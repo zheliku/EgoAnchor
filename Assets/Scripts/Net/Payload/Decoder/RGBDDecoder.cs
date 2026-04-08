@@ -1,4 +1,32 @@
+using System;
 using UnityEngine;
+using UnityEngine.Events;
+
+/// <summary>
+/// 原始字节数据
+/// 可用于图像、深度或任何字节流数据
+/// </summary>
+[Serializable]
+public struct RawData
+{
+    [SerializeField] private byte[] data;
+    [SerializeField] private double timestampMs;
+
+    public byte[] Data => data;
+    public double TimestampMs => timestampMs;
+
+    public RawData(byte[] data, double timestampMs)
+    {
+        this.data = data;
+        this.timestampMs = timestampMs;
+    }
+}
+
+/// <summary>
+/// 原始字节数据事件（图像、深度通用）
+/// </summary>
+[Serializable]
+public class RawDataEvent : UnityEvent<RawData> { }
 
 /// <summary>
 /// RGBD 协议解码器。

@@ -2,7 +2,40 @@ using System;
 using System.Globalization;
 using System.Text;
 using UnityEngine;
-using Debug = UnityEngine.Debug;
+using UnityEngine.Events;
+
+/// <summary>
+/// 位姿数据
+/// </summary>
+[Serializable]
+public struct PoseData
+{
+    [SerializeField] private Matrix4x4 poseMatrix;
+    [SerializeField] private bool hasPose;
+
+    public Matrix4x4? PoseMatrix => hasPose ? poseMatrix : null;
+    public bool HasPose => hasPose;
+
+    public PoseData(Matrix4x4? matrix)
+    {
+        if (matrix.HasValue)
+        {
+            poseMatrix = matrix.Value;
+            hasPose = true;
+        }
+        else
+        {
+            poseMatrix = Matrix4x4.identity;
+            hasPose = false;
+        }
+    }
+}
+
+/// <summary>
+/// 位姿数据事件
+/// </summary>
+[Serializable]
+public class PoseDataEvent : UnityEvent<PoseData> { }
 
 /// <summary>
 /// Pose JSON 协议解码器。
@@ -16,7 +49,7 @@ using Debug = UnityEngine.Debug;
 /// 输出事件：
 /// - OnPoseReceived：当 pose 有效时触发。
 /// </summary>
-public class PoseJsonDecoder : BaseDecoder
+public class PoseDecoder : BaseDecoder
 {
     [Header("Events")]
     public PoseDataEvent OnPoseReceived = new PoseDataEvent();
