@@ -26,7 +26,7 @@ public enum TrackingPhase
 /// - OnPoseReceived: 仅在 pose 有效时触发
 /// - OnTrackingStarted / OnTrackingLost: 阶段切换事件
 /// </summary>
-public class TrackingDecoder : MonoBehaviour
+public class TrackingDecoder : BaseDecoder
 {
     [Header("Events")]
     [Tooltip("当收到图像数据时触发")]
@@ -63,7 +63,7 @@ public class TrackingDecoder : MonoBehaviour
     /// <summary>
     /// Receiver 事件回调入口：解析 tracking payload 并按业务语义派发。
     /// </summary>
-    public void OnPayloadReceived(RawPayload payload)
+    public override void OnPayloadReceived(RawPayload payload)
     {
         byte[][] payloadParts = payload.Parts;
 

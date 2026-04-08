@@ -32,5 +32,6 @@
             "envManager": "ms-python.python:system",
             "packageManager": "ms-python.python:pip"
         }
-    ]
+    ],
+    "cmake.sourceDirectory": "P:/Unity-Project/Work/VR-Pose-Tracking/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/src/main/cpp"
 }

@@ -24,7 +24,7 @@ public class PayloadSender : MonoBehaviour
     private const string SendHighWatermarkPrefKey = "PayloadSender.SendHighWatermark";
     private const string SocketLingerMsPrefKey = "PayloadSender.SocketLingerMs";
 
-    [SerializeField] private EncoderBase payloadEncoder;
+    [SerializeField] private BaseEncoder payloadEncoder;
     [SerializeField] private string serverIP = "127.0.0.1";
     [SerializeField] private int serverPort = 5557;
     [SerializeField] private int targetFps = 60;
@@ -52,7 +52,7 @@ public class PayloadSender : MonoBehaviour
     {
         if (payloadEncoder == null)
         {
-            payloadEncoder = GetComponent<EncoderBase>();
+            payloadEncoder = GetComponent<BaseEncoder>();
         }
 
         LoadConfig();

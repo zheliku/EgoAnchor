@@ -11,7 +11,7 @@ using UnityEngine;
 /// - 在 PayloadReceiver 的 OnPayloadReceived 事件中，绑定本类 OnPayloadReceived。
 /// - 本类再对外发出 OnImageReceived / OnDepthReceived。
 /// </summary>
-public class RGBDDecoder : MonoBehaviour
+public class RGBDDecoder : BaseDecoder
 {
     [Header("Events")]
     [Tooltip("当收到图像数据时触发")]
@@ -34,7 +34,7 @@ public class RGBDDecoder : MonoBehaviour
     /// <summary>
     /// Receiver 事件回调入口：解析 payload 并派发图像/深度事件。
     /// </summary>
-    public void OnPayloadReceived(RawPayload payload)
+    public override void OnPayloadReceived(RawPayload payload)
     {
         byte[][] parts = payload.Parts;
         if (parts == null || parts.Length != 2)

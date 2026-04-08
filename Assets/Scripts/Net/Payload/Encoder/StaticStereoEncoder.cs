@@ -9,7 +9,7 @@ using UnityEngine;
 /// 设计点：
 /// - 当输入纹理未变化时复用已编码 JPEG，减少重复编码开销。
 /// </summary>
-public class StaticStereoEncoder : EncoderBase
+public class StaticStereoEncoder : BaseEncoder
 {
     [SerializeField] private Texture leftTexture;
     [SerializeField] private Texture rightTexture;

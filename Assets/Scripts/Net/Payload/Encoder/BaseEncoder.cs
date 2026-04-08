@@ -7,7 +7,7 @@ using UnityEngine;
 /// - 任何业务数据都先编码为 byte[][]（multipart payload）。
 /// - Sender 仅消费该抽象，不依赖具体业务类型。
 /// </summary>
-public abstract class EncoderBase : MonoBehaviour
+public abstract class BaseEncoder : MonoBehaviour
 {
     /// <summary>
     /// 尝试编码当前帧业务数据。

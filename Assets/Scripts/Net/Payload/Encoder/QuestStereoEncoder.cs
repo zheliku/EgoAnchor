@@ -11,7 +11,7 @@ using UnityEngine;
 /// - 本组件只负责编码，不负责发送。
 /// - 发送节奏由 PayloadSender 控制。
 /// </summary>
-public class QuestStereoEncoder : EncoderBase
+public class QuestStereoEncoder : BaseEncoder
 {
     private enum StereoImageCodec
     {
