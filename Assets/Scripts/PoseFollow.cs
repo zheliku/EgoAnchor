@@ -84,8 +84,20 @@ public class PoseFollow : MonoBehaviour
     [Range(1, 300)]
     [SerializeField] private int debugLogInterval = 30;
 
-    private float _lastPoseSampleTime = -1f;
-    private float _sampleIntervalEma;
+    // 最近一次解码得到的目标位姿（世界坐标）。
+    private Vector3 _targetWorldPosition;
+    private Quaternion _targetWorldRotation = Quaternion.identity;
+    private PoseData _latestPoseData;
+    private bool _hasTargetPose;
+
+    // 接收频率统计（按 Decoder 回调频率）。
+    private float _lastPoseReceiveTime = -1f;
+    private float _receiveIntervalEma;
+
+    // 应用频率统计（按 Update 频率）。
+    private float _lastApplyTime = -1f;
+    private float _applyIntervalEma;
+
     private int _applyFrameCount;
     private bool _hasWarnedNoReference;
 
@@ -108,7 +120,11 @@ public class PoseFollow : MonoBehaviour
     }
 
     /// <summary>
-    /// 在 Decoder 事件中调用：根据 4x4 pose 更新当前对象变换。
+    /// 在 Decoder 事件中调用：接收 pose 并更新 targetPose。
+    ///
+    /// 注意：
+    /// - 这里不直接改 transform。
+    /// - 真正的位姿应用在 Update 中每帧执行，避免受网络输入帧率（如 5fps）限制。
     /// </summary>
     public virtual void FollowTarget(PoseData pose)
     {
@@ -152,10 +168,25 @@ public class PoseFollow : MonoBehaviour
             }
         }
 
+        _targetWorldPosition = worldPosition;
+        _targetWorldRotation = worldRotation;
+        _latestPoseData = pose;
+        _hasTargetPose = true;
+
+        UpdateReceiveStats();
+    }
+
+    private void Update()
+    {
+        if (!_hasTargetPose)
+        {
+            return;
+        }
+
         PoseFrame frame = new PoseFrame(
-            pose,
-            worldPosition,
-            worldRotation,
+            _latestPoseData,
+            _targetWorldPosition,
+            _targetWorldRotation,
             Time.realtimeSinceStartup
         );
 
@@ -169,17 +200,30 @@ public class PoseFollow : MonoBehaviour
         UpdateDebugStats(frame);
     }
 
+    private void UpdateReceiveStats()
+    {
+        float now = Time.realtimeSinceStartup;
+        if (_lastPoseReceiveTime > 0f)
+        {
+            float interval = Mathf.Max(now - _lastPoseReceiveTime, 1e-5f);
+            _receiveIntervalEma = _receiveIntervalEma <= 0f
+                ? interval
+                : (_receiveIntervalEma * 0.85f + interval * 0.15f);
+        }
+        _lastPoseReceiveTime = now;
+    }
+
     private void UpdateDebugStats(PoseFrame frame)
     {
         float now = frame.SampleTime;
-        if (_lastPoseSampleTime > 0f)
+        if (_lastApplyTime > 0f)
         {
-            float interval = Mathf.Max(now - _lastPoseSampleTime, 1e-5f);
-            _sampleIntervalEma = _sampleIntervalEma <= 0f
+            float interval = Mathf.Max(now - _lastApplyTime, 1e-5f);
+            _applyIntervalEma = _applyIntervalEma <= 0f
                 ? interval
-                : (_sampleIntervalEma * 0.85f + interval * 0.15f);
+                : (_applyIntervalEma * 0.85f + interval * 0.15f);
         }
-        _lastPoseSampleTime = now;
+        _lastApplyTime = now;
 
         if (!enableVerboseDebugLog)
         {
@@ -192,12 +236,13 @@ public class PoseFollow : MonoBehaviour
             return;
         }
 
-        float sampleHz = _sampleIntervalEma > 1e-5f ? 1f / _sampleIntervalEma : 0f;
+        float applyHz = _applyIntervalEma > 1e-5f ? 1f / _applyIntervalEma : 0f;
+        float receiveHz = _receiveIntervalEma > 1e-5f ? 1f / _receiveIntervalEma : 0f;
         float posError = Vector3.Distance(frame.RawWorldPosition, frame.WorldPosition);
         float rotError = Quaternion.Angle(frame.RawWorldRotation, frame.WorldRotation);
 
         Debug.Log(
-            $"[PoseFollow] sampleHz={sampleHz:F2}, posDelta={posError:F4}m, rotDelta={rotError:F2}deg",
+            $"[PoseFollow] recvHz={receiveHz:F2}, applyHz={applyHz:F2}, posDelta={posError:F4}m, rotDelta={rotError:F2}deg",
             this
         );
     }

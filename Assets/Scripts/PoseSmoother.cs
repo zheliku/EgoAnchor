@@ -4,8 +4,8 @@ using UnityEngine;
 /// PoseFollow 的指数平滑插件。
 ///
 /// 用法：
-/// 1. 挂到与 PoseFollow 同一个对象，手动指定 poseFollow。
-/// 2. 订阅 PoseFollow.BeforePoseApply。
+/// 1. 挂到与 PoseFollow 同一个对象（可自动绑定）。
+/// 2. 或者在 Inspector 中把 ProcessPose 手动挂到 PoseFollow.OnBeforePoseApply。
 /// 3. 修改 frame.WorldPosition / frame.WorldRotation，实现“可插拔平滑”。
 /// </summary>
 public class PoseSmoother : MonoBehaviour
@@ -22,9 +22,12 @@ public class PoseSmoother : MonoBehaviour
     private Vector3 _smoothedPosition;
     private Quaternion _smoothedRotation = Quaternion.identity;
 
+
     public void ProcessPose(PoseFrame frame)
     {
-        if (!_hasSmoothedPose || snapOnFirstPose)
+        // 首帧只初始化一次，不能把 snapOnFirstPose 写进条件，
+        // 否则在 snapOnFirstPose=true 时会每帧重置，导致完全不平滑。
+        if (!_hasSmoothedPose)
         {
             _smoothedPosition = frame.WorldPosition;
             _smoothedRotation = frame.WorldRotation;
