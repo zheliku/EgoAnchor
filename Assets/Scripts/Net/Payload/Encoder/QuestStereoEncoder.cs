@@ -5,7 +5,7 @@ using UnityEngine;
 /// Quest 双目图像编码器。
 ///
 /// 输入：左右 Passthrough Camera 纹理。
-/// 输出：multipart [left_jpg, right_jpg]。
+/// 输出：单帧 payload（MessagePack，包含 image_jpeg/frame_id/sender_mono_ms/unity_frame）。
 ///
 /// 注意：
 /// - 本组件只负责编码，不负责发送。
@@ -13,21 +13,12 @@ using UnityEngine;
 /// </summary>
 public class QuestStereoEncoder : BaseEncoder
 {
-    private enum StereoImageCodec
-    {
-        Jpeg = 0,
-        Png = 1,
-    }
-
     [SerializeField] private PassthroughCameraAccess leftCameraAccess;
     [SerializeField] private PassthroughCameraAccess rightCameraAccess;
-    [SerializeField] private bool packStereoIntoSingleJpeg = false;
     [Range(0.25f, 1f)]
     [SerializeField] private float outputScale = 1f;
     [Range(30, 100)]
     [SerializeField] private int jpegQuality = 95;
-    [SerializeField] private StereoImageCodec imageCodec = StereoImageCodec.Jpeg;
-    [SerializeField] private bool appendTimingMetadata = true;
     [Header("Debug")]
     [SerializeField] private bool enableVerboseDebugLog = true;
     [Range(1, 300)]
@@ -46,12 +37,12 @@ public class QuestStereoEncoder : BaseEncoder
     private long _senderFrameId;
 
     /// <summary>
-    /// 从 Quest 左右相机抓取当前帧并编码为双帧 payload。
+    /// 从 Quest 左右相机抓取当前帧并编码为单帧 payload。
     /// </summary>
-    public override bool TryEncodePayload(out byte[][] payloadParts)
+    public override bool TryEncodePayload(out byte[] payload)
     {
         double encodeStart = Time.realtimeSinceStartupAsDouble;
-        payloadParts = null;
+        payload = null;
 
         if (leftCameraAccess == null || rightCameraAccess == null)
         {
@@ -78,82 +69,36 @@ public class QuestStereoEncoder : BaseEncoder
         double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
         long frameId = ++_senderFrameId;
 
-        string encodePath;
+        BlitToRenderTarget(leftTexture, _leftRenderTexture);
+        BlitToRenderTarget(rightTexture, _rightRenderTexture);
 
-        if (packStereoIntoSingleJpeg)
-        {
-            BlitToRenderTarget(leftTexture, _leftRenderTexture);
-            BlitToRenderTarget(rightTexture, _rightRenderTexture);
+        byte[] packedImage = CapturePackedStereo(
+            _leftRenderTexture,
+            _rightRenderTexture,
+            _packedRenderTexture,
+            _packedReadbackTexture);
 
-            byte[] packedImage = CapturePackedStereo(
-                _leftRenderTexture,
-                _rightRenderTexture,
-                _packedRenderTexture,
-                _packedReadbackTexture);
-
-            if (packedImage == null)
-            {
-                return false;
-            }
-
-            QuestStereoMsg message = new QuestStereoMsg
-            {
-                is_packed = true,
-                packed_image = packedImage,
-                frame_id = frameId,
-                sender_mono_ms = senderMonoMs,
-                unity_frame = Time.frameCount,
-            };
-
-            payloadParts = message.ToPayloadParts(appendTimingMetadata);
-            if (payloadParts == null)
-            {
-                return false;
-            }
-
-            encodePath = appendTimingMetadata ? "Packed+Meta" : "Packed";
-            LogEncodeStats(payloadParts, encodePath, encodeStart);
-            return true;
-        }
-
-        bool leftDirect = TryEncodeTexture2DDirect(leftTexture, out byte[] leftImage);
-        bool rightDirect = TryEncodeTexture2DDirect(rightTexture, out byte[] rightImage);
-
-        if (!leftDirect)
-        {
-            leftImage = CaptureAsEncodedBytes(leftTexture, _leftRenderTexture, _leftReadbackTexture);
-        }
-
-        if (!rightDirect)
-        {
-            rightImage = CaptureAsEncodedBytes(rightTexture, _rightRenderTexture, _rightReadbackTexture);
-        }
-
-        if (leftImage == null || rightImage == null)
+        if (packedImage == null)
         {
             return false;
         }
 
-        QuestStereoMsg dualMessage = new QuestStereoMsg
+        QuestStereoMsg message = new QuestStereoMsg
         {
-            is_packed = false,
-            left_image = leftImage,
-            right_image = rightImage,
+            image_jpeg = packedImage,
             frame_id = frameId,
             sender_mono_ms = senderMonoMs,
             unity_frame = Time.frameCount,
         };
 
-        payloadParts = dualMessage.ToPayloadParts(appendTimingMetadata);
-        if (payloadParts == null)
+        payload = message.Serialize();
+        if (payload == null)
         {
             return false;
         }
 
-        encodePath = !appendTimingMetadata
-            ? $"Dual(L:{(leftDirect ? "Direct" : "Readback")},R:{(rightDirect ? "Direct" : "Readback")})"
-            : $"Dual+Meta(L:{(leftDirect ? "Direct" : "Readback")},R:{(rightDirect ? "Direct" : "Readback")})";
-        LogEncodeStats(payloadParts, encodePath, encodeStart);
+        string encodePath = "PackedPayload";
+        LogEncodeStats(payload, encodePath, encodeStart);
         return true;
     }
 
@@ -197,38 +142,6 @@ public class QuestStereoEncoder : BaseEncoder
         readbackTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
     }
 
-    /// <summary>
-    /// 将 source 纹理回读并编码。
-    /// 若 source 已是匹配尺寸的 RenderTexture，则直接回读，避免一次额外 Blit。
-    /// </summary>
-    private byte[] CaptureAsEncodedBytes(Texture source, RenderTexture target, Texture2D readbackTexture)
-    {
-        if (source == null || target == null || readbackTexture == null)
-        {
-            return null;
-        }
-
-        RenderTexture readSource = target;
-        if (source is RenderTexture sourceRt &&
-            sourceRt.width == target.width &&
-            sourceRt.height == target.height)
-        {
-            readSource = sourceRt;
-        }
-        else
-        {
-            Graphics.Blit(source, target);
-        }
-
-        RenderTexture previous = RenderTexture.active;
-        RenderTexture.active = readSource;
-
-        readbackTexture.ReadPixels(new Rect(0, 0, readSource.width, readSource.height), 0, 0, false);
-
-        RenderTexture.active = previous;
-        return EncodeTexture(readbackTexture);
-    }
-
     private static void BlitToRenderTarget(Texture source, RenderTexture target)
     {
         if (source == null || target == null)
@@ -237,31 +150,6 @@ public class QuestStereoEncoder : BaseEncoder
         }
 
         Graphics.Blit(source, target);
-    }
-
-    private bool TryEncodeTexture2DDirect(Texture source, out byte[] encoded)
-    {
-        encoded = null;
-
-        if (!Mathf.Approximately(outputScale, 1f))
-        {
-            return false;
-        }
-
-        if (source is not Texture2D texture2D)
-        {
-            return false;
-        }
-
-        try
-        {
-            encoded = EncodeTexture(texture2D);
-            return encoded != null && encoded.Length > 0;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private void LogTextureTypesOnce(Texture leftTexture, Texture rightTexture)
@@ -274,10 +162,7 @@ public class QuestStereoEncoder : BaseEncoder
         _hasLoggedTextureTypes = true;
         string leftType = leftTexture.GetType().Name;
         string rightType = rightTexture.GetType().Name;
-        string codecDesc = imageCodec == StereoImageCodec.Jpeg
-            ? $"JPEG(q={jpegQuality})"
-            : "PNG(lossless)";
-        Debug.Log($"[QuestStereoEncoder] LeftType={leftType}, RightType={rightType}, OutputScale={outputScale:F2}, PackSingleJpeg={packStereoIntoSingleJpeg}, Codec={codecDesc}");
+        Debug.Log($"[QuestStereoEncoder] LeftType={leftType}, RightType={rightType}, OutputScale={outputScale:F2}, Codec=JPEG(q={jpegQuality})");
         if (enableVerboseDebugLog)
         {
             LogTextureDetails("Left", leftTexture);
@@ -317,7 +202,7 @@ public class QuestStereoEncoder : BaseEncoder
         Debug.Log(baseInfo);
     }
 
-    private void LogEncodeStats(byte[][] payloadParts, string encodePath, double encodeStart)
+    private void LogEncodeStats(byte[] payload, string encodePath, double encodeStart)
     {
         if (!enableVerboseDebugLog)
         {
@@ -328,17 +213,7 @@ public class QuestStereoEncoder : BaseEncoder
         double elapsedMs = (Time.realtimeSinceStartupAsDouble - encodeStart) * 1000.0;
         _encodeTimeAccMs += elapsedMs;
 
-        long bytes = 0;
-        if (payloadParts != null)
-        {
-            for (int i = 0; i < payloadParts.Length; i++)
-            {
-                if (payloadParts[i] != null)
-                {
-                    bytes += payloadParts[i].LongLength;
-                }
-            }
-        }
+        long bytes = payload == null ? 0 : payload.LongLength;
         _payloadBytesAcc += bytes;
 
         int interval = Mathf.Max(1, debugLogInterval);
@@ -349,10 +224,9 @@ public class QuestStereoEncoder : BaseEncoder
 
         double avgEncodeMs = _encodeTimeAccMs / interval;
         double avgPayloadKB = (_payloadBytesAcc / (double)interval) / 1024.0;
-        int partCount = payloadParts == null ? 0 : payloadParts.Length;
 
         Debug.Log(
-            $"[QuestStereoEncoder] EncodeStats frames={_encodedFrameCount}, mode={encodePath}, parts={partCount}, avgEncode={avgEncodeMs:F2}ms, avgPayload={avgPayloadKB:F1}KB, codec={imageCodec}"
+            $"[QuestStereoEncoder] EncodeStats frames={_encodedFrameCount}, mode={encodePath}, avgEncode={avgEncodeMs:F2}ms, avgPayload={avgPayloadKB:F1}KB, codec=Jpeg"
         );
 
         _encodeTimeAccMs = 0.0;
@@ -395,11 +269,6 @@ public class QuestStereoEncoder : BaseEncoder
         if (texture == null)
         {
             return null;
-        }
-
-        if (imageCodec == StereoImageCodec.Png)
-        {
-            return texture.EncodeToPNG();
         }
 
         return texture.EncodeToJPG(jpegQuality);

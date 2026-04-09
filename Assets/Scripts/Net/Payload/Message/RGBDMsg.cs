@@ -1,26 +1,66 @@
 using System;
+using MessagePack;
 using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// RGBD 完整消息：单条消息同时包含彩色图与深度图。
+/// RGBD MessagePack 消息：单条消息同时包含彩色图与深度图。
 /// </summary>
 [Serializable]
-public struct RGBDMsg
+[MessagePackObject]
+public class RGBDMsg
 {
-    [SerializeField] private byte[] colorImage; // 彩色图编码字节（通常为 JPG）。
-    [SerializeField] private byte[] depthImage; // 深度图编码字节（通常为 PNG）。
-    [SerializeField] private double timestampMs; // 该条消息对应的接收时间戳（毫秒）。
+    [Key("color_image")]
+    [SerializeField] public byte[] color_image; // 彩色图编码字节（通常为 JPG）。
 
-    public byte[] ColorImage => colorImage; // 彩色图数据。
-    public byte[] DepthImage => depthImage; // 深度图数据。
-    public double TimestampMs => timestampMs; // 时间戳（毫秒）。
+    [Key("depth_image")]
+    [SerializeField] public byte[] depth_image; // 深度图编码字节（通常为 PNG）。
+
+    [Key("timestamp_ms")]
+    [SerializeField] public double timestamp_ms; // 该条消息对应的时间戳（毫秒）。
+
+    public RGBDMsg()
+    {
+    }
 
     public RGBDMsg(byte[] colorImage, byte[] depthImage, double timestampMs)
     {
-        this.colorImage = colorImage;
-        this.depthImage = depthImage;
-        this.timestampMs = timestampMs;
+        color_image = colorImage;
+        depth_image = depthImage;
+        timestamp_ms = timestampMs;
+    }
+
+    public byte[] Serialize()
+    {
+        if (color_image == null || depth_image == null)
+        {
+            return null;
+        }
+
+        return MessagePackSerializer.Serialize(this);
+    }
+
+    public static RGBDMsg Deserialize(byte[] payload)
+    {
+        if (payload == null || payload.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            RGBDMsg message = MessagePackSerializer.Deserialize<RGBDMsg>(payload);
+            if (message == null || message.color_image == null || message.depth_image == null)
+            {
+                return null;
+            }
+
+            return message;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 

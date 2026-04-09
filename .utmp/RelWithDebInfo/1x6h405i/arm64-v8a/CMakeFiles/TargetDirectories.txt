@@ -1,0 +1,5 @@
+P:/Unity-Project/Work/VR-Pose-Tracking/.utmp/RelWithDebInfo/1x6h405i/arm64-v8a/CMakeFiles/edit_cache.dir
+P:/Unity-Project/Work/VR-Pose-Tracking/.utmp/RelWithDebInfo/1x6h405i/arm64-v8a/CMakeFiles/rebuild_cache.dir
+P:/Unity-Project/Work/VR-Pose-Tracking/.utmp/RelWithDebInfo/1x6h405i/arm64-v8a/GameActivity/CMakeFiles/game.dir
+P:/Unity-Project/Work/VR-Pose-Tracking/.utmp/RelWithDebInfo/1x6h405i/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+P:/Unity-Project/Work/VR-Pose-Tracking/.utmp/RelWithDebInfo/1x6h405i/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir

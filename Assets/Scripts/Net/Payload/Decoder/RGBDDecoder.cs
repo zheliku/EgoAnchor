@@ -4,8 +4,7 @@ using UnityEngine;
 /// RGBD 协议解码器。
 ///
 /// 输入协议：
-/// - parts[0] = color_jpg
-/// - parts[1] = depth_png
+/// - payload = RGBDMsg.Serialize() 的单帧二进制
 ///
 /// 使用方式：
 /// - 在 PayloadReceiver 的 OnPayloadReceived 事件中，绑定本类 OnPayloadReceived。
@@ -31,12 +30,16 @@ public class RGBDDecoder : BaseDecoder
     /// </summary>
     public override void OnPayloadReceived(RawPayload payload)
     {
-        byte[][] parts = payload.Parts;
-        if (parts == null || parts.Length != 2)
+        byte[] frame = payload.Payload;
+        if (frame == null || frame.Length == 0)
         {
             return;
         }
 
-        OnRGBDReceived?.Invoke(new RGBDMsg(parts[0], parts[1], payload.TimestampMs));
+        RGBDMsg message = RGBDMsg.Deserialize(frame);
+        if (message != null)
+        {
+            OnRGBDReceived?.Invoke(message);
+        }
     }
 }

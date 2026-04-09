@@ -12,13 +12,13 @@ using Debug = UnityEngine.Debug;
 
 public readonly struct RawPayload
 {
-    public byte[][] Parts { get; }
+    public byte[] Payload { get; }
     public string Topic { get; }
     public double TimestampMs { get; }
 
-    public RawPayload(byte[][] parts, string topic, double timestampMs)
+    public RawPayload(byte[] payload, string topic, double timestampMs)
     {
-        Parts = parts;
+        Payload = payload;
         Topic = topic;
         TimestampMs = timestampMs;
     }
@@ -199,18 +199,16 @@ public class PayloadReceiver : MonoBehaviour
 
                 int startFrame = useTopic ? 1 : 0;
                 string receivedTopic = useTopic ? message[0].ConvertToString() : string.Empty;
-
-                int payloadCount = message.FrameCount - startFrame;
-                byte[][] payloadParts = new byte[payloadCount][];
-                for (int i = 0; i < payloadCount; i++)
+                byte[] payload = message[startFrame].ToByteArray();
+                if (payload == null || payload.Length == 0)
                 {
-                    payloadParts[i] = message[startFrame + i].ToByteArray();
+                    continue;
                 }
 
                 double timestampMs = _stopwatch.Elapsed.TotalMilliseconds;
                 lock (_lock)
                 {
-                    _latestPayload = new RawPayload(payloadParts, receivedTopic, timestampMs);
+                    _latestPayload = new RawPayload(payload, receivedTopic, timestampMs);
                     _hasNewPayload = true;
                 }
             }

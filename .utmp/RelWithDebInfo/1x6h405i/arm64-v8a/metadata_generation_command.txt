@@ -1,0 +1,21 @@
+                        -HP:\Unity-Project\Work\VR-Pose-Tracking\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=32
+-DANDROID_PLATFORM=android-32
+-DANDROID_ABI=arm64-v8a
+-DCMAKE_ANDROID_ARCH_ABI=arm64-v8a
+-DANDROID_NDK=S:\Unity Editor\6000.3.11f1\Editor\Data\PlaybackEngines\AndroidPlayer\NDK
+-DCMAKE_ANDROID_NDK=S:\Unity Editor\6000.3.11f1\Editor\Data\PlaybackEngines\AndroidPlayer\NDK
+-DCMAKE_TOOLCHAIN_FILE=S:\Unity Editor\6000.3.11f1\Editor\Data\PlaybackEngines\AndroidPlayer\NDK\build\cmake\android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=S:\Unity Editor\6000.3.11f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\cmake\3.22.1\bin\ninja.exe
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=P:\Unity-Project\Work\VR-Pose-Tracking\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\1x6h405i\obj\arm64-v8a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=P:\Unity-Project\Work\VR-Pose-Tracking\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\1x6h405i\obj\arm64-v8a
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-DCMAKE_FIND_ROOT_PATH=P:\Unity-Project\Work\VR-Pose-Tracking\.utmp\RelWithDebInfo\1x6h405i\prefab\arm64-v8a\prefab
+-BP:\Unity-Project\Work\VR-Pose-Tracking\.utmp\RelWithDebInfo\1x6h405i\arm64-v8a
+-GNinja
+-DANDROID_STL=c++_shared
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+                        Build command args: []
+                        Version: 2

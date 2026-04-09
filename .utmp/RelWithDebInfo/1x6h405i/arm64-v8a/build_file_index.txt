@@ -1,0 +1,2 @@
+P:\Unity-Project\Work\VR-Pose-Tracking\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+P:\Unity-Project\Work\VR-Pose-Tracking\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

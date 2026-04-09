@@ -1,62 +1,54 @@
 using System;
-using System.Globalization;
-using System.Text;
+using MessagePack;
 
 /// <summary>
-/// Quest 双目传输消息：包含完整发送内容（图像 + 元数据）。
+/// Quest 双目 MessagePack 传输消息。
 /// </summary>
 [Serializable]
+[MessagePackObject]
 public class QuestStereoMsg
 {
-    public byte[] left_image; // 左目编码图像字节（Dual 模式使用）。
-    public byte[] right_image; // 右目编码图像字节（Dual 模式使用）。
-    public byte[] packed_image; // 左右拼接后的编码图像字节（Packed 模式使用）。
-    public bool is_packed; // 是否为 Packed 发送模式。
+    [Key("image_jpeg")]
+    public byte[] image_jpeg; // 左右拼接后的单张 JPEG 图像字节。
 
+    [Key("frame_id")]
     public long frame_id; // 发送端帧号（用于检测丢帧与延迟）。
+    [Key("sender_mono_ms")]
     public double sender_mono_ms; // 发送端单调时钟（毫秒）。
+    [Key("unity_frame")]
     public int unity_frame; // Unity 的 Time.frameCount。
 
-    // 将完整消息转换为发送 payload 的 multipart 数组。
-    public byte[][] ToPayloadParts(bool includeMetadata)
+    // 将消息序列化为 MessagePack 负载。
+    public byte[] Serialize()
     {
-        if (is_packed)
+        if (image_jpeg == null || image_jpeg.Length == 0)
         {
-            if (packed_image == null || packed_image.Length == 0)
-            {
-                return null;
-            }
-
-            if (!includeMetadata)
-            {
-                return new[] { packed_image };
-            }
-
-            return new[] { packed_image, ToMetadataJsonBytes() };
+            return null;
         }
+        return MessagePackSerializer.Serialize(this);
+    }
 
-        if (left_image == null || right_image == null || left_image.Length == 0 || right_image.Length == 0)
+    // 反序列化 MessagePack 负载。
+    public static QuestStereoMsg Deserialize(byte[] payload)
+    {
+        if (payload == null || payload.Length == 0)
         {
             return null;
         }
 
-        if (!includeMetadata)
+        try
         {
-            return new[] { left_image, right_image };
+            QuestStereoMsg message = MessagePackSerializer.Deserialize<QuestStereoMsg>(payload);
+            if (message == null || message.image_jpeg == null || message.image_jpeg.Length == 0)
+            {
+                return null;
+            }
+
+            return message;
         }
-
-        return new[] { left_image, right_image, ToMetadataJsonBytes() };
-    }
-
-    // 将元数据编码为 JSON 字节（UTF-8）。
-    public byte[] ToMetadataJsonBytes()
-    {
-        string json = "{"
-            + "\"frame_id\":" + frame_id.ToString(CultureInfo.InvariantCulture) + ","
-            + "\"sender_mono_ms\":" + sender_mono_ms.ToString(CultureInfo.InvariantCulture) + ","
-            + "\"unity_frame\":" + unity_frame.ToString(CultureInfo.InvariantCulture)
-            + "}";
-
-        return Encoding.UTF8.GetBytes(json);
+        catch
+        {
+            return null;
+        }
     }
 }

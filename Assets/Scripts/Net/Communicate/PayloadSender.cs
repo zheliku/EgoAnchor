@@ -164,8 +164,8 @@ public class PayloadSender : MonoBehaviour
     /// 固定帧率发送循环。
     ///
     /// 流程：
-    /// 1) 从 Encoder 拉取 payloadParts。
-    /// 2) 非阻塞发送 multipart。
+    /// 1) 从 Encoder 拉取单帧 payload。
+    /// 2) 非阻塞发送单帧。
     /// 3) 成功计数 sent，失败计数 dropped。
     ///
     /// 说明：失败（TrySend 返回 false）通常表示网络拥塞。
@@ -184,14 +184,14 @@ public class PayloadSender : MonoBehaviour
             }
 
             double encodeStart = Time.realtimeSinceStartupAsDouble;
-            bool encoded = payloadEncoder.TryEncodePayload(out byte[][] payloadParts) &&
-                           payloadParts != null && payloadParts.Length > 0;
+            bool encoded = payloadEncoder.TryEncodePayload(out byte[] payload) &&
+                           payload != null && payload.Length > 0;
             _encodeTimeAcc += Time.realtimeSinceStartupAsDouble - encodeStart;
 
             if (encoded && _socket != null)
             {
                 double sendStart = Time.realtimeSinceStartupAsDouble;
-                bool sent = _socket.TrySendMultipartBytes(TimeSpan.Zero, payloadParts);
+                bool sent = _socket.TrySendFrame(TimeSpan.Zero, payload);
                 _sendTimeAcc += Time.realtimeSinceStartupAsDouble - sendStart;
 
                 if (sent)
