@@ -27,6 +27,7 @@ public class QuestStereoEncoder : BaseEncoder
     [Range(30, 100)]
     [SerializeField] private int jpegQuality = 95;
     [SerializeField] private StereoImageCodec imageCodec = StereoImageCodec.Jpeg;
+    [SerializeField] private bool appendTimingMetadata = true;
     [Header("Debug")]
     [SerializeField] private bool enableVerboseDebugLog = true;
     [Range(1, 300)]
@@ -42,6 +43,7 @@ public class QuestStereoEncoder : BaseEncoder
     private int _encodedFrameCount;
     private double _encodeTimeAccMs;
     private long _payloadBytesAcc;
+    private long _senderFrameId;
 
     /// <summary>
     /// 从 Quest 左右相机抓取当前帧并编码为双帧 payload。
@@ -73,6 +75,9 @@ public class QuestStereoEncoder : BaseEncoder
 
         EnsureCaptureBuffers(leftTexture, rightTexture);
 
+        double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+        long frameId = ++_senderFrameId;
+
         string encodePath;
 
         if (packStereoIntoSingleJpeg)
@@ -91,8 +96,22 @@ public class QuestStereoEncoder : BaseEncoder
                 return false;
             }
 
-            payloadParts = new[] { packedImage };
-            encodePath = "Packed";
+            QuestStereoMsg message = new QuestStereoMsg
+            {
+                is_packed = true,
+                packed_image = packedImage,
+                frame_id = frameId,
+                sender_mono_ms = senderMonoMs,
+                unity_frame = Time.frameCount,
+            };
+
+            payloadParts = message.ToPayloadParts(appendTimingMetadata);
+            if (payloadParts == null)
+            {
+                return false;
+            }
+
+            encodePath = appendTimingMetadata ? "Packed+Meta" : "Packed";
             LogEncodeStats(payloadParts, encodePath, encodeStart);
             return true;
         }
@@ -115,8 +134,25 @@ public class QuestStereoEncoder : BaseEncoder
             return false;
         }
 
-        payloadParts = new[] { leftImage, rightImage };
-        encodePath = $"Dual(L:{(leftDirect ? "Direct" : "Readback")},R:{(rightDirect ? "Direct" : "Readback")})";
+        QuestStereoMsg dualMessage = new QuestStereoMsg
+        {
+            is_packed = false,
+            left_image = leftImage,
+            right_image = rightImage,
+            frame_id = frameId,
+            sender_mono_ms = senderMonoMs,
+            unity_frame = Time.frameCount,
+        };
+
+        payloadParts = dualMessage.ToPayloadParts(appendTimingMetadata);
+        if (payloadParts == null)
+        {
+            return false;
+        }
+
+        encodePath = !appendTimingMetadata
+            ? $"Dual(L:{(leftDirect ? "Direct" : "Readback")},R:{(rightDirect ? "Direct" : "Readback")})"
+            : $"Dual+Meta(L:{(leftDirect ? "Direct" : "Readback")},R:{(rightDirect ? "Direct" : "Readback")})";
         LogEncodeStats(payloadParts, encodePath, encodeStart);
         return true;
     }

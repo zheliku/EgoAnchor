@@ -154,6 +154,7 @@ MonoBehaviour:
   outputScale: 1
   jpegQuality: 80
   imageCodec: 0
+  appendTimingMetadata: 1
   enableVerboseDebugLog: 1
   debugLogInterval: 30
 --- !u!4 &217519041

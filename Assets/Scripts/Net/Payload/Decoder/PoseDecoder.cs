@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// 位姿数据
+/// 运行时位姿业务结构：用于场景内组件传递，不属于网络传输 schema。
 /// </summary>
 [Serializable]
 public struct PoseData
@@ -32,19 +32,17 @@ public struct PoseData
 }
 
 /// <summary>
-/// 位姿数据事件
+/// PoseData 对外事件类型。
 /// </summary>
 [Serializable]
 public class PoseDataEvent : UnityEvent<PoseData> { }
 
 /// <summary>
-/// Pose JSON 协议解码器。
+/// Pose 协议解码器。
 ///
-/// 输入协议（topic 后第 1 帧）：
-/// {
-///   "has_pose": true/false,
-///   "pose_matrix": [[...4x4...]]
-/// }
+/// 输入 JSON 至少包含：
+/// - "has_pose": bool
+/// - "pose_matrix": 4x4 matrix（当 has_pose=true 时）
 ///
 /// 输出事件：
 /// - OnPoseReceived：当 pose 有效时触发。
@@ -73,6 +71,21 @@ public class PoseDecoder : BaseDecoder
         if (string.IsNullOrWhiteSpace(json))
         {
             return;
+        }
+
+        // Preferred path: parse via shared schema with flattened 4x4 matrix.
+        try
+        {
+            PoseMsg message = JsonUtility.FromJson<PoseMsg>(json);
+            if (message != null && message.has_pose && message.TryGetPoseMatrix(out Matrix4x4 typedMatrix))
+            {
+                OnPoseReceived?.Invoke(new PoseData(typedMatrix));
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // Ignore and fallback to legacy parser.
         }
 
         if (!TryReadHasPose(json, out bool hasPose) || !hasPose)

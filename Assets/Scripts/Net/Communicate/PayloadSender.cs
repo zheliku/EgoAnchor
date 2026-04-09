@@ -109,6 +109,16 @@ public class PayloadSender : MonoBehaviour
             yield break;
         }
 
+        Debug.Log($"[PayloadSender] RuntimeConfig endpoint={Endpoint}, targetFps={targetFps}, sendHWM={sendHighWatermark}, lingerMs={socketLingerMs}, encoder={(payloadEncoder != null ? payloadEncoder.GetType().Name : "null")}");
+        if (sendHighWatermark > 1)
+        {
+            Debug.LogWarning($"[PayloadSender] sendHighWatermark={sendHighWatermark} (>1) 可能引入排队延迟。低延迟链路建议设置为 1。", this);
+        }
+        if (targetFps > 20)
+        {
+            Debug.LogWarning($"[PayloadSender] targetFps={targetFps} 偏高。若下游仅 6~10 FPS，建议把发送帧率降到 8~12 以避免排队和陈旧帧。", this);
+        }
+
         Connect();
         _lastStatTime = Time.realtimeSinceStartupAsDouble;
         _sendCoroutine = StartCoroutine(SendLoop());
