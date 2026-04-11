@@ -12,9 +12,9 @@ public class PoseSmoother : MonoBehaviour
 {
     [Header("Smoothing")]
     [Min(0.01f)]
-    [SerializeField] private float positionSmoothSpeed = 10f;
+    [SerializeField] private float positionSmoothSpeed = 3f;
     [Min(0.01f)]
-    [SerializeField] private float rotationSmoothSpeed = 12f;
+    [SerializeField] private float rotationSmoothSpeed = 3f;
     [Tooltip("首次收到位姿时是否直接贴合，避免初始跳变。")]
     [SerializeField] private bool snapOnFirstPose = true;
 

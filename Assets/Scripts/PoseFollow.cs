@@ -65,9 +65,16 @@ public class PoseFrameEvent : UnityEvent<PoseFrame> { }
 /// </summary>
 public class PoseFollow : MonoBehaviour
 {
+    private static readonly Matrix4x4 OpenCvToUnityAxisMatrix =
+        Matrix4x4.Scale(new Vector3(1f, -1f, 1f));
+
     [Header("Reference Transform")]
     [Tooltip("位姿参考系（通常是相机根节点或世界锚点）。")]
     public Transform target;
+
+    [Header("Coordinate Mapping")]
+    [Tooltip("输入位姿若来自 OpenCV 相机坐标（x右/y下/z前），勾选后自动转换到 Unity 坐标（x右/y上/z前）。")]
+    [SerializeField] private bool convertFromOpenCvCamera = true;
 
     [Header("Events")]
     [Tooltip("收到有效 PoseData 时触发。")]
@@ -136,6 +143,12 @@ public class PoseFollow : MonoBehaviour
         OnPoseReceived?.Invoke(pose);
 
         Matrix4x4 poseMatrix = pose.PoseMatrix.Value;
+        if (convertFromOpenCvCamera)
+        {
+            // 用相似变换做坐标系切换，保证平移和旋转在同一规则下转换。
+            poseMatrix = OpenCvToUnityAxisMatrix * poseMatrix * OpenCvToUnityAxisMatrix;
+        }
+
         Vector3 localPosition = new Vector3(poseMatrix.m03, poseMatrix.m13, poseMatrix.m23);
         Quaternion localRotation = Quaternion.LookRotation(
             new Vector3(poseMatrix.m02, poseMatrix.m12, poseMatrix.m22),
