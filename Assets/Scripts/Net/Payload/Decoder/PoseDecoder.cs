@@ -6,7 +6,7 @@ using UnityEngine.Events;
 /// Pose 对外事件类型。
 /// </summary>
 [Serializable]
-public class PoseEvent : UnityEvent<Pose> { }
+public class PoseReceivedEvent : UnityEvent<Pose, long> { }
 
 /// <summary>
 /// Pose 协议解码器。
@@ -16,7 +16,7 @@ public class PoseEvent : UnityEvent<Pose> { }
 /// - "pose_matrix_flat": 长度 16 的位姿矩阵展平数组（当 has_pose=true 时）
 ///
 /// 输出事件：
-/// - OnPoseReceived：当 pose 有效时触发。
+/// - OnPoseReceived：当 pose 有效时触发（参数：pose, frame_id）。
 /// </summary>
 public class PoseDecoder : BaseDecoder
 {
@@ -25,13 +25,13 @@ public class PoseDecoder : BaseDecoder
     [SerializeField] private bool convertFromOpenCvCamera = true;
 
     [Header("Events")]
-    public PoseEvent OnPoseReceived = new PoseEvent();
+    public PoseReceivedEvent OnPoseReceived = new PoseReceivedEvent();
 
     private void Awake()
     {
         if (OnPoseReceived == null)
         {
-            OnPoseReceived = new PoseEvent();
+            OnPoseReceived = new PoseReceivedEvent();
         }
     }
 
@@ -63,7 +63,7 @@ public class PoseDecoder : BaseDecoder
             pose = convertedPose;
         }
 
-        OnPoseReceived?.Invoke(pose);
+        OnPoseReceived?.Invoke(pose, message.frame_id);
     }
 
     private static bool TryConvertOpenCvPoseToUnity(Pose inputPose, out Pose outputPose)

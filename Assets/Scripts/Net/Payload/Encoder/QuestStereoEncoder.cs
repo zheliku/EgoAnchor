@@ -1,5 +1,10 @@
+using System;
 using Meta.XR;
 using UnityEngine;
+using UnityEngine.Events;
+
+[Serializable]
+public class FrameIdEvent : UnityEvent<long> { }
 
 /// <summary>
 /// Quest 双目图像编码器。
@@ -23,6 +28,10 @@ public class QuestStereoEncoder : BaseEncoder
     [SerializeField] private bool enableVerboseDebugLog = true;
     [Range(1, 300)]
     [SerializeField] private int debugLogInterval = 30;
+
+    [Header("Events")]
+    [Tooltip("编码出有效帧后触发，参数为 frame_id。可在 Inspector 绑定监听。")]
+    public FrameIdEvent OnFrameEncoded = new FrameIdEvent();
 
     private RenderTexture _leftRenderTexture;
     private RenderTexture _rightRenderTexture;
@@ -68,6 +77,7 @@ public class QuestStereoEncoder : BaseEncoder
 
         double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
         long frameId = ++_senderFrameId;
+        OnFrameEncoded?.Invoke(frameId);
 
         BlitToRenderTarget(leftTexture, _leftRenderTexture);
         BlitToRenderTarget(rightTexture, _rightRenderTexture);
@@ -100,6 +110,14 @@ public class QuestStereoEncoder : BaseEncoder
         string encodePath = "PackedPayload";
         LogEncodeStats(payload, encodePath, encodeStart);
         return true;
+    }
+
+    private void Awake()
+    {
+        if (OnFrameEncoded == null)
+        {
+            OnFrameEncoded = new FrameIdEvent();
+        }
     }
 
     /// <summary>

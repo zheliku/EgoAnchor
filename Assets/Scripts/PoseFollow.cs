@@ -1,57 +1,14 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// 可被处理链修改的位姿帧数据。
-///
-/// 设计说明：
-/// - RawWorldPosition/RawWorldRotation：原始计算值（只读）。
-/// - WorldPosition/WorldRotation：最终应用值（可被事件监听器修改）。
+/// 位姿应用事件。
+/// 参数：worldPose, frameId, sampleTime。
 /// </summary>
 [Serializable]
-public class PoseFrame
-{
-    [SerializeField] private Pose sourcePose;
-    [SerializeField] private Vector3 rawWorldPosition;
-    [SerializeField] private Quaternion rawWorldRotation;
-    [SerializeField] private float sampleTime;
-
-    public Pose SourcePose => sourcePose;
-    public Vector3 RawWorldPosition => rawWorldPosition;
-    public Quaternion RawWorldRotation => rawWorldRotation;
-    public float SampleTime => sampleTime;
-
-    /// <summary>
-    /// 可被处理器修改，最终会应用到目标 Transform。
-    /// </summary>
-    public Vector3 WorldPosition;
-
-    /// <summary>
-    /// 可被处理器修改，最终会应用到目标 Transform。
-    /// </summary>
-    public Quaternion WorldRotation;
-
-    public PoseFrame(
-        Pose pose,
-        Vector3 worldPosition,
-        Quaternion worldRotation,
-        float timestamp)
-    {
-        sourcePose = pose;
-        rawWorldPosition = worldPosition;
-        rawWorldRotation = worldRotation;
-        sampleTime = timestamp;
-        WorldPosition = worldPosition;
-        WorldRotation = worldRotation;
-    }
-}
-
-/// <summary>
-/// PoseFollow 帧事件。
-/// </summary>
-[Serializable]
-public class PoseFrameEvent : UnityEvent<PoseFrame> { }
+public class PoseApplyEvent : UnityEvent<Pose, long, float> { }
 
 /// <summary>
 /// 通用位姿消费器。
@@ -60,24 +17,32 @@ public class PoseFrameEvent : UnityEvent<PoseFrame> { }
 /// - 无任何处理器时，直接同步位姿（不平滑）。
 ///
 /// 可插拔行为：
-/// - 通过 OnBeforePoseApply 或 BeforePoseApply 事件挂接处理器，
-///   修改 PoseFrame.WorldPosition/WorldRotation 即可实现平滑、约束、滤波等插件能力。
+/// - 通过 OnBeforePoseApply/OnAfterPoseApply 监听应用过程。
+/// - 需要平滑时由 PoseSmoother 组件处理，不再依赖 PoseFrame 包装对象。
 /// </summary>
 public class PoseFollow : MonoBehaviour
 {
-    [Header("Reference Transform")]
-    [Tooltip("位姿参考系（通常是相机根节点或世界锚点）。")]
-    public Transform target;
+    [Header("Alignment")]
+    [Tooltip("发送帧事件来源（通常为 QuestStereoEncoder）。")]
+    [SerializeField] private QuestStereoEncoder frameSourceEncoder;
+    [Tooltip("用于对齐回包位姿的发送时参考目标。通常绑定发送端相机或其父节点。")]
+    [SerializeField] private Transform sourceTarget;
+    [Min(64)]
+    [SerializeField] private int sourceTargetCacheSize = 512;
+
+    [Header("Smoothing")]
+    [Tooltip("可选平滑器。为空时直接应用原始位姿。")]
+    [SerializeField] private PoseSmoother poseSmoother;
 
     [Header("Events")]
     [Tooltip("收到有效 Pose 时触发。")]
-    public PoseEvent OnPoseReceived = new PoseEvent();
+    public PoseReceivedEvent OnPoseReceived = new PoseReceivedEvent();
 
-    [Tooltip("应用位姿前触发。可在监听器中修改 frame.WorldPosition / frame.WorldRotation。")]
-    public PoseFrameEvent OnBeforePoseApply = new PoseFrameEvent();
+    [Tooltip("应用位姿前触发（worldPose, frameId, sampleTime）。")]
+    public PoseApplyEvent OnBeforePoseApply = new PoseApplyEvent();
 
-    [Tooltip("位姿应用到 Transform 后触发。")]
-    public PoseFrameEvent OnAfterPoseApply = new PoseFrameEvent();
+    [Tooltip("位姿应用到 Transform 后触发（worldPose, frameId, sampleTime）。")]
+    public PoseApplyEvent OnAfterPoseApply = new PoseApplyEvent();
 
     [Header("Debug")]
     [SerializeField] private bool enableVerboseDebugLog;
@@ -87,7 +52,7 @@ public class PoseFollow : MonoBehaviour
     // 最近一次解码得到的目标位姿（世界坐标）。
     private Vector3 _targetWorldPosition;
     private Quaternion _targetWorldRotation = Quaternion.identity;
-    private Pose _latestPose;
+    private long _latestFrameId = -1;
     private bool _hasTargetPose;
 
     // 接收频率统计（按 Decoder 回调频率）。
@@ -99,23 +64,53 @@ public class PoseFollow : MonoBehaviour
     private float _applyIntervalEma;
 
     private int _applyFrameCount;
-    private bool _hasWarnedNoReference;
+    private bool _hasWarnedFrameMiss;
+
+    private readonly Dictionary<long, Pose> _sourceTargetPoseCache =
+        new Dictionary<long, Pose>();
+    private readonly Queue<long> _sourceTargetPoseOrder = new Queue<long>();
 
     private void Awake()
     {
         if (OnPoseReceived == null)
         {
-            OnPoseReceived = new PoseEvent();
+            OnPoseReceived = new PoseReceivedEvent();
         }
 
         if (OnBeforePoseApply == null)
         {
-            OnBeforePoseApply = new PoseFrameEvent();
+            OnBeforePoseApply = new PoseApplyEvent();
         }
 
         if (OnAfterPoseApply == null)
         {
-            OnAfterPoseApply = new PoseFrameEvent();
+            OnAfterPoseApply = new PoseApplyEvent();
+        }
+
+        if (frameSourceEncoder == null)
+        {
+            frameSourceEncoder = FindFirstObjectByType<QuestStereoEncoder>();
+        }
+
+        if (poseSmoother == null)
+        {
+            poseSmoother = GetComponent<PoseSmoother>();
+        }
+    }
+
+    private void OnEnable()
+    {
+        if (frameSourceEncoder != null)
+        {
+            frameSourceEncoder.OnFrameEncoded.AddListener(HandleFrameEncoded);
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (frameSourceEncoder != null)
+        {
+            frameSourceEncoder.OnFrameEncoded.RemoveListener(HandleFrameEncoded);
         }
     }
 
@@ -126,9 +121,19 @@ public class PoseFollow : MonoBehaviour
     /// - 这里不直接改 transform。
     /// - 真正的位姿应用在 Update 中每帧执行，避免受网络输入帧率（如 5fps）限制。
     /// </summary>
-    public virtual void FollowTarget(Pose pose)
+    public virtual void FollowTarget(Pose pose, long frameId)
     {
-        OnPoseReceived?.Invoke(pose);
+        OnPoseReceived?.Invoke(pose, frameId);
+
+        if (!TryGetSourceTargetPose(frameId, out Pose sourceTargetPose))
+        {
+            if (!_hasWarnedFrameMiss)
+            {
+                _hasWarnedFrameMiss = true;
+                Debug.LogWarning($"[PoseFollow] 未命中发送帧缓存: frameId={frameId}。", this);
+            }
+            return;
+        }
 
         Vector3 localPosition = pose.position;
         Quaternion localRotation = pose.rotation;
@@ -139,32 +144,55 @@ public class PoseFollow : MonoBehaviour
         Vector3 worldPosition;
         Quaternion worldRotation;
 
-        if (target != null)
-        {
-            // 正确做法：
-            // 1) 位置用 TransformPoint，把参考系旋转和平移都考虑进去。
-            // 2) 旋转按 world = reference * local 的顺序组合。
-            worldPosition = target.TransformPoint(localPosition);
-            worldRotation = target.rotation * localRotation;
-        }
-        else
-        {
-            worldPosition = localPosition;
-            worldRotation = localRotation;
-
-            if (!_hasWarnedNoReference)
-            {
-                _hasWarnedNoReference = true;
-                Debug.LogWarning("[PoseFollow] target 未指定，按世界坐标直接应用位姿。", this);
-            }
-        }
+        worldPosition = sourceTargetPose.position + sourceTargetPose.rotation * localPosition;
+        worldRotation = sourceTargetPose.rotation * localRotation;
 
         _targetWorldPosition = worldPosition;
         _targetWorldRotation = worldRotation;
-        _latestPose = pose;
+        _latestFrameId = frameId;
         _hasTargetPose = true;
 
         UpdateReceiveStats();
+    }
+
+    public void HandleFrameEncoded(long frameId)
+    {
+        if (frameId <= 0 || sourceTarget == null)
+        {
+            return;
+        }
+
+        CacheSourceTargetPose(
+            frameId,
+            new Pose(sourceTarget.position, sourceTarget.rotation),
+            Mathf.Max(64, sourceTargetCacheSize)
+        );
+    }
+
+    private bool TryGetSourceTargetPose(long frameId, out Pose sourceTargetPose)
+    {
+        sourceTargetPose = Pose.identity;
+        if (frameId <= 0)
+        {
+            return false;
+        }
+
+        return _sourceTargetPoseCache.TryGetValue(frameId, out sourceTargetPose);
+    }
+
+    private void CacheSourceTargetPose(long frameId, Pose pose, int maxCount)
+    {
+        if (!_sourceTargetPoseCache.ContainsKey(frameId))
+        {
+            _sourceTargetPoseOrder.Enqueue(frameId);
+        }
+
+        _sourceTargetPoseCache[frameId] = pose;
+        while (_sourceTargetPoseOrder.Count > maxCount)
+        {
+            long oldFrameId = _sourceTargetPoseOrder.Dequeue();
+            _sourceTargetPoseCache.Remove(oldFrameId);
+        }
     }
 
     private void Update()
@@ -174,21 +202,20 @@ public class PoseFollow : MonoBehaviour
             return;
         }
 
-        PoseFrame frame = new PoseFrame(
-            _latestPose,
-            _targetWorldPosition,
-            _targetWorldRotation,
-            Time.realtimeSinceStartup
-        );
+        float sampleTime = Time.realtimeSinceStartup;
+        Pose rawWorldPose = new Pose(_targetWorldPosition, _targetWorldRotation);
+        OnBeforePoseApply?.Invoke(rawWorldPose, _latestFrameId, sampleTime);
 
-        // 先触发处理链，给插件机会修改最终输出位姿。
-        OnBeforePoseApply?.Invoke(frame);
+        Pose appliedPose = rawWorldPose;
+        if (poseSmoother != null)
+        {
+            appliedPose = poseSmoother.ApplySmoothing(rawWorldPose);
+        }
 
-        transform.SetPositionAndRotation(frame.WorldPosition, frame.WorldRotation);
+        transform.SetPositionAndRotation(appliedPose.position, appliedPose.rotation);
+        OnAfterPoseApply?.Invoke(appliedPose, _latestFrameId, sampleTime);
 
-        OnAfterPoseApply?.Invoke(frame);
-
-        UpdateDebugStats(frame);
+        UpdateDebugStats(rawWorldPose, appliedPose, sampleTime);
     }
 
     private void UpdateReceiveStats()
@@ -204,9 +231,9 @@ public class PoseFollow : MonoBehaviour
         _lastPoseReceiveTime = now;
     }
 
-    private void UpdateDebugStats(PoseFrame frame)
+    private void UpdateDebugStats(Pose rawWorldPose, Pose appliedPose, float sampleTime)
     {
-        float now = frame.SampleTime;
+        float now = sampleTime;
         if (_lastApplyTime > 0f)
         {
             float interval = Mathf.Max(now - _lastApplyTime, 1e-5f);
@@ -229,11 +256,11 @@ public class PoseFollow : MonoBehaviour
 
         float applyHz = _applyIntervalEma > 1e-5f ? 1f / _applyIntervalEma : 0f;
         float receiveHz = _receiveIntervalEma > 1e-5f ? 1f / _receiveIntervalEma : 0f;
-        float posError = Vector3.Distance(frame.RawWorldPosition, frame.WorldPosition);
-        float rotError = Quaternion.Angle(frame.RawWorldRotation, frame.WorldRotation);
+        float posError = Vector3.Distance(rawWorldPose.position, appliedPose.position);
+        float rotError = Quaternion.Angle(rawWorldPose.rotation, appliedPose.rotation);
 
         Debug.Log(
-            $"[PoseFollow] recvHz={receiveHz:F2}, applyHz={applyHz:F2}, posDelta={posError:F4}m, rotDelta={rotError:F2}deg",
+            $"[PoseFollow] recvHz={receiveHz:F2}, applyHz={applyHz:F2}, posDelta={posError:F4}m, rotDelta={rotError:F2}deg, frameId={_latestFrameId}",
             this
         );
     }

@@ -5,8 +5,7 @@ using UnityEngine;
 ///
 /// 用法：
 /// 1. 挂到与 PoseFollow 同一个对象（可自动绑定）。
-/// 2. 或者在 Inspector 中把 ProcessPose 手动挂到 PoseFollow.OnBeforePoseApply。
-/// 3. 修改 frame.WorldPosition / frame.WorldRotation，实现“可插拔平滑”。
+/// 2. PoseFollow 会调用 ApplySmoothing(Pose) 获取平滑后的位姿。
 /// </summary>
 public class PoseSmoother : MonoBehaviour
 {
@@ -22,23 +21,20 @@ public class PoseSmoother : MonoBehaviour
     private Vector3 _smoothedPosition;
     private Quaternion _smoothedRotation = Quaternion.identity;
 
-
-    public void ProcessPose(PoseFrame frame)
+    public Pose ApplySmoothing(Pose worldPose)
     {
         // 首帧只初始化一次，不能把 snapOnFirstPose 写进条件，
         // 否则在 snapOnFirstPose=true 时会每帧重置，导致完全不平滑。
         if (!_hasSmoothedPose)
         {
-            _smoothedPosition = frame.WorldPosition;
-            _smoothedRotation = frame.WorldRotation;
+            _smoothedPosition = worldPose.position;
+            _smoothedRotation = worldPose.rotation;
             _hasSmoothedPose = true;
 
             // 第一次可直接贴合，也可以继续走一次平滑（由 snapOnFirstPose 控制）。
             if (snapOnFirstPose)
             {
-                frame.WorldPosition = _smoothedPosition;
-                frame.WorldRotation = _smoothedRotation;
-                return;
+                return new Pose(_smoothedPosition, _smoothedRotation);
             }
         }
 
@@ -46,10 +42,9 @@ public class PoseSmoother : MonoBehaviour
         float posT = 1f - Mathf.Exp(-positionSmoothSpeed * dt);
         float rotT = 1f - Mathf.Exp(-rotationSmoothSpeed * dt);
 
-        _smoothedPosition = Vector3.Lerp(_smoothedPosition, frame.WorldPosition, posT);
-        _smoothedRotation = Quaternion.Slerp(_smoothedRotation, frame.WorldRotation, rotT);
+        _smoothedPosition = Vector3.Lerp(_smoothedPosition, worldPose.position, posT);
+        _smoothedRotation = Quaternion.Slerp(_smoothedRotation, worldPose.rotation, rotT);
 
-        frame.WorldPosition = _smoothedPosition;
-        frame.WorldRotation = _smoothedRotation;
+        return new Pose(_smoothedPosition, _smoothedRotation);
     }
 }

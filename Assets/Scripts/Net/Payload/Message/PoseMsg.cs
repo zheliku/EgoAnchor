@@ -15,6 +15,8 @@ public class PoseMsg
 {
     [Key("timestamp_ms")]
     public double timestamp_ms; // 该条位姿消息的时间戳（毫秒）。
+    [Key("frame_id")]
+    public long frame_id; // 对应输入双目帧号（用于 Unity 本地对齐发送时参考位姿）。
     [Key("stage")]
     public int stage; // Pipeline 阶段编号。
     [Key("phase")]

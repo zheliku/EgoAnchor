@@ -154,6 +154,9 @@ MonoBehaviour:
   jpegQuality: 80
   enableVerboseDebugLog: 1
   debugLogInterval: 30
+  OnFrameEncoded:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!4 &217519041
 Transform:
   m_ObjectHideFlags: 0
@@ -1832,8 +1835,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  target: {fileID: 960095797}
-  convertFromOpenCvCamera: 1
+  frameSourceEncoder: {fileID: 217519040}
+  sourceTarget: {fileID: 960095797}
+  sourceTargetCacheSize: 512
+  poseSmoother: {fileID: 864581799}
   OnPoseReceived:
     m_PersistentCalls:
       m_Calls: []
@@ -2474,53 +2479,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30158715ff59ef442aeceebc655d1b73, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!1 &1046697703
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1046697705}
-  - component: {fileID: 1046697704}
-  m_Layer: 0
-  m_Name: StaticStereoEncoder
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1046697704
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1046697703}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a9e85cc690b3b254c8c4695a5ef9e997, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::StaticStereoEncoder
-  leftTexture: {fileID: 2800000, guid: dffef66376be4fa480fb02b19edbe903, type: 3}
-  rightTexture: {fileID: 2800000, guid: 85698edae8cee474cb380dd0347653c0, type: 3}
-  jpegQuality: 80
---- !u!4 &1046697705
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1046697703}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.00971, y: 0, z: 0.09355}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1066022993
 GameObject:
   m_ObjectHideFlags: 0
@@ -2774,7 +2732,7 @@ MonoBehaviour:
   _displayName: 666
   _port: 7759
   _password: 123
-  _useHttps: 0
+  _useHttps: 1
   _certificate: {fileID: 0}
   _certificatePassword: 
   _runOnEnable: 1
@@ -3647,8 +3605,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  target: {fileID: 960095797}
-  convertFromOpenCvCamera: 1
+  frameSourceEncoder: {fileID: 217519040}
+  sourceTarget: {fileID: 960095797}
+  sourceTargetCacheSize: 512
+  poseSmoother: {fileID: 1824679902}
   OnPoseReceived:
     m_PersistentCalls:
       m_Calls: []
@@ -3980,6 +3940,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5e7134f102f4c40a9f84d4fd64e9e88, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseJsonDecoder
+  convertFromOpenCvCamera: 1
   OnPoseReceived:
     m_PersistentCalls:
       m_Calls:
@@ -4068,7 +4029,6 @@ SceneRoots:
   - {fileID: 457553053}
   - {fileID: 850615824}
   - {fileID: 762868053}
-  - {fileID: 1046697705}
   - {fileID: 882331661}
   - {fileID: 217519041}
   - {fileID: 265007996}
