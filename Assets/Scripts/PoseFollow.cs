@@ -12,12 +12,12 @@ using UnityEngine.Events;
 [Serializable]
 public class PoseFrame
 {
-    [SerializeField] private PoseData sourcePose;
+    [SerializeField] private Pose sourcePose;
     [SerializeField] private Vector3 rawWorldPosition;
     [SerializeField] private Quaternion rawWorldRotation;
     [SerializeField] private float sampleTime;
 
-    public PoseData SourcePose => sourcePose;
+    public Pose SourcePose => sourcePose;
     public Vector3 RawWorldPosition => rawWorldPosition;
     public Quaternion RawWorldRotation => rawWorldRotation;
     public float SampleTime => sampleTime;
@@ -33,7 +33,7 @@ public class PoseFrame
     public Quaternion WorldRotation;
 
     public PoseFrame(
-        PoseData pose,
+        Pose pose,
         Vector3 worldPosition,
         Quaternion worldRotation,
         float timestamp)
@@ -65,20 +65,13 @@ public class PoseFrameEvent : UnityEvent<PoseFrame> { }
 /// </summary>
 public class PoseFollow : MonoBehaviour
 {
-    private static readonly Matrix4x4 OpenCvToUnityAxisMatrix =
-        Matrix4x4.Scale(new Vector3(1f, -1f, 1f));
-
     [Header("Reference Transform")]
     [Tooltip("位姿参考系（通常是相机根节点或世界锚点）。")]
     public Transform target;
 
-    [Header("Coordinate Mapping")]
-    [Tooltip("输入位姿若来自 OpenCV 相机坐标（x右/y下/z前），勾选后自动转换到 Unity 坐标（x右/y上/z前）。")]
-    [SerializeField] private bool convertFromOpenCvCamera = true;
-
     [Header("Events")]
-    [Tooltip("收到有效 PoseData 时触发。")]
-    public PoseDataEvent OnPoseReceived = new PoseDataEvent();
+    [Tooltip("收到有效 Pose 时触发。")]
+    public PoseEvent OnPoseReceived = new PoseEvent();
 
     [Tooltip("应用位姿前触发。可在监听器中修改 frame.WorldPosition / frame.WorldRotation。")]
     public PoseFrameEvent OnBeforePoseApply = new PoseFrameEvent();
@@ -94,7 +87,7 @@ public class PoseFollow : MonoBehaviour
     // 最近一次解码得到的目标位姿（世界坐标）。
     private Vector3 _targetWorldPosition;
     private Quaternion _targetWorldRotation = Quaternion.identity;
-    private PoseData _latestPoseData;
+    private Pose _latestPose;
     private bool _hasTargetPose;
 
     // 接收频率统计（按 Decoder 回调频率）。
@@ -112,7 +105,7 @@ public class PoseFollow : MonoBehaviour
     {
         if (OnPoseReceived == null)
         {
-            OnPoseReceived = new PoseDataEvent();
+            OnPoseReceived = new PoseEvent();
         }
 
         if (OnBeforePoseApply == null)
@@ -133,27 +126,12 @@ public class PoseFollow : MonoBehaviour
     /// - 这里不直接改 transform。
     /// - 真正的位姿应用在 Update 中每帧执行，避免受网络输入帧率（如 5fps）限制。
     /// </summary>
-    public virtual void FollowTarget(PoseData pose)
+    public virtual void FollowTarget(Pose pose)
     {
-        if (!pose.HasPose || !pose.PoseMatrix.HasValue)
-        {
-            return;
-        }
-
         OnPoseReceived?.Invoke(pose);
 
-        Matrix4x4 poseMatrix = pose.PoseMatrix.Value;
-        if (convertFromOpenCvCamera)
-        {
-            // 用相似变换做坐标系切换，保证平移和旋转在同一规则下转换。
-            poseMatrix = OpenCvToUnityAxisMatrix * poseMatrix * OpenCvToUnityAxisMatrix;
-        }
-
-        Vector3 localPosition = new Vector3(poseMatrix.m03, poseMatrix.m13, poseMatrix.m23);
-        Quaternion localRotation = Quaternion.LookRotation(
-            new Vector3(poseMatrix.m02, poseMatrix.m12, poseMatrix.m22),
-            new Vector3(poseMatrix.m01, poseMatrix.m11, poseMatrix.m21)
-        );
+        Vector3 localPosition = pose.position;
+        Quaternion localRotation = pose.rotation;
 
         // 注意命名：
         // - localPosition/localRotation：由 pose_matrix 解出的“参考系下位姿”（通常是相机系）。
@@ -183,7 +161,7 @@ public class PoseFollow : MonoBehaviour
 
         _targetWorldPosition = worldPosition;
         _targetWorldRotation = worldRotation;
-        _latestPoseData = pose;
+        _latestPose = pose;
         _hasTargetPose = true;
 
         UpdateReceiveStats();
@@ -197,7 +175,7 @@ public class PoseFollow : MonoBehaviour
         }
 
         PoseFrame frame = new PoseFrame(
-            _latestPoseData,
+            _latestPose,
             _targetWorldPosition,
             _targetWorldRotation,
             Time.realtimeSinceStartup

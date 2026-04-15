@@ -73,9 +73,9 @@ public class PoseMsg
         }
     }
 
-    public bool TryGetPoseMatrix(out Matrix4x4 matrix)
+    public bool TryGetPose(out Pose pose)
     {
-        matrix = Matrix4x4.identity;
+        pose = Pose.identity;
         if (!has_pose)
         {
             return false;
@@ -86,22 +86,29 @@ public class PoseMsg
             return false;
         }
 
-        matrix.m00 = pose_matrix_flat[0];
-        matrix.m01 = pose_matrix_flat[1];
-        matrix.m02 = pose_matrix_flat[2];
-        matrix.m03 = pose_matrix_flat[3];
-        matrix.m10 = pose_matrix_flat[4];
-        matrix.m11 = pose_matrix_flat[5];
-        matrix.m12 = pose_matrix_flat[6];
-        matrix.m13 = pose_matrix_flat[7];
-        matrix.m20 = pose_matrix_flat[8];
-        matrix.m21 = pose_matrix_flat[9];
-        matrix.m22 = pose_matrix_flat[10];
-        matrix.m23 = pose_matrix_flat[11];
-        matrix.m30 = pose_matrix_flat[12];
-        matrix.m31 = pose_matrix_flat[13];
-        matrix.m32 = pose_matrix_flat[14];
-        matrix.m33 = pose_matrix_flat[15];
+        Vector3 forward = new Vector3(
+            pose_matrix_flat[2],
+            pose_matrix_flat[6],
+            pose_matrix_flat[10]
+        );
+        Vector3 up = new Vector3(
+            pose_matrix_flat[1],
+            pose_matrix_flat[5],
+            pose_matrix_flat[9]
+        );
+        if (forward.sqrMagnitude < 1e-12f || up.sqrMagnitude < 1e-12f)
+        {
+            return false;
+        }
+
+        pose = new Pose(
+            new Vector3(
+                pose_matrix_flat[3],
+                pose_matrix_flat[7],
+                pose_matrix_flat[11]
+            ),
+            Quaternion.LookRotation(forward, up)
+        );
         return true;
     }
 }

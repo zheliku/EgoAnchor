@@ -3,37 +3,10 @@ using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// 运行时位姿业务结构：用于场景内组件传递，不属于网络传输 schema。
+/// Pose 对外事件类型。
 /// </summary>
 [Serializable]
-public struct PoseData
-{
-    [SerializeField] private Matrix4x4 poseMatrix;
-    [SerializeField] private bool hasPose;
-
-    public Matrix4x4? PoseMatrix => hasPose ? poseMatrix : null;
-    public bool HasPose => hasPose;
-
-    public PoseData(Matrix4x4? matrix)
-    {
-        if (matrix.HasValue)
-        {
-            poseMatrix = matrix.Value;
-            hasPose = true;
-        }
-        else
-        {
-            poseMatrix = Matrix4x4.identity;
-            hasPose = false;
-        }
-    }
-}
-
-/// <summary>
-/// PoseData 对外事件类型。
-/// </summary>
-[Serializable]
-public class PoseDataEvent : UnityEvent<PoseData> { }
+public class PoseEvent : UnityEvent<Pose> { }
 
 /// <summary>
 /// Pose 协议解码器。
@@ -47,14 +20,18 @@ public class PoseDataEvent : UnityEvent<PoseData> { }
 /// </summary>
 public class PoseDecoder : BaseDecoder
 {
+    [Header("Coordinate Mapping")]
+    [Tooltip("输入位姿若来自 OpenCV 相机坐标（x右/y下/z前），勾选后自动转换到 Unity 坐标（x右/y上/z前）。")]
+    [SerializeField] private bool convertFromOpenCvCamera = true;
+
     [Header("Events")]
-    public PoseDataEvent OnPoseReceived = new PoseDataEvent();
+    public PoseEvent OnPoseReceived = new PoseEvent();
 
     private void Awake()
     {
         if (OnPoseReceived == null)
         {
-            OnPoseReceived = new PoseDataEvent();
+            OnPoseReceived = new PoseEvent();
         }
     }
 
@@ -71,11 +48,42 @@ public class PoseDecoder : BaseDecoder
             return;
         }
 
-        if (!message.TryGetPoseMatrix(out Matrix4x4 poseMatrix))
+        if (!message.TryGetPose(out Pose pose))
         {
             return;
         }
 
-        OnPoseReceived?.Invoke(new PoseData(poseMatrix));
+        if (convertFromOpenCvCamera)
+        {
+            if (!TryConvertOpenCvPoseToUnity(pose, out Pose convertedPose))
+            {
+                return;
+            }
+
+            pose = convertedPose;
+        }
+
+        OnPoseReceived?.Invoke(pose);
+    }
+
+    private static bool TryConvertOpenCvPoseToUnity(Pose inputPose, out Pose outputPose)
+    {
+        Vector3 forwardInput = inputPose.rotation * Vector3.forward;
+        Vector3 forward = new Vector3(forwardInput.x, -forwardInput.y, forwardInput.z);
+        // 等价于 M * R * M（M=diag(1,-1,1)）中的右乘 M 对 up 轴的影响。
+        Vector3 upInput = inputPose.rotation * Vector3.down;
+        Vector3 up = new Vector3(upInput.x, -upInput.y, upInput.z);
+        if (forward.sqrMagnitude < 1e-12f || up.sqrMagnitude < 1e-12f)
+        {
+            outputPose = Pose.identity;
+            return false;
+        }
+
+        Vector3 position = inputPose.position;
+        outputPose = new Pose(
+            new Vector3(position.x, -position.y, position.z),
+            Quaternion.LookRotation(forward, up)
+        );
+        return true;
     }
 }
