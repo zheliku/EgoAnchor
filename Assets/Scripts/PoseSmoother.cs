@@ -21,7 +21,7 @@ public class PoseSmoother : MonoBehaviour
     private Vector3 _smoothedPosition;
     private Quaternion _smoothedRotation = Quaternion.identity;
 
-    public Pose ApplySmoothing(Pose worldPose)
+    public Pose ApplySmoothing(Pose worldPose, long frameId, float sampleTime)
     {
         // 首帧只初始化一次，不能把 snapOnFirstPose 写进条件，
         // 否则在 snapOnFirstPose=true 时会每帧重置，导致完全不平滑。

@@ -209,7 +209,7 @@ public class PoseFollow : MonoBehaviour
         Pose appliedPose = rawWorldPose;
         if (poseSmoother != null)
         {
-            appliedPose = poseSmoother.ApplySmoothing(rawWorldPose);
+            appliedPose = poseSmoother.ApplySmoothing(rawWorldPose, _latestFrameId, sampleTime);
         }
 
         transform.SetPositionAndRotation(appliedPose.position, appliedPose.rotation);
