@@ -6,10 +6,8 @@ namespace RuntimeInspectorNamespace
 {
 	public class ExposedMethodField : InspectorField
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private Button invokeButton;
-#pragma warning restore 0649
 
 		protected ExposedMethod boundMethod;
 

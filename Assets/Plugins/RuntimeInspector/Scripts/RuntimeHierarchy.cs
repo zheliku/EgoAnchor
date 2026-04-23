@@ -20,7 +20,6 @@ namespace RuntimeInspectorNamespace
 		public delegate void DoubleClickDelegate( HierarchyData clickedItem );
 		public delegate bool GameObjectFilterDelegate( Transform transform );
 
-#pragma warning disable 0649
 		[SerializeField]
 		private float m_refreshInterval = 0f;
 		public float RefreshInterval
@@ -363,7 +362,6 @@ namespace RuntimeInspectorNamespace
 		[SerializeField]
 		private Sprite m_transformDrawerBackground;
 		internal Sprite TransformDrawerBackground { get { return m_transformDrawerBackground; } }
-#pragma warning restore 0649
 
 		private static int aliveHierarchies = 0;
 
@@ -377,12 +375,8 @@ namespace RuntimeInspectorNamespace
 
 		private readonly List<Transform> m_currentSelection = new List<Transform>( 16 );
 		public ReadOnlyCollection<Transform> CurrentSelection { get { return m_currentSelection.AsReadOnly(); } }
-
-		// Stores the selected Transforms' instanceIDs. An object's instanceID can be retrieved via GetInstanceID() but it
-		// makes an unnecessary "EnsureRunningOnMainThread()" call. Luckily, GetHashCode() also returns the instanceID and
-		// it doesn't call "EnsureRunningOnMainThread()"
-		private readonly HashSet<int> currentSelectionSet = new HashSet<int>();
-		private readonly HashSet<int> newSelectionSet = new HashSet<int>();
+        private readonly HashSet<Transform> currentSelectionSet = new();
+        private readonly HashSet<Transform> newSelectionSet = new();
 
 #pragma warning disable 0414 // Value is assigned but never used on Android & iOS
 		private Transform multiSelectionPivotTransform;
@@ -638,13 +632,13 @@ namespace RuntimeInspectorNamespace
 					}
 					else if( m_allowMultiSelection && !m_multiSelectionToggleSelectionMode )
 					{
-						if( currentSelectionSet.Add( currentlyPressedDrawer.Data.BoundTransform.GetHashCode() ) )
-						{
-							m_currentSelection.Add( currentlyPressedDrawer.Data.BoundTransform );
-							currentlyPressedDrawer.IsSelected = true;
+                        if (currentSelectionSet.Add(currentlyPressedDrawer.Data.BoundTransform))
+                        {
+                            m_currentSelection.Add(currentlyPressedDrawer.Data.BoundTransform);
+                            currentlyPressedDrawer.IsSelected = true;
 
-							OnCurrentSelectionChanged();
-						}
+                            OnCurrentSelectionChanged();
+                        }
 
 						MultiSelectionToggleSelectionMode = true;
 						justActivatedMultiSelectionToggleSelectionMode = true;
@@ -817,7 +811,7 @@ namespace RuntimeInspectorNamespace
 			{
 				drawer.Skin = Skin;
 				drawer.SetContent( data );
-				drawer.IsSelected = data.BoundTransform && currentSelectionSet.Contains( data.BoundTransform.GetHashCode() );
+                drawer.IsSelected = data.BoundTransform != null && currentSelectionSet.Contains(data.BoundTransform);
 				drawer.MultiSelectionToggleVisible = m_multiSelectionToggleSelectionMode;
 				drawer.Refresh();
 
@@ -840,7 +834,6 @@ namespace RuntimeInspectorNamespace
 
 				bool hasSelectionChanged = false;
 				Transform clickedTransform = drawer.Data.BoundTransform;
-				int clickedTransformInstanceID = clickedTransform ? clickedTransform.GetHashCode() : -1;
 
 #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL || UNITY_WSA || UNITY_WSA_10_0
 				// When Shift key is held, all items from the pivot item to the clicked item will be selected
@@ -849,16 +842,16 @@ namespace RuntimeInspectorNamespace
 				{
 					newSelectionSet.Clear();
 
-					if( clickedTransform )
-					{
-						newSelectionSet.Add( clickedTransformInstanceID );
+                    if (clickedTransform != null)
+                    {
+                        newSelectionSet.Add(clickedTransform);
 
-						if( currentSelectionSet.Add( clickedTransformInstanceID ) )
-						{
-							m_currentSelection.Add( clickedTransform );
-							hasSelectionChanged = true;
-						}
-					}
+                        if (currentSelectionSet.Add(clickedTransform))
+                        {
+                            m_currentSelection.Add(clickedTransform);
+                            hasSelectionChanged = true;
+                        }
+                    }
 
 					// Add new Transforms to selection
 					for( int i = multiSelectionPivotIndex, endIndex = drawer.Position, increment = ( multiSelectionPivotIndex < endIndex ) ? 1 : -1; i != endIndex; i += increment )
@@ -867,14 +860,13 @@ namespace RuntimeInspectorNamespace
 						if( !newSelection )
 							continue;
 
-						int selectionInstanceID = newSelection.GetHashCode();
-						newSelectionSet.Add( selectionInstanceID );
+                        newSelectionSet.Add(newSelection);
 
-						if( currentSelectionSet.Add( selectionInstanceID ) )
-						{
-							m_currentSelection.Add( newSelection );
-							hasSelectionChanged = true;
-						}
+                        if (currentSelectionSet.Add(newSelection))
+                        {
+                            m_currentSelection.Add(newSelection);
+                            hasSelectionChanged = true;
+                        }
 					}
 
 					// Remove old Transforms from selection
@@ -884,14 +876,13 @@ namespace RuntimeInspectorNamespace
 						if( !oldSelection )
 							continue;
 
-						int selectionInstanceID = oldSelection.GetHashCode();
-						if( !newSelectionSet.Contains( selectionInstanceID ) )
-						{
-							m_currentSelection.RemoveAt( i );
-							currentSelectionSet.Remove( selectionInstanceID );
+                        if (!newSelectionSet.Contains(oldSelection))
+                        {
+                            m_currentSelection.RemoveAt(i);
+                            currentSelectionSet.Remove(oldSelection);
 
-							hasSelectionChanged = true;
-						}
+                            hasSelectionChanged = true;
+                        }
 					}
 				}
 				else
@@ -908,21 +899,21 @@ namespace RuntimeInspectorNamespace
 					if( m_allowMultiSelection && m_multiSelectionToggleSelectionMode )
 #endif
 					{
-						if( clickedTransform )
-						{
-							if( currentSelectionSet.Add( clickedTransformInstanceID ) )
-								m_currentSelection.Add( clickedTransform );
-							else
-							{
-								m_currentSelection.Remove( clickedTransform );
-								currentSelectionSet.Remove( clickedTransformInstanceID );
+                        if (clickedTransform != null)
+                        {
+                            if (currentSelectionSet.Add(clickedTransform))
+                                m_currentSelection.Add(clickedTransform);
+                            else
+                            {
+                                m_currentSelection.Remove(clickedTransform);
+                                currentSelectionSet.Remove(clickedTransform);
 
-								if( m_currentSelection.Count == 0 )
-									MultiSelectionToggleSelectionMode = false;
-							}
+                                if (m_currentSelection.Count == 0)
+                                    MultiSelectionToggleSelectionMode = false;
+                            }
 
-							hasSelectionChanged = true;
-						}
+                            hasSelectionChanged = true;
+                        }
 					}
 					else
 					{
@@ -934,7 +925,7 @@ namespace RuntimeInspectorNamespace
 								currentSelectionSet.Clear();
 
 								m_currentSelection.Add( clickedTransform );
-								currentSelectionSet.Add( clickedTransformInstanceID );
+                                currentSelectionSet.Add(clickedTransform);
 
 								hasSelectionChanged = true;
 							}
@@ -958,8 +949,8 @@ namespace RuntimeInspectorNamespace
 							Transform drawerTransform = drawers[i].Data.BoundTransform;
 							if( drawerTransform )
 							{
-								if( drawers[i].IsSelected != currentSelectionSet.Contains( drawerTransform.GetHashCode() ) )
-									drawers[i].IsSelected = !drawers[i].IsSelected;
+                                if (drawers[i].IsSelected != currentSelectionSet.Contains(drawerTransform))
+                                    drawers[i].IsSelected = !drawers[i].IsSelected;
 							}
 							else if( drawers[i].IsSelected )
 								drawers[i].IsSelected = false;
@@ -1140,15 +1131,15 @@ namespace RuntimeInspectorNamespace
 
 			Initialize();
 
-			// Remove null Transforms from existing selection
-			for( int i = m_currentSelection.Count - 1; i >= 0; i-- )
-			{
-				if( m_currentSelection[i] == null )
-				{
-					currentSelectionSet.Remove( m_currentSelection[i].GetHashCode() );
-					m_currentSelection.RemoveAt( i );
-				}
-			}
+            // Remove null Transforms from existing selection
+            for (int i = m_currentSelection.Count - 1; i >= 0; i--)
+            {
+                if (m_currentSelection[i] == null)
+                {
+                    currentSelectionSet.Remove(m_currentSelection[i]);
+                    m_currentSelection.RemoveAt(i);
+                }
+            }
 
 			// Make sure that the contents of the hierarchy are up-to-date
 			Refresh();
@@ -1178,56 +1169,55 @@ namespace RuntimeInspectorNamespace
 			bool hasSelectionChanged = false;
 			if( additive )
 			{
-				for( int i = 0; i < selection.Count; i++ )
-				{
-					Transform _selection = selection[i];
-					if( CanSelectTransform( _selection ) && currentSelectionSet.Add( _selection.GetHashCode() ) )
-					{
-						m_currentSelection.Add( _selection );
-						hasSelectionChanged = true;
-					}
-				}
+                for (int i = 0; i < selection.Count; i++)
+                {
+                    Transform _selection = selection[i];
+                    if (CanSelectTransform(_selection) && currentSelectionSet.Add(_selection))
+                    {
+                        m_currentSelection.Add(_selection);
+                        hasSelectionChanged = true;
+                    }
+                }
 			}
 			else
 			{
 				newSelectionSet.Clear();
 
-				// Add new Transforms to selection
-				for( int i = 0; i < selection.Count; i++ )
-				{
-					Transform newSelection = selection[i];
-					if( !CanSelectTransform( newSelection ) )
-						continue;
+                // Add new Transforms to selection
+                for (int i = 0; i < selection.Count; i++)
+                {
+                    Transform newSelection = selection[i];
+                    if (!CanSelectTransform(newSelection))
+                        continue;
 
-					int selectionInstanceID = newSelection.GetHashCode();
-					newSelectionSet.Add( selectionInstanceID );
+                    newSelectionSet.Add(newSelection);
 
-					if( currentSelectionSet.Add( selectionInstanceID ) )
-					{
-						m_currentSelection.Add( newSelection );
-						hasSelectionChanged = true;
-					}
-				}
+                    if (currentSelectionSet.Add(newSelection))
+                    {
+                        m_currentSelection.Add(newSelection);
+                        hasSelectionChanged = true;
+                    }
+                }
 
-				// Remove old Transforms from selection
-				for( int i = m_currentSelection.Count - 1; i >= 0; i-- )
-				{
-					int selectionInstanceID = m_currentSelection[i].GetHashCode();
-					if( !newSelectionSet.Contains( selectionInstanceID ) )
-					{
-						m_currentSelection.RemoveAt( i );
-						currentSelectionSet.Remove( selectionInstanceID );
+                // Remove old Transforms from selection
+                for (int i = m_currentSelection.Count - 1; i >= 0; i--)
+                {
+                    Transform currentSelection = m_currentSelection[i];
+                    if (!newSelectionSet.Contains(currentSelection))
+                    {
+                        m_currentSelection.RemoveAt(i);
+                        currentSelectionSet.Remove(currentSelection);
 
-						hasSelectionChanged = true;
-					}
-				}
+                        hasSelectionChanged = true;
+                    }
+                }
 			}
 
-			if( multiSelectionPivotTransform != null && !currentSelectionSet.Contains( multiSelectionPivotTransform.GetHashCode() ) )
-			{
-				multiSelectionPivotTransform = null;
-				multiSelectionPivotSceneData = null;
-			}
+            if (multiSelectionPivotTransform != null && !currentSelectionSet.Contains(multiSelectionPivotTransform))
+            {
+                multiSelectionPivotTransform = null;
+                multiSelectionPivotSceneData = null;
+            }
 
 			// Expand the selected Transforms' parents if they are currently collapsed
 			HierarchyDataTransform itemToFocus = null;
@@ -1329,15 +1319,15 @@ namespace RuntimeInspectorNamespace
 			}
 			else
 			{
-				for( int i = deselection.Count - 1; i >= 0; i-- )
-				{
-					Transform deselect = deselection[i];
-					if( deselect && currentSelectionSet.Remove( deselect.GetHashCode() ) )
-					{
-						m_currentSelection.Remove( deselect );
-						hasSelectionChanged = true;
-					}
-				}
+                for (int i = deselection.Count - 1; i >= 0; i--)
+                {
+                    Transform deselect = deselection[i];
+                    if (deselect != null && currentSelectionSet.Remove(deselect))
+                    {
+                        m_currentSelection.Remove(deselect);
+                        hasSelectionChanged = true;
+                    }
+                }
 			}
 
 			if( hasSelectionChanged )
@@ -1348,11 +1338,11 @@ namespace RuntimeInspectorNamespace
 						drawers[i].IsSelected = false;
 				}
 
-				if( multiSelectionPivotTransform != null && !currentSelectionSet.Contains( multiSelectionPivotTransform.GetHashCode() ) )
-				{
-					multiSelectionPivotTransform = null;
-					multiSelectionPivotSceneData = null;
-				}
+                if (multiSelectionPivotTransform != null && !currentSelectionSet.Contains(multiSelectionPivotTransform))
+                {
+                    multiSelectionPivotTransform = null;
+                    multiSelectionPivotSceneData = null;
+                }
 
 				if( selectedPathBackground.gameObject.activeSelf )
 					selectedPathBackground.gameObject.SetActive( false );
@@ -1361,10 +1351,10 @@ namespace RuntimeInspectorNamespace
 			}
 		}
 
-		public bool IsSelected( Transform transform )
-		{
-			return transform && currentSelectionSet.Contains( transform.GetHashCode() );
-		}
+        public bool IsSelected(Transform transform)
+        {
+            return transform != null && currentSelectionSet.Contains(transform);
+        }
 
 		// Check if Transform is hidden from this RuntimeHierarchy
 		private bool CanSelectTransform( Transform transform )

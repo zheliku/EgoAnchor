@@ -11,7 +11,6 @@ namespace RuntimeInspectorNamespace
 		public delegate object Getter();
 		public delegate void Setter( object value );
 
-#pragma warning disable 0649
 		[SerializeField]
 		protected LayoutElement layoutElement;
 
@@ -23,7 +22,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private MaskableGraphic visibleArea;
-#pragma warning restore 0649
 
 		private RuntimeInspector m_inspector;
 		public RuntimeInspector Inspector
@@ -269,7 +267,6 @@ namespace RuntimeInspectorNamespace
 
 	public abstract class ExpandableInspectorField : InspectorField
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		protected RectTransform drawArea;
 
@@ -282,7 +279,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Image expandArrow; // Expand Arrow's sprite should look right at 0 rotation
-#pragma warning restore 0649
 
 		protected readonly List<InspectorField> elements = new List<InspectorField>( 8 );
 		protected readonly List<ExposedMethodField> exposedMethods = new List<ExposedMethodField>();

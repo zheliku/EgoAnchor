@@ -34,7 +34,6 @@ namespace RuntimeInspectorNamespace
 
 		private RectTransform rectTransform;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private RectTransform SelectorOut;
 
@@ -43,7 +42,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private WindowDragHandler colorPickerWindow;
-#pragma warning restore 0649
 
 		private float outer;
 		private Vector2 inner;

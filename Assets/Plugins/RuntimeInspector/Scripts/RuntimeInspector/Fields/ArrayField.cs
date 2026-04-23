@@ -12,7 +12,6 @@ namespace RuntimeInspectorNamespace
 {
 	public class ArrayField : ExpandableInspectorField, IDropHandler
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private LayoutElement sizeLayoutElement;
 
@@ -21,7 +20,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private BoundInputField sizeInput;
-#pragma warning restore 0649
 
 		private bool isArray;
 		private Type elementType;

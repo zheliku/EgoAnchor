@@ -33,7 +33,6 @@ namespace RuntimeInspectorNamespace
 		public delegate string NameGetter( object reference );
 		private NameGetter referenceNameGetter, referenceDisplayNameGetter;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private Image panel;
 
@@ -72,7 +71,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private ObjectReferencePickerItem referenceItemPrefab;
-#pragma warning restore 0649
 
 		private Canvas referenceCanvas;
 

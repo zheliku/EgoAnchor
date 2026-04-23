@@ -9,7 +9,6 @@ namespace RuntimeInspectorNamespace
 {
 	public class ObjectReferenceField : InspectorField, IDropHandler
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private RectTransform referencePickerArea;
 
@@ -25,7 +24,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		protected Text referenceNameText;
-#pragma warning restore 0649
 
 		public override void Initialize()
 		{

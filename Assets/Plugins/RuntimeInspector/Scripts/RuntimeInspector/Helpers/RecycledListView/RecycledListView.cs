@@ -8,12 +8,10 @@ namespace RuntimeInspectorNamespace
 	public class RecycledListView : MonoBehaviour
 	{
 		// Cached components
-#pragma warning disable 0649
 		[SerializeField]
 		private RectTransform viewportTransform;
 		[SerializeField]
 		private RectTransform contentTransform;
-#pragma warning restore 0649
 
 		private float itemHeight, _1OverItemHeight;
 

@@ -196,15 +196,7 @@ namespace DynamicPanels
 					panel.resizeZones[i].Stop();
 			}
 
-			public void OnApplicationQuit()
-			{
-#if UNITY_2018_1_OR_NEWER
-				panel.OnApplicationQuitting();
-#else
-				panel.OnApplicationQuit();
-#endif
-			}
-
+			public void OnApplicationQuit() { panel.OnApplicationQuitting(); }
 			public void AnchorZonesSetActive( bool value ) { panel.AnchorZonesSetActive( value ); }
 			public void OnResize( Direction direction, Vector2 screenPoint ) { panel.OnResize( direction, screenPoint ); }
 			public void OnTranslate( Vector2 deltaPosition ) { panel.OnTranslate( deltaPosition ); }
@@ -218,7 +210,6 @@ namespace DynamicPanels
 
 		internal InternalSettings Internal { get; private set; }
 
-#pragma warning disable 0649
 		[SerializeField]
 		private PanelHeader header;
 
@@ -231,7 +222,6 @@ namespace DynamicPanels
 
 		[SerializeField]
 		private Button closeButton;
-#pragma warning restore 0649
 
 		private RectTransform resizeZonesParent;
 		private readonly PanelResizeHelper[] resizeZones = new PanelResizeHelper[4]; // one for each side
@@ -241,7 +231,6 @@ namespace DynamicPanels
 		private PanelAnchorZone panelAnchorZone;
 		private PanelHeaderAnchorZone headerAnchorZone;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private float headerHeight = 50f;
 
@@ -268,7 +257,6 @@ namespace DynamicPanels
 		[SerializeField]
 		private Color m_tabDetachingTextColor;
 		public Color TabDetachingTextColor { get { return m_tabDetachingTextColor; } }
-#pragma warning restore 0649
 
 		public Vector2 Position { get { return RectTransform.anchoredPosition; } }
 		public Vector2 Size { get { return RectTransform.sizeDelta; } }
@@ -375,12 +363,10 @@ namespace DynamicPanels
 			closeButton.onClick.AddListener( () => PanelNotificationCenter.Internal.PanelClosed( this ) );
 			closeButton.transform.SetAsLastSibling();
 
-#if UNITY_2018_1_OR_NEWER
 			// OnApplicationQuit isn't reliable on some Unity versions when Application.wantsToQuit is used; Application.quitting is the only reliable solution on those versions
 			// https://issuetracker.unity3d.com/issues/onapplicationquit-method-is-called-before-application-dot-wantstoquit-event-is-raised
 			Application.quitting -= OnApplicationQuitting;
 			Application.quitting += OnApplicationQuitting;
-#endif
 		}
 
 		private void Start()
@@ -413,9 +399,7 @@ namespace DynamicPanels
 
 		private void OnDestroy()
 		{
-#if UNITY_2018_1_OR_NEWER
 			Application.quitting -= OnApplicationQuitting;
-#endif
 
 			if( !isQuitting )
 			{
@@ -426,11 +410,7 @@ namespace DynamicPanels
 			}
 		}
 
-#if UNITY_2018_1_OR_NEWER
 		private void OnApplicationQuitting()
-#else
-		private void OnApplicationQuit()
-#endif
 		{
 			isQuitting = true;
 		}
@@ -470,6 +450,9 @@ namespace DynamicPanels
 
 					tab.Internal.RectTransform.SetParent( null, false ); // workaround for a rare internal Unity crash
 					tab.Internal.RectTransform.SetParent( tabsParent, false );
+
+                    /// On Unity 6.5, destroying the panel without detaching its child <see cref="PanelTab.Content"/> object first will disable all components on that <see cref="PanelTab.Content"/>.
+                    tabContent.SetParent(null, false);
 
 					tab.Panel.Internal.RemoveTab( tab.Index, false );
 				}

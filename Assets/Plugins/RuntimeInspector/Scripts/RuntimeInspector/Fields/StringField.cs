@@ -9,10 +9,8 @@ namespace RuntimeInspectorNamespace
 	{
 		public enum Mode { OnValueChange = 0, OnSubmit = 1 };
 
-#pragma warning disable 0649
 		[SerializeField]
 		private BoundInputField input;
-#pragma warning restore 0649
 
 		private Mode m_setterMode = Mode.OnValueChange;
 		public Mode SetterMode

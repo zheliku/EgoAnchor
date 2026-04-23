@@ -7,7 +7,6 @@ namespace RuntimeInspectorNamespace
 	{
 		public delegate void OnValueChangedDelegate( BoundSlider source, float value );
 
-#pragma warning disable 0649
 		[SerializeField]
 		private Slider slider;
 		public Slider BackingField { get { return slider; } }
@@ -17,7 +16,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Image thumb;
-#pragma warning restore 0649
 
 		private bool sliderFocused = false;
 		public bool IsFocused { get { return sliderFocused; } }

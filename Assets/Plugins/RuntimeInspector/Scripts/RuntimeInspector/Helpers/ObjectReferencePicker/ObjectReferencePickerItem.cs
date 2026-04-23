@@ -6,7 +6,6 @@ namespace RuntimeInspectorNamespace
 {
 	public class ObjectReferencePickerItem : RecycledListItem
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private Image background;
 
@@ -16,7 +15,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Text referenceNameText;
-#pragma warning restore 0649
 
 		public object Reference { get; private set; }
 

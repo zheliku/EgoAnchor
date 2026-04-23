@@ -7,10 +7,8 @@ namespace RuntimeInspectorNamespace
 {
 	public class NumberRangeField : NumberField
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private BoundSlider slider;
-#pragma warning restore 0649
 
 		public override void Initialize()
 		{

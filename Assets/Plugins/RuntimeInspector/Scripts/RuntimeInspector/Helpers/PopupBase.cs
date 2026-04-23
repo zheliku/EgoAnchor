@@ -8,7 +8,6 @@ namespace RuntimeInspectorNamespace
 	{
 		private const float POINTER_VALIDATE_INTERVAL = 5f;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private LayoutElement borderLayoutElement;
 
@@ -17,7 +16,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		protected Text label;
-#pragma warning restore 0649
 
 		private RectTransform rectTransform;
 		private RectTransform canvasTransform;

@@ -51,7 +51,6 @@ namespace DynamicPanels
 			public void SetActive( bool activeState ) { tab.SetActive( activeState ); }
 		}
 
-#pragma warning disable 0649
 		[SerializeField]
 		private Image background;
 
@@ -63,7 +62,6 @@ namespace DynamicPanels
 
 		[SerializeField]
 		private Button closeButton;
-#pragma warning restore 0649
 
 		internal InternalSettings Internal { get; private set; }
 

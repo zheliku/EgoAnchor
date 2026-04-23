@@ -8,14 +8,12 @@ namespace RuntimeInspectorNamespace
 {
 	public class ColorField : InspectorField
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private RectTransform colorPickerArea;
 
 		[SerializeField]
 		private PointerEventListener inputColor;
 		private Image colorImg;
-#pragma warning restore 0649
 
 		private bool isColor32;
 

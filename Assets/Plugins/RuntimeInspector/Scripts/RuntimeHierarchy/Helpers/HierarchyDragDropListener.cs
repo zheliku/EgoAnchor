@@ -9,7 +9,6 @@ namespace RuntimeInspectorNamespace
 	{
 		private const float POINTER_VALIDATE_INTERVAL = 5f;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private float siblingIndexModificationArea = 5f;
 
@@ -29,7 +28,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Image dragDropTargetVisualization;
-#pragma warning restore 0649
 
 		private Canvas canvas;
 

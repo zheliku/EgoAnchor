@@ -3,12 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-#if UNITY_2017_3_OR_NEWER
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo( "DynamicPanels.Editor" )]
-#else
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo( "Assembly-CSharp-Editor" )]
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo( "Assembly-CSharp-Editor-firstpass" )]
-#endif
 namespace DynamicPanels
 {
 	[DisallowMultipleComponent]
@@ -81,15 +76,7 @@ namespace DynamicPanels
 				return false;
 			}
 
-			public void OnApplicationQuit()
-			{
-#if UNITY_2018_1_OR_NEWER
-				canvas.OnApplicationQuitting();
-#else
-				canvas.OnApplicationQuit();
-#endif
-			}
-
+			public void OnApplicationQuit() { canvas.OnApplicationQuitting(); }
 			public void AnchorZonesSetActive( bool value ) { canvas.AnchorZonesSetActive( value ); }
 			public void ReceiveRaycasts( bool value ) { canvas.background.raycastTarget = value; }
 		}
@@ -181,7 +168,6 @@ namespace DynamicPanels
 		private RectTransform anchorZonesParent;
 		private readonly CanvasAnchorZone[] anchorZones = new CanvasAnchorZone[4]; // one for each side
 
-#pragma warning disable 0649
 		[SerializeField]
 		private bool m_leaveFreeSpace = true;
 		public bool LeaveFreeSpace
@@ -234,7 +220,6 @@ namespace DynamicPanels
 		[HideInInspector]
 		private List<SerializableAnchoredPanelProperties> initialPanelsAnchoredSerialized;
 		private AnchoredPanelProperties initialPanelsAnchored;
-#pragma warning restore 0649
 
 		private bool updateBounds = true;
 		private bool isDirty = false;
@@ -269,12 +254,10 @@ namespace DynamicPanels
 
 			PanelManager.Instance.RegisterCanvas( this );
 
-#if UNITY_2018_1_OR_NEWER
 			// OnApplicationQuit isn't reliable on some Unity versions when Application.wantsToQuit is used; Application.quitting is the only reliable solution on those versions
 			// https://issuetracker.unity3d.com/issues/onapplicationquit-method-is-called-before-application-dot-wantstoquit-event-is-raised
 			Application.quitting -= OnApplicationQuitting;
 			Application.quitting += OnApplicationQuitting;
-#endif
 		}
 
 		private void Start()
@@ -334,19 +317,13 @@ namespace DynamicPanels
 
 		private void OnDestroy()
 		{
-#if UNITY_2018_1_OR_NEWER
 			Application.quitting -= OnApplicationQuitting;
-#endif
 
 			if( !isQuitting )
 				PanelManager.Instance.UnregisterCanvas( this );
 		}
 
-#if UNITY_2018_1_OR_NEWER
 		private void OnApplicationQuitting()
-#else
-		private void OnApplicationQuit()
-#endif
 		{
 			isQuitting = true;
 		}

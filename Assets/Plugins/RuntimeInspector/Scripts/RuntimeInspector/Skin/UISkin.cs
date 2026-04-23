@@ -22,7 +22,6 @@ namespace RuntimeInspectorNamespace
 		}
 #endif
 
-#pragma warning disable 0649
 		[SerializeField]
 		private Font m_font;
 		public Font Font
@@ -337,6 +336,5 @@ namespace RuntimeInspectorNamespace
 				}
 			}
 		}
-#pragma warning restore 0649
 	}
 }

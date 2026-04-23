@@ -11,7 +11,6 @@ namespace RuntimeInspectorNamespace
 		private const float INACTIVE_ITEM_TEXT_ALPHA = 0.57f;
 		private const float TEXT_X_OFFSET = 35f;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private RectTransform contentTransform;
 
@@ -32,7 +31,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Image multiSelectionToggleBackground;
-#pragma warning restore 0649
 
 		private RectTransform rectTransform;
 		private Image background;

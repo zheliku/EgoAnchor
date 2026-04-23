@@ -14,7 +14,6 @@ namespace RuntimeInspectorNamespace
 
 		private Camera _camera;
 
-#pragma warning disable 0649
 		[SerializeField]
 		private UISkin draggedReferenceSkin;
 
@@ -29,7 +28,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private float raycastRange = float.MaxValue;
-#pragma warning restore 0649
 
 		private bool pointerDown = false;
 		private float pointerDownTime;

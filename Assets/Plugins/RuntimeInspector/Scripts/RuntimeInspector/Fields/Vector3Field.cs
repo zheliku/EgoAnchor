@@ -8,7 +8,6 @@ namespace RuntimeInspectorNamespace
 {
 	public class Vector3Field : InspectorField
 	{
-#pragma warning disable 0649
 		[SerializeField]
 		private BoundInputField inputX;
 
@@ -26,11 +25,8 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Text labelZ;
-#pragma warning restore 0649
 
-#if UNITY_2017_2_OR_NEWER
 		private bool isVector3Int;
-#endif
 
 		public override void Initialize()
 		{
@@ -53,20 +49,15 @@ namespace RuntimeInspectorNamespace
 			inputZ.DefaultEmptyValue = "0";
 		}
 
-		public override bool SupportsType( Type type )
-		{
-#if UNITY_2017_2_OR_NEWER
-			if( type == typeof( Vector3Int ) )
-				return true;
-#endif
-			return type == typeof( Vector3 );
-		}
+        public override bool SupportsType(Type type)
+        {
+            return type == typeof(Vector3) || type == typeof(Vector3Int);
+        }
 
 		protected override void OnBound( MemberInfo variable )
 		{
 			base.OnBound( variable );
 
-#if UNITY_2017_2_OR_NEWER
 			isVector3Int = BoundVariableType == typeof( Vector3Int );
 			if( isVector3Int )
 			{
@@ -76,7 +67,6 @@ namespace RuntimeInspectorNamespace
 				inputZ.Text = val.z.ToString( RuntimeInspectorUtils.numberFormat );
 			}
 			else
-#endif
 			{
 				Vector3 val = (Vector3) Value;
 				inputX.Text = val.x.ToString( RuntimeInspectorUtils.numberFormat );
@@ -87,7 +77,6 @@ namespace RuntimeInspectorNamespace
 
 		private bool OnValueChanged( BoundInputField source, string input )
 		{
-#if UNITY_2017_2_OR_NEWER
 			if( isVector3Int )
 			{
 				int value;
@@ -106,7 +95,6 @@ namespace RuntimeInspectorNamespace
 				}
 			}
 			else
-#endif
 			{
 				float value;
 				if( float.TryParse( input, NumberStyles.Float, RuntimeInspectorUtils.numberFormat, out value ) )
@@ -162,7 +150,6 @@ namespace RuntimeInspectorNamespace
 
 		public override void Refresh()
 		{
-#if UNITY_2017_2_OR_NEWER
 			if( isVector3Int )
 			{
 				Vector3Int prevVal = (Vector3Int) Value;
@@ -177,7 +164,6 @@ namespace RuntimeInspectorNamespace
 					inputZ.Text = val.z.ToString( RuntimeInspectorUtils.numberFormat );
 			}
 			else
-#endif
 			{
 				Vector3 prevVal = (Vector3) Value;
 				base.Refresh();

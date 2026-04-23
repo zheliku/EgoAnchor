@@ -1,169 +1,141 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 
 namespace DynamicPanels
 {
-	public static class PanelSerialization
-	{
-		#region Helper Classes
-#pragma warning disable 0649
-		[Serializable]
-		private class SerializedCanvas
-		{
-			public bool active;
-			public bool useFreeSpace;
+    public static class PanelSerialization
+    {
+        #region Helper Classes
+        [Serializable]
+        private class SerializedCanvas
+        {
+            public bool active;
+            public bool useFreeSpace;
 
-			public SerializedPanelGroup rootPanelGroup;
-			public SerializedPanelGroup unanchoredPanelGroup;
-		}
+            public SerializedPanelGroup rootPanelGroup;
+            public SerializedPanelGroup unanchoredPanelGroup;
+        }
 
-		[Serializable]
-		private abstract class ISerializedElement
-		{
-			public SerializedVector2 size;
-		}
+        [Serializable]
+        private abstract class ISerializedElement
+        {
+            public Vector2 size;
+        }
 
-		[Serializable]
-		private class SerializedPanelGroup : ISerializedElement
-		{
-			public bool horizontal;
-			public ISerializedElement[] children;
-		}
+        [Serializable]
+        private class SerializedPanelGroup : ISerializedElement
+        {
+            public bool horizontal;
+            [SerializeReference]
+            public ISerializedElement[] children;
+        }
 
-		[Serializable]
-		private class SerializedDummyPanel : ISerializedElement
-		{
-		}
+        [Serializable]
+        private class SerializedDummyPanel : ISerializedElement
+        {
+        }
 
-		[Serializable]
-		private class SerializedPanel : ISerializedElement
-		{
-			public int activeTab;
-			public SerializedPanelTab[] tabs;
-			public SerializedVector2 floatingSize;
-		}
+        [Serializable]
+        private class SerializedPanel : ISerializedElement
+        {
+            public int activeTab;
+            public SerializedPanelTab[] tabs;
+            public Vector2 floatingSize;
+        }
 
-		[Serializable]
-		private class SerializedUnanchoredPanel : SerializedPanel
-		{
-			public bool active;
-			public SerializedVector2 position;
-		}
+        [Serializable]
+        private class SerializedUnanchoredPanel : SerializedPanel
+        {
+            public bool active;
+            public Vector2 position;
+        }
 
-		[Serializable]
-		private class SerializedPanelTab
-		{
-			public string id;
-			//public SerializedVector2 minSize;
-			//public string label;
-		}
+        [Serializable]
+        private class SerializedPanelTab
+        {
+            public string id;
+            //public Vector2 minSize;
+            //public string label;
+        }
 
-		[Serializable]
-		private struct SerializedVector2
-		{
-			public float x, y;
+        private struct GroupElementSizeHolder
+        {
+            public IPanelGroupElement element;
+            public Vector2 size;
 
-			public static implicit operator Vector2( SerializedVector2 v )
-			{
-				return new Vector2( v.x, v.y );
-			}
-
-			public static implicit operator SerializedVector2( Vector2 v )
-			{
-				return new SerializedVector2() { x = v.x, y = v.y };
-			}
-		}
-
-		private struct GroupElementSizeHolder
-		{
-			public IPanelGroupElement element;
-			public Vector2 size;
-
-			public GroupElementSizeHolder( IPanelGroupElement element, Vector2 size )
-			{
-				this.element = element;
-				this.size = size;
-			}
-		}
-#pragma warning restore 0649
-		#endregion
+            public GroupElementSizeHolder(IPanelGroupElement element, Vector2 size)
+            {
+                this.element = element;
+                this.size = size;
+            }
+        }
+        #endregion
 
 		private static readonly List<SerializedPanelTab> tabsTemp = new List<SerializedPanelTab>( 4 );
 		private static readonly List<GroupElementSizeHolder> sizesHolder = new List<GroupElementSizeHolder>( 4 );
 
-		public static void SerializeCanvas( DynamicPanelsCanvas canvas )
-		{
-			byte[] data = SerializeCanvasToArray( canvas );
-			if( data == null || data.Length == 0 )
-			{
-				Debug.LogError( "Couldn't serialize!" );
-				return;
-			}
+        public static void SerializeCanvas(DynamicPanelsCanvas canvas)
+        {
+            string json = SerializeCanvasToJson(canvas);
+            if (string.IsNullOrEmpty(json))
+                return;
 
-			PlayerPrefs.SetString( canvas.ID, Convert.ToBase64String( data ) );
-			PlayerPrefs.Save();
-		}
+            PlayerPrefs.SetString(canvas.ID, json);
+            PlayerPrefs.Save();
+        }
 
-		public static void DeserializeCanvas( DynamicPanelsCanvas canvas )
-		{
-			DeserializeCanvasFromArray( canvas, Convert.FromBase64String( PlayerPrefs.GetString( canvas.ID, string.Empty ) ) );
-		}
+        public static void DeserializeCanvas(DynamicPanelsCanvas canvas)
+        {
+            if (PlayerPrefs.HasKey(canvas.ID))
+                DeserializeCanvasFromJson(canvas, PlayerPrefs.GetString(canvas.ID, string.Empty));
+        }
 
-		public static byte[] SerializeCanvasToArray( DynamicPanelsCanvas canvas )
-		{
-#if UNITY_EDITOR
-			if( !Application.isPlaying )
-			{
-				Debug.LogError( "Can serialize in Play mode only!" );
-				return null;
-			}
-#endif
+        public static string SerializeCanvasToJson(DynamicPanelsCanvas canvas, bool prettyPrint = false)
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.LogError($"{nameof(PanelSerialization)} works in Play mode only.");
+                return null;
+            }
 
-			canvas.ForceRebuildLayoutImmediate();
+            canvas.ForceRebuildLayoutImmediate();
 
-			BinaryFormatter formatter = new BinaryFormatter();
-			using( MemoryStream stream = new MemoryStream() )
-			{
-				formatter.Serialize( stream, new SerializedCanvas
-				{
-					active = canvas.gameObject.activeSelf,
-					useFreeSpace = canvas.LeaveFreeSpace,
-					rootPanelGroup = Serialize( canvas.RootPanelGroup ) as SerializedPanelGroup,
-					unanchoredPanelGroup = Serialize( canvas.UnanchoredPanelGroup ) as SerializedPanelGroup
-				} );
+            return JsonUtility.ToJson(new SerializedCanvas
+            {
+                active = canvas.gameObject.activeSelf,
+                useFreeSpace = canvas.LeaveFreeSpace,
+                rootPanelGroup = Serialize(canvas.RootPanelGroup) as SerializedPanelGroup,
+                unanchoredPanelGroup = Serialize(canvas.UnanchoredPanelGroup) as SerializedPanelGroup,
+            }, prettyPrint);
+        }
 
-				return stream.ToArray();
-			}
-		}
+        public static void DeserializeCanvasFromJson(DynamicPanelsCanvas canvas, string json)
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.LogError($"{nameof(PanelSerialization)} works in Play mode only.");
+                return;
+            }
 
-		public static void DeserializeCanvasFromArray( DynamicPanelsCanvas canvas, byte[] data )
-		{
-#if UNITY_EDITOR
-			if( !Application.isPlaying )
-			{
-				Debug.LogError( "Can deserialize in Play mode only!" );
-				return;
-			}
-#endif
+            if (string.IsNullOrEmpty(json))
+            {
+                Debug.LogError($"{nameof(PanelSerialization)} encountered empty json during deserialization.");
+                return;
+            }
 
-			if( data == null || data.Length == 0 )
-			{
-				Debug.LogError( "Data is null!" );
-				return;
-			}
+            if (!json.StartsWith('{'))
+            {
+                Debug.LogError($"{nameof(PanelSerialization)} encountered invalid json during deserialization.");
+                return;
+            }
 
-			SerializedCanvas serializedCanvas;
-			BinaryFormatter formatter = new BinaryFormatter();
-			using( MemoryStream stream = new MemoryStream( data ) )
-			{
-				serializedCanvas = formatter.Deserialize( stream ) as SerializedCanvas;
-			}
-
-			if( serializedCanvas == null )
-				return;
+            SerializedCanvas serializedCanvas = JsonUtility.FromJson<SerializedCanvas>(json);
+            if (serializedCanvas == null)
+            {
+                Debug.LogError($"{nameof(PanelSerialization)} couldn't deserialize json.");
+                return;
+            }
 
 			sizesHolder.Clear();
 			canvas.LeaveFreeSpace = serializedCanvas.useFreeSpace;

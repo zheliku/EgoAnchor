@@ -15,10 +15,8 @@ namespace RuntimeInspectorNamespace
 			typeof( float ), typeof( double ), typeof( decimal )
 		};
 
-#pragma warning disable 0649
 		[SerializeField]
 		protected BoundInputField input;
-#pragma warning restore 0649
 
 		protected INumberHandler numberHandler;
 

@@ -151,19 +151,16 @@ namespace RuntimeInspectorNamespace
 			{
 				List<Type> componentTypes = new List<Type>( 128 );
 
-#if UNITY_EDITOR || !NETFX_CORE
-				Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-#else
-				// Common Unity assemblies
-				IEnumerable<Assembly> assemblies = new HashSet<Assembly> 
-				{
-					typeof( Transform ).Assembly,
-					typeof( RectTransform ).Assembly,
-					typeof( Rigidbody ).Assembly,
-					typeof( Rigidbody2D ).Assembly,
-					typeof( AudioSource ).Assembly
-				};
-#endif
+                IEnumerable<Assembly> assemblies = RuntimeInspectorUtils.GetAllAssemblies() ?? (IEnumerable<Assembly>)new HashSet<Assembly>
+                {
+                    // Common Unity assemblies
+                    typeof(Transform).Assembly,
+                    typeof(RectTransform).Assembly,
+                    typeof(Rigidbody).Assembly,
+                    typeof(Rigidbody2D).Assembly,
+                    typeof(AudioSource).Assembly,
+                };
+
 				// Search assemblies for Component types
 				foreach( Assembly assembly in assemblies )
 				{

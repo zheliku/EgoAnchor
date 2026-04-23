@@ -18,7 +18,6 @@ namespace RuntimeInspectorNamespace
 		public delegate object InspectedObjectChangingDelegate( object previousInspectedObject, object newInspectedObject );
 		public delegate void ComponentFilterDelegate( GameObject gameObject, List<Component> components );
 
-#pragma warning disable 0649
 		[SerializeField, UnityEngine.Serialization.FormerlySerializedAs( "refreshInterval" )]
 		private float m_refreshInterval = 0f;
 		private float nextRefreshTime = -1f;
@@ -217,7 +216,6 @@ namespace RuntimeInspectorNamespace
 
 		[SerializeField]
 		private Image scrollbar;
-#pragma warning restore 0649
 
 		private static int aliveInspectors = 0;
 
