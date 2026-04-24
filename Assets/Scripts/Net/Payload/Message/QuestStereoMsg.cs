@@ -8,8 +8,11 @@ using MessagePack;
 [MessagePackObject]
 public class QuestStereoMsg
 {
-    [Key("image_jpeg")]
-    public byte[] image_jpeg; // 左右拼接后的单张 JPEG 图像字节。
+    [Key("left_image_jpeg")]
+    public byte[] left_image_jpeg; // 左目 JPEG 图像字节。
+
+    [Key("right_image_jpeg")]
+    public byte[] right_image_jpeg; // 右目 JPEG 图像字节。
 
     [Key("frame_id")]
     public long frame_id; // 发送端帧号（用于检测丢帧与延迟）。
@@ -21,7 +24,13 @@ public class QuestStereoMsg
     // 将消息序列化为 MessagePack 负载。
     public byte[] Serialize()
     {
-        if (image_jpeg == null || image_jpeg.Length == 0)
+        // 新协议要求左右图都存在，避免接收侧出现“半帧”状态。
+        if (left_image_jpeg == null || left_image_jpeg.Length == 0)
+        {
+            return null;
+        }
+
+        if (right_image_jpeg == null || right_image_jpeg.Length == 0)
         {
             return null;
         }
@@ -39,7 +48,17 @@ public class QuestStereoMsg
         try
         {
             QuestStereoMsg message = MessagePackSerializer.Deserialize<QuestStereoMsg>(payload);
-            if (message == null || message.image_jpeg == null || message.image_jpeg.Length == 0)
+            if (message == null)
+            {
+                return null;
+            }
+
+            if (message.left_image_jpeg == null || message.left_image_jpeg.Length == 0)
+            {
+                return null;
+            }
+
+            if (message.right_image_jpeg == null || message.right_image_jpeg.Length == 0)
             {
                 return null;
             }

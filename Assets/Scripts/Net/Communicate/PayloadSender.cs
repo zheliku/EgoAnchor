@@ -19,6 +19,9 @@ public class PayloadSender : MonoBehaviour
 {
     private const string SenderIPPrefKey = "PayloadSender.ServerIP";
     private const string SenderPortPrefKey = "PayloadSender.ServerPort";
+    private const string SenderSendTopicPrefKey = "PayloadSender.SendTopic";
+    private const string SenderUseTopicLegacyPrefKey = "PayloadSender.UseTopic";
+    private const string SenderDefaultTopicPrefKey = "PayloadSender.DefaultTopic";
     private const string TargetFpsPrefKey = "PayloadSender.TargetFps";
     private const string LogIntervalPrefKey = "PayloadSender.LogInterval";
     private const string SendHighWatermarkPrefKey = "PayloadSender.SendHighWatermark";
@@ -27,13 +30,16 @@ public class PayloadSender : MonoBehaviour
     [SerializeField] private BaseEncoder payloadEncoder;
     [SerializeField] private string serverIP = "127.0.0.1";
     [SerializeField] private int serverPort = 5557;
+    [SerializeField] private bool sendTopic = false;
+    [SerializeField] private string defaultTopic = "quest_stereo";
     [SerializeField] private int targetFps = 60;
     [SerializeField] private int logInterval = 30;
     [SerializeField] private int sendHighWatermark = 1;
     [SerializeField] private int socketLingerMs = 0;
 
-    private PushSocket _socket;
+    private NetMQSocket _socket;
     private Coroutine _sendCoroutine;
+    private bool _hasWarnedTopicEmpty;
 
     private int _sentFrameCount;
     private int _droppedFrameCount;
@@ -65,6 +71,16 @@ public class PayloadSender : MonoBehaviour
     {
         serverIP = PlayerPrefs.GetString(SenderIPPrefKey, serverIP);
         serverPort = PlayerPrefs.GetInt(SenderPortPrefKey, serverPort);
+        if (PlayerPrefs.HasKey(SenderSendTopicPrefKey))
+        {
+            sendTopic = PlayerPrefs.GetInt(SenderSendTopicPrefKey, sendTopic ? 1 : 0) != 0;
+        }
+        else
+        {
+            // 兼容历史配置键名（PayloadSender.UseTopic）。
+            sendTopic = PlayerPrefs.GetInt(SenderUseTopicLegacyPrefKey, sendTopic ? 1 : 0) != 0;
+        }
+        defaultTopic = PlayerPrefs.GetString(SenderDefaultTopicPrefKey, defaultTopic);
         targetFps = PlayerPrefs.GetInt(TargetFpsPrefKey, targetFps);
         logInterval = PlayerPrefs.GetInt(LogIntervalPrefKey, logInterval);
         sendHighWatermark = PlayerPrefs.GetInt(SendHighWatermarkPrefKey, sendHighWatermark);
@@ -78,6 +94,8 @@ public class PayloadSender : MonoBehaviour
     {
         PlayerPrefs.SetString(SenderIPPrefKey, serverIP);
         PlayerPrefs.SetInt(SenderPortPrefKey, serverPort);
+        PlayerPrefs.SetInt(SenderSendTopicPrefKey, sendTopic ? 1 : 0);
+        PlayerPrefs.SetString(SenderDefaultTopicPrefKey, defaultTopic);
         PlayerPrefs.SetInt(TargetFpsPrefKey, targetFps);
         PlayerPrefs.SetInt(LogIntervalPrefKey, logInterval);
         PlayerPrefs.SetInt(SendHighWatermarkPrefKey, sendHighWatermark);
@@ -109,7 +127,8 @@ public class PayloadSender : MonoBehaviour
             yield break;
         }
 
-        Debug.Log($"[PayloadSender] RuntimeConfig endpoint={Endpoint}, targetFps={targetFps}, sendHWM={sendHighWatermark}, lingerMs={socketLingerMs}, encoder={(payloadEncoder != null ? payloadEncoder.GetType().Name : "null")}");
+        string modeDesc = sendTopic ? $"PUB(topic={defaultTopic})" : "PUSH";
+        Debug.Log($"[PayloadSender] RuntimeConfig endpoint={Endpoint}, mode={modeDesc}, targetFps={targetFps}, sendHWM={sendHighWatermark}, lingerMs={socketLingerMs}, encoder={(payloadEncoder != null ? payloadEncoder.GetType().Name : "null")}");
         if (sendHighWatermark > 1)
         {
             Debug.LogWarning($"[PayloadSender] sendHighWatermark={sendHighWatermark} (>1) 可能引入排队延迟。低延迟链路建议设置为 1。", this);
@@ -125,7 +144,7 @@ public class PayloadSender : MonoBehaviour
     }
 
     /// <summary>
-    /// 建立 PUSH 连接。
+    /// 建立发送连接（PUSH 或 PUB）。
     /// HWM=1：仅保留极少积压，降低延迟尾部。
     /// </summary>
     private void Connect()
@@ -137,12 +156,16 @@ public class PayloadSender : MonoBehaviour
 
         AsyncIO.ForceDotNet.Force();
 
-        _socket = new PushSocket();
+        // 统一协议：
+        // - sendTopic=false -> PUSH（单帧）
+        // - sendTopic=true  -> PUB（multipart: [topic, payload]）
+        _socket = sendTopic ? new PublisherSocket() : new PushSocket();
         _socket.Options.SendHighWatermark = sendHighWatermark;
         _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
         _socket.Connect(Endpoint);
 
-        Debug.Log($"[PayloadSender] Connected to {Endpoint}");
+        string modeDesc = sendTopic ? $"PUB(topic={defaultTopic})" : "PUSH";
+        Debug.Log($"[PayloadSender] Connected to {Endpoint}, mode={modeDesc}");
     }
 
     /// <summary>
@@ -191,7 +214,31 @@ public class PayloadSender : MonoBehaviour
             if (encoded && _socket != null)
             {
                 double sendStart = Time.realtimeSinceStartupAsDouble;
-                bool sent = _socket.TrySendFrame(TimeSpan.Zero, payload);
+                bool sent;
+                if (sendTopic)
+                {
+                    // topic 模式下使用 multipart。若 topic 为空则丢帧并告警，避免发出不可筛选的脏数据。
+                    if (string.IsNullOrWhiteSpace(defaultTopic))
+                    {
+                        if (!_hasWarnedTopicEmpty)
+                        {
+                            _hasWarnedTopicEmpty = true;
+                            Debug.LogWarning("[PayloadSender] sendTopic=true 但 defaultTopic 为空，当前帧已丢弃。", this);
+                        }
+                        sent = false;
+                    }
+                    else
+                    {
+                        NetMQMessage message = new NetMQMessage();
+                        message.Append(defaultTopic);
+                        message.Append(payload);
+                        sent = _socket.TrySendMultipartMessage(TimeSpan.Zero, message);
+                    }
+                }
+                else
+                {
+                    sent = _socket.TrySendFrame(TimeSpan.Zero, payload);
+                }
                 _sendTimeAcc += Time.realtimeSinceStartupAsDouble - sendStart;
 
                 if (sent)

@@ -10,7 +10,7 @@ public class FrameIdEvent : UnityEvent<long> { }
 /// Quest 双目图像编码器。
 ///
 /// 输入：左右 Passthrough Camera 纹理。
-/// 输出：单帧 payload（MessagePack，包含 image_jpeg/frame_id/sender_mono_ms/unity_frame）。
+/// 输出：单帧 payload（MessagePack，包含 left_image_jpeg/right_image_jpeg/frame_id/sender_mono_ms/unity_frame）。
 ///
 /// 注意：
 /// - 本组件只负责编码，不负责发送。
@@ -35,10 +35,8 @@ public class QuestStereoEncoder : BaseEncoder
 
     private RenderTexture _leftRenderTexture;
     private RenderTexture _rightRenderTexture;
-    private RenderTexture _packedRenderTexture;
     private Texture2D _leftReadbackTexture;
     private Texture2D _rightReadbackTexture;
-    private Texture2D _packedReadbackTexture;
     private bool _hasLoggedTextureTypes;
     private int _encodedFrameCount;
     private double _encodeTimeAccMs;
@@ -82,20 +80,19 @@ public class QuestStereoEncoder : BaseEncoder
         BlitToRenderTarget(leftTexture, _leftRenderTexture);
         BlitToRenderTarget(rightTexture, _rightRenderTexture);
 
-        byte[] packedImage = CapturePackedStereo(
-            _leftRenderTexture,
-            _rightRenderTexture,
-            _packedRenderTexture,
-            _packedReadbackTexture);
-
-        if (packedImage == null)
+        // 新协议：左右图分别编码。
+        // 这样接收端可以直接解码成 left/right，避免“发送前拼接 + 接收后拆分”的冗余流程。
+        byte[] leftJpeg = EncodeRenderTextureToJpeg(_leftRenderTexture, _leftReadbackTexture);
+        byte[] rightJpeg = EncodeRenderTextureToJpeg(_rightRenderTexture, _rightReadbackTexture);
+        if (leftJpeg == null || rightJpeg == null)
         {
             return false;
         }
 
         QuestStereoMsg message = new QuestStereoMsg
         {
-            image_jpeg = packedImage,
+            left_image_jpeg = leftJpeg,
+            right_image_jpeg = rightJpeg,
             frame_id = frameId,
             sender_mono_ms = senderMonoMs,
             unity_frame = Time.frameCount,
@@ -107,7 +104,7 @@ public class QuestStereoEncoder : BaseEncoder
             return false;
         }
 
-        string encodePath = "PackedPayload";
+        string encodePath = "DualImagePayload";
         LogEncodeStats(payload, encodePath, encodeStart);
         return true;
     }
@@ -129,12 +126,9 @@ public class QuestStereoEncoder : BaseEncoder
         int leftHeight = Mathf.Max(1, Mathf.RoundToInt(leftTexture.height * outputScale));
         int rightWidth = Mathf.Max(1, Mathf.RoundToInt(rightTexture.width * outputScale));
         int rightHeight = Mathf.Max(1, Mathf.RoundToInt(rightTexture.height * outputScale));
-        int packedWidth = leftWidth + rightWidth;
-        int packedHeight = Mathf.Min(leftHeight, rightHeight);
 
         EnsureBuffer(ref _leftRenderTexture, ref _leftReadbackTexture, leftWidth, leftHeight);
         EnsureBuffer(ref _rightRenderTexture, ref _rightReadbackTexture, rightWidth, rightHeight);
-        EnsureBuffer(ref _packedRenderTexture, ref _packedReadbackTexture, packedWidth, packedHeight);
     }
 
     private void EnsureBuffer(
@@ -251,35 +245,28 @@ public class QuestStereoEncoder : BaseEncoder
         _payloadBytesAcc = 0;
     }
 
-    private byte[] CapturePackedStereo(
-        RenderTexture leftSource,
-        RenderTexture rightSource,
-        RenderTexture packedTarget,
-        Texture2D packedReadbackTexture)
+    /// <summary>
+    /// 将单个 RenderTexture 回读并编码为 JPEG。
+    ///
+    /// 设计说明：
+    /// - 这里复用传入的 readback 纹理，避免每帧 new Texture2D 产生 GC 压力。
+    /// - 使用 RenderTexture.active + ReadPixels 的同步回读方式，逻辑直观稳定。
+    /// </summary>
+    private byte[] EncodeRenderTextureToJpeg(
+        RenderTexture source,
+        Texture2D readbackTexture)
     {
-        if (leftSource == null || rightSource == null || packedTarget == null || packedReadbackTexture == null)
+        if (source == null || readbackTexture == null)
         {
             return null;
         }
 
         RenderTexture previous = RenderTexture.active;
-        RenderTexture.active = packedTarget;
-
-        GL.PushMatrix();
-        GL.LoadPixelMatrix(0, packedTarget.width, packedTarget.height, 0);
-
-        int leftWidth = leftSource.width;
-        int rightWidth = rightSource.width;
-        int packedHeight = packedTarget.height;
-
-        Graphics.DrawTexture(new Rect(0, 0, leftWidth, packedHeight), leftSource);
-        Graphics.DrawTexture(new Rect(leftWidth, 0, rightWidth, packedHeight), rightSource);
-
-        GL.PopMatrix();
-
-        packedReadbackTexture.ReadPixels(new Rect(0, 0, packedTarget.width, packedTarget.height), 0, 0, false);
+        RenderTexture.active = source;
+        readbackTexture.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0, false);
+        readbackTexture.Apply(false, false);
         RenderTexture.active = previous;
-        return EncodeTexture(packedReadbackTexture);
+        return EncodeTexture(readbackTexture);
     }
 
     private byte[] EncodeTexture(Texture2D texture)
@@ -318,6 +305,5 @@ public class QuestStereoEncoder : BaseEncoder
     {
         ReleaseBuffer(ref _leftRenderTexture, ref _leftReadbackTexture);
         ReleaseBuffer(ref _rightRenderTexture, ref _rightReadbackTexture);
-        ReleaseBuffer(ref _packedRenderTexture, ref _packedReadbackTexture);
     }
 }
