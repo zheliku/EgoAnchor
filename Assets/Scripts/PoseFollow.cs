@@ -64,7 +64,9 @@ public class PoseFollow : MonoBehaviour
     private float _applyIntervalEma;
 
     private int _applyFrameCount;
-    private bool _hasWarnedFrameMiss;
+    private float _lastFrameMissLogTime = -99f;
+    private float _lastCacheBailLogTime = -99f;
+    private float _lastFollowOkLogTime = -99f;
 
     private readonly Dictionary<long, Pose> _sourceTargetPoseCache =
         new Dictionary<long, Pose>();
@@ -125,12 +127,23 @@ public class PoseFollow : MonoBehaviour
     {
         OnPoseReceived?.Invoke(pose, frameId);
 
+        // 诊断：每2秒打印一次 FollowTarget 被调用（说明 Decoder→FollowTarget 通了）。
+        float now = Time.realtimeSinceStartup;
+        if (now - _lastFollowOkLogTime > 2f)
+        {
+            _lastFollowOkLogTime = now;
+            Debug.Log($"[PoseFollow] FollowTarget called frameId={frameId} pose.pos=({pose.position.x:F3},{pose.position.y:F3},{pose.position.z:F3})", this);
+        }
+
         if (!TryGetSourceTargetPose(frameId, out Pose sourceTargetPose))
         {
-            if (!_hasWarnedFrameMiss)
+            if (now - _lastFrameMissLogTime > 2f)
             {
-                _hasWarnedFrameMiss = true;
-                Debug.LogWarning($"[PoseFollow] 未命中发送帧缓存: frameId={frameId}。", this);
+                _lastFrameMissLogTime = now;
+                int cacheCount = _sourceTargetPoseCache.Count;
+                Debug.LogWarning(
+                    $"[PoseFollow] 未命中发送帧缓存 frameId={frameId} cacheSize={cacheCount} " +
+                    $"sourceTarget={(sourceTarget == null ? "null" : sourceTarget.name)}", this);
             }
             return;
         }
@@ -157,6 +170,23 @@ public class PoseFollow : MonoBehaviour
 
     public void HandleFrameEncoded(long frameId)
     {
+        // 诊断：每2秒打印一次 HandleFrameEncoded 状态。
+        float now = Time.realtimeSinceStartup;
+        if (now - _lastCacheBailLogTime > 2f)
+        {
+            _lastCacheBailLogTime = now;
+            if (sourceTarget == null)
+            {
+                Debug.LogWarning(
+                    $"[PoseFollow] HandleFrameEncoded bailed: sourceTarget=null (frameSourceEncoder={(frameSourceEncoder == null ? "null" : frameSourceEncoder.name)})", this);
+            }
+            else
+            {
+                Debug.Log(
+                    $"[PoseFollow] HandleFrameEncoded frameId={frameId} srcPos=({sourceTarget.position.x:F3},{sourceTarget.position.y:F3},{sourceTarget.position.z:F3}) cacheSize={_sourceTargetPoseCache.Count}", this);
+            }
+        }
+
         if (frameId <= 0 || sourceTarget == null)
         {
             return;

@@ -1,8 +1,8 @@
 ﻿<Solution>
   <Project Path="RuntimeInspector.Runtime.csproj" />
   <Project Path="VHierarchy.csproj" />
-  <Project Path="DynamicPanels.Runtime.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="DynamicPanels.Runtime.csproj" />
   <Project Path="IngameDebugConsole.Runtime.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="Proxima.csproj" />

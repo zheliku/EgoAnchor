@@ -43,6 +43,14 @@ public class QuestStereoEncoder : BaseEncoder
     private long _payloadBytesAcc;
     private long _senderFrameId;
 
+    // 失败原因计数（用于选择打印频率，避免日志洪水）。
+    private int _failCamNullCount;
+    private int _failNotPlayingCount;
+    private int _failTexNullCount;
+    private int _failJpegNullCount;
+    private int _failSerializeNullCount;
+    private float _lastFailLogTime;
+
     /// <summary>
     /// 从 Quest 左右相机抓取当前帧并编码为单帧 payload。
     /// </summary>
@@ -53,11 +61,15 @@ public class QuestStereoEncoder : BaseEncoder
 
         if (leftCameraAccess == null || rightCameraAccess == null)
         {
+            _failCamNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
         if (!leftCameraAccess.IsPlaying || !rightCameraAccess.IsPlaying)
         {
+            _failNotPlayingCount++;
+            MaybeLogFailure();
             return false;
         }
 
@@ -66,6 +78,8 @@ public class QuestStereoEncoder : BaseEncoder
 
         if (leftTexture == null || rightTexture == null)
         {
+            _failTexNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
@@ -86,6 +100,8 @@ public class QuestStereoEncoder : BaseEncoder
         byte[] rightJpeg = EncodeRenderTextureToJpeg(_rightRenderTexture, _rightReadbackTexture);
         if (leftJpeg == null || rightJpeg == null)
         {
+            _failJpegNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
@@ -101,12 +117,40 @@ public class QuestStereoEncoder : BaseEncoder
         payload = message.Serialize();
         if (payload == null)
         {
+            _failSerializeNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
         string encodePath = "DualImagePayload";
         LogEncodeStats(payload, encodePath, encodeStart);
         return true;
+    }
+
+    /// <summary>
+    /// 每 2 秒最多打印一次失败统计，帮助定位为何 stereo 发不出去。
+    /// </summary>
+    private void MaybeLogFailure()
+    {
+        float now = Time.realtimeSinceStartup;
+        if (now - _lastFailLogTime < 2.0f)
+        {
+            return;
+        }
+        _lastFailLogTime = now;
+        Debug.LogWarning(
+            $"[QuestStereoEncoder] TryEncode failures in last 2s: " +
+            $"CamNull={_failCamNullCount}, NotPlaying={_failNotPlayingCount}, " +
+            $"GetTextureNull={_failTexNullCount}, JpegNull={_failJpegNullCount}, " +
+            $"SerializeNull={_failSerializeNullCount}. " +
+            $"LeftPlaying={(leftCameraAccess != null && leftCameraAccess.IsPlaying)}, " +
+            $"RightPlaying={(rightCameraAccess != null && rightCameraAccess.IsPlaying)}."
+        );
+        _failCamNullCount = 0;
+        _failNotPlayingCount = 0;
+        _failTexNullCount = 0;
+        _failJpegNullCount = 0;
+        _failSerializeNullCount = 0;
     }
 
     private void Awake()

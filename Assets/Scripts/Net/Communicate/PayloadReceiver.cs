@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using NetMQ;
@@ -6,10 +7,12 @@ using NetMQ.Sockets;
 using Proxima;
 using RuntimeInspectorNamespace;
 using UnityEngine;
-using UnityEngine.Events;
 using VInspector;
 using Debug = UnityEngine.Debug;
 
+/// <summary>
+/// 原始负载结构：包含 payload 字节、topic 名称和接收时间戳。
+/// </summary>
 public readonly struct RawPayload
 {
     public byte[] Payload { get; }
@@ -24,59 +27,60 @@ public readonly struct RawPayload
     }
 }
 
+/// <summary>
+/// 接收条目：每个条目绑定一个 topic 和解码器。
+/// </summary>
 [Serializable]
-public class RawPayloadEvent : UnityEvent<RawPayload> { }
+public class ReceiverEntry
+{
+    [Tooltip("订阅 topic 名称")] public string topic = "default";
+    [Tooltip("解码器实例，负责解析该 topic 的 payload")] public BaseDecoder decoder;
+}
 
 /// <summary>
-/// Unity 侧通用 Payload 接收器。
+/// Unity 侧多 Topic Payload 接收器。
 ///
-/// 统一协议（与 Python 对齐）：
-/// - useTopic=false -> PULL（单帧 payload）
-/// - useTopic=true  -> SUB（multipart: [topic, payload]）
-///
-/// 实时性策略：
-/// - 始终采用“latest-drain”：每次先收一帧，再非阻塞清空队列，仅保留最新帧。
+/// 设计目标：
+/// - 面向 Inspector 配置：一个 PayloadReceiver 持有多个 ReceiverEntry，
+///   每个 Entry 绑定独立的 topic 和解码器。
+/// - 统一使用 SUB 模式，订阅所有配置的 topics。
+/// - 后台线程接收，主线程按 topic 路由到对应解码器。
+/// - 实时性策略：latest-drain，仅保留每个 topic 的最新帧。
 /// </summary>
 public class PayloadReceiver : MonoBehaviour
 {
     private const string ReceiverIPPrefKey = "PayloadReceiver.ServerIP";
     private const string ReceiverPortPrefKey = "PayloadReceiver.ServerPort";
-    private const string ReceiverUseTopicPrefKey = "PayloadReceiver.UseTopic";
-    private const string ReceiverTopicPrefKey = "PayloadReceiver.Topic";
     private const string ReceiveHighWatermarkPrefKey = "PayloadReceiver.ReceiveHighWatermark";
     private const string SocketLingerMsPrefKey = "PayloadReceiver.SocketLingerMs";
     private const string ReceivePollTimeoutMsPrefKey = "PayloadReceiver.ReceivePollTimeoutMs";
 
+    [Header("Network")]
     [SerializeField] private string serverIP = "127.0.0.1";
     [SerializeField] private int serverPort = 5556;
-    [SerializeField] private bool useTopic = true;
-    [SerializeField] private string topic = "pose";
     [SerializeField] private int receiveHighWatermark = 1;
     [SerializeField] private int socketLingerMs = 0;
     [SerializeField] private int receivePollTimeoutMs = 100;
 
-    private NetMQSocket _socket;
+    [Header("Entries")]
+    [Tooltip("接收条目列表，每个条目绑定 topic 和解码器")]
+    [SerializeField] private List<ReceiverEntry> entries = new List<ReceiverEntry>();
+
+    private SubscriberSocket _socket;
     private Thread _receiveThread;
     private volatile bool _running;
     private readonly Stopwatch _stopwatch = new Stopwatch();
 
+    // 按 topic 缓存最新 payload。
     private readonly object _lock = new object();
-    private RawPayload _latestPayload;
-    private bool _hasNewPayload;
+    private readonly Dictionary<string, RawPayload> _latestByTopic = new Dictionary<string, RawPayload>();
+    private readonly HashSet<string> _newTopics = new HashSet<string>();
 
     public bool IsConnected => _running && _socket != null;
     public string ServerAddress => $"tcp://{serverIP}:{serverPort}";
 
-    [Header("Events")]
-    public RawPayloadEvent OnPayloadReceived = new RawPayloadEvent();
-
     private void Awake()
     {
-        if (OnPayloadReceived == null)
-        {
-            OnPayloadReceived = new RawPayloadEvent();
-        }
-
         LoadConfig();
     }
 
@@ -87,8 +91,6 @@ public class PayloadReceiver : MonoBehaviour
     {
         serverIP = PlayerPrefs.GetString(ReceiverIPPrefKey, serverIP);
         serverPort = PlayerPrefs.GetInt(ReceiverPortPrefKey, serverPort);
-        useTopic = PlayerPrefs.GetInt(ReceiverUseTopicPrefKey, useTopic ? 1 : 0) != 0;
-        topic = PlayerPrefs.GetString(ReceiverTopicPrefKey, topic);
         receiveHighWatermark = PlayerPrefs.GetInt(ReceiveHighWatermarkPrefKey, receiveHighWatermark);
         socketLingerMs = PlayerPrefs.GetInt(SocketLingerMsPrefKey, socketLingerMs);
         receivePollTimeoutMs = PlayerPrefs.GetInt(ReceivePollTimeoutMsPrefKey, receivePollTimeoutMs);
@@ -101,8 +103,6 @@ public class PayloadReceiver : MonoBehaviour
     {
         PlayerPrefs.SetString(ReceiverIPPrefKey, serverIP);
         PlayerPrefs.SetInt(ReceiverPortPrefKey, serverPort);
-        PlayerPrefs.SetInt(ReceiverUseTopicPrefKey, useTopic ? 1 : 0);
-        PlayerPrefs.SetString(ReceiverTopicPrefKey, topic);
         PlayerPrefs.SetInt(ReceiveHighWatermarkPrefKey, receiveHighWatermark);
         PlayerPrefs.SetInt(SocketLingerMsPrefKey, socketLingerMs);
         PlayerPrefs.SetInt(ReceivePollTimeoutMsPrefKey, receivePollTimeoutMs);
@@ -128,22 +128,58 @@ public class PayloadReceiver : MonoBehaviour
         Connect();
     }
 
+    /// <summary>
+    /// 主线程分发：将后台线程缓存的新 payload 路由到对应解码器。
+    /// </summary>
     private void Update()
     {
-        RawPayload payload;
+        List<RawPayload> pending;
 
         lock (_lock)
         {
-            if (!_hasNewPayload)
+            if (_newTopics.Count == 0)
             {
                 return;
             }
 
-            payload = _latestPayload;
-            _hasNewPayload = false;
+            pending = new List<RawPayload>(_newTopics.Count);
+            foreach (string topic in _newTopics)
+            {
+                if (_latestByTopic.TryGetValue(topic, out RawPayload payload))
+                {
+                    pending.Add(payload);
+                }
+            }
+
+            _newTopics.Clear();
         }
 
-        OnPayloadReceived?.Invoke(payload);
+        // 路由到对应解码器。
+        for (int i = 0; i < pending.Count; i++)
+        {
+            RawPayload payload = pending[i];
+            ReceiverEntry entry = FindEntry(payload.Topic);
+            if (entry != null && entry.decoder != null)
+            {
+                entry.decoder.OnPayloadReceived(payload);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 按 topic 名称查找匹配的 ReceiverEntry。
+    /// </summary>
+    private ReceiverEntry FindEntry(string topic)
+    {
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].topic == topic)
+            {
+                return entries[i];
+            }
+        }
+
+        return null;
     }
 
     public void Connect()
@@ -155,22 +191,24 @@ public class PayloadReceiver : MonoBehaviour
 
         AsyncIO.ForceDotNet.Force();
 
-        _socket = useTopic ? new SubscriberSocket() : new PullSocket();
+        _socket = new SubscriberSocket();
         _socket.Options.ReceiveHighWatermark = receiveHighWatermark;
         _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
         _socket.Connect(ServerAddress);
 
-        if (useTopic && _socket is SubscriberSocket subscriberSocket)
+        // 订阅所有配置的 topics。
+        for (int i = 0; i < entries.Count; i++)
         {
-            subscriberSocket.Subscribe(topic ?? string.Empty);
+            string topic = entries[i].topic ?? string.Empty;
+            _socket.Subscribe(topic);
         }
 
         _running = true;
         _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
         _receiveThread.Start();
 
-        string modeDesc = useTopic ? $"SUB(topic={topic})" : "PULL";
-        Debug.Log($"[PayloadReceiver] Connected to {ServerAddress}, mode={modeDesc}, latest=drain");
+        string topicList = string.Join(", ", entries.ConvertAll(e => e.topic));
+        Debug.Log($"[PayloadReceiver] Connected to {ServerAddress}, topics=[{topicList}]");
     }
 
     public void Disconnect()
@@ -181,22 +219,20 @@ public class PayloadReceiver : MonoBehaviour
         {
             _receiveThread.Join(1000);
         }
-        _receiveThread = null;
 
+        _receiveThread = null;
         DisconnectSocket();
         Debug.Log("[PayloadReceiver] Disconnected");
     }
 
     /// <summary>
-    /// 从底层 socket 读取一条业务消息。
-    ///
-    /// timeoutMs 约定：
-    /// - >0：阻塞等待给定毫秒
-    /// - 0：非阻塞轮询
+    /// 从底层 socket 读取一条 SUB 消息，返回 topic + payload。
     /// </summary>
-    private bool TryReceiveOnePayload(int timeoutMs, out RawPayload payload)
+    private bool TryReceiveOnePayload(int timeoutMs, out string topic, out byte[] payload)
     {
-        payload = default;
+        topic = null;
+        payload = null;
+
         if (_socket == null)
         {
             return false;
@@ -206,44 +242,20 @@ public class PayloadReceiver : MonoBehaviour
             ? TimeSpan.Zero
             : TimeSpan.FromMilliseconds(timeoutMs);
 
-        if (useTopic)
+        NetMQMessage message = new NetMQMessage();
+        if (!_socket.TryReceiveMultipartMessage(timeout, ref message))
         {
-            NetMQMessage message = new NetMQMessage();
-            if (!_socket.TryReceiveMultipartMessage(timeout, ref message))
-            {
-                return false;
-            }
-
-            if (message.FrameCount < 2)
-            {
-                return false;
-            }
-
-            string receivedTopic = message[0].ConvertToString();
-            byte[] body = message[1].ToByteArray();
-            if (body == null || body.Length == 0)
-            {
-                return false;
-            }
-
-            payload = new RawPayload(body, receivedTopic, _stopwatch.Elapsed.TotalMilliseconds);
-            return true;
+            return false;
         }
-        else
+
+        if (message.FrameCount < 2)
         {
-            if (!_socket.TryReceiveFrameBytes(timeout, out byte[] body))
-            {
-                return false;
-            }
-
-            if (body == null || body.Length == 0)
-            {
-                return false;
-            }
-
-            payload = new RawPayload(body, string.Empty, _stopwatch.Elapsed.TotalMilliseconds);
-            return true;
+            return false;
         }
+
+        topic = message[0].ConvertToString();
+        payload = message[1].ToByteArray();
+        return payload != null && payload.Length > 0;
     }
 
     private void ReceiveLoop()
@@ -259,21 +271,28 @@ public class PayloadReceiver : MonoBehaviour
                 }
 
                 // 第一步：按配置超时等待至少一条消息。
-                if (!TryReceiveOnePayload(receivePollTimeoutMs, out RawPayload latestPayload))
+                if (!TryReceiveOnePayload(receivePollTimeoutMs, out string topic, out byte[] payload))
                 {
                     continue;
                 }
 
-                // 第二步：非阻塞 drain 队列，始终只保留最后一条（最新）消息。
-                while (TryReceiveOnePayload(0, out RawPayload newerPayload))
-                {
-                    latestPayload = newerPayload;
-                }
-
+                // 将第一条消息存入缓存。
+                double firstTs = _stopwatch.Elapsed.TotalMilliseconds;
                 lock (_lock)
                 {
-                    _latestPayload = latestPayload;
-                    _hasNewPayload = true;
+                    _latestByTopic[topic] = new RawPayload(payload, topic, firstTs);
+                    _newTopics.Add(topic);
+                }
+
+                // 第二步：非阻塞 drain 队列，每条消息按 topic 分别缓存（而非只保留最后一条）。
+                while (TryReceiveOnePayload(0, out string newerTopic, out byte[] newerPayload))
+                {
+                    double drainTs = _stopwatch.Elapsed.TotalMilliseconds;
+                    lock (_lock)
+                    {
+                        _latestByTopic[newerTopic] = new RawPayload(newerPayload, newerTopic, drainTs);
+                        _newTopics.Add(newerTopic);
+                    }
                 }
             }
             catch (Exception e)
@@ -283,6 +302,17 @@ public class PayloadReceiver : MonoBehaviour
                     Debug.LogError($"[PayloadReceiver] Error: {e.Message}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 获取指定 topic 的最新 payload（不消耗，仅查询）。
+    /// </summary>
+    public bool TryGetLatestPayload(string topic, out RawPayload payload)
+    {
+        lock (_lock)
+        {
+            return _latestByTopic.TryGetValue(topic, out payload);
         }
     }
 

@@ -119,59 +119,6 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &217519039
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 217519041}
-  - component: {fileID: 217519040}
-  m_Layer: 0
-  m_Name: QuestStereoEncoder
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &217519040
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 217519039}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bdcbb84e343ee1a43a61e4543ac75ee4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QuestStereoEncoder
-  leftCameraAccess: {fileID: 850615822}
-  rightCameraAccess: {fileID: 762868051}
-  outputScale: 1
-  jpegQuality: 80
-  enableVerboseDebugLog: 1
-  debugLogInterval: 30
-  OnFrameEncoded:
-    m_PersistentCalls:
-      m_Calls: []
---- !u!4 &217519041
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 217519039}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.30225, y: -0, z: 5.65172}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &265007992
 GameObject:
   m_ObjectHideFlags: 0
@@ -1835,7 +1782,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  frameSourceEncoder: {fileID: 217519040}
+  frameSourceEncoder: {fileID: 882331663}
   sourceTarget: {fileID: 960095797}
   sourceTargetCacheSize: 512
   poseSmoother: {fileID: 864581799}
@@ -1953,6 +1900,8 @@ GameObject:
   m_Component:
   - component: {fileID: 882331661}
   - component: {fileID: 882331660}
+  - component: {fileID: 882331663}
+  - component: {fileID: 882331662}
   m_Layer: 0
   m_Name: PayloadSender
   m_TagString: Untagged
@@ -1972,15 +1921,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1eaa9864e20d99642859bcb2693a69ab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PayloadSender
-  payloadEncoder: {fileID: 217519040}
   serverIP: 127.0.0.1
   serverPort: 5557
-  sendTopic: 0
-  defaultTopic: quest_stereo
-  targetFps: 60
-  logInterval: 30
-  sendHighWatermark: 1
+  sendHighWatermark: 10
   socketLingerMs: 0
+  logInterval: 60
+  entries:
+  - encoder: {fileID: 882331663}
+    topic: quest_stereo
+    targetFps: 60
+  - encoder: {fileID: 882331662}
+    topic: quest_camera_info
+    targetFps: 1
 --- !u!4 &882331661
 Transform:
   m_ObjectHideFlags: 0
@@ -1996,6 +1948,65 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &882331662
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 882331659}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d7e8f2b0f0a4b4eb4ff0b6d9bb4f1d2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QuestCameraInfoEncoder
+  leftCameraAccess: {fileID: 850615822}
+  rightCameraAccess: {fileID: 762868051}
+--- !u!114 &882331663
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 882331659}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bdcbb84e343ee1a43a61e4543ac75ee4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QuestStereoEncoder
+  leftCameraAccess: {fileID: 850615822}
+  rightCameraAccess: {fileID: 762868051}
+  outputScale: 1
+  jpegQuality: 80
+  enableVerboseDebugLog: 1
+  debugLogInterval: 30
+  OnFrameEncoded:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 1824679901}
+        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
+        m_MethodName: HandleFrameEncoded
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 864581800}
+        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
+        m_MethodName: HandleFrameEncoded
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &936837636
 GameObject:
   m_ObjectHideFlags: 0
@@ -3607,7 +3618,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  frameSourceEncoder: {fileID: 217519040}
+  frameSourceEncoder: {fileID: 882331663}
   sourceTarget: {fileID: 960095797}
   sourceTargetCacheSize: 512
   poseSmoother: {fileID: 1824679902}
@@ -3984,26 +3995,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PayloadReceiver
   serverIP: 127.0.0.1
   serverPort: 5556
-  useTopic: 1
-  topic: pose
   receiveHighWatermark: 1
   socketLingerMs: 0
   receivePollTimeoutMs: 100
-  OnPayloadReceived:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 2090662820}
-        m_TargetAssemblyTypeName: PoseDecoder, Assembly-CSharp
-        m_MethodName: OnPayloadReceived
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+  entries:
+  - topic: pose
+    decoder: {fileID: 2090662820}
 --- !u!4 &2090662822
 Transform:
   m_ObjectHideFlags: 0
@@ -4032,7 +4029,6 @@ SceneRoots:
   - {fileID: 850615824}
   - {fileID: 762868053}
   - {fileID: 882331661}
-  - {fileID: 217519041}
   - {fileID: 265007996}
   - {fileID: 1081554900}
   - {fileID: 2090662822}
