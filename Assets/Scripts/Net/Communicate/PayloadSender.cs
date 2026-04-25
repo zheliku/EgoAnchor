@@ -15,7 +15,7 @@ using VInspector;
 public class SenderEntry
 {
     [Tooltip("编码器实例，负责生成单帧 payload")] public BaseEncoder encoder;
-    [Tooltip("PUB 模式的 topic 名称")] public string topic = "default";
+    [Tooltip("PUB 模式的 topic 名称")] public string topic = "";
     [Tooltip("发送帧率（每秒最大编码+发送次数）")] public int targetFps = 10;
 
     // 运行时状态（非序列化）。

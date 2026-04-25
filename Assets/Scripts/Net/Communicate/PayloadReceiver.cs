@@ -33,7 +33,7 @@ public readonly struct RawPayload
 [Serializable]
 public class ReceiverEntry
 {
-    [Tooltip("订阅 topic 名称")] public string topic = "default";
+    [Tooltip("订阅 topic 名称")] public string topic = "";
     [Tooltip("解码器实例，负责解析该 topic 的 payload")] public BaseDecoder decoder;
 }
 
@@ -120,12 +120,30 @@ public class PayloadReceiver : MonoBehaviour
 
     private void Start()
     {
+        ValidateEntries();
+
         if (!_stopwatch.IsRunning)
         {
             _stopwatch.Start();
         }
 
         Connect();
+    }
+
+    private void ValidateEntries()
+    {
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].decoder == null)
+            {
+                Debug.LogError($"[PayloadReceiver] Entry[{i}] decoder is null.", this);
+            }
+
+            if (string.IsNullOrWhiteSpace(entries[i].topic))
+            {
+                Debug.LogError($"[PayloadReceiver] Entry[{i}] topic is empty.", this);
+            }
+        }
     }
 
     /// <summary>
@@ -200,6 +218,10 @@ public class PayloadReceiver : MonoBehaviour
         for (int i = 0; i < entries.Count; i++)
         {
             string topic = entries[i].topic ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(topic))
+            {
+                continue;
+            }
             _socket.Subscribe(topic);
         }
 
@@ -248,7 +270,7 @@ public class PayloadReceiver : MonoBehaviour
             return false;
         }
 
-        if (message.FrameCount < 2)
+        if (message.FrameCount != 2)
         {
             return false;
         }

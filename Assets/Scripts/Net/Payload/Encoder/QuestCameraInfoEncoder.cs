@@ -8,17 +8,13 @@ using UnityEngine;
 /// 输出：单帧 payload（MessagePack，包含 QuestCameraInfoMsg 全部字段）。
 ///
 /// 特性：
-/// - 仅当相机信息发生变化时重新编码，避免无谓序列化开销。
-/// - 相机静态信息通常不变，因此绝大部分帧复用缓存 payload。
+/// - 每次发送都会刷新 sender_mono_ms，保证 Python 侧收到的是本次发送时间戳。
+/// - 相机静态信息本身通常不变，发送频率由 PayloadSender 的 targetFps 控制。
 /// </summary>
 public class QuestCameraInfoEncoder : BaseEncoder
 {
     [SerializeField] private PassthroughCameraAccess leftCameraAccess;
     [SerializeField] private PassthroughCameraAccess rightCameraAccess;
-
-    // 缓存上次编码的 payload 和消息摘要，避免重复编码。
-    private byte[] _cachedPayload;
-    private string _cachedDigest;
 
     /// <summary>
     /// 从 Quest 左右相机读取静态信息并编码为单帧 payload。
@@ -37,24 +33,13 @@ public class QuestCameraInfoEncoder : BaseEncoder
             return false;
         }
 
-        // 构造消息并生成摘要，仅在内容变化时重新编码。
         QuestCameraInfoMsg msg = BuildMessage();
-        string digest = ComputeDigest(msg);
-
-        if (digest == _cachedDigest && _cachedPayload != null)
-        {
-            payload = _cachedPayload;
-            return true;
-        }
-
         payload = msg.Serialize();
         if (payload == null || payload.Length == 0)
         {
             return false;
         }
 
-        _cachedDigest = digest;
-        _cachedPayload = payload;
         return true;
     }
 
@@ -125,18 +110,5 @@ public class QuestCameraInfoEncoder : BaseEncoder
             right_lens_offset_qw = rightIntr.LensOffset.rotation.w,
             sender_mono_ms = Time.realtimeSinceStartupAsDouble * 1000.0,
         };
-    }
-
-    /// <summary>
-    /// 计算消息摘要，用于判断相机信息是否变化。
-    /// 仅使用关键数值字段拼接，避免全字段序列化开销。
-    /// </summary>
-    private static string ComputeDigest(QuestCameraInfoMsg msg)
-    {
-        return $"{msg.left_fx:F2}_{msg.left_fy:F2}_{msg.left_cx:F2}_{msg.left_cy:F2}_"
-             + $"{msg.right_fx:F2}_{msg.right_fy:F2}_{msg.right_cx:F2}_{msg.right_cy:F2}_"
-             + $"{msg.baseline_m:F6}_{msg.sensor_width}_{msg.sensor_height}_"
-             + $"{msg.left_requested_width}x{msg.left_requested_height}_"
-             + $"{msg.current_width}_{msg.current_height}_{msg.max_framerate}";
     }
 }
