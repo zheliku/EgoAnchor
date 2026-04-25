@@ -30,12 +30,14 @@ public class RGBDDecoder : BaseDecoder
     /// </summary>
     public override void OnPayloadReceived(RawPayload payload)
     {
+        // RawPayload 中已经包含 topic 与接收时间，这里只关心业务字节。
         byte[] frame = payload.Payload;
         if (frame == null || frame.Length == 0)
         {
             return;
         }
 
+        // 反序列化失败时返回 null，不向业务层派发半成品消息。
         RGBDMsg message = RGBDMsg.Deserialize(frame);
         if (message != null)
         {

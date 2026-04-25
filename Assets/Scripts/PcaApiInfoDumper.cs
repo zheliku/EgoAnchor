@@ -7,12 +7,16 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Dumps comprehensive runtime information from PassthroughCameraAccess for left and right cameras.
+/// PassthroughCameraAccess 运行时信息导出工具。
 ///
-/// Usage:
-/// 1) Add this component to any GameObject in scene.
-/// 2) Assign left/right PassthroughCameraAccess in Inspector (or keep auto-find enabled).
-/// 3) Run on Quest, then press dumpKey or use context menu to print all details.
+/// 用法：
+/// 1) 将本组件挂到场景中的任意 GameObject。
+/// 2) 在 Inspector 中绑定左右 PassthroughCameraAccess，或开启 autoFindInScene 自动查找。
+/// 3) 在 Quest 上运行后，按 dumpKey 或使用右键菜单打印完整相机 API 信息。
+///
+/// 主要用途：
+/// - 核对 Quest 左右目内参、分辨率、镜头偏移和纹理状态。
+/// - 当 Python 侧位姿或深度异常时，用该日志排查 Unity 相机源是否变化。
 /// </summary>
 public class PcaApiInfoDumper : MonoBehaviour
 {
@@ -36,6 +40,7 @@ public class PcaApiInfoDumper : MonoBehaviour
 
     private void Start()
     {
+        // 启动时先尝试绑定相机组件，减少 Inspector 漏配导致的无输出问题。
         TryAutoBindCameraAccesses();
 
         if (dumpOnStartWhenReady)
@@ -46,11 +51,13 @@ public class PcaApiInfoDumper : MonoBehaviour
 
     private void Update()
     {
+        // 若允许运行时自动查找，则持续补齐左右相机引用。
         if (autoFindInScene && (leftCameraAccess == null || rightCameraAccess == null))
         {
             TryAutoBindCameraAccesses();
         }
 
+        // 键盘触发手动 dump，方便戴头显联调时随时抓取状态。
         var keyboard = Keyboard.current;
         if (keyboard != null && keyboard[dumpKey].wasPressedThisFrame)
         {
@@ -92,6 +99,9 @@ public class PcaApiInfoDumper : MonoBehaviour
         Debug.Log(sb.ToString());
     }
 
+    /// <summary>
+    /// 等待任意一侧相机开始播放后自动 dump 一次。
+    /// </summary>
     private IEnumerator DumpWhenReadyCoroutine()
     {
         while (!_dumpedOnStart)
