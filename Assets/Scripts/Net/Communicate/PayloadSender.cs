@@ -185,6 +185,7 @@ public class PayloadSender : MonoBehaviour
                 {
                     continue;
                 }
+                entry.lastSendTime = now;
 
                 double encodeStart = Time.realtimeSinceStartupAsDouble;
                 bool encoded = entry.encoder.TryEncodePayload(out byte[] payload) &&
@@ -213,12 +214,11 @@ public class PayloadSender : MonoBehaviour
                     _totalDropped++;
                 }
 
-                entry.lastSendTime = Time.realtimeSinceStartupAsDouble;
             }
 
             // 周期日志。
             int total = _totalSent + _totalDropped;
-            if (logInterval > 0 && total > 0 && total % logInterval == 0)
+            if (logInterval > 0 && total - _lastStatTotal >= logInterval)
             {
                 double statNow = Time.realtimeSinceStartupAsDouble;
                 double statInterval = statNow - _lastStatTime;

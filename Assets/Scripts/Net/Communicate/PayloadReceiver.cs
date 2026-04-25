@@ -75,6 +75,7 @@ public class PayloadReceiver : MonoBehaviour
     private readonly object _lock = new object();
     private readonly Dictionary<string, RawPayload> _latestByTopic = new Dictionary<string, RawPayload>();
     private readonly HashSet<string> _newTopics = new HashSet<string>();
+    private readonly Dictionary<string, ReceiverEntry> _entriesByTopic = new Dictionary<string, ReceiverEntry>();
 
     public bool IsConnected => _running && _socket != null;
     public string ServerAddress => $"tcp://{serverIP}:{serverPort}";
@@ -132,6 +133,8 @@ public class PayloadReceiver : MonoBehaviour
 
     private void ValidateEntries()
     {
+        _entriesByTopic.Clear();
+
         for (int i = 0; i < entries.Count; i++)
         {
             if (entries[i].decoder == null)
@@ -142,7 +145,16 @@ public class PayloadReceiver : MonoBehaviour
             if (string.IsNullOrWhiteSpace(entries[i].topic))
             {
                 Debug.LogError($"[PayloadReceiver] Entry[{i}] topic is empty.", this);
+                continue;
             }
+
+            if (_entriesByTopic.ContainsKey(entries[i].topic))
+            {
+                Debug.LogWarning($"[PayloadReceiver] Duplicate topic ignored: {entries[i].topic}", this);
+                continue;
+            }
+
+            _entriesByTopic.Add(entries[i].topic, entries[i]);
         }
     }
 
@@ -189,15 +201,9 @@ public class PayloadReceiver : MonoBehaviour
     /// </summary>
     private ReceiverEntry FindEntry(string topic)
     {
-        for (int i = 0; i < entries.Count; i++)
-        {
-            if (entries[i].topic == topic)
-            {
-                return entries[i];
-            }
-        }
-
-        return null;
+        return topic != null && _entriesByTopic.TryGetValue(topic, out ReceiverEntry entry)
+            ? entry
+            : null;
     }
 
     public void Connect()
