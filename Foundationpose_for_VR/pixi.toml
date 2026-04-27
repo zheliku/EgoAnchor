@@ -1,0 +1,159 @@
+[workspace]
+authors = ["zheliku <302734905@qq.com>"]
+channels = ["https://prefix.dev/conda-forge", "conda-forge"]
+name = "Foundationpose_for_VR"
+platforms = ["win-64", "linux-64"]
+version = "0.1.0"
+
+[system-requirements]
+cuda = "12.8" # 只声明需要 CUDA，不指定具体小版本
+
+[dependencies]
+python = "3.12.*"
+cuda-toolkit = "12.8.*"
+cmake = ">=4.1.2,<5"
+boost = ">=1.82.0,<2"
+eigen = ">=3.4.0,<4"
+ninja = ">=1.13.1,<2"
+psutil = ">=7.1.0,<8"
+pybind11 = ">=3.0.1,<4"
+mypy = ">=1.18.2,<2"
+pyrender = ">=0.1.45,<0.2"
+scipy = ">=1.17.0,<2"
+netifaces = ">=0.11.0,<0.12"
+libopencv = ">=4.12.0,<5"
+opencv = ">=4.12.0,<5"
+imageio = ">=2.37.0,<3"
+pandas = ">=3.0.0,<4"
+h5py = ">=3.15.1,<4"
+omegaconf = ">=2.3.0,<3"
+transformations = ">=2022.9.26,<2023"
+hydra-core = ">=1.3.2,<2"
+joblib = ">=1.5.3,<2"
+scikit-learn = ">=1.8.0,<2"
+pyglet = ">=2.1.13,<3"
+ftfy = ">=6.3.1,<7"
+regex = ">=2026.1.15,<2027"
+iopath = ">=0.1.10,<0.2"
+scikit-image = ">=0.26.0,<0.27"
+ruamel = ">=1.0,<2"
+"ruamel.yaml" = ">=0.19.1,<0.20"
+open3d = ">=0.19.0,<0.20"
+setuptools = ">=69.0.0,<75"
+einops = ">=0.8.2,<0.9"
+pycocotools = ">=2.0.11,<3"
+
+[pypi-dependencies]
+# PyTorch 全家桶从 PyPI 安装
+torch = { version = ">=2.7.1,<2.8", index = "https://download.pytorch.org/whl/cu128" }
+torchvision = { version = ">=0.22,<0.23", index = "https://download.pytorch.org/whl/cu128" }
+torchaudio = { version = ">=2.7,<2.8", index = "https://download.pytorch.org/whl/cu128" }
+timm = ">=1.0.25, <2"
+kornia = ">=0.8.2"
+pytorch3d = { version = "==0.7.9+pt2.7.1cu128", index = "https://miropsota.github.io/torch_packages_builder" }
+warp-lang = ">=1.11.1, <2"
+kaolin = ">=0.1, <0.2"
+zmq = ">=0.0.0, <0.0.1"
+nvdiffrast = { git = "https://gitcode.com/gh_mirrors/nv/nvdiffrast.git" }
+cutie = { path = "./Cutie", editable = true }
+pyrealsense2 = ">=2.56.5,<3"
+xatlas = ">=0.0.11, <0.0.12"
+einops = "*"
+omegaconf = "*"
+scipy = "*"
+numpy = "*"
+scikit-image = "*"
+opencv-contrib-python = ">=4.11.0.86, <5"
+imageio = "*"
+pyyaml = "*"
+ultralytics = ">=8.4.26, <9"
+msgpack = "*"
+onnx = ">=1.21.0, <2"
+pillow = ">=12, <13"
+clip = { git = "https://github.com/ultralytics/CLIP.git" }
+tensorrt-cu12 = ">=10.16.1.11, <11"
+
+
+[target.win-64.pypi-dependencies]
+triton-windows = ">=3.6.0.post26, <4"
+
+[target.win-64.dependencies]
+c-compiler = ">=1.11,<2"
+cxx-compiler = ">=1.11,<2"
+
+[target.linux-64.dependencies]
+gcc_linux-64 = "11.*"
+gxx_linux-64 = "11.*"
+
+[tasks]
+# 编译 FoundationPose 的 C++ 扩展
+_build-fp = { cmd = """
+cmake -E rm -rf FoundationPose/mycpp/build &&
+cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build --fresh -G Ninja -DCMAKE_BUILD_TYPE=Release &&
+cmake --build FoundationPose/mycpp/build --parallel
+""" }
+_make-onnx = { cmd = """
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-26-39/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-26-39/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 8 --max_disp 192 &&
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 8 --max_disp 192 &&
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192
+""" }
+_build-trt = { cmd = """
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16 &&
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16 &&
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16
+""" }
+
+build = { depends-on = ["_build-fp", "_make-onnx", "_build-trt"] }
+
+demo-fp = { cmd = """
+python FoundationPose/run_demo.py \
+--debug 2
+""" }
+
+demo-ffs = { cmd = """
+cd Fast-FoundationStereo &&
+python scripts/run_demo.py \
+--model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth \
+--left_file Fast-FoundationStereo/demo_data/left.png \
+--right_file Fast-FoundationStereo/demo_data/right.png \
+--intrinsic_file Fast-FoundationStereo/demo_data/K.txt \
+--out_dir Fast-FoundationStereo/output/ \
+--remove_invisible 0 \
+--denoise_cloud 1  \
+--scale 1 \
+--get_pc 1 \
+--valid_iters 8 \
+--max_disp 192 \
+--zfar 100 \
+""" }
+
+demo-ffs-fast = { cmd = """
+cd Fast-FoundationStereo &&
+python src/realsense_foundationstereo_test.py \
+--model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth \
+--valid_iters 4 \
+""" }
+
+demo-ffs-slow = { cmd = """
+cd Fast-FoundationStereo &&
+python src/realsense_foundationstereo_test.py \
+--model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth \
+--valid_iters 8 \
+""" }
+
+demo-yoloe = { cmd = """
+python src/pipeline/realsense_pipeline.py \
+--mesh_path data/online/cube/mesh/cube.stl \
+--yolo_model_path checkpoints/yoloe-26l-seg.pt \
+--yolo_prompt "white block"
+""" }
+
+demo-pipeline = { cmd = """
+python src/pipeline/quest_pipeline.py
+""" }
