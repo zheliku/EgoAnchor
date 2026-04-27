@@ -17,14 +17,13 @@ public class PoseApplyEvent : UnityEvent<Pose, long, float> { }
 /// - 无任何处理器时，直接同步位姿（不平滑）。
 ///
 /// 可插拔行为：
+/// - 在 Inspector 中把 QuestStereoEncoder.OnFrameEncoded 绑定到 HandleFrameEncoded。
 /// - 通过 OnBeforePoseApply/OnAfterPoseApply 监听应用过程。
 /// - 需要平滑时由 PoseSmoother 组件处理，不再依赖 PoseFrame 包装对象。
 /// </summary>
 public class PoseFollow : MonoBehaviour
 {
     [Header("Alignment")]
-    [Tooltip("发送帧事件来源（通常为 QuestStereoEncoder）。")]
-    [SerializeField] private QuestStereoEncoder frameSourceEncoder;
     [Tooltip("用于对齐回包位姿的发送时参考目标。通常绑定发送端相机或其父节点。")]
     [SerializeField] private Transform sourceTarget;
     [Min(64)]
@@ -44,29 +43,14 @@ public class PoseFollow : MonoBehaviour
     [Tooltip("位姿应用到 Transform 后触发（worldPose, frameId, sampleTime）。")]
     public PoseApplyEvent OnAfterPoseApply = new PoseApplyEvent();
 
-    [Header("Debug")]
-    [SerializeField] private bool enableVerboseDebugLog;
-    [Range(1, 300)]
-    [SerializeField] private int debugLogInterval = 30;
-
     // 最近一次解码得到的目标位姿（世界坐标）。
     private Vector3 _targetWorldPosition;
     private Quaternion _targetWorldRotation = Quaternion.identity;
     private long _latestFrameId = -1;
     private bool _hasTargetPose;
 
-    // 接收频率统计（按 Decoder 回调频率）。
-    private float _lastPoseReceiveTime = -1f;
-    private float _receiveIntervalEma;
-
-    // 应用频率统计（按 Update 频率）。
-    private float _lastApplyTime = -1f;
-    private float _applyIntervalEma;
-
-    private int _applyFrameCount;
     private float _lastFrameMissLogTime = -99f;
     private float _lastCacheBailLogTime = -99f;
-    private float _lastFollowOkLogTime = -99f;
 
     private readonly Dictionary<long, Pose> _sourceTargetPoseCache =
         new Dictionary<long, Pose>();
@@ -89,30 +73,9 @@ public class PoseFollow : MonoBehaviour
             OnAfterPoseApply = new PoseApplyEvent();
         }
 
-        if (frameSourceEncoder == null)
-        {
-            frameSourceEncoder = FindFirstObjectByType<QuestStereoEncoder>();
-        }
-
         if (poseSmoother == null)
         {
             poseSmoother = GetComponent<PoseSmoother>();
-        }
-    }
-
-    private void OnEnable()
-    {
-        if (frameSourceEncoder != null)
-        {
-            frameSourceEncoder.OnFrameEncoded.AddListener(HandleFrameEncoded);
-        }
-    }
-
-    private void OnDisable()
-    {
-        if (frameSourceEncoder != null)
-        {
-            frameSourceEncoder.OnFrameEncoded.RemoveListener(HandleFrameEncoded);
         }
     }
 
@@ -127,15 +90,8 @@ public class PoseFollow : MonoBehaviour
     {
         OnPoseReceived?.Invoke(pose, frameId);
 
-        // 诊断：每2秒打印一次 FollowTarget 被调用（说明 Decoder→FollowTarget 通了）。
         float now = Time.realtimeSinceStartup;
-        if (now - _lastFollowOkLogTime > 2f)
-        {
-            _lastFollowOkLogTime = now;
-            Debug.Log($"[PoseFollow] FollowTarget called frameId={frameId} pose.pos=({pose.position.x:F3},{pose.position.y:F3},{pose.position.z:F3})", this);
-        }
-
-        if (!TryGetSourceTargetPose(frameId, out Pose sourceTargetPose))
+        if (frameId <= 0 || !_sourceTargetPoseCache.TryGetValue(frameId, out Pose sourceTargetPose))
         {
             if (now - _lastFrameMissLogTime > 2f)
             {
@@ -164,60 +120,27 @@ public class PoseFollow : MonoBehaviour
         _targetWorldRotation = worldRotation;
         _latestFrameId = frameId;
         _hasTargetPose = true;
-
-        UpdateReceiveStats();
     }
 
     public void HandleFrameEncoded(long frameId)
     {
-        // 诊断：每2秒打印一次 HandleFrameEncoded 状态。
-        float now = Time.realtimeSinceStartup;
-        if (now - _lastCacheBailLogTime > 2f)
-        {
-            _lastCacheBailLogTime = now;
-            if (sourceTarget == null)
-            {
-                Debug.LogWarning(
-                    $"[PoseFollow] HandleFrameEncoded bailed: sourceTarget=null (frameSourceEncoder={(frameSourceEncoder == null ? "null" : frameSourceEncoder.name)})", this);
-            }
-            else
-            {
-                Debug.Log(
-                    $"[PoseFollow] HandleFrameEncoded frameId={frameId} srcPos=({sourceTarget.position.x:F3},{sourceTarget.position.y:F3},{sourceTarget.position.z:F3}) cacheSize={_sourceTargetPoseCache.Count}", this);
-            }
-        }
-
         if (frameId <= 0 || sourceTarget == null)
         {
+            if (sourceTarget == null && Time.realtimeSinceStartup - _lastCacheBailLogTime > 2f)
+            {
+                _lastCacheBailLogTime = Time.realtimeSinceStartup;
+                Debug.LogWarning("[PoseFollow] 无法缓存发送帧姿态：sourceTarget=null。", this);
+            }
             return;
         }
 
-        CacheSourceTargetPose(
-            frameId,
-            new Pose(sourceTarget.position, sourceTarget.rotation),
-            Mathf.Max(64, sourceTargetCacheSize)
-        );
-    }
-
-    private bool TryGetSourceTargetPose(long frameId, out Pose sourceTargetPose)
-    {
-        sourceTargetPose = Pose.identity;
-        if (frameId <= 0)
-        {
-            return false;
-        }
-
-        return _sourceTargetPoseCache.TryGetValue(frameId, out sourceTargetPose);
-    }
-
-    private void CacheSourceTargetPose(long frameId, Pose pose, int maxCount)
-    {
         if (!_sourceTargetPoseCache.ContainsKey(frameId))
         {
             _sourceTargetPoseOrder.Enqueue(frameId);
         }
 
-        _sourceTargetPoseCache[frameId] = pose;
+        _sourceTargetPoseCache[frameId] = new Pose(sourceTarget.position, sourceTarget.rotation);
+        int maxCount = Mathf.Max(64, sourceTargetCacheSize);
         while (_sourceTargetPoseOrder.Count > maxCount)
         {
             long oldFrameId = _sourceTargetPoseOrder.Dequeue();
@@ -244,54 +167,5 @@ public class PoseFollow : MonoBehaviour
 
         transform.SetPositionAndRotation(appliedPose.position, appliedPose.rotation);
         OnAfterPoseApply?.Invoke(appliedPose, _latestFrameId, sampleTime);
-
-        UpdateDebugStats(rawWorldPose, appliedPose, sampleTime);
-    }
-
-    private void UpdateReceiveStats()
-    {
-        float now = Time.realtimeSinceStartup;
-        if (_lastPoseReceiveTime > 0f)
-        {
-            float interval = Mathf.Max(now - _lastPoseReceiveTime, 1e-5f);
-            _receiveIntervalEma = _receiveIntervalEma <= 0f
-                ? interval
-                : (_receiveIntervalEma * 0.85f + interval * 0.15f);
-        }
-        _lastPoseReceiveTime = now;
-    }
-
-    private void UpdateDebugStats(Pose rawWorldPose, Pose appliedPose, float sampleTime)
-    {
-        float now = sampleTime;
-        if (_lastApplyTime > 0f)
-        {
-            float interval = Mathf.Max(now - _lastApplyTime, 1e-5f);
-            _applyIntervalEma = _applyIntervalEma <= 0f
-                ? interval
-                : (_applyIntervalEma * 0.85f + interval * 0.15f);
-        }
-        _lastApplyTime = now;
-
-        if (!enableVerboseDebugLog)
-        {
-            return;
-        }
-
-        _applyFrameCount++;
-        if (_applyFrameCount % Mathf.Max(1, debugLogInterval) != 0)
-        {
-            return;
-        }
-
-        float applyHz = _applyIntervalEma > 1e-5f ? 1f / _applyIntervalEma : 0f;
-        float receiveHz = _receiveIntervalEma > 1e-5f ? 1f / _receiveIntervalEma : 0f;
-        float posError = Vector3.Distance(rawWorldPose.position, appliedPose.position);
-        float rotError = Quaternion.Angle(rawWorldPose.rotation, appliedPose.rotation);
-
-        Debug.Log(
-            $"[PoseFollow] recvHz={receiveHz:F2}, applyHz={applyHz:F2}, posDelta={posError:F4}m, rotDelta={rotError:F2}deg, frameId={_latestFrameId}",
-            this
-        );
     }
 }

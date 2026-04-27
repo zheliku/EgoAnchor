@@ -25,7 +25,7 @@ public class QuestStereoEncoder : BaseEncoder
     [Range(30, 100)]
     [SerializeField] private int jpegQuality = 95;
     [Header("Debug")]
-    [SerializeField] private bool enableVerboseDebugLog = true;
+    [SerializeField] private bool enableEncodeStatsLog;
     [Range(1, 300)]
     [SerializeField] private int debugLogInterval = 30;
 
@@ -37,7 +37,6 @@ public class QuestStereoEncoder : BaseEncoder
     private RenderTexture _rightRenderTexture;
     private Texture2D _leftReadbackTexture;
     private Texture2D _rightReadbackTexture;
-    private bool _hasLoggedTextureTypes;
     private int _encodedFrameCount;
     private double _encodeTimeAccMs;
     private long _payloadBytesAcc;
@@ -83,8 +82,6 @@ public class QuestStereoEncoder : BaseEncoder
             return false;
         }
 
-        LogTextureTypesOnce(leftTexture, rightTexture);
-
         EnsureCaptureBuffers(leftTexture, rightTexture);
 
         double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
@@ -122,8 +119,24 @@ public class QuestStereoEncoder : BaseEncoder
             return false;
         }
 
-        string encodePath = "DualImagePayload";
-        LogEncodeStats(payload, encodePath, encodeStart);
+        if (enableEncodeStatsLog)
+        {
+            _encodedFrameCount++;
+            _encodeTimeAccMs += (Time.realtimeSinceStartupAsDouble - encodeStart) * 1000.0;
+            _payloadBytesAcc += payload.Length;
+
+            int interval = Mathf.Max(1, debugLogInterval);
+            if (_encodedFrameCount % interval == 0)
+            {
+                Debug.Log(
+                    $"[QuestStereoEncoder] EncodeStats frames={_encodedFrameCount}, " +
+                    $"avgEncode={_encodeTimeAccMs / interval:F2}ms, " +
+                    $"avgPayload={(_payloadBytesAcc / (double)interval) / 1024.0:F1}KB"
+                );
+                _encodeTimeAccMs = 0.0;
+                _payloadBytesAcc = 0;
+            }
+        }
         return true;
     }
 
@@ -206,87 +219,6 @@ public class QuestStereoEncoder : BaseEncoder
         }
 
         Graphics.Blit(source, target);
-    }
-
-    private void LogTextureTypesOnce(Texture leftTexture, Texture rightTexture)
-    {
-        if (_hasLoggedTextureTypes)
-        {
-            return;
-        }
-
-        _hasLoggedTextureTypes = true;
-        string leftType = leftTexture.GetType().Name;
-        string rightType = rightTexture.GetType().Name;
-        Debug.Log($"[QuestStereoEncoder] LeftType={leftType}, RightType={rightType}, OutputScale={outputScale:F2}, Codec=JPEG(q={jpegQuality})");
-        if (enableVerboseDebugLog)
-        {
-            LogTextureDetails("Left", leftTexture);
-            LogTextureDetails("Right", rightTexture);
-        }
-    }
-
-    private void LogTextureDetails(string label, Texture texture)
-    {
-        if (texture == null)
-        {
-            Debug.Log($"[QuestStereoEncoder] {label} Texture=null");
-            return;
-        }
-
-        string baseInfo =
-            $"[QuestStereoEncoder] {label} TexInfo type={texture.GetType().Name}, size={texture.width}x{texture.height}, dimension={texture.dimension}, graphicsFormat={texture.graphicsFormat}, mipCount={texture.mipmapCount}, filter={texture.filterMode}";
-
-        if (texture is RenderTexture rt)
-        {
-            Debug.Log(
-                baseInfo +
-                $", rtFormat={rt.format}, depth={rt.depth}, msaa={rt.antiAliasing}, useMipMap={rt.useMipMap}, sRGB={rt.sRGB}"
-            );
-            return;
-        }
-
-        if (texture is Texture2D t2d)
-        {
-            Debug.Log(
-                baseInfo +
-                $", tex2DFormat={t2d.format}, readable={t2d.isReadable}"
-            );
-            return;
-        }
-
-        Debug.Log(baseInfo);
-    }
-
-    private void LogEncodeStats(byte[] payload, string encodePath, double encodeStart)
-    {
-        if (!enableVerboseDebugLog)
-        {
-            return;
-        }
-
-        _encodedFrameCount++;
-        double elapsedMs = (Time.realtimeSinceStartupAsDouble - encodeStart) * 1000.0;
-        _encodeTimeAccMs += elapsedMs;
-
-        long bytes = payload == null ? 0 : payload.LongLength;
-        _payloadBytesAcc += bytes;
-
-        int interval = Mathf.Max(1, debugLogInterval);
-        if (_encodedFrameCount % interval != 0)
-        {
-            return;
-        }
-
-        double avgEncodeMs = _encodeTimeAccMs / interval;
-        double avgPayloadKB = (_payloadBytesAcc / (double)interval) / 1024.0;
-
-        Debug.Log(
-            $"[QuestStereoEncoder] EncodeStats frames={_encodedFrameCount}, mode={encodePath}, avgEncode={avgEncodeMs:F2}ms, avgPayload={avgPayloadKB:F1}KB, codec=Jpeg"
-        );
-
-        _encodeTimeAccMs = 0.0;
-        _payloadBytesAcc = 0;
     }
 
     /// <summary>

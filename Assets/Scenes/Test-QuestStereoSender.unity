@@ -1782,7 +1782,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  frameSourceEncoder: {fileID: 882331663}
   sourceTarget: {fileID: 960095797}
   sourceTargetCacheSize: 512
   poseSmoother: {fileID: 864581799}
@@ -1795,8 +1794,6 @@ MonoBehaviour:
   OnAfterPoseApply:
     m_PersistentCalls:
       m_Calls: []
-  enableVerboseDebugLog: 1
-  debugLogInterval: 30
 --- !u!65 &864581801
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -1978,7 +1975,7 @@ MonoBehaviour:
   rightCameraAccess: {fileID: 762868051}
   outputScale: 1
   jpegQuality: 80
-  enableVerboseDebugLog: 1
+  enableEncodeStatsLog: 0
   debugLogInterval: 30
   OnFrameEncoded:
     m_PersistentCalls:
@@ -3618,7 +3615,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  frameSourceEncoder: {fileID: 882331663}
   sourceTarget: {fileID: 960095797}
   sourceTargetCacheSize: 512
   poseSmoother: {fileID: 1824679902}
@@ -3643,8 +3639,6 @@ MonoBehaviour:
   OnAfterPoseApply:
     m_PersistentCalls:
       m_Calls: []
-  enableVerboseDebugLog: 1
-  debugLogInterval: 30
 --- !u!114 &1824679902
 MonoBehaviour:
   m_ObjectHideFlags: 0

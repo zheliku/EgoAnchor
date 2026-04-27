@@ -638,8 +638,6 @@ MonoBehaviour:
   OnAfterPoseApply:
     m_PersistentCalls:
       m_Calls: []
-  enableVerboseDebugLog: 1
-  debugLogInterval: 30
 --- !u!114 &400007
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -714,8 +712,6 @@ MonoBehaviour:
   OnAfterPoseApply:
     m_PersistentCalls:
       m_Calls: []
-  enableVerboseDebugLog: 1
-  debugLogInterval: 30
 --- !u!65 &1017702961
 BoxCollider:
   m_ObjectHideFlags: 0

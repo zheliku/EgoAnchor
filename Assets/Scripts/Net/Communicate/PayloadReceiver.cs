@@ -188,22 +188,13 @@ public class PayloadReceiver : MonoBehaviour
         for (int i = 0; i < pending.Count; i++)
         {
             RawPayload payload = pending[i];
-            ReceiverEntry entry = FindEntry(payload.Topic);
-            if (entry != null && entry.decoder != null)
+            if (payload.Topic != null &&
+                _entriesByTopic.TryGetValue(payload.Topic, out ReceiverEntry entry) &&
+                entry.decoder != null)
             {
                 entry.decoder.OnPayloadReceived(payload);
             }
         }
-    }
-
-    /// <summary>
-    /// 按 topic 名称查找匹配的 ReceiverEntry。
-    /// </summary>
-    private ReceiverEntry FindEntry(string topic)
-    {
-        return topic != null && _entriesByTopic.TryGetValue(topic, out ReceiverEntry entry)
-            ? entry
-            : null;
     }
 
     public void Connect()
