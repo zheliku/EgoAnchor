@@ -377,3 +377,42 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
 - 本文件是长期项目记忆入口。
 - 大改后至少更新：入口、模块职责、协议字段、标定策略、位姿坐标、调试统计、常见排查。
 - 删除或迁移旧文档后，不要再引用旧 handoff 文件。
+
+## 2026-04 架构收敛更新
+
+- Unity payload 抽象命名已统一为 `PayloadEncoder` / `PayloadDecoder`：
+  - Encoder 方法为 `TryEncode(out byte[] payload)`。
+  - Decoder 方法为 `HandlePayload(RawPayload payload)`。
+  - `PayloadSender` / `PayloadReceiver` 的 Inspector 配置方式不变，`VInspector`、`RuntimeInspector`、`Proxima` 调试按钮继续保留。
+- Python payload 抽象命名已统一：
+  - `zmq_utils/payload/encoder/payload_encoder.py` 定义 `PayloadEncoder`。
+  - `zmq_utils/payload/decoder/payload_decoder.py` 定义 `PayloadDecoder`。
+- 协议契约新增到 `Foundationpose_for_VR/src/zmq_utils/payload/protocol_contract.json`，用于记录 topic、端口方向、MessagePack 字段与坐标约定。
+- `pose_server.py` 保持主入口职责，辅助逻辑拆到 `Foundationpose_for_VR/src/server/`：
+  - `camera_info_cache.py`：camera_info latest 保存、核心字段比较、旧版本备份。
+  - `debug_view.py`：OpenCV debug 窗口、等待占位图、HUD 文本绘制。
+  - `runtime_stats.py`：发布计数、pose/drop 比例、EMA 延迟统计。
+  - `keyboard_control.py`：本地调试热键处理。
+- Python 协议测试新增 `Foundationpose_for_VR/src/test/test_protocol_contract.py`，覆盖 message 字段契约、PoseEncoder/PoseDecoder 回环和 receiver 多 topic latest-drain。
+
+## 2026-04 可读性与提交卫生更新
+
+- `QuestReceiver` 提供公开诊断接口：
+  - `has_stereo_frame()`：判断是否已成功解码过 stereo 帧。
+  - `get_input_state()`：返回 `QuestInputState` 快照，用于 `pose_server.py` 等待阶段输出 camera_info/stereo/解码计数等诊断。
+  - 上层不应再直接访问 `pipeline.camera._latest_stereo` 等私有缓存字段。
+- `server/keyboard_control.py` 使用 `KeyboardControllablePipeline` Protocol 描述热键所需的最小 pipeline 能力，避免用 `object` 隐藏依赖。
+- `zmq_utils/communicate/sender.py` 与 `receiver.py` 的连接/关闭输出改为 `logging.info/debug`，不再在通用传输层分散使用 `print`。
+- Unity `PayloadSender` / `PayloadReceiver` 注释补充了传输层边界、PUB/SUB multipart 协议、HWM 延迟取舍、latest-drain 策略、后台收包线程到主线程 decoder 分发的线程模型。
+- Unity `PayloadEncoder` / `PayloadDecoder` 注释说明了与 Python `PayloadEncoder` / `PayloadDecoder` 的对称关系。
+- `PoseEncoder` / `PoseDecoder` 注释明确：
+  - `frame_id` 必须从 `QuestStereoMsg` 传递到 `PoseMsg`，用于 Unity 回找发送帧参考姿态。
+  - `has_pose=false` 且 `pose_matrix_flat=None/null` 是合法状态包，不是解码失败。
+- `Foundationpose_for_VR/src/zmq_utils/payload/README.md` 记录 `protocol_contract.json` 的维护规则，因为 JSON 本身不支持注释。
+- `.gitignore` 补充运行/验证产物规则：
+  - `.dotnet/` 为外部 dotnet 验证生成的临时目录，不应提交。
+  - Python `__pycache__/`、`*.py[cod]` 不应提交。
+  - `Foundationpose_for_VR/Calibration/cache/camera_info_latest.json` 和 `camera_info_*.json` 属于运行时标定缓存/备份，默认不作为源码改动提交。
+- 本轮验证命令：
+  - `pixi run python -m compileall src/pose_server.py src/server src/zmq_utils/payload src/modules/quest_io.py`
+  - `pixi run python -m unittest src.test.test_protocol_contract`

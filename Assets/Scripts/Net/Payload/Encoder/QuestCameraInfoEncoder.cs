@@ -11,7 +11,7 @@ using UnityEngine;
 /// - 每次发送都会刷新 sender_mono_ms，保证 Python 侧收到的是本次发送时间戳。
 /// - 相机静态信息本身通常不变，发送频率由 PayloadSender 的 targetFps 控制。
 /// </summary>
-public class QuestCameraInfoEncoder : BaseEncoder
+public class QuestCameraInfoEncoder : PayloadEncoder
 {
     [SerializeField] private PassthroughCameraAccess leftCameraAccess;
     [SerializeField] private PassthroughCameraAccess rightCameraAccess;
@@ -19,7 +19,7 @@ public class QuestCameraInfoEncoder : BaseEncoder
     /// <summary>
     /// 从 Quest 左右相机读取静态信息并编码为单帧 payload。
     /// </summary>
-    public override bool TryEncodePayload(out byte[] payload)
+    public override bool TryEncode(out byte[] payload)
     {
         payload = null;
 
@@ -112,3 +112,4 @@ public class QuestCameraInfoEncoder : BaseEncoder
         };
     }
 }
+

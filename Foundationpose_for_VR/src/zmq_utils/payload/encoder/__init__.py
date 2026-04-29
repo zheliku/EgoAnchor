@@ -1,9 +1,10 @@
-from .base_encoder import BaseEncoder
+from .payload_encoder import PayloadEncoder
 from .camera_info_encoder import CameraInfoEncoder
 from .pose_encoder import PoseEncoder
 
 __all__ = [
-    "BaseEncoder",
+    "PayloadEncoder",
     "CameraInfoEncoder",
     "PoseEncoder",
 ]
+

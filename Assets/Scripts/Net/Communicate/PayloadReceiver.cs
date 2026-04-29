@@ -34,7 +34,7 @@ public readonly struct RawPayload
 public class ReceiverEntry
 {
     [Tooltip("订阅 topic 名称")] public string topic = "";
-    [Tooltip("解码器实例，负责解析该 topic 的 payload")] public BaseDecoder decoder;
+    [Tooltip("解码器实例，负责解析该 topic 的 payload")] public PayloadDecoder decoder;
 }
 
 /// <summary>
@@ -49,6 +49,16 @@ public class ReceiverEntry
 /// </summary>
 public class PayloadReceiver : MonoBehaviour
 {
+    /*
+     * 线程模型：
+     * - 后台线程只做 ZMQ SUB 收包，并把每个 topic 的最新 RawPayload 写入 _latestByTopic。
+     * - Unity 主线程在 Update() 中取出新 topic，再调用对应 PayloadDecoder.HandlePayload。
+     * - decoder 永远在主线程执行，因此可以安全触发 UnityEvent、修改 Transform 或访问场景对象。
+     *
+     * latest-drain 策略：
+     * - 同一 topic 队列中如果堆积了多帧，只保留最新帧，旧帧直接被覆盖。
+     * - 不同 topic 分别保留最新值，避免高频 stereo 把低频 pose/camera_info 的最新包冲掉。
+     */
     private const string ReceiverIPPrefKey = "PayloadReceiver.ServerIP";
     private const string ReceiverPortPrefKey = "PayloadReceiver.ServerPort";
     private const string ReceiveHighWatermarkPrefKey = "PayloadReceiver.ReceiveHighWatermark";
@@ -72,6 +82,7 @@ public class PayloadReceiver : MonoBehaviour
     private readonly Stopwatch _stopwatch = new Stopwatch();
 
     // 按 topic 缓存最新 payload。
+    // 按 topic 缓存最新 payload；这个字典只在 _lock 保护下读写。
     private readonly object _lock = new object();
     private readonly Dictionary<string, RawPayload> _latestByTopic = new Dictionary<string, RawPayload>();
     private readonly HashSet<string> _newTopics = new HashSet<string>();
@@ -192,7 +203,7 @@ public class PayloadReceiver : MonoBehaviour
                 _entriesByTopic.TryGetValue(payload.Topic, out ReceiverEntry entry) &&
                 entry.decoder != null)
             {
-                entry.decoder.OnPayloadReceived(payload);
+                entry.decoder.HandlePayload(payload);
             }
         }
     }
@@ -358,3 +369,4 @@ public class PayloadReceiver : MonoBehaviour
         Disconnect();
     }
 }
+

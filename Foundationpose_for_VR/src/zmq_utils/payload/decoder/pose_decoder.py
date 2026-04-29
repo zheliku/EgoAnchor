@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base_decoder import PayloadDecoder
+from .payload_decoder import PayloadDecoder
 from ..message.pose_msg import PoseMsg
 
 
@@ -14,6 +14,13 @@ class PoseDecoder(PayloadDecoder):
     """
 
     def decode(self, payload: bytes) -> dict[str, object] | None:
+        """解码 PoseMsg，并保留协议字段的原始语义。
+
+        注意：
+        - frame_id 不做重新生成或本地替换，测试会用它确认 Unity/Python 回环一致；
+        - has_pose=false 时 pose_matrix_flat 可以为 None，这是“无位姿状态包”而不是解码失败；
+        - 真正的解码失败只返回 None。
+        """
         # 先复用 PoseMsg 的统一反序列化与基础校验逻辑。
         message = PoseMsg.deserialize(payload)
         if message is None:
@@ -22,6 +29,7 @@ class PoseDecoder(PayloadDecoder):
         # 输出普通 dict，便于日志、测试断言和临时脚本直接使用。
         return {
             "timestamp_ms": float(message.timestamp_ms),
+            "frame_id": int(message.frame_id),
             "stage": int(message.stage),
             "phase": str(message.phase),
             "det_count": int(message.det_count),
@@ -34,3 +42,4 @@ class PoseDecoder(PayloadDecoder):
             "cutie_ms": float(message.cutie_ms),
             "pose_ms": float(message.pose_ms),
         }
+

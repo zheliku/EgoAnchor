@@ -10,11 +10,11 @@ from .decoder import (
     PoseDecoder,
     StereoDecoder,
 )
-from .encoder import BaseEncoder, CameraInfoEncoder, PoseEncoder
+from .encoder import PayloadEncoder, CameraInfoEncoder, PoseEncoder
 from .message import PoseMsg, QuestCameraInfoMsg, QuestStereoMsg
 
 __all__ = [
-    "BaseEncoder",
+    "PayloadEncoder",
     "CameraInfoDecoder",
     "CameraInfoEncoder",
     "PoseEncoder",
@@ -24,3 +24,4 @@ __all__ = [
     "QuestStereoMsg",
     "StereoDecoder",
 ]
+

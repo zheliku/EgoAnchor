@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import zmq
@@ -54,10 +55,10 @@ class PayloadSender:
         self.socket.set_hwm(self.hwm)
         if self.is_bind:
             self.socket.bind(self.endpoint)
-            print(f"[{self.__class__.__name__}] Bound to {self.endpoint}")
+            logging.info("[%s] Bound to %s", self.__class__.__name__, self.endpoint)
         else:
             self.socket.connect(self.endpoint)
-            print(f"[{self.__class__.__name__}] Connected to {self.endpoint}")
+            logging.info("[%s] Connected to %s", self.__class__.__name__, self.endpoint)
 
     def send_payload(self, payload: bytes, topic: str) -> bool:
         """发送业务 payload（单帧 bytes），必须指定 topic。
@@ -90,7 +91,7 @@ class PayloadSender:
         if self.socket is not None:
             self.socket.close()
             self.socket = None
-            print(f"[ZMQ] Node closed: {self.endpoint}")
+            logging.debug("[ZMQ] Node closed: %s", self.endpoint)
 
     def __enter__(self) -> "PayloadSender":
         return self

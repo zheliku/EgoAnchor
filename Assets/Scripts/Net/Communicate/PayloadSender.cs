@@ -14,7 +14,7 @@ using VInspector;
 [Serializable]
 public class SenderEntry
 {
-    [Tooltip("编码器实例，负责生成单帧 payload")] public BaseEncoder encoder;
+    [Tooltip("编码器实例，负责生成单帧 payload")] public PayloadEncoder encoder;
     [Tooltip("PUB 模式的 topic 名称")] public string topic = "";
     [Tooltip("发送帧率（每秒最大编码+发送次数）")] public int targetFps = 10;
 
@@ -37,6 +37,13 @@ public class SenderEntry
 /// </summary>
 public class PayloadSender : MonoBehaviour
 {
+    /*
+     * 传输层边界：
+     * - PayloadSender 只负责 ZMQ PUB socket、topic 与 byte[] 发送，不理解图像、相机信息或 pose 语义。
+     * - 每个 SenderEntry 持有一个 PayloadEncoder 子类；encoder 负责生成 MessagePack payload。
+     * - HWM（High Watermark）是队列积压上限。实时流宁愿丢旧帧，也不要让队列无限排队增加延迟。
+     * - 这里保留 Inspector 手动配置方式，方便在 Unity 中可视化管理 topic、fps 与 encoder 引用。
+     */
     private const string SenderIPPrefKey = "PayloadSender.ServerIP";
     private const string SenderPortPrefKey = "PayloadSender.ServerPort";
     private const string SendHighWatermarkPrefKey = "PayloadSender.SendHighWatermark";
@@ -188,7 +195,7 @@ public class PayloadSender : MonoBehaviour
                 entry.lastSendTime = now;
 
                 double encodeStart = Time.realtimeSinceStartupAsDouble;
-                bool encoded = entry.encoder.TryEncodePayload(out byte[] payload) &&
+                bool encoded = entry.encoder.TryEncode(out byte[] payload) &&
                                payload != null && payload.Length > 0;
                 entry.encodeTimeAcc += Time.realtimeSinceStartupAsDouble - encodeStart;
 
@@ -198,6 +205,7 @@ public class PayloadSender : MonoBehaviour
                 }
 
                 // PUB 模式：发送 multipart [topic, payload]。
+                // PUB 协议固定发送 multipart [topic_utf8, payload_bytes]，与 Python PayloadReceiver 完全对称。
                 NetMQMessage message = new NetMQMessage();
                 message.Append(entry.topic);
                 message.Append(payload);
@@ -264,3 +272,4 @@ public class PayloadSender : MonoBehaviour
         Cleanup();
     }
 }
+

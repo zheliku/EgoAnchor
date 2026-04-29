@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base_encoder import BaseEncoder
+from .payload_encoder import PayloadEncoder
 from ..message.pose_msg import PoseMsg
 
 
-class PoseEncoder(BaseEncoder):
+class PoseEncoder(PayloadEncoder):
     """将 pose_server 的结构化输出编码为 Unity 可消费的单帧 payload。
 
     该类只负责协议封包：
@@ -28,6 +28,13 @@ class PoseEncoder(BaseEncoder):
         timing_ms: dict[str, float],
         pose_4x4: np.ndarray | None,
     ) -> bytes | None:
+        """编码一帧 PoseMsg。
+
+        协议约定：
+        - frame_id 必须原样来自 QuestStereoMsg，用来让 Unity 找回发送该帧时的参考节点姿态；
+        - pose_4x4 为 None 表示本帧只有状态诊断、没有有效 6D 位姿；
+        - 无 pose 时 has_pose=false 且 pose_matrix_flat=None，这是合法包，Unity decoder 会忽略位姿应用。
+        """
         # timing_ms 来自 PipelineStepTiming；这里允许缺字段，便于上层渐进扩展。
         timing = timing_ms or {}
         pose_matrix_flat: list[float] | None = None
@@ -54,3 +61,4 @@ class PoseEncoder(BaseEncoder):
             pose_ms=float(timing.get("pose", 0.0)),
         )
         return message.serialize()
+

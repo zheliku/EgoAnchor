@@ -41,6 +41,22 @@ TOPIC_STEREO = "quest_stereo"
 TOPIC_CAMERA_INFO = "quest_camera_info"
 
 
+@dataclass(frozen=True)
+class QuestInputState:
+    """Quest 网络输入状态快照。
+
+    该对象只面向诊断和日志：上层可以用它判断 stereo/camera_info 是否已经到达，
+    但不会直接接触 `_latest_stereo`、`_latest_camera_info` 等内部缓存字段。
+    """
+
+    has_stereo: bool
+    has_camera_info: bool
+    camera_info_version: int
+    received_count: int
+    decoded_count: int
+    decode_fail_count: int
+
+
 @dataclass
 class QuestStereoCalibration:
     """Quest 双目标定信息（由网络 camera_info 消息构造）。"""
@@ -212,7 +228,7 @@ class QuestReceiver:
             topics=self.topics,
         )
         self._started = True
-        print(f"[QuestReceiver] Listening on {self.endpoint}, topics={self.topics}")
+        logging.info("[QuestReceiver] Listening on %s, topics=%s", self.endpoint, self.topics)
 
     def stop(self) -> None:
         """停止接收并释放资源。"""
@@ -257,6 +273,21 @@ class QuestReceiver:
     def get_camera_info_version(self) -> int:
         """Return the latest camera_info message version."""
         return self._camera_info_version
+
+    def has_stereo_frame(self) -> bool:
+        """是否已经成功解码过至少一帧 stereo 图像。"""
+        return self._latest_stereo is not None
+
+    def get_input_state(self) -> QuestInputState:
+        """返回输入链路状态快照，供服务端等待阶段输出诊断日志。"""
+        return QuestInputState(
+            has_stereo=self._latest_stereo is not None,
+            has_camera_info=self._latest_camera_info is not None,
+            camera_info_version=self._camera_info_version,
+            received_count=self._received_count,
+            decoded_count=self._decoded_count,
+            decode_fail_count=self._decode_fail_count,
+        )
 
     def get_calibration(self) -> QuestStereoCalibration | None:
         """从最新相机信息构造标定对象。未收到时返回 None。"""

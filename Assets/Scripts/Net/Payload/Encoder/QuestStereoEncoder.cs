@@ -16,7 +16,7 @@ public class FrameIdEvent : UnityEvent<long> { }
 /// - 本组件只负责编码，不负责发送。
 /// - 发送节奏由 PayloadSender 控制。
 /// </summary>
-public class QuestStereoEncoder : BaseEncoder
+public class QuestStereoEncoder : PayloadEncoder
 {
     [SerializeField] private PassthroughCameraAccess leftCameraAccess;
     [SerializeField] private PassthroughCameraAccess rightCameraAccess;
@@ -53,7 +53,7 @@ public class QuestStereoEncoder : BaseEncoder
     /// <summary>
     /// 从 Quest 左右相机抓取当前帧并编码为单帧 payload。
     /// </summary>
-    public override bool TryEncodePayload(out byte[] payload)
+    public override bool TryEncode(out byte[] payload)
     {
         double encodeStart = Time.realtimeSinceStartupAsDouble;
         payload = null;
@@ -283,3 +283,4 @@ public class QuestStereoEncoder : BaseEncoder
         ReleaseBuffer(ref _rightRenderTexture, ref _rightReadbackTexture);
     }
 }
+

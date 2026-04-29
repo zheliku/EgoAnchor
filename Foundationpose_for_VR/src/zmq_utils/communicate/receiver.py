@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import zmq
@@ -72,10 +73,10 @@ class PayloadReceiver:
 
         if self.is_bind:
             self.socket.bind(self.endpoint)
-            print(f"[{self.__class__.__name__}] Bound to {self.endpoint}")
+            logging.info("[%s] Bound to %s", self.__class__.__name__, self.endpoint)
         else:
             self.socket.connect(self.endpoint)
-            print(f"[{self.__class__.__name__}] Connected to {self.endpoint}")
+            logging.info("[%s] Connected to %s", self.__class__.__name__, self.endpoint)
 
     def _recv_frame_once(self, *, nonblock: bool) -> tuple[str, bytes] | None:
         """读取一条 SUB 消息，返回 (topic, payload)。"""
@@ -136,7 +137,7 @@ class PayloadReceiver:
         if self.socket is not None:
             self.socket.close()
             self.socket = None
-            print(f"[ZMQ] Node closed: {self.endpoint}")
+            logging.debug("[ZMQ] Node closed: %s", self.endpoint)
 
     def __enter__(self) -> "PayloadReceiver":
         return self

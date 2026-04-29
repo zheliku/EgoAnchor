@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .base_encoder import BaseEncoder
+from .payload_encoder import PayloadEncoder
 from ..message.quest_camera_info_msg import QuestCameraInfoMsg
 
 
-class CameraInfoEncoder(BaseEncoder):
+class CameraInfoEncoder(PayloadEncoder):
     """Quest 相机信息 payload 编码器。
 
     该编码器主要用于 Python 侧测试或回环：
@@ -19,3 +19,4 @@ class CameraInfoEncoder(BaseEncoder):
         # QuestCameraInfoMsg 是 frozen dataclass，serialize 内部只做字段到 dict 的稳定映射。
         # kwargs 预留给未来扩展（例如压缩/版本号），当前不参与编码。
         return msg.serialize()
+

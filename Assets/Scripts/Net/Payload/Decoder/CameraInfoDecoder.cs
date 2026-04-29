@@ -14,7 +14,7 @@ public class CameraInfoReceivedEvent : UnityEvent<QuestCameraInfoMsg> { }
 /// 输入：RawPayload（MessagePack 编码的 QuestCameraInfoMsg）。
 /// 输出：OnCameraInfoReceived 事件，参数为反序列化后的 QuestCameraInfoMsg。
 /// </summary>
-public class CameraInfoDecoder : BaseDecoder
+public class CameraInfoDecoder : PayloadDecoder
 {
     [Header("Events")]
     [Tooltip("当收到完整相机信息消息时触发")]
@@ -28,7 +28,7 @@ public class CameraInfoDecoder : BaseDecoder
         }
     }
 
-    public override void OnPayloadReceived(RawPayload payload)
+    public override void HandlePayload(RawPayload payload)
     {
         if (payload.Payload == null || payload.Payload.Length == 0)
         {
@@ -42,3 +42,4 @@ public class CameraInfoDecoder : BaseDecoder
         }
     }
 }
+

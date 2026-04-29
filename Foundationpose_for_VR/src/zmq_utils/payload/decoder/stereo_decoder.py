@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-from .base_decoder import PayloadDecoder
+from .payload_decoder import PayloadDecoder
 from ..message.quest_stereo_msg import QuestStereoMsg
 
 
@@ -34,3 +34,4 @@ class StereoDecoder(PayloadDecoder):
         message.left = cast(NDArray[np.uint8], left)
         message.right = cast(NDArray[np.uint8], right)
         return message
+

@@ -18,7 +18,7 @@ public class PoseReceivedEvent : UnityEvent<Pose, long> { }
 /// 输出事件：
 /// - OnPoseReceived：当 pose 有效时触发（参数：pose, frame_id）。
 /// </summary>
-public class PoseDecoder : BaseDecoder
+public class PoseDecoder : PayloadDecoder
 {
     [Header("Coordinate Mapping")]
     [Tooltip("输入位姿若来自 OpenCV 相机坐标（x右/y下/z前），勾选后自动转换到 Unity 坐标（x右/y上/z前）。")]
@@ -35,7 +35,7 @@ public class PoseDecoder : BaseDecoder
         }
     }
 
-    public override void OnPayloadReceived(RawPayload payload)
+    public override void HandlePayload(RawPayload payload)
     {
         if (payload.Payload == null || payload.Payload.Length == 0)
         {
@@ -87,3 +87,4 @@ public class PoseDecoder : BaseDecoder
         return true;
     }
 }
+

@@ -16,7 +16,7 @@ from .communicate import PayloadReceiver, PayloadSender
 
 # 通用 payload 编解码
 from .payload import (
-    BaseEncoder,
+    PayloadEncoder,
     CameraInfoDecoder,
     CameraInfoEncoder,
     PayloadDecoder,
@@ -34,7 +34,7 @@ __all__ = [
     "PayloadSender",
     "PayloadReceiver",
     # Payload 编解码
-    "BaseEncoder",
+    "PayloadEncoder",
     "CameraInfoDecoder",
     "CameraInfoEncoder",
     "PayloadDecoder",
@@ -45,3 +45,4 @@ __all__ = [
     "QuestStereoMsg",
     "StereoDecoder",
 ]
+
