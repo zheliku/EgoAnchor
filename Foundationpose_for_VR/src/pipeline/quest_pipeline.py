@@ -1048,7 +1048,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--listen_port",
         type=int,
-        default=5557,
+        default=15557,
         help="Quest 接收端口（需与 Unity 发送端端口一致）。",
     )
     parser.add_argument(
@@ -1352,7 +1352,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         choices=[0, 1],
-        help="是否用 Cutie bbox 中心强制修正 FoundationPose 上一帧 tx/ty。默认关闭以避免 2D 抖动注入 6D pose。",
+        help="是否用 Cutie bbox 中心强制修正 FoundationPose 上一帧 tx/ty。默认启用；若 2D bbox 抖动明显可显式传 0 关闭。",
     )
     return parser
 

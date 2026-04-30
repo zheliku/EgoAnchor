@@ -143,7 +143,7 @@ class QuestReceiver:
     Quest 多 Topic 网络接收器。
 
     使用方式（示例）：
-        recv = QuestReceiver(listen_port=5557)
+        recv = QuestReceiver(listen_port=15557)
         recv.start()
 
         # 获取双目帧。
@@ -159,7 +159,7 @@ class QuestReceiver:
 
     # 输入配置。
     listen_host: str = "*"
-    listen_port: int = 5557
+    listen_port: int = 15557
     hwm: int = 20
     timeout_ms: int = 100
     endpoint: str = ""
@@ -196,7 +196,7 @@ class QuestReceiver:
     def __init__(
         self,
         listen_host: str = "*",
-        listen_port: int = 5557,
+        listen_port: int = 15557,
         hwm: int = 20,
         timeout_ms: int = 100,
         topics: list[str] | None = None,
@@ -441,7 +441,7 @@ if __name__ == "__main__":
     4) 按 q 或 ESC 退出。
     """
 
-    LISTEN_PORT = 5557
+    LISTEN_PORT = 15557
     STATS_INTERVAL = 60
     WINDOW_NAME = "Quest Stereo (Left | Right)"
 

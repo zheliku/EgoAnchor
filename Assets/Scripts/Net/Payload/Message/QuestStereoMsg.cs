@@ -3,34 +3,37 @@ using MessagePack;
 
 /// <summary>
 /// Quest 双目 MessagePack 传输消息。
+///
+/// C# 侧使用 PascalCase 属性保持本地代码风格；[Key("...")] 中的 snake_case
+/// 是真实网络协议字段名，必须与 Python QuestStereoMsg 和 protocol_contract.json 保持一致。
 /// </summary>
 [Serializable]
 [MessagePackObject]
 public class QuestStereoMsg
 {
     [Key("left_image_jpeg")]
-    public byte[] left_image_jpeg; // 左目 JPEG 图像字节。
+    public byte[] LeftImageJpeg { get; set; } // 左目 JPEG 图像字节。
 
     [Key("right_image_jpeg")]
-    public byte[] right_image_jpeg; // 右目 JPEG 图像字节。
+    public byte[] RightImageJpeg { get; set; } // 右目 JPEG 图像字节。
 
     [Key("frame_id")]
-    public long frame_id; // 发送端帧号（用于检测丢帧与延迟）。
+    public long FrameId { get; set; } // 发送端帧号（用于检测丢帧与延迟）。
     [Key("sender_mono_ms")]
-    public double sender_mono_ms; // 发送端单调时钟（毫秒）。
+    public double SenderMonoMs { get; set; } // 发送端单调时钟（毫秒）。
     [Key("unity_frame")]
-    public int unity_frame; // Unity 的 Time.frameCount。
+    public int UnityFrame { get; set; } // Unity 的 Time.frameCount。
 
     // 将消息序列化为 MessagePack 负载。
     public byte[] Serialize()
     {
         // 新协议要求左右图都存在，避免接收侧出现“半帧”状态。
-        if (left_image_jpeg == null || left_image_jpeg.Length == 0)
+        if (LeftImageJpeg == null || LeftImageJpeg.Length == 0)
         {
             return null;
         }
 
-        if (right_image_jpeg == null || right_image_jpeg.Length == 0)
+        if (RightImageJpeg == null || RightImageJpeg.Length == 0)
         {
             return null;
         }
@@ -53,12 +56,12 @@ public class QuestStereoMsg
                 return null;
             }
 
-            if (message.left_image_jpeg == null || message.left_image_jpeg.Length == 0)
+            if (message.LeftImageJpeg == null || message.LeftImageJpeg.Length == 0)
             {
                 return null;
             }
 
-            if (message.right_image_jpeg == null || message.right_image_jpeg.Length == 0)
+            if (message.RightImageJpeg == null || message.RightImageJpeg.Length == 0)
             {
                 return null;
             }

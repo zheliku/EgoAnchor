@@ -8,39 +8,40 @@ using UnityEngine;
 /// 规范：
 /// - 消息类统一以 Msg 结尾。
 /// - 每个消息只保留一个类型定义，不再拆分出独立 timing 类型。
+/// - C# 侧使用 PascalCase 属性；[Key("...")] 中的 snake_case 是真实 MessagePack 协议字段。
 /// </summary>
 [Serializable]
 [MessagePackObject]
 public class PoseMsg
 {
     [Key("timestamp_ms")]
-    public double timestamp_ms; // 该条位姿消息的时间戳（毫秒）。
+    public double TimestampMs { get; set; } // 该条位姿消息的时间戳（毫秒）。
     [Key("frame_id")]
-    public long frame_id; // 对应输入双目帧号（用于 Unity 本地对齐发送时参考位姿）。
+    public long FrameId { get; set; } // 对应输入双目帧号（用于 Unity 本地对齐发送时参考位姿）。
     [Key("stage")]
-    public int stage; // Pipeline 阶段编号。
+    public int Stage { get; set; } // Pipeline 阶段编号。
     [Key("phase")]
-    public string phase; // 阶段名称（例如 REGISTER / TRACK）。
+    public string Phase { get; set; } // 阶段名称（例如 REGISTER / TRACK）。
     [Key("det_count")]
-    public int det_count; // 检测目标数量。
+    public int DetCount { get; set; } // 检测目标数量。
     [Key("depth_valid_ratio")]
-    public float depth_valid_ratio; // 深度有效像素占比（0~1）。
+    public float DepthValidRatio { get; set; } // 深度有效像素占比（0~1）。
     [Key("fps")]
-    public float fps; // 实时帧率。
+    public float Fps { get; set; } // 实时帧率。
 
     [Key("has_pose")]
-    public bool has_pose; // 是否有可用位姿。
+    public bool HasPose { get; set; } // 是否有可用位姿。
     [Key("pose_matrix_flat")]
-    public float[] pose_matrix_flat; // 位姿矩阵展平后的 16 个元素（行优先）。
+    public float[] PoseMatrixFlat { get; set; } // 位姿矩阵展平后的 16 个元素（行优先）。
 
     [Key("yolo_ms")]
-    public float yolo_ms; // YOLO 阶段耗时（毫秒）。
+    public float YoloMs { get; set; } // YOLO 阶段耗时（毫秒）。
     [Key("depth_ms")]
-    public float depth_ms; // 深度估计阶段耗时（毫秒）。
+    public float DepthMs { get; set; } // 深度估计阶段耗时（毫秒）。
     [Key("cutie_ms")]
-    public float cutie_ms; // Cutie 阶段耗时（毫秒）。
+    public float CutieMs { get; set; } // Cutie 阶段耗时（毫秒）。
     [Key("pose_ms")]
-    public float pose_ms; // 位姿估计阶段耗时（毫秒）。
+    public float PoseMs { get; set; } // 位姿估计阶段耗时（毫秒）。
 
     public byte[] Serialize()
     {
@@ -62,7 +63,7 @@ public class PoseMsg
                 return null;
             }
 
-            if (message.has_pose && (message.pose_matrix_flat == null || message.pose_matrix_flat.Length != 16))
+            if (message.HasPose && (message.PoseMatrixFlat == null || message.PoseMatrixFlat.Length != 16))
             {
                 return null;
             }
@@ -78,25 +79,25 @@ public class PoseMsg
     public bool TryGetPose(out Pose pose)
     {
         pose = Pose.identity;
-        if (!has_pose)
+        if (!HasPose)
         {
             return false;
         }
 
-        if (pose_matrix_flat == null || pose_matrix_flat.Length != 16)
+        if (PoseMatrixFlat == null || PoseMatrixFlat.Length != 16)
         {
             return false;
         }
 
         Vector3 forward = new Vector3(
-            pose_matrix_flat[2],
-            pose_matrix_flat[6],
-            pose_matrix_flat[10]
+            PoseMatrixFlat[2],
+            PoseMatrixFlat[6],
+            PoseMatrixFlat[10]
         );
         Vector3 up = new Vector3(
-            pose_matrix_flat[1],
-            pose_matrix_flat[5],
-            pose_matrix_flat[9]
+            PoseMatrixFlat[1],
+            PoseMatrixFlat[5],
+            PoseMatrixFlat[9]
         );
         if (forward.sqrMagnitude < 1e-12f || up.sqrMagnitude < 1e-12f)
         {
@@ -105,9 +106,9 @@ public class PoseMsg
 
         pose = new Pose(
             new Vector3(
-                pose_matrix_flat[3],
-                pose_matrix_flat[7],
-                pose_matrix_flat[11]
+                PoseMatrixFlat[3],
+                PoseMatrixFlat[7],
+                PoseMatrixFlat[11]
             ),
             Quaternion.LookRotation(forward, up)
         );

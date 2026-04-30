@@ -33,11 +33,14 @@ class PoseMsg:
                 return None
 
             pose_matrix_flat_raw = data.get("pose_matrix_flat")
+            has_pose = bool(data.get("has_pose", pose_matrix_flat_raw is not None))
             pose_matrix_flat: list[float] | None = None
             if pose_matrix_flat_raw is not None:
                 pose_matrix_flat = [float(item) for item in pose_matrix_flat_raw]
                 if len(pose_matrix_flat) != 16:
                     return None
+            elif has_pose:
+                return None
 
             return cls(
                 timestamp_ms=float(data.get("timestamp_ms", 0.0)),
@@ -47,7 +50,7 @@ class PoseMsg:
                 det_count=int(data.get("det_count", 0)),
                 depth_valid_ratio=float(data.get("depth_valid_ratio", 0.0)),
                 fps=float(data.get("fps", 0.0)),
-                has_pose=bool(data.get("has_pose", pose_matrix_flat is not None)),
+                has_pose=has_pose,
                 pose_matrix_flat=pose_matrix_flat,
                 yolo_ms=float(data.get("yolo_ms", 0.0)),
                 depth_ms=float(data.get("depth_ms", 0.0)),

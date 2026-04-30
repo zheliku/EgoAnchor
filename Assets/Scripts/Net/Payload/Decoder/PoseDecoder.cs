@@ -15,6 +15,8 @@ public class PoseReceivedEvent : UnityEvent<Pose, long> { }
 /// - "has_pose": bool
 /// - "pose_matrix_flat": 长度 16 的位姿矩阵展平数组（当 has_pose=true 时）
 ///
+/// 注意：PoseMsg 的 C# 属性是 PascalCase，但网络字段仍由 [Key("snake_case")] 决定。
+///
 /// 输出事件：
 /// - OnPoseReceived：当 pose 有效时触发（参数：pose, frame_id）。
 /// </summary>
@@ -43,7 +45,7 @@ public class PoseDecoder : PayloadDecoder
         }
 
         PoseMsg message = PoseMsg.Deserialize(payload.Payload);
-        if (message == null || !message.has_pose)
+        if (message == null || !message.HasPose)
         {
             return;
         }
@@ -63,7 +65,7 @@ public class PoseDecoder : PayloadDecoder
             pose = convertedPose;
         }
 
-        OnPoseReceived?.Invoke(pose, message.frame_id);
+        OnPoseReceived?.Invoke(pose, message.FrameId);
     }
 
     private static bool TryConvertOpenCvPoseToUnity(Pose inputPose, out Pose outputPose)

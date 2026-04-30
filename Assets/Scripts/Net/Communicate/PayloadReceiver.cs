@@ -64,10 +64,11 @@ public class PayloadReceiver : MonoBehaviour
     private const string ReceiveHighWatermarkPrefKey = "PayloadReceiver.ReceiveHighWatermark";
     private const string SocketLingerMsPrefKey = "PayloadReceiver.SocketLingerMs";
     private const string ReceivePollTimeoutMsPrefKey = "PayloadReceiver.ReceivePollTimeoutMs";
+    private const int DefaultPoseServerPort = 15556;
 
     [Header("Network")]
     [SerializeField] private string serverIP = "127.0.0.1";
-    [SerializeField] private int serverPort = 5556;
+    [SerializeField] private int serverPort = DefaultPoseServerPort;
     [SerializeField] private int receiveHighWatermark = 1;
     [SerializeField] private int socketLingerMs = 0;
     [SerializeField] private int receivePollTimeoutMs = 100;
@@ -87,6 +88,7 @@ public class PayloadReceiver : MonoBehaviour
     private readonly Dictionary<string, RawPayload> _latestByTopic = new Dictionary<string, RawPayload>();
     private readonly HashSet<string> _newTopics = new HashSet<string>();
     private readonly Dictionary<string, ReceiverEntry> _entriesByTopic = new Dictionary<string, ReceiverEntry>();
+    private readonly List<RawPayload> _pendingPayloads = new List<RawPayload>();
 
     public bool IsConnected => _running && _socket != null;
     public string ServerAddress => $"tcp://{serverIP}:{serverPort}";
@@ -132,8 +134,6 @@ public class PayloadReceiver : MonoBehaviour
 
     private void Start()
     {
-        ValidateEntries();
-
         if (!_stopwatch.IsRunning)
         {
             _stopwatch.Start();
@@ -174,8 +174,6 @@ public class PayloadReceiver : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        List<RawPayload> pending;
-
         lock (_lock)
         {
             if (_newTopics.Count == 0)
@@ -183,12 +181,13 @@ public class PayloadReceiver : MonoBehaviour
                 return;
             }
 
-            pending = new List<RawPayload>(_newTopics.Count);
+            // 复用列表，避免高频接收时每帧分配临时 List。
+            _pendingPayloads.Clear();
             foreach (string topic in _newTopics)
             {
                 if (_latestByTopic.TryGetValue(topic, out RawPayload payload))
                 {
-                    pending.Add(payload);
+                    _pendingPayloads.Add(payload);
                 }
             }
 
@@ -196,9 +195,9 @@ public class PayloadReceiver : MonoBehaviour
         }
 
         // 路由到对应解码器。
-        for (int i = 0; i < pending.Count; i++)
+        for (int i = 0; i < _pendingPayloads.Count; i++)
         {
-            RawPayload payload = pending[i];
+            RawPayload payload = _pendingPayloads[i];
             if (payload.Topic != null &&
                 _entriesByTopic.TryGetValue(payload.Topic, out ReceiverEntry entry) &&
                 entry.decoder != null)
@@ -206,6 +205,8 @@ public class PayloadReceiver : MonoBehaviour
                 entry.decoder.HandlePayload(payload);
             }
         }
+
+        _pendingPayloads.Clear();
     }
 
     public void Connect()
@@ -215,6 +216,8 @@ public class PayloadReceiver : MonoBehaviour
             return;
         }
 
+        ValidateEntries();
+
         AsyncIO.ForceDotNet.Force();
 
         _socket = new SubscriberSocket();
@@ -222,14 +225,16 @@ public class PayloadReceiver : MonoBehaviour
         _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
         _socket.Connect(ServerAddress);
 
-        // 订阅所有配置的 topics。
-        for (int i = 0; i < entries.Count; i++)
+        lock (_lock)
         {
-            string topic = entries[i].topic ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(topic))
-            {
-                continue;
-            }
+            _latestByTopic.Clear();
+            _newTopics.Clear();
+            _pendingPayloads.Clear();
+        }
+
+        // 只订阅 ValidateEntries() 接受的唯一 topic，避免重复或空 topic 进入底层 SUB socket。
+        foreach (string topic in _entriesByTopic.Keys)
+        {
             _socket.Subscribe(topic);
         }
 
@@ -237,7 +242,7 @@ public class PayloadReceiver : MonoBehaviour
         _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
         _receiveThread.Start();
 
-        string topicList = string.Join(", ", entries.ConvertAll(e => e.topic));
+        string topicList = string.Join(", ", _entriesByTopic.Keys);
         Debug.Log($"[PayloadReceiver] Connected to {ServerAddress}, topics=[{topicList}]");
     }
 

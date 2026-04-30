@@ -65,7 +65,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pose_pub_port",
         type=int,
-        default=5556,
+        default=15556,
         help="位姿发布端口（ZMQ PUB）。",
     )
     parser.add_argument(

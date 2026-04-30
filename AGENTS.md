@@ -31,7 +31,7 @@
 
 - `Assets/Scripts/Net/Communicate/PayloadSender.cs`
   - 多 `SenderEntry` PUB 发送器；每个 entry 绑定 `encoder + topic + targetFps`。
-  - 默认向 Python Quest 接收端连接，常用端口 `5557`。
+  - 默认向 Python Quest 接收端连接，常用端口 `15557`。
 - `Assets/Scripts/Net/Communicate/PayloadReceiver.cs`
   - 多 `ReceiverEntry` SUB 接收器；后台线程接收，主线程按 topic 路由 decoder。
   - latest-drain 以 `_latestByTopic` 保存每个 topic 最新 payload。
@@ -154,8 +154,9 @@ Topic：
 
 默认端口/方向：
 
-- Unity `PayloadSender` connect -> Python `QuestReceiver` bind：`5557`。
-- Python `pose_server.py` bind -> Unity `PayloadReceiver` connect：`5556`。
+- Unity `PayloadSender` connect -> Python `QuestReceiver` bind：`15557`。
+- Python `pose_server.py` bind -> Unity `PayloadReceiver` connect：`15556`。
+- `5556/5557` 是旧默认端口，容易与本机应用冲突；不要恢复为默认值，也不要在 Unity `PayloadSender` / `PayloadReceiver` 中添加 `LegacyQuestReceiverPort`、`LegacyPoseServerPort` 或自动 PlayerPrefs 迁移逻辑。若本地 PlayerPrefs 仍保存旧端口，手动在 Inspector 改为 `15557/15556` 后 `Save Config`。
 
 HWM 经验：
 
@@ -321,8 +322,8 @@ Quest 接收统计还包括：
 
 - 若 `depth_in_mask` 很低或 dashboard 的 depth+mask 面板中 mask 覆盖区域深度明显错位，优先检查 Quest K 映射、双目 rectification/左右图同步与 FFS 深度。
 - 若初始 mask 框住了多个目标或背景，优先调 `--yolo_prompt`、`--yolo_conf`、`--yolo_mask_threshold`，并保持 `--yolo_max_det 1` 或确认单目标选择策略。
-- `--cutie_adjust_pose` 默认关闭；只有确认 Cutie bbox 稳定且确实需要 2D 辅助时再开启，否则 bbox 中心抖动会直接注入 FoundationPose 的 tx/ty。
-- 快速移动后若 mask/Cutie bbox 仍稳定但 pose 丢失，优先保持 `--cutie_adjust_pose 0`，依赖 `--re_register_on_track_lost 1` 用当前 mask 恢复；必要时调大 `--pose_jump_translation_m`、`--pose_jump_rotation_deg` 或提高 `--track_refine_iter`。
+- `--cutie_adjust_pose` 默认启用（默认值 `1`）；若确认 Cutie bbox 中心抖动会注入 FoundationPose 的 tx/ty，可显式传 `--cutie_adjust_pose 0` 关闭。
+- 快速移动后若 mask/Cutie bbox 仍稳定但 pose 丢失，可先保留 `--cutie_adjust_pose 1` 并依赖 `--re_register_on_track_lost 1` 用当前 mask 恢复；若 2D 辅助带来明显抖动，再改用 `--cutie_adjust_pose 0`，必要时调大 `--pose_jump_translation_m`、`--pose_jump_rotation_deg` 或提高 `--track_refine_iter`。
 
 ## 环境
 
@@ -371,6 +372,8 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
 - Pose JSON 传输路径
 - TRT legacy alias / legacy fallback 文件名
 - 运行时 `onnx.yaml` 依赖
+- 旧默认端口 `5556/5557`
+- Unity `LegacyQuestReceiverPort` / `LegacyPoseServerPort` 兼容迁移逻辑
 
 ## 文档维护规则
 
@@ -388,6 +391,7 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
   - `zmq_utils/payload/encoder/payload_encoder.py` 定义 `PayloadEncoder`。
   - `zmq_utils/payload/decoder/payload_decoder.py` 定义 `PayloadDecoder`。
 - 协议契约新增到 `Foundationpose_for_VR/src/zmq_utils/payload/protocol_contract.json`，用于记录 topic、端口方向、MessagePack 字段与坐标约定。
+- Unity `QuestStereoMsg` / `QuestCameraInfoMsg` / `PoseMsg` 源码成员使用 C# PascalCase 属性；`[Key("snake_case")]` 中的字段名才是网络协议字段，必须继续与 Python message 和 `protocol_contract.json` 保持一致。
 - `pose_server.py` 保持主入口职责，辅助逻辑拆到 `Foundationpose_for_VR/src/server/`：
   - `camera_info_cache.py`：camera_info latest 保存、核心字段比较、旧版本备份。
   - `debug_view.py`：OpenCV debug 窗口、等待占位图、HUD 文本绘制。
@@ -416,3 +420,13 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
 - 本轮验证命令：
   - `pixi run python -m compileall src/pose_server.py src/server src/zmq_utils/payload src/modules/quest_io.py`
   - `pixi run python -m unittest src.test.test_protocol_contract`
+
+## 2026-05 端口避让更新
+
+- Python/Unity 主链路默认端口已从 `5557/5556` 迁移到 `15557/15556`：
+  - Unity `PayloadSender` -> Python `QuestReceiver`：`15557`。
+  - Python `pose_server.py` -> Unity `PayloadReceiver`：`15556`。
+- 旧端口 `5556/5557` 在 Windows 本机上可能被 QQ/QQMusic 等本地 IPC 占用，导致 ZMQ `Address in use`。
+- Unity 侧不保留旧端口兼容：`PayloadSender` / `PayloadReceiver` 只保留当前默认端口常量，不再维护 `LegacyQuestReceiverPort`、`LegacyPoseServerPort` 或自动 PlayerPrefs 迁移。
+- 若 Unity PlayerPrefs 曾保存旧端口，后续 Agent 不要通过兼容代码修复；应在 Inspector 或运行时调试面板中手动设置新端口并执行 `Save Config`。
+- 端口协议变更必须同步更新 `pose_server.py`、`quest_pipeline.py` / `quest_io.py`、Unity Sender/Receiver 默认值、场景序列化端口、`protocol_contract.json` 和本文件。

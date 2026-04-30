@@ -39,8 +39,18 @@ def _unpack_keys(payload: bytes) -> set[str]:
 
 
 def _unity_message_keys(file_name: str) -> set[str]:
+    return set(_unity_keyed_members(file_name).keys())
+
+
+def _unity_keyed_members(file_name: str) -> dict[str, str]:
     text = (UNITY_MESSAGE_DIR / file_name).read_text(encoding="utf-8")
-    return set(re.findall(r'\[Key\("([^"]+)"\)\]', text))
+    return dict(
+        re.findall(
+            r'\[Key\("([^"]+)"\)\]\s*public\s+[\w<>\[\]?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\{|;)',
+            text,
+            flags=re.MULTILINE,
+        )
+    )
 
 
 class ProtocolContractTests(unittest.TestCase):
@@ -141,6 +151,15 @@ class ProtocolContractTests(unittest.TestCase):
             set(contract["PoseMsg"]["fields"].keys()),
         )
 
+    def test_unity_message_members_use_pascal_case(self) -> None:
+        for file_name in ("QuestStereoMsg.cs", "QuestCameraInfoMsg.cs", "PoseMsg.cs"):
+            with self.subTest(file_name=file_name):
+                keyed_members = _unity_keyed_members(file_name)
+                self.assertTrue(keyed_members)
+                for protocol_key, member_name in keyed_members.items():
+                    self.assertNotIn("_", member_name, protocol_key)
+                    self.assertTrue(member_name[0].isupper(), protocol_key)
+
     def test_pose_encoder_decoder_roundtrip_keeps_frame_id(self) -> None:
         payload = PoseEncoder().encode(
             timestamp_ms=100.0,
@@ -159,6 +178,19 @@ class ProtocolContractTests(unittest.TestCase):
         self.assertEqual(decoded["frame_id"], 42)
         self.assertFalse(decoded["has_pose"])
         self.assertIsNone(decoded["pose_matrix_flat"])
+
+    def test_pose_msg_rejects_has_pose_without_valid_matrix(self) -> None:
+        missing_matrix = msgpack.packb(
+            {"has_pose": True, "pose_matrix_flat": None},
+            use_bin_type=True,
+        )
+        short_matrix = msgpack.packb(
+            {"has_pose": True, "pose_matrix_flat": [0.0, 1.0, 2.0]},
+            use_bin_type=True,
+        )
+
+        self.assertIsNone(PoseMsg.deserialize(missing_matrix))
+        self.assertIsNone(PoseMsg.deserialize(short_matrix))
 
     def test_receiver_drains_latest_payload_per_topic(self) -> None:
         endpoint = f"inproc://protocol-contract-{time.time_ns()}"

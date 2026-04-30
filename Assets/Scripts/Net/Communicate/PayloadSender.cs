@@ -49,10 +49,11 @@ public class PayloadSender : MonoBehaviour
     private const string SendHighWatermarkPrefKey = "PayloadSender.SendHighWatermark";
     private const string SocketLingerMsPrefKey = "PayloadSender.SocketLingerMs";
     private const string LogIntervalPrefKey = "PayloadSender.LogInterval";
+    private const int DefaultQuestReceiverPort = 15557;
 
     [Header("Network")]
     [SerializeField] private string serverIP = "127.0.0.1";
-    [SerializeField] private int serverPort = 5557;
+    [SerializeField] private int serverPort = DefaultQuestReceiverPort;
     [SerializeField] private int sendHighWatermark = 10;
     [SerializeField] private int socketLingerMs = 0;
     [SerializeField] private int logInterval = 60;

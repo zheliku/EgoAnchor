@@ -16,6 +16,13 @@ public class QuestCameraInfoEncoder : PayloadEncoder
     [SerializeField] private PassthroughCameraAccess leftCameraAccess;
     [SerializeField] private PassthroughCameraAccess rightCameraAccess;
 
+    // camera_info 是低频静态消息，但启动阶段引用/播放状态异常很常见；
+    // 这里保留限频统计，方便定位“Python 一直等标定”的问题，同时避免日志刷屏。
+    private int _failCamNullCount;
+    private int _failNotPlayingCount;
+    private int _failSerializeNullCount;
+    private float _lastFailLogTime;
+
     /// <summary>
     /// 从 Quest 左右相机读取静态信息并编码为单帧 payload。
     /// </summary>
@@ -25,11 +32,15 @@ public class QuestCameraInfoEncoder : PayloadEncoder
 
         if (leftCameraAccess == null || rightCameraAccess == null)
         {
+            _failCamNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
         if (!leftCameraAccess.IsPlaying || !rightCameraAccess.IsPlaying)
         {
+            _failNotPlayingCount++;
+            MaybeLogFailure();
             return false;
         }
 
@@ -37,10 +48,34 @@ public class QuestCameraInfoEncoder : PayloadEncoder
         payload = msg.Serialize();
         if (payload == null || payload.Length == 0)
         {
+            _failSerializeNullCount++;
+            MaybeLogFailure();
             return false;
         }
 
         return true;
+    }
+
+    private void MaybeLogFailure()
+    {
+        float now = Time.realtimeSinceStartup;
+        if (now - _lastFailLogTime < 2.0f)
+        {
+            return;
+        }
+
+        _lastFailLogTime = now;
+        Debug.LogWarning(
+            $"[QuestCameraInfoEncoder] TryEncode failures in last 2s: " +
+            $"CamNull={_failCamNullCount}, NotPlaying={_failNotPlayingCount}, " +
+            $"SerializeNull={_failSerializeNullCount}. " +
+            $"LeftPlaying={(leftCameraAccess != null && leftCameraAccess.IsPlaying)}, " +
+            $"RightPlaying={(rightCameraAccess != null && rightCameraAccess.IsPlaying)}.",
+            this
+        );
+        _failCamNullCount = 0;
+        _failNotPlayingCount = 0;
+        _failSerializeNullCount = 0;
     }
 
     /// <summary>
@@ -66,49 +101,49 @@ public class QuestCameraInfoEncoder : PayloadEncoder
 
         return new QuestCameraInfoMsg
         {
-            is_supported = PassthroughCameraAccess.IsSupported,
-            left_fx = leftIntr.FocalLength.x,
-            left_fy = leftIntr.FocalLength.y,
-            left_cx = leftIntr.PrincipalPoint.x,
-            left_cy = leftIntr.PrincipalPoint.y,
-            right_fx = rightIntr.FocalLength.x,
-            right_fy = rightIntr.FocalLength.y,
-            right_cx = rightIntr.PrincipalPoint.x,
-            right_cy = rightIntr.PrincipalPoint.y,
-            left_distortion = new float[0],
-            right_distortion = new float[0],
-            baseline_m = baseline,
-            sensor_width = sWidth,
-            sensor_height = sHeight,
+            IsSupported = PassthroughCameraAccess.IsSupported,
+            LeftFx = leftIntr.FocalLength.x,
+            LeftFy = leftIntr.FocalLength.y,
+            LeftCx = leftIntr.PrincipalPoint.x,
+            LeftCy = leftIntr.PrincipalPoint.y,
+            RightFx = rightIntr.FocalLength.x,
+            RightFy = rightIntr.FocalLength.y,
+            RightCx = rightIntr.PrincipalPoint.x,
+            RightCy = rightIntr.PrincipalPoint.y,
+            LeftDistortion = new float[0],
+            RightDistortion = new float[0],
+            BaselineM = baseline,
+            SensorWidth = sWidth,
+            SensorHeight = sHeight,
             // activeArraySize：当前使用 SensorResolution 作为有效区域（Quest 通常无裁剪）。
-            active_left = 0,
-            active_top = 0,
-            active_right = sWidth,
-            active_bottom = sHeight,
-            left_requested_width = leftCameraAccess.RequestedResolution.x,
-            left_requested_height = leftCameraAccess.RequestedResolution.y,
-            right_requested_width = rightCameraAccess.RequestedResolution.x,
-            right_requested_height = rightCameraAccess.RequestedResolution.y,
-            current_width = leftRes.x,
-            current_height = leftRes.y,
-            max_framerate = leftCameraAccess.MaxFramerate,
+            ActiveLeft = 0,
+            ActiveTop = 0,
+            ActiveRight = sWidth,
+            ActiveBottom = sHeight,
+            LeftRequestedWidth = leftCameraAccess.RequestedResolution.x,
+            LeftRequestedHeight = leftCameraAccess.RequestedResolution.y,
+            RightRequestedWidth = rightCameraAccess.RequestedResolution.x,
+            RightRequestedHeight = rightCameraAccess.RequestedResolution.y,
+            CurrentWidth = leftRes.x,
+            CurrentHeight = leftRes.y,
+            MaxFramerate = leftCameraAccess.MaxFramerate,
             // 左目镜头偏移。
-            left_lens_offset_px = leftIntr.LensOffset.position.x,
-            left_lens_offset_py = leftIntr.LensOffset.position.y,
-            left_lens_offset_pz = leftIntr.LensOffset.position.z,
-            left_lens_offset_qx = leftIntr.LensOffset.rotation.x,
-            left_lens_offset_qy = leftIntr.LensOffset.rotation.y,
-            left_lens_offset_qz = leftIntr.LensOffset.rotation.z,
-            left_lens_offset_qw = leftIntr.LensOffset.rotation.w,
+            LeftLensOffsetPx = leftIntr.LensOffset.position.x,
+            LeftLensOffsetPy = leftIntr.LensOffset.position.y,
+            LeftLensOffsetPz = leftIntr.LensOffset.position.z,
+            LeftLensOffsetQx = leftIntr.LensOffset.rotation.x,
+            LeftLensOffsetQy = leftIntr.LensOffset.rotation.y,
+            LeftLensOffsetQz = leftIntr.LensOffset.rotation.z,
+            LeftLensOffsetQw = leftIntr.LensOffset.rotation.w,
             // 右目镜头偏移。
-            right_lens_offset_px = rightIntr.LensOffset.position.x,
-            right_lens_offset_py = rightIntr.LensOffset.position.y,
-            right_lens_offset_pz = rightIntr.LensOffset.position.z,
-            right_lens_offset_qx = rightIntr.LensOffset.rotation.x,
-            right_lens_offset_qy = rightIntr.LensOffset.rotation.y,
-            right_lens_offset_qz = rightIntr.LensOffset.rotation.z,
-            right_lens_offset_qw = rightIntr.LensOffset.rotation.w,
-            sender_mono_ms = Time.realtimeSinceStartupAsDouble * 1000.0,
+            RightLensOffsetPx = rightIntr.LensOffset.position.x,
+            RightLensOffsetPy = rightIntr.LensOffset.position.y,
+            RightLensOffsetPz = rightIntr.LensOffset.position.z,
+            RightLensOffsetQx = rightIntr.LensOffset.rotation.x,
+            RightLensOffsetQy = rightIntr.LensOffset.rotation.y,
+            RightLensOffsetQz = rightIntr.LensOffset.rotation.z,
+            RightLensOffsetQw = rightIntr.LensOffset.rotation.w,
+            SenderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0,
         };
     }
 }

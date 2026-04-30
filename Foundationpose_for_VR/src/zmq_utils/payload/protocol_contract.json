@@ -10,13 +10,13 @@
     "unity_to_python": {
       "topic_owner": "Unity PayloadSender",
       "receiver": "Python QuestReceiver",
-      "default_port": 5557,
+      "default_port": 15557,
       "topics": ["quest_stereo", "quest_camera_info"]
     },
     "python_to_unity": {
       "topic_owner": "Python pose_server",
       "receiver": "Unity PayloadReceiver",
-      "default_port": 5556,
+      "default_port": 15556,
       "topics": ["pose"]
     }
   },

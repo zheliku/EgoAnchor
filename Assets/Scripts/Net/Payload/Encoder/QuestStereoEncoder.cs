@@ -104,11 +104,11 @@ public class QuestStereoEncoder : PayloadEncoder
 
         QuestStereoMsg message = new QuestStereoMsg
         {
-            left_image_jpeg = leftJpeg,
-            right_image_jpeg = rightJpeg,
-            frame_id = frameId,
-            sender_mono_ms = senderMonoMs,
-            unity_frame = Time.frameCount,
+            LeftImageJpeg = leftJpeg,
+            RightImageJpeg = rightJpeg,
+            FrameId = frameId,
+            SenderMonoMs = senderMonoMs,
+            UnityFrame = Time.frameCount,
         };
 
         payload = message.Serialize();
