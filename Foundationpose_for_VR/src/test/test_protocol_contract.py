@@ -25,6 +25,7 @@ from zmq_utils.payload.message.quest_stereo_msg import QuestStereoMsg
 
 CONTRACT_PATH = SRC_DIR / "zmq_utils" / "payload" / "protocol_contract.json"
 UNITY_MESSAGE_DIR = REPO_ROOT / "Assets" / "Scripts" / "Net" / "Payload" / "Message"
+UNITY_SCENE_DIR = REPO_ROOT / "Assets" / "Scenes"
 
 
 def _contract() -> dict[str, object]:
@@ -51,6 +52,13 @@ def _unity_keyed_members(file_name: str) -> dict[str, str]:
             flags=re.MULTILINE,
         )
     )
+
+
+def _project_unity_scene_texts() -> dict[str, str]:
+    return {
+        scene_path.name: scene_path.read_text(encoding="utf-8")
+        for scene_path in sorted(UNITY_SCENE_DIR.glob("*.unity"))
+    }
 
 
 class ProtocolContractTests(unittest.TestCase):
@@ -213,6 +221,24 @@ class ProtocolContractTests(unittest.TestCase):
         finally:
             sender.close()
             receiver.close()
+
+    def test_project_unity_scenes_do_not_reference_legacy_pose_receiver_config(self) -> None:
+        scenes = _project_unity_scene_texts()
+        self.assertTrue(scenes)
+        forbidden_patterns = {
+            "legacy pose server port 5556": r"\bserverPort:\s*5556\b",
+            "legacy quest receiver port 5557": r"\bserverPort:\s*5557\b",
+            "legacy PoseJsonDecoder": r"\bPoseJsonDecoder\b",
+            "legacy OnPayloadReceived event": r"\bOnPayloadReceived\b",
+        }
+
+        for scene_name, text in scenes.items():
+            with self.subTest(scene=scene_name):
+                for description, pattern in forbidden_patterns.items():
+                    self.assertIsNone(
+                        re.search(pattern, text),
+                        f"{scene_name} still contains {description}.",
+                    )
 
 
 if __name__ == "__main__":

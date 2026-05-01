@@ -3946,7 +3946,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e5e7134f102f4c40a9f84d4fd64e9e88, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseJsonDecoder
+  m_EditorClassIdentifier: Assembly-CSharp::PoseDecoder
   convertFromOpenCvCamera: 1
   OnPoseReceived:
     m_PersistentCalls:

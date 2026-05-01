@@ -414,27 +414,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PayloadReceiver
   serverIP: 127.0.0.1
-  serverPort: 5556
-  useTopic: 1
-  topic: pose
+  serverPort: 15556
   receiveHighWatermark: 1
   socketLingerMs: 0
   receivePollTimeoutMs: 100
-  OnPayloadReceived:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 300003}
-        m_TargetAssemblyTypeName: PoseJsonDecoder, Assembly-CSharp
-        m_MethodName: OnPayloadReceived
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+  entries:
+  - topic: pose
+    decoder: {fileID: 300003}
 --- !u!4 &300002
 Transform:
   m_ObjectHideFlags: 0
@@ -461,7 +447,8 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e5e7134f102f4c40a9f84d4fd64e9e88, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseJsonDecoder
+  m_EditorClassIdentifier: Assembly-CSharp::PoseDecoder
+  convertFromOpenCvCamera: 1
   OnPoseReceived:
     m_PersistentCalls:
       m_Calls:
