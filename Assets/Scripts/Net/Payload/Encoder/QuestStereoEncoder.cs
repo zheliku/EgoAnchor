@@ -156,8 +156,8 @@ public class QuestStereoEncoder : PayloadEncoder
             $"CamNull={_failCamNullCount}, NotPlaying={_failNotPlayingCount}, " +
             $"GetTextureNull={_failTexNullCount}, JpegNull={_failJpegNullCount}, " +
             $"SerializeNull={_failSerializeNullCount}. " +
-            $"LeftPlaying={(leftCameraAccess != null && leftCameraAccess.IsPlaying)}, " +
-            $"RightPlaying={(rightCameraAccess != null && rightCameraAccess.IsPlaying)}."
+            $"LeftPlaying={leftCameraAccess != null && leftCameraAccess.IsPlaying}, " +
+            $"RightPlaying={rightCameraAccess != null && rightCameraAccess.IsPlaying}."
         );
         _failCamNullCount = 0;
         _failNotPlayingCount = 0;

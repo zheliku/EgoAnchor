@@ -69,8 +69,8 @@ public class QuestCameraInfoEncoder : PayloadEncoder
             $"[QuestCameraInfoEncoder] TryEncode failures in last 2s: " +
             $"CamNull={_failCamNullCount}, NotPlaying={_failNotPlayingCount}, " +
             $"SerializeNull={_failSerializeNullCount}. " +
-            $"LeftPlaying={(leftCameraAccess != null && leftCameraAccess.IsPlaying)}, " +
-            $"RightPlaying={(rightCameraAccess != null && rightCameraAccess.IsPlaying)}.",
+            $"LeftPlaying={leftCameraAccess != null && leftCameraAccess.IsPlaying}, " +
+            $"RightPlaying={rightCameraAccess != null && rightCameraAccess.IsPlaying}.",
             this
         );
         _failCamNullCount = 0;

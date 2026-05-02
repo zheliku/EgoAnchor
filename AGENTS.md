@@ -43,13 +43,17 @@
   - 低频发送左右相机内参、分辨率、active array、baseline、lens offset、`sender_mono_ms`。
 - `Assets/Scripts/Net/Payload/Decoder/PoseDecoder.cs`
   - 解码 Python `PoseMsg`；默认 `convertFromOpenCvCamera=true`，把 OpenCV 相机坐标转为 Unity 坐标。
-- `Assets/Scripts/PoseFollow.cs`
+- `Assets/Scripts/Pose/PoseFollow.cs`
   - 消费 `PoseDecoder.OnPoseReceived`。
   - 由 Inspector 将 `QuestStereoEncoder.OnFrameEncoded` 显式绑定到 `HandleFrameEncoded(frame_id)`，不在代码中自动查找或自动订阅 encoder。
   - 用 `frame_id` 查找发送帧缓存的 `sourceTarget` 世界姿态。
-  - 将相机/参考系下的局部 pose 转成世界 pose，并在 `Update()` 中应用。
-- `Assets/Scripts/PoseSmoother.cs`
-  - `PoseFollow` 可选指数平滑组件；平滑按 Unity `Update()` 频率运行。
+  - 将相机/参考系下的局部 pose 转成 world raw pose；`Update()` 每帧按 `processors` 列表顺序调用 `PoseProcessor.Process(...)`，应用最终 processed pose，并触发通知事件。
+- `Assets/Scripts/Pose/PoseProcessor.cs`
+  - 位姿处理器基类。因为 `Pose` 是 struct，处理器必须显式返回处理后的 `Pose`，不能依赖 UnityEvent 参数被原地修改。
+- `Assets/Scripts/Pose/PoseSmoother.cs`
+  - `PoseProcessor` 派生的指数平滑处理器；放入 `PoseFollow.processors` 列表后按 Unity `Update()` 频率运行。
+- `Assets/Scripts/Pose/PoseKalmanFilter.cs`
+  - `PoseProcessor` 派生的卡尔曼滤波处理器；放入 `PoseFollow.processors` 列表后用于抑制静止物体 pose 估计噪声。
 - `Assets/Scripts/PcaApiInfoDumper.cs`
   - PassthroughCameraAccess API/相机信息导出与排查工具。
 - `Assets/Scripts/CameraViewerManager.cs`
@@ -278,8 +282,8 @@ Unity 不直接把 Python pose 设置到物体，而是：
 2. Inspector 中把 `OnFrameEncoded(frame_id)` 绑定到 `PoseFollow.HandleFrameEncoded(frame_id)`，缓存此时 `sourceTarget` 的世界 pose。
 3. Python 回包带同一个 `frame_id`。
 4. `PoseFollow.FollowTarget(pose, frame_id)` 查找发送帧参考 pose。
-5. 使用 `sourceTargetPose.position + sourceTargetPose.rotation * localPosition` 与 `sourceTargetPose.rotation * localRotation` 转到世界坐标。
-6. `Update()` 每帧应用最新目标 pose，可选通过 `PoseSmoother` 平滑。
+5. 可选组合左相机 `Intrinsics.LensOffset`，再使用参考 pose 将相机局部 pose 转到 world raw pose。
+6. `Update()` 每帧先触发 `OnBeforePoseApply` 通知，再按 `PoseFollow.processors` 列表顺序处理 raw pose（例如 `PoseSmoother` 或 `PoseKalmanFilter`），随后应用 processed pose 并触发 `OnAfterPoseApply`。
 
 若 Unity 日志出现“未命中发送帧缓存”：检查 `QuestStereoEncoder.OnFrameEncoded` 是否已在 Inspector 绑定到 `PoseFollow.HandleFrameEncoded`、`sourceTarget` 是否为空、`sourceTargetCacheSize` 是否过小、Python 回包 `frame_id` 是否正确传递。
 

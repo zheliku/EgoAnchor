@@ -13,7 +13,16 @@ MonoBehaviour:
   m_Name: vHierarchy Data
   m_EditorClassIdentifier: VHierarchy::VHierarchy.VHierarchyData
   sceneDatas_byGuid:
-    keys: []
-    values: []
+    keys:
+    - 01a071d4a1691e7419c8053b7b038e18
+    values:
+    - goDatas_byGlobalId:
+        keys:
+        - globalObjectIdString: GlobalObjectId_V1-2-01a071d4a1691e7419c8053b7b038e18-1230027303-0
+        values:
+        - colorIndex: 3
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 1
   bookmarks: []
   bookmarkedScenePaths: []
