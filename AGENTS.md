@@ -45,9 +45,9 @@
   - 解码 Python `PoseMsg`；默认 `convertFromOpenCvCamera=true`，把 OpenCV 相机坐标转为 Unity 坐标。
 - `Assets/Scripts/Pose/PoseFollow.cs`
   - 消费 `PoseDecoder.OnPoseReceived`。
-  - 由 Inspector 将 `QuestStereoEncoder.OnFrameEncoded` 显式绑定到 `HandleFrameEncoded(frame_id)`，不在代码中自动查找或自动订阅 encoder。
-  - 用 `frame_id` 查找发送帧缓存的 `sourceTarget` 世界姿态。
-  - 将相机/参考系下的局部 pose 转成 world raw pose；`Update()` 每帧按 `processors` 列表顺序调用 `PoseProcessor.Process(...)`，应用最终 processed pose，并触发通知事件。
+  - 由 Inspector 将 `QuestStereoEncoder.OnFrameEncoded(frame_id, cameraPose)` 显式绑定到 `HandleFrameEncoded(frame_id, cameraPose)`，不在代码中自动查找或自动订阅 encoder。
+  - 用 `frame_id` 查找发送帧缓存的左 Passthrough `GetCameraPose()` 世界姿态；不再使用 `sourceTarget` 或运行时 LensOffset 近似相机位姿。
+  - 将相机下的局部 pose 转成 world raw pose；`Update()` 每帧按 `processors` 列表顺序调用 `PoseProcessor.Process(...)`，应用最终 processed pose，并触发通知事件。
 - `Assets/Scripts/Pose/PoseProcessor.cs`
   - 位姿处理器基类。因为 `Pose` 是 struct，处理器必须显式返回处理后的 `Pose`，不能依赖 UnityEvent 参数被原地修改。
 - `Assets/Scripts/Pose/PoseSmoother.cs`
@@ -67,7 +67,8 @@
   - 管理 `Calibration/cache/camera_info_latest.json` 缓存与备份。
   - 提供本地 OpenCV 调试窗口、键盘控制、延迟/发布统计。
 - `Foundationpose_for_VR/src/pipeline/quest_pipeline.py`
-  - Quest 输入完整 pipeline：输入 -> YOLOE -> FFS -> FoundationPose。
+  - Quest 输入完整 pipeline：输入 -> SAM3/YoloE 2D 分割 -> FFS -> FoundationPose。
+  - 默认 `--segmenter sam3 --sam3_async 1`：SAM3 后台低频生成语义 mask 种子，当前帧 mask 优先由 Cutie 传播；`--segmenter yoloe26` 保留为 fallback/对比。
   - `camera_source=network` 默认先尝试预加载 camera_info 缓存，再等待网络标定校验/刷新。
   - FoundationPose/Cutie 输入使用 RGB；OpenCV/YOLO/debug 显示保留 BGR。
   - register 前会检查 mask 内有效深度比例，避免 mask/depth 明显错位时直接初始化。
@@ -78,7 +79,9 @@
   - Quest 多 topic 接收模块；对外提供 `QuestReceiver.get_stereo_frames()`、`get_camera_info()`、`get_calibration()`。
   - `QuestStereoCalibration.scaled_k()` 负责把 Quest 标定 K 映射到算法处理分辨率。
 - `Foundationpose_for_VR/src/modules/yoloe26.py`
-  - YOLOE-26 语义分割封装。
+  - YOLOE-26 语义分割封装，作为 Quest pipeline 的 fallback segmenter。
+- `Foundationpose_for_VR/src/modules/sam3_masker.py`
+  - SAM3 语义分割封装；同步 `Sam3Masker` 用本地 `sam3/assets/sam3_ckpt/sam3.pt`，异步 `AsyncSam3Masker` 在后台线程持有 CUDA 模型，忙时丢帧且只保留最新完成结果。
 - `Foundationpose_for_VR/src/modules/fast_foundationstereo.py`
   - Fast-FoundationStereo 实时深度封装；支持 PyTorch 与 TensorRT 后端。
 - `Foundationpose_for_VR/src/modules/foundationpose.py`
@@ -129,8 +132,8 @@ pixi 任务：
 Quest/RealSense pipeline 使用 4 个阶段：
 
 1. stage 1：仅输入图像。
-2. stage 2：输入 + YOLOE 2D 分割。
-3. stage 3：输入 + YOLOE + Fast-FoundationStereo 深度。
+2. stage 2：输入 + 2D 分割（默认异步 SAM3 种子 + 可选 Cutie 当前帧传播；YOLOE 可 fallback）。
+3. stage 3：输入 + 2D mask + Fast-FoundationStereo 深度。
 4. stage 4：完整链路，包含 FoundationPose register/track。
 
 OpenCV 调试窗口热键：
@@ -211,7 +214,7 @@ Python 定义在 `src/zmq_utils/payload/message/quest_stereo_msg.py`，Unity 定
 - `fps`
 - `has_pose`
 - `pose_matrix_flat`：4x4 矩阵行优先展平，16 个数；无 pose 时为 null/空。
-- `yolo_ms/depth_ms/cutie_ms/pose_ms`
+- `yolo_ms/depth_ms/cutie_ms/pose_ms`（兼容字段名；`yolo_ms` 在默认 SAM3 路径中表示 2D segmentation/最新 SAM3 推理耗时）
 
 `pose_server.py --send_when_no_pose 1` 时，无有效位姿也会发送状态包；Unity `PoseDecoder` 会忽略 `has_pose=false` 的包。
 
@@ -278,14 +281,14 @@ Unity `PoseDecoder.convertFromOpenCvCamera=true` 时转换为 Unity 常用口径
 
 Unity 不直接把 Python pose 设置到物体，而是：
 
-1. `QuestStereoEncoder` 成功编码 stereo 后递增 `frame_id` 并触发 `OnFrameEncoded(frame_id)`。
-2. Inspector 中把 `OnFrameEncoded(frame_id)` 绑定到 `PoseFollow.HandleFrameEncoded(frame_id)`，缓存此时 `sourceTarget` 的世界 pose。
+1. `QuestStereoEncoder` 获取左目 Passthrough texture 后立即读取左目 `GetCameraPose()`，随后递增 `frame_id` 并触发 `OnFrameEncoded(frame_id, cameraPose)`。
+2. Inspector 中把 `OnFrameEncoded(frame_id, cameraPose)` 绑定到 `PoseFollow.HandleFrameEncoded(frame_id, cameraPose)`，缓存该发送帧对应的左 Passthrough camera 世界 pose。
 3. Python 回包带同一个 `frame_id`。
 4. `PoseFollow.FollowTarget(pose, frame_id)` 查找发送帧参考 pose。
-5. 可选组合左相机 `Intrinsics.LensOffset`，再使用参考 pose 将相机局部 pose 转到 world raw pose。
+5. 使用缓存的左 Passthrough camera pose 将相机局部 pose 转到 world raw pose。
 6. `Update()` 每帧先触发 `OnBeforePoseApply` 通知，再按 `PoseFollow.processors` 列表顺序处理 raw pose（例如 `PoseSmoother` 或 `PoseKalmanFilter`），随后应用 processed pose 并触发 `OnAfterPoseApply`。
 
-若 Unity 日志出现“未命中发送帧缓存”：检查 `QuestStereoEncoder.OnFrameEncoded` 是否已在 Inspector 绑定到 `PoseFollow.HandleFrameEncoded`、`sourceTarget` 是否为空、`sourceTargetCacheSize` 是否过小、Python 回包 `frame_id` 是否正确传递。
+若 Unity 日志出现“未命中发送帧 camera pose 缓存”：检查 `QuestStereoEncoder.OnFrameEncoded` 是否已在 Inspector 绑定到 `PoseFollow.HandleFrameEncoded(long, Pose)`、`PoseFollow.sourceCameraAccess` 是否绑定左目 PassthroughCameraAccess、`cameraPoseCacheSize` 是否过小、Python 回包 `frame_id` 是否正确传递。
 
 ## 调试统计口径
 
@@ -325,7 +328,7 @@ Quest 接收统计还包括：
 稳定性排查建议：
 
 - 若 `depth_in_mask` 很低或 dashboard 的 depth+mask 面板中 mask 覆盖区域深度明显错位，优先检查 Quest K 映射、双目 rectification/左右图同步与 FFS 深度。
-- 若初始 mask 框住了多个目标或背景，优先调 `--yolo_prompt`、`--yolo_conf`、`--yolo_mask_threshold`，并保持 `--yolo_max_det 1` 或确认单目标选择策略。
+- 若初始 mask 框住了多个目标或背景，优先调 `--seg_prompt`、`--seg_mask_threshold`、`--seg_max_det 1`；使用 YOLOE fallback 时再调 `--yolo_conf`。
 - `--cutie_adjust_pose` 默认启用（默认值 `1`）；若确认 Cutie bbox 中心抖动会注入 FoundationPose 的 tx/ty，可显式传 `--cutie_adjust_pose 0` 关闭。
 - 快速移动后若 mask/Cutie bbox 仍稳定但 pose 丢失，可先保留 `--cutie_adjust_pose 1` 并依赖 `--re_register_on_track_lost 1` 用当前 mask 恢复；若 2D 辅助带来明显抖动，再改用 `--cutie_adjust_pose 0`，必要时调大 `--pose_jump_translation_m`、`--pose_jump_rotation_deg` 或提高 `--track_refine_iter`。
 
@@ -350,8 +353,8 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
 
 - stereo 收不到但 camera_info 能收到：检查 Unity `PayloadSender` 是否有 `quest_stereo` entry；`QuestStereoEncoder` 左右相机是否 `IsPlaying`；Python `recv_hwm` 是否太小。
 - camera_info 收不到：检查 Unity `quest_camera_info` topic；`QuestCameraInfoEncoder` 左右相机引用；Python 订阅 topics。
-- Unity 物体位置/朝向明显错：检查 `PoseDecoder.convertFromOpenCvCamera`、`PoseFollow.sourceTarget`、`frame_id` 缓存命中、Quest K 映射策略。
-- stage 2 mask 不稳定：优先调 `--yolo_prompt`、`--yolo_conf`、`--yolo_max_det`、光照/目标可见性。
+- Unity 物体位置/朝向明显错：检查 `PoseDecoder.convertFromOpenCvCamera`、`PoseFollow.sourceCameraAccess` 是否为左目 PassthroughCameraAccess、`frame_id` camera pose 缓存命中、Quest K 映射策略。
+- stage 2 mask 不稳定：优先调 `--seg_prompt`、`--seg_mask_threshold`、`--seg_max_det`、光照/目标可见性；使用 YOLOE fallback 时再调 `--yolo_conf`。
 - stage 3 depth_valid 低：检查左右图同步/基线/内参映射、`min_depth/max_depth`、FFS 权重与 TRT engine 是否匹配。
 - stage 4 register 失败：先确认 mask 与 depth 正确，再看 mesh 路径、对称设置、FoundationPose refine iter。
 - TRT 不生效：检查 engine 文件名是否带完整 tag、平台、精度；必要时用 `--ffs_trt_strict 1` 强制暴露错误。

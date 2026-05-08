@@ -69,7 +69,7 @@ public class PayloadReceiver : MonoBehaviour
     [Header("Network")]
     [SerializeField] private string serverIP = "127.0.0.1";
     [SerializeField] private int serverPort = DefaultPoseServerPort;
-    [SerializeField] private int receiveHighWatermark = 1;
+    [SerializeField] private int receiveHighWatermark = 10;
     [SerializeField] private int socketLingerMs = 0;
     [SerializeField] private int receivePollTimeoutMs = 100;
 

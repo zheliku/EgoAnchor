@@ -644,7 +644,12 @@ class SequenceGeometryEncoder(nn.Module):
             # boxes are [Num_boxes, bs, 4], normalized in [0, 1]
             # We need to denormalize, and convert to [x, y, x, y]
             boxes_xyxy = box_cxcywh_to_xyxy(boxes)
-            scale = torch.tensor([W, H, W, H], dtype=boxes_xyxy.dtype)
+            # FoundationPose may set the process-wide default tensor type to
+            # torch.cuda.FloatTensor.  In that state torch.tensor(...) would
+            # create a CUDA tensor here, and pin_memory() below would fail
+            # because only dense CPU tensors can be pinned.  Keep this scale
+            # tensor on CPU explicitly, then move it to boxes_xyxy.device.
+            scale = torch.tensor([W, H, W, H], dtype=boxes_xyxy.dtype, device="cpu")
             scale = scale.pin_memory().to(device=boxes_xyxy.device, non_blocking=True)
             scale = scale.view(1, 1, 4)
             boxes_xyxy = boxes_xyxy * scale

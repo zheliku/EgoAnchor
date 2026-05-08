@@ -15,28 +15,21 @@ public class PoseApplyEvent : UnityEvent<Pose, long, float> { }
 /// 通用位姿消费器。
 ///
 /// 职责边界：
-/// - 通过 HandleFrameEncoded 缓存发送 stereo 帧时的 sourceTarget 姿态，用 frame_id 对齐 Python 回包。
+/// - 通过 HandleFrameEncoded 缓存发送 stereo 帧时的 Passthrough camera 姿态，用 frame_id 对齐 Python 回包。
 /// - 接收 PoseDecoder 输出的相机局部 pose。
-/// - 使用对应发送帧的 sourceTarget 姿态，以及可选左相机 LensOffset，把局部 pose 转为 Unity 世界 raw pose。
+/// - 使用对应发送帧的 camera pose，把局部 pose 转为 Unity 世界 raw pose。
 /// - 在 Update 中按 processors 列表顺序处理 raw pose，并应用最终 processed pose。
 /// - OnBeforePoseApply / OnAfterPoseApply 仅用于通知，不用于修改 pose。
 /// </summary>
 public class PoseFollow : MonoBehaviour
 {
     [Header("Alignment")]
-    [Tooltip("用于把相机局部位姿转换到 Unity 世界坐标的参考目标。通常绑定 Quest/HMD/CenterEye 或其等价参考节点。")]
-    [SerializeField] private Transform sourceTarget;
-
-    [Min(64)]
-    [Tooltip("按 frame_id 缓存的发送帧参考姿态数量。需要覆盖 Python 推理与网络回包期间的最大在途帧数。")]
-    [SerializeField] private int sourceTargetCacheSize = 512;
-
-    [Header("Camera Offset")]
-    [Tooltip("左侧 PassthroughCameraAccess。Python pose 基于左目图像时，用其 Intrinsics.LensOffset 将 sourceTarget 参考系修正到左相机光心。")]
+    [Tooltip("左侧 PassthroughCameraAccess。Python pose 基于左目图像时，直接使用 GetCameraPose() 作为发送帧相机世界姿态。")]
     [SerializeField] private PassthroughCameraAccess sourceCameraAccess;
 
-    [Tooltip("是否把 sourceTarget 与左相机 Intrinsics.LensOffset 组合后再应用 pose。若 sourceTarget 已经是左相机位姿，应关闭以避免重复应用外参。")]
-    [SerializeField] private bool applySourceCameraLensOffset = true;
+    [Min(64)]
+    [Tooltip("按 frame_id 缓存的发送帧 camera pose 数量。需要覆盖 Python 推理与网络回包期间的最大在途帧数。")]
+    [SerializeField] private int cameraPoseCacheSize = 512;
 
     [Header("Processors")]
     [Tooltip("按顺序处理 world raw pose 的处理器列表。例如只放 PoseSmoother，或只放 PoseKalmanFilter。")]
@@ -58,10 +51,8 @@ public class PoseFollow : MonoBehaviour
     private bool _hasPose;
 
     private float _lastFrameMissLogTime = -99f;
-    private float _lastCacheBailLogTime = -99f;
-
-    private readonly Dictionary<long, Pose> _sourceTargetPoseCache = new Dictionary<long, Pose>();
-    private readonly Queue<long> _sourceTargetPoseOrder = new Queue<long>();
+    private readonly Dictionary<long, Pose> _cameraPoseCache = new Dictionary<long, Pose>();
+    private readonly Queue<long> _cameraPoseOrder = new Queue<long>();
 
     public Pose RawWorldPose => _rawWorldPose;
     public Pose ProcessedWorldPose => _processedWorldPose;
@@ -87,31 +78,26 @@ public class PoseFollow : MonoBehaviour
     }
 
     /// <summary>
-    /// 在 QuestStereoEncoder.OnFrameEncoded 中调用：缓存发送该 frame_id 时的参考姿态。
+    /// 在 QuestStereoEncoder.OnFrameEncoded 中调用：缓存发送该 frame_id 时的 Passthrough camera 姿态。
     /// </summary>
-    public void HandleFrameEncoded(long frameId)
+    public void HandleFrameEncoded(long frameId, Pose cameraPose)
     {
-        if (frameId <= 0 || sourceTarget == null)
+        if (frameId <= 0)
         {
-            if (sourceTarget == null && Time.realtimeSinceStartup - _lastCacheBailLogTime > 2f)
-            {
-                _lastCacheBailLogTime = Time.realtimeSinceStartup;
-                Debug.LogWarning("[PoseFollow] 无法缓存发送帧姿态：sourceTarget=null。", this);
-            }
             return;
         }
 
-        if (!_sourceTargetPoseCache.ContainsKey(frameId))
+        if (!_cameraPoseCache.ContainsKey(frameId))
         {
-            _sourceTargetPoseOrder.Enqueue(frameId);
+            _cameraPoseOrder.Enqueue(frameId);
         }
 
-        _sourceTargetPoseCache[frameId] = new Pose(sourceTarget.position, sourceTarget.rotation);
-        int maxCount = Mathf.Max(64, sourceTargetCacheSize);
-        while (_sourceTargetPoseOrder.Count > maxCount)
+        _cameraPoseCache[frameId] = cameraPose;
+        int maxCount = Mathf.Max(64, cameraPoseCacheSize);
+        while (_cameraPoseOrder.Count > maxCount)
         {
-            long oldFrameId = _sourceTargetPoseOrder.Dequeue();
-            _sourceTargetPoseCache.Remove(oldFrameId);
+            long oldFrameId = _cameraPoseOrder.Dequeue();
+            _cameraPoseCache.Remove(oldFrameId);
         }
     }
 
@@ -120,33 +106,23 @@ public class PoseFollow : MonoBehaviour
     /// </summary>
     public virtual void FollowTarget(Pose pose, long frameId)
     {
-        if (frameId <= 0 || !_sourceTargetPoseCache.TryGetValue(frameId, out Pose sourceTargetPose))
+        if (frameId <= 0 || !_cameraPoseCache.TryGetValue(frameId, out Pose cameraPose))
         {
             float now = Time.realtimeSinceStartup;
             if (now - _lastFrameMissLogTime > 2f)
             {
                 _lastFrameMissLogTime = now;
                 Debug.LogWarning(
-                    $"[PoseFollow] 未命中发送帧缓存 frameId={frameId} cacheSize={_sourceTargetPoseCache.Count} " +
-                    $"sourceTarget={(sourceTarget == null ? "null" : sourceTarget.name)}",
+                    $"[PoseFollow] 未命中发送帧 camera pose 缓存 frameId={frameId} cacheSize={_cameraPoseCache.Count} " +
+                    $"sourceCameraAccess={(sourceCameraAccess == null ? "null" : sourceCameraAccess.name)}",
                     this);
             }
             return;
         }
 
-        Vector3 referencePosition = sourceTargetPose.position;
-        Quaternion referenceRotation = sourceTargetPose.rotation;
-
-        if (applySourceCameraLensOffset && sourceCameraAccess != null && sourceCameraAccess.IsPlaying)
-        {
-            Pose lensOffset = sourceCameraAccess.Intrinsics.LensOffset;
-            referencePosition += referenceRotation * lensOffset.position;
-            referenceRotation *= lensOffset.rotation;
-        }
-
         _rawWorldPose = new Pose(
-            referencePosition + referenceRotation * pose.position,
-            referenceRotation * pose.rotation
+            cameraPose.position + cameraPose.rotation * pose.position,
+            cameraPose.rotation * pose.rotation
         );
         _processedWorldPose = _rawWorldPose;
         _latestFrameId = frameId;

@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Events;
 
 [Serializable]
-public class FrameIdEvent : UnityEvent<long> { }
+public class FramePoseEvent : UnityEvent<long, Pose> { }
 
 /// <summary>
 /// Quest 双目图像编码器。
@@ -30,8 +30,8 @@ public class QuestStereoEncoder : PayloadEncoder
     [SerializeField] private int debugLogInterval = 30;
 
     [Header("Events")]
-    [Tooltip("编码出有效帧后触发，参数为 frame_id。可在 Inspector 绑定监听。")]
-    public FrameIdEvent OnFrameEncoded = new FrameIdEvent();
+    [Tooltip("编码出有效帧后触发，参数为 frame_id 与左 Passthrough camera pose。可在 Inspector 绑定 PoseFollow.HandleFrameEncoded。")]
+    public FramePoseEvent OnFrameEncoded = new FramePoseEvent();
 
     private RenderTexture _leftRenderTexture;
     private RenderTexture _rightRenderTexture;
@@ -74,6 +74,17 @@ public class QuestStereoEncoder : PayloadEncoder
 
         Texture leftTexture = leftCameraAccess.GetTexture();
         Texture rightTexture = rightCameraAccess.GetTexture();
+        Pose leftCameraPose;
+        try
+        {
+            leftCameraPose = leftCameraAccess.GetCameraPose();
+        }
+        catch
+        {
+            _failTexNullCount++;
+            MaybeLogFailure();
+            return false;
+        }
 
         if (leftTexture == null || rightTexture == null)
         {
@@ -86,7 +97,7 @@ public class QuestStereoEncoder : PayloadEncoder
 
         double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
         long frameId = ++_senderFrameId;
-        OnFrameEncoded?.Invoke(frameId);
+        OnFrameEncoded?.Invoke(frameId, leftCameraPose);
 
         BlitToRenderTarget(leftTexture, _leftRenderTexture);
         BlitToRenderTarget(rightTexture, _rightRenderTexture);
@@ -170,7 +181,7 @@ public class QuestStereoEncoder : PayloadEncoder
     {
         if (OnFrameEncoded == null)
         {
-            OnFrameEncoded = new FrameIdEvent();
+            OnFrameEncoded = new FramePoseEvent();
         }
     }
 
@@ -283,4 +294,3 @@ public class QuestStereoEncoder : PayloadEncoder
         ReleaseBuffer(ref _rightRenderTexture, ref _rightReadbackTexture);
     }
 }
-

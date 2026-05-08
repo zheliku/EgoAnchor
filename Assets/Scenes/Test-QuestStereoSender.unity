@@ -4019,7 +4019,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PayloadReceiver
   serverIP: 127.0.0.1
   serverPort: 15556
-  receiveHighWatermark: 1
+  receiveHighWatermark: 10
   socketLingerMs: 0
   receivePollTimeoutMs: 100
   entries:

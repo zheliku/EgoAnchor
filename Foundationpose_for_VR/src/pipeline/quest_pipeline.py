@@ -19,11 +19,13 @@ if __package__ is None or __package__ == "":
         sys.path.append(str(SRC_DIR))
 
 from modules import (  # noqa: E402
+    AsyncSam3Masker,
     FastFoundationStereoRealtime,
     FoundationPoseEstimator,
     QuestReceiver,
     QuestStereoCalibration,
     QuestStereoMsg,
+    Sam3Masker,
     Yoloe26Masker,
 )
 from modules.cutie import CutieTracker  # noqa: E402
@@ -32,7 +34,6 @@ from zmq_utils.payload.message.quest_camera_info_msg import QuestCameraInfoMsg  
 THIS_FILE = Path(__file__).resolve()
 SRC_DIR = THIS_FILE.parent.parent
 PROJECT_DIR = SRC_DIR.parent
-
 
 # =========================
 # 数据结构定义（输入/输出）
@@ -65,7 +66,7 @@ class FrameDiagnostics:
     depth_valid_in_mask: float = 0.0
     depth_median_in_mask: float = 0.0
     depth_iqr_in_mask: float = 0.0
-    yolo_selected_index: int = -1
+    segmenter_selected_index: int = -1
     cutie_adjust_applied: bool = False
 
 
@@ -248,7 +249,7 @@ class QuestStereoPosePipeline:
     # 依赖注入。
     args: argparse.Namespace
     camera: QuestReceiver
-    yolo: Yoloe26Masker
+    segmenter: Yoloe26Masker | Sam3Masker | AsyncSam3Masker
     ffs: FastFoundationStereoRealtime
     cutie_tracker: CutieTracker | None
 
@@ -272,9 +273,12 @@ class QuestStereoPosePipeline:
     _has_pose: bool = False
     _cutie_initialized: bool = False
     _last_processed_frame_id: int | None = None
+    _reset_after_frame_id: int | None = None
     _calib_initialized: bool = False  # 标定是否已初始化。
     _last_pose_4x4: np.ndarray | None = None
     _track_reject_count: int = 0
+    _segmenter_latest_version: int = 0
+    _last_segmenter_result: object | None = None
 
     # 性能统计累加器。
     _frame_count: int = 0
@@ -282,7 +286,7 @@ class QuestStereoPosePipeline:
     _stats_t: float = 0.0
     _last_frame_t: float = 0.0
     _fps_rt: float = 0.0
-    _yolo_acc: float = 0.0
+    _seg_acc: float = 0.0
     _depth_acc: float = 0.0
     _cutie_acc: float = 0.0
     _pose_acc: float = 0.0
@@ -291,7 +295,7 @@ class QuestStereoPosePipeline:
         self,
         args: argparse.Namespace,
         camera: QuestReceiver,
-        yolo: Yoloe26Masker,
+        segmenter: Yoloe26Masker | Sam3Masker | AsyncSam3Masker,
         ffs: FastFoundationStereoRealtime,
         cutie_tracker: CutieTracker | None,
         calib: QuestStereoCalibration | None = None,
@@ -302,14 +306,14 @@ class QuestStereoPosePipeline:
         参数：
         - args: 命令行与运行配置。
         - camera: Quest 多 Topic 接收模块。
-        - yolo: 2D 分割模块。
+        - segmenter: 2D 分割模块，可为 SAM3/Yoloe26/异步 SAM3。
         - ffs: 双目深度模块。
         - cutie_tracker: 可选 2D 跟踪模块。
         - calib: 可选预加载的 camera_info 标定缓存。
         """
         self.args = args
         self.camera = camera
-        self.yolo = yolo
+        self.segmenter = segmenter
         self.ffs = ffs
         self.cutie_tracker = cutie_tracker
 
@@ -434,6 +438,8 @@ class QuestStereoPosePipeline:
             return
 
         self.camera.start()
+        if hasattr(self.segmenter, "start"):
+            self.segmenter.start()
 
         self._started = True
         self._has_pose = False
@@ -450,7 +456,10 @@ class QuestStereoPosePipeline:
         self._last_frame_t = 0.0
         self._fps_rt = 0.0
         self._last_processed_frame_id = None
-        self._yolo_acc = 0.0
+        self._reset_after_frame_id = None
+        self._segmenter_latest_version = 0
+        self._last_segmenter_result = None
+        self._seg_acc = 0.0
         self._depth_acc = 0.0
         self._cutie_acc = 0.0
         self._pose_acc = 0.0
@@ -459,6 +468,8 @@ class QuestStereoPosePipeline:
         """停止 Pipeline：关闭接收器并清理状态。"""
         if not self._started:
             return
+        if hasattr(self.segmenter, "stop"):
+            self.segmenter.stop()
         self.camera.stop()
         self._started = False
 
@@ -476,6 +487,16 @@ class QuestStereoPosePipeline:
         self._cutie_initialized = False
         self._last_pose_4x4 = None
         self._track_reject_count = 0
+        self._last_segmenter_result = None
+        self._reset_after_frame_id = self._last_processed_frame_id
+        if isinstance(self.segmenter, AsyncSam3Masker):
+            self._segmenter_latest_version = 0
+            min_frame_id = (
+                self._last_processed_frame_id + 1
+                if self._last_processed_frame_id is not None
+                else None
+            )
+            self.segmenter.reset_runtime(min_frame_id=min_frame_id)
         if self.pose_estimator is not None:
             self.pose_estimator.reset()
         if self.cutie_tracker is not None and hasattr(self.cutie_tracker, "reset"):
@@ -498,14 +519,14 @@ class QuestStereoPosePipeline:
 
         logging.info(
             "[stats] frames=%d stage=%d phase=%s rt_fps=%.1f window_fps=%.1f "
-            "avg(yolo/depth/cutie/pose)=%.1f/%.1f/%.1f/%.1fms depth_valid=%.1f%% "
+            "avg(seg/depth/cutie/pose)=%.1f/%.1f/%.1f/%.1fms depth_valid=%.1f%% "
             "recv=%s decode_fail=%s sender_fps=%.1f sender_est=%.1fms sender_raw=%.1fms sender_gap=%s",
             self._frame_count,
             self.stage,
             output.phase,
             output.fps,
             window_fps,
-            self._yolo_acc / self.stats_interval,
+            self._seg_acc / self.stats_interval,
             self._depth_acc / self.stats_interval,
             self._cutie_acc / self.stats_interval,
             self._pose_acc / self.stats_interval,
@@ -519,7 +540,7 @@ class QuestStereoPosePipeline:
         )
 
         self._stats_t = now
-        self._yolo_acc = 0.0
+        self._seg_acc = 0.0
         self._depth_acc = 0.0
         self._cutie_acc = 0.0
         self._pose_acc = 0.0
@@ -589,10 +610,10 @@ class QuestStereoPosePipeline:
         self,
         mask_bw: np.ndarray,
         depth_m: np.ndarray,
-        yolo_selected_index: int = -1,
+        segmenter_selected_index: int = -1,
     ) -> FrameDiagnostics:
         """计算 mask/depth 对齐相关诊断指标。"""
-        diag = FrameDiagnostics(yolo_selected_index=int(yolo_selected_index))
+        diag = FrameDiagnostics(segmenter_selected_index=int(segmenter_selected_index))
         if mask_bw is None or mask_bw.size == 0:
             return diag
 
@@ -698,6 +719,47 @@ class QuestStereoPosePipeline:
 
         return pose_4x4
 
+    def _run_cutie_on_current_frame(
+        self,
+        left_rgb: np.ndarray,
+        mask_bw: np.ndarray,
+        det_count: int,
+        diag: FrameDiagnostics,
+        timing: PipelineStepTiming,
+        allow_reinit: bool = True,
+        adjust_pose: bool = False,
+    ) -> tuple[np.ndarray | None, list[int]]:
+        """在当前帧传播 Cutie mask；SAM3 慢速种子只负责初始化，实时 mask 由这里对齐当前帧。"""
+        cutie_bbox = [-1, -1, 0, 0]
+        if self.cutie_tracker is None or not self._cutie_initialized:
+            return None, cutie_bbox
+
+        ct0 = time.perf_counter()
+        cutie_mask: np.ndarray | None = None
+        try:
+            cutie_result = self.cutie_tracker.track(left_rgb)
+            cutie_bbox = cutie_result.bbox_xywh
+            cutie_mask = (cutie_result.mask > 0).astype(np.uint8) * 255
+
+            x, y, bw, bh = cutie_bbox
+            if bw > 0 and bh > 0:
+                cx = float(x + bw / 2.0)
+                cy = float(y + bh / 2.0)
+                if adjust_pose and bool(self.args.cutie_adjust_pose):
+                    self.pose_estimator.adjust_pose_to_image_point(cx, cy)
+                    diag.cutie_adjust_applied = True
+            elif allow_reinit and det_count > 0 and np.count_nonzero(mask_bw) > 0:
+                _ = self.cutie_tracker.initialize(left_rgb, init_mask=mask_bw)
+                self._cutie_initialized = True
+        except Exception as exc:
+            logging.warning("[cutie] 跟踪失败: %s", exc)
+            self._cutie_initialized = False
+            cutie_mask = None
+        finally:
+            timing.cutie_ms += (time.perf_counter() - ct0) * 1000.0
+
+        return cutie_mask, cutie_bbox
+
 
     def run(self, return_debug: bool = False) -> PosePipelineOutput | None:
         """
@@ -759,31 +821,127 @@ class QuestStereoPosePipeline:
         depth_m = np.zeros(left_bgr.shape[:2], dtype=np.float32)
         vis_bgr = left_bgr.copy()
         diag = FrameDiagnostics()
+        stage_cutie_mask: np.ndarray | None = None
+        stage_cutie_bbox = [-1, -1, 0, 0]
 
-        # 阶段2：YOLO 分割。
+        # 阶段2：通用 2D 分割。默认 SAM3 异步低频检测；YOLOE 仍可作为 fallback。
         if self.stage >= 2:
-            t0 = time.perf_counter()
-            yolo_result = self.yolo.infer(left_bgr)
-            timing.yolo_ms = (time.perf_counter() - t0) * 1000.0
-            self._yolo_acc += timing.yolo_ms
+            segmenter_result = None
+            segmenter_name = str(getattr(self.args, "segmenter", "sam3")).lower()
 
-            det_count = yolo_result.det_count
-            mask_bw = yolo_result.mask_bw
-            if mask_bw.shape[:2] != left_bgr.shape[:2]:
-                logging.warning(
-                    "[YOLOE] mask 尺寸与图像不一致 mask=%s image=%s，已按最近邻缩放。",
-                    mask_bw.shape[:2],
-                    left_bgr.shape[:2],
+            if isinstance(self.segmenter, AsyncSam3Masker):
+                t0 = time.perf_counter()
+                prev_version = self._segmenter_latest_version
+                should_submit_sam3 = not (
+                    self._has_pose
+                    and self._cutie_initialized
+                    and not bool(getattr(self.args, "sam3_refresh_when_tracking", 0))
                 )
-                mask_bw = cv2.resize(
-                    mask_bw,
-                    (left_bgr.shape[1], left_bgr.shape[0]),
-                    interpolation=cv2.INTER_NEAREST,
+                if should_submit_sam3:
+                    _ = self.segmenter.submit(
+                        left_bgr,
+                        frame_id=int(stereo.frame_id) if stereo.frame_id is not None else None,
+                        timestamp_ms=stereo_timestamp_ms,
+                    )
+                latest, version = self.segmenter.get_latest()
+                latest_is_new = latest is not None and version != self._segmenter_latest_version
+                if (
+                    latest_is_new
+                    and latest.source_frame_id is not None
+                    and self._reset_after_frame_id is not None
+                    and latest.source_frame_id <= self._reset_after_frame_id
+                ):
+                    latest_is_new = False
+
+                if latest is not None and latest_is_new and not self._has_pose:
+                    if (
+                        not bool(getattr(self.args, "sam3_allow_stale_register", 0))
+                        and latest.source_timestamp_ms is not None
+                    ):
+                        age_ms = max(0.0, stereo_timestamp_ms - float(latest.source_timestamp_ms))
+                        if age_ms > float(getattr(self.args, "sam3_max_result_age_ms", 1500.0)):
+                            logging.debug(
+                                "[SAM3] 异步结果过旧 age=%.0fms，仅保留展示，不直接 register。",
+                                age_ms,
+                            )
+                    self._segmenter_latest_version = version
+                    self._reset_after_frame_id = None
+                    if (
+                        self.cutie_tracker is not None
+                        and latest.det_count > 0
+                        and np.count_nonzero(latest.mask_bw) > 0
+                    ):
+                        ct0 = time.perf_counter()
+                        try:
+                            seed_rgb = (
+                                cv2.cvtColor(latest.source_image_bgr, cv2.COLOR_BGR2RGB)
+                                if latest.source_image_bgr is not None
+                                else left_rgb
+                            )
+                            _ = self.cutie_tracker.initialize(
+                                seed_rgb, init_mask=latest.mask_bw
+                            )
+                            self._cutie_initialized = True
+                        except Exception as exc:
+                            self._cutie_initialized = False
+                            logging.warning("[cutie] SAM3 种子初始化失败: %s", exc)
+                        timing.cutie_ms += (time.perf_counter() - ct0) * 1000.0
+                    elif bool(getattr(self.args, "sam3_allow_stale_register", 0)):
+                        segmenter_result = latest
+                timing.yolo_ms = (time.perf_counter() - t0) * 1000.0
+                stats = self.segmenter.get_stats()
+                last_infer = float(stats.get("last_infer_ms", 0.0) or 0.0)
+                if last_infer > 0.0 and version != prev_version and latest_is_new:
+                    timing.yolo_ms = last_infer
+            else:
+                t0 = time.perf_counter()
+                segmenter_result = self.segmenter.infer(left_bgr)
+                timing.yolo_ms = (time.perf_counter() - t0) * 1000.0
+            self._seg_acc += timing.yolo_ms
+
+            if segmenter_result is not None:
+                self._last_segmenter_result = segmenter_result
+                det_count = int(segmenter_result.det_count)
+                mask_bw = segmenter_result.mask_bw
+                if mask_bw.shape[:2] != left_bgr.shape[:2]:
+                    logging.warning(
+                        "[segmenter:%s] mask 尺寸与图像不一致 mask=%s image=%s，已按最近邻缩放。",
+                        segmenter_name,
+                        mask_bw.shape[:2],
+                        left_bgr.shape[:2],
+                    )
+                    mask_bw = cv2.resize(
+                        mask_bw,
+                        (left_bgr.shape[1], left_bgr.shape[0]),
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+                diag.segmenter_selected_index = int(getattr(segmenter_result, "selected_index", -1))
+                diag.mask_area_ratio = float(getattr(segmenter_result, "mask_area_ratio", 0.0))
+                vis_bgr = segmenter_result.overlay.copy()
+
+            # SAM3 异步结果可能来自旧帧，默认仅作为 Cutie 种子；当前帧 register 优先使用 Cutie 传播 mask。
+            if isinstance(self.segmenter, AsyncSam3Masker) and self._cutie_initialized:
+                stage_cutie_mask, stage_cutie_bbox = self._run_cutie_on_current_frame(
+                    left_rgb=left_rgb,
+                    mask_bw=mask_bw,
+                    det_count=det_count,
+                    diag=diag,
+                    timing=timing,
+                    allow_reinit=False,
+                    adjust_pose=False,
                 )
-            diag.yolo_selected_index = int(getattr(yolo_result, "selected_index", -1))
-            diag.mask_area_ratio = float(getattr(yolo_result, "mask_area_ratio", 0.0))
-            vis_bgr = yolo_result.overlay.copy()
-            phase = "STAGE2_YOLO"
+                if stage_cutie_mask is not None and np.count_nonzero(stage_cutie_mask) > 0:
+                    mask_bw = stage_cutie_mask
+                    det_count = 1
+                    diag.mask_area_ratio = float(np.count_nonzero(mask_bw)) / float(mask_bw.size)
+                    vis_bgr = _overlay_mask_contour(left_bgr, mask_bw, (0, 255, 255))
+            elif (
+                isinstance(self.segmenter, AsyncSam3Masker)
+                and not bool(getattr(self.args, "sam3_allow_stale_register", 0))
+            ):
+                det_count = 0
+
+            phase = "STAGE2_SEGMENT"
 
         # 阶段3：FFS 深度。
         if self.stage >= 3:
@@ -814,7 +972,7 @@ class QuestStereoPosePipeline:
             diag = self._compute_frame_diagnostics(
                 mask_bw,
                 depth_m,
-                yolo_selected_index=diag.yolo_selected_index,
+                segmenter_selected_index=diag.segmenter_selected_index,
             )
             phase = "STAGE3_FFS"
 
@@ -822,8 +980,8 @@ class QuestStereoPosePipeline:
         if self.stage >= 4:
             t2 = time.perf_counter()
 
-            cutie_bbox = [-1, -1, 0, 0]
-            cutie_mask: np.ndarray | None = None
+            cutie_bbox = stage_cutie_bbox
+            cutie_mask: np.ndarray | None = stage_cutie_mask
 
             if not self._has_pose:
                 has_valid_mask = det_count > 0 and np.count_nonzero(mask_bw) > 0
@@ -872,29 +1030,20 @@ class QuestStereoPosePipeline:
                     phase = "WAIT_DETECT"
 
             else:
-                if self.cutie_tracker is not None and self._cutie_initialized:
-                    ct0 = time.perf_counter()
-                    try:
-                        cutie_result = self.cutie_tracker.track(left_rgb)
-                        cutie_bbox = cutie_result.bbox_xywh
-                        cutie_mask = (cutie_result.mask > 0).astype(np.uint8) * 255
-
-                        x, y, bw, bh = cutie_bbox
-                        if bw > 0 and bh > 0:
-                            cx = float(x + bw / 2.0)
-                            cy = float(y + bh / 2.0)
-                            if bool(self.args.cutie_adjust_pose):
-                                self.pose_estimator.adjust_pose_to_image_point(cx, cy)
-                                diag.cutie_adjust_applied = True
-                        elif det_count > 0 and np.count_nonzero(mask_bw) > 0:
-                            _ = self.cutie_tracker.initialize(
-                                left_rgb, init_mask=mask_bw
-                            )
-                            self._cutie_initialized = True
-                    except Exception as exc:
-                        logging.warning("[cutie] 跟踪失败: %s", exc)
-                        self._cutie_initialized = False
-                    timing.cutie_ms += (time.perf_counter() - ct0) * 1000.0
+                if cutie_mask is None:
+                    cutie_mask, cutie_bbox = self._run_cutie_on_current_frame(
+                        left_rgb=left_rgb,
+                        mask_bw=mask_bw,
+                        det_count=det_count,
+                        diag=diag,
+                        timing=timing,
+                        allow_reinit=True,
+                        adjust_pose=True,
+                    )
+                elif cutie_bbox[2] > 0 and cutie_bbox[3] > 0 and bool(self.args.cutie_adjust_pose):
+                    x, y, bw, bh = cutie_bbox
+                    self.pose_estimator.adjust_pose_to_image_point(float(x + bw / 2.0), float(y + bh / 2.0))
+                    diag.cutie_adjust_applied = True
 
                 try:
                     pose_4x4 = self.pose_estimator.track(
@@ -944,7 +1093,7 @@ class QuestStereoPosePipeline:
                         diag=self._compute_frame_diagnostics(
                             cutie_mask if cutie_mask is not None else mask_bw,
                             depth_m,
-                            yolo_selected_index=diag.yolo_selected_index,
+                            segmenter_selected_index=diag.segmenter_selected_index,
                         ),
                         timing=timing,
                     )
@@ -996,7 +1145,7 @@ class QuestStereoPosePipeline:
                 vis_bgr,
                 [
                     f"fps={fps:.1f} stage={self.stage} {phase} det={det_count}",
-                    f"ms y/d/c/p={timing.yolo_ms:.0f}/{timing.depth_ms:.0f}/{timing.cutie_ms:.0f}/{timing.pose_ms:.0f}",
+                    f"ms seg/d/c/p={timing.yolo_ms:.0f}/{timing.depth_ms:.0f}/{timing.cutie_ms:.0f}/{timing.pose_ms:.0f}",
                     f"depth={depth_valid_ratio:.0%} in_mask={diag.depth_valid_in_mask:.0%} med={diag.depth_median_in_mask:.2f}m",
                     f"mask={diag.mask_area_ratio:.1%} reject={self._track_reject_count}",
                 ],
@@ -1119,6 +1268,90 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="算法处理分辨率高度（像素）。",
     )
 
+    # 2D 分割参数。默认 SAM3，YOLOE-26 保留为 fallback/对比。
+    parser.add_argument(
+        "--segmenter",
+        type=str,
+        default="sam3",
+        choices=["sam3", "yoloe26"],
+        help="2D 分割器：sam3=默认低频语义种子，yoloe26=旧 YOLOE fallback。",
+    )
+    parser.add_argument(
+        "--seg_prompt",
+        type=str,
+        default="white cube",
+        help="2D 分割文本提示词，SAM3/YOLOE 共用。",
+    )
+    parser.add_argument(
+        "--seg_max_det",
+        type=int,
+        default=1,
+        help="2D 分割最多保留检测数量。",
+    )
+    parser.add_argument(
+        "--seg_mask_threshold",
+        type=float,
+        default=0.5,
+        help="2D 分割 mask 二值化阈值。",
+    )
+    parser.add_argument(
+        "--sam3_checkpoint_path",
+        type=Path,
+        default=PROJECT_DIR / "sam3" / "assets" / "sam3_ckpt" / "sam3.pt",
+        help="SAM3 本地 checkpoint 路径。",
+    )
+    parser.add_argument(
+        "--sam3_confidence_threshold",
+        type=float,
+        default=0.5,
+        help="SAM3 检测置信度阈值。",
+    )
+    parser.add_argument(
+        "--sam3_resolution",
+        type=int,
+        default=1008,
+        help="SAM3 processor 输入分辨率。",
+    )
+    parser.add_argument(
+        "--sam3_device",
+        type=str,
+        default="cuda",
+        help="SAM3 推理设备。",
+    )
+    parser.add_argument(
+        "--sam3_async",
+        type=int,
+        default=1,
+        choices=[0, 1],
+        help="是否启用 SAM3 后台异步低频检测。",
+    )
+    parser.add_argument(
+        "--sam3_interval_sec",
+        type=float,
+        default=0.0,
+        help="SAM3 异步提交最小间隔（秒）。",
+    )
+    parser.add_argument(
+        "--sam3_refresh_when_tracking",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="已进入 FoundationPose/Cutie 稳定跟踪后是否继续后台刷新 SAM3。默认 0，避免 SAM3/Cutie 重初始化造成周期性卡顿。",
+    )
+    parser.add_argument(
+        "--sam3_max_result_age_ms",
+        type=float,
+        default=1500.0,
+        help="SAM3 结果最大建议年龄（毫秒）；默认禁止过期结果直接 register，仅用于诊断/显式 fallback。",
+    )
+    parser.add_argument(
+        "--sam3_allow_stale_register",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="无 Cutie 时是否允许用异步 SAM3 旧帧 mask 直接 register；默认 0 避免 mask/depth 错位。",
+    )
+
     # YOLO 参数。
     parser.add_argument(
         "--yolo_model_path",
@@ -1133,12 +1366,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="YOLOE 文本编码器权重路径。",
     )
     parser.add_argument(
-        "--yolo_prompt",
-        type=str,
-        default="white cube",
-        help="YOLOE 文本提示词。",
-    )
-    parser.add_argument(
         "--yolo_conf",
         type=float,
         default=0.15,
@@ -1150,19 +1377,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=640,
         help="YOLO 推理输入尺寸。",
     )
-    parser.add_argument(
-        "--yolo_max_det",
-        type=int,
-        default=1,
-        help="YOLO 每帧最大保留检测数量。",
-    )
-    parser.add_argument(
-        "--yolo_mask_threshold",
-        type=float,
-        default=0.5, 
-        help="YOLO 分割 mask 二值化阈值。",
-    )
-
     # FFS 参数。
     parser.add_argument(
         "--ffs_model_path",
@@ -1391,11 +1605,13 @@ def build_quest_pipeline(args: argparse.Namespace) -> QuestStereoPosePipeline:
     """构建 Quest Pipeline 对象（API 工厂函数）。"""
     # 校验模型文件（仅校验始终需要的）。
     model_paths = [
-        args.yolo_model_path,
-        args.mobileclip2_path,
         args.ffs_model_path,
         args.mesh_path,
     ]
+    if str(args.segmenter).lower() == "sam3":
+        model_paths.append(args.sam3_checkpoint_path)
+    else:
+        model_paths.extend([args.yolo_model_path, args.mobileclip2_path])
     for path in model_paths:
         if not Path(path).exists():
             raise FileNotFoundError(f"必要文件不存在: {path}")
@@ -1426,17 +1642,37 @@ def build_quest_pipeline(args: argparse.Namespace) -> QuestStereoPosePipeline:
         timeout_ms=int(args.recv_timeout_ms),
     )
 
-    yolo = Yoloe26Masker(
-        model_path=str(args.yolo_model_path),
-        init_prompt=args.yolo_prompt,
-        conf=float(args.yolo_conf),
-        imgsz=int(args.yolo_imgsz),
-        max_det=int(args.yolo_max_det),
-        mask_threshold=float(args.yolo_mask_threshold),
-        use_half=False,
-        device=None,
-        mobileclip2_path=str(args.mobileclip2_path),
-    )
+    if str(args.segmenter).lower() == "sam3":
+        sam3_kwargs = {
+            "checkpoint_path": args.sam3_checkpoint_path,
+            "prompt": str(args.seg_prompt),
+            "confidence_threshold": float(args.sam3_confidence_threshold),
+            "mask_threshold": float(args.seg_mask_threshold),
+            "max_det": int(args.seg_max_det),
+            "device": str(args.sam3_device),
+            "resolution": int(args.sam3_resolution),
+            "sam3_root": PROJECT_DIR / "sam3",
+        }
+        segmenter = (
+            AsyncSam3Masker(
+                masker_kwargs=sam3_kwargs,
+                min_interval_sec=float(args.sam3_interval_sec),
+            )
+            if bool(args.sam3_async)
+            else Sam3Masker(**sam3_kwargs)
+        )
+    else:
+        segmenter = Yoloe26Masker(
+            model_path=str(args.yolo_model_path),
+            init_prompt=str(args.seg_prompt),
+            conf=float(args.yolo_conf),
+            imgsz=int(args.yolo_imgsz),
+            max_det=int(args.seg_max_det),
+            mask_threshold=float(args.seg_mask_threshold),
+            use_half=False,
+            device=None,
+            mobileclip2_path=str(args.mobileclip2_path),
+        )
 
     ffs = FastFoundationStereoRealtime(
         model_dir=str(args.ffs_model_path),
@@ -1466,7 +1702,7 @@ def build_quest_pipeline(args: argparse.Namespace) -> QuestStereoPosePipeline:
     return QuestStereoPosePipeline(
         args=args,
         camera=camera,
-        yolo=yolo,
+        segmenter=segmenter,
         ffs=ffs,
         cutie_tracker=cutie_tracker,
         calib=calib,
