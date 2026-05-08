@@ -23,11 +23,11 @@ def build_realsense_pipeline(args):
     return _build(args)
 
 
-def build_quest_pipeline(args):
+def build_quest_pipeline(cfg):
     """懒加载并构建 Quest Pipeline，避免导入包时提前初始化模型与网络依赖。"""
     from .quest_pipeline import build_quest_pipeline as _build
 
-    return _build(args)
+    return _build(cfg)
 
 
 __all__ = [

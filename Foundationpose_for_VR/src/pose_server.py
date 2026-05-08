@@ -12,6 +12,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Protocol
 
 # 允许直接脚本运行：python src/pose_server.py
@@ -23,9 +24,9 @@ if __package__ is None or __package__ == "":
 from pipeline.quest_pipeline import (  # noqa: E402
     PosePipelineOutput,
     QuestStereoPosePipeline,
-    build_arg_parser as build_pipeline_arg_parser,
     build_quest_pipeline,
 )
+from config import load_runtime_config, print_effective_config  # noqa: E402
 from server import (  # noqa: E402
     PoseServerDebugView,
     PoseServerStats,
@@ -46,75 +47,18 @@ class _KeyboardControllablePipeline(Protocol):
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """在 Quest Pipeline 参数基础上扩展 pose_server 参数。"""
-    parser = build_pipeline_arg_parser()
-
-    parser.description = "Quest 位姿服务：接收双目和相机信息，向 Unity 发布 pose。"
+    """构建入口级 CLI，只负责选择/打印 TOML 配置。"""
+    parser = argparse.ArgumentParser(description="Quest 位姿服务：TOML 配置入口。")
     parser.add_argument(
-        "--run_stage",
-        type=int,
-        default=4,
-        help="Pipeline 执行阶段（1~4）。默认 4。",
+        "--config",
+        type=Path,
+        default=None,
+        help="运行配置 TOML 路径；默认读取 config/runtime.toml。",
     )
     parser.add_argument(
-        "--pose_pub_host",
-        type=str,
-        default="*",
-        help="位姿发布端绑定地址。",
-    )
-    parser.add_argument(
-        "--pose_pub_port",
-        type=int,
-        default=15556,
-        help="位姿发布端口（ZMQ PUB）。",
-    )
-    parser.add_argument(
-        "--pose_topic",
-        type=str,
-        default="pose",
-        help="位姿消息 topic。",
-    )
-    parser.add_argument(
-        "--pose_pub_hwm",
-        type=int,
-        default=1,
-        help="位姿发布端高水位。",
-    )
-    parser.add_argument(
-        "--send_when_no_pose",
-        type=int,
-        default=1,
-        help="无 pose 时是否仍发送状态包（1=发送，0=跳过）。",
-    )
-    parser.add_argument(
-        "--pub_log_interval",
-        type=int,
-        default=60,
-        help="每处理多少帧打印一次发布统计。",
-    )
-    parser.add_argument(
-        "--local_debug",
-        type=int,
-        default=1,
-        help="是否开启本地 OpenCV 调试窗口。",
-    )
-    parser.add_argument(
-        "--latency_ema_alpha",
-        type=float,
-        default=0.15,
-        help="延迟统计 EMA alpha。",
-    )
-    parser.add_argument(
-        "--enable_keyboard_control",
-        type=int,
-        default=1,
-        help="是否启用 OpenCV 窗口热键。",
-    )
-    parser.add_argument(
-        "--reset_interval_sec",
-        type=float,
-        default=0.0,
-        help="自动重置跟踪状态的周期（秒）；<=0 关闭。",
+        "--print_config",
+        action="store_true",
+        help="打印解析并完成路径展开后的有效配置，然后退出。",
     )
 
     return parser
@@ -249,27 +193,28 @@ def _log_publish_stats(stats: PoseServerStats, phase: str) -> None:
     )
 
 
-def run_pose_server(args: argparse.Namespace) -> None:
+def run_pose_server(cfg: SimpleNamespace) -> None:
     """运行端到端位姿服务主循环。"""
-    endpoint = f"tcp://{args.pose_pub_host}:{int(args.pose_pub_port)}"
-    topic = str(args.pose_topic)
-    log_interval = max(int(args.pub_log_interval), 1)
-    send_when_no_pose = bool(int(args.send_when_no_pose))
-    local_debug = bool(int(args.local_debug))
-    enable_keyboard_control = bool(int(args.enable_keyboard_control))
-    reset_interval_sec = max(float(args.reset_interval_sec), 0.0)
-    camera_cache_dir = Path(args.camera_cache_dir)
+    endpoint = f"tcp://{cfg.network.sender.host}:{int(cfg.network.sender.port)}"
+    topic = str(cfg.network.sender.topic)
+    log_interval = max(int(cfg.debug.publish_log_interval), 1)
+    send_when_no_pose = bool(cfg.server.send_when_no_pose)
+    local_debug = bool(cfg.debug.local_debug)
+    enable_keyboard_control = bool(cfg.debug.enable_keyboard_control)
+    reset_interval_sec = max(float(cfg.server.reset_interval_sec), 0.0)
+    wait_log_interval_sec = max(float(cfg.debug.wait_log_interval_sec), 0.1)
+    camera_cache_dir = Path(cfg.pipeline.calibration.camera_cache_dir)
 
-    pipeline = build_quest_pipeline(args)
-    pipeline.set_stage(int(args.run_stage))
+    pipeline = build_quest_pipeline(cfg)
+    pipeline.set_stage(int(cfg.server.run_stage))
 
     sender = PayloadSender(
         endpoint=endpoint,
-        hwm=max(int(args.pose_pub_hwm), 1),
+        hwm=max(int(cfg.network.sender.hwm), 1),
         bind=True,
     )
     encoder = PoseEncoder()
-    stats = PoseServerStats(latency_alpha=_clip_alpha(args.latency_ema_alpha))
+    stats = PoseServerStats(latency_alpha=_clip_alpha(cfg.debug.latency_ema_alpha))
 
     calib_ready_at_start = bool(getattr(pipeline, "_calib_initialized", False))
     waiting_text = (
@@ -287,14 +232,14 @@ def run_pose_server(args: argparse.Namespace) -> None:
         pipeline.start()
         logging.info(
             "[pose_server] started recv=tcp://%s:%d pub=%s topic=%s stage=%d camera_source=%s calib_ready=%s preload_cache=%s",
-            args.listen_host,
-            int(args.listen_port),
+            cfg.network.receiver.listen_host,
+            int(cfg.network.receiver.listen_port),
             endpoint,
             topic,
-            int(args.run_stage),
-            args.camera_source,
+            int(cfg.server.run_stage),
+            cfg.pipeline.calibration.camera_source,
             "YES" if calib_ready_at_start else "NO",
-            int(getattr(args, "preload_camera_cache", 1)),
+            bool(cfg.pipeline.calibration.preload_camera_cache),
         )
 
         while True:
@@ -313,7 +258,7 @@ def run_pose_server(args: argparse.Namespace) -> None:
                     last_reset_t = time.perf_counter()
 
                 now_wait = time.perf_counter()
-                if now_wait - last_wait_log_t >= 3.0:
+                if now_wait - last_wait_log_t >= wait_log_interval_sec:
                     _log_waiting_state(pipeline)
                     last_wait_log_t = now_wait
                 continue
@@ -372,9 +317,13 @@ def run_pose_server(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = parse_args(argv)
+    cli_args = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    run_pose_server(args)
+    cfg = load_runtime_config(cli_args.config)
+    if cli_args.print_config:
+        print_effective_config(cfg)
+        return
+    run_pose_server(cfg)
 
 
 if __name__ == "__main__":

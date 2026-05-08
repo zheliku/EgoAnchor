@@ -71,6 +71,13 @@ def _colorize_error(
     return vis
 
 
+def _ensure_three_channel(image: np.ndarray) -> np.ndarray:
+    """Return an HWC 3-channel view/copy for grayscale or color input."""
+    if image.ndim == 2:
+        return np.repeat(image[..., None], 3, axis=2)
+    return image[..., :3]
+
+
 class _PyTorchStereoBackend:
     """PyTorch 推理后端，负责模型加载、体构建后端检查与前向推理。"""
 
@@ -514,19 +521,8 @@ class FastFoundationStereoRealtime:
         """
         t0 = time.perf_counter()
 
-        # 统一输入到 3 通道：
-        # - 灰度图复制成 3 通道
-        # - 彩色图保留前 3 通道
-        left = left_image
-        right = right_image
-        if left.ndim == 2:
-            left = np.repeat(left[..., None], 3, axis=2)
-        else:
-            left = left[..., :3]
-        if right.ndim == 2:
-            right = np.repeat(right[..., None], 3, axis=2)
-        else:
-            right = right[..., :3]
+        left = _ensure_three_channel(left_image)
+        right = _ensure_three_channel(right_image)
 
         # 缩放用于加速，右图跟随左图尺寸。
         if self.scale != 1.0:

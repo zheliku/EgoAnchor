@@ -61,20 +61,9 @@ public class PoseFollow : MonoBehaviour
 
     private void Awake()
     {
-        if (OnPoseReceived == null)
-        {
-            OnPoseReceived = new PoseReceivedEvent();
-        }
-
-        if (OnBeforePoseApply == null)
-        {
-            OnBeforePoseApply = new PoseApplyEvent();
-        }
-
-        if (OnAfterPoseApply == null)
-        {
-            OnAfterPoseApply = new PoseApplyEvent();
-        }
+        OnPoseReceived ??= new PoseReceivedEvent();
+        OnBeforePoseApply ??= new PoseApplyEvent();
+        OnAfterPoseApply ??= new PoseApplyEvent();
     }
 
     /// <summary>
@@ -135,10 +124,7 @@ public class PoseFollow : MonoBehaviour
     {
         foreach (PoseProcessor processor in processors)
         {
-            if (processor != null)
-            {
-                processor.ResetProcessor();
-            }
+            processor?.ResetProcessor();
         }
     }
 
@@ -155,10 +141,9 @@ public class PoseFollow : MonoBehaviour
         Pose processedPose = _rawWorldPose;
         foreach (PoseProcessor processor in processors)
         {
-            if (processor != null)
-            {
-                processedPose = processor.Process(processedPose, _latestFrameId, sampleTime);
-            }
+            processedPose = processor == null
+                ? processedPose
+                : processor.Process(processedPose, _latestFrameId, sampleTime);
         }
 
         _processedWorldPose = processedPose;

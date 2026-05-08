@@ -90,11 +90,11 @@ class PoseServerDebugView:
         if not self.enabled or getattr(output, "debug", None) is None:
             return -1
 
-        debug = output.debug
-        debug_vis = debug.dashboard_bgr.copy()
+        dashboard_bgr, stereo_bgr = output.debug
+        debug_vis = dashboard_bgr.copy()
         draw_text_block(debug_vis, overlay_lines, anchor="bottom-left")
         cv2.imshow(DEBUG_WINDOW, debug_vis)
-        cv2.imshow(STEREO_WINDOW, debug.stereo_bgr)
+        cv2.imshow(STEREO_WINDOW, stereo_bgr)
         cv2.setWindowProperty(DEBUG_WINDOW, cv2.WND_PROP_TOPMOST, 1)
         cv2.setWindowProperty(STEREO_WINDOW, cv2.WND_PROP_TOPMOST, 0)
         return cv2.waitKey(1) & 0xFF

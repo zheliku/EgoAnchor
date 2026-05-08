@@ -58,18 +58,21 @@ public class QuestStereoEncoder : PayloadEncoder
         double encodeStart = Time.realtimeSinceStartupAsDouble;
         payload = null;
 
+        bool Fail(ref int counter)
+        {
+            counter++;
+            LogFailureIfDue();
+            return false;
+        }
+
         if (leftCameraAccess == null || rightCameraAccess == null)
         {
-            _failCamNullCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failCamNullCount);
         }
 
         if (!leftCameraAccess.IsPlaying || !rightCameraAccess.IsPlaying)
         {
-            _failNotPlayingCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failNotPlayingCount);
         }
 
         Texture leftTexture = leftCameraAccess.GetTexture();
@@ -81,16 +84,12 @@ public class QuestStereoEncoder : PayloadEncoder
         }
         catch
         {
-            _failTexNullCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failTexNullCount);
         }
 
         if (leftTexture == null || rightTexture == null)
         {
-            _failTexNullCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failTexNullCount);
         }
 
         EnsureCaptureBuffers(leftTexture, rightTexture);
@@ -99,8 +98,8 @@ public class QuestStereoEncoder : PayloadEncoder
         long frameId = ++_senderFrameId;
         OnFrameEncoded?.Invoke(frameId, leftCameraPose);
 
-        BlitToRenderTarget(leftTexture, _leftRenderTexture);
-        BlitToRenderTarget(rightTexture, _rightRenderTexture);
+        Graphics.Blit(leftTexture, _leftRenderTexture);
+        Graphics.Blit(rightTexture, _rightRenderTexture);
 
         // 新协议：左右图分别编码。
         // 这样接收端可以直接解码成 left/right，避免“发送前拼接 + 接收后拆分”的冗余流程。
@@ -108,9 +107,7 @@ public class QuestStereoEncoder : PayloadEncoder
         byte[] rightJpeg = EncodeRenderTextureToJpeg(_rightRenderTexture, _rightReadbackTexture);
         if (leftJpeg == null || rightJpeg == null)
         {
-            _failJpegNullCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failJpegNullCount);
         }
 
         QuestStereoMsg message = new QuestStereoMsg
@@ -125,9 +122,7 @@ public class QuestStereoEncoder : PayloadEncoder
         payload = message.Serialize();
         if (payload == null)
         {
-            _failSerializeNullCount++;
-            MaybeLogFailure();
-            return false;
+            return Fail(ref _failSerializeNullCount);
         }
 
         if (enableEncodeStatsLog)
@@ -154,7 +149,7 @@ public class QuestStereoEncoder : PayloadEncoder
     /// <summary>
     /// 每 2 秒最多打印一次失败统计，帮助定位为何 stereo 发不出去。
     /// </summary>
-    private void MaybeLogFailure()
+    private void LogFailureIfDue()
     {
         float now = Time.realtimeSinceStartup;
         if (now - _lastFailLogTime < 2.0f)
@@ -195,41 +190,21 @@ public class QuestStereoEncoder : PayloadEncoder
         int rightWidth = Mathf.Max(1, Mathf.RoundToInt(rightTexture.width * outputScale));
         int rightHeight = Mathf.Max(1, Mathf.RoundToInt(rightTexture.height * outputScale));
 
-        EnsureBuffer(ref _leftRenderTexture, ref _leftReadbackTexture, leftWidth, leftHeight);
-        EnsureBuffer(ref _rightRenderTexture, ref _rightReadbackTexture, rightWidth, rightHeight);
-    }
-
-    private void EnsureBuffer(
-        ref RenderTexture renderTexture,
-        ref Texture2D readbackTexture,
-        int width,
-        int height)
-    {
-        bool needsCreate =
-            renderTexture == null ||
-            readbackTexture == null ||
-            renderTexture.width != width ||
-            renderTexture.height != height;
-
-        if (!needsCreate)
+        if (_leftRenderTexture == null || _leftReadbackTexture == null ||
+            _leftRenderTexture.width != leftWidth || _leftRenderTexture.height != leftHeight)
         {
-            return;
+            ReleaseBuffer(ref _leftRenderTexture, ref _leftReadbackTexture);
+            _leftRenderTexture = new RenderTexture(leftWidth, leftHeight, 0, RenderTextureFormat.ARGB32);
+            _leftReadbackTexture = new Texture2D(leftWidth, leftHeight, TextureFormat.RGB24, false);
         }
 
-        ReleaseBuffer(ref renderTexture, ref readbackTexture);
-
-        renderTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);
-        readbackTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
-    }
-
-    private static void BlitToRenderTarget(Texture source, RenderTexture target)
-    {
-        if (source == null || target == null)
+        if (_rightRenderTexture == null || _rightReadbackTexture == null ||
+            _rightRenderTexture.width != rightWidth || _rightRenderTexture.height != rightHeight)
         {
-            return;
+            ReleaseBuffer(ref _rightRenderTexture, ref _rightReadbackTexture);
+            _rightRenderTexture = new RenderTexture(rightWidth, rightHeight, 0, RenderTextureFormat.ARGB32);
+            _rightReadbackTexture = new Texture2D(rightWidth, rightHeight, TextureFormat.RGB24, false);
         }
-
-        Graphics.Blit(source, target);
     }
 
     /// <summary>
@@ -253,17 +228,7 @@ public class QuestStereoEncoder : PayloadEncoder
         readbackTexture.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0, false);
         readbackTexture.Apply(false, false);
         RenderTexture.active = previous;
-        return EncodeTexture(readbackTexture);
-    }
-
-    private byte[] EncodeTexture(Texture2D texture)
-    {
-        if (texture == null)
-        {
-            return null;
-        }
-
-        return texture.EncodeToJPG(jpegQuality);
+        return readbackTexture.EncodeToJPG(jpegQuality);
     }
 
     /// <summary>
