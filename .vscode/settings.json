@@ -1,18 +1,17 @@
 {
     "files.exclude": {
         "**/*.meta": true,
-        "build/": true,
-        "Build/": true,
-        "Library/": true,
-        "library/": true,
-        "obj/": true,
-        "Obj/": true,
-        "Logs/": true,
-        "logs/": true,
-        "ProjectSettings/": true,
-        "UserSettings/": true,
-        "temp/": true,
-        "Temp/": true
+        "**/build/": true,
+        "**/Build/": true,
+        "**/Library/": true,
+        "**/library/": true,
+        "**/obj/": true,
+        "**/Obj/": true,
+        "**/Logs/": true,
+        "**/logs/": true,
+        "**/UserSettings/": true,
+        "**/temp/": true,
+        "**/Temp/": true
     },
     "files.associations": {
         "*.asset": "yaml",
@@ -24,14 +23,13 @@
     "explorer.fileNesting.patterns": {
         "*.sln": "*.csproj"
     },
-    "dotnet.defaultSolution": "VR-Pose-Tracking.slnx",
+    "dotnet.defaultSolution": "EgoAnchor_Unity/EgoAnchor_Unity.slnx",
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": [
         {
-            "path": "Foundationpose_for_VR",
+            "path": "EgoAnchor_Python",
             "envManager": "ms-python.python:system",
             "packageManager": "ms-python.python:pip"
         }
-    ],
-    "cmake.sourceDirectory": "P:/Unity-Project/Work/VR-Pose-Tracking/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/src/main/cpp"
+    ]
 }

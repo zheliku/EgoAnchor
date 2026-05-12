@@ -1,0 +1,101 @@
+# Quest pose_server / quest_pipeline 当前运行配置；相对路径均相对 EgoAnchor_Python。
+
+[server]
+run_stage = 4                    # 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
+send_when_no_pose = true         # 无有效 pose 时也发送状态包；Unity 仅忽略 has_pose=false 的位姿应用。
+reset_interval_sec = 0.0         # 自动重置跟踪的周期（秒）；<=0 表示关闭。
+
+[network.receiver]
+listen_host = "*"                # Python 接收 Unity quest_stereo / quest_camera_info 的绑定地址。
+listen_port = 15557              # Python 接收端口；Unity PayloadSender 连接此端口。
+hwm = 20                         # ZMQ 接收高水位；stereo 帧较大，初始化模型时不宜太小。
+timeout_ms = 100                 # 等待 camera_info / stereo 包的 poll 超时（毫秒）。
+
+[network.sender]
+host = "*"                       # Python 发布 pose 的绑定地址；Unity PayloadReceiver 连接此地址。
+port = 15556                     # pose PUB 端口。
+topic = "pose"                   # pose multipart topic 名称。
+hwm = 1                          # pose PUB 高水位；低值保证 Unity 只消费最新 pose。
+
+[pipeline.calibration]
+camera_source = "network"        # 标定来源：network=等待 Quest camera_info，local=优先本地缓存。
+preload_camera_cache = true      # network 模式下先用 camera_info_latest.json 预初始化 K/FoundationPose。
+network_calib_update = true      # 网络标定与缓存不同时，刷新 K/FoundationPose 并重置跟踪。
+camera_cache_dir = "Calibration/cache" # camera_info_latest.json 与备份文件保存目录。
+assume_center_crop = true        # K 映射方式：true=中心裁剪+缩放，false=仅线性缩放。
+process_width = 640              # 算法处理宽度；<=0 时使用标定宽度。
+process_height = 480             # 算法处理高度；<=0 时使用标定高度。
+
+[pipeline.depth]
+min_depth = 0.1                  # 有效深度下限（米）；超出范围会置零并拒绝 pose z。
+max_depth = 3.0                  # 有效深度上限（米）；超出范围会置零并拒绝 pose z。
+
+[module.segmenter]
+type = "yoloe26"                 # 分割后端：sam3 或 yoloe26。
+prompt = "little white cube"     # SAM3 / YOLOE 共用文本提示词。
+max_det = 1                      # 分割最多保留检测数量。
+mask_threshold = 0.5             # mask 二值化阈值。
+
+[module.sam3]
+checkpoint_path = "sam3/assets/sam3_ckpt/sam3.pt" # SAM3 checkpoint 路径。
+confidence_threshold = 0.5       # SAM3 语义检测置信度阈值。
+resolution = 1008                # SAM3 processor 输入分辨率。
+device = "cuda"                  # SAM3 推理设备，通常为 cuda 或 cpu。
+async_enabled = true             # 后台线程异步运行 SAM3，避免主 pipeline 同步等待。
+interval_sec = 1.0               # 异步 SAM3 最小提交间隔；调大可减少 GPU 抢占卡顿。
+refresh_when_tracking = false    # FoundationPose+Cutie 稳定跟踪时是否继续刷新 SAM3。
+max_result_age_ms = 1500.0       # 异步 SAM3 结果允许直接 register 的最大年龄（毫秒）。
+allow_stale_register = false     # 无 Cutie 当前 mask 时，是否允许旧 SAM3 mask 直接 register。
+
+[module.yoloe]
+model_path = "checkpoints/yoloe-26l-seg.pt" # YOLOE 分割模型路径。
+mobileclip2_path = "mobileclip2_b.ts"       # YOLOE 文本编码器本地路径。
+conf = 0.1                       # YOLOE 检测置信度；过低容易选到背景 mask。
+imgsz = 640                      # YOLOE 推理输入尺寸。
+use_half = false                 # YOLOE 是否使用半精度推理。
+device = "auto"                  # YOLOE 设备：auto、cpu、cuda 或字符串数字 GPU id。
+
+[module.ffs]
+model_path = "Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth" # FFS 权重路径。
+device = "cuda"                  # FFS 推理设备。
+scale = 1.0                      # FFS 内部图像缩放；越小越快但精度下降。
+valid_iters = 4                  # FFS recurrent refine 迭代次数。
+max_disp = 192                   # FFS 最大视差，同时参与 TRT engine 匹配。
+optimize_build_volume = "triton" # cost-volume 构建后端：triton 或 pytorch1。
+seed = -1                        # 随机种子；<0 表示优先速度。
+cudnn_benchmark = true           # 固定输入尺寸下启用 cudnn.benchmark 加速。
+use_trt = true                   # 优先使用匹配的 TensorRT engine。
+trt_precision = "fp16"           # TRT engine 精度标签。
+trt_strict = false               # true 时 TRT 缺失/失败直接报错；false 回退 PyTorch。
+trt_tag = ""                     # 显式 TRT artifact tag；空值按尺寸/iters/max_disp 自动生成。
+trt_platform_tag = ""            # TRT 平台标签；空值自动识别 win/linux/mac。
+trt_feature_engine_path = ""     # 显式 feature runner engine 路径；空值自动查找。
+trt_post_engine_path = ""        # 显式 post runner engine 路径；空值自动查找。
+
+[module.foundationpose]
+mesh_path = "data/online/cube/mesh/cube.stl" # FoundationPose 目标物体 mesh。
+est_refine_iter = 5              # register 阶段 refine 迭代次数。
+track_refine_iter = 2            # track 阶段 refine 迭代次数。
+symmetry_mode = "cube"           # 对称约束模式：cube 或 none。
+register_min_depth_valid_in_mask = 0.2 # register/re-register 前 mask 内有效深度比例下限。
+re_register_on_track_lost = true # track 失败或跳变时，用当前 2D mask 尝试重新 register。
+pose_jump_translation_m = 0.35   # 单帧 track 平移跳变拒绝阈值（米）。
+pose_jump_rotation_deg = 80.0    # 单帧 track 旋转跳变拒绝阈值（度）。
+debug = 0                        # FoundationPose 内部 debug 等级。
+debug_dir = ""                   # FoundationPose debug 输出目录；空值表示不指定。
+
+[module.cutie]
+enabled = true                   # 启用 Cutie，在初始分割后传播当前帧 mask。
+seg_threshold = 0.1              # Cutie 分割阈值。
+erosion_size = 5                 # Cutie mask 腐蚀核大小。
+adjust_pose = true               # 用 Cutie bbox 中心辅助修正 FoundationPose 图像平面位移。
+
+[debug]
+local_debug = true               # pose_server 是否显示本地 OpenCV debug 窗口。
+enable_keyboard_control = true   # OpenCV 窗口热键：1/2/3/4 切阶段，r 重置，q/ESC 退出。
+pipeline_stats_interval = 30     # Quest pipeline 统计日志输出帧间隔。
+publish_log_interval = 60        # pose 发布统计日志输出帧间隔。
+latency_ema_alpha = 0.15         # 延迟 EMA alpha；代码中会裁剪到 [0.01, 1.0]。
+wait_log_interval_sec = 3.0      # 首帧到达前等待状态日志间隔（秒）。
+show_mask_snapshot = true        # 检测到有效 mask 时显示一张 RGB/mask 对齐快照；r/切阶段后可再次显示。
+mask_snapshot_window = "Mask Snapshot" # 单帧 mask 快照窗口名。

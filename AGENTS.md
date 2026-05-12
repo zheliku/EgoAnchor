@@ -12,7 +12,7 @@
 4. Python 通过 ZMQ PUB `pose` topic 回传位姿。
 5. Unity 解码 pose，按 `frame_id` 对齐发送帧时的左目相机世界姿态，把物体放回 Unity 世界坐标。
 
-当前主线：Unity 多 topic 发送 -> `Foundationpose_for_VR/src/pose_server.py` -> Quest Pipeline -> `pose` topic 回传 Unity。RealSense pipeline 仅用于本机算法调试/验证。
+当前主线：Unity 多 topic 发送 -> `EgoAnchor_Python/src/pose_server.py` -> Quest Pipeline -> `pose` topic 回传 Unity。RealSense pipeline 仅用于本机算法调试/验证。
 
 ## 工程原则
 
@@ -21,12 +21,12 @@
 - 多 topic 实时流必须按 topic 分别 latest-drain，不能只保留全局最后一条消息。
 - 高频路径日志保持精简，只保留限频告警和必要统计；详细编码/收发统计通过显式开关启用。
 - Unity 事件链优先显式 Inspector 绑定，避免组件内部自动 Find/自动 AddListener 导致重复订阅或隐藏依赖。
-- Python Quest 主链路运行参数只改 `Foundationpose_for_VR/config/runtime.toml`；不要恢复大量 argparse 参数。
+- Python Quest 主链路运行参数只改 `EgoAnchor_Python/config/runtime.toml`；不要恢复大量 argparse 参数。
 - 优先保持端到端链路可运行，再做性能/精度优化。
 
 ## 重要入口
 
-在 `Foundationpose_for_VR` 目录运行：
+在 `EgoAnchor_Python` 目录运行：
 
 ```powershell
 pixi run python .\src\pose_server.py
@@ -56,7 +56,7 @@ dotnet build "Assembly-CSharp.csproj" --no-restore
 
 ## 运行配置
 
-统一配置文件：`Foundationpose_for_VR/config/runtime.toml`。该文件已使用中文行内注释，调参优先直接看此文件。
+统一配置文件：`EgoAnchor_Python/config/runtime.toml`。该文件已使用中文行内注释，调参优先直接看此文件。
 
 `pose_server.py` 和 `quest_pipeline.py` CLI 只保留：
 
@@ -76,10 +76,10 @@ dotnet build "Assembly-CSharp.csproj" --no-restore
 
 配置加载：
 
-- `Foundationpose_for_VR/src/config/runtime_config.py` 使用 stdlib `tomllib`。
+- `EgoAnchor_Python/src/config/runtime_config.py` 使用 stdlib `tomllib`。
 - 配置对象为 `SimpleNamespace`，例如 `cfg.module.ffs.use_trt`。
 - `CONFIG_SCHEMA` 做嵌套未知 key 校验；新增/移动字段时必须同步：`runtime.toml`、`runtime_config.py`、使用点、`src/test/test_runtime_config.py`。
-- 路径字段统一解析为 `Foundationpose_for_VR` 项目相对路径。
+- 路径字段统一解析为 `EgoAnchor_Python` 项目相对路径。
 
 ## Unity 侧关键模块
 
@@ -106,31 +106,31 @@ dotnet build "Assembly-CSharp.csproj" --no-restore
 
 ## Python 侧关键模块
 
-- `Foundationpose_for_VR/src/pose_server.py`
+- `EgoAnchor_Python/src/pose_server.py`
   - Quest 端到端服务入口：接收 `quest_stereo`、`quest_camera_info`，运行 pipeline，发布 `pose`。
   - 保存/备份 `Calibration/cache/camera_info_latest.json`。
   - 本地 OpenCV debug、键盘控制、延迟/发布统计由 `src/server/` 辅助模块处理。
-- `Foundationpose_for_VR/src/pipeline/quest_pipeline.py`
+- `EgoAnchor_Python/src/pipeline/quest_pipeline.py`
   - Quest pipeline：输入 -> 2D 分割 -> FFS 深度 -> FoundationPose register/track。
   - 默认可用 SAM3 异步种子 + Cutie 当前帧传播；YOLOE-26 可作为 fallback/对比。
   - FoundationPose/Cutie 输入使用 RGB；OpenCV/YOLO/debug 显示保留 BGR。
   - register 前检查 mask 内有效深度比例，避免明显 mask/depth 错位时初始化。
   - track 失败或 pose 跳变时，可用当前稳定 2D mask 自动 re-register。
   - `debug.show_mask_snapshot=true` 时，检测到有效 mask 会显示一张单帧 RGB/mask/overlay 对齐快照；按 `r` 或切 stage 后可再次显示。
-- `Foundationpose_for_VR/src/modules/quest_io.py`
+- `EgoAnchor_Python/src/modules/quest_io.py`
   - Quest 多 topic 接收；公开 `get_stereo_frames()`、`get_camera_info()`、`get_calibration()`、`get_input_state()`。
   - `QuestStereoCalibration.scaled_k()` 负责把 Quest 标定 K 映射到算法处理分辨率。
-- `Foundationpose_for_VR/src/modules/sam3_masker.py`
+- `EgoAnchor_Python/src/modules/sam3_masker.py`
   - 同步/异步 SAM3 封装；异步版本后台线程持有 CUDA 模型，忙时丢帧且只保留最新完成结果。
-- `Foundationpose_for_VR/src/modules/yoloe26.py`
+- `EgoAnchor_Python/src/modules/yoloe26.py`
   - YOLOE-26 语义分割 fallback。
-- `Foundationpose_for_VR/src/modules/fast_foundationstereo.py`
+- `EgoAnchor_Python/src/modules/fast_foundationstereo.py`
   - FFS 实时深度；支持 PyTorch 与 TensorRT。
-- `Foundationpose_for_VR/src/modules/foundationpose.py`
+- `EgoAnchor_Python/src/modules/foundationpose.py`
   - FoundationPose register、track、visualize 封装。
-- `Foundationpose_for_VR/src/modules/cutie.py`
+- `EgoAnchor_Python/src/modules/cutie.py`
   - 可选 2D mask tracker，用于当前帧 mask 传播和可选 bbox 中心辅助修正。
-- `Foundationpose_for_VR/src/zmq_utils/payload/protocol_contract.json`
+- `EgoAnchor_Python/src/zmq_utils/payload/protocol_contract.json`
   - Python/Unity 协议契约；改 topic、字段或坐标约定时必须同步更新。
 
 ## 网络协议
@@ -201,7 +201,7 @@ HWM 经验：
 
 ## 标定、K 映射与深度
 
-- `pose_server.py` 将收到的 `quest_camera_info` 保存到 `Foundationpose_for_VR/Calibration/cache/camera_info_latest.json`。
+- `pose_server.py` 将收到的 `quest_camera_info` 保存到 `EgoAnchor_Python/Calibration/cache/camera_info_latest.json`。
 - 若新旧核心标定不同，旧 latest 备份为 `camera_info_<timestamp>.json`。
 - 核心比较排除 `_received_at` 与 `sender_mono_ms`。
 - `pipeline.calibration.camera_source="network" + preload_camera_cache=true`：先用缓存预初始化，收到网络标定后校验/刷新。
@@ -275,7 +275,7 @@ OpenCV 热键：
 
 ## 环境
 
-Python 环境由 `Foundationpose_for_VR/pixi.toml` 管理：
+Python 环境由 `EgoAnchor_Python/pixi.toml` 管理：
 
 - Python 3.12
 - CUDA 12.8
@@ -304,7 +304,7 @@ FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；若 Found
 - `Sam3MaskResult.source_image_bgr` 用于保证异步 SAM3 mask 与初始化 Cutie 的 RGB 帧一致，避免 async mask/RGB 错配。
 - `AsyncSam3Masker.reset_runtime(min_frame_id=...)` 会清理 stale latest/pending，并拒绝 reset 前 in-flight 旧帧结果；按 `r` 重置后不要用旧 mask register。
 - 端口已迁移到 `15557/15556`，不要恢复旧默认 `5556/5557`。
-- `.gitignore` 应忽略 `.dotnet/`、Python `__pycache__/`、`*.py[cod]`、`Foundationpose_for_VR/Calibration/cache/camera_info_latest.json` 和 `camera_info_*.json`。
+- `.gitignore` 应忽略 `.dotnet/`、Python `__pycache__/`、`*.py[cod]`、`EgoAnchor_Python/Calibration/cache/camera_info_latest.json` 和 `camera_info_*.json`。
 
 ## 不要恢复的旧内容
 
