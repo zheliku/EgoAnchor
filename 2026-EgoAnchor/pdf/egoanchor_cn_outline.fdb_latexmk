@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex pdf/egoanchor_cn_outline"] 1778602491.97303 "pdf/egoanchor_cn_outline.aux" "pdf/egoanchor_cn_outline.bbl" "pdf/egoanchor_cn_outline" 1778602579.85464 0
+["bibtex pdf/egoanchor_cn_outline"] 1778602491.97303 "pdf/egoanchor_cn_outline.aux" "pdf/egoanchor_cn_outline.bbl" "pdf/egoanchor_cn_outline" 1778603789.3265 0
   "./abbrv-doi-hyperref-narrow.bst" 1707947791 27292 0c40562748b6b2edd14427a7d0b858a7 ""
   "./egoanchor_cn_refs.bib" 1778588178 758 d923c40199b86dcc98cd2dcbbc635a32 ""
-  "pdf/egoanchor_cn_outline.aux" 1778602578 6357 a81a861c20220379a3e49292af56aede "pdflatex"
+  "pdf/egoanchor_cn_outline.aux" 1778603788 6357 a81a861c20220379a3e49292af56aede "pdflatex"
   (generated)
   "pdf/egoanchor_cn_outline.bbl"
   "pdf/egoanchor_cn_outline.blg"
   (rewritten before read)
-["pdflatex"] 1778602577.58414 "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/egoanchor_cn_outline.tex" "pdf/egoanchor_cn_outline.pdf" "egoanchor_cn_outline" 1778602579.85497 0
+["pdflatex"] 1778603787.04802 "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/egoanchor_cn_outline.tex" "pdf/egoanchor_cn_outline.pdf" "egoanchor_cn_outline" 1778603789.32684 0
   "c:/Windows/Fonts/msyh.ttc" 1755606861 19704352 1e10e74402e59d54499af795caf0b135 ""
   "c:/Windows/Fonts/simhei.ttf" 1769749036 9745792 5c7fd3058dea9b77be5049ff7efa9f34 ""
   "c:/Windows/Fonts/simsun.ttc" 1769749036 18316748 0ba67eea91ba3af0ac4836d0e922d011 ""
@@ -294,12 +294,12 @@
   "e:/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1755618610 5512713 1afc121bf1c2501145eca4203112aa46 ""
   "e:/texlive/2025/texmf-var/web2c/pdftex/pdflatex.fmt" 1755618785 3346177 addaa862d13f839520956e64971f9d5b ""
   "e:/texlive/2025/texmf.cnf" 1755618598 713 e69b156964470283e0530f5060668171 ""
-  "egoanchor_cn_outline.tex" 1778602577 16789 2af95e5e634ce6e3b5cac5aef53cac57 ""
-  "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/egoanchor_cn_outline.tex" 1778602577 16789 2af95e5e634ce6e3b5cac5aef53cac57 ""
-  "pdf/egoanchor_cn_outline.aux" 1778602578 6357 a81a861c20220379a3e49292af56aede "pdflatex"
+  "egoanchor_cn_outline.tex" 1778603786 16810 a7d60bea297b2db66c743b89a94213fd ""
+  "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/egoanchor_cn_outline.tex" 1778603786 16810 a7d60bea297b2db66c743b89a94213fd ""
+  "pdf/egoanchor_cn_outline.aux" 1778603788 6357 a81a861c20220379a3e49292af56aede "pdflatex"
   "pdf/egoanchor_cn_outline.bbl" 1778602492 94 02b0ca6c08a872238d709d37cd6ddeb4 "bibtex pdf/egoanchor_cn_outline"
-  "pdf/egoanchor_cn_outline.brf" 1778602578 0 d41d8cd98f00b204e9800998ecf8427e "pdflatex"
-  "pdf/egoanchor_cn_outline.out" 1778602578 5289 a191aa1dc18f6e3aaa9dfed7c9452862 "pdflatex"
+  "pdf/egoanchor_cn_outline.brf" 1778603788 0 d41d8cd98f00b204e9800998ecf8427e "pdflatex"
+  "pdf/egoanchor_cn_outline.out" 1778603788 5289 a191aa1dc18f6e3aaa9dfed7c9452862 "pdflatex"
   "vgtc.cls" 1707947791 35448 54bdac3a09617e4b0913fc2f7a4a00d4 ""
   (generated)
   "pdf/egoanchor_cn_outline.aux"
