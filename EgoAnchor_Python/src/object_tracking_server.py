@@ -1,4 +1,4 @@
-"""Quest pose server entrypoint.
+"""Quest object tracking server entrypoint.
 
 职责边界：
 - 本文件只负责参数解析、资源创建、主循环编排和退出清理。
@@ -15,21 +15,21 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Protocol
 
-# 允许直接脚本运行：python src/pose_server.py
+# 允许直接脚本运行：python src/object_tracking_server.py
 if __package__ is None or __package__ == "":
     SRC_DIR = Path(__file__).resolve().parent
     if str(SRC_DIR) not in sys.path:
         sys.path.append(str(SRC_DIR))
 
-from pipeline.quest_pipeline import (  # noqa: E402
-    PosePipelineOutput,
-    QuestStereoPosePipeline,
-    build_quest_pipeline,
+from pipeline.quest_object_tracking_pipeline import (  # noqa: E402
+    TrackingPipelineOutput,
+    QuestObjectTrackingPipeline,
+    build_quest_object_tracking_pipeline,
 )
 from config import load_runtime_config, print_effective_config  # noqa: E402
 from server import (  # noqa: E402
-    PoseServerDebugView,
-    PoseServerStats,
+    TrackingServerDebugView,
+    TrackingServerStats,
     handle_debug_key,
     save_camera_info,
 )
@@ -48,7 +48,7 @@ class _KeyboardControllablePipeline(Protocol):
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构建入口级 CLI，只负责选择/打印 TOML 配置。"""
-    parser = argparse.ArgumentParser(description="Quest 位姿服务：TOML 配置入口。")
+    parser = argparse.ArgumentParser(description="Quest object tracking server：TOML 配置入口。")
     parser.add_argument(
         "--config",
         type=Path,
@@ -74,7 +74,7 @@ def _clip_alpha(value: float) -> float:
 
 def _maybe_save_camera_info(
     *,
-    pipeline: QuestStereoPosePipeline,
+    pipeline: QuestObjectTrackingPipeline,
     camera_cache_dir: Path,
     last_saved_version: int,
 ) -> int:
@@ -91,12 +91,12 @@ def _maybe_save_camera_info(
     return last_saved_version
 
 
-def _log_waiting_state(pipeline: QuestStereoPosePipeline) -> None:
+def _log_waiting_state(pipeline: QuestObjectTrackingPipeline) -> None:
     """等待首帧时输出低频诊断，区分缺标定还是缺 stereo。"""
     input_state = pipeline.camera.get_input_state()
     recv_stats = pipeline.camera.get_stats()
     logging.info(
-        "[pose_server] waiting... calib_ready=%s camera_info=%s stereo=%s recv=%s decoded=%s",
+        "[object_tracking_server] waiting... calib_ready=%s camera_info=%s stereo=%s recv=%s decoded=%s",
         "YES" if getattr(pipeline, "_calib_initialized", False) else "NO",
         "OK" if input_state.has_camera_info else "None",
         "OK" if input_state.has_stereo else "None",
@@ -108,7 +108,7 @@ def _log_waiting_state(pipeline: QuestStereoPosePipeline) -> None:
 def _auto_reset_if_due(
     *,
     pipeline: _KeyboardControllablePipeline,
-    stats: PoseServerStats,
+    stats: TrackingServerStats,
     reset_interval_sec: float,
     last_reset_t: float,
 ) -> float:
@@ -122,11 +122,11 @@ def _auto_reset_if_due(
 
     pipeline.reset_tracking_state()
     stats.record_reset()
-    logging.info("[pose_server] auto reset tracking (interval=%.2fs)", reset_interval_sec)
+    logging.info("[object_tracking_server] auto reset tracking (interval=%.2fs)", reset_interval_sec)
     return now_t
 
 
-def _encode_pose_payload(encoder: PoseEncoder, output: PosePipelineOutput) -> bytes | None:
+def _encode_pose_payload(encoder: PoseEncoder, output: TrackingPipelineOutput) -> bytes | None:
     """把 pipeline 输出封装成 Unity 可消费的 PoseMsg payload。"""
     return encoder.encode(
         timestamp_ms=output.timestamp_ms,
@@ -148,8 +148,8 @@ def _encode_pose_payload(encoder: PoseEncoder, output: PosePipelineOutput) -> by
 
 def _record_latency(
     *,
-    stats: PoseServerStats,
-    output: PosePipelineOutput,
+    stats: TrackingServerStats,
+    output: TrackingPipelineOutput,
     loop_t0: float,
     after_run_t: float,
     send_ms: float,
@@ -173,9 +173,9 @@ def _record_latency(
     )
 
 
-def _log_publish_stats(stats: PoseServerStats, phase: str) -> None:
+def _log_publish_stats(stats: TrackingServerStats, phase: str) -> None:
     logging.info(
-        "[pose_server] frames=%d sent=%d dropped=%d pub_fps=%.1f pose_ratio=%.1f%% drop=%.1f%% phase=%s "
+        "[object_tracking_server] frames=%d sent=%d dropped=%d pub_fps=%.1f pose_ratio=%.1f%% drop=%.1f%% phase=%s "
         "lat(ms):quest_rx->unity_tx=%.1f run=%.1f wait=%.1f proc=%.1f send=%.2f reset=%d",
         stats.frame_count,
         stats.sent_count,
@@ -193,8 +193,8 @@ def _log_publish_stats(stats: PoseServerStats, phase: str) -> None:
     )
 
 
-def run_pose_server(cfg: SimpleNamespace) -> None:
-    """运行端到端位姿服务主循环。"""
+def run_object_tracking_server(cfg: SimpleNamespace) -> None:
+    """运行端到端 object tracking 服务主循环。"""
     endpoint = f"tcp://{cfg.network.sender.host}:{int(cfg.network.sender.port)}"
     topic = str(cfg.network.sender.topic)
     log_interval = max(int(cfg.debug.publish_log_interval), 1)
@@ -205,7 +205,7 @@ def run_pose_server(cfg: SimpleNamespace) -> None:
     wait_log_interval_sec = max(float(cfg.debug.wait_log_interval_sec), 0.1)
     camera_cache_dir = Path(cfg.pipeline.calibration.camera_cache_dir)
 
-    pipeline = build_quest_pipeline(cfg)
+    pipeline = build_quest_object_tracking_pipeline(cfg)
     pipeline.set_stage(int(cfg.server.run_stage))
 
     sender = PayloadSender(
@@ -214,7 +214,7 @@ def run_pose_server(cfg: SimpleNamespace) -> None:
         bind=True,
     )
     encoder = PoseEncoder()
-    stats = PoseServerStats(latency_alpha=_clip_alpha(cfg.debug.latency_ema_alpha))
+    stats = TrackingServerStats(latency_alpha=_clip_alpha(cfg.debug.latency_ema_alpha))
 
     calib_ready_at_start = bool(getattr(pipeline, "_calib_initialized", False))
     waiting_text = (
@@ -222,7 +222,7 @@ def run_pose_server(cfg: SimpleNamespace) -> None:
         if calib_ready_at_start
         else "Waiting for Quest camera_info & stereo..."
     )
-    debug_view = PoseServerDebugView(enabled=local_debug, waiting_text=waiting_text)
+    debug_view = TrackingServerDebugView(enabled=local_debug, waiting_text=waiting_text)
 
     last_saved_camera_info_version = 0
     last_reset_t = time.perf_counter()
@@ -231,7 +231,7 @@ def run_pose_server(cfg: SimpleNamespace) -> None:
     try:
         pipeline.start()
         logging.info(
-            "[pose_server] started recv=tcp://%s:%d pub=%s topic=%s stage=%d camera_source=%s calib_ready=%s preload_cache=%s",
+            "[object_tracking_server] started recv=tcp://%s:%d pub=%s topic=%s stage=%d camera_source=%s calib_ready=%s preload_cache=%s",
             cfg.network.receiver.listen_host,
             int(cfg.network.receiver.listen_port),
             endpoint,
@@ -309,7 +309,7 @@ def run_pose_server(cfg: SimpleNamespace) -> None:
             if stats.frame_count % log_interval == 0:
                 _log_publish_stats(stats, output.phase)
     except KeyboardInterrupt:
-        logging.info("\n[pose_server] interrupted by user")
+        logging.info("\n[object_tracking_server] interrupted by user")
     finally:
         pipeline.stop()
         sender.close()
@@ -323,7 +323,7 @@ def main(argv: list[str] | None = None) -> None:
     if cli_args.print_config:
         print_effective_config(cfg)
         return
-    run_pose_server(cfg)
+    run_object_tracking_server(cfg)
 
 
 if __name__ == "__main__":

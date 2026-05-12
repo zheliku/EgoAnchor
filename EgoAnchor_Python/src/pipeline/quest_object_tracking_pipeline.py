@@ -1,4 +1,4 @@
-"""Quest 结构化 Pipeline：对外提供位姿 API，并在 main 中演示可视化。"""
+"""Quest object tracking pipeline: output per-frame 6D object poses."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-# 允许直接以脚本方式运行：python src/pipeline/quest_pipeline.py
+# 允许直接以脚本方式运行：python src/pipeline/quest_object_tracking_pipeline.py
 if __package__ is None or __package__ == "":
     SRC_DIR = Path(__file__).resolve().parents[1]
     if str(SRC_DIR) not in sys.path:
@@ -65,7 +65,7 @@ class FrameDiagnostics:
 
 
 @dataclass
-class PosePipelineOutput:
+class TrackingPipelineOutput:
     """Pipeline API 输出：面向外部传输和上层业务。"""
 
     timestamp_ms: float
@@ -224,13 +224,13 @@ def _generate_cube_symmetry_tfs() -> np.ndarray:
 # =========================
 
 
-class QuestStereoPosePipeline:
+class QuestObjectTrackingPipeline:
     """
-    Quest 位姿 Pipeline（结构化独立实现）。
+    Quest object tracking pipeline（结构化独立实现）。
 
     说明：
     1. `start()`：启动网络接收并重置运行状态。
-    2. `run()`：处理一帧并返回 `PosePipelineOutput`。
+    2. `run()`：处理一帧并返回 `TrackingPipelineOutput`。
     3. `stop()`：释放接收器资源。
 
     标定初始化策略：
@@ -296,12 +296,12 @@ class QuestStereoPosePipeline:
         calib: QuestStereoCalibration | None = None,
     ) -> None:
         """
-        初始化 Quest 位姿 Pipeline。
+        初始化 Quest object tracking pipeline。
 
         参数：
         - cfg: TOML 运行配置。
         - camera: Quest 多 Topic 接收模块。
-        - segmenter: 2D 分割模块，可为 SAM3/Yoloe26/异步 SAM3。
+        - segmenter: 2D 分割模块，当前主线为 YOLOE-26；SAM3/AsyncSam3Masker 仅作为可选历史路径保留。
         - ffs: 双目深度模块。
         - cutie_tracker: 可选 2D 跟踪模块。
         - calib: 可选预加载的 camera_info 标定缓存。
@@ -411,7 +411,7 @@ class QuestStereoPosePipeline:
         """若网络 camera_info 与预加载缓存不同，则刷新 K 与 PoseEstimator。
 
         使用场景：
-        - pose_server 启动时可先用本地 camera_info_latest.json 预初始化 FoundationPose；
+        - object_tracking_server 启动时可先用本地 camera_info_latest.json 预初始化 FoundationPose；
         - 后续真正收到 Quest 端 camera_info 后，再用该方法校验是否需要切换到网络标定；
         - 若已经进入跟踪，刷新标定会重置跟踪状态，保证后续 pose 使用正确 K。
         """
@@ -560,7 +560,7 @@ class QuestStereoPosePipeline:
             window_name,
         )
 
-    def _log_stats_if_due(self, output: PosePipelineOutput) -> None:
+    def _log_stats_if_due(self, output: TrackingPipelineOutput) -> None:
         """按固定间隔打印统计信息，便于线上观察性能。"""
         if self._frame_count % self.stats_interval != 0:
             return
@@ -819,7 +819,7 @@ class QuestStereoPosePipeline:
         return cutie_mask, cutie_bbox
 
 
-    def run(self, return_debug: bool = False) -> PosePipelineOutput | None:
+    def run(self, return_debug: bool = False) -> TrackingPipelineOutput | None:
         """
         执行一帧 Pipeline，并返回位姿结果。
 
@@ -882,7 +882,7 @@ class QuestStereoPosePipeline:
         stage_cutie_mask: np.ndarray | None = None
         stage_cutie_bbox = [-1, -1, 0, 0]
 
-        # 阶段2：通用 2D 分割。默认 SAM3 异步低频检测；YOLOE 仍可作为 fallback。
+        # 阶段2：通用 2D 分割。当前默认 YOLOE-26；SAM3/AsyncSam3Masker 仅作为可选路径保留。
         if self.stage >= 2:
             segmenter_result = None
             segmenter_name = str(self.cfg.module.segmenter.type).lower()
@@ -983,7 +983,7 @@ class QuestStereoPosePipeline:
                     selected_index=diag.segmenter_selected_index,
                 )
 
-            # SAM3 异步结果可能来自旧帧，默认仅作为 Cutie 种子；当前帧 register 优先使用 Cutie 传播 mask。
+            # SAM3 异步结果可能来自旧帧；启用该历史路径时，当前帧 register 优先使用 Cutie 传播 mask。
             if isinstance(self.segmenter, AsyncSam3Masker) and self._cutie_initialized:
                 stage_cutie_mask, stage_cutie_bbox = self._run_cutie_on_current_frame(
                     left_rgb=left_rgb,
@@ -1222,7 +1222,7 @@ class QuestStereoPosePipeline:
 
             debug_data = (dashboard_bgr, stereo_vis_bgr)
 
-        output = PosePipelineOutput(
+        output = TrackingPipelineOutput(
             timestamp_ms=stereo_timestamp_ms,
             frame_id=stereo.frame_id,
             stage=self.stage,
@@ -1291,8 +1291,8 @@ def _load_cached_calib(cfg: SimpleNamespace) -> QuestStereoCalibration | None:
     return None
 
 
-def build_quest_pipeline(cfg: SimpleNamespace) -> QuestStereoPosePipeline:
-    """构建 Quest Pipeline 对象（API 工厂函数）。"""
+def build_quest_object_tracking_pipeline(cfg: SimpleNamespace) -> QuestObjectTrackingPipeline:
+    """构建 Quest object tracking pipeline 对象（API 工厂函数）。"""
     # 校验模型文件（仅校验始终需要的）。
     model_paths = [
         cfg.module.ffs.model_path,
@@ -1394,7 +1394,7 @@ def build_quest_pipeline(cfg: SimpleNamespace) -> QuestStereoPosePipeline:
         else None
     )
 
-    return QuestStereoPosePipeline(
+    return QuestObjectTrackingPipeline(
         cfg=cfg,
         camera=camera,
         segmenter=segmenter,
@@ -1404,9 +1404,9 @@ def build_quest_pipeline(cfg: SimpleNamespace) -> QuestStereoPosePipeline:
     )
 
 
-def run_quest_pipeline(cfg: SimpleNamespace) -> None:
+def run_quest_object_tracking_pipeline(cfg: SimpleNamespace) -> None:
     """示例运行函数：循环调用 API，并在这里展示图像。"""
-    pipeline = build_quest_pipeline(cfg)
+    pipeline = build_quest_object_tracking_pipeline(cfg)
     pipeline.set_stage(int(cfg.server.run_stage))
     pipeline.start()
 
@@ -1461,7 +1461,7 @@ def main(argv: list[str] | None = None) -> None:
     if cli_args.print_config:
         print_effective_config(cfg)
         return
-    run_quest_pipeline(cfg)
+    run_quest_object_tracking_pipeline(cfg)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,255 @@
+\documentclass[review]{vgtc}
+
+\graphicspath{{figures/}{pictures/}{images/}{./}}
+
+\usepackage[UTF8]{ctex}
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{mathptmx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\onlineid{0}
+\vgtccategory{Research}
+% vgtc 模板会在这里统一插入 hyperref / cleveref 等兼容包，
+% 因此不要再手动 \usepackage{hyperref} 或 \usepackage{cleveref}。
+\vgtcinsertpkg
+
+\title{EgoAnchor：面向透视混合现实的帧对齐真实物体锚定系统}
+
+\author{作者待定}
+
+\teaser{
+  \centering
+  \fbox{\rule{0pt}{2.0in}\rule{0.95\linewidth}{0pt}}
+  \caption{系统总览占位。建议最终展示 Quest 透视双目采集、外部 6DoF 感知链路、基于 frame id 的发送帧相机位姿回查，以及 Unity 世界坐标中的真实物体锚定结果。}
+  \label{fig:teaser}
+}
+
+\abstract{
+我们提出 EgoAnchor，一套面向 passthrough 场景的真实物体锚定系统，面向具有先验 3D 模型的目标物体，仅依赖头戴式显示器的双目相机输入实现对象级 6DoF 姿态跟踪，并将其转化为稳定的世界坐标锚定结果。系统由 XR 前端与追踪后端组成，结合双目图像采集、语义定位、深度估计以及对象级 6DoF 姿态跟踪，通过帧对齐锚定机制将异步返回的相机坐标姿态一致映射到对应观测帧的应用世界坐标，从而缓解头动与推理时延耦合导致的空间错位。此外，EgoAnchor 结合几何一致性约束、低时延处理与可靠性感知更新，以支持头动、遮挡和跟踪退化条件下的持续锚定。本文将从锚定精度、稳定性、端到端时延与恢复能力等维度对系统进行评估，并分析异步 6DoF 感知转化为可用 MR 锚定结果的关键条件。}
+
+\keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 异步感知, 低延迟系统}
+
+\begin{document}
+
+% \firstsection{引言}
+\maketitle
+
+\section{引言}
+
+透视式混合现实中的对象高亮、操作指导与协作标注，依赖虚拟内容对真实物体的稳定附着。对于这类应用，系统真正需要的并不是单帧图像中的 6DoF 位姿数值，而是一个能够在头显运动、视角变化和短时遮挡下持续保持一致的世界坐标锚定结果。现有 XR 平台已经提供 world anchors、image tracking、reference objects 和 fiducial markers 等多种锚定机制，它们适用于静态内容放置、受控目标注册或带标记场景；与此同时，视觉领域的 6DoF 物体姿态估计与跟踪方法也已经能够处理具有先验几何模型的目标物体。然而，这两类技术路径之间仍存在明显空缺：前者难以直接覆盖未加标记真实物体的持续锚定，后者则主要评价相机坐标系下的逐帧误差，对于感知结果如何进入 MR 应用层并影响世界坐标中的锚定质量，讨论仍然有限。
+
+在 passthrough MR 中，高质量对象感知与交互实时性之间存在天然张力。为了获得更可靠的 6DoF 姿态估计，系统往往需要依赖头显外部的感知计算资源；然而，这种前后端分离会使观测、推理与锚定更新在时间上发生解耦，即使相机坐标系中的姿态估计是准确的，最终应用到世界坐标中的真实物体锚定仍可能因头动与时延而产生可见偏差。除此之外，真实物体锚定还需要同时处理感知与应用之间的几何一致性，以及遮挡、快速运动和跟踪退化条件下的恢复能力。这些挑战表明，passthrough MR 中的真实物体锚定并不是姿态估计结果的直接保证，而是一个需要在时间、几何与恢复三个层面协同设计的系统问题。
+
+为此，本文提出 EgoAnchor，一套面向 passthrough MR 的真实物体锚定系统。该系统由 XR 前端与追踪后端组成：前端负责采集头戴双目图像、相机信息和观测帧位姿，后端执行语义定位、双目深度估计以及对象级 6DoF 姿态跟踪。EgoAnchor 围绕世界一致、可恢复的真实物体锚定目标组织为一条面向异步感知的系统闭环。该闭环以\textbf{帧对齐锚定}为关键机制，并结合几何一致性约束、低时延处理与可靠性感知更新，使异步返回的对象级 6DoF 姿态能够被稳定地应用为世界坐标中的真实物体锚定结果。
+
+我们通过系统评估分析 EgoAnchor 的有效性，并将评价重点从传统的逐帧 pose accuracy 扩展到世界坐标中的锚定质量。除位姿误差外，本文进一步关注锚定误差、稳定性、端到端时延与恢复能力，并通过关键基线与消融实验分析帧对齐、更新策略与几何映射对系统行为的影响。本文旨在验证 EgoAnchor 在真实物体锚定任务中的系统可用性，并分析世界一致性、更新稳定性与恢复能力之间的关键关系。
+
+本文的贡献如下：
+\begin{enumerate}
+  \item 提出一种面向异步 passthrough MR 的\textbf{真实物体锚定闭环方法}，以帧对齐锚定为关键机制，将相机坐标系中的对象级 6DoF 姿态稳定转化为世界一致的真实物体锚定结果。
+  \item 实现 \textbf{EgoAnchor} 端到端系统，将头戴透视双目感知、外部对象级姿态跟踪与应用层锚定整合为一条可运行、可分析的完整闭环。
+  \item 建立一套面向 MR object anchoring 的\textbf{评估协议}，通过关键基线与消融，从锚定误差、稳定性、时延与恢复能力等维度分析系统可用性。
+\end{enumerate}
+
+\section{相关工作}
+
+\subsection{头戴式 MR 中的真实物体感知与锚定}
+本节综述 passthrough MR、object-centric interaction 和 world-locked content placement 的代表性工作，说明真实物体作为锚定对象在任务语义和交互反馈上的特殊性，并总结相关研究对世界一致性、稳定性与可用性的评价方式。
+
+\subsection{静态 trackables、marker 与对象级锚定}
+本节讨论基于 planes/world anchors 的空间锚定、基于 image/reference object 的预定义 trackables，以及基于 fiducial markers 的仪器化定位，明确本文设定与这些路径在先验条件、部署方式和适用场景上的差异。
+
+\subsection{6DoF 物体姿态估计与跟踪}
+本节梳理基于 RGB、RGB-D、双目和 CAD 模型的 6DoF pose estimation / tracking 工作，聚焦 register / track / re-register 结构、恢复机制以及已知模型假设与本文系统的关系。
+
+\subsection{低时延 XR 感知系统与异步处理}
+本节回顾 XR 场景中的跨进程感知、实时通信、late update、时延补偿与异步视觉管线，为本文的系统视角建立 VR 社区背景。
+
+\subsection{小结}
+本节最后总结本文与现有工作的关系：EgoAnchor 聚焦异步感知进入 MR 应用层后的时间对齐、坐标一致性与恢复策略。
+
+\section{问题定义与系统概览}
+
+\subsection{问题设定与设计目标}
+本节定义输入、输出与边界条件：输入为头戴透视双目图像、相机信息和发送帧相机位姿，输出为 Unity 世界坐标中可持续驱动交互内容的真实物体 anchor。随后给出系统设计目标：世界一致性、低时延、可恢复性与可分析性。
+
+\subsection{总体架构}
+EgoAnchor 的主链路包括四个部分：
+\begin{enumerate}
+  \item Quest / Unity 侧的双目透视图像与相机信息采集；
+  \item Python 服务端的 2D 分割、双目深度与 6DoF 姿态估计；
+  \item 基于 ZMQ + MessagePack 的多 topic 低时延传输；
+  \item Unity 侧基于发送帧相机姿态回查的世界坐标锚定应用。
+\end{enumerate}
+
+\subsection{运行流程概述}
+本节配合总览图给出时序化流程说明，展示采集、编码、发送、推理、发布与锚定应用之间的依赖关系，并统一 frame id、时间戳和关键状态变量的符号。
+
+\section{方法}
+
+\subsection{从逐帧 pose 到 world-consistent anchoring}
+本节给出方法总定义，区分相机坐标系 pose 与 Unity 世界坐标 anchor，并说明后者为何构成 MR 系统中的最终状态变量。
+
+\subsection{头戴式双目采集与相机信息传输}
+本节描述 Quest 侧如何获取左右透视图、相机静态信息与发送帧姿态，并通过多 topic PUB/SUB 管线传输给 Python 服务端，说明图像与 camera info 分 topic 发送的必要性，以及 frame id 作为跨进程时序对齐契约字段的作用。
+
+\subsection{相机内参与处理分辨率映射}
+本节描述如何将 Quest 原始 camera info 中的内参与 active array 信息映射到算法处理分辨率，并分析 center crop 假设对双目深度、mask 对齐与姿态估计的影响，为后续标定消融建立清晰变量定义。
+
+\subsection{语义定位：目标初始化与在线更新}
+本节介绍目标初始化与在线更新的语义定位机制：
+\begin{enumerate}
+  \item 基于 prompt 的目标级分割，用于初始化目标区域；
+  \item 异步分割结果管理，用于在不阻塞主 pipeline 的前提下提供最新可用目标种子。
+\end{enumerate}
+本节强调系统对目标的语义可指向性，以及这一能力如何在连续运行中维持稳定的目标初始化与在线更新。
+
+\subsection{度量几何：双目深度估计}
+本节阐明双目深度模块的系统角色，并定义深度范围裁剪、有效深度比例和 depth-in-mask 等核心统计量，说明它们如何为世界坐标锚定提供度量几何约束。
+
+\subsection{对象级姿态跟踪与恢复}
+本节介绍 register、track 与 re-register 的工作流程，重点说明：
+\begin{enumerate}
+  \item 为什么初始化采用 register；
+  \item 为什么连续阶段采用 track；
+  \item 为什么在 mask 有效但 track 不可信时需要 re-register；
+  \item 为什么本文属于 markerless、model-based 的已知目标跟踪设定；
+  \item 为什么恢复能力会直接影响 MR 场景中的持续锚定质量。
+\end{enumerate}
+
+\subsection{帧对齐的世界坐标锚定}
+本节形式化定义以下三个量：
+\begin{enumerate}
+  \item 发送双目帧时缓存的左目相机世界姿态；
+  \item Python 回传的相机局部物体姿态；
+  \item 基于相同 frame id 回查相机 pose，并将局部 pose 转回 Unity 世界坐标的过程。
+\end{enumerate}
+本节进一步论证：若直接使用回包到达时刻的头显姿态应用 pose，在快速头动和外部推理延迟条件下会产生显著的世界坐标错位。
+
+\subsection{可靠性感知的锚定更新与恢复}
+本节承接系统方法贡献，将锚定更新写成轻量且明确的决策策略。最小版本包括：
+\begin{itemize}
+  \item \textbf{输入：} 姿态可靠性、深度有效性、tracking 状态、头显运动强度、回包年龄；
+  \item \textbf{输出：} Update、Smooth、Hold、Reacquire 四种锚定模式；
+  \item \textbf{原则：} 错误更新通常比短时保持更糟；系统应在高不确定性时抑制错误 anchor 更新。
+\end{itemize}
+若最终实现采用规则式状态机，本节需要明确给出其决策依据、状态切换条件与对任务可用性的影响。
+
+\section{实现细节与复现信息}
+
+\subsection{硬件与软件环境}
+本节记录 Quest 型号、PC GPU、Python / Unity / CUDA / TensorRT 版本和网络部署方式，使系统条件与运行边界清晰可复现。
+
+\subsection{通信协议与工程约束}
+本节简述 ZMQ PUB/SUB、多 topic latest-drain、MessagePack 契约、topic 设计与高水位策略，说明工程实现如何支撑低时延与一致性目标。
+
+\subsection{调试与状态观测}
+本节说明系统如何输出 stage、phase、timing、latency、depth-in-mask 等指标，并解释这些观测量如何支撑实验分析与失效诊断。
+
+\section{评估设计}
+
+\subsection{研究问题}
+评估围绕以下研究问题展开：
+\begin{itemize}
+  \item \textbf{RQ1：} EgoAnchor 能否在 passthrough MR 中实现面向未加标记、已知几何模型真实物体的世界一致锚定？
+  \item \textbf{RQ2：} 帧对齐机制对世界一致锚定的误差有多大影响？
+  \item \textbf{RQ3：} 可靠性感知的锚定更新与恢复机制是否优于始终更新的策略？
+  \item \textbf{RQ4：} 标定映射与感知栈设计对最终锚定质量有多大影响？
+  \item \textbf{RQ5：} 在头动、遮挡和感知失败条件下，系统的时延、恢复能力与任务可用性如何？
+\end{itemize}
+
+\subsection{实验设置}
+本节说明实验对象、场景、采样与 ground truth 获取方式，重点写清数据采集条件与统计协议：
+\begin{enumerate}
+  \item 物体种类与数量；
+  \item 标注或 ground truth 获取方式；
+  \item 场景条件（静态、快速头动、部分遮挡、出视野再回来等）；
+  \item 每组实验的采样次数与统计方法。
+\end{enumerate}
+
+\subsection{评价指标}
+评价指标至少包括以下五类：
+\begin{itemize}
+  \item 位姿精度：translation / rotation error、ADD / ADD-S；
+  \item 系统时延：capture、segmentation、depth、pose、network、Unity apply；
+  \item 鲁棒性：tracking survival、recovery success rate、recovery time；
+  \item 锚定稳定性：world-space jitter、anchor drift；
+  \item 任务可用性：完成时间、对齐误差、主观稳定性评分。
+\end{itemize}
+
+\subsection{基线与消融}
+关键对比包括：
+\begin{enumerate}
+  \item 无 frame alignment vs. 有 frame alignment；
+  \item Always Update vs. reliability-aware anchoring；
+  \item 无 recovery vs. 有 recovery；
+  \item fiducial marker 基线（如 AprilTag / ArUco）作为仪器化参考或上界；
+  \item 不同感知栈组合，例如分割/跟踪初始化方案差异；
+  \item 不同标定映射策略；
+  \item 不同目标初始化 / 跟踪组合；
+  \item 若平台条件允许，可加入预定义 trackables 与本文对象级锚定的定性讨论。
+\end{enumerate}
+
+\section{实验结果}
+
+\subsection{姿态精度与锚定精度}
+本节报告物体 pose 精度与最终世界锚定误差，明确区分相机坐标下的 pose 误差与 Unity 世界坐标中的 anchor 误差，并分析两者之间的关系。
+
+\subsection{端到端时延分析}
+本节展示分阶段 latency breakdown，并讨论哪些时延项最直接影响锚定稳定性与恢复体验。
+
+\subsection{帧对齐机制的效果}
+本节专门讨论 frame alignment 的收益，通过快速头动条件下的可视化与定量结果展示无对齐和有对齐的差异。
+
+\subsection{自适应锚定控制的效果}
+本节报告 Update / Smooth / Hold / Reacquire 等策略对稳定性、恢复性和任务表现的影响，并分析不同条件下各策略的适用范围。
+
+\subsection{鲁棒性与恢复能力}
+本节展示遮挡、出视野和快速运动条件下的 tracking failure 与 re-register 表现，重点分析恢复成功率、恢复时间与失败模式。
+
+\subsection{用户或任务实验}
+若开展任务实验，本节报告真实物体高亮、标签附着或指认任务中的主客观结果，用以验证系统指标与实际可用性之间的关系。
+
+\section{讨论}
+
+\subsection{为什么单帧 pose 精度不足以解释 MR 可用性}
+本节总结本文最核心的系统观点：world-consistent anchoring 涉及时间、模块和坐标系之间的协同，需要在系统层面理解其误差来源与稳定性表现。
+
+\subsection{适用场景与失败模式}
+本节讨论以下适用场景与失败模式：
+\begin{itemize}
+  \item 目标过小、强反光、纹理贫乏时的失败情况；
+  \item 头动过快与 GPU 拥塞带来的时延上升；
+  \item 单物体设定对系统泛化性的限制。
+\end{itemize}
+
+\subsection{局限性与未来工作}
+本节讨论多物体扩展、头显端轻量部署、在线个性化、跨房间长期锚定等方向，并明确本文当前边界与后续工作空间。
+
+\section{结论}
+结论部分回到本文核心研究问题：如何将异步 6DoF object pose tracking 组织为稳定、世界一致且可恢复的真实物体锚定系统。写作重点应基于实验结果给出清晰回答，并总结系统设计带来的经验结论。
+
+\section{补充材料}
+建议提供：
+\begin{itemize}
+  \item 运行视频；
+  \item 系统示意图与更多实验可视化；
+  \item 配置文件与协议契约；
+  \item 若可公开，则提供关键代码、运行配置与复现说明。
+\end{itemize}
+
+\section{图像来源说明}
+若最终论文中使用外部图片、模型图或复现图，请在此统一说明来源与许可。
+
+\bibliographystyle{abbrv-doi-hyperref-narrow}
+\bibliography{egoanchor_cn_refs}
+
+\end{document}

@@ -7,7 +7,7 @@ from ..message.pose_msg import PoseMsg
 
 
 class PoseEncoder(PayloadEncoder):
-    """将 pose_server 的结构化输出编码为 Unity 可消费的单帧 payload。
+    """将 object_tracking_server 的结构化输出编码为 Unity 可消费的单帧 PoseMsg payload。
 
     该类只负责协议封包：
     - 把 4x4 numpy 位姿矩阵展平为 16 个浮点数；

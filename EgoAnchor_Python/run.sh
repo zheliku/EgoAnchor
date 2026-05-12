@@ -26,4 +26,4 @@ export TORCH_CUDA_ARCH_LIST="8.0"
 export QT_QPA_PLATFORM=offscreen
 
 cd /home/shining/jhl/projects/EgoAnchor/EgoAnchor_Python
-pixi run python -u src/pipeline/quest_pipeline.py
+pixi run python -u src/pipeline/quest_object_tracking_pipeline.py

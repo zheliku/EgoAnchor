@@ -1765,19 +1765,17 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  sourceTarget: {fileID: 960095797}
-  sourceTargetCacheSize: 512
+  m_EditorClassIdentifier: Assembly-CSharp::FrameAlignedObjectAnchor
   sourceCameraAccess: {fileID: 850615822}
-  applySourceCameraLensOffset: 1
+  cameraPoseCacheSize: 512
   processors: []
-  OnPoseReceived:
+  OnAnchorPoseResolved:
     m_PersistentCalls:
       m_Calls: []
-  OnBeforePoseApply:
+  OnBeforeAnchorApply:
     m_PersistentCalls:
       m_Calls: []
-  OnAfterPoseApply:
+  OnAfterAnchorApply:
     m_PersistentCalls:
       m_Calls: []
 --- !u!65 &864581801
@@ -1967,7 +1965,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 1824679901}
-        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
         m_MethodName: HandleFrameEncoded
         m_Mode: 0
         m_Arguments:
@@ -1979,7 +1977,7 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
       - m_Target: {fileID: 864581800}
-        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
         m_MethodName: HandleFrameEncoded
         m_Mode: 0
         m_Arguments:
@@ -3634,21 +3632,19 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  sourceTarget: {fileID: 960095797}
-  sourceTargetCacheSize: 512
+  m_EditorClassIdentifier: Assembly-CSharp::FrameAlignedObjectAnchor
   sourceCameraAccess: {fileID: 850615822}
-  applySourceCameraLensOffset: 1
+  cameraPoseCacheSize: 512
   processors:
   - {fileID: 1824679908}
   - {fileID: 1824679907}
-  OnPoseReceived:
+  OnAnchorPoseResolved:
     m_PersistentCalls:
       m_Calls: []
-  OnBeforePoseApply:
+  OnBeforeAnchorApply:
     m_PersistentCalls:
       m_Calls: []
-  OnAfterPoseApply:
+  OnAfterAnchorApply:
     m_PersistentCalls:
       m_Calls: []
 --- !u!65 &1824679903
@@ -3755,7 +3751,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 14ff3490c76f0364189b115caa1413fb, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseSmoother
+  m_EditorClassIdentifier: Assembly-CSharp::AnchorSmoother
   processorEnabled: 1
   positionSmoothSpeed: 3
   rotationSmoothSpeed: 3
@@ -3771,7 +3767,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7d91d7a8f09c48c1a3c3c4fe86d5e2a7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseKalmanFilter
+  m_EditorClassIdentifier: Assembly-CSharp::AnchorKalmanFilter
   processorEnabled: 1
   positionMeasurementNoise: 0.0004
   positionProcessNoise: 0.02
@@ -3982,8 +3978,8 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 1824679901}
-        m_TargetAssemblyTypeName: CubeFollow, Assembly-CSharp
-        m_MethodName: FollowTarget
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
+        m_MethodName: ApplyCameraPose
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -3994,8 +3990,8 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
       - m_Target: {fileID: 864581800}
-        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
-        m_MethodName: FollowTarget
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
+        m_MethodName: ApplyCameraPose
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

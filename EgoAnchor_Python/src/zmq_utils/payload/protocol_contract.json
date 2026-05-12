@@ -14,7 +14,7 @@
       "topics": ["quest_stereo", "quest_camera_info"]
     },
     "python_to_unity": {
-      "topic_owner": "Python pose_server",
+      "topic_owner": "Python object_tracking_server",
       "receiver": "Unity PayloadReceiver",
       "default_port": 15556,
       "topics": ["pose"]

@@ -30,7 +30,7 @@ public class QuestStereoEncoder : PayloadEncoder
     [SerializeField] private int debugLogInterval = 30;
 
     [Header("Events")]
-    [Tooltip("编码出有效帧后触发，参数为 frame_id 与左 Passthrough camera pose。可在 Inspector 绑定 PoseFollow.HandleFrameEncoded。")]
+    [Tooltip("编码出有效帧后触发，参数为 frame_id 与左 Passthrough camera pose。可在 Inspector 绑定 FrameAlignedObjectAnchor.HandleFrameEncoded。")]
     public FramePoseEvent OnFrameEncoded = new FramePoseEvent();
 
     private RenderTexture _leftRenderTexture;

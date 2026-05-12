@@ -1,12 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// PoseFollow 的卡尔曼滤波处理器。
+/// FrameAlignedObjectAnchor 的卡尔曼滤波处理器。
 ///
-/// 放入 PoseFollow.processors 列表后生效。位置使用 3 个独立的常速度 1D Kalman filter；
-/// 旋转使用指数式 Slerp 低通。适合抑制物体静止时 pose 估计的细微抖动。
+/// 放入 FrameAlignedObjectAnchor.processors 列表后生效。位置使用 3 个独立的常速度
+/// 1D Kalman filter；旋转使用指数式 Slerp 低通。适合抑制物体静止时 pose 估计的细微抖动。
 /// </summary>
-public class PoseKalmanFilter : PoseProcessor
+public class AnchorKalmanFilter : AnchorProcessor
 {
     [Header("Position Kalman")]
     [Tooltip("位置测量噪声。值越大，越不相信输入 pose，输出越稳但延迟越大。")]

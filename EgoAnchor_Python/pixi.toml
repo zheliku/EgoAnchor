@@ -148,12 +148,12 @@ python src/realsense_foundationstereo_test.py \
 """ }
 
 demo-yoloe = { cmd = """
-python src/pipeline/realsense_pipeline.py \
+python src/pipeline/realsense_object_tracking_pipeline.py \
 --mesh_path data/online/cube/mesh/cube.stl \
 --yolo_model_path checkpoints/yoloe-26l-seg.pt \
 --yolo_prompt "white block"
 """ }
 
 demo-pipeline = { cmd = """
-python src/pipeline/quest_pipeline.py
+python src/pipeline/quest_object_tracking_pipeline.py
 """ }

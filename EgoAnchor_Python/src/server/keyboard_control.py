@@ -41,12 +41,12 @@ def handle_debug_key(
 
     if key == ord("r"):
         pipeline.reset_tracking_state()
-        logging.info("[pose_server] manual reset tracking")
+        logging.info("[object_tracking_server] manual reset tracking")
         return "reset"
 
     if key in (ord("1"), ord("2"), ord("3"), ord("4")):
         pipeline.set_stage(int(chr(key)))
-        logging.info("[pose_server] switch stage -> %d", pipeline.stage)
+        logging.info("[object_tracking_server] switch stage -> %d", pipeline.stage)
         return "reset"
 
     return None

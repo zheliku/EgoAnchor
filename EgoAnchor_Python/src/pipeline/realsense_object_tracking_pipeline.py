@@ -12,7 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# 允许直接以脚本方式运行：python src/pipeline/realsense_pipeline.py
+# 允许直接以脚本方式运行：python src/pipeline/realsense_object_tracking_pipeline.py
 if __package__ is None or __package__ == "":
     SRC_DIR = Path(__file__).resolve().parents[1]
     if str(SRC_DIR) not in sys.path:
@@ -61,7 +61,7 @@ class PipelineDebugData:
 
 
 @dataclass
-class PosePipelineOutput:
+class TrackingPipelineOutput:
     """Pipeline API 输出：面向外部传输和上层业务。"""
 
     # 当前帧时间戳（毫秒）。
@@ -188,13 +188,13 @@ def _generate_cube_symmetry_tfs() -> np.ndarray:
 # =========================
 
 
-class RealSenseStereoPosePipeline:
+class RealSenseObjectTrackingPipeline:
     """
     RealSense 位姿 Pipeline（结构化独立实现）。
 
     说明：
     1. `start()`：仅启动相机并重置运行状态。
-    2. `run()`：处理一帧并返回 `PosePipelineOutput`。
+    2. `run()`：处理一帧并返回 `TrackingPipelineOutput`。
     3. `stop()`：释放资源。
 
     API 输入：
@@ -202,7 +202,7 @@ class RealSenseStereoPosePipeline:
     - 参数输入：相机内参、baseline、模型配置（由构建函数注入）。
 
     API 输出：
-    - `PosePipelineOutput`，核心是 `pose_4x4`（可用于传输到 Quest）。
+    - `TrackingPipelineOutput`，核心是 `pose_4x4`（可用于传输到 Quest）。
     """
 
     # 依赖注入。
@@ -362,7 +362,7 @@ class RealSenseStereoPosePipeline:
         if self.pose_estimator is not None:
             self.pose_estimator.reset()
 
-    def _log_stats_if_due(self, output: PosePipelineOutput) -> None:
+    def _log_stats_if_due(self, output: TrackingPipelineOutput) -> None:
         """按固定间隔打印统计信息，便于线上观察性能。"""
         if self._frame_count % self.stats_interval != 0:
             return
@@ -392,7 +392,7 @@ class RealSenseStereoPosePipeline:
         self._cutie_acc = 0.0
         self._pose_acc = 0.0
 
-    def run(self, return_debug: bool = False) -> PosePipelineOutput | None:
+    def run(self, return_debug: bool = False) -> TrackingPipelineOutput | None:
         """
         执行一帧 Pipeline，并返回位姿结果。
 
@@ -401,7 +401,7 @@ class RealSenseStereoPosePipeline:
         - 内部参数：阶段开关、模型配置、相机参数。
 
         输出：
-        - `PosePipelineOutput`：其中 `pose_4x4` 为核心输出。
+        - `TrackingPipelineOutput`：其中 `pose_4x4` 为核心输出。
         - 若设备未出帧（本 RealSense 实现通常不会）可返回 None。
         """
         if not self._started:
@@ -589,7 +589,7 @@ class RealSenseStereoPosePipeline:
                 stereo_vis_bgr=stereo_vis_bgr,
             )
 
-        output = PosePipelineOutput(
+        output = TrackingPipelineOutput(
             timestamp_ms=float(stereo.timestamp_ms),
             stage=self.stage,
             phase=phase,
@@ -795,7 +795,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return build_arg_parser().parse_args(argv)
 
 
-def build_realsense_pipeline(args: argparse.Namespace) -> RealSenseStereoPosePipeline:
+def build_realsense_object_tracking_pipeline(args: argparse.Namespace) -> RealSenseObjectTrackingPipeline:
     """构建 RealSense Pipeline 对象（API 工厂函数）。"""
     required_paths = [
         args.yolo_model_path,
@@ -842,7 +842,7 @@ def build_realsense_pipeline(args: argparse.Namespace) -> RealSenseStereoPosePip
         else None
     )
 
-    return RealSenseStereoPosePipeline(
+    return RealSenseObjectTrackingPipeline(
         args=args,
         camera=camera,
         yolo=yolo,
@@ -851,9 +851,9 @@ def build_realsense_pipeline(args: argparse.Namespace) -> RealSenseStereoPosePip
     )
 
 
-def run_realsense_pipeline(args: argparse.Namespace) -> None:
+def run_realsense_object_tracking_pipeline(args: argparse.Namespace) -> None:
     """示例运行函数：循环调用 API，并在这里展示图像。"""
-    pipeline = build_realsense_pipeline(args)
+    pipeline = build_realsense_object_tracking_pipeline(args)
     pipeline.start()
 
     cv2.namedWindow("RealSense Pipeline", cv2.WINDOW_AUTOSIZE)
@@ -909,7 +909,7 @@ def main(argv: list[str] | None = None) -> None:
     """脚本入口：构建并运行 main 示例。"""
     args = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    run_realsense_pipeline(args)
+    run_realsense_object_tracking_pipeline(args)
 
 
 if __name__ == "__main__":

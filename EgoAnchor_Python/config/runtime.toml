@@ -1,4 +1,4 @@
-# Quest pose_server / quest_pipeline 当前运行配置；相对路径均相对 EgoAnchor_Python。
+# Quest object_tracking_server / quest_object_tracking_pipeline 当前运行配置；相对路径均相对 EgoAnchor_Python。
 
 [server]
 run_stage = 4                    # 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
@@ -91,7 +91,7 @@ erosion_size = 5                 # Cutie mask 腐蚀核大小。
 adjust_pose = true               # 用 Cutie bbox 中心辅助修正 FoundationPose 图像平面位移。
 
 [debug]
-local_debug = true               # pose_server 是否显示本地 OpenCV debug 窗口。
+local_debug = true               # object_tracking_server 是否显示本地 OpenCV debug 窗口。
 enable_keyboard_control = true   # OpenCV 窗口热键：1/2/3/4 切阶段，r 重置，q/ESC 退出。
 pipeline_stats_interval = 30     # Quest pipeline 统计日志输出帧间隔。
 publish_log_interval = 60        # pose 发布统计日志输出帧间隔。

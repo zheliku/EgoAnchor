@@ -453,8 +453,8 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 400006}
-        m_TargetAssemblyTypeName: CubeFollow, Assembly-CSharp
-        m_MethodName: FollowTarget
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
+        m_MethodName: ApplyCameraPose
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -465,8 +465,8 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
       - m_Target: {fileID: 1017702960}
-        m_TargetAssemblyTypeName: PoseFollow, Assembly-CSharp
-        m_MethodName: FollowTarget
+        m_TargetAssemblyTypeName: FrameAlignedObjectAnchor, Assembly-CSharp
+        m_MethodName: ApplyCameraPose
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -601,28 +601,15 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  target: {fileID: 100003}
-  convertFromOpenCvCamera: 1
-  OnPoseReceived:
+  m_EditorClassIdentifier: Assembly-CSharp::FrameAlignedObjectAnchor
+  OnAnchorPoseResolved:
     m_PersistentCalls:
       m_Calls: []
-  OnBeforePoseApply:
+  OnBeforeAnchorApply:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 400007}
-        m_TargetAssemblyTypeName: PoseFollowExponentialSmoother, Assembly-CSharp
-        m_MethodName: ProcessPose
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-  OnAfterPoseApply:
+      m_Calls: []
+
+  OnAfterAnchorApply:
     m_PersistentCalls:
       m_Calls: []
 --- !u!114 &400007
@@ -636,7 +623,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 14ff3490c76f0364189b115caa1413fb, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseFollowExponentialSmoother
+  m_EditorClassIdentifier: Assembly-CSharp::AnchorSmoother
   positionSmoothSpeed: 3
   rotationSmoothSpeed: 3
   snapOnFirstPose: 1
@@ -672,7 +659,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 14ff3490c76f0364189b115caa1413fb, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseFollowExponentialSmoother
+  m_EditorClassIdentifier: Assembly-CSharp::AnchorSmoother
   positionSmoothSpeed: 3
   rotationSmoothSpeed: 3
   snapOnFirstPose: 1
@@ -687,16 +674,14 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8182a4c599acfec4ba51f3f73f5f7122, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CubeFollow
-  target: {fileID: 100003}
-  convertFromOpenCvCamera: 1
-  OnPoseReceived:
+  m_EditorClassIdentifier: Assembly-CSharp::FrameAlignedObjectAnchor
+  OnAnchorPoseResolved:
     m_PersistentCalls:
       m_Calls: []
-  OnBeforePoseApply:
+  OnBeforeAnchorApply:
     m_PersistentCalls:
       m_Calls: []
-  OnAfterPoseApply:
+  OnAfterAnchorApply:
     m_PersistentCalls:
       m_Calls: []
 --- !u!65 &1017702961

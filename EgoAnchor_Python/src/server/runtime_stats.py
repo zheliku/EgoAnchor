@@ -1,4 +1,4 @@
-"""Runtime statistics for pose_server."""
+"""Runtime statistics for object_tracking_server."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ def ema(prev: float, value: float, alpha: float) -> float:
 
 
 @dataclass
-class PoseServerStats:
-    """聚合 pose_server 主循环统计，避免计数逻辑散在主入口里。"""
+class TrackingServerStats:
+    """聚合 object_tracking_server 主循环统计，避免计数逻辑散在主入口里。"""
 
     latency_alpha: float
     start_t: float = field(default_factory=time.perf_counter)

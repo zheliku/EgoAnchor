@@ -64,11 +64,11 @@ public class PayloadReceiver : MonoBehaviour
     private const string ReceiveHighWatermarkPrefKey = "PayloadReceiver.ReceiveHighWatermark";
     private const string SocketLingerMsPrefKey = "PayloadReceiver.SocketLingerMs";
     private const string ReceivePollTimeoutMsPrefKey = "PayloadReceiver.ReceivePollTimeoutMs";
-    private const int DefaultPoseServerPort = 15556;
+    private const int DefaultObjectTrackingServerPort = 15556;
 
     [Header("Network")]
     [SerializeField] private string serverIP = "127.0.0.1";
-    [SerializeField] private int serverPort = DefaultPoseServerPort;
+    [SerializeField] private int serverPort = DefaultObjectTrackingServerPort;
     [SerializeField] private int receiveHighWatermark = 10;
     [SerializeField] private int socketLingerMs = 0;
     [SerializeField] private int receivePollTimeoutMs = 100;
@@ -374,4 +374,3 @@ public class PayloadReceiver : MonoBehaviour
         Disconnect();
     }
 }
-

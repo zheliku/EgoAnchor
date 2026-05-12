@@ -1,4 +1,4 @@
-"""OpenCV debug windows for pose_server."""
+"""OpenCV debug windows for object_tracking_server."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 
 
-DEBUG_WINDOW = "PoseServer Debug"
-STEREO_WINDOW = "PoseServer Stereo"
+DEBUG_WINDOW = "ObjectTrackingServer Debug"
+STEREO_WINDOW = "ObjectTrackingServer Stereo"
 
 
 def draw_text_block(
@@ -65,8 +65,8 @@ def make_waiting_placeholder(text: str) -> np.ndarray:
     return image
 
 
-class PoseServerDebugView:
-    """管理 pose_server 的 OpenCV 调试窗口。"""
+class TrackingServerDebugView:
+    """管理 object_tracking_server 的 OpenCV 调试窗口。"""
 
     def __init__(self, enabled: bool, waiting_text: str) -> None:
         self.enabled = enabled

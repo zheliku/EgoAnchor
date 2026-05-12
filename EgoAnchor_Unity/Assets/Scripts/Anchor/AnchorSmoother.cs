@@ -1,12 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// PoseFollow 的指数平滑处理器。
+/// FrameAlignedObjectAnchor 的指数平滑处理器。
 ///
-/// 放入 PoseFollow.processors 列表后生效。处理器内部缓存平滑状态，
-/// 每帧接收上游 pose 并返回平滑后的 pose。
+/// 放入 FrameAlignedObjectAnchor.processors 列表后生效。处理器内部缓存平滑状态，
+/// 每帧接收上游 anchor pose 并返回平滑后的 pose。
 /// </summary>
-public class PoseSmoother : PoseProcessor
+public class AnchorSmoother : AnchorProcessor
 {
     [Header("Smoothing")]
     [Min(0.01f)]
