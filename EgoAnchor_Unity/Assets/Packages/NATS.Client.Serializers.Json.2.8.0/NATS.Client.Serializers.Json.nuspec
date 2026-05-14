@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>NATS.Client.Serializers.Json</id>
+    <version>2.8.0</version>
+    <authors>The NATS Authors</authors>
+    <license type="expression">Apache-2.0</license>
+    <licenseUrl>https://licenses.nuget.org/Apache-2.0</licenseUrl>
+    <icon>Icon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/nats-io/nats.net</projectUrl>
+    <description>JSON serializer for NATS .NET using System.Text.Json. Supports ad-hoc types for quick prototyping. Not suitable for native AOT deployments.</description>
+    <copyright>Copyright © The NATS Authors 2016-2026</copyright>
+    <tags>pubsub messaging json serialization nats</tags>
+    <repository type="git" url="https://github.com/nats-io/nats.net" commit="e18d8a552c047678a94cde4d91a22d62d9f8eb4f" />
+    <dependencies>
+      <group targetFramework="net6.0">
+        <dependency id="NATS.Client.Abstractions" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="NATS.Client.Abstractions" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="NATS.Client.Abstractions" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="System.Text.Json" version="8.0.5" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.1">
+        <dependency id="NATS.Client.Abstractions" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="System.Text.Json" version="8.0.5" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

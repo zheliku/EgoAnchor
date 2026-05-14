@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.Hosting</name>
+    </assembly>
+    <members>
+        <member name="M:NATS.Client.Hosting.NatsHostingExtensions.AddNats(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Int32,System.Func{NATS.Client.Core.NatsOpts,NATS.Client.Core.NatsOpts},System.Action{NATS.Client.Core.NatsConnection})">
+            <summary>
+            Add NatsConnection/Pool to ServiceCollection. When poolSize = 1, registered `NatsConnection` and `INatsConnection` as singleton.
+            Others, registered `NatsConnectionPool` as singleton, `NatsConnection` and `INatsConnection` as transient(get from pool).
+            </summary>
+        </member>
+    </members>
+</doc>

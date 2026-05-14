@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.Serializers.Json</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.Client.Serializers.Json.NatsJsonSerializer`1">
+            <summary>
+            Reflection based JSON serializer for NATS.
+            </summary>
+            <remarks>
+            This serializer is not suitable for native AOT deployments since it might rely on reflection
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Serializers.Json.NatsJsonSerializer`1.#ctor">
+            <summary>
+            Reflection-based JSON serializer for NATS.
+            </summary>
+            <remarks>
+            This serializer is not suitable for native AOT deployments since it might rely on reflection
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Serializers.Json.NatsJsonSerializer`1.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Serializers.Json.NatsJsonSerializer`1"/> with the specified options.
+            </summary>
+            <param name="opts">Serialization options</param>
+        </member>
+        <member name="P:NATS.Client.Serializers.Json.NatsJsonSerializer`1.Default">
+            <summary>
+            Default instance of <see cref="T:NATS.Client.Serializers.Json.NatsJsonSerializer`1"/> with option set to ignore <c>null</c> values when writing.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Serializers.Json.NatsJsonSerializer`1.CombineWith(NATS.Client.Core.INatsSerializer{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Serializers.Json.NatsJsonSerializer`1.Serialize(System.Buffers.IBufferWriter{System.Byte},`0)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Serializers.Json.NatsJsonSerializer`1.Deserialize(System.Buffers.ReadOnlySequence{System.Byte}@)">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>

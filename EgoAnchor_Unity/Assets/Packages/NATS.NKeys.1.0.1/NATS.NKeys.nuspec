@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>NATS.NKeys</id>
+    <version>1.0.1</version>
+    <authors>The NATS Authors</authors>
+    <license type="expression">Apache-2.0</license>
+    <licenseUrl>https://licenses.nuget.org/Apache-2.0</licenseUrl>
+    <icon>Icon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/nats-io/nkeys.net</projectUrl>
+    <description>NKeys for .NET.</description>
+    <copyright>Copyright © The NATS Authors 2016-2026</copyright>
+    <tags>nkeys</tags>
+    <repository type="git" url="https://github.com/nats-io/nkeys.net" commit="5004fc2b887ba0c278123605ef1b58e3275900bc" />
+    <dependencies>
+      <group targetFramework="net8.0" />
+      <group targetFramework="net10.0" />
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="System.Memory" version="4.5.4" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

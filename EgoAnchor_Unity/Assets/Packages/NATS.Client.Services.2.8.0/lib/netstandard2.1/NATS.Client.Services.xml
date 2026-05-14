@@ -1,0 +1,609 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.Services</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.Client.Services.INatsSvcContext">
+            <summary>
+            NATS Services context.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcContext.Connection">
+            <summary>
+            Gets the associated NATS connection.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcContext.AddServiceAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service.
+            </summary>
+            <param name="name">Service name.</param>
+            <param name="version">Service SemVer version.</param>
+            <param name="queueGroup">Optional queue group (default: "q")</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>NATS Service instance.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcContext.AddServiceAsync(NATS.Client.Services.NatsSvcConfig,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service.
+            </summary>
+            <param name="config">Service configuration.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>NATS Service instance.</returns>
+        </member>
+        <member name="T:NATS.Client.Services.INatsSvcServer">
+            <summary>
+            NATS Services interface.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcServer.StopAsync(System.Threading.CancellationToken)">
+            <summary>
+            Stop the service.
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the stop operation.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcServer.AddEndpointAsync``1(System.Func{NATS.Client.Services.NatsSvcMsg{``0},System.Threading.Tasks.ValueTask},System.String,System.String,System.String,System.Collections.Generic.IDictionary{System.String,System.String},NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Adds a new endpoint.
+            </summary>
+            <param name="handler">Callback for handling incoming messages.</param>
+            <param name="name">Optional endpoint name.</param>
+            <param name="subject">Optional endpoint subject.</param>
+            <param name="queueGroup">Queue group name (defaults to service group's).</param>
+            <param name="metadata">Optional endpoint metadata.</param>
+            <param name="serializer">Serializer to use when deserializing incoming messages (defaults to connection's serializer).</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to stop the endpoint.</param>
+            <typeparam name="T">Serialization type for messages received.</typeparam>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+            <remarks>
+            One of name or subject must be specified.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcServer.AddGroupAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service group with optional queue group.
+            </summary>
+            <param name="name">Name of the group.</param>
+            <param name="queueGroup">Queue group name.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> may be used to cancel th call in the future.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcServer.GetStats">
+            <summary>
+            Get current stats for the service.
+            </summary>
+            <returns>Stats response object</returns>
+        </member>
+        <member name="M:NATS.Client.Services.INatsSvcServer.GetInfo">
+            <summary>
+            Get current info for the service.
+            </summary>
+            <returns>Info response object</returns>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.EndpointInfo">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.EndpointStats">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.InfoResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.PingResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.StatsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.ICollectionEndpointInfo">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.ICollectionEndpointStats">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.IDictionaryStringString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.JsonNode">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.Int64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.String">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.Default">
+            <summary>
+            The default <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> associated with a default <see cref="T:System.Text.Json.JsonSerializerOptions"/> instance.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.GeneratedSerializerOptions">
+            <summary>
+            The source-generated options associated with this context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.#ctor">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Services.Internal.NatsSrvJsonSerializerContext.GetTypeInfo(System.Type)">
+            <inheritdoc/>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcConfig">
+            <summary>
+            NATS service configuration.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcConfig.#ctor(System.String,System.String)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcConfig"/>.
+            </summary>
+            <param name="name">Service name.</param>
+            <param name="version">Service SemVer version.</param>
+            <exception cref="T:System.ArgumentException">Name or version is invalid.</exception>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.Name">
+            <summary>
+            Service name.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.Version">
+            <summary>
+            Service version. Must be a valid Semantic Versioning string.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.Description">
+            <summary>
+            Service description.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.Metadata">
+            <summary>
+            Service metadata. This will be included in the service info.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.QueueGroup">
+            <summary>
+            Queue group name. (default: "q" unless <see cref="P:NATS.Client.Services.NatsSvcConfig.UseQueueGroup"/> is set to <c>false</c>)
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.UseQueueGroup">
+            <summary>
+            Use a queue group when creating service subscriptions. (default: <c>true</c>)
+            Queue group name is defined using <see cref="P:NATS.Client.Services.NatsSvcConfig.QueueGroup"/> property.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcConfig.StatsHandler">
+            <summary>
+            Stats handler. JSON object returned by this handler will be included in
+            the service stats <c>data</c> property.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcContext">
+            <summary>
+            NATS service context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcContext.#ctor(NATS.Client.Core.INatsConnection)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcContext"/>.
+            </summary>
+            <param name="nats">NATS connection.</param>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcContext.Connection">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcContext.AddServiceAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service.
+            </summary>
+            <param name="name">Service name.</param>
+            <param name="version">Service SemVer version.</param>
+            <param name="queueGroup">Optional queue group (default: "q")</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>NATS Service instance.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcContext.AddServiceAsync(NATS.Client.Services.NatsSvcConfig,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service.
+            </summary>
+            <param name="config">Service configuration.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>NATS Service instance.</returns>
+        </member>
+        <member name="T:NATS.Client.Services.INatsSvcEndpoint">
+            <summary>
+            NATS service endpoint.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.Requests">
+            <summary>
+            Number of requests received.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.ProcessingTime">
+            <summary>
+            Total processing time in nanoseconds.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.Errors">
+            <summary>
+            Number of errors.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.LastError">
+            <summary>
+            Last error message.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.AverageProcessingTime">
+            <summary>
+            Average processing time in nanoseconds.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.Metadata">
+            <summary>
+            Endpoint metadata.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.Name">
+            <summary>
+            The name of the endpoint.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.Subject">
+            <summary>
+            The subject name to subscribe to.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.INatsSvcEndpoint.QueueGroup">
+            <summary>
+            Endpoint queue group.
+            </summary>
+            <remarks>
+            If specified, the subscriber will join this queue group. Subscribers with the same queue group name,
+            become a queue group, and only one randomly chosen subscriber of the queue group will
+            consume a message each time a message is received by the queue group.
+            </remarks>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcEndpointBase">
+            <summary>
+            Endpoint base class exposing general stats.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.Requests">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.ProcessingTime">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.Errors">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.LastError">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.AverageProcessingTime">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.Metadata">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointBase.Name">
+            <inheritdoc/>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcEndpoint`1">
+            <summary>
+            NATS service endpoint.
+            </summary>
+            <typeparam name="T">Serialized type to use when receiving data.</typeparam>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcEndpoint`1.#ctor(NATS.Client.Core.INatsConnection,System.String,System.String,System.Func{NATS.Client.Services.NatsSvcMsg{`0},System.Threading.Tasks.ValueTask},System.String,System.Collections.Generic.IDictionary{System.String,System.String},NATS.Client.Core.INatsDeserialize{`0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcEndpoint`1"/>.
+            </summary>
+            <param name="nats">NATS connection.</param>
+            <param name="queueGroup">Queue group.</param>
+            <param name="name">Optional endpoint name.</param>
+            <param name="handler">Callback function to handle messages received.</param>
+            <param name="subject">Optional subject name.</param>
+            <param name="metadata">Endpoint metadata.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Subscription options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.Name">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.Requests">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.ProcessingTime">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.Errors">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.LastError">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.AverageProcessingTime">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpoint`1.Metadata">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcEndpoint`1.DisposeAsync">
+            <inheritdoc/>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcException">
+            <summary>
+            NATS service exception.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcException.#ctor(System.String)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcException"/>.
+            </summary>
+            <param name="message">Exception message.</param>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcEndpointException">
+            <summary>
+            NATS service endpoint exception.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcEndpointException.#ctor(System.Int32,System.String,System.String)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcEndpointException"/>.
+            </summary>
+            <param name="code">Error code.</param>
+            <param name="message">Error message</param>
+            <param name="body">Optional error body.</param>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointException.Code">
+            <summary>
+            Error code.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcEndpointException.Body">
+            <summary>
+            Error body.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcMsg`1">
+            <summary>
+            NATS service exception.
+            </summary>
+            <typeparam name="T"></typeparam>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcMsg`1.#ctor(NATS.Client.Core.NatsMsg{`0},NATS.Client.Services.NatsSvcEndpointBase,System.Exception)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcMsg`1"/>.
+            </summary>
+            <param name="msg">NATS message.</param>
+            <param name="endPoint">Service endpoint.</param>
+            <param name="exception">Optional exception if there were any errors.</param>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.Exception">
+            <summary>
+            Optional exception if there were any errors.
+            </summary>
+            <remarks>
+            Check this property to see if there were any errors before processing the message.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.Subject">
+            <summary>
+            Message subject.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.Data">
+            <summary>
+            Message data.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.ReplyTo">
+            <summary>
+            Message reply-to subject.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.Headers">
+            <summary>
+            Pass additional information using name-value pairs.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Services.NatsSvcMsg`1.Msg">
+            <summary>
+            Gets the underlying NatsMsg for internal use (e.g., message drop callbacks).
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcMsg`1.ReplyAsync(NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Send a reply with an empty message body.
+            </summary>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="opts">Optional publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcMsg`1.ReplyAsync``1(``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Send a reply with a message body.
+            </summary>
+            <param name="data">Data to be sent.</param>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Optional publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="TReply">A serializable type as data.</typeparam>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcMsg`1.ReplyErrorAsync``1(System.Int32,System.String,``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply with an error and additional data as error body.
+            </summary>
+            <param name="code">Error code.</param>
+            <param name="message">Error message.</param>
+            <param name="data">Error body.</param>
+            <param name="headers">Optional additional headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Optional publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="TReply">A serializable type as data.</typeparam>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcMsg`1.ReplyErrorAsync(System.Int32,System.String,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply with an error.
+            </summary>
+            <param name="code">Error code.</param>
+            <param name="message">Error message.</param>
+            <param name="headers">Optional additional headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="opts">Optional publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcServer">
+            <summary>
+            NATS service server.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.#ctor(NATS.Client.Core.INatsConnection,NATS.Client.Services.NatsSvcConfig,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcServer"/>.
+            </summary>
+            <param name="nats">NATS connection.</param>
+            <param name="config">Service configuration.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the service creation requests.</param>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.StopAsync(System.Threading.CancellationToken)">
+            <summary>
+            Stop the service.
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the stop operation.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.AddEndpointAsync``1(System.Func{NATS.Client.Services.NatsSvcMsg{``0},System.Threading.Tasks.ValueTask},System.String,System.String,System.String,System.Collections.Generic.IDictionary{System.String,System.String},NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Adds a new endpoint.
+            </summary>
+            <param name="handler">Callback for handling incoming messages.</param>
+            <param name="name">Optional endpoint name.</param>
+            <param name="subject">Optional endpoint subject.</param>
+            <param name="queueGroup">Queue group name (defaults to service group's).</param>
+            <param name="metadata">Optional endpoint metadata.</param>
+            <param name="serializer">Serializer to use when deserializing incoming messages (defaults to connection's serializer).</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to stop the endpoint.</param>
+            <typeparam name="T">Serialization type for messages received.</typeparam>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+            <remarks>
+            One of name or subject must be specified.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.AddGroupAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service group with optional queue group.
+            </summary>
+            <param name="name">Name of the group.</param>
+            <param name="queueGroup">Queue group name.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> may be used to cancel th call in the future.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.GetStats">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.GetInfo">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.DisposeAsync">
+            <summary>
+            Stop the service.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Services.NatsSvcServer.Group">
+            <summary>
+            NATS service group.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.Group.#ctor(NATS.Client.Services.NatsSvcServer,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Services.NatsSvcServer.Group"/>.
+            </summary>
+            <param name="server">Service instance.</param>
+            <param name="groupName">Group name.</param>
+            <param name="queueGroup">Optional queue group.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> may be used to cancel th call in the future.</param>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.Group.AddEndpointAsync``1(System.Func{NATS.Client.Services.NatsSvcMsg{``0},System.Threading.Tasks.ValueTask},System.String,System.String,System.String,System.Collections.Generic.IDictionary{System.String,System.String},NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Adds a new endpoint.
+            </summary>
+            <param name="handler">Callback for handling incoming messages.</param>
+            <param name="name">Optional endpoint name.</param>
+            <param name="subject">Optional endpoint subject.</param>
+            <param name="queueGroup">Queue group name (defaults to service group's).</param>
+            <param name="metadata">Optional endpoint metadata.</param>
+            <param name="serializer">Serializer to use when deserializing incoming messages (defaults to connection's serializer).</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to stop the endpoint.</param>
+            <typeparam name="T">Serialization type for messages received.</typeparam>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+            <remarks>
+            One of name or subject must be specified.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Services.NatsSvcServer.Group.AddGroupAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Adds a new service group with optional queue group.
+            </summary>
+            <param name="name">Name of the group.</param>
+            <param name="queueGroup">Optional queue group name.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> may be used to cancel th call in the future.</param>
+            <returns>A <seealso cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateServicesContext(NATS.Client.Core.INatsClient)">
+            <summary>
+            Creates a NATS Services context for the given NATS client.
+            </summary>
+            <param name="client">The NATS client for which to create the services context.</param>
+            <returns>An instance of <see cref="T:NATS.Client.Services.INatsSvcContext"/> used for interacting with the NATS Services.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateServicesContext(NATS.Client.Core.INatsConnection)">
+            <summary>
+            Creates a NATS Services context for the given NATS connection.
+            </summary>
+            <param name="connection">The NATS connection for which to create the services context.</param>
+            <returns>An instance of <see cref="T:NATS.Client.Services.INatsSvcContext"/> used for interacting with the NATS Services.</returns>
+        </member>
+    </members>
+</doc>

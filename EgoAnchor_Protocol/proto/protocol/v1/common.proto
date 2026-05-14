@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package protocol.v1;
+
+option csharp_namespace = "EgoAnchor.Protocol.V1";
+
+message MessageHeader {
+  string message_id = 1;
+  string request_id = 2;
+  string session_id = 3;
+  string client_id = 4;
+  string anchor_id = 5;
+  int64 frame_id = 6;
+  int64 unity_frame = 7;
+  double sender_mono_ms = 8;
+  double created_unix_ms = 9;
+  string schema_version = 10;
+}
+
+message Vec3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message Quat {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  double w = 4;
+}
+
+message Pose3D {
+  Vec3 position = 1;
+  Quat rotation = 2;
+}
+
+message Matrix4x4 {
+  repeated double values = 1;
+}
+
+message ErrorInfo {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message TimingStats {
+  double yolo_ms = 1;
+  double depth_ms = 2;
+  double cutie_ms = 3;
+  double pose_ms = 4;
+  double total_ms = 5;
+}
+
+message CommandAck {
+  MessageHeader header = 1;
+  bool accepted = 2;
+  bool duplicate = 3;
+  string status = 4;
+  string message = 5;
+  ErrorInfo error = 6;
+  double accepted_mono_ms = 7;
+}

@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>NATS.Net</id>
+    <version>2.8.0</version>
+    <authors>The NATS Authors</authors>
+    <license type="expression">Apache-2.0</license>
+    <licenseUrl>https://licenses.nuget.org/Apache-2.0</licenseUrl>
+    <icon>Icon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/nats-io/nats.net</projectUrl>
+    <description>NATS .NET client for the NATS cloud-native messaging system. Includes Core NATS pub/sub, JetStream persistent messaging, Key/Value Store, Object Store, and Services. Built on async/await with support for .NET 8, .NET 6, and .NET Standard 2.0/2.1.</description>
+    <copyright>Copyright © The NATS Authors 2016-2026</copyright>
+    <tags>pubsub messaging cloud-native distributed async real-time CNCF nats</tags>
+    <repository type="git" url="https://github.com/nats-io/nats.net" commit="e18d8a552c047678a94cde4d91a22d62d9f8eb4f" />
+    <dependencies>
+      <group targetFramework="net6.0">
+        <dependency id="NATS.Client.Core" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Hosting" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.JetStream" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.KeyValueStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.ObjectStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Serializers.Json" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Services" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Simplified" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="NATS.Client.Core" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Hosting" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.JetStream" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.KeyValueStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.ObjectStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Serializers.Json" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Services" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Simplified" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="NATS.Client.Core" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Hosting" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.JetStream" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.KeyValueStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.ObjectStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Serializers.Json" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Services" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Simplified" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.1">
+        <dependency id="NATS.Client.Core" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Hosting" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.JetStream" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.KeyValueStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.ObjectStore" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Serializers.Json" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Services" version="2.8.0" exclude="Build,Analyzers" />
+        <dependency id="NATS.Client.Simplified" version="2.8.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

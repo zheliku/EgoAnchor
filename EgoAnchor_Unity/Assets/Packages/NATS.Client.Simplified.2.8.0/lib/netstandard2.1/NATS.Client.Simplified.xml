@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.Simplified</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.Net.NatsClient">
+            <summary>
+            Represents a NATS client that provides methods for interacting with NATS server.
+            </summary>
+        </member>
+        <member name="M:NATS.Net.NatsClient.#ctor(System.String,System.String,System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Net.NatsClient"/> class.
+            </summary>
+            <param name="url">NATS server URL to connect to. (default: nats://localhost:4222)</param>
+            <param name="name">Client name. (default: NATS .NET Client)</param>
+            <param name="credsFile">Credentials filepath.</param>
+            <remarks>
+            <para>
+            You can set more than one server as seed servers in a comma-separated list in the <paramref name="url"/>.
+            The client will randomly select a server from the list to connect.
+            </para>
+            <para>
+            User-password or token authentication can be set in the <paramref name="url"/>.
+            For example, <c>nats://derek:s3cr3t@localhost:4222</c> or <c>nats://token@localhost:4222</c>.
+            You should URL-encode the username and password or token if they contain special characters.
+            </para>
+            <para>
+            If multiple servers are specified and user-password or token authentication is used in the <paramref name="url"/>,
+            only the credentials in the first server URL will be used; credentials in the remaining server
+            URLs will be ignored.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Net.NatsClient.#ctor(NATS.Client.Core.NatsOpts,System.Threading.Channels.BoundedChannelFullMode)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Net.NatsClient"/> class.
+            </summary>
+            <param name="opts">NATS client options.</param>
+            <param name="pending">Sets `SubPendingChannelFullMode` option. (default: wait)</param>
+            <remarks>
+            By default, the <paramref name="opts"/> will be merged with the default options
+            overriding SerializationRegistry with <see cref="F:NATS.Net.NatsClientDefaultSerializerRegistry.Default"/>
+            and SubPendingChannelFullMode with <see cref="F:System.Threading.Channels.BoundedChannelFullMode.Wait"/>.
+            </remarks>
+        </member>
+        <member name="P:NATS.Net.NatsClient.Connection">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.ConnectAsync">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.PingAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.PublishAsync``1(System.String,``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.PublishAsync(System.String,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.SubscribeAsync``1(System.String,System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.RequestAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.RequestAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.ReconnectAsync">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClient.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Net.NatsClientDefaultSerializer`1">
+            <summary>
+            Default serializer interface for NATS messages.
+            </summary>
+            <typeparam name="T">Serialized object type</typeparam>
+        </member>
+        <member name="F:NATS.Net.NatsClientDefaultSerializer`1.Default">
+            <summary>
+            Default serializer interface for NATS messages.
+            </summary>
+        </member>
+        <member name="T:NATS.Net.NatsClientDefaultSerializerRegistry">
+            <summary>
+            Default implementation of the INatsSerializerRegistry interface.
+            It provides the default serializer and deserializer for primitive types,
+            binary data, and JSON serialization.
+            </summary>
+        </member>
+        <member name="F:NATS.Net.NatsClientDefaultSerializerRegistry.Default">
+            <summary>
+            Default implementation of the INatsSerializerRegistry interface.
+            It provides the default serializer and deserializer for primitive types,
+            binary data, and JSON serialization.
+            </summary>
+        </member>
+        <member name="M:NATS.Net.NatsClientDefaultSerializerRegistry.GetSerializer``1">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Net.NatsClientDefaultSerializerRegistry.GetDeserializer``1">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>

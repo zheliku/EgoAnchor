@@ -1,0 +1,619 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.ObjectStore</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.Client.ObjectStore.INatsObjContext">
+            <summary>
+            NATS Object Store context.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.INatsObjContext.JetStreamContext">
+            <summary>
+            Provides access to the JetStream context associated with the Object Store operations.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjContext.CreateObjectStoreAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Create a new object store.
+            </summary>
+            <param name="bucket">Bucket name.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object store object.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjContext.CreateObjectStoreAsync(NATS.Client.ObjectStore.NatsObjConfig,System.Threading.CancellationToken)">
+            <summary>
+            Create a new object store.
+            </summary>
+            <param name="config">Object store configuration.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object store object.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjContext.GetObjectStoreAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Get an existing object store.
+            </summary>
+            <param name="bucket">Bucket name</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>The Object Store object</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjContext.DeleteObjectStore(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete an object store.
+            </summary>
+            <param name="bucket">Name of the bucket.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Whether delete was successful or not.</returns>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.INatsObjStore">
+            <summary>
+            NATS Object Store.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.INatsObjStore.JetStreamContext">
+            <summary>
+            Provides access to the JetStream context associated with the Object Store operations.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.INatsObjStore.Bucket">
+            <summary>
+            Object store bucket name.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.GetBytesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Get object by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object value as a byte array.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.GetAsync(System.String,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Get object by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="stream">Stream to write the object value to.</param>
+            <param name="leaveOpen"><c>true</c> to not close the underlying stream when async method returns; otherwise, <c>false</c></param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata.</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">Metadata didn't match the value retrieved e.g. the SHA digest.</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.PutAsync(System.String,System.Byte[],System.Threading.CancellationToken)">
+            <summary>
+            Put an object by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="value">Object value as a byte array.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.PutAsync(System.String,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Put an object by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="stream">Stream to read the value from.</param>
+            <param name="leaveOpen"><c>true</c> to not close the underlying stream when async method returns; otherwise, <c>false</c></param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata.</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">There was an error calculating SHA digest.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.PutAsync(NATS.Client.ObjectStore.Models.ObjectMetadata,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Put an object by key.
+            </summary>
+            <param name="meta">Object metadata.</param>
+            <param name="stream">Stream to read the value from.</param>
+            <param name="leaveOpen"><c>true</c> to not close the underlying stream when async method returns; otherwise, <c>false</c></param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata.</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">There was an error calculating SHA digest.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.UpdateMetaAsync(System.String,NATS.Client.ObjectStore.Models.ObjectMetadata,System.Threading.CancellationToken)">
+            <summary>
+            Update object metadata
+            </summary>
+            <param name="key">Object key</param>
+            <param name="meta">Object metadata</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">There is already an object with the same name</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.AddLinkAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Add a link to another object
+            </summary>
+            <param name="link">Link name</param>
+            <param name="target">Target object's name</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Metadata of the new link object</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.AddLinkAsync(System.String,NATS.Client.ObjectStore.Models.ObjectMetadata,System.Threading.CancellationToken)">
+            <summary>
+            Add a link to another object
+            </summary>
+            <param name="link">Link name</param>
+            <param name="target">Target object's metadata</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Metadata of the new link object</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.AddBucketLinkAsync(System.String,NATS.Client.ObjectStore.INatsObjStore,System.Threading.CancellationToken)">
+            <summary>
+            Add a link to another object store
+            </summary>
+            <param name="link">Object's name to be linked</param>
+            <param name="target">Target object store</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Metadata of the new link object</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">Object with the same name already exists</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.SealAsync(System.Threading.CancellationToken)">
+            <summary>
+            Seal the object store. No further modifications will be allowed.
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">Update operation failed</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.GetInfoAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Get object metadata by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="showDeleted">Also retrieve deleted objects.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object metadata.</returns>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">Object was not found.</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.ListAsync(NATS.Client.ObjectStore.NatsObjListOpts,System.Threading.CancellationToken)">
+            <summary>
+            List all the objects in this store.
+            </summary>
+            <param name="opts">List options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>An async enumerable object metadata to be used in an <c>await foreach</c></returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.GetStatusAsync(System.Threading.CancellationToken)">
+            <summary>
+            Retrieves run-time status about the backing store of the bucket.
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Object store status</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.WatchAsync(NATS.Client.ObjectStore.NatsObjWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Watch for changes in the underlying store and receive meta information updates.
+            </summary>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>An async enumerable object metadata to be used in an <c>await foreach</c></returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.INatsObjStore.DeleteAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete an object by key.
+            </summary>
+            <param name="key">Object key.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <exception cref="T:NATS.Client.ObjectStore.NatsObjException">Object metadata was invalid or chunks can't be purged.</exception>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.Internal.Base64UrlEncoder">
+            <summary>
+            Encodes and Decodes strings as Base64Url encoding.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.ObjectStore.Internal.Base64UrlEncoder.SBase64Table">
+            <summary>
+            Encoding table
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.Base64UrlEncoder.Encode(System.String)">
+            <summary>
+            The following functions perform base64url encoding which differs from regular base64 encoding as follows
+            * padding is skipped so the pad character '=' doesn't have to be percent encoded
+            * the 62nd and 63rd regular base64 encoding characters ('+' and '/') are replace with ('-' and '_')
+            The changes make the encoding alphabet file and URL safe.
+            </summary>
+            <param name="arg">string to encode.</param>
+            <returns>Base64Url encoding of the UTF8 bytes.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.Base64UrlEncoder.Encode(System.Span{System.Byte},System.Boolean)">
+            <summary>
+            Converts a subset of an array of 8-bit unsigned integers to its equivalent string representation which is encoded with base-64-url digits. Parameters specify
+            the subset as an offset in the input array, and the number of elements in the array to convert.
+            </summary>
+            <param name="inArray">An array of 8-bit unsigned integers.</param>
+            <param name="raw">Remove padding</param>
+            <returns>The string representation in base 64 url encoding of length elements of inArray, starting at position offset.</returns>
+            <exception cref="T:System.ArgumentNullException">'inArray' is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">offset or length is negative OR offset plus length is greater than the length of inArray.</exception>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.Base64UrlEncoder.Decode(System.String)">
+            <summary>
+            Decodes the string from Base64UrlEncoded to UTF8.
+            </summary>
+            <param name="arg">string to decode.</param>
+            <returns>UTF8 string.</returns>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.Base64UrlEncoder.DecodeBytes(System.String)">
+            <summary>
+            Converts the specified string, base-64-url encoded to utf8 bytes.</summary>
+            <param name="str">base64Url encoded string.</param>
+            <returns>UTF8 bytes.</returns>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.Boolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.MetaDataOptions">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.NatsObjLink">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.ObjectMetadata">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.DictionaryStringStringArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.DictionaryStringString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.DateTimeOffset">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.Int32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.NullableInt32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.String">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.StringArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.UInt32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.UInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.Default">
+            <summary>
+            The default <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> associated with a default <see cref="T:System.Text.Json.JsonSerializerOptions"/> instance.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.GeneratedSerializerOptions">
+            <summary>
+            The source-generated options associated with this context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.#ctor">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.Internal.NatsObjJsonSerializerContext.GetTypeInfo(System.Type)">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Name">
+            <summary>
+            Object name
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Description">
+            <summary>
+            Object description
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Bucket">
+            <summary>
+            Bucket name
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Nuid">
+            <summary>
+            Object NUID
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Size">
+            <summary>
+            The size of the object in bytes.
+            It only includes the size of the object itself, not the metadata.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.MTime">
+            <summary>
+            Modified timestamp
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Chunks">
+            <summary>
+            Number of chunks
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Digest">
+            <summary>
+            Object digest
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Metadata">
+            <summary>
+            Object metadata
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Headers">
+            <summary>
+            Object metadata
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Deleted">
+            <summary>
+            Object deleted
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.ObjectMetadata.Options">
+            <summary>
+            Object options
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.MetaDataOptions.Link">
+            <summary>
+            Link
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.MetaDataOptions.MaxChunkSize">
+            <summary>
+            Max chunk size
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.NatsObjLink.Name">
+            <summary>
+            Link name
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.Models.NatsObjLink.Bucket">
+            <summary>
+            Bucket name
+            </summary>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjStorageType">
+            <summary>
+            Object Store storage type
+            </summary>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjConfig">
+            <summary>
+            Object store configuration.
+            </summary>
+            <param name="Bucket">Name of the bucket.</param>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjConfig.#ctor(System.String)">
+            <summary>
+            Object store configuration.
+            </summary>
+            <param name="Bucket">Name of the bucket.</param>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Bucket">
+            <summary>Name of the bucket.</summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Description">
+            <summary>
+            Bucket description.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.MaxAge">
+            <summary>
+            Maximum age of the object.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.MaxBytes">
+            <summary>
+            How big the store may be, when the combined stream size exceeds this old keys are removed.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Storage">
+            <summary>
+            Type of backing storage to use.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.NumberOfReplicas">
+            <summary>
+            How many replicas to keep for each key.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Placement">
+            <summary>
+            Placement requirements for a object store stream.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Metadata">
+            <summary>
+            Additional metadata for the bucket.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjConfig.Compression">
+            <summary>
+            Use compressed storage.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjContext">
+            <summary>
+            Object Store context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjContext.#ctor(NATS.Client.JetStream.INatsJSContext)">
+            <summary>
+            Create a new object store context.
+            </summary>
+            <param name="context">JetStream context.</param>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjContext.JetStreamContext">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjContext.CreateObjectStoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjContext.CreateObjectStoreAsync(NATS.Client.ObjectStore.NatsObjConfig,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjContext.GetObjectStoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjContext.DeleteObjectStore(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjException">
+            <summary>
+            NATS Object Store exception.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjException.#ctor(System.String)">
+            <summary>
+            Create a new NATS Object Store exception.
+            </summary>
+            <param name="message">Exception message.</param>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjException.#ctor(System.String,System.Exception)">
+            <summary>
+            Create a new NATS Object Store exception.
+            </summary>
+            <param name="message">Exception message.</param>
+            <param name="exception">Inner exception</param>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjNotFoundException">
+            <summary>
+            NATS Object Store object not found exception.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjNotFoundException.#ctor(System.String)">
+            <summary>
+            Create a new NATS Object Store object not found exception.
+            </summary>
+            <param name="message">Exception message.</param>
+        </member>
+        <member name="T:NATS.Client.ObjectStore.NatsObjStore">
+            <summary>
+            NATS Object Store.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjStore.JetStreamContext">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjStore.Bucket">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.GetBytesAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.GetAsync(System.String,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.PutAsync(System.String,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.PutAsync(System.String,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.PutAsync(NATS.Client.ObjectStore.Models.ObjectMetadata,System.IO.Stream,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.UpdateMetaAsync(System.String,NATS.Client.ObjectStore.Models.ObjectMetadata,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.AddLinkAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.AddLinkAsync(System.String,NATS.Client.ObjectStore.Models.ObjectMetadata,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.AddBucketLinkAsync(System.String,NATS.Client.ObjectStore.INatsObjStore,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.SealAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.GetInfoAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.ListAsync(NATS.Client.ObjectStore.NatsObjListOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.GetStatusAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.WatchAsync(NATS.Client.ObjectStore.NatsObjWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.ObjectStore.NatsObjStore.DeleteAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjWatchOpts.InitialSetOnly">
+            <summary>
+            Only return the initial set of objects and don't watch for further updates.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjWatchOpts.OnNoData">
+            <summary>
+            Async function called when the enumerator reaches the end of data. Return True to break the async enumeration, False to allow the enumeration to continue.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.ObjectStore.NatsObjListOpts.OnNoData">
+            <summary>
+            Async function called when the enumerator reaches the end of data. Return True to break the async enumeration, False to allow the enumeration to continue.
+            </summary>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateObjectStoreContext(NATS.Client.Core.INatsClient)">
+            <summary>
+            Creates a NATS Object Store context for the given NATS client.
+            </summary>
+            <param name="client">The NATS client instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.ObjectStore.INatsObjContext"/> used for interacting with the NATS Object Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateObjectStoreContext(NATS.Client.Core.INatsConnection)">
+            <summary>
+            Creates a NATS Object Store context for the given NATS connection.
+            </summary>
+            <param name="connection">The NATS connection instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.ObjectStore.INatsObjContext"/> used for interacting with the NATS Object Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateObjectStoreContext(NATS.Client.JetStream.INatsJSContext)">
+            <summary>
+            Creates a NATS Object Store context for the given NATS JetStream context.
+            </summary>
+            <param name="context">The NATS JetStream context instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.ObjectStore.INatsObjContext"/> used for interacting with the NATS Object Store.</returns>
+        </member>
+    </members>
+</doc>

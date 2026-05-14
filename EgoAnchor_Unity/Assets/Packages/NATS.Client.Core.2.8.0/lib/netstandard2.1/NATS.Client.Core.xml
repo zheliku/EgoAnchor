@@ -1,0 +1,2392 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.Core</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.Client.Core.AsyncEventHandler">
+            <summary>
+            An asynchronous event handler.
+            </summary>
+            <param name="sender">The sender of the event.</param>
+            <param name="args">Event arguments.</param>
+            <returns>A value task whose completion signals handling is finished.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.AsyncEventHandler`1">
+            <summary>
+            An asynchronous event handler.
+            </summary>
+            <typeparam name="TEventArgs">The type of event arguments.</typeparam>
+            <param name="sender">The sender of the event.</param>
+            <param name="args">Event arguments.</param>
+            <returns>A value task whose completion signals handling is finished.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.Commands.CommandWriter">
+            <summary>
+            Sets up a buffer (Pipe), and provides methods to write protocol messages to the buffer
+            When methods complete, they have been queued for sending
+            and further cancellation is not possible
+            </summary>
+            <remarks>
+            These methods are in the hot path, and have all been
+            optimized to eliminate allocations and minimize copying
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.CommandWriter.EnqueueCommand">
+            <summary>
+            Enqueues a command, and kicks off a flush
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.WrittenMemory">
+            <summary>
+            Gets the data written to the underlying buffer so far, as a <see cref="T:System.ReadOnlyMemory`1"/>.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.WrittenSpan">
+            <summary>
+            Gets the data written to the underlying buffer so far, as a <see cref="T:System.ReadOnlySpan`1"/>.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.WrittenCount">
+            <summary>
+            Gets the amount of data written to the underlying buffer so far.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.Advance(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.GetMemory(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.GetSpan(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.ToString">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.CheckBufferAndEnsureCapacity(System.Int32)">
+            <summary>
+            Ensures that <see cref="F:NATS.Client.Core.Commands.NatsPooledBufferWriter`1._array"/> has enough free space to contain a given number of new items.
+            </summary>
+            <param name="sizeHint">The minimum number of items to ensure space for in <see cref="F:NATS.Client.Core.Commands.NatsPooledBufferWriter`1._array"/>.</param>
+        </member>
+        <member name="M:NATS.Client.Core.Commands.NatsPooledBufferWriter`1.ResizeBuffer(System.Int32)">
+            <summary>
+            Resizes <see cref="F:NATS.Client.Core.Commands.NatsPooledBufferWriter`1._array"/> to ensure it can fit the specified number of new items.
+            </summary>
+            <param name="sizeHint">The minimum number of items to ensure space for in <see cref="F:NATS.Client.Core.Commands.NatsPooledBufferWriter`1._array"/>.</param>
+        </member>
+        <member name="P:NATS.Client.Core.INatsClient.Connection">
+            <summary>
+            Represents a connection to the NATS server.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.ConnectAsync">
+            <summary>
+            Connect socket and write CONNECT command to nats server.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.PingAsync(System.Threading.CancellationToken)">
+            <summary>
+            Send PING command and await PONG. Return value is similar as Round Trip Time (RTT).
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask`1"/> that represents the asynchronous round trip operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.PublishAsync``1(System.String,``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Publishes a serializable message payload to the given subject name, optionally supplying a reply subject.
+            </summary>
+            <param name="subject">The destination subject to publish to.</param>
+            <param name="data">Serializable data object.</param>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="T">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.PublishAsync(System.String,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Publishes an empty message payload to the given subject name, optionally supplying a reply subject.
+            </summary>
+            <param name="subject">The destination subject to publish to.</param>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+            <remarks>
+            Publishing a sentinel usually means a signal to the given subject which could be used to trigger an action
+            or indicate an event for example and of messages.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.SubscribeAsync``1(System.String,System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Initiates a subscription to a subject, optionally joining a distributed queue group.
+            </summary>
+            <param name="subject">The subject name to subscribe to.</param>
+            <param name="queueGroup">If specified, the subscriber will join this queue group.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsSubOpts"/> for subscription options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="T">Specifies the type of data that may be received from the NATS Server.</typeparam>
+            <returns>An asynchronous enumerable of <see cref="T:NATS.Client.Core.NatsMsg`1"/> objects</returns>
+            <remarks>
+            Subscribers with the same queue group name, become a queue group,
+            and only one randomly chosen subscriber of the queue group will
+            consume a message each time a message is received by the queue group.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.RequestAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Request and receive a single reply from a responder.
+            </summary>
+            <param name="subject">Subject of the responder</param>
+            <param name="data">Data to send to responder</param>
+            <param name="headers">Optional message headers</param>
+            <param name="requestSerializer">Serializer to use for the request message type.</param>
+            <param name="replySerializer">Serializer to use for the reply message type.</param>
+            <param name="requestOpts">Request publish options</param>
+            <param name="replyOpts">Reply handler subscription options</param>
+            <param name="cancellationToken">Cancel this request</param>
+            <typeparam name="TRequest">Request type</typeparam>
+            <typeparam name="TReply">Reply type</typeparam>
+            <returns>Returns the <see cref="T:NATS.Client.Core.NatsMsg`1"/> received from the responder as reply.</returns>
+            <exception cref="T:System.OperationCanceledException">Raised when cancellation token is used</exception>
+            <remarks>
+            Response can be (null) or one <see cref="T:NATS.Client.Core.NatsMsg`1"/>.
+            Reply option's max messages will be set to 1.
+            If reply option's timeout is not defined, then it will be set to NatsOpts.RequestTimeout.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.RequestAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Send an empty request message and await the reply message asynchronously.
+            </summary>
+            <param name="subject">Subject of the responder</param>
+            <param name="replySerializer">Serializer to use for the reply message type.</param>
+            <param name="replyOpts">Reply handler subscription options</param>
+            <param name="cancellationToken">Cancel this request</param>
+            <typeparam name="TReply">Reply type</typeparam>
+            <returns>Returns the <see cref="T:NATS.Client.Core.NatsMsg`1"/> received from the responder as reply.</returns>
+            <exception cref="T:System.OperationCanceledException">Raised when cancellation token is used</exception>
+            <remarks>
+            Response can be (null) or one <see cref="T:NATS.Client.Core.NatsMsg`1"/>.
+            Reply option's max messages will be set to 1.
+            If reply option's timeout is not defined, then it will be set to NatsOpts.RequestTimeout.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsClient.ReconnectAsync">
+            <summary>
+            Force a reconnection to the NATS server.
+            </summary>
+            <remarks>
+            This method doesn't wait for the connection to be established.
+            </remarks>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.ConnectionDisconnected">
+            <summary>
+            Event that is raised when the connection to the NATS server is disconnected.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.ConnectionOpened">
+            <summary>
+            Event that is raised when the connection to the NATS server is opened.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.ReconnectFailed">
+            <summary>
+            Event that is raised when a reconnect attempt is failed.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.MessageDropped">
+            <summary>
+            Event that is raised when a message is dropped for a subscription.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.SlowConsumerDetected">
+            <summary>
+            Event that is raised when a slow consumer is detected on a subscription.
+            This event fires once per "episode" - when the subscription transitions into a slow consumer state.
+            It will fire again if the subscription recovers (channel drains to nearly empty) and then becomes slow again.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.LameDuckModeActivated">
+            <summary>
+            Event that is raised when server goes into Lame Duck Mode.
+            </summary>
+        </member>
+        <member name="E:NATS.Client.Core.INatsConnection.ServerError">
+            <summary>
+            Event that is raised when server sends an error message ('-ERR').
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.ServerInfo">
+            <summary>
+            Server information received from the NATS server.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.Opts">
+            <summary>
+            Options used to configure the NATS connection.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.ConnectionState">
+            <summary>
+            Connection state of the NATS connection.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.SubscriptionManager">
+            <summary>
+            Subscription manager used to manage subscriptions for the NATS connection.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.HeaderParser">
+            <summary>
+            Singleton instance of the NATS header parser used to parse message headers
+            used by the NATS connection.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.OnConnectingAsync">
+            <summary>
+            Hook before TCP connection open.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsConnection.OnSocketAvailableAsync">
+            <summary>
+            Hook when socket is available.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.PublishAsync``1(NATS.Client.Core.NatsMsg{``0}@,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Publishes a serializable message payload to the given subject name, optionally supplying a reply subject.
+            </summary>
+            <param name="msg">A <see cref="T:NATS.Client.Core.NatsMsg`1"/> representing message details.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="T">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.SubscribeCoreAsync``1(System.String,System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Initiates a subscription to a subject, optionally joining a distributed queue group
+            and returns a <see cref="T:NATS.Client.Core.INatsSub`1"/> object which provides more control over the subscription.
+            </summary>
+            <param name="subject">The subject name to subscribe to.</param>
+            <param name="queueGroup">If specified, the subscriber will join this queue group.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsSubOpts"/> for subscription options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="T">Specifies the type of data that may be received from the NATS Server.</typeparam>
+            <returns>An asynchronous task that completes with the NATS subscription.</returns>
+            <remarks>
+            <para>
+            Subscribers with the same queue group name, become a queue group,
+            and only one randomly chosen subscriber of the queue group will
+            consume a message each time a message is received by the queue group.
+            </para>
+            <para>
+            This method returns a <see cref="T:NATS.Client.Core.INatsSub`1"/> object which provides slightly lower level
+            control over the subscription. You can use this object to create your own core messaging
+            patterns or to create your own higher level abstractions.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.NewInbox">
+            <summary>
+            Create a new inbox subject with the form {Inbox Prefix}.{Unique Connection ID}.{Unique Inbox ID}
+            </summary>
+            <returns>A <see cref="T:System.String"/> containing a unique inbox subject.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.RequestManyAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Request and receive zero or more replies from a responder.
+            </summary>
+            <param name="subject">Subject of the responder</param>
+            <param name="data">Data to send to responder</param>
+            <param name="headers">Optional message headers</param>
+            <param name="requestSerializer">Serializer to use for the request message type.</param>
+            <param name="replySerializer">Serializer to use for the reply message type.</param>
+            <param name="requestOpts">Request publish options</param>
+            <param name="replyOpts">Reply handler subscription options</param>
+            <param name="cancellationToken">Cancel this request</param>
+            <typeparam name="TRequest">Request type</typeparam>
+            <typeparam name="TReply">Reply type</typeparam>
+            <returns>An asynchronous enumerable of <see cref="T:NATS.Client.Core.NatsMsg`1"/> objects</returns>
+            <exception cref="T:System.OperationCanceledException">Raised when cancellation token is used</exception>
+            <remarks>
+            if reply option's timeout is not defined then it will be set to NatsOpts.RequestTimeout.
+            </remarks>
+            <seealso href="https://www.nuget.org/packages/Synadia.Orbit.Core.Extensions">RequestManyWithSentinelAsync for custom stop conditions</seealso>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.AddSubAsync(NATS.Client.Core.NatsSubBase,System.Threading.CancellationToken)">
+            <summary>
+            Adds a subscription to the NATS connection for a given <see cref="T:NATS.Client.Core.NatsSubBase"/> object.
+            Subscriptions are managed by the connection and are automatically removed when the connection is closed.
+            </summary>
+            <param name="sub">The <see cref="T:NATS.Client.Core.NatsSubBase"/> object representing the subscription details.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the operation.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous subscription operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.CreateRequestSubAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Creates a subscription with appropriate request and reply subjects publishing the request.
+            It's the caller's responsibility to retrieve the reply messages and complete the subscription.
+            </summary>
+            <typeparam name="TRequest">The type of the request data.</typeparam>
+            <typeparam name="TReply">The type of the expected reply.</typeparam>
+            <param name="subject">The subject to subscribe to.</param>
+            <param name="data">The optional request data.</param>
+            <param name="headers">The optional headers to include with the request.</param>
+            <param name="requestSerializer">The optional serializer for the request data.</param>
+            <param name="replySerializer">The optional deserializer for the reply data.</param>
+            <param name="requestOpts">The optional publishing options for the request.</param>
+            <param name="replyOpts">The optional subscription options for the reply.</param>
+            <param name="cancellationToken">The optional cancellation token.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask`1"/> representing the asynchronous operation of creating the request subscription.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.GetBoundedChannelOpts(NATS.Client.Core.NatsSubChannelOpts)">
+            <summary>
+            Retrieves the bounded channel options for creating a channel used by a subscription.
+            Options are built from the connection's configuration and the subscription channel options.
+            Used to aid in custom message handling when building a subscription channel.
+            </summary>
+            <param name="subChannelOpts">The options for configuring the subscription channel.</param>
+            <returns>The bounded channel options used for creating the subscription channel.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsConnection.OnMessageDropped``1(NATS.Client.Core.NatsSubBase,System.Int32,NATS.Client.Core.NatsMsg{``0})">
+            <summary>
+            Called when a message is dropped for a subscription.
+            Used to aid in custom message handling when a subscription's message channel is full.
+            </summary>
+            <param name="natsSub">The <see cref="T:NATS.Client.Core.NatsSubBase"/> representing the subscription.</param>
+            <param name="pending">The number of pending messages at the time the drop occurred.</param>
+            <param name="msg">The dropped message represented by <see cref="T:NATS.Client.Core.NatsMsg`1"/>.</param>
+            <typeparam name="T">Specifies the type of data in the dropped message.</typeparam>
+            <remarks>
+            This method is expected to complete quickly to avoid further delays in processing;
+            if complex work is required, it is recommended to offload to a channel or other out-of-band processor.
+            </remarks>
+        </member>
+        <member name="T:NATS.Client.Core.INatsMsg">
+            <summary>
+            Shared contract for all NATS message types.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg.Headers">
+            <summary>
+            Headers of the user message if set.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.INatsSocketConnection">
+            <summary>
+            Represents a socket connection to a NATS server.
+            </summary>
+            <remarks>
+            This interface defines the contract for low-level socket connections to NATS servers,
+            providing methods for sending and receiving data and disposing the socket.
+            Disposing should attempt to perform graceful shutdown of the socket.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsSocketConnection.SendAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Sends data asynchronously over the connection.
+            </summary>
+            <param name="buffer">The buffer containing the data to send.</param>
+            <returns>A task representing the asynchronous send operation with the number of bytes sent.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsSocketConnection.ReceiveAsync(System.Memory{System.Byte})">
+            <summary>
+            Receives data asynchronously from the connection.
+            </summary>
+            <param name="buffer">The buffer to store the received data.</param>
+            <returns>A task representing the asynchronous receive operation with the number of bytes received.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.ISocketConnection">
+            <summary>
+            Obsolete, use <see cref="T:NATS.Client.Core.INatsSocketConnection"/> instead
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.INatsTlsUpgradeableSocketConnection">
+            <summary>
+            Represents a NATS socket connection that can be upgraded to use TLS.
+            </summary>
+            <remarks>
+            This interface extends <see cref="T:NATS.Client.Core.INatsSocketConnection"/> to provide access to the underlying
+            socket that is used to create a SslStream.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.INatsTlsUpgradeableSocketConnection.Socket">
+            <summary>
+            Gets the underlying Socket instance for the connection.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.INatsSocketConnectionFactory">
+            <summary>
+            Factory interface for creating socket connections to NATS servers.
+            </summary>
+            <remarks>
+            This interface abstracts the creation of socket connections to NATS servers,
+            allowing for custom implementations of connection logic.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsSocketConnectionFactory.ConnectAsync(System.Uri,NATS.Client.Core.NatsOpts,System.Threading.CancellationToken)">
+            <summary>
+            Establishes a connection to a NATS server at the specified URI.
+            </summary>
+            <param name="uri">The URI of the NATS server to connect to.</param>
+            <param name="opts">The Options associated with the NATS Client.</param>
+            <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+            <returns>
+            A task that represents the asynchronous connect operation. The task result contains
+            the socket connection.
+            </returns>
+        </member>
+        <member name="P:NATS.Client.Core.INatsSub`1.Msgs">
+            <summary>
+            Access incoming messages for your subscription.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsSub`1.Subject">
+            <summary>
+            The subject name to subscribe to.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsSub`1.QueueGroup">
+            <summary>
+            If specified, the subscriber will join this queue group. Subscribers with the same queue group name,
+            become a queue group, and only one randomly chosen subscriber of the queue group will
+            consume a message each time a message is received by the queue group.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsSub`1.UnsubscribeAsync">
+            <summary>
+            Complete the message channel, stop timers if they were used and send an unsubscribe
+            message to the server.
+            </summary>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous server UNSUB operation.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.INatsSubscriptionManager">
+            <summary>
+            Subscription manager interface.
+            </summary>
+            <remarks>
+            This interface is used to manage subscriptions. However, it is not intended to be used directly.
+            You can implement this interface if you are using low-level APIs and implement your own
+            subscription manager.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsSubscriptionManager.RemoveAsync(NATS.Client.Core.NatsSubBase)">
+            <summary>
+            Remove a subscription.
+            </summary>
+            <param name="sub">Subscription to remove.</param>
+            <returns>A value task that represents the asynchronous remove operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.ActivityEndingMsgReader`1.TryRead(`0@)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.AsyncEventExtensions.InvokeAsync(NATS.Client.Core.AsyncEventHandler,System.Object,System.EventArgs)">
+            <summary>
+            Invokes asynchronous event handlers, returning a task that completes when all event handlers have been invoked.
+            Each handler is fully executed (including continuations) before the next handler in the list is invoked.
+            </summary>
+            <param name="handlers">The event handlers.  May be <see langword="null" />.</param>
+            <param name="sender">The event source.</param>
+            <param name="args">The event argument.</param>
+            <returns>The task that completes when all handlers have completed.</returns>
+            <exception cref="T:System.AggregateException">Thrown if any handlers fail. It contains a collection of all failures.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.AsyncEventExtensions.InvokeAsync``1(NATS.Client.Core.AsyncEventHandler{``0},System.Object,``0)">
+            <summary>
+            Invokes asynchronous event handlers, returning a task that completes when all event handlers have been invoked.
+            Each handler is fully executed (including continuations) before the next handler in the list is invoked.
+            </summary>
+            <typeparam name="TEventArgs">The type of argument passed to each handler.</typeparam>
+            <param name="handlers">The event handlers.  May be <see langword="null" />.</param>
+            <param name="sender">The event source.</param>
+            <param name="args">The event argument.</param>
+            <returns>The task that completes when all handlers have completed.  The task is faulted if any handlers throw an exception.</returns>
+            <exception cref="T:System.AggregateException">Thrown if any handlers fail. It contains a collection of all failures.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.BufferExtensions.PositionOfAny``1(System.Buffers.ReadOnlySequence{``0}@,``0,``0)">
+            <summary>
+            Returns position of first occurrence of item in the <see cref="T:System.Buffers.ReadOnlySequence`1"/>
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.Internal.ClearingMemoryPool">
+            <summary>
+            A <see cref="T:System.Buffers.MemoryPool`1"/> wrapper that clears rented buffers when they
+            are returned, preventing credential data from leaking through pooled memory.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Echo">
+            <summary>Optional boolean. If set to true, the server (version 1.2.0+) will not send originating messages from this connection to its own subscriptions. Clients should set this to true only for server supporting this feature, which is when proto in the INFO protocol is set to at least 1.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Verbose">
+            <summary>Turns on +OK protocol acknowledgements.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Pedantic">
+            <summary>Turns on additional strict format checking, e.g. for properly formed subjects</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.TLSRequired">
+            <summary>Indicates whether the client requires an SSL connection.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.JWT">
+            <summary>The JWT that identifies a user permissions and account.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Sig">
+            <summary>In case the server has responded with a nonce on INFO, then a NATS client must use this field to reply with the signed nonce.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.AuthToken">
+            <summary>Client authorization token (if auth_required is set)</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Username">
+            <summary>Connection username (if auth_required is set)</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Password">
+            <summary>Connection password (if auth_required is set)</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Name">
+            <summary>Optional client name</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.ClientLang">
+            <summary>The implementation language of the client.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.ClientVersion">
+            <summary>The version of the client.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.ClientOpts.Protocol">
+            <summary>optional int. Sending 0 (or absent) indicates client supports original protocol. Sending 1 indicates that the client supports dynamic reconfiguration of cluster topology changes by asynchronously receiving INFO messages with known servers it can reconnect to.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.Boolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.NullableBoolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.ClientOpts">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.ServerInfo">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.Int32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.Int64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.String">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.StringArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.UInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.Default">
+            <summary>
+            The default <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> associated with a default <see cref="T:System.Text.Json.JsonSerializerOptions"/> instance.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.Internal.JsonContext.GeneratedSerializerOptions">
+            <summary>
+            The source-generated options associated with this context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.JsonContext.#ctor">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.JsonContext.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.JsonContext.GetTypeInfo(System.Type)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.StringExtensions.WriteASCIIBytes(System.String,System.Span{System.Byte})">
+            <summary>
+            Allocation free ASCII buffer writer.
+            There is no protection if string isn't ASCII.
+            </summary>
+            <param name="key">ASCII string</param>
+            <param name="span">Target memory location. Assumed to be large enough.</param>
+        </member>
+        <member name="T:NATS.Client.Core.Internal.SubjectValidator">
+            <summary>
+            Validates NATS subjects and queue groups at the API level.
+            </summary>
+            <remarks>
+            Subject validation prevents protocol-breaking whitespace characters from being sent to the server.
+            This validation is performed at the top-level API (Publish/Subscribe) for immediate error feedback.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.SubjectValidator.ValidateSubject(System.String)">
+            <summary>
+            Validates a subject string for whitespace characters.
+            </summary>
+            <param name="subject">The subject to validate.</param>
+            <exception cref="T:NATS.Client.Core.NatsException">Thrown when the subject is empty or contains whitespace.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.SubjectValidator.ValidateReplyTo(System.String)">
+            <summary>
+            Validates a reply-to string for whitespace characters (if not null).
+            </summary>
+            <param name="replyTo">The reply-to to validate, or null.</param>
+            <exception cref="T:NATS.Client.Core.NatsException">Thrown when the reply-to contains whitespace.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.SubjectValidator.ValidateQueueGroup(System.String)">
+            <summary>
+            Validates a queue group string for whitespace characters (if not null).
+            </summary>
+            <param name="queueGroup">The queue group to validate, or null.</param>
+            <exception cref="T:NATS.Client.Core.NatsException">Thrown when the queue group is empty or contains whitespace.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.SubscriptionManager.WriteReconnectCommandsAsync(NATS.Client.Core.Commands.CommandWriter)">
+            <summary>
+            Returns commands for all the live subscriptions to be used on reconnect so that they can rebuild their connection state on the server.
+            </summary>
+            <remarks>
+            Commands returned form all the subscriptions will be run as a priority right after reconnection is established.
+            </remarks>
+            <returns>Enumerable list of commands</returns>
+        </member>
+        <member name="M:NATS.Client.Core.Internal.TaskCompletionSourceExtensions.TrySetObservedException(NATS.Client.Core.Internal.NetStandardExtensions.TaskCompletionSource,System.Exception)">
+            <summary>
+            Sets an exception on the task completion source and immediately observes it to avoid unobserved task exceptions surfacing.
+            </summary>
+            <param name="source">The task completion source.</param>
+            <param name="ex">The exception to set and observe.</param>
+            <returns>True if the exception was successfully set, otherwise false</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsAuthOpts.AuthCredCallback">
+            <summary>
+            Callback to provide NATS authentication credentials.
+            When specified, value of <see cref="T:NATS.Client.Core.NatsAuthCred"/> will take precedence
+            over other authentication options. Note that, <c>default</c> value of
+            <see cref="T:NATS.Client.Core.NatsAuthCred"/> should not be returned as the behavior is not defined.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsBufferWriter`1">
+            <summary>
+            Represents a heap-based, array-backed output sink into which <typeparamref name="T"/> data can be written.
+            </summary>
+            <typeparam name="T">The type of items to write to the current instance.</typeparam>
+        </member>
+        <member name="F:NATS.Client.Core.NatsBufferWriter`1.DefaultInitialBufferSize">
+            <summary>
+            The default buffer size to use to expand empty arrays.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsBufferWriter`1._pool">
+            <summary>
+            The <see cref="T:System.Buffers.ArrayPool`1"/> instance used to rent <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/>.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsBufferWriter`1._array">
+            <summary>
+            The underlying <typeparamref name="T"/> array.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsBufferWriter`1._index">
+            <summary>
+            The starting offset within <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> class.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.#ctor(System.Buffers.ArrayPool{`0})">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> class.
+            </summary>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance to use.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.#ctor(System.Int32)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> class.
+            </summary>
+            <param name="initialCapacity">The minimum capacity with which to initialize the underlying buffer.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="initialCapacity"/> is not valid.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.#ctor(System.Buffers.ArrayPool{`0},System.Int32)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> class.
+            </summary>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance to use.</param>
+            <param name="initialCapacity">The minimum capacity with which to initialize the underlying buffer.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="initialCapacity"/> is not valid.</exception>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.System#Buffers#IMemoryOwner{T}#Memory">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.WrittenMemory">
+            <summary>
+            Gets the data written to the underlying buffer so far, as a <see cref="T:System.ReadOnlyMemory`1"/>.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.WrittenSpan">
+            <summary>
+            Gets the data written to the underlying buffer so far, as a <see cref="T:System.ReadOnlySpan`1"/>.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.WrittenCount">
+            <summary>
+            Gets the amount of data written to the underlying buffer so far.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.Capacity">
+            <summary>
+            Gets the total amount of space within the underlying buffer.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsBufferWriter`1.FreeCapacity">
+            <summary>
+            Gets the amount of space available that can still be written into without forcing the underlying buffer to grow.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.Clear">
+            <summary>
+            Clears the data written to the underlying buffer.
+            </summary>
+            <remarks>
+            You must clear the buffer instance before trying to re-use it.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.Advance(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.GetMemory(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.GetSpan(System.Int32)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.DangerousGetArray">
+            <summary>
+            Gets an <see cref="T:System.ArraySegment`1"/> instance wrapping the underlying <typeparamref name="T"/> array in use.
+            </summary>
+            <returns>An <see cref="T:System.ArraySegment`1"/> instance wrapping the underlying <typeparamref name="T"/> array in use.</returns>
+            <exception cref="T:System.ObjectDisposedException">Thrown when the buffer in use has already been disposed.</exception>
+            <remarks>
+            This method is meant to be used when working with APIs that only accept an array as input, and should be used with caution.
+            In particular, the returned array is rented from an array pool, and it is responsibility of the caller to ensure that it's
+            not used after the current <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> instance is disposed. Doing so is considered undefined
+            behavior, as the same array might be in use within another <see cref="T:NATS.Client.Core.NatsBufferWriter`1"/> instance.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.Dispose">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ToString">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ThrowArgumentOutOfRangeExceptionForNegativeCount">
+            <summary>
+            Throws an <see cref="T:System.ArgumentOutOfRangeException"/> when the requested count is negative.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ThrowArgumentOutOfRangeExceptionForNegativeSizeHint">
+            <summary>
+            Throws an <see cref="T:System.ArgumentOutOfRangeException"/> when the size hint is negative.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ThrowArgumentExceptionForAdvancedTooFar">
+            <summary>
+            Throws an <see cref="T:System.ArgumentOutOfRangeException"/> when the requested count is negative.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ThrowObjectDisposedException">
+            <summary>
+            Throws an <see cref="T:System.ObjectDisposedException"/> when <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/> is <see langword="null"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.CheckBufferAndEnsureCapacity(System.Int32)">
+            <summary>
+            Ensures that <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/> has enough free space to contain a given number of new items.
+            </summary>
+            <param name="sizeHint">The minimum number of items to ensure space for in <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/>.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriter`1.ResizeBuffer(System.Int32)">
+            <summary>
+            Resizes <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/> to ensure it can fit the specified number of new items.
+            </summary>
+            <param name="sizeHint">The minimum number of items to ensure space for in <see cref="F:NATS.Client.Core.NatsBufferWriter`1._array"/>.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsBufferWriterExtensions.Resize``1(System.Buffers.ArrayPool{``0},``0[]@,System.Int32,System.Boolean)">
+            <summary>
+            Changes the number of elements of a rented one-dimensional array to the specified new size.
+            </summary>
+            <typeparam name="T">The type of items into the target array to resize.</typeparam>
+            <param name="pool">The target <see cref="T:System.Buffers.ArrayPool`1"/> instance to use to resize the array.</param>
+            <param name="array">The rented <typeparamref name="T"/> array to resize, or <see langword="null"/> to create a new array.</param>
+            <param name="newSize">The size of the new array.</param>
+            <param name="clearArray">Indicates whether the contents of the array should be cleared before reuse.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="newSize"/> is less than 0.</exception>
+            <remarks>When this method returns, the caller must not use any references to the old array anymore.</remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.ConnectAsync">
+            <summary>
+            Connect socket and write CONNECT command to nats server.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.OnMessageDropped``1(NATS.Client.Core.NatsSubBase,System.Int32,NATS.Client.Core.NatsMsg{``0})">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.GetBoundedChannelOpts(NATS.Client.Core.NatsSubChannelOpts)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.AddSubAsync(NATS.Client.Core.NatsSubBase,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.PingAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.PingOnlyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Send PING command to writers channel waiting on the chanel if necessary.
+            This is to make sure the PING time window is not missed in case the writer
+            channel is full with other commands and we will wait to enqueue rather than
+            just trying which might not happen in time on a busy channel.
+            </summary>
+            <param name="cancellationToken">Cancels the Ping command</param>
+            <returns><see cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous operation</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.PublishAsync(System.String,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.PublishAsync``1(System.String,``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.PublishAsync``1(NATS.Client.Core.NatsMsg{``0}@,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.ReconnectAsync">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.NewInbox">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.RequestAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.RequestAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.RequestManyAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.CreateRequestSubAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.SubscribeAsync``1(System.String,System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsConnection.SubscribeCoreAsync``1(System.String,System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.Core.NatsHeaders">
+            <summary>
+            Represents a wrapper for RequestHeaders and ResponseHeaders.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.#ctor">
+            <summary>
+            Initializes a new instance of <see cref="T:NATS.Client.Core.NatsHeaders"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.#ctor(System.Collections.Generic.Dictionary{System.String,Microsoft.Extensions.Primitives.StringValues})">
+            <summary>
+            Initializes a new instance of <see cref="T:NATS.Client.Core.NatsHeaders"/>.
+            </summary>
+            <param name="store">The value to use as the backing store.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.#ctor(System.Int32)">
+            <summary>
+            Initializes a new instance of <see cref="T:NATS.Client.Core.NatsHeaders"/>.
+            </summary>
+            <param name="capacity">The initial number of headers that this instance can contain.</param>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.Item(System.String)">
+            <summary>
+            Get or sets the associated value from the collection as a single string.
+            </summary>
+            <param name="key">The header name.</param>
+            <returns>the associated value from the collection as a StringValues or StringValues.Empty if the key is not present.</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.Count">
+            <summary>
+            Gets the number of elements contained in the <see cref="T:NATS.Client.Core.NatsHeaders" />;.
+            </summary>
+            <returns>The number of elements contained in the <see cref="T:NATS.Client.Core.NatsHeaders" />.</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.IsReadOnly">
+            <summary>
+            Gets a value that indicates whether the <see cref="T:NATS.Client.Core.NatsHeaders" /> is in read-only mode.
+            </summary>
+            <returns>true if the <see cref="T:NATS.Client.Core.NatsHeaders" /> is in read-only mode; otherwise, false.</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.Keys">
+            <summary>
+            Gets the collection of HTTP header names in this instance.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.Values">
+            <summary>
+            Gets the collection of HTTP header values in this instance.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Add(System.Collections.Generic.KeyValuePair{System.String,Microsoft.Extensions.Primitives.StringValues})">
+            <summary>
+            Adds a new header item to the collection.
+            </summary>
+            <param name="item">The item to add.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Add(System.String,Microsoft.Extensions.Primitives.StringValues)">
+            <summary>
+            Adds the given header and values to the collection.
+            </summary>
+            <param name="key">The header name.</param>
+            <param name="value">The header values.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Clear">
+            <summary>
+            Clears the entire list of objects.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Contains(System.Collections.Generic.KeyValuePair{System.String,Microsoft.Extensions.Primitives.StringValues})">
+            <summary>
+            Returns a value indicating whether the specified object occurs within this collection.
+            </summary>
+            <param name="item">The item.</param>
+            <returns>true if the specified object occurs within this collection; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.ContainsKey(System.String)">
+            <summary>
+            Determines whether the <see cref="T:NATS.Client.Core.NatsHeaders" /> contains a specific key.
+            </summary>
+            <param name="key">The key.</param>
+            <returns>true if the <see cref="T:NATS.Client.Core.NatsHeaders" /> contains a specific key; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.CopyTo(System.Collections.Generic.KeyValuePair{System.String,Microsoft.Extensions.Primitives.StringValues}[],System.Int32)">
+            <summary>
+            Copies the <see cref="T:NATS.Client.Core.NatsHeaders" /> elements to a one-dimensional Array instance at the specified index.
+            </summary>
+            <param name="array">The one-dimensional Array that is the destination of the specified objects copied from the <see cref="T:NATS.Client.Core.NatsHeaders" />.</param>
+            <param name="arrayIndex">The zero-based index in <paramref name="array" /> at which copying begins.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.GetBytesLength(System.Text.Encoding)">
+            <summary>
+            Returns the bytes length of the header
+            </summary>
+            <param name="encoding">Encoding used.  Default to utf8 if not provided</param>
+            <returns>Bytes length of the header</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Remove(System.Collections.Generic.KeyValuePair{System.String,Microsoft.Extensions.Primitives.StringValues})">
+            <summary>
+            Removes the given item from the the collection.
+            </summary>
+            <param name="item">The item.</param>
+            <returns>true if the specified object was removed from the collection; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Remove(System.String)">
+            <summary>
+            Removes the given header from the collection.
+            </summary>
+            <param name="key">The header name.</param>
+            <returns>true if the specified object was removed from the collection; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.TryGetValue(System.String,Microsoft.Extensions.Primitives.StringValues@)">
+            <summary>
+            Retrieves a value from the dictionary.
+            </summary>
+            <param name="key">The header name.</param>
+            <param name="value">The value.</param>
+            <returns>true if the <see cref="T:NATS.Client.Core.NatsHeaders" /> contains the key; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.TryGetLastValue(System.String,System.String@)">
+            <summary>
+            Retrieves a last value from the dictionary.
+            </summary>
+            <param name="key">The header name.</param>
+            <param name="value">The value.</param>
+            <returns>true if the <see cref="T:NATS.Client.Core.NatsHeaders" /> contains the key; otherwise, false.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.GetEnumerator">
+            <summary>
+            Returns an enumerator that iterates through a collection.
+            </summary>
+            <returns>An <see cref="T:NATS.Client.Core.NatsHeaders.Enumerator" /> object that can be used to iterate through the collection.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.System#Collections#Generic#IEnumerable{System#Collections#Generic#KeyValuePair{System#String,Microsoft#Extensions#Primitives#StringValues}}#GetEnumerator">
+            <summary>
+            Returns an enumerator that iterates through a collection.
+            </summary>
+            <returns>An <see cref="T:System.Collections.IEnumerator" /> object that can be used to iterate through the collection.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.System#Collections#IEnumerable#GetEnumerator">
+            <summary>
+            Returns an enumerator that iterates through a collection.
+            </summary>
+            <returns>An <see cref="T:System.Collections.IEnumerator" /> object that can be used to iterate through the collection.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.NatsHeaders.Enumerator">
+            <summary>
+            Enumerates a <see cref="T:NATS.Client.Core.NatsHeaders"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Enumerator.MoveNext">
+            <summary>
+            Advances the enumerator to the next element of the <see cref="T:NATS.Client.Core.NatsHeaders"/>.
+            </summary>
+            <returns><see langword="true"/> if the enumerator was successfully advanced to the next element;
+            <see langword="false"/> if the enumerator has passed the end of the collection.</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsHeaders.Enumerator.Current">
+            <summary>
+            Gets the element at the current position of the enumerator.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsHeaders.Enumerator.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.Core.NatsInstrumentationOptions">
+            <summary>
+            Options for the OpenTelemetry instrumentation.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsInstrumentationOptions.Filter">
+            <summary>
+            Gets or sets a filter function that determines whether or not to collect telemetry on a per request basis.
+            </summary>
+            <remarks>
+            The return value for the filter function is interpreted as follows:
+            - If filter returns `true`, the request is collected.
+            - If filter returns `false` or throws an exception the request is NOT collected.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsInstrumentationOptions.Enrich">
+            <summary>
+            Gets or sets an action to enrich an Activity.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsMemoryOwnerAllocationMode">
+            <summary>
+            An <see langword="enum"/> that indicates a mode to use when allocating buffers.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwnerAllocationMode.Default">
+            <summary>
+            The default allocation mode for pooled memory (rented buffers are not cleared).
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwnerAllocationMode.Clear">
+            <summary>
+            Clear pooled buffers when renting them.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsMemoryOwner`1">
+            <summary>
+            An <see cref="T:System.Buffers.IMemoryOwner`1"/> implementation with an embedded length and a fast <see cref="T:System.Span`1"/> accessor.
+            </summary>
+            <typeparam name="T">The type of items to store in the current instance.</typeparam>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwner`1._start">
+            <summary>
+            The starting offset within <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._array"/>.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwner`1._length">
+            <summary>
+            The usable length within <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._array"/> (starting from <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._start"/>).
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwner`1._pool">
+            <summary>
+            The <see cref="T:System.Buffers.ArrayPool`1"/> instance used to rent <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._array"/>.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsMemoryOwner`1._array">
+            <summary>
+            The underlying <typeparamref name="T"/> array.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.#ctor(System.Int32,System.Buffers.ArrayPool{`0},NATS.Client.Core.NatsMemoryOwnerAllocationMode)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> class with the specified parameters.
+            </summary>
+            <param name="length">The length of the new memory buffer to use.</param>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance to use.</param>
+            <param name="mode">Indicates the allocation mode to use for the new buffer to rent.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.#ctor(System.Int32,System.Int32,System.Buffers.ArrayPool{`0},`0[])">
+            <summary>
+            Initializes a new instance of the <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> class with the specified parameters.
+            </summary>
+            <param name="start">The starting offset within <paramref name="array"/>.</param>
+            <param name="length">The length of the array to use.</param>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance currently in use.</param>
+            <param name="array">The input <typeparamref name="T"/> array to use.</param>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMemoryOwner`1.Empty">
+            <summary>
+            Gets an empty <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMemoryOwner`1.Length">
+            <summary>
+            Gets the number of items in the current instance
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Allocate(System.Int32)">
+            <summary>
+            Creates a new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance with the specified parameters.
+            </summary>
+            <param name="size">The length of the new memory buffer to use.</param>
+            <returns>A <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance of the requested length.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is not valid.</exception>
+            <remarks>This method is just a proxy for the <see langword="private"/> constructor, for clarity.</remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Allocate(System.Int32,System.Buffers.ArrayPool{`0})">
+            <summary>
+            Creates a new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance with the specified parameters.
+            </summary>
+            <param name="size">The length of the new memory buffer to use.</param>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance currently in use.</param>
+            <returns>A <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance of the requested length.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is not valid.</exception>
+            <remarks>This method is just a proxy for the <see langword="private"/> constructor, for clarity.</remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Allocate(System.Int32,NATS.Client.Core.NatsMemoryOwnerAllocationMode)">
+            <summary>
+            Creates a new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance with the specified parameters.
+            </summary>
+            <param name="size">The length of the new memory buffer to use.</param>
+            <param name="mode">Indicates the allocation mode to use for the new buffer to rent.</param>
+            <returns>A <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance of the requested length.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is not valid.</exception>
+            <remarks>This method is just a proxy for the <see langword="private"/> constructor, for clarity.</remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Allocate(System.Int32,System.Buffers.ArrayPool{`0},NATS.Client.Core.NatsMemoryOwnerAllocationMode)">
+            <summary>
+            Creates a new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance with the specified parameters.
+            </summary>
+            <param name="size">The length of the new memory buffer to use.</param>
+            <param name="pool">The <see cref="T:System.Buffers.ArrayPool`1"/> instance currently in use.</param>
+            <param name="mode">Indicates the allocation mode to use for the new buffer to rent.</param>
+            <returns>A <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance of the requested length.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is not valid.</exception>
+            <remarks>This method is just a proxy for the <see langword="private"/> constructor, for clarity.</remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMemoryOwner`1.Memory">
+            <inheritdoc/>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMemoryOwner`1.Span">
+            <summary>
+            Gets a <see cref="T:System.Span`1"/> wrapping the memory belonging to the current instance.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.DangerousGetArray">
+            <summary>
+            Gets an <see cref="T:System.ArraySegment`1"/> instance wrapping the underlying <typeparamref name="T"/> array in use.
+            </summary>
+            <returns>An <see cref="T:System.ArraySegment`1"/> instance wrapping the underlying <typeparamref name="T"/> array in use.</returns>
+            <exception cref="T:System.ObjectDisposedException">Thrown when the buffer in use has already been disposed.</exception>
+            <remarks>
+            This method is meant to be used when working with APIs that only accept an array as input, and should be used with caution.
+            In particular, the returned array is rented from an array pool, and it is responsibility of the caller to ensure that it's
+            not used after the current <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance is disposed. Doing so is considered undefined behavior,
+            as the same array might be in use within another <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Slice(System.Int32,System.Int32)">
+            <summary>
+            Slices the buffer currently in use and returns a new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance.
+            </summary>
+            <param name="start">The starting offset within the current buffer.</param>
+            <param name="length">The length of the buffer to use.</param>
+            <returns>A new <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance using the target range of items.</returns>
+            <exception cref="T:System.ObjectDisposedException">Thrown when the buffer in use has already been disposed.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="start"/> or <paramref name="length"/> are not valid.</exception>
+            <remarks>
+            Using this method will dispose the current instance, and should only be used when an oversized
+            buffer is rented and then adjusted in size, to avoid having to rent a new buffer of the new
+            size and copy the previous items into the new one, or needing an additional variable/field
+            to manually handle to track the used range within a given <see cref="T:NATS.Client.Core.NatsMemoryOwner`1"/> instance.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.Dispose">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.ToString">
+            <inheritdoc/>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.ThrowObjectDisposedException">
+            <summary>
+            Throws an <see cref="T:System.ObjectDisposedException"/> when <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._array"/> is <see langword="null"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.ThrowInvalidOffsetException">
+            <summary>
+            Throws an <see cref="T:System.ArgumentOutOfRangeException"/> when the <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._start"/> is invalid.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMemoryOwner`1.ThrowInvalidLengthException">
+            <summary>
+            Throws an <see cref="T:System.ArgumentOutOfRangeException"/> when the <see cref="F:NATS.Client.Core.NatsMemoryOwner`1._length"/> is invalid.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.INatsMsg`1">
+            <summary>
+            This interface provides an optional contract when passing
+            messages to processing methods which is usually helpful in
+            creating test doubles in unit testing.
+            </summary>
+            <remarks>
+            <para>
+            Using this interface is optional and should not affect functionality.
+            </para>
+            <para>
+            There is a performance penalty when using this interface because
+            <see cref="T:NATS.Client.Core.NatsMsg`1"/> is a value type and boxing is required.
+            A boxing allocation occurs when a value type is converted to the
+            interface type. This is because the interface type is a reference
+            type and the value type must be converted to a reference type.
+            You should benchmark your application to determine if the
+            interface is worth the performance penalty or makes any noticeable
+            degradation in performance.
+            </para>
+            </remarks>
+            <typeparam name="T">Data type of the payload</typeparam>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.Subject">
+            <summary>The destination subject to publish to.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.ReplyTo">
+            <summary>The reply subject that subscribers can use to send a response back to the publisher/requester.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.Size">
+            <summary>Message size in bytes.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.Data">
+            <summary>Serializable data object.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.Connection">
+            <summary>NATS connection this message is associated to.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.INatsMsg`1.Error">
+            <summary>Any errors (generally serialization errors) encountered while processing the message.</summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsMsg`1.EnsureSuccess">
+            <summary>Throws an exception if the message contains any errors (generally serialization errors).</summary>
+        </member>
+        <member name="M:NATS.Client.Core.INatsMsg`1.ReplyAsync(NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply with an empty message.
+            </summary>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.INatsMsg`1.ReplyAsync``1(``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply to this message.
+            </summary>
+            <param name="data">Serializable data object.</param>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="TReply">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+            <remarks>
+            <para>
+            Publishes a new message using the reply-to subject from the this message as the destination subject.
+            </para>
+            <para>
+            If the <paramref name="serializer"/> is not specified, the <see cref="T:NATS.Client.Core.INatsSerializerRegistry"/> assigned to
+            the <see cref="T:NATS.Client.Core.NatsConnection"/> will be used to find a serializer for the type <typeparamref name="TReply"/>.
+            You can specify a <see cref="T:NATS.Client.Core.INatsSerializerRegistry"/> in <see cref="T:NATS.Client.Core.NatsOpts"/> when creating a
+            <see cref="T:NATS.Client.Core.NatsConnection"/>. If not specified, <see cref="T:NATS.Client.Core.NatsDefaultSerializerRegistry"/> will be used.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.INatsMsg`1.ReplyAsync``1(NATS.Client.Core.NatsMsg{``0},NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply to this message.
+            </summary>
+            <param name="msg">A <see cref="T:NATS.Client.Core.NatsMsg`1"/> representing message details.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="TReply">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+            <remarks>
+            Publishes a new message using the reply-to subject from the this message as the destination subject.
+            </remarks>
+        </member>
+        <member name="T:NATS.Client.Core.NatsMsg`1">
+            <summary>
+            NATS message structure as defined by the protocol.
+            </summary>
+            <typeparam name="T">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <remarks>
+            <para>Connection property is used to provide reply functionality.</para>
+            <para>
+            Message size is calculated using the same method NATS server uses:
+            <code lang="C#">
+            int size = subject.Length + replyTo.Length + headers.Length + payload.Length;
+            </code>
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.#ctor(System.String,System.String,System.Int32,NATS.Client.Core.NatsHeaders,`0,NATS.Client.Core.INatsConnection,NATS.Client.Core.NatsMsgFlags)">
+            <summary>
+            NATS message structure as defined by the protocol.
+            </summary>
+            <param name="subject">The destination subject to publish to.</param>
+            <param name="replyTo">The reply subject that subscribers can use to send a response back to the publisher/requester.</param>
+            <param name="size">Message size in bytes.</param>
+            <param name="headers">Pass additional information using name-value pairs.</param>
+            <param name="data">Serializable data object.</param>
+            <param name="connection">NATS connection this message is associated to.</param>
+            <param name="flags">Message flags to indicate no responders and empty payloads.</param>
+            <remarks>
+            <para>Connection property is used to provide reply functionality.</para>
+            <para>
+            Message size is calculated using the same method NATS server uses:
+            <code lang="C#">
+            int size = subject.Length + replyTo.Length + headers.Length + payload.Length;
+            </code>
+            </para>
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Error">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Subject">
+            <summary>The destination subject to publish to.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.ReplyTo">
+            <summary>The reply subject that subscribers can use to send a response back to the publisher/requester.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Size">
+            <summary>Message size in bytes.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Headers">
+            <summary>Pass additional information using name-value pairs.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Data">
+            <summary>Serializable data object.</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsg`1.Connection">
+            <summary>NATS connection this message is associated to.</summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.EnsureSuccess">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.ReplyAsync(NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply with an empty message.
+            </summary>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.ReplyAsync``1(``0,NATS.Client.Core.NatsHeaders,System.String,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply to this message.
+            </summary>
+            <param name="data">Serializable data object.</param>
+            <param name="headers">Optional message headers.</param>
+            <param name="replyTo">Optional reply-to subject.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="TReply">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+            <remarks>
+            <para>
+            Publishes a new message using the reply-to subject from the this message as the destination subject.
+            </para>
+            <para>
+            If the <paramref name="serializer"/> is not specified, the <see cref="T:NATS.Client.Core.INatsSerializerRegistry"/> assigned to
+            the <see cref="T:NATS.Client.Core.NatsConnection"/> will be used to find a serializer for the type <typeparamref name="TReply"/>.
+            You can specify a <see cref="T:NATS.Client.Core.INatsSerializerRegistry"/> in <see cref="T:NATS.Client.Core.NatsOpts"/> when creating a
+            <see cref="T:NATS.Client.Core.NatsConnection"/>. If not specified, <see cref="T:NATS.Client.Core.NatsDefaultSerializerRegistry"/> will be used.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.ReplyAsync``1(NATS.Client.Core.NatsMsg{``0},NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.NatsPubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Reply to this message.
+            </summary>
+            <param name="msg">A <see cref="T:NATS.Client.Core.NatsMsg`1"/> representing message details.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">A <see cref="T:NATS.Client.Core.NatsPubOpts"/> for publishing options.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the command.</param>
+            <typeparam name="TReply">Specifies the type of data that may be sent to the NATS Server.</typeparam>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous send operation.</returns>
+            <remarks>
+            Publishes a new message using the reply-to subject from the this message as the destination subject.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsg`1.Build(System.String,System.String,System.Nullable{System.Buffers.ReadOnlySequence{System.Byte}}@,System.Buffers.ReadOnlySequence{System.Byte}@,NATS.Client.Core.INatsConnection,NATS.Client.Core.NatsHeaderParser,NATS.Client.Core.INatsDeserialize{`0})">
+            <summary>
+            Builds a new instance of a <see cref="T:NATS.Client.Core.NatsMsg`1"/> with the specified parameters.
+            </summary>
+            <remarks>
+            (INTERNAL API) This method is intended for internal use only. it doesn't have the same
+            guarantees as the public API. it may change in future versions with no notice.
+            </remarks>
+            <param name="subject">The subject string associated with the message.</param>
+            <param name="replyTo">The optional reply-to subject string.</param>
+            <param name="headersBuffer">The optional buffer containing the message headers.</param>
+            <param name="payloadBuffer">The buffer containing the message payload.</param>
+            <param name="connection">The connection associated with the message.</param>
+            <param name="headerParser">The parser for processing message headers.</param>
+            <param name="serializer">The deserializer for the message payload.</param>
+            <returns>A new <see cref="T:NATS.Client.Core.NatsMsg`1"/> instance containing the provided data.</returns>
+            <exception cref="T:NATS.Client.Core.NatsException">Thrown if there is an error during the processing of the message.</exception>
+        </member>
+        <member name="T:NATS.Client.Core.NatsMsgBuilder`1">
+            <summary>
+            Builder class for creating <see cref="T:NATS.Client.Core.NatsMsg`1" />
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Subject">
+            <summary>
+            The destination subject to publish to.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.ReplyTo">
+            <summary>
+            The reply subject that subscribers can use to send a response back to the publisher/requester.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Headers">
+            <summary>
+            Pass additional information using name-value pairs.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Data">
+            <summary>
+                Gets or sets the message payload.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Connection">
+            <summary>
+            NATS connection this message is associated to.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Flags">
+            <summary>
+            Message flags to indicate no responders and empty payloads.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Serializer">
+            <summary>
+            Serializer to use for the calculate data size.
+            </summary>
+            <remarks>This results in double serialization: once for size calculation, once when publishing.</remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.SerializationBufferSize">
+            <summary>
+            The serializer buffer size
+            </summary>
+            <remarks>This results in double serialization: once for size calculation, once when publishing.</remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Encoding">
+            <summary>
+            Encoding used.  Default to utf8 if not provided
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsMsgBuilder`1.Msg">
+            <summary>
+                Builds and returns the <see cref="T:NATS.Client.Core.NatsMsg`1" /> instance.
+            </summary>
+            <exception cref="T:System.InvalidOperationException">Thrown if <see cref="P:NATS.Client.Core.NatsMsgBuilder`1.Subject"/> is null or Empty</exception>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsgTelemetryExtensions.StartActivity``1(NATS.Client.Core.NatsMsg{``0}@,System.String,System.Collections.Generic.IEnumerable{System.Collections.Generic.KeyValuePair{System.String,System.Object}})">
+            <summary>Start an activity under the NatsMsg associated activity.</summary>
+            <param name="msg">Nats message</param>
+            <param name="name">Name of new activity</param>
+            <param name="tags">Optional tags to add to the activity</param>
+            <returns>Returns an <see cref="T:System.Diagnostics.Activity"/> or null if no listeners.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsMsgTelemetryExtensions.GetActivityContext(NATS.Client.Core.NatsHeaders)">
+            <summary>Gets the activity context carried by the NatsHeaders.</summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsRequestReplyMode">
+            <summary>
+            Specifies the modes for handling request-reply interactions in NATS.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsRequestReplyMode.SharedInbox">
+            <summary>
+            Uses a shared inbox for all requests.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsRequestReplyMode.Direct">
+            <summary>
+            Uses a direct reply for each request.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsOpts">
+            <summary>
+            Immutable options for NatsConnection, you can configure via `with` operator.
+            </summary>
+            <seealso href="https://www.nuget.org/packages/Synadia.Orbit.NatsContext">Load NatsOpts from NATS CLI context files</seealso>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.Url">
+            <summary>
+            NATS server URL to connect to. (default: nats://localhost:4222)
+            </summary>
+            <remarks>
+            <para>
+            You can set more than one server as seed servers in a comma-separated list.
+            The client will randomly select a server from the list to connect to unless
+            <see cref="P:NATS.Client.Core.NatsOpts.NoRandomize"/> (which is <c>false</c> by default) is set to <c>true</c>.
+            </para>
+            <para>
+            User-password or token authentication can be set in the URL.
+            For example, <c>nats://derek:s3cr3t@localhost:4222</c> or <c>nats://token@localhost:4222</c>.
+            You can also set the username and password or token separately using <see cref="P:NATS.Client.Core.NatsOpts.AuthOpts"/>;
+            however, if both are set, the <see cref="P:NATS.Client.Core.NatsOpts.AuthOpts"/> will take precedence.
+            You should URL-encode the username and password or token if they contain special characters.
+            </para>
+            <para>
+            If multiple servers are specified and user-password or token authentication is used in the URL,
+            only the credentials in the first server URL will be used; credentials in the remaining server
+            URLs will be ignored.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.TlsOpts">
+            <summary>
+            TLS options for the connection.
+            </summary>
+            <remarks>
+            By default the client attempts a TLS upgrade when the server advertises TLS support.
+            If you don't want TLS (e.g. behind a TLS-terminating proxy), set
+            <see cref="P:NATS.Client.Core.NatsTlsOpts.Mode"/> to <see cref="F:NATS.Client.Core.TlsMode.Disable"/>.
+            </remarks>
+            <seealso cref="P:NATS.Client.Core.NatsTlsOpts.Mode"/>
+            <seealso cref="T:NATS.Client.Core.TlsMode"/>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.MaxPayloadHardCap">
+            <summary>
+            Maximum allowed incoming message size. Provides a client-side safeguard against
+            unexpectedly large messages causing out-of-memory conditions.
+            Default is 64 MB.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.ReconnectWaitMin">
+            <summary>
+            Minimum amount of time to wait between reconnect attempts. (default: 2s)
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.ReconnectJitter">
+            <summary>
+            Random amount of time to wait between reconnect attempts. (default: 100ms)
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.HeaderEncoding">
+            <summary>
+            Gets or sets encoding used for NATS message header names and values. (default: ASCII)
+            </summary>
+            <remarks>
+            NATS headers follow HTTP/1.1 conventions where header field values are
+            restricted to visible US-ASCII characters per RFC 9110. Use base64 encoding
+            for non-ASCII data in header values.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SubjectEncoding">
+            <summary>
+            Gets or sets encoding used for NATS subjects and reply-to addresses. (default: UTF-8)
+            </summary>
+            <remarks>
+            The NATS protocol specifies that subjects are UTF-8 encoded on the wire.
+            UTF-8 is backwards compatible with ASCII, so existing ASCII-only subjects
+            are unaffected by this default.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.DrainSubscriptionsOnDispose">
+            <summary>
+            When true, <see cref="M:NATS.Client.Core.NatsConnection.DisposeAsync"/> drains subscriptions
+            and flushes the command writer before closing the socket. (default: false)
+            </summary>
+            <remarks>
+            <para>
+            With the default (false), the socket is closed first, which means UNSUB
+            and any pending writes (e.g. JetStream acks queued by a consume loop)
+            are dropped. Enable to let subscriptions drain cleanly on dispose.
+            Required for <see cref="P:NATS.Client.Core.NatsOpts.ConsumerDrainOnDisposeTimeout"/> to be effective.
+            </para>
+            <para>
+            Drain mechanism: each subscription sends UNSUB, then a PING and waits
+            for the PONG (bounded by <see cref="P:NATS.Client.Core.NatsOpts.DrainPingTimeout"/>). Once the
+            PONG arrives the server has processed UNSUB and the socket reader has
+            delivered any messages the server sent before that, so completing the
+            user channel afterwards won't drop in-flight messages. Subscriptions
+            drain in parallel on connection dispose, so total dispose time is
+            bounded by one round-trip plus the <see cref="P:NATS.Client.Core.NatsOpts.ConsumerDrainOnDisposeTimeout"/>
+            wait if set, not multiplied by the number of subscriptions.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.ConsumerDrainOnDisposeTimeout">
+            <summary>
+            When set, JetStream consumer/fetch dispose waits up to this timeout for
+            the user's consume loop to finish acking buffered messages before
+            returning. (default: null, no wait)
+            </summary>
+            <remarks>
+            Only effective when <see cref="P:NATS.Client.Core.NatsOpts.DrainSubscriptionsOnDispose"/> is also
+            true. Without this wait, messages already delivered into the consumer
+            channel but not yet yielded by the user loop are dropped on dispose
+            and remain NumAckPending until AckWait expires.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.DrainPingTimeout">
+            <summary>
+            Per-subscription PING/PONG timeout used during drain on dispose.
+            (default: 5 seconds)
+            </summary>
+            <remarks>
+            Bounds how long drain will wait for the server to ack the UNSUB before
+            completing the user channel anyway. Increase for high-latency networks
+            where a single round-trip can exceed the default. Only effective when
+            <see cref="P:NATS.Client.Core.NatsOpts.DrainSubscriptionsOnDispose"/> is true.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.MaxReconnectRetry">
+            <summary>
+            Maximum number of reconnect attempts. (default: -1, unlimited)
+            </summary>
+            <remarks>
+            Set to -1 for unlimited retries.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.ReconnectWaitMax">
+            <summary>
+            Backoff delay limit for reconnect attempts. (default: 5 seconds)
+            </summary>
+            <remarks>
+            When the connection is lost, the client will wait for <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMin"/> before attempting to reconnect.
+            Every failed attempt will increase the wait time by 2x, up to <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMax"/>.
+            If <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMax"/> is equal to or less than <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMin"/>, the delay will be constant.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.IgnoreAuthErrorAbort">
+            <summary>
+            Opts-out of the default connect behavior of aborting
+            subsequent reconnect attempts if server returns the same auth error twice.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SubPendingChannelCapacity">
+            <summary>
+            This value will be used for subscriptions internal bounded message channel capacity.
+            The default subscriber pending message limit is 1024.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SubPendingChannelFullMode">
+            <summary>
+            This value will be used for subscriptions internal bounded message channel <c>FullMode</c>.
+            The default is to drop newest message when full (<c>BoundedChannelFullMode.DropNewest</c>).
+            </summary>
+            <remarks>
+            If the client reaches this internal limit (bounded channel capacity), by default it will drop messages
+            and continue to process new messages. This is aligned with NATS at most once delivery. It is up to
+            the application to detect the missing messages (<seealso cref="E:NATS.Client.Core.NatsConnection.MessageDropped"/>) and recover
+            from this condition or set a different default such as <c>BoundedChannelFullMode.Wait</c> in which
+            case it might risk server disconnecting the client as a slow consumer.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.RequestReplyMode">
+            <summary>
+            Determines the mechanism for handling request-reply interactions in NATS.
+            </summary>
+            <remarks>
+            There are two available modes:
+            <para>
+            1. <see cref="F:NATS.Client.Core.NatsRequestReplyMode.SharedInbox"/> - Uses a shared subscription inbox for handling replies
+            to request messages, using the muxer.
+            </para>
+            <para>
+            2. <see cref="F:NATS.Client.Core.NatsRequestReplyMode.Direct"/> - While using the same inbox prefix, each reply
+            is handled before being processed by the muxer. This mode is more resource-efficient.
+            </para>
+            The <see cref="P:NATS.Client.Core.NatsOpts.RequestReplyMode"/> setting determines which mode is used during message exchanges
+            initiated by <see cref="M:NATS.Client.Core.NatsConnection.RequestAsync``2(System.String,``0,NATS.Client.Core.NatsHeaders,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)"/> or other related methods.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SocketConnectionFactory">
+            <summary>
+            Factory for creating socket connections to the NATS server.
+            When set, this factory will be used instead of the default connection implementation.
+            For the library to handle TLS upgrade automatically, implement the <see cref="T:NATS.Client.Core.INatsTlsUpgradeableSocketConnection"/> interface.
+            </summary>
+            <seealso cref="T:NATS.Client.Core.INatsTlsUpgradeableSocketConnection"/>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.RetryOnInitialConnect">
+            <summary>
+            Determines whether the client should retry connecting to the server during the initial connection
+            attempt if the connection fails. (default: <c>false</c>)
+            </summary>
+            <remarks>
+            <para>
+            This property controls the behavior of the initial connection process.
+            </para>
+            <para>
+            When set to <c>true</c>, the client will periodically retry connecting to the server based on the
+            configured retry intervals until a successful connection is established or the operation is explicitly canceled.
+            </para>
+            <para>
+            When set to <c>false</c> (default behavior), the client will not retry and will throw an exception
+            if the connection cannot be established initially.
+            </para>
+            <para>
+            The retry intervals are influenced by options such as <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMin"/> and <see cref="P:NATS.Client.Core.NatsOpts.ReconnectWaitMax"/>, with the potential addition of <see cref="P:NATS.Client.Core.NatsOpts.ReconnectJitter"/> for randomized delays between retries.
+            This property is particularly useful in scenarios where transient network failures or server unavailability are expected during the first connection attempt.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.PublishTimeoutOnDisconnected">
+            <summary>
+            Gets or sets a value indicating whether publish would throw an exception
+            when the connection is disconnected and the <see cref="P:NATS.Client.Core.NatsOpts.CommandTimeout"/> is reached.
+            The default is <c>false</c>, meaning publish will not throw on disconnected state
+            and will wait to publish the message until reconnected.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SkipSubjectValidation">
+            <summary>
+            Gets or sets a value indicating whether to skip subject validation.
+            The default is <c>false</c>, meaning subject validation is enabled.
+            </summary>
+            <remarks>
+            <para>
+            When set to <c>false</c> (default), subjects are validated to ensure they are not empty
+            and don't contain whitespace characters (space, tab, CR, LF). This prevents CRLF
+            protocol injection where a subject containing \r\n could inject arbitrary NATS commands.
+            </para>
+            <para>
+            When set to <c>true</c>, all subject validation is bypassed for maximum throughput.
+            Only use this if you fully control all subject strings and can guarantee they never
+            contain whitespace or CRLF sequences.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsOpts.SuppressSlowConsumerWarnings">
+            <summary>
+            Gets or sets a value indicating whether to suppress warning logs when a slow consumer is detected.
+            The default is <c>false</c>, meaning warnings will be logged once per slow consumer episode.
+            </summary>
+            <remarks>
+            <para>
+            When a subscription becomes a slow consumer (dropping messages due to channel capacity limits),
+            a warning is logged once. The warning will be logged again if the subscription recovers
+            (channel drains to nearly empty) and then becomes slow again.
+            </para>
+            <para>
+            Note that the <see cref="E:NATS.Client.Core.NatsConnection.MessageDropped"/> and <see cref="E:NATS.Client.Core.NatsConnection.SlowConsumerDetected"/>
+            events will still fire regardless of this setting.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsOptsExtensions.BackoffWithJitterAsync(NATS.Client.Core.NatsOpts,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Applies an exponential backoff delay with an added random jitter for attempts.
+            </summary>
+            <param name="opts">The NatsOpts instance containing configuration settings for intervals and jitter.</param>
+            <param name="iter">The current attempt iteration, used to calculate the exponential delay.</param>
+            <param name="cancellationToken">Cancel back-off delay.</param>
+            <returns>A task that completes after the calculated delay time has elapsed.</returns>
+        </member>
+        <member name="P:NATS.Client.Core.NatsPubOpts.WaitUntilSent">
+            <summary>
+            Obsolete option historically used to control when PublishAsync returned
+            No longer has any effect
+            This option method will be removed in a future release
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsPubOpts.ErrorHandler">
+            <summary>
+            Obsolete callback historically used for handling serialization errors
+            All errors are now thrown as exceptions in PublishAsync
+            This option method will be removed in a future release
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsRequestExtensions.RequestAsync``2(NATS.Client.Core.INatsConnection,NATS.Client.Core.NatsMsg{``0}@,NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Request and receive a single reply from a responder.
+            </summary>
+            <param name="nats">NATS connection</param>
+            <param name="msg">Message to be sent as request</param>
+            <param name="requestSerializer">Serializer to use for the request message type.</param>
+            <param name="replySerializer">Serializer to use for the reply message type.</param>
+            <param name="requestOpts">Request publish options</param>
+            <param name="replyOpts">Reply handler subscription options</param>
+            <param name="cancellationToken">Cancel this request</param>
+            <typeparam name="TRequest">Request type</typeparam>
+            <typeparam name="TReply">Reply type</typeparam>
+            <returns>Returns the <see cref="T:NATS.Client.Core.NatsMsg`1"/> received from the responder as reply.</returns>
+            <exception cref="T:System.OperationCanceledException">Raised when cancellation token is used</exception>
+            <remarks>
+            Response can be (null) or one <see cref="T:NATS.Client.Core.NatsMsg`1"/>.
+            Reply option's max messages will be set to 1.
+            if reply option's timeout is not defined then it will be set to NatsOpts.RequestTimeout.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsRequestManyExtensions.RequestManyAsync``2(NATS.Client.Core.INatsConnection,NATS.Client.Core.NatsMsg{``0},NATS.Client.Core.INatsSerialize{``0},NATS.Client.Core.INatsDeserialize{``1},NATS.Client.Core.NatsPubOpts,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Request and receive zero or more replies from a responder.
+            </summary>
+            <param name="nats">NATS connection</param>
+            <param name="msg">Message to be sent as request</param>
+            <param name="requestSerializer">Serializer to use for the request message type.</param>
+            <param name="replySerializer">Serializer to use for the reply message type.</param>
+            <param name="requestOpts">Request publish options</param>
+            <param name="replyOpts">Reply handler subscription options</param>
+            <param name="cancellationToken">Cancel this request</param>
+            <typeparam name="TRequest">Request type</typeparam>
+            <typeparam name="TReply">Reply type</typeparam>
+            <returns>An asynchronous enumerable of <see cref="T:NATS.Client.Core.NatsMsg`1"/> objects</returns>
+            <exception cref="T:System.OperationCanceledException">Raised when cancellation token is used</exception>
+            <remarks>
+            if reply option's timeout is not defined then it will be set to NatsOpts.RequestTimeout.
+            </remarks>
+        </member>
+        <member name="T:NATS.Client.Core.NatsDefaultSerializer`1">
+            <summary>
+            Default serializer for NATS messages.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.NatsDefaultSerializer`1.Default">
+            <summary>
+            Combined serializer of <see cref="T:NATS.Client.Core.NatsRawSerializer`1"/> and <see cref="T:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1"/> set
+            as the default serializer for NATS messages.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1">
+            <summary>
+            UTF8 serializer for strings and all the primitives.
+            </summary>
+            <remarks>
+            Supported types are <c>string</c>, <c>DateTime</c>, <c>DateTimeOffset</c>, <c>Guid</c>,
+            <c>TimeSpan</c>, <c>bool</c>, <c>byte</c>, <c>decimal</c>, <c>double</c>, <c>float</c>,
+            <c>int</c>, <c>long</c>, <c>sbyte</c>, <c>short</c>, <c>uint</c> and <c>ulong</c>.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1.#ctor(NATS.Client.Core.INatsSerializer{`0})">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1"/>.
+            </summary>
+            <param name="next">The next serializer in chain.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1.CombineWith(NATS.Client.Core.INatsSerializer{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1.Serialize(System.Buffers.IBufferWriter{System.Byte},`0)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsUtf8PrimitivesSerializer`1.Deserialize(System.Buffers.ReadOnlySequence{System.Byte}@)">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.Core.NatsRawSerializer`1">
+            <summary>
+            Serializer for binary data.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsRawSerializer`1.#ctor(NATS.Client.Core.INatsSerializer{`0})">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Core.NatsRawSerializer`1"/>.
+            </summary>
+            <param name="next">Next serializer in chain.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsRawSerializer`1.CombineWith(NATS.Client.Core.INatsSerializer{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsRawSerializer`1.Serialize(System.Buffers.IBufferWriter{System.Byte},`0)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsRawSerializer`1.Deserialize(System.Buffers.ReadOnlySequence{System.Byte}@)">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.Core.NatsJsonContextSerializer`1">
+            <summary>
+            Serializer with support for <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsJsonContextSerializer`1.#ctor(System.Text.Json.Serialization.JsonSerializerContext[],NATS.Client.Core.INatsSerializer{`0})">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Core.NatsJsonContextSerializer`1"/>.
+            </summary>
+            <param name="contexts">Context to use for serialization.</param>
+            <param name="next">Next serializer in chain.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsJsonContextSerializer`1.CombineWith(NATS.Client.Core.INatsSerializer{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsJsonContextSerializer`1.Serialize(System.Buffers.IBufferWriter{System.Byte},`0)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.Core.NatsJsonContextSerializer`1.Deserialize(System.Buffers.ReadOnlySequence{System.Byte}@)">
+            <inheritdoc />
+        </member>
+        <member name="T:NATS.Client.Core.NatsSerializerBuilder`1">
+            <summary>
+            Represents a builder for creating a chain of serializers for NATS messages.
+            </summary>
+            <typeparam name="T">Serialized object type</typeparam>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSerializerBuilder`1.Add(NATS.Client.Core.INatsSerializer{`0})">
+            <summary>
+            Adds a serializer to the chain of serializers for NATS messages.
+            </summary>
+            <param name="serializer">The serializer to be added.</param>
+            <returns>The updated instance of the serializer builder.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSerializerBuilder`1.Build">
+            <summary>
+            Builds a chain of serializers for NATS messages based on the added serializers.
+            Serializers are combined in the reverse order they were added.
+            </summary>
+            <returns>The combined serializer chain.</returns>
+        </member>
+        <member name="T:NATS.Client.Core.NatsSubBase">
+            <summary>
+            The base class for NATS subscriptions.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.#ctor(NATS.Client.Core.INatsConnection,NATS.Client.Core.INatsSubscriptionManager,System.String,System.String,NATS.Client.Core.NatsSubOpts,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new instance of <see cref="T:NATS.Client.Core.NatsSubBase"/>.
+            </summary>
+            <param name="connection">NATS connection.</param>
+            <param name="manager">Subscription manager.</param>
+            <param name="subject">Subject to subscribe to.</param>
+            <param name="queueGroup">Queue group name.</param>
+            <param name="opts">Subscription options.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubBase.Subject">
+            <summary>
+            The subject name to subscribe to.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubBase.QueueGroup">
+            <summary>
+            If specified, the subscriber will join this queue group. Subscribers with the same queue group name,
+            become a queue group, and only one randomly chosen subscriber of the queue group will
+            consume a message each time a message is received by the queue group.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubBase.Exception">
+            <summary>
+            Represents an exception that occurs during the execution of a NATS subscription.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubBase.EndReason">
+            <summary>
+            The reason for the subscription ending.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubBase.Connection">
+            <summary>
+            Represents a connection to the NATS server.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.ReadyAsync">
+            <summary>
+            Signals that the subscription is ready to receive messages.
+            Override this method to perform any initialization logic.
+            </summary>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.UnsubscribeAsync">
+            <summary>
+            Complete the message channel, stop timers if they were used and send an unsubscribe
+            message to the server.
+            </summary>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous server UNSUB operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.DisposeAsync">
+            <summary>
+            Disposes the instance asynchronously.
+            </summary>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> representing the asynchronous disposal operation.</returns>
+            <exception cref="P:NATS.Client.Core.NatsSubBase.Exception">Thrown when an exception occurs during disposal.</exception>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.ReceiveAsync(System.String,System.String,System.Nullable{System.Buffers.ReadOnlySequence{System.Byte}},System.Buffers.ReadOnlySequence{System.Byte})">
+            <summary>
+            Called when a message is received for the subscription.
+            Calls <see cref="M:NATS.Client.Core.NatsSubBase.ReceiveInternalAsync(System.String,System.String,System.Nullable{System.Buffers.ReadOnlySequence{System.Byte}},System.Buffers.ReadOnlySequence{System.Byte})"/> to process the message handling any exceptions.
+            </summary>
+            <param name="subject">Subject received for this subscription.</param>
+            <param name="replyTo">Reply subject received for this subscription.</param>
+            <param name="headersBuffer">Headers buffer received for this subscription.</param>
+            <param name="payloadBuffer">Payload buffer received for this subscription.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.DrainAsync">
+            <summary>
+            Sends UNSUB to the server, waits for PING/PONG round-trip to ensure
+            all in-flight messages are processed, then completes the channel.
+            This avoids the race where TryComplete() closes the channel while
+            the socket reader is still delivering messages.
+            </summary>
+            <remarks>
+            No-op unless <see cref="P:NATS.Client.Core.NatsOpts.DrainSubscriptionsOnDispose"/> is
+            enabled. The connection-level dispose path also gates entry into
+            this method on the same flag (see ordering in
+            <see cref="M:NATS.Client.Core.NatsConnection.DisposeAsync"/>).
+            </remarks>
+            <returns>A <see cref="T:System.Threading.Tasks.ValueTask"/> that represents the asynchronous drain operation.</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.TryMarkSlowConsumer">
+            <summary>
+            Marks this subscription as a slow consumer. Returns true if this was a state transition
+            (i.e., the subscription was not previously marked as a slow consumer).
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.WriteReconnectCommandsAsync(NATS.Client.Core.Commands.CommandWriter,System.Int32)">
+            <summary>
+            Write commands when reconnecting.
+            </summary>
+            <remarks>
+            By default this will write the required subscription command.
+            When overriden base must be called to write the re-subscription command.
+            Additional command (e.g. publishing pull requests in case of JetStream consumers) can be written as part of the reconnect routine.
+            </remarks>
+            <param name="commandWriter">command writer used to write reconnect commands</param>
+            <param name="sid">SID which might be required to create subscription commands</param>
+            <returns>ValueTask</returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.MarkReaderActive">
+            <summary>
+            Marks the user-side reader as active so dispose can wait for it to
+            drain buffered messages before completing. Pairs with
+            <see cref="M:NATS.Client.Core.NatsSubBase.MarkReaderInactive"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.MarkReaderInactive">
+            <summary>
+            Signals the user-side reader has exited. Pairs with <see cref="M:NATS.Client.Core.NatsSubBase.MarkReaderActive"/>.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.ReceiveInternalAsync(System.String,System.String,System.Nullable{System.Buffers.ReadOnlySequence{System.Byte}},System.Buffers.ReadOnlySequence{System.Byte})">
+            <summary>
+            Invoked when a MSG or HMSG arrives for the subscription.
+            <remarks>
+            This method is invoked while reading from the socket. Buffers belong to the socket reader and you should process them as quickly as possible or create a copy before you return from this method.
+            </remarks>
+            </summary>
+            <param name="subject">Subject received for this subscription. This might not be the subject you subscribed to especially when using wildcards. For example, if you subscribed to events.* you may receive events.open.</param>
+            <param name="replyTo">Subject the sender wants you to send messages back to it.</param>
+            <param name="headersBuffer">Raw headers bytes. You can use <see cref="T:NATS.Client.Core.NatsConnection"/> <see cref="T:NATS.Client.Core.NatsHeaderParser"/> to decode them.</param>
+            <param name="payloadBuffer">Raw payload bytes.</param>
+            <returns></returns>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.WaitForReaderDrainAsync">
+            <summary>
+            Waits for the user-side reader to exit so buffered messages can be
+            drained on dispose. No-op when the reader was never marked active or
+            when <see cref="P:NATS.Client.Core.NatsOpts.ConsumerDrainOnDisposeTimeout"/> is unset.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.ResetSlowConsumer(System.Int32)">
+            <summary>
+            Resets the slow consumer state if the channel has drained, allowing another
+            slow consumer event to be raised if the subscription becomes slow again.
+            </summary>
+            <param name="pendingMsgCount">The current number of messages pending in the channel.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.SetException(System.Exception)">
+            <summary>
+            Sets the exception that caused the subscription to end.
+            </summary>
+            <param name="exception">Exception that caused the subscription to end.</param>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.ResetIdleTimeout">
+            <summary>
+            Resets the idle timeout timer.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.DecrementMaxMsgs">
+            <summary>
+            Decrements the maximum number of messages.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.TryComplete">
+            <summary>
+            Invoked to signal end of the subscription.
+            </summary>
+            <remarks>
+            Do not implement complex logic in this method. It should only be used to complete the channel writers.
+            The reason is that this method might be invoked while instance is being created in constructors and
+            the cancellation token might be cancelled before the members are fully initialized.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.NatsSubBase.EndSubscription(NATS.Client.Core.NatsSubEndReason)">
+            <summary>
+            Ends the subscription with the specified reason.
+            </summary>
+            <param name="reason">Reason for ending the subscription.</param>
+        </member>
+        <member name="T:NATS.Client.Core.NatsSubChannelOpts">
+            <summary>
+            Options For setting the FullMode and Capacity for a the <see cref="T:System.Threading.Channels.Channel"/> created for Subscriptions
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubChannelOpts.FullMode">
+            <summary>
+            The Behavior of the Subscription's Channel when the Capacity has been reached.
+            By default, the behavior is <seealso cref="F:System.Threading.Channels.BoundedChannelFullMode.Wait"/>
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubChannelOpts.Capacity">
+            <summary>
+            The Maximum Capacity for the channel. If not specified, a default of 1000 is used.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.MaxMsgs">
+            <summary>
+            Number of messages to wait for before automatically unsubscribing.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.Timeout">
+            <summary>
+            Amount of time to wait before automatically unsubscribing.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.StartUpTimeout">
+            <summary>
+            Maximum amount of time allowed before the first message is received.
+            If exceeded, subscription will be automatically unsubscribed.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.IdleTimeout">
+            <summary>
+            Maximum amount of time allowed between any two subsequent messages
+            before automatically unsubscribing.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.StopOnEmptyMsg">
+            <summary>
+            If true, end the subscription upon receiving an empty message.
+            The empty message will not be delivered to the subscription.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.ThrowIfNoResponders">
+            <summary>
+            If true, end the subscription and throw an exception if a
+            no responders status message is received.
+            The no responders status message will not be delivered to the subscription.
+            </summary>
+            <remarks>
+            If not set, all published messages will be received until explicitly
+            unsubscribed or disposed.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsSubOpts.ChannelOpts">
+            <summary>
+            Allows Configuration of <see cref="T:System.Threading.Channels.Channel"/> options for a subscription.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.TlsMode">
+            <summary>
+            TLS mode to use during connection.
+            </summary>
+            <remarks>
+            Only <see cref="F:NATS.Client.Core.TlsMode.Require"/> and <see cref="F:NATS.Client.Core.TlsMode.Implicit"/> provide the full protection that TLS can offer.
+            Other modes may fall back to plaintext depending on server configuration.
+            </remarks>
+        </member>
+        <member name="F:NATS.Client.Core.TlsMode.Auto">
+            <summary>
+            For connections that use the "nats://" scheme and don't supply Client or CA Certificates - same as <see cref="F:NATS.Client.Core.TlsMode.Prefer"/>.
+            For connections that use the "tls://" scheme or supply Client or CA Certificates - same as <see cref="F:NATS.Client.Core.TlsMode.Require"/>.
+            </summary>
+            <remarks>
+            When this resolves to <see cref="F:NATS.Client.Core.TlsMode.Prefer"/>, TLS is opportunistic: the connection
+            may remain plaintext depending on the server's INFO response.
+            Use the <c>tls://</c> scheme or set <see cref="F:NATS.Client.Core.TlsMode.Require"/> explicitly when TLS is required.
+            </remarks>
+        </member>
+        <member name="F:NATS.Client.Core.TlsMode.Prefer">
+            <summary>
+            If the server supports TLS, then use it; otherwise, use plain-text.
+            </summary>
+            <remarks>
+            <para>
+            This is an opportunistic TLS mode. The TLS decision is based on the server's
+            INFO message, which arrives over plaintext before any encryption is established.
+            On an untrusted network the connection may remain plaintext.
+            </para>
+            <para>
+            When connecting directly, this mode upgrades to TLS if the server supports it.
+            Behind a TLS-terminating proxy, use <see cref="F:NATS.Client.Core.TlsMode.Disable"/> instead,
+            as the client may attempt a TLS upgrade that the nats-server cannot complete.
+            </para>
+            <para>
+            If TLS is required, use the <c>tls://</c> scheme or set <see cref="F:NATS.Client.Core.TlsMode.Require"/> explicitly.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:NATS.Client.Core.TlsMode.Require">
+            <summary>
+            Forces the connection to upgrade to TLS. if the Server does not support TLS, then fail the connection.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.TlsMode.Implicit">
+            <summary>
+            Upgrades the connection to TLS as soon as the connection is established.
+            </summary>
+        </member>
+        <member name="F:NATS.Client.Core.TlsMode.Disable">
+            <summary>
+            Disabled mode will not attempt to upgrade the connection to TLS.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.NatsTlsOpts">
+            <summary>
+            Immutable options for TlsOptions, you can configure via `with` operator.
+            These options are ignored in WebSocket connections
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.CertBundleFile">
+            <summary>
+            File path to PKCS#12 bundle containing X509 Client Certificate and Private Key
+            </summary>
+            <remarks>
+            Use <see cref="P:NATS.Client.Core.NatsTlsOpts.CertBundleFilePassword"/> to specify the password for the bundle.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.CertBundleFilePassword">
+            <summary>
+            Password for the PKCS#12 bundle file
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.ConfigureClientAuthentication">
+            <summary>
+            Callback to configure <see cref="T:System.Net.Security.SslClientAuthenticationOptions"/>
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.CaFile">
+            <summary>
+            String or file path to PEM-encoded X509 CA Certificate
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.InsecureSkipVerify">
+            <summary>When true, skip remote certificate verification and accept any server certificate</summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsTlsOpts.Mode">
+            <summary>
+            TLS mode to use during connection.
+            </summary>
+            <remarks>
+            <para>
+            Defaults to <see cref="F:NATS.Client.Core.TlsMode.Auto"/>, which resolves to <see cref="F:NATS.Client.Core.TlsMode.Prefer"/>
+            for <c>nats://</c> connections without certificates. In this mode the client will
+            attempt a TLS upgrade when the server advertises TLS support. This differs from most
+            other NATS clients, which do not upgrade unless explicitly configured.
+            </para>
+            <para>
+            Behind a TLS-terminating proxy, use <see cref="F:NATS.Client.Core.TlsMode.Disable"/> to prevent the
+            client from attempting a TLS upgrade that the nats-server cannot complete.
+            Use the <c>tls://</c> scheme or <see cref="F:NATS.Client.Core.TlsMode.Require"/> when TLS is required.
+            </para>
+            <para>
+            Only <see cref="F:NATS.Client.Core.TlsMode.Require"/> and <see cref="F:NATS.Client.Core.TlsMode.Implicit"/> provide the full
+            protection that TLS can offer. Other modes may fall back to plaintext depending on server configuration.
+            </para>
+            </remarks>
+        </member>
+        <member name="T:NATS.Client.Core.NatsWebSocketOpts">
+            <summary>
+            Options for ClientWebSocketOptions
+            </summary>
+        </member>
+        <member name="P:NATS.Client.Core.NatsWebSocketOpts.RequestHeaders">
+            <summary>
+            An optional dictionary of HTTP request headers to be sent with the WebSocket request.
+            </summary>
+            <remarks>
+            Not supported when running in the Browser, such as when using Blazor WebAssembly,
+            as the underlying Browser implementation does not support adding headers to a WebSocket.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.Core.NatsWebSocketOpts.ConfigureClientWebSocketOptions">
+            <summary>
+            An optional async callback handler for manipulation of ClientWebSocketOptions used for WebSocket connections.
+            Implementors should use the passed CancellationToken for async operations called by this handler.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.Core.Nuid">
+            <summary>
+            Represents a unique identifier generator.
+            </summary>
+            <remarks>
+            The <c>Nuid</c> class generates unique identifiers that can be used
+            to ensure uniqueness in distributed systems.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.Core.Nuid.NewNuid">
+            <summary>
+            Generates a new NATS unique identifier (NUID).
+            </summary>
+            <returns>A new NUID as a string.</returns>
+            <exception cref="T:System.InvalidOperationException">Thrown when unable to generate the NUID.</exception>
+        </member>
+    </members>
+</doc>

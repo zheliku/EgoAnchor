@@ -1,0 +1,858 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.Client.KeyValueStore</name>
+    </assembly>
+    <members>
+        <member name="P:NATS.Client.KeyValueStore.INatsKVContext.JetStreamContext">
+            <summary>
+            Provides access to the JetStream context associated with the Key-Value Store operations.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.INatsKVContext.Opts">
+            <summary>
+            Configuration options for the Nats Key-Value Store operations used within the Key-Value Store context.
+            </summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.CreateStoreAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Create a new Key Value Store or get an existing one
+            </summary>
+            <param name="bucket">Name of the bucket</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Key Value Store</returns>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.CreateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <summary>
+            Create a new Key Value Store or get an existing one
+            </summary>
+            <param name="config">Key Value Store configuration</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Key Value Store</returns>
+            <exception cref="T:NATS.Client.KeyValueStore.NatsKVException">There was an issue with configuration</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.GetStoreAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Get a Key Value Store
+            </summary>
+            <param name="bucket">Name of the bucjet</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Key Value Store</returns>
+            <exception cref="T:NATS.Client.KeyValueStore.NatsKVException">There was an issue with configuration</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.UpdateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <summary>
+            Update a key value store configuration. Storage type cannot change.
+            </summary>
+            <param name="config">Key Value Store configuration</param>
+            <param name="cancellationToken"> used to cancel the API call.</param>
+            <returns>Key Value Store</returns>
+            <exception cref="T:NATS.Client.KeyValueStore.NatsKVException">There was an issue with configuration</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.CreateOrUpdateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new Key Value Store if it doesn't exist or update if the store already exists.
+            </summary>
+            <param name="config">Key Value Store configuration</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>Key Value Store</returns>
+            <exception cref="T:NATS.Client.KeyValueStore.NatsKVException">There was an issue with configuration</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.DeleteStoreAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete a Key Value Store
+            </summary>
+            <param name="bucket">Name of the bucket</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>True for success</returns>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.GetBucketNamesAsync(System.Threading.CancellationToken)">
+            <summary>
+            Get a list of bucket names
+            </summary>
+            <param name="cancellationToken"> used to cancel the API call.</param>
+            <returns>Async enumerable of bucket names. Can be used in a <c>await foreach</c> loop.</returns>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVContext.GetStatusesAsync(System.Threading.CancellationToken)">
+            <summary>
+            Gets the status for all buckets
+            </summary>
+            <param name="cancellationToken"> used to cancel the API call.</param>
+            <returns>Async enumerable of Key/Value statuses. Can be used in a <c>await foreach</c> loop.</returns>
+            <exception cref="T:NATS.Client.JetStream.NatsJSException">There was an issue retrieving the response.</exception>
+            <exception cref="T:NATS.Client.JetStream.NatsJSApiException">Server responded with an error.</exception>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.INatsKVStore">
+            <summary>
+            Represents a NATS Key-Value Store bucket.
+            </summary>
+            <seealso href="https://www.nuget.org/packages/Synadia.Orbit.KeyValueStore.Extensions">KV codec extensions for typed serialization</seealso>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.INatsKVStore.JetStreamContext">
+            <summary>
+            Provides access to the JetStream context associated with the Object Store operations.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.INatsKVStore.Bucket">
+            <summary>
+            Name of the Key Value Store bucket
+            </summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.PutAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Put a value into the bucket using the key
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>Revision number</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryPutAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Tries to put a value into the bucket using the key
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>Revision number</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.CreateAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Create a new entry in the bucket only if it doesn't exist
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>The revision number of the entry</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.CreateAsync``1(System.String,``0,System.TimeSpan,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Create a new entry in the bucket only if it doesn't exist
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="ttl">Time to live for the entry (requires the <see cref="P:NATS.Client.KeyValueStore.NatsKVConfig.LimitMarkerTTL"/> to be set to true). For a key that should never expire, use the <see cref="F:System.TimeSpan.MaxValue"/> constant. This feature is only available on NATS server v2.11 and later.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>The revision number of the entry</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryCreateAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Tries to create a new entry in the bucket only if it doesn't exist
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>A NatsResult object representing the revision number of the created entry or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryCreateAsync``1(System.String,``0,System.TimeSpan,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Tries to create a new entry in the bucket only if it doesn't exist
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="ttl">Time to live for the entry (requires the <see cref="P:NATS.Client.KeyValueStore.NatsKVConfig.LimitMarkerTTL"/> to be set to true). For a key that should never expire, use the <see cref="F:System.TimeSpan.MaxValue"/> constant. This feature is only available on NATS server v2.11 and later.</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>A NatsResult object representing the revision number of the created entry or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.UpdateAsync``1(System.String,``0,System.UInt64,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Update an entry in the bucket only if last update revision matches
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="revision">Last revision number to match</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>The revision number of the updated entry</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryUpdateAsync``1(System.String,``0,System.UInt64,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Tries to update an entry in the bucket only if last update revision matches
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="value">Value of the entry</param>
+            <param name="revision">Last revision number to match</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>A NatsResult object representing the revision number of the updated entry or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.DeleteAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Delete an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryDeleteAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Delete an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>A NatsResult object representing success or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.PurgeAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Purge an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.PurgeAsync(System.String,System.TimeSpan,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Purge an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="ttl">Time to live for the purge marker (requires the <see cref="P:NATS.Client.KeyValueStore.NatsKVConfig.LimitMarkerTTL"/> to be set to true). For a key that should never expire, use the <see cref="F:System.TimeSpan.MaxValue"/> constant. This feature is only available on NATS server v2.11 and later.</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryPurgeAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Tries to purge an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>A NatsResult object representing success or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryPurgeAsync(System.String,System.TimeSpan,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <summary>
+            Tries to purge an entry from the bucket
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="ttl">Time to live for the purge marker (requires the <see cref="P:NATS.Client.KeyValueStore.NatsKVConfig.LimitMarkerTTL"/> to be set to true). For a key that should never expire, use the <see cref="F:System.TimeSpan.MaxValue"/> constant. This feature is only available on NATS server v2.11 and later.</param>
+            <param name="opts">Delete options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>A NatsResult object representing success or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.GetEntryAsync``1(System.String,System.UInt64,NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Get an entry from the bucket using the key
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="revision">Revision to retrieve</param>
+            <param name="serializer">Optional serialized to override the default</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>The entry</returns>
+            <exception cref="T:NATS.Client.KeyValueStore.NatsKVException">There was an error with metadata</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.TryGetEntryAsync``1(System.String,System.UInt64,NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <summary>
+            Try to get an entry from the bucket using the key.
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="revision">Revision to retrieve</param>
+            <param name="serializer">Optional serialized to override the default</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>A NatsResult object representing the value or an error.</returns>
+            <remarks>
+            Use this method to avoid exceptions when, for example, the key is not found.
+            </remarks>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.WatchAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Start a watcher for specific keys
+            </summary>
+            <param name="key">Key to watch (subject-based wildcards may be used)</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>An asynchronous enumerable which can be used in <c>await foreach</c> loops</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.WatchAsync``1(System.Collections.Generic.IEnumerable{System.String},NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Start a watcher for specific keys
+            </summary>
+            <param name="keys">Keys to watch (subject-based wildcards may be used)</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>An asynchronous enumerable which can be used in <c>await foreach</c> loops</returns>
+            <exception cref="T:System.InvalidOperationException">There was a conflict in options, e.g. IncludeHistory and UpdatesOnly are only valid when ResumeAtRevision is not set.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.WatchAsync``1(NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Start a watcher for all the keys in the bucket
+            </summary>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>An asynchronous enumerable which can be used in <c>await foreach</c> loops</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.HistoryAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Get the history of an entry by key
+            </summary>
+            <param name="key">Key of the entry</param>
+            <param name="serializer">Serializer to use for the message type.</param>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <typeparam name="T">Serialized value type</typeparam>
+            <returns>An async enumerable of entries to be used in an <c>await foreach</c></returns>
+            <exception cref="T:System.InvalidOperationException">There was a conflict in options, e.g. IncludeHistory and UpdatesOnly are only valid when ResumeAtRevision is not set.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.GetStatusAsync(System.Threading.CancellationToken)">
+            <summary>
+            Get the bucket status
+            </summary>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>The Key/Value store status</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.PurgeDeletesAsync(NATS.Client.KeyValueStore.NatsKVPurgeOpts,System.Threading.CancellationToken)">
+            <summary>
+            Purge all deleted entries
+            </summary>
+            <param name="opts">Purge options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.GetKeysAsync(NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Get all the keys in the bucket
+            </summary>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>An async enumerable of keys to be used in an <c>await foreach</c></returns>
+            <exception cref="T:System.InvalidOperationException">There was a conflict in options, e.g. IncludeHistory and UpdatesOnly are only valid when ResumeAtRevision is not set.</exception>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.INatsKVStore.GetKeysAsync(System.Collections.Generic.IEnumerable{System.String},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <summary>
+            Get a filtered set of keys in the bucket
+            </summary>
+            <param name="filters">Subject-based wildcard filters to filter on</param>
+            <param name="opts">Watch options</param>
+            <param name="cancellationToken">A <see cref="T:System.Threading.CancellationToken"/> used to cancel the API call.</param>
+            <returns>An async enumerable of keys to be used in an <c>await foreach</c></returns>
+            <exception cref="T:System.InvalidOperationException">There was a conflict in options, e.g. IncludeHistory and UpdatesOnly are only valid when ResumeAtRevision is not set.</exception>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVConfig">
+            <summary>
+            Key Value Store configuration
+            </summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVConfig.#ctor(System.String)">
+            <summary>
+            Create a new configuration
+            </summary>
+            <param name="bucket">Name of the bucket</param>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Bucket">
+            <summary>
+            Name of the bucket
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Description">
+            <summary>
+            Human readable description.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.MaxValueSize">
+            <summary>
+            Maximum size of a single value.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.History">
+            <summary>
+            Maximum historical entries.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.MaxAge">
+            <summary>
+            Maximum age of any entry in the bucket, expressed in nanoseconds
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.MaxBytes">
+            <summary>
+            How large the bucket may become in total bytes before the configured discard policy kicks in
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Storage">
+            <summary>
+            The type of storage backend, `File` (default) and `Memory`
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.NumberOfReplicas">
+            <summary>
+            How many replicas to keep for each entry in a cluster.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Republish">
+            <summary>
+            Republish is for republishing messages once persistent in the Key Value Bucket.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Placement">
+            <summary>
+            Placement requirements for a key-value store stream.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Compression">
+            <summary>
+            Use compressed storage.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Mirror">
+            <summary>
+            Mirror defines the configuration for mirroring another KeyValue store
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Sources">
+            <summary>
+            Sources defines the configuration for sources of a KeyValue store.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.Metadata">
+            <summary>
+            Additional metadata for the Bucket
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVConfig.LimitMarkerTTL">
+            <summary>
+            How long the bucket keeps markers when keys are removed by the TTL setting, 0 meaning markers are not supported.
+            </summary>
+            <remarks>This feature is only available on NATS server v2.11 and later.</remarks>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVRepublish">
+            <summary>
+            Key Value Store republish configuration
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVRepublish.Src">
+            <summary>
+            Subject that should be republished.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVRepublish.Dest">
+            <summary>
+            Subject where messages will be republished.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVRepublish.HeadersOnly">
+            <summary>
+            If true, only headers should be republished.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVStorageType">
+            <summary>
+            Key Value Store storage type
+            </summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVContext">
+            <summary>
+            Key Value Store context
+            </summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.#ctor(NATS.Client.JetStream.INatsJSContext,NATS.Client.KeyValueStore.NatsKVOpts)">
+            <summary>
+            Create a new Key Value Store context
+            </summary>
+            <param name="context">JetStream context</param>
+            <param name="opts">Context options</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.#ctor(NATS.Client.JetStream.INatsJSContext)">
+            <summary>
+            Create a new Key Value Store context
+            </summary>
+            <param name="context">JetStream context</param>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVContext.JetStreamContext">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVContext.Opts">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.CreateStoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.CreateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.GetStoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.UpdateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.CreateOrUpdateStoreAsync(NATS.Client.KeyValueStore.NatsKVConfig,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.DeleteStoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.GetBucketNamesAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVContext.GetStatusesAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVOpts.WatcherThrowOnCancellation">
+            <summary>
+            Indicates whether the Watch operation should throw an exception if the cancellation token is triggered.
+            Default is true.
+            </summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVEntry`1">
+            <summary>
+            Key Value Store entry
+            </summary>
+            <param name="Bucket">Name of the bucket</param>
+            <param name="Key">Name of the key</param>
+            <typeparam name="T">Serialized value type</typeparam>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVEntry`1.#ctor(System.String,System.String)">
+            <summary>
+            Key Value Store entry
+            </summary>
+            <param name="Bucket">Name of the bucket</param>
+            <param name="Key">Name of the key</param>
+            <typeparam name="T">Serialized value type</typeparam>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Bucket">
+            <summary>
+            Name of the bucket the entry is in.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Key">
+            <summary>
+            The key that was retrieved.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Value">
+            <summary>
+            The value that was retrieved.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Revision">
+            <summary>
+            A unique sequence for this value.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Delta">
+            <summary>
+            Distance from the latest value.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Created">
+            <summary>
+            The time the data was put in the bucket.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Operation">
+            <summary>
+            The kind of operation that caused this entry.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVEntry`1.Error">
+            <summary>Any errors encountered while processing the message.</summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVEntry`1.EnsureSuccess">
+            <summary>Throws an exception if the message contains any errors.</summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVException">
+            <summary>
+            Key Value Store exception
+            </summary>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVException.#ctor(System.String)">
+            <summary>
+            Create a new Key Value Store exception
+            </summary>
+            <param name="message">Exception message</param>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVException.#ctor(System.String,System.Exception)">
+            <summary>
+            Create a new Key Value Store exception
+            </summary>
+            <param name="message">Exception message</param>
+            <param name="exception">Inner exception</param>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVWatchOpts">
+            <summary>
+            Key Value Store watch options
+            </summary>
+        </member>
+        <member name="F:NATS.Client.KeyValueStore.NatsKVWatchOpts.Default">
+            <summary>
+            Default watch options
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.IdleHeartbeat">
+            <summary>
+            Idle heartbeat interval
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.IgnoreDeletes">
+            <summary>
+            Ignore deletes of the entries
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.IncludeHistory">
+            <summary>
+            Include history of the entries
+            </summary>
+            <remarks>
+            Setting this will cause the watcher to throw <see cref="T:System.InvalidOperationException"/>
+            if the values for <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.UpdatesOnly"/> and/or <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.ResumeAtRevision"/> are set.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.UpdatesOnly">
+            <summary>
+            Only retrieve updates, not current values
+            </summary>
+            <remarks>
+            Setting this will cause the watcher to throw <see cref="T:System.InvalidOperationException"/>
+            if the values for <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.IncludeHistory"/> and/or <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.ResumeAtRevision"/> are set.
+            </remarks>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.MetaOnly">
+            <summary>
+            Meta only to get the metadata of the entries
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.OnNoData">
+            <summary>
+            Async function called when the enumerator reaches the end of data. Return True to break the async enumeration, False to allow the enumeration to continue.
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.ResumeAtRevision">
+            <summary>
+            The revision to start from, if set to 0 (default) this will be ignored.
+            <remarks>
+            Setting this to a non-zero value will cause the watcher to throw <see cref="T:System.InvalidOperationException"/>
+            if the values for <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.IncludeHistory"/> and/or <see cref="P:NATS.Client.KeyValueStore.NatsKVWatchOpts.UpdatesOnly"/> are set.
+            </remarks>
+            </summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVOperation">
+            <summary>
+            Key Value Store entry operation
+            </summary>
+        </member>
+        <member name="F:NATS.Client.KeyValueStore.NatsKVOperation.Put">
+            <summary>
+            A value was put into the bucket
+            </summary>
+        </member>
+        <member name="F:NATS.Client.KeyValueStore.NatsKVOperation.Del">
+            <summary>
+            A value was deleted from a bucket
+            </summary>
+        </member>
+        <member name="F:NATS.Client.KeyValueStore.NatsKVOperation.Purge">
+            <summary>
+            A value was purged from a bucket
+            </summary>
+        </member>
+        <member name="T:NATS.Client.KeyValueStore.NatsKVStore">
+            <summary>
+            Key Value Store
+            </summary>
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVStore.JetStreamContext">
+            <inheritdoc />
+        </member>
+        <member name="P:NATS.Client.KeyValueStore.NatsKVStore.Bucket">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.IsValidKey(System.String)">
+            <summary>
+            <para>
+            Tests for a valid Bucket Key
+            </para>
+            <para>
+            Valid keys are \A[-/_=\.a-zA-Z0-9]+\z, additionally they may not start or end in .
+            </para>
+            </summary>
+            <param name="key">Subject to publish the data to.</param>
+            <returns>
+            A NatsResult signifying if the key is Valid, or if invalid, the exception detail.
+            </returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.PutAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryPutAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.CreateAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.CreateAsync``1(System.String,``0,System.TimeSpan,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryCreateAsync``1(System.String,``0,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryCreateAsync``1(System.String,``0,System.TimeSpan,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.UpdateAsync``1(System.String,``0,System.UInt64,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryUpdateAsync``1(System.String,``0,System.UInt64,NATS.Client.Core.INatsSerialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.DeleteAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryDeleteAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.PurgeAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.PurgeAsync(System.String,System.TimeSpan,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryPurgeAsync(System.String,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryPurgeAsync(System.String,System.TimeSpan,NATS.Client.KeyValueStore.NatsKVDeleteOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.GetEntryAsync``1(System.String,System.UInt64,NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryGetEntryAsync``1(System.String,System.UInt64,NATS.Client.Core.INatsDeserialize{``0},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.WatchAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.WatchAsync``1(System.Collections.Generic.IEnumerable{System.String},NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.HistoryAsync``1(System.String,NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.GetStatusAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.WatchAsync``1(NATS.Client.Core.INatsDeserialize{``0},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.PurgeDeletesAsync(NATS.Client.KeyValueStore.NatsKVPurgeOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.GetKeysAsync(NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.GetKeysAsync(System.Collections.Generic.IEnumerable{System.String},NATS.Client.KeyValueStore.NatsKVWatchOpts,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.ToTTLString(System.TimeSpan)">
+            <summary>
+            For the TTL header, we need to convert the TimeSpan to a Go time.ParseDuration string.
+            </summary>
+            <param name="ttl">TTL</param>
+            <returns>String representing the number of seconds Go time.ParseDuration() can understand.</returns>
+        </member>
+        <member name="M:NATS.Client.KeyValueStore.NatsKVStore.TryValidateKey(System.String)">
+            <summary>
+            Valid keys are \A[-/_=\.a-zA-Z0-9]+\z, additionally they may not start or end in .
+            </summary>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.Core.INatsClient)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS client.
+            </summary>
+            <param name="client">The NATS client instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.Core.INatsConnection)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS connection.
+            </summary>
+            <param name="connection">The NATS connection instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.JetStream.INatsJSContext)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS JetStream context.
+            </summary>
+            <param name="context">The NATS JetStream context instance.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.Core.INatsClient,NATS.Client.KeyValueStore.NatsKVOpts)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS client.
+            </summary>
+            <param name="client">The NATS client instance.</param>
+            <param name="opts">Context options.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.Core.INatsConnection,NATS.Client.KeyValueStore.NatsKVOpts)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS connection.
+            </summary>
+            <param name="connection">The NATS connection instance.</param>
+            <param name="opts">Context options.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+        <member name="M:NATS.Net.NatsClientExtensions.CreateKeyValueStoreContext(NATS.Client.JetStream.INatsJSContext,NATS.Client.KeyValueStore.NatsKVOpts)">
+            <summary>
+            Creates a NATS Key-Value Store context using the specified NATS JetStream context.
+            </summary>
+            <param name="context">The NATS JetStream context instance.</param>
+            <param name="opts">Context options.</param>
+            <returns>An instance of <see cref="T:NATS.Client.KeyValueStore.INatsKVContext"/> which can be used to interact with the Key-Value Store.</returns>
+        </member>
+    </members>
+</doc>

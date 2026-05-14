@@ -1,0 +1,14 @@
+[workspace]
+authors = ["zheliku <302734905@qq.com>"]
+channels = ["conda-forge"]
+name = "try_nats"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+nats-py = ">=2.14.0,<3"
+opencv = ">=4.13.0,<5"
+numpy = ">=2.4.4,<3"

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package protocol.v1;
+
+option csharp_namespace = "EgoAnchor.Protocol.V1";
+
+import "protocol/v1/common.proto";
+
+message LensPose {
+  Vec3 position = 1;
+  Quat rotation = 2;
+}
+
+message QuestStereoFrame {
+  MessageHeader header = 1;
+  bytes left_image_jpeg = 2;
+  bytes right_image_jpeg = 3;
+  int32 left_width = 4;
+  int32 left_height = 5;
+  int32 right_width = 6;
+  int32 right_height = 7;
+  int32 jpeg_quality = 8;
+}
+
+message QuestCameraInfo {
+  MessageHeader header = 1;
+  bool is_supported = 2;
+  double left_fx = 3;
+  double left_fy = 4;
+  double left_cx = 5;
+  double left_cy = 6;
+  double right_fx = 7;
+  double right_fy = 8;
+  double right_cx = 9;
+  double right_cy = 10;
+  repeated double left_distortion = 11;
+  repeated double right_distortion = 12;
+  double baseline_m = 13;
+  int32 sensor_width = 14;
+  int32 sensor_height = 15;
+  int32 active_left = 16;
+  int32 active_top = 17;
+  int32 active_right = 18;
+  int32 active_bottom = 19;
+  int32 left_requested_width = 20;
+  int32 left_requested_height = 21;
+  int32 right_requested_width = 22;
+  int32 right_requested_height = 23;
+  int32 current_width = 24;
+  int32 current_height = 25;
+  int32 max_framerate = 26;
+  LensPose left_lens_pose = 27;
+  LensPose right_lens_pose = 28;
+}

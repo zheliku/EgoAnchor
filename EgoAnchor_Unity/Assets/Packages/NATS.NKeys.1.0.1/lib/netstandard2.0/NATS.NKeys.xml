@@ -1,0 +1,924 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NATS.NKeys</name>
+    </assembly>
+    <members>
+        <member name="T:NATS.NKeys.Base32">
+            <summary>
+            Base32 encoding and decoding.
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.Base32.FromBase32(System.ReadOnlySpan{System.Char},System.Span{System.Byte})">
+            <summary>
+            Decodes a Base32-encoded string into a byte array.
+            </summary>
+            <param name="encoded">The Base32-encoded string to decode.</param>
+            <param name="result">The byte array to store the decoded data.</param>
+            <returns>The number of bytes decoded.</returns>
+        </member>
+        <member name="M:NATS.NKeys.Base32.ToBase32(System.ReadOnlySpan{System.Byte},System.Span{System.Char})">
+            <summary>
+            Converts a byte array to a Base32-encoded string.
+            </summary>
+            <param name="data">The byte array to encode.</param>
+            <param name="output">The span of characters to store the encoded data.</param>
+            <returns>The number of characters encoded.</returns>
+        </member>
+        <member name="M:NATS.NKeys.Base32.GetDataLength(System.ReadOnlySpan{System.Char})">
+            <summary>
+            Calculates the length of the decoded data from a Base32-encoded string.
+            </summary>
+            <param name="encoded">The Base32-encoded string.</param>
+            <returns>The length of the decoded data.</returns>
+        </member>
+        <member name="M:NATS.NKeys.Base32.GetEncodedLength(System.ReadOnlySpan{System.Byte})">
+            <summary>
+            Calculates the length of the Base32 encoding for a given byte array.
+            </summary>
+            <param name="data">The byte array to calculate the encoding length for.</param>
+            <returns>The length of the Base32 encoding.</returns>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteSeed">
+            <summary>
+            The version byte used for encoded NATS Seeds.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'S...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixBytePrivate">
+            <summary>
+            The version byte used for encoded NATS Private keys.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'P...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteServer">
+            <summary>
+            The version byte used for encoded NATS Servers.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'N...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteCluster">
+            <summary>
+            The version byte used for encoded NATS Clusters.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'C...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteOperator">
+            <summary>
+            The version byte used for encoded NATS Operators.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'O...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteAccount">
+            <summary>
+            The version byte used for encoded NATS Accounts.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'A...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteUser">
+            <summary>
+            The version byte used for encoded NATS Users.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'U...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteCurve">
+            <summary>
+            The version byte used for Curve Keys (X25519).
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'X...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.Internal.NKeysConstants.PrefixByteUnknown">
+            <summary>
+            The version byte used for unknown prefixes.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'Z...'</remarks>
+        </member>
+        <member name="T:NATS.NKeys.KeyPair">
+            <summary>
+            Represents a NKeys cryptographic key pair.
+            </summary>
+        </member>
+        <member name="P:NATS.NKeys.KeyPair.Prefix">
+            <summary>
+            Gets the type of the key as a <see cref="T:NATS.NKeys.PrefixByte"/> enumeration value.
+            </summary>
+            <remarks>
+            The prefix indicates the role or purpose of the key, such as Operator, Server, Cluster, Account, User, or Curve.
+            </remarks>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.IsValidPublicKey(NATS.NKeys.PrefixByte,System.ReadOnlySpan{System.Char})">
+            <summary>
+            Validates if a given public key matches the provided prefix type.
+            </summary>
+            <param name="prefix">The expected prefix type to validate against.</param>
+            <param name="publicKey">The public key to validate.</param>
+            <returns><c>true</c> if the public key matches the specified prefix; otherwise, <c>false</c>.</returns>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the public key is not a valid NKey or cannot be decoded.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.FromPublicKey(System.ReadOnlySpan{System.Char})">
+            <summary>
+            Creates a <see cref="T:NATS.NKeys.KeyPair"/> object from a public key.
+            </summary>
+            <param name="publicKey">The public key to create the <see cref="T:NATS.NKeys.KeyPair"/> object from.</param>
+            <returns>A new <see cref="T:NATS.NKeys.KeyPair"/> object.</returns>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the public key is not a valid NKey.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.FromSeed(System.ReadOnlySpan{System.Char})">
+            <summary>
+            Creates a <see cref="T:NATS.NKeys.KeyPair"/> object from a seed.
+            </summary>
+            <param name="encodedSeed">The seed encoded as a ReadOnlySpan of characters.</param>
+            <returns>A new <see cref="T:NATS.NKeys.KeyPair"/> object representing the generated key pair.</returns>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the encoded seed is not valid or the key pair cannot be created.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.CreatePair(NATS.NKeys.PrefixByte)">
+            <summary>
+            Creates a new <see cref="T:NATS.NKeys.KeyPair"/> object with the specified prefix.
+            </summary>
+            <param name="prefix">The prefix byte to use for the key pair.</param>
+            <returns>A new <see cref="T:NATS.NKeys.KeyPair"/> object.</returns>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.CreatePair(NATS.NKeys.PrefixByte,System.Security.Cryptography.RandomNumberGenerator)">
+            <summary>
+            Creates a <see cref="T:NATS.NKeys.KeyPair"/> object with a specified prefix and random number generator.
+            </summary>
+            <param name="prefix">The prefix byte for the <see cref="T:NATS.NKeys.KeyPair"/> object. Must be a valid prefix.</param>
+            <param name="rng">The random number generator used to generate the seed.</param>
+            <returns>A new <see cref="T:NATS.NKeys.KeyPair"/> object.</returns>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the prefix is not valid.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.GetSeed">
+            <summary>
+            Retrieves the encoded seed used to generate the key pair.
+            </summary>
+            <returns>The encoded seed used to generate the key pair.</returns>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.GetPublicKey">
+            <summary>
+            Returns the encoded public key of the <see cref="T:NATS.NKeys.KeyPair"/> object.
+            </summary>
+            <returns>The encoded public key of the <see cref="T:NATS.NKeys.KeyPair"/> object.</returns>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.Sign(System.ReadOnlyMemory{System.Byte},System.Memory{System.Byte})">
+            <summary>
+            Signs a message with the private key of the <see cref="T:NATS.NKeys.KeyPair"/> object.
+            </summary>
+            <param name="message">The message to be signed.</param>
+            <param name="signature">The memory to store the signature.</param>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the private key is not valid or there is an error during the signing process.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.Verify(System.ReadOnlyMemory{System.Byte},System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Verifies the authenticity of a message using the given signature.
+            </summary>
+            <param name="message">The message to verify.</param>
+            <param name="signature">The signature to use for verification.</param>
+            <returns>
+            <c>true</c> if the message is authentic and the signature is valid;
+            otherwise, <c>false</c>.
+            </returns>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.Seal(System.Byte[],System.String)">
+            <summary>
+            Encrypts a data payload for a specified receiver using public-key cryptography.
+            </summary>
+            <param name="data">The data to be encrypted.</param>
+            <param name="receiver">The public key of the receiver to encrypt the data for.</param>
+            <returns>A byte array containing the sealed encrypted message including necessary metadata.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when either the data or receiver is null.</exception>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the receiver's public key is invalid.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.Open(System.Byte[],System.String)">
+            <summary>
+            Decrypts encrypted data using the sender's public key and the current instance's private key.
+            </summary>
+            <param name="input">The encrypted data to decrypt.</param>
+            <param name="sender">The sender's public key used for encryption.</param>
+            <returns>The decrypted byte array of the original data.</returns>
+            <exception cref="T:NATS.NKeys.NKeysException">Thrown if the input data is invalid or decryption fails.</exception>
+        </member>
+        <member name="M:NATS.NKeys.KeyPair.Dispose">
+            <summary>
+            Disposes the KeyPair object, wiping the sensitive data.
+            </summary>
+            <remarks>
+            This method should be called when the KeyPair object is no longer
+            needed to safely wipe the sensitive data, such as the seed,
+            secret key, and public key.
+            </remarks>
+        </member>
+        <member name="T:NATS.NKeys.NaCl.CryptoBytes">
+            <summary>
+            Utility class for cryptography.
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ConstantTimeEquals(System.Byte[],System.Byte[])">
+             <summary>
+             Comparison of two arrays.
+            
+             The runtime of this method does not depend on the contents of the arrays. Using constant time
+             prevents timing attacks that allow an attacker to learn if the arrays have a common prefix.
+            
+             It is important to use such a constant time comparison when verifying MACs.
+             </summary>
+             <param name="x">Byte array</param>
+             <param name="y">Byte array</param>
+             <returns>True if arrays are equal</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ConstantTimeEquals(System.ArraySegment{System.Byte},System.ArraySegment{System.Byte})">
+             <summary>
+             Comparison of two array segments.
+            
+             The runtime of this method does not depend on the contents of the arrays. Using constant time
+             prevents timing attacks that allow an attacker to learn if the arrays have a common prefix.
+            
+             It is important to use such a constant time comparison when verifying MACs.
+             </summary>
+             <param name="x">Byte array segment</param>
+             <param name="y">Byte array segment</param>
+             <returns>True if contents of x and y are equal</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ConstantTimeEquals(System.Byte[],System.Int32,System.Byte[],System.Int32,System.Int32)">
+             <summary>
+             Comparison of two byte sequences.
+            
+             The runtime of this method does not depend on the contents of the arrays. Using constant time
+             prevents timing attacks that allow an attacker to learn if the arrays have a common prefix.
+            
+             It is important to use such a constant time comparison when verifying MACs.
+             </summary>
+             <param name="x">Byte array</param>
+             <param name="xOffset">Offset of byte sequence in the x array</param>
+             <param name="y">Byte array</param>
+             <param name="yOffset">Offset of byte sequence in the y array</param>
+             <param name="length">Lengh of byte sequence</param>
+             <returns>True if sequences are equal</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.Wipe(System.Byte[])">
+            <summary>
+            Overwrites the contents of the array, wiping the previous content.
+            </summary>
+            <param name="data">Byte array</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.Wipe(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            Overwrites the contents of the array, wiping the previous content.
+            </summary>
+            <param name="data">Byte array</param>
+            <param name="offset">Index of byte sequence</param>
+            <param name="length">Length of byte sequence</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.Wipe(System.ArraySegment{System.Byte})">
+            <summary>
+            Overwrites the contents of the array segment, wiping the previous content.
+            </summary>
+            <param name="data">Byte array segment</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ToHexStringUpper(System.Byte[])">
+            <summary>
+            Constant-time conversion of the bytes array to an upper-case hex string.
+            Please see http://stackoverflow.com/a/14333437/445517 for the detailed explanation
+            </summary>
+            <param name="data">Byte array</param>
+            <returns>Hex representation of byte array</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ToHexStringLower(System.Byte[])">
+            <summary>
+            Constant-time conversion of the bytes array to an lower-case hex string.
+            Please see http://stackoverflow.com/a/14333437/445517 for the detailed explanation.
+            </summary>
+            <param name="data">Byte array</param>
+            <returns>Hex representation of byte array</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.FromHexString(System.String)">
+            <summary>
+            Converts the hex string to bytes. Case insensitive.
+            </summary>
+            <param name="hexString">Hex encoded byte sequence</param>
+            <returns>Byte array</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.ToBase64String(System.Byte[])">
+            <summary>
+            Encodes the bytes with the Base64 encoding.
+            More compact than hex, but it is case-sensitive and uses the special characters `+`, `/` and `=`.
+            </summary>
+            <param name="data">Byte array</param>
+            <returns>Base 64 encoded data</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.FromBase64String(System.String)">
+            <summary>
+            Decodes a Base64 encoded string back to bytes.
+            </summary>
+            <param name="base64String">Base 64 encoded data</param>
+            <returns>Byte array</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.Base58Encode(System.Byte[])">
+            <summary>
+            Encode a byte sequence as a base58-encoded string
+            </summary>
+            <param name="input">Byte sequence</param>
+            <returns>Encoding result</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.CryptoBytes.Base58Decode(System.String)">
+            <summary>
+            // Decode a base58-encoded string into byte array
+            </summary>
+            <param name="strBase58">Base58 data string</param>
+            <returns>Byte array</returns>
+        </member>
+        <member name="F:NATS.NKeys.NaCl.Ed25519.PublicKeySize">
+            <summary>
+            Public Keys are 32 byte values. All possible values of this size a valid.
+            </summary>
+        </member>
+        <member name="F:NATS.NKeys.NaCl.Ed25519.SignatureSize">
+            <summary>
+            Signatures are 64 byte values
+            </summary>
+        </member>
+        <member name="F:NATS.NKeys.NaCl.Ed25519.PrivateKeySeedSize">
+            <summary>
+            Private key seeds are 32 byte arbitrary values. This is the form that should be generated and stored.
+            </summary>
+        </member>
+        <member name="F:NATS.NKeys.NaCl.Ed25519.ExpandedPrivateKeySize">
+            <summary>
+            A 64 byte expanded form of private key. This form is used internally to improve performance
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.Verify(System.ArraySegment{System.Byte},System.ArraySegment{System.Byte},System.ArraySegment{System.Byte})">
+            <summary>
+            Verify Ed25519 signature
+            </summary>
+            <param name="signature">Signature bytes</param>
+            <param name="message">Message</param>
+            <param name="publicKey">Public key</param>
+            <returns>True if signature is valid, false if it's not</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.Verify(System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            Verify Ed25519 signature
+            </summary>
+            <param name="signature">Signature bytes</param>
+            <param name="message">Message</param>
+            <param name="publicKey">Public key</param>
+            <returns>True if signature is valid, false if it's not</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.Sign(System.ArraySegment{System.Byte},System.ArraySegment{System.Byte},System.ArraySegment{System.Byte})">
+            <summary>
+            Create new Ed25519 signature
+            </summary>
+            <param name="signature">Buffer for signature</param>
+            <param name="message">Message bytes</param>
+            <param name="expandedPrivateKey">Expanded form of private key</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.Sign(System.Byte[],System.Byte[])">
+            <summary>
+            Create new Ed25519 signature
+            </summary>
+            <param name="message">Message bytes</param>
+            <param name="expandedPrivateKey">Expanded form of private key</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.PublicKeyFromSeed(System.Byte[])">
+            <summary>
+            Calculate public key from private key seed
+            </summary>
+            <param name="privateKeySeed">Private key seed value</param>
+            <returns></returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.ExpandedPrivateKeyFromSeed(System.Byte[])">
+            <summary>
+            Calculate expanded form of private key from the key seed.
+            </summary>
+            <param name="privateKeySeed">Private key seed value</param>
+            <returns>Expanded form of the private key</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.KeyPairFromSeed(System.Byte[]@,System.Byte[]@,System.Byte[])">
+            <summary>
+            Calculate key pair from the key seed.
+            </summary>
+            <param name="publicKey">Public key</param>
+            <param name="expandedPrivateKey">Expanded form of the private key</param>
+            <param name="privateKeySeed">Private key seed value</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Ed25519.KeyPairFromSeed(System.ArraySegment{System.Byte},System.ArraySegment{System.Byte},System.ArraySegment{System.Byte})">
+            <summary>
+            Calculate key pair from the key seed.
+            </summary>
+            <param name="publicKey">Public key</param>
+            <param name="expandedPrivateKey">Expanded form of the private key</param>
+            <param name="privateKeySeed">Private key seed value</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.#ctor">
+            <summary>
+            Allocation and initialization of the new SHA-512 object.
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.Init">
+            <summary>
+            Performs an initialization of internal SHA-512 state.
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.Update(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            Updates internal state with data from the provided array.
+            </summary>
+            <param name="data">Array of bytes</param>
+            <param name="index">Offset of byte sequence</param>
+            <param name="length">Sequence length</param>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.Finalize">
+            <summary>
+            Finalizes SHA-512 hashing.
+            </summary>
+            <returns>Hash bytes</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.Hash(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            Calculates SHA-512 hash value for the given bytes array.
+            </summary>
+            <param name="data">Data bytes array</param>
+            <param name="index">Offset of byte sequence</param>
+            <param name="length">Sequence length</param>
+            <returns>Hash bytes</returns>
+        </member>
+        <member name="M:NATS.NKeys.NaCl.Sha512.Dispose">
+            <inheritdoc/>
+        </member>
+        <member name="T:NATS.NKeys.NKeysException">
+            <summary>
+            Represents an exception specific to the NKeys library.
+            </summary>
+        </member>
+        <member name="M:NATS.NKeys.NKeysException.#ctor(System.String,System.Exception)">
+            <summary>
+            Represents an exception specific to the NKeys library.
+            </summary>
+        </member>
+        <member name="T:NATS.NKeys.PrefixByte">
+            <summary>
+            Lists the prefix bytes used in the NATS NKeys library.
+            </summary>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.Operator">
+            <summary>
+            The version byte used for encoded NATS Operators.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'O...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.Server">
+            <summary>
+            The version byte used for encoded NATS Servers.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'N...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.Cluster">
+            <summary>
+            The version byte used for encoded NATS Clusters.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'C...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.Account">
+            <summary>
+            The version byte used for encoded NATS Accounts.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'A...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.User">
+            <summary>
+            The version byte used for encoded NATS Users.
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'U...'</remarks>
+        </member>
+        <member name="F:NATS.NKeys.PrefixByte.Curve">
+            <summary>
+            The version byte used for encoded CurveKeys (X25519).
+            </summary>
+            <remarks>When encoded as base32, it encodes to 'X...'</remarks>
+        </member>
+        <member name="F:NaCl.TweetNaCl.ScalarmultBytes">
+            <summary>
+            crypto_scalarmult_curve25519
+            </summary>
+        </member>
+        <member name="F:NaCl.TweetNaCl.ScalarBytes">
+            <summary>
+            crypto_scalarmult_curve25519
+            </summary>
+        </member>
+        <member name="F:NaCl.TweetNaCl.BoxBeforenmBytes">
+            <summary>
+            crypto_box_beforenm computed shared key size
+            </summary>
+        </member>
+        <member name="F:NaCl.TweetNaCl.HashBytes">
+            <summary>
+            SHA-512 hash bytes
+            </summary>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoScalarmult(System.Byte[],System.Byte[])">
+            <summary>
+            Scalar multiplication is a curve25519 implementation.
+            </summary>
+            <param name="n"></param>
+            <param name="p"></param>
+            <returns>the resulting group element q of length SCALARMULT_BYTES.</returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBoxKeypair(System.Byte[])">
+            <summary>
+            The crypto_box_keypair function randomly generates a secret key and a corresponding public key.
+            It guarantees that sk has crypto_box_SECRETKEYBYTES bytes and that pk has crypto_box_PUBLICKEYBYTES bytes.
+            </summary>
+            <param name="secretKey">generated secret key</param>
+            <returns>generated public key</returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBoxBeforenm(System.Byte[],System.Byte[])">
+            <summary>
+            The intermediate data computed by crypto_box_beforenm
+            Applications that send several messages to the same receiver can gain speed by splitting CryptoBox into two steps,
+            <b>CryptoBoxBeforenm</b> and CryptoBoxAfternm.
+            </summary>
+            <param name="publicKey"></param>
+            <param name="secretKey"></param>
+            <returns>
+                shared key to be used with afternm
+            </returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBoxAfternm(System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            Applications that send several messages to the same receiver can gain speed by splitting CryptoBox into two steps,
+            CryptoBoxBeforenm and <b>CryptoBoxAfternm</b>.
+            </summary>
+            <param name="cipheredMessage"></param>
+            <param name="paddedMessage"></param>
+            <param name="nonce"></param>
+            <param name="k"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBoxOpenAfternm(System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            Applications that receive several messages from the same
+            sender can gain speed by splitting CryptoBoxOpen into two steps, CryptoBoxBeforenm and <b>CryptoBoxOpenAfternm</b>.
+            </summary>
+            <param name="paddedMessage"></param>
+            <param name="cipheredMessage"></param>
+            <param name="nonce"></param>
+            <param name="k"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBox(System.Byte[],System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            The crypto_box function encrypts and authenticates a message m, remember that all
+            messages are 0-padded versions of messages with BOX_ZEROBYTES.
+            </summary>
+            <param name="cipheredMessage"></param>
+            <param name="paddedMessage"></param>
+            <param name="nonce"></param>
+            <param name="publicKey"></param>
+            <param name="secretKey"></param>
+            <returns>
+                0 for success or -1 for failure
+            </returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoBoxOpen(System.Byte[],System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            The crypto_box_open function verifies and decrypts a ciphertext
+            </summary>
+            <param name="paddedMessage"></param>
+            <param name="cipheredMessage"></param>
+            <param name="d"></param>
+            <param name="nonce"></param>
+            <param name="publicKey"></param>
+            <param name="secretKey"></param>
+            <returns>
+                0 for success or -1 for failure
+            </returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoSignKeypair(System.Byte[])">
+            <summary>
+            Randomly generates a secret key and a corresponding public key NaCl-compatible Ed25519 https://ed25519.cr.yp.to/
+            </summary>
+            <param name="publicKey"></param>
+            <param name="secretKey"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoSign(System.Byte[],System.Byte[])">
+            <summary>
+            The crypto_sign function signs a message m using the signer's secret key secretKey.
+            </summary>
+            <param name="signedMessage"></param>
+            <param name="message"></param>
+            <param name="n"></param>
+            <param name="secretKey"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoSignOpen(System.Byte[],System.Byte[])">
+            <summary>
+            The CryptoSignOpen function verifies the signature
+            </summary>
+            <param name="message">returned clear message</param>
+            <param name="signedMessage">signed message</param>
+            <param name="publicKey">public key</param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoScalarmultBase(System.Byte[])">
+            <summary>
+            The crypto_scalarmult_base function computes the scalar product of a standard group element and an integer n.
+            </summary>
+            <param name="n"></param>
+            <returns>It returns the resulting group element q of length SCALARMULT_BYTES</returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoHash(System.Byte[],System.Byte[],System.Int32)">
+            <summary>
+            crypto_hash is currently an implementation of SHA-512.
+            </summary>
+            <param name="hash">hash for message</param>
+            <param name="message">message to calculate the hash</param>
+            <param name="n"></param>
+            <returns>
+                0 for success or -1 for failure
+            </returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoOnetimeAuth(System.Byte[],System.Int32,System.Byte[],System.Int64,System.Int64,System.Byte[])">
+            <summary>
+            crypto_onetimeauth is crypto_onetimeauth_poly1305, an authenticator specified in "Cryptography in NaCl", Section 9.
+            This authenticator is proven to meet the standard notion of unforgeability after a single message.
+            </summary>
+            <param name="pout"></param>
+            <param name="poutOffset"></param>
+            <param name="m"></param>
+            <param name="mOffset"></param>
+            <param name="n"></param>
+            <param name="k"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoSecretBox(System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            The crypto_secretbox function encrypts and authenticates a message
+            </summary>
+            <param name="cipheredMessage"></param>
+            <param name="message"></param>
+            <param name="nonce"></param>
+            <param name="secretkey"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.CryptoSecretBoxOpen(System.Byte[],System.Byte[],System.Byte[])">
+            <summary>
+            The CryptoSecretboxOpen function verifies and decrypts a ciphertext
+            </summary>
+            <param name="paddedMessage"></param>
+            <param name="cipheredMessage"></param>
+            <param name="nonce"></param>
+            <param name="secretKey"></param>
+            <returns></returns>
+        </member>
+        <member name="M:NaCl.TweetNaCl.RandomBytes(System.Byte[])">
+            <summary>
+            generate number of random bytes equal to array size.
+            </summary>
+            <param name="d">generated random byte</param>
+        </member>
+        <member name="T:X25519.FieldElement">
+            <summary>
+            fieldElement represents an element of the field GF(2^255 - 19). An element
+            t, entries t[0]...t[9], represents the integer t[0]+2^26 t[1]+2^51 t[2]+2^77
+            t[3]+2^102 t[4]+...+2^230 t[9]. Bounds on each t[i] vary depending on
+            context.
+            </summary>
+        </member>
+        <member name="F:X25519.FieldElement._elements">
+            <summary>
+            In Golang, field element type is just only [10]int array
+            </summary>
+        </member>
+        <member name="M:X25519.FieldElement.#ctor">
+            <summary>
+            Generate field with empty elements
+            </summary>
+        </member>
+        <member name="M:X25519.FieldElement.#ctor(System.Byte[])">
+            <summary>
+            Generate field element from byte array
+            </summary>
+            <remarks>
+            This is identical to feFromBytes in Golang
+            </remarks>
+            <param name="src"></param>
+        </member>
+        <member name="M:X25519.FieldElement.SetElementsDirect(System.Int32[])">
+            <summary>
+            Directly overwrites elements in field with given array
+            </summary>
+            <param name="src"></param>
+        </member>
+        <member name="M:X25519.FieldElement.ToBytes">
+             <summary>
+             Converts to a 32 byte array
+             </summary>
+             <remarks>
+             Identical to feToBytes in Golang
+               feToBytes marshals h to s.
+             Preconditions:
+             |h| bounded by 1.1*2^25,1.1*2^24,1.1*2^25,1.1*2^24,etc.
+            
+             Write p=2^255-19; q=floor(h/p).
+             Basic claim: q = floor(2^(-255)(h + 19 2^(-25)h9 + 2^(-1))).
+            
+             Proof:
+             Have |h|&lt;=p so |q|&lt;=1 so |19^2 2^(-255) q|&lt;1/4.
+             Also have |h-2^230 h9|&lt;2^230 so |19 2^(-255)(h-2^230 h9)|&lt;1/4.
+            
+             Write y=2^(-1)-19^2 2^(-255)q-19 2^(-255)(h-2^230 h9).
+             Then 0&lt;y&lt;1.
+            
+             Write r=h-pq.
+             Have 0&lt;=r&lt;=p-1=2^255-20.
+             Thus 0&lt;=r+19(2^-255)r&lt;r+19(2^-255)2^255&lt;=2^255-1.
+            
+             Write x=r+19(2^-255)r+y.
+             Then 0&lt;x&lt;2^255 so floor(2^(-255)x) = 0 so floor(q+2^(-255)x) = q.
+            
+             Have q+2^(-255)x = 2^(-255)(h + 19 2^(-25) h9 + 2^(-1))
+             so floor(2^(-255)(h + 19 2^(-25) h9 + 2^(-1))) = q.
+             </remarks>
+             <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.Multiply(X25519.FieldElement)">
+             <summary>
+             Calculates this * g
+             </summary>
+             <param name="g"></param>
+             <remarks>
+             Can overlap h with f or g.
+            
+             Preconditions:
+             |f| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
+             |g| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
+            
+             Postconditions:
+             |h| bounded by 1.1*2^25,1.1*2^24,1.1*2^25,1.1*2^24,etc.
+            
+             Notes on implementation strategy:
+            
+             Using schoolbook multiplication.
+             Karatsuba would save a little in some cost models.
+            
+             Most multiplications by 2 and 19 are 32-bit precomputations;
+             cheaper than 64-bit postcomputations.
+            
+             There is one remaining multiplication by 19 in the carry chain;
+             one *19 precomputation can be merged into this,
+             but the resulting data flow is considerably less clean.
+            
+             There are 12 carries below.
+             10 of them are 2-way parallelizable and vectorizable.
+             Can get away with 11 carries, but then data flow is much deeper.
+            
+             With tighter constraints on inputs can squeeze carries into int32.
+             </remarks>
+             <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.Square">
+            <summary>
+            Calculates f*f. Can overlap h with f.
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.Mul121666">
+             <summary>
+             Calculates h = f * 121666. Can overlap h with f; I have no clue why this is a thing
+             </summary>
+             <remarks>
+               Preconditions:
+             |f| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
+            
+             Postconditions:
+             |h| bounded by 1.1*2^25,1.1*2^24,1.1*2^25,1.1*2^24,etc.
+             </remarks>
+             <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.Invert">
+             <summary>
+             Calculates this ^(-1)
+             </summary>
+            
+             <returns></returns>
+        </member>
+        <member name="P:X25519.FieldElement.Item(System.Int32)">
+            <summary>
+            Directly gets or sets the _elements
+            </summary>
+            <param name="i">The index. Note that the max value is always 10</param>
+            <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.One">
+            <summary>
+            Sets all values of field to zero except that Element[0] = 1
+            </summary>
+        </member>
+        <member name="M:X25519.FieldElement.CSwap(X25519.FieldElement@,X25519.FieldElement@,System.Int32)">
+            <summary>
+            Replaces (f,g) with (g,f) if b == 1; replaces (f,g) with (f,g) if b == 0.
+            </summary>
+            <param name="f">f</param>
+            <param name="g">g</param>
+            <param name="b"></param>
+        </member>
+        <member name="M:X25519.FieldElement.Copy(X25519.FieldElement@,X25519.FieldElement)">
+            <summary>
+            Copies one FieldElement to another FieldElement
+            </summary>
+            <param name="dst">Where the src must be copied to</param>
+            <param name="src">What to copy</param>
+        </member>
+        <member name="M:X25519.FieldElement.Load3(System.Collections.Generic.IReadOnlyList{System.Byte})">
+            <summary>
+            load3 reads a 24-bit, little-endian value from in
+            </summary>
+            <param name="bytes">Input</param>
+            <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.Load4(System.Collections.Generic.IReadOnlyList{System.Byte})">
+            <summary>
+            load4 reads a 32-bit, little-endian value from in.
+            </summary>
+            <param name="bytes"></param>
+            <returns></returns>
+        </member>
+        <member name="M:X25519.FieldElement.SubArray``1(``0[],System.Int32,System.Int32)">
+            <summary>
+            Generates a slice of array
+            </summary>
+            <typeparam name="T"></typeparam>
+            <param name="data">Data to get slice from</param>
+            <param name="index">The start index</param>
+            <param name="length">The length of sub array</param>
+            <returns></returns>
+        </member>
+        <member name="F:X25519.Curve25519.Basepoint">
+            <summary>
+            The base point that is x = 9
+            </summary>
+        </member>
+        <member name="M:X25519.Curve25519.ScalarMult(System.Byte[],System.Byte[])">
+            <summary>
+            An inner function to calculate scalar * point
+            </summary>
+            <param name="input"></param>
+            <param name="baseIn"></param>
+            <returns></returns>
+        </member>
+        <member name="M:X25519.Curve25519.ScalarMultiplication(System.Byte[],System.Byte[])">
+             <summary>
+             X25519 returns the result of the scalar multiplication (scalar * point),
+             according to RFC 7748, Section 5. scalar, point and the return value are
+             slices of 32 bytes.
+            
+             If point is Basepoint (but not if it's a different slice with the same
+             contents) a precomputed implementation might be used for performance.
+             </summary>
+             <returns></returns>
+        </member>
+        <member name="T:X25519.X25519KeyAgreement">
+            <summary>
+            A friendly front-end for you developers to generate keys and calculate agreements
+            </summary>
+        </member>
+        <member name="M:X25519.X25519KeyAgreement.GenerateKeyPair">
+            <summary>
+            Uses RNG Random to generate a key pair
+            </summary>
+            <returns>A random key pair</returns>
+        </member>
+        <member name="M:X25519.X25519KeyAgreement.GenerateKeyFromPrivateKey(System.Byte[])">
+            <summary>
+            Generates a full key pair (Public and private) given the private key
+            </summary>
+            <param name="privateKey">The private key to generate public key from</param>
+            <returns>A full key pair</returns>
+        </member>
+        <member name="M:X25519.X25519KeyAgreement.Agreement(System.Byte[],System.Byte[])">
+            <summary>
+            Generate a shared secret with the other users public key and your private key
+            </summary>
+            <param name="myPrivateKey">Your private key</param>
+            <param name="otherPublicKey">The public key of the other user</param>
+            <returns>A shared secret</returns>
+        </member>
+        <member name="T:X25519.X25519KeyPair">
+            <summary>
+            Private an public keys for Curve25519
+            </summary>
+        </member>
+        <member name="F:X25519.X25519KeyPair.PrivateKey">
+            <summary>
+            The private key that you have to keep secret
+            </summary>
+        </member>
+        <member name="F:X25519.X25519KeyPair.PublicKey">
+            <summary>
+            The public key that you have to share with users
+            </summary>
+        </member>
+    </members>
+</doc>

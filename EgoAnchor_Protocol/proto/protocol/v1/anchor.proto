@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package protocol.v1;
+
+option csharp_namespace = "EgoAnchor.Protocol.V1";
+
+import "protocol/v1/common.proto";
+
+message PoseResult {
+  MessageHeader header = 1;
+  bool has_pose = 2;
+  Matrix4x4 pose_matrix_cv_camera = 3;
+  string phase = 4;
+  int32 stage = 5;
+  int32 det_count = 6;
+  float depth_valid_ratio = 7;
+  float fps = 8;
+  TimingStats timing = 9;
+  ErrorInfo last_error = 10;
+}
+
+message AnchorStatusEvent {
+  MessageHeader header = 1;
+  string state = 2;
+  string event = 3;
+  string message = 4;
+  ErrorInfo error = 5;
+}
+
+message ServerHeartbeat {
+  MessageHeader header = 1;
+  string state = 2;
+  bool input_ready = 3;
+  int64 latest_stereo_frame_id = 4;
+  int64 camera_info_version = 5;
+  float runtime_fps = 6;
+  float publish_fps = 7;
+  ErrorInfo last_error = 8;
+  int32 command_queue_length = 9;
+}
+
+message ResetTrackingRequest {
+  MessageHeader header = 1;
+  bool clear_filters = 2;
+  bool clear_anchor_pose = 3;
+  string reason = 4;
+}
+
+message ReacquireAnchorRequest {
+  enum ReacquireMode {
+    NEXT_VALID_FRAME = 0;
+    LATEST_FRAME_IF_AVAILABLE = 1;
+    FORCE_DETECT = 2;
+  }
+
+  MessageHeader header = 1;
+  ReacquireMode mode = 2;
+  bool clear_tracking_first = 3;
+  string prompt_override = 4;
+  double timeout_ms = 5;
+}
+
+message AnchorControlRequest {
+  enum ControlAction {
+    CONTROL_ACTION_UNSPECIFIED = 0;
+    SET_STAGE = 1;
+    PAUSE = 2;
+    RESUME = 3;
+  }
+
+  MessageHeader header = 1;
+  ControlAction action = 2;
+  int32 stage = 3;
+  string reason = 4;
+}
