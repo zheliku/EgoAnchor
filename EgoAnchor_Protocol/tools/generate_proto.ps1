@@ -1,8 +1,8 @@
 param(
     [string]$ProtocolRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$PythonOut = (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python\src_v2")).Path,
-    [string]$CSharpOut = (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity\Assets\Scripts_v2\EgoAnchor\Protocol\Generated")).Path,
-    [string]$UnityProtocolOut = (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity\Assets\Scripts_v2\EgoAnchor\Protocol")).Path
+    [string]$PythonOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python")).Path "src_v2"),
+    [string]$CSharpOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol\Generated"),
+    [string]$UnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol")
 )
 
 $ProtoRoot = Join-Path $ProtocolRoot "proto"
@@ -41,16 +41,16 @@ protoc --proto_path=$ProtoRoot --csharp_out=$CSharpOut $ProtoFiles
 
 $subjectsPath = Join-Path $ProtocolRoot "subjects.v1.json"
 $subjectsJson = Get-Content -Raw -Path $subjectsPath | ConvertFrom-Json -AsHashtable
-$subjectNamesPath = Join-Path $UnityProtocolOut "SubjectNames.cs"
+$channelNamesPath = Join-Path $UnityProtocolOut "ChannelNames.cs"
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("namespace EgoAnchor.V2.Protocol")
 $lines.Add("{")
 $lines.Add("    /// <summary>")
-$lines.Add("    /// Unity 侧 v2 subject 名称常量。")
+$lines.Add("    /// Unity 侧 v2 逻辑 channel 名称常量。")
 $lines.Add("    /// 本文件由 EgoAnchor_Protocol/tools/generate_proto.ps1 从 subjects.v1.json 生成。")
-$lines.Add("    /// 不要手动修改；subject 变更请改 subjects.v1.json 后重新运行生成脚本。")
+$lines.Add("    /// 不要手动修改；channel 变更请改 subjects.v1.json 后重新运行生成脚本。")
 $lines.Add("    /// </summary>")
-$lines.Add("    public static class SubjectNames")
+$lines.Add("    public static class ChannelNames")
 $lines.Add("    {")
 $nameMap = @{
     "egoanchor.v1.quest.stereo" = "QuestStereo"
@@ -72,4 +72,4 @@ foreach ($subject in $subjectsJson.Keys) {
 }
 $lines.Add("    }")
 $lines.Add("}")
-Set-Content -Path $subjectNamesPath -Value ($lines -join "`r`n") -Encoding UTF8
+Set-Content -Path $channelNamesPath -Value ($lines -join "`r`n") -Encoding UTF8

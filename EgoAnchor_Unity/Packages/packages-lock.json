@@ -80,15 +80,6 @@
       },
       "url": "https://packages.unity.com"
     },
-    "com.unifan.ides": {
-      "version": "https://github.com/821869798/com.unifan.ides.git",
-      "depth": 0,
-      "source": "git",
-      "dependencies": {
-        "com.unity.test-framework": "1.1.9"
-      },
-      "hash": "852337c7a1dc60ed5b2a398194e63c7c5f83928b"
-    },
     "com.unity.ai.navigation": {
       "version": "2.0.11",
       "depth": 0,
