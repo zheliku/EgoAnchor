@@ -1,6 +1,13 @@
 # Root-local editor and agent state
 /.utmp/
 /.kilo/
+/.kilocode/
 /.vscode/
 /AGENTS.md
 /*.code-workspace
+
+# Large local dependency/environment caches
+/EgoAnchor_Python/.pixi/
+
+# Generated paper build outputs
+/2026-EgoAnchor/pdf/
