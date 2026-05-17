@@ -1,0 +1,106 @@
+# EgoAnchor v2 默认运行配置。
+#
+# 说明：
+# - v2 与旧主线并行存在，本配置只服务 src_v2 下的新框架。
+# - 高频 Quest 图像/标定走 ZMQ 数据面；NATS 控制面后续接入 pose/status/command。
+# - 当前阶段继续接入 Python 侧 pose debug：只在本地 OpenCV 显示，不向 Unity 发布 pose。
+
+[server]
+# Python pose debug 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
+run_stage = 4
+
+[network.data_plane]
+# Python 作为 SUB 端 bind，Unity/Quest 作为 PUB 端 connect。
+listen_host = "*"
+listen_port = 15557
+# stereo payload 较大，接收侧 HWM 保持一定缓冲；上层仍按 topic latest-drain 丢旧帧。
+receive_hwm = 20
+poll_timeout_ms = 30
+
+[network.control_plane]
+# NATS 暂未在视频流 demo 中启用，但先保留配置位置，后续接 PoseResult/Heartbeat/Command。
+enabled = false
+url = "nats://127.0.0.1:4222"
+
+[pipeline.calibration]
+# v2 当前从 Protobuf QuestCameraInfo 获取标定；收到变化时可刷新 K/FoundationPose。
+network_calib_update = true
+# K 映射方式：true=中心裁剪+缩放，false=仅线性缩放。
+assume_center_crop = true
+# 算法处理分辨率；<=0 时使用 camera_info 标定尺寸。
+process_width = 640
+process_height = 480
+
+[pipeline.depth]
+# 有效深度范围；超出范围会置零，并用于拒绝异常 pose。
+min_depth = 0.1
+max_depth = 3.0
+
+[module.segmenter]
+# 当前 v2 pose debug 默认使用 YOLOE-26；SAM3 暂不进入本阶段主线。
+type = "yoloe26"
+prompt = "little white cube"
+max_det = 1
+mask_threshold = 0.5
+
+[module.yoloe]
+model_path = "checkpoints/yoloe-26l-seg.pt"
+mobileclip2_path = "mobileclip2_b.ts"
+conf = 0.1
+imgsz = 640
+use_half = false
+device = "auto"
+
+[module.ffs]
+model_path = "Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth"
+device = "cuda"
+scale = 1.0
+valid_iters = 4
+max_disp = 192
+optimize_build_volume = "triton"
+seed = -1
+cudnn_benchmark = true
+use_trt = true
+trt_precision = "fp16"
+trt_strict = false
+trt_tag = ""
+trt_platform_tag = ""
+trt_feature_engine_path = ""
+trt_post_engine_path = ""
+
+[module.foundationpose]
+mesh_path = "data/online/cube/mesh/cube.stl"
+est_refine_iter = 5
+track_refine_iter = 2
+symmetry_mode = "cube"
+register_min_depth_valid_in_mask = 0.2
+re_register_on_track_lost = true
+pose_jump_translation_m = 0.35
+pose_jump_rotation_deg = 80.0
+debug = 0
+debug_dir = ""
+
+[module.cutie]
+enabled = true
+seg_threshold = 0.1
+erosion_size = 5
+adjust_pose = true
+
+[debug]
+pipeline_stats_interval = 30
+show_mask_snapshot = true
+mask_snapshot_window = "EgoAnchor v2 Mask Snapshot"
+
+[demo.video]
+# OpenCV 预览窗口名。
+window_name = "EgoAnchor v2 Quest Stereo"
+# 每多少帧打印一次接收统计。
+stats_interval_frames = 60
+# 无数据时每多少秒打印一次等待提示。
+wait_log_interval_s = 3.0
+
+[demo.pose]
+# Python 本地 pose debug 窗口名；不对 Unity 发送 pose。
+debug_window_name = "EgoAnchor v2 Pose Debug"
+stereo_window_name = "EgoAnchor v2 Stereo"
+wait_log_interval_s = 3.0
