@@ -26,8 +26,9 @@ import cv2
 import numpy as np
 
 from egoanchor.config import load_config
+from egoanchor.diagnostics import create_fixed_window
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
-from egoanchor.protocol.v1 import quest_pb2
+from egoanchor.protocol import quest_pb2
 from egoanchor.transport import ZmqDataPlaneReceiver
 
 
@@ -137,7 +138,11 @@ def run_demo(config_path: str | None = None) -> None:
 
     try:
         receiver.start()
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        create_fixed_window(
+            window_name,
+            int(video_cfg.stereo_window_width),
+            int(video_cfg.stereo_window_height),
+        )
         cv2.imshow(window_name, waiting_image)
         logging.info(
             "[QuestVideoDemo] Listening on %s. Press q or ESC in OpenCV window to exit.",

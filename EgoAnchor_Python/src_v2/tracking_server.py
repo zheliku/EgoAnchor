@@ -9,7 +9,7 @@ src_v2/quest_video_stream_demo.py。
 
 from __future__ import annotations
 
-from egoanchor.app.tracking_server import main
+from egoanchor.app import tracking_server_main as main
 
 
 if __name__ == "__main__":

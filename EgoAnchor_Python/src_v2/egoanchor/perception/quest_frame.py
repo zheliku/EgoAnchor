@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from egoanchor.protocol.v1 import quest_pb2
+from egoanchor.protocol import quest_pb2
 
 
 @dataclass(frozen=True, slots=True)

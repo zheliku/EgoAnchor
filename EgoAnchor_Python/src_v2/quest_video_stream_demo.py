@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from egoanchor.app.quest_video_stream_demo import main
+from egoanchor.app import quest_video_stream_demo_main as main
 
 
 if __name__ == "__main__":

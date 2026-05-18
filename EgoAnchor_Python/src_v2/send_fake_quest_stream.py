@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from egoanchor.tests.send_fake_quest_stream import main
+from egoanchor.tests import fake_quest_stream_main as main
 
 
 if __name__ == "__main__":

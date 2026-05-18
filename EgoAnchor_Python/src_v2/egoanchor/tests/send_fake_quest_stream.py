@@ -26,7 +26,7 @@ import numpy as np
 import zmq
 
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
-from egoanchor.protocol.v1 import common_pb2, quest_pb2
+from egoanchor.protocol import common_pb2, quest_pb2
 
 
 def _make_image(frame_id: int, side: str, width: int, height: int) -> np.ndarray:

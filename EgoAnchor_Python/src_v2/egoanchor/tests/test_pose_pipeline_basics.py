@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import unittest
 
-from egoanchor.perception.pose_observation import PoseObservation
-from egoanchor.perception.quest_calibration import QuestStereoCalibration
-from egoanchor.perception.quest_pose_pipeline import _generate_cube_symmetry_tfs
-from egoanchor.protocol.v1 import quest_pb2
+from egoanchor.perception import PoseObservation, QuestPosePipeline, QuestStereoCalibration
+from egoanchor.protocol import quest_pb2
 from egoanchor.reliability import score_observation
 
 
@@ -44,8 +42,18 @@ class PosePipelineBasicsTest(unittest.TestCase):
     def test_cube_symmetry_count(self) -> None:
         """立方体对称群应生成 24 个 4x4 变换。"""
 
-        tfs = _generate_cube_symmetry_tfs()
-        self.assertEqual(tfs.shape, (24, 4, 4))
+        class DummySegmenter:
+            pass
+
+        class DummyDepth:
+            pass
+
+        from egoanchor.config import load_config
+
+        cfg = load_config()
+        cfg.module.foundationpose.symmetry_mode = "cube"
+        pipeline = QuestPosePipeline(cfg, DummySegmenter(), DummyDepth())
+        self.assertEqual(pipeline.symmetry_tfs.shape, (24, 4, 4))
 
     def test_reliability_score_uses_pose_diagnostics(self) -> None:
         """有 pose 且诊断较好时，可靠性分数应大于 0。"""

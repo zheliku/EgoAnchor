@@ -17,16 +17,15 @@ import logging
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import Any
 
 import cv2
 import numpy as np
 
-from egoanchor.algorithms import MaskTracker2D, ObjectPoseEstimator, ObjectSegmenter, SegmenterResult, StereoDepthEstimator
-from egoanchor.diagnostics import colorize_depth, draw_hud, overlay_mask_contour, stack_stereo, tile_pose_depth_dashboard
-from egoanchor.perception.pose_observation import PoseObservation
-from egoanchor.perception.quest_calibration import QuestStereoCalibration
-from egoanchor.perception.quest_frame import decode_quest_stereo_frame, preprocess_stereo_pair
-from egoanchor.protocol.v1 import quest_pb2
+from egoanchor.algorithms import SegmenterResult
+from egoanchor.diagnostics import colorize_depth, create_fixed_window, draw_hud, overlay_mask_contour, stack_stereo, tile_pose_depth_dashboard
+from egoanchor.perception import PoseObservation, QuestStereoCalibration, decode_quest_stereo_frame, preprocess_stereo_pair
+from egoanchor.protocol import quest_pb2
 from egoanchor.reliability import score_observation
 
 
@@ -67,9 +66,9 @@ class QuestPosePipeline:
     def __init__(
         self,
         cfg: SimpleNamespace,
-        segmenter: ObjectSegmenter,
-        depth_estimator: StereoDepthEstimator,
-        cutie_tracker: MaskTracker2D | None = None,
+        segmenter: Any,
+        depth_estimator: Any,
+        cutie_tracker: Any | None = None,
         initial_calibration: QuestStereoCalibration | None = None,
     ) -> None:
         self.cfg = cfg
@@ -87,7 +86,7 @@ class QuestPosePipeline:
         self.fx = 0.0
         self.frame_w = 0
         self.frame_h = 0
-        self.pose_estimator: ObjectPoseEstimator | None = None
+        self.pose_estimator: Any | None = None
         self.symmetry_tfs = _generate_cube_symmetry_tfs() if str(cfg.module.foundationpose.symmetry_mode).lower() == "cube" else None
 
         self._calib_signature: tuple[float, ...] | None = None
@@ -254,7 +253,8 @@ class QuestPosePipeline:
             self.frame_w,
             self.frame_h,
         )
-        from egoanchor.algorithms.foundationpose_estimator import FoundationPoseObjectEstimator
+        # 通过 algorithms 包级入口惰性导入具体实现，避免散落深层 import 路径。
+        from egoanchor.algorithms import FoundationPoseObjectEstimator
 
         self.pose_estimator = FoundationPoseObjectEstimator(
             mesh_path=self.cfg.module.foundationpose.mesh_path,
@@ -586,7 +586,7 @@ class QuestPosePipeline:
         draw_hud(overlay_panel, ["RGB + mask", f"det={det_count} selected={selected_index} area={mask.mean():.1%}"], x=8, y=22)
         snapshot = np.hstack((rgb_panel, mask_panel, overlay_panel))
         window_name = str(self.cfg.debug.mask_snapshot_window)
-        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+        create_fixed_window(window_name, int(self.cfg.debug.mask_snapshot_width), int(self.cfg.debug.mask_snapshot_height))
         cv2.imshow(window_name, snapshot)
         cv2.waitKey(1)
         self._mask_snapshot_shown = True
@@ -680,8 +680,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         raise ValueError(f"v2 pose debug 当前仅实现 yoloe26 segmenter，收到: {segmenter_type}")
 
     # 具体模型适配器在工厂内惰性导入，避免 import 本模块时提前加载 torch/ultralytics/CUDA。
-    from egoanchor.algorithms.fast_foundationstereo_depth import FastFoundationStereoDepth
-    from egoanchor.algorithms.yoloe26_segmenter import Yoloe26Segmenter
+    from egoanchor.algorithms import FastFoundationStereoDepth, Yoloe26Segmenter
 
     yoloe_device = str(cfg.module.yoloe.device).strip()
     if yoloe_device.lower() == "auto":
@@ -719,7 +718,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         project_root=cfg.paths.python_root,
     )
     if bool(cfg.module.cutie.enabled):
-        from egoanchor.algorithms.cutie_mask_tracker import CutieMaskTracker
+        from egoanchor.algorithms import CutieMaskTracker
 
         cutie = CutieMaskTracker(
             seg_threshold=float(cfg.module.cutie.seg_threshold),

@@ -1,8 +1,9 @@
 param(
     [string]$ProtocolRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$PythonOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python")).Path "src_v2"),
-    [string]$CSharpOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol\Generated"),
-    [string]$UnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol")
+    [string]$UnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\EgoAnchor\Protocol"),
+    [string]$CSharpOut = (Join-Path $UnityProtocolOut "Generated"),
+    [string]$LegacyUnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol")
 )
 
 $ProtoRoot = Join-Path $ProtocolRoot "proto"
@@ -73,3 +74,17 @@ foreach ($subject in $subjectsJson.Keys) {
 $lines.Add("    }")
 $lines.Add("}")
 Set-Content -Path $channelNamesPath -Value ($lines -join "`r`n") -Encoding UTF8
+
+# 旧版本曾把 Unity 生成协议放在 Assets/Scripts_v2/Protocol。
+# 现在统一收敛到 Assets/Scripts_v2/EgoAnchor/Protocol，避免与业务侧 Protocol 目录重名。
+if (Test-Path $LegacyUnityProtocolOut) {
+    $legacyFull = (Resolve-Path $LegacyUnityProtocolOut).Path
+    $unityFull = (Resolve-Path $UnityProtocolOut).Path
+    if ($legacyFull -ne $unityFull) {
+        Remove-Item -Recurse -Force $LegacyUnityProtocolOut
+    }
+}
+$legacyUnityProtocolMeta = "$LegacyUnityProtocolOut.meta"
+if (Test-Path $legacyUnityProtocolMeta) {
+    Remove-Item -Force $legacyUnityProtocolMeta
+}

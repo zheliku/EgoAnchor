@@ -17,7 +17,7 @@ import zmq
 from google.protobuf.message import DecodeError
 
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
-from egoanchor.protocol.v1 import quest_pb2
+from egoanchor.protocol import quest_pb2
 
 
 @dataclass(frozen=True)

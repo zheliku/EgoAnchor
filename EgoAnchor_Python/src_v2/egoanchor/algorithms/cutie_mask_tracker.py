@@ -16,15 +16,19 @@ import numpy as np
 import torch
 from torchvision.transforms.functional import to_tensor
 
-from egoanchor.algorithms.mask_tracker import MaskTrackResult
+from egoanchor.algorithms import MaskTrackResult
 
 
 class CutieMaskTracker:
     """Cutie 2D mask tracker 适配器。"""
 
     def __init__(self, seg_threshold: float = 0.1, erosion_size: int = 5, project_root: str | Path | None = None) -> None:
+        """初始化 Cutie 模型与时序推理核心。"""
+
+        # 基础后处理参数：seg_threshold 当前保留给后续概率阈值扩展，erosion_size 用于 bbox 抗噪。
         self.seg_threshold = float(seg_threshold)
         self.erosion_size = int(erosion_size)
+        # Cutie 只负责 2D mask 传播；设备选择在适配器内部完成，不暴露到 perception pipeline。
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.project_root = Path(project_root).resolve() if project_root is not None else Path(__file__).resolve().parents[3]
 
@@ -38,6 +42,7 @@ class CutieMaskTracker:
         from cutie.inference.inference_core import InferenceCore
         from cutie.utils.get_default_model import get_default_model
 
+        # InferenceCore 持有时序 memory；reset() 会重建它，避免旧目标污染新 register。
         self.InferenceCore = InferenceCore
         self.model: Any = get_default_model()
         if hasattr(self.model, "to"):

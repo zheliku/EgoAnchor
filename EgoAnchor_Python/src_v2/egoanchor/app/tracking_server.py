@@ -16,7 +16,7 @@ import logging
 import time
 
 from egoanchor.config import load_config
-from egoanchor.runtime.tracking_runtime import TrackingRuntime
+from egoanchor.runtime import TrackingRuntime
 
 
 def run_server(config_path: str | None = None) -> None:

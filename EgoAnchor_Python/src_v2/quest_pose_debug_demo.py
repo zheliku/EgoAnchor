@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from egoanchor.app.quest_pose_debug_demo import main
+from egoanchor.app import quest_pose_debug_demo_main as main
 
 
 if __name__ == "__main__":

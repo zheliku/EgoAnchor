@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 
 from egoanchor.protocol import QUEST_STEREO, load_subjects
-from egoanchor.protocol.v1 import common_pb2, quest_pb2
+from egoanchor.protocol import common_pb2, quest_pb2
 from egoanchor.transport import LatestQuestInputStore
 
 

@@ -24,8 +24,8 @@ import time
 import cv2
 
 from egoanchor.config import load_config
-from egoanchor.diagnostics import make_waiting_image
-from egoanchor.perception.quest_pose_pipeline import build_quest_pose_pipeline
+from egoanchor.diagnostics import create_fixed_window, make_waiting_image
+from egoanchor.perception import build_quest_pose_pipeline
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
 from egoanchor.transport import ZmqDataPlaneReceiver
 
@@ -53,8 +53,8 @@ def run_demo(config_path: str | None = None) -> None:
 
     try:
         receiver.start()
-        cv2.namedWindow(debug_window, cv2.WINDOW_NORMAL)
-        cv2.namedWindow(stereo_window, cv2.WINDOW_NORMAL)
+        create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
+        create_fixed_window(stereo_window, int(pose_cfg.stereo_window_width), int(pose_cfg.stereo_window_height))
         cv2.imshow(debug_window, waiting)
         cv2.imshow(stereo_window, waiting)
         logging.info(

@@ -147,13 +147,13 @@ Protobuf 很适合 v2，因为：
 
 因此 v2 推荐链路是：
 
-1. Unity `QuestDataPlanePublisher` 采集 stereo frame。
+1. Unity `QuestStreamPublisher` 调度 `StereoFrameSource` 采集 stereo frame。
 2. 同一时刻缓存 `frame_id -> leftCameraWorldPose + sender_mono_ms + unity_frame`。
 3. Unity 通过 ZMQ 发 `QuestStereoFrame`。
 4. Python 对该 frame 估计 `pose_matrix_cv_camera`。
 5. Python 通过 NATS 发 `PoseResult(frame_id, has_pose, diagnostics)`。
 6. Unity `PoseResultReceiver` 收到结果。
-7. Unity `FrameAlignmentBuffer` 用 `frame_id` 找采集时刻 camera world pose。
+7. Unity `FramePoseHistory` 用 `frame_id` 找采集时刻 camera world pose。
 8. Unity `PoseToAnchorRuntime` 转成 raw world anchor pose。
 9. Unity `ReliabilityAwareAnchorController` 进行 gate/filter/predict/state lifecycle。
 10. Unity 输出 stable dynamic anchor transform。
@@ -251,13 +251,9 @@ EgoAnchor_Python/src_v2/
 
   algorithms/
     __init__.py
-    segmenter.py
     yoloe26_segmenter.py
-    stereo_depth.py
     fast_foundationstereo_depth.py
-    pose_estimator.py
     foundationpose_estimator.py
-    mask_tracker.py
     cutie_mask_tracker.py
 
   reliability/
@@ -270,6 +266,7 @@ EgoAnchor_Python/src_v2/
     __init__.py
     runtime_stats.py
     debug_view.py
+    window.py
     event_log.py
 
   tests/
@@ -280,6 +277,8 @@ EgoAnchor_Python/src_v2/
     test_frame_store.py
     test_reliability_gate.py
 ```
+
+当前实现注记：`algorithms/__init__.py` 统一导出 `SegmenterResult`、`MaskTrackResult` 和具体算法适配器；由于每类算法当前只有一个具体实现，已不保留只含 `Protocol` 的空基类文件，外部代码应直接 `from egoanchor.algorithms import ...`。`perception/__init__.py` 统一导出 `PoseObservation`、Quest 标定/帧工具、`QuestPosePipeline` 和 `build_quest_pose_pipeline`；`protocol/__init__.py` 统一导出 subjects 常量、`quest_pb2/common_pb2/anchor_pb2` 和常用 Protobuf 类型；wrapper/runtime/tests 也优先使用包级入口，生成的 `*_pb2.py` 内部 import 例外。OpenCV demo 窗口固定初始尺寸由 `config/defaults.toml` 的 `demo.video`、`demo.pose` 和 `debug` 字段控制，参数说明统一写在同一行末尾注释。
 
 ---
 
@@ -391,24 +390,25 @@ EgoAnchor_Unity/Assets/Scripts_v2/
         Common.cs
         Quest.cs
         Anchor.cs
+      ChannelNames.cs
       SubjectNames.cs
       ProtoCodec.cs
 
     Transport/
-      ZmqDataPlanePublisher.cs
+      ZmqTopicPublisher.cs
       NatsControlClient.cs
       NatsPoseSubscriber.cs
       TransportSettings.cs
 
     Quest/
-      QuestStereoFrameSource.cs
-      QuestCameraInfoSource.cs
+      StereoFrameSource.cs
+      CameraInfoSource.cs
       FramePoseHistory.cs
       QuestFrameCapture.cs
 
     Client/
       EgoAnchorClient.cs
-      QuestDataPlanePublisher.cs
+      QuestStreamPublisher.cs
       AnchorCommandClient.cs
       PoseResultReceiver.cs
       ServerHeartbeatReceiver.cs
@@ -455,10 +455,19 @@ EgoAnchor_Unity/Assets/Scene_v2/
 
 如果暂时不想创建 prefab，也可以先只设计脚本目录，之后逐步搭建 scene。
 
+当前 Unity v2 目录/命名约定：
+
+- 协议文件统一放在 `Assets/Scripts_v2/EgoAnchor/Protocol/`；`Generated/*.cs` 与 `ChannelNames.cs` 都由 `EgoAnchor_Protocol/tools/generate_proto.ps1` 生成。旧外层 `Assets/Scripts_v2/Protocol/` 不再使用，避免和业务侧 `EgoAnchor/Protocol` 重名。
+- `data plane` 是架构术语，表示 ZMQ 上的高频 stereo/camera_info 数据面；`control plane` 表示 NATS 上的低频 pose/status/heartbeat/command 控制面。术语可以在文档中保留，但类名优先表达具体职责。
+- 因此旧 `QuestDataPlanePublisher` 改为 `QuestStreamPublisher`，旧 `ZmqDataPlanePublisher` 改为 `ZmqTopicPublisher`。
+- `Quest/` 目录用于 Quest 数据提供者/source 和采集期缓存；`Client/` 目录用于组合 source、transport、anchor runtime 的场景级组件；`Transport/` 目录只做网络，不理解 Quest/anchor 语义。
+- `EgoAnchor.V2.Quest` 命名空间内的类可省略重复 `Quest` 前缀：`StereoFrameSource`、`CameraInfoSource`；共享协议消息名仍保留 `QuestStereoFrame`、`QuestCameraInfo`。
+- Unity v2 新脚本要添加中文 `<summary>`；所有 Inspector 暴露参数要添加 `[Tooltip]`，说明单位、默认值、实时性/坐标/时间语义和不要回退的历史约束。
+
 ---
 
 **Unity 关键类职责**
-`Quest/QuestStereoFrameSource.cs`
+`Quest/StereoFrameSource.cs`
 
 - 读取左右 `PassthroughCameraAccess` texture。
 - JPEG 编码。
@@ -467,7 +476,7 @@ EgoAnchor_Unity/Assets/Scene_v2/
 - 同步记录左目 camera pose 到 `FramePoseHistory`。
 - 不负责 ZMQ socket。
 
-`Quest/QuestCameraInfoSource.cs`
+`Quest/CameraInfoSource.cs`
 
 - 读取左右 PCA intrinsics。
 - 生成 `QuestCameraInfo` Protobuf。
@@ -480,16 +489,16 @@ EgoAnchor_Unity/Assets/Scene_v2/
 - v2 论文关键模块之一。
 - 后续可扩展记录 capture timestamp、camera velocity、HMD pose。
 
-`Transport/ZmqDataPlanePublisher.cs`
+`Transport/ZmqTopicPublisher.cs`
 
 - 管理 ZMQ PUB socket。
 - 发送 multipart `[topic, protobuf_bytes]`。
 - 不知道 camera/anchor 语义。
 
-`Client/QuestDataPlanePublisher.cs`
+`Client/QuestStreamPublisher.cs`
 
 - MonoBehaviour。
-- 持有 `QuestStereoFrameSource`、`QuestCameraInfoSource`、`ZmqDataPlanePublisher`。
+- 持有 `StereoFrameSource`、`CameraInfoSource`、`ZmqTopicPublisher`。
 - 按 target fps 调度 stereo/camera_info 发送。
 - 对外暴露 link stats。
 
@@ -582,10 +591,10 @@ Unity Quest
   PassthroughCameraAccess L/R
     |
     v
-  QuestStereoFrameSource -----> FramePoseHistory
+  StereoFrameSource ----------> FramePoseHistory
     |                               ^
     v                               |
-  ZmqDataPlanePublisher             |
+  ZmqTopicPublisher                 |
     |                               |
     | egoanchor.v1.quest.stereo     |
     v                               |
@@ -703,12 +712,12 @@ Unity：
 
 ```text
 Assets/Scripts_v2/EgoAnchor/Protocol/SubjectNames.cs
-Assets/Scripts_v2/EgoAnchor/Transport/ZmqDataPlanePublisher.cs
+Assets/Scripts_v2/EgoAnchor/Transport/ZmqTopicPublisher.cs
 Assets/Scripts_v2/EgoAnchor/Transport/NatsControlClient.cs
 Assets/Scripts_v2/EgoAnchor/Quest/FramePoseHistory.cs
-Assets/Scripts_v2/EgoAnchor/Quest/QuestStereoFrameSource.cs
-Assets/Scripts_v2/EgoAnchor/Quest/QuestCameraInfoSource.cs
-Assets/Scripts_v2/EgoAnchor/Client/QuestDataPlanePublisher.cs
+Assets/Scripts_v2/EgoAnchor/Quest/StereoFrameSource.cs
+Assets/Scripts_v2/EgoAnchor/Quest/CameraInfoSource.cs
+Assets/Scripts_v2/EgoAnchor/Client/QuestStreamPublisher.cs
 Assets/Scripts_v2/EgoAnchor/Client/PoseResultReceiver.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/CameraPoseFrameAligner.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/PoseToAnchorRuntime.cs

@@ -33,6 +33,8 @@ class _PyTorchStereoBackend:
     """PyTorch 推理后端。"""
 
     def __init__(self, host: "FastFoundationStereoDepth") -> None:
+        """保存宿主对象引用，后端共享模型、设备和配置。"""
+
         self.host = host
 
     def prepare_optimize_build_volume(self) -> None:
@@ -94,6 +96,8 @@ class _TrtStereoBackend:
     """TensorRT 推理后端。"""
 
     def __init__(self, host: "FastFoundationStereoDepth") -> None:
+        """保存宿主对象引用，TRT runner 生命周期由宿主统一管理。"""
+
         self.host = host
 
     @staticmethod
@@ -203,6 +207,7 @@ class FastFoundationStereoDepth:
         trt_post_engine_path: str = "",
         project_root: str | Path | None = None,
     ) -> None:
+        # 推理参数：这些值会同时影响 PyTorch 前向和 TRT engine 匹配。
         self.scale = float(scale)
         self.valid_iters = int(valid_iters)
         self.max_disp = int(max_disp)
@@ -216,11 +221,13 @@ class FastFoundationStereoDepth:
         self.trt_platform_tag = str(trt_platform_tag)
         self.trt_feature_engine_path = str(trt_feature_engine_path)
         self.trt_post_engine_path = str(trt_post_engine_path)
+        # runtime_backend 仅用于日志/诊断；真正分支由 use_trt 和 trt_runner 决定。
         self.runtime_backend = "pytorch"
         self.trt_runner: Any = None
         self.trt_input_hw: tuple[int, int] | None = None
         self.model: Any = None
 
+        # v2 不 import 旧 src/modules，直接定位 Fast-FoundationStereo 工程目录并动态导入。
         self.project_root = Path(project_root).resolve() if project_root is not None else Path(__file__).resolve().parents[3]
         self.ffs_root = self.project_root / "Fast-FoundationStereo"
         if str(self.ffs_root) not in sys.path:
@@ -242,6 +249,7 @@ class FastFoundationStereoDepth:
         self.set_logging_format(level=logging.INFO)
         self.torch.autograd.set_grad_enabled(False)
 
+        # 用户配置 cuda 但本机不可用时，优先回退 CPU，避免 demo 启动阶段直接崩溃。
         runtime_device = str(device)
         if runtime_device == "cuda" and not self.torch.cuda.is_available():
             logging.warning("CUDA 不可用，FoundationStereo 自动回退 CPU。")
@@ -265,6 +273,7 @@ class FastFoundationStereoDepth:
         self.TrtRunner: Any = None
         self.OmegaConf: Any = None
         if self.use_trt:
+            # TRT 依赖按需加载；失败时根据 trt_strict 决定报错或回退 PyTorch。
             try:
                 core_mod = importlib.import_module("core.foundation_stereo")
                 omegaconf_mod = importlib.import_module("omegaconf")
@@ -323,6 +332,8 @@ class FastFoundationStereoDepth:
         self._pt_backend.load_model()
 
     def _predict_disparity(self, left_t: Any, right_t: Any) -> Any:
+        """按当前后端状态预测视差。"""
+
         if self.use_trt:
             return self._trt_backend.predict_disparity(left_t, right_t)
         return self._pt_backend.predict_disparity(left_t, right_t)

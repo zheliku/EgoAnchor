@@ -11,15 +11,21 @@ import logging
 import time
 from types import SimpleNamespace
 
-from egoanchor.perception.quest_pose_pipeline import QuestPosePipeline, build_quest_pose_pipeline
+from egoanchor.perception import QuestPosePipeline, build_quest_pose_pipeline
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
 from egoanchor.transport import ZmqDataPlaneReceiver
 
 
 class TrackingRuntime:
-    """v2 runtime 主循环骨架。"""
+    """v2 runtime 主循环。
+
+    它是后续 NATS command handler、perception pipeline、pose publisher 的汇合点，
+    也是唯一允许持有 GPU/pipeline 状态的对象。
+    """
 
     def __init__(self, cfg: SimpleNamespace) -> None:
+        """保存配置并创建数据面接收器。"""
+
         self.cfg = cfg
         self.receiver = ZmqDataPlaneReceiver(
             listen_host=cfg.network.data_plane.listen_host,

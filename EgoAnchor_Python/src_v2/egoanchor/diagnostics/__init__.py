@@ -8,6 +8,7 @@ from egoanchor.diagnostics.debug_view import (
 	stack_stereo,
 	tile_pose_depth_dashboard,
 )
+from egoanchor.diagnostics.window import create_fixed_window
 
 __all__ = [
 	"colorize_depth",
@@ -16,4 +17,5 @@ __all__ = [
 	"overlay_mask_contour",
 	"stack_stereo",
 	"tile_pose_depth_dashboard",
+	"create_fixed_window",
 ]

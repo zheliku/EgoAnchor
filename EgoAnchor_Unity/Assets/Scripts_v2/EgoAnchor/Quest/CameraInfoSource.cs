@@ -8,19 +8,28 @@ namespace EgoAnchor.V2.Quest
     /// <summary>
     /// Quest 相机标定信息源。
     ///
+    /// 本类位于 EgoAnchor.V2.Quest 命名空间，因此类名省略重复的 Quest 前缀；
+    /// 输出消息仍是共享协议里的 QuestCameraInfo。
+    ///
     /// 职责边界：
-    /// - 从左右 PassthroughCameraAccess 读取 intrinsics / lens pose。
-    /// - 构造 QuestCameraInfo Protobuf。
-    /// - 不负责 ZMQ socket，不负责发送频率。
+    /// - 从左右 PassthroughCameraAccess 读取 intrinsics、sensor resolution、lens pose。
+    /// - 构造 QuestCameraInfo Protobuf，供上层按低频发送。
+    /// - 不负责 ZMQ socket、不负责发送频率、不缓存旧标定。
     /// </summary>
-    public sealed class QuestCameraInfoSource : MonoBehaviour
+    public sealed class CameraInfoSource : MonoBehaviour
     {
+        [Header("Passthrough Cameras")]
+        [Tooltip("左目 PassthroughCameraAccess，用于读取左目 intrinsics、lens pose 和当前分辨率。")]
         [SerializeField] private PassthroughCameraAccess leftCameraAccess;
+
+        [Tooltip("右目 PassthroughCameraAccess，用于读取右目 intrinsics、lens pose，并与左目计算 baseline。")]
         [SerializeField] private PassthroughCameraAccess rightCameraAccess;
 
         /// <summary>
         /// 尝试读取当前 Quest camera_info。
         /// </summary>
+        /// <param name="info">成功时输出可直接序列化发送的 QuestCameraInfo。</param>
+        /// <returns>左右相机是否可用且标定读取成功。</returns>
         public bool TryCapture(out QuestCameraInfo info)
         {
             info = null;
@@ -82,6 +91,9 @@ namespace EgoAnchor.V2.Quest
             return true;
         }
 
+        /// <summary>
+        /// 将 Unity Pose 转为协议中的 LensPose。字段保持 Unity 坐标；Python 侧按协议解释。
+        /// </summary>
         private static LensPose ToLensPose(Pose pose)
         {
             return new LensPose

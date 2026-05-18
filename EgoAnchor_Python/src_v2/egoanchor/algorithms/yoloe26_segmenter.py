@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from ultralytics import YOLOE
 
-from egoanchor.algorithms.segmenter import SegmenterResult
+from egoanchor.algorithms import SegmenterResult
 
 
 class Yoloe26Segmenter:
