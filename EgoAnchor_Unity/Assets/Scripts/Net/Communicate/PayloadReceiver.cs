@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using EgoAnchor.Net;
 using NetMQ;
 using NetMQ.Sockets;
 using Proxima;
@@ -80,6 +81,7 @@ public class PayloadReceiver : MonoBehaviour
     private SubscriberSocket _socket;
     private Thread _receiveThread;
     private volatile bool _running;
+    private bool _ownsNetMqLease;
     private readonly Stopwatch _stopwatch = new Stopwatch();
 
     // 按 topic 缓存最新 payload。
@@ -218,12 +220,22 @@ public class PayloadReceiver : MonoBehaviour
 
         ValidateEntries();
 
-        AsyncIO.ForceDotNet.Force();
-
-        _socket = new SubscriberSocket();
-        _socket.Options.ReceiveHighWatermark = receiveHighWatermark;
-        _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
-        _socket.Connect(ServerAddress);
+        try
+        {
+            NetMQUnityRuntime.Acquire();
+            _ownsNetMqLease = true;
+            _socket = new SubscriberSocket();
+            _socket.Options.ReceiveHighWatermark = receiveHighWatermark;
+            _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
+            _socket.Connect(ServerAddress);
+        }
+        catch
+        {
+            _socket?.Dispose();
+            _socket = null;
+            ReleaseNetMqLease();
+            throw;
+        }
 
         lock (_lock)
         {
@@ -358,15 +370,36 @@ public class PayloadReceiver : MonoBehaviour
             return;
         }
 
-        _socket.Close();
-        _socket.Dispose();
-        _socket = null;
+        try
+        {
+            _socket.Close();
+        }
+        catch (Exception exc)
+        {
+            Debug.LogWarning($"[PayloadReceiver] socket close ignored: {exc.Message}", this);
+        }
+        finally
+        {
+            _socket.Dispose();
+            _socket = null;
+            ReleaseNetMqLease();
+        }
+    }
+
+    private void ReleaseNetMqLease()
+    {
+        if (!_ownsNetMqLease)
+        {
+            return;
+        }
+
+        _ownsNetMqLease = false;
+        NetMQUnityRuntime.Release();
     }
 
     private void OnDestroy()
     {
         Disconnect();
-        NetMQConfig.Cleanup(false);
     }
 
     private void OnApplicationQuit()

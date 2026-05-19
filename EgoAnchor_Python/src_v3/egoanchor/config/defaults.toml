@@ -1,5 +1,5 @@
 # EgoAnchor v3 默认运行配置。
-# 当前 v3 已包含 ZMQ 数据面通信 demo 与 Python-only pose debug；仍不启动 NATS 或 Unity anchor runtime。
+# 当前 v3 已包含 ZMQ 数据面通信 demo、Python pose debug，以及通过 NATS 发布 PoseResult 给 Unity anchor runtime。
 
 [server]
 run_stage = 4 # Python pose debug 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
@@ -10,6 +10,21 @@ listen_port = 15557 # Unity -> Python 数据面端口；保持新链路默认值
 receive_hwm = 20 # ZMQ 接收高水位；限制积压，业务层仍按 topic latest-only 处理。
 poll_timeout_ms = 10 # 每轮 poll 最长等待时间，单位毫秒；越小窗口响应越快。
 
+[network.message_plane]
+enabled = true # 是否启用 NATS 消息面；当前阶段只发布 PoseResult，不实现命令/状态机。
+url = "nats://127.0.0.1:4222" # NATS server URL；Quest 真机接收时 Unity 侧也应配置到同一开发机地址。
+pose_result_subject = "egoanchor.v1.pose.result" # Python -> Unity PoseResult subject；必须与 subjects.v1.json 保持一致。
+client_name = "egoanchor-python-v3" # Python NATS 客户端名称，便于 nats-server 日志排查。
+connect_timeout_s = 2.0 # 初次连接 NATS 的超时时间，单位秒。
+request_timeout_s = 1.0 # 预留给未来 request/reply 命令的默认超时，当前阶段不使用。
+max_pending_futures = 32 # 后台 publish Future 最大积压数；超过后丢弃新 pose，保持 latest-only。
+wait_ready_on_start = false # 启动时是否等待 NATS 首次连接；false 可避免 nats-server 未启动时阻塞模型加载。
+
+[runtime.commands]
+max_queue_size = 128 # NATS command handler 接受后的内存队列容量；handler 只 ack/enqueue，不直接操作 pipeline。
+dedup_ttl_ms = 60000 # command request_id 幂等缓存时间，单位毫秒；Unity 超时重试同一 request_id 时返回旧 ack。
+execute_per_tick = 8 # 每轮 TrackingRuntime tick 最多执行的命令数量，避免长时间占用主循环。
+
 [pipeline.calibration]
 network_calib_update = true # 收到新的 QuestCameraInfo 且标定变化时刷新 K/FoundationPose。
 assume_center_crop = true # K 映射方式：true=中心裁剪+缩放，false=仅线性缩放。
@@ -18,7 +33,7 @@ process_height = 480 # 算法处理图像高度；当前 pose debug 固定缩放
 
 [pipeline.depth]
 min_depth = 0.1 # 有效深度下限，单位米；低于该值会置零。
-max_depth = 3.0 # 有效深度上限，单位米；高于该值会置零。
+max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可适当增大，但过大可能引入背景深度噪声。
 
 [module.segmenter]
 type = "yoloe26" # 分割后端；当前 v3 pose debug 仅实现 yoloe26。
@@ -63,8 +78,10 @@ symmetry_axis = "z" # symmetry_mode=axis 时的旋转轴。
 symmetry_count = 36 # symmetry_mode=axis 时离散旋转数量。
 register_min_depth_valid_in_mask = 0.2 # register/re-register 前 mask 内有效深度比例下限。
 re_register_on_track_lost = true # track 失败或跳变时是否用当前 2D mask 重新 register。
-pose_jump_translation_m = 0.35 # 单帧 track 平移跳变拒绝阈值，单位米。
-pose_jump_rotation_deg = 80.0 # 单帧 track 旋转跳变拒绝阈值，单位度。
+pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位米；快速移动/近距离视角变化时可继续调大。
+pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
+accept_track_jump_without_mask = true # track 跳变但当前没有可用 re-register mask 时是否暂时接受该 pose，避免直接输出 no_pose 导致 anchor 卡住。
+max_consecutive_track_rejects = 3 # 连续 track reject 达到该值后强制回到 detect/register，避免长时间漂移。
 debug = 0 # FoundationPose 内部 debug 等级。
 debug_dir = "FoundationPose/debug/api_v3" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
 

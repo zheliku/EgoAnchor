@@ -1,9 +1,9 @@
+using System;
 using EgoAnchor.V3.Protocol;
 using EgoAnchor.V3.Protocol.Generated;
 using EgoAnchor.V3.Quest;
 using EgoAnchor.V3.Transport;
 using Google.Protobuf;
-using NetMQ;
 using UnityEngine;
 
 namespace EgoAnchor.V3.Client
@@ -18,6 +18,9 @@ namespace EgoAnchor.V3.Client
     /// </summary>
     public sealed class QuestStreamPublisher : MonoBehaviour
     {
+        /// <summary>重新创建 publisher 的最小间隔，避免连接失败时每帧狂重试。</summary>
+        private const double PublisherRetryIntervalSeconds = 1.0;
+
         /// <summary>Python 接收端 IP。</summary>
         [Header("Network / ZMQ")]
         [Tooltip("Python v3 数据接收端 IP。Quest 真机建议通过 UI/PlayerPrefs 注入开发机局域网 IP，避免长期写死。")]
@@ -100,6 +103,9 @@ namespace EgoAnchor.V3.Client
         /// <summary>上次打印统计时的总计数。</summary>
         private int lastLoggedTotal;
 
+        /// <summary>上次尝试重建 publisher 的 Unity 单调时间。</summary>
+        private double lastPublisherAttemptTime;
+
         /// <summary>
         /// 更新 Python 接收端 IP，并可选择写入 PlayerPrefs。
         /// </summary>
@@ -121,13 +127,40 @@ namespace EgoAnchor.V3.Client
         }
 
         /// <summary>
-        /// Unity Start：加载持久化配置并连接 ZMQ。
+        /// Unity Awake：提前加载持久化配置，避免首次连接时仍使用旧的序列化值。
+        /// </summary>
+        private void Awake()
+        {
+            QuestStreamSession.BeginNewSession();
+            LoadServerIpFromPlayerPrefs();
+        }
+
+        /// <summary>
+        /// Unity Start：确保 publisher 已启动。
         /// </summary>
         private void Start()
         {
+            TryStartPublisher(force: false);
+        }
+
+        /// <summary>
+        /// Unity 启用时重新连接 publisher。用于 Play Mode 重入和组件重新启用。
+        /// </summary>
+        private void OnEnable()
+        {
+            QuestStreamSession.BeginNewSession();
             LoadServerIpFromPlayerPrefs();
-            publisher = new ZmqTopicPublisher();
-            publisher.Connect(serverIp, serverPort, sendHighWatermark, socketLingerMs);
+            TryStartPublisher(force: true);
+        }
+
+        /// <summary>
+        /// 重新读取配置并重建 ZMQ publisher。可由 UI 网络设置面板或调试按钮调用。
+        /// </summary>
+        public void RestartPublisher()
+        {
+            LoadServerIpFromPlayerPrefs();
+            DisposePublisher();
+            TryStartPublisher(force: true);
         }
 
         /// <summary>
@@ -136,6 +169,13 @@ namespace EgoAnchor.V3.Client
         private void Update()
         {
             double now = Time.realtimeSinceStartupAsDouble;
+            TryStartPublisher(force: false);
+            if (publisher == null)
+            {
+                MaybeLogStats();
+                return;
+            }
+
             TrySendCameraInfo(now);
             TrySendStereo(now);
             MaybeLogStats();
@@ -243,7 +283,14 @@ namespace EgoAnchor.V3.Client
         private void OnDestroy()
         {
             DisposePublisher();
-            NetMQConfig.Cleanup(false);
+        }
+
+        /// <summary>
+        /// Unity 禁用组件时释放 ZMQ，避免切场景或退出 Play Mode 时残留 socket。
+        /// </summary>
+        private void OnDisable()
+        {
+            DisposePublisher();
         }
 
         /// <summary>
@@ -261,6 +308,43 @@ namespace EgoAnchor.V3.Client
         {
             publisher?.Dispose();
             publisher = null;
+        }
+
+        /// <summary>
+        /// 尝试创建并连接底层 ZMQ publisher。
+        /// 连接失败时不抛给 Unity 主循环，而是延迟重试，避免 Play Mode 启动阶段被一次性失败卡死。
+        /// </summary>
+        /// <param name="force">是否忽略重试间隔，立即尝试一次。</param>
+        /// <returns>本次是否已经成功持有可用 publisher。</returns>
+        private bool TryStartPublisher(bool force)
+        {
+            if (publisher != null)
+            {
+                return true;
+            }
+
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (!force && now - lastPublisherAttemptTime < PublisherRetryIntervalSeconds)
+            {
+                return false;
+            }
+
+            lastPublisherAttemptTime = now;
+
+            try
+            {
+                publisher = new ZmqTopicPublisher();
+                publisher.Connect(serverIp, serverPort, sendHighWatermark, socketLingerMs);
+                lastStereoSendTime = 0.0;
+                lastCameraInfoSendTime = 0.0;
+                return true;
+            }
+            catch (Exception exc)
+            {
+                Debug.LogWarning($"[V3 QuestStreamPublisher] publisher connect failed, will retry: {exc.Message}", this);
+                DisposePublisher();
+                return false;
+            }
         }
     }
 }

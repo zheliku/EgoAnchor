@@ -10,9 +10,9 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from egoanchor.perception.pose_observation import PoseObservation
-from egoanchor.perception.quest_calibration import QuestStereoCalibration
-from egoanchor.perception.quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
+from .pose_observation import PoseObservation
+from .quest_calibration import QuestStereoCalibration
+from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
 
 
 _LAZY_EXPORTS = {

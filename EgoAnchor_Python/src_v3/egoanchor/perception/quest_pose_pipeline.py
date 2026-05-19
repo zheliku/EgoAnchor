@@ -16,9 +16,7 @@ import cv2
 import numpy as np
 
 from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult, Yoloe26Segmenter
-from egoanchor.perception.pose_observation import PoseObservation
-from egoanchor.perception.quest_calibration import QuestStereoCalibration
-from egoanchor.perception.quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
+from egoanchor.perception import PoseObservation, QuestStereoCalibration, DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
 from egoanchor.protocol import quest_pb2
 from egoanchor.reliability import score_observation
 
@@ -144,6 +142,8 @@ class QuestPosePipeline:
         re_register_on_track_lost: bool = True,
         pose_jump_translation_m: float = 0.25,
         pose_jump_rotation_deg: float = 35.0,
+        accept_track_jump_without_mask: bool = False,
+        max_consecutive_track_rejects: int = 3,
         cutie_enabled: bool = False,
         cutie_adjust_pose: bool = False,
         log_stats_interval: int = 60,
@@ -194,6 +194,12 @@ class QuestPosePipeline:
         self.pose_jump_rotation_deg = float(pose_jump_rotation_deg)
         """track pose 旋转跳变 reject 阈值，单位度。"""
 
+        self.accept_track_jump_without_mask = bool(accept_track_jump_without_mask)
+        """track 跳变但没有 re-register mask 时是否暂时接受该 pose。"""
+
+        self.max_consecutive_track_rejects = max(1, int(max_consecutive_track_rejects))
+        """连续 track reject 达到该值后强制回到 detect/register。"""
+
         self.cutie_enabled = bool(cutie_enabled)
         """是否启用 Cutie mask 传播。"""
 
@@ -233,6 +239,9 @@ class QuestPosePipeline:
         self._last_frame_id: int | None = None
         """上一帧处理过的 frame_id，避免重复处理。"""
 
+        self._last_session_id = ""
+        """上一帧处理过的 Unity 发布会话 ID，用于识别 Unity 重启后的 frame_id 回绕。"""
+
         self._track_reject_count = 0
         """连续 track reject 次数。"""
 
@@ -259,6 +268,8 @@ class QuestPosePipeline:
         self._has_registered = False
         self._cutie_ready = False
         self._last_pose = None
+        self._last_frame_id = None
+        self._last_session_id = ""
         self._track_reject_count = 0
         if self.estimator is not None:
             self.estimator.reset()
@@ -286,11 +297,19 @@ class QuestPosePipeline:
             obs = self._make_observation(None, "DECODE_FAILED", False, None, "NONE", diagnostics, timing, failure_reason="decode_failed")
             return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
 
-        if decoded.frame_id is not None and decoded.frame_id == self._last_frame_id:
+        session_id = self._extract_session_id(stereo_msg)
+        same_session = not session_id or not self._last_session_id or session_id == self._last_session_id
+        if same_session and decoded.frame_id is not None and decoded.frame_id == self._last_frame_id:
             diagnostics.phase = "DUPLICATE_FRAME"
             diagnostics.frame_id = decoded.frame_id
             return QuestPosePipelineOutput(observation=None, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
+
+        if not same_session:
+            self.reset_tracking_state()
+            diagnostics.phase = "STREAM_RESTART"
+
         self._last_frame_id = decoded.frame_id
+        self._last_session_id = session_id or self._last_session_id
         diagnostics.frame_id = decoded.frame_id
 
         left_bgr, right_bgr = preprocess_stereo_pair(decoded.left_bgr, decoded.right_bgr, self.process_width, self.process_height)
@@ -371,6 +390,14 @@ class QuestPosePipeline:
         obs = self._make_observation(decoded, phase, has_pose, pose, pose_source, diagnostics, timing, failure_reason="" if has_pose else phase.lower())
         self._log_stats(diagnostics, obs)
         return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
+
+    @staticmethod
+    def _extract_session_id(stereo_msg: quest_pb2.QuestStereoFrame) -> str:
+        """从 stereo message header 中提取 Unity 发布会话 ID；缺失时返回空字符串。"""
+
+        if not stereo_msg.HasField("header"):
+            return ""
+        return str(getattr(stereo_msg.header, "session_id", ""))
 
     def _refresh_calibration(self, msg: quest_pb2.QuestCameraInfo) -> None:
         """根据 camera_info 更新 K，并在变化时重建 FoundationPose。"""
@@ -473,6 +500,11 @@ class QuestPosePipeline:
             self.estimator.reset()
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
+            if self.accept_track_jump_without_mask and self._track_reject_count < self.max_consecutive_track_rejects:
+                self._has_registered = True
+                self._last_pose = pose
+                logging.warning("FoundationPose track pose 跳变但无 re-register mask，暂时接受该 pose。")
+                return pose, "TRACK_ACCEPTED_JUMP", "TRACK_ACCEPTED_JUMP"
             return None, "NONE", "TRACK_REJECT"
 
         self._track_reject_count = 0

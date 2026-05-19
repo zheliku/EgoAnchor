@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using EgoAnchor.Net;
 using NetMQ;
 using NetMQ.Sockets;
 using Proxima;
@@ -64,6 +65,7 @@ public class PayloadSender : MonoBehaviour
 
     private PublisherSocket _socket;
     private Coroutine _sendCoroutine;
+    private bool _ownsNetMqLease;
 
     // 全局统计。
     private int _totalSent;
@@ -147,12 +149,22 @@ public class PayloadSender : MonoBehaviour
             return;
         }
 
-        AsyncIO.ForceDotNet.Force();
-
-        _socket = new PublisherSocket();
-        _socket.Options.SendHighWatermark = sendHighWatermark;
-        _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
-        _socket.Connect(Endpoint);
+        try
+        {
+            NetMQUnityRuntime.Acquire();
+            _ownsNetMqLease = true;
+            _socket = new PublisherSocket();
+            _socket.Options.SendHighWatermark = sendHighWatermark;
+            _socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
+            _socket.Connect(Endpoint);
+        }
+        catch
+        {
+            _socket?.Dispose();
+            _socket = null;
+            ReleaseNetMqLease();
+            throw;
+        }
 
         string entrySummary = string.Join(", ", entries.ConvertAll(e => $"{e.topic}@{e.targetFps}fps"));
         Debug.Log($"[PayloadSender] Connected to {Endpoint}, entries=[{entrySummary}]");
@@ -165,9 +177,31 @@ public class PayloadSender : MonoBehaviour
             return;
         }
 
-        _socket.Close();
-        _socket.Dispose();
-        _socket = null;
+        try
+        {
+            _socket.Close();
+        }
+        catch (Exception exc)
+        {
+            Debug.LogWarning($"[PayloadSender] socket close ignored: {exc.Message}", this);
+        }
+        finally
+        {
+            _socket.Dispose();
+            _socket = null;
+            ReleaseNetMqLease();
+        }
+    }
+
+    private void ReleaseNetMqLease()
+    {
+        if (!_ownsNetMqLease)
+        {
+            return;
+        }
+
+        _ownsNetMqLease = false;
+        NetMQUnityRuntime.Release();
     }
 
     /// <summary>
@@ -265,7 +299,6 @@ public class PayloadSender : MonoBehaviour
     private void OnDestroy()
     {
         Cleanup();
-        NetMQConfig.Cleanup(false);
     }
 
     private void OnApplicationQuit()

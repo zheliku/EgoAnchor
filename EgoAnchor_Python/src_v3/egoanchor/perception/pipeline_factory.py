@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Yoloe26Segmenter
-from egoanchor.perception.quest_pose_pipeline import QuestPosePipeline
+from egoanchor.perception import QuestPosePipeline
 
 
 def _resolve_path(path_value: str | Path, python_root: Path) -> Path:
@@ -209,6 +209,8 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         re_register_on_track_lost=bool(fp_cfg.re_register_on_track_lost),
         pose_jump_translation_m=float(fp_cfg.pose_jump_translation_m),
         pose_jump_rotation_deg=float(fp_cfg.pose_jump_rotation_deg),
+        accept_track_jump_without_mask=bool(_cfg_get(fp_cfg, "accept_track_jump_without_mask", False)),
+        max_consecutive_track_rejects=int(_cfg_get(fp_cfg, "max_consecutive_track_rejects", 3)),
         cutie_enabled=bool(cutie_cfg.enabled),
         cutie_adjust_pose=bool(cutie_cfg.adjust_pose),
         log_stats_interval=int(debug_cfg.pipeline_stats_interval),

@@ -1,4 +1,5 @@
 using System;
+using EgoAnchor.Net;
 using NetMQ;
 using NetMQ.Sockets;
 using UnityEngine;
@@ -22,6 +23,7 @@ namespace EgoAnchor.V2.Transport
         private string _endpoint;
         private int _sendHighWatermark;
         private int _socketLingerMs;
+        private bool _ownsNetMqLease;
 
         /// <summary>当前是否已经创建并连接 PUB socket。</summary>
         public bool IsConnected => _socket != null;
@@ -47,13 +49,22 @@ namespace EgoAnchor.V2.Transport
             _sendHighWatermark = Mathf.Max(1, sendHighWatermark);
             _socketLingerMs = Mathf.Max(0, socketLingerMs);
 
-            // NetMQ 在 Unity/IL2CPP 环境中通常需要先强制使用托管 AsyncIO。
-            AsyncIO.ForceDotNet.Force();
-
-            _socket = new PublisherSocket();
-            _socket.Options.SendHighWatermark = _sendHighWatermark;
-            _socket.Options.Linger = TimeSpan.FromMilliseconds(_socketLingerMs);
-            _socket.Connect(_endpoint);
+            try
+            {
+                NetMQUnityRuntime.Acquire();
+                _ownsNetMqLease = true;
+                _socket = new PublisherSocket();
+                _socket.Options.SendHighWatermark = _sendHighWatermark;
+                _socket.Options.Linger = TimeSpan.FromMilliseconds(_socketLingerMs);
+                _socket.Connect(_endpoint);
+            }
+            catch
+            {
+                _socket?.Dispose();
+                _socket = null;
+                ReleaseNetMqLease();
+                throw;
+            }
 
             Debug.Log($"[ZmqTopicPublisher] Connected to {_endpoint}, hwm={_sendHighWatermark}");
         }
@@ -87,9 +98,31 @@ namespace EgoAnchor.V2.Transport
                 return;
             }
 
-            _socket.Close();
-            _socket.Dispose();
-            _socket = null;
+            try
+            {
+                _socket.Close();
+            }
+            catch (Exception exc)
+            {
+                Debug.LogWarning($"[ZmqTopicPublisher] socket close ignored: {exc.Message}");
+            }
+            finally
+            {
+                _socket.Dispose();
+                _socket = null;
+                ReleaseNetMqLease();
+            }
+        }
+
+        private void ReleaseNetMqLease()
+        {
+            if (!_ownsNetMqLease)
+            {
+                return;
+            }
+
+            _ownsNetMqLease = false;
+            NetMQUnityRuntime.Release();
         }
     }
 }

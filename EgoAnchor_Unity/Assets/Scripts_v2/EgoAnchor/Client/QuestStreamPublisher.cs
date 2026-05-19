@@ -3,7 +3,6 @@ using EgoAnchor.V2.Protocol;
 using EgoAnchor.V2.Quest;
 using EgoAnchor.V2.Transport;
 using Google.Protobuf;
-using NetMQ;
 using UnityEngine;
 
 namespace EgoAnchor.V2.Client
@@ -168,7 +167,6 @@ namespace EgoAnchor.V2.Client
         private void OnDestroy()
         {
             DisposePublisher();
-            NetMQConfig.Cleanup(false);
         }
 
         private void OnApplicationQuit()

@@ -61,13 +61,17 @@ def run_tracking_server(config_path: str | None = None) -> None:
                 now = time.perf_counter()
                 if now - last_wait_log_time >= float(pose_cfg.wait_log_interval_s):
                     stats = runtime.get_stats()
+                    publish_stats = runtime.get_pose_publish_stats()
                     logging.info(
-                        "[TrackingServer:v3] waiting/idle received=%d stereo=%d camera_info=%d decode_failed=%d latest_frame=%s",
+                        "[TrackingServer:v3] waiting/idle received=%d stereo=%d camera_info=%d decode_failed=%d latest_frame=%s pose_pub=%s/%s failed=%s",
                         stats.received,
                         stats.decoded_stereo,
                         stats.decoded_camera_info,
                         stats.decode_failed,
                         stats.latest_stereo_frame_id,
+                        publish_stats.get("submitted", 0),
+                        publish_stats.get("attempts", 0),
+                        publish_stats.get("failed", 0),
                     )
                     last_wait_log_time = now
                 cv2.imshow(debug_window, waiting)

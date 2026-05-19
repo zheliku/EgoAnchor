@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from egoanchor.config.runtime_config import RuntimePaths, load_config
+from .runtime_config import RuntimePaths, load_config
 
 __all__ = ["RuntimePaths", "load_config"]

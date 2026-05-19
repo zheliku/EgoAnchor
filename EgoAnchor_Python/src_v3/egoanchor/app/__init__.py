@@ -12,7 +12,7 @@ from typing import Any
 def quest_video_probe_main(*args: Any, **kwargs: Any) -> Any:
     """启动 Quest 视频流探针入口。"""
 
-    from egoanchor.app.probes import main
+    from .probes import main
 
     return main(*args, **kwargs)
 
@@ -20,7 +20,7 @@ def quest_video_probe_main(*args: Any, **kwargs: Any) -> Any:
 def tracking_server_main(*args: Any, **kwargs: Any) -> Any:
     """启动 Python-only pose debug 入口。"""
 
-    from egoanchor.app.tracking_server import main
+    from .tracking_server import main
 
     return main(*args, **kwargs)
 

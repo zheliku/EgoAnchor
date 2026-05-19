@@ -50,15 +50,36 @@ namespace EgoAnchor.V3.Transport
             sendHighWatermark = Mathf.Max(1, hwm);
             socketLingerMs = Mathf.Max(0, lingerMs);
 
-            // Unity/IL2CPP 下 NetMQ 通常需要强制托管 AsyncIO，避免运行时初始化问题。
-            AsyncIO.ForceDotNet.Force();
-
-            socket = new PublisherSocket();
-            socket.Options.SendHighWatermark = sendHighWatermark;
-            socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
-            socket.Connect(endpoint);
+            try
+            {
+                PrepareNetMq();
+                socket = new PublisherSocket();
+                socket.Options.SendHighWatermark = sendHighWatermark;
+                socket.Options.Linger = TimeSpan.FromMilliseconds(socketLingerMs);
+                socket.Connect(endpoint);
+            }
+            catch
+            {
+                socket?.Dispose();
+                socket = null;
+                CleanupNetMq("connect failed");
+                throw;
+            }
 
             Debug.Log($"[V3 ZmqTopicPublisher] connected endpoint={endpoint}, hwm={sendHighWatermark}");
+        }
+
+        /// <summary>
+        /// 显式重连到当前 endpoint。用于 Play Mode 热重启或网络设置变更后的恢复。
+        /// </summary>
+        /// <param name="serverIp">Python 接收端 IP。</param>
+        /// <param name="serverPort">Python 接收端端口。</param>
+        /// <param name="hwm">发送高水位。</param>
+        /// <param name="lingerMs">关闭 linger 毫秒数。</param>
+        public void Reconnect(string serverIp, int serverPort, int hwm, int lingerMs)
+        {
+            Dispose();
+            Connect(serverIp, serverPort, hwm, lingerMs);
         }
 
         /// <summary>
@@ -90,9 +111,52 @@ namespace EgoAnchor.V3.Transport
                 return;
             }
 
-            socket.Close();
-            socket.Dispose();
-            socket = null;
+            try
+            {
+                socket.Close();
+            }
+            catch (Exception exc)
+            {
+                Debug.LogWarning($"[V3 ZmqTopicPublisher] socket close ignored: {exc.Message}");
+            }
+            finally
+            {
+                socket.Dispose();
+                socket = null;
+                CleanupNetMq("publisher disposed");
+            }
+        }
+
+        /// <summary>
+        /// 创建 socket 前准备 NetMQ 运行环境。
+        ///
+        /// 当前 v3 场景只在 Unity 主线程创建/释放一个 ZMQ PUB socket，
+        /// 因此不需要额外的全局状态锁或 lease manager。
+        /// 如果未来同一场景出现多个 NetMQ socket 或后台 NetMQ 线程，再升级为集中 runtime。
+        /// </summary>
+        private static void PrepareNetMq()
+        {
+            AsyncIO.ForceDotNet.Force();
+            NetMQConfig.Linger = TimeSpan.Zero;
+        }
+
+        /// <summary>
+        /// 清理 NetMQ 进程级状态。
+        ///
+        /// 本方法只在本发布器失败或释放后调用；因为 v3 当前只有一个 ZMQ 发布器，
+        /// 不需要全局锁。若未来多个 NetMQ 对象并存，应改回集中 runtime 统一清理。
+        /// </summary>
+        /// <param name="reason">触发清理的原因，便于日志排查。</param>
+        private static void CleanupNetMq(string reason)
+        {
+            try
+            {
+                NetMQConfig.Cleanup(false);
+            }
+            catch (Exception exc)
+            {
+                Debug.LogWarning($"[V3 ZmqTopicPublisher] cleanup ignored ({reason}): {exc.Message}");
+            }
         }
     }
 }

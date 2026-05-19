@@ -51,15 +51,7 @@ namespace EgoAnchor.V3.Quest
 
             info = new QuestCameraInfo
             {
-                Header = new MessageHeader
-                {
-                    MessageId = Guid.NewGuid().ToString("N"),
-                    FrameId = 0,
-                    UnityFrame = Time.frameCount,
-                    SenderMonoMs = senderMonoMs,
-                    CreatedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    SchemaVersion = "v1"
-                },
+                Header = QuestStreamSession.BuildHeader(0, Time.frameCount, senderMonoMs),
                 IsSupported = PassthroughCameraAccess.IsSupported,
                 LeftFx = leftIntr.FocalLength.x,
                 LeftFy = leftIntr.FocalLength.y,
