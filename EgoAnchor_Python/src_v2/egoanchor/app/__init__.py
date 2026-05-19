@@ -14,9 +14,13 @@ _LAZY_EXPORTS = {
 	"tracking_server_main": ("egoanchor.app.tracking_server", "main"),
 	"quest_video_stream_demo_main": ("egoanchor.app.quest_video_stream_demo", "main"),
 	"quest_pose_debug_demo_main": ("egoanchor.app.quest_pose_debug_demo", "main"),
+	"pose_result_console_demo_main": ("egoanchor.app.pose_result_console_demo", "main"),
+	"anchor_link_smoke_main": ("egoanchor.app.anchor_link_smoke", "main"),
 	"run_server": ("egoanchor.app.tracking_server", "run_server"),
 	"run_quest_video_stream_demo": ("egoanchor.app.quest_video_stream_demo", "run_demo"),
 	"run_quest_pose_debug_demo": ("egoanchor.app.quest_pose_debug_demo", "run_demo"),
+	"run_pose_result_console_demo": ("egoanchor.app.pose_result_console_demo", "run_demo"),
+	"run_anchor_link_smoke": ("egoanchor.app.anchor_link_smoke", "run_smoke"),
 }
 
 
@@ -37,7 +41,11 @@ __all__ = [
 	"tracking_server_main",
 	"quest_video_stream_demo_main",
 	"quest_pose_debug_demo_main",
+	"pose_result_console_demo_main",
+	"anchor_link_smoke_main",
 	"run_server",
 	"run_quest_video_stream_demo",
 	"run_quest_pose_debug_demo",
+	"run_pose_result_console_demo",
+	"run_anchor_link_smoke",
 ]

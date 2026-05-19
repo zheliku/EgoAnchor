@@ -1,4 +1,4 @@
-"""v2 pose quality 骨架。"""
+"""v2 pose quality 轻量规则。"""
 
 from __future__ import annotations
 

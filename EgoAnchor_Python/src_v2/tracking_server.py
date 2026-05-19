@@ -3,8 +3,8 @@
 推荐运行方式（在 EgoAnchor_Python 目录）：
     pixi run python .\\src_v2\\tracking_server.py
 
-当前该入口只启动 TrackingRuntime 骨架；如果只想看实时视频，请优先运行
-src_v2/quest_video_stream_demo.py。
+该入口启动 `TrackingRuntime`：接收 ZMQ Quest stream，运行本地 pose pipeline，
+并在配置启用时通过 NATS 发布 `PoseResult`。
 """
 
 from __future__ import annotations

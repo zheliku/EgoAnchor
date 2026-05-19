@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import unittest
 
-from egoanchor.protocol import QUEST_STEREO, load_subjects
+from egoanchor.perception import PoseObservation
+from egoanchor.protocol import POSE_RESULT, QUEST_STEREO, load_subjects
 from egoanchor.protocol import common_pb2, quest_pb2
-from egoanchor.transport import LatestQuestInputStore
+from egoanchor.runtime import LatestQuestInputStore, pose_result_from_observation
 
 
 class ProtoRoundtripTest(unittest.TestCase):
@@ -49,6 +50,9 @@ class ProtoRoundtripTest(unittest.TestCase):
         self.assertIn(QUEST_STEREO, loaded)
         self.assertEqual(loaded[QUEST_STEREO].transport, "zmq")
         self.assertEqual(loaded[QUEST_STEREO].protobuf, "protocol.v1.QuestStereoFrame")
+        self.assertIn(POSE_RESULT, loaded)
+        self.assertEqual(loaded[POSE_RESULT].transport, "nats")
+        self.assertEqual(loaded[POSE_RESULT].protobuf, "protocol.v1.PoseResult")
 
     def test_latest_store_keeps_latest_frame(self) -> None:
         """LatestQuestInputStore 应以最新 stereo 覆盖旧 stereo。"""
@@ -64,6 +68,53 @@ class ProtoRoundtripTest(unittest.TestCase):
         self.assertEqual(store.latest_stereo.header.frame_id, 2)
         self.assertEqual(stats.decoded_stereo, 2)
         self.assertEqual(stats.latest_stereo_frame_id, 2)
+
+    def test_pose_result_from_observation_roundtrip(self) -> None:
+        """PoseObservation 应能映射为 PoseResult 并保持 frame_id/矩阵字段。"""
+
+        matrix = tuple(float(i) for i in range(16))
+        msg = pose_result_from_observation(
+            PoseObservation(
+                has_pose=True,
+                phase="TRACK",
+                frame_id=123,
+                pose_matrix_cv_camera=matrix,
+                stage=4,
+                det_count=1,
+                depth_valid_ratio=0.8,
+                depth_valid_in_mask=0.7,
+                fps=20.0,
+                yolo_ms=1.0,
+                depth_ms=2.0,
+                cutie_ms=3.0,
+                pose_ms=4.0,
+            )
+        )
+        decoded = type(msg)()
+        decoded.ParseFromString(msg.SerializeToString())
+
+        self.assertTrue(decoded.has_pose)
+        self.assertEqual(decoded.header.frame_id, 123)
+        self.assertEqual(decoded.phase, "TRACK")
+        self.assertEqual(list(decoded.pose_matrix_cv_camera.values), list(matrix))
+        self.assertAlmostEqual(decoded.timing.total_ms, 10.0)
+
+    def test_pose_result_invalid_matrix_downgrades_to_no_pose(self) -> None:
+        """has_pose=true 但矩阵长度非法时应降级为 NO_POSE，避免发出破坏协议的包。"""
+
+        msg = pose_result_from_observation(
+            PoseObservation(
+                has_pose=True,
+                phase="BAD_MATRIX",
+                frame_id=7,
+                pose_matrix_cv_camera=(1.0, 2.0),
+            )
+        )
+
+        self.assertFalse(msg.has_pose)
+        self.assertEqual(msg.header.frame_id, 7)
+        self.assertEqual(len(msg.pose_matrix_cv_camera.values), 0)
+        self.assertEqual(msg.last_error.code, "NO_POSE")
 
 
 if __name__ == "__main__":

@@ -52,6 +52,8 @@ ZMQ 部分只做两件事：
 - 不做业务分片。
 - 不恢复旧 `5556/5557` 端口。
 - 默认继续使用 `15557` 作为 Unity -> Python 数据面端口。
+- Unity 底层类名是 `ZmqTopicPublisher`；Python 底层类名应对齐为 `ZmqTopicSubscriber`，只收发 topic bytes，不理解 Quest/Protobuf。
+- Quest 业务解码放在 Python `runtime/quest_stream_receiver.py` 的 `QuestStreamReceiver`，与 Unity `Client/QuestStreamPublisher.cs` 对齐。
 
 旧架构中可参考的部分：
 
@@ -78,6 +80,14 @@ NATS 不承载图像，不参与高频帧传输。它只负责：
 - Python 发布 `PoseResult`。
 - Python 发布 `AnchorStatusEvent`。
 - Python 发布 `ServerHeartbeat`。
+- Unity 通过 request/reply 发送 `ResetTrackingRequest`、`ReacquireAnchorRequest`、`AnchorControlRequest`。
+
+从 `nats_example/` 得到的架构结论：
+
+- `image_viewer.py` 证明 NATS 可以传图，但 v2 正式架构不能用 NATS 承载图像；图像仍走 ZMQ latest-only，避免 NATS 控制面被大 payload 阻塞。
+- `request.py` / `responder.py` 的 request/reply 模型适合 reset/reacquire/control；返回 `CommandAck` 只表示“已接受/拒绝/重复”，不等待模型重定位完成。
+- Python NATS handler 必须很短：parse Protobuf -> validate `request_id` -> 幂等检查 -> enqueue `RuntimeCommand` -> reply `CommandAck`。它不能调用 FoundationPose、不能改 GPU 状态、不能阻塞等待下一帧。
+- `TrackingRuntime` 是唯一消费 `CommandQueue` 并修改 pipeline 状态的地方；这保证后续 pause/resume/stage/reacquire、heartbeat/status 和可靠性状态机不会互相抢状态。
 - Unity 发起 `ResetTrackingRequest`。
 - Unity 发起 `ReacquireAnchorRequest`。
 - Unity 发起 `AnchorControlRequest`。
@@ -231,15 +241,22 @@ EgoAnchor_Python/src_v2/
 
   transport/
     __init__.py
-    zmq_data_plane.py
-    nats_control_plane.py
-    message_bus.py
+    zmq_topic_subscriber.py
+    nats/
+      __init__.py
+      nats_control_settings.py
+      nats_control_client.py
+      pose_result_publisher.py
+      anchor_command_service.py
 
   runtime/
     __init__.py
     tracking_runtime.py
+    quest_stream_receiver.py
     runtime_state.py
     command_queue.py
+    command_ack_factory.py
+    pose_result_factory.py
     lifecycle.py
 
   perception/
@@ -294,23 +311,32 @@ EgoAnchor_Python/src_v2/
 - 不直接实现模型细节。
 - 不直接处理 NATS command 的业务逻辑。
 
-`transport/zmq_data_plane.py`
+`transport/zmq_topic_subscriber.py`
 
-- 绑定 Unity -> Python data endpoint。
-- 订阅 `egoanchor.v1.quest.stereo` 和 `egoanchor.v1.quest.camera_info`。
+- 与 Unity `Transport/ZmqTopicPublisher.cs` 对齐。
+- 绑定 Unity -> Python ZMQ endpoint。
+- 订阅指定 topic。
 - multipart topic + protobuf payload。
 - 按 topic latest-drain。
-- 解码为 Protobuf message。
-- 输出 `LatestQuestInputStore` 或简单回调。
-- 不引入 OpenCV 模型逻辑。
+- 只输出 topic -> payload bytes。
+- 不导入 Protobuf/OpenCV/模型，不知道 Quest 或 anchor 语义。
 
-`transport/nats_control_plane.py`
+`runtime/quest_stream_receiver.py`
 
-- 连接 NATS。
-- 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`。
-- 注册 reset/reacquire/control request handlers。
-- handlers 只校验、ack、写 command queue。
-- 不直接调用 FoundationPose/GPU。
+- 与 Unity `Client/QuestStreamPublisher.cs` 对齐。
+- 组合 `ZmqTopicSubscriber`。
+- 解码 `QuestStereoFrame` / `QuestCameraInfo`。
+- 维护 `LatestQuestInputStore` 和 `QuestInputStats`。
+- 对上层 `TrackingRuntime` / video demo 暴露 `get_latest_stereo()`、`get_latest_camera_info()`。
+
+`transport/nats/`
+
+- `nats_control_settings.py`：`NatsControlSettings`，从 `network.control_plane` 读取 URL、subject、client name、pending 上限。
+- `nats_control_client.py`：通用 `NatsControlClient`，负责连接生命周期、bytes publish、request、request handler 注册，命名对齐 Unity `NatsControlClient.cs`。
+- `pose_result_publisher.py`：`PoseResultPublisher`，只负责发布已经构造好的 `PoseResult`，用 pending future 上限避免低频控制面堆积陈旧 pose。
+- `anchor_command_service.py`：`AnchorCommandService`，处理 reset/reacquire/control request/reply；只 parse/validate/enqueue/ack，不直接调用 pipeline/GPU。
+- `PoseObservation -> PoseResult` 映射属于 `runtime/pose_result_factory.py`，不得放在 transport 层，避免 NATS 反向依赖 perception。
+- 未来新增 `AnchorStatusEvent`、`ServerHeartbeat` 时继续拆成小文件；handler/publisher 均不得反向依赖 perception。
 
 `runtime/tracking_runtime.py`
 
@@ -319,7 +345,7 @@ EgoAnchor_Python/src_v2/
 - 执行 pipeline。
 - 调用 reliability scorer。
 - 生成 `PoseResult`。
-- 处理 command queue。
+- 顺序消费 `CommandQueue`，执行 reset/reacquire/control。
 - 发布 heartbeat/status。
 - 管理 `Searching/Tracking/Lost/Reacquiring/Paused` 等 server-side 状态。
 
@@ -397,8 +423,6 @@ EgoAnchor_Unity/Assets/Scripts_v2/
     Transport/
       ZmqTopicPublisher.cs
       NatsControlClient.cs
-      NatsPoseSubscriber.cs
-      TransportSettings.cs
 
     Quest/
       StereoFrameSource.cs
@@ -426,10 +450,14 @@ EgoAnchor_Unity/Assets/Scripts_v2/
       AnchorObservation.cs
       ReliabilityScore.cs
       ReliabilityGate.cs
-      AnchorFilter.cs
-      OneEuroAnchorFilter.cs
-      KalmanAnchorFilter.cs
       AnchorPredictor.cs
+
+    # 当前已落地的第一批滤波/处理器先放 Anchor/，因为它们直接消费 Unity world pose，
+    # 后续 reliability-aware controller 成熟后再把打分/gate/predict 独立到 Reliability/。
+    Anchor/
+      AnchorPoseProcessor.cs
+      AnchorKalmanPoseProcessor.cs
+      AnchorLowPassPoseProcessor.cs
 
     Diagnostics/
       EgoAnchorHud.cs
@@ -526,10 +554,10 @@ EgoAnchor_Unity/Assets/Scene_v2/
 `Anchor/PoseToAnchorRuntime.cs`
 
 - 输入 pose observation。
-- 调用 `ReliabilityGate`。
-- 调用 `AnchorStateMachine`。
-- 调用 filter/predictor。
-- 输出 stable anchor pose。
+- 调用 `CameraPoseFrameAligner` 生成 raw Unity world pose。
+- 保留 raw pose，供不处理 baseline 对照。
+- 按 `AnchorPoseProcessor` 列表顺序生成 stable pose；当前可组合 `AnchorKalmanPoseProcessor` 和 `AnchorLowPassPoseProcessor`。
+- 后续再接入 `ReliabilityGate`、`AnchorStateMachine` 和 predictor。
 - 不负责网络。
 
 `Anchor/DynamicObjectAnchor.cs`
@@ -553,11 +581,23 @@ EgoAnchor_Unity/Assets/Scene_v2/
 - 定义状态转移和事件。
 - 后续实验中可对比 raw pose、simple smoothing、reliability-aware anchoring。
 
-`Reliability/AnchorFilter.cs`
+`Anchor/AnchorPoseProcessor.cs`
 
-- 先实现简单 low-pass/slerp 或 One Euro。
-- 后续替换/扩展 Kalman。
-- 不耦合网络。
+- v2 可插拔 pose 处理器基类。
+- 输入/输出都是 Unity world pose。
+- `Pose` 是 struct，每个处理器必须显式返回处理后的 pose。
+- 不耦合网络、Protobuf 或 frame history。
+
+`Anchor/AnchorKalmanPoseProcessor.cs`
+
+- 当前第一版稳定 anchor 处理器。
+- 位置使用三轴一维常速度 Kalman；旋转先用 Slerp 低通。
+- 用于低频、间歇、带噪的外部 pose 流 baseline。
+
+`Anchor/AnchorLowPassPoseProcessor.cs`
+
+- 轻量指数平滑 baseline。
+- 可单独使用，也可接在 Kalman 后做额外低通；论文里不要把它写成最终 reliability-aware controller。
 
 ---
 
@@ -598,7 +638,10 @@ Unity Quest
     |                               |
     | egoanchor.v1.quest.stereo     |
     v                               |
-Python ZmqDataPlaneReceiver          |
+Python ZmqTopicSubscriber           |
+    |                               |
+    v                               |
+  QuestStreamReceiver               |
     |                               |
     v                               |
   TrackingRuntime                   |
@@ -610,7 +653,7 @@ Python ZmqDataPlaneReceiver          |
   PoseObservation + Reliability ----|
     |
     v
-  NatsControlPlane
+  PoseResultPublisher
     |
     | egoanchor.v1.pose.result
     v
@@ -623,7 +666,7 @@ Unity PoseResultReceiver
   PoseToAnchorRuntime
     |
     v
-  ReliabilityGate + Filter + StateMachine
+  AnchorPoseProcessor Chain + future ReliabilityGate/StateMachine
     |
     v
   DynamicObjectAnchor Transform
@@ -656,9 +699,9 @@ Unity PoseResultReceiver
 
 - Unity v2 发 fake/small `QuestCameraInfo`。
 - Python v2 收并打印 subject/protobuf header。
-- Python v2 发 heartbeat。
-- Unity v2 收 heartbeat。
-- 只验证 ZMQ/NATS/Protobuf，不接模型。
+- Python v2 用 `anchor_link_smoke.py` 按收到的 `frame_id` 发 fake `PoseResult`。
+- Unity v2 通过 `NatsControlClient -> PoseResultReceiver -> PoseToAnchorRuntime` 验证 frame-aligned anchor 基础同步。
+- 只验证 ZMQ/NATS/Protobuf/frame_id，不接模型。
 
 **阶段 3：Quest 数据面接入**
 
@@ -699,10 +742,16 @@ Python：
 src_v2/app/tracking_server.py
 src_v2/config/runtime_config.py
 src_v2/protocol/subjects.py
-src_v2/transport/zmq_data_plane.py
-src_v2/transport/nats_control_plane.py
+src_v2/transport/zmq_topic_subscriber.py
+src_v2/transport/nats/nats_control_settings.py
+src_v2/transport/nats/nats_control_client.py
+src_v2/transport/nats/pose_result_publisher.py
+src_v2/transport/nats/anchor_command_service.py
+src_v2/runtime/quest_stream_receiver.py
+src_v2/runtime/pose_result_factory.py
 src_v2/runtime/tracking_runtime.py
 src_v2/runtime/command_queue.py
+src_v2/runtime/command_ack_factory.py
 src_v2/perception/quest_pose_pipeline.py
 src_v2/perception/pose_observation.py
 src_v2/reliability/pose_quality.py
@@ -721,6 +770,9 @@ Assets/Scripts_v2/EgoAnchor/Client/QuestStreamPublisher.cs
 Assets/Scripts_v2/EgoAnchor/Client/PoseResultReceiver.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/CameraPoseFrameAligner.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/PoseToAnchorRuntime.cs
+Assets/Scripts_v2/EgoAnchor/Anchor/AnchorPoseProcessor.cs
+Assets/Scripts_v2/EgoAnchor/Anchor/AnchorKalmanPoseProcessor.cs
+Assets/Scripts_v2/EgoAnchor/Anchor/AnchorLowPassPoseProcessor.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/DynamicObjectAnchor.cs
 Assets/Scripts_v2/EgoAnchor/Anchor/AnchorStateMachine.cs
 ```

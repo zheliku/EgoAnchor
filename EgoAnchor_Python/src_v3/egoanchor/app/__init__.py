@@ -1,0 +1,20 @@
+"""v3 应用入口包。
+
+这里使用惰性导入，避免仅导入 `egoanchor.app` 时就加载 OpenCV 等较重依赖。
+业务代码应从包级入口导入 app 函数，而不是直接依赖某个具体文件路径。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def quest_video_probe_main(*args: Any, **kwargs: Any) -> Any:
+    """启动 Quest 视频流探针入口。"""
+
+    from egoanchor.app.probes import main
+
+    return main(*args, **kwargs)
+
+
+__all__ = ["quest_video_probe_main"]

@@ -1,5 +1,5 @@
 # EgoAnchor v2 默认运行配置。
-# 说明：v2 与旧主线并行存在；当前 Python pose debug 只本地 OpenCV 显示，不向 Unity 发布 pose。
+# 说明：v2 与旧主线并行存在；默认仍关闭 NATS，按需启用 Python -> Unity PoseResult 发布。
 
 [server]
 run_stage = 4 # Python pose debug 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
@@ -11,8 +11,13 @@ receive_hwm = 20 # ZMQ 接收高水位；stereo payload 较大，保留少量缓
 poll_timeout_ms = 30 # 每次 poll 数据面的最长等待时间，单位毫秒。
 
 [network.control_plane]
-enabled = false # NATS 控制面开关；当前 pose debug 阶段保持关闭。
+enabled = true # NATS 控制面开关；设为 true 后 tracking_server 会发布 PoseResult 到 Unity。
 url = "nats://127.0.0.1:4222" # NATS server 地址；后续 PoseResult/Heartbeat/Command 使用。
+pose_result_subject = "egoanchor.v1.pose.result" # Python -> Unity PoseResult subject；必须与 subjects.v1.json / Unity SubjectNames 保持一致。
+client_name = "egoanchor-python-v2" # NATS 连接名称；用于 server 端诊断，不参与业务路由。
+connect_timeout_s = 2.0 # Python nats-py 初次连接超时，单位秒；NATS 未启动时只记录错误，不阻塞 pipeline。
+max_pending_futures = 32 # 后台 publish Future 上限；防止断连时积累旧 pose，符合 latest-only 语义。
+request_timeout_s = 1.0 # NATS request/reply 默认超时，单位秒；command ack 只表示已接受/拒绝，不等待重定位完成。
 
 [pipeline.calibration]
 network_calib_update = true # 收到新的 QuestCameraInfo 且标定变化时刷新 K/FoundationPose。
@@ -74,6 +79,7 @@ erosion_size = 5 # Cutie mask 提取 bbox 前的腐蚀核大小，单位像素�
 adjust_pose = true # 是否用 Cutie bbox 中心轻量修正 FoundationPose pose_last 的图像平面平移。
 
 [debug]
+enable_tracking_window = true # tracking_server 是否默认显示 OpenCV debug 窗口；测试阶段默认开启，部署/后台运行可用 --no-debug-window 覆盖。
 pipeline_stats_interval = 30 # 每处理多少帧打印一次 pose pipeline 性能统计。
 show_mask_snapshot = true # 首次有效 mask 时是否弹出 RGB/mask/overlay 对齐快照。
 mask_snapshot_window = "EgoAnchor v2 Mask Snapshot" # mask snapshot 的 OpenCV 窗口名。

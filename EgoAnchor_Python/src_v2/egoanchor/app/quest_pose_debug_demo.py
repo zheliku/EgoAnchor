@@ -27,7 +27,7 @@ from egoanchor.config import load_config
 from egoanchor.diagnostics import create_fixed_window, make_waiting_image
 from egoanchor.perception import build_quest_pose_pipeline
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
-from egoanchor.transport import ZmqDataPlaneReceiver
+from egoanchor.runtime import QuestStreamReceiver
 
 
 def run_demo(config_path: str | None = None) -> None:
@@ -37,7 +37,7 @@ def run_demo(config_path: str | None = None) -> None:
     data_cfg = cfg.network.data_plane
     pose_cfg = cfg.demo.pose
 
-    receiver = ZmqDataPlaneReceiver(
+    receiver = QuestStreamReceiver(
         listen_host=data_cfg.listen_host,
         listen_port=data_cfg.listen_port,
         hwm=data_cfg.receive_hwm,

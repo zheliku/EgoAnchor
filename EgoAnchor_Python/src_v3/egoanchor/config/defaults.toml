@@ -1,0 +1,15 @@
+# EgoAnchor v3 默认运行配置。
+# 当前首阶段只启用 ZMQ 数据面通信 demo，不启动 NATS、模型或 anchor runtime。
+
+[network.data_plane]
+listen_host = "*" # Python ZMQ SUB 绑定地址；Quest/Unity PUB 连接到这台机器的实际 IP。
+listen_port = 15557 # Unity -> Python 数据面端口；保持新链路默认值，不回退旧 5557。
+receive_hwm = 20 # ZMQ 接收高水位；限制积压，业务层仍按 topic latest-only 处理。
+poll_timeout_ms = 10 # 每轮 poll 最长等待时间，单位毫秒；越小窗口响应越快。
+
+[demo.video]
+window_name = "EgoAnchor v3 Quest Stereo" # OpenCV 实时预览窗口名称。
+stereo_window_width = 1280 # 预览窗口初始宽度，单位像素。
+stereo_window_height = 480 # 预览窗口初始高度，单位像素。
+stats_interval_frames = 60 # 每显示多少帧打印一次聚合接收统计。
+wait_log_interval_s = 3.0 # 尚未收到 stereo 时等待日志输出间隔，单位秒。

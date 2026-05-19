@@ -29,7 +29,7 @@ from egoanchor.config import load_config
 from egoanchor.diagnostics import create_fixed_window
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO
 from egoanchor.protocol import quest_pb2
-from egoanchor.transport import ZmqDataPlaneReceiver
+from egoanchor.runtime import QuestStreamReceiver
 
 
 def _decode_jpeg(data: bytes) -> np.ndarray | None:
@@ -120,7 +120,7 @@ def run_demo(config_path: str | None = None) -> None:
     data_cfg = cfg.network.data_plane
     video_cfg = cfg.demo.video
 
-    receiver = ZmqDataPlaneReceiver(
+    receiver = QuestStreamReceiver(
         listen_host=data_cfg.listen_host,
         listen_port=data_cfg.listen_port,
         hwm=data_cfg.receive_hwm,
