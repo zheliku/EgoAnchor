@@ -17,4 +17,12 @@ def quest_video_probe_main(*args: Any, **kwargs: Any) -> Any:
     return main(*args, **kwargs)
 
 
-__all__ = ["quest_video_probe_main"]
+def tracking_server_main(*args: Any, **kwargs: Any) -> Any:
+    """启动 Python-only pose debug 入口。"""
+
+    from egoanchor.app.tracking_server import main
+
+    return main(*args, **kwargs)
+
+
+__all__ = ["quest_video_probe_main", "tracking_server_main"]
