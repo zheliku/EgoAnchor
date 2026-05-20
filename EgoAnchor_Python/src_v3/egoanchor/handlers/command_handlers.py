@@ -13,12 +13,15 @@ import time
 from google.protobuf.message import Message
 
 from egoanchor.protocol import (
+    AnchorControlRequest,
     CMD_ANCHOR_CONTROL,
     CMD_ANCHOR_REACQUIRE,
     CMD_ANCHOR_RESET,
     CommandAck,
     ErrorInfo,
     MessageHeader,
+    ReacquireAnchorRequest,
+    ResetTrackingRequest,
 )
 from egoanchor.routing import HandlerContext, HandlerRegistry
 from egoanchor.runtime import CommandType
@@ -46,6 +49,47 @@ def _ack_for(message: Message, *, accepted: bool, status: str, text: str, code: 
     return ack
 
 
+def _validate(message: Message, command_type: CommandType) -> tuple[bool, str]:
+    """对 command 做轻量参数校验。
+
+    handler 层只做不会触碰 GPU/pipeline 的基础校验：消息类型、枚举值、stage 范围等。
+    真正的 reset/reacquire/control 执行仍由 TrackingRuntime 在主循环边界顺序完成。
+    """
+
+    if command_type == CommandType.RESET:
+        if not isinstance(message, ResetTrackingRequest):
+            return False, "reset command protobuf type mismatch"
+        return True, ""
+
+    if command_type == CommandType.REACQUIRE:
+        if not isinstance(message, ReacquireAnchorRequest):
+            return False, "reacquire command protobuf type mismatch"
+        valid_modes = {
+            ReacquireAnchorRequest.NEXT_VALID_FRAME,
+            ReacquireAnchorRequest.LATEST_FRAME_IF_AVAILABLE,
+            ReacquireAnchorRequest.FORCE_DETECT,
+        }
+        if int(message.mode) not in valid_modes:
+            return False, f"invalid reacquire mode: {int(message.mode)}"
+        return True, ""
+
+    if command_type == CommandType.CONTROL:
+        if not isinstance(message, AnchorControlRequest):
+            return False, "control command protobuf type mismatch"
+        valid_actions = {
+            AnchorControlRequest.SET_STAGE,
+            AnchorControlRequest.PAUSE,
+            AnchorControlRequest.RESUME,
+        }
+        if int(message.action) not in valid_actions:
+            return False, f"invalid control action: {int(message.action)}"
+        if int(message.action) == AnchorControlRequest.SET_STAGE and not 1 <= int(message.stage) <= 4:
+            return False, f"SET_STAGE stage must be in 1..4, got {int(message.stage)}"
+        return True, ""
+
+    return False, f"unsupported command type: {command_type.value}"
+
+
 def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) -> Message:
     """通用命令接受逻辑。"""
 
@@ -54,6 +98,20 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
     if not request_id:
         ack = _ack_for(message, accepted=False, status="INVALID_ARGUMENT", text="header.request_id is required", code="INVALID_ARGUMENT")
         LOGGER.info("[CommandHandler:v3] type=%s accepted=false status=%s", command_type.value, ack.status)
+        return ack
+
+    valid, invalid_reason = _validate(message, command_type)
+    if not valid:
+        ack = _ack_for(message, accepted=False, status="INVALID_ARGUMENT", text=invalid_reason, code="INVALID_ARGUMENT")
+        if ctx.dedup is not None:
+            ctx.dedup.remember(request_id, ack)
+        LOGGER.info(
+            "[CommandHandler:v3] type=%s request_id=%s accepted=false status=%s reason=%s",
+            command_type.value,
+            request_id,
+            ack.status,
+            invalid_reason,
+        )
         return ack
 
     if ctx.dedup is not None:

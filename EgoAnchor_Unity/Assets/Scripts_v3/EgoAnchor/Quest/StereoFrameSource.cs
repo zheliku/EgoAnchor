@@ -9,7 +9,7 @@ namespace EgoAnchor.V3.Quest
     /// <summary>
     /// Quest 双目图像源。
     ///
-    /// 本类只负责读取左右 Passthrough texture、同步记录左目 camera pose、JPEG 编码并构造 Protobuf。
+    /// 本类只负责读取左右 Passthrough texture、同步记录多参考 camera pose、JPEG 编码并构造 Protobuf。
     /// 它不负责 ZMQ 发送，也不负责发送频率调度。
     /// </summary>
     public sealed class StereoFrameSource : MonoBehaviour
@@ -23,8 +23,13 @@ namespace EgoAnchor.V3.Quest
         [Tooltip("右目 PassthroughCameraAccess。需要处于 IsPlaying 状态，并与左目同一采集周期读取。")]
         [SerializeField] private PassthroughCameraAccess rightCameraAccess;
 
+        /// <summary>中心参考相机 Transform 覆盖。</summary>
+        [Tooltip("可选中心参考 Transform，例如 OVRCameraRig/CenterEyeAnchor。为空时使用左右 Passthrough camera pose 的中点和插值旋转作为 center。")]
+        [SerializeField] private Transform centerReferenceOverride;
+
         /// <summary>frame pose 环形缓存。</summary>
-        [Tooltip("frame_id -> 采集时刻左目 camera pose 的环形缓存。后续 PoseResult 回来后必须用它做 frame-aligned world anchor。")]
+        [Header("Frame Alignment")]
+        [Tooltip("frame_id -> 采集时刻 left/right/center camera pose 的环形缓存。后续 PoseResult 回来后必须用它做 frame-aligned world anchor。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>输出图像缩放比例。</summary>
@@ -79,14 +84,18 @@ namespace EgoAnchor.V3.Quest
             }
 
             Pose leftCameraPose;
+            Pose rightCameraPose;
             try
             {
                 leftCameraPose = leftCameraAccess.GetCameraPose();
+                rightCameraPose = rightCameraAccess.GetCameraPose();
             }
             catch (Exception)
             {
                 return false;
             }
+
+            Pose centerCameraPose = ResolveCenterCameraPose(leftCameraPose, rightCameraPose);
 
             EnsureCaptureBuffers(leftTexture, rightTexture);
 
@@ -104,7 +113,7 @@ namespace EgoAnchor.V3.Quest
                 return false;
             }
 
-            framePoseHistory?.Record(currentFrameId, leftCameraPose, senderMonoMs, unityFrame);
+            framePoseHistory?.Record(currentFrameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
 
             frame = new QuestStereoFrame
             {
@@ -118,6 +127,28 @@ namespace EgoAnchor.V3.Quest
                 JpegQuality = jpegQuality
             };
             return true;
+        }
+
+        /// <summary>
+        /// 计算中心参考相机 pose。
+        ///
+        /// 如果用户显式指定 CenterEyeAnchor 或其它稳定 Transform，则使用该 Transform 的采集时刻 world pose；
+        /// 否则使用左右 Passthrough camera pose 的中点和球面插值旋转，得到一个不依赖渲染眼相机启用状态的中心参考。
+        /// </summary>
+        /// <param name="leftCameraPose">采集时刻左目 Passthrough camera world pose。</param>
+        /// <param name="rightCameraPose">采集时刻右目 Passthrough camera world pose。</param>
+        /// <returns>中心参考 camera world pose。</returns>
+        private Pose ResolveCenterCameraPose(Pose leftCameraPose, Pose rightCameraPose)
+        {
+            if (centerReferenceOverride != null)
+            {
+                return new Pose(centerReferenceOverride.position, centerReferenceOverride.rotation);
+            }
+
+            return new Pose(
+                Vector3.Lerp(leftCameraPose.position, rightCameraPose.position, 0.5f),
+                Quaternion.Slerp(leftCameraPose.rotation, rightCameraPose.rotation, 0.5f)
+            );
         }
 
         /// <summary>

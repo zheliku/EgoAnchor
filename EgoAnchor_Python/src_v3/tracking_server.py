@@ -3,8 +3,8 @@ r"""EgoAnchor v3 Python-only pose debug 入口。
 运行示例（在 EgoAnchor_Python 目录）：
     pixi run python .\src_v3\tracking_server.py
 
-当前入口只在 Python 侧接收 Quest stereo/camera_info、运行 pose pipeline 并显示
-OpenCV debug 界面；暂不连接 NATS，也不向 Unity 发布 PoseResult。
+当前入口在 Python 侧接收 Quest stereo/camera_info、运行 pose pipeline、显示 OpenCV debug 界面，
+并在启用 NATS 时向 Unity 发布 PoseResult，同时接收 reset/reacquire/control 命令。
 """
 
 from __future__ import annotations

@@ -10,6 +10,7 @@ namespace EgoAnchor.V3.Anchor
     ///
     /// 这是 Unity v3 Anchor Runtime 的核心组合点：它接收 Python 返回的 camera-space PoseResult，
     /// 调用 CameraPoseFrameAligner 得到 frame-aligned raw world pose，再按处理器链得到 stable pose。
+    /// 对齐策略、参考相机选择和实验性固定偏移都集中在这里，避免 DynamicObjectAnchor 或网络层分散修改坐标。
     ///
     /// 当前阶段刻意不实现状态机：has_pose=false 或 frame_id 对齐失败时只更新诊断，
     /// 不清空上一帧输出，也不进入 Lost/Reacquire 等状态。
@@ -32,10 +33,30 @@ namespace EgoAnchor.V3.Anchor
             AlignFailed,
         }
 
-        /// <summary>frame_id -> capture-time left camera world pose 缓存。</summary>
+        /// <summary>frame_id -> capture-time 多参考 camera world pose 缓存。</summary>
         [Header("Frame Alignment")]
-        [Tooltip("frame_id -> capture-time left camera world pose 缓存。必须与 StereoFrameSource/QuestStreamPublisher 使用同一个实例。")]
+        [Tooltip("frame_id -> capture-time left/right/center camera world pose 缓存。必须与 StereoFrameSource/QuestStreamPublisher 使用同一个实例。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
+
+        /// <summary>Unity 本地覆盖的对齐参考相机。</summary>
+        [Tooltip("Unity 本地选择的对齐参考相机。Left 是当前 Python pose 的语义默认值；Right/Center/None 仅用于本地对照、补偿或诊断，不需要服务器知道。")]
+        [SerializeField] private AnchorPoseReference alignmentReference = AnchorPoseReference.Left;
+
+        /// <summary>是否应用本地固定偏移。</summary>
+        [Tooltip("是否在 frame 对齐后应用本地固定偏移。用于补偿 Quest Passthrough camera 与渲染眼相机之间的小量外参残差，不建议替代正确的参考相机选择。")]
+        [SerializeField] private bool applyLocalOffset = false;
+
+        /// <summary>本地固定位置偏移，单位米。</summary>
+        [Tooltip("本地固定位置偏移，单位米。offsetInAnchorLocal=true 时按 anchor 局部轴解释；否则按 Unity world 轴解释。")]
+        [SerializeField] private Vector3 localPositionOffset = Vector3.zero;
+
+        /// <summary>本地固定旋转偏移，欧拉角度。</summary>
+        [Tooltip("本地固定旋转偏移，欧拉角度。offsetInAnchorLocal=true 时右乘到 anchor rotation；否则左乘到 world rotation。")]
+        [SerializeField] private Vector3 localRotationOffsetEuler = Vector3.zero;
+
+        /// <summary>固定偏移是否按 anchor 局部坐标解释。</summary>
+        [Tooltip("固定偏移是否按 anchor 局部坐标解释。开启时位置偏移会随物体旋转，关闭时按 Unity world 坐标直接平移。")]
+        [SerializeField] private bool offsetInAnchorLocal = true;
 
         /// <summary>是否启用 stable pose 处理器链。</summary>
         [Header("Anchor Processors")]
@@ -63,6 +84,10 @@ namespace EgoAnchor.V3.Anchor
         [Tooltip("最近一次失败原因。空字符串表示最近一次处理没有失败。")]
         [SerializeField] private string latestFailure = "";
 
+        /// <summary>最近一次实际使用的对齐参考相机。</summary>
+        [Tooltip("最近一次实际使用的对齐参考相机。用于确认当前是 Left/Right/Center/None 哪一种对齐。")]
+        [SerializeField] private AnchorPoseReference latestUsedReference = AnchorPoseReference.Left;
+
         /// <summary>frame-aligned 坐标转换器。</summary>
         private CameraPoseFrameAligner aligner;
 
@@ -87,6 +112,9 @@ namespace EgoAnchor.V3.Anchor
         /// <summary>最近一次失败原因。</summary>
         public string LatestFailure => latestFailure;
 
+        /// <summary>最近一次实际使用的对齐参考相机。</summary>
+        public AnchorPoseReference LatestUsedReference => latestUsedReference;
+
         /// <summary>
         /// Unity Awake：构造 frame aligner。
         /// </summary>
@@ -104,6 +132,8 @@ namespace EgoAnchor.V3.Anchor
             {
                 processors = new List<AnchorPoseProcessor>();
             }
+
+            RebuildAligner();
         }
 
         /// <summary>
@@ -137,12 +167,14 @@ namespace EgoAnchor.V3.Anchor
                 RebuildAligner();
             }
 
-            if (aligner == null || !aligner.TryAlign(result, out Pose worldPose))
+            if (aligner == null || !aligner.TryAlign(result, out Pose worldPose, out AnchorPoseReference usedReference))
             {
                 SetFailure($"align_failed_frame_{result.Header.FrameId}");
                 return AcceptResult.AlignFailed;
             }
 
+            latestUsedReference = usedReference;
+            worldPose = ApplyOffset(worldPose);
             AcceptWorldPose(result.Header.FrameId, worldPose);
             latestFailure = string.Empty;
             return AcceptResult.Aligned;
@@ -213,6 +245,27 @@ namespace EgoAnchor.V3.Anchor
         }
 
         /// <summary>
+        /// 清空当前 raw/stable anchor pose 状态。
+        ///
+        /// 该方法用于 Unity 收到 Python reset command accepted 后，按需清理本地可视化状态。
+        /// Python reset 只会重置外部 pose 估计 pipeline；Unity 侧上一帧 raw/stable pose 和滤波器需要由本方法显式清理。
+        /// </summary>
+        /// <param name="clearProcessors">是否同时重置处理器内部状态。</param>
+        public void ClearPoseState(bool clearProcessors = true)
+        {
+            hasRawPose = false;
+            hasStablePose = false;
+            latestAlignedFrameId = -1;
+            latestPhase = string.Empty;
+            latestFailure = "cleared_by_command";
+
+            if (clearProcessors)
+            {
+                ResetProcessors();
+            }
+        }
+
+        /// <summary>
         /// 按配置顺序运行处理器链。
         /// </summary>
         private Pose RunProcessors(Pose inputPose, long frameId, double sampleTime)
@@ -236,11 +289,40 @@ namespace EgoAnchor.V3.Anchor
         }
 
         /// <summary>
+        /// 对 frame-aligned world pose 应用可选的本地固定偏移。
+        /// </summary>
+        /// <param name="inputPose">frame 对齐后的 Unity world pose。</param>
+        /// <returns>应用偏移后的 Unity world pose。</returns>
+        private Pose ApplyOffset(Pose inputPose)
+        {
+            if (!applyLocalOffset)
+            {
+                return inputPose;
+            }
+
+            Quaternion offsetRotation = Quaternion.Euler(localRotationOffsetEuler);
+            if (offsetInAnchorLocal)
+            {
+                return new Pose(
+                    inputPose.position + inputPose.rotation * localPositionOffset,
+                    inputPose.rotation * offsetRotation
+                );
+            }
+
+            return new Pose(
+                inputPose.position + localPositionOffset,
+                offsetRotation * inputPose.rotation
+            );
+        }
+
+        /// <summary>
         /// 重新构造 frame aligner。
         /// </summary>
         private void RebuildAligner()
         {
-            aligner = framePoseHistory != null ? new CameraPoseFrameAligner(framePoseHistory) : null;
+            aligner = framePoseHistory != null || alignmentReference == AnchorPoseReference.None
+                ? new CameraPoseFrameAligner(framePoseHistory, alignmentReference)
+                : null;
             if (aligner == null && keepDiagnostics)
             {
                 latestFailure = "missing_frame_pose_history";

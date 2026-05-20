@@ -9,23 +9,30 @@ namespace EgoAnchor.V3.Anchor
     /// camera-space pose -> Unity world anchor pose 的 frame-aligned 转换器。
     ///
     /// Python 发布的是 OpenCV camera 坐标系下的物体 4x4 pose：x 右、y 下、z 前。
-    /// Unity 侧必须按 PoseResult.header.frame_id 回查“采集该帧时”的左目 camera world pose，
+    /// Unity 侧必须按 PoseResult.header.frame_id 回查“采集该帧时”的参考 camera world pose，
     /// 再把 OpenCV camera-local pose 转为 Unity camera-local pose，最终映射到 Unity world。
     ///
     /// 本类不订阅网络、不做平滑、不修改 Transform；它只负责可测试的坐标与 frame 对齐逻辑。
     /// </summary>
     public sealed class CameraPoseFrameAligner
     {
-        /// <summary>frame_id -> 采集时刻左目 camera world pose 缓存。</summary>
+        /// <summary>frame_id -> 采集时刻 left/right/center camera world pose 缓存。</summary>
         private readonly FramePoseHistory framePoseHistory;
+
+        /// <summary>Inspector/调用方指定的对齐参考相机。</summary>
+        private readonly AnchorPoseReference alignmentReference;
 
         /// <summary>
         /// 构造 frame aligner。FramePoseHistory 由 StereoFrameSource 在发送 stereo 时维护。
         /// </summary>
-        /// <param name="framePoseHistory">frame_id 到 capture-time camera pose 的环形缓存。</param>
-        public CameraPoseFrameAligner(FramePoseHistory framePoseHistory)
+        /// <param name="framePoseHistory">frame_id 到 capture-time left/right/center camera pose 的环形缓存。</param>
+        /// <param name="alignmentReference">Unity 本地选择的对齐参考相机。</param>
+        public CameraPoseFrameAligner(
+            FramePoseHistory framePoseHistory,
+            AnchorPoseReference alignmentReference = AnchorPoseReference.Left)
         {
             this.framePoseHistory = framePoseHistory;
+            this.alignmentReference = alignmentReference;
         }
 
         /// <summary>
@@ -36,7 +43,20 @@ namespace EgoAnchor.V3.Anchor
         /// <returns>是否成功得到 world pose。</returns>
         public bool TryAlign(PoseResult poseResult, out Pose worldPose)
         {
+            return TryAlign(poseResult, out worldPose, out _);
+        }
+
+        /// <summary>
+        /// 从 PoseResult 读取 camera-space pose，并按 frame_id 对齐到 Unity world，同时返回实际使用的参考相机。
+        /// </summary>
+        /// <param name="poseResult">Python 发布的 camera-space PoseResult。</param>
+        /// <param name="worldPose">成功时输出 Unity world pose。</param>
+        /// <param name="usedReference">本次用于组合 camera-local pose 的参考相机。</param>
+        /// <returns>是否成功得到 world pose。</returns>
+        public bool TryAlign(PoseResult poseResult, out Pose worldPose, out AnchorPoseReference usedReference)
+        {
             worldPose = default;
+            usedReference = alignmentReference;
             if (poseResult == null || poseResult.Header == null || !poseResult.HasPose)
             {
                 return false;
@@ -47,7 +67,8 @@ namespace EgoAnchor.V3.Anchor
                 return false;
             }
 
-            return TryAlign(poseResult.Header.FrameId, cvCameraPose, out worldPose);
+            usedReference = alignmentReference;
+            return TryAlign(poseResult.Header.FrameId, cvCameraPose, usedReference, out worldPose);
         }
 
         /// <summary>
@@ -59,23 +80,42 @@ namespace EgoAnchor.V3.Anchor
         /// <returns>是否成功查询历史 camera pose 并完成坐标转换。</returns>
         public bool TryAlign(long frameId, Pose cvCameraPose, out Pose worldPose)
         {
-            worldPose = default;
-            if (framePoseHistory == null)
-            {
-                return false;
-            }
+            return TryAlign(frameId, cvCameraPose, alignmentReference, out worldPose);
+        }
 
-            if (!framePoseHistory.TryGet(frameId, out FramePoseRecord record))
-            {
-                return false;
-            }
+        /// <summary>
+        /// 已解出 camera-local pose 时，按指定参考相机和 frame_id 对齐到 Unity world。
+        /// </summary>
+        /// <param name="frameId">PoseResult 对应的 stereo frame_id。</param>
+        /// <param name="cvCameraPose">OpenCV camera 坐标系下的 object pose。</param>
+        /// <param name="reference">用于组合 camera-local pose 的采集时刻参考相机。</param>
+        /// <param name="worldPose">成功时输出 Unity world pose。</param>
+        /// <returns>是否成功完成坐标转换和 frame 对齐。</returns>
+        public bool TryAlign(long frameId, Pose cvCameraPose, AnchorPoseReference reference, out Pose worldPose)
+        {
+            worldPose = default;
 
             if (!TryConvertOpenCvPoseToUnityCamera(cvCameraPose, out Pose unityCameraLocalPose))
             {
                 return false;
             }
 
-            Pose cameraWorldPose = record.CameraPose;
+            if (reference == AnchorPoseReference.None)
+            {
+                worldPose = unityCameraLocalPose;
+                return true;
+            }
+
+            if (framePoseHistory == null)
+            {
+                return false;
+            }
+
+            if (!framePoseHistory.TryGet(frameId, out FramePoseRecord record) || !record.TryGetCameraPose(reference, out Pose cameraWorldPose))
+            {
+                return false;
+            }
+
             worldPose = new Pose(
                 cameraWorldPose.position + cameraWorldPose.rotation * unityCameraLocalPose.position,
                 cameraWorldPose.rotation * unityCameraLocalPose.rotation

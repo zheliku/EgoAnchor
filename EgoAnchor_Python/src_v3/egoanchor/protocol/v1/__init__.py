@@ -27,14 +27,13 @@ ResetTrackingRequest = anchor_pb2.ResetTrackingRequest
 """重置 tracking 的 command request 类型。"""
 
 __all__ = [
-	"AnchorControlRequest",
-	"CommandAck",
-	"ErrorInfo",
-	"MessageHeader",
-	"ReacquireAnchorRequest",
-	"ResetTrackingRequest",
-	"anchor_pb2",
-	"common_pb2",
-	"quest_pb2",
+    "AnchorControlRequest",
+    "CommandAck",
+    "ErrorInfo",
+    "MessageHeader",
+    "ReacquireAnchorRequest",
+    "ResetTrackingRequest",
+    "anchor_pb2",
+    "common_pb2",
+    "quest_pb2",
 ]
-

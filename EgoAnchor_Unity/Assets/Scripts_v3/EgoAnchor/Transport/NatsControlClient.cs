@@ -14,12 +14,14 @@ namespace EgoAnchor.V3.Transport
     /// v3 NATS 消息面客户端组件。
     ///
     /// 消息面与 ZMQ 高频数据面相对：它只承载低频、小 payload、需要状态语义的消息，
-    /// 当前阶段先实现 Python -> Unity 的 PoseResult 订阅链路，用于验证实时 anchor 显示。
+    /// 当前阶段同时承载 Python -> Unity 的 PoseResult 订阅链路，以及 Unity -> Python 的
+    /// reset/reacquire/control request-reply 命令链路。
     ///
     /// 本类只负责：
     /// - 连接 NATS。
     /// - 订阅 PoseResult subject。
     /// - 把收到的 Protobuf payload 放入线程安全 latest-only 队列，等待 Unity 主线程消费。
+    /// - 提供 bytes request/reply 方法，供上层 AnchorCommandClient 发送 typed command。
     ///
     /// 注意：NATS 后台回调不应直接修改 Transform，也不应运行 anchor 状态机。
     /// </summary>
@@ -83,6 +85,9 @@ namespace EgoAnchor.V3.Transport
         /// <summary>NATS.Net 客户端。</summary>
         private NatsClient client;
 
+        /// <summary>连接完成信号；request/reply 发送前会等待它完成。</summary>
+        private TaskCompletionSource<bool> connectReady;
+
         /// <summary>累计收到的 PoseResult 数量。</summary>
         private int receivedPoseResults;
 
@@ -95,6 +100,15 @@ namespace EgoAnchor.V3.Transport
         /// <summary>接收循环是否运行中。</summary>
         private volatile bool isRunning;
 
+        /// <summary>累计发送的 request/reply 命令数量。</summary>
+        private int sentRequests;
+
+        /// <summary>累计收到 reply 的 request/reply 命令数量。</summary>
+        private int repliedRequests;
+
+        /// <summary>累计 request/reply 失败数量。</summary>
+        private int failedRequests;
+
         /// <summary>当前配置的 NATS 服务地址。</summary>
         public string NatsUrl => natsUrl;
 
@@ -106,6 +120,15 @@ namespace EgoAnchor.V3.Transport
 
         /// <summary>Unity 侧 latest queue 因容量限制丢弃的旧 payload 数量。</summary>
         public int DroppedInUnityQueueCount => droppedInUnityQueue;
+
+        /// <summary>累计发送的 request/reply 命令数量。</summary>
+        public int SentRequestCount => sentRequests;
+
+        /// <summary>累计收到 reply 的 request/reply 命令数量。</summary>
+        public int RepliedRequestCount => repliedRequests;
+
+        /// <summary>累计 request/reply 失败数量。</summary>
+        public int FailedRequestCount => failedRequests;
 
         /// <summary>
         /// Unity Awake：初始化纯 C# 队列。
@@ -165,8 +188,69 @@ namespace EgoAnchor.V3.Transport
 
             EnsureQueue();
             isRunning = true;
+            connectReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             cts = new CancellationTokenSource();
             receiveTask = Task.Run(() => ReceiveLoopAsync(cts.Token));
+        }
+
+        /// <summary>
+        /// 发送一次 NATS request/reply bytes 请求。
+        ///
+        /// 本方法属于 transport 层，只认识 subject 与 bytes，不解析 Protobuf，也不理解 reset/reacquire/control 语义。
+        /// 上层 AnchorCommandClient 负责构造具体 Protobuf request，并解析 CommandAck。
+        /// </summary>
+        /// <param name="subject">NATS request subject，必须来自 SubjectNames。</param>
+        /// <param name="payload">已经序列化的 Protobuf request bytes。</param>
+        /// <param name="timeoutSeconds">等待连接和等待 reply 的超时时间，单位秒。</param>
+        /// <param name="token">外部取消信号。</param>
+        /// <returns>reply payload bytes。</returns>
+        public async Task<byte[]> RequestAsync(string subject, byte[] payload, float timeoutSeconds, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(subject))
+            {
+                throw new ArgumentException("NATS request subject 不能为空。", nameof(subject));
+            }
+
+            if (payload == null || payload.Length == 0)
+            {
+                throw new ArgumentException("NATS request payload 不能为空。", nameof(payload));
+            }
+
+            if (!isRunning)
+            {
+                StartClient();
+            }
+
+            float safeTimeout = Mathf.Max(0.1f, timeoutSeconds);
+            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(safeTimeout));
+
+            Task readyTask = connectReady?.Task;
+            if (readyTask != null)
+            {
+                await WaitWithCancellationAsync(readyTask, timeoutCts.Token);
+            }
+
+            NatsClient activeClient = client;
+            if (activeClient == null)
+            {
+                Interlocked.Increment(ref failedRequests);
+                throw new InvalidOperationException("NATS client 尚未连接，无法发送 command request。");
+            }
+
+            try
+            {
+                Interlocked.Increment(ref sentRequests);
+                NatsMsg<byte[]> reply = await activeClient.RequestAsync<byte[], byte[]>(subject, payload, cancellationToken: timeoutCts.Token);
+                byte[] data = reply.Data ?? Array.Empty<byte>();
+                Interlocked.Increment(ref repliedRequests);
+                return data;
+            }
+            catch
+            {
+                Interlocked.Increment(ref failedRequests);
+                throw;
+            }
         }
 
         /// <summary>
@@ -217,6 +301,7 @@ namespace EgoAnchor.V3.Transport
                 NatsClient localClient = new NatsClient(opts, BoundedChannelFullMode.DropOldest);
                 client = localClient;
                 await localClient.ConnectAsync();
+                connectReady?.TrySetResult(true);
                 Debug.Log($"[NatsControlClient:v3] connected url={natsUrl}, subject={SubjectNames.PoseResult}", this);
 
                 await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.PoseResult, cancellationToken: token))
@@ -242,15 +327,46 @@ namespace EgoAnchor.V3.Transport
             catch (OperationCanceledException)
             {
                 // Play Mode 退出或组件销毁时的正常路径。
+                connectReady?.TrySetCanceled();
             }
             catch (Exception ex)
             {
+                connectReady?.TrySetException(ex);
                 Debug.LogError($"[NatsControlClient:v3] NATS receive loop failed: {ex}", this);
             }
             finally
             {
                 isRunning = false;
             }
+        }
+
+        /// <summary>
+        /// 等待任务完成，同时支持旧 Unity/.NET Standard 环境中没有 Task.WaitAsync 的情况。
+        /// </summary>
+        /// <param name="task">要等待的任务。</param>
+        /// <param name="token">取消信号。</param>
+        private static async Task WaitWithCancellationAsync(Task task, CancellationToken token)
+        {
+            if (task.IsCompleted)
+            {
+                await task;
+                return;
+            }
+
+            TaskCompletionSource<bool> cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using CancellationTokenRegistration registration = token.Register(state =>
+            {
+                TaskCompletionSource<bool> source = (TaskCompletionSource<bool>)state;
+                source.TrySetResult(true);
+            }, cancelled);
+
+            Task finished = await Task.WhenAny(task, cancelled.Task);
+            if (finished != task)
+            {
+                throw new OperationCanceledException(token);
+            }
+
+            await task;
         }
 
         /// <summary>
@@ -349,6 +465,7 @@ namespace EgoAnchor.V3.Transport
             client = null;
             cts = null;
             receiveTask = null;
+            connectReady?.TrySetCanceled();
             isRunning = false;
 
             try

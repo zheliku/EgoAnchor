@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable, TYPE_CHECKING
 
-from egoanchor.protocol import AnchorControlRequest, ReacquireAnchorRequest
+from egoanchor.protocol import AnchorControlRequest
 from egoanchor.runtime import CommandType, RuntimeCommand
 
 if TYPE_CHECKING:
@@ -133,10 +133,9 @@ def interpret_reset(executor: CommandExecutor, command: RuntimeCommand) -> Comma
 def interpret_reacquire(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
     """解释 reacquire command。"""
 
-    message = command.message
-    force_detect = getattr(message, "mode", None) == ReacquireAnchorRequest.FORCE_DETECT
-    clear_first = bool(getattr(message, "clear_tracking_first", False))
-    return CommandExecutionResult(reset_tracking=bool(force_detect or clear_first))
+    _ = executor
+    _ = command
+    return CommandExecutionResult(reset_tracking=True)
 
 
 @command_handler(CommandType.CONTROL)
@@ -152,7 +151,7 @@ def interpret_set_stage(executor: CommandExecutor, command: RuntimeCommand) -> C
 
     stage = int(getattr(command.message, "stage", 0))
     if 1 <= stage <= 4:
-        return CommandExecutionResult(stage=stage, reset_tracking=True)
+        return CommandExecutionResult(stage=stage)
     LOGGER.warning("[CommandExecutor:v3] ignore invalid SET_STAGE stage=%s request_id=%s", stage, command.request_id)
     return CommandExecutionResult()
 

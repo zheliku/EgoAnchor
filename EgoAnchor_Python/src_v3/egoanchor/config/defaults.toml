@@ -11,7 +11,7 @@ receive_hwm = 20 # ZMQ 接收高水位；限制积压，业务层仍按 topic la
 poll_timeout_ms = 10 # 每轮 poll 最长等待时间，单位毫秒；越小窗口响应越快。
 
 [network.message_plane]
-enabled = true # 是否启用 NATS 消息面；当前阶段只发布 PoseResult，不实现命令/状态机。
+enabled = true # 是否启用 NATS 消息面；发布 PoseResult，并接收 reset/reacquire/control request-reply 命令。
 url = "nats://127.0.0.1:4222" # NATS server URL；Quest 真机接收时 Unity 侧也应配置到同一开发机地址。
 pose_result_subject = "egoanchor.v1.pose.result" # Python -> Unity PoseResult subject；必须与 subjects.v1.json 保持一致。
 client_name = "egoanchor-python-v3" # Python NATS 客户端名称，便于 nats-server 日志排查。

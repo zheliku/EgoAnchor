@@ -12,7 +12,7 @@
 3. Python v3 `QuestStreamReceiver` 按 topic 做 latest-only 接收与 Protobuf 解码。
 4. 通信 demo 只显示左右 JPEG 拼接图；tracking server 继续运行本地 6DoF pose pipeline。
 5. tracking server 将 `PoseObservation` 映射为 Protobuf `PoseResult`，通过 NATS subject `egoanchor.v1.pose.result` 发布给 Unity。
-6. Unity v3 `PoseResultReceiver` 在主线程解码 `PoseResult`，`PoseToAnchorRuntime` 按 `frame_id` 回查发送帧左目 camera pose，并生成 raw/stable world anchor pose。
+6. Unity v3 `PoseResultReceiver` 在主线程解码 `PoseResult`，`PoseToAnchorRuntime` 按 `frame_id` 回查发送帧 left/right/center camera pose，并根据 Unity 本地 `alignmentReference` 生成 raw/stable world anchor pose；`None` 模式可用于不做 frame 对齐的诊断。
 
 ## Topics
 
@@ -126,7 +126,8 @@ Inspector 绑定要求：
 - 如果 stereo 收不到但 camera_info 能收到，优先检查 Unity `StereoFrameSource` 的左右 camera 是否 `IsPlaying`。
 - pose debug 首次启动会加载 YOLOE、FFS、FoundationPose/Cutie，耗时明显长于通信 demo。
 - 若 Unity `NatsControlClient` 没有 connected 日志，先确认 `nats-server` 已启动、URL/IP 可达、防火墙未拦截 4222。
-- 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例，以及 `frame_id` 是否被 Python 原样透传。
+- 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例、`frame_id` 是否被 Python 原样透传，以及 Unity 本地 `alignmentReference/latestUsedReference` 是否需要历史 frame pose。
+- 当前 v3 Python 感知 pipeline 使用左目图像、左目 K 和左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义上仍是左目 OpenCV camera pose。`PoseToAnchorRuntime.alignmentReference` 是 Unity 本地对齐/诊断策略，不写入通信协议，也不需要服务器知道；Right/Center 可用于本地对照或外参补偿实验，必要时配合 `applyLocalOffset` 做小量残差补偿。
 - 若 raw 物体正常但 smoothed 物体不动，检查 `PoseToAnchorRuntime.processors` 中 processor 是否禁用，或 stable `DynamicObjectAnchor.outputMode` 是否选择了 `Smoothed`。
 - 如果 dashboard 显示 `WAIT_CALIBRATION`，说明 stereo 已到但 camera_info 尚未到达或未成功解析。
 - 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt/conf/mask_threshold`。
