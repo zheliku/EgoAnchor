@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
     # ===== 直接改这里（不使用 argparse） =====
     MODEL_PATH = str(project_dir / "checkpoints" / "yoloe-26l-seg.pt")
-    PROMPT: str | list[str] = ["white block"]
+    PROMPT: str | list[str] = ["pink mouse"]
     CONF = 0.15
     IMGSZ = 640
     MAX_DET = 2

@@ -30,6 +30,17 @@ def _cfg_get(cfg: SimpleNamespace, name: str, default: Any) -> Any:
     return getattr(cfg, name, default)
 
 
+def _normalize_yolo_device(device: str) -> str | int | None:
+    """把配置中的 YOLOE device 字段转为适配器可接受的值。"""
+
+    value = str(device).strip().lower()
+    if value in {"", "auto", "none"}:
+        return None
+    if value.isdigit():
+        return int(value)
+    return value
+
+
 def _generate_cube_symmetry_tfs() -> np.ndarray:
     """生成立方体 24 个正交旋转对称变换。"""
 
@@ -127,7 +138,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         max_det=int(segmenter_cfg.max_det),
         mask_threshold=float(segmenter_cfg.mask_threshold),
         use_half=bool(yolo_cfg.use_half),
-        device=str(yolo_cfg.device),
+        device=_normalize_yolo_device(str(yolo_cfg.device)),
         mobileclip2_path=str(_resolve_path(str(yolo_cfg.mobileclip2_path), python_root)),
     )
 

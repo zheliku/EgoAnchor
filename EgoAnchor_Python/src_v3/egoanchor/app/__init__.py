@@ -25,4 +25,12 @@ def tracking_server_main(*args: Any, **kwargs: Any) -> Any:
     return main(*args, **kwargs)
 
 
-__all__ = ["quest_video_probe_main", "tracking_server_main"]
+def yoloe_mask_probe_main(*args: Any, **kwargs: Any) -> Any:
+    """启动 YOLOE-26 实时掩码验证入口。"""
+
+    from .yoloe_mask_probe import main
+
+    return main(*args, **kwargs)
+
+
+__all__ = ["quest_video_probe_main", "tracking_server_main", "yoloe_mask_probe_main"]

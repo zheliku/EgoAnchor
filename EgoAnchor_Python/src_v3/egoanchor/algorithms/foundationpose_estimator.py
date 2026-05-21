@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import numpy as np
 import trimesh
+from PIL import Image
 
 
 class FoundationPoseObjectEstimator:
@@ -122,9 +123,6 @@ class FoundationPoseObjectEstimator:
         self.FoundationPose = resolve_symbol("FoundationPose")
         """FoundationPose estimator 类型。"""
 
-        self.trimesh_add_pure_colored_texture = resolve_symbol("trimesh_add_pure_colored_texture")
-        """给 trimesh 添加纯色纹理的工具函数。"""
-
         self.draw_posed_3d_box = resolve_symbol("draw_posed_3d_box")
         """绘制目标 3D 包围盒的工具函数。"""
 
@@ -148,28 +146,33 @@ class FoundationPoseObjectEstimator:
     def _load_mesh_and_create_estimator(self) -> None:
         """加载 mesh、计算可视化 bbox，并创建 FoundationPose estimator。"""
 
-        loaded_mesh = trimesh.load(self.mesh_path)
+        loaded_mesh = trimesh.load(self.mesh_path, force="scene", process=False)
         if isinstance(loaded_mesh, trimesh.Scene):
-            loaded_mesh = loaded_mesh.dump(concatenate=True)
+            geometries = [geom.copy() for geom in loaded_mesh.geometry.values() if hasattr(geom, "vertices") and hasattr(geom, "faces")]
+            if not geometries:
+                raise ValueError(f"FoundationPose mesh scene 不包含可用几何体: {self.mesh_path}")
+            loaded_mesh = trimesh.util.concatenate(geometries) if len(geometries) > 1 else geometries[0]
         self.mesh = cast(Any, loaded_mesh)
         """FoundationPose 使用的目标 mesh。"""
 
         self.mesh.apply_scale(self.apply_scale)
-        if self.force_apply_color:
-            self.mesh = self.trimesh_add_pure_colored_texture(self.mesh, color=np.array(self.apply_color), resolution=10)
+        self._ensure_renderable_visual()
 
-        self.to_origin, extents = trimesh.bounds.oriented_bounds(self.mesh)
-        """mesh oriented bounds 到原点的变换与 extents。"""
+        self.to_origin, extents = self._compute_axis_aligned_bounds_to_origin(self.mesh)
+        """mesh 轴对齐 bounds 到原点的变换与 extents。"""
 
         self.bbox = np.stack([-extents / 2, extents / 2], axis=0).reshape(2, 3)
         """可视化绘制用的目标包围盒。"""
+
+        model_normals = self._get_safe_vertex_normals(self.mesh)
+        """传给 FoundationPose 的顶点法线；优先使用 mesh 自带法线，失败时手动估计。"""
 
         scorer = self.ScorePredictor()
         refiner = self.PoseRefinePredictor()
         glctx = self.dr.RasterizeCudaContext()
         self.estimator = self.FoundationPose(
             model_pts=self.mesh.vertices,
-            model_normals=self.mesh.vertex_normals,
+            model_normals=model_normals,
             symmetry_tfs=self.symmetry_tfs,
             mesh=self.mesh,
             scorer=scorer,
@@ -179,6 +182,99 @@ class FoundationPoseObjectEstimator:
             debug=self.debug,
         )
         """FoundationPose estimator 实例。"""
+
+    def _ensure_renderable_visual(self) -> None:
+        """确保 mesh visual 可被 FoundationPose rasterizer 使用。
+
+        一些 GLB 会被 trimesh 解析为 `PBRMaterial.baseColorTexture`，而原版
+        FoundationPose 的 `make_mesh_tensors()` 只访问 `material.image`。因此这里会
+        先把 PBR base color texture 规范化为 FoundationPose 可读的
+        `SimpleMaterial.image`；只有在纹理确实缺失或显式强制时才使用纯色纹理。
+        """
+
+        visual = getattr(self.mesh, "visual", None)
+        material = getattr(visual, "material", None)
+        image = self._extract_material_image(material)
+        should_apply_color = self.force_apply_color or image is None or not hasattr(image, "convert")
+        if not should_apply_color:
+            self._set_texture_visual(image)
+            logging.info("FoundationPose mesh 使用模型自带纹理: mesh=%s image_size=%s", self.mesh_path, getattr(image, "size", None))
+            return
+
+        color = np.asarray(self.apply_color, dtype=np.uint8).reshape(1, 1, 3)
+        texture = np.tile(color, (10, 10, 1))
+        self._set_texture_visual(Image.fromarray(texture))
+        reason = "force_apply_color=true" if self.force_apply_color else "模型纹理不可被 FoundationPose 读取"
+        logging.info("FoundationPose mesh 使用纯色纹理 fallback: mesh=%s reason=%s", self.mesh_path, reason)
+
+    @staticmethod
+    def _extract_material_image(material: Any) -> Any | None:
+        """从 trimesh material 中提取 FoundationPose 可用的 PIL image。"""
+
+        if material is None:
+            return None
+        image = getattr(material, "image", None)
+        if image is not None and hasattr(image, "convert"):
+            return image
+        base_color_texture = getattr(material, "baseColorTexture", None)
+        if base_color_texture is not None and hasattr(base_color_texture, "convert"):
+            return base_color_texture
+        return None
+
+    def _set_texture_visual(self, image: Any) -> None:
+        """把 mesh visual 改写成 FoundationPose `make_mesh_tensors()` 可读取的格式。"""
+
+        visual = getattr(self.mesh, "visual", None)
+        vertex_count = int(len(self.mesh.vertices))
+        uv = getattr(visual, "uv", None)
+        if uv is None or len(uv) != vertex_count:
+            uv = np.zeros((vertex_count, 2), dtype=np.float32)
+        material = trimesh.visual.texture.SimpleMaterial(image=image)
+        self.mesh.visual = trimesh.visual.texture.TextureVisuals(uv=uv, image=image, material=material)
+
+    @staticmethod
+    def _compute_axis_aligned_bounds_to_origin(mesh: Any) -> tuple[np.ndarray, np.ndarray]:
+        """用轴对齐 bounds 计算 `to_origin`，避免大 GLB 触发 oriented_bounds 崩溃。"""
+
+        vertices = np.asarray(mesh.vertices, dtype=np.float64)
+        min_xyz = np.min(vertices, axis=0)
+        max_xyz = np.max(vertices, axis=0)
+        center = (min_xyz + max_xyz) * 0.5
+        extents = np.maximum(max_xyz - min_xyz, 1e-9)
+        to_origin = np.eye(4, dtype=np.float64)
+        to_origin[:3, 3] = -center
+        return to_origin, extents
+
+    @staticmethod
+    def _estimate_vertex_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+        """不依赖 trimesh 懒属性，手动按相邻三角面平均估计顶点法线。"""
+
+        triangles = vertices[faces]
+        face_normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+        face_lengths = np.linalg.norm(face_normals, axis=1)
+        valid_faces = face_lengths > 1e-12
+        face_normals[valid_faces] /= face_lengths[valid_faces, None]
+        face_normals[~valid_faces] = 0.0
+
+        vertex_normals = np.zeros_like(vertices, dtype=np.float64)
+        for corner in range(3):
+            np.add.at(vertex_normals, faces[:, corner], face_normals)
+        vertex_lengths = np.linalg.norm(vertex_normals, axis=1)
+        valid_vertices = vertex_lengths > 1e-12
+        vertex_normals[valid_vertices] /= vertex_lengths[valid_vertices, None]
+        vertex_normals[~valid_vertices] = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        return vertex_normals
+
+    def _get_safe_vertex_normals(self, mesh: Any) -> np.ndarray:
+        """获取顶点法线；若 trimesh 懒计算触发底层 DLL 崩溃风险，则使用手动估计。"""
+
+        try:
+            normals = np.asarray(mesh.vertex_normals, dtype=np.float64)
+            if normals.shape == np.asarray(mesh.vertices).shape and np.all(np.isfinite(normals)):
+                return normals
+        except Exception as exc:
+            logging.warning("读取 mesh.vertex_normals 失败，改用手动法线估计: %s", exc)
+        return self._estimate_vertex_normals(np.asarray(mesh.vertices, dtype=np.float64), np.asarray(mesh.faces, dtype=np.int64))
 
     @staticmethod
     def _get_pose_xy_from_image_point(ob_in_cam: np.ndarray, cam_k: np.ndarray, x: float, y: float) -> tuple[float, float]:

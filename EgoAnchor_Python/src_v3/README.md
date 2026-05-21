@@ -1,8 +1,9 @@
 # EgoAnchor v3 Python 入口
 
-本目录是 v3 新实现的起点。当前包含两个 Python 入口：
+本目录是 v3 新实现的起点。当前包含三个 Python 入口：
 
 - **通信 demo**：只验证 Quest/Unity -> Python 的双目图像通信与实时显示，不加载模型。
+- **YOLOE mask probe**：接收同一条 Quest stereo 数据面，只运行 YOLOE-26 并实时显示 overlay/mask，用于快速调 prompt、conf 和 mask 阈值。
 - **tracking server**：接收同一条 ZMQ 数据面，运行 YOLOE-26 + Fast-FoundationStereo + FoundationPose/Cutie，在 Python OpenCV 中显示 debug 结果，并可通过 NATS 向 Unity 发布 camera-space `PoseResult`。
 
 ## 当前链路
@@ -38,6 +39,25 @@ pixi run python .\src_v3\quest_video_stream_demo.py --config .\path\to\override.
 ```
 
 默认监听端口是 `15557`，配置在 `src_v3/egoanchor/config/defaults.toml`。
+
+## Python 运行：YOLOE mask probe
+
+在 `EgoAnchor_Python` 目录运行：
+
+```powershell
+pixi run python .\src_v3\yoloe_mask_probe.py
+```
+
+常用参数：
+
+```powershell
+pixi run python .\src_v3\yoloe_mask_probe.py --prompt "white mouse" --conf 0.08 --max-det 1 --save-dir .\debug\yoloe_probe
+```
+
+OpenCV 热键：
+
+- `s`：当设置了 `--save-dir` 时保存当前 overlay/mask/stereo 快照。
+- `q` 或 `ESC`：退出。
 
 ## Python 运行：tracking server / pose debug / NATS 发布
 

@@ -42,21 +42,9 @@ namespace EgoAnchor.V3.Anchor
         [Tooltip("Unity 本地选择的对齐参考相机。Left 是当前 Python pose 的语义默认值；Right/Center/None 仅用于本地对照、补偿或诊断，不需要服务器知道。")]
         [SerializeField] private AnchorPoseReference alignmentReference = AnchorPoseReference.Left;
 
-        /// <summary>是否应用本地固定偏移。</summary>
-        [Tooltip("是否在 frame 对齐后应用本地固定偏移。用于补偿 Quest Passthrough camera 与渲染眼相机之间的小量外参残差，不建议替代正确的参考相机选择。")]
-        [SerializeField] private bool applyLocalOffset = false;
-
-        /// <summary>本地固定位置偏移，单位米。</summary>
-        [Tooltip("本地固定位置偏移，单位米。offsetInAnchorLocal=true 时按 anchor 局部轴解释；否则按 Unity world 轴解释。")]
-        [SerializeField] private Vector3 localPositionOffset = Vector3.zero;
-
-        /// <summary>本地固定旋转偏移，欧拉角度。</summary>
-        [Tooltip("本地固定旋转偏移，欧拉角度。offsetInAnchorLocal=true 时右乘到 anchor rotation；否则左乘到 world rotation。")]
-        [SerializeField] private Vector3 localRotationOffsetEuler = Vector3.zero;
-
-        /// <summary>固定偏移是否按 anchor 局部坐标解释。</summary>
-        [Tooltip("固定偏移是否按 anchor 局部坐标解释。开启时位置偏移会随物体旋转，关闭时按 Unity world 坐标直接平移。")]
-        [SerializeField] private bool offsetInAnchorLocal = true;
+        /// <summary>camera-local 轴翻转和 frame-aligned 后固定偏移的统一配置。</summary>
+        [Tooltip("camera-local 轴翻转和 frame-aligned 后固定偏移的统一配置。测试鼠标模型时可直接关闭 Flip Y，而不需要修改代码。")]
+        [SerializeField] private AnchorPoseTransform poseTransform = AnchorPoseTransform.OpenCvToUnityDefault;
 
         /// <summary>是否启用 stable pose 处理器链。</summary>
         [Header("Anchor Processors")]
@@ -174,7 +162,6 @@ namespace EgoAnchor.V3.Anchor
             }
 
             latestUsedReference = usedReference;
-            worldPose = ApplyOffset(worldPose);
             AcceptWorldPose(result.Header.FrameId, worldPose);
             latestFailure = string.Empty;
             return AcceptResult.Aligned;
@@ -289,39 +276,12 @@ namespace EgoAnchor.V3.Anchor
         }
 
         /// <summary>
-        /// 对 frame-aligned world pose 应用可选的本地固定偏移。
-        /// </summary>
-        /// <param name="inputPose">frame 对齐后的 Unity world pose。</param>
-        /// <returns>应用偏移后的 Unity world pose。</returns>
-        private Pose ApplyOffset(Pose inputPose)
-        {
-            if (!applyLocalOffset)
-            {
-                return inputPose;
-            }
-
-            Quaternion offsetRotation = Quaternion.Euler(localRotationOffsetEuler);
-            if (offsetInAnchorLocal)
-            {
-                return new Pose(
-                    inputPose.position + inputPose.rotation * localPositionOffset,
-                    inputPose.rotation * offsetRotation
-                );
-            }
-
-            return new Pose(
-                inputPose.position + localPositionOffset,
-                offsetRotation * inputPose.rotation
-            );
-        }
-
-        /// <summary>
         /// 重新构造 frame aligner。
         /// </summary>
         private void RebuildAligner()
         {
             aligner = framePoseHistory != null || alignmentReference == AnchorPoseReference.None
-                ? new CameraPoseFrameAligner(framePoseHistory, alignmentReference)
+                ? new CameraPoseFrameAligner(framePoseHistory, alignmentReference, poseTransform)
                 : null;
             if (aligner == null && keepDiagnostics)
             {
