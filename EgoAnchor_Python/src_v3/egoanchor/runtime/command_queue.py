@@ -61,6 +61,17 @@ class CommandQueue:
                 out.append(heapq.heappop(self._items).command)
             return out
 
+    def pop_many(self, limit: int) -> list[RuntimeCommand]:
+        """最多取出 limit 条命令，未取出的命令留在队列中保持原顺序。"""
+
+        if limit <= 0:
+            return []
+        with self._lock:
+            out: list[RuntimeCommand] = []
+            for _ in range(min(int(limit), len(self._items))):
+                out.append(heapq.heappop(self._items).command)
+            return out
+
     def __len__(self) -> int:
         with self._lock:
             return len(self._items)

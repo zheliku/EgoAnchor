@@ -212,8 +212,7 @@ class TrackingRuntime:
 
         if self.pipeline is None:
             return
-        commands = self.command_queue.drain()
-        for command in commands[: self.command_execute_per_tick]:
+        for command in self.command_queue.pop_many(self.command_execute_per_tick):
             result = self.command_executor.interpret(command)
             if result.paused is not None:
                 self.paused = bool(result.paused)
@@ -221,5 +220,3 @@ class TrackingRuntime:
                 self.pipeline.set_stage(result.stage)
             if result.reset_tracking:
                 self.pipeline.reset_tracking_state()
-        for command in commands[self.command_execute_per_tick :]:
-            self.command_queue.put(command)

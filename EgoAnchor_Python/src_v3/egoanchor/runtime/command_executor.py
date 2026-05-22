@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, TYPE_CHECKING
+from typing import Callable
 
 from egoanchor.protocol import AnchorControlRequest
 from egoanchor.runtime import CommandType, RuntimeCommand
-
-if TYPE_CHECKING:
-    from egoanchor.runtime import CommandExecutor
 
 LOGGER = logging.getLogger(__name__)
 

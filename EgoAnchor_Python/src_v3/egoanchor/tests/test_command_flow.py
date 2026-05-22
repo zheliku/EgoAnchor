@@ -118,5 +118,42 @@ class CommandExecutorTest(unittest.TestCase):
         self.assertFalse(result.reset_tracking)
 
 
+class CommandQueueTest(unittest.TestCase):
+    """验证 runtime command queue 的优先级和分批取出语义。"""
+
+    def test_pop_many_keeps_remaining_commands_in_original_order(self) -> None:
+        """每 tick 只取执行额度内的命令，剩余命令不应被 drain/requeue 改写顺序。"""
+
+        queue = CommandQueue(max_size=8)
+        first = RuntimeCommand.from_message(
+            CommandType.CONTROL,
+            AnchorControlRequest(header=MessageHeader(request_id="control-1"), action=AnchorControlRequest.PAUSE),
+        )
+        second = RuntimeCommand.from_message(
+            CommandType.CONTROL,
+            AnchorControlRequest(header=MessageHeader(request_id="control-2"), action=AnchorControlRequest.RESUME),
+        )
+        third = RuntimeCommand.from_message(
+            CommandType.CONTROL,
+            AnchorControlRequest(header=MessageHeader(request_id="control-3"), action=AnchorControlRequest.PAUSE),
+        )
+        for command in (first, second, third):
+            self.assertTrue(queue.put(command))
+
+        popped = queue.pop_many(2)
+
+        self.assertEqual([command.request_id for command in popped], ["control-1", "control-2"])
+        self.assertEqual(len(queue), 1)
+
+        fourth = RuntimeCommand.from_message(
+            CommandType.CONTROL,
+            AnchorControlRequest(header=MessageHeader(request_id="control-4"), action=AnchorControlRequest.RESUME),
+        )
+        self.assertTrue(queue.put(fourth))
+
+        remaining = queue.drain()
+        self.assertEqual([command.request_id for command in remaining], ["control-3", "control-4"])
+
+
 if __name__ == "__main__":
     unittest.main()
