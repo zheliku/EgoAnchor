@@ -1,0 +1,1493 @@
+{
+  "video_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\blue_mouse.mp4",
+  "output_dir": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames",
+  "fps": 30.00219082935062,
+  "frame_count": 1479,
+  "duration_seconds": 49.2964,
+  "selected_count": 247,
+  "exported_count": 247,
+  "frames": [
+    {
+      "frame_index": 0,
+      "sequence_index": 0,
+      "timestamp_seconds": 0.0,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000000.jpg"
+    },
+    {
+      "frame_index": 6,
+      "sequence_index": 1,
+      "timestamp_seconds": 0.19998539553752537,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000006.jpg"
+    },
+    {
+      "frame_index": 12,
+      "sequence_index": 2,
+      "timestamp_seconds": 0.39997079107505074,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000012.jpg"
+    },
+    {
+      "frame_index": 18,
+      "sequence_index": 3,
+      "timestamp_seconds": 0.5999561866125761,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000018.jpg"
+    },
+    {
+      "frame_index": 24,
+      "sequence_index": 4,
+      "timestamp_seconds": 0.7999415821501015,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000024.jpg"
+    },
+    {
+      "frame_index": 30,
+      "sequence_index": 5,
+      "timestamp_seconds": 0.9999269776876268,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000030.jpg"
+    },
+    {
+      "frame_index": 36,
+      "sequence_index": 6,
+      "timestamp_seconds": 1.1999123732251522,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000036.jpg"
+    },
+    {
+      "frame_index": 42,
+      "sequence_index": 7,
+      "timestamp_seconds": 1.3998977687626775,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000042.jpg"
+    },
+    {
+      "frame_index": 48,
+      "sequence_index": 8,
+      "timestamp_seconds": 1.599883164300203,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000048.jpg"
+    },
+    {
+      "frame_index": 54,
+      "sequence_index": 9,
+      "timestamp_seconds": 1.7998685598377282,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000054.jpg"
+    },
+    {
+      "frame_index": 60,
+      "sequence_index": 10,
+      "timestamp_seconds": 1.9998539553752537,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000060.jpg"
+    },
+    {
+      "frame_index": 66,
+      "sequence_index": 11,
+      "timestamp_seconds": 2.199839350912779,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000066.jpg"
+    },
+    {
+      "frame_index": 72,
+      "sequence_index": 12,
+      "timestamp_seconds": 2.3998247464503044,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000072.jpg"
+    },
+    {
+      "frame_index": 78,
+      "sequence_index": 13,
+      "timestamp_seconds": 2.5998101419878297,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000078.jpg"
+    },
+    {
+      "frame_index": 84,
+      "sequence_index": 14,
+      "timestamp_seconds": 2.799795537525355,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000084.jpg"
+    },
+    {
+      "frame_index": 90,
+      "sequence_index": 15,
+      "timestamp_seconds": 2.9997809330628806,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000090.jpg"
+    },
+    {
+      "frame_index": 96,
+      "sequence_index": 16,
+      "timestamp_seconds": 3.199766328600406,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000096.jpg"
+    },
+    {
+      "frame_index": 102,
+      "sequence_index": 17,
+      "timestamp_seconds": 3.399751724137931,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000102.jpg"
+    },
+    {
+      "frame_index": 108,
+      "sequence_index": 18,
+      "timestamp_seconds": 3.5997371196754564,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000108.jpg"
+    },
+    {
+      "frame_index": 114,
+      "sequence_index": 19,
+      "timestamp_seconds": 3.799722515212982,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000114.jpg"
+    },
+    {
+      "frame_index": 120,
+      "sequence_index": 20,
+      "timestamp_seconds": 3.9997079107505074,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000120.jpg"
+    },
+    {
+      "frame_index": 126,
+      "sequence_index": 21,
+      "timestamp_seconds": 4.199693306288033,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000126.jpg"
+    },
+    {
+      "frame_index": 132,
+      "sequence_index": 22,
+      "timestamp_seconds": 4.399678701825558,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000132.jpg"
+    },
+    {
+      "frame_index": 138,
+      "sequence_index": 23,
+      "timestamp_seconds": 4.599664097363084,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000138.jpg"
+    },
+    {
+      "frame_index": 144,
+      "sequence_index": 24,
+      "timestamp_seconds": 4.799649492900609,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000144.jpg"
+    },
+    {
+      "frame_index": 150,
+      "sequence_index": 25,
+      "timestamp_seconds": 4.999634888438134,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000150.jpg"
+    },
+    {
+      "frame_index": 156,
+      "sequence_index": 26,
+      "timestamp_seconds": 5.199620283975659,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000156.jpg"
+    },
+    {
+      "frame_index": 162,
+      "sequence_index": 27,
+      "timestamp_seconds": 5.399605679513185,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000162.jpg"
+    },
+    {
+      "frame_index": 168,
+      "sequence_index": 28,
+      "timestamp_seconds": 5.59959107505071,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000168.jpg"
+    },
+    {
+      "frame_index": 174,
+      "sequence_index": 29,
+      "timestamp_seconds": 5.799576470588235,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000174.jpg"
+    },
+    {
+      "frame_index": 180,
+      "sequence_index": 30,
+      "timestamp_seconds": 5.999561866125761,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000180.jpg"
+    },
+    {
+      "frame_index": 186,
+      "sequence_index": 31,
+      "timestamp_seconds": 6.1995472616632865,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000186.jpg"
+    },
+    {
+      "frame_index": 192,
+      "sequence_index": 32,
+      "timestamp_seconds": 6.399532657200812,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000192.jpg"
+    },
+    {
+      "frame_index": 198,
+      "sequence_index": 33,
+      "timestamp_seconds": 6.599518052738337,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000198.jpg"
+    },
+    {
+      "frame_index": 204,
+      "sequence_index": 34,
+      "timestamp_seconds": 6.799503448275862,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000204.jpg"
+    },
+    {
+      "frame_index": 210,
+      "sequence_index": 35,
+      "timestamp_seconds": 6.9994888438133875,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000210.jpg"
+    },
+    {
+      "frame_index": 216,
+      "sequence_index": 36,
+      "timestamp_seconds": 7.199474239350913,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000216.jpg"
+    },
+    {
+      "frame_index": 222,
+      "sequence_index": 37,
+      "timestamp_seconds": 7.399459634888438,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000222.jpg"
+    },
+    {
+      "frame_index": 228,
+      "sequence_index": 38,
+      "timestamp_seconds": 7.599445030425964,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000228.jpg"
+    },
+    {
+      "frame_index": 234,
+      "sequence_index": 39,
+      "timestamp_seconds": 7.7994304259634895,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000234.jpg"
+    },
+    {
+      "frame_index": 240,
+      "sequence_index": 40,
+      "timestamp_seconds": 7.999415821501015,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000240.jpg"
+    },
+    {
+      "frame_index": 246,
+      "sequence_index": 41,
+      "timestamp_seconds": 8.19940121703854,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000246.jpg"
+    },
+    {
+      "frame_index": 252,
+      "sequence_index": 42,
+      "timestamp_seconds": 8.399386612576066,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000252.jpg"
+    },
+    {
+      "frame_index": 258,
+      "sequence_index": 43,
+      "timestamp_seconds": 8.59937200811359,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000258.jpg"
+    },
+    {
+      "frame_index": 264,
+      "sequence_index": 44,
+      "timestamp_seconds": 8.799357403651117,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000264.jpg"
+    },
+    {
+      "frame_index": 270,
+      "sequence_index": 45,
+      "timestamp_seconds": 8.999342799188641,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000270.jpg"
+    },
+    {
+      "frame_index": 276,
+      "sequence_index": 46,
+      "timestamp_seconds": 9.199328194726167,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000276.jpg"
+    },
+    {
+      "frame_index": 282,
+      "sequence_index": 47,
+      "timestamp_seconds": 9.399313590263692,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000282.jpg"
+    },
+    {
+      "frame_index": 288,
+      "sequence_index": 48,
+      "timestamp_seconds": 9.599298985801218,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000288.jpg"
+    },
+    {
+      "frame_index": 294,
+      "sequence_index": 49,
+      "timestamp_seconds": 9.799284381338742,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000294.jpg"
+    },
+    {
+      "frame_index": 300,
+      "sequence_index": 50,
+      "timestamp_seconds": 9.999269776876268,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000300.jpg"
+    },
+    {
+      "frame_index": 306,
+      "sequence_index": 51,
+      "timestamp_seconds": 10.199255172413794,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000306.jpg"
+    },
+    {
+      "frame_index": 312,
+      "sequence_index": 52,
+      "timestamp_seconds": 10.399240567951319,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000312.jpg"
+    },
+    {
+      "frame_index": 318,
+      "sequence_index": 53,
+      "timestamp_seconds": 10.599225963488845,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000318.jpg"
+    },
+    {
+      "frame_index": 324,
+      "sequence_index": 54,
+      "timestamp_seconds": 10.79921135902637,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000324.jpg"
+    },
+    {
+      "frame_index": 330,
+      "sequence_index": 55,
+      "timestamp_seconds": 10.999196754563895,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000330.jpg"
+    },
+    {
+      "frame_index": 336,
+      "sequence_index": 56,
+      "timestamp_seconds": 11.19918215010142,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000336.jpg"
+    },
+    {
+      "frame_index": 342,
+      "sequence_index": 57,
+      "timestamp_seconds": 11.399167545638946,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000342.jpg"
+    },
+    {
+      "frame_index": 348,
+      "sequence_index": 58,
+      "timestamp_seconds": 11.59915294117647,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000348.jpg"
+    },
+    {
+      "frame_index": 354,
+      "sequence_index": 59,
+      "timestamp_seconds": 11.799138336713996,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000354.jpg"
+    },
+    {
+      "frame_index": 360,
+      "sequence_index": 60,
+      "timestamp_seconds": 11.999123732251523,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000360.jpg"
+    },
+    {
+      "frame_index": 366,
+      "sequence_index": 61,
+      "timestamp_seconds": 12.199109127789047,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000366.jpg"
+    },
+    {
+      "frame_index": 372,
+      "sequence_index": 62,
+      "timestamp_seconds": 12.399094523326573,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000372.jpg"
+    },
+    {
+      "frame_index": 378,
+      "sequence_index": 63,
+      "timestamp_seconds": 12.599079918864097,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000378.jpg"
+    },
+    {
+      "frame_index": 384,
+      "sequence_index": 64,
+      "timestamp_seconds": 12.799065314401624,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000384.jpg"
+    },
+    {
+      "frame_index": 390,
+      "sequence_index": 65,
+      "timestamp_seconds": 12.999050709939148,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000390.jpg"
+    },
+    {
+      "frame_index": 396,
+      "sequence_index": 66,
+      "timestamp_seconds": 13.199036105476674,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000396.jpg"
+    },
+    {
+      "frame_index": 402,
+      "sequence_index": 67,
+      "timestamp_seconds": 13.3990215010142,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000402.jpg"
+    },
+    {
+      "frame_index": 408,
+      "sequence_index": 68,
+      "timestamp_seconds": 13.599006896551725,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000408.jpg"
+    },
+    {
+      "frame_index": 414,
+      "sequence_index": 69,
+      "timestamp_seconds": 13.79899229208925,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000414.jpg"
+    },
+    {
+      "frame_index": 420,
+      "sequence_index": 70,
+      "timestamp_seconds": 13.998977687626775,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000420.jpg"
+    },
+    {
+      "frame_index": 426,
+      "sequence_index": 71,
+      "timestamp_seconds": 14.198963083164301,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000426.jpg"
+    },
+    {
+      "frame_index": 432,
+      "sequence_index": 72,
+      "timestamp_seconds": 14.398948478701826,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000432.jpg"
+    },
+    {
+      "frame_index": 438,
+      "sequence_index": 73,
+      "timestamp_seconds": 14.598933874239352,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000438.jpg"
+    },
+    {
+      "frame_index": 444,
+      "sequence_index": 74,
+      "timestamp_seconds": 14.798919269776876,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000444.jpg"
+    },
+    {
+      "frame_index": 450,
+      "sequence_index": 75,
+      "timestamp_seconds": 14.998904665314402,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000450.jpg"
+    },
+    {
+      "frame_index": 456,
+      "sequence_index": 76,
+      "timestamp_seconds": 15.198890060851928,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000456.jpg"
+    },
+    {
+      "frame_index": 462,
+      "sequence_index": 77,
+      "timestamp_seconds": 15.398875456389453,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000462.jpg"
+    },
+    {
+      "frame_index": 468,
+      "sequence_index": 78,
+      "timestamp_seconds": 15.598860851926979,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000468.jpg"
+    },
+    {
+      "frame_index": 474,
+      "sequence_index": 79,
+      "timestamp_seconds": 15.798846247464503,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000474.jpg"
+    },
+    {
+      "frame_index": 480,
+      "sequence_index": 80,
+      "timestamp_seconds": 15.99883164300203,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000480.jpg"
+    },
+    {
+      "frame_index": 486,
+      "sequence_index": 81,
+      "timestamp_seconds": 16.198817038539556,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000486.jpg"
+    },
+    {
+      "frame_index": 492,
+      "sequence_index": 82,
+      "timestamp_seconds": 16.39880243407708,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000492.jpg"
+    },
+    {
+      "frame_index": 498,
+      "sequence_index": 83,
+      "timestamp_seconds": 16.598787829614604,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000498.jpg"
+    },
+    {
+      "frame_index": 504,
+      "sequence_index": 84,
+      "timestamp_seconds": 16.798773225152132,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000504.jpg"
+    },
+    {
+      "frame_index": 510,
+      "sequence_index": 85,
+      "timestamp_seconds": 16.998758620689657,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000510.jpg"
+    },
+    {
+      "frame_index": 516,
+      "sequence_index": 86,
+      "timestamp_seconds": 17.19874401622718,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000516.jpg"
+    },
+    {
+      "frame_index": 522,
+      "sequence_index": 87,
+      "timestamp_seconds": 17.398729411764705,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000522.jpg"
+    },
+    {
+      "frame_index": 528,
+      "sequence_index": 88,
+      "timestamp_seconds": 17.598714807302233,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000528.jpg"
+    },
+    {
+      "frame_index": 534,
+      "sequence_index": 89,
+      "timestamp_seconds": 17.798700202839758,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000534.jpg"
+    },
+    {
+      "frame_index": 540,
+      "sequence_index": 90,
+      "timestamp_seconds": 17.998685598377282,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000540.jpg"
+    },
+    {
+      "frame_index": 546,
+      "sequence_index": 91,
+      "timestamp_seconds": 18.198670993914806,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000546.jpg"
+    },
+    {
+      "frame_index": 552,
+      "sequence_index": 92,
+      "timestamp_seconds": 18.398656389452334,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000552.jpg"
+    },
+    {
+      "frame_index": 558,
+      "sequence_index": 93,
+      "timestamp_seconds": 18.59864178498986,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000558.jpg"
+    },
+    {
+      "frame_index": 564,
+      "sequence_index": 94,
+      "timestamp_seconds": 18.798627180527383,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000564.jpg"
+    },
+    {
+      "frame_index": 570,
+      "sequence_index": 95,
+      "timestamp_seconds": 18.99861257606491,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000570.jpg"
+    },
+    {
+      "frame_index": 576,
+      "sequence_index": 96,
+      "timestamp_seconds": 19.198597971602435,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000576.jpg"
+    },
+    {
+      "frame_index": 582,
+      "sequence_index": 97,
+      "timestamp_seconds": 19.39858336713996,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000582.jpg"
+    },
+    {
+      "frame_index": 588,
+      "sequence_index": 98,
+      "timestamp_seconds": 19.598568762677484,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000588.jpg"
+    },
+    {
+      "frame_index": 594,
+      "sequence_index": 99,
+      "timestamp_seconds": 19.798554158215012,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000594.jpg"
+    },
+    {
+      "frame_index": 600,
+      "sequence_index": 100,
+      "timestamp_seconds": 19.998539553752536,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000600.jpg"
+    },
+    {
+      "frame_index": 606,
+      "sequence_index": 101,
+      "timestamp_seconds": 20.19852494929006,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000606.jpg"
+    },
+    {
+      "frame_index": 612,
+      "sequence_index": 102,
+      "timestamp_seconds": 20.39851034482759,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000612.jpg"
+    },
+    {
+      "frame_index": 618,
+      "sequence_index": 103,
+      "timestamp_seconds": 20.598495740365113,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000618.jpg"
+    },
+    {
+      "frame_index": 624,
+      "sequence_index": 104,
+      "timestamp_seconds": 20.798481135902637,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000624.jpg"
+    },
+    {
+      "frame_index": 630,
+      "sequence_index": 105,
+      "timestamp_seconds": 20.99846653144016,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000630.jpg"
+    },
+    {
+      "frame_index": 636,
+      "sequence_index": 106,
+      "timestamp_seconds": 21.19845192697769,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000636.jpg"
+    },
+    {
+      "frame_index": 642,
+      "sequence_index": 107,
+      "timestamp_seconds": 21.398437322515214,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000642.jpg"
+    },
+    {
+      "frame_index": 648,
+      "sequence_index": 108,
+      "timestamp_seconds": 21.59842271805274,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000648.jpg"
+    },
+    {
+      "frame_index": 654,
+      "sequence_index": 109,
+      "timestamp_seconds": 21.798408113590266,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000654.jpg"
+    },
+    {
+      "frame_index": 660,
+      "sequence_index": 110,
+      "timestamp_seconds": 21.99839350912779,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000660.jpg"
+    },
+    {
+      "frame_index": 666,
+      "sequence_index": 111,
+      "timestamp_seconds": 22.198378904665315,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000666.jpg"
+    },
+    {
+      "frame_index": 672,
+      "sequence_index": 112,
+      "timestamp_seconds": 22.39836430020284,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000672.jpg"
+    },
+    {
+      "frame_index": 678,
+      "sequence_index": 113,
+      "timestamp_seconds": 22.598349695740367,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000678.jpg"
+    },
+    {
+      "frame_index": 684,
+      "sequence_index": 114,
+      "timestamp_seconds": 22.79833509127789,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000684.jpg"
+    },
+    {
+      "frame_index": 690,
+      "sequence_index": 115,
+      "timestamp_seconds": 22.998320486815416,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000690.jpg"
+    },
+    {
+      "frame_index": 696,
+      "sequence_index": 116,
+      "timestamp_seconds": 23.19830588235294,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000696.jpg"
+    },
+    {
+      "frame_index": 702,
+      "sequence_index": 117,
+      "timestamp_seconds": 23.39829127789047,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000702.jpg"
+    },
+    {
+      "frame_index": 708,
+      "sequence_index": 118,
+      "timestamp_seconds": 23.598276673427993,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000708.jpg"
+    },
+    {
+      "frame_index": 714,
+      "sequence_index": 119,
+      "timestamp_seconds": 23.798262068965517,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000714.jpg"
+    },
+    {
+      "frame_index": 720,
+      "sequence_index": 120,
+      "timestamp_seconds": 23.998247464503045,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000720.jpg"
+    },
+    {
+      "frame_index": 726,
+      "sequence_index": 121,
+      "timestamp_seconds": 24.19823286004057,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000726.jpg"
+    },
+    {
+      "frame_index": 732,
+      "sequence_index": 122,
+      "timestamp_seconds": 24.398218255578094,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000732.jpg"
+    },
+    {
+      "frame_index": 738,
+      "sequence_index": 123,
+      "timestamp_seconds": 24.598203651115618,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000738.jpg"
+    },
+    {
+      "frame_index": 744,
+      "sequence_index": 124,
+      "timestamp_seconds": 24.798189046653146,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000744.jpg"
+    },
+    {
+      "frame_index": 750,
+      "sequence_index": 125,
+      "timestamp_seconds": 24.99817444219067,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000750.jpg"
+    },
+    {
+      "frame_index": 756,
+      "sequence_index": 126,
+      "timestamp_seconds": 25.198159837728195,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000756.jpg"
+    },
+    {
+      "frame_index": 762,
+      "sequence_index": 127,
+      "timestamp_seconds": 25.398145233265723,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000762.jpg"
+    },
+    {
+      "frame_index": 768,
+      "sequence_index": 128,
+      "timestamp_seconds": 25.598130628803247,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000768.jpg"
+    },
+    {
+      "frame_index": 774,
+      "sequence_index": 129,
+      "timestamp_seconds": 25.79811602434077,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000774.jpg"
+    },
+    {
+      "frame_index": 780,
+      "sequence_index": 130,
+      "timestamp_seconds": 25.998101419878296,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000780.jpg"
+    },
+    {
+      "frame_index": 786,
+      "sequence_index": 131,
+      "timestamp_seconds": 26.198086815415824,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000786.jpg"
+    },
+    {
+      "frame_index": 792,
+      "sequence_index": 132,
+      "timestamp_seconds": 26.398072210953348,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000792.jpg"
+    },
+    {
+      "frame_index": 798,
+      "sequence_index": 133,
+      "timestamp_seconds": 26.598057606490872,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000798.jpg"
+    },
+    {
+      "frame_index": 804,
+      "sequence_index": 134,
+      "timestamp_seconds": 26.7980430020284,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000804.jpg"
+    },
+    {
+      "frame_index": 810,
+      "sequence_index": 135,
+      "timestamp_seconds": 26.998028397565925,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000810.jpg"
+    },
+    {
+      "frame_index": 816,
+      "sequence_index": 136,
+      "timestamp_seconds": 27.19801379310345,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000816.jpg"
+    },
+    {
+      "frame_index": 822,
+      "sequence_index": 137,
+      "timestamp_seconds": 27.397999188640974,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000822.jpg"
+    },
+    {
+      "frame_index": 828,
+      "sequence_index": 138,
+      "timestamp_seconds": 27.5979845841785,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000828.jpg"
+    },
+    {
+      "frame_index": 834,
+      "sequence_index": 139,
+      "timestamp_seconds": 27.797969979716026,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000834.jpg"
+    },
+    {
+      "frame_index": 840,
+      "sequence_index": 140,
+      "timestamp_seconds": 27.99795537525355,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000840.jpg"
+    },
+    {
+      "frame_index": 846,
+      "sequence_index": 141,
+      "timestamp_seconds": 28.197940770791075,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000846.jpg"
+    },
+    {
+      "frame_index": 852,
+      "sequence_index": 142,
+      "timestamp_seconds": 28.397926166328602,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000852.jpg"
+    },
+    {
+      "frame_index": 858,
+      "sequence_index": 143,
+      "timestamp_seconds": 28.597911561866127,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000858.jpg"
+    },
+    {
+      "frame_index": 864,
+      "sequence_index": 144,
+      "timestamp_seconds": 28.79789695740365,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000864.jpg"
+    },
+    {
+      "frame_index": 870,
+      "sequence_index": 145,
+      "timestamp_seconds": 28.99788235294118,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000870.jpg"
+    },
+    {
+      "frame_index": 876,
+      "sequence_index": 146,
+      "timestamp_seconds": 29.197867748478703,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000876.jpg"
+    },
+    {
+      "frame_index": 882,
+      "sequence_index": 147,
+      "timestamp_seconds": 29.397853144016228,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000882.jpg"
+    },
+    {
+      "frame_index": 888,
+      "sequence_index": 148,
+      "timestamp_seconds": 29.597838539553752,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000888.jpg"
+    },
+    {
+      "frame_index": 894,
+      "sequence_index": 149,
+      "timestamp_seconds": 29.79782393509128,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000894.jpg"
+    },
+    {
+      "frame_index": 900,
+      "sequence_index": 150,
+      "timestamp_seconds": 29.997809330628805,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000900.jpg"
+    },
+    {
+      "frame_index": 906,
+      "sequence_index": 151,
+      "timestamp_seconds": 30.19779472616633,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000906.jpg"
+    },
+    {
+      "frame_index": 912,
+      "sequence_index": 152,
+      "timestamp_seconds": 30.397780121703857,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000912.jpg"
+    },
+    {
+      "frame_index": 918,
+      "sequence_index": 153,
+      "timestamp_seconds": 30.59776551724138,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000918.jpg"
+    },
+    {
+      "frame_index": 924,
+      "sequence_index": 154,
+      "timestamp_seconds": 30.797750912778906,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000924.jpg"
+    },
+    {
+      "frame_index": 930,
+      "sequence_index": 155,
+      "timestamp_seconds": 30.99773630831643,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000930.jpg"
+    },
+    {
+      "frame_index": 936,
+      "sequence_index": 156,
+      "timestamp_seconds": 31.197721703853958,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000936.jpg"
+    },
+    {
+      "frame_index": 942,
+      "sequence_index": 157,
+      "timestamp_seconds": 31.397707099391482,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000942.jpg"
+    },
+    {
+      "frame_index": 948,
+      "sequence_index": 158,
+      "timestamp_seconds": 31.597692494929007,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000948.jpg"
+    },
+    {
+      "frame_index": 954,
+      "sequence_index": 159,
+      "timestamp_seconds": 31.797677890466534,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000954.jpg"
+    },
+    {
+      "frame_index": 960,
+      "sequence_index": 160,
+      "timestamp_seconds": 31.99766328600406,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000960.jpg"
+    },
+    {
+      "frame_index": 966,
+      "sequence_index": 161,
+      "timestamp_seconds": 32.19764868154159,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000966.jpg"
+    },
+    {
+      "frame_index": 972,
+      "sequence_index": 162,
+      "timestamp_seconds": 32.39763407707911,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000972.jpg"
+    },
+    {
+      "frame_index": 978,
+      "sequence_index": 163,
+      "timestamp_seconds": 32.597619472616636,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000978.jpg"
+    },
+    {
+      "frame_index": 984,
+      "sequence_index": 164,
+      "timestamp_seconds": 32.79760486815416,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000984.jpg"
+    },
+    {
+      "frame_index": 990,
+      "sequence_index": 165,
+      "timestamp_seconds": 32.997590263691684,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000990.jpg"
+    },
+    {
+      "frame_index": 996,
+      "sequence_index": 166,
+      "timestamp_seconds": 33.19757565922921,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_000996.jpg"
+    },
+    {
+      "frame_index": 1002,
+      "sequence_index": 167,
+      "timestamp_seconds": 33.39756105476673,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001002.jpg"
+    },
+    {
+      "frame_index": 1008,
+      "sequence_index": 168,
+      "timestamp_seconds": 33.597546450304264,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001008.jpg"
+    },
+    {
+      "frame_index": 1014,
+      "sequence_index": 169,
+      "timestamp_seconds": 33.79753184584179,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001014.jpg"
+    },
+    {
+      "frame_index": 1020,
+      "sequence_index": 170,
+      "timestamp_seconds": 33.99751724137931,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001020.jpg"
+    },
+    {
+      "frame_index": 1026,
+      "sequence_index": 171,
+      "timestamp_seconds": 34.19750263691684,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001026.jpg"
+    },
+    {
+      "frame_index": 1032,
+      "sequence_index": 172,
+      "timestamp_seconds": 34.39748803245436,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001032.jpg"
+    },
+    {
+      "frame_index": 1038,
+      "sequence_index": 173,
+      "timestamp_seconds": 34.597473427991886,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001038.jpg"
+    },
+    {
+      "frame_index": 1044,
+      "sequence_index": 174,
+      "timestamp_seconds": 34.79745882352941,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001044.jpg"
+    },
+    {
+      "frame_index": 1050,
+      "sequence_index": 175,
+      "timestamp_seconds": 34.997444219066935,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001050.jpg"
+    },
+    {
+      "frame_index": 1056,
+      "sequence_index": 176,
+      "timestamp_seconds": 35.19742961460447,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001056.jpg"
+    },
+    {
+      "frame_index": 1062,
+      "sequence_index": 177,
+      "timestamp_seconds": 35.39741501014199,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001062.jpg"
+    },
+    {
+      "frame_index": 1068,
+      "sequence_index": 178,
+      "timestamp_seconds": 35.597400405679515,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001068.jpg"
+    },
+    {
+      "frame_index": 1074,
+      "sequence_index": 179,
+      "timestamp_seconds": 35.79738580121704,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001074.jpg"
+    },
+    {
+      "frame_index": 1080,
+      "sequence_index": 180,
+      "timestamp_seconds": 35.997371196754564,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001080.jpg"
+    },
+    {
+      "frame_index": 1086,
+      "sequence_index": 181,
+      "timestamp_seconds": 36.19735659229209,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001086.jpg"
+    },
+    {
+      "frame_index": 1092,
+      "sequence_index": 182,
+      "timestamp_seconds": 36.39734198782961,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001092.jpg"
+    },
+    {
+      "frame_index": 1098,
+      "sequence_index": 183,
+      "timestamp_seconds": 36.597327383367144,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001098.jpg"
+    },
+    {
+      "frame_index": 1104,
+      "sequence_index": 184,
+      "timestamp_seconds": 36.79731277890467,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001104.jpg"
+    },
+    {
+      "frame_index": 1110,
+      "sequence_index": 185,
+      "timestamp_seconds": 36.99729817444219,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001110.jpg"
+    },
+    {
+      "frame_index": 1116,
+      "sequence_index": 186,
+      "timestamp_seconds": 37.19728356997972,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001116.jpg"
+    },
+    {
+      "frame_index": 1122,
+      "sequence_index": 187,
+      "timestamp_seconds": 37.39726896551724,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001122.jpg"
+    },
+    {
+      "frame_index": 1128,
+      "sequence_index": 188,
+      "timestamp_seconds": 37.597254361054766,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001128.jpg"
+    },
+    {
+      "frame_index": 1134,
+      "sequence_index": 189,
+      "timestamp_seconds": 37.79723975659229,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001134.jpg"
+    },
+    {
+      "frame_index": 1140,
+      "sequence_index": 190,
+      "timestamp_seconds": 37.99722515212982,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001140.jpg"
+    },
+    {
+      "frame_index": 1146,
+      "sequence_index": 191,
+      "timestamp_seconds": 38.197210547667346,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001146.jpg"
+    },
+    {
+      "frame_index": 1152,
+      "sequence_index": 192,
+      "timestamp_seconds": 38.39719594320487,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001152.jpg"
+    },
+    {
+      "frame_index": 1158,
+      "sequence_index": 193,
+      "timestamp_seconds": 38.597181338742395,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001158.jpg"
+    },
+    {
+      "frame_index": 1164,
+      "sequence_index": 194,
+      "timestamp_seconds": 38.79716673427992,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001164.jpg"
+    },
+    {
+      "frame_index": 1170,
+      "sequence_index": 195,
+      "timestamp_seconds": 38.997152129817444,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001170.jpg"
+    },
+    {
+      "frame_index": 1176,
+      "sequence_index": 196,
+      "timestamp_seconds": 39.19713752535497,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001176.jpg"
+    },
+    {
+      "frame_index": 1182,
+      "sequence_index": 197,
+      "timestamp_seconds": 39.3971229208925,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001182.jpg"
+    },
+    {
+      "frame_index": 1188,
+      "sequence_index": 198,
+      "timestamp_seconds": 39.597108316430024,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001188.jpg"
+    },
+    {
+      "frame_index": 1194,
+      "sequence_index": 199,
+      "timestamp_seconds": 39.79709371196755,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001194.jpg"
+    },
+    {
+      "frame_index": 1200,
+      "sequence_index": 200,
+      "timestamp_seconds": 39.99707910750507,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001200.jpg"
+    },
+    {
+      "frame_index": 1206,
+      "sequence_index": 201,
+      "timestamp_seconds": 40.1970645030426,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001206.jpg"
+    },
+    {
+      "frame_index": 1212,
+      "sequence_index": 202,
+      "timestamp_seconds": 40.39704989858012,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001212.jpg"
+    },
+    {
+      "frame_index": 1218,
+      "sequence_index": 203,
+      "timestamp_seconds": 40.597035294117646,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001218.jpg"
+    },
+    {
+      "frame_index": 1224,
+      "sequence_index": 204,
+      "timestamp_seconds": 40.79702068965518,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001224.jpg"
+    },
+    {
+      "frame_index": 1230,
+      "sequence_index": 205,
+      "timestamp_seconds": 40.9970060851927,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001230.jpg"
+    },
+    {
+      "frame_index": 1236,
+      "sequence_index": 206,
+      "timestamp_seconds": 41.196991480730226,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001236.jpg"
+    },
+    {
+      "frame_index": 1242,
+      "sequence_index": 207,
+      "timestamp_seconds": 41.39697687626775,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001242.jpg"
+    },
+    {
+      "frame_index": 1248,
+      "sequence_index": 208,
+      "timestamp_seconds": 41.596962271805275,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001248.jpg"
+    },
+    {
+      "frame_index": 1254,
+      "sequence_index": 209,
+      "timestamp_seconds": 41.7969476673428,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001254.jpg"
+    },
+    {
+      "frame_index": 1260,
+      "sequence_index": 210,
+      "timestamp_seconds": 41.99693306288032,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001260.jpg"
+    },
+    {
+      "frame_index": 1266,
+      "sequence_index": 211,
+      "timestamp_seconds": 42.196918458417855,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001266.jpg"
+    },
+    {
+      "frame_index": 1272,
+      "sequence_index": 212,
+      "timestamp_seconds": 42.39690385395538,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001272.jpg"
+    },
+    {
+      "frame_index": 1278,
+      "sequence_index": 213,
+      "timestamp_seconds": 42.596889249492904,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001278.jpg"
+    },
+    {
+      "frame_index": 1284,
+      "sequence_index": 214,
+      "timestamp_seconds": 42.79687464503043,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001284.jpg"
+    },
+    {
+      "frame_index": 1290,
+      "sequence_index": 215,
+      "timestamp_seconds": 42.99686004056795,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001290.jpg"
+    },
+    {
+      "frame_index": 1296,
+      "sequence_index": 216,
+      "timestamp_seconds": 43.19684543610548,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001296.jpg"
+    },
+    {
+      "frame_index": 1302,
+      "sequence_index": 217,
+      "timestamp_seconds": 43.396830831643,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001302.jpg"
+    },
+    {
+      "frame_index": 1308,
+      "sequence_index": 218,
+      "timestamp_seconds": 43.59681622718053,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001308.jpg"
+    },
+    {
+      "frame_index": 1314,
+      "sequence_index": 219,
+      "timestamp_seconds": 43.79680162271806,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001314.jpg"
+    },
+    {
+      "frame_index": 1320,
+      "sequence_index": 220,
+      "timestamp_seconds": 43.99678701825558,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001320.jpg"
+    },
+    {
+      "frame_index": 1326,
+      "sequence_index": 221,
+      "timestamp_seconds": 44.196772413793106,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001326.jpg"
+    },
+    {
+      "frame_index": 1332,
+      "sequence_index": 222,
+      "timestamp_seconds": 44.39675780933063,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001332.jpg"
+    },
+    {
+      "frame_index": 1338,
+      "sequence_index": 223,
+      "timestamp_seconds": 44.596743204868154,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001338.jpg"
+    },
+    {
+      "frame_index": 1344,
+      "sequence_index": 224,
+      "timestamp_seconds": 44.79672860040568,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001344.jpg"
+    },
+    {
+      "frame_index": 1350,
+      "sequence_index": 225,
+      "timestamp_seconds": 44.9967139959432,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001350.jpg"
+    },
+    {
+      "frame_index": 1356,
+      "sequence_index": 226,
+      "timestamp_seconds": 45.196699391480735,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001356.jpg"
+    },
+    {
+      "frame_index": 1362,
+      "sequence_index": 227,
+      "timestamp_seconds": 45.39668478701826,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001362.jpg"
+    },
+    {
+      "frame_index": 1368,
+      "sequence_index": 228,
+      "timestamp_seconds": 45.59667018255578,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001368.jpg"
+    },
+    {
+      "frame_index": 1374,
+      "sequence_index": 229,
+      "timestamp_seconds": 45.79665557809331,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001374.jpg"
+    },
+    {
+      "frame_index": 1380,
+      "sequence_index": 230,
+      "timestamp_seconds": 45.99664097363083,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001380.jpg"
+    },
+    {
+      "frame_index": 1386,
+      "sequence_index": 231,
+      "timestamp_seconds": 46.19662636916836,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001386.jpg"
+    },
+    {
+      "frame_index": 1392,
+      "sequence_index": 232,
+      "timestamp_seconds": 46.39661176470588,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001392.jpg"
+    },
+    {
+      "frame_index": 1398,
+      "sequence_index": 233,
+      "timestamp_seconds": 46.59659716024341,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001398.jpg"
+    },
+    {
+      "frame_index": 1404,
+      "sequence_index": 234,
+      "timestamp_seconds": 46.79658255578094,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001404.jpg"
+    },
+    {
+      "frame_index": 1410,
+      "sequence_index": 235,
+      "timestamp_seconds": 46.99656795131846,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001410.jpg"
+    },
+    {
+      "frame_index": 1416,
+      "sequence_index": 236,
+      "timestamp_seconds": 47.196553346855985,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001416.jpg"
+    },
+    {
+      "frame_index": 1422,
+      "sequence_index": 237,
+      "timestamp_seconds": 47.39653874239351,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001422.jpg"
+    },
+    {
+      "frame_index": 1428,
+      "sequence_index": 238,
+      "timestamp_seconds": 47.596524137931034,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001428.jpg"
+    },
+    {
+      "frame_index": 1434,
+      "sequence_index": 239,
+      "timestamp_seconds": 47.79650953346856,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001434.jpg"
+    },
+    {
+      "frame_index": 1440,
+      "sequence_index": 240,
+      "timestamp_seconds": 47.99649492900609,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001440.jpg"
+    },
+    {
+      "frame_index": 1446,
+      "sequence_index": 241,
+      "timestamp_seconds": 48.196480324543614,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001446.jpg"
+    },
+    {
+      "frame_index": 1452,
+      "sequence_index": 242,
+      "timestamp_seconds": 48.39646572008114,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001452.jpg"
+    },
+    {
+      "frame_index": 1458,
+      "sequence_index": 243,
+      "timestamp_seconds": 48.59645111561866,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001458.jpg"
+    },
+    {
+      "frame_index": 1464,
+      "sequence_index": 244,
+      "timestamp_seconds": 48.79643651115619,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001464.jpg"
+    },
+    {
+      "frame_index": 1470,
+      "sequence_index": 245,
+      "timestamp_seconds": 48.99642190669371,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001470.jpg"
+    },
+    {
+      "frame_index": 1476,
+      "sequence_index": 246,
+      "timestamp_seconds": 49.196407302231236,
+      "image_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Tools\\Video2Image\\frames\\frame_001476.jpg"
+    }
+  ]
+}
