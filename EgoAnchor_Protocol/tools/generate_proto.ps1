@@ -1,17 +1,15 @@
 param(
     [string]$ProtocolRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$PythonOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python")).Path "src_v3"),
-    [string]$UnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v3\EgoAnchor\Protocol"),
+    [string]$PythonOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python")).Path "src"),
+    [string]$UnityProtocolOut = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts\EgoAnchor\Protocol"),
     [string]$CSharpOut = (Join-Path $UnityProtocolOut "Generated"),
-    [string]$CSharpNamespace = "EgoAnchor.V3.Protocol.Generated",
-    [switch]$GenerateV2,
-    [string]$PythonOutV2 = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Python")).Path "src_v2"),
-    [string]$UnityProtocolOutV2 = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\EgoAnchor\Protocol"),
-    [string]$CSharpOutV2 = (Join-Path $UnityProtocolOutV2 "Generated"),
-    [string]$LegacyUnityProtocolOutV2 = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\EgoAnchor_Unity")).Path "Assets\Scripts_v2\Protocol")
+    [string]$CSharpNamespace = "EgoAnchor.Protocol.Generated"
 )
 
+$ErrorActionPreference = "Stop"
+
 $ProtoRoot = Join-Path $ProtocolRoot "proto"
+$Protoc = Get-Command protoc -ErrorAction Stop
 New-Item -ItemType Directory -Force -Path $PythonOut | Out-Null
 New-Item -ItemType Directory -Force -Path $CSharpOut | Out-Null
 New-Item -ItemType Directory -Force -Path $UnityProtocolOut | Out-Null
@@ -28,17 +26,27 @@ function Invoke-PythonProtoGeneration {
     )
 
     New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
-    if (Test-Path (Join-Path $OutputRoot "protocol")) {
-        Remove-Item -Recurse -Force (Join-Path $OutputRoot "protocol")
+    $tempRoot = Join-Path $OutputRoot ".proto_gen_tmp"
+    if (Test-Path $tempRoot) {
+        Remove-Item -Recurse -Force $tempRoot
     }
-    protoc --proto_path=$ProtoRoot --python_out=$OutputRoot $ProtoFiles
+    New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+    & $Protoc.Source --proto_path=$ProtoRoot --python_out=$tempRoot $ProtoFiles
+    if ($LASTEXITCODE -ne 0) {
+        throw "protoc Python generation failed with exit code $LASTEXITCODE"
+    }
+    $tempV1 = Join-Path $tempRoot "protocol\v1"
+    if (-not (Test-Path $tempV1)) {
+        throw "protoc Python generation did not produce protocol\v1"
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $OutputRoot "egoanchor") | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $OutputRoot "egoanchor\protocol") | Out-Null
-    if (Test-Path (Join-Path $OutputRoot "egoanchor\protocol\v1")) {
-        Remove-Item -Recurse -Force (Join-Path $OutputRoot "egoanchor\protocol\v1")
+    $targetV1 = Join-Path $OutputRoot "egoanchor\protocol\v1"
+    if (Test-Path $targetV1) {
+        Remove-Item -Recurse -Force $targetV1
     }
-    Move-Item (Join-Path $OutputRoot "protocol\v1") (Join-Path $OutputRoot "egoanchor\protocol\v1")
-    Remove-Item -Recurse -Force (Join-Path $OutputRoot "protocol")
+    Move-Item $tempV1 $targetV1
+    Remove-Item -Recurse -Force $tempRoot
     if (-not (Test-Path (Join-Path $OutputRoot "egoanchor\protocol\__init__.py"))) {
         Set-Content -Path (Join-Path $OutputRoot "egoanchor\protocol\__init__.py") -Value "# protocol package`n" -Encoding UTF8
     }
@@ -107,14 +115,25 @@ function Invoke-CSharpProtoGeneration {
         [Parameter(Mandatory=$false)][string]$NamespaceReplacement = "",
         [Parameter(Mandatory=$false)][string]$GeneratedRootOverride = "",
         [Parameter(Mandatory=$false)][string]$SubjectConstantsFileName = "SubjectNames.cs",
-        [Parameter(Mandatory=$false)][string]$SubjectConstantsClassName = "SubjectNames",
-        [Parameter(Mandatory=$false)][string]$LegacySubjectConstantsFileName = "ChannelNames.cs"
+        [Parameter(Mandatory=$false)][string]$SubjectConstantsClassName = "SubjectNames"
     )
 
     $generatedRoot = if ([string]::IsNullOrWhiteSpace($GeneratedRootOverride)) { Join-Path $UnityProtocolRoot "Generated" } else { $GeneratedRootOverride }
     New-Item -ItemType Directory -Force -Path $generatedRoot | Out-Null
     New-Item -ItemType Directory -Force -Path $UnityProtocolRoot | Out-Null
-    protoc --proto_path=$ProtoRoot --csharp_out=$generatedRoot $ProtoFiles
+    $tempGeneratedRoot = Join-Path $generatedRoot ".proto_gen_tmp"
+    if (Test-Path $tempGeneratedRoot) {
+        Remove-Item -Recurse -Force $tempGeneratedRoot
+    }
+    New-Item -ItemType Directory -Force -Path $tempGeneratedRoot | Out-Null
+    & $Protoc.Source --proto_path=$ProtoRoot --csharp_out=$tempGeneratedRoot $ProtoFiles
+    if ($LASTEXITCODE -ne 0) {
+        throw "protoc C# generation failed with exit code $LASTEXITCODE"
+    }
+
+    Get-ChildItem -Path $generatedRoot -Filter "*.cs" -File | Remove-Item -Force
+    Get-ChildItem -Path $tempGeneratedRoot -Filter "*.cs" -File | Move-Item -Destination $generatedRoot -Force
+    Remove-Item -Recurse -Force $tempGeneratedRoot
 
     if (-not [string]::IsNullOrWhiteSpace($NamespaceReplacement)) {
         Get-ChildItem -Path $generatedRoot -Filter "*.cs" | ForEach-Object {
@@ -128,12 +147,6 @@ function Invoke-CSharpProtoGeneration {
     $subjectsPath = Join-Path $ProtocolRoot "subjects.v1.json"
     $subjectsJson = Get-Content -Raw -Path $subjectsPath | ConvertFrom-Json -AsHashtable
     $subjectNamesPath = Join-Path $UnityProtocolRoot $SubjectConstantsFileName
-    if (-not [string]::IsNullOrWhiteSpace($LegacySubjectConstantsFileName)) {
-        $legacySubjectNamesPath = Join-Path $UnityProtocolRoot $LegacySubjectConstantsFileName
-        if ($legacySubjectNamesPath -ne $subjectNamesPath -and (Test-Path $legacySubjectNamesPath)) {
-            Remove-Item -Force $legacySubjectNamesPath
-        }
-    }
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("namespace $NamespaceLine")
     $lines.Add("{")
@@ -183,23 +196,4 @@ function Invoke-CSharpProtoGeneration {
 }
 
 Invoke-PythonProtoGeneration -OutputRoot $PythonOut
-Invoke-CSharpProtoGeneration -UnityProtocolRoot $UnityProtocolOut -NamespaceLine "EgoAnchor.V3.Protocol" -NamespaceReplacement $CSharpNamespace -GeneratedRootOverride $CSharpOut -SubjectConstantsFileName "SubjectNames.cs" -SubjectConstantsClassName "SubjectNames" -LegacySubjectConstantsFileName "ChannelNames.cs"
-
-if ($GenerateV2) {
-    Invoke-PythonProtoGeneration -OutputRoot $PythonOutV2
-    Invoke-CSharpProtoGeneration -UnityProtocolRoot $UnityProtocolOutV2 -NamespaceLine "EgoAnchor.V2.Protocol" -GeneratedRootOverride $CSharpOutV2 -SubjectConstantsFileName "ChannelNames.cs" -SubjectConstantsClassName "ChannelNames" -LegacySubjectConstantsFileName ""
-
-    # 旧版本曾把 Unity 生成协议放在 Assets/Scripts_v2/Protocol。
-    # 现在统一收敛到 Assets/Scripts_v2/EgoAnchor/Protocol，避免与业务侧 Protocol 目录重名。
-    if (Test-Path $LegacyUnityProtocolOutV2) {
-        $legacyFull = (Resolve-Path $LegacyUnityProtocolOutV2).Path
-        $unityFull = (Resolve-Path $UnityProtocolOutV2).Path
-        if ($legacyFull -ne $unityFull) {
-            Remove-Item -Recurse -Force $LegacyUnityProtocolOutV2
-        }
-    }
-    $legacyUnityProtocolMeta = "$LegacyUnityProtocolOutV2.meta"
-    if (Test-Path $legacyUnityProtocolMeta) {
-        Remove-Item -Force $legacyUnityProtocolMeta
-    }
-}
+Invoke-CSharpProtoGeneration -UnityProtocolRoot $UnityProtocolOut -NamespaceLine "EgoAnchor.Protocol" -NamespaceReplacement $CSharpNamespace -GeneratedRootOverride $CSharpOut -SubjectConstantsFileName "SubjectNames.cs" -SubjectConstantsClassName "SubjectNames"

@@ -1,0 +1,23 @@
+"""运行配置路径契约测试。"""
+
+from __future__ import annotations
+
+import unittest
+
+from egoanchor.config import load_config
+
+
+class RuntimeConfigPathsTest(unittest.TestCase):
+    """验证默认配置不会回退到旧权重目录。"""
+
+    def test_yoloe_weights_live_under_unified_weights_dir(self) -> None:
+        """YOLOE-26 与 mobileclip2 默认权重都应从 EgoAnchor_Python/weights 读取。"""
+
+        cfg = load_config()
+
+        self.assertEqual(cfg.module.yoloe.model_path, "weights/yoloe-26l-seg.pt")
+        self.assertEqual(cfg.module.yoloe.mobileclip2_path, "weights/mobileclip2_b.ts")
+
+
+if __name__ == "__main__":
+    unittest.main()

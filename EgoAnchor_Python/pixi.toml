@@ -67,7 +67,6 @@ opencv-contrib-python = ">=4.11.0.86, <5"
 imageio = "*"
 pyyaml = "*"
 ultralytics = ">=8.4.26, <9"
-msgpack = "*"
 onnx = ">=1.21.0, <2"
 pillow = ">=12, <13"
 nats-py = ">=2.12.0, <3"
@@ -150,12 +149,18 @@ python src/realsense_foundationstereo_test.py \
 """ }
 
 demo-yoloe = { cmd = """
-python src/pipeline/realsense_object_tracking_pipeline.py \
---mesh_path data/online/cube/mesh/cube.stl \
---yolo_model_path checkpoints/yoloe-26l-seg.pt \
---yolo_prompt "white block"
+python src/yoloe_mask_probe.py \
+--prompt "white block"
+""" }
+
+tool-yoloe26-mask = { cmd = """
+python tools/yoloe26/yoloe26_mask.py
+""" }
+
+test-yoloe26-tool = { cmd = """
+python -m unittest tools\\yoloe26\\test_yoloe26_mask.py
 """ }
 
 demo-pipeline = { cmd = """
-python src/pipeline/quest_object_tracking_pipeline.py
+python src/tracking_server.py
 """ }

@@ -1,0 +1,116 @@
+# EgoAnchor 默认运行配置。
+# 当前主线包含 ZMQ 数据面通信 demo、Python pose debug，以及通过 NATS 发布 PoseResult 给 Unity anchor runtime。
+
+[server]
+run_stage = 4 # Python pose debug 启动阶段：1=输入，2=分割，3=深度，4=完整 pose。
+
+[network.data_plane]
+listen_host = "*" # Python ZMQ SUB 绑定地址；Quest/Unity PUB 连接到这台机器的实际 IP。
+listen_port = 15557 # Unity -> Python 数据面端口；保持新链路默认值，不回退旧 5557。
+receive_hwm = 20 # ZMQ 接收高水位；限制积压，业务层仍按 topic latest-only 处理。
+poll_timeout_ms = 10 # 每轮 poll 最长等待时间，单位毫秒；越小窗口响应越快。
+
+[network.message_plane]
+enabled = true # 是否启用 NATS 消息面；发布 PoseResult，并接收 reset/reacquire/control request-reply 命令。
+url = "nats://127.0.0.1:4222" # NATS server URL；Quest 真机接收时 Unity 侧也应配置到同一开发机地址。
+pose_result_subject = "egoanchor.v1.pose.result" # Python -> Unity PoseResult subject；必须与 subjects.v1.json 保持一致。
+client_name = "egoanchor-python" # Python NATS 客户端名称，便于 nats-server 日志排查。
+connect_timeout_s = 2.0 # 初次连接 NATS 的超时时间，单位秒。
+request_timeout_s = 1.0 # 预留给未来 request/reply 命令的默认超时，当前阶段不使用。
+max_pending_futures = 32 # 后台 publish Future 最大积压数；超过后丢弃新 pose，保持 latest-only。
+wait_ready_on_start = false # 启动时是否等待 NATS 首次连接；false 可避免 nats-server 未启动时阻塞模型加载。
+
+[runtime.commands]
+max_queue_size = 128 # NATS command handler 接受后的内存队列容量；handler 只 ack/enqueue，不直接操作 pipeline。
+dedup_ttl_ms = 60000 # command request_id 幂等缓存时间，单位毫秒；Unity 超时重试同一 request_id 时返回旧 ack。
+execute_per_tick = 8 # 每轮 TrackingRuntime tick 最多执行的命令数量，避免长时间占用主循环。
+
+[pipeline.calibration]
+network_calib_update = true # 收到新的 QuestCameraInfo 且标定变化时刷新 K/FoundationPose。
+assume_center_crop = true # K 映射方式：true=中心裁剪+缩放，false=仅线性缩放。
+process_width = 640 # 算法处理图像宽度；当前 pose debug 固定缩放到该宽度。
+process_height = 480 # 算法处理图像高度；当前 pose debug 固定缩放到该高度。
+
+[pipeline.depth]
+min_depth = 0.1 # 有效深度下限，单位米；低于该值会置零。
+max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可适当增大，但过大可能引入背景深度噪声。
+
+[module.segmenter]
+type = "yoloe26" # 分割后端；当前主线 pose debug 仅实现 yoloe26。
+prompt = "little white cube" # YOLOE-26 文本提示词，用于定位目标物体。
+max_det = 1 # 最多保留检测数量；默认单目标，避免多误检 union 污染 pose。
+mask_threshold = 0.5 # mask 二值化阈值。
+
+[module.yoloe]
+model_path = "weights/yoloe-26l-seg.pt" # YOLOE-26 segmentation 权重路径，相对 EgoAnchor_Python，统一放在 weights 目录。
+mobileclip2_path = "weights/mobileclip2_b.ts" # YOLOE 文本编码器本地路径，相对 EgoAnchor_Python，统一放在 weights 目录。
+conf = 0.1 # YOLOE 检测置信度阈值；过低容易误检背景。
+imgsz = 640 # YOLOE 推理输入尺寸。
+use_half = false # 是否启用半精度推理；部分环境下可提速。
+device = "auto" # YOLOE 推理设备：auto、cpu、cuda 或 GPU 序号字符串。
+
+[module.ffs]
+model_dir = "Fast-FoundationStereo/weights/23-36-37" # Fast-FoundationStereo 权重目录或 pth 文件路径，相对 EgoAnchor_Python。
+device = "cuda" # FFS 推理设备；CUDA 不可用时实现会回退 CPU。
+scale = 1.0 # FFS 内部输入缩放比例；越小越快但精度下降。
+valid_iters = 4 # FFS recurrent refine 迭代次数。
+max_disp = 192 # FFS 最大视差，也参与 TRT engine 自动匹配。
+optimize_build_volume = "triton" # PyTorch 路径 cost-volume 后端；triton 不可用会回退 pytorch1。
+seed = -1 # 随机种子；<0 表示速度优先，>=0 表示确定性模式。
+cudnn_benchmark = true # 固定输入尺寸时启用 cudnn.benchmark 提速。
+use_trt = true # 是否优先使用 TensorRT engine。
+trt_precision = "fp16" # TensorRT engine 精度标签。
+trt_strict = false # true=TRT 缺失/失败直接报错；false=自动回退 PyTorch。
+trt_tag = "" # 显式 TRT artifact tag；空值按尺寸/iters/max_disp 自动生成。
+trt_platform_tag = "" # 显式 TRT 平台标签；空值自动识别 win/linux/mac。
+trt_feature_engine_path = "" # 显式 feature runner engine 路径；空值自动查找。
+trt_post_engine_path = "" # 显式 post runner engine 路径；空值自动查找。
+
+[module.foundationpose]
+mesh_path = "data/online/cube/mesh/cube.stl" # FoundationPose 目标物体 mesh 路径，相对 EgoAnchor_Python。
+est_refine_iter = 5 # register 阶段 refine 迭代次数。
+track_refine_iter = 2 # track 阶段 refine 迭代次数。
+apply_scale = 1.0 # 加载 mesh 后应用的尺度缩放，默认保持 mesh 原尺度。
+force_apply_color = false # 是否给 mesh 强制添加纯色纹理。
+apply_color = [0, 159, 237] # 强制纹理颜色，RGB 顺序。
+symmetry_mode = "cube" # 对称约束模式：none、cube 或 axis。
+symmetry_axis = "z" # symmetry_mode=axis 时的旋转轴。
+symmetry_count = 36 # symmetry_mode=axis 时离散旋转数量。
+register_min_depth_valid_in_mask = 0.2 # register/re-register 前 mask 内有效深度比例下限。
+re_register_on_track_lost = true # track 失败或跳变时是否用当前 2D mask 重新 register。
+pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位米；快速移动/近距离视角变化时可继续调大。
+pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
+accept_track_jump_without_mask = true # track 跳变但当前没有可用 re-register mask 时是否暂时接受该 pose，避免直接输出 no_pose 导致 anchor 卡住。
+max_consecutive_track_rejects = 3 # 连续 track reject 达到该值后强制回到 detect/register，避免长时间漂移。
+debug = 0 # FoundationPose 内部 debug 等级。
+debug_dir = "FoundationPose/debug/api" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
+
+[module.cutie]
+enabled = true # 是否启用 Cutie 进行 2D mask 时序传播。
+seg_threshold = 0.1 # Cutie 分割概率阈值。
+erosion_size = 5 # Cutie mask 提取 bbox 前的腐蚀核大小，单位像素。
+adjust_pose = true # 是否用 Cutie bbox 中心轻量修正 FoundationPose pose_last 的图像平面平移。
+
+[debug]
+enable_tracking_window = true # tracking_server 是否默认显示 OpenCV debug 窗口；当前 Python debug 阶段保持开启。
+pipeline_stats_interval = 30 # 每处理多少帧打印一次 pose pipeline 性能统计。
+show_mask_snapshot = true # 首次有效 mask 时是否弹出真实下游 mask 快照。
+mask_snapshot_window = "EgoAnchor Mask Snapshot" # mask snapshot 的 OpenCV 窗口名。
+mask_snapshot_width = 1440 # mask snapshot 固定窗口宽度，单位像素；当前预留给后续扩展。
+mask_snapshot_height = 420 # mask snapshot 固定窗口高度，单位像素；当前预留给后续扩展。
+
+[demo.video]
+window_name = "EgoAnchor Quest Stereo" # OpenCV 实时预览窗口名称。
+stereo_window_width = 1280 # 预览窗口初始宽度，单位像素。
+stereo_window_height = 480 # 预览窗口初始高度，单位像素。
+stats_interval_frames = 60 # 每显示多少帧打印一次聚合接收统计。
+wait_log_interval_s = 3.0 # 尚未收到 stereo 时等待日志输出间隔，单位秒。
+
+[demo.pose]
+debug_window_name = "EgoAnchor Pose Debug" # Python 本地 pose debug 主窗口名。
+stereo_window_name = "EgoAnchor Stereo" # Python 本地 stereo 辅助窗口名。
+debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
+debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
+stereo_window_width = 1280 # stereo 辅助窗口固定宽度，单位像素。
+stereo_window_height = 480 # stereo 辅助窗口固定高度，单位像素。
+wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。
