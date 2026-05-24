@@ -9,3 +9,7 @@ __pycache__/
 
 # Generated paper build outputs
 /2026-EgoAnchor/pdf/
+EgoAnchor_Blender/ai_model/
+EgoAnchor_Blender/plugin/
+*.blend
+*.blend1

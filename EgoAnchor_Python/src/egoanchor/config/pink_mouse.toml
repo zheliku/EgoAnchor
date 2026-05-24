@@ -1,0 +1,23 @@
+# EgoAnchor mouse object override.
+# 本文件位于 配置包目录，可通过 --config .\src\egoanchor\config\mouse.toml 使用。
+# 它只覆盖 defaults.toml 中与 mouse 目标相关的参数。
+
+[module.segmenter]
+prompt = "pink mouse" # YOLOE-26 文本提示词；若检测不到，可运行时用 --prompt 覆盖。
+max_det = 1 # 单目标追踪，避免多个误检 mask union 污染 pose。
+mask_threshold = 0.5 # mask 二值化阈值；mask 破碎可降到 0.4。
+
+[module.yoloe]
+conf = 0.2 # 鼠标目标颜色偏浅，先用稍低阈值提高召回；误检多时调回 0.1~0.15。
+
+[module.foundationpose]
+mesh_path = "data/online/mouse/pink_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径；GLB 中的 PBR baseColorTexture 可被当前适配器读取。
+apply_scale = 0.12 # 若 GLB 单位已经是米或与真实物体一致，保持 1.0；尺寸不对时调整这里。
+# force_apply_color = true # 是否给 mesh 强制添加纯色纹理。
+# apply_color = [161, 170, 169] # 强制纹理颜色，RGB 顺序。
+est_refine_iter = 5 # 鼠标重建网格面数较多，先降低初始 register 迭代；确认可跑通后再逐步调高到 2~5。
+track_refine_iter = 2 # 先降低每帧 track 迭代，避免调试阶段看起来卡死；稳定后可调回 2。
+symmetry_mode = "none" # 鼠标不是 cube 对称体，不能沿用 cube 对称约束。
+register_min_depth_valid_in_mask = 0.15 # 初始 register 的 mask 内有效深度比例阈值；深度不稳可临时降到 0.1。
+
+
