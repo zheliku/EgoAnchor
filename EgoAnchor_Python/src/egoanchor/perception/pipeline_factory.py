@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Yoloe26Segmenter
+from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Sam3Segmenter, Yoloe26Segmenter
 from egoanchor.perception import QuestPosePipeline
 
 
@@ -39,6 +39,22 @@ def _normalize_yolo_device(device: str) -> str | int | None:
     if value.isdigit():
         return int(value)
     return value
+
+
+def normalize_segmenter_type(segmenter_cfg: SimpleNamespace) -> str:
+    """规范化分割后端类型，并尽早拒绝未知值。"""
+
+    value = str(_cfg_get(segmenter_cfg, "type", "yoloe26")).strip().lower()
+    aliases = {
+        "yolo": "yoloe26",
+        "yoloe": "yoloe26",
+        "yoloe26": "yoloe26",
+        "sam3": "sam3",
+    }
+    normalized = aliases.get(value)
+    if normalized is None:
+        raise ValueError(f"未知分割后端 {value!r}，仅支持 yoloe26 或 sam3。")
+    return normalized
 
 
 def _generate_cube_symmetry_tfs() -> np.ndarray:
@@ -119,6 +135,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     python_root = Path(cfg.paths.python_root)
     segmenter_cfg = cfg.module.segmenter
     yolo_cfg = cfg.module.yoloe
+    sam3_cfg = cfg.module.sam3
     ffs_cfg = cfg.module.ffs
     fp_cfg = cfg.module.foundationpose
     cutie_cfg = cfg.module.cutie
@@ -126,21 +143,31 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     depth_cfg = cfg.pipeline.depth
     debug_cfg = cfg.debug
 
-    segmenter_type = str(_cfg_get(segmenter_cfg, "type", "yoloe26")).lower()
-    if segmenter_type != "yoloe26":
-        raise ValueError(f"当前主线只支持 yoloe26 segmenter，实际为 {segmenter_type!r}")
-
-    segmenter = Yoloe26Segmenter(
-        model_path=_resolve_path(str(yolo_cfg.model_path), python_root),
-        init_prompt=str(segmenter_cfg.prompt),
-        conf=float(yolo_cfg.conf),
-        imgsz=int(yolo_cfg.imgsz),
-        max_det=int(segmenter_cfg.max_det),
-        mask_threshold=float(segmenter_cfg.mask_threshold),
-        use_half=bool(yolo_cfg.use_half),
-        device=_normalize_yolo_device(str(yolo_cfg.device)),
-        mobileclip2_path=str(_resolve_path(str(yolo_cfg.mobileclip2_path), python_root)),
-    )
+    segmenter_type = normalize_segmenter_type(segmenter_cfg)
+    if segmenter_type == "yoloe26":
+        segmenter = Yoloe26Segmenter(
+            model_path=_resolve_path(str(yolo_cfg.model_path), python_root),
+            init_prompt=str(segmenter_cfg.prompt),
+            conf=float(yolo_cfg.conf),
+            imgsz=int(yolo_cfg.imgsz),
+            max_det=int(segmenter_cfg.max_det),
+            mask_threshold=float(segmenter_cfg.mask_threshold),
+            use_half=bool(yolo_cfg.use_half),
+            device=_normalize_yolo_device(str(yolo_cfg.device)),
+            mobileclip2_path=str(_resolve_path(str(yolo_cfg.mobileclip2_path), python_root)),
+        )
+    else:
+        segmenter = Sam3Segmenter(
+            repo_path=_resolve_path(str(sam3_cfg.repo_path), python_root),
+            checkpoint_path=_resolve_path(str(sam3_cfg.checkpoint_path), python_root),
+            init_prompt=str(segmenter_cfg.prompt),
+            confidence_threshold=float(sam3_cfg.confidence_threshold),
+            resolution=int(sam3_cfg.resolution),
+            mask_threshold=float(sam3_cfg.mask_threshold),
+            device=str(sam3_cfg.device),
+            load_from_hf=bool(sam3_cfg.load_from_hf),
+            disable_position_precompute=bool(_cfg_get(sam3_cfg, "disable_position_precompute", True)),
+        )
 
     depth_estimator = FastFoundationStereoDepth(
         model_dir=_resolve_path(str(ffs_cfg.model_dir), python_root),
@@ -207,6 +234,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
 
     return QuestPosePipeline(
         segmenter=segmenter,
+        segmenter_name=segmenter_type,
         depth_estimator=depth_estimator,
         foundationpose_estimator=foundationpose_estimator,
         cutie_tracker=cutie_tracker,
@@ -228,4 +256,3 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         show_mask_snapshot=bool(debug_cfg.show_mask_snapshot),
         mask_snapshot_window=str(debug_cfg.mask_snapshot_window),
     )
-

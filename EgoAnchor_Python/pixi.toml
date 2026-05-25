@@ -157,6 +157,10 @@ tool-yoloe26-mask = { cmd = """
 python tools/yoloe26/yoloe26_mask.py
 """ }
 
+tool-sam3-mask = { cmd = """
+python tools/sam3/sam3_mask.py
+""" }
+
 test-yoloe26-tool = { cmd = """
 python -m unittest tools\\yoloe26\\test_yoloe26_mask.py
 """ }

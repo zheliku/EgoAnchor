@@ -1,4 +1,4 @@
-"""Quest stereo + YOLOE + FFS + FoundationPose 的 pose pipeline。
+"""Quest stereo + 可切换分割后端 + FFS + FoundationPose 的 pose pipeline。
 
 本文件实现 Python 侧本地 debug 用的感知主流程。它接收已由 runtime 提供的最新
 Quest Protobuf 消息，输出 camera-space PoseObservation 和 OpenCV debug 图像；不
@@ -11,11 +11,12 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
+from typing import Protocol
 
 import cv2
 import numpy as np
 
-from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult, Yoloe26Segmenter
+from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult
 from egoanchor.perception import PoseObservation, QuestStereoCalibration, DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
 from egoanchor.protocol import quest_pb2
 from egoanchor.reliability import score_observation
@@ -26,7 +27,7 @@ class PipelineStepTiming:
     """单帧 pipeline 各阶段耗时。"""
 
     yolo_ms: float = 0.0
-    """YOLOE 分割耗时，单位毫秒。"""
+    """分割后端耗时，单位毫秒；字段名沿用旧 PoseObservation 契约。"""
 
     depth_ms: float = 0.0
     """FFS 深度估计耗时，单位毫秒。"""
@@ -39,6 +40,13 @@ class PipelineStepTiming:
 
     total_ms: float = 0.0
     """整帧处理耗时，单位毫秒。"""
+
+
+class SegmenterBackend(Protocol):
+    """QuestPosePipeline 依赖的最小分割后端接口。"""
+
+    def infer(self, image_bgr: np.ndarray, prompt: str | list[str] | None = None) -> SegmenterResult:
+        """执行单帧分割并返回统一 SegmenterResult。"""
 
 
 @dataclass(slots=True)
@@ -55,7 +63,7 @@ class FrameDiagnostics:
     """当前使用的二值 mask。"""
 
     segmentation_overlay_bgr: np.ndarray | None = None
-    """YOLOE 原始 overlay 图。"""
+    """分割后端原始 overlay 图。"""
 
     depth: np.ndarray | None = None
     """FFS 输出深度图，单位米。"""
@@ -73,13 +81,13 @@ class FrameDiagnostics:
     """当前处理帧 frame_id。"""
 
     det_count: int = 0
-    """YOLOE 检测数量。"""
+    """分割后端返回的检测数量。"""
 
     mask_area_ratio: float = 0.0
     """mask 面积比例。"""
 
     mask_source: str = "none"
-    """当前 mask 来源：none、yoloe 或 cutie。"""
+    """当前 mask 来源：none、yoloe、sam3 或 cutie。"""
 
     cutie_bbox_xywh: tuple[int, int, int, int] = (-1, -1, 0, 0)
     """Cutie 输出 bbox，用于 debug 可视化。"""
@@ -128,7 +136,8 @@ class QuestPosePipeline:
 
     def __init__(
         self,
-        segmenter: Yoloe26Segmenter,
+        segmenter: SegmenterBackend,
+        segmenter_name: str,
         depth_estimator: FastFoundationStereoDepth,
         foundationpose_estimator: FoundationPoseObjectEstimator,
         cutie_tracker: CutieMaskTracker | None,
@@ -153,7 +162,10 @@ class QuestPosePipeline:
         """注入算法组件和 pipeline 策略参数。"""
 
         self.segmenter = segmenter
-        """YOLOE-26 单目标分割器。"""
+        """单目标分割器；可由 YOLOE-26 或 SAM3 提供。"""
+
+        self.segmenter_name = str(segmenter_name)
+        """当前分割后端名称，用于 diagnostics.mask_source。"""
 
         self.depth_estimator = depth_estimator
         """FFS 深度估计器。"""
@@ -334,7 +346,7 @@ class QuestPosePipeline:
             if seg_result.mask_bw is not None and seg_result.mask_area_ratio > 0.0:
                 mask = (seg_result.mask_bw > 0).astype(np.uint8)
                 diagnostics.mask = mask
-                diagnostics.mask_source = "yoloe"
+                diagnostics.mask_source = self.segmenter_name
                 self._show_mask_snapshot_once(mask)
 
             if self.stage <= 2:
@@ -422,7 +434,7 @@ class QuestPosePipeline:
         logging.info("calibration updated: calib=%dx%d baseline=%.4fm fx=%.1f", calibration.calib_width, calibration.calib_height, calibration.baseline_m, self.cam_k[0, 0])
 
     def _run_segmenter(self, left_bgr: np.ndarray, timing: PipelineStepTiming) -> SegmenterResult:
-        """执行 YOLOE 分割并记录耗时。"""
+        """执行分割后端并记录耗时。"""
 
         t0 = time.perf_counter()
         result = self.segmenter.infer(left_bgr)

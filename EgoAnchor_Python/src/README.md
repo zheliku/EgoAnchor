@@ -1,10 +1,11 @@
 # EgoAnchor Python 入口
 
-本目录是 EgoAnchor Python 主线实现的起点。当前包含三个 Python 入口：
+本目录是 EgoAnchor Python 主线实现的起点。当前包含三个 src 入口和一个 RealSense 工具入口：
 
 - **通信 demo**：只验证 Quest/Unity -> Python 的双目图像通信与实时显示，不加载模型。
 - **YOLOE mask probe**：接收同一条 Quest stereo 数据面，只运行 YOLOE-26 并实时显示 overlay/mask，用于快速调 prompt、conf 和 mask 阈值。
-- **tracking server**：接收同一条 ZMQ 数据面，运行 YOLOE-26 + Fast-FoundationStereo + FoundationPose/Cutie，在 Python OpenCV 中显示 debug 结果，并可通过 NATS 向 Unity 发布 camera-space `PoseResult`。
+- **SAM3 RealSense mask tool**：使用 RealSense 彩色流运行 SAM3 文本 prompt 分割，用于不接 Quest 时快速测试耳机盒等目标描述。
+- **tracking server**：接收同一条 ZMQ 数据面，运行可切换 YOLOE-26/SAM3 mask backend + Fast-FoundationStereo + FoundationPose/Cutie，在 Python OpenCV 中显示 debug 结果，并可通过 NATS 向 Unity 发布 camera-space `PoseResult`。
 
 ## 当前链路
 
@@ -59,6 +60,16 @@ OpenCV 热键：
 - `s`：当设置了 `--save-dir` 时保存当前 overlay/mask/stereo 快照。
 - `q` 或 `ESC`：退出。
 
+## Python 运行：SAM3 RealSense mask tool
+
+在 `EgoAnchor_Python` 目录运行：
+
+```powershell
+pixi run tool-sam3-mask
+```
+
+提示词、SAM3 置信度、mask 阈值和 RealSense 相机参数在 `tools/sam3/sam3_mask.py` 顶部常量中配置。该工具使用本地 `sam3/assets/sam3_ckpt/sam3.pt`，用于先确认耳机盒等目标 prompt 是否能产生稳定单目标 mask。
+
 ## Python 运行：tracking server / pose debug / NATS 发布
 
 在 `EgoAnchor_Python` 目录运行：
@@ -79,7 +90,7 @@ pixi run python .\src\tracking_server.py --config .\path\to\override.toml
 OpenCV 热键：
 
 - `1`：只看输入图像。
-- `2`：显示 YOLOE mask 相关 debug。
+- `2`：显示当前分割后端 mask 相关 debug。
 - `3`：显示深度与 mask/depth 对齐质量。
 - `4`：完整 pose register/track 可视化。
 - `r`：重置 FoundationPose/Cutie 时序状态，下一帧重新 register。
@@ -89,15 +100,15 @@ OpenCV 热键：
 
 当前主逻辑写在 `egoanchor/perception/quest_pose_pipeline.py` 的 `QuestPosePipeline.process()`：
 
-1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载 YOLOE、FFS、FoundationPose 和可选 Cutie。
+1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载配置指定的分割后端、FFS、FoundationPose 和可选 Cutie。
 2. 每轮 `TrackingRuntime.tick()` 只取最新 stereo/camera_info，避免旧帧积压。
 3. `QuestPosePipeline.process()` 先用 `camera_info` 更新 K；此时只更新 FoundationPose 适配器的相机矩阵，不重建重模型。
-4. 未成功 register 前，使用 YOLOE-26 找 cube mask，再结合 FFS 深度调用 FoundationPose `register()`。
-5. register 成功后初始化 Cutie。后续正常帧不再要求 YOLOE 每帧检测成功，而是用 Cutie 传播 2D mask，并继续调用 FoundationPose `track()`。
-6. 如果 FoundationPose track 失败或 pose 跳变，才使用当前 Cutie mask 尝试 re-register；如果 Cutie 也失效，则回到等待 YOLOE 重新检测的状态。
+4. 未成功 register 前，按 `module.segmenter.type` 使用 YOLOE-26 或 SAM3 找单目标 mask，再结合 FFS 深度调用 FoundationPose `register()`。
+5. register 成功后初始化 Cutie。后续正常帧不再要求分割后端每帧检测成功，而是用 Cutie 传播 2D mask，并继续调用 FoundationPose `track()`。
+6. 如果 FoundationPose track 失败或 pose 跳变，才使用当前 Cutie mask 尝试 re-register；如果 Cutie 也失效，则回到等待分割后端重新检测的状态。
 7. `diagnostics/debug_view.py` 只负责把 stereo、mask、depth、pose 和 HUD 拼成 OpenCV dashboard。
 
-因此，YOLOE 当前主要负责“首次获取/丢失恢复”，Cutie + FoundationPose 负责“连续跟踪”。HUD 中的 `mask_src=yoloe/cutie` 可以区分当前 mask 来源。
+因此，YOLOE/SAM3 当前主要负责“首次获取/丢失恢复”，Cutie + FoundationPose 负责“连续跟踪”。HUD 中的 `mask_src=yoloe26/sam3/cutie` 可以区分当前 mask 来源。
 
 ## Unity 场景配置：ZMQ 数据面
 
@@ -144,13 +155,13 @@ Inspector 绑定要求：
 - Python 日志出现 `camera_info version=...`：说明标定 topic 已到达。
 - Python 窗口出现左右拼接图：说明 stereo topic、Protobuf 和 JPEG 解码均正常。
 - 如果 stereo 收不到但 camera_info 能收到，优先检查 Unity `StereoFrameSource` 的左右 camera 是否 `IsPlaying`。
-- pose debug 首次启动会加载 YOLOE、FFS、FoundationPose/Cutie，耗时明显长于通信 demo。
+- pose debug 首次启动会加载配置指定的分割后端、FFS、FoundationPose/Cutie，耗时明显长于通信 demo；SAM3 checkpoint 较大，首次加载更慢。
 - 若 Unity `NatsControlClient` 没有 connected 日志，先确认 `nats-server` 已启动、URL/IP 可达、防火墙未拦截 4222。
 - 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例、`frame_id` 是否被 Python 原样透传，以及 Unity 本地 `alignmentReference/latestUsedReference` 是否需要历史 frame pose。
 - 当前主线 Python 感知 pipeline 使用左目图像、左目 K 和左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义上仍是左目 OpenCV camera pose。`PoseToAnchorRuntime.alignmentReference` 是 Unity 本地对齐/诊断策略，不写入通信协议，也不需要服务器知道；Right/Center 可用于本地对照或外参补偿实验，必要时配合 `applyLocalOffset` 做小量残差补偿。
 - 若 raw 物体正常但 smoothed 物体不动，检查 `PoseToAnchorRuntime.processors` 中 processor 是否禁用，或 stable `DynamicObjectAnchor.outputMode` 是否选择了 `Smoothed`。
 - 如果 dashboard 显示 `WAIT_CALIBRATION`，说明 stereo 已到但 camera_info 尚未到达或未成功解析。
-- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt/conf/mask_threshold`。
+- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt` 和当前后端阈值；YOLOE 调 `module.yoloe.conf`，SAM3 调 `module.sam3.confidence_threshold`，也可先用 `tool-sam3-mask` 做 RealSense prompt 对照。
 - 如果显示 `REJECT_DEPTH`，优先检查 K 映射、双目同步、baseline、FFS 权重或 TRT engine。
 
 ## 设计边界

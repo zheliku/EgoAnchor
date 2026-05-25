@@ -39,7 +39,8 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 - Python `src/quest_video_stream_demo.py`：ZMQ/Protobuf 双目通信预览，不加载模型。
 - Python `src/yoloe_mask_probe.py`：同一 ZMQ 数据面，只运行 YOLOE-26，实时看 overlay/mask，快速调 prompt/conf/mask threshold。
-- Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行 YOLOE-26 + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`。
+- Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
+- Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。
 - Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore -> CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
@@ -58,6 +59,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 pixi run python .\src\quest_video_stream_demo.py
 pixi run python .\src\yoloe_mask_probe.py
 pixi run python .\src\tracking_server.py
+pixi run tool-sam3-mask
 
 # Python 验证
 pixi run python -m compileall src
@@ -88,7 +90,8 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - 覆盖配置示例：`EgoAnchor_Python/src/egoanchor/config/mouse.toml`。
 - 加载器：`EgoAnchor_Python/src/egoanchor/config/runtime_config.py`。
 - 每个 `.toml` 参数必须在同一行末尾写中文注释；新增参数时同步默认值、加载点、使用点和测试。
-- 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`module.segmenter/yoloe/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
+- 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`module.segmenter/yoloe/sam3/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
+- `module.segmenter.type` 支持 `yoloe26` 和 `sam3`；默认必须保持 `yoloe26`，耳机盒等覆盖配置可显式切到 `sam3`。SAM3 本地仓库和 checkpoint 默认位于 `EgoAnchor_Python/sam3` 与 `sam3/assets/sam3_ckpt/sam3.pt`。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
 ### 共享协议
@@ -122,6 +125,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/tracking_server.py`：当前主入口 wrapper，调用 `egoanchor.app.tracking_server`。
 - `src/quest_video_stream_demo.py`：ZMQ/Protobuf 双目实时预览 demo。
 - `src/yoloe_mask_probe.py`：YOLOE mask 调参入口。
+- `tools/sam3/sam3_mask.py`：RealSense + SAM3 prompt mask 调参入口；顶部常量配置 prompt、置信度、分辨率和相机参数。
 - `src/egoanchor/config/`：轻量配置。配置层只读 TOML，不导入 ZMQ/OpenCV/模型。
 - `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口。
 - `src/egoanchor/transport/zmq_topic_subscriber.py`：通用 ZMQ SUB；只负责 socket、multipart topic bytes、topic latest-drain，不导入 Protobuf/OpenCV/模型。
@@ -133,9 +137,9 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/runtime/command_queue.py`、`command_dedup.py`、`command_executor.py`：命令队列、request_id TTL 幂等、runtime 内解释命令。
 - `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult、顺序消费 commands。
 - `src/egoanchor/runtime/pose_result_factory.py`：`PoseObservation -> PoseResult` 映射。
-- `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合 YOLOE-26、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。
+- `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
-- `src/egoanchor/algorithms/`：单模型适配层。
+- `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
 - `src/egoanchor/reliability/pose_quality.py`：轻量感知可靠性评分，目前主要用于 HUD 和内部诊断。
 - `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard、窗口工具。
 - `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
@@ -187,7 +191,7 @@ Unity 命名/目录规则：
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
 - Unity `PoseResultReceiver` decoded 增加但 aligned 为 0：查 `PoseResultHub` runtime 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用、`alignmentReference` 是否正确、Python 是否原样透传 frame_id。
 - raw 物体正常但 smoothed 不动：查 `PoseToAnchorRuntime.processors`、processor 是否启用、`DynamicObjectAnchor.outputMode` 是否为 `Smoothed`。
-- YOLOE mask 不稳：调 prompt、conf、mask threshold、max_det，并用 `debug.show_mask_snapshot=true` 或 `yoloe_mask_probe.py` 看真实下游 mask。
+- YOLOE mask 不稳：调 prompt、conf、mask threshold、max_det，并用 `debug.show_mask_snapshot=true` 或 `yoloe_mask_probe.py` 看真实下游 mask；若语义误检仍高，可显式切 `module.segmenter.type="sam3"`，并先用 `pixi run tool-sam3-mask` 在 RealSense 上测试 prompt/confidence。
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
 - track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
@@ -256,13 +260,13 @@ IEEE VR 2027 论文定位：
 
 - 不要写成“VR pose tracking 工程堆模块”。核心是 pose-to-anchor 和 world-consistent anchoring。
 - 不要夸大“first”除非限定清楚：open、end-to-end、head-worn stereo input、external asynchronous 6DoF pose stream、Unity deployment、world-consistent real-object anchoring。
-- 可强调机制：`frame_id` 对齐、capture-time camera pose 回查、per-topic latest-drain、Quest K remapping、YOLOE-26 + FFS + FoundationPose/Cutie re-register、NATS command ack/enqueue、状态/时延/mask-depth 诊断。
+- 可强调机制：`frame_id` 对齐、capture-time camera pose 回查、per-topic latest-drain、Quest K remapping、可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie re-register、NATS command ack/enqueue、状态/时延/mask-depth 诊断。
 - 实验主指标优先用 anchor 指标：world-space anchor error、head-motion-induced slip、world-space jitter/drift、recovery success/time、P50/P90 latency。ADD/ADD-S、translation/rotation pose error 只能作为支持性底层感知指标。
 - 如果做用户/任务实验，需提前确认伦理/IRB 要求。
 
 ## 环境
 
-- Python 环境由 `EgoAnchor_Python/pixi.toml` 管理：Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT cu12、pyrealsense2、ultralytics/YOLOE、onnx、pillow、protobuf、nats-py、Cutie editable path。
+- Python 环境由 `EgoAnchor_Python/pixi.toml` 管理：Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT cu12、pyrealsense2、ultralytics/YOLOE、onnx、pillow、protobuf、nats-py、Cutie editable path；SAM3 代码当前作为项目内 `EgoAnchor_Python/sam3` 仓库使用，默认从本地 checkpoint 加载。
 - Windows 重建 `.pixi/envs/default` 失败时，先关闭 VS Code Python LSP、Black Formatter、残留 Python 进程，避免文件占用。
 - FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；FFS ONNX/TRT artifact 也由 build task 生成。
 - Unity 依赖由 `EgoAnchor_Unity/Packages/manifest.json` 管理；主线依赖 Google.Protobuf、NATS.Net、NetMQ 等。

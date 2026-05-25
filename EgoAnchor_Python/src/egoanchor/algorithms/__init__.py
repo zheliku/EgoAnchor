@@ -31,7 +31,7 @@ class SegmenterResult:
     """分割模型单帧推理耗时，单位毫秒。"""
 
     prompt: list[str]
-    """当前 YOLOE 文本提示词列表。"""
+    """当前分割后端使用的文本提示词列表。"""
 
     selected_index: int = -1
     """被选中的 mask 下标；没有有效 mask 时为 -1。"""
@@ -53,6 +53,7 @@ class MaskTrackResult:
 
 _LAZY_EXPORTS = {
     "Yoloe26Segmenter": "egoanchor.algorithms.yoloe26_segmenter",
+    "Sam3Segmenter": "egoanchor.algorithms.sam3_segmenter",
     "FastFoundationStereoDepth": "egoanchor.algorithms.fast_foundationstereo_depth",
     "FoundationPoseObjectEstimator": "egoanchor.algorithms.foundationpose_estimator",
     "CutieMaskTracker": "egoanchor.algorithms.cutie_mask_tracker",
@@ -75,6 +76,7 @@ __all__ = [
     "SegmenterResult",
     "MaskTrackResult",
     "Yoloe26Segmenter",
+    "Sam3Segmenter",
     "FastFoundationStereoDepth",
     "FoundationPoseObjectEstimator",
     "CutieMaskTracker",

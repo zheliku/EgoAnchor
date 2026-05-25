@@ -1,0 +1,310 @@
+"""SAM3 文本提示分割适配器。
+
+本适配器把项目内 ``EgoAnchor_Python/sam3`` 的 SAM3 image processor 包装为
+EgoAnchor algorithms 层统一的 ``SegmenterResult``。它只负责单帧 2D mask，不理解
+ZMQ/NATS、Quest frame_id、FoundationPose 或 Unity anchor 语义。
+"""
+
+from __future__ import annotations
+
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+import cv2
+import numpy as np
+from PIL import Image
+
+from egoanchor.algorithms import SegmenterResult
+
+
+def _to_numpy(value: Any) -> np.ndarray:
+    """把 torch.Tensor 或 numpy-like 对象统一转为 numpy.ndarray。"""
+
+    if hasattr(value, "detach"):
+        return value.detach().cpu().numpy()
+    return np.asarray(value)
+
+
+def _normalize_prompt(prompt: str | list[str]) -> list[str]:
+    """把 prompt 统一成非空字符串列表。"""
+
+    items = [prompt] if isinstance(prompt, str) else list(prompt)
+    normalized = [item.strip() for item in items if item.strip()]
+    if not normalized:
+        raise ValueError("SAM3 prompt 不能为空。")
+    return normalized
+
+
+def ensure_bgr_u8(image: np.ndarray) -> np.ndarray:
+    """把输入图像统一成 OpenCV BGR uint8 三通道。"""
+
+    if image.ndim == 2:
+        out = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    elif image.ndim == 3:
+        out = image[..., :3]
+    else:
+        raise ValueError("image 维度不正确，应为 (H,W) 或 (H,W,C)。")
+    if out.dtype != np.uint8:
+        out = np.clip(out, 0, 255).astype(np.uint8)
+    return out
+
+
+def select_best_sam3_mask(
+    masks: Any,
+    scores: Any | None,
+    frame_shape: tuple[int, int],
+    threshold: float = 0.5,
+) -> tuple[np.ndarray, int, float]:
+    """从 SAM3 多实例输出中选择最高分的非空 mask。
+
+    下游 FoundationPose register 需要单目标 mask，因此这里不做 union。空 mask
+    即使分数高也会被跳过，避免误把无效检测当作目标。
+    """
+
+    height, width = int(frame_shape[0]), int(frame_shape[1])
+    empty = np.zeros((height, width), dtype=np.uint8)
+    masks_np = _to_numpy(masks)
+    if masks_np.size == 0:
+        return empty, -1, 0.0
+    masks_np = np.asarray(masks_np)
+    if masks_np.ndim == 4 and masks_np.shape[1] == 1:
+        masks_np = masks_np[:, 0, :, :]
+    elif masks_np.ndim == 2:
+        masks_np = masks_np[None, :, :]
+    if masks_np.ndim != 3:
+        raise ValueError(f"SAM3 masks 维度不正确，应为 (N,H,W) 或 (N,1,H,W)，实际为 {masks_np.shape}")
+
+    binary_masks = (masks_np >= float(threshold)).astype(np.uint8) * 255
+    mask_count = int(binary_masks.shape[0])
+    if scores is None:
+        score_values = np.ones((mask_count,), dtype=np.float32)
+    else:
+        score_values = _to_numpy(scores).astype(np.float32).reshape(-1)[:mask_count]
+        if score_values.shape[0] < mask_count:
+            pad = np.ones((mask_count - score_values.shape[0],), dtype=np.float32)
+            score_values = np.concatenate([score_values, pad])
+
+    areas = np.count_nonzero(binary_masks.reshape(mask_count, -1), axis=1)
+    valid = areas > 0
+    if not np.any(valid):
+        return empty, -1, 0.0
+
+    ranked_scores = score_values.copy()
+    ranked_scores[~valid] = -1.0
+    selected_index = int(np.argmax(ranked_scores))
+    mask_bw = binary_masks[selected_index]
+    if mask_bw.shape[:2] != (height, width):
+        mask_bw = cv2.resize(mask_bw, (width, height), interpolation=cv2.INTER_NEAREST)
+
+    area_ratio = float(np.count_nonzero(mask_bw)) / float(max(mask_bw.size, 1))
+    return mask_bw, selected_index, area_ratio
+
+
+def disable_sam3_position_precompute(model_builder_module: Any) -> None:
+    """禁用 SAM3 构建阶段的位置编码预计算慢路径。
+
+    SAM3 官方 builder 会用 ``precompute_resolution=1008`` 预先计算多尺度
+    position encoding 缓存。EgoAnchor 当前没有启用 torch.compile，这个预计算
+    不是必需路径；在 Windows/CUDA 上它会造成启动阶段长时间无窗口刷新。
+    """
+
+    if getattr(model_builder_module, "_egoanchor_position_precompute_disabled", False):
+        return
+    original = model_builder_module._create_position_encoding
+
+    def _create_position_encoding_without_precompute(precompute_resolution: int | None = None) -> Any:
+        """忽略官方 hardcoded precompute_resolution，改为后续按需计算。"""
+
+        return original(precompute_resolution=None)
+
+    model_builder_module._create_position_encoding = _create_position_encoding_without_precompute
+    model_builder_module._egoanchor_position_precompute_disabled = True
+
+
+class Sam3Segmenter:
+    """SAM3 文本提示单目标分割器。"""
+
+    def __init__(
+        self,
+        repo_path: str | Path,
+        checkpoint_path: str | Path,
+        init_prompt: str | list[str],
+        confidence_threshold: float = 0.5,
+        resolution: int = 1008,
+        mask_threshold: float = 0.5,
+        device: str = "auto",
+        load_from_hf: bool = False,
+        disable_position_precompute: bool = True,
+    ) -> None:
+        """加载 SAM3 image model，并设置初始文本提示词。"""
+
+        self.repo_path = Path(repo_path).expanduser().resolve()
+        """项目内 SAM3 仓库根目录，即包含二级 sam3 package 的目录。"""
+
+        self.checkpoint_path = Path(checkpoint_path).expanduser().resolve()
+        """SAM3 checkpoint 文件路径。"""
+
+        self.confidence_threshold = float(confidence_threshold)
+        """SAM3 检测置信度阈值，越高越严格。"""
+
+        self.resolution = int(resolution)
+        """SAM3 processor 输入分辨率。"""
+
+        self.mask_threshold = float(mask_threshold)
+        """SAM3 mask 概率或布尔 mask 的二值化阈值。"""
+
+        self.device = self._normalize_device(device)
+        """SAM3 推理设备。"""
+
+        self.load_from_hf = bool(load_from_hf)
+        """是否允许从 HuggingFace 下载权重；主线默认关闭，使用本地 checkpoint。"""
+
+        self.disable_position_precompute = bool(disable_position_precompute)
+        """是否跳过 SAM3 构建阶段的位置编码预计算慢路径。"""
+
+        self._prompt = _normalize_prompt(init_prompt)
+        """当前文本提示词缓存。"""
+
+        if not self.repo_path.is_dir():
+            raise FileNotFoundError(f"SAM3 仓库目录不存在: {self.repo_path}")
+        if not self.checkpoint_path.is_file() and not self.load_from_hf:
+            raise FileNotFoundError(f"SAM3 checkpoint 不存在: {self.checkpoint_path}")
+        self._ensure_repo_on_path()
+
+        from sam3.model.sam3_image_processor import Sam3Processor
+        import sam3.model_builder as sam3_model_builder
+
+        if self.disable_position_precompute:
+            disable_sam3_position_precompute(sam3_model_builder)
+
+        checkpoint = str(self.checkpoint_path) if self.checkpoint_path.is_file() else None
+        self.model = sam3_model_builder.build_sam3_image_model(
+            checkpoint_path=checkpoint,
+            load_from_HF=self.load_from_hf,
+            device=self.device,
+        )
+        """SAM3 image model。"""
+
+        self.processor = Sam3Processor(
+            self.model,
+            resolution=self.resolution,
+            device=self.device,
+            confidence_threshold=self.confidence_threshold,
+        )
+        """SAM3 image processor。"""
+
+    def _ensure_repo_on_path(self) -> None:
+        """把项目内 SAM3 仓库加入 sys.path，避免要求用户额外安装 editable 包。"""
+
+        repo_text = str(self.repo_path)
+        if repo_text not in sys.path:
+            sys.path.insert(0, repo_text)
+
+    @staticmethod
+    def _normalize_device(device: str) -> str:
+        """把配置中的 device 字段转为 SAM3 processor 可接受的值。"""
+
+        value = str(device).strip().lower()
+        if value in {"", "auto", "none"}:
+            try:
+                import torch
+
+                return "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                return "cpu"
+        return value
+
+    def set_prompt(self, prompt: str | list[str]) -> None:
+        """更新文本提示词缓存。"""
+
+        self._prompt = _normalize_prompt(prompt)
+
+    def infer(self, image_bgr: np.ndarray, prompt: str | list[str] | None = None) -> SegmenterResult:
+        """执行单帧 SAM3 文本提示分割。"""
+
+        if prompt is not None:
+            self.set_prompt(prompt)
+        frame = ensure_bgr_u8(image_bgr)
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(image_rgb)
+
+        t0 = time.perf_counter()
+        state = self.processor.set_image(image)
+        best_output: dict[str, Any] | None = None
+        best_prompt = ""
+        best_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        best_selected_index = -1
+        best_area_ratio = 0.0
+        best_score = -1.0
+        total_det_count = 0
+
+        for prompt_text in self._prompt:
+            try:
+                self.processor.reset_all_prompts(state)
+            except Exception:
+                pass
+            output = self.processor.set_text_prompt(state=state, prompt=prompt_text)
+            masks = output.get("masks", np.empty((0, frame.shape[0], frame.shape[1]), dtype=np.uint8))
+            scores = output.get("scores", None)
+            det_count = int(len(scores)) if scores is not None else int(len(masks))
+            total_det_count += det_count
+            mask_bw, selected_index, area_ratio = select_best_sam3_mask(
+                masks=masks,
+                scores=scores,
+                frame_shape=frame.shape[:2],
+                threshold=self.mask_threshold,
+            )
+            selected_score = -1.0
+            if selected_index >= 0 and scores is not None:
+                scores_np = _to_numpy(scores).reshape(-1)
+                if selected_index < scores_np.shape[0]:
+                    selected_score = float(scores_np[selected_index])
+            if selected_index >= 0 and (selected_score > best_score or best_selected_index < 0):
+                best_output = output
+                best_prompt = prompt_text
+                best_mask = mask_bw
+                best_selected_index = selected_index
+                best_area_ratio = area_ratio
+                best_score = selected_score
+
+        infer_ms = (time.perf_counter() - t0) * 1000.0
+
+        boxes = best_output.get("boxes", None) if best_output is not None else None
+        scores = best_output.get("scores", None) if best_output is not None else None
+        overlay = self._make_overlay(frame, best_mask, boxes, scores, best_selected_index)
+
+        return SegmenterResult(
+            overlay_bgr=overlay,
+            mask_bw=best_mask,
+            det_count=total_det_count,
+            infer_ms=infer_ms,
+            prompt=[best_prompt] if best_prompt else list(self._prompt),
+            selected_index=best_selected_index,
+            mask_area_ratio=best_area_ratio,
+        )
+
+    def _make_overlay(self, frame: np.ndarray, mask_bw: np.ndarray, boxes: Any | None, scores: Any | None, selected_index: int) -> np.ndarray:
+        """绘制 SAM3 mask 轮廓、bbox 和分数，供 OpenCV debug 查看。"""
+
+        overlay = frame.copy()
+        if np.count_nonzero(mask_bw) > 0:
+            color_layer = np.zeros_like(overlay)
+            color_layer[:, :, 1] = mask_bw
+            overlay = cv2.addWeighted(overlay, 1.0, color_layer, 0.35, 0.0)
+            contours, _ = cv2.findContours(mask_bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(overlay, contours, -1, (0, 255, 255), 2)
+
+        if selected_index >= 0 and boxes is not None:
+            boxes_np = _to_numpy(boxes).reshape(-1, 4)
+            if selected_index < boxes_np.shape[0]:
+                x0, y0, x1, y1 = [int(round(float(v))) for v in boxes_np[selected_index]]
+                cv2.rectangle(overlay, (x0, y0), (x1, y1), (0, 255, 255), 2)
+                label = f"sam3 {selected_index}"
+                if scores is not None:
+                    scores_np = _to_numpy(scores).reshape(-1)
+                    if selected_index < scores_np.shape[0]:
+                        label += f" {float(scores_np[selected_index]):.2f}"
+                cv2.putText(overlay, label, (max(x0, 0), max(y0 - 8, 16)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2, cv2.LINE_AA)
+        return overlay
