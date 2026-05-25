@@ -161,7 +161,7 @@ Inspector 绑定要求：
 - 当前主线 Python 感知 pipeline 使用左目图像、左目 K 和左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义上仍是左目 OpenCV camera pose。`PoseToAnchorRuntime.alignmentReference` 是 Unity 本地对齐/诊断策略，不写入通信协议，也不需要服务器知道；Right/Center 可用于本地对照或外参补偿实验，必要时配合 `applyLocalOffset` 做小量残差补偿。
 - 若 raw 物体正常但 smoothed 物体不动，检查 `PoseToAnchorRuntime.processors` 中 processor 是否禁用，或 stable `DynamicObjectAnchor.outputMode` 是否选择了 `Smoothed`。
 - 如果 dashboard 显示 `WAIT_CALIBRATION`，说明 stereo 已到但 camera_info 尚未到达或未成功解析。
-- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt` 和当前后端阈值；YOLOE 调 `module.yoloe.conf`，SAM3 调 `module.sam3.confidence_threshold`，也可先用 `tool-sam3-mask` 做 RealSense prompt 对照。
+- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt`、`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold`；SAM3 也可先用 `tool-sam3-mask` 做 RealSense prompt 对照。
 - 如果显示 `REJECT_DEPTH`，优先检查 K 映射、双目同步、baseline、FFS 权重或 TRT engine。
 
 ## 设计边界

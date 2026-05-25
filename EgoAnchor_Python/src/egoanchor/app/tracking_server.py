@@ -28,6 +28,16 @@ def _handle_key(runtime: TrackingRuntime, key: int) -> bool:
     return True
 
 
+def should_show_waiting_frame(has_debug_frame: bool) -> bool:
+    """判断 idle tick 是否应显示等待画面。
+
+    已经显示过真实 dashboard 后，不再用 waiting 图覆盖窗口，避免异步 SAM3 等待
+    阶段在 dashboard 与 waiting 之间来回闪烁。
+    """
+
+    return not bool(has_debug_frame)
+
+
 def run_tracking_server(config_path: str | None = None) -> None:
     """运行 Python-only pose estimation debug server。"""
 
@@ -41,6 +51,7 @@ def run_tracking_server(config_path: str | None = None) -> None:
     stereo_window = str(pose_cfg.stereo_window_name)
     waiting = make_pose_waiting_image(int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height), "EgoAnchor Pose Debug")
     last_wait_log_time = 0.0
+    has_debug_frame = False
 
     try:
         logging.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
@@ -74,7 +85,8 @@ def run_tracking_server(config_path: str | None = None) -> None:
                         publish_stats.get("failed", 0),
                     )
                     last_wait_log_time = now
-                cv2.imshow(debug_window, waiting)
+                if should_show_waiting_frame(has_debug_frame):
+                    cv2.imshow(debug_window, waiting)
                 continue
 
             dashboard = tile_pose_depth_dashboard(
@@ -86,6 +98,7 @@ def run_tracking_server(config_path: str | None = None) -> None:
                 max_depth=float(depth_cfg.max_depth),
             )
             cv2.imshow(debug_window, dashboard)
+            has_debug_frame = True
 
             stereo = stack_pose_stereo(output.diagnostics.left_bgr, output.diagnostics.right_bgr)
             cv2.imshow(stereo_window, stereo)

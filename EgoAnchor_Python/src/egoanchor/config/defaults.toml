@@ -36,15 +36,15 @@ min_depth = 0.1 # 有效深度下限，单位米；低于该值会置零。
 max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可适当增大，但过大可能引入背景深度噪声。
 
 [module.segmenter]
-type = "sam3" # 分割后端；默认 yoloe26，可显式改为 sam3。
+type = "yoloe26" # 分割后端；默认 yoloe26，可显式改为 sam3。
 prompt = "little white cube" # 文本提示词，用于定位目标物体；YOLOE-26 和 SAM3 共用。
+confidence_threshold = 0.1 # 检测候选置信度阈值；YOLOE 和 SAM3 共用，越高越严格，过低容易误检背景。
 max_det = 1 # 最多保留检测数量；默认单目标，避免多误检 union 污染 pose。
-mask_threshold = 0.5 # mask 二值化阈值。
+mask_threshold = 0.5 # mask 二值化阈值；YOLOE 和 SAM3 共用。
 
 [module.yoloe]
 model_path = "weights/yoloe-26l-seg.pt" # YOLOE-26 segmentation 权重路径，相对 EgoAnchor_Python，统一放在 weights 目录。
 mobileclip2_path = "weights/mobileclip2_b.ts" # YOLOE 文本编码器本地路径，相对 EgoAnchor_Python，统一放在 weights 目录。
-conf = 0.1 # YOLOE 检测置信度阈值；过低容易误检背景。
 imgsz = 640 # YOLOE 推理输入尺寸。
 use_half = false # 是否启用半精度推理；部分环境下可提速。
 device = "auto" # YOLOE 推理设备：auto、cpu、cuda 或 GPU 序号字符串。
@@ -52,12 +52,11 @@ device = "auto" # YOLOE 推理设备：auto、cpu、cuda 或 GPU 序号字符串
 [module.sam3]
 repo_path = "sam3" # 项目内 SAM3 仓库路径，相对 EgoAnchor_Python；其中应包含 sam3 Python package。
 checkpoint_path = "sam3/assets/sam3_ckpt/sam3.pt" # SAM3 checkpoint 路径，相对 EgoAnchor_Python；默认使用本地权重，不在线下载。
-confidence_threshold = 0.5 # SAM3 检测置信度阈值，越高越严格。
 resolution = 1008 # SAM3 processor 输入分辨率；默认沿用官方 image processor 设置。
-mask_threshold = 0.5 # SAM3 mask 二值化阈值。
 device = "auto" # SAM3 推理设备：auto、cpu 或 cuda。
 load_from_hf = false # 是否允许 SAM3 从 HuggingFace 下载权重；主线默认关闭，避免调试时触发网络依赖。
 disable_position_precompute = true # 是否跳过 SAM3 构建阶段的位置编码预计算慢路径；当前未启用 torch.compile，建议保持 true。
+async_segmentation = true # 是否在 tracking_server 主线中后台异步执行 SAM3 分割；true 时相机/debug 窗口不等待 SAM3 推理完成。
 
 [module.ffs]
 model_dir = "Fast-FoundationStereo/weights/23-36-37" # Fast-FoundationStereo 权重目录或 pth 文件路径，相对 EgoAnchor_Python。

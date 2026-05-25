@@ -57,7 +57,7 @@ def _build_segmenter(cfg: object, args: argparse.Namespace) -> Yoloe26Segmenter:
     segmenter_cfg = cfg.module.segmenter
     yolo_cfg = cfg.module.yoloe
     prompt = str(args.prompt if args.prompt is not None else segmenter_cfg.prompt)
-    conf = float(args.conf if args.conf is not None else yolo_cfg.conf)
+    conf = float(args.conf if args.conf is not None else segmenter_cfg.confidence_threshold)
     max_det = int(args.max_det if args.max_det is not None else segmenter_cfg.max_det)
     mask_threshold = float(args.mask_threshold if args.mask_threshold is not None else segmenter_cfg.mask_threshold)
     device_value = _normalize_device(str(args.device if args.device is not None else yolo_cfg.device))

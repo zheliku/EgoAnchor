@@ -4,16 +4,10 @@
 
 [module.segmenter]
 type = "sam3" # 耳机盒目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
-prompt = "wireless pink earbuds charging case" # 文本提示词；若检测不到，可运行时用工具脚本修改 prompt 对照。
+prompt = "small pink rounded rectangular earphone charging case" # 文本提示词；若检测不到，可运行时用工具脚本修改 prompt 对照。
+confidence_threshold = 0.2 # 检测候选置信度阈值；SAM3 误检多时调高，漏检多时调低。
 max_det = 1 # 单目标追踪，避免多个误检 mask union 污染 pose。
 mask_threshold = 0.5 # mask 二值化阈值；mask 破碎可降到 0.4。
-
-[module.yoloe]
-conf = 0.3 # 仅在 module.segmenter.type 改回 yoloe26 时使用；误检多时调回 0.1~0.15。
-
-[module.sam3]
-confidence_threshold = 0.6 # SAM3 检测置信度阈值；误检多时调高，漏检多时调低。
-mask_threshold = 0.5 # SAM3 mask 二值化阈值；边缘破碎时可降到 0.4。
 
 [module.foundationpose]
 mesh_path = "data/model/earphone.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径；GLB 中的 PBR baseColorTexture 可被当前适配器读取。

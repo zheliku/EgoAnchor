@@ -113,6 +113,8 @@ class TrackingRuntime:
     def close(self) -> None:
         """关闭 receiver 与 NATS publisher；OpenCV 窗口由 app 层关闭。"""
 
+        if self.pipeline is not None and hasattr(self.pipeline, "close"):
+            self.pipeline.close()
         if self.pose_publisher is not None:
             self.pose_publisher.close()
         self.receiver.close()

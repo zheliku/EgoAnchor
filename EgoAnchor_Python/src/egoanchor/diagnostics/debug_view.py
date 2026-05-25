@@ -108,10 +108,17 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
         f"depth med/iqr={diagnostics.depth_median_in_mask:.2f}/{diagnostics.depth_iqr_in_mask:.2f}m fps={diagnostics.fps:.1f}",
         f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
     ]
+    if diagnostics.segmenter_async:
+        busy = "busy" if diagnostics.segmenter_busy else "idle"
+        lines.append(
+            f"seg_async={busy} done={diagnostics.segmenter_completed}/{diagnostics.segmenter_submitted} drop={diagnostics.segmenter_dropped}"
+        )
     if observation and observation.reliability_flags:
         lines.append("flags=" + ",".join(observation.reliability_flags[:4]))
     if diagnostics.failure_reason:
         lines.append(f"failure={diagnostics.failure_reason}")
+    if diagnostics.segmenter_error:
+        lines.append(f"seg_error={diagnostics.segmenter_error[:96]}")
 
     y = 26
     for text in lines:

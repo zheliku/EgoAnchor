@@ -18,8 +18,13 @@ class SegmenterConfigTest(unittest.TestCase):
         cfg = load_config()
 
         self.assertEqual(cfg.module.segmenter.type, "yoloe26")
+        self.assertEqual(cfg.module.segmenter.confidence_threshold, 0.1)
+        self.assertFalse(hasattr(cfg.module.yoloe, "conf"))
+        self.assertFalse(hasattr(cfg.module.sam3, "confidence_threshold"))
+        self.assertFalse(hasattr(cfg.module.sam3, "mask_threshold"))
         self.assertEqual(cfg.module.sam3.repo_path, "sam3")
         self.assertEqual(cfg.module.sam3.checkpoint_path, "sam3/assets/sam3_ckpt/sam3.pt")
+        self.assertTrue(cfg.module.sam3.async_segmentation)
 
     def test_normalize_segmenter_type_accepts_sam3(self) -> None:
         """工厂层应接受 sam3 作为显式分割后端。"""

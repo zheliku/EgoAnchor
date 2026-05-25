@@ -144,14 +144,16 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     debug_cfg = cfg.debug
 
     segmenter_type = normalize_segmenter_type(segmenter_cfg)
+    confidence_threshold = float(_cfg_get(segmenter_cfg, "confidence_threshold", _cfg_get(yolo_cfg, "conf", _cfg_get(sam3_cfg, "confidence_threshold", 0.1))))
+    mask_threshold = float(_cfg_get(segmenter_cfg, "mask_threshold", _cfg_get(sam3_cfg, "mask_threshold", 0.5)))
     if segmenter_type == "yoloe26":
         segmenter = Yoloe26Segmenter(
             model_path=_resolve_path(str(yolo_cfg.model_path), python_root),
             init_prompt=str(segmenter_cfg.prompt),
-            conf=float(yolo_cfg.conf),
+            conf=confidence_threshold,
             imgsz=int(yolo_cfg.imgsz),
             max_det=int(segmenter_cfg.max_det),
-            mask_threshold=float(segmenter_cfg.mask_threshold),
+            mask_threshold=mask_threshold,
             use_half=bool(yolo_cfg.use_half),
             device=_normalize_yolo_device(str(yolo_cfg.device)),
             mobileclip2_path=str(_resolve_path(str(yolo_cfg.mobileclip2_path), python_root)),
@@ -161,9 +163,9 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
             repo_path=_resolve_path(str(sam3_cfg.repo_path), python_root),
             checkpoint_path=_resolve_path(str(sam3_cfg.checkpoint_path), python_root),
             init_prompt=str(segmenter_cfg.prompt),
-            confidence_threshold=float(sam3_cfg.confidence_threshold),
+            confidence_threshold=confidence_threshold,
             resolution=int(sam3_cfg.resolution),
-            mask_threshold=float(sam3_cfg.mask_threshold),
+            mask_threshold=mask_threshold,
             device=str(sam3_cfg.device),
             load_from_hf=bool(sam3_cfg.load_from_hf),
             disable_position_precompute=bool(_cfg_get(sam3_cfg, "disable_position_precompute", True)),
@@ -255,4 +257,5 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         log_stats_interval=int(debug_cfg.pipeline_stats_interval),
         show_mask_snapshot=bool(debug_cfg.show_mask_snapshot),
         mask_snapshot_window=str(debug_cfg.mask_snapshot_window),
+        async_segmentation=bool(_cfg_get(sam3_cfg, "async_segmentation", segmenter_type == "sam3")) if segmenter_type == "sam3" else False,
     )

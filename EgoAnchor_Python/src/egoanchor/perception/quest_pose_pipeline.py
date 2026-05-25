@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -47,6 +48,196 @@ class SegmenterBackend(Protocol):
 
     def infer(self, image_bgr: np.ndarray, prompt: str | list[str] | None = None) -> SegmenterResult:
         """执行单帧分割并返回统一 SegmenterResult。"""
+
+
+@dataclass(slots=True)
+class AsyncSegmenterJob:
+    """提交给后台分割线程的单帧数据包。"""
+
+    decoded: DecodedQuestStereoFrame
+    """解码后的 Quest 双目帧元数据和原图。"""
+
+    session_id: str
+    """Unity 发布会话 ID，用于丢弃旧 session 结果。"""
+
+    left_bgr: np.ndarray
+    """处理分辨率下的左目 BGR 图；SAM3 在该图上生成 mask。"""
+
+    right_bgr: np.ndarray
+    """处理分辨率下的右目 BGR 图；后续 FFS 与 register 使用同一帧。"""
+
+    generation: int
+    """pipeline reset/calibration 代数；结果回来时必须一致。"""
+
+
+@dataclass(slots=True)
+class AsyncSegmenterOutput:
+    """后台分割线程完成的一次结果。"""
+
+    job: AsyncSegmenterJob
+    """产生该结果的输入帧包。"""
+
+    result: SegmenterResult | None
+    """分割结果；异常时为 None。"""
+
+    elapsed_ms: float
+    """后台线程测得的总耗时，单位毫秒。"""
+
+    error: str = ""
+    """异常文本；空字符串表示成功。"""
+
+
+@dataclass(frozen=True, slots=True)
+class AsyncSegmenterSnapshot:
+    """后台分割 worker 的轻量状态快照。"""
+
+    busy: bool
+    """后台线程是否正在推理或已有待处理帧。"""
+
+    submitted: int
+    """累计接受的帧数。"""
+
+    completed: int
+    """累计完成的推理次数。"""
+
+    dropped: int
+    """因为 worker 忙或结果未消费而丢弃的提交次数。"""
+
+    error: str
+    """最近一次异常文本。"""
+
+
+class AsyncSegmenterWorker:
+    """单线程 latest-only 分割 worker。
+
+    worker 只运行 SAM3/分割模型，不运行 FFS、FoundationPose 或 Cutie。完成后主
+    pipeline 线程会用同一帧的 left/right RGB 与 mask 继续 register，避免 RGB/mask
+    错帧。
+    """
+
+    def __init__(self, segmenter: SegmenterBackend) -> None:
+        """保存分割器并初始化线程同步状态。"""
+
+        self.segmenter = segmenter
+        """实际分割后端。"""
+
+        self._condition = threading.Condition()
+        """保护 pending/completed 状态的条件变量。"""
+
+        self._pending: AsyncSegmenterJob | None = None
+        """等待后台处理的最新帧。"""
+
+        self._completed_output: AsyncSegmenterOutput | None = None
+        """等待主线程消费的最新完成结果。"""
+
+        self._busy = False
+        """后台线程是否正在推理。"""
+
+        self._stopping = False
+        """后台线程停止标记。"""
+
+        self._submitted = 0
+        """累计接受帧数。"""
+
+        self._completed = 0
+        """累计完成推理次数。"""
+
+        self._dropped = 0
+        """丢弃提交次数。"""
+
+        self._error = ""
+        """最近一次异常文本。"""
+
+        self._thread = threading.Thread(target=self._run, name="EgoAnchorAsyncSegmenter", daemon=True)
+        """后台分割线程。"""
+
+    def start(self) -> None:
+        """启动后台分割线程。"""
+
+        self._thread.start()
+
+    def stop(self) -> None:
+        """请求后台线程退出并等待短暂收尾。"""
+
+        with self._condition:
+            self._stopping = True
+            self._condition.notify_all()
+        self._thread.join(timeout=2.0)
+
+    def clear(self) -> None:
+        """丢弃未开始处理的帧和未消费结果；正在推理的帧靠 generation 过滤。"""
+
+        with self._condition:
+            self._pending = None
+            self._completed_output = None
+            self._error = ""
+
+    def submit(self, job: AsyncSegmenterJob) -> bool:
+        """提交一帧给后台；忙或旧结果未消费时返回 False。"""
+
+        with self._condition:
+            if self._busy or self._pending is not None or self._completed_output is not None:
+                self._dropped += 1
+                return False
+            self._pending = AsyncSegmenterJob(
+                decoded=job.decoded,
+                session_id=job.session_id,
+                left_bgr=job.left_bgr.copy(),
+                right_bgr=job.right_bgr.copy(),
+                generation=int(job.generation),
+            )
+            self._submitted += 1
+            self._condition.notify()
+            return True
+
+    def take_completed(self) -> AsyncSegmenterOutput | None:
+        """取走最新完成结果；没有结果时返回 None。"""
+
+        with self._condition:
+            output = self._completed_output
+            self._completed_output = None
+            return output
+
+    def snapshot(self) -> AsyncSegmenterSnapshot:
+        """返回 worker 当前状态快照。"""
+
+        with self._condition:
+            return AsyncSegmenterSnapshot(
+                busy=self._busy or self._pending is not None,
+                submitted=self._submitted,
+                completed=self._completed,
+                dropped=self._dropped,
+                error=self._error,
+            )
+
+    def _run(self) -> None:
+        """后台线程主循环。"""
+
+        while True:
+            with self._condition:
+                while self._pending is None and not self._stopping:
+                    self._condition.wait()
+                if self._stopping:
+                    return
+                job = self._pending
+                self._pending = None
+                self._busy = True
+
+            t0 = time.perf_counter()
+            try:
+                result = self.segmenter.infer(job.left_bgr)
+                error = ""
+            except Exception as exc:
+                result = None
+                error = f"{type(exc).__name__}: {exc}"
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+            with self._condition:
+                self._busy = False
+                self._completed_output = AsyncSegmenterOutput(job=job, result=result, elapsed_ms=elapsed_ms, error=error)
+                self._completed += 1
+                if error:
+                    self._error = error
 
 
 @dataclass(slots=True)
@@ -110,6 +301,24 @@ class FrameDiagnostics:
     failure_reason: str = ""
     """当前帧失败原因。"""
 
+    segmenter_async: bool = False
+    """当前分割后端是否使用后台异步推理。"""
+
+    segmenter_busy: bool = False
+    """后台分割线程是否忙。"""
+
+    segmenter_submitted: int = 0
+    """异步分割累计提交帧数。"""
+
+    segmenter_completed: int = 0
+    """异步分割累计完成次数。"""
+
+    segmenter_dropped: int = 0
+    """异步分割因忙而丢弃的提交次数。"""
+
+    segmenter_error: str = ""
+    """异步分割最近一次异常。"""
+
     timing: PipelineStepTiming = field(default_factory=PipelineStepTiming)
     """当前帧耗时。"""
 
@@ -158,6 +367,7 @@ class QuestPosePipeline:
         log_stats_interval: int = 60,
         show_mask_snapshot: bool = False,
         mask_snapshot_window: str = "EgoAnchor mask",
+        async_segmentation: bool = False,
     ) -> None:
         """注入算法组件和 pipeline 策略参数。"""
 
@@ -227,6 +437,15 @@ class QuestPosePipeline:
         self.mask_snapshot_window = str(mask_snapshot_window)
         """mask snapshot 窗口名。"""
 
+        self.async_segmentation = bool(async_segmentation)
+        """是否把初始分割阶段放到后台线程。"""
+
+        self._segmenter_worker: AsyncSegmenterWorker | None = AsyncSegmenterWorker(segmenter) if self.async_segmentation else None
+        """异步分割 worker；同步模式下为 None。"""
+
+        if self._segmenter_worker is not None:
+            self._segmenter_worker.start()
+
         self.stage = 4
         """当前 OpenCV debug stage。"""
 
@@ -269,20 +488,33 @@ class QuestPosePipeline:
         self._mask_snapshot_shown = False
         """mask snapshot 是否已经显示过。"""
 
+        self._generation = 0
+        """pipeline tracking generation；reset/calibration 后递增，用于过滤旧异步结果。"""
+
     def set_stage(self, stage: int) -> None:
         """设置 debug stage，并限制在 1..4。"""
 
         self.stage = max(1, min(4, int(stage)))
 
+    def close(self) -> None:
+        """关闭 pipeline 持有的后台资源。"""
+
+        if self._segmenter_worker is not None:
+            self._segmenter_worker.stop()
+            self._segmenter_worker = None
+
     def reset_tracking_state(self) -> None:
         """重置时序跟踪状态，下一帧重新分割/register。"""
 
+        self._generation += 1
         self._has_registered = False
         self._cutie_ready = False
         self._last_pose = None
         self._last_frame_id = None
         self._last_session_id = ""
         self._track_reject_count = 0
+        if self._segmenter_worker is not None:
+            self._segmenter_worker.clear()
         if self.estimator is not None:
             self.estimator.reset()
         if self.cutie is not None:
@@ -299,6 +531,10 @@ class QuestPosePipeline:
         if camera_info_msg is not None:
             self._refresh_calibration(camera_info_msg)
 
+        ready_output = self._take_ready_async_segmentation(t_total)
+        if ready_output is not None:
+            return ready_output
+
         if stereo_msg is None:
             diagnostics.phase = "WAIT_STREAM"
             return QuestPosePipelineOutput(observation=None, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
@@ -312,6 +548,9 @@ class QuestPosePipeline:
         session_id = self._extract_session_id(stereo_msg)
         same_session = not session_id or not self._last_session_id or session_id == self._last_session_id
         if same_session and decoded.frame_id is not None and decoded.frame_id == self._last_frame_id:
+            ready_output = self._take_ready_async_segmentation(t_total)
+            if ready_output is not None:
+                return ready_output
             diagnostics.phase = "DUPLICATE_FRAME"
             diagnostics.frame_id = decoded.frame_id
             return QuestPosePipelineOutput(observation=None, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
@@ -334,12 +573,127 @@ class QuestPosePipeline:
             obs = self._make_observation(decoded, diagnostics.phase, False, None, "NONE", diagnostics, timing, failure_reason="wait_calibration")
             return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
 
+        if self.async_segmentation and not self._has_registered:
+            job = AsyncSegmenterJob(
+                decoded=decoded,
+                session_id=session_id,
+                left_bgr=left_bgr,
+                right_bgr=right_bgr,
+                generation=self._generation,
+            )
+            return self._process_async_segmentation_frame(job, diagnostics, timing, t_total)
+
+        return self._process_prepared_frame(decoded, left_bgr, right_bgr, diagnostics, timing, t_total, async_seg_result=None)
+
+    def _process_async_segmentation_frame(
+        self,
+        current_job: AsyncSegmenterJob,
+        current_diagnostics: FrameDiagnostics,
+        current_timing: PipelineStepTiming,
+        t_total: float,
+    ) -> QuestPosePipelineOutput:
+        """异步 SAM3 模式下提交当前帧，并在结果完成时处理对应旧帧。"""
+
+        worker = self._segmenter_worker
+        if worker is None:
+            return self._process_prepared_frame(
+                current_job.decoded,
+                current_job.left_bgr,
+                current_job.right_bgr,
+                current_diagnostics,
+                current_timing,
+                t_total,
+                async_seg_result=None,
+            )
+
+        completed_output = self._take_ready_async_segmentation(t_total)
+        if completed_output is not None:
+            return completed_output
+
+        worker.submit(current_job)
+        current_diagnostics.phase = "WAIT_SEGMENTATION"
+        self._apply_segmenter_snapshot(current_diagnostics)
+        current_timing.total_ms = (time.perf_counter() - t_total) * 1000.0
+        return QuestPosePipelineOutput(observation=None, diagnostics=current_diagnostics, timing=current_timing, new_frame_processed=True)
+
+    def _take_ready_async_segmentation(self, t_total: float) -> QuestPosePipelineOutput | None:
+        """若后台分割已有完成结果，则用结果所属帧继续 pipeline。"""
+
+        worker = self._segmenter_worker
+        if not self.async_segmentation or worker is None or self._has_registered:
+            return None
+        if self.calibration is None or self.cam_k is None:
+            return None
+
+        completed = worker.take_completed()
+        if completed is None:
+            return None
+
+        result_job = completed.job
+        result_timing = PipelineStepTiming(yolo_ms=completed.elapsed_ms)
+        result_diagnostics = FrameDiagnostics(
+            left_bgr=result_job.left_bgr,
+            right_bgr=result_job.right_bgr,
+            stage=self.stage,
+            phase="SEGMENTATION_READY",
+            frame_id=result_job.decoded.frame_id,
+            timing=result_timing,
+        )
+        self._apply_segmenter_snapshot(result_diagnostics)
+
+        if completed.error:
+            result_diagnostics.phase = "SEGMENTATION_FAILED"
+            result_timing.total_ms = (time.perf_counter() - t_total) * 1000.0
+            obs = self._make_observation(
+                result_job.decoded,
+                result_diagnostics.phase,
+                False,
+                None,
+                "NONE",
+                result_diagnostics,
+                result_timing,
+                failure_reason="segmentation_failed",
+            )
+            return QuestPosePipelineOutput(observation=obs, diagnostics=result_diagnostics, timing=result_timing, new_frame_processed=True)
+
+        same_generation = result_job.generation == self._generation
+        same_session = not self._last_session_id or not result_job.session_id or result_job.session_id == self._last_session_id
+        if completed.result is None or not same_generation or not same_session:
+            return None
+
+        return self._process_prepared_frame(
+            result_job.decoded,
+            result_job.left_bgr,
+            result_job.right_bgr,
+            result_diagnostics,
+            result_timing,
+            t_total,
+            async_seg_result=completed.result,
+        )
+
+    def _process_prepared_frame(
+        self,
+        decoded: DecodedQuestStereoFrame,
+        left_bgr: np.ndarray,
+        right_bgr: np.ndarray,
+        diagnostics: FrameDiagnostics,
+        timing: PipelineStepTiming,
+        t_total: float,
+        async_seg_result: SegmenterResult | None,
+    ) -> QuestPosePipelineOutput:
+        """处理已解码并缩放好的同一帧 stereo 数据。"""
+
+        diagnostics.left_bgr = left_bgr
+        diagnostics.right_bgr = right_bgr
+        diagnostics.frame_id = decoded.frame_id
+        self._apply_segmenter_snapshot(diagnostics)
+
         rgb = cv2.cvtColor(left_bgr, cv2.COLOR_BGR2RGB)
         right_rgb = cv2.cvtColor(right_bgr, cv2.COLOR_BGR2RGB)
 
         mask: np.ndarray | None = None
         if not self._has_registered:
-            seg_result = self._run_segmenter(left_bgr, timing)
+            seg_result = async_seg_result if async_seg_result is not None else self._run_segmenter(left_bgr, timing)
             diagnostics.det_count = int(seg_result.det_count)
             diagnostics.segmentation_overlay_bgr = seg_result.overlay_bgr
             diagnostics.mask_area_ratio = float(seg_result.mask_area_ratio)
@@ -425,13 +779,32 @@ class QuestPosePipeline:
         self.cam_k = calibration.scaled_k(self.process_width, self.process_height)
         self.estimator.update_camera_matrix(self.cam_k)
         self.estimator.reset()
+        self._generation += 1
         self._has_registered = False
         self._last_pose = None
         self._track_reject_count = 0
         self._cutie_ready = False
+        if self._segmenter_worker is not None:
+            self._segmenter_worker.clear()
         if self.cutie is not None:
             self.cutie.reset()
         logging.info("calibration updated: calib=%dx%d baseline=%.4fm fx=%.1f", calibration.calib_width, calibration.calib_height, calibration.baseline_m, self.cam_k[0, 0])
+
+    def _apply_segmenter_snapshot(self, diagnostics: FrameDiagnostics) -> None:
+        """把异步分割 worker 状态填入 diagnostics，供 HUD/日志显示。"""
+
+        diagnostics.segmenter_async = self.async_segmentation
+        worker = self._segmenter_worker
+        if worker is None:
+            return
+        snapshot = worker.snapshot()
+        diagnostics.segmenter_busy = snapshot.busy
+        diagnostics.segmenter_submitted = snapshot.submitted
+        diagnostics.segmenter_completed = snapshot.completed
+        diagnostics.segmenter_dropped = snapshot.dropped
+        diagnostics.segmenter_error = snapshot.error
+        if snapshot.error and not diagnostics.failure_reason:
+            diagnostics.failure_reason = "segmenter_error"
 
     def _run_segmenter(self, left_bgr: np.ndarray, timing: PipelineStepTiming) -> SegmenterResult:
         """执行分割后端并记录耗时。"""
