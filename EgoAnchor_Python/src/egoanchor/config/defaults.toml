@@ -67,7 +67,7 @@ trt_feature_engine_path = "" # 显式 feature runner engine 路径；空值自�
 trt_post_engine_path = "" # 显式 post runner engine 路径；空值自动查找。
 
 [module.foundationpose]
-mesh_path = "data/online/cube/mesh/cube.stl" # FoundationPose 目标物体 mesh 路径，相对 EgoAnchor_Python。
+mesh_path = "data/model/cube.stl" # FoundationPose 目标物体 mesh 路径，相对 EgoAnchor_Python。
 est_refine_iter = 5 # register 阶段 refine 迭代次数。
 track_refine_iter = 2 # track 阶段 refine 迭代次数。
 apply_scale = 1.0 # 加载 mesh 后应用的尺度缩放，默认保持 mesh 原尺度。

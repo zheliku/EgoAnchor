@@ -11,8 +11,8 @@ mask_threshold = 0.5 # mask 二值化阈值；mask 破碎可降到 0.4。
 conf = 0.2 # 鼠标目标颜色偏浅，先用稍低阈值提高召回；误检多时调回 0.1~0.15。
 
 [module.foundationpose]
-mesh_path = "data/online/mouse/pink_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径；GLB 中的 PBR baseColorTexture 可被当前适配器读取。
-apply_scale = 0.12 # 若 GLB 单位已经是米或与真实物体一致，保持 1.0；尺寸不对时调整这里。
+mesh_path = "data/model/pink_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径；GLB 中的 PBR baseColorTexture 可被当前适配器读取。
+apply_scale = 1 # 若 GLB 单位已经是米或与真实物体一致，保持 1.0；尺寸不对时调整这里。
 # force_apply_color = true # 是否给 mesh 强制添加纯色纹理。
 # apply_color = [161, 170, 169] # 强制纹理颜色，RGB 顺序。
 est_refine_iter = 5 # 鼠标重建网格面数较多，先降低初始 register 迭代；确认可跑通后再逐步调高到 2~5。
