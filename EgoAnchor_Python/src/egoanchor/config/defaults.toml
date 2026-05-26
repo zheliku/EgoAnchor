@@ -14,6 +14,8 @@ poll_timeout_ms = 10 # 每轮 poll 最长等待时间，单位毫秒；越小窗
 enabled = true # 是否启用 NATS 消息面；发布 PoseResult，并接收 reset/reacquire/control request-reply 命令。
 url = "nats://127.0.0.1:4222" # NATS server URL；Quest 真机接收时 Unity 侧也应配置到同一开发机地址。
 pose_result_subject = "egoanchor.v1.pose.result" # Python -> Unity PoseResult subject；必须与 subjects.v1.json 保持一致。
+anchor_status_subject = "egoanchor.v1.anchor.status" # Python -> Unity AnchorStatusEvent subject；状态事件流不做 latest-only。
+server_heartbeat_subject = "egoanchor.v1.server.heartbeat" # Python -> Unity ServerHeartbeat subject；用于低频链路健康诊断。
 client_name = "egoanchor-python" # Python NATS 客户端名称，便于 nats-server 日志排查。
 connect_timeout_s = 2.0 # 初次连接 NATS 的超时时间，单位秒。
 request_timeout_s = 1.0 # 预留给未来 request/reply 命令的默认超时，当前阶段不使用。
@@ -24,6 +26,19 @@ wait_ready_on_start = false # 启动时是否等待 NATS 首次连接；false �
 max_queue_size = 128 # NATS command handler 接受后的内存队列容量；handler 只 ack/enqueue，不直接操作 pipeline。
 dedup_ttl_ms = 60000 # command request_id 幂等缓存时间，单位毫秒；Unity 超时重试同一 request_id 时返回旧 ack。
 execute_per_tick = 8 # 每轮 TrackingRuntime tick 最多执行的命令数量，避免长时间占用主循环。
+
+[runtime.heartbeat]
+interval_s = 1.0 # ServerHeartbeat 发布间隔，单位秒；保持低频，避免影响 pose 发布。
+
+[runtime.logging]
+enabled = true # 是否保存 Python server 结构化 JSONL 日志；用于论文实验复盘和状态机调试。
+output_dir = "data/runtime_logs" # 日志根目录，相对 EgoAnchor_Python；每次启动会创建时间戳-session_id 子目录。
+filename = "events.jsonl" # 单个 session 内的 JSONL 文件名；一行是一条 runtime 事件。
+flush_every = 1 # 每写入多少条事件 flush 一次；1 最安全，调大可减少磁盘 flush 频率。
+log_pose_results = true # 是否记录每帧 PoseResult 摘要，包括 pose score、phase、flags 和 frame_id。
+log_status_events = true # 是否记录 AnchorStatusEvent 状态变化与命令执行结果。
+log_heartbeats = true # 是否记录 ServerHeartbeat 摘要；心跳低频，默认记录。
+log_commands = true # 是否记录 runtime 线程实际执行 command 的时间点和动作。
 
 [pipeline.calibration]
 network_calib_update = true # 收到新的 QuestCameraInfo 且标定变化时刷新 K/FoundationPose。
@@ -91,14 +106,16 @@ pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位�
 pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
 accept_track_jump_without_mask = true # track 跳变但当前没有可用 re-register mask 时是否暂时接受该 pose，避免直接输出 no_pose 导致 anchor 卡住。
 max_consecutive_track_rejects = 3 # 连续 track reject 达到该值后强制回到 detect/register，避免长时间漂移。
-debug = 0 # FoundationPose 内部 debug 等级。
+debug = 0 # FoundationPose 内部 debug 等级；0=关闭内部 debug 可视化/文件输出，>0 只在专项排查时开启。
 debug_dir = "FoundationPose/debug/api" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
+enable_logging = false # 是否允许 FoundationPose 内部 stdout/stderr/logging 输出到 console；默认关闭，避免第三方库刷屏遮住系统日志。
 
 [module.cutie]
 enabled = true # 是否启用 Cutie 进行 2D mask 时序传播。
 seg_threshold = 0.1 # Cutie 分割概率阈值。
 erosion_size = 5 # Cutie mask 提取 bbox 前的腐蚀核大小，单位像素。
 adjust_pose = true # 是否用 Cutie bbox 中心轻量修正 FoundationPose pose_last 的图像平面平移。
+enable_logging = false # 是否允许 Cutie 内部 stdout/stderr/logging 输出到 console；默认关闭，避免第三方库刷屏遮住系统日志。
 
 [debug]
 enable_tracking_window = true # tracking_server 是否默认显示 OpenCV debug 窗口；当前 Python debug 阶段保持开启。

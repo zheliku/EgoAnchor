@@ -16,13 +16,19 @@ import numpy as np
 import torch
 from torchvision.transforms.functional import to_tensor
 
-from egoanchor.algorithms import MaskTrackResult
+from egoanchor.algorithms import FoundationPoseObjectEstimator, MaskTrackResult
 
 
 class CutieMaskTracker:
     """Cutie 2D mask tracker 封装。"""
 
-    def __init__(self, seg_threshold: float = 0.1, erosion_size: int = 5, project_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        seg_threshold: float = 0.1,
+        erosion_size: int = 5,
+        project_root: str | Path | None = None,
+        enable_logging: bool = False,
+    ) -> None:
         """初始化 Cutie 模型与时序推理核心。"""
 
         self.seg_threshold = float(seg_threshold)
@@ -34,27 +40,41 @@ class CutieMaskTracker:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         """Cutie 推理设备。"""
 
+        self.enable_logging = bool(enable_logging)
+        """是否允许 Cutie 内部 stdout/stderr/logging 输出到 console。"""
+
         self.project_root = Path(project_root).resolve() if project_root is not None else Path(__file__).resolve().parents[3]
         """EgoAnchor_Python 项目根目录。"""
 
         if str(self.project_root) not in sys.path:
             sys.path.insert(0, str(self.project_root))
 
-        cutie_pkg = importlib.import_module("Cutie.cutie")
+        cutie_pkg = FoundationPoseObjectEstimator.call_with_logging_control(
+            importlib.import_module,
+            "Cutie.cutie",
+            enable_logging=self.enable_logging,
+        )
         sys.modules["cutie"] = cutie_pkg
 
-        from cutie.inference.inference_core import InferenceCore
-        from cutie.utils.get_default_model import get_default_model
+        InferenceCore, get_default_model = FoundationPoseObjectEstimator.call_with_logging_control(
+            self._load_cutie_symbols,
+            enable_logging=self.enable_logging,
+        )
 
         self.InferenceCore = InferenceCore
         """Cutie 时序推理核心类型。"""
 
-        self.model: Any = get_default_model()
+        self.model: Any = FoundationPoseObjectEstimator.call_with_logging_control(get_default_model, enable_logging=self.enable_logging)
         """Cutie 默认模型实例。"""
 
         if hasattr(self.model, "to"):
             self.model = self.model.to(self.device)
-        self.processor = self.InferenceCore(self.model, cfg=self.model.cfg)
+        self.processor = FoundationPoseObjectEstimator.call_with_logging_control(
+            self.InferenceCore,
+            self.model,
+            cfg=self.model.cfg,
+            enable_logging=self.enable_logging,
+        )
         """当前时序推理核心，持有上一帧 memory。"""
 
         self.processor.max_internal_size = -1
@@ -140,5 +160,19 @@ class CutieMaskTracker:
     def reset(self) -> None:
         """重建 InferenceCore，清空上一目标的时序 memory。"""
 
-        self.processor = self.InferenceCore(self.model, cfg=self.model.cfg)
+        self.processor = FoundationPoseObjectEstimator.call_with_logging_control(
+            self.InferenceCore,
+            self.model,
+            cfg=self.model.cfg,
+            enable_logging=self.enable_logging,
+        )
         self.processor.max_internal_size = -1
+
+    @staticmethod
+    def _load_cutie_symbols() -> tuple[Any, Any]:
+        """导入 Cutie 推理核心和默认模型入口，便于统一控制第三方 import 输出。"""
+
+        from cutie.inference.inference_core import InferenceCore
+        from cutie.utils.get_default_model import get_default_model
+
+        return InferenceCore, get_default_model

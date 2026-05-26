@@ -219,6 +219,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
             symmetry_tfs=symmetry_tfs,
             debug=int(fp_cfg.debug),
             debug_dir=debug_dir,
+            enable_logging=bool(_cfg_get(fp_cfg, "enable_logging", False)),
             project_root=python_root,
         )
 
@@ -229,6 +230,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
             seg_threshold=float(cutie_cfg.seg_threshold),
             erosion_size=int(cutie_cfg.erosion_size),
             project_root=python_root,
+            enable_logging=bool(_cfg_get(cutie_cfg, "enable_logging", False)),
         )
 
     foundationpose_estimator = foundationpose_factory(bootstrap_k)

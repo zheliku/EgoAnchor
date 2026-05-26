@@ -90,7 +90,7 @@ EgoAnchor 作为本文框架的实例化实现，由四个环节构成：
 \begin{enumerate}
   \item Quest / Unity 侧的双目透视图像与相机信息采集；
   \item Python 服务端的 2D 分割、双目深度与 6DoF 姿态估计；
-  \item 基于 ZMQ + MessagePack 的多 topic 低时延传输；
+  \item 基于 ZMQ Protobuf 数据面与 NATS Protobuf 消息/命令面的多 topic 低时延传输；
   \item Unity 侧基于发送帧相机姿态回查的世界坐标锚定应用。
 \end{enumerate}
 
@@ -129,13 +129,13 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 本节需要清楚比较两种做法：一是 frame-aligned anchoring，二是 arrival-time anchoring，并说明后者在快速头动和外部推理延迟条件下会造成显著的世界坐标错位。
 
 \subsection{可靠性感知的锚定更新与恢复}
-本节将“从 pose stream 到 anchor behavior”的控制层写成轻量但清晰的决策机制。EgoAnchor 不对每个返回 pose 都直接更新 anchor，而是结合当前观测的可靠性、深度有效性与 tracking 状态决定如何更新。其最小形式包括：
+本节将“从 pose stream 到 anchor behavior”的控制层写成轻量但清晰的决策机制。EgoAnchor 不对每个返回 pose 都直接更新 anchor，而是结合当前观测的可靠性、深度有效性、tracking 状态、frame alignment 结果与 world-space pose innovation 决定如何更新。其最小形式包括：
 \begin{itemize}
   \item \textbf{输入：} 姿态可靠性、深度有效性、tracking 状态、头显运动强度、回包年龄；
   \item \textbf{输出：} Update、Smooth、Hold、Reacquire 四种锚定模式；
   \item \textbf{原则：} 错误更新通常比短时保持更糟；系统应在高不确定性时抑制错误 anchor 更新。
 \end{itemize}
-若本文最终实现采用规则式状态机，可按以下三个层次展开：
+当前实现采用规则式状态机，可按以下三个层次展开：
 \begin{enumerate}
   \item \textbf{可靠性估计：} 由 segmentation 质量、depth-in-mask、pose 跳变与 track 状态共同构成；
   \item \textbf{更新策略：} 高可靠性时更新，边界情况时平滑，低可靠性时保持，失败时触发重获取；
@@ -149,7 +149,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 本节记录 Quest 型号、PC GPU、Python / Unity / CUDA / TensorRT 版本和网络部署方式，使系统条件与运行边界清晰可复现。
 
 \subsection{运行时管线与通信实现}
-本节说明 Unity 与 Python 之间的多 topic ZMQ/MessagePack 运行时管线，包括 \texttt{quest\_stereo}、\texttt{quest\_camera\_info} 与 \texttt{pose} 三类消息的职责，以及 topic-level latest-drain、发送帧 pose 回查和低高水位配置如何共同支撑低时延与世界一致性目标。
+本节说明 Unity 与 Python 之间的多 topic ZMQ Protobuf / NATS Protobuf 运行时管线，包括 \texttt{quest\_stereo}、\texttt{quest\_camera\_info}、\texttt{pose}、\texttt{status}、\texttt{heartbeat} 与 command request/reply 的职责，以及 topic-level latest-drain、发送帧 pose 回查和低高水位配置如何共同支撑低时延与世界一致性目标。
 
 \subsection{诊断与复现支持}
 本节记录系统输出的阶段状态、时延统计、depth-in-mask 等诊断量，并说明这些观测如何用于实验分析、失效排查与复现。
@@ -230,7 +230,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 \end{itemize}
 
 \subsection{局限性与未来工作}
-本节讨论多物体扩展、头显端轻量部署、在线个性化和跨场景长期锚定等方向，并明确区分本文当前已实现的最小控制策略与未来更完整的 reliability-aware anchor controller / temporal filter 设计。
+本节讨论多物体扩展、头显端轻量部署、在线个性化和跨场景长期锚定等方向，并明确区分本文当前已实现的规则式 reliability-aware anchor controller 与未来更完整的学习式或任务自适应 temporal policy 设计。
 
 \section{结论}
 结论部分回到本文的核心问题：如何在异步感知、外部推理和头显持续运动条件下，将 6DoF object pose tracking 组织为稳定、世界一致且可恢复的真实物体锚定。写作重点是基于实验结果明确回答这一问题，并总结对后续 MR 对象锚定系统设计具有普遍意义的经验结论。

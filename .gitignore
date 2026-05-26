@@ -4,6 +4,8 @@
 # Large local dependency/environment caches
 /EgoAnchor_Python/.pixi/
 /EgoAnchor_Tools/.pixi/
+/EgoAnchor_Tools/**/bin/
+/EgoAnchor_Tools/**/obj/
 __pycache__/
 *.py[cod]
 

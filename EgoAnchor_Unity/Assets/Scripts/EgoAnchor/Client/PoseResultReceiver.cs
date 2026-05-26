@@ -10,11 +10,12 @@ namespace EgoAnchor.Client
     /// PoseResult 接收器。
     ///
     /// 本类属于 Client 层：它从 NatsControlClient 取出后台线程收到的 bytes，
-    /// 在 Unity 主线程解析 Protobuf PoseResult，再交给 Anchor/PoseResultHub 分发给
-    /// 一个或多个 PoseToAnchorRuntime。
+    /// 在 Unity 主线程解析 Protobuf PoseResult，再交给 AnchorRuntimeHub 分发给
+    /// 一个或多个 PoseToAnchorRuntime。status/heartbeat receiver 也可以使用同一个 hub，
+    /// 让三类消息面输入驱动完全相同的 runtime 集合。
     ///
     /// 本类不直接修改 Transform，也不持有滤波/状态机；Transform 应用由 DynamicObjectAnchor 完成。
-    /// baseline 对照时，场景中只需要一个 PoseResultReceiver，一个 PoseResultHub 可以广播到
+    /// baseline 对照时，场景中只需要一个 PoseResultReceiver，一个 AnchorRuntimeHub 可以广播到
     /// raw runtime 与 smoothed runtime。
     /// </summary>
     public sealed class PoseResultReceiver : MonoBehaviour
@@ -25,8 +26,8 @@ namespace EgoAnchor.Client
         [SerializeField] private NatsControlClient natsClient;
 
         /// <summary>PoseResult 分发中心。</summary>
-        [Tooltip("PoseResult 分发中心。负责把同一条 PoseResult 广播给一个或多个 PoseToAnchorRuntime。")]
-        [SerializeField] private PoseResultHub poseResultHub;
+        [Tooltip("Anchor runtime 分发中心。负责把同一条 PoseResult 广播给一个或多个 PoseToAnchorRuntime。")]
+        [SerializeField] private AnchorRuntimeHub runtimeHub;
 
         /// <summary>是否输出聚合统计。</summary>
         [Header("Debug")]
@@ -55,7 +56,7 @@ namespace EgoAnchor.Client
         /// </summary>
         private void Update()
         {
-            if (natsClient == null || poseResultHub == null)
+            if (natsClient == null || runtimeHub == null)
             {
                 return;
             }
@@ -70,7 +71,7 @@ namespace EgoAnchor.Client
             {
                 PoseResult result = PoseResult.Parser.ParseFrom(payload);
                 decoded++;
-                poseResultHub.Publish(result);
+                runtimeHub.Publish(result);
             }
             catch (InvalidProtocolBufferException ex)
             {
@@ -97,7 +98,7 @@ namespace EgoAnchor.Client
                 lastLoggedTotal = total;
                 Debug.Log(
                     $"[PoseResultReceiver] decoded={decoded}, parseFailed={parseFailed}, " +
-                    $"skippedOlder={skippedOlder}, hubRuntimes={poseResultHub.RuntimeCount}",
+                    $"skippedOlder={skippedOlder}, hubRuntimes={runtimeHub.RuntimeCount}",
                     this
                 );
             }

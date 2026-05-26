@@ -165,6 +165,22 @@ test-yoloe26-tool = { cmd = """
 python -m unittest tools\\yoloe26\\test_yoloe26_mask.py
 """ }
 
-demo-pipeline = { cmd = """
+default = { cmd = """
 python src/tracking_server.py
+""" }
+
+blue_mouse ={ cmd = """
+python src/tracking_server.py --config ./src/egoanchor/config/blue_mouse.toml
+""" }
+
+pink_mouse ={ cmd = """
+python src/tracking_server.py --config ./src/egoanchor/config/pink_mouse.toml
+""" }
+
+earphone ={ cmd = """
+python src/tracking_server.py --config ./src/egoanchor/config/earphone.toml
+""" }
+
+controller ={ cmd = """
+python src/tracking_server.py --config ./src/egoanchor/config/controller.toml
 """ }

@@ -25,43 +25,48 @@ namespace EgoAnchor.Protocol.Generated {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "Chhwcm90b2NvbC92MS9hbmNob3IucHJvdG8SC3Byb3RvY29sLnYxGhhwcm90",
-            "b2NvbC92MS9jb21tb24ucHJvdG8isAIKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
+            "b2NvbC92MS9jb21tb24ucHJvdG8i8QMKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
             "GAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchIQCghoYXNfcG9z",
             "ZRgCIAEoCBI1ChVwb3NlX21hdHJpeF9jdl9jYW1lcmEYAyABKAsyFi5wcm90",
             "b2NvbC52MS5NYXRyaXg0eDQSDQoFcGhhc2UYBCABKAkSDQoFc3RhZ2UYBSAB",
             "KAUSEQoJZGV0X2NvdW50GAYgASgFEhkKEWRlcHRoX3ZhbGlkX3JhdGlvGAcg",
             "ASgCEgsKA2ZwcxgIIAEoAhIoCgZ0aW1pbmcYCSABKAsyGC5wcm90b2NvbC52",
             "MS5UaW1pbmdTdGF0cxIqCgpsYXN0X2Vycm9yGAogASgLMhYucHJvdG9jb2wu",
-            "djEuRXJyb3JJbmZvIpUBChFBbmNob3JTdGF0dXNFdmVudBIqCgZoZWFkZXIY",
-            "ASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVhZGVyEg0KBXN0YXRlGAIg",
-            "ASgJEg0KBWV2ZW50GAMgASgJEg8KB21lc3NhZ2UYBCABKAkSJQoFZXJyb3IY",
-            "BSABKAsyFi5wcm90b2NvbC52MS5FcnJvckluZm8ikgIKD1NlcnZlckhlYXJ0",
-            "YmVhdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVh",
-            "ZGVyEg0KBXN0YXRlGAIgASgJEhMKC2lucHV0X3JlYWR5GAMgASgIEh4KFmxh",
-            "dGVzdF9zdGVyZW9fZnJhbWVfaWQYBCABKAMSGwoTY2FtZXJhX2luZm9fdmVy",
-            "c2lvbhgFIAEoAxITCgtydW50aW1lX2ZwcxgGIAEoAhITCgtwdWJsaXNoX2Zw",
-            "cxgHIAEoAhIqCgpsYXN0X2Vycm9yGAggASgLMhYucHJvdG9jb2wudjEuRXJy",
-            "b3JJbmZvEhwKFGNvbW1hbmRfcXVldWVfbGVuZ3RoGAkgASgFIoQBChRSZXNl",
-            "dFRyYWNraW5nUmVxdWVzdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52",
-            "MS5NZXNzYWdlSGVhZGVyEhUKDWNsZWFyX2ZpbHRlcnMYAiABKAgSGQoRY2xl",
-            "YXJfYW5jaG9yX3Bvc2UYAyABKAgSDgoGcmVhc29uGAQgASgJIqgCChZSZWFj",
-            "cXVpcmVBbmNob3JSZXF1ZXN0EioKBmhlYWRlchgBIAEoCzIaLnByb3RvY29s",
-            "LnYxLk1lc3NhZ2VIZWFkZXISPwoEbW9kZRgCIAEoDjIxLnByb3RvY29sLnYx",
-            "LlJlYWNxdWlyZUFuY2hvclJlcXVlc3QuUmVhY3F1aXJlTW9kZRIcChRjbGVh",
-            "cl90cmFja2luZ19maXJzdBgDIAEoCBIXCg9wcm9tcHRfb3ZlcnJpZGUYBCAB",
-            "KAkSEgoKdGltZW91dF9tcxgFIAEoASJWCg1SZWFjcXVpcmVNb2RlEhQKEE5F",
-            "WFRfVkFMSURfRlJBTUUQABIdChlMQVRFU1RfRlJBTUVfSUZfQVZBSUxBQkxF",
-            "EAESEAoMRk9SQ0VfREVURUNUEAIi+QEKFEFuY2hvckNvbnRyb2xSZXF1ZXN0",
-            "EioKBmhlYWRlchgBIAEoCzIaLnByb3RvY29sLnYxLk1lc3NhZ2VIZWFkZXIS",
-            "PwoGYWN0aW9uGAIgASgOMi8ucHJvdG9jb2wudjEuQW5jaG9yQ29udHJvbFJl",
-            "cXVlc3QuQ29udHJvbEFjdGlvbhINCgVzdGFnZRgDIAEoBRIOCgZyZWFzb24Y",
-            "BCABKAkiVQoNQ29udHJvbEFjdGlvbhIeChpDT05UUk9MX0FDVElPTl9VTlNQ",
-            "RUNJRklFRBAAEg0KCVNFVF9TVEFHRRABEgkKBVBBVVNFEAISCgoGUkVTVU1F",
-            "EANCGKoCFUVnb0FuY2hvci5Qcm90b2NvbC5WMWIGcHJvdG8z"));
+            "djEuRXJyb3JJbmZvEhkKEXJlbGlhYmlsaXR5X3Njb3JlGAsgASgCEhkKEXJl",
+            "bGlhYmlsaXR5X2ZsYWdzGAwgAygJEhsKE2RlcHRoX3ZhbGlkX2luX21hc2sY",
+            "DSABKAISFwoPbWFza19hcmVhX3JhdGlvGA4gASgCEhMKC3Bvc2Vfc291cmNl",
+            "GA8gASgJEh4KFnNlcnZlcl9yZWNlaXZlX21vbm9fbXMYECABKAESHgoWc2Vy",
+            "dmVyX3B1Ymxpc2hfbW9ub19tcxgRIAEoASKVAQoRQW5jaG9yU3RhdHVzRXZl",
+            "bnQSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRl",
+            "chINCgVzdGF0ZRgCIAEoCRINCgVldmVudBgDIAEoCRIPCgdtZXNzYWdlGAQg",
+            "ASgJEiUKBWVycm9yGAUgASgLMhYucHJvdG9jb2wudjEuRXJyb3JJbmZvIpIC",
+            "Cg9TZXJ2ZXJIZWFydGJlYXQSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wu",
+            "djEuTWVzc2FnZUhlYWRlchINCgVzdGF0ZRgCIAEoCRITCgtpbnB1dF9yZWFk",
+            "eRgDIAEoCBIeChZsYXRlc3Rfc3RlcmVvX2ZyYW1lX2lkGAQgASgDEhsKE2Nh",
+            "bWVyYV9pbmZvX3ZlcnNpb24YBSABKAMSEwoLcnVudGltZV9mcHMYBiABKAIS",
+            "EwoLcHVibGlzaF9mcHMYByABKAISKgoKbGFzdF9lcnJvchgIIAEoCzIWLnBy",
+            "b3RvY29sLnYxLkVycm9ySW5mbxIcChRjb21tYW5kX3F1ZXVlX2xlbmd0aBgJ",
+            "IAEoBSKEAQoUUmVzZXRUcmFja2luZ1JlcXVlc3QSKgoGaGVhZGVyGAEgASgL",
+            "MhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchIVCg1jbGVhcl9maWx0ZXJz",
+            "GAIgASgIEhkKEWNsZWFyX2FuY2hvcl9wb3NlGAMgASgIEg4KBnJlYXNvbhgE",
+            "IAEoCSKoAgoWUmVhY3F1aXJlQW5jaG9yUmVxdWVzdBIqCgZoZWFkZXIYASAB",
+            "KAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVhZGVyEj8KBG1vZGUYAiABKA4y",
+            "MS5wcm90b2NvbC52MS5SZWFjcXVpcmVBbmNob3JSZXF1ZXN0LlJlYWNxdWly",
+            "ZU1vZGUSHAoUY2xlYXJfdHJhY2tpbmdfZmlyc3QYAyABKAgSFwoPcHJvbXB0",
+            "X292ZXJyaWRlGAQgASgJEhIKCnRpbWVvdXRfbXMYBSABKAEiVgoNUmVhY3F1",
+            "aXJlTW9kZRIUChBORVhUX1ZBTElEX0ZSQU1FEAASHQoZTEFURVNUX0ZSQU1F",
+            "X0lGX0FWQUlMQUJMRRABEhAKDEZPUkNFX0RFVEVDVBACIvkBChRBbmNob3JD",
+            "b250cm9sUmVxdWVzdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5N",
+            "ZXNzYWdlSGVhZGVyEj8KBmFjdGlvbhgCIAEoDjIvLnByb3RvY29sLnYxLkFu",
+            "Y2hvckNvbnRyb2xSZXF1ZXN0LkNvbnRyb2xBY3Rpb24SDQoFc3RhZ2UYAyAB",
+            "KAUSDgoGcmVhc29uGAQgASgJIlUKDUNvbnRyb2xBY3Rpb24SHgoaQ09OVFJP",
+            "TF9BQ1RJT05fVU5TUEVDSUZJRUQQABINCglTRVRfU1RBR0UQARIJCgVQQVVT",
+            "RRACEgoKBlJFU1VNRRADQhiqAhVFZ29BbmNob3IuUHJvdG9jb2wuVjFiBnBy",
+            "b3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::EgoAnchor.Protocol.Generated.CommonReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError", "ReliabilityScore", "ReliabilityFlags", "DepthValidInMask", "MaskAreaRatio", "PoseSource", "ServerReceiveMonoMs", "ServerPublishMonoMs" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.AnchorStatusEvent), global::EgoAnchor.Protocol.Generated.AnchorStatusEvent.Parser, new[]{ "Header", "State", "Event", "Message", "Error" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ServerHeartbeat), global::EgoAnchor.Protocol.Generated.ServerHeartbeat.Parser, new[]{ "Header", "State", "InputReady", "LatestStereoFrameId", "CameraInfoVersion", "RuntimeFps", "PublishFps", "LastError", "CommandQueueLength" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ResetTrackingRequest), global::EgoAnchor.Protocol.Generated.ResetTrackingRequest.Parser, new[]{ "Header", "ClearFilters", "ClearAnchorPose", "Reason" }, null, null, null, null),
@@ -118,6 +123,13 @@ namespace EgoAnchor.Protocol.Generated {
       fps_ = other.fps_;
       timing_ = other.timing_ != null ? other.timing_.Clone() : null;
       lastError_ = other.lastError_ != null ? other.lastError_.Clone() : null;
+      reliabilityScore_ = other.reliabilityScore_;
+      reliabilityFlags_ = other.reliabilityFlags_.Clone();
+      depthValidInMask_ = other.depthValidInMask_;
+      maskAreaRatio_ = other.maskAreaRatio_;
+      poseSource_ = other.poseSource_;
+      serverReceiveMonoMs_ = other.serverReceiveMonoMs_;
+      serverPublishMonoMs_ = other.serverPublishMonoMs_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -247,6 +259,89 @@ namespace EgoAnchor.Protocol.Generated {
       }
     }
 
+    /// <summary>Field number for the "reliability_score" field.</summary>
+    public const int ReliabilityScoreFieldNumber = 11;
+    private float reliabilityScore_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float ReliabilityScore {
+      get { return reliabilityScore_; }
+      set {
+        reliabilityScore_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "reliability_flags" field.</summary>
+    public const int ReliabilityFlagsFieldNumber = 12;
+    private static readonly pb::FieldCodec<string> _repeated_reliabilityFlags_codec
+        = pb::FieldCodec.ForString(98);
+    private readonly pbc::RepeatedField<string> reliabilityFlags_ = new pbc::RepeatedField<string>();
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> ReliabilityFlags {
+      get { return reliabilityFlags_; }
+    }
+
+    /// <summary>Field number for the "depth_valid_in_mask" field.</summary>
+    public const int DepthValidInMaskFieldNumber = 13;
+    private float depthValidInMask_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float DepthValidInMask {
+      get { return depthValidInMask_; }
+      set {
+        depthValidInMask_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "mask_area_ratio" field.</summary>
+    public const int MaskAreaRatioFieldNumber = 14;
+    private float maskAreaRatio_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaskAreaRatio {
+      get { return maskAreaRatio_; }
+      set {
+        maskAreaRatio_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "pose_source" field.</summary>
+    public const int PoseSourceFieldNumber = 15;
+    private string poseSource_ = "";
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string PoseSource {
+      get { return poseSource_; }
+      set {
+        poseSource_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "server_receive_mono_ms" field.</summary>
+    public const int ServerReceiveMonoMsFieldNumber = 16;
+    private double serverReceiveMonoMs_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public double ServerReceiveMonoMs {
+      get { return serverReceiveMonoMs_; }
+      set {
+        serverReceiveMonoMs_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "server_publish_mono_ms" field.</summary>
+    public const int ServerPublishMonoMsFieldNumber = 17;
+    private double serverPublishMonoMs_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public double ServerPublishMonoMs {
+      get { return serverPublishMonoMs_; }
+      set {
+        serverPublishMonoMs_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -272,6 +367,13 @@ namespace EgoAnchor.Protocol.Generated {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Fps, other.Fps)) return false;
       if (!object.Equals(Timing, other.Timing)) return false;
       if (!object.Equals(LastError, other.LastError)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ReliabilityScore, other.ReliabilityScore)) return false;
+      if(!reliabilityFlags_.Equals(other.reliabilityFlags_)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(DepthValidInMask, other.DepthValidInMask)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaskAreaRatio, other.MaskAreaRatio)) return false;
+      if (PoseSource != other.PoseSource) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(ServerReceiveMonoMs, other.ServerReceiveMonoMs)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(ServerPublishMonoMs, other.ServerPublishMonoMs)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -289,6 +391,13 @@ namespace EgoAnchor.Protocol.Generated {
       if (Fps != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Fps);
       if (timing_ != null) hash ^= Timing.GetHashCode();
       if (lastError_ != null) hash ^= LastError.GetHashCode();
+      if (ReliabilityScore != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ReliabilityScore);
+      hash ^= reliabilityFlags_.GetHashCode();
+      if (DepthValidInMask != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(DepthValidInMask);
+      if (MaskAreaRatio != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaskAreaRatio);
+      if (PoseSource.Length != 0) hash ^= PoseSource.GetHashCode();
+      if (ServerReceiveMonoMs != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(ServerReceiveMonoMs);
+      if (ServerPublishMonoMs != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(ServerPublishMonoMs);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -347,6 +456,31 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(82);
         output.WriteMessage(LastError);
       }
+      if (ReliabilityScore != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(ReliabilityScore);
+      }
+      reliabilityFlags_.WriteTo(output, _repeated_reliabilityFlags_codec);
+      if (DepthValidInMask != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(DepthValidInMask);
+      }
+      if (MaskAreaRatio != 0F) {
+        output.WriteRawTag(117);
+        output.WriteFloat(MaskAreaRatio);
+      }
+      if (PoseSource.Length != 0) {
+        output.WriteRawTag(122);
+        output.WriteString(PoseSource);
+      }
+      if (ServerReceiveMonoMs != 0D) {
+        output.WriteRawTag(129, 1);
+        output.WriteDouble(ServerReceiveMonoMs);
+      }
+      if (ServerPublishMonoMs != 0D) {
+        output.WriteRawTag(137, 1);
+        output.WriteDouble(ServerPublishMonoMs);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -397,6 +531,31 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(82);
         output.WriteMessage(LastError);
       }
+      if (ReliabilityScore != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(ReliabilityScore);
+      }
+      reliabilityFlags_.WriteTo(ref output, _repeated_reliabilityFlags_codec);
+      if (DepthValidInMask != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(DepthValidInMask);
+      }
+      if (MaskAreaRatio != 0F) {
+        output.WriteRawTag(117);
+        output.WriteFloat(MaskAreaRatio);
+      }
+      if (PoseSource.Length != 0) {
+        output.WriteRawTag(122);
+        output.WriteString(PoseSource);
+      }
+      if (ServerReceiveMonoMs != 0D) {
+        output.WriteRawTag(129, 1);
+        output.WriteDouble(ServerReceiveMonoMs);
+      }
+      if (ServerPublishMonoMs != 0D) {
+        output.WriteRawTag(137, 1);
+        output.WriteDouble(ServerPublishMonoMs);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -436,6 +595,25 @@ namespace EgoAnchor.Protocol.Generated {
       }
       if (lastError_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(LastError);
+      }
+      if (ReliabilityScore != 0F) {
+        size += 1 + 4;
+      }
+      size += reliabilityFlags_.CalculateSize(_repeated_reliabilityFlags_codec);
+      if (DepthValidInMask != 0F) {
+        size += 1 + 4;
+      }
+      if (MaskAreaRatio != 0F) {
+        size += 1 + 4;
+      }
+      if (PoseSource.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(PoseSource);
+      }
+      if (ServerReceiveMonoMs != 0D) {
+        size += 2 + 8;
+      }
+      if (ServerPublishMonoMs != 0D) {
+        size += 2 + 8;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -490,6 +668,25 @@ namespace EgoAnchor.Protocol.Generated {
           LastError = new global::EgoAnchor.Protocol.Generated.ErrorInfo();
         }
         LastError.MergeFrom(other.LastError);
+      }
+      if (other.ReliabilityScore != 0F) {
+        ReliabilityScore = other.ReliabilityScore;
+      }
+      reliabilityFlags_.Add(other.reliabilityFlags_);
+      if (other.DepthValidInMask != 0F) {
+        DepthValidInMask = other.DepthValidInMask;
+      }
+      if (other.MaskAreaRatio != 0F) {
+        MaskAreaRatio = other.MaskAreaRatio;
+      }
+      if (other.PoseSource.Length != 0) {
+        PoseSource = other.PoseSource;
+      }
+      if (other.ServerReceiveMonoMs != 0D) {
+        ServerReceiveMonoMs = other.ServerReceiveMonoMs;
+      }
+      if (other.ServerPublishMonoMs != 0D) {
+        ServerPublishMonoMs = other.ServerPublishMonoMs;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -562,6 +759,34 @@ namespace EgoAnchor.Protocol.Generated {
             input.ReadMessage(LastError);
             break;
           }
+          case 93: {
+            ReliabilityScore = input.ReadFloat();
+            break;
+          }
+          case 98: {
+            reliabilityFlags_.AddEntriesFrom(input, _repeated_reliabilityFlags_codec);
+            break;
+          }
+          case 109: {
+            DepthValidInMask = input.ReadFloat();
+            break;
+          }
+          case 117: {
+            MaskAreaRatio = input.ReadFloat();
+            break;
+          }
+          case 122: {
+            PoseSource = input.ReadString();
+            break;
+          }
+          case 129: {
+            ServerReceiveMonoMs = input.ReadDouble();
+            break;
+          }
+          case 137: {
+            ServerPublishMonoMs = input.ReadDouble();
+            break;
+          }
         }
       }
     #endif
@@ -631,6 +856,34 @@ namespace EgoAnchor.Protocol.Generated {
               LastError = new global::EgoAnchor.Protocol.Generated.ErrorInfo();
             }
             input.ReadMessage(LastError);
+            break;
+          }
+          case 93: {
+            ReliabilityScore = input.ReadFloat();
+            break;
+          }
+          case 98: {
+            reliabilityFlags_.AddEntriesFrom(ref input, _repeated_reliabilityFlags_codec);
+            break;
+          }
+          case 109: {
+            DepthValidInMask = input.ReadFloat();
+            break;
+          }
+          case 117: {
+            MaskAreaRatio = input.ReadFloat();
+            break;
+          }
+          case 122: {
+            PoseSource = input.ReadString();
+            break;
+          }
+          case 129: {
+            ServerReceiveMonoMs = input.ReadDouble();
+            break;
+          }
+          case 137: {
+            ServerPublishMonoMs = input.ReadDouble();
             break;
           }
         }

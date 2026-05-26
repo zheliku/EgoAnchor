@@ -20,7 +20,7 @@ class PoseResultFactory:
     但不负责 NATS 发布、不访问 Unity，也不修改 pipeline/GPU 状态。
     """
 
-    def __init__(self, *, client_id: str = "egoanchor-python", anchor_id: str = "default") -> None:
+    def __init__(self, *, client_id: str = "egoanchor-python", anchor_id: str = "default", session_id: str = "") -> None:
         """保存消息头中的客户端/anchor 标识。"""
 
         self.client_id = str(client_id)
@@ -29,7 +29,7 @@ class PoseResultFactory:
         self.anchor_id = str(anchor_id)
         """目标 anchor 标识；当前单目标 demo 使用 default。"""
 
-        self.session_id = uuid.uuid4().hex
+        self.session_id = str(session_id or uuid.uuid4().hex)
         """本次 Python 进程会话 ID，用于 Unity 侧日志排查。"""
 
     def build(self, observation: PoseObservation) -> anchor_pb2.PoseResult:
@@ -45,7 +45,13 @@ class PoseResultFactory:
         result.stage = int(observation.stage)
         result.det_count = int(observation.det_count)
         result.depth_valid_ratio = float(observation.depth_valid_ratio)
+        result.depth_valid_in_mask = float(observation.depth_valid_in_mask)
+        result.mask_area_ratio = float(observation.mask_area_ratio)
+        result.reliability_score = float(observation.reliability_score)
+        result.reliability_flags.extend(str(flag) for flag in observation.reliability_flags)
+        result.pose_source = str(observation.pose_source or "")
         result.fps = float(observation.fps)
+        result.server_publish_mono_ms = time.monotonic() * 1000.0
         result.timing.CopyFrom(
             common_pb2.TimingStats(
                 yolo_ms=float(observation.yolo_ms),

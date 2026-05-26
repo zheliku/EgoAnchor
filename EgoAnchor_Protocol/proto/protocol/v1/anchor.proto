@@ -17,6 +17,13 @@ message PoseResult {
   float fps = 8;
   TimingStats timing = 9;
   ErrorInfo last_error = 10;
+  float reliability_score = 11;
+  repeated string reliability_flags = 12;
+  float depth_valid_in_mask = 13;
+  float mask_area_ratio = 14;
+  string pose_source = 15;
+  double server_receive_mono_ms = 16;
+  double server_publish_mono_ms = 17;
 }
 
 message AnchorStatusEvent {

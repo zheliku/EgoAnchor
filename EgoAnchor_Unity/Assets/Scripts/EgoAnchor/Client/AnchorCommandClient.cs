@@ -103,6 +103,12 @@ namespace EgoAnchor.Client
         /// <summary>最近一次 reset request；收到 ack 后用于决定是否清理本地 anchor 状态。</summary>
         private ResetTrackingRequest pendingResetForLocalApply;
 
+        /// <summary>最近一次 reacquire request；收到 ack 后用于通知本地状态机。</summary>
+        private ReacquireAnchorRequest pendingReacquireForLocalApply;
+
+        /// <summary>最近一次 control request；收到 ack 后用于通知本地 pause/resume 状态。</summary>
+        private AnchorControlRequest pendingControlForLocalApply;
+
         /// <summary>最近一次 request 取消源。</summary>
         private CancellationTokenSource requestCts;
 
@@ -272,6 +278,7 @@ namespace EgoAnchor.Client
                 TimeoutMs = timeoutMs,
             };
             request.Header.MessageId = $"{request.Header.MessageId}_{reason ?? string.Empty}";
+            pendingReacquireForLocalApply = request;
             return await SendCommandAsync(SubjectNames.ReacquireAnchor, request, token);
         }
 
@@ -296,6 +303,7 @@ namespace EgoAnchor.Client
                 Stage = stage,
                 Reason = reason ?? string.Empty,
             };
+            pendingControlForLocalApply = request;
             return await SendCommandAsync(SubjectNames.AnchorControl, request, token);
         }
 
@@ -418,6 +426,14 @@ namespace EgoAnchor.Client
                 {
                     ApplyAcceptedResetLocally(pendingResetForLocalApply);
                 }
+                else if (subject == SubjectNames.ReacquireAnchor)
+                {
+                    ApplyAcceptedReacquireLocally(pendingReacquireForLocalApply);
+                }
+                else if (subject == SubjectNames.AnchorControl)
+                {
+                    ApplyAcceptedControlLocally(pendingControlForLocalApply);
+                }
             }
             else
             {
@@ -482,6 +498,59 @@ namespace EgoAnchor.Client
                 if (request.ClearAnchorPose)
                 {
                     runtime.ClearPoseState(clearProcessors: false);
+                }
+
+                runtime.NotifyResetAccepted(request.ClearFilters, request.ClearAnchorPose, request.Reason);
+            }
+        }
+
+        /// <summary>
+        /// Python accepted reacquire 后，同步 Unity 本地 anchor 状态为 Relocalizing。
+        /// </summary>
+        /// <param name="request">对应 reacquire request。</param>
+        private void ApplyAcceptedReacquireLocally(ReacquireAnchorRequest request)
+        {
+            if (request == null || localAnchorRuntimes == null)
+            {
+                return;
+            }
+
+            foreach (PoseToAnchorRuntime runtime in localAnchorRuntimes)
+            {
+                if (runtime == null)
+                {
+                    continue;
+                }
+
+                runtime.NotifyReacquireAccepted(request.ClearTrackingFirst, request.Header?.MessageId ?? "reacquire");
+            }
+        }
+
+        /// <summary>
+        /// Python accepted pause/resume 后，同步 Unity 本地 anchor 状态。
+        /// </summary>
+        /// <param name="request">对应 control request。</param>
+        private void ApplyAcceptedControlLocally(AnchorControlRequest request)
+        {
+            if (request == null || localAnchorRuntimes == null)
+            {
+                return;
+            }
+
+            foreach (PoseToAnchorRuntime runtime in localAnchorRuntimes)
+            {
+                if (runtime == null)
+                {
+                    continue;
+                }
+
+                if (request.Action == AnchorControlRequest.Types.ControlAction.Pause)
+                {
+                    runtime.NotifyPauseAccepted(request.Reason);
+                }
+                else if (request.Action == AnchorControlRequest.Types.ControlAction.Resume)
+                {
+                    runtime.NotifyResumeAccepted(request.Reason);
                 }
             }
         }

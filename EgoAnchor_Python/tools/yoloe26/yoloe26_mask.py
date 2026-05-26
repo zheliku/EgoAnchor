@@ -31,7 +31,7 @@ MODEL_PATH = WEIGHTS_DIR / "yoloe-26l-seg.pt"
 MOBILECLIP2_PATH = WEIGHTS_DIR / "mobileclip2_b.ts"
 
 # 初始提示词；可写字符串，也可写多个候选类别。
-PROMPT: str | list[str] = ["small pink rounded rectangular earphone charging case"]
+PROMPT: str | list[str] = ["quest 3 controller"]
 
 # 检测置信度阈值；降低可提高召回，但会增加误检。
 CONF = 0.15
@@ -40,7 +40,7 @@ CONF = 0.15
 IMGSZ = 640
 
 # 最大检测数量；prompt 调试可设为 2 或 3 观察误检。
-MAX_DET = 2
+MAX_DET = 1
 
 # mask 二值化阈值；mask 破碎时可适当降低。
 MASK_THRESHOLD = 0.5

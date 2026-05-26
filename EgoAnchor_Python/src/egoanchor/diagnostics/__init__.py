@@ -11,6 +11,7 @@ from .debug_view import (
     tile_pose_depth_dashboard,
 )
 from .stereo_view import decode_jpeg, draw_stereo_hud, make_waiting_image, stack_stereo
+from .runtime_event_log import RuntimeEventLogger
 from .window import create_fixed_window
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "decode_jpeg",
     "draw_stereo_hud",
     "make_waiting_image",
+    "RuntimeEventLogger",
     "stack_stereo",
     "colorize_depth",
     "draw_pose_hud",

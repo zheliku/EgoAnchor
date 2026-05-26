@@ -354,7 +354,7 @@ class FastFoundationStereoDepth:
             self._pt_backend.load_model()
         else:
             self.runtime_backend = "trt"
-            logging.info("FFS TRT 模式启用，首次推理将按输入尺寸匹配 engine。")
+            logging.debug("FFS TRT 模式启用，首次推理将按输入尺寸匹配 engine。")
 
         if hasattr(self.torch, "set_float32_matmul_precision"):
             self.torch.set_float32_matmul_precision("high")

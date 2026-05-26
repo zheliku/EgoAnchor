@@ -5,26 +5,23 @@ using UnityEngine;
 namespace EgoAnchor.Anchor
 {
     /// <summary>
-    /// PoseResult 分发中心。
+    /// Anchor runtime 分发中心。
     ///
     /// 一个 Python 目标 pose 流可以同时驱动多个 Unity anchor runtime：
     /// - raw baseline runtime：不挂 processor，或 DynamicObjectAnchor 读取 Raw。
     /// - smoothed runtime：挂 Kalman/LowPass 等 processor，DynamicObjectAnchor 读取 Smoothed。
     ///
-    /// 因此 PoseResultReceiver 不应该绑定单个 PoseToAnchorRuntime；它只负责解码网络消息，
-    /// 再把同一条 PoseResult 广播给本 hub。hub 在主线程顺序调用多个 runtime，保证
-    /// baseline 和 smoothed 对照使用完全相同的输入 pose。
+    /// 因此网络 receiver 不应该各自绑定单个 PoseToAnchorRuntime；它们只负责解码
+    /// Protobuf，再把 PoseResult、AnchorStatusEvent、ServerHeartbeat 交给本 hub。
+    /// hub 在主线程顺序调用多个 runtime，保证 baseline 和 smoothed 对照使用完全相同的
+    /// pose/status/heartbeat 输入。
     /// </summary>
-    public sealed class PoseResultHub : MonoBehaviour
+    public sealed class AnchorRuntimeHub : MonoBehaviour
     {
-        /// <summary>接收同一 PoseResult 的 runtime 列表。</summary>
+        /// <summary>接收 pose/status/heartbeat 的 runtime 列表。</summary>
         [Header("Targets")]
-        [Tooltip("接收同一 PoseResult 的 runtime 列表。用于同时驱动 raw baseline 与 smoothed 输出。")]
+        [Tooltip("接收 pose/status/heartbeat 的 runtime 列表。用于同时驱动 raw baseline、smoothed 输出和 reliability-aware policy。")]
         [SerializeField] private List<PoseToAnchorRuntime> runtimes = new List<PoseToAnchorRuntime>();
-
-        /// <summary>是否在 Awake 时自动收集子物体中的 runtime。</summary>
-        [Tooltip("列表为空时，是否自动收集当前 GameObject 子层级中的 PoseToAnchorRuntime。建议显式绑定，自动收集只用于快速调试。")]
-        [SerializeField] private bool autoCollectChildrenWhenEmpty = true;
 
         /// <summary>是否输出聚合统计。</summary>
         [Header("Debug")]
@@ -48,19 +45,17 @@ namespace EgoAnchor.Anchor
         /// <summary>累计 runtime 对齐/矩阵失败次数。</summary>
         private int failed;
 
+        /// <summary>累计分发 AnchorStatusEvent 的 runtime 次数。</summary>
+        private int statusDispatched;
+
+        /// <summary>累计分发 ServerHeartbeat 的 runtime 次数。</summary>
+        private int heartbeatDispatched;
+
         /// <summary>上次打印统计时的接收数量。</summary>
         private int lastLoggedReceived;
 
         /// <summary>只读 runtime 数。</summary>
         public int RuntimeCount => runtimes?.Count ?? 0;
-
-        /// <summary>
-        /// Unity Awake：按需自动收集 runtime。
-        /// </summary>
-        private void Awake()
-        {
-            EnsureRuntimeList();
-        }
 
         /// <summary>
         /// Inspector 修改时确保列表非空。
@@ -152,18 +147,73 @@ namespace EgoAnchor.Anchor
         }
 
         /// <summary>
-        /// 确保 runtime 列表可用，并在空列表时按需从子层级自动收集。
+        /// 把一条 AnchorStatusEvent 分发给所有 runtime。
+        /// </summary>
+        /// <param name="status">Python 发布的 AnchorStatusEvent。</param>
+        /// <returns>实际通知的 runtime 数量。</returns>
+        public int PublishStatus(AnchorStatusEvent status)
+        {
+            EnsureRuntimeList();
+            if (status == null || runtimes == null || runtimes.Count == 0)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (PoseToAnchorRuntime runtime in runtimes)
+            {
+                if (runtime == null)
+                {
+                    continue;
+                }
+
+                runtime.NotifyStatusEvent(status);
+                count++;
+            }
+
+            statusDispatched += count;
+            MaybeLogStats();
+            return count;
+        }
+
+        /// <summary>
+        /// 把一条 ServerHeartbeat 分发给所有 runtime。
+        /// </summary>
+        /// <param name="heartbeat">Python 发布的 ServerHeartbeat。</param>
+        /// <returns>实际通知的 runtime 数量。</returns>
+        public int PublishHeartbeat(ServerHeartbeat heartbeat)
+        {
+            EnsureRuntimeList();
+            if (heartbeat == null || runtimes == null || runtimes.Count == 0)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (PoseToAnchorRuntime runtime in runtimes)
+            {
+                if (runtime == null)
+                {
+                    continue;
+                }
+
+                runtime.NotifyHeartbeat(heartbeat);
+                count++;
+            }
+
+            heartbeatDispatched += count;
+            MaybeLogStats();
+            return count;
+        }
+
+        /// <summary>
+        /// 确保 runtime 列表可用。
         /// </summary>
         private void EnsureRuntimeList()
         {
             if (runtimes == null)
             {
                 runtimes = new List<PoseToAnchorRuntime>();
-            }
-
-            if (runtimes.Count == 0 && autoCollectChildrenWhenEmpty)
-            {
-                runtimes.AddRange(GetComponentsInChildren<PoseToAnchorRuntime>(includeInactive: false));
             }
         }
 
@@ -181,7 +231,8 @@ namespace EgoAnchor.Anchor
             {
                 lastLoggedReceived = received;
                 Debug.Log(
-                    $"[PoseResultHub] received={received}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, failed={failed}",
+                    $"[AnchorRuntimeHub] received={received}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, " +
+                    $"failed={failed}, statusDispatched={statusDispatched}, heartbeatDispatched={heartbeatDispatched}",
                     this
                 );
             }

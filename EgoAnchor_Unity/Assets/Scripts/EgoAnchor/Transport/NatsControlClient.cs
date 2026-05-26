@@ -14,13 +14,13 @@ namespace EgoAnchor.Transport
     /// NATS 消息面客户端组件。
     ///
     /// 消息面与 ZMQ 高频数据面相对：它只承载低频、小 payload、需要状态语义的消息，
-    /// 当前阶段同时承载 Python -> Unity 的 PoseResult 订阅链路，以及 Unity -> Python 的
+    /// 当前阶段同时承载 Python -> Unity 的 PoseResult/status/heartbeat 订阅链路，以及 Unity -> Python 的
     /// reset/reacquire/control request-reply 命令链路。
     ///
     /// 本类只负责：
     /// - 连接 NATS。
-    /// - 订阅 PoseResult subject。
-    /// - 把收到的 Protobuf payload 放入线程安全 latest-only 队列，等待 Unity 主线程消费。
+    /// - 订阅 PoseResult、AnchorStatusEvent、ServerHeartbeat subject。
+    /// - 把收到的 Protobuf payload 放入线程安全队列，等待 Unity 主线程消费。
     /// - 提供 bytes request/reply 方法，供上层 AnchorCommandClient 发送 typed command。
     ///
     /// 注意：NATS 后台回调不应直接修改 Transform，也不应运行 anchor 状态机。
@@ -41,11 +41,11 @@ namespace EgoAnchor.Transport
         [SerializeField] private string natsUrlPlayerPrefsKey = "EgoAnchor.NatsUrl";
 
         /// <summary>是否在 Start 时自动连接。</summary>
-        [Tooltip("是否在 Start 时自动连接 NATS 并订阅 PoseResult。关闭后可由外部脚本显式调用 StartClient。")]
+        [Tooltip("是否在 Start 时自动连接 NATS 并订阅 PoseResult、AnchorStatusEvent 与 ServerHeartbeat。关闭后可由外部脚本显式调用 StartClient。")]
         [SerializeField] private bool connectOnStart = true;
 
         /// <summary>订阅端 pending channel 容量。</summary>
-        [Tooltip("订阅端内部 pending channel 容量。PoseResult 是 latest-only 小消息，容量不宜过大，避免旧 pose 排队。")]
+        [Tooltip("订阅端内部 pending channel 容量。PoseResult/Heartbeat 是 latest-only 小消息，容量不宜过大，避免旧消息排队。")]
         [Min(1)]
         [SerializeField] private int pendingCapacity = 8;
 
@@ -76,6 +76,12 @@ namespace EgoAnchor.Transport
         /// <summary>后台线程收到、等待主线程消费的 PoseResult payload 队列。</summary>
         private ConcurrentQueue<byte[]> poseResultPayloads;
 
+        /// <summary>后台线程收到、等待主线程消费的 AnchorStatusEvent payload 队列。</summary>
+        private ConcurrentQueue<byte[]> statusPayloads;
+
+        /// <summary>后台线程收到、等待主线程消费的 ServerHeartbeat payload 队列。</summary>
+        private ConcurrentQueue<byte[]> heartbeatPayloads;
+
         /// <summary>后台接收循环取消源。</summary>
         private CancellationTokenSource cts;
 
@@ -91,8 +97,17 @@ namespace EgoAnchor.Transport
         /// <summary>累计收到的 PoseResult 数量。</summary>
         private int receivedPoseResults;
 
+        /// <summary>累计收到的 AnchorStatusEvent 数量。</summary>
+        private int receivedStatusEvents;
+
+        /// <summary>累计收到的 ServerHeartbeat 数量。</summary>
+        private int receivedHeartbeats;
+
         /// <summary>Unity 侧 latest queue 因容量限制丢弃的旧 payload 数量。</summary>
         private int droppedInUnityQueue;
+
+        /// <summary>Unity 侧 status event 队列因容量限制丢弃的旧 payload 数量。</summary>
+        private int droppedStatusEvents;
 
         /// <summary>上次打印统计时的接收数量。</summary>
         private int lastLoggedReceived;
@@ -115,11 +130,26 @@ namespace EgoAnchor.Transport
         /// <summary>收到但尚未被主线程消费的 PoseResult payload 数量。</summary>
         public int PendingPoseResultCount => poseResultPayloads?.Count ?? 0;
 
+        /// <summary>收到但尚未被主线程消费的 AnchorStatusEvent payload 数量。</summary>
+        public int PendingStatusEventCount => statusPayloads?.Count ?? 0;
+
+        /// <summary>收到但尚未被主线程消费的 ServerHeartbeat payload 数量。</summary>
+        public int PendingHeartbeatCount => heartbeatPayloads?.Count ?? 0;
+
         /// <summary>累计收到的 PoseResult 数量。</summary>
         public int ReceivedPoseResultCount => receivedPoseResults;
 
+        /// <summary>累计收到的 AnchorStatusEvent 数量。</summary>
+        public int ReceivedStatusEventCount => receivedStatusEvents;
+
+        /// <summary>累计收到的 ServerHeartbeat 数量。</summary>
+        public int ReceivedHeartbeatCount => receivedHeartbeats;
+
         /// <summary>Unity 侧 latest queue 因容量限制丢弃的旧 payload 数量。</summary>
         public int DroppedInUnityQueueCount => droppedInUnityQueue;
+
+        /// <summary>Unity 侧 status event 队列因容量限制丢弃的旧 payload 数量。</summary>
+        public int DroppedStatusEventCount => droppedStatusEvents;
 
         /// <summary>累计发送的 request/reply 命令数量。</summary>
         public int SentRequestCount => sentRequests;
@@ -264,20 +294,34 @@ namespace EgoAnchor.Transport
         /// <returns>是否取到 payload。</returns>
         public bool TryDequeueLatestPoseResult(out byte[] payload, out int skippedOlderPayloads)
         {
-            payload = null;
-            skippedOlderPayloads = 0;
             EnsureQueue();
-            while (poseResultPayloads.TryDequeue(out byte[] candidate))
-            {
-                if (payload != null)
-                {
-                    skippedOlderPayloads++;
-                }
+            return TryDequeueLatest(poseResultPayloads, out payload, out skippedOlderPayloads);
+        }
 
-                payload = candidate;
-            }
+        /// <summary>
+        /// 尝试取出一条 AnchorStatusEvent payload。
+        ///
+        /// 状态事件不是 latest-only：reset/reacquire/lost 等事件需要按顺序被 UI 或 runtime 消费，
+        /// 因此这里一次只取一条，由上层 receiver 在主线程逐帧 drain。
+        /// </summary>
+        /// <param name="payload">最早尚未处理的 status event payload。</param>
+        /// <returns>是否取到 payload。</returns>
+        public bool TryDequeueStatusEvent(out byte[] payload)
+        {
+            EnsureQueue();
+            return statusPayloads.TryDequeue(out payload);
+        }
 
-            return payload != null;
+        /// <summary>
+        /// 尝试从线程安全队列中取出最新 ServerHeartbeat payload。
+        /// </summary>
+        /// <param name="payload">最新 heartbeat payload。</param>
+        /// <param name="skippedOlderPayloads">本次消费跳过的旧 heartbeat payload 数量。</param>
+        /// <returns>是否取到 payload。</returns>
+        public bool TryDequeueLatestHeartbeat(out byte[] payload, out int skippedOlderPayloads)
+        {
+            EnsureQueue();
+            return TryDequeueLatest(heartbeatPayloads, out payload, out skippedOlderPayloads);
         }
 
         /// <summary>
@@ -302,27 +346,16 @@ namespace EgoAnchor.Transport
                 client = localClient;
                 await localClient.ConnectAsync();
                 connectReady?.TrySetResult(true);
-                Debug.Log($"[NatsControlClient] connected url={natsUrl}, subject={SubjectNames.PoseResult}", this);
+                Debug.Log(
+                    $"[NatsControlClient] connected url={natsUrl}, pose={SubjectNames.PoseResult}, " +
+                    $"status={SubjectNames.AnchorStatus}, heartbeat={SubjectNames.ServerHeartbeat}",
+                    this
+                );
 
-                await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.PoseResult, cancellationToken: token))
-                {
-                    if (token.IsCancellationRequested)
-                    {
-                        break;
-                    }
-
-                    byte[] data = msg.Data;
-                    if (data == null || data.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    EnsureQueue();
-                    poseResultPayloads.Enqueue(data);
-                    Interlocked.Increment(ref receivedPoseResults);
-                    TrimPendingQueueToLatestCapacity();
-                    MaybeLogReceiveStats();
-                }
+                Task poseTask = ReceivePoseResultsAsync(localClient, token);
+                Task statusTask = ReceiveStatusEventsAsync(localClient, token);
+                Task heartbeatTask = ReceiveHeartbeatsAsync(localClient, token);
+                await Task.WhenAll(poseTask, statusTask, heartbeatTask);
             }
             catch (OperationCanceledException)
             {
@@ -338,6 +371,81 @@ namespace EgoAnchor.Transport
             {
                 isRunning = false;
             }
+        }
+
+        /// <summary>
+        /// 后台订阅 PoseResult subject，并写入 latest-only 队列。
+        /// </summary>
+        private async Task ReceivePoseResultsAsync(NatsClient localClient, CancellationToken token)
+        {
+            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.PoseResult, cancellationToken: token))
+            {
+                if (!TryReadMessageData(msg, out byte[] data, token))
+                {
+                    continue;
+                }
+
+                EnsureQueue();
+                poseResultPayloads.Enqueue(data);
+                Interlocked.Increment(ref receivedPoseResults);
+                TrimQueueToCapacity(poseResultPayloads, ref droppedInUnityQueue);
+                MaybeLogReceiveStats();
+            }
+        }
+
+        /// <summary>
+        /// 后台订阅 AnchorStatusEvent subject，并写入事件队列。
+        /// </summary>
+        private async Task ReceiveStatusEventsAsync(NatsClient localClient, CancellationToken token)
+        {
+            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.AnchorStatus, cancellationToken: token))
+            {
+                if (!TryReadMessageData(msg, out byte[] data, token))
+                {
+                    continue;
+                }
+
+                EnsureQueue();
+                statusPayloads.Enqueue(data);
+                Interlocked.Increment(ref receivedStatusEvents);
+                TrimQueueToCapacity(statusPayloads, ref droppedStatusEvents);
+                MaybeLogReceiveStats();
+            }
+        }
+
+        /// <summary>
+        /// 后台订阅 ServerHeartbeat subject，并写入 latest-only 队列。
+        /// </summary>
+        private async Task ReceiveHeartbeatsAsync(NatsClient localClient, CancellationToken token)
+        {
+            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.ServerHeartbeat, cancellationToken: token))
+            {
+                if (!TryReadMessageData(msg, out byte[] data, token))
+                {
+                    continue;
+                }
+
+                EnsureQueue();
+                heartbeatPayloads.Enqueue(data);
+                Interlocked.Increment(ref receivedHeartbeats);
+                TrimQueueToCapacity(heartbeatPayloads, ref droppedInUnityQueue);
+                MaybeLogReceiveStats();
+            }
+        }
+
+        /// <summary>
+        /// 从 NATS 消息读取非空 bytes payload。
+        /// </summary>
+        private static bool TryReadMessageData(NatsMsg<byte[]> msg, out byte[] data, CancellationToken token)
+        {
+            data = null;
+            if (token.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            data = msg.Data;
+            return data != null && data.Length > 0;
         }
 
         /// <summary>
@@ -372,14 +480,34 @@ namespace EgoAnchor.Transport
         /// <summary>
         /// 将主线程队列裁剪到配置容量，保持 latest-only。
         /// </summary>
-        private void TrimPendingQueueToLatestCapacity()
+        private void TrimQueueToCapacity(ConcurrentQueue<byte[]> queue, ref int droppedCounter)
         {
             EnsureQueue();
             int safeCapacity = Mathf.Max(1, pendingCapacity);
-            while (poseResultPayloads.Count > safeCapacity && poseResultPayloads.TryDequeue(out _))
+            while (queue.Count > safeCapacity && queue.TryDequeue(out _))
             {
-                Interlocked.Increment(ref droppedInUnityQueue);
+                Interlocked.Increment(ref droppedCounter);
             }
+        }
+
+        /// <summary>
+        /// 从指定队列按 latest-only 语义取出最新 payload。
+        /// </summary>
+        private static bool TryDequeueLatest(ConcurrentQueue<byte[]> queue, out byte[] payload, out int skippedOlderPayloads)
+        {
+            payload = null;
+            skippedOlderPayloads = 0;
+            while (queue != null && queue.TryDequeue(out byte[] candidate))
+            {
+                if (payload != null)
+                {
+                    skippedOlderPayloads++;
+                }
+
+                payload = candidate;
+            }
+
+            return payload != null;
         }
 
         /// <summary>
@@ -392,13 +520,14 @@ namespace EgoAnchor.Transport
                 return;
             }
 
-            int received = receivedPoseResults;
+            int received = receivedPoseResults + receivedStatusEvents + receivedHeartbeats;
             if (received > 0 && received - lastLoggedReceived >= statsIntervalMessages)
             {
                 lastLoggedReceived = received;
                 Debug.Log(
-                    $"[NatsControlClient] pose_result received={received}, pending={poseResultPayloads.Count}, " +
-                    $"droppedInUnityQueue={droppedInUnityQueue}, subject={SubjectNames.PoseResult}",
+                    $"[NatsControlClient] pose={receivedPoseResults}, status={receivedStatusEvents}, heartbeat={receivedHeartbeats}, " +
+                    $"pendingPose={poseResultPayloads.Count}, pendingStatus={statusPayloads.Count}, pendingHeartbeat={heartbeatPayloads.Count}, " +
+                    $"droppedLatest={droppedInUnityQueue}, droppedStatus={droppedStatusEvents}",
                     this
                 );
             }
@@ -412,6 +541,14 @@ namespace EgoAnchor.Transport
             if (poseResultPayloads == null)
             {
                 poseResultPayloads = new ConcurrentQueue<byte[]>();
+            }
+            if (statusPayloads == null)
+            {
+                statusPayloads = new ConcurrentQueue<byte[]>();
+            }
+            if (heartbeatPayloads == null)
+            {
+                heartbeatPayloads = new ConcurrentQueue<byte[]>();
             }
         }
 

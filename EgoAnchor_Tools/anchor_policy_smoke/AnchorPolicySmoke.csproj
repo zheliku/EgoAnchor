@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>S:\Unity Editor\6000.3.11f1\Editor\Data\Managed\UnityEngine\UnityEngine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>S:\Unity Editor\6000.3.11f1\Editor\Data\Managed\UnityEngine\UnityEngine.CoreModule.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Google.Protobuf">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\Google.Protobuf.3.35.0\lib\netstandard2.0\Google.Protobuf.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\..\EgoAnchor_Unity\Library\ScriptAssemblies\UnityEngine.UI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>..\..\EgoAnchor_Unity\Library\ScriptAssemblies\Unity.TextMeshPro.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Threading.Channels">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\System.Threading.Channels.8.0.0\lib\netstandard2.1\System.Threading.Channels.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="NATS.Client.Abstractions">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\NATS.Client.Abstractions.2.8.0\lib\netstandard2.1\NATS.Client.Abstractions.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="NATS.Client.Core">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\NATS.Client.Core.2.8.0\lib\netstandard2.1\NATS.Client.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="NATS.Client.Simplified">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\NATS.Client.Simplified.2.8.0\lib\netstandard2.1\NATS.Client.Simplified.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="NATS.Net">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\NATS.Net.2.8.0\lib\netstandard2.1\NATS.Net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\Microsoft.Extensions.Primitives.6.0.0\lib\netstandard2.0\Microsoft.Extensions.Primitives.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\Microsoft.Extensions.Logging.Abstractions.6.0.1\lib\netstandard2.0\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Text.Json">
+      <HintPath>..\..\EgoAnchor_Unity\Assets\Packages\System.Text.Json.8.0.5\lib\netstandard2.0\System.Text.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\Generated\Common.cs" Link="Generated\Common.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\Generated\Anchor.cs" Link="Generated\Anchor.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\SubjectNames.cs" Link="Protocol\SubjectNames.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Quest\AnchorPoseReference.cs" Link="Quest\AnchorPoseReference.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Quest\FramePoseHistory.cs" Link="Quest\FramePoseHistory.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorPoseProcessor.cs" Link="AnchorPoseProcessor.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\CameraPoseFrameAligner.cs" Link="CameraPoseFrameAligner.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\PoseToAnchorRuntime.cs" Link="PoseToAnchorRuntime.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorObservation.cs" Link="AnchorObservation.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorLifecycleEvent.cs" Link="AnchorLifecycleEvent.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorStateMachine.cs" Link="AnchorStateMachine.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\ReliabilityScore.cs" Link="ReliabilityScore.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\ReliabilityGate.cs" Link="ReliabilityGate.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\PoseInnovationGate.cs" Link="PoseInnovationGate.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\AnchorPredictor.cs" Link="AnchorPredictor.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\AnchorPolicyController.cs" Link="AnchorPolicyController.cs" />
+  </ItemGroup>
+</Project>

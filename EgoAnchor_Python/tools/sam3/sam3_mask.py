@@ -37,7 +37,7 @@ SAM3_REPO_PATH = PYTHON_DIR / "sam3"
 SAM3_CHECKPOINT_PATH = SAM3_REPO_PATH / "assets/sam3_ckpt/sam3.pt"
 
 # 初始提示词；可写字符串，也可写多个候选描述。
-PROMPT: str | list[str] = ["small pink rounded rectangular earphone charging case"]
+PROMPT: str | list[str] = ["quest 3 controller"]
 
 # SAM3 检测置信度阈值；越高越严格，误检多时建议调高。
 CONFIDENCE_THRESHOLD = 0.2

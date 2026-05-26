@@ -18,7 +18,7 @@ from typing import Any
 
 from google.protobuf.message import Message as ProtobufMessage
 
-from egoanchor.protocol import POSE_RESULT
+from egoanchor.protocol import ANCHOR_STATUS, POSE_RESULT, SERVER_HEARTBEAT
 
 MessageCallback = Callable[[str, bytes, str | None], Awaitable[bytes | None]]
 """NATS bytes callback 类型：输入 subject/payload/reply，输出可选 reply payload。"""
@@ -40,6 +40,12 @@ class NatsMessageSettings:
 
     pose_result_subject: str = POSE_RESULT
     """PoseResult 发布 subject，来自共享协议契约。"""
+
+    anchor_status_subject: str = ANCHOR_STATUS
+    """AnchorStatusEvent 发布 subject，来自共享协议契约。"""
+
+    server_heartbeat_subject: str = SERVER_HEARTBEAT
+    """ServerHeartbeat 发布 subject，来自共享协议契约。"""
 
     client_name: str = "egoanchor-python"
     """Python NATS 客户端名称，便于 nats-server 日志排查。"""
@@ -66,6 +72,8 @@ class NatsMessageSettings:
             enabled=bool(getattr(message, "enabled", False)),
             url=str(getattr(message, "url", "nats://127.0.0.1:4222")),
             pose_result_subject=str(getattr(message, "pose_result_subject", POSE_RESULT)),
+            anchor_status_subject=str(getattr(message, "anchor_status_subject", ANCHOR_STATUS)),
+            server_heartbeat_subject=str(getattr(message, "server_heartbeat_subject", SERVER_HEARTBEAT)),
             client_name=str(getattr(message, "client_name", "egoanchor-python")),
             connect_timeout_s=float(getattr(message, "connect_timeout_s", 2.0)),
             request_timeout_s=float(getattr(message, "request_timeout_s", 1.0)),
@@ -266,11 +274,11 @@ class NatsMessageClient:
         self._subscriptions.clear()
 
 
-class PoseResultPublisher:
-    """同步 runtime 可调用的 PoseResult 发布器。
+class ProtobufPublisher:
+    """同步 runtime 可调用的 Protobuf 发布器。
 
     本类负责 Protobuf 序列化、subject 发布和后台 Future 限流；
-    它不负责把 PoseObservation 映射成 Protobuf，也不理解 Unity world anchor。
+    它不负责把业务对象映射成 Protobuf，也不理解 Unity world anchor。
     """
 
     def __init__(self, client: NatsMessageClient, *, subject: str, max_pending_futures: int = 32) -> None:
@@ -280,7 +288,7 @@ class PoseResultPublisher:
         """底层 bytes NATS client。"""
 
         self.subject = str(subject)
-        """PoseResult 发布 subject。"""
+        """当前发布器负责的 NATS subject。"""
 
         self.max_pending_futures = max(1, int(max_pending_futures))
         """后台 publish Future 最大积压数。"""
@@ -299,7 +307,7 @@ class PoseResultPublisher:
 
     @property
     def enabled(self) -> bool:
-        """PoseResult 发布链路是否启用。"""
+        """当前发布链路是否启用。"""
 
         return self.client.enabled
 
@@ -340,11 +348,11 @@ class PoseResultPublisher:
 
         self.client.close()
 
-    def publish_pose_result(self, msg: ProtobufMessage) -> bool:
-        """发布一条 Protobuf PoseResult。
+    def publish(self, msg: ProtobufMessage) -> bool:
+        """发布一条 Protobuf 消息。
 
         返回值只表示“是否成功提交到后台 event loop”，不保证订阅端已经收到。
-        PoseResult 是实时 latest-only 小消息；NATS 未连接或队列积压时直接丢弃当前包。
+        NATS 未连接或队列积压时直接丢弃当前包，避免阻塞 runtime 主循环。
         """
 
         if not self.enabled:
@@ -373,7 +381,7 @@ class PoseResultPublisher:
             self._published += 1
         except Exception as exc:
             self._failed += 1
-            logging.debug("[PoseResultPublisher] publish PoseResult 失败 subject=%s：%s", self.subject, exc)
+            logging.debug("[ProtobufPublisher] publish 失败 subject=%s：%s", self.subject, exc)
 
     def _drain_completed_futures(self) -> None:
         """清理已完成 Future，并观察异常，避免后台异常泄漏。"""
@@ -389,16 +397,17 @@ class PoseResultPublisher:
                 future.result()
             except Exception as exc:
                 self._failed += 1
-                logging.debug("[PoseResultPublisher] 后台 publish future 异常：%s", exc)
+                logging.debug("[ProtobufPublisher] 后台 publish future 异常：%s", exc)
         self._pending = remaining
 
 
-class NatsClient(NatsMessageClient):
-    """NATS bytes client 的短别名。
+class PoseResultPublisher(ProtobufPublisher):
+    """PoseResult 发布器的语义别名。"""
 
-    保留该别名是为了让业务代码可以使用计划中的简洁命名；当前实现仍复用
-    `NatsMessageClient` 的完整能力。
-    """
+    def publish_pose_result(self, msg: ProtobufMessage) -> bool:
+        """发布一条 Protobuf PoseResult。"""
+
+        return self.publish(msg)
 
 
-__all__ = ["MessageCallback", "NatsClient", "NatsMessageClient", "NatsMessageSettings", "PoseResultPublisher"]
+__all__ = ["MessageCallback", "NatsMessageClient", "NatsMessageSettings", "PoseResultPublisher", "ProtobufPublisher"]

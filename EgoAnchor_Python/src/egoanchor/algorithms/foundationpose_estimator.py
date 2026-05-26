@@ -8,14 +8,22 @@ FoundationPose 子工程动态加载依赖，不引用 v1/v2 代码。
 from __future__ import annotations
 
 import importlib
+import io
+import ctypes
 import logging
+import os
 import sys
+import tempfile
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, Iterator, TypeVar, cast
 
 import numpy as np
 import trimesh
 from PIL import Image
+
+T = TypeVar("T")
+"""保留被包装函数返回类型的泛型变量。"""
 
 
 class FoundationPoseObjectEstimator:
@@ -33,6 +41,7 @@ class FoundationPoseObjectEstimator:
         symmetry_tfs: np.ndarray | None = None,
         debug: int = 0,
         debug_dir: str | Path | None = None,
+        enable_logging: bool = False,
         project_root: str | Path | None = None,
     ) -> None:
         """加载 mesh 并创建 FoundationPose estimator。"""
@@ -71,6 +80,9 @@ class FoundationPoseObjectEstimator:
         self.debug_dir = str(debug_dir) if debug_dir else str(self.foundationpose_root / "debug" / "api")
         """FoundationPose 内部 debug 输出目录。"""
 
+        self.enable_logging = bool(enable_logging)
+        """是否允许 FoundationPose 内部 stdout/stderr/logging 输出到 console。"""
+
         self.cam_k = np.asarray(cam_k, dtype=np.float64).reshape(3, 3)
         """算法处理分辨率下的左目相机内参矩阵。"""
 
@@ -84,23 +96,7 @@ class FoundationPoseObjectEstimator:
         if str(self.foundationpose_root) not in sys.path:
             sys.path.append(str(self.foundationpose_root))
 
-        try:
-            utils_mod = importlib.import_module("FoundationPose.Utils")
-        except ModuleNotFoundError:
-            utils_mod = importlib.import_module("Utils")
-
-        old_utils_module = sys.modules.get("Utils")
-        sys.modules["Utils"] = utils_mod
-        try:
-            try:
-                est_mod = importlib.import_module("FoundationPose.estimater")
-            except ModuleNotFoundError:
-                est_mod = importlib.import_module("estimater")
-        finally:
-            if old_utils_module is None:
-                sys.modules.pop("Utils", None)
-            else:
-                sys.modules["Utils"] = old_utils_module
+        est_mod, utils_mod = self.load_modules_with_logging_control(self._load_foundationpose_modules, enable_logging=self.enable_logging)
 
         def resolve_symbol(name: str) -> Any:
             """从 FoundationPose estimater 或 Utils 中解析运行符号。"""
@@ -129,8 +125,106 @@ class FoundationPoseObjectEstimator:
         self.draw_xyz_axis = resolve_symbol("draw_xyz_axis")
         """绘制目标坐标轴的工具函数。"""
 
-        self._load_mesh_and_create_estimator()
-        logging.info("FoundationPose estimator initialized: mesh=%s", self.mesh_path)
+        self.call_with_logging_control(self._load_mesh_and_create_estimator, enable_logging=self.enable_logging)
+        if self.enable_logging:
+            logging.info("FoundationPose estimator initialized: mesh=%s", self.mesh_path)
+
+    @staticmethod
+    def call_with_logging_control(func: Callable[..., T], *args: Any, enable_logging: bool = False, **kwargs: Any) -> T:
+        """按配置调用第三方函数，并可临时抑制 stdout/stderr/logging。
+
+        FoundationPose 内部有若干 print/logging/进度输出。默认把它们收进内存缓冲区，避免高频
+        register/track 时盖住 EgoAnchor 自己的系统日志；关闭抑制后保留原始输出，便于
+        专门排查 FoundationPose 子工程内部问题。部分 CUDA/渲染依赖会绕过 Python
+        `print` 直接写进进程 stdout/stderr 文件描述符，因此这里同时重定向 Python
+        stream 和 fd=1/2。
+        """
+
+        if enable_logging:
+            return func(*args, **kwargs)
+        previous_disable_level = logging.root.manager.disable
+        try:
+            logging.disable(logging.CRITICAL)
+            with FoundationPoseObjectEstimator._suppress_process_output():
+                return func(*args, **kwargs)
+        finally:
+            logging.disable(previous_disable_level)
+
+    @staticmethod
+    @contextmanager
+    def _suppress_process_output() -> Iterator[None]:
+        """临时吞掉 Python stream 和底层 fd stdout/stderr 输出。"""
+
+        FoundationPoseObjectEstimator._flush_c_stdio()
+        saved_stdout_fd = os.dup(1)
+        saved_stderr_fd = os.dup(2)
+        with tempfile.TemporaryFile() as sink_stdout, tempfile.TemporaryFile() as sink_stderr:
+            try:
+                os.dup2(sink_stdout.fileno(), 1)
+                os.dup2(sink_stderr.fileno(), 2)
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    yield
+            finally:
+                FoundationPoseObjectEstimator._flush_c_stdio()
+                os.dup2(saved_stdout_fd, 1)
+                os.dup2(saved_stderr_fd, 2)
+                os.close(saved_stdout_fd)
+                os.close(saved_stderr_fd)
+
+    @staticmethod
+    def _flush_c_stdio() -> None:
+        """尽量 flush 当前平台 C runtime 的 stdio，避免恢复 fd 后吐出旧缓冲。"""
+
+        candidates: tuple[str | None, ...]
+        if os.name == "nt":
+            candidates = ("ucrtbase", "msvcrt")
+        elif sys.platform == "darwin":
+            candidates = (None, "libSystem.B.dylib")
+        else:
+            candidates = (None, "libc.so.6")
+
+        for name in candidates:
+            try:
+                libc = ctypes.CDLL(name) if name is not None else ctypes.CDLL(None)
+                fflush = libc.fflush
+                fflush.argtypes = [ctypes.c_void_p]
+                fflush.restype = ctypes.c_int
+                fflush(None)
+            except Exception:
+                continue
+
+    @staticmethod
+    def load_modules_with_logging_control(
+        loader: Callable[[], tuple[Any, Any]],
+        *,
+        enable_logging: bool = False,
+    ) -> tuple[Any, Any]:
+        """按配置加载 FoundationPose 模块，并抑制 import 阶段的第三方输出。"""
+
+        return FoundationPoseObjectEstimator.call_with_logging_control(loader, enable_logging=enable_logging)
+
+    @staticmethod
+    def _load_foundationpose_modules() -> tuple[Any, Any]:
+        """导入 FoundationPose estimator 与 Utils，并兼容原工程的顶层 Utils import。"""
+
+        try:
+            utils_mod = importlib.import_module("FoundationPose.Utils")
+        except ModuleNotFoundError:
+            utils_mod = importlib.import_module("Utils")
+
+        old_utils_module = sys.modules.get("Utils")
+        sys.modules["Utils"] = utils_mod
+        try:
+            try:
+                est_mod = importlib.import_module("FoundationPose.estimater")
+            except ModuleNotFoundError:
+                est_mod = importlib.import_module("estimater")
+        finally:
+            if old_utils_module is None:
+                sys.modules.pop("Utils", None)
+            else:
+                sys.modules["Utils"] = old_utils_module
+        return est_mod, utils_mod
 
     def update_camera_matrix(self, cam_k: np.ndarray) -> None:
         """更新运行时相机内参矩阵，不重建 FoundationPose 重模型。
@@ -322,7 +416,15 @@ class FoundationPoseObjectEstimator:
         """初始注册：RGB-D + mask -> object-in-camera pose。"""
 
         mask_u8 = (mask > 0).astype(np.uint8) * 255
-        pose = self.estimator.register(K=self.cam_k, rgb=rgb, depth=np.asarray(depth, dtype=np.float64), ob_mask=mask_u8, iteration=self.est_refine_iter)
+        pose = self.call_with_logging_control(
+            self.estimator.register,
+            K=self.cam_k,
+            rgb=rgb,
+            depth=np.asarray(depth, dtype=np.float64),
+            ob_mask=mask_u8,
+            iteration=self.est_refine_iter,
+            enable_logging=self.enable_logging,
+        )
         self._initialized = True
         return np.asarray(pose, dtype=np.float64).reshape(4, 4)
 
@@ -331,7 +433,14 @@ class FoundationPoseObjectEstimator:
 
         if not self._initialized:
             raise RuntimeError("FoundationPose 尚未 register，不能直接 track。")
-        pose = self.estimator.track_one(rgb=rgb, depth=np.asarray(depth, dtype=np.float64), K=self.cam_k, iteration=self.track_refine_iter)
+        pose = self.call_with_logging_control(
+            self.estimator.track_one,
+            rgb=rgb,
+            depth=np.asarray(depth, dtype=np.float64),
+            K=self.cam_k,
+            iteration=self.track_refine_iter,
+            enable_logging=self.enable_logging,
+        )
         return np.asarray(pose, dtype=np.float64).reshape(4, 4)
 
     def visualize_pose(self, rgb: np.ndarray, pose: np.ndarray, axis_scale: float = 0.1, thickness: int = 3) -> np.ndarray:

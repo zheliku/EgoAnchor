@@ -8,10 +8,10 @@ from typing import Any
 from .zmq_topic_subscriber import LatestTopicPayloadStore, ZmqTopicSubscriber, ZmqTopicSubscriberStats
 
 _LAZY_EXPORTS = {
-    "NatsClient": "egoanchor.transport.nats_client",
     "NatsMessageClient": "egoanchor.transport.nats_client",
     "NatsMessageSettings": "egoanchor.transport.nats_client",
     "PoseResultPublisher": "egoanchor.transport.nats_client",
+    "ProtobufPublisher": "egoanchor.transport.nats_client",
 }
 
 
@@ -29,10 +29,10 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "LatestTopicPayloadStore",
-    "NatsClient",
     "NatsMessageClient",
     "NatsMessageSettings",
     "PoseResultPublisher",
+    "ProtobufPublisher",
     "ZmqTopicSubscriber",
     "ZmqTopicSubscriberStats",
 ]
