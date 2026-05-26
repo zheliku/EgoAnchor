@@ -487,7 +487,7 @@ class TrackingRuntime:
             enabled=bool(getattr(logging_cfg, "enabled", True)),
             output_dir=output_dir,
             session_id=self.session_id,
-            filename=str(getattr(logging_cfg, "filename", "events.jsonl")),
+            filename=str(getattr(logging_cfg, "filename", "")),
             flush_every=int(getattr(logging_cfg, "flush_every", 1)),
         )
 

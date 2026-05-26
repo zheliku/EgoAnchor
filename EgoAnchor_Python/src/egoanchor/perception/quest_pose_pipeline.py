@@ -362,6 +362,7 @@ class QuestPosePipeline:
         pose_jump_rotation_deg: float = 35.0,
         accept_track_jump_without_mask: bool = False,
         max_consecutive_track_rejects: int = 3,
+        tracked_mask_lost_frames: int = 3,
         cutie_enabled: bool = False,
         cutie_adjust_pose: bool = False,
         log_stats_interval: int = 60,
@@ -422,6 +423,9 @@ class QuestPosePipeline:
         self.max_consecutive_track_rejects = max(1, int(max_consecutive_track_rejects))
         """连续 track reject 达到该值后强制回到 detect/register。"""
 
+        self.tracked_mask_lost_frames = max(0, int(tracked_mask_lost_frames))
+        """已注册后连续多少帧没有有效 Cutie mask 时主动回到 detect/register；0 表示关闭。"""
+
         self.cutie_enabled = bool(cutie_enabled)
         """是否启用 Cutie mask 传播。"""
 
@@ -476,6 +480,9 @@ class QuestPosePipeline:
         self._track_reject_count = 0
         """连续 track reject 次数。"""
 
+        self._tracked_mask_lost_count = 0
+        """已注册阶段连续缺失有效 Cutie mask 的帧数。"""
+
         self._fps = 0.0
         """pipeline FPS EMA。"""
 
@@ -513,6 +520,7 @@ class QuestPosePipeline:
         self._last_frame_id = None
         self._last_session_id = ""
         self._track_reject_count = 0
+        self._tracked_mask_lost_count = 0
         if self._segmenter_worker is not None:
             self._segmenter_worker.clear()
         if self.estimator is not None:
@@ -736,6 +744,23 @@ class QuestPosePipeline:
             obs = self._make_observation(decoded, "DEPTH_ONLY", False, None, "NONE", diagnostics, timing, failure_reason="stage_depth_only")
             return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
 
+        recovery = self._try_recover_from_tracked_mask_loss(left_bgr, rgb, depth, mask, diagnostics, timing)
+        if recovery is not None:
+            pose, pose_source, phase = recovery
+            diagnostics.phase = phase
+            has_pose = pose is not None
+            if pose is not None and self.estimator is not None:
+                pose_vis_rgb = self.estimator.visualize_pose(rgb, pose)
+                diagnostics.pose_vis_bgr = cv2.cvtColor(pose_vis_rgb, cv2.COLOR_RGB2BGR)
+
+            timing.total_ms = (time.perf_counter() - t_total) * 1000.0
+            self._update_fps()
+            diagnostics.fps = self._fps
+            diagnostics.timing = timing
+            obs = self._make_observation(decoded, phase, has_pose, pose, pose_source, diagnostics, timing, failure_reason="" if has_pose else phase.lower())
+            self._log_stats(diagnostics, obs)
+            return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
+
         if not self._has_registered and diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             diagnostics.phase = "REJECT_DEPTH"
             timing.total_ms = (time.perf_counter() - t_total) * 1000.0
@@ -783,6 +808,7 @@ class QuestPosePipeline:
         self._has_registered = False
         self._last_pose = None
         self._track_reject_count = 0
+        self._tracked_mask_lost_count = 0
         self._cutie_ready = False
         if self._segmenter_worker is not None:
             self._segmenter_worker.clear()
@@ -857,12 +883,63 @@ class QuestPosePipeline:
             diagnostics.depth_median_in_mask = float(q50)
             diagnostics.depth_iqr_in_mask = float(q75 - q25)
 
+    def _try_recover_from_tracked_mask_loss(
+        self,
+        left_bgr: np.ndarray,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        mask: np.ndarray | None,
+        diagnostics: FrameDiagnostics,
+        timing: PipelineStepTiming,
+    ) -> tuple[np.ndarray | None, str, str] | None:
+        """Cutie mask 连续丢失时，主动运行检测 mask 并尝试 re-register。"""
+
+        if not self._has_registered or not self.cutie_enabled or self.tracked_mask_lost_frames <= 0:
+            return None
+
+        mask_pixels = int(np.count_nonzero(mask)) if mask is not None else 0
+        if mask_pixels > 0:
+            self._tracked_mask_lost_count = 0
+            return None
+
+        self._tracked_mask_lost_count += 1
+        if self._tracked_mask_lost_count < self.tracked_mask_lost_frames:
+            return None
+
+        self._has_registered = False
+        self._cutie_ready = False
+        self._last_pose = None
+        self._track_reject_count = 0
+        self._tracked_mask_lost_count = 0
+        self.estimator.reset()
+        if self.cutie is not None:
+            self.cutie.reset()
+
+        seg_result = self._run_segmenter(left_bgr, timing)
+        diagnostics.det_count = int(seg_result.det_count)
+        diagnostics.segmentation_overlay_bgr = seg_result.overlay_bgr
+        diagnostics.mask_area_ratio = float(seg_result.mask_area_ratio)
+        if seg_result.mask_bw is None or seg_result.mask_area_ratio <= 0.0:
+            diagnostics.mask = None
+            diagnostics.mask_source = "none"
+            return None, "NONE", "REDETECT_NO_MASK"
+
+        redetect_mask = (seg_result.mask_bw > 0).astype(np.uint8)
+        diagnostics.mask = redetect_mask
+        diagnostics.mask_source = self.segmenter_name
+        self._show_mask_snapshot_once(redetect_mask)
+        self._update_depth_diagnostics(diagnostics, depth, redetect_mask)
+        if diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
+            return None, "NONE", "REDETECT_REJECT_DEPTH"
+        return self._try_register(rgb, depth, redetect_mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
+
     def _estimate_pose(self, rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray | None, timing: PipelineStepTiming) -> tuple[np.ndarray | None, str, str]:
         """根据当前状态选择 register、track 或 re-register。"""
 
         if not self._has_registered:
             if mask is None or np.count_nonzero(mask) <= 0:
                 return None, "NONE", "NO_MASK"
+            self._tracked_mask_lost_count = 0
             return self._try_register(rgb, depth, mask, timing, pose_source="REGISTER", phase="REGISTER")
 
         t_pose = time.perf_counter()
@@ -872,6 +949,7 @@ class QuestPosePipeline:
         except Exception as exc:
             logging.warning("FoundationPose track 失败: %s", exc)
             self._has_registered = False
+            self._tracked_mask_lost_count = 0
             self.estimator.reset()
             self._track_reject_count += 1
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
@@ -882,6 +960,7 @@ class QuestPosePipeline:
             self._track_reject_count += 1
             logging.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", self._track_reject_count)
             self._has_registered = False
+            self._tracked_mask_lost_count = 0
             self.estimator.reset()
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
@@ -893,6 +972,8 @@ class QuestPosePipeline:
             return None, "NONE", "TRACK_REJECT"
 
         self._track_reject_count = 0
+        if mask is not None and np.count_nonzero(mask) > 0:
+            self._tracked_mask_lost_count = 0
         self._last_pose = pose
         return pose, "TRACK", "TRACK"
 
@@ -912,6 +993,7 @@ class QuestPosePipeline:
         self._has_registered = True
         self._last_pose = pose
         self._track_reject_count = 0
+        self._tracked_mask_lost_count = 0
         self._initialize_cutie(rgb, mask, timing)
         return pose, pose_source, phase
 
@@ -963,8 +1045,12 @@ class QuestPosePipeline:
 
         if self._last_pose is None:
             return False
-        t_delta = float(np.linalg.norm(pose[:3, 3] - self._last_pose[:3, 3]))
-        r_delta = self._rotation_angle_deg(self._last_pose[:3, :3].T @ pose[:3, :3])
+        dx = float(pose[0, 3] - self._last_pose[0, 3])
+        dy = float(pose[1, 3] - self._last_pose[1, 3])
+        dz = float(pose[2, 3] - self._last_pose[2, 3])
+        t_delta = math.sqrt(dx * dx + dy * dy + dz * dz)
+        rotation_trace = sum(float(self._last_pose[row, col] * pose[row, col]) for row in range(3) for col in range(3))
+        r_delta = self._rotation_angle_from_trace_deg(rotation_trace)
         return t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg
 
     @staticmethod
@@ -972,6 +1058,12 @@ class QuestPosePipeline:
         """由相对旋转矩阵计算角度差。"""
 
         trace = float(np.trace(rotation_delta))
+        return QuestPosePipeline._rotation_angle_from_trace_deg(trace)
+
+    @staticmethod
+    def _rotation_angle_from_trace_deg(trace: float) -> float:
+        """由相对旋转矩阵 trace 计算角度差。"""
+
         cos_theta = max(-1.0, min(1.0, (trace - 1.0) * 0.5))
         return math.degrees(math.acos(cos_theta))
 

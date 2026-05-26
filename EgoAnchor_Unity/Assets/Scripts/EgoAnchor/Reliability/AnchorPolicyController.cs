@@ -139,6 +139,11 @@ namespace EgoAnchor.Reliability
                 return HandleMissing(observation);
             }
 
+            if (IsRelocalizationObservation(observation) && observation.ReliabilityScore >= reliabilityGate.MinHoldScore)
+            {
+                return AcceptStablePose(observation, "relocalize_accept");
+            }
+
             ReliabilityScore reliability = reliabilityGate.Evaluate(observation);
             if (reliability.Level != ReliabilityLevel.Accept)
             {
@@ -164,13 +169,7 @@ namespace EgoAnchor.Reliability
                 );
             }
 
-            stablePose = observation.WorldPose;
-            hasStablePose = true;
-            lastReliablePoseTimeSeconds = observation.SampleTimeSeconds;
-            lowReliabilityStartTimeSeconds = -1.0;
-            predictor.Observe(stablePose, observation.SampleTimeSeconds);
-            AnchorState state = stateMachine.OnReliablePose(observation.SampleTimeSeconds, reliability.Reason);
-            return new AnchorPolicyDecision(AnchorPolicyAction.Accept, state, true, stablePose, reliability.Reason);
+            return AcceptStablePose(observation, reliability.Reason);
         }
 
         /// <summary>
@@ -269,6 +268,36 @@ namespace EgoAnchor.Reliability
             lastReliablePoseTimeSeconds = -1.0;
             predictor.Reset();
             lowReliabilityStartTimeSeconds = -1.0;
+        }
+
+        /// <summary>
+        /// 接受当前 world pose 作为新的 stable pose，并同步状态机与预测器。
+        /// </summary>
+        /// <param name="observation">已完成 frame alignment 的 pose 观测。</param>
+        /// <param name="reason">接受原因。</param>
+        /// <returns>本帧策略决策。</returns>
+        private AnchorPolicyDecision AcceptStablePose(AnchorObservation observation, string reason)
+        {
+            stablePose = observation.WorldPose;
+            hasStablePose = true;
+            lastReliablePoseTimeSeconds = observation.SampleTimeSeconds;
+            lowReliabilityStartTimeSeconds = -1.0;
+            predictor.Observe(stablePose, observation.SampleTimeSeconds);
+            AnchorState state = stateMachine.OnReliablePose(observation.SampleTimeSeconds, reason);
+            return new AnchorPolicyDecision(AnchorPolicyAction.Accept, state, true, stablePose, reason);
+        }
+
+        /// <summary>
+        /// 判断当前观测是否来自 Python 重新注册路径；该类 pose 允许跨越旧 stable pose 的大位移。
+        /// </summary>
+        /// <param name="observation">Unity anchor policy 观测。</param>
+        /// <returns>是否为 register/re-register 观测。</returns>
+        private static bool IsRelocalizationObservation(AnchorObservation observation)
+        {
+            string source = observation.PoseSource ?? string.Empty;
+            string phase = observation.Phase ?? string.Empty;
+            return source.IndexOf("REGISTER", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || phase.IndexOf("REGISTER", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>

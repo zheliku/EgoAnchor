@@ -41,20 +41,36 @@ static class Program
         );
         Assert(lowStillHeld.State == AnchorState.Lost, "sustained low reliability should eventually enter Lost");
 
+        Pose relocalizedPose = new Pose(new Vector3(1.2f, -0.25f, 0f), Quaternion.identity);
+        AnchorPolicyDecision relocalized = controller.AcceptPose(
+            AnchorObservation.FromAlignedPose(
+                6,
+                relocalizedPose,
+                sampleTimeSeconds: 2.32,
+                reliabilityScore: 0.17f,
+                reliabilityFlags: new[] { "depth_in_mask_low" },
+                phase: "RE_REGISTER",
+                poseSource: "RE_REGISTER"
+            )
+        );
+        Assert(relocalized.Action == AnchorPolicyAction.Accept, "re-register pose should recover policy even when it jumps from old stable pose");
+        Assert(relocalized.State == AnchorState.Tracking, "re-register pose should return policy to Tracking");
+        Assert(Vector3.Distance(relocalized.OutputPose.position, relocalizedPose.position) < 0.001f, "re-register pose should update stable pose");
+
         AnchorPolicyDecision recovered = controller.AcceptPose(
-            AnchorObservation.FromAlignedPose(6, firstPose, sampleTimeSeconds: 2.32, reliabilityScore: 0.9f)
+            AnchorObservation.FromAlignedPose(7, relocalizedPose, sampleTimeSeconds: 2.36, reliabilityScore: 0.9f)
         );
         Assert(recovered.Action == AnchorPolicyAction.Accept, "reliable pose should recover from Lost");
         Assert(recovered.State == AnchorState.Tracking, "reliable pose after Lost should return Tracking");
 
         AnchorPolicyDecision coast = controller.AcceptPose(
-            AnchorObservation.MissingPose(7, sampleTimeSeconds: 2.55, "no_pose")
+            AnchorObservation.MissingPose(8, sampleTimeSeconds: 2.55, "no_pose")
         );
         Assert(coast.Action == AnchorPolicyAction.Coast, "short missing pose after reliable update should coast");
         Assert(coast.State == AnchorState.Coasting, "short missing pose after reliable update should enter Coasting");
 
         AnchorPolicyDecision lost = controller.AcceptPose(
-            AnchorObservation.MissingPose(8, sampleTimeSeconds: 4.6, "no_pose_timeout")
+            AnchorObservation.MissingPose(9, sampleTimeSeconds: 4.6, "no_pose_timeout")
         );
         Assert(lost.Action == AnchorPolicyAction.Hold, "long missing pose should hold last output");
         Assert(lost.State == AnchorState.Lost, "long missing pose should enter Lost");

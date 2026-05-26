@@ -32,8 +32,8 @@ interval_s = 1.0 # ServerHeartbeat 发布间隔，单位秒；保持低频，避
 
 [runtime.logging]
 enabled = true # 是否保存 Python server 结构化 JSONL 日志；用于论文实验复盘和状态机调试。
-output_dir = "data/runtime_logs" # 日志根目录，相对 EgoAnchor_Python；每次启动会创建时间戳-session_id 子目录。
-filename = "events.jsonl" # 单个 session 内的 JSONL 文件名；一行是一条 runtime 事件。
+output_dir = "data/runtime_logs" # 日志根目录，相对 EgoAnchor_Python；每次启动直接写入一个时间戳 JSONL 文件。
+filename = "" # JSONL 文件名；空值表示使用启动时间戳，例如 20260527-031500.jsonl。
 flush_every = 1 # 每写入多少条事件 flush 一次；1 最安全，调大可减少磁盘 flush 频率。
 log_pose_results = true # 是否记录每帧 PoseResult 摘要，包括 pose score、phase、flags 和 frame_id。
 log_status_events = true # 是否记录 AnchorStatusEvent 状态变化与命令执行结果。
@@ -106,6 +106,7 @@ pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位�
 pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
 accept_track_jump_without_mask = true # track 跳变但当前没有可用 re-register mask 时是否暂时接受该 pose，避免直接输出 no_pose 导致 anchor 卡住。
 max_consecutive_track_rejects = 3 # 连续 track reject 达到该值后强制回到 detect/register，避免长时间漂移。
+tracked_mask_lost_frames = 3 # 已注册且启用 Cutie 时，连续多少帧没有有效 Cutie mask 后主动回到检测/重注册。
 debug = 0 # FoundationPose 内部 debug 等级；0=关闭内部 debug 可视化/文件输出，>0 只在专项排查时开启。
 debug_dir = "FoundationPose/debug/api" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
 enable_logging = false # 是否允许 FoundationPose 内部 stdout/stderr/logging 输出到 console；默认关闭，避免第三方库刷屏遮住系统日志。

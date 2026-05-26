@@ -17,14 +17,14 @@ class RuntimeEventLoggerTest(unittest.TestCase):
     """验证 Python server 论文相关诊断事件能写入 JSONL。"""
 
     def test_logger_writes_jsonl_event_with_session_and_payload(self) -> None:
-        """启用日志时应创建 session 目录，并把事件与字段写成一行 JSON。"""
+        """启用日志时应直接创建时间戳 JSONL 文件，并把事件与字段写成一行 JSON。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             logger = RuntimeEventLogger(
                 enabled=True,
                 output_dir=Path(tmp),
                 session_id="session-a",
-                filename="events.jsonl",
+                filename="",
                 flush_every=1,
             )
 
@@ -33,30 +33,34 @@ class RuntimeEventLoggerTest(unittest.TestCase):
 
             log_path = logger.log_path
             self.assertTrue(log_path.is_file())
+            self.assertEqual(log_path.parent, Path(tmp))
+            self.assertRegex(log_path.name, r"^\d{8}-\d{6}\.jsonl$")
+            self.assertEqual(len(list(Path(tmp).iterdir())), 1)
             row = json.loads(log_path.read_text(encoding="utf-8").strip())
             self.assertEqual(row["event"], "pose_result")
             self.assertEqual(row["session_id"], "session-a")
-            self.assertEqual(row["session_dir"], logger.session_dir.name)
+            self.assertEqual(row["log_filename"], log_path.name)
             self.assertEqual(row["frame_id"], 42)
             self.assertAlmostEqual(row["pose_score"], 0.73)
             self.assertEqual(row["state"], "TRACKING")
 
-    def test_session_directory_uses_timestamp_prefix(self) -> None:
-        """session 日志目录应以时间戳开头，方便按实验时间排序。"""
+    def test_custom_filename_still_writes_single_file_in_output_dir(self) -> None:
+        """显式传入文件名时仍应直接写在日志根目录，方便专项测试覆盖。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             logger = RuntimeEventLogger(
                 enabled=True,
                 output_dir=Path(tmp),
                 session_id="session-a",
-                filename="events.jsonl",
+                filename="custom.jsonl",
             )
 
             logger.write("runtime_started")
             logger.close()
 
-            self.assertRegex(logger.session_dir.name, r"^\d{8}-\d{6}-session-a$")
-            self.assertTrue((Path(tmp) / logger.session_dir.name / "events.jsonl").is_file())
+            self.assertEqual(logger.log_path, Path(tmp) / "custom.jsonl")
+            self.assertTrue(logger.log_path.is_file())
+            self.assertEqual(len(list(Path(tmp).iterdir())), 1)
 
     def test_disabled_logger_does_not_create_files(self) -> None:
         """关闭日志时 write/close 应为空操作，不创建输出目录。"""

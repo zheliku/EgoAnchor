@@ -254,6 +254,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         pose_jump_rotation_deg=float(fp_cfg.pose_jump_rotation_deg),
         accept_track_jump_without_mask=bool(_cfg_get(fp_cfg, "accept_track_jump_without_mask", False)),
         max_consecutive_track_rejects=int(_cfg_get(fp_cfg, "max_consecutive_track_rejects", 3)),
+        tracked_mask_lost_frames=int(_cfg_get(fp_cfg, "tracked_mask_lost_frames", 3)),
         cutie_enabled=bool(cutie_cfg.enabled),
         cutie_adjust_pose=bool(cutie_cfg.adjust_pose),
         log_stats_interval=int(debug_cfg.pipeline_stats_interval),

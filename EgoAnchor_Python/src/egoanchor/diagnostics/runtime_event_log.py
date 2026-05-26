@@ -14,8 +14,8 @@ class RuntimeEventLogger:
     """把论文实验关心的 runtime 事件写入 JSONL。
 
     日志器只做同步轻量写入，不理解 ZMQ/NATS/模型语义；TrackingRuntime 决定什么时候
-    记录 pose、状态、心跳和命令事件。每个 Python 进程会话使用独立 session 目录，
-    便于后续把 JSONL 与 Unity CSV/录屏按 session_id 对齐。
+    记录 pose、状态、心跳和命令事件。每个 Python 进程会话使用一个时间戳命名的
+    JSONL 文件，便于按实验时间排序；跨端对齐仍依赖每行里的 session_id。
     """
 
     def __init__(
@@ -33,16 +33,16 @@ class RuntimeEventLogger:
         """是否实际写入日志。"""
 
         self.output_dir = Path(output_dir).expanduser()
-        """日志根目录；每个 session 会在其下创建子目录。"""
+        """日志根目录；日志文件直接写在该目录下。"""
 
         self.session_id = str(session_id or uuid.uuid4().hex)
         """本次 Python server 会话 ID。"""
 
-        self.session_dir_name = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{self.session_id}"
-        """当前日志目录名；前缀使用本地时间戳，后缀保留 session_id 便于跨端对齐。"""
+        self.timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        """当前日志文件时间戳，使用本地时间。"""
 
-        self.filename = str(filename or "events.jsonl")
-        """JSONL 文件名。"""
+        self.filename = Path(str(filename or f"{self.timestamp}.jsonl")).name
+        """JSONL 文件名；默认使用时间戳，且只取文件名避免在日志根目录下再建子目录。"""
 
         self.flush_every = max(1, int(flush_every))
         """每写入多少行 flush 一次。"""
@@ -55,15 +55,15 @@ class RuntimeEventLogger:
 
     @property
     def session_dir(self) -> Path:
-        """返回当前 session 的日志目录。"""
+        """返回日志根目录；保留该属性便于旧测试/调用方读取。"""
 
-        return self.output_dir / self.session_dir_name
+        return self.output_dir
 
     @property
     def log_path(self) -> Path:
         """返回当前 JSONL 文件路径。"""
 
-        return self.session_dir / self.filename
+        return self.output_dir / self.filename
 
     def write(self, event: str, **fields: Any) -> None:
         """写入一条结构化事件。"""
@@ -74,7 +74,7 @@ class RuntimeEventLogger:
         row = {
             "event": str(event or ""),
             "session_id": self.session_id,
-            "session_dir": self.session_dir_name,
+            "log_filename": self.filename,
             "created_unix_ms": time.time() * 1000.0,
             "mono_ms": time.monotonic() * 1000.0,
         }
@@ -97,10 +97,10 @@ class RuntimeEventLogger:
         self._written_since_flush = 0
 
     def _ensure_file(self) -> TextIO:
-        """懒创建 session 目录并打开 JSONL 文件。"""
+        """懒创建日志根目录并打开 JSONL 文件。"""
 
         if self._file is None:
-            self.session_dir.mkdir(parents=True, exist_ok=True)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
             self._file = self.log_path.open("a", encoding="utf-8")
         return self._file
 

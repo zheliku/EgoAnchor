@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -79,6 +80,21 @@ class _FakeFoundationPoseEstimator:
         """直接返回输入图，避免绘制依赖。"""
 
         return rgb.copy()
+
+
+class _EmptyCutieTracker:
+    """单测用 Cutie；初始化成功，但 track 时连续返回空 mask。"""
+
+    def reset(self) -> None:
+        """测试中不需要真实重置。"""
+
+    def initialize(self, rgb: np.ndarray, init_mask: np.ndarray) -> None:
+        """测试中不需要真实初始化。"""
+
+    def track(self, rgb: np.ndarray) -> SimpleNamespace:
+        """返回空 mask，模拟目标出镜或 Cutie 丢失目标。"""
+
+        return SimpleNamespace(mask=np.zeros(rgb.shape[:2], dtype=np.uint8), bbox_xywh=[-1, -1, 0, 0])
 
 
 def _make_stereo_frame(frame_id: int, color_bgr: tuple[int, int, int]) -> quest_pb2.QuestStereoFrame:
@@ -209,6 +225,60 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
             self.assertLess(float(np.mean(np.abs(registered_rgb.astype(np.int16) - expected_rgb.astype(np.int16)))), 2.0)
         finally:
             pipeline.close()
+
+    def test_registered_pipeline_re_registers_when_cutie_mask_is_lost(self) -> None:
+        """已注册后若 Cutie mask 连续丢失，应主动用检测 mask 重注册。"""
+
+        segmenter = _FakeSegmenter()
+        estimator = _FakeFoundationPoseEstimator()
+        pipeline = QuestPosePipeline(
+            segmenter=segmenter,
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=estimator,
+            cutie_tracker=_EmptyCutieTracker(),
+            process_width=8,
+            process_height=8,
+            cutie_enabled=True,
+            tracked_mask_lost_frames=1,
+        )
+
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        second = pipeline.process(_make_stereo_frame(2, (10, 20, 30)), _make_camera_info())
+
+        self.assertTrue(first.observation.has_pose)
+        self.assertEqual(first.observation.pose_source, "REGISTER")
+        self.assertTrue(second.observation.has_pose)
+        self.assertEqual(second.observation.pose_source, "RE_REGISTER")
+        self.assertEqual(second.observation.phase, "RE_REGISTER")
+        self.assertEqual(len(estimator.register_calls), 2)
+
+    def test_mask_lost_counter_survives_wrong_track_pose_until_threshold(self) -> None:
+        """即使 FoundationPose 仍返回 TRACK，空 Cutie mask 也应累计到阈值触发重注册。"""
+
+        estimator = _FakeFoundationPoseEstimator()
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=estimator,
+            cutie_tracker=_EmptyCutieTracker(),
+            process_width=8,
+            process_height=8,
+            cutie_enabled=True,
+            tracked_mask_lost_frames=3,
+        )
+
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        second = pipeline.process(_make_stereo_frame(2, (10, 20, 30)), _make_camera_info())
+        third = pipeline.process(_make_stereo_frame(3, (10, 20, 30)), _make_camera_info())
+        fourth = pipeline.process(_make_stereo_frame(4, (10, 20, 30)), _make_camera_info())
+
+        self.assertEqual(first.observation.pose_source, "REGISTER")
+        self.assertEqual(second.observation.pose_source, "TRACK")
+        self.assertEqual(third.observation.pose_source, "TRACK")
+        self.assertEqual(fourth.observation.pose_source, "RE_REGISTER")
+        self.assertEqual(len(estimator.register_calls), 2)
 
 
 if __name__ == "__main__":
