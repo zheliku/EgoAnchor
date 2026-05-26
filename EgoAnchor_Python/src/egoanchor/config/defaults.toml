@@ -38,7 +38,7 @@ max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可�
 [module.segmenter]
 type = "yoloe26" # 分割后端；默认 yoloe26，可显式改为 sam3。
 prompt = "little white cube" # 文本提示词，用于定位目标物体；YOLOE-26 和 SAM3 共用。
-confidence_threshold = 0.1 # 检测候选置信度阈值；YOLOE 和 SAM3 共用，越高越严格，过低容易误检背景。
+confidence_threshold = 0.2 # 检测候选置信度阈值；YOLOE 和 SAM3 共用，越高越严格，过低容易误检背景。
 max_det = 1 # 最多保留检测数量；默认单目标，避免多误检 union 污染 pose。
 mask_threshold = 0.5 # mask 二值化阈值；YOLOE 和 SAM3 共用。
 
@@ -85,7 +85,7 @@ apply_color = [0, 159, 237] # 强制纹理颜色，RGB 顺序。
 symmetry_mode = "cube" # 对称约束模式：none、cube 或 axis。
 symmetry_axis = "z" # symmetry_mode=axis 时的旋转轴。
 symmetry_count = 36 # symmetry_mode=axis 时离散旋转数量。
-register_min_depth_valid_in_mask = 0.2 # register/re-register 前 mask 内有效深度比例下限。
+register_min_depth_valid_in_mask = 0.15 # register/re-register 前 mask 内有效深度比例下限。
 re_register_on_track_lost = true # track 失败或跳变时是否用当前 2D mask 重新 register。
 pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位米；快速移动/近距离视角变化时可继续调大。
 pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。

@@ -1,15 +1,10 @@
 ﻿<Solution>
-  <Project Path="RuntimeInspector.Runtime.csproj" />
   <Project Path="VHierarchy.csproj" />
-  <Project Path="DynamicPanels.Runtime.csproj" />
-  <Project Path="IngameDebugConsole.Runtime.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="Proxima.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
   <Project Path="VInspector.csproj" />
-  <Project Path="DynamicPanels.Editor.csproj" />
   <Project Path="Proxima.Editor.csproj" />
   <Project Path="VFavorites.csproj" />
-  <Project Path="IngameDebugConsole.Editor.csproj" />
 </Solution>
