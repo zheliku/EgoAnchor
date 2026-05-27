@@ -20,6 +20,18 @@ ErrorInfo = common_pb2.ErrorInfo
 MessageHeader = common_pb2.MessageHeader
 """共享消息头类型。"""
 
+Matrix4x4 = common_pb2.Matrix4x4
+"""4x4 矩阵消息类型。"""
+
+PoseResult = anchor_pb2.PoseResult
+"""Python -> Unity pose result 类型。"""
+
+QuestCameraInfo = quest_pb2.QuestCameraInfo
+"""Quest 相机标定消息类型。"""
+
+QuestStereoFrame = quest_pb2.QuestStereoFrame
+"""Quest 双目帧消息类型。"""
+
 ReacquireAnchorRequest = anchor_pb2.ReacquireAnchorRequest
 """主动重新获取 anchor 的 command request 类型。"""
 
@@ -31,6 +43,10 @@ __all__ = [
     "CommandAck",
     "ErrorInfo",
     "MessageHeader",
+    "Matrix4x4",
+    "PoseResult",
+    "QuestCameraInfo",
+    "QuestStereoFrame",
     "ReacquireAnchorRequest",
     "ResetTrackingRequest",
     "anchor_pb2",

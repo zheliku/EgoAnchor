@@ -4,78 +4,19 @@ using UnityEngine;
 namespace EgoAnchor.Reliability
 {
     /// <summary>
-    /// anchor policy 对单帧观测的决策类型。
-    /// </summary>
-    public enum AnchorPolicyAction
-    {
-        /// <summary>接受本帧 pose，并更新 raw/stable anchor。</summary>
-        Accept,
-
-        /// <summary>拒绝本帧 pose，并保持上一 stable anchor。</summary>
-        Reject,
-
-        /// <summary>短时缺失 pose，用预测或上一 stable anchor 续航。</summary>
-        Coast,
-
-        /// <summary>保持上一 stable anchor，不进行外推。</summary>
-        Hold,
-
-        /// <summary>清空本地状态或等待重新搜索。</summary>
-        Reset,
-    }
-
-    /// <summary>
-    /// anchor policy 单次决策结果。
-    /// </summary>
-    public readonly struct AnchorPolicyDecision
-    {
-        /// <summary>本次策略动作。</summary>
-        public readonly AnchorPolicyAction Action;
-
-        /// <summary>决策后的 anchor 状态。</summary>
-        public readonly AnchorState State;
-
-        /// <summary>是否有可输出的 stable pose。</summary>
-        public readonly bool HasOutputPose;
-
-        /// <summary>输出 stable pose；HasOutputPose=false 时为 Pose.identity。</summary>
-        public readonly Pose OutputPose;
-
-        /// <summary>本次决策原因。</summary>
-        public readonly string Reason;
-
-        /// <summary>
-        /// 构造 anchor policy 决策结果。
-        /// </summary>
-        /// <param name="action">本次策略动作。</param>
-        /// <param name="state">决策后的 anchor 状态。</param>
-        /// <param name="hasOutputPose">是否有可输出的 stable pose。</param>
-        /// <param name="outputPose">输出 stable pose。</param>
-        /// <param name="reason">本次决策原因。</param>
-        public AnchorPolicyDecision(AnchorPolicyAction action, AnchorState state, bool hasOutputPose, Pose outputPose, string reason)
-        {
-            Action = action;
-            State = state;
-            HasOutputPose = hasOutputPose;
-            OutputPose = outputPose;
-            Reason = reason ?? string.Empty;
-        }
-    }
-
-    /// <summary>
     /// reliability-aware anchor policy controller。
     ///
     /// 它组合可靠性评分 gate、pose innovation gate、短时 predictor 和 anchor 状态机，
     /// 将低频、延迟、含噪或间歇失效的 pose stream 转换为 Unity 可用的 anchor 更新行为。
     /// 本类不解码 Protobuf、不访问 NATS、不修改 Transform。
     /// </summary>
-    public sealed class AnchorPolicyController
+    public sealed class PolicyController
     {
         /// <summary>感知可靠性 gate。</summary>
         private readonly ReliabilityGate reliabilityGate;
 
         /// <summary>pose 跳变 gate。</summary>
-        private readonly PoseInnovationGate innovationGate;
+        private readonly InnovationGate innovationGate;
 
         /// <summary>短时预测器。</summary>
         private readonly AnchorPredictor predictor;
@@ -102,14 +43,14 @@ namespace EgoAnchor.Reliability
         /// <param name="innovationGate">pose 跳变 gate；为空时使用默认阈值。</param>
         /// <param name="predictor">短时预测器；为空时使用默认参数。</param>
         /// <param name="stateMachine">状态机；为空时使用默认时间阈值。</param>
-        public AnchorPolicyController(
+        public PolicyController(
             ReliabilityGate reliabilityGate = null,
-            PoseInnovationGate innovationGate = null,
+            InnovationGate innovationGate = null,
             AnchorPredictor predictor = null,
             AnchorStateMachine stateMachine = null)
         {
             this.reliabilityGate = reliabilityGate ?? new ReliabilityGate();
-            this.innovationGate = innovationGate ?? new PoseInnovationGate();
+            this.innovationGate = innovationGate ?? new InnovationGate();
             this.predictor = predictor ?? new AnchorPredictor();
             this.stateMachine = stateMachine ?? new AnchorStateMachine();
             stablePose = Pose.identity;

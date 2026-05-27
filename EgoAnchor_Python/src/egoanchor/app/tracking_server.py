@@ -38,10 +38,10 @@ def should_show_waiting_frame(has_debug_frame: bool) -> bool:
     return not bool(has_debug_frame)
 
 
-def run_tracking_server(config_path: str | None = None) -> None:
+def run_tracking_server(config_path: str | None = None, object_name: str | None = None) -> None:
     """运行 Python-only pose estimation debug server。"""
 
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, object_name=object_name)
     subjects = SubjectRegistry.load(cfg.paths.subjects_path)
     pose_cfg = cfg.demo.pose
     depth_cfg = cfg.pipeline.depth
@@ -113,9 +113,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="EgoAnchor Python-only pose estimation debug server")
     parser.add_argument("--config", default=None, help="可选 TOML 配置路径；默认使用包内 defaults.toml")
+    parser.add_argument("--object", dest="object_name", default=None, help="目标物体名；来自 src/egoanchor/config/objects.toml")
     parser.add_argument("--log", default="INFO", help="日志级别，例如 DEBUG/INFO/WARNING")
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, str(args.log).upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
-    run_tracking_server(args.config)
+    run_tracking_server(args.config, args.object_name)
 

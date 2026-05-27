@@ -20,7 +20,7 @@ namespace EgoAnchor.Anchor
         private readonly FramePoseHistory framePoseHistory;
 
         /// <summary>Inspector/调用方指定的对齐参考相机。</summary>
-        private readonly AnchorPoseReference alignmentReference;
+        private readonly CameraReference alignmentReference;
 
         /// <summary>camera-local 坐标转换和 frame-aligned 后固定偏移配置。</summary>
         private readonly AnchorPoseTransform poseTransform;
@@ -33,7 +33,7 @@ namespace EgoAnchor.Anchor
         /// <param name="poseTransform">camera-local 轴翻转和本地固定偏移配置。</param>
         public CameraPoseFrameAligner(
             FramePoseHistory framePoseHistory,
-            AnchorPoseReference alignmentReference = AnchorPoseReference.Left,
+            CameraReference alignmentReference = CameraReference.Left,
             AnchorPoseTransform? poseTransform = null)
         {
             this.framePoseHistory = framePoseHistory;
@@ -59,7 +59,7 @@ namespace EgoAnchor.Anchor
         /// <param name="worldPose">成功时输出 Unity world pose。</param>
         /// <param name="usedReference">本次用于组合 camera-local pose 的参考相机。</param>
         /// <returns>是否成功得到 world pose。</returns>
-        public bool TryAlign(PoseResult poseResult, out Pose worldPose, out AnchorPoseReference usedReference)
+        public bool TryAlign(PoseResult poseResult, out Pose worldPose, out CameraReference usedReference)
         {
             worldPose = default;
             usedReference = alignmentReference;
@@ -97,7 +97,7 @@ namespace EgoAnchor.Anchor
         /// <param name="reference">用于组合 camera-local pose 的采集时刻参考相机。</param>
         /// <param name="worldPose">成功时输出 Unity world pose。</param>
         /// <returns>是否成功完成坐标转换和 frame 对齐。</returns>
-        public bool TryAlign(long frameId, Pose cvCameraPose, AnchorPoseReference reference, out Pose worldPose)
+        public bool TryAlign(long frameId, Pose cvCameraPose, CameraReference reference, out Pose worldPose)
         {
             worldPose = default;
 
@@ -106,7 +106,7 @@ namespace EgoAnchor.Anchor
                 return false;
             }
 
-            if (reference == AnchorPoseReference.None)
+            if (reference == CameraReference.None)
             {
                 worldPose = poseTransform.ApplyFixedOffset(unityCameraLocalPose);
                 return true;

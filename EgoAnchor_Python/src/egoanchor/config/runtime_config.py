@@ -19,12 +19,23 @@ class RuntimePaths:
     """运行时常用路径集合。"""
 
     repo_root: Path
+    """EgoAnchor 仓库根目录。"""
+
     python_root: Path
+    """EgoAnchor_Python 项目根目录。"""
+
     protocol_root: Path
+    """共享协议目录。"""
+
     subjects_path: Path
+    """共享 subject registry JSON 文件路径。"""
+
+    objects_path: Path
+    """对象覆盖配置 TOML 文件路径。"""
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().with_name("defaults.toml")
+OBJECT_CONFIG_PATH = Path(__file__).resolve().with_name("objects.toml")
 
 
 def _repo_root() -> Path:
@@ -61,11 +72,41 @@ def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
-def load_config(config_path: str | Path | None = None) -> SimpleNamespace:
-    """加载 配置并附加仓库路径信息。"""
+def load_object_override(name: str, objects_path: str | Path | None = None) -> dict[str, Any]:
+    """按对象名读取统一对象覆盖配置。
+
+    返回值可直接叠加到 defaults.toml 上。未知对象名会立即报错，避免
+    tracking server 悄悄退回默认 cube 配置。
+    """
+
+    object_name = str(name or "").strip()
+    if not object_name:
+        raise KeyError("未知对象配置: <empty>")
+    path = Path(objects_path) if objects_path is not None else OBJECT_CONFIG_PATH
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    objects = data.get("objects", {})
+    if object_name not in objects:
+        available = ", ".join(sorted(objects)) or "<none>"
+        raise KeyError(f"未知对象配置: {object_name}; 可用对象: {available}")
+    value = objects[object_name]
+    if not isinstance(value, dict):
+        raise KeyError(f"未知对象配置: {object_name}")
+    return copy.deepcopy(value)
+
+
+def load_config(config_path: str | Path | None = None, object_name: str | None = None) -> SimpleNamespace:
+    """加载运行配置并附加仓库路径信息。
+
+    合并顺序为 defaults.toml -> objects.toml 对象覆盖 -> 显式 config_path，
+    便于先选择目标物体，再用本地 TOML 做临时调参。
+    """
 
     with DEFAULT_CONFIG_PATH.open("rb") as f:
         data = tomllib.load(f)
+
+    if object_name is not None:
+        data = _merge_dict(data, load_object_override(object_name))
 
     if config_path is not None:
         path = Path(config_path)
@@ -79,5 +120,6 @@ def load_config(config_path: str | Path | None = None) -> SimpleNamespace:
         python_root=_python_root(),
         protocol_root=repo_root / "EgoAnchor_Protocol",
         subjects_path=repo_root / "EgoAnchor_Protocol" / "subjects.v1.json",
+        objects_path=OBJECT_CONFIG_PATH,
     )
     return cfg

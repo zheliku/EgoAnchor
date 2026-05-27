@@ -8,7 +8,7 @@ static class Program
 {
     private static int Main()
     {
-        var controller = new AnchorPolicyController();
+        var controller = new PolicyController();
 
         Pose firstPose = new Pose(Vector3.zero, Quaternion.identity);
         AnchorPolicyDecision first = controller.AcceptPose(

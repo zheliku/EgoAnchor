@@ -1,11 +1,8 @@
 using System;
-using System.Collections.Concurrent;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using EgoAnchor.Protocol;
-using NATS.Client.Core;
-using NATS.Net;
+using EgoAnchor.Util;
 using UnityEngine;
 
 namespace EgoAnchor.Transport
@@ -74,25 +71,16 @@ namespace EgoAnchor.Transport
         [SerializeField] private int statsIntervalMessages = 120;
 
         /// <summary>后台线程收到、等待主线程消费的 PoseResult payload 队列。</summary>
-        private ConcurrentQueue<byte[]> poseResultPayloads;
+        private LatestOnlyQueue<byte[]> poseResultPayloads;
 
         /// <summary>后台线程收到、等待主线程消费的 AnchorStatusEvent payload 队列。</summary>
-        private ConcurrentQueue<byte[]> statusPayloads;
+        private EventQueue<byte[]> statusPayloads;
 
         /// <summary>后台线程收到、等待主线程消费的 ServerHeartbeat payload 队列。</summary>
-        private ConcurrentQueue<byte[]> heartbeatPayloads;
+        private LatestOnlyQueue<byte[]> heartbeatPayloads;
 
-        /// <summary>后台接收循环取消源。</summary>
-        private CancellationTokenSource cts;
-
-        /// <summary>后台接收 Task。</summary>
-        private Task receiveTask;
-
-        /// <summary>NATS.Net 客户端。</summary>
-        private NatsClient client;
-
-        /// <summary>连接完成信号；request/reply 发送前会等待它完成。</summary>
-        private TaskCompletionSource<bool> connectReady;
+        /// <summary>纯 bytes NATS 客户端。</summary>
+        private NatsBytesClient bytesClient;
 
         /// <summary>累计收到的 PoseResult 数量。</summary>
         private int receivedPoseResults;
@@ -103,17 +91,8 @@ namespace EgoAnchor.Transport
         /// <summary>累计收到的 ServerHeartbeat 数量。</summary>
         private int receivedHeartbeats;
 
-        /// <summary>Unity 侧 latest queue 因容量限制丢弃的旧 payload 数量。</summary>
-        private int droppedInUnityQueue;
-
-        /// <summary>Unity 侧 status event 队列因容量限制丢弃的旧 payload 数量。</summary>
-        private int droppedStatusEvents;
-
         /// <summary>上次打印统计时的接收数量。</summary>
         private int lastLoggedReceived;
-
-        /// <summary>接收循环是否运行中。</summary>
-        private volatile bool isRunning;
 
         /// <summary>累计发送的 request/reply 命令数量。</summary>
         private int sentRequests;
@@ -146,10 +125,10 @@ namespace EgoAnchor.Transport
         public int ReceivedHeartbeatCount => receivedHeartbeats;
 
         /// <summary>Unity 侧 latest queue 因容量限制丢弃的旧 payload 数量。</summary>
-        public int DroppedInUnityQueueCount => droppedInUnityQueue;
+        public int DroppedInUnityQueueCount => (poseResultPayloads?.DroppedCount ?? 0) + (heartbeatPayloads?.DroppedCount ?? 0);
 
         /// <summary>Unity 侧 status event 队列因容量限制丢弃的旧 payload 数量。</summary>
-        public int DroppedStatusEventCount => droppedStatusEvents;
+        public int DroppedStatusEventCount => statusPayloads?.DroppedCount ?? 0;
 
         /// <summary>累计发送的 request/reply 命令数量。</summary>
         public int SentRequestCount => sentRequests;
@@ -211,16 +190,29 @@ namespace EgoAnchor.Transport
         /// </summary>
         public void StartClient()
         {
-            if (isRunning)
+            if (bytesClient != null && bytesClient.IsRunning)
             {
                 return;
             }
 
             EnsureQueue();
-            isRunning = true;
-            connectReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            cts = new CancellationTokenSource();
-            receiveTask = Task.Run(() => ReceiveLoopAsync(cts.Token));
+            NatsBytesClient.Settings settings = new NatsBytesClient.Settings(
+                natsUrl,
+                pendingCapacity,
+                retryOnInitialConnect,
+                reconnectWaitMinSeconds,
+                reconnectWaitMaxSeconds
+            );
+            bytesClient = new NatsBytesClient(settings, this);
+            bytesClient.Subscribe(SubjectNames.PoseResult, EnqueuePoseResult);
+            bytesClient.Subscribe(SubjectNames.AnchorStatus, EnqueueStatusEvent);
+            bytesClient.Subscribe(SubjectNames.ServerHeartbeat, EnqueueHeartbeat);
+            bytesClient.Start();
+            Debug.Log(
+                $"[NatsControlClient] subscribing pose={SubjectNames.PoseResult}, " +
+                $"status={SubjectNames.AnchorStatus}, heartbeat={SubjectNames.ServerHeartbeat}",
+                this
+            );
         }
 
         /// <summary>
@@ -246,33 +238,15 @@ namespace EgoAnchor.Transport
                 throw new ArgumentException("NATS request payload 不能为空。", nameof(payload));
             }
 
-            if (!isRunning)
+            if (bytesClient == null || !bytesClient.IsRunning)
             {
                 StartClient();
-            }
-
-            float safeTimeout = Mathf.Max(0.1f, timeoutSeconds);
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(safeTimeout));
-
-            Task readyTask = connectReady?.Task;
-            if (readyTask != null)
-            {
-                await WaitWithCancellationAsync(readyTask, timeoutCts.Token);
-            }
-
-            NatsClient activeClient = client;
-            if (activeClient == null)
-            {
-                Interlocked.Increment(ref failedRequests);
-                throw new InvalidOperationException("NATS client 尚未连接，无法发送 command request。");
             }
 
             try
             {
                 Interlocked.Increment(ref sentRequests);
-                NatsMsg<byte[]> reply = await activeClient.RequestAsync<byte[], byte[]>(subject, payload, cancellationToken: timeoutCts.Token);
-                byte[] data = reply.Data ?? Array.Empty<byte>();
+                byte[] data = await bytesClient.RequestAsync(subject, payload, timeoutSeconds, token);
                 Interlocked.Increment(ref repliedRequests);
                 return data;
             }
@@ -295,7 +269,7 @@ namespace EgoAnchor.Transport
         public bool TryDequeueLatestPoseResult(out byte[] payload, out int skippedOlderPayloads)
         {
             EnsureQueue();
-            return TryDequeueLatest(poseResultPayloads, out payload, out skippedOlderPayloads);
+            return poseResultPayloads.TryDequeueLatest(out payload, out skippedOlderPayloads);
         }
 
         /// <summary>
@@ -321,193 +295,40 @@ namespace EgoAnchor.Transport
         public bool TryDequeueLatestHeartbeat(out byte[] payload, out int skippedOlderPayloads)
         {
             EnsureQueue();
-            return TryDequeueLatest(heartbeatPayloads, out payload, out skippedOlderPayloads);
+            return heartbeatPayloads.TryDequeueLatest(out payload, out skippedOlderPayloads);
         }
 
         /// <summary>
-        /// 后台 NATS 订阅循环。
+        /// 写入 latest-only PoseResult 队列。
         /// </summary>
-        private async Task ReceiveLoopAsync(CancellationToken token)
-        {
-            try
-            {
-                NatsOpts opts = new NatsOpts
-                {
-                    Url = natsUrl,
-                    RetryOnInitialConnect = retryOnInitialConnect,
-                    ReconnectWaitMin = TimeSpan.FromSeconds(Mathf.Max(0.1f, reconnectWaitMinSeconds)),
-                    ReconnectWaitMax = TimeSpan.FromSeconds(Mathf.Max(reconnectWaitMinSeconds, reconnectWaitMaxSeconds)),
-                    DrainSubscriptionsOnDispose = false,
-                    SubPendingChannelCapacity = Mathf.Max(1, pendingCapacity),
-                    SubPendingChannelFullMode = BoundedChannelFullMode.DropOldest,
-                };
-
-                NatsClient localClient = new NatsClient(opts, BoundedChannelFullMode.DropOldest);
-                client = localClient;
-                await localClient.ConnectAsync();
-                connectReady?.TrySetResult(true);
-                Debug.Log(
-                    $"[NatsControlClient] connected url={natsUrl}, pose={SubjectNames.PoseResult}, " +
-                    $"status={SubjectNames.AnchorStatus}, heartbeat={SubjectNames.ServerHeartbeat}",
-                    this
-                );
-
-                Task poseTask = ReceivePoseResultsAsync(localClient, token);
-                Task statusTask = ReceiveStatusEventsAsync(localClient, token);
-                Task heartbeatTask = ReceiveHeartbeatsAsync(localClient, token);
-                await Task.WhenAll(poseTask, statusTask, heartbeatTask);
-            }
-            catch (OperationCanceledException)
-            {
-                // Play Mode 退出或组件销毁时的正常路径。
-                connectReady?.TrySetCanceled();
-            }
-            catch (Exception ex)
-            {
-                connectReady?.TrySetException(ex);
-                Debug.LogError($"[NatsControlClient] NATS receive loop failed: {ex}", this);
-            }
-            finally
-            {
-                isRunning = false;
-            }
-        }
-
-        /// <summary>
-        /// 后台订阅 PoseResult subject，并写入 latest-only 队列。
-        /// </summary>
-        private async Task ReceivePoseResultsAsync(NatsClient localClient, CancellationToken token)
-        {
-            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.PoseResult, cancellationToken: token))
-            {
-                if (!TryReadMessageData(msg, out byte[] data, token))
-                {
-                    continue;
-                }
-
-                EnsureQueue();
-                poseResultPayloads.Enqueue(data);
-                Interlocked.Increment(ref receivedPoseResults);
-                TrimQueueToCapacity(poseResultPayloads, ref droppedInUnityQueue);
-                MaybeLogReceiveStats();
-            }
-        }
-
-        /// <summary>
-        /// 后台订阅 AnchorStatusEvent subject，并写入事件队列。
-        /// </summary>
-        private async Task ReceiveStatusEventsAsync(NatsClient localClient, CancellationToken token)
-        {
-            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.AnchorStatus, cancellationToken: token))
-            {
-                if (!TryReadMessageData(msg, out byte[] data, token))
-                {
-                    continue;
-                }
-
-                EnsureQueue();
-                statusPayloads.Enqueue(data);
-                Interlocked.Increment(ref receivedStatusEvents);
-                TrimQueueToCapacity(statusPayloads, ref droppedStatusEvents);
-                MaybeLogReceiveStats();
-            }
-        }
-
-        /// <summary>
-        /// 后台订阅 ServerHeartbeat subject，并写入 latest-only 队列。
-        /// </summary>
-        private async Task ReceiveHeartbeatsAsync(NatsClient localClient, CancellationToken token)
-        {
-            await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(SubjectNames.ServerHeartbeat, cancellationToken: token))
-            {
-                if (!TryReadMessageData(msg, out byte[] data, token))
-                {
-                    continue;
-                }
-
-                EnsureQueue();
-                heartbeatPayloads.Enqueue(data);
-                Interlocked.Increment(ref receivedHeartbeats);
-                TrimQueueToCapacity(heartbeatPayloads, ref droppedInUnityQueue);
-                MaybeLogReceiveStats();
-            }
-        }
-
-        /// <summary>
-        /// 从 NATS 消息读取非空 bytes payload。
-        /// </summary>
-        private static bool TryReadMessageData(NatsMsg<byte[]> msg, out byte[] data, CancellationToken token)
-        {
-            data = null;
-            if (token.IsCancellationRequested)
-            {
-                return false;
-            }
-
-            data = msg.Data;
-            return data != null && data.Length > 0;
-        }
-
-        /// <summary>
-        /// 等待任务完成，同时支持旧 Unity/.NET Standard 环境中没有 Task.WaitAsync 的情况。
-        /// </summary>
-        /// <param name="task">要等待的任务。</param>
-        /// <param name="token">取消信号。</param>
-        private static async Task WaitWithCancellationAsync(Task task, CancellationToken token)
-        {
-            if (task.IsCompleted)
-            {
-                await task;
-                return;
-            }
-
-            TaskCompletionSource<bool> cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using CancellationTokenRegistration registration = token.Register(state =>
-            {
-                TaskCompletionSource<bool> source = (TaskCompletionSource<bool>)state;
-                source.TrySetResult(true);
-            }, cancelled);
-
-            Task finished = await Task.WhenAny(task, cancelled.Task);
-            if (finished != task)
-            {
-                throw new OperationCanceledException(token);
-            }
-
-            await task;
-        }
-
-        /// <summary>
-        /// 将主线程队列裁剪到配置容量，保持 latest-only。
-        /// </summary>
-        private void TrimQueueToCapacity(ConcurrentQueue<byte[]> queue, ref int droppedCounter)
+        private void EnqueuePoseResult(byte[] data)
         {
             EnsureQueue();
-            int safeCapacity = Mathf.Max(1, pendingCapacity);
-            while (queue.Count > safeCapacity && queue.TryDequeue(out _))
-            {
-                Interlocked.Increment(ref droppedCounter);
-            }
+            poseResultPayloads.Enqueue(data);
+            Interlocked.Increment(ref receivedPoseResults);
+            MaybeLogReceiveStats();
         }
 
         /// <summary>
-        /// 从指定队列按 latest-only 语义取出最新 payload。
+        /// 写入 AnchorStatusEvent 事件队列。
         /// </summary>
-        private static bool TryDequeueLatest(ConcurrentQueue<byte[]> queue, out byte[] payload, out int skippedOlderPayloads)
+        private void EnqueueStatusEvent(byte[] data)
         {
-            payload = null;
-            skippedOlderPayloads = 0;
-            while (queue != null && queue.TryDequeue(out byte[] candidate))
-            {
-                if (payload != null)
-                {
-                    skippedOlderPayloads++;
-                }
+            EnsureQueue();
+            statusPayloads.Enqueue(data);
+            Interlocked.Increment(ref receivedStatusEvents);
+            MaybeLogReceiveStats();
+        }
 
-                payload = candidate;
-            }
-
-            return payload != null;
+        /// <summary>
+        /// 写入 latest-only ServerHeartbeat 队列。
+        /// </summary>
+        private void EnqueueHeartbeat(byte[] data)
+        {
+            EnsureQueue();
+            heartbeatPayloads.Enqueue(data);
+            Interlocked.Increment(ref receivedHeartbeats);
+            MaybeLogReceiveStats();
         }
 
         /// <summary>
@@ -527,7 +348,7 @@ namespace EgoAnchor.Transport
                 Debug.Log(
                     $"[NatsControlClient] pose={receivedPoseResults}, status={receivedStatusEvents}, heartbeat={receivedHeartbeats}, " +
                     $"pendingPose={poseResultPayloads.Count}, pendingStatus={statusPayloads.Count}, pendingHeartbeat={heartbeatPayloads.Count}, " +
-                    $"droppedLatest={droppedInUnityQueue}, droppedStatus={droppedStatusEvents}",
+                    $"droppedLatest={DroppedInUnityQueueCount}, droppedStatus={DroppedStatusEventCount}",
                     this
                 );
             }
@@ -540,15 +361,15 @@ namespace EgoAnchor.Transport
         {
             if (poseResultPayloads == null)
             {
-                poseResultPayloads = new ConcurrentQueue<byte[]>();
+                poseResultPayloads = new LatestOnlyQueue<byte[]>(pendingCapacity);
             }
             if (statusPayloads == null)
             {
-                statusPayloads = new ConcurrentQueue<byte[]>();
+                statusPayloads = new EventQueue<byte[]>(pendingCapacity);
             }
             if (heartbeatPayloads == null)
             {
-                heartbeatPayloads = new ConcurrentQueue<byte[]>();
+                heartbeatPayloads = new LatestOnlyQueue<byte[]>(pendingCapacity);
             }
         }
 
@@ -590,68 +411,13 @@ namespace EgoAnchor.Transport
         /// </summary>
         public void StopClient()
         {
-            if (!isRunning && cts == null && client == null)
+            if (bytesClient == null)
             {
                 return;
             }
 
-            NatsClient clientToDispose = client;
-            CancellationTokenSource ctsToDispose = cts;
-            Task receiveTaskToObserve = receiveTask;
-
-            client = null;
-            cts = null;
-            receiveTask = null;
-            connectReady?.TrySetCanceled();
-            isRunning = false;
-
-            try
-            {
-                ctsToDispose?.Cancel();
-            }
-            catch
-            {
-                // ignored
-            }
-
-            DisposeClientWithoutBlocking(clientToDispose);
-            ObserveReceiveTaskAndDisposeCts(receiveTaskToObserve, ctsToDispose);
-        }
-
-        private static async void DisposeClientWithoutBlocking(NatsClient clientToDispose)
-        {
-            if (clientToDispose == null)
-            {
-                return;
-            }
-
-            try
-            {
-                await clientToDispose.DisposeAsync();
-            }
-            catch
-            {
-                // Play Mode/Domain Reload 退出时不因关闭异常打断 Unity。
-            }
-        }
-
-        private static async void ObserveReceiveTaskAndDisposeCts(Task receiveTaskToObserve, CancellationTokenSource ctsToDispose)
-        {
-            try
-            {
-                if (receiveTaskToObserve != null)
-                {
-                    await receiveTaskToObserve;
-                }
-            }
-            catch
-            {
-                // 关闭路径忽略后台任务异常。
-            }
-            finally
-            {
-                ctsToDispose?.Dispose();
-            }
+            bytesClient.Stop();
+            bytesClient = null;
         }
     }
 }

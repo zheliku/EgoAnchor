@@ -33,20 +33,6 @@ def make_waiting_image(width: int, height: int, title: str) -> np.ndarray:
     return image
 
 
-def stack_stereo(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    """把左右图等高横向拼接，便于观察双目同步情况。"""
-
-    if left.shape[0] != right.shape[0]:
-        target_height = min(left.shape[0], right.shape[0])
-        left = cv2.resize(left, (max(1, int(left.shape[1] * target_height / left.shape[0])), target_height), interpolation=cv2.INTER_LINEAR)
-        right = cv2.resize(
-            right,
-            (max(1, int(right.shape[1] * target_height / right.shape[0])), target_height),
-            interpolation=cv2.INTER_LINEAR,
-        )
-    return np.hstack((left, right))
-
-
 def draw_stereo_hud(
     image: np.ndarray,
     *,

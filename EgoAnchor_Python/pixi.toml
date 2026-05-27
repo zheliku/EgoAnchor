@@ -170,17 +170,17 @@ python src/tracking_server.py
 """ }
 
 blue_mouse ={ cmd = """
-python src/tracking_server.py --config ./src/egoanchor/config/blue_mouse.toml
+python src/tracking_server.py --object blue_mouse
 """ }
 
 pink_mouse ={ cmd = """
-python src/tracking_server.py --config ./src/egoanchor/config/pink_mouse.toml
+python src/tracking_server.py --object pink_mouse
 """ }
 
 earphone ={ cmd = """
-python src/tracking_server.py --config ./src/egoanchor/config/earphone.toml
+python src/tracking_server.py --object earphone
 """ }
 
 controller ={ cmd = """
-python src/tracking_server.py --config ./src/egoanchor/config/controller.toml
+python src/tracking_server.py --object controller
 """ }

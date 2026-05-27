@@ -4,7 +4,7 @@ namespace EgoAnchor.Anchor
     /// Unity anchor 生命周期状态机。
     ///
     /// 本类只维护 anchor 状态和最近状态变化原因，不做坐标转换、不做滤波、
-    /// 不订阅网络。PoseToAnchorRuntime 或 AnchorPolicyController 根据 pose 质量和
+    /// 不订阅网络。PoseToAnchorRuntime 或 AnchorPolicyHost/PolicyController 根据 pose 质量和
     /// command/status 事件调用它，从而把状态转移逻辑从 MonoBehaviour 中拆出来。
     /// </summary>
     public sealed class AnchorStateMachine
@@ -35,7 +35,7 @@ namespace EgoAnchor.Anchor
             this.lostTimeoutSeconds = lostTimeoutSeconds > this.coastTimeoutSeconds
                 ? lostTimeoutSeconds
                 : this.coastTimeoutSeconds * 3.0;
-            lastEvent = new AnchorLifecycleEvent(AnchorState.Uninitialized, AnchorState.Uninitialized, "initialized", 0.0);
+            lastEvent = new AnchorLifecycleEvent(AnchorState.Uninitialized, AnchorState.Uninitialized, "initialized");
         }
 
         /// <summary>当前 anchor 生命周期状态。</summary>
@@ -203,7 +203,7 @@ namespace EgoAnchor.Anchor
         {
             AnchorState previous = state;
             state = nextState;
-            lastEvent = new AnchorLifecycleEvent(previous, nextState, reason, sampleTimeSeconds);
+            lastEvent = new AnchorLifecycleEvent(previous, nextState, reason);
             return state;
         }
     }

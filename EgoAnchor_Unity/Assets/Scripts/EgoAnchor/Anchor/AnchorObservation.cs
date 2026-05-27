@@ -79,7 +79,7 @@ namespace EgoAnchor.Anchor
         /// <param name="reliabilityFlags">Python 感知侧可靠性 flags。</param>
         /// <param name="phase">Python pipeline phase。</param>
         /// <param name="poseSource">pose 来源。</param>
-        /// <returns>可交给 AnchorPolicyController 的观测。</returns>
+        /// <returns>可交给 AnchorPolicyHost/PolicyController 的观测。</returns>
         public static AnchorObservation FromAlignedPose(
             long frameId,
             Pose worldPose,

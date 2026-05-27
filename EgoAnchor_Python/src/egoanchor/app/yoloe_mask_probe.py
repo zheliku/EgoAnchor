@@ -40,6 +40,7 @@ def _parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description="EgoAnchor YOLOE-26 实时掩码验证工具")
     parser.add_argument("--config", default=None, help="可选 TOML 配置路径；默认使用包内 defaults.toml")
+    parser.add_argument("--object", dest="object_name", default=None, help="目标物体名；来自 src/egoanchor/config/objects.toml")
     parser.add_argument("--log", default="INFO", help="日志级别，例如 DEBUG/INFO/WARNING")
     parser.add_argument("--prompt", default=None, help="覆盖配置中的 YOLOE 文本提示词，例如 'white mouse'")
     parser.add_argument("--conf", type=float, default=None, help="覆盖 YOLOE 置信度阈值")
@@ -130,10 +131,10 @@ def _save_snapshot(save_dir: Path, frame_id: int, overlay: object, mask_bw: obje
     logging.info("已保存 YOLOE 掩码快照: %s_*", prefix)
 
 
-def run_yoloe_mask_probe(config_path: str | None = None, args: argparse.Namespace | None = None) -> None:
+def run_yoloe_mask_probe(config_path: str | None = None, args: argparse.Namespace | None = None, object_name: str | None = None) -> None:
     """接收 Quest stereo，实时运行 YOLOE-26 并显示 mask/overlay。"""
 
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, object_name=object_name)
     args = args or argparse.Namespace(prompt=None, conf=None, max_det=None, mask_threshold=None, device=None, save_dir=None)
     subjects = SubjectRegistry.load(cfg.paths.subjects_path)
     for name in (QUEST_STEREO, QUEST_CAMERA_INFO):
@@ -252,5 +253,5 @@ def main() -> None:
 
     args = _parse_args()
     logging.basicConfig(level=getattr(logging, str(args.log).upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
-    run_yoloe_mask_probe(args.config, args)
+    run_yoloe_mask_probe(args.config, args, args.object_name)
 

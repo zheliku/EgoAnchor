@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using EgoAnchor.Anchor;
 using EgoAnchor.Protocol;
 using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Transport;
@@ -42,18 +41,6 @@ namespace EgoAnchor.Client
         [Tooltip("等待 NATS 连接和 Python CommandAck 的超时时间，单位秒。ack 只表示命令已接受或拒绝，不表示重定位已经完成。")]
         [Min(0.1f)]
         [SerializeField] private float requestTimeoutSeconds = 1.5f;
-
-        /// <summary>Unity 默认 reset 是否清理本地 anchor processor。</summary>
-        [Tooltip("ResetTracking() 默认是否在 Python ack accepted 后清理本地 anchor processor。Python 只重置 pose 估计；Unity 本地滤波状态需要在本侧清理。")]
-        [SerializeField] private bool resetLocalFiltersOnAccepted = true;
-
-        /// <summary>Unity 默认 reset 是否清空本地 anchor pose。</summary>
-        [Tooltip("ResetTracking() 默认是否在 Python ack accepted 后清空本地 raw/stable anchor pose，避免旧 anchor 在重新检测期间继续显示。")]
-        [SerializeField] private bool clearLocalAnchorPoseOnAccepted = false;
-
-        /// <summary>可选本地 anchor runtime 列表。</summary>
-        [Tooltip("可选本地 PoseToAnchorRuntime 列表。Python ack accepted 后，可按 reset request 字段同步清理本地滤波/pose 状态。")]
-        [SerializeField] private PoseToAnchorRuntime[] localAnchorRuntimes;
 
         /// <summary>是否输出每条命令的 ack 日志。</summary>
         [Header("Debug")]
@@ -100,15 +87,6 @@ namespace EgoAnchor.Client
         /// <summary>累计异常/超时数。</summary>
         private int failedCommands;
 
-        /// <summary>最近一次 reset request；收到 ack 后用于决定是否清理本地 anchor 状态。</summary>
-        private ResetTrackingRequest pendingResetForLocalApply;
-
-        /// <summary>最近一次 reacquire request；收到 ack 后用于通知本地状态机。</summary>
-        private ReacquireAnchorRequest pendingReacquireForLocalApply;
-
-        /// <summary>最近一次 control request；收到 ack 后用于通知本地 pause/resume 状态。</summary>
-        private AnchorControlRequest pendingControlForLocalApply;
-
         /// <summary>最近一次 request 取消源。</summary>
         private CancellationTokenSource requestCts;
 
@@ -147,22 +125,11 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
-        /// Inspector 修改时保持数组非空，避免审阅诊断时出现 null。
-        /// </summary>
-        private void OnValidate()
-        {
-            if (localAnchorRuntimes == null)
-            {
-                localAnchorRuntimes = Array.Empty<PoseToAnchorRuntime>();
-            }
-        }
-
-        /// <summary>
         /// UnityEvent/Button 入口：按默认配置请求 Python 重置 pose 估计。
         /// </summary>
         public void ResetTracking()
         {
-            _ = ResetTrackingAsync(resetLocalFiltersOnAccepted, clearLocalAnchorPoseOnAccepted, "unity_reset_button");
+            _ = ResetTrackingAsync("unity_reset_button");
         }
 
         /// <summary>
@@ -233,8 +200,22 @@ namespace EgoAnchor.Client
         /// <summary>
         /// 发送 ResetTrackingRequest，并等待 Python CommandAck。
         /// </summary>
-        /// <param name="clearFilters">ack accepted 后是否清理 Unity 本地 processor。</param>
-        /// <param name="clearAnchorPose">ack accepted 后是否清空 Unity 本地 anchor pose。</param>
+        /// <param name="reason">命令原因，写入 request.reason 便于日志排查。</param>
+        /// <param name="token">外部取消信号。</param>
+        /// <returns>Python 返回的 CommandAck；异常时返回 null。</returns>
+        public async Task<CommandAck> ResetTrackingAsync(string reason = "unity_api", CancellationToken token = default)
+        {
+            return await ResetTrackingAsync(clearFilters: false, clearAnchorPose: false, reason, token);
+        }
+
+        /// <summary>
+        /// 发送 ResetTrackingRequest，并等待 Python CommandAck。
+        ///
+        /// clearFilters/clearAnchorPose 仅写入请求字段，ack accepted 阶段不再清理 Unity 本地状态；
+        /// 本地 reset/reacquire/pause/resume 闭环由后续 AnchorStatusEvent 驱动。
+        /// </summary>
+        /// <param name="clearFilters">写入 request.clear_filters 的保留字段。</param>
+        /// <param name="clearAnchorPose">写入 request.clear_anchor_pose 的保留字段。</param>
         /// <param name="reason">命令原因，写入 request.reason 便于日志排查。</param>
         /// <param name="token">外部取消信号。</param>
         /// <returns>Python 返回的 CommandAck；异常时返回 null。</returns>
@@ -247,7 +228,6 @@ namespace EgoAnchor.Client
                 ClearAnchorPose = clearAnchorPose,
                 Reason = reason ?? string.Empty,
             };
-            pendingResetForLocalApply = request;
             return await SendCommandAsync(SubjectNames.ResetTracking, request, token);
         }
 
@@ -278,7 +258,6 @@ namespace EgoAnchor.Client
                 TimeoutMs = timeoutMs,
             };
             request.Header.MessageId = $"{request.Header.MessageId}_{reason ?? string.Empty}";
-            pendingReacquireForLocalApply = request;
             return await SendCommandAsync(SubjectNames.ReacquireAnchor, request, token);
         }
 
@@ -303,7 +282,6 @@ namespace EgoAnchor.Client
                 Stage = stage,
                 Reason = reason ?? string.Empty,
             };
-            pendingControlForLocalApply = request;
             return await SendCommandAsync(SubjectNames.AnchorControl, request, token);
         }
 
@@ -422,18 +400,6 @@ namespace EgoAnchor.Client
             if (lastAccepted)
             {
                 acceptedAcks++;
-                if (subject == SubjectNames.ResetTracking)
-                {
-                    ApplyAcceptedResetLocally(pendingResetForLocalApply);
-                }
-                else if (subject == SubjectNames.ReacquireAnchor)
-                {
-                    ApplyAcceptedReacquireLocally(pendingReacquireForLocalApply);
-                }
-                else if (subject == SubjectNames.AnchorControl)
-                {
-                    ApplyAcceptedControlLocally(pendingControlForLocalApply);
-                }
             }
             else
             {
@@ -466,92 +432,6 @@ namespace EgoAnchor.Client
             if (logCommandAck)
             {
                 Debug.LogWarning($"[AnchorCommandClient] command failed subject={subject}, request_id={lastRequestId}, error={lastMessage}", this);
-            }
-        }
-
-        /// <summary>
-        /// Python accepted reset 后，同步清理 Unity 本地 anchor runtime。
-        ///
-        /// 注意：CommandAck 只表示 Python 已接受重置命令；本地清理是为了避免视觉端继续持有旧滤波/旧 pose。
-        /// 真正重新定位是否成功仍由后续 PoseResult/状态事件决定。
-        /// </summary>
-        /// <param name="request">对应 reset request。</param>
-        private void ApplyAcceptedResetLocally(ResetTrackingRequest request)
-        {
-            if (request == null || localAnchorRuntimes == null)
-            {
-                return;
-            }
-
-            foreach (PoseToAnchorRuntime runtime in localAnchorRuntimes)
-            {
-                if (runtime == null)
-                {
-                    continue;
-                }
-
-                if (request.ClearFilters)
-                {
-                    runtime.ResetProcessors();
-                }
-
-                if (request.ClearAnchorPose)
-                {
-                    runtime.ClearPoseState(clearProcessors: false);
-                }
-
-                runtime.NotifyResetAccepted(request.ClearFilters, request.ClearAnchorPose, request.Reason);
-            }
-        }
-
-        /// <summary>
-        /// Python accepted reacquire 后，同步 Unity 本地 anchor 状态为 Relocalizing。
-        /// </summary>
-        /// <param name="request">对应 reacquire request。</param>
-        private void ApplyAcceptedReacquireLocally(ReacquireAnchorRequest request)
-        {
-            if (request == null || localAnchorRuntimes == null)
-            {
-                return;
-            }
-
-            foreach (PoseToAnchorRuntime runtime in localAnchorRuntimes)
-            {
-                if (runtime == null)
-                {
-                    continue;
-                }
-
-                runtime.NotifyReacquireAccepted(request.ClearTrackingFirst, request.Header?.MessageId ?? "reacquire");
-            }
-        }
-
-        /// <summary>
-        /// Python accepted pause/resume 后，同步 Unity 本地 anchor 状态。
-        /// </summary>
-        /// <param name="request">对应 control request。</param>
-        private void ApplyAcceptedControlLocally(AnchorControlRequest request)
-        {
-            if (request == null || localAnchorRuntimes == null)
-            {
-                return;
-            }
-
-            foreach (PoseToAnchorRuntime runtime in localAnchorRuntimes)
-            {
-                if (runtime == null)
-                {
-                    continue;
-                }
-
-                if (request.Action == AnchorControlRequest.Types.ControlAction.Pause)
-                {
-                    runtime.NotifyPauseAccepted(request.Reason);
-                }
-                else if (request.Action == AnchorControlRequest.Types.ControlAction.Resume)
-                {
-                    runtime.NotifyResumeAccepted(request.Reason);
-                }
             }
         }
 

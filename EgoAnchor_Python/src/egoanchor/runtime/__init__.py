@@ -11,7 +11,9 @@ from .command_executor import CommandExecutionResult, CommandExecutor, CommandHa
 from .command_queue import CommandQueue
 from .runtime_state import RuntimeState, runtime_state_value
 from .heartbeat_factory import HeartbeatFactory
+from .latest_value_store import LatestValueStore
 from .latest_quest_input_store import LatestQuestInputStore, QuestInputStats
+from .pose_log_factory import PoseLogFactory
 from .pose_result_factory import PoseResultFactory
 from .status_event_factory import StatusEventFactory
 
@@ -44,7 +46,9 @@ __all__ = [
     "command_handler",
     "control_action_handler",
     "LatestQuestInputStore",
+    "LatestValueStore",
     "HeartbeatFactory",
+    "PoseLogFactory",
     "PoseResultFactory",
     "QuestInputStats",
     "QuestStreamReceiver",

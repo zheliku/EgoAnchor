@@ -13,7 +13,8 @@
 1. 在已有 NATS GameObject 上保留 `NatsControlClient` 和 `PoseResultReceiver`。
 2. 给同一个 GameObject 添加 `AnchorCommandClient`。
 3. 将 `AnchorCommandClient.natsClient` 指向同一个 `NatsControlClient`。
-4. 如需 reset 后同步清理 Unity 本地滤波/pose，把 `PoseToAnchorRuntime` 拖入 `localAnchorRuntimes`。
+4. 将 `PoseResultReceiver`、`AnchorStatusReceiver`、`ServerHeartbeatReceiver` 指向同一个 `NatsControlClient` 和 `AnchorRuntimeHub`。
 5. UI Button 的 `OnClick()` 直接绑定 `AnchorCommandClient.ResetTracking()`、`ForceReacquire()`、`PauseTracking()` 等公开方法。
 
 `CommandAck.accepted=true` 只表示 Python 已接受命令；reset/reacquire 的实际完成状态仍应以后续 `PoseResult` 或状态事件为准。
+Unity 本地滤波/pose 清理只由后续 `AnchorStatusEvent` 和 `PoseToAnchorRuntime` 状态机路径驱动，不再在 ack 阶段提前清理。

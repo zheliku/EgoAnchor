@@ -21,6 +21,7 @@ from .subjects import (
 )
 from . import v1
 from .protobuf_registry import ProtobufRegistry
+from .header_utils import extract_client_id, extract_frame_id, extract_session_id
 
 anchor_pb2 = v1.anchor_pb2
 """protocol.v1 anchor Protobuf 生成模块。"""
@@ -43,6 +44,18 @@ ErrorInfo = v1.ErrorInfo
 MessageHeader = v1.MessageHeader
 """共享消息头类型。"""
 
+Matrix4x4 = v1.Matrix4x4
+"""4x4 矩阵消息类型。"""
+
+PoseResult = v1.PoseResult
+"""Python -> Unity pose result 类型。"""
+
+QuestCameraInfo = v1.QuestCameraInfo
+"""Quest 相机标定消息类型。"""
+
+QuestStereoFrame = v1.QuestStereoFrame
+"""Quest 双目帧消息类型。"""
+
 ReacquireAnchorRequest = v1.ReacquireAnchorRequest
 """主动重新获取 anchor 的 command request 类型。"""
 
@@ -64,12 +77,19 @@ __all__ = [
     "CommandAck",
     "ErrorInfo",
     "MessageHeader",
+    "Matrix4x4",
+    "PoseResult",
     "ProtobufRegistry",
+    "QuestCameraInfo",
+    "QuestStereoFrame",
     "ReacquireAnchorRequest",
     "ResetTrackingRequest",
     "anchor_pb2",
     "common_pb2",
     "default_subjects_path",
+    "extract_client_id",
+    "extract_frame_id",
+    "extract_session_id",
     "load_subjects",
     "quest_pb2",
 ]

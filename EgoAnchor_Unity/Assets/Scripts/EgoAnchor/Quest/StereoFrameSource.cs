@@ -231,7 +231,7 @@ namespace EgoAnchor.Quest
     /// 否则 Python 端会把 camera_info 与 stereo 误判为不同 Unity 重启会话。
     /// QuestStreamPublisher 在启用时会刷新 session_id，使 Python 能识别 Unity Play Mode 重入和应用重启。
     /// </summary>
-    internal static class QuestStreamSession
+    public static class QuestStreamSession
     {
         /// <summary>当前 Unity 发布会话 ID；同一次发布期间 stereo/camera_info 共用。</summary>
         public static string SessionId { get; private set; } = NewSessionId();

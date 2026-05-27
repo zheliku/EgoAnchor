@@ -22,6 +22,7 @@ from egoanchor.runtime import (
     CommandExecutor,
     CommandQueue,
     HeartbeatFactory,
+    PoseLogFactory,
     PoseResultFactory,
     QuestStreamReceiver,
     RuntimeState,
@@ -170,8 +171,8 @@ class TrackingRuntime:
         self.last_error = None
         """最近一次结构化 runtime 错误；无错误时为 None。"""
 
-        self.last_logged_pose_matrix: tuple[float, ...] | None = None
-        """上一条成功写入日志的 camera-space pose matrix，用于计算相邻 pose jump。"""
+        self.pose_log_factory = PoseLogFactory()
+        """PoseResult 结构化日志字段构造器。"""
 
         self.started = False
         """runtime 是否已经启动。"""
@@ -346,7 +347,7 @@ class TrackingRuntime:
         """把 command request/reply router 绑定到 NATS client。"""
 
         from egoanchor.handlers import register_command_handlers
-        from egoanchor.routing import HandlerContext, HandlerRegistry, NatsRouter, iter_nats_request_specs
+        from egoanchor.routing import HandlerContext, HandlerRegistry, NatsRouter
 
         handlers = HandlerRegistry()
         register_command_handlers(handlers)
@@ -356,7 +357,9 @@ class TrackingRuntime:
             handlers,
             HandlerContext(commands=self.command_queue, dedup=self.command_dedup),
         )
-        for spec in iter_nats_request_specs(self.subjects):
+        for spec in self.subjects.by_transport("nats"):
+            if spec.direction != "unity_to_python" or spec.mode != "request_reply":
+                continue
             client.add_subscription(spec.name, router.handle_message)
 
     def _execute_pending_commands(self) -> None:
@@ -506,7 +509,7 @@ class TrackingRuntime:
     def _log_pose_result(self, msg) -> None:
         """记录 PoseResult 的论文相关摘要字段。"""
 
-        pose_fields = self._pose_log_fields(msg)
+        pose_fields = self.pose_log_factory.build(msg)
         fields = dict(
             frame_id=int(msg.header.frame_id),
             state=self.state.value,
@@ -526,86 +529,6 @@ class TrackingRuntime:
         )
         fields.update(pose_fields)
         self._log_event("pose_result", **fields)
-
-    def _pose_log_fields(self, msg) -> dict[str, float]:
-        """提取 pose 平移、旋转和相邻 jump，便于诊断 frame alignment 残差。"""
-
-        if not bool(getattr(msg, "has_pose", False)):
-            self.last_logged_pose_matrix = None
-            return {}
-        matrix = getattr(getattr(msg, "pose_matrix_cv_camera", None), "values", None)
-        if matrix is None or len(matrix) != 16:
-            self.last_logged_pose_matrix = None
-            return {}
-
-        values = tuple(float(v) for v in matrix)
-        tx, ty, tz = values[3], values[7], values[11]
-        qx, qy, qz, qw = self._rotation_matrix_to_quaternion(values)
-        jump_t = 0.0
-        jump_r = 0.0
-        if self.last_logged_pose_matrix is not None:
-            prev = self.last_logged_pose_matrix
-            dx = tx - prev[3]
-            dy = ty - prev[7]
-            dz = tz - prev[11]
-            jump_t = (dx * dx + dy * dy + dz * dz) ** 0.5
-            pqx, pqy, pqz, pqw = self._rotation_matrix_to_quaternion(prev)
-            dot = abs(qx * pqx + qy * pqy + qz * pqz + qw * pqw)
-            dot = max(-1.0, min(1.0, dot))
-            import math
-
-            jump_r = math.degrees(2.0 * math.acos(dot))
-        self.last_logged_pose_matrix = values
-        return {
-            "pose_tx_m": tx,
-            "pose_ty_m": ty,
-            "pose_tz_m": tz,
-            "pose_distance_m": (tx * tx + ty * ty + tz * tz) ** 0.5,
-            "pose_qx": qx,
-            "pose_qy": qy,
-            "pose_qz": qz,
-            "pose_qw": qw,
-            "pose_matrix_cv_camera": list(values),
-            "pose_jump_translation_m": jump_t,
-            "pose_jump_rotation_deg": jump_r,
-        }
-
-    @staticmethod
-    def _rotation_matrix_to_quaternion(matrix: tuple[float, ...]) -> tuple[float, float, float, float]:
-        """把 row-major 4x4 旋转部分转换为归一化四元数 x/y/z/w。"""
-
-        import math
-
-        m00, m01, m02 = matrix[0], matrix[1], matrix[2]
-        m10, m11, m12 = matrix[4], matrix[5], matrix[6]
-        m20, m21, m22 = matrix[8], matrix[9], matrix[10]
-        trace = m00 + m11 + m22
-        if trace > 0.0:
-            s = math.sqrt(trace + 1.0) * 2.0
-            qw = 0.25 * s
-            qx = (m21 - m12) / s
-            qy = (m02 - m20) / s
-            qz = (m10 - m01) / s
-        elif m00 > m11 and m00 > m22:
-            s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
-            qw = (m21 - m12) / s
-            qx = 0.25 * s
-            qy = (m01 + m10) / s
-            qz = (m02 + m20) / s
-        elif m11 > m22:
-            s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
-            qw = (m02 - m20) / s
-            qx = (m01 + m10) / s
-            qy = 0.25 * s
-            qz = (m12 + m21) / s
-        else:
-            s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
-            qw = (m10 - m01) / s
-            qx = (m02 + m20) / s
-            qy = (m12 + m21) / s
-            qz = 0.25 * s
-        norm = max((qx * qx + qy * qy + qz * qz + qw * qw) ** 0.5, 1e-12)
-        return qx / norm, qy / norm, qz / norm, qw / norm
 
     def _log_status(self, status, previous: RuntimeState) -> None:
         """记录 AnchorStatusEvent 的状态迁移摘要。"""

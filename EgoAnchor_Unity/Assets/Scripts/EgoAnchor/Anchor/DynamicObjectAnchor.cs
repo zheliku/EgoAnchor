@@ -51,11 +51,7 @@ namespace EgoAnchor.Anchor
         [Tooltip("没有有效 pose 时是否保持上一帧 Transform。建议保持开启，避免 has_pose=false 时物体跳回原点。")]
         [SerializeField] private bool holdLastPoseWhenMissing = true;
 
-        /// <summary>是否记录 Inspector 诊断。</summary>
         [Header("Debug")]
-        [Tooltip("是否在 Inspector 中记录最后一次成功应用的 frame_id。")]
-        [SerializeField] private bool keepDiagnostics = true;
-
         /// <summary>最近一次成功应用的 frame_id。</summary>
         [Tooltip("最近一次成功应用的 frame_id。只用于 Inspector/日志诊断。")]
         [SerializeField] private long lastAppliedFrameId = -1;
@@ -101,7 +97,7 @@ namespace EgoAnchor.Anchor
 
             if (!hasPose)
             {
-                if (!holdLastPoseWhenMissing && keepDiagnostics)
+                if (!holdLastPoseWhenMissing)
                 {
                     lastAppliedFrameId = -1;
                 }
@@ -118,10 +114,7 @@ namespace EgoAnchor.Anchor
                 targetTransform.rotation = pose.rotation;
             }
 
-            if (keepDiagnostics)
-            {
-                lastAppliedFrameId = runtime.LatestAlignedFrameId;
-            }
+            lastAppliedFrameId = runtime.LatestAlignedFrameId;
         }
     }
 }

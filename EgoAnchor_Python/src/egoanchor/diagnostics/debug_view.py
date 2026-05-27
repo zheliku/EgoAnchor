@@ -7,35 +7,11 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
+from egoanchor.diagnostics import fit_to_size, stack_stereo
 from egoanchor.perception import PoseObservation
 
 if TYPE_CHECKING:
     from egoanchor.perception import FrameDiagnostics
-
-
-def _fit_width(image: np.ndarray, width: int) -> np.ndarray:
-    """按目标宽度等比缩放图像。"""
-
-    if image.shape[1] == width:
-        return image
-    height = max(1, int(image.shape[0] * width / max(image.shape[1], 1)))
-    return cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA if width < image.shape[1] else cv2.INTER_LINEAR)
-
-
-def _fit_size(image: np.ndarray, width: int, height: int) -> np.ndarray:
-    """缩放并居中填充到固定大小。"""
-
-    width = max(int(width), 1)
-    height = max(int(height), 1)
-    scale = min(width / max(image.shape[1], 1), height / max(image.shape[0], 1))
-    new_w = max(1, int(image.shape[1] * scale))
-    new_h = max(1, int(image.shape[0] * scale))
-    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
-    canvas = np.zeros((height, width, 3), dtype=np.uint8)
-    x0 = (width - new_w) // 2
-    y0 = (height - new_h) // 2
-    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = resized
-    return canvas
 
 
 def colorize_depth(depth: np.ndarray | None, min_depth: float = 0.1, max_depth: float = 5.0) -> np.ndarray:
@@ -69,22 +45,6 @@ def overlay_mask_contour(image_bgr: np.ndarray, mask: np.ndarray | None, color: 
     contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(output, contours, -1, color, 2)
     return output
-
-
-def stack_stereo(left_bgr: np.ndarray | None, right_bgr: np.ndarray | None) -> np.ndarray:
-    """把左右图等高横向拼接，缺失时显示占位图。"""
-
-    if left_bgr is None and right_bgr is None:
-        return np.zeros((240, 640, 3), dtype=np.uint8)
-    if left_bgr is None:
-        left_bgr = np.zeros_like(right_bgr)
-    if right_bgr is None:
-        right_bgr = np.zeros_like(left_bgr)
-    if left_bgr.shape[0] != right_bgr.shape[0]:
-        target_height = min(left_bgr.shape[0], right_bgr.shape[0])
-        left_bgr = cv2.resize(left_bgr, (max(1, int(left_bgr.shape[1] * target_height / left_bgr.shape[0])), target_height))
-        right_bgr = cv2.resize(right_bgr, (max(1, int(right_bgr.shape[1] * target_height / right_bgr.shape[0])), target_height))
-    return np.hstack([left_bgr, right_bgr])
 
 
 def make_waiting_image(width: int, height: int, title: str) -> np.ndarray:
@@ -156,10 +116,10 @@ def tile_pose_depth_dashboard(
 
     cell_w = max(int(width) // 2, 1)
     cell_h = max(int(height) // 2, 1)
-    top_left = _fit_size(stereo, cell_w, cell_h)
-    top_right = _fit_size(mask_view, cell_w, cell_h)
-    bottom_left = _fit_size(depth_view, cell_w, cell_h)
-    bottom_right = _fit_size(pose_view, cell_w, cell_h)
+    top_left = fit_to_size(stereo, cell_w, cell_h)
+    top_right = fit_to_size(mask_view, cell_w, cell_h)
+    bottom_left = fit_to_size(depth_view, cell_w, cell_h)
+    bottom_right = fit_to_size(pose_view, cell_w, cell_h)
     dashboard = np.vstack([np.hstack([top_left, top_right]), np.hstack([bottom_left, bottom_right])])
     dashboard = draw_hud(dashboard, observation, diagnostics)
 

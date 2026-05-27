@@ -6,9 +6,9 @@ namespace EgoAnchor.Reliability
     /// 检测相邻 anchor pose 的突变。
     ///
     /// 该 gate 用于拦截明显不合理的 world-space 跳变。它不负责平滑；
-    /// 被拒绝的 pose 会由 AnchorPolicyController 保持上一 stable pose 并进入 FrozenUncertain。
+    /// 被拒绝的 pose 会由 PolicyController 保持上一 stable pose 并进入 FrozenUncertain。
     /// </summary>
-    public sealed class PoseInnovationGate
+    public sealed class InnovationGate
     {
         /// <summary>单次更新允许的最大平移跳变，单位米。</summary>
         private readonly float maxTranslationMeters;
@@ -21,7 +21,7 @@ namespace EgoAnchor.Reliability
         /// </summary>
         /// <param name="maxTranslationMeters">单次更新允许的最大平移跳变，单位米。</param>
         /// <param name="maxRotationDegrees">单次更新允许的最大旋转跳变，单位度。</param>
-        public PoseInnovationGate(float maxTranslationMeters = 0.80f, float maxRotationDegrees = 90f)
+        public InnovationGate(float maxTranslationMeters = 0.80f, float maxRotationDegrees = 90f)
         {
             this.maxTranslationMeters = Mathf.Max(0.001f, maxTranslationMeters);
             this.maxRotationDegrees = Mathf.Max(1f, maxRotationDegrees);

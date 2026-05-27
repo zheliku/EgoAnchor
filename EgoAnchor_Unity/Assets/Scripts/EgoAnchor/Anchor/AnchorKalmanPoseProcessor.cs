@@ -34,9 +34,6 @@ namespace EgoAnchor.Anchor
         [Tooltip("首次收到位姿时是否直接贴合，避免滤波器从原点缓慢收敛。")]
         [SerializeField] private bool snapOnFirstPose = true;
 
-        /// <summary>是否已有滤波状态。</summary>
-        private bool hasState;
-
         /// <summary>x 轴常速度 Kalman 状态。</summary>
         private AxisKalman xAxis;
 
@@ -49,34 +46,23 @@ namespace EgoAnchor.Anchor
         /// <summary>滤波后的旋转。</summary>
         private Quaternion filteredRotation = Quaternion.identity;
 
-        /// <summary>上一帧样本时间，单位秒。</summary>
-        private double lastSampleTime;
-
         /// <summary>当前滤波输出，仅用于调试读取。</summary>
         public Pose FilteredPose => new Pose(new Vector3(xAxis.Position, yAxis.Position, zAxis.Position), filteredRotation);
+
+        /// <summary>派生类当前输出 pose，用于首次 snap。</summary>
+        protected override Pose CurrentPose => FilteredPose;
 
         /// <summary>
         /// 用常速度模型滤波位置，并用指数 Slerp 滤波旋转。
         /// </summary>
         protected override Pose ProcessPose(Pose inputPose, long frameId, double sampleTime)
         {
-            if (!hasState)
+            if (TryHandleFirstSample(inputPose, sampleTime, snapOnFirstPose, out Pose firstPose))
             {
-                xAxis = new AxisKalman(inputPose.position.x);
-                yAxis = new AxisKalman(inputPose.position.y);
-                zAxis = new AxisKalman(inputPose.position.z);
-                filteredRotation = inputPose.rotation;
-                lastSampleTime = sampleTime;
-                hasState = true;
-
-                if (snapOnFirstPose)
-                {
-                    return FilteredPose;
-                }
+                return firstPose;
             }
 
-            float dt = Mathf.Max((float)(sampleTime - lastSampleTime), 1e-5f);
-            lastSampleTime = sampleTime;
+            float dt = ConsumeDeltaTime(sampleTime);
 
             float q = Mathf.Max(positionProcessNoise, 0.000001f);
             float r = Mathf.Max(positionMeasurementNoise, 0.000001f);
@@ -90,16 +76,26 @@ namespace EgoAnchor.Anchor
         }
 
         /// <summary>
+        /// 首次样本到达时初始化 Kalman 状态。
+        /// </summary>
+        protected override void OnFirstSample(in Pose inputPose, double sampleTime)
+        {
+            xAxis = new AxisKalman(inputPose.position.x);
+            yAxis = new AxisKalman(inputPose.position.y);
+            zAxis = new AxisKalman(inputPose.position.z);
+            filteredRotation = inputPose.rotation;
+        }
+
+        /// <summary>
         /// 清空 Kalman 状态，让下一条 pose 重新初始化。
         /// </summary>
         public override void ResetProcessor()
         {
-            hasState = false;
+            base.ResetProcessor();
             xAxis = default;
             yAxis = default;
             zAxis = default;
             filteredRotation = Quaternion.identity;
-            lastSampleTime = 0.0;
         }
 
         /// <summary>

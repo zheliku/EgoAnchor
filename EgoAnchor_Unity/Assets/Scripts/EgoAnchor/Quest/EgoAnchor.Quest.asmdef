@@ -1,0 +1,18 @@
+{
+    "name": "EgoAnchor.Quest",
+    "rootNamespace": "EgoAnchor.Quest",
+    "references": [
+        "EgoAnchor.Protocol",
+        "Oculus.VR",
+        "meta.xr.mrutilitykit"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

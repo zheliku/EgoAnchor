@@ -51,22 +51,17 @@ namespace EgoAnchor.Anchor
         /// <summary>触发状态变化的原因。</summary>
         public readonly string Reason;
 
-        /// <summary>触发状态变化的 Unity 单调时间，单位秒。</summary>
-        public readonly double SampleTimeSeconds;
-
         /// <summary>
         /// 构造一条 anchor 生命周期事件。
         /// </summary>
         /// <param name="previousState">状态变化前的状态。</param>
         /// <param name="currentState">状态变化后的状态。</param>
         /// <param name="reason">触发状态变化的原因。</param>
-        /// <param name="sampleTimeSeconds">触发状态变化的 Unity 单调时间，单位秒。</param>
-        public AnchorLifecycleEvent(AnchorState previousState, AnchorState currentState, string reason, double sampleTimeSeconds)
+        public AnchorLifecycleEvent(AnchorState previousState, AnchorState currentState, string reason)
         {
             PreviousState = previousState;
             CurrentState = currentState;
             Reason = reason ?? string.Empty;
-            SampleTimeSeconds = sampleTimeSeconds;
         }
     }
 }

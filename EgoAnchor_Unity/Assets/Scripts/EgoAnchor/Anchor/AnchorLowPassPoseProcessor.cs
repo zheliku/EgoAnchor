@@ -25,41 +25,29 @@ namespace EgoAnchor.Anchor
         [Tooltip("首次收到位姿时是否直接贴合，避免初始从原点缓慢收敛。")]
         [SerializeField] private bool snapOnFirstPose = true;
 
-        /// <summary>当前是否已有平滑状态。</summary>
-        private bool hasSmoothedPose;
-
         /// <summary>平滑后的位置。</summary>
         private Vector3 smoothedPosition;
 
         /// <summary>平滑后的旋转。</summary>
         private Quaternion smoothedRotation = Quaternion.identity;
 
-        /// <summary>上一帧样本时间，单位秒。</summary>
-        private double lastSampleTime;
-
         /// <summary>当前平滑输出，仅用于调试读取。</summary>
         public Pose SmoothedPose => new Pose(smoothedPosition, smoothedRotation);
+
+        /// <summary>派生类当前输出 pose，用于首次 snap。</summary>
+        protected override Pose CurrentPose => SmoothedPose;
 
         /// <summary>
         /// 对 raw world pose 做指数平滑。
         /// </summary>
         protected override Pose ProcessPose(Pose inputPose, long frameId, double sampleTime)
         {
-            if (!hasSmoothedPose)
+            if (TryHandleFirstSample(inputPose, sampleTime, snapOnFirstPose, out Pose firstPose))
             {
-                smoothedPosition = inputPose.position;
-                smoothedRotation = inputPose.rotation;
-                lastSampleTime = sampleTime;
-                hasSmoothedPose = true;
-
-                if (snapOnFirstPose)
-                {
-                    return SmoothedPose;
-                }
+                return firstPose;
             }
 
-            float dt = Mathf.Max((float)(sampleTime - lastSampleTime), 1e-5f);
-            lastSampleTime = sampleTime;
+            float dt = ConsumeDeltaTime(sampleTime);
             float posT = 1f - Mathf.Exp(-Mathf.Max(positionSmoothSpeed, 0.01f) * dt);
             float rotT = 1f - Mathf.Exp(-Mathf.Max(rotationSmoothSpeed, 0.01f) * dt);
 
@@ -69,14 +57,22 @@ namespace EgoAnchor.Anchor
         }
 
         /// <summary>
+        /// 首次样本到达时初始化平滑状态。
+        /// </summary>
+        protected override void OnFirstSample(in Pose inputPose, double sampleTime)
+        {
+            smoothedPosition = inputPose.position;
+            smoothedRotation = inputPose.rotation;
+        }
+
+        /// <summary>
         /// 清空平滑状态，让下一条 pose 重新初始化。
         /// </summary>
         public override void ResetProcessor()
         {
-            hasSmoothedPose = false;
+            base.ResetProcessor();
             smoothedPosition = Vector3.zero;
             smoothedRotation = Quaternion.identity;
-            lastSampleTime = 0.0;
         }
     }
 }

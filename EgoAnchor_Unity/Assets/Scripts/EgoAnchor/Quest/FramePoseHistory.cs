@@ -147,20 +147,20 @@ namespace EgoAnchor.Quest
         /// <param name="reference">目标参考相机。</param>
         /// <param name="cameraPose">成功时输出对应参考相机的采集时刻 world pose。</param>
         /// <returns>参考相机是否需要且能够返回 world pose。</returns>
-        public bool TryGetCameraPose(AnchorPoseReference reference, out Pose cameraPose)
+        public bool TryGetCameraPose(CameraReference reference, out Pose cameraPose)
         {
             switch (reference)
             {
-                case AnchorPoseReference.None:
+                case CameraReference.None:
                     cameraPose = Pose.identity;
                     return false;
-                case AnchorPoseReference.Right:
+                case CameraReference.Right:
                     cameraPose = RightCameraPose;
                     return true;
-                case AnchorPoseReference.Center:
+                case CameraReference.Center:
                     cameraPose = CenterCameraPose;
                     return true;
-                case AnchorPoseReference.Left:
+                case CameraReference.Left:
                 default:
                     cameraPose = LeftCameraPose;
                     return true;

@@ -13,6 +13,8 @@ from typing import Any
 
 import zmq
 
+from egoanchor.transport import BaseTransportClient
+
 
 @dataclass(frozen=True)
 class ZmqTopicSubscriberStats:
@@ -56,12 +58,13 @@ class LatestTopicPayloadStore:
         )
 
 
-class ZmqTopicSubscriber:
+class ZmqTopicSubscriber(BaseTransportClient):
     """接收 Unity PUB 发送的 multipart `[topic_utf8, payload_bytes]`。"""
 
     def __init__(self, listen_host: str = "*", listen_port: int = 15557, hwm: int = 20, topics: list[str] | None = None) -> None:
         """初始化 SUB socket 参数，但不立即 bind。"""
 
+        super().__init__("ZmqTopicSubscriber")
         self.endpoint = f"tcp://{listen_host}:{int(listen_port)}"
         self.hwm = max(int(hwm), 1)
         self.topics = tuple(topics or [])
@@ -72,7 +75,7 @@ class ZmqTopicSubscriber:
     def start(self) -> None:
         """创建并绑定 SUB socket。"""
 
-        if self._socket is not None:
+        if not self.begin_start():
             return
         socket = self._ctx.socket(zmq.SUB)
         socket.setsockopt(zmq.RCVHWM, self.hwm)
@@ -81,13 +84,20 @@ class ZmqTopicSubscriber:
                 socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         else:
             socket.setsockopt_string(zmq.SUBSCRIBE, "")
-        socket.bind(self.endpoint)
-        self._socket = socket
+        try:
+            socket.bind(self.endpoint)
+            self._socket = socket
+        except Exception:
+            socket.close(linger=0)
+            self.cancel_start()
+            raise
         logging.info("[ZmqTopicSubscriber] listening endpoint=%s topics=%s hwm=%d", self.endpoint, self.topics or ("*",), self.hwm)
 
     def close(self) -> None:
         """关闭 SUB socket，linger=0 避免退出 demo 时阻塞。"""
 
+        if not self.begin_close():
+            return
         if self._socket is not None:
             self._socket.close(linger=0)
             self._socket = None

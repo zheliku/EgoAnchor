@@ -14,7 +14,7 @@
 3. Python `QuestStreamReceiver` 按 topic 做 latest-only 接收与 Protobuf 解码。
 4. 通信 demo 只显示左右 JPEG 拼接图；tracking server 继续运行本地 6DoF pose pipeline。
 5. tracking server 将 `PoseObservation` 映射为 Protobuf `PoseResult`，通过 NATS subject `egoanchor.v1.pose.result` 发布给 Unity。
-6. Unity `PoseResultReceiver` 在主线程解码 `PoseResult`，`PoseToAnchorRuntime` 按 `frame_id` 回查发送帧 left/right/center camera pose，并根据 Unity 本地 `alignmentReference` 生成 raw/stable world anchor pose；`None` 模式可用于不做 frame 对齐的诊断。
+6. Unity `PoseResultReceiver` 在主线程解码 `PoseResult`，通过 `AnchorRuntimeHub` 广播给一个或多个 `PoseToAnchorRuntime`；runtime 按 `frame_id` 回查发送帧 left/right/center camera pose，并根据 Unity 本地 `alignmentReference` 生成 raw/stable world anchor pose；`None` 模式可用于不做 frame 对齐的诊断。
 
 ## Topics
 
@@ -53,6 +53,7 @@ pixi run python .\src\yoloe_mask_probe.py
 
 ```powershell
 pixi run python .\src\yoloe_mask_probe.py --prompt "white mouse" --conf 0.08 --max-det 1 --save-dir .\debug\yoloe_probe
+pixi run python .\src\yoloe_mask_probe.py --object blue_mouse
 ```
 
 OpenCV 热键：
@@ -82,10 +83,14 @@ pixi run python .\src\tracking_server.py
 
 ```powershell
 pixi run python .\src\tracking_server.py --log DEBUG
+pixi run python .\src\tracking_server.py --object blue_mouse
+pixi run python .\src\tracking_server.py --object earphone
 pixi run python .\src\tracking_server.py --config .\path\to\override.toml
 ```
 
 默认配置会启用 `[network.message_plane]`，并连接 `nats://127.0.0.1:4222` 发布 `PoseResult`。端到端 Unity anchor 测试前，需要先启动本机或开发机上的 `nats-server`，并确保 Unity `NatsControlClient.natsUrl` 指向同一个地址。若只想做 Python-only debug，可在 override TOML 中设置 `network.message_plane.enabled = false`。
+
+目标物体统一写在 `src/egoanchor/config/objects.toml`。当前对象名包括 `blue_mouse`、`pink_mouse`、`earphone` 和 `controller`；加载顺序是 `defaults.toml -> objects.toml 中的 --object -> --config 临时覆盖`。`earphone` 会显式切到 SAM3，默认主线仍保持 YOLOE-26。
 
 OpenCV 热键：
 
@@ -132,22 +137,27 @@ Inspector 绑定要求：
 在同一场景中继续新增或绑定以下 组件：
 
 1. `EgoAnchor.Transport.NatsControlClient`
-2. `EgoAnchor.Anchor.PoseToAnchorRuntime`
-3. `EgoAnchor.Client.PoseResultReceiver`
-4. 一个或多个 `EgoAnchor.Anchor.DynamicObjectAnchor`
-5. 可选：`EgoAnchor.Anchor.AnchorKalmanPoseProcessor` 或 `EgoAnchor.Anchor.AnchorLowPassPoseProcessor`
+2. `EgoAnchor.Anchor.AnchorRuntimeHub`
+3. `EgoAnchor.Anchor.PoseToAnchorRuntime`
+4. `EgoAnchor.Client.PoseResultReceiver`
+5. `EgoAnchor.Client.AnchorStatusReceiver`
+6. `EgoAnchor.Client.ServerHeartbeatReceiver`
+7. 一个或多个 `EgoAnchor.Anchor.DynamicObjectAnchor`
+8. 可选：`EgoAnchor.Anchor.AnchorKalmanPoseProcessor`、`EgoAnchor.Anchor.AnchorLowPassPoseProcessor` 或 `EgoAnchor.Reliability.AnchorPolicyHost`
 
 Inspector 绑定要求：
 
 - `NatsControlClient.natsUrl`：填 `nats-server` 地址，例如开发机本地 `nats://127.0.0.1:4222`，Quest 真机应填开发机局域网 IP；也可通过 `PlayerPrefs` key `EgoAnchor.NatsUrl` 持久化。
 - `PoseToAnchorRuntime.framePoseHistory`：必须绑定与 `StereoFrameSource` 相同的 `FramePoseHistory`，否则无法按 `frame_id` 对齐。
-- `PoseToAnchorRuntime.processors`：挂入一个或多个 processor。论文对照时，建议 stable 链路挂 `AnchorKalmanPoseProcessor`，raw 链路不挂处理器或由 `DynamicObjectAnchor` 选择 Raw 输出。
-- `PoseResultReceiver.natsClient`：绑定 `NatsControlClient`。
-- `PoseResultReceiver.anchorRuntime`：绑定 `PoseToAnchorRuntime`。
+- `AnchorRuntimeHub.runtimes`：绑定所有要同时接收同一 pose/status/heartbeat 的 `PoseToAnchorRuntime`，例如 raw baseline、Kalman baseline、reliability-aware runtime。
+- `PoseToAnchorRuntime.processors`：挂入一个或多个 processor；为空时 stable 直接等于 raw。
+- `PoseToAnchorRuntime.policyHost`：为空时是 raw + processor baseline；若要启用 reliability-aware policy，在同一 GameObject 或其它 GameObject 上添加 `EgoAnchor.Reliability.AnchorPolicyHost` 并拖入该字段。
+- `PoseResultReceiver.natsClient` / `AnchorStatusReceiver.natsClient` / `ServerHeartbeatReceiver.natsClient`：都绑定同一个 `NatsControlClient`。
+- `PoseResultReceiver.runtimeHub` / `AnchorStatusReceiver.runtimeHub` / `ServerHeartbeatReceiver.runtimeHub`：都绑定同一个 `AnchorRuntimeHub`。
 - `DynamicObjectAnchor.runtime`：绑定 `PoseToAnchorRuntime`。
 - `DynamicObjectAnchor.outputMode`：一个物体选 `Raw` 作为不平滑 baseline，另一个物体选 `Smoothed` 作为处理器链输出，用于实时对照。
 
-当前阶段不实现 anchor 状态机：`has_pose=false`、pose 矩阵非法或 `frame_id` 查不到时，只更新诊断并保持上一帧有效 Transform，不触发 Lost/Reacquire 状态。
+`AnchorCommandClient` 只发送 command request 并解析 `CommandAck`。`accepted=true` 只表示 Python 接受命令，Unity 本地 pose/filter 清理由后续 `AnchorStatusEvent` 和 runtime 状态机路径驱动。
 
 ## 验证要点
 
@@ -157,7 +167,7 @@ Inspector 绑定要求：
 - 如果 stereo 收不到但 camera_info 能收到，优先检查 Unity `StereoFrameSource` 的左右 camera 是否 `IsPlaying`。
 - pose debug 首次启动会加载配置指定的分割后端、FFS、FoundationPose/Cutie，耗时明显长于通信 demo；SAM3 checkpoint 较大，首次加载更慢。
 - 若 Unity `NatsControlClient` 没有 connected 日志，先确认 `nats-server` 已启动、URL/IP 可达、防火墙未拦截 4222。
-- 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例、`frame_id` 是否被 Python 原样透传，以及 Unity 本地 `alignmentReference/latestUsedReference` 是否需要历史 frame pose。
+- 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `AnchorRuntimeHub.runtimes` 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例、`frame_id` 是否被 Python 原样透传，以及 Unity 本地 `alignmentReference/latestUsedReference` 是否需要历史 frame pose。
 - 当前主线 Python 感知 pipeline 使用左目图像、左目 K 和左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义上仍是左目 OpenCV camera pose。`PoseToAnchorRuntime.alignmentReference` 是 Unity 本地对齐/诊断策略，不写入通信协议，也不需要服务器知道；Right/Center 可用于本地对照或外参补偿实验，必要时配合 `applyLocalOffset` 做小量残差补偿。
 - 若 raw 物体正常但 smoothed 物体不动，检查 `PoseToAnchorRuntime.processors` 中 processor 是否禁用，或 stable `DynamicObjectAnchor.outputMode` 是否选择了 `Smoothed`。
 - 如果 dashboard 显示 `WAIT_CALIBRATION`，说明 stereo 已到但 camera_info 尚未到达或未成功解析。
@@ -172,5 +182,6 @@ Inspector 绑定要求：
 - `perception` 层只输出 OpenCV camera 坐标系下的 `PoseObservation`，不做 Unity world transform。
 - `algorithms` 层只封装单模型适配器，不直接处理网络或 runtime 命令。
 - Python `transport/nats_client.py` 是唯一 NATS transport 文件，只负责 bytes publish/subscribe，不导入 OpenCV 或 perception 重模型。
-- Unity `Quest` 目录只负责采集，`Transport` 目录只负责网络，`Client` 目录负责 Protobuf decode 和 runtime 调用，`Anchor` 目录负责 frame alignment、processor chain 和 Transform 输出。
+- Unity `Quest` 目录只负责采集，`Transport` 目录只负责网络，`Client` 目录负责 Protobuf decode 和 runtime 调用，`Anchor` 目录负责 frame alignment、processor chain、policy 接口和 Transform 输出，`Reliability` 目录负责具体 policy/gate 实现。
+- Unity 已按 `EgoAnchor.Protocol`、`EgoAnchor.Util`、`EgoAnchor.Transport`、`EgoAnchor.Quest`、`EgoAnchor.Anchor`、`EgoAnchor.Reliability`、`EgoAnchor.Client`、`EgoAnchor.Diagnostics` asmdef 分层；Unity Editor 刷新后会重新生成对应 csproj。
 

@@ -16,10 +16,15 @@ from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, pre
 
 
 _LAZY_EXPORTS = {
-    "FrameDiagnostics": "egoanchor.perception.quest_pose_pipeline",
-    "PipelineStepTiming": "egoanchor.perception.quest_pose_pipeline",
+    "AsyncSegmenterJob": "egoanchor.perception.async_segmenter",
+    "AsyncSegmenterWorker": "egoanchor.perception.async_segmenter",
+    "SegmenterBackend": "egoanchor.perception.async_segmenter",
+    "FrameDiagnostics": "egoanchor.perception.pipeline_types",
+    "MaskSource": "egoanchor.perception.pipeline_types",
+    "PipelineStepTiming": "egoanchor.perception.pipeline_types",
+    "PipelineTrackingState": "egoanchor.perception.pipeline_types",
     "QuestPosePipeline": "egoanchor.perception.quest_pose_pipeline",
-    "QuestPosePipelineOutput": "egoanchor.perception.quest_pose_pipeline",
+    "QuestPosePipelineOutput": "egoanchor.perception.pipeline_types",
     "build_quest_pose_pipeline": "egoanchor.perception.pipeline_factory",
 }
 
@@ -42,8 +47,13 @@ __all__ = [
     "DecodedQuestStereoFrame",
     "decode_quest_stereo_frame",
     "preprocess_stereo_pair",
+    "AsyncSegmenterJob",
+    "AsyncSegmenterWorker",
+    "SegmenterBackend",
     "FrameDiagnostics",
+    "MaskSource",
     "PipelineStepTiming",
+    "PipelineTrackingState",
     "QuestPosePipeline",
     "QuestPosePipelineOutput",
     "build_quest_pose_pipeline",

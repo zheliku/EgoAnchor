@@ -7,7 +7,7 @@ namespace EgoAnchor.Quest
     /// 在本地用哪一个 capture-time camera world pose 组合 object pose，不写入通信协议，
     /// 也不需要 Python 服务器知道。Right/Center/None 主要用于本地对照、补偿和诊断。
     /// </summary>
-    public enum AnchorPoseReference
+    public enum CameraReference
     {
         /// <summary>不做 camera frame 对齐；直接把 camera-local pose 当作 world pose 使用，主要用于诊断。</summary>
         None = 0,

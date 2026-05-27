@@ -498,30 +498,23 @@ MonoBehaviour:
     positionOffset: {x: 0, y: 0, z: 0}
     rotationOffsetEuler: {x: 0, y: 0, z: 0}
     offsetInAnchorLocal: 1
-  enableProcessors: 1
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
-  enableReliabilityPolicy: 1
-  minAcceptScore: 0.35
-  minHoldScore: 0.12
-  maxTranslationJumpMeters: 0.8
-  maxRotationJumpDegrees: 90
-  coastTimeoutSeconds: 0.45
-  lostTimeoutSeconds: 2
-  keepDiagnostics: 1
-  latestAlignedFrameId: -1
-  latestPhase: 
-  latestFailure: missing_frame_pose_history
-  currentAnchorState: 0
-  latestPolicyAction: 
-  latestPolicyReason: 
-  latestReliabilityScore: 1
-  latestServerState: 
-  latestServerEvent: 
-  latestHeartbeatInputReady: 0
-  latestHeartbeatReceiveTime: -1
-  latestUsedReference: 1
+  policyHost: {fileID: 1039886366}
+  diagnostics:
+    latestAlignedFrameId: -1
+    latestPhase: 
+    latestFailure: missing_frame_pose_history
+    currentAnchorState: 0
+    latestPolicyAction: 
+    latestPolicyReason: 
+    latestReliabilityScore: 1
+    latestServerState: 
+    latestServerEvent: 
+    latestHeartbeatInputReady: 0
+    latestHeartbeatReceiveTime: -1
+    latestUsedReference: 1
 --- !u!114 &160200732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -540,7 +533,6 @@ MonoBehaviour:
   applyPosition: 1
   applyRotation: 1
   holdLastPoseWhenMissing: 1
-  keepDiagnostics: 1
   lastAppliedFrameId: -1
 --- !u!4 &160200733
 Transform:
@@ -939,9 +931,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.PoseResultReceiver
   natsClient: {fileID: 785850744}
-  runtimeHub: {fileID: 1390846974}
   logStats: 1
   statsIntervalMessages: 120
+  runtimeHub: {fileID: 1390846974}
 --- !u!4 &287376995
 Transform:
   m_ObjectHideFlags: 0
@@ -1600,10 +1592,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.AnchorStatusReceiver
   natsClient: {fileID: 785850744}
-  runtimeHub: {fileID: 1390846974}
-  maxEventsPerFrame: 8
   logStats: 1
   statsIntervalMessages: 30
+  runtimeHub: {fileID: 1390846974}
+  maxEventsPerFrame: 8
 --- !u!1 &785850743
 GameObject:
   m_ObjectHideFlags: 0
@@ -2269,6 +2261,56 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1085434120}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1039886364
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1039886365}
+  - component: {fileID: 1039886366}
+  m_Layer: 0
+  m_Name: AnchorPolicyHost
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1039886365
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.05382, y: 0, z: 0.10197}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1085434120}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1039886366
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor.Reliability::EgoAnchor.Reliability.AnchorPolicyHost
+  minAcceptScore: 0.35
+  minHoldScore: 0.12
+  maxTranslationJumpMeters: 0.8
+  maxRotationJumpDegrees: 90
+  coastTimeoutSeconds: 0.45
+  lostTimeoutSeconds: 2
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2350,6 +2392,7 @@ Transform:
   - {fileID: 287376995}
   - {fileID: 733706455}
   - {fileID: 1588420537}
+  - {fileID: 1039886365}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1125115305
@@ -2519,28 +2562,21 @@ MonoBehaviour:
     positionOffset: {x: 0, y: 0, z: 0}
     rotationOffsetEuler: {x: 0, y: 0, z: 0}
     offsetInAnchorLocal: 1
-  enableProcessors: 1
   processors: []
-  enableReliabilityPolicy: 0
-  minAcceptScore: 0.55
-  minHoldScore: 0.25
-  maxTranslationJumpMeters: 0.35
-  maxRotationJumpDegrees: 35
-  coastTimeoutSeconds: 0.25
-  lostTimeoutSeconds: 0.75
-  keepDiagnostics: 1
-  latestAlignedFrameId: -1
-  latestPhase: 
-  latestFailure: missing_frame_pose_history
-  currentAnchorState: 0
-  latestPolicyAction: 
-  latestPolicyReason: 
-  latestReliabilityScore: 1
-  latestServerState: 
-  latestServerEvent: 
-  latestHeartbeatInputReady: 0
-  latestHeartbeatReceiveTime: -1
-  latestUsedReference: 1
+  policyHost: {fileID: 0}
+  diagnostics:
+    latestAlignedFrameId: -1
+    latestPhase: 
+    latestFailure: missing_frame_pose_history
+    currentAnchorState: 0
+    latestPolicyAction: 
+    latestPolicyReason: 
+    latestReliabilityScore: 1
+    latestServerState: 
+    latestServerEvent: 
+    latestHeartbeatInputReady: 0
+    latestHeartbeatReceiveTime: -1
+    latestUsedReference: 1
 --- !u!114 &1137170459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2559,7 +2595,6 @@ MonoBehaviour:
   applyPosition: 1
   applyRotation: 1
   holdLastPoseWhenMissing: 1
-  keepDiagnostics: 1
   lastAppliedFrameId: -1
 --- !u!4 &1137170460
 Transform:
@@ -2762,11 +2797,6 @@ MonoBehaviour:
   clientId: egoanchor-unity
   anchorId: default
   requestTimeoutSeconds: 1.5
-  resetLocalFiltersOnAccepted: 1
-  clearLocalAnchorPoseOnAccepted: 0
-  localAnchorRuntimes:
-  - {fileID: 160200731}
-  - {fileID: 1137170458}
   logCommandAck: 1
   sessionId: 
   lastRequestId: 
@@ -3121,9 +3151,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.ServerHeartbeatReceiver
   natsClient: {fileID: 785850744}
-  runtimeHub: {fileID: 1390846974}
   logStats: 1
   statsIntervalMessages: 30
+  runtimeHub: {fileID: 1390846974}
 --- !u!1 &1599024804
 GameObject:
   m_ObjectHideFlags: 0

@@ -19,6 +19,7 @@ from typing import Any
 from google.protobuf.message import Message as ProtobufMessage
 
 from egoanchor.protocol import ANCHOR_STATUS, POSE_RESULT, SERVER_HEARTBEAT
+from egoanchor.transport import BaseTransportClient
 
 MessageCallback = Callable[[str, bytes, str | None], Awaitable[bytes | None]]
 """NATS bytes callback 类型：输入 subject/payload/reply，输出可选 reply payload。"""
@@ -82,7 +83,7 @@ class NatsMessageSettings:
         )
 
 
-class NatsMessageClient:
+class NatsMessageClient(BaseTransportClient):
     """后台 asyncio NATS bytes 客户端。
 
     Runtime 主线程只调用本类的同步入口；真正的 NATS I/O 在后台线程执行。
@@ -92,6 +93,7 @@ class NatsMessageClient:
     def __init__(self, settings: NatsMessageSettings) -> None:
         """保存 NATS 配置并初始化后台线程状态。"""
 
+        super().__init__("NatsMessageClient")
         self.settings = settings
         """NATS 消息面配置。"""
 
@@ -155,7 +157,7 @@ class NatsMessageClient:
         if not self.enabled:
             logging.info("[NatsMessageClient] network.message_plane.enabled=false，消息面保持关闭。")
             return
-        if self._thread is not None:
+        if not self.begin_start():
             return
 
         self._closed = False
@@ -170,6 +172,8 @@ class NatsMessageClient:
     def close(self) -> None:
         """关闭后台 NATS 连接和 event loop。"""
 
+        if not self.begin_close():
+            return
         self._closed = True
         loop = self._loop
         if loop is None:

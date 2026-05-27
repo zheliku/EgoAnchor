@@ -1,0 +1,179 @@
+"""Quest pose pipeline 的轻量数据结构。"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+import numpy as np
+
+from egoanchor.perception import PoseObservation
+
+
+@dataclass(slots=True)
+class PipelineStepTiming:
+    """单帧 pipeline 各阶段耗时。"""
+
+    yolo_ms: float = 0.0
+    """分割后端耗时，单位毫秒；字段名沿用旧 PoseObservation 契约。"""
+
+    depth_ms: float = 0.0
+    """FFS 深度估计耗时，单位毫秒。"""
+
+    cutie_ms: float = 0.0
+    """Cutie mask tracker 耗时，单位毫秒。"""
+
+    pose_ms: float = 0.0
+    """FoundationPose register/track 耗时，单位毫秒。"""
+
+    total_ms: float = 0.0
+    """整帧处理耗时，单位毫秒。"""
+
+    def finalize(self, start_time_s: float) -> None:
+        """根据单帧起始时间写入 total_ms，避免各阶段重复计算。"""
+
+        self.total_ms = (time.perf_counter() - start_time_s) * 1000.0
+
+
+class MaskSource(StrEnum):
+    """pipeline diagnostics 中的 mask 来源。"""
+
+    NONE = "none"
+    """当前帧没有可用 mask。"""
+
+    CUTIE = "cutie"
+    """当前 mask 来自 Cutie 时序传播。"""
+
+
+@dataclass(slots=True)
+class FrameDiagnostics:
+    """用于 debug 显示的中间图像和诊断数值。"""
+
+    left_bgr: np.ndarray | None = None
+    """处理分辨率下的左目 BGR 图。"""
+
+    right_bgr: np.ndarray | None = None
+    """处理分辨率下的右目 BGR 图。"""
+
+    mask: np.ndarray | None = None
+    """当前使用的二值 mask。"""
+
+    segmentation_overlay_bgr: np.ndarray | None = None
+    """分割后端原始 overlay 图。"""
+
+    depth: np.ndarray | None = None
+    """FFS 输出深度图，单位米。"""
+
+    pose_vis_bgr: np.ndarray | None = None
+    """FoundationPose 可视化图。"""
+
+    stage: int = 4
+    """当前 debug stage。"""
+
+    phase: str = "WAIT_STREAM"
+    """当前 pipeline phase。"""
+
+    frame_id: int | None = None
+    """当前处理帧 frame_id。"""
+
+    det_count: int = 0
+    """分割后端返回的检测数量。"""
+
+    mask_area_ratio: float = 0.0
+    """mask 面积比例。"""
+
+    mask_source: str = MaskSource.NONE.value
+    """当前 mask 来源：none、yoloe、sam3 或 cutie。"""
+
+    cutie_bbox_xywh: tuple[int, int, int, int] = (-1, -1, 0, 0)
+    """Cutie 输出 bbox，用于 debug 可视化。"""
+
+    depth_valid_ratio: float = 0.0
+    """全图有效深度比例。"""
+
+    depth_valid_in_mask: float = 0.0
+    """mask 内有效深度比例。"""
+
+    depth_median_in_mask: float = 0.0
+    """mask 内深度中位数。"""
+
+    depth_iqr_in_mask: float = 0.0
+    """mask 内深度 IQR。"""
+
+    fps: float = 0.0
+    """pipeline FPS EMA。"""
+
+    failure_reason: str = ""
+    """当前帧失败原因。"""
+
+    segmenter_async: bool = False
+    """当前分割后端是否使用后台异步推理。"""
+
+    segmenter_busy: bool = False
+    """后台分割线程是否忙。"""
+
+    segmenter_submitted: int = 0
+    """异步分割累计提交帧数。"""
+
+    segmenter_completed: int = 0
+    """异步分割累计完成次数。"""
+
+    segmenter_dropped: int = 0
+    """异步分割因忙而丢弃的提交次数。"""
+
+    segmenter_error: str = ""
+    """异步分割最近一次异常。"""
+
+    timing: PipelineStepTiming = field(default_factory=PipelineStepTiming)
+    """当前帧耗时。"""
+
+
+@dataclass(slots=True)
+class QuestPosePipelineOutput:
+    """Quest pose pipeline 的单次处理输出。"""
+
+    observation: PoseObservation | None
+    """camera-space pose observation；无输入时可为 None。"""
+
+    diagnostics: FrameDiagnostics
+    """OpenCV debug 所需中间结果。"""
+
+    timing: PipelineStepTiming
+    """单帧耗时统计。"""
+
+    new_frame_processed: bool
+    """本次调用是否实际处理了新的 stereo frame。"""
+
+
+@dataclass(slots=True)
+class PipelineTrackingState:
+    """FoundationPose/Cutie 时序跟踪状态。"""
+
+    generation: int = 0
+    """reset 或 calibration 变化后的代数，用于过滤旧异步分割结果。"""
+
+    has_registered: bool = False
+    """FoundationPose 是否已完成首次 register。"""
+
+    cutie_ready: bool = False
+    """Cutie 是否已用当前目标 mask 初始化。"""
+
+    last_pose: np.ndarray | None = None
+    """上一帧接受的 4x4 pose，用于跳变检测。"""
+
+    track_reject_count: int = 0
+    """连续 track reject 次数。"""
+
+    tracked_mask_lost_count: int = 0
+    """已注册阶段连续缺失有效 Cutie mask 的帧数。"""
+
+    def bump_generation(self) -> None:
+        """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""
+
+        self.generation += 1
+        self.has_registered = False
+        self.cutie_ready = False
+        self.last_pose = None
+        self.track_reject_count = 0
+        self.tracked_mask_lost_count = 0

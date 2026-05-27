@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from functools import partial
 
 from google.protobuf.message import Message
 
@@ -144,17 +145,13 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
 def register_command_handlers(registry: HandlerRegistry) -> None:
     """注册 reset/reacquire/control 三个 command request handler。"""
 
-    @registry.request(CMD_ANCHOR_RESET)
-    def handle_reset(ctx: HandlerContext, message: Message) -> Message:
-        return _accept(ctx, message, CommandType.RESET)
-
-    @registry.request(CMD_ANCHOR_REACQUIRE)
-    def handle_reacquire(ctx: HandlerContext, message: Message) -> Message:
-        return _accept(ctx, message, CommandType.REACQUIRE)
-
-    @registry.request(CMD_ANCHOR_CONTROL)
-    def handle_control(ctx: HandlerContext, message: Message) -> Message:
-        return _accept(ctx, message, CommandType.CONTROL)
+    specs = (
+        (CMD_ANCHOR_RESET, CommandType.RESET),
+        (CMD_ANCHOR_REACQUIRE, CommandType.REACQUIRE),
+        (CMD_ANCHOR_CONTROL, CommandType.CONTROL),
+    )
+    for subject, command_type in specs:
+        registry.request(subject)(partial(_accept, command_type=command_type))
 
 
 __all__ = ["register_command_handlers"]
