@@ -15,6 +15,8 @@ from .latest_value_store import LatestValueStore
 from .latest_quest_input_store import LatestQuestInputStore, QuestInputStats
 from .pose_log_factory import PoseLogFactory
 from .pose_result_factory import PoseResultFactory
+from .runtime_log_writer import RuntimeLogWriter
+from .command_pump import CommandPump
 from .status_event_factory import StatusEventFactory
 
 _LAZY_EXPORTS = {
@@ -41,6 +43,7 @@ __all__ = [
     "CommandExecutionResult",
     "CommandExecutor",
     "CommandHandler",
+    "CommandPump",
     "CommandQueue",
     "CommandType",
     "command_handler",
@@ -53,6 +56,7 @@ __all__ = [
     "QuestInputStats",
     "QuestStreamReceiver",
     "RuntimeState",
+    "RuntimeLogWriter",
     "runtime_state_value",
     "RuntimeCommand",
     "RuntimeTickResult",

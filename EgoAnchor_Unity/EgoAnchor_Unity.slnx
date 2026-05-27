@@ -4,6 +4,7 @@
   <Project Path="EgoAnchor.Client.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="EgoAnchor.Protocol.csproj" />
+  <Project Path="EgoAnchor.Anchor.csproj" />
   <Project Path="Proxima.csproj" />
   <Project Path="EgoAnchor.Quest.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
@@ -11,7 +12,6 @@
   <Project Path="Assembly-CSharp.csproj" />
   <Project Path="Proxima.Editor.csproj" />
   <Project Path="VFavorites.csproj" />
-  <Project Path="EgoAnchor.Anchor.csproj" />
   <Project Path="EgoAnchor.Transport.csproj" />
   <Project Path="EgoAnchor.Util.csproj" />
   <Project Path="EgoAnchor.Diagnostics.csproj" />

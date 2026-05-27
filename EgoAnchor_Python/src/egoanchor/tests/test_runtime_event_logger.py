@@ -83,10 +83,12 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             cfg.runtime.logging.output_dir = tmp
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
 
-            runtime._set_state(RuntimeState.WAITING_INPUT, event="RUNTIME_STARTED", message="unit test")
-            runtime.event_logger.close()
+            try:
+                runtime._set_state(RuntimeState.WAITING_INPUT, event="RUNTIME_STARTED", message="unit test")
+            finally:
+                runtime.log_writer.close()
 
-            log_path = runtime.event_logger.log_path
+            log_path = runtime.log_writer.logger.log_path
             row = json.loads(log_path.read_text(encoding="utf-8").strip())
             self.assertEqual(row["event"], "status_event")
             self.assertEqual(row["status_event"], "RUNTIME_STARTED")
@@ -132,10 +134,12 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             cfg.runtime.logging.output_dir = tmp
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
 
-            runtime._log_pose_result(PoseMsg())
-            runtime.event_logger.close()
+            try:
+                runtime.log_writer.pose_result(PoseMsg(), state=runtime.state)
+            finally:
+                runtime.log_writer.close()
 
-            row = json.loads(runtime.event_logger.log_path.read_text(encoding="utf-8").strip())
+            row = json.loads(runtime.log_writer.logger.log_path.read_text(encoding="utf-8").strip())
             self.assertTrue(row["has_pose"])
             self.assertAlmostEqual(row["pose_score"], 0.72)
             self.assertAlmostEqual(row["pose_tx_m"], 0.12)

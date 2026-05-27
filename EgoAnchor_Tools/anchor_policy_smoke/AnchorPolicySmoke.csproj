@@ -66,16 +66,18 @@
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\SubjectNames.cs" Link="Protocol\SubjectNames.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Quest\CameraReference.cs" Link="Quest\CameraReference.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Quest\FramePoseHistory.cs" Link="Quest\FramePoseHistory.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorPoseProcessor.cs" Link="AnchorPoseProcessor.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\CameraPoseFrameAligner.cs" Link="CameraPoseFrameAligner.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorPolicyDecision.cs" Link="AnchorPolicyDecision.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorPolicyHostBase.cs" Link="AnchorPolicyHostBase.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\PoseToAnchorRuntime.cs" Link="PoseToAnchorRuntime.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\PoseToAnchorRuntime.Diagnostics.cs" Link="PoseToAnchorRuntime.Diagnostics.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\PoseToAnchorRuntime.Events.cs" Link="PoseToAnchorRuntime.Events.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorObservation.cs" Link="AnchorObservation.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorLifecycleEvent.cs" Link="AnchorLifecycleEvent.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\AnchorStateMachine.cs" Link="AnchorStateMachine.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Processor\AnchorPoseProcessor.cs" Link="AnchorPoseProcessor.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Runtime\CameraPoseFrameAligner.cs" Link="CameraPoseFrameAligner.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\AnchorPolicyDecision.cs" Link="AnchorPolicyDecision.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\AnchorPolicyHostBase.cs" Link="AnchorPolicyHostBase.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Runtime\PoseToAnchorRuntime.cs" Link="PoseToAnchorRuntime.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Runtime\PoseToAnchorRuntime.Diagnostics.cs" Link="PoseToAnchorRuntime.Diagnostics.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Runtime\PoseToAnchorRuntime.Events.cs" Link="PoseToAnchorRuntime.Events.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Runtime\PoseToAnchorRuntime.ServerNotifications.cs" Link="PoseToAnchorRuntime.ServerNotifications.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\PoseToAnchorRuntime.PolicyNotifications.cs" Link="PoseToAnchorRuntime.PolicyNotifications.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\AnchorObservation.cs" Link="AnchorObservation.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\AnchorLifecycleEvent.cs" Link="AnchorLifecycleEvent.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Anchor\Policy\AnchorStateMachine.cs" Link="AnchorStateMachine.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\ReliabilityScore.cs" Link="ReliabilityScore.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\ReliabilityGate.cs" Link="ReliabilityGate.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Reliability\InnovationGate.cs" Link="InnovationGate.cs" />

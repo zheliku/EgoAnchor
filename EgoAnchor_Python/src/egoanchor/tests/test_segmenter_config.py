@@ -18,7 +18,7 @@ class SegmenterConfigTest(unittest.TestCase):
         cfg = load_config()
 
         self.assertEqual(cfg.module.segmenter.type, "yoloe26")
-        self.assertEqual(cfg.module.segmenter.confidence_threshold, 0.1)
+        self.assertEqual(cfg.module.segmenter.confidence_threshold, 0.2)
         self.assertFalse(hasattr(cfg.module.yoloe, "conf"))
         self.assertFalse(hasattr(cfg.module.sam3, "confidence_threshold"))
         self.assertFalse(hasattr(cfg.module.sam3, "mask_threshold"))

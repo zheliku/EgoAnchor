@@ -281,3 +281,222 @@ dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
 
 主要可量化收益：**Python 单文件最大行数下降 ~40%、Unity 单文件最大行数下降 ~40%、override toml 数量从 4 → 1、Unity 单脚本改动重编译范围缩小到 1/6**。论文实验阶段（AGENTS.md Phase B/C）继续推进时，更小的单文件 + 单向 asmdef 会让"加 reliability 字段、加新的 anchor policy 行为"这类增量修改都更安全。
 
+---
+
+# 第二轮：重构验收 + 后续优化建议
+
+## 10. Context（本轮目标）
+
+第一轮工程报告提出的 12 项 Python + 9 项 Unity 优化已由用户落地。现在需要：
+1. **验收**：逐项核对当前代码状态是否符合阶段 1~3 的要求，标出仍有差距的条目；
+2. **后续规划**：基于落地后的目录结构，回答用户两个具体问题——
+   - `Anchor/` 下 policy/observation/decision 等脚本是否需要归到子目录；
+   - `Anchor/AnchorPolicyHostBase.cs` 是否冗余（用户感觉它和 `Reliability/AnchorPolicyHost.cs` 命名近似）；
+3. 输出"必须修"和"可选优化"两档清单，避免一次改太多再次堆积。
+
+**约束**：所有结论必须保留 AGENTS.md "不要回退"红线（双平面、frame-aligned anchor、单 owner runtime），并保留第一轮已确立的 asmdef 单向依赖（`Reliability → Anchor → Quest/Protocol`）。
+
+## 11. 验收记分卡
+
+按第一轮 P0/P1/P2/P3 条目逐项核对（行数为本轮 `wc -l` 实测）。
+
+### 11.1 Python（11/12 ✅）
+
+| 条目 | 目标 | 实测 | 结论 |
+|---|---|---|---|
+| `quest_pose_pipeline.py` 拆分 | < 700 行 | 553 行 + `pipeline_helpers.py` 377 + `pipeline_types.py` 179 + `async_segmenter.py` 223 | ✅ |
+| `tracking_runtime.py` 收缩 | < 500 行 | **576 行** | ⚠ **差距 ~76 行** |
+| `command_handlers.py` partial 化 | 三 handler 合并 | 已合并 | ✅ |
+| `route_specs.py` 删除 | 删除 | 已删 | ✅ |
+| `status_handlers.py` 处理 | 写实或删 | 已删 | ✅ |
+| 4 个 override toml 合并 | `objects.toml` + `--object` | 已合并（35 行 / 4 子表） | ✅ |
+| `transport/_lifecycle.py` | 抽 base | 已建 | ✅ |
+| `runtime/latest_value_store.py` | 抽公共缓存 | 已建 | ✅ |
+| `diagnostics/image_utils.py` | 抽 fit/stack/hud | 已建 | ✅ |
+| `utils/math.py` 四元数 | 数学外迁 | 已建（仅 43 行，偏薄但合理） | ✅ |
+| `protocol/header_utils.py` | header 抽取 | 已建 | ✅ |
+| 测试补强（transport/config/pipeline_state） | 三个新测试 | 已加入 `tests/` | ✅ |
+
+### 11.2 Unity（8/9 ✅）
+
+| 条目 | 目标 | 实测 | 结论 |
+|---|---|---|---|
+| `NatsTypedReceiver<T>` 抽基类 | 3 receiver 同形合并 | 已合并 | ✅ |
+| `PoseToAnchorRuntime.cs` 拆分 | < 450 行 | 318 行 主 + `Events.cs` 336 + `Diagnostics.cs` 64 | ✅（主文件）/ ⚠（**`Events.cs` 偏厚**） |
+| `NatsControlClient.cs` 拆 `NatsBytesClient` | < 350 行 | **425 行** + `NatsBytesClient.cs` 338 | ⚠ **差距 ~75 行** |
+| `LatestOnlyQueue<T>` 统一 | 一份实现 | 已抽到 `Util/`，唯一调用方仅 `NatsControlClient` | ✅（实现统一）/ 备注见 12.1 |
+| `AnchorObservation` + `LifecycleEvent` 字段去重 | SampleTime/Phase 不重复 | 已去重 | ✅ |
+| `AnchorPoseProcessor` 基类 helper | `TryHandleFirstSample` | 已抽 | ✅ |
+| 删除 `keepDiagnostics` 开关 | 删 | 已删 | ✅ |
+| 删除 `AnchorCommandClient` 两个 ack 阶段清理开关 | 删 SerializeField + 不在 ack 阶段清理 | SerializeField 已删，但**仍残留 `clearFilters` / `clearAnchorPose` 重载方法**（`AnchorCommandClient.cs:222`） | ❌ **未完成** |
+| asmdef 6+ 包分层 | 单向依赖 | 已建 8 个（多了 Util、Diagnostics 单独包） | ✅ |
+| 命名收敛 | `CameraReference` / `PolicyController` / `InnovationGate` | 已改名 | ✅ |
+
+### 11.3 总体结论
+
+整体落地度高，**21 项里 19 项达标**，但有 3 个具体问题在阶段 4 必须收尾，2 个目录组织问题适合作为阶段 5 的轻量优化。
+
+## 12. 必须修的 3 个收尾项（阶段 4）
+
+### 12.1 `tracking_runtime.py` 仍 576 行，目标 <500
+
+**事实**：`utils/math.py` 已抽出但只有 43 行，说明四元数迁出没释放预期空间——`tracking_runtime.py` 内还残留 protocol 装配 / command 路由 / heartbeat 装配 / pose log 字段四类样板。
+
+**建议**：
+- 把 `_pose_log_fields` 完整迁到独立 `runtime/pose_log_factory.py`（pose_result_factory 旁边），运行时只调用一次。
+- 把 `Heartbeat` 装配段（`make_heartbeat / fill_input_ready / publish_heartbeat`）抽到 `runtime/heartbeat_factory.py`，与 PoseResultFactory 一致风格。
+- `command` 顺序消费循环（poll → dispatch → ack）抽到 `runtime/command_pump.py`，runtime 只持有 pump 引用。
+- 完成后 `tracking_runtime.py` 应只剩"循环 + 阶段调用 + 错误归因"，预计 380~420 行。
+
+### 12.2 `AnchorCommandClient.cs` 残留 ack 阶段清理重载
+
+**事实**：[AnchorCommandClient.cs:222](EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs#L222) 仍存在 `clearFilters` / `clearAnchorPose` 方法重载。第一轮已删 SerializeField 开关，但调用路径仍在 ack 分支被触发。
+
+**建议**：
+- 直接删除这两个方法重载和它们在 `OnAck(...)` 内的调用点；
+- 清理改由 `AnchorStatusReceiver` → `PoseToAnchorRuntime.NotifyReset/NotifyReacquire/NotifyClear` 单一路径触发；
+- 这与 AGENTS.md "CommandAck.accepted=true 不表示重定位完成" 一致，避免双清理路径冲突。
+
+### 12.3 `PoseToAnchorRuntime.Events.cs` 336 行偏厚
+
+**事实**：主文件 318 行已达标，但 partial `Events.cs` 累积了 8 个 `Notify*` 方法（Reset/Reacquire/Pause/Resume/Clear/MissingPose/AlignFailure/StatusEvent...），逻辑接近 controller 层而非"事件薄壳"。
+
+**建议**：
+- 把 `NotifyMissingPose / NotifyAlignFailure` 这两个**纯失败诊断**写入留在主文件（它们与 `SetFailure` 紧耦合）；
+- 把 `NotifyReset / NotifyReacquire / NotifyPause / NotifyResume / NotifyClear / NotifyStatusEvent / NotifyHeartbeat` 7 个**对外 policy 通知**抽到独立 `Anchor/Policy/PoseToAnchorRuntime.PolicyNotifications.cs` partial（与 12.4 的目录调整配合），主文件仅保留入口委托；
+- 完成后 partial 文件目标 <180 行。
+
+## 13. 用户两个具体问题的答复
+
+### 13.1 `Anchor/` 下脚本是否需要分子目录？✅ 建议分
+
+**事实**：当前 [Anchor/](EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Anchor/) 平铺 14 个文件，混合了三类截然不同的职责：
+- **runtime 主体**：`PoseToAnchorRuntime.cs` + `PoseToAnchorRuntime.Events.cs` + `PoseToAnchorRuntime.Diagnostics.cs`、`DynamicObjectAnchor.cs`、`FramePoseHistory.cs`、`CameraPoseFrameAligner.cs`、`AnchorPoseTransform.cs`、`CameraReference.cs`；
+- **policy 接口/数据**：`AnchorPolicyHostBase.cs`、`AnchorPolicyDecision.cs`、`AnchorObservation.cs`、`AnchorState.cs`、`AnchorLifecycleEvent.cs`；
+- **processor 基类**：`AnchorPoseProcessor.cs`（具体 Kalman/LowPass 实现已在 `Anchor/Processors/` 内？需核实）。
+
+**建议拆为 3 个子目录**（仅文件移位 + namespace 不变，**不改 asmdef**——`Anchor.asmdef` 仍覆盖整个 `Anchor/` 树）：
+
+```
+Anchor/
+├── Runtime/                        ← runtime 主体 + frame alignment
+│   ├── PoseToAnchorRuntime.cs
+│   ├── PoseToAnchorRuntime.Events.cs   (12.3 拆分后改名)
+│   ├── PoseToAnchorRuntime.Diagnostics.cs
+│   ├── DynamicObjectAnchor.cs
+│   ├── FramePoseHistory.cs
+│   ├── CameraPoseFrameAligner.cs
+│   ├── AnchorPoseTransform.cs
+│   └── CameraReference.cs
+├── Policy/                         ← policy 抽象接口 + observation/decision DTO
+│   ├── AnchorPolicyHostBase.cs
+│   ├── AnchorPolicyDecision.cs
+│   ├── AnchorObservation.cs
+│   ├── AnchorState.cs
+│   ├── AnchorLifecycleEvent.cs
+│   └── PoseToAnchorRuntime.PolicyNotifications.cs  (12.3 抽出的 partial)
+└── Processor/                      ← processor 基类（具体实现已在 Reliability 或单独子目录）
+    └── AnchorPoseProcessor.cs
+```
+
+**理由**：
+- `Anchor/Policy/` 让 "policy 接口在 Anchor 层、policy 实现在 Reliability 层" 的反向依赖更直观（13.2 即依赖此分组）；
+- 不改 namespace（仍为 `EgoAnchor.Anchor`）和 asmdef，**Unity 不会有 missing-reference 风险**；
+- `DynamicObjectAnchor` 放 Runtime 子目录避免新读者把它误归 Policy。
+
+**风险**：Unity 移文件会改 `.meta` 路径，需要 git 一并提交；Inspector 引用以 GUID 为准，不会断。
+
+### 13.2 `Anchor/AnchorPolicyHostBase.cs` 是否冗余？❌ **不冗余，必须保留**
+
+用户的疑问是合理的——两个文件都叫 `AnchorPolicyHost*` 且都是 MonoBehaviour，看起来像同一个东西放了两份。但读完代码后**两者承担截然不同的职责**：
+
+| 维度 | `Anchor/AnchorPolicyHostBase.cs`（58 行） | `Reliability/AnchorPolicyHost.cs`（163 行） |
+|---|---|---|
+| 类型 | `abstract class` | `sealed class : AnchorPolicyHostBase` |
+| 内容 | 5 个 abstract 方法（State/AcceptPose/NotifyReset/NotifyReacquire/NotifyPause/Resume/Clear） | Inspector 字段（5 个阈值）+ `PolicyController` 实例 + `Rebuild()` 生命周期 |
+| 所在 asmdef | `EgoAnchor.Anchor.asmdef` | `EgoAnchor.Reliability.asmdef`（→ Anchor） |
+| 被谁引用 | `PoseToAnchorRuntime.policyHost` 字段类型 | 实际挂在 GameObject 上的具体组件 |
+
+**核心理由（保留 base 的 3 条）**：
+
+1. **asmdef 单向依赖的承重墙**。当前依赖图是 `Reliability → Anchor`（policy 实现依赖 anchor 抽象）。如果删掉 base、`PoseToAnchorRuntime` 直接持有 `Reliability.AnchorPolicyHost`，则 `Anchor.asmdef` 必须依赖 `Reliability.asmdef`——**变成双向依赖，asmdef 编译失败**。
+2. **依赖倒置（DIP）**。这是教科书级别的接口在调用方包内、实现在被调方包内的反向依赖范式（类比 Java：`api/` 包定义接口，`impl/` 包提供实现）。第一轮工程报告 3.2 节明确写了"`PoseToAnchorRuntime` 改为只持有 `AnchorPolicyHost` 引用，'启用 policy' 由是否引用了该组件决定"——base 就是这个引用类型。
+3. **测试 / 替换灵活性**。未来想加第二个 policy 实现（例如纯 EKF policy 不走 reliability gate），或想在测试里 mock policy，只需新派生一个 `AnchorPolicyHostBase` 即可。如果只有具体类，每次都要改 `PoseToAnchorRuntime`。
+
+**用户感知问题（命名）的处理**：两个文件都叫 `AnchorPolicyHost*` 确实容易让人以为是同一份。建议轻量改名：
+- `Anchor/AnchorPolicyHostBase.cs` → `Anchor/Policy/IAnchorPolicyHost.cs`（即使 Unity MonoBehaviour 不允许 interface，命名上加 `I` 前缀或 `Host` 改 `Provider` 仍然能区分）；
+- 但这是**命名口味**问题而非架构问题，可与 13.1 的目录拆分一起做，也可以保持现状。
+
+**结论**：`AnchorPolicyHostBase.cs` 是当前依赖架构的承重墙，**绝对不能删**。两个文件并存不是冗余而是分层。
+
+## 14. 可选优化项（阶段 5，低优先级）
+
+下面这些是阶段 4 完工后可以考虑的进一步整理，不属于"不达标"，纯粹是基于现状再迭代的方向。
+
+### 14.1 Python 包内子目录
+
+- `runtime/` 当前 14 个文件平铺，可按职能拆为 `runtime/factories/`（`pose_result_factory.py` / `heartbeat_factory.py` / `pose_log_factory.py`）、`runtime/commands/`（`command_pump.py` 等）、`runtime/input/`（`latest_quest_input_store.py` / `latest_value_store.py`）三组；
+- `perception/` 9 个文件可建 `perception/core/`（pipeline 主体）+ `perception/segmenter/`（async_segmenter + 后续 SAM3 worker）；
+- `tests/` 17 个文件可镜像源码层级建子目录（`tests/perception/` / `tests/runtime/` / `tests/transport/` / `tests/config/`）。
+
+### 14.2 Unity transport 层 SubjectNames 解耦
+
+[NatsControlClient.cs:207-209](EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Transport/NatsControlClient.cs#L207-L209) 直接 `using` 了 `SubjectNames.PoseResult` / `AnchorStatus` / `ServerHeartbeat`，违反"transport 只认 bytes 不认 EgoAnchor 协议"的分层意图（第一轮 3.3 节）。
+
+**建议**：把订阅入口的三行 subject 字符串改为 SerializeField（默认值仍来自 `SubjectNames`，但运行时可注入），或把 `Subscribe(SubjectNames.X, ...)` 三行整体迁到 `Client/NatsSubscriptionInstaller.cs` 一个新组件。这步收益不大，主要是论文里写"transport 是 protocol-agnostic"时口径更干净。
+
+### 14.3 `LatestOnlyQueue<T>` 归位
+
+当前在 `Util/`，但唯一使用方是 `NatsControlClient`。如果未来不打算让其它层（例如 ZMQ Unity 端、本地缓存）复用，可以把它收回 `Transport/`，避免 `Util` 包变成"什么都往里放"。维持 `Util/` 也合理——这是品味问题。
+
+### 14.4 `utils/math.py` 偏薄（43 行）
+
+可以接受。如果未来还要加旋转矩阵相关数学（例如 ZYX Euler / SE3 平均），就让它自然增长；不要为了"凑大小"反向把代码塞进来。
+
+## 15. 阶段 4 实施顺序与验证
+
+按风险从低到高：
+
+1. **删 `clearFilters` / `clearAnchorPose` 方法重载（12.2）**——无破坏性，编译即验证；
+2. **拆 `tracking_runtime.py`（12.1）**——纯 Python，跑 `pixi run python -m unittest discover -s src -p "test_*.py"` + `pixi run python ./src/tracking_server.py` 烟雾即可；
+3. **拆 `PoseToAnchorRuntime.Events.cs`（12.3）**——partial 拆分，编译验证 + Unity Inspector 引用是否完整；
+4. **`Anchor/` 子目录调整（13.1）**——文件移位，必须 `git mv` 保留历史 + Unity Editor 重新生成 csproj。
+
+每步完成后跑 AGENTS.md 中"常用入口与验证"的 4 条命令：
+
+```powershell
+cd EgoAnchor_Python
+pixi run python -m compileall src
+pixi run python -m unittest discover -s src -p "test_*.py"
+pixi run python .\src\tracking_server.py
+
+cd ..
+dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
+```
+
+12.3 + 13.1 完成后，加跑：
+- Unity Editor 打开场景，确认 `PoseToAnchorRuntime` Inspector 上 `policyHost` 引用未丢失；
+- 真机 / replay：raw + smoothed 两条 anchor 在 policy 启用 / 关闭各 1 次，对比静态 + 头动场景。
+
+## 16. 不动的清单（再次重申）
+
+阶段 4/5 同样不允许：
+- 改 `subjects.v1.json` channel 列表 / proto 字段号；
+- 把 SAM3 设默认；
+- 把 FoundationPose 状态搬出 `TrackingRuntime` owner 线程；
+- 把 `AnchorPolicyHostBase` 删掉或合并进 `AnchorPolicyHost`（13.2 已论证）；
+- 调整 asmdef 依赖方向（必须保持 `Reliability → Anchor`）。
+
+---
+
+## 17. 阶段 4 收尾后的验收指标
+
+| 维度 | 当前 | 阶段 4 后预期 |
+|---|---|---|
+| `tracking_runtime.py` | 576 行 | < 450 行 |
+| `PoseToAnchorRuntime.Events.cs` | 336 行 | < 180 行 + 新 partial `PolicyNotifications.cs` < 180 行 |
+| `AnchorCommandClient` ack 清理路径 | 双路径（ack + status） | 单路径（status 唯一） |
+| `Anchor/` 平铺文件数 | 14 | Runtime/Policy/Processor 三子目录 |
+| `AnchorPolicyHostBase.cs` 名字混淆度 | 高（与 Host 命名相近） | 移到 `Anchor/Policy/` 后通过路径区分 |
+
+主要可量化收益：**Python tracking 路径关键文件全部 <500 行；Unity Anchor 层职责按目录分组、partial 文件不再单文件超 180；ack 阶段不再触发本地状态清理（与 AGENTS.md 一致）**。

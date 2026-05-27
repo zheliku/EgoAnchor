@@ -136,10 +136,12 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/runtime/latest_quest_input_store.py`：topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
 - `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store。
 - `src/egoanchor/runtime/command_queue.py`、`command_dedup.py`、`command_executor.py`：命令队列、request_id TTL 幂等、runtime 内解释命令。
-- `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat、顺序消费 commands。
+- `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat，并把 command/logging 细节委托给 runtime helper。
 - `src/egoanchor/runtime/pose_result_factory.py`：`PoseObservation -> PoseResult` 映射。
 - `src/egoanchor/runtime/status_event_factory.py`：Python runtime state/command/error -> `AnchorStatusEvent` 映射。
 - `src/egoanchor/runtime/heartbeat_factory.py`：input stats/runtime stats -> `ServerHeartbeat` 映射。
+- `src/egoanchor/runtime/command_pump.py`：在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue 的 command，handler 不直接碰 pipeline/GPU。
+- `src/egoanchor/runtime/runtime_log_writer.py`：集中写入 PoseResult/status/heartbeat/command JSONL 结构化事件，保持 runtime 主循环薄。
 - `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。SAM3 异步模式只把分割模型放入 latest-only worker；worker 输出携带原始 decoded frame/left/right 图，主 pipeline 线程消费后再做 depth/register。
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
 - `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
@@ -163,13 +165,14 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `Assets/Scripts/EgoAnchor/Client/AnchorStatusReceiver.cs`：主线程按事件顺序解析 `AnchorStatusEvent`，转交 `PoseToAnchorRuntime` 更新本地 lifecycle，不修改 Transform。
 - `Assets/Scripts/EgoAnchor/Client/ServerHeartbeatReceiver.cs`：主线程 latest-drain、解析 `ServerHeartbeat`，转交 `PoseToAnchorRuntime` 更新链路健康诊断。
 - `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
-- `Assets/Scripts/EgoAnchor/Anchor/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
-- `Assets/Scripts/EgoAnchor/Anchor/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose；包含 `AnchorPoseTransform` 轴翻转和固定 offset 配置。
-- `Assets/Scripts/EgoAnchor/Anchor/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，并按 processor chain 或 reliability-aware policy 生成 stable pose。
-- `Assets/Scripts/EgoAnchor/Anchor/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与当前 baseline。
-- `Assets/Scripts/EgoAnchor/Anchor/AnchorObservation.cs`、`AnchorStateMachine.cs`、`AnchorLifecycleEvent.cs`：Unity anchor 侧观测与生命周期状态，不订阅网络、不修改 Transform。
+- `Assets/Scripts/EgoAnchor/Anchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
+- `Assets/Scripts/EgoAnchor/Anchor/Runtime/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose；包含 `AnchorPoseTransform` 轴翻转和固定 offset 配置。
+- `Assets/Scripts/EgoAnchor/Anchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，并按 processor chain 或 reliability-aware policy 生成 stable pose。
+- `Assets/Scripts/EgoAnchor/Anchor/Runtime/PoseToAnchorRuntime.Events.cs`：no-pose、align failure 与 policy decision 应用；`PolicyNotifications.cs` / `ServerNotifications.cs` 分别放在 `Policy/` 与 `Runtime/`。
+- `Assets/Scripts/EgoAnchor/Anchor/Processor/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与当前 baseline。
+- `Assets/Scripts/EgoAnchor/Anchor/Policy/AnchorPolicyHostBase.cs`、`AnchorPolicyDecision.cs`、`AnchorObservation.cs`、`AnchorStateMachine.cs`、`AnchorLifecycleEvent.cs`：Unity anchor 侧 policy 抽象、观测与生命周期状态，不订阅网络、不修改 Transform。
 - `Assets/Scripts/EgoAnchor/Reliability/`：Unity anchor 侧可靠性感知策略；`ReliabilityGate` 评估 score/flags，`InnovationGate` 拒绝大跳变，`AnchorPredictor` 做短时 coasting，`PolicyController` 组合 gate/predict/state，`AnchorPolicyHost` 作为可挂载 policy 组件。
-- `Assets/Scripts/EgoAnchor/Anchor/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
+- `Assets/Scripts/EgoAnchor/Anchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
 - `Assets/Scene/`：当前主线测试场景工作区。
 
 Unity 命名/目录规则：
@@ -177,7 +180,9 @@ Unity 命名/目录规则：
 - `Quest/` 放 Quest 数据提供者/source 和采集期缓存。
 - `Transport/` 放网络 socket/client，不理解 Quest 或 anchor 语义。
 - `Client/` 放把 source、transport、runtime 组合成场景组件的客户端脚本。
-- `Anchor/` 放 frame alignment、processor chain、pose hub、Transform 输出和未来 anchor policy/state。
+- `Anchor/Runtime/` 放 frame alignment、pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
+- `Anchor/Policy/` 放 anchor policy 抽象、observation/decision DTO、state machine 和 policy notification partial；`AnchorPolicyHostBase` 必须留在 Anchor asmdef，不能合并进 Reliability 具体实现。
+- `Anchor/Processor/` 放 raw -> stable pose processor 基类与 Kalman/LowPass baseline。
 - 新增脚本应写清中文 `<summary>` 和 Inspector 参数 `[Tooltip]`，尤其是端口、帧率、HWM、缓存容量、坐标/时间语义。
 
 ## 标定、深度与坐标约定

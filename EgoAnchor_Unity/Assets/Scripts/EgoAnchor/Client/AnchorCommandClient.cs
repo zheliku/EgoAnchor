@@ -205,27 +205,9 @@ namespace EgoAnchor.Client
         /// <returns>Python 返回的 CommandAck；异常时返回 null。</returns>
         public async Task<CommandAck> ResetTrackingAsync(string reason = "unity_api", CancellationToken token = default)
         {
-            return await ResetTrackingAsync(clearFilters: false, clearAnchorPose: false, reason, token);
-        }
-
-        /// <summary>
-        /// 发送 ResetTrackingRequest，并等待 Python CommandAck。
-        ///
-        /// clearFilters/clearAnchorPose 仅写入请求字段，ack accepted 阶段不再清理 Unity 本地状态；
-        /// 本地 reset/reacquire/pause/resume 闭环由后续 AnchorStatusEvent 驱动。
-        /// </summary>
-        /// <param name="clearFilters">写入 request.clear_filters 的保留字段。</param>
-        /// <param name="clearAnchorPose">写入 request.clear_anchor_pose 的保留字段。</param>
-        /// <param name="reason">命令原因，写入 request.reason 便于日志排查。</param>
-        /// <param name="token">外部取消信号。</param>
-        /// <returns>Python 返回的 CommandAck；异常时返回 null。</returns>
-        public async Task<CommandAck> ResetTrackingAsync(bool clearFilters, bool clearAnchorPose, string reason = "unity_api", CancellationToken token = default)
-        {
             ResetTrackingRequest request = new ResetTrackingRequest
             {
                 Header = BuildHeader("reset"),
-                ClearFilters = clearFilters,
-                ClearAnchorPose = clearAnchorPose,
                 Reason = reason ?? string.Empty,
             };
             return await SendCommandAsync(SubjectNames.ResetTracking, request, token);
@@ -386,7 +368,7 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
-        /// 记录 Python CommandAck，并按需同步清理本地 anchor 状态。
+        /// 记录 Python CommandAck；accepted 只表示 Python 已接收命令，不在 ack 阶段清理本地 anchor 状态。
         /// </summary>
         /// <param name="subject">对应 command subject。</param>
         /// <param name="ack">Python 返回的 ack。</param>

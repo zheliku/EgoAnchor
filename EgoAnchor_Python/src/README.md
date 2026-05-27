@@ -90,7 +90,7 @@ pixi run python .\src\tracking_server.py --config .\path\to\override.toml
 
 默认配置会启用 `[network.message_plane]`，并连接 `nats://127.0.0.1:4222` 发布 `PoseResult`。端到端 Unity anchor 测试前，需要先启动本机或开发机上的 `nats-server`，并确保 Unity `NatsControlClient.natsUrl` 指向同一个地址。若只想做 Python-only debug，可在 override TOML 中设置 `network.message_plane.enabled = false`。
 
-目标物体统一写在 `src/egoanchor/config/objects.toml`。当前对象名包括 `blue_mouse`、`pink_mouse`、`earphone` 和 `controller`；加载顺序是 `defaults.toml -> objects.toml 中的 --object -> --config 临时覆盖`。`earphone` 会显式切到 SAM3，默认主线仍保持 YOLOE-26。
+目标物体统一写在 `src/egoanchor/config/objects.toml`。当前对象名包括 `blue_mouse`、`pink_mouse`、`earphone` 和 `controller`；每个对象直接写与 `defaults.toml` 一致的嵌套覆盖表，例如 `[objects.pink_mouse.module.segmenter]` 和 `[objects.pink_mouse.module.foundationpose]`，避免扁平字段名和默认配置字段发生歧义。加载顺序是 `defaults.toml -> objects.toml 中的 --object -> --config 临时覆盖`。`earphone` 会显式切到 SAM3，默认主线仍保持 YOLOE-26。
 
 OpenCV 热键：
 
@@ -105,7 +105,7 @@ OpenCV 热键：
 
 当前主逻辑写在 `egoanchor/perception/quest_pose_pipeline.py` 的 `QuestPosePipeline.process()`：
 
-1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载配置指定的分割后端、FFS、FoundationPose 和可选 Cutie。
+1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载配置指定的分割后端、FFS、FoundationPose 和可选 Cutie；command 执行由 `runtime/command_pump.py` 在 owner 线程顺序处理，结构化日志由 `runtime/runtime_log_writer.py` 写入。
 2. 每轮 `TrackingRuntime.tick()` 只取最新 stereo/camera_info，避免旧帧积压。
 3. `QuestPosePipeline.process()` 先用 `camera_info` 更新 K；此时只更新 FoundationPose 适配器的相机矩阵，不重建重模型。
 4. 未成功 register 前，按 `module.segmenter.type` 使用 YOLOE-26 或 SAM3 找单目标 mask，再结合 FFS 深度调用 FoundationPose `register()`。

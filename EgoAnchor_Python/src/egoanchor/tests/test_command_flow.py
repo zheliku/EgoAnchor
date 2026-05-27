@@ -24,7 +24,7 @@ from egoanchor.protocol import (
     SubjectRegistry,
 )
 from egoanchor.routing import HandlerContext, HandlerRegistry, NatsRouter
-from egoanchor.runtime import CommandDedupStore, CommandExecutor, CommandQueue, CommandType, RuntimeCommand
+from egoanchor.runtime import CommandDedupStore, CommandExecutor, CommandPump, CommandQueue, CommandType, RuntimeCommand, RuntimeState
 
 
 class CommandFlowTest(unittest.IsolatedAsyncioTestCase):
@@ -153,6 +153,58 @@ class CommandQueueTest(unittest.TestCase):
 
         remaining = queue.drain()
         self.assertEqual([command.request_id for command in remaining], ["control-3", "control-4"])
+
+
+class CommandPumpTest(unittest.TestCase):
+    """验证 runtime owner 线程命令泵的顺序执行边界。"""
+
+    def test_pump_applies_command_actions_and_publishes_status(self) -> None:
+        """命令泵应顺序应用 pause、stage、reset，并为每条命令发布 runtime 状态事件。"""
+
+        queue = CommandQueue(max_size=8)
+        for command in (
+            RuntimeCommand.from_message(
+                CommandType.CONTROL,
+                AnchorControlRequest(header=MessageHeader(request_id="pause"), action=AnchorControlRequest.PAUSE),
+            ),
+            RuntimeCommand.from_message(
+                CommandType.CONTROL,
+                AnchorControlRequest(header=MessageHeader(request_id="stage"), action=AnchorControlRequest.SET_STAGE, stage=3),
+            ),
+            RuntimeCommand.from_message(
+                CommandType.RESET,
+                ResetTrackingRequest(header=MessageHeader(request_id="reset")),
+            ),
+        ):
+            self.assertTrue(queue.put(command))
+
+        calls: dict[str, list[object]] = {"paused": [], "stage": [], "reset": [], "status": [], "log": []}
+        pump = CommandPump(
+            queue=queue,
+            executor=CommandExecutor(),
+            execute_per_tick=8,
+            log_execution=lambda command, result, queue_length: calls["log"].append((command.request_id, queue_length)),
+            set_paused=lambda paused: calls["paused"].append(paused),
+            set_stage=lambda stage: calls["stage"].append(stage),
+            reset_tracking=lambda: calls["reset"].append(True),
+            get_state=lambda: RuntimeState.TRACKING,
+            publish_state=lambda state, **fields: calls["status"].append((state, fields.get("event"), fields.get("request_id"))),
+        )
+
+        pump.execute_pending(pipeline_ready=True)
+
+        self.assertEqual(calls["paused"], [True])
+        self.assertEqual(calls["stage"], [3])
+        self.assertEqual(calls["reset"], [True])
+        self.assertEqual(
+            calls["status"],
+            [
+                (RuntimeState.DETECTING, "RESET_APPLIED", "reset"),
+                (RuntimeState.PAUSED, "PAUSE_APPLIED", "pause"),
+                (RuntimeState.TRACKING, "STAGE_SET", "stage"),
+            ],
+        )
+        self.assertEqual(len(queue), 0)
 
 
 if __name__ == "__main__":

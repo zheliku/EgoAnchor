@@ -11,20 +11,19 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.protocol import ProtobufRegistry, QUEST_CAMERA_INFO, QUEST_STEREO, SubjectRegistry
 from egoanchor.runtime import (
     CommandDedupStore,
     CommandExecutor,
+    CommandPump,
     CommandQueue,
     HeartbeatFactory,
-    PoseLogFactory,
     PoseResultFactory,
     QuestStreamReceiver,
+    RuntimeLogWriter,
     RuntimeState,
     StatusEventFactory,
 )
@@ -80,20 +79,8 @@ class TrackingRuntime:
         self.session_id = uuid.uuid4().hex
         """本次 Python server runtime 会话 ID，贯穿 pose/status/heartbeat 和 JSONL 日志。"""
 
-        self.event_logger = self._build_event_logger(cfg)
-        """Python server 结构化事件日志器。"""
-
-        self.log_pose_results = self._logging_flag(cfg, "log_pose_results", True)
-        """是否记录 PoseResult 摘要。"""
-
-        self.log_status_events = self._logging_flag(cfg, "log_status_events", True)
-        """是否记录 AnchorStatusEvent 摘要。"""
-
-        self.log_heartbeats = self._logging_flag(cfg, "log_heartbeats", True)
-        """是否记录 ServerHeartbeat 摘要。"""
-
-        self.log_commands = self._logging_flag(cfg, "log_commands", True)
-        """是否记录 runtime command 执行动作。"""
+        self.log_writer = RuntimeLogWriter(cfg, session_id=self.session_id)
+        """Python server 结构化事件日志写入器。"""
 
         self.pose_result_factory = PoseResultFactory(session_id=self.session_id)
         """PoseObservation -> Protobuf PoseResult 的映射器。"""
@@ -114,11 +101,21 @@ class TrackingRuntime:
         self.command_executor = CommandExecutor()
         """命令解释器；TrackingRuntime 在 tick 边界按解释结果操作 pipeline。"""
 
-        self.command_execute_per_tick = max(1, int(getattr(command_cfg, "execute_per_tick", 8)))
-        """每轮 tick 最多执行的命令数量。"""
-
         self.paused = False
         """是否因 control/pause 暂停处理新图像。"""
+
+        self.command_pump = CommandPump(
+            queue=self.command_queue,
+            executor=self.command_executor,
+            execute_per_tick=int(getattr(command_cfg, "execute_per_tick", 8)),
+            log_execution=self._log_command_execution,
+            set_paused=lambda value: setattr(self, "paused", bool(value)),
+            set_stage=self._set_pipeline_stage,
+            reset_tracking=self._reset_pipeline_tracking,
+            get_state=lambda: self.state,
+            publish_state=self._set_state,
+        )
+        """runtime owner 线程上的 command 顺序执行器。"""
 
         self.nats_client: NatsMessageClient | None = None
         """共享 NATS bytes client；pose/status/heartbeat publisher 复用同一连接。"""
@@ -171,9 +168,6 @@ class TrackingRuntime:
         self.last_error = None
         """最近一次结构化 runtime 错误；无错误时为 None。"""
 
-        self.pose_log_factory = PoseLogFactory()
-        """PoseResult 结构化日志字段构造器。"""
-
         self.started = False
         """runtime 是否已经启动。"""
 
@@ -196,14 +190,14 @@ class TrackingRuntime:
         self.pipeline = build_quest_pose_pipeline(self.cfg)
         self.pipeline.set_stage(int(self.cfg.server.run_stage))
         self.started = True
-        self._log_event("runtime_started", endpoint=self.endpoint, run_stage=int(self.cfg.server.run_stage), state=self.state.value)
+        self.log_writer.event("runtime_started", endpoint=self.endpoint, run_stage=int(self.cfg.server.run_stage), state=self.state.value)
         self._set_state(RuntimeState.WAITING_INPUT, event="RUNTIME_STARTED", message="TrackingRuntime 已启动，等待 Quest 输入。")
 
     def close(self) -> None:
         """关闭 receiver 与 NATS publisher；OpenCV 窗口由 app 层关闭。"""
 
         self._set_state(RuntimeState.STOPPED, event="RUNTIME_STOPPED", message="TrackingRuntime 已停止。")
-        self._log_event("runtime_stopped", state=RuntimeState.STOPPED.value)
+        self.log_writer.event("runtime_stopped", state=RuntimeState.STOPPED.value)
         if self.pipeline is not None and hasattr(self.pipeline, "close"):
             self.pipeline.close()
         if self.pose_publisher is not None:
@@ -211,7 +205,7 @@ class TrackingRuntime:
         elif self.nats_client is not None:
             self.nats_client.close()
         self.receiver.close()
-        self.event_logger.close()
+        self.log_writer.close()
         self.started = False
 
     def tick(self, return_debug: bool = True) -> RuntimeTickResult:
@@ -221,7 +215,7 @@ class TrackingRuntime:
             raise RuntimeError("TrackingRuntime 尚未 start。")
         self._update_runtime_fps()
         try:
-            self._execute_pending_commands()
+            self.command_pump.execute_pending(pipeline_ready=self.pipeline is not None)
             data_cfg = self.cfg.network.data_plane
             self.receiver.poll_latest(timeout_ms=int(data_cfg.poll_timeout_ms))
             if self.paused:
@@ -238,7 +232,7 @@ class TrackingRuntime:
             return RuntimeTickResult(pipeline_output=output if return_debug else None, new_frame_processed=output.new_frame_processed)
         except Exception as exc:
             self.last_error = self._build_error("RUNTIME_EXCEPTION", str(exc), exc.__class__.__name__)
-            self._log_event("runtime_error", state=RuntimeState.ERROR.value, error_code=self.last_error.code, message=str(exc), details=exc.__class__.__name__)
+            self.log_writer.event("runtime_error", state=RuntimeState.ERROR.value, error_code=self.last_error.code, message=str(exc), details=exc.__class__.__name__)
             self._set_state(RuntimeState.ERROR, event="RUNTIME_ERROR", message=str(exc), error=self.last_error)
             raise
 
@@ -298,8 +292,7 @@ class TrackingRuntime:
         """把当前帧观测转换为 PoseResult 并投递到 NATS。"""
 
         msg = self.pose_result_factory.build(observation)
-        if self.log_pose_results:
-            self._log_pose_result(msg)
+        self.log_writer.pose_result(msg, state=self.state)
         if self.pose_publisher is None or not self.pose_publisher.enabled:
             return
         self.pose_publish_attempts += 1
@@ -326,8 +319,7 @@ class TrackingRuntime:
             command_stats=self.get_command_stats(),
             last_error=self.last_error,
         )
-        if self.log_heartbeats:
-            self._log_heartbeat(msg)
+        self.log_writer.heartbeat(msg)
         if self.heartbeat_publisher is None or not self.heartbeat_publisher.enabled:
             return
         self.heartbeat_publish_attempts += 1
@@ -361,46 +353,6 @@ class TrackingRuntime:
             if spec.direction != "unity_to_python" or spec.mode != "request_reply":
                 continue
             client.add_subscription(spec.name, router.handle_message)
-
-    def _execute_pending_commands(self) -> None:
-        """在 runtime 主循环顺序执行已接受 command。"""
-
-        if self.pipeline is None:
-            return
-        for command in self.command_queue.pop_many(self.command_execute_per_tick):
-            result = self.command_executor.interpret(command)
-            if self.log_commands:
-                self._log_command_execution(command, result)
-            if result.paused is not None:
-                self.paused = bool(result.paused)
-            if result.stage is not None:
-                self.pipeline.set_stage(result.stage)
-            if result.reset_tracking:
-                self.pipeline.reset_tracking_state()
-            self._publish_command_status(command, result)
-
-    def _publish_command_status(self, command, result) -> None:
-        """发布 runtime command 执行后的状态事件。"""
-
-        if command.command_type.value == "reset":
-            self._set_state(RuntimeState.DETECTING, event="RESET_APPLIED", message="reset command 已在 runtime 线程执行。", request_id=command.request_id)
-            return
-        if command.command_type.value == "reacquire":
-            self._set_state(
-                RuntimeState.REACQUIRING,
-                event="REACQUIRE_STARTED",
-                message="reacquire command 已在 runtime 线程执行，等待后续有效 pose。",
-                request_id=command.request_id,
-            )
-            return
-        if result.paused is True:
-            self._set_state(RuntimeState.PAUSED, event="PAUSE_APPLIED", message="runtime 已暂停处理新图像。", request_id=command.request_id)
-            return
-        if result.paused is False:
-            self._set_state(RuntimeState.DETECTING, event="RESUME_APPLIED", message="runtime 已恢复处理新图像。", request_id=command.request_id)
-            return
-        if result.stage is not None:
-            self._set_state(self.state, event="STAGE_SET", message=f"debug stage 已切换为 {result.stage}。", request_id=command.request_id)
 
     def _refresh_input_state_before_pipeline(self) -> None:
         """根据 latest input 更新等待输入/等待标定状态。"""
@@ -457,8 +409,7 @@ class TrackingRuntime:
             error=error,
         )
         self._publish_status(status)
-        if self.log_status_events:
-            self._log_status(status, previous)
+        self.log_writer.status(status, previous=previous)
         LOGGER.info("[TrackingRuntime] state=%s event=%s message=%s", state.value, event_name, status.message)
 
     def _update_runtime_fps(self) -> None:
@@ -479,98 +430,20 @@ class TrackingRuntime:
 
         return common_pb2.ErrorInfo(code=str(code or ""), message=str(message or ""), details=str(details or ""))
 
-    def _build_event_logger(self, cfg: SimpleNamespace) -> RuntimeEventLogger:
-        """根据 TOML 配置创建结构化事件日志器。"""
-
-        logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
-        python_root = Path(getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd()))
-        raw_output_dir = Path(str(getattr(logging_cfg, "output_dir", "data/runtime_logs"))).expanduser()
-        output_dir = raw_output_dir if raw_output_dir.is_absolute() else python_root / raw_output_dir
-        return RuntimeEventLogger(
-            enabled=bool(getattr(logging_cfg, "enabled", True)),
-            output_dir=output_dir,
-            session_id=self.session_id,
-            filename=str(getattr(logging_cfg, "filename", "")),
-            flush_every=int(getattr(logging_cfg, "flush_every", 1)),
-        )
-
-    @staticmethod
-    def _logging_flag(cfg: SimpleNamespace, name: str, default: bool) -> bool:
-        """读取 runtime.logging 中的布尔开关。"""
-
-        logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
-        return bool(getattr(logging_cfg, name, default))
-
-    def _log_event(self, event_type: str, **fields) -> None:
-        """写入一条 runtime 结构化事件。"""
-
-        self.event_logger.write(event_type, **fields)
-
-    def _log_pose_result(self, msg) -> None:
-        """记录 PoseResult 的论文相关摘要字段。"""
-
-        pose_fields = self.pose_log_factory.build(msg)
-        fields = dict(
-            frame_id=int(msg.header.frame_id),
-            state=self.state.value,
-            has_pose=bool(msg.has_pose),
-            phase=str(msg.phase),
-            stage=int(msg.stage),
-            pose_source=str(msg.pose_source),
-            pose_score=float(msg.reliability_score),
-            reliability_flags=list(msg.reliability_flags),
-            depth_valid_ratio=float(msg.depth_valid_ratio),
-            depth_valid_in_mask=float(msg.depth_valid_in_mask),
-            mask_area_ratio=float(msg.mask_area_ratio),
-            det_count=int(msg.det_count),
-            fps=float(msg.fps),
-            total_ms=float(msg.timing.total_ms),
-            server_publish_mono_ms=float(msg.server_publish_mono_ms),
-        )
-        fields.update(pose_fields)
-        self._log_event("pose_result", **fields)
-
-    def _log_status(self, status, previous: RuntimeState) -> None:
-        """记录 AnchorStatusEvent 的状态迁移摘要。"""
-
-        self._log_event(
-            "status_event",
-            previous_state=previous.value,
-            state=str(status.state),
-            status_event=str(status.event),
-            message=str(status.message),
-            request_id=str(status.header.request_id),
-            frame_id=int(status.header.frame_id),
-            error_code=str(status.error.code) if status.error is not None else "",
-        )
-
-    def _log_heartbeat(self, heartbeat) -> None:
-        """记录 ServerHeartbeat 的低频健康状态摘要。"""
-
-        self._log_event(
-            "server_heartbeat",
-            state=str(heartbeat.state),
-            input_ready=bool(heartbeat.input_ready),
-            latest_stereo_frame_id=int(heartbeat.latest_stereo_frame_id),
-            camera_info_version=int(heartbeat.camera_info_version),
-            runtime_fps=float(heartbeat.runtime_fps),
-            publish_fps=float(heartbeat.publish_fps),
-            command_queue_length=int(heartbeat.command_queue_length),
-            error_code=str(heartbeat.last_error.code) if heartbeat.last_error is not None else "",
-        )
-
-    def _log_command_execution(self, command, result) -> None:
+    def _log_command_execution(self, command, result, queue_length: int) -> None:
         """记录 runtime 线程实际执行 command 的时间点和动作。"""
 
-        self._log_event(
-            "command_executed",
-            command_type=command.command_type.value,
-            request_id=command.request_id,
-            anchor_id=command.anchor_id,
-            queued_mono_ms=float(command.created_mono_ms),
-            paused=result.paused,
-            stage=result.stage,
-            reset_tracking=bool(result.reset_tracking),
-            queue_length=len(self.command_queue),
-        )
+        self.log_writer.command_execution(command, result, queue_length=queue_length)
+
+    def _set_pipeline_stage(self, stage: int) -> None:
+        """由 CommandPump 在 owner 线程切换 pipeline stage。"""
+
+        if self.pipeline is not None:
+            self.pipeline.set_stage(stage)
+
+    def _reset_pipeline_tracking(self) -> None:
+        """由 CommandPump 在 owner 线程重置 tracking 状态。"""
+
+        if self.pipeline is not None:
+            self.pipeline.reset_tracking_state()
 
