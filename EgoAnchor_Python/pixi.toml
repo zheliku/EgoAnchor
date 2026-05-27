@@ -148,11 +148,6 @@ python src/realsense_foundationstereo_test.py \
 --valid_iters 8 \
 """ }
 
-demo-yoloe = { cmd = """
-python src/yoloe_mask_probe.py \
---prompt "white block"
-""" }
-
 tool-yoloe26-mask = { cmd = """
 python tools/yoloe26/yoloe26_mask.py
 """ }

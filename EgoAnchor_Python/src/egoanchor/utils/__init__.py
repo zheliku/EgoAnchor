@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .latest_value_store import LatestValueStore
 from .math import rotation_matrix_to_quaternion
 
-__all__ = ["rotation_matrix_to_quaternion"]
+__all__ = ["LatestValueStore", "rotation_matrix_to_quaternion"]

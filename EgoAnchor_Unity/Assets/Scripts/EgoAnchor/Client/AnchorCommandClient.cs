@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using EgoAnchor.Protocol;
 using EgoAnchor.Protocol.Generated;
-using EgoAnchor.Transport;
 using Google.Protobuf;
 using UnityEngine;
 
@@ -51,30 +50,6 @@ namespace EgoAnchor.Client
         [Tooltip("本次 Unity command session id，只用于 Inspector 诊断。")]
         [SerializeField] private string sessionId = "";
 
-        /// <summary>最近一次 request_id。</summary>
-        [Tooltip("最近一次 command request_id，只用于 Inspector 诊断。")]
-        [SerializeField] private string lastRequestId = "";
-
-        /// <summary>最近一次 command subject。</summary>
-        [Tooltip("最近一次 command subject，只用于 Inspector 诊断。")]
-        [SerializeField] private string lastSubject = "";
-
-        /// <summary>最近一次 ack accepted。</summary>
-        [Tooltip("最近一次 CommandAck.accepted，只用于 Inspector 诊断。")]
-        [SerializeField] private bool lastAccepted;
-
-        /// <summary>最近一次 ack duplicate。</summary>
-        [Tooltip("最近一次 CommandAck.duplicate，只用于 Inspector 诊断。")]
-        [SerializeField] private bool lastDuplicate;
-
-        /// <summary>最近一次 ack status。</summary>
-        [Tooltip("最近一次 CommandAck.status，只用于 Inspector 诊断。")]
-        [SerializeField] private string lastStatus = "";
-
-        /// <summary>最近一次 ack message 或异常文本。</summary>
-        [Tooltip("最近一次 CommandAck.message 或异常文本，只用于 Inspector 诊断。")]
-        [SerializeField] private string lastMessage = "";
-
         /// <summary>累计发送命令数。</summary>
         private int sentCommands;
 
@@ -101,12 +76,6 @@ namespace EgoAnchor.Client
 
         /// <summary>累计异常/超时数。</summary>
         public int FailedCommands => failedCommands;
-
-        /// <summary>最近一次 ack status。</summary>
-        public string LastStatus => lastStatus;
-
-        /// <summary>最近一次 ack message 或异常文本。</summary>
-        public string LastMessage => lastMessage;
 
         /// <summary>
         /// Unity Awake：补齐 session id 与默认 NatsControlClient 引用。
@@ -293,27 +262,26 @@ namespace EgoAnchor.Client
         {
             if (natsClient == null)
             {
-                RecordFailure(subject, "missing_nats_control_client");
+                RecordFailure(subject, string.Empty, "missing_nats_control_client");
                 return null;
             }
 
             using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             requestCts = linkedCts;
             MessageHeader header = ExtractHeader(request);
-            lastRequestId = header?.RequestId ?? string.Empty;
-            lastSubject = subject;
+            string requestId = header?.RequestId ?? string.Empty;
             sentCommands++;
 
             try
             {
                 byte[] replyPayload = await natsClient.RequestAsync(subject, request.ToByteArray(), requestTimeoutSeconds, linkedCts.Token);
                 CommandAck ack = CommandAck.Parser.ParseFrom(replyPayload);
-                ApplyAck(subject, ack);
+                ApplyAck(subject, requestId, ack);
                 return ack;
             }
             catch (Exception ex)
             {
-                RecordFailure(subject, ex.Message);
+                RecordFailure(subject, requestId, ex.Message);
                 return null;
             }
             finally
@@ -372,14 +340,14 @@ namespace EgoAnchor.Client
         /// </summary>
         /// <param name="subject">对应 command subject。</param>
         /// <param name="ack">Python 返回的 ack。</param>
-        private void ApplyAck(string subject, CommandAck ack)
+        private void ApplyAck(string subject, string requestId, CommandAck ack)
         {
-            lastAccepted = ack != null && ack.Accepted;
-            lastDuplicate = ack != null && ack.Duplicate;
-            lastStatus = ack?.Status ?? "EMPTY_ACK";
-            lastMessage = ack?.Message ?? string.Empty;
+            bool accepted = ack != null && ack.Accepted;
+            bool duplicate = ack != null && ack.Duplicate;
+            string status = ack?.Status ?? "EMPTY_ACK";
+            string message = ack?.Message ?? string.Empty;
 
-            if (lastAccepted)
+            if (accepted)
             {
                 acceptedAcks++;
             }
@@ -391,8 +359,8 @@ namespace EgoAnchor.Client
             if (logCommandAck)
             {
                 Debug.Log(
-                    $"[AnchorCommandClient] subject={subject}, request_id={lastRequestId}, " +
-                    $"accepted={lastAccepted}, duplicate={lastDuplicate}, status={lastStatus}, message={lastMessage}",
+                    $"[AnchorCommandClient] subject={subject}, request_id={requestId}, " +
+                    $"accepted={accepted}, duplicate={duplicate}, status={status}, message={message}",
                     this
                 );
             }
@@ -403,17 +371,13 @@ namespace EgoAnchor.Client
         /// </summary>
         /// <param name="subject">对应 command subject。</param>
         /// <param name="message">异常文本。</param>
-        private void RecordFailure(string subject, string message)
+        private void RecordFailure(string subject, string requestId, string message)
         {
             failedCommands++;
-            lastSubject = subject;
-            lastAccepted = false;
-            lastDuplicate = false;
-            lastStatus = "REQUEST_FAILED";
-            lastMessage = message ?? string.Empty;
+            string errorMessage = message ?? string.Empty;
             if (logCommandAck)
             {
-                Debug.LogWarning($"[AnchorCommandClient] command failed subject={subject}, request_id={lastRequestId}, error={lastMessage}", this);
+                Debug.LogWarning($"[AnchorCommandClient] command failed subject={subject}, request_id={requestId}, error={errorMessage}", this);
             }
         }
 

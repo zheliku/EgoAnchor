@@ -1,0 +1,18 @@
+{
+    "name": "EgoAnchor",
+    "rootNamespace": "EgoAnchor",
+    "references": [
+        "Oculus.VR",
+        "meta.xr.mrutilitykit",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

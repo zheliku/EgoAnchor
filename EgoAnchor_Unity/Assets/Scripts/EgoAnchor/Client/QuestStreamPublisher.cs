@@ -1,4 +1,5 @@
 using System;
+using EgoAnchor.Alignment;
 using EgoAnchor.Protocol;
 using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Quest;

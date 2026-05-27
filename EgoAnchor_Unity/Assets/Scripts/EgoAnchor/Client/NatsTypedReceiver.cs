@@ -1,4 +1,3 @@
-using EgoAnchor.Transport;
 using Google.Protobuf;
 using UnityEngine;
 

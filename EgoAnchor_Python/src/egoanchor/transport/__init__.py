@@ -5,7 +5,6 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from ._lifecycle import BaseTransportClient
 from .zmq_topic_subscriber import LatestTopicPayloadStore, ZmqTopicSubscriber, ZmqTopicSubscriberStats
 
 _LAZY_EXPORTS = {
@@ -29,7 +28,6 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "BaseTransportClient",
     "LatestTopicPayloadStore",
     "NatsMessageClient",
     "NatsMessageSettings",

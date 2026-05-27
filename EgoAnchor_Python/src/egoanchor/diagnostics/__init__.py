@@ -12,10 +12,8 @@ from .debug_view import (
 )
 from .stereo_view import decode_jpeg, draw_stereo_hud, make_waiting_image
 from .runtime_event_log import RuntimeEventLogger
-from .window import create_fixed_window
 
 __all__ = [
-    "create_fixed_window",
     "decode_jpeg",
     "draw_stereo_hud",
     "fit_to_size",

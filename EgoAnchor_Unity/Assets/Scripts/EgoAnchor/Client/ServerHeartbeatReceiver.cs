@@ -1,4 +1,4 @@
-using EgoAnchor.Anchor;
+using EgoAnchor.Runtime;
 using EgoAnchor.Protocol.Generated;
 using Google.Protobuf;
 using UnityEngine;

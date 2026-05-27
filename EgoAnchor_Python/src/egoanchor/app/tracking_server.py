@@ -9,7 +9,7 @@ import time
 import cv2
 
 from egoanchor.config import load_config
-from egoanchor.diagnostics import create_fixed_window, make_pose_waiting_image, stack_pose_stereo, tile_pose_depth_dashboard
+from egoanchor.diagnostics import make_pose_waiting_image, stack_pose_stereo, tile_pose_depth_dashboard
 from egoanchor.protocol import SubjectRegistry
 from egoanchor.runtime import TrackingRuntime
 
@@ -38,6 +38,13 @@ def should_show_waiting_frame(has_debug_frame: bool) -> bool:
     return not bool(has_debug_frame)
 
 
+def _create_fixed_window(name: str, width: int, height: int) -> None:
+    """创建可调整大小的 OpenCV 窗口，并设置初始尺寸。"""
+
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(name, max(int(width), 1), max(int(height), 1))
+
+
 def run_tracking_server(config_path: str | None = None, object_name: str | None = None) -> None:
     """运行 Python-only pose estimation debug server。"""
 
@@ -56,8 +63,8 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     try:
         logging.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
-        create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
-        create_fixed_window(stereo_window, int(pose_cfg.stereo_window_width), int(pose_cfg.stereo_window_height))
+        _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
+        _create_fixed_window(stereo_window, int(pose_cfg.stereo_window_width), int(pose_cfg.stereo_window_height))
         cv2.imshow(debug_window, waiting)
         logging.info("[TrackingServer] listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
 

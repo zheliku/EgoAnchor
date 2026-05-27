@@ -1,7 +1,6 @@
 using System;
-using EgoAnchor.Anchor;
+using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
-using EgoAnchor.Reliability;
 using UnityEngine;
 
 static class Program

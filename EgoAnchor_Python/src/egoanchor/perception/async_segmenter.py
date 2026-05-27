@@ -12,7 +12,7 @@ import numpy as np
 
 from egoanchor.algorithms import SegmenterResult
 from egoanchor.perception import DecodedQuestStereoFrame
-from egoanchor.runtime import LatestValueStore
+from egoanchor.utils import LatestValueStore
 
 LOGGER = logging.getLogger(__name__)
 """异步分割 worker 日志记录器。"""

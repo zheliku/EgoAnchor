@@ -487,7 +487,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.PoseToAnchorRuntime
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
   framePoseHistory: {fileID: 1015685191}
   alignmentReference: 1
   poseTransform:
@@ -526,7 +526,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.DynamicObjectAnchor
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 160200731}
   targetTransform: {fileID: 160200733}
   outputMode: 1
@@ -562,7 +562,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7657f2f30d7136b4dab961e75a5f4111, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.AnchorLowPassPoseProcessor
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Processors.AnchorLowPassPoseProcessor
   processorEnabled: 1
   positionSmoothSpeed: 3
   rotationSmoothSpeed: 3
@@ -578,7 +578,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1329d90362842694aa9891229aec38be, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.AnchorKalmanPoseProcessor
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Processors.AnchorKalmanPoseProcessor
   processorEnabled: 1
   positionMeasurementNoise: 0.0004
   positionProcessNoise: 0.02
@@ -929,7 +929,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7aec5c9b5ef2cfb4f9b4eedc36e8ae4a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.PoseResultReceiver
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.PoseResultReceiver
   natsClient: {fileID: 785850744}
   logStats: 1
   statsIntervalMessages: 120
@@ -1385,7 +1385,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: da6b0f8e7e843ed409c2cbec20e48b87, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Quest.StereoFrameSource
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Quest.StereoFrameSource
   leftCameraAccess: {fileID: 838830482}
   rightCameraAccess: {fileID: 880946284}
   centerReferenceOverride: {fileID: 0}
@@ -1403,7 +1403,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9a81a36f5269a046baac00deede74b1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Quest.CameraInfoSource
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Quest.CameraInfoSource
   leftCameraAccess: {fileID: 838830482}
   rightCameraAccess: {fileID: 880946284}
 --- !u!114 &727659789
@@ -1417,7 +1417,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5e8e5138777cb66478ff2773ef2fad5d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.QuestStreamPublisher
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher
   serverIp: 127.0.0.1
   loadServerIpFromPlayerPrefs: 1
   serverIpPlayerPrefsKey: EgoAnchor.DataPlaneServerIp
@@ -1590,7 +1590,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bcf0c42a33a8485cb98559da71e81e79, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.AnchorStatusReceiver
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.AnchorStatusReceiver
   natsClient: {fileID: 785850744}
   logStats: 1
   statsIntervalMessages: 30
@@ -1624,7 +1624,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 06ee8ae5601298d42a2ce6836f93bf28, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Transport.NatsControlClient
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.NatsControlClient
   natsUrl: nats://127.0.0.1:4222
   loadUrlFromPlayerPrefs: 1
   natsUrlPlayerPrefsKey: EgoAnchor.NatsUrl
@@ -2244,7 +2244,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7c9ab8cd461317948afac390c493aeda, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Quest.FramePoseHistory
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Alignment.FramePoseHistory
   capacity: 512
 --- !u!4 &1015685192
 Transform:
@@ -2304,7 +2304,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor.Reliability::EgoAnchor.Reliability.AnchorPolicyHost
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   minAcceptScore: 0.35
   minHoldScore: 0.12
   maxTranslationJumpMeters: 0.8
@@ -2551,7 +2551,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.PoseToAnchorRuntime
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
   framePoseHistory: {fileID: 1015685191}
   alignmentReference: 1
   poseTransform:
@@ -2588,7 +2588,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.DynamicObjectAnchor
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 1137170458}
   targetTransform: {fileID: 1137170460}
   outputMode: 0
@@ -2792,7 +2792,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c94c9ad8d1a85244badc404f49815dfc, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.AnchorCommandClient
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.AnchorCommandClient
   natsClient: {fileID: 785850744}
   clientId: egoanchor-unity
   anchorId: default
@@ -2864,7 +2864,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9c95f3f2ad00f5742acb92a69e18078a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Anchor.AnchorRuntimeHub
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.AnchorRuntimeHub
   runtimes:
   - {fileID: 160200731}
   - {fileID: 1137170458}
@@ -3149,7 +3149,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8cc97e63d18f46349c4fc0e59c3a7ac9, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EgoAnchor.Client.ServerHeartbeatReceiver
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.ServerHeartbeatReceiver
   natsClient: {fileID: 785850744}
   logStats: 1
   statsIntervalMessages: 30

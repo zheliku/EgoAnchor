@@ -1,19 +1,18 @@
 # EgoAnchor Python 入口
 
-本目录是 EgoAnchor Python 主线实现的起点。当前包含三个 src 入口和一个 RealSense 工具入口：
+本目录是 EgoAnchor Python 主线实现的起点。当前保留一个主线 src 入口和两个独立工具入口：
 
-- **通信 demo**：只验证 Quest/Unity -> Python 的双目图像通信与实时显示，不加载模型。
-- **YOLOE mask probe**：接收同一条 Quest stereo 数据面，只运行 YOLOE-26 并实时显示 overlay/mask，用于快速调 prompt、conf 和 mask 阈值。
+- **tracking server**：接收 ZMQ 数据面，运行可切换 YOLOE-26/SAM3 mask backend + Fast-FoundationStereo + FoundationPose/Cutie，在 Python OpenCV 中显示 debug 结果，并可通过 NATS 向 Unity 发布 camera-space `PoseResult`。
+- **YOLOE-26 RealSense mask tool**：使用 RealSense 彩色流运行 YOLOE-26 文本 prompt 分割，用于不接 Quest 时快速调 prompt、conf 和 mask 阈值。
 - **SAM3 RealSense mask tool**：使用 RealSense 彩色流运行 SAM3 文本 prompt 分割，用于不接 Quest 时快速测试耳机盒等目标描述。
-- **tracking server**：接收同一条 ZMQ 数据面，运行可切换 YOLOE-26/SAM3 mask backend + Fast-FoundationStereo + FoundationPose/Cutie，在 Python OpenCV 中显示 debug 结果，并可通过 NATS 向 Unity 发布 camera-space `PoseResult`。
 
 ## 当前链路
 
 1. Unity `QuestStreamPublisher` 按 topic 发送 Protobuf bytes。
 2. 数据面使用 ZMQ PUB/SUB，消息格式固定为 multipart：`[topic_utf8, protobuf_payload_bytes]`。
 3. Python `QuestStreamReceiver` 按 topic 做 latest-only 接收与 Protobuf 解码。
-4. 通信 demo 只显示左右 JPEG 拼接图；tracking server 继续运行本地 6DoF pose pipeline。
-5. tracking server 将 `PoseObservation` 映射为 Protobuf `PoseResult`，通过 NATS subject `egoanchor.v1.pose.result` 发布给 Unity。
+4. `TrackingRuntime` 运行本地 6DoF pose pipeline，并将 `PoseObservation` 映射为 Protobuf `PoseResult`。
+5. NATS subject `egoanchor.v1.pose.result` 把 camera-space pose 发布给 Unity。
 6. Unity `PoseResultReceiver` 在主线程解码 `PoseResult`，通过 `AnchorRuntimeHub` 广播给一个或多个 `PoseToAnchorRuntime`；runtime 按 `frame_id` 回查发送帧 left/right/center camera pose，并根据 Unity 本地 `alignmentReference` 生成 raw/stable world anchor pose；`None` 模式可用于不做 frame 对齐的诊断。
 
 ## Topics
@@ -24,42 +23,15 @@
 
 以上名称来自 `EgoAnchor_Protocol/subjects.v1.json`，不要在业务代码里手写新字符串。
 
-## Python 运行：通信 demo
+## Python 运行：YOLOE-26 RealSense mask tool
 
 在 `EgoAnchor_Python` 目录运行：
 
 ```powershell
-pixi run python .\src\quest_video_stream_demo.py
+pixi run tool-yoloe26-mask
 ```
 
-可选参数：
-
-```powershell
-pixi run python .\src\quest_video_stream_demo.py --log DEBUG
-pixi run python .\src\quest_video_stream_demo.py --config .\path\to\override.toml
-```
-
-默认监听端口是 `15557`，配置在 `src/egoanchor/config/defaults.toml`。
-
-## Python 运行：YOLOE mask probe
-
-在 `EgoAnchor_Python` 目录运行：
-
-```powershell
-pixi run python .\src\yoloe_mask_probe.py
-```
-
-常用参数：
-
-```powershell
-pixi run python .\src\yoloe_mask_probe.py --prompt "white mouse" --conf 0.08 --max-det 1 --save-dir .\debug\yoloe_probe
-pixi run python .\src\yoloe_mask_probe.py --object blue_mouse
-```
-
-OpenCV 热键：
-
-- `s`：当设置了 `--save-dir` 时保存当前 overlay/mask/stereo 快照。
-- `q` 或 `ESC`：退出。
+提示词、YOLOE 置信度、mask 阈值和 RealSense 相机参数在 `tools/yoloe26/yoloe26_mask.py` 顶部常量中配置。该工具用于先确认目标 prompt 是否能产生稳定单目标 mask。
 
 ## Python 运行：SAM3 RealSense mask tool
 
@@ -105,7 +77,7 @@ OpenCV 热键：
 
 当前主逻辑写在 `egoanchor/perception/quest_pose_pipeline.py` 的 `QuestPosePipeline.process()`：
 
-1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载配置指定的分割后端、FFS、FoundationPose 和可选 Cutie；command 执行由 `runtime/command_pump.py` 在 owner 线程顺序处理，结构化日志由 `runtime/runtime_log_writer.py` 写入。
+1. `runtime/tracking_runtime.py` 启动 ZMQ receiver，并在 `start()` 阶段预加载配置指定的分割后端、FFS、FoundationPose 和可选 Cutie；command 执行由 `runtime/commands.py` 在 owner 线程顺序处理，结构化日志由 `runtime/runtime_log_writer.py` 写入。
 2. 每轮 `TrackingRuntime.tick()` 只取最新 stereo/camera_info，避免旧帧积压。
 3. `QuestPosePipeline.process()` 先用 `camera_info` 更新 K；此时只更新 FoundationPose 适配器的相机矩阵，不重建重模型。
 4. 未成功 register 前，按 `module.segmenter.type` 使用 YOLOE-26 或 SAM3 找单目标 mask，再结合 FFS 深度调用 FoundationPose `register()`。
@@ -119,7 +91,7 @@ OpenCV 热键：
 
 在 Unity 场景中新增或绑定以下 组件：
 
-1. `EgoAnchor.Quest.FramePoseHistory`
+1. `EgoAnchor.Alignment.FramePoseHistory`
 2. `EgoAnchor.Quest.StereoFrameSource`
 3. `EgoAnchor.Quest.CameraInfoSource`
 4. `EgoAnchor.Client.QuestStreamPublisher`
@@ -136,14 +108,14 @@ Inspector 绑定要求：
 
 在同一场景中继续新增或绑定以下 组件：
 
-1. `EgoAnchor.Transport.NatsControlClient`
-2. `EgoAnchor.Anchor.AnchorRuntimeHub`
-3. `EgoAnchor.Anchor.PoseToAnchorRuntime`
+1. `EgoAnchor.Client.NatsControlClient`
+2. `EgoAnchor.Runtime.AnchorRuntimeHub`
+3. `EgoAnchor.Runtime.PoseToAnchorRuntime`
 4. `EgoAnchor.Client.PoseResultReceiver`
 5. `EgoAnchor.Client.AnchorStatusReceiver`
 6. `EgoAnchor.Client.ServerHeartbeatReceiver`
-7. 一个或多个 `EgoAnchor.Anchor.DynamicObjectAnchor`
-8. 可选：`EgoAnchor.Anchor.AnchorKalmanPoseProcessor`、`EgoAnchor.Anchor.AnchorLowPassPoseProcessor` 或 `EgoAnchor.Reliability.AnchorPolicyHost`
+7. 一个或多个 `EgoAnchor.Runtime.DynamicObjectAnchor`
+8. 可选：`EgoAnchor.Processors.AnchorKalmanPoseProcessor`、`EgoAnchor.Processors.AnchorLowPassPoseProcessor` 或 `EgoAnchor.Policy.AnchorPolicyHost`
 
 Inspector 绑定要求：
 
@@ -151,7 +123,7 @@ Inspector 绑定要求：
 - `PoseToAnchorRuntime.framePoseHistory`：必须绑定与 `StereoFrameSource` 相同的 `FramePoseHistory`，否则无法按 `frame_id` 对齐。
 - `AnchorRuntimeHub.runtimes`：绑定所有要同时接收同一 pose/status/heartbeat 的 `PoseToAnchorRuntime`，例如 raw baseline、Kalman baseline、reliability-aware runtime。
 - `PoseToAnchorRuntime.processors`：挂入一个或多个 processor；为空时 stable 直接等于 raw。
-- `PoseToAnchorRuntime.policyHost`：为空时是 raw + processor baseline；若要启用 reliability-aware policy，在同一 GameObject 或其它 GameObject 上添加 `EgoAnchor.Reliability.AnchorPolicyHost` 并拖入该字段。
+- `PoseToAnchorRuntime.policyHost`：为空时是 raw + processor baseline；若要启用 reliability-aware policy，在同一 GameObject 或其它 GameObject 上添加 `EgoAnchor.Policy.AnchorPolicyHost` 并拖入该字段。
 - `PoseResultReceiver.natsClient` / `AnchorStatusReceiver.natsClient` / `ServerHeartbeatReceiver.natsClient`：都绑定同一个 `NatsControlClient`。
 - `PoseResultReceiver.runtimeHub` / `AnchorStatusReceiver.runtimeHub` / `ServerHeartbeatReceiver.runtimeHub`：都绑定同一个 `AnchorRuntimeHub`。
 - `DynamicObjectAnchor.runtime`：绑定 `PoseToAnchorRuntime`。
@@ -165,13 +137,13 @@ Inspector 绑定要求：
 - Python 日志出现 `camera_info version=...`：说明标定 topic 已到达。
 - Python 窗口出现左右拼接图：说明 stereo topic、Protobuf 和 JPEG 解码均正常。
 - 如果 stereo 收不到但 camera_info 能收到，优先检查 Unity `StereoFrameSource` 的左右 camera 是否 `IsPlaying`。
-- pose debug 首次启动会加载配置指定的分割后端、FFS、FoundationPose/Cutie，耗时明显长于通信 demo；SAM3 checkpoint 较大，首次加载更慢。
+- pose debug 首次启动会加载配置指定的分割后端、FFS、FoundationPose/Cutie，SAM3 checkpoint 较大时首次加载会更慢。
 - 若 Unity `NatsControlClient` 没有 connected 日志，先确认 `nats-server` 已启动、URL/IP 可达、防火墙未拦截 4222。
 - 若 Unity `PoseResultReceiver` 有 decoded 但 aligned 为 0，优先检查 `AnchorRuntimeHub.runtimes` 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用同一个实例、`frame_id` 是否被 Python 原样透传，以及 Unity 本地 `alignmentReference/latestUsedReference` 是否需要历史 frame pose。
 - 当前主线 Python 感知 pipeline 使用左目图像、左目 K 和左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义上仍是左目 OpenCV camera pose。`PoseToAnchorRuntime.alignmentReference` 是 Unity 本地对齐/诊断策略，不写入通信协议，也不需要服务器知道；Right/Center 可用于本地对照或外参补偿实验，必要时配合 `applyLocalOffset` 做小量残差补偿。
 - 若 raw 物体正常但 smoothed 物体不动，检查 `PoseToAnchorRuntime.processors` 中 processor 是否禁用，或 stable `DynamicObjectAnchor.outputMode` 是否选择了 `Smoothed`。
 - 如果 dashboard 显示 `WAIT_CALIBRATION`，说明 stereo 已到但 camera_info 尚未到达或未成功解析。
-- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt`、`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold`；SAM3 也可先用 `tool-sam3-mask` 做 RealSense prompt 对照。
+- 如果显示 `NO_MASK`，优先调整 `module.segmenter.prompt`、`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold`；可先用 `tool-yoloe26-mask` 或 `tool-sam3-mask` 做 RealSense prompt 对照。
 - 如果显示 `REJECT_DEPTH`，优先检查 K 映射、双目同步、baseline、FFS 权重或 TRT engine。
 
 ## 设计边界
@@ -182,6 +154,6 @@ Inspector 绑定要求：
 - `perception` 层只输出 OpenCV camera 坐标系下的 `PoseObservation`，不做 Unity world transform。
 - `algorithms` 层只封装单模型适配器，不直接处理网络或 runtime 命令。
 - Python `transport/nats_client.py` 是唯一 NATS transport 文件，只负责 bytes publish/subscribe，不导入 OpenCV 或 perception 重模型。
-- Unity `Quest` 目录只负责采集，`Transport` 目录只负责网络，`Client` 目录负责 Protobuf decode 和 runtime 调用，`Anchor` 目录负责 frame alignment、processor chain、policy 接口和 Transform 输出，`Reliability` 目录负责具体 policy/gate 实现。
-- Unity 已按 `EgoAnchor.Protocol`、`EgoAnchor.Util`、`EgoAnchor.Transport`、`EgoAnchor.Quest`、`EgoAnchor.Anchor`、`EgoAnchor.Reliability`、`EgoAnchor.Client`、`EgoAnchor.Diagnostics` asmdef 分层；Unity Editor 刷新后会重新生成对应 csproj。
+- Unity `Quest` 目录只负责采集，`Transport` 目录只负责网络，`Client` 目录负责 Protobuf decode、NATS 控制和 runtime 调用，`Runtime/Alignment/Processors/Policy` 分别负责 anchor 应用、frame alignment、pose processor 和可靠性策略。
+- Unity `Assets/Scripts/EgoAnchor` 作为单一 `EgoAnchor` 程序集维护；Unity Editor 刷新后会重新生成对应 csproj。
 

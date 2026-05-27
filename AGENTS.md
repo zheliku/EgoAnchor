@@ -37,18 +37,16 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 当前主线能力：
 
-- Python `src/quest_video_stream_demo.py`：ZMQ/Protobuf 双目通信预览，不加载模型。
-- Python `src/yoloe_mask_probe.py`：同一 ZMQ 数据面，只运行 YOLOE-26，实时看 overlay/mask，快速调 prompt/conf/mask threshold。
 - Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
 - Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore -> CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架。
+- Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
 - Unity `NatsControlClient`：订阅 PoseResult latest queue、ServerHeartbeat latest queue 和 AnchorStatusEvent event queue，并提供 bytes request/reply。
 - Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持 raw baseline 与 smoothed/runtime policy 使用同一 pose 输入。
 - Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
 - Unity `AnchorLowPassPoseProcessor`、`AnchorKalmanPoseProcessor`：当前 stable baseline。
-- Unity `AnchorStateMachine`、`AnchorPolicyHostBase` 与 `Reliability/AnchorPolicyHost/PolicyController`：基础 reliability-aware anchor policy 已接入，可根据 PoseResult 可靠性、frame alignment 失败、pose jump 和连续 no-pose 输出 Accept/Reject/Coast/Hold/Lost/Relocalizing 等行为；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。
+- Unity `Policy/AnchorStateMachine`、`AnchorPolicyHost` 与 `PolicyController`：基础 reliability-aware anchor policy 已接入，可根据 PoseResult 可靠性、frame alignment 失败、pose jump 和连续 no-pose 输出 Accept/Reject/Coast/Hold/Lost/Relocalizing 等行为；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。
 - Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
 
 ## 常用入口与验证
@@ -57,9 +55,8 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 ```powershell
 # 当前主线
-pixi run python .\src\quest_video_stream_demo.py
-pixi run python .\src\yoloe_mask_probe.py
 pixi run python .\src\tracking_server.py
+pixi run tool-yoloe26-mask
 pixi run tool-sam3-mask
 
 # Python 验证
@@ -124,8 +121,6 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 ### Python
 
 - `src/tracking_server.py`：当前主入口 wrapper，调用 `egoanchor.app.tracking_server`。
-- `src/quest_video_stream_demo.py`：ZMQ/Protobuf 双目实时预览 demo。
-- `src/yoloe_mask_probe.py`：YOLOE mask 调参入口。
 - `tools/sam3/sam3_mask.py`：RealSense + SAM3 prompt mask 调参入口；顶部常量配置 prompt、置信度、分辨率和相机参数。
 - `src/egoanchor/config/`：轻量配置。配置层只读 TOML，不导入 ZMQ/OpenCV/模型。
 - `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口。
@@ -133,56 +128,52 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/transport/nats_client.py`：唯一 NATS transport 文件；负责后台 asyncio NATS 连接、bytes publish/subscribe/request-reply callback 和 publish 限流，不理解 perception 或 Unity anchor。
 - `src/egoanchor/routing/`：`HandlerRegistry`、`NatsRouter`、`iter_nats_request_specs`；负责 subject -> protobuf parse -> handler -> reply serialize。
 - `src/egoanchor/handlers/command_handlers.py`：reset/reacquire/control request handler；只 validate/dedup/enqueue/ack，不直接碰 pipeline/GPU。
-- `src/egoanchor/runtime/latest_quest_input_store.py`：topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
-- `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store。
-- `src/egoanchor/runtime/command_queue.py`、`command_dedup.py`、`command_executor.py`：命令队列、request_id TTL 幂等、runtime 内解释命令。
+- `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store；内部包含 topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
+- `src/egoanchor/runtime/commands.py`：命令模型、命令队列、request_id TTL 幂等、runtime 内解释命令，以及在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue command 的 pump。
 - `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat，并把 command/logging 细节委托给 runtime helper。
-- `src/egoanchor/runtime/pose_result_factory.py`：`PoseObservation -> PoseResult` 映射。
-- `src/egoanchor/runtime/status_event_factory.py`：Python runtime state/command/error -> `AnchorStatusEvent` 映射。
-- `src/egoanchor/runtime/heartbeat_factory.py`：input stats/runtime stats -> `ServerHeartbeat` 映射。
-- `src/egoanchor/runtime/command_pump.py`：在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue 的 command，handler 不直接碰 pipeline/GPU。
+- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射。
 - `src/egoanchor/runtime/runtime_log_writer.py`：集中写入 PoseResult/status/heartbeat/command JSONL 结构化事件，保持 runtime 主循环薄。
 - `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。SAM3 异步模式只把分割模型放入 latest-only worker；worker 输出携带原始 decoded frame/left/right 图，主 pipeline 线程消费后再做 depth/register。
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
 - `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
 - `src/egoanchor/reliability/pose_quality.py`：轻量感知可靠性评分，目前主要用于 HUD 和内部诊断。
-- `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard、窗口工具。
+- `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard 等诊断工具；窗口创建辅助由 app 层就近维护。
 - `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
 
 ### Unity
 
 - `Assets/Scripts/EgoAnchor/Protocol/Generated/`：C# Protobuf 生成代码。
 - `Assets/Scripts/EgoAnchor/Protocol/SubjectNames.cs`：由协议脚本生成的 subject 常量，不要手改。
+- `Assets/Scripts/EgoAnchor/EgoAnchor.asmdef`：唯一手写 EgoAnchor 程序集；`Assets/Scripts/EgoAnchor` 下所有非生成手写脚本都归入该程序集。
 - `Assets/Scripts/EgoAnchor/Transport/ZmqTopicPublisher.cs`：只管理 NetMQ PUB socket，发送 `[topic_utf8, protobuf_payload_bytes]`。
-- `Assets/Scripts/EgoAnchor/Transport/NatsControlClient.cs`：NATS 消息面客户端；订阅 PoseResult latest queue、AnchorStatusEvent event queue、ServerHeartbeat latest queue，提供 bytes request/reply；后台回调不改 Transform。
+- `Assets/Scripts/EgoAnchor/Client/NatsControlClient.cs`：NATS 消息面客户端；订阅 PoseResult latest queue、AnchorStatusEvent event queue、ServerHeartbeat latest queue，提供 bytes request/reply；后台回调不改 Transform。
 - `Assets/Scripts/EgoAnchor/Quest/StereoFrameSource.cs`：读取左右 Passthrough texture、记录 left/right/center camera pose、JPEG 编码、构造 `QuestStereoFrame`。
 - `Assets/Scripts/EgoAnchor/Quest/CameraInfoSource.cs`：读取 Quest intrinsics/lens pose 并构造 `QuestCameraInfo`。
-- `Assets/Scripts/EgoAnchor/Quest/FramePoseHistory.cs`：`frame_id -> capture-time left/right/center camera world pose` 环形缓存，是 frame-aligned anchor 的关键。
-- `Assets/Scripts/EgoAnchor/Quest/CameraReference.cs`：Unity 本地对齐参考枚举。Python 当前语义仍是左目 OpenCV camera pose；Right/Center/None 只用于本地诊断、对照或小量补偿实验。
+- `Assets/Scripts/EgoAnchor/Alignment/FramePoseHistory.cs`：`frame_id -> capture-time left/right/center camera world pose` 环形缓存，是 frame-aligned anchor 的关键。
+- `Assets/Scripts/EgoAnchor/Alignment/CameraReference.cs`：Unity 本地对齐参考枚举。Python 当前语义仍是左目 OpenCV camera pose；Right/Center/None 只用于本地诊断、对照或小量补偿实验。
+- `Assets/Scripts/EgoAnchor/Alignment/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose；包含 `AnchorPoseTransform` 轴翻转和固定 offset 配置。
 - `Assets/Scripts/EgoAnchor/Client/QuestStreamPublisher.cs`：场景级 ZMQ 数据面发送组件；支持 PlayerPrefs 配置 Python IP。
 - `Assets/Scripts/EgoAnchor/Client/NatsTypedReceiver.cs`：PoseResult、AnchorStatusEvent、ServerHeartbeat 三类 Protobuf receiver 的主线程解码基类。
 - `Assets/Scripts/EgoAnchor/Client/PoseResultReceiver.cs`：主线程 latest-drain、解析 PoseResult、交给 `AnchorRuntimeHub`。
 - `Assets/Scripts/EgoAnchor/Client/AnchorStatusReceiver.cs`：主线程按事件顺序解析 `AnchorStatusEvent`，转交 `PoseToAnchorRuntime` 更新本地 lifecycle，不修改 Transform。
 - `Assets/Scripts/EgoAnchor/Client/ServerHeartbeatReceiver.cs`：主线程 latest-drain、解析 `ServerHeartbeat`，转交 `PoseToAnchorRuntime` 更新链路健康诊断。
 - `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
-- `Assets/Scripts/EgoAnchor/Anchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
-- `Assets/Scripts/EgoAnchor/Anchor/Runtime/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose；包含 `AnchorPoseTransform` 轴翻转和固定 offset 配置。
-- `Assets/Scripts/EgoAnchor/Anchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，并按 processor chain 或 reliability-aware policy 生成 stable pose。
-- `Assets/Scripts/EgoAnchor/Anchor/Runtime/PoseToAnchorRuntime.Events.cs`：no-pose、align failure 与 policy decision 应用；`PolicyNotifications.cs` / `ServerNotifications.cs` 分别放在 `Policy/` 与 `Runtime/`。
-- `Assets/Scripts/EgoAnchor/Anchor/Processor/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与当前 baseline。
-- `Assets/Scripts/EgoAnchor/Anchor/Policy/AnchorPolicyHostBase.cs`、`AnchorPolicyDecision.cs`、`AnchorObservation.cs`、`AnchorStateMachine.cs`、`AnchorLifecycleEvent.cs`：Unity anchor 侧 policy 抽象、观测与生命周期状态，不订阅网络、不修改 Transform。
-- `Assets/Scripts/EgoAnchor/Reliability/`：Unity anchor 侧可靠性感知策略；`ReliabilityGate` 评估 score/flags，`InnovationGate` 拒绝大跳变，`AnchorPredictor` 做短时 coasting，`PolicyController` 组合 gate/predict/state，`AnchorPolicyHost` 作为可挂载 policy 组件。
-- `Assets/Scripts/EgoAnchor/Anchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
+- `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
+- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，并按 processor chain 或 reliability-aware policy 生成 stable pose；no-pose、align failure、server notification 与 policy decision 应用集中在同一文件内分区维护。
+- `Assets/Scripts/EgoAnchor/Processors/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与当前 baseline。
+- `Assets/Scripts/EgoAnchor/Policy/`：Unity anchor 侧可靠性感知策略、观测、决策 DTO 与生命周期状态；`ReliabilityGate` 评估 score/flags，`InnovationGate` 拒绝大跳变，`AnchorPredictor` 做短时 coasting，`PolicyController` 组合 gate/predict/state，`AnchorPolicyHost` 作为可挂载 policy 组件。
+- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
 - `Assets/Scene/`：当前主线测试场景工作区。
 
 Unity 命名/目录规则：
 
-- `Quest/` 放 Quest 数据提供者/source 和采集期缓存。
-- `Transport/` 放网络 socket/client，不理解 Quest 或 anchor 语义。
+- `Quest/` 放 Quest 数据提供者/source。
+- `Alignment/` 放 frame pose history、camera reference 与 frame-aligned world pose 转换。
+- `Transport/` 放纯网络 socket/bytes client，不理解 Quest 或 anchor 语义。
 - `Client/` 放把 source、transport、runtime 组合成场景组件的客户端脚本。
-- `Anchor/Runtime/` 放 frame alignment、pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
-- `Anchor/Policy/` 放 anchor policy 抽象、observation/decision DTO、state machine 和 policy notification partial；`AnchorPolicyHostBase` 必须留在 Anchor asmdef，不能合并进 Reliability 具体实现。
-- `Anchor/Processor/` 放 raw -> stable pose processor 基类与 Kalman/LowPass baseline。
+- `Runtime/` 放 pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
+- `Policy/` 放 reliability-aware policy 实现、observation/decision DTO 和 state machine；不再保留旧的 policy host 基类。
+- `Processors/` 放 raw -> stable pose processor 基类与 Kalman/LowPass baseline。
 - 新增脚本应写清中文 `<summary>` 和 Inspector 参数 `[Tooltip]`，尤其是端口、帧率、HWM、缓存容量、坐标/时间语义。
 
 ## 标定、深度与坐标约定
@@ -204,7 +195,7 @@ Unity 命名/目录规则：
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
 - Unity `PoseResultReceiver` decoded 增加但 aligned 为 0：查 `AnchorRuntimeHub` runtime 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用、`alignmentReference` 是否正确、Python 是否原样透传 frame_id。
 - raw 物体正常但 smoothed 不动：查 `PoseToAnchorRuntime.processors`、processor 是否启用、`DynamicObjectAnchor.outputMode` 是否为 `Smoothed`。
-- mask 不稳：调 `module.segmenter.prompt`、`module.segmenter.confidence_threshold`、`module.segmenter.mask_threshold`、`module.segmenter.max_det`，并用 `debug.show_mask_snapshot=true`、`yoloe_mask_probe.py` 或 `pixi run tool-sam3-mask` 看真实下游 mask；若 YOLOE 语义误检仍高，可显式切 `module.segmenter.type="sam3"`。
+- mask 不稳：调 `module.segmenter.prompt`、`module.segmenter.confidence_threshold`、`module.segmenter.mask_threshold`、`module.segmenter.max_det`，并用 `debug.show_mask_snapshot=true`、`pixi run tool-yoloe26-mask` 或 `pixi run tool-sam3-mask` 看真实下游 mask；若 YOLOE 语义误检仍高，可显式切 `module.segmenter.type="sam3"`。
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
 - track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
@@ -226,7 +217,7 @@ Unity 命名/目录规则：
 - 基础 `AnchorStateMachine` / `AnchorPolicyHost` / `PolicyController` 已完成并通过本地 smoke；`AnchorStatusEvent` 与 `ServerHeartbeat` 已接入 Unity runtime，下一步是回包年龄、实验日志和 HUD。
 - 输入已覆盖 `PoseResult` 可靠性字段、frame history 命中、pose innovation、连续 no-pose、heartbeat/input health；待补回包年龄。
 - 输出已覆盖 `Accept`、`Hold`、`Coast`、`Reject`、`Lost`、`Relocalizing` 等 anchor 行为；后续需要补 UI/HUD 和事件记录。
-- 保留 raw、low-pass、Kalman baseline；full method 通过给 `PoseToAnchorRuntime.policyHost` 绑定 `Reliability/AnchorPolicyHost` 启用。
+- 保留 raw、low-pass、Kalman baseline；full method 通过给 `PoseToAnchorRuntime.policyHost` 绑定 `Policy/AnchorPolicyHost` 启用。
 - 不要把 controller 写进 `NatsControlClient`、`PoseResultReceiver` 或 `DynamicObjectAnchor`；它应保持在 anchor runtime/policy 层。
 
 ### Phase C：端到端与论文实验

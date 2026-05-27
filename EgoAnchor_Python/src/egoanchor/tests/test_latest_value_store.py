@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from egoanchor.runtime import LatestValueStore
+from egoanchor.utils import LatestValueStore
 
 
 class LatestValueStoreTest(unittest.TestCase):
