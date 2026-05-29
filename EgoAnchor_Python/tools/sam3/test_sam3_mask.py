@@ -6,6 +6,7 @@ import time
 import unittest
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 import numpy as np
 
@@ -18,7 +19,7 @@ for path in (TOOL_DIR, SRC_DIR):
         sys.path.insert(0, str(path))
 
 from egoanchor.algorithms import SegmenterResult
-from sam3_mask import AsyncSam3Worker, WorkerSnapshot, compose_live_overlay
+from sam3_mask import AsyncSam3Worker, WorkerSnapshot, compose_live_overlay, compose_mask_view
 
 
 class _FakeSegmenter:
@@ -37,6 +38,7 @@ class _FakeSegmenter:
             infer_ms=10.0,
             prompt=["fake"],
             selected_index=0,
+            selected_score=0.75,
             mask_area_ratio=float(np.count_nonzero(mask)) / float(mask.size),
         )
 
@@ -81,6 +83,7 @@ class LiveOverlayTest(unittest.TestCase):
             infer_ms=25.0,
             prompt=["fake"],
             selected_index=0,
+            selected_score=0.82,
             mask_area_ratio=float(np.count_nonzero(mask)) / float(mask.size),
         )
         snapshot = WorkerSnapshot(
@@ -97,6 +100,55 @@ class LiveOverlayTest(unittest.TestCase):
 
         np.testing.assert_array_equal(overlay[116, 116], live_frame[116, 116])
         self.assertFalse(np.array_equal(overlay[88, 88], live_frame[88, 88]))
+
+
+class MaskViewTest(unittest.TestCase):
+    """验证 mask 调试窗口会在 mask 旁边显示检测结果分数。"""
+
+    def test_compose_mask_view_adds_selected_score_panel_next_to_mask(self) -> None:
+        """mask 视图右侧应增加信息栏，并显示当前选中 mask 的 score。"""
+
+        mask = np.zeros((32, 48), dtype=np.uint8)
+        mask[8:16, 12:24] = 255
+        result = SegmenterResult(
+            overlay_bgr=np.zeros((32, 48, 3), dtype=np.uint8),
+            mask_bw=mask,
+            det_count=1,
+            infer_ms=12.0,
+            prompt=["fake"],
+            selected_index=0,
+            selected_score=0.91,
+            mask_area_ratio=float(np.count_nonzero(mask)) / float(mask.size),
+        )
+
+        view = compose_mask_view(mask, result)
+
+        self.assertEqual(view.shape, (32, 208, 3))
+        np.testing.assert_array_equal(view[12, 16], np.array([255, 255, 255], dtype=np.uint8))
+        self.assertGreater(int(np.count_nonzero(view[:, 48:])), 0)
+
+    def test_compose_mask_view_draws_selected_score_text(self) -> None:
+        """信息栏应绘制模型返回的 selected_score，而不是配置阈值。"""
+
+        result = SegmenterResult(
+            overlay_bgr=np.zeros((32, 48, 3), dtype=np.uint8),
+            mask_bw=np.zeros((32, 48), dtype=np.uint8),
+            det_count=1,
+            infer_ms=12.0,
+            prompt=["fake"],
+            selected_index=0,
+            selected_score=0.91,
+            mask_area_ratio=0.0,
+        )
+        drawn_text: list[str] = []
+
+        def record_text(*args: object, **kwargs: object) -> None:
+            drawn_text.append(str(args[1]))
+
+        with patch("sam3_mask.cv2.putText", side_effect=record_text):
+            compose_mask_view(result.mask_bw, result)
+
+        self.assertIn("0.91", drawn_text)
 
 
 if __name__ == "__main__":

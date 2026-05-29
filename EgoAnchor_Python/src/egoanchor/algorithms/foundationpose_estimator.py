@@ -242,10 +242,7 @@ class FoundationPoseObjectEstimator:
 
         loaded_mesh = trimesh.load(self.mesh_path, force="scene", process=False)
         if isinstance(loaded_mesh, trimesh.Scene):
-            geometries = [geom.copy() for geom in loaded_mesh.geometry.values() if hasattr(geom, "vertices") and hasattr(geom, "faces")]
-            if not geometries:
-                raise ValueError(f"FoundationPose mesh scene 不包含可用几何体: {self.mesh_path}")
-            loaded_mesh = trimesh.util.concatenate(geometries) if len(geometries) > 1 else geometries[0]
+            loaded_mesh = self._scene_to_transformed_mesh(loaded_mesh)
         self.mesh = cast(Any, loaded_mesh)
         """FoundationPose 使用的目标 mesh。"""
 
@@ -369,6 +366,23 @@ class FoundationPoseObjectEstimator:
         except Exception as exc:
             logging.warning("读取 mesh.vertex_normals 失败，改用手动法线估计: %s", exc)
         return self._estimate_vertex_normals(np.asarray(mesh.vertices, dtype=np.float64), np.asarray(mesh.faces, dtype=np.int64))
+
+    @staticmethod
+    def _scene_to_transformed_mesh(scene: trimesh.Scene) -> Any:
+        """把 GLB scene 转为已应用 node transform 的单 mesh。
+
+        有些 GLB 会把真实米单位尺寸写在 scene graph transform 里，而 geometry 顶点仍是
+        建模软件内部单位。直接拼接 scene.geometry 会丢掉缩放/旋转/平移，导致
+        FoundationPose 把小物体当成巨大物体注册。
+        """
+
+        if not scene.geometry:
+            raise ValueError("FoundationPose mesh scene 不包含可用几何体。")
+
+        try:
+            return scene.to_geometry()
+        except AttributeError:
+            return scene.dump(concatenate=True)
 
     @staticmethod
     def _get_pose_xy_from_image_point(ob_in_cam: np.ndarray, cam_k: np.ndarray, x: float, y: float) -> tuple[float, float]:

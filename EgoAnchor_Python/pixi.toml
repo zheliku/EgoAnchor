@@ -176,6 +176,10 @@ earphone ={ cmd = """
 python src/tracking_server.py --object earphone
 """ }
 
-controller ={ cmd = """
-python src/tracking_server.py --object controller
+controller_right ={ cmd = """
+python src/tracking_server.py --object controller_right
+""" }
+
+controller_left ={ cmd = """
+python src/tracking_server.py --object controller_left
 """ }

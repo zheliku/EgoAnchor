@@ -396,6 +396,23 @@ def compose_live_overlay(frame_bgr: np.ndarray, snapshot: WorkerSnapshot, prompt
     return draw_worker_status(overlay, snapshot, prompt)
 
 
+def compose_mask_view(mask_bw: np.ndarray, result: SegmenterResult | None) -> np.ndarray:
+    """在黑白 mask 右侧拼接当前 SAM3 检测结果分数。"""
+
+    if mask_bw.ndim == 2:
+        mask_bgr = cv2.cvtColor(mask_bw, cv2.COLOR_GRAY2BGR)
+    else:
+        mask_bgr = mask_bw.copy()
+
+    height = int(mask_bgr.shape[0])
+    panel_width = 160
+    panel = np.zeros((height, panel_width, 3), dtype=np.uint8)
+    cv2.putText(panel, "CONFIDENCE", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (190, 255, 190), 1, cv2.LINE_AA)
+    score_text = "--" if result is None or result.selected_score < 0.0 else f"{result.selected_score:.2f}"
+    cv2.putText(panel, score_text, (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.78, (255, 255, 255), 2, cv2.LINE_AA)
+    return np.hstack((mask_bgr, panel))
+
+
 def save_snapshot(
     color_bgr: np.ndarray,
     result: SegmenterResult,
@@ -469,7 +486,7 @@ def main() -> None:
                 mask_view = snapshot.result.mask_bw
 
             cv2.imshow("SAM3 Overlay", overlay)
-            cv2.imshow("SAM3 Mask BW", mask_view)
+            cv2.imshow("SAM3 Mask BW", compose_mask_view(mask_view, snapshot.result))
             if SHOW_DEPTH:
                 show_depth_window(rgbd.depth)
 

@@ -21,9 +21,10 @@ class Sam3MaskSelectionTest(unittest.TestCase):
         masks[2, 1:4, 2:5] = 1.0
         scores = np.array([0.6, 0.95, 0.8], dtype=np.float32)
 
-        mask_bw, selected_index, area_ratio = select_best_sam3_mask(masks, scores, (4, 5))
+        mask_bw, selected_index, area_ratio, selected_score = select_best_sam3_mask(masks, scores, (4, 5))
 
         self.assertEqual(selected_index, 2)
+        self.assertAlmostEqual(selected_score, 0.8, places=5)
         self.assertEqual(mask_bw.dtype, np.uint8)
         self.assertEqual(mask_bw.shape, (4, 5))
         self.assertEqual(int(np.count_nonzero(mask_bw)), 9)
@@ -35,9 +36,10 @@ class Sam3MaskSelectionTest(unittest.TestCase):
         masks = np.zeros((2, 3, 4), dtype=np.float32)
         scores = np.array([0.7, 0.8], dtype=np.float32)
 
-        mask_bw, selected_index, area_ratio = select_best_sam3_mask(masks, scores, (3, 4))
+        mask_bw, selected_index, area_ratio, selected_score = select_best_sam3_mask(masks, scores, (3, 4))
 
         self.assertEqual(selected_index, -1)
+        self.assertEqual(selected_score, -1.0)
         self.assertEqual(int(np.count_nonzero(mask_bw)), 0)
         self.assertEqual(area_ratio, 0.0)
 

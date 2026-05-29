@@ -144,6 +144,7 @@ class Yoloe26Segmenter:
         overlay = result.plot()
         det_count = int(len(result.boxes.data)) if result.boxes is not None and result.boxes.data is not None else 0
         selected_index = -1
+        selected_score = -1.0
 
         if result.masks is None or result.masks.data is None or len(result.masks.data) == 0:
             mask_bw = np.zeros(frame.shape[:2], dtype=np.uint8)
@@ -163,6 +164,7 @@ class Yoloe26Segmenter:
                 score = scores[: binary_masks.shape[0]].copy()
                 score[~valid] = -1.0
                 selected_index = int(np.argmax(score))
+                selected_score = float(score[selected_index])
                 mask_bw = binary_masks[selected_index]
             else:
                 mask_bw = np.zeros(frame.shape[:2], dtype=np.uint8)
@@ -178,6 +180,7 @@ class Yoloe26Segmenter:
             infer_ms=infer_ms,
             prompt=list(self._prompt),
             selected_index=selected_index,
+            selected_score=selected_score,
             mask_area_ratio=mask_area_ratio,
         )
 

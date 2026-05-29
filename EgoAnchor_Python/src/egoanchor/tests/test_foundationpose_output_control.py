@@ -199,5 +199,31 @@ class FoundationPoseOutputControlTest(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "")
 
 
+class FoundationPoseMeshLoadTest(unittest.TestCase):
+    """验证 FoundationPose mesh 加载保留 GLB scene 节点变换。"""
+
+    def test_scene_geometry_uses_trimesh_transform_aware_conversion(self) -> None:
+        """GLB scene 应走 transform-aware conversion，而不是直接拼接原始 geometry。"""
+
+        class FakeScene:
+            """只模拟 helper 需要的 scene API，避免单测触发 native 渲染/几何依赖。"""
+
+            geometry = {"mesh": object()}
+
+            def __init__(self) -> None:
+                self.to_geometry_called = False
+
+            def to_geometry(self) -> str:
+                self.to_geometry_called = True
+                return "transformed_mesh"
+
+        scene = FakeScene()
+
+        mesh = FoundationPoseObjectEstimator._scene_to_transformed_mesh(scene)
+
+        self.assertEqual(mesh, "transformed_mesh")
+        self.assertTrue(scene.to_geometry_called)
+
+
 if __name__ == "__main__":
     unittest.main()

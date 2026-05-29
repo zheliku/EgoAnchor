@@ -39,6 +39,9 @@ class SegmenterResult:
     mask_area_ratio: float = 0.0
     """mask 前景面积占整图比例，用于可靠性诊断。"""
 
+    selected_score: float = -1.0
+    """被选中检测结果的模型分数；没有有效检测或后端未提供分数时为 -1。"""
+
 
 @dataclass(slots=True)
 class MaskTrackResult:

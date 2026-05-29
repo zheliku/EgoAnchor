@@ -56,7 +56,7 @@ def select_best_sam3_mask(
     scores: Any | None,
     frame_shape: tuple[int, int],
     threshold: float = 0.5,
-) -> tuple[np.ndarray, int, float]:
+) -> tuple[np.ndarray, int, float, float]:
     """从 SAM3 多实例输出中选择最高分的非空 mask。
 
     下游 FoundationPose register 需要单目标 mask，因此这里不做 union。空 mask
@@ -67,7 +67,7 @@ def select_best_sam3_mask(
     empty = np.zeros((height, width), dtype=np.uint8)
     masks_np = _to_numpy(masks)
     if masks_np.size == 0:
-        return empty, -1, 0.0
+        return empty, -1, 0.0, -1.0
     masks_np = np.asarray(masks_np)
     if masks_np.ndim == 4 and masks_np.shape[1] == 1:
         masks_np = masks_np[:, 0, :, :]
@@ -78,7 +78,8 @@ def select_best_sam3_mask(
 
     binary_masks = (masks_np >= float(threshold)).astype(np.uint8) * 255
     mask_count = int(binary_masks.shape[0])
-    if scores is None:
+    has_scores = scores is not None
+    if not has_scores:
         score_values = np.ones((mask_count,), dtype=np.float32)
     else:
         score_values = _to_numpy(scores).astype(np.float32).reshape(-1)[:mask_count]
@@ -89,7 +90,7 @@ def select_best_sam3_mask(
     areas = np.count_nonzero(binary_masks.reshape(mask_count, -1), axis=1)
     valid = areas > 0
     if not np.any(valid):
-        return empty, -1, 0.0
+        return empty, -1, 0.0, -1.0
 
     ranked_scores = score_values.copy()
     ranked_scores[~valid] = -1.0
@@ -99,7 +100,8 @@ def select_best_sam3_mask(
         mask_bw = cv2.resize(mask_bw, (width, height), interpolation=cv2.INTER_NEAREST)
 
     area_ratio = float(np.count_nonzero(mask_bw)) / float(max(mask_bw.size, 1))
-    return mask_bw, selected_index, area_ratio
+    selected_score = float(score_values[selected_index]) if has_scores else -1.0
+    return mask_bw, selected_index, area_ratio, selected_score
 
 
 def disable_sam3_position_precompute(model_builder_module: Any) -> None:
@@ -250,17 +252,12 @@ class Sam3Segmenter:
             scores = output.get("scores", None)
             det_count = int(len(scores)) if scores is not None else int(len(masks))
             total_det_count += det_count
-            mask_bw, selected_index, area_ratio = select_best_sam3_mask(
+            mask_bw, selected_index, area_ratio, selected_score = select_best_sam3_mask(
                 masks=masks,
                 scores=scores,
                 frame_shape=frame.shape[:2],
                 threshold=self.mask_threshold,
             )
-            selected_score = -1.0
-            if selected_index >= 0 and scores is not None:
-                scores_np = _to_numpy(scores).reshape(-1)
-                if selected_index < scores_np.shape[0]:
-                    selected_score = float(scores_np[selected_index])
             if selected_index >= 0 and (selected_score > best_score or best_selected_index < 0):
                 best_output = output
                 best_prompt = prompt_text
@@ -282,6 +279,7 @@ class Sam3Segmenter:
             infer_ms=infer_ms,
             prompt=[best_prompt] if best_prompt else list(self._prompt),
             selected_index=best_selected_index,
+            selected_score=best_score,
             mask_area_ratio=best_area_ratio,
         )
 
