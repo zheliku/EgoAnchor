@@ -59,6 +59,9 @@ namespace EgoAnchor.Quest
         /// <summary>单调递增 frame_id。</summary>
         private long frameId;
 
+        /// <summary>采集并记录一帧 frame_id 相机位姿后触发；参数为 (frameId, captureMonoMs)。无订阅者时零成本。</summary>
+        public event Action<long, double> FrameCaptured;
+
         /// <summary>
         /// 尝试采集并编码一帧 stereo Protobuf。
         /// </summary>
@@ -115,6 +118,7 @@ namespace EgoAnchor.Quest
             }
 
             framePoseHistory?.Record(currentFrameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
+            FrameCaptured?.Invoke(currentFrameId, senderMonoMs);
 
             frame = new QuestStereoFrame
             {
@@ -275,4 +279,3 @@ namespace EgoAnchor.Quest
         }
     }
 }
-

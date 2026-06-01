@@ -1,0 +1,12 @@
+{
+    "name": "EgoAnchorEval",
+    "rootNamespace": "EgoAnchorEval",
+    "references": [
+        "EgoAnchor",
+        "Oculus.VR",
+        "meta.xr.mrutilitykit",
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
+    ],
+    "autoReferenced": true
+}

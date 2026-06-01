@@ -1,5 +1,6 @@
 ﻿<Solution>
   <Project Path="VHierarchy.csproj" />
+  <Project Path="EgoAnchorEval.csproj" />
   <Project Path="EgoAnchor.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="Proxima.csproj" />
