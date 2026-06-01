@@ -147,7 +147,7 @@ namespace EgoAnchorEval
                 return;
             }
 
-            TryGetGroundTruth(out Pose gtPose, out bool gtTracked);
+            ControllerGroundTruthSample gtSample = ReadGroundTruthSample();
             bool cameraValid = TryGetCameraPose(frameId, out Pose cameraPose);
             Pose headPose = ResolveHeadPose();
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -157,8 +157,11 @@ namespace EgoAnchorEval
                 unixMs,
                 headPose,
                 cameraPose,
-                gtPose,
-                gtTracked,
+                gtSample.Pose,
+                gtSample.Tracked,
+                gtSample.HasPose,
+                gtSample.PoseSource,
+                gtSample.HoldAgeMs,
                 cameraValid));
         }
 
@@ -172,7 +175,7 @@ namespace EgoAnchorEval
                 return;
             }
 
-            TryGetGroundTruth(out Pose gtPose, out bool gtTracked);
+            ControllerGroundTruthSample gtSample = ReadGroundTruthSample();
             double monoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Pose headPose = ResolveHeadPose();
@@ -182,19 +185,51 @@ namespace EgoAnchorEval
                 unixMs,
                 sourceFrameId,
                 headPose,
-                gtPose,
-                gtTracked,
+                gtSample.Pose,
+                gtSample.Tracked,
+                gtSample.HasPose,
+                gtSample.PoseSource,
+                gtSample.HoldAgeMs,
                 variantSnapshots));
         }
 
         /// <summary>
-        /// 读取手柄 GT，provider 缺失时返回 identity + tracked=false。
+        /// 收集当前配置的 runtime 变体标签，用于写 session manifest。
         /// </summary>
-        private bool TryGetGroundTruth(out Pose gtPose, out bool gtTracked)
+        /// <param name="labels">接收标签的列表；调用前会被清空。</param>
+        public void CollectVariantLabels(List<string> labels)
         {
-            gtPose = Pose.identity;
-            gtTracked = false;
-            return gt != null && gt.TryGetWorldPose(out gtPose, out gtTracked);
+            if (labels == null)
+            {
+                return;
+            }
+
+            labels.Clear();
+            if (recordedRuntimes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < recordedRuntimes.Count; i++)
+            {
+                string label = string.IsNullOrEmpty(recordedRuntimes[i].label)
+                    ? $"variant_{i}"
+                    : recordedRuntimes[i].label;
+                labels.Add(label);
+            }
+        }
+
+        /// <summary>
+        /// 读取手柄 GT sample；provider 缺失时返回无 pose。
+        /// </summary>
+        private ControllerGroundTruthSample ReadGroundTruthSample()
+        {
+            if (gt != null && gt.TryGetWorldPoseSample(out ControllerGroundTruthSample sample))
+            {
+                return sample;
+            }
+
+            return new ControllerGroundTruthSample(false, Pose.identity, false, ControllerGroundTruthProvider.SourceNone, 0.0);
         }
 
         /// <summary>

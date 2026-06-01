@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -91,6 +92,36 @@ namespace EgoAnchorEval
             bool gtTracked,
             bool cameraValid = true)
         {
+            return BuildCaptureLine(
+                frameId,
+                captureMonoMs,
+                captureUnixMs,
+                headPose,
+                cameraPose,
+                groundTruthPose,
+                gtTracked,
+                gtPoseValid: true,
+                gtPoseSource: gtTracked ? ControllerGroundTruthProvider.SourceLiveTracked : ControllerGroundTruthProvider.SourceOvrUntracked,
+                gtHoldAgeMs: 0.0,
+                cameraValid);
+        }
+
+        /// <summary>
+        /// 构造每个 frame_id 对应的采集记录行，并显式写出 GT pose 来源。
+        /// </summary>
+        public static string BuildCaptureLine(
+            long frameId,
+            double captureMonoMs,
+            double captureUnixMs,
+            Pose headPose,
+            Pose cameraPose,
+            Pose groundTruthPose,
+            bool gtTracked,
+            bool gtPoseValid,
+            string gtPoseSource,
+            double gtHoldAgeMs,
+            bool cameraValid = true)
+        {
             var builder = new StringBuilder(512);
             bool first = true;
             builder.Append('{');
@@ -98,11 +129,15 @@ namespace EgoAnchorEval
             AppendLongProperty(builder, ref first, "frame_id", frameId);
             AppendDoubleProperty(builder, ref first, "capture_mono_ms", captureMonoMs);
             AppendDoubleProperty(builder, ref first, "capture_unix_ms", captureUnixMs);
+            AppendReadableTimeProperties(builder, ref first, "capture", captureUnixMs);
             AppendPoseProperties(builder, ref first, "head_pos", "head_rot", headPose, hasPose: true);
             AppendBoolProperty(builder, ref first, "cam_valid", cameraValid);
             AppendPoseProperties(builder, ref first, "cam_pos", "cam_rot", cameraPose, cameraValid);
-            AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, hasPose: true);
+            AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, gtPoseValid);
             AppendBoolProperty(builder, ref first, "gt_tracked", gtTracked);
+            AppendBoolProperty(builder, ref first, "gt_pose_valid", gtPoseValid);
+            AppendStringProperty(builder, ref first, "gt_pose_source", gtPoseSource);
+            AppendDoubleProperty(builder, ref first, "gt_hold_age_ms", gtHoldAgeMs);
             builder.Append('}');
             return builder.ToString();
         }
@@ -119,16 +154,48 @@ namespace EgoAnchorEval
             bool gtTracked,
             IReadOnlyList<RecordedVariantSnapshot> variants)
         {
+            return BuildOutputLine(
+                renderMonoMs,
+                renderUnixMs,
+                sourceFrameId,
+                headPose,
+                groundTruthPose,
+                gtTracked,
+                gtPoseValid: true,
+                gtPoseSource: gtTracked ? ControllerGroundTruthProvider.SourceLiveTracked : ControllerGroundTruthProvider.SourceOvrUntracked,
+                gtHoldAgeMs: 0.0,
+                variants);
+        }
+
+        /// <summary>
+        /// 构造每个渲染 tick 对应的输出记录行，并显式写出 GT pose 来源。
+        /// </summary>
+        public static string BuildOutputLine(
+            double renderMonoMs,
+            double renderUnixMs,
+            long sourceFrameId,
+            Pose headPose,
+            Pose groundTruthPose,
+            bool gtTracked,
+            bool gtPoseValid,
+            string gtPoseSource,
+            double gtHoldAgeMs,
+            IReadOnlyList<RecordedVariantSnapshot> variants)
+        {
             var builder = new StringBuilder(1024);
             bool first = true;
             builder.Append('{');
             AppendStringProperty(builder, ref first, "event", "unity_output");
             AppendDoubleProperty(builder, ref first, "render_mono_ms", renderMonoMs);
             AppendDoubleProperty(builder, ref first, "render_unix_ms", renderUnixMs);
+            AppendReadableTimeProperties(builder, ref first, "render", renderUnixMs);
             AppendLongProperty(builder, ref first, "source_frame_id", sourceFrameId);
             AppendPoseProperties(builder, ref first, "head_pos", "head_rot", headPose, hasPose: true);
-            AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, hasPose: true);
+            AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, gtPoseValid);
             AppendBoolProperty(builder, ref first, "gt_tracked", gtTracked);
+            AppendBoolProperty(builder, ref first, "gt_pose_valid", gtPoseValid);
+            AppendStringProperty(builder, ref first, "gt_pose_source", gtPoseSource);
+            AppendDoubleProperty(builder, ref first, "gt_hold_age_ms", gtHoldAgeMs);
             AppendVariants(builder, ref first, variants);
             builder.Append('}');
             return builder.ToString();
@@ -243,6 +310,15 @@ namespace EgoAnchorEval
         }
 
         /// <summary>
+        /// 写入 UTC 与本地可读时间字符串。
+        /// </summary>
+        private static void AppendReadableTimeProperties(StringBuilder builder, ref bool first, string prefix, double unixMs)
+        {
+            AppendStringProperty(builder, ref first, $"{prefix}_utc", FormatUtc(unixMs));
+            AppendStringProperty(builder, ref first, $"{prefix}_local", FormatLocal(unixMs));
+        }
+
+        /// <summary>
         /// 写入 bool 属性。
         /// </summary>
         private static void AppendBoolProperty(StringBuilder builder, ref bool first, string name, bool value)
@@ -308,6 +384,31 @@ namespace EgoAnchorEval
             }
 
             builder.Append(value.ToString("R", CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// 把 Unix 毫秒格式化为 ISO-8601 UTC 字符串。
+        /// </summary>
+        private static string FormatUtc(double unixMs)
+        {
+            return FromUnixMs(unixMs).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 把 Unix 毫秒格式化为本地时区字符串。
+        /// </summary>
+        private static string FormatLocal(double unixMs)
+        {
+            return FromUnixMs(unixMs).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 从 double Unix 毫秒安全构造 DateTimeOffset。
+        /// </summary>
+        private static DateTimeOffset FromUnixMs(double unixMs)
+        {
+            long rounded = (long)Math.Round(unixMs, MidpointRounding.AwayFromZero);
+            return DateTimeOffset.FromUnixTimeMilliseconds(rounded);
         }
 
         /// <summary>

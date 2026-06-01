@@ -21,19 +21,21 @@ data/eval/<session_id>/
   report/                              # Python eval 产出表+图
 ```
 
+Unity session_id 使用人类可读时间命名，默认格式为 `yyyyMMdd_HHmmss_<object_id>`，例如 `20260602_153012_controller_right`。若同一秒重复开始录制，自动追加 `_02`、`_03`，避免覆盖。
+
 **关键**：Unity 的 `session_id` 不必等于 Python 的 `session_id`。三份日志靠 **`frame_id` 精确 join**（QuestStereoFrame 发出的 frame_id 同时出现在 Python `pose_result.frame_id` 和 Unity `unity_capture.frame_id`）。Unity session_id 仅用于命名/分目录。manifest 里记 `python_log_filename` 字段指向对应的 Python 日志，离线脚本据此配对。
 
 ### 0.2 坐标系约定（务必记牢，错了指标全错）
 
 - Python `pose_result.pose_matrix_cv_camera`：OpenCV 左目相机系（x右 y下 z前），16 个 float 行主序。
 - Unity 侧 GT / anchor / 头 / 相机 pose：全部记 **Unity 世界系**（左手系，y上）。
-- GT（手柄）：`OVRInput` 局部位姿 → 经 `OVRCameraRig.trackingSpace` 变换到 Unity 世界系。
+- GT（手柄）：`OVRInput` 局部位姿 → 经 `OVRCameraRig.trackingSpace` 变换到 Unity 世界系。Meta 手柄静止一段时间可能因省电报告 `tracked=false`；评估侧不伪装实时追踪，而是缓存最后一次 live tracked pose，继续写 `gt_pose_source="hold_last"`、`gt_tracked=false`、`gt_hold_age_ms`，供静态段离线使用并保留真实性标记。
 - anchor（被评估输出）：`PoseToAnchorRuntime.TryGetStablePose/TryGetRawPose` 已是 Unity 世界系。
 - 因此**离线指标全在 Unity 世界系算**，Python camera-space 矩阵只在 RQ1（arrival-time vs frame-aligned 离线重算）时才用到，需配合 `unity_capture` 的相机世界位姿做组合。
 
 ### 0.3 时间戳约定
 
-每条记录同时写 `*_mono_ms`（Unity `Time.realtimeSinceStartupAsDouble*1000`，单调，做 latency）和 `*_unix_ms`（`DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()`，墙钟，跨进程对时兜底）。manifest 记 `mono_to_unix_offset_ms = unix - mono`（session 启动时采一次）。
+每条记录同时写 `*_mono_ms`（Unity `Time.realtimeSinceStartupAsDouble*1000`，单调，做 latency）、`*_unix_ms`（`DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()`，墙钟，跨进程对时兜底）、`*_utc`（ISO-8601 UTC，可读）和 `*_local`（本地时区可读）。manifest 记 `mono_to_unix_offset_ms = unix - mono`（session 启动时采一次），并为 session/condition/event 同时写 UTC/local 可读时间。
 
 ### 0.4 JSON 序列化策略（Unity 侧）
 
@@ -218,14 +220,16 @@ public sealed class AnchorEvalRecorder : MonoBehaviour
 private void OnFrameCaptured(long frameId, double captureMonoMs)
 {
     if (!recording) return;
-    gt.TryGetWorldPose(out Pose g, out bool tracked);
+    gt.TryGetWorldPoseSample(out ControllerGroundTruthSample gtSample);
     framePoseHistory.TryGet(frameId, out FramePoseRecord rec);
     rec.TryGetCameraPose(alignmentReference, out Pose camPose);
     Pose head = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
     double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     // 手写 JSON 一行：event=unity_capture, frame_id, capture_mono_ms, capture_unix_ms,
-    //   head_pos/rot, cam_pos/rot, gt_pos/rot, gt_tracked
-    captureWriter.WriteLine(BuildCaptureLine(frameId, captureMonoMs, unixMs, head, camPose, g, tracked));
+    //   head_pos/rot, cam_pos/rot, gt_pos/rot, gt_tracked,
+    //   gt_pose_valid, gt_pose_source(live_tracked/hold_last/ovr_untracked), gt_hold_age_ms
+    captureWriter.WriteLine(BuildCaptureLine(frameId, captureMonoMs, unixMs, head, camPose, gtSample.Pose,
+        gtSample.Tracked, gtSample.HasPose, gtSample.PoseSource, gtSample.HoldAgeMs));
 }
 ```
 
@@ -237,7 +241,7 @@ private void OnFrameCaptured(long frameId, double captureMonoMs)
 void LateUpdate()
 {
     if (!recording) return;
-    gt.TryGetWorldPose(out Pose g, out bool tracked);
+    gt.TryGetWorldPoseSample(out ControllerGroundTruthSample gtSample);
     double monoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
     double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     Pose head = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
@@ -256,7 +260,8 @@ void LateUpdate()
         }
     }
     // source_frame_id 取主变体的 LatestAlignedFrameId
-    outputWriter.WriteLine(BuildOutputLine(monoMs, unixMs, head, g, tracked, /*variants*/));
+    outputWriter.WriteLine(BuildOutputLine(monoMs, unixMs, head, gtSample.Pose, gtSample.Tracked,
+        gtSample.HasPose, gtSample.PoseSource, gtSample.HoldAgeMs, /*variants*/));
 }
 ```
 
@@ -317,19 +322,21 @@ public sealed class EvalSessionController : MonoBehaviour
     //   session_id, object_id, unity_run_mode="editor_link",
     //   gt_source = controller==LTouch?"ovr_ltouch":"ovr_rtouch",
     //   mono_to_unix_offset_ms, condition_spans[], event_markers[],
-    //   variant_labels[], python_log_filename(留空或手填), notes
+    //   variant_labels[], python_log_filename(留空或手填), notes,
+    //   gt_hold_policy, hold_last_when_untracked, max_hold_age_ms
 }
 ```
 
-**UI 绑定**：场景已有 `Button_Reset/Resume/Pause/ForceReacquire`。新增 `Button_EvalStart/Stop`，或 Editor 下用 Unity 新 Input System（如 `Keyboard.current` / `InputAction`）触发 `StartSession/StopSession`；条件切换/事件标记也用按钮或键盘（如数字键 1-7 对应 7 个条件段，O 标 occlusion）。录制时单手操作友好。
+**UI 绑定**：场景已有 `Button_Reset/Resume/Pause/ForceReacquire`。新增 `Button_EvalStart/Stop`，或 Editor 下挂 `EvalSessionHotkeyDriver`，用 Unity 新 Input System（`Keyboard.current` / `Key`）触发 `StartSession/StopSession`；条件切换/事件标记也用按钮或键盘（数字键 1-7 对应 7 个条件段，0 结束当前段，O/V/R 标 occlusion/out_of_view/recovery）。录制时单手操作友好。
 
 > `gt_source` / `objectId` / Python `--object` / provider 的 `controller` **四者必须一致**，否则标定 X 会用错手柄。建议 `StartSession` 里加断言日志：打印三者，人工核对。
 
 ### U3.1 验收
 
-- 点 Start → 切几个 condition（看 Console 或临时 UI 文本）→ 标一个 event → Stop。
+- 点 Start 或按 F7 → 切几个 condition（看 Console 或临时 UI 文本）→ 标一个 event → Stop/F8。
 - 确认 `session_manifest.json` 生成，`condition_spans` 时间区间连续不重叠、`gt_source` 与 provider 的 controller 对应。
 - 确认 capture/output 两份日志在该 session 目录下，文件名含 session_id。
+- 若手柄静止后 Meta SDK 报 `tracked=false`，确认日志继续写 pose 且 `gt_pose_source="hold_last"`、`gt_tracked=false`，不要把缓存 pose 当作 live tracked。
 
 ---
 
@@ -341,20 +348,23 @@ public sealed class EvalSessionController : MonoBehaviour
 
 现有场景 `Server` 下已有：`AnchorRuntimeHub`、`AnchorPolicyHost`、`AnchorObject`(stable)、`AnchorObject Raw`、`StereoFrameSource`、`FramePoseHistory`、`CameraInfoSource`，以及 `OVRCameraRig/CenterEyeAnchor`。
 
-1. 新建空 GameObject `EvalRig`（挂 `Server` 下），挂 `AnchorEvalRecorder` + `EvalSessionController` + `ControllerGroundTruthProvider`。
+1. 新建空 GameObject `EvalRig`（挂 `Server` 下），挂 `AnchorEvalRecorder` + `EvalSessionController` + `ControllerGroundTruthProvider` + `EvalSessionHotkeyDriver`。
 2. `ControllerGroundTruthProvider.cameraRig` ← 场景 `OVRCameraRig`；`controller` ← 本轮手柄。
 3. `AnchorEvalRecorder`：`gt`←同物体 provider；`headAnchor`←`CenterEyeAnchor`；`stereoSource`/`framePoseHistory`←场景对应组件（与 runtime 同实例）；`alignmentReference`←`Left`（与主 runtime 一致）。
 4. `recordedRuntimes` 列表：先连两项 —— `AnchorObject`(label="kalman" 或当前 stable 配置, isPrimary=true) 与 `AnchorObject Raw`(label="raw")。RQ2 ablation 时再加 lowpass/policy 变体子物体（往 `AnchorRuntimeHub.runtimes` 加 + 拖进本 list，纯场景配置）。
 5. `EvalSessionController`：`recorder`/`gt` 拖入，`outputRoot` 填 `data/eval` 绝对路径，`objectId` 设对。
-6. UI/热键绑定 Start/Stop/condition/mark。
+6. UI/热键绑定 Start/Stop/condition/mark；当前场景可直接用 `EvalSessionHotkeyDriver`：F7 Start、F8 Stop、1-7 条件段、0 结束段、O/V/R 事件标记。
 
 ### U4.2 验收（本阶段 Unity 侧完成定义）
 
 - 启动 Python：`pixi run controller_right`（或 left），戴头显进入 Editor+Link。
 - 点 Start，录 ~20 秒（随便动动手柄+头），点 Stop。
 - 产出三份文件齐全：`*_unity_capture.jsonl`、`*_unity_output.jsonl`、`session_manifest.json`。
+- `dotnet run --project EgoAnchor_Tools\eval_writer_smoke\EvalWriterSmoke.csproj` 会自动检查 `EgoAnchor-Evaluation.unity` 中 `EvalRig`、`EvalSessionController`、`EvalSessionHotkeyDriver` 和 hold-last GT 配置仍存在。
 - **frame_id 对齐验证**：取 capture 中任一 `frame_id`，在 Python 当日 `runtime_logs/*.jsonl` 里 grep 到同 `frame_id` 的 `pose_result`（证明三方 join 可行）。
+- 录制后可直接跑 `dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj -- --session-dir EgoAnchor_Python\data\eval\<session_id> --python-log <runtime_log.jsonl> --require-python-join`，自动检查三份 Unity 日志、manifest、raw/主变体字段、GT hold-last 字段与 Python `frame_id` join。
 - output 的 `variants` 含 raw + 主变体，主变体有 `aligned_raw_pos/rot` + `reliability_score`。
+- capture/output 均含 `gt_pose_valid`、`gt_pose_source`、`gt_hold_age_ms`；静止省电导致停追踪时允许 `hold_last`，但必须保留 `gt_tracked=false`。
 - 无明显掉帧/卡顿（若 90fps 写盘卡，把 output 降到 ~30Hz：LateUpdate 里按时间间隔节流）。
 
 > ⚠️ Unity 侧到此可交付。Python 侧（P0-P4）可并行开工，但**端到端验收（Stage T）依赖一份真实录制数据**，建议 U4 跑出一份 ~3 分钟的完整协议数据备用。

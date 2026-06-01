@@ -2460,6 +2460,7 @@ Transform:
   - {fileID: 733706455}
   - {fileID: 1588420537}
   - {fileID: 1039886365}
+  - {fileID: 1262713666}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1125115305
@@ -2825,9 +2826,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1262713666}
+  - component: {fileID: 1262713667}
+  - component: {fileID: 1262713668}
   - component: {fileID: 1262713665}
   - component: {fileID: 1262713664}
-  - component: {fileID: 1262713663}
   m_Layer: 0
   m_Name: EvalRig
   m_TagString: Untagged
@@ -2835,27 +2837,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1262713663
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1262713662}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6199560f06b627d8507b369e71b29462, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalManualSmokeDriver
-  gt: {fileID: 1262713665}
-  recorder: {fileID: 1262713664}
-  outputRoot: 
-  sessionPrefix: u1_u2_manual_smoke
-  logGroundTruthOnStart: 0
-  toggleGroundTruthLogKey: 99
-  beginRecordingKey: 100
-  stopRecordingKey: 101
-  gtLogIntervalSeconds: 1
 --- !u!114 &1262713664
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2894,6 +2875,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.ControllerGroundTruthProvider
   cameraRig: {fileID: 1846668448}
   controller: 2
+  holdLastPoseWhenUntracked: 1
+  maxHoldAgeSeconds: 0
 --- !u!4 &1262713666
 Transform:
   m_ObjectHideFlags: 0
@@ -2907,8 +2890,53 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1085434120}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1262713667
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1262713662}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec5e8d9fb81f4e2c9a7157a3bb5dfc43, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionController
+  recorder: {fileID: 1262713664}
+  gt: {fileID: 1262713665}
+  outputRoot: 
+  objectId: controller_right
+  unityRunMode: editor_link
+  pythonLogFilename: 
+  notes: 
+--- !u!114 &1262713668
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1262713662}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e19b0e5d02b4ff4b5a2a179c923ac71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionHotkeyDriver
+  controller: {fileID: 1262713667}
+  startSessionKey: 100
+  stopSessionKey: 101
+  endConditionKey: 50
+  staticKey: 41
+  slowHeadKey: 42
+  fastHeadKey: 43
+  objectMotionKey: 44
+  occlusionKey: 45
+  outOfViewKey: 46
+  lightingKey: 47
+  markOcclusionKey: 29
+  markOutOfViewKey: 36
+  markRecoveryKey: 32
 --- !u!1 &1334624607
 GameObject:
   m_ObjectHideFlags: 0
@@ -4485,4 +4513,3 @@ SceneRoots:
   - {fileID: 1085434120}
   - {fileID: 160200733}
   - {fileID: 1137170460}
-  - {fileID: 1262713666}
