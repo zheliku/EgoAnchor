@@ -283,6 +283,8 @@ namespace EgoAnchorEval
                 string state = runtime != null ? runtime.CurrentAnchorState.ToString() : "MissingRuntime";
                 string action = runtime != null ? runtime.LatestPolicyAction : string.Empty;
                 string reason = runtime != null ? runtime.LatestPolicyReason : string.Empty;
+                string phase = runtime != null ? runtime.LatestPhase : string.Empty;
+                string failure = runtime != null ? runtime.LatestFailure : "missing_runtime";
                 float reliability = runtime != null ? runtime.LatestReliabilityScore : 0.0f;
 
                 if (recorded.isPrimary && !hasPrimary)
@@ -299,6 +301,8 @@ namespace EgoAnchorEval
                     state,
                     action,
                     reason,
+                    phase,
+                    failure,
                     recorded.isPrimary,
                     hasRaw,
                     rawPose,

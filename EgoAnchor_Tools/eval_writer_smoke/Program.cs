@@ -79,6 +79,8 @@ static class Program
                 anchorState: "Tracking",
                 policyAction: "baseline_accept",
                 policyReason: "policy_disabled",
+                latestPhase: "tracking",
+                latestFailure: "",
                 isPrimary: true,
                 hasAlignedRawPose: true,
                 alignedRawPose: camera,
@@ -104,6 +106,8 @@ static class Program
         AssertContains(output, "\"gt_hold_age_ms\":123.5");
         AssertContains(output, "\"variants\":[");
         AssertContains(output, "\"label\":\"kalman\"");
+        AssertContains(output, "\"latest_phase\":\"tracking\"");
+        AssertContains(output, "\"latest_failure\":\"\"");
         AssertContains(output, "\"aligned_raw_pos\":[4,5,6]");
         AssertContains(output, "\"reliability_score\":0.75");
 

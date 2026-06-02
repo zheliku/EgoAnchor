@@ -157,6 +157,8 @@ static class Program
     {
         var labels = new HashSet<string>(StringComparer.Ordinal);
         bool sawPrimary = false;
+        bool sawPositiveSourceFrame = false;
+        bool sawPrimaryAlignedRaw = false;
         rowCount = 0;
 
         foreach (string line in File.ReadLines(path))
@@ -173,7 +175,11 @@ static class Program
             RequireNumber(row, "render_unix_ms");
             RequireString(row, "render_utc");
             RequireString(row, "render_local");
-            RequireLong(row, "source_frame_id");
+            long rowSourceFrameId = RequireLong(row, "source_frame_id");
+            if (rowSourceFrameId >= 0)
+            {
+                sawPositiveSourceFrame = true;
+            }
             RequirePoseArray(row, "head_pos", 3, allowNull: false);
             RequirePoseArray(row, "head_rot", 4, allowNull: false);
             RequireBool(row, "gt_tracked");
@@ -197,11 +203,17 @@ static class Program
                 RequireString(variant, "anchor_state");
                 RequireString(variant, "policy_action");
                 RequireString(variant, "policy_reason");
+                RequireString(variant, "latest_phase");
+                RequireString(variant, "latest_failure");
 
                 if (isPrimary)
                 {
                     sawPrimary = true;
-                    RequireBool(variant, "has_aligned_raw");
+                    bool hasAlignedRaw = RequireBool(variant, "has_aligned_raw");
+                    if (hasAlignedRaw)
+                    {
+                        sawPrimaryAlignedRaw = true;
+                    }
                     RequirePoseArray(variant, "aligned_raw_pos", 3, allowNull: true);
                     RequirePoseArray(variant, "aligned_raw_rot", 4, allowNull: true);
                     RequireNumberOrNull(variant, "reliability_score");
@@ -219,6 +231,16 @@ static class Program
         if (!sawPrimary)
         {
             throw new InvalidOperationException("Output variants never contained is_primary=true.");
+        }
+
+        if (!sawPositiveSourceFrame)
+        {
+            throw new InvalidOperationException("Output log never contained source_frame_id >= 0. Runtime did not produce any frame-aligned pose.");
+        }
+
+        if (!sawPrimaryAlignedRaw)
+        {
+            throw new InvalidOperationException("Primary variant never contained has_aligned_raw=true.");
         }
 
         return labels;

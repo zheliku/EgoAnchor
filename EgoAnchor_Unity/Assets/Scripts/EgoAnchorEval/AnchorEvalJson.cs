@@ -32,6 +32,12 @@ namespace EgoAnchorEval
         /// <summary>最近一次 policy 原因。</summary>
         public readonly string PolicyReason;
 
+        /// <summary>最近一次 Python/Unity runtime phase。</summary>
+        public readonly string LatestPhase;
+
+        /// <summary>最近一次 runtime 对齐或 pose 失败原因。</summary>
+        public readonly string LatestFailure;
+
         /// <summary>是否是主变体；主变体额外写 aligned raw 与 reliability。</summary>
         public readonly bool IsPrimary;
 
@@ -55,6 +61,8 @@ namespace EgoAnchorEval
             string anchorState,
             string policyAction,
             string policyReason,
+            string latestPhase,
+            string latestFailure,
             bool isPrimary,
             bool hasAlignedRawPose,
             Pose alignedRawPose,
@@ -67,6 +75,8 @@ namespace EgoAnchorEval
             AnchorState = anchorState ?? string.Empty;
             PolicyAction = policyAction ?? string.Empty;
             PolicyReason = policyReason ?? string.Empty;
+            LatestPhase = latestPhase ?? string.Empty;
+            LatestFailure = latestFailure ?? string.Empty;
             IsPrimary = isPrimary;
             HasAlignedRawPose = hasAlignedRawPose;
             AlignedRawPose = alignedRawPose;
@@ -238,6 +248,8 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "anchor_state", variant.AnchorState);
             AppendStringProperty(builder, ref first, "policy_action", variant.PolicyAction);
             AppendStringProperty(builder, ref first, "policy_reason", variant.PolicyReason);
+            AppendStringProperty(builder, ref first, "latest_phase", variant.LatestPhase);
+            AppendStringProperty(builder, ref first, "latest_failure", variant.LatestFailure);
             if (variant.IsPrimary)
             {
                 AppendBoolProperty(builder, ref first, "has_aligned_raw", variant.HasAlignedRawPose);

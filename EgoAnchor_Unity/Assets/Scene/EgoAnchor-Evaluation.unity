@@ -1495,7 +1495,7 @@ MonoBehaviour:
   cameraInfoSource: {fileID: 727659788}
   stereoFps: 30
   cameraInfoFps: 1
-  logStats: 1
+  logStats: 0
   statsIntervalFrames: 120
 --- !u!4 &727659790
 Transform:
@@ -1700,7 +1700,7 @@ MonoBehaviour:
   retryOnInitialConnect: 0
   reconnectWaitMinSeconds: 0.25
   reconnectWaitMaxSeconds: 1
-  logStats: 1
+  logStats: 0
   statsIntervalMessages: 120
 --- !u!4 &785850745
 Transform:
