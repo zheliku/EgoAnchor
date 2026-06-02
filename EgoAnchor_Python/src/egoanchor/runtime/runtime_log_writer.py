@@ -69,10 +69,10 @@ class RuntimeLogWriter:
     避免主循环文件混入 pose/status/heartbeat/command 的日志装配细节。
     """
 
-    def __init__(self, cfg: SimpleNamespace, *, session_id: str) -> None:
+    def __init__(self, cfg: SimpleNamespace, *, session_id: str, eval_session: object | None = None) -> None:
         """读取 runtime.logging 配置并创建底层事件日志器。"""
 
-        self.logger = self._build_event_logger(cfg, session_id=session_id)
+        self.logger = self._build_event_logger(cfg, session_id=session_id, eval_session=eval_session)
         """底层 JSONL 事件日志器。"""
 
         self.pose_results = self._flag(cfg, "log_pose_results", True)
@@ -105,6 +105,7 @@ class RuntimeLogWriter:
 
         if not self.pose_results:
             return
+        timing = getattr(msg, "timing", SimpleNamespace())
         fields = dict(
             frame_id=int(msg.header.frame_id),
             state=state.value,
@@ -119,8 +120,13 @@ class RuntimeLogWriter:
             mask_area_ratio=float(msg.mask_area_ratio),
             det_count=int(msg.det_count),
             fps=float(msg.fps),
-            total_ms=float(msg.timing.total_ms),
-            server_publish_mono_ms=float(msg.server_publish_mono_ms),
+            total_ms=float(getattr(timing, "total_ms", 0.0)),
+            yolo_ms=float(getattr(timing, "yolo_ms", 0.0)),
+            depth_ms=float(getattr(timing, "depth_ms", 0.0)),
+            cutie_ms=float(getattr(timing, "cutie_ms", 0.0)),
+            pose_ms=float(getattr(timing, "pose_ms", 0.0)),
+            server_receive_mono_ms=float(getattr(msg, "server_receive_mono_ms", 0.0)),
+            server_publish_mono_ms=float(getattr(msg, "server_publish_mono_ms", 0.0)),
         )
         fields.update(self.pose_factory.build(msg))
         self.event("pose_result", **fields)
@@ -176,18 +182,23 @@ class RuntimeLogWriter:
         )
 
     @staticmethod
-    def _build_event_logger(cfg: SimpleNamespace, *, session_id: str) -> RuntimeEventLogger:
+    def _build_event_logger(cfg: SimpleNamespace, *, session_id: str, eval_session: object | None = None) -> RuntimeEventLogger:
         """根据 TOML 配置创建结构化事件日志器。"""
 
         logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
-        python_root = Path(getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd()))
-        raw_output_dir = Path(str(getattr(logging_cfg, "output_dir", "data/runtime_logs"))).expanduser()
-        output_dir = raw_output_dir if raw_output_dir.is_absolute() else python_root / raw_output_dir
+        if eval_session is not None:
+            output_dir = Path(getattr(eval_session, "session_dir"))
+            filename = str(getattr(eval_session, "python_log_filename"))
+        else:
+            python_root = Path(getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd()))
+            raw_output_dir = Path(str(getattr(logging_cfg, "output_dir", "data/runtime_logs"))).expanduser()
+            output_dir = raw_output_dir if raw_output_dir.is_absolute() else python_root / raw_output_dir
+            filename = str(getattr(logging_cfg, "filename", ""))
         return RuntimeEventLogger(
             enabled=bool(getattr(logging_cfg, "enabled", True)),
             output_dir=output_dir,
             session_id=session_id,
-            filename=str(getattr(logging_cfg, "filename", "")),
+            filename=filename,
             flush_every=int(getattr(logging_cfg, "flush_every", 1)),
         )
 

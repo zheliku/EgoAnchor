@@ -10,20 +10,21 @@
 
 ### 0.1 数据落盘位置与命名
 
-所有评估数据落到 `EgoAnchor_Python/data/eval/<session_id>/`（与 Python `runtime_logs` 同根，便于 join）。一个 session 目录内：
+所有评估数据落到 `EgoAnchor_Python/data/eval/<session_id>/`。默认推荐 **先启动 Python，再启动 Unity 录制**：Python 先创建共享 session 目录并写入 `python_session.json`，Unity Start/F7 时自动复用该目录。一个 session 目录内：
 
 ```
 data/eval/<session_id>/
+  python_session.json                 # Python 写，session 元数据 + python_log_filename
+  <session_id>_python_runtime.jsonl   # Python 写，PoseResult/status/heartbeat/command runtime 日志
   <session_id>_unity_capture.jsonl     # Unity 写，每 frame_id 一行（~8fps）
   <session_id>_unity_output.jsonl      # Unity 写，每渲染 tick 一行（~90fps）
   session_manifest.json                # Unity 写，session 元数据 + 条件/事件标签
-  <python_runtime_log>.jsonl           # Python 已有，手动/脚本拷入或记录路径
   report/                              # Python eval 产出表+图
 ```
 
 Unity session_id 使用人类可读时间命名，默认格式为 `yyyyMMdd_HHmmss_<object_id>`，例如 `20260602_153012_controller_right`。若同一秒重复开始录制，自动追加 `_02`、`_03`，避免覆盖。
 
-**关键**：Unity 的 `session_id` 不必等于 Python 的 `session_id`。三份日志靠 **`frame_id` 精确 join**（QuestStereoFrame 发出的 frame_id 同时出现在 Python `pose_result.frame_id` 和 Unity `unity_capture.frame_id`）。Unity session_id 仅用于命名/分目录。manifest 里记 `python_log_filename` 字段指向对应的 Python 日志，离线脚本据此配对。
+**关键**：默认自动配对时 Python 与 Unity 使用同一个人类可读 `session_id` 目录。三份日志仍靠 **`frame_id` 精确 join**（QuestStereoFrame 发出的 frame_id 同时出现在 Python `pose_result.frame_id` 和 Unity `unity_capture.frame_id`）。manifest 里记 `python_log_filename` 字段，Unity 从 `python_session.json` 自动填入；只有旧数据或未找到 Python session 时才需要显式传 `--python-log`。
 
 ### 0.2 坐标系约定（务必记牢，错了指标全错）
 
@@ -274,7 +275,7 @@ void LateUpdate()
 - 不接 SessionController，先在 recorder 里硬编码一个 `BeginRecording` 路径、Play 几秒、Stop。
 - 确认两份 JSONL 行数比例合理（output 约为 capture 的 ~10×，对应 90fps vs 8fps）。
 - 用文本编辑器看几行：capture 的 `frame_id` 递增、`gt_pos` 合理；output 的 `variants` 数组含配置的标签、主变体有 `aligned_raw_pos`。
-- 抽一个 capture 的 `frame_id`，确认它能在 Python `runtime_logs` 当日日志里找到同 `frame_id` 的 `pose_result` 行（join 主键成立）。
+- 抽一个 capture 的 `frame_id`，确认它能在同一 session 目录的 `<session_id>_python_runtime.jsonl` 中找到同 `frame_id` 的 `pose_result` 行（join 主键成立）。
 
 ---
 
@@ -289,6 +290,8 @@ public sealed class EvalSessionController : MonoBehaviour
     [SerializeField] private ControllerGroundTruthProvider gt;
     [SerializeField] private string outputRoot;          // data/eval 绝对路径
     [SerializeField] private string objectId = "controller_right";  // controller_left / controller_right
+    [SerializeField] private bool reuseLatestPythonSession = true;  // 先找 Python 已创建的共享 session
+    [SerializeField] private string pythonSessionMetadataFilename = "python_session.json";
 
     private string sessionId;
     private string sessionDir;
@@ -298,8 +301,12 @@ public sealed class EvalSessionController : MonoBehaviour
     private (string label, double start)? openSpan;
 
     public void StartSession() {
-        sessionId = Guid.NewGuid().ToString("N");
-        sessionDir = Path.Combine(outputRoot, sessionId);
+        if (reuseLatestPythonSession && TryFindReusablePythonSession(outputRoot, objectId, ..., out sessionId, out sessionDir, out pythonLog)) {
+            // 复用 Python 的 data/eval/<session_id> 目录，manifest.python_log_filename 自动写 pythonLog。
+        } else {
+            sessionId = BuildReadableSessionId(DateTimeOffset.Now, objectId);
+            sessionDir = Path.Combine(outputRoot, ResolveUniqueSessionId(outputRoot, sessionId));
+        }
         double mono = Time.realtimeSinceStartupAsDouble * 1000.0;
         monoToUnixOffsetMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - mono;
         recorder.BeginRecording(
@@ -322,7 +329,7 @@ public sealed class EvalSessionController : MonoBehaviour
     //   session_id, object_id, unity_run_mode="editor_link",
     //   gt_source = controller==LTouch?"ovr_ltouch":"ovr_rtouch",
     //   mono_to_unix_offset_ms, condition_spans[], event_markers[],
-    //   variant_labels[], python_log_filename(留空或手填), notes,
+    //   variant_labels[], python_log_filename(从 python_session.json 自动填入；旧数据可手动覆盖), notes,
     //   gt_hold_policy, hold_last_when_untracked, max_hold_age_ms
 }
 ```
@@ -352,17 +359,17 @@ public sealed class EvalSessionController : MonoBehaviour
 2. `ControllerGroundTruthProvider.cameraRig` ← 场景 `OVRCameraRig`；`controller` ← 本轮手柄。
 3. `AnchorEvalRecorder`：`gt`←同物体 provider；`headAnchor`←`CenterEyeAnchor`；`stereoSource`/`framePoseHistory`←场景对应组件（与 runtime 同实例）；`alignmentReference`←`Left`（与主 runtime 一致）。
 4. `recordedRuntimes` 列表：先连两项 —— `AnchorObject`(label="kalman" 或当前 stable 配置, isPrimary=true) 与 `AnchorObject Raw`(label="raw")。RQ2 ablation 时再加 lowpass/policy 变体子物体（往 `AnchorRuntimeHub.runtimes` 加 + 拖进本 list，纯场景配置）。
-5. `EvalSessionController`：`recorder`/`gt` 拖入，`outputRoot` 填 `data/eval` 绝对路径，`objectId` 设对。
+5. `EvalSessionController`：`recorder`/`gt` 拖入，`outputRoot` 填 `data/eval` 绝对路径，`objectId` 设对，`reuseLatestPythonSession` 保持勾选。
 6. UI/热键绑定 Start/Stop/condition/mark；当前场景可直接用 `EvalSessionHotkeyDriver`：F7 Start、F8 Stop、1-7 条件段、0 结束段、O/V/R 事件标记。
 
 ### U4.2 验收（本阶段 Unity 侧完成定义）
 
-- 启动 Python：`pixi run controller_right`（或 left），戴头显进入 Editor+Link。
-- 点 Start，录 ~20 秒（随便动动手柄+头），点 Stop。
+- 启动 Python：`pixi run controller_right`（或 left）。Python 会创建 `data/eval/<session_id>/python_session.json` 和 `<session_id>_python_runtime.jsonl`。
+- 戴头显进入 Editor+Link，点 Start/F7；Unity 应在 Console 打印复用 Python eval session。录 ~20 秒（随便动动手柄+头），点 Stop/F8。
 - 产出三份文件齐全：`*_unity_capture.jsonl`、`*_unity_output.jsonl`、`session_manifest.json`。
 - `dotnet run --project EgoAnchor_Tools\eval_writer_smoke\EvalWriterSmoke.csproj` 会自动检查 `EgoAnchor-Evaluation.unity` 中 `EvalRig`、`EvalSessionController`、`EvalSessionHotkeyDriver` 和 hold-last GT 配置仍存在。
-- **frame_id 对齐验证**：取 capture 中任一 `frame_id`，在 Python 当日 `runtime_logs/*.jsonl` 里 grep 到同 `frame_id` 的 `pose_result`（证明三方 join 可行）。
-- 录制后可直接跑 `dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj -- --session-dir EgoAnchor_Python\data\eval\<session_id> --python-log <runtime_log.jsonl> --require-python-join`，自动检查三份 Unity 日志、manifest、raw/主变体字段、GT hold-last 字段与 Python `frame_id` join。
+- **frame_id 对齐验证**：取 capture 中任一 `frame_id`，在同目录 `<session_id>_python_runtime.jsonl` 里 grep 到同 `frame_id` 的 `pose_result`（证明三方 join 可行）。
+- 录制后可直接跑 `dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj -- --session-dir EgoAnchor_Python\data\eval\<session_id> --require-python-join`，自动检查三份 Unity 日志、manifest、raw/主变体字段、GT 字段与 Python `frame_id` join。
 - output 的 `variants` 含 raw + 主变体，主变体有 `aligned_raw_pos/rot` + `reliability_score`。
 - capture/output 均含 `gt_pose_valid`、`gt_pose_source`、`gt_hold_age_ms`；静止省电导致停追踪时允许 `hold_last`，但必须保留 `gt_tracked=false`。
 - 无明显掉帧/卡顿（若 90fps 写盘卡，把 output 降到 ~30Hz：LateUpdate 里按时间间隔节流）。
@@ -394,7 +401,7 @@ server_publish_mono_ms=float(msg.server_publish_mono_ms),
 ### P0.1 验收
 
 - `pixi run controller_right` 跑几秒、停。
-- 看最新 `runtime_logs/*.jsonl` 的 `pose_result` 行含 `yolo_ms/depth_ms/cutie_ms/pose_ms/server_receive_mono_ms`，数值合理（和为 ≈ total_ms 数量级）。
+- 看最新 `data/eval/<session_id>/<session_id>_python_runtime.jsonl` 的 `pose_result` 行含 `yolo_ms/depth_ms/cutie_ms/pose_ms/server_receive_mono_ms`，数值合理（和为 ≈ total_ms 数量级）。
 - 现有依赖 `pose_result` 的单测仍通过（`pixi run test` 或对应测试任务）。
 
 ---
@@ -424,7 +431,7 @@ def label_conditions(df, manifest, mono_col: str) -> pd.DataFrame:  # 按 condit
 
 要点：
 - `output` 的 `variants` 数组**展平成长表**（每 variant 一行，列 `label`），方便 `groupby("label")` 算各变体指标。
-- Python 日志路径：从 `manifest["python_log_filename"]` 取；为空时回退到"同目录唯一 .jsonl"或让 CLI 显式传 `--python-log`。
+- Python 日志路径：默认从 `manifest["python_log_filename"]` 取，自动配对成功时它指向同目录 `<session_id>_python_runtime.jsonl`；为空时回退到"同目录唯一非 Unity .jsonl"或让 CLI 显式传 `--python-log`。
 - `gt_tracked=false` 的行打 `valid=False` 列，各指标默认 `df[df.valid]`。
 - 坐标系：所有 pos/quat 已是 Unity 世界系（capture/output），pose_result 是 OpenCV 相机系（仅 RQ1 用）。
 

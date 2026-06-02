@@ -251,7 +251,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1614,6 +1614,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4397664628265918113, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
   m_PrefabInstance: {fileID: 728089505}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &728089507 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1168042862848623612, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+  m_PrefabInstance: {fileID: 728089505}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &733706454
 GameObject:
   m_ObjectHideFlags: 0
@@ -2828,7 +2833,6 @@ GameObject:
   - component: {fileID: 1262713666}
   - component: {fileID: 1262713667}
   - component: {fileID: 1262713668}
-  - component: {fileID: 1262713665}
   - component: {fileID: 1262713664}
   m_Layer: 0
   m_Name: EvalRig
@@ -2849,7 +2853,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4383186c4fd3ee9003bdd891bfe52bbe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.AnchorEvalRecorder
-  gt: {fileID: 1262713665}
+  groundTruthTransform: {fileID: 728089507}
   headAnchor: {fileID: 1846668452}
   alignmentReference: 1
   stereoSource: {fileID: 727659787}
@@ -2857,26 +2861,12 @@ MonoBehaviour:
   recordedRuntimes:
   - label: kalman
     runtime: {fileID: 160200731}
+    anchorTransform: {fileID: 0}
     isPrimary: 1
   - label: raw
     runtime: {fileID: 1137170458}
+    anchorTransform: {fileID: 0}
     isPrimary: 0
---- !u!114 &1262713665
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1262713662}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dfdfda54c220643e040d10b4a4155a7d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.ControllerGroundTruthProvider
-  cameraRig: {fileID: 1846668448}
-  controller: 2
-  holdLastPoseWhenUntracked: 1
-  maxHoldAgeSeconds: 0
 --- !u!4 &1262713666
 Transform:
   m_ObjectHideFlags: 0
@@ -2905,12 +2895,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionController
   recorder: {fileID: 1262713664}
-  gt: {fileID: 1262713665}
   outputRoot: 
   objectId: controller_right
   unityRunMode: editor_link
   pythonLogFilename: 
-  notes: 
+  reuseLatestPythonSession: 1
+  maxPythonSessionAgeMinutes: 180
+  pythonSessionMetadataFilename: python_session.json
+  sessionNotes: 
 --- !u!114 &1262713668
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3339,6 +3331,10 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_Name
       value: MetaQuestTouchPlus_Left
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

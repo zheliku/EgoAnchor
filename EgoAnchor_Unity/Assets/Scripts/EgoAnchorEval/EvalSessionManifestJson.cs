@@ -64,7 +64,7 @@ namespace EgoAnchorEval
             string objectId,
             string unityRunMode,
             string gtSource,
-            string gtController,
+            string gtTransform,
             double monoToUnixOffsetMs,
             double sessionStartMonoMs,
             double sessionStopMonoMs,
@@ -72,10 +72,7 @@ namespace EgoAnchorEval
             IReadOnlyList<EvalEventMarker> eventMarkers,
             IReadOnlyList<string> variantLabels,
             string pythonLogFilename,
-            string notes,
-            string gtHoldPolicy,
-            bool holdLastWhenUntracked,
-            double maxHoldAgeMs)
+            string sessionNotes)
         {
             var builder = new StringBuilder(1024);
             bool first = true;
@@ -84,20 +81,17 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "object_id", objectId);
             AppendStringProperty(builder, ref first, "unity_run_mode", unityRunMode);
             AppendStringProperty(builder, ref first, "gt_source", gtSource);
-            AppendStringProperty(builder, ref first, "gt_controller", gtController);
+            AppendStringProperty(builder, ref first, "gt_transform", gtTransform);
             AppendDoubleProperty(builder, ref first, "mono_to_unix_offset_ms", monoToUnixOffsetMs);
             AppendDoubleProperty(builder, ref first, "session_start_mono_ms", sessionStartMonoMs);
             AppendReadableTimeProperties(builder, ref first, "session_start", sessionStartMonoMs + monoToUnixOffsetMs);
             AppendDoubleProperty(builder, ref first, "session_stop_mono_ms", sessionStopMonoMs);
             AppendReadableTimeProperties(builder, ref first, "session_stop", sessionStopMonoMs + monoToUnixOffsetMs);
-            AppendStringProperty(builder, ref first, "gt_hold_policy", gtHoldPolicy);
-            AppendBoolProperty(builder, ref first, "hold_last_when_untracked", holdLastWhenUntracked);
-            AppendDoubleProperty(builder, ref first, "max_hold_age_ms", maxHoldAgeMs);
             AppendConditionSpans(builder, ref first, conditionSpans, monoToUnixOffsetMs);
             AppendEventMarkers(builder, ref first, eventMarkers, monoToUnixOffsetMs);
             AppendStringArray(builder, ref first, "variant_labels", variantLabels);
             AppendStringProperty(builder, ref first, "python_log_filename", pythonLogFilename);
-            AppendStringProperty(builder, ref first, "notes", notes);
+            AppendStringProperty(builder, ref first, "notes", sessionNotes);
             builder.Append('}');
             return builder.ToString();
         }
@@ -206,15 +200,6 @@ namespace EgoAnchorEval
         {
             AppendName(builder, ref first, name);
             AppendDouble(builder, value);
-        }
-
-        /// <summary>
-        /// 写入 bool 属性。
-        /// </summary>
-        private static void AppendBoolProperty(StringBuilder builder, ref bool first, string name, bool value)
-        {
-            AppendName(builder, ref first, name);
-            builder.Append(value ? "true" : "false");
         }
 
         /// <summary>

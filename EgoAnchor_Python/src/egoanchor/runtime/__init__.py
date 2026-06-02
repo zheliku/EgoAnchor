@@ -17,6 +17,7 @@ from .commands import (
     command_handler,
     control_action_handler,
 )
+from .eval_session import EvalSessionPaths, build_eval_session_id, create_eval_session, sanitize_session_token
 from .runtime_state import RuntimeState, runtime_state_value
 from .message_factories import HeartbeatFactory, PoseResultFactory, StatusEventFactory
 from .quest_stream_receiver import LatestQuestInputStore, QuestInputStats
@@ -51,6 +52,9 @@ __all__ = [
     "CommandType",
     "command_handler",
     "control_action_handler",
+    "build_eval_session_id",
+    "create_eval_session",
+    "EvalSessionPaths",
     "LatestQuestInputStore",
     "HeartbeatFactory",
     "PoseLogFactory",
@@ -62,6 +66,7 @@ __all__ = [
     "runtime_state_value",
     "RuntimeCommand",
     "RuntimeTickResult",
+    "sanitize_session_token",
     "StatusEventFactory",
     "TrackingRuntime",
 ]

@@ -122,4 +122,5 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
         subjects_path=repo_root / "EgoAnchor_Protocol" / "subjects.v1.json",
         objects_path=OBJECT_CONFIG_PATH,
     )
+    cfg.runtime.object_id = str(object_name or getattr(cfg.runtime, "object_id", "default") or "default")
     return cfg

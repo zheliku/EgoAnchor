@@ -81,6 +81,7 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             cfg = load_config()
             cfg.network.message_plane.enabled = False
             cfg.runtime.logging.output_dir = tmp
+            cfg.runtime.logging.eval_session_enabled = False
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
 
             try:
@@ -101,6 +102,10 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             frame_id = 7
 
         class Timing:
+            yolo_ms = 2.0
+            depth_ms = 3.0
+            cutie_ms = 1.5
+            pose_ms = 6.0
             total_ms = 12.5
 
         class PoseMatrix:
@@ -125,6 +130,7 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             det_count = 1
             fps = 18.0
             timing = Timing()
+            server_receive_mono_ms = 1200.0
             server_publish_mono_ms = 1234.0
             pose_matrix_cv_camera = PoseMatrix()
 
@@ -132,6 +138,7 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             cfg = load_config()
             cfg.network.message_plane.enabled = False
             cfg.runtime.logging.output_dir = tmp
+            cfg.runtime.logging.eval_session_enabled = False
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
 
             try:
@@ -142,6 +149,13 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             row = json.loads(runtime.log_writer.logger.log_path.read_text(encoding="utf-8").strip())
             self.assertTrue(row["has_pose"])
             self.assertAlmostEqual(row["pose_score"], 0.72)
+            self.assertAlmostEqual(row["total_ms"], 12.5)
+            self.assertAlmostEqual(row["yolo_ms"], 2.0)
+            self.assertAlmostEqual(row["depth_ms"], 3.0)
+            self.assertAlmostEqual(row["cutie_ms"], 1.5)
+            self.assertAlmostEqual(row["pose_ms"], 6.0)
+            self.assertAlmostEqual(row["server_receive_mono_ms"], 1200.0)
+            self.assertAlmostEqual(row["server_publish_mono_ms"], 1234.0)
             self.assertAlmostEqual(row["pose_tx_m"], 0.12)
             self.assertAlmostEqual(row["pose_ty_m"], -0.03)
             self.assertAlmostEqual(row["pose_tz_m"], 0.45)

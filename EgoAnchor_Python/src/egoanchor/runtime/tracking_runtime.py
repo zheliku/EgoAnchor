@@ -11,6 +11,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,7 @@ from egoanchor.runtime.commands import (
     CommandPump,
     CommandQueue,
 )
+from egoanchor.runtime.eval_session import create_eval_session
 from egoanchor.runtime.message_factories import HeartbeatFactory, PoseResultFactory, StatusEventFactory
 from egoanchor.runtime.quest_stream_receiver import QuestStreamReceiver
 from egoanchor.runtime.runtime_log_writer import RuntimeLogWriter
@@ -74,10 +76,13 @@ class TrackingRuntime:
         self.pipeline = None
         """QuestPosePipeline 实例；start 时创建，避免构造 runtime 就加载重模型。"""
 
-        self.session_id = uuid.uuid4().hex
+        self.eval_session = self._create_eval_session_if_enabled(cfg)
+        """Python 先启动时创建的共享评估 session；关闭时为 None。"""
+
+        self.session_id = self.eval_session.session_id if self.eval_session is not None else uuid.uuid4().hex
         """本次 Python server runtime 会话 ID，贯穿 pose/status/heartbeat 和 JSONL 日志。"""
 
-        self.log_writer = RuntimeLogWriter(cfg, session_id=self.session_id)
+        self.log_writer = RuntimeLogWriter(cfg, session_id=self.session_id, eval_session=self.eval_session)
         """Python server 结构化事件日志写入器。"""
 
         self.pose_result_factory = PoseResultFactory(session_id=self.session_id)
@@ -286,6 +291,23 @@ class TrackingRuntime:
         self.status_publisher = ProtobufPublisher(client, subject=settings.anchor_status_subject, max_pending_futures=settings.max_pending_futures)
         self.heartbeat_publisher = ProtobufPublisher(client, subject=settings.server_heartbeat_subject, max_pending_futures=settings.max_pending_futures)
 
+    def _create_eval_session_if_enabled(self, cfg: SimpleNamespace):
+        """按配置创建可被 Unity 自动复用的 Python eval session 目录。"""
+
+        logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
+        if not bool(getattr(logging_cfg, "eval_session_enabled", False)):
+            return None
+        python_root = getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd())
+        eval_root = Path(str(getattr(logging_cfg, "eval_output_dir", "data/eval"))).expanduser()
+        if not eval_root.is_absolute():
+            eval_root = Path(python_root) / eval_root
+        return create_eval_session(
+            eval_root,
+            str(getattr(getattr(cfg, "runtime", SimpleNamespace()), "object_id", "default")),
+            metadata_filename=str(getattr(logging_cfg, "eval_metadata_filename", "python_session.json")),
+            python_log_filename=str(getattr(logging_cfg, "filename", "")),
+        )
+
     def _publish_observation(self, observation) -> None:
         """把当前帧观测转换为 PoseResult 并投递到 NATS。"""
 
@@ -444,4 +466,3 @@ class TrackingRuntime:
 
         if self.pipeline is not None:
             self.pipeline.reset_tracking_state()
-

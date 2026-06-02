@@ -17,17 +17,13 @@ namespace EgoAnchorEval
         [Tooltip("写 capture/output JSONL 的 AnchorEvalRecorder。")]
         [SerializeField] private AnchorEvalRecorder recorder;
 
-        /// <summary>手柄 GT provider，用于写 manifest 中的 gt_source 和连续性策略。</summary>
-        [Tooltip("手柄 GT provider，用于写 manifest 中的 gt_source、controller 和 hold-last 策略。")]
-        [SerializeField] private ControllerGroundTruthProvider gt;
-
         /// <summary>评估数据根目录；为空时自动指向 EgoAnchor_Python/data/eval。</summary>
         [Header("Session Metadata")]
         [Tooltip("评估数据根目录；推荐填写绝对路径 EgoAnchor_Python/data/eval。为空时自动从 Unity 工程推导。")]
         [SerializeField] private string outputRoot = string.Empty;
 
-        /// <summary>本 session 追踪对象 ID，必须与 Python --object 和 GT 手柄一致。</summary>
-        [Tooltip("本 session 追踪对象 ID，例如 controller_right 或 controller_left。必须与 Python --object 和 GT provider 的 controller 一致。")]
+        /// <summary>本 session 追踪对象 ID，必须与 Python --object 一致。</summary>
+        [Tooltip("本 session 追踪对象 ID，例如 controller_right 或 controller_left。必须与 Python --object 一致。")]
         [SerializeField] private string objectId = "controller_right";
 
         /// <summary>Unity 运行模式，默认 Editor + Quest Link。</summary>
@@ -35,13 +31,26 @@ namespace EgoAnchorEval
         [SerializeField] private string unityRunMode = "editor_link";
 
         /// <summary>Python runtime log 文件名；未知时留空，后续 P1 loader 可显式传入。</summary>
-        [Tooltip("Python runtime log 文件名；未知时留空，后续分析 CLI 可显式传入 --python-log。")]
+        [Tooltip("手动覆盖 Python runtime log 文件名。默认留空；启用自动复用 Python session 时会从 python_session.json 自动填入 manifest。")]
         [SerializeField] private string pythonLogFilename = string.Empty;
+
+        /// <summary>开始录制时是否优先复用 Python 已创建的共享 eval session 目录。</summary>
+        [Tooltip("开始录制时是否优先复用 Python 已创建的共享 eval session 目录。通常先运行 Python，再按 F7/Start 录制 Unity。")]
+        [SerializeField] private bool reuseLatestPythonSession = true;
+
+        /// <summary>自动复用 Python session 的最大年龄，单位分钟；小于等于 0 表示不限制。</summary>
+        [Tooltip("自动复用 Python session 的最大年龄，单位分钟；小于等于 0 表示不限制。")]
+        [SerializeField] private double maxPythonSessionAgeMinutes = 180.0;
+
+        /// <summary>Python 写入的 session 元数据文件名。</summary>
+        [Tooltip("Python 写入的 session 元数据文件名。Unity 通过它读取 object_id 和 python_log_filename。")]
+        [SerializeField] private string pythonSessionMetadataFilename = "python_session.json";
 
         /// <summary>本轮实验备注。</summary>
         [Tooltip("本轮实验备注，例如 lighting、mesh、Python 配置或异常情况。")]
+        [InspectorName("实验备注")]
         [TextArea]
-        [SerializeField] private string notes = string.Empty;
+        [SerializeField] private string sessionNotes = string.Empty;
 
         /// <summary>当前 session id。</summary>
         private string sessionId = string.Empty;
@@ -79,6 +88,9 @@ namespace EgoAnchorEval
         /// <summary>当前是否正在录制。</summary>
         private bool recording;
 
+        /// <summary>本次录制实际写入 manifest 的 Python runtime log 文件名。</summary>
+        private string activePythonLogFilename = string.Empty;
+
         /// <summary>当前 session id。</summary>
         public string SessionId => sessionId;
 
@@ -105,10 +117,30 @@ namespace EgoAnchorEval
             }
 
             string outputRootPath = ResolveOutputRoot();
-            string baseSessionId = BuildReadableSessionId(DateTimeOffset.Now, objectId);
-            sessionId = ResolveUniqueSessionId(outputRootPath, baseSessionId);
-            sessionDir = Path.Combine(outputRootPath, sessionId);
-            Directory.CreateDirectory(sessionDir);
+            activePythonLogFilename = string.Empty;
+            if (reuseLatestPythonSession && TryFindReusablePythonSession(
+                outputRootPath,
+                objectId,
+                maxPythonSessionAgeMinutes,
+                pythonSessionMetadataFilename,
+                out string reusedSessionId,
+                out string reusedSessionDir,
+                out string reusedPythonLogFilename))
+            {
+                sessionId = reusedSessionId;
+                sessionDir = reusedSessionDir;
+                activePythonLogFilename = reusedPythonLogFilename;
+                Directory.CreateDirectory(sessionDir);
+                Debug.Log($"[EgoAnchorEval][U3] Reusing Python eval session: {sessionDir}");
+            }
+            else
+            {
+                string baseSessionId = BuildReadableSessionId(DateTimeOffset.Now, objectId);
+                sessionId = ResolveUniqueSessionId(outputRootPath, baseSessionId);
+                sessionDir = Path.Combine(outputRootPath, sessionId);
+                Directory.CreateDirectory(sessionDir);
+                activePythonLogFilename = pythonLogFilename;
+            }
             spans.Clear();
             markers.Clear();
             variantLabels.Clear();
@@ -269,18 +301,15 @@ namespace EgoAnchorEval
                 objectId,
                 unityRunMode,
                 ResolveGtSource(),
-                gt != null ? gt.Controller.ToString() : string.Empty,
+                recorder != null ? recorder.ManifestGtTransform : string.Empty,
                 monoToUnixOffsetMs,
                 sessionStartMonoMs,
                 sessionStopMonoMs,
                 spans,
                 markers,
                 variantLabels,
-                pythonLogFilename,
-                notes,
-                gt != null ? gt.HoldPolicyName : "missing_gt_provider",
-                gt != null && gt.HoldLastPoseWhenUntracked,
-                gt != null ? gt.MaxHoldAgeMs : 0.0);
+                ResolvePythonLogFilenameForManifest(),
+                sessionNotes);
             string manifestPath = Path.Combine(sessionDir, "session_manifest.json");
             File.WriteAllText(manifestPath, manifest, new UTF8Encoding(false));
             Debug.Log($"[EgoAnchorEval][U3] Manifest written: {manifestPath}");
@@ -318,6 +347,161 @@ namespace EgoAnchorEval
         }
 
         /// <summary>
+        /// 查找最新且尚未写入 Unity 日志的 Python eval session 目录。
+        /// </summary>
+        /// <param name="outputRootPath">共享 eval 根目录。</param>
+        /// <param name="expectedObjectId">Unity 当前 objectId；必须与 Python metadata object_id 一致。</param>
+        /// <param name="maxAgeMinutes">最大允许年龄，单位分钟；小于等于 0 表示不限制。</param>
+        /// <param name="metadataFilename">Python 写入的 metadata 文件名。</param>
+        /// <param name="resolvedSessionId">找到的 session id。</param>
+        /// <param name="resolvedSessionDir">找到的 session 目录。</param>
+        /// <param name="resolvedPythonLogFilename">metadata 中记录的 Python runtime log 文件名。</param>
+        /// <returns>找到可复用目录时返回 true。</returns>
+        public static bool TryFindReusablePythonSession(
+            string outputRootPath,
+            string expectedObjectId,
+            double maxAgeMinutes,
+            string metadataFilename,
+            out string resolvedSessionId,
+            out string resolvedSessionDir,
+            out string resolvedPythonLogFilename)
+        {
+            resolvedSessionId = string.Empty;
+            resolvedSessionDir = string.Empty;
+            resolvedPythonLogFilename = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(outputRootPath) || !Directory.Exists(outputRootPath))
+            {
+                return false;
+            }
+
+            string safeMetadataFilename = string.IsNullOrWhiteSpace(metadataFilename)
+                ? "python_session.json"
+                : Path.GetFileName(metadataFilename);
+            string expected = SanitizePathToken(string.IsNullOrWhiteSpace(expectedObjectId) ? "object" : expectedObjectId);
+            DateTime nowUtc = DateTime.UtcNow;
+            DateTime bestWriteUtc = DateTime.MinValue;
+
+            foreach (string candidateDir in Directory.GetDirectories(outputRootPath))
+            {
+                string metadataPath = Path.Combine(candidateDir, safeMetadataFilename);
+                if (!File.Exists(metadataPath) || HasUnityEvalLogs(candidateDir))
+                {
+                    continue;
+                }
+
+                DateTime writeUtc = File.GetLastWriteTimeUtc(metadataPath);
+                if (maxAgeMinutes > 0.0 && nowUtc - writeUtc > TimeSpan.FromMinutes(maxAgeMinutes))
+                {
+                    continue;
+                }
+
+                string json = File.ReadAllText(metadataPath);
+                string objectId = ReadJsonStringProperty(json, "object_id");
+                string pythonLog = ReadJsonStringProperty(json, "python_log_filename");
+                if (string.IsNullOrWhiteSpace(objectId) || string.IsNullOrWhiteSpace(pythonLog))
+                {
+                    continue;
+                }
+
+                string safeObjectId = SanitizePathToken(objectId);
+                if (!string.Equals(safeObjectId, expected, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (writeUtc <= bestWriteUtc)
+                {
+                    continue;
+                }
+
+                bestWriteUtc = writeUtc;
+                resolvedSessionId = Path.GetFileName(candidateDir);
+                resolvedSessionDir = candidateDir;
+                resolvedPythonLogFilename = Path.GetFileName(pythonLog);
+            }
+
+            return !string.IsNullOrEmpty(resolvedSessionDir);
+        }
+
+        /// <summary>
+        /// 判断 session 目录中是否已经存在 Unity capture/output，存在则不可自动复用。
+        /// </summary>
+        private static bool HasUnityEvalLogs(string sessionDirectory)
+        {
+            return Directory.GetFiles(sessionDirectory, "*_unity_capture.jsonl").Length > 0
+                || Directory.GetFiles(sessionDirectory, "*_unity_output.jsonl").Length > 0;
+        }
+
+        /// <summary>
+        /// 从简单 JSON object 中读取字符串属性；用于解析 Python session metadata。
+        /// </summary>
+        private static string ReadJsonStringProperty(string json, string propertyName)
+        {
+            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(propertyName))
+            {
+                return string.Empty;
+            }
+
+            string needle = $"\"{propertyName}\"";
+            int nameIndex = json.IndexOf(needle, StringComparison.Ordinal);
+            if (nameIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            int colonIndex = json.IndexOf(':', nameIndex + needle.Length);
+            if (colonIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            int quoteIndex = json.IndexOf('"', colonIndex + 1);
+            if (quoteIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder();
+            bool escaping = false;
+            for (int i = quoteIndex + 1; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (escaping)
+                {
+                    builder.Append(c);
+                    escaping = false;
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    escaping = true;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    return builder.ToString();
+                }
+
+                builder.Append(c);
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 返回本次 manifest 应写入的 Python runtime log 文件名。
+        /// </summary>
+        private string ResolvePythonLogFilenameForManifest()
+        {
+            return !string.IsNullOrWhiteSpace(activePythonLogFilename)
+                ? activePythonLogFilename
+                : pythonLogFilename;
+        }
+
+        /// <summary>
         /// 把 objectId 变成可用于目录名的短 token。
         /// </summary>
         private static string SanitizePathToken(string value)
@@ -345,42 +529,28 @@ namespace EgoAnchorEval
         /// </summary>
         private string ResolveGtSource()
         {
-            if (gt != null)
+            if (recorder != null)
             {
-                return gt.ManifestGtSource;
+                return recorder.ManifestGtSource;
             }
 
-            string lowerObject = objectId == null ? string.Empty : objectId.ToLowerInvariant();
-            if (lowerObject.Contains("left"))
-            {
-                return "ovr_ltouch";
-            }
-
-            if (lowerObject.Contains("right"))
-            {
-                return "ovr_rtouch";
-            }
-
-            return string.Empty;
+            return "transform_missing";
         }
 
         /// <summary>
-        /// 启动时打印 objectId / gt_source / controller，便于人工核对 Python --object。
+        /// 启动时打印 objectId / gt_source / GT Transform，便于人工核对 Python --object 和场景绑定。
         /// </summary>
         private void LogSessionConsistency()
         {
             string gtSource = ResolveGtSource();
-            string controllerName = gt != null ? gt.Controller.ToString() : "MissingProvider";
-            Debug.Log($"[EgoAnchorEval][U3] object_id={objectId} gt_source={gtSource} controller={controllerName} python_object_should_match={objectId}");
+            string gtTransformName = recorder != null && !string.IsNullOrEmpty(recorder.ManifestGtTransform)
+                ? recorder.ManifestGtTransform
+                : "MissingTransform";
+            Debug.Log($"[EgoAnchorEval][U3] object_id={objectId} gt_source={gtSource} gt_transform={gtTransformName} python_object_should_match={objectId}");
 
-            string lowerObject = objectId == null ? string.Empty : objectId.ToLowerInvariant();
-            bool objectIsLeft = lowerObject.Contains("left");
-            bool objectIsRight = lowerObject.Contains("right");
-            bool gtIsLeft = string.Equals(gtSource, "ovr_ltouch", StringComparison.OrdinalIgnoreCase);
-            bool gtIsRight = string.Equals(gtSource, "ovr_rtouch", StringComparison.OrdinalIgnoreCase);
-            if ((objectIsLeft && !gtIsLeft) || (objectIsRight && !gtIsRight))
+            if (recorder == null || string.IsNullOrEmpty(recorder.ManifestGtTransform))
             {
-                Debug.LogWarning("[EgoAnchorEval][U3] objectId and GT controller look inconsistent; check Python --object, provider.controller, and manifest gt_source.");
+                Debug.LogWarning("[EgoAnchorEval][U3] Missing GT Transform; bind AnchorEvalRecorder.groundTruthTransform to OVRControllerPrefab before recording.");
             }
         }
 

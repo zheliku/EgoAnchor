@@ -49,6 +49,7 @@ static class Program
         RequireString(manifest, "object_id");
         RequireString(manifest, "unity_run_mode");
         RequireString(manifest, "gt_source");
+        RequireString(manifest, "gt_transform");
         RequireNumber(manifest, "mono_to_unix_offset_ms");
         RequireNumber(manifest, "session_start_unix_ms");
         RequireString(manifest, "session_start_utc");
@@ -56,8 +57,6 @@ static class Program
         RequireNumber(manifest, "session_stop_unix_ms");
         RequireString(manifest, "session_stop_utc");
         RequireString(manifest, "session_stop_local");
-        RequireString(manifest, "gt_hold_policy");
-        RequireBool(manifest, "hold_last_when_untracked");
         ValidateConditionSpans(manifest, out int conditionSpanCount);
         ValidateEventMarkers(manifest, out int eventMarkerCount);
         HashSet<string> manifestVariantLabels = ReadStringSet(manifest, "variant_labels");
@@ -131,17 +130,19 @@ static class Program
             frameIds.Add(frameId);
             RequireNumber(row, "capture_mono_ms");
             RequireNumber(row, "capture_unix_ms");
+            RequireLong(row, "capture_unity_frame");
             RequireString(row, "capture_utc");
             RequireString(row, "capture_local");
             RequirePoseArray(row, "head_pos", 3, allowNull: false);
             RequirePoseArray(row, "head_rot", 4, allowNull: false);
             RequireBool(row, "cam_valid");
+            RequireString(row, "camera_reference");
             RequirePoseArray(row, "cam_pos", 3, allowNull: true);
             RequirePoseArray(row, "cam_rot", 4, allowNull: true);
-            RequireBool(row, "gt_tracked");
+            RequirePoseArray(row, "gt_pos", 3, allowNull: true);
+            RequirePoseArray(row, "gt_rot", 4, allowNull: true);
             RequireBool(row, "gt_pose_valid");
             RequireString(row, "gt_pose_source");
-            RequireNumberOrNull(row, "gt_hold_age_ms");
             rowCount++;
         }
 
@@ -173,6 +174,7 @@ static class Program
             RequireStringEquals(row, "event", "unity_output");
             RequireNumber(row, "render_mono_ms");
             RequireNumber(row, "render_unix_ms");
+            RequireLong(row, "render_unity_frame");
             RequireString(row, "render_utc");
             RequireString(row, "render_local");
             long rowSourceFrameId = RequireLong(row, "source_frame_id");
@@ -182,10 +184,10 @@ static class Program
             }
             RequirePoseArray(row, "head_pos", 3, allowNull: false);
             RequirePoseArray(row, "head_rot", 4, allowNull: false);
-            RequireBool(row, "gt_tracked");
+            RequirePoseArray(row, "gt_pos", 3, allowNull: true);
+            RequirePoseArray(row, "gt_rot", 4, allowNull: true);
             RequireBool(row, "gt_pose_valid");
             RequireString(row, "gt_pose_source");
-            RequireNumberOrNull(row, "gt_hold_age_ms");
 
             JsonElement variants = RequireProperty(row, "variants");
             if (variants.ValueKind != JsonValueKind.Array || variants.GetArrayLength() == 0)
@@ -200,6 +202,12 @@ static class Program
                 bool isPrimary = RequireBool(variant, "is_primary");
                 RequireLong(variant, "source_frame_id");
                 RequireBool(variant, "has_stable");
+                RequirePoseArray(variant, "stable_pos", 3, allowNull: true);
+                RequirePoseArray(variant, "stable_rot", 4, allowNull: true);
+                RequireString(variant, "anchor_pose_source");
+                RequireBool(variant, "has_source_capture_timing");
+                RequireNumberOrNull(variant, "source_capture_mono_ms");
+                RequireLong(variant, "source_capture_unity_frame");
                 RequireString(variant, "anchor_state");
                 RequireString(variant, "policy_action");
                 RequireString(variant, "policy_reason");

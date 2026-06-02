@@ -38,6 +38,18 @@ namespace EgoAnchorEval
         /// <summary>最近一次 runtime 对齐或 pose 失败原因。</summary>
         public readonly string LatestFailure;
 
+        /// <summary>stable_pos/stable_rot 的采样来源，例如 transform 或 none。</summary>
+        public readonly string AnchorPoseSource;
+
+        /// <summary>是否拿到了 source frame 的采集时间。</summary>
+        public readonly bool HasSourceCaptureTiming;
+
+        /// <summary>source frame 在 Unity 发送侧的单调时间，单位毫秒。</summary>
+        public readonly double SourceCaptureMonoMs;
+
+        /// <summary>source frame 对应的 Unity Time.frameCount。</summary>
+        public readonly int SourceCaptureUnityFrame;
+
         /// <summary>是否是主变体；主变体额外写 aligned raw 与 reliability。</summary>
         public readonly bool IsPrimary;
 
@@ -63,6 +75,10 @@ namespace EgoAnchorEval
             string policyReason,
             string latestPhase,
             string latestFailure,
+            string anchorPoseSource,
+            bool hasSourceCaptureTiming,
+            double sourceCaptureMonoMs,
+            int sourceCaptureUnityFrame,
             bool isPrimary,
             bool hasAlignedRawPose,
             Pose alignedRawPose,
@@ -77,6 +93,10 @@ namespace EgoAnchorEval
             PolicyReason = policyReason ?? string.Empty;
             LatestPhase = latestPhase ?? string.Empty;
             LatestFailure = latestFailure ?? string.Empty;
+            AnchorPoseSource = anchorPoseSource ?? string.Empty;
+            HasSourceCaptureTiming = hasSourceCaptureTiming;
+            SourceCaptureMonoMs = sourceCaptureMonoMs;
+            SourceCaptureUnityFrame = sourceCaptureUnityFrame;
             IsPrimary = isPrimary;
             HasAlignedRawPose = hasAlignedRawPose;
             AlignedRawPose = alignedRawPose;
@@ -99,38 +119,11 @@ namespace EgoAnchorEval
             Pose headPose,
             Pose cameraPose,
             Pose groundTruthPose,
-            bool gtTracked,
-            bool cameraValid = true)
-        {
-            return BuildCaptureLine(
-                frameId,
-                captureMonoMs,
-                captureUnixMs,
-                headPose,
-                cameraPose,
-                groundTruthPose,
-                gtTracked,
-                gtPoseValid: true,
-                gtPoseSource: gtTracked ? ControllerGroundTruthProvider.SourceLiveTracked : ControllerGroundTruthProvider.SourceOvrUntracked,
-                gtHoldAgeMs: 0.0,
-                cameraValid);
-        }
-
-        /// <summary>
-        /// 构造每个 frame_id 对应的采集记录行，并显式写出 GT pose 来源。
-        /// </summary>
-        public static string BuildCaptureLine(
-            long frameId,
-            double captureMonoMs,
-            double captureUnixMs,
-            Pose headPose,
-            Pose cameraPose,
-            Pose groundTruthPose,
-            bool gtTracked,
             bool gtPoseValid,
             string gtPoseSource,
-            double gtHoldAgeMs,
-            bool cameraValid = true)
+            bool cameraValid = true,
+            int captureUnityFrame = -1,
+            string cameraReference = "")
         {
             var builder = new StringBuilder(512);
             bool first = true;
@@ -140,14 +133,14 @@ namespace EgoAnchorEval
             AppendDoubleProperty(builder, ref first, "capture_mono_ms", captureMonoMs);
             AppendDoubleProperty(builder, ref first, "capture_unix_ms", captureUnixMs);
             AppendReadableTimeProperties(builder, ref first, "capture", captureUnixMs);
+            AppendLongProperty(builder, ref first, "capture_unity_frame", captureUnityFrame);
             AppendPoseProperties(builder, ref first, "head_pos", "head_rot", headPose, hasPose: true);
             AppendBoolProperty(builder, ref first, "cam_valid", cameraValid);
+            AppendStringProperty(builder, ref first, "camera_reference", cameraReference);
             AppendPoseProperties(builder, ref first, "cam_pos", "cam_rot", cameraPose, cameraValid);
             AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, gtPoseValid);
-            AppendBoolProperty(builder, ref first, "gt_tracked", gtTracked);
             AppendBoolProperty(builder, ref first, "gt_pose_valid", gtPoseValid);
             AppendStringProperty(builder, ref first, "gt_pose_source", gtPoseSource);
-            AppendDoubleProperty(builder, ref first, "gt_hold_age_ms", gtHoldAgeMs);
             builder.Append('}');
             return builder.ToString();
         }
@@ -161,36 +154,10 @@ namespace EgoAnchorEval
             long sourceFrameId,
             Pose headPose,
             Pose groundTruthPose,
-            bool gtTracked,
-            IReadOnlyList<RecordedVariantSnapshot> variants)
-        {
-            return BuildOutputLine(
-                renderMonoMs,
-                renderUnixMs,
-                sourceFrameId,
-                headPose,
-                groundTruthPose,
-                gtTracked,
-                gtPoseValid: true,
-                gtPoseSource: gtTracked ? ControllerGroundTruthProvider.SourceLiveTracked : ControllerGroundTruthProvider.SourceOvrUntracked,
-                gtHoldAgeMs: 0.0,
-                variants);
-        }
-
-        /// <summary>
-        /// 构造每个渲染 tick 对应的输出记录行，并显式写出 GT pose 来源。
-        /// </summary>
-        public static string BuildOutputLine(
-            double renderMonoMs,
-            double renderUnixMs,
-            long sourceFrameId,
-            Pose headPose,
-            Pose groundTruthPose,
-            bool gtTracked,
             bool gtPoseValid,
             string gtPoseSource,
-            double gtHoldAgeMs,
-            IReadOnlyList<RecordedVariantSnapshot> variants)
+            IReadOnlyList<RecordedVariantSnapshot> variants,
+            int renderUnityFrame = -1)
         {
             var builder = new StringBuilder(1024);
             bool first = true;
@@ -199,13 +166,12 @@ namespace EgoAnchorEval
             AppendDoubleProperty(builder, ref first, "render_mono_ms", renderMonoMs);
             AppendDoubleProperty(builder, ref first, "render_unix_ms", renderUnixMs);
             AppendReadableTimeProperties(builder, ref first, "render", renderUnixMs);
+            AppendLongProperty(builder, ref first, "render_unity_frame", renderUnityFrame);
             AppendLongProperty(builder, ref first, "source_frame_id", sourceFrameId);
             AppendPoseProperties(builder, ref first, "head_pos", "head_rot", headPose, hasPose: true);
             AppendPoseProperties(builder, ref first, "gt_pos", "gt_rot", groundTruthPose, gtPoseValid);
-            AppendBoolProperty(builder, ref first, "gt_tracked", gtTracked);
             AppendBoolProperty(builder, ref first, "gt_pose_valid", gtPoseValid);
             AppendStringProperty(builder, ref first, "gt_pose_source", gtPoseSource);
-            AppendDoubleProperty(builder, ref first, "gt_hold_age_ms", gtHoldAgeMs);
             AppendVariants(builder, ref first, variants);
             builder.Append('}');
             return builder.ToString();
@@ -245,6 +211,18 @@ namespace EgoAnchorEval
             AppendLongProperty(builder, ref first, "source_frame_id", variant.SourceFrameId);
             AppendBoolProperty(builder, ref first, "has_stable", variant.HasStablePose);
             AppendPoseProperties(builder, ref first, "stable_pos", "stable_rot", variant.StablePose, variant.HasStablePose);
+            AppendStringProperty(builder, ref first, "anchor_pose_source", variant.AnchorPoseSource);
+            AppendBoolProperty(builder, ref first, "has_source_capture_timing", variant.HasSourceCaptureTiming);
+            AppendDoubleProperty(
+                builder,
+                ref first,
+                "source_capture_mono_ms",
+                variant.HasSourceCaptureTiming ? variant.SourceCaptureMonoMs : double.NaN);
+            AppendLongProperty(
+                builder,
+                ref first,
+                "source_capture_unity_frame",
+                variant.HasSourceCaptureTiming ? variant.SourceCaptureUnityFrame : -1);
             AppendStringProperty(builder, ref first, "anchor_state", variant.AnchorState);
             AppendStringProperty(builder, ref first, "policy_action", variant.PolicyAction);
             AppendStringProperty(builder, ref first, "policy_reason", variant.PolicyReason);

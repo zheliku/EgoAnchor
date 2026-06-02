@@ -53,21 +53,21 @@ static class Program
             head,
             camera,
             gt,
-            gtTracked: true,
             gtPoseValid: true,
-            gtPoseSource: "live_tracked",
-            gtHoldAgeMs: 0.0,
-            cameraValid: true);
+            gtPoseSource: "transform",
+            cameraValid: true,
+            captureUnityFrame: 123,
+            cameraReference: "Left");
         AssertContains(capture, "\"event\":\"unity_capture\"");
         AssertContains(capture, "\"frame_id\":11");
+        AssertContains(capture, "\"capture_unity_frame\":123");
         AssertContains(capture, "\"head_pos\":[1,2,3]");
         AssertContains(capture, "\"capture_utc\":\"1970-01-01T00:00:01.000Z\"");
         AssertContains(capture, "\"capture_local\":\"");
         AssertContains(capture, "\"cam_valid\":true");
-        AssertContains(capture, "\"gt_tracked\":true");
+        AssertContains(capture, "\"camera_reference\":\"Left\"");
         AssertContains(capture, "\"gt_pose_valid\":true");
-        AssertContains(capture, "\"gt_pose_source\":\"live_tracked\"");
-        AssertContains(capture, "\"gt_hold_age_ms\":0");
+        AssertContains(capture, "\"gt_pose_source\":\"transform\"");
 
         var variants = new List<RecordedVariantSnapshot>
         {
@@ -81,6 +81,10 @@ static class Program
                 policyReason: "policy_disabled",
                 latestPhase: "tracking",
                 latestFailure: "",
+                anchorPoseSource: "transform",
+                hasSourceCaptureTiming: true,
+                sourceCaptureMonoMs: 12.5,
+                sourceCaptureUnityFrame: 123,
                 isPrimary: true,
                 hasAlignedRawPose: true,
                 alignedRawPose: camera,
@@ -92,20 +96,21 @@ static class Program
             11,
             head,
             gt,
-            gtTracked: false,
             gtPoseValid: true,
-            gtPoseSource: "hold_last",
-            gtHoldAgeMs: 123.5,
-            variants);
+            gtPoseSource: "transform",
+            variants,
+            renderUnityFrame: 456);
         AssertContains(output, "\"event\":\"unity_output\"");
         AssertContains(output, "\"source_frame_id\":11");
+        AssertContains(output, "\"render_unity_frame\":456");
         AssertContains(output, "\"render_utc\":\"1970-01-01T00:00:02.000Z\"");
         AssertContains(output, "\"render_local\":\"");
-        AssertContains(output, "\"gt_tracked\":false");
-        AssertContains(output, "\"gt_pose_source\":\"hold_last\"");
-        AssertContains(output, "\"gt_hold_age_ms\":123.5");
+        AssertContains(output, "\"gt_pose_source\":\"transform\"");
         AssertContains(output, "\"variants\":[");
         AssertContains(output, "\"label\":\"kalman\"");
+        AssertContains(output, "\"anchor_pose_source\":\"transform\"");
+        AssertContains(output, "\"source_capture_mono_ms\":12.5");
+        AssertContains(output, "\"source_capture_unity_frame\":123");
         AssertContains(output, "\"latest_phase\":\"tracking\"");
         AssertContains(output, "\"latest_failure\":\"\"");
         AssertContains(output, "\"aligned_raw_pos\":[4,5,6]");
@@ -115,8 +120,8 @@ static class Program
             sessionId: "session_a",
             objectId: "controller_right",
             unityRunMode: "editor_link",
-            gtSource: "ovr_rtouch",
-            gtController: "RTouch",
+            gtSource: "transform",
+            gtTransform: "OVRControllerPrefab",
             monoToUnixOffsetMs: 9000.25,
             sessionStartMonoMs: 10.0,
             sessionStopMonoMs: 40.0,
@@ -131,13 +136,11 @@ static class Program
             },
             variantLabels: new[] { "kalman", "raw" },
             pythonLogFilename: "",
-            notes: "smoke \"notes\"",
-            gtHoldPolicy: "hold_last_pose_when_untracked",
-            holdLastWhenUntracked: true,
-            maxHoldAgeMs: 600000.0);
+            sessionNotes: "smoke \"notes\"");
         AssertContains(manifest, "\"session_id\":\"session_a\"");
         AssertContains(manifest, "\"object_id\":\"controller_right\"");
-        AssertContains(manifest, "\"gt_source\":\"ovr_rtouch\"");
+        AssertContains(manifest, "\"gt_source\":\"transform\"");
+        AssertContains(manifest, "\"gt_transform\":\"OVRControllerPrefab\"");
         AssertContains(manifest, "\"session_start_utc\":");
         AssertContains(manifest, "\"session_start_local\":");
         AssertContains(manifest, "\"session_stop_utc\":");
@@ -150,21 +153,16 @@ static class Program
         AssertContains(manifest, "\"type\":\"occlusion\"");
         AssertContains(manifest, "\"marker_utc\":");
         AssertContains(manifest, "\"variant_labels\":[\"kalman\",\"raw\"]");
-        AssertContains(manifest, "\"gt_hold_policy\":\"hold_last_pose_when_untracked\"");
-        AssertContains(manifest, "\"hold_last_when_untracked\":true");
         AssertEquals("20260602_150405_controller_right", EvalSessionController.BuildReadableSessionId(
             new DateTimeOffset(2026, 6, 2, 15, 4, 5, TimeSpan.FromHours(8)),
             "controller_right"));
+        AssertPythonSessionReuseSelection();
 
-        AssertHasMethod(typeof(ControllerGroundTruthProvider), nameof(ControllerGroundTruthProvider.TryGetWorldPoseSample));
         AssertHasMethod(typeof(AnchorEvalRecorder), nameof(AnchorEvalRecorder.CollectVariantLabels));
         AssertHasMethod(typeof(EvalSessionController), nameof(EvalSessionController.StartSession));
         AssertHasMethod(typeof(EvalSessionController), nameof(EvalSessionController.StopSession));
         AssertHasMethod(typeof(EvalSessionController), nameof(EvalSessionController.BeginCondition));
         AssertHasMethod(typeof(EvalSessionController), nameof(EvalSessionController.Mark));
-        AssertHasMethod(typeof(EvalManualSmokeDriver), nameof(EvalManualSmokeDriver.LogGroundTruthOnce));
-        AssertHasMethod(typeof(EvalManualSmokeDriver), nameof(EvalManualSmokeDriver.BeginSmokeRecording));
-        AssertHasMethod(typeof(EvalManualSmokeDriver), nameof(EvalManualSmokeDriver.StopSmokeRecording));
         AssertHasMethod(typeof(EvalSessionHotkeyDriver), nameof(EvalSessionHotkeyDriver.BeginStaticCondition));
         AssertEvaluationSceneMounted();
 
@@ -184,8 +182,59 @@ static class Program
         AssertContains(scene, "m_Name: EvalRig");
         AssertContains(scene, "EgoAnchorEval.EvalSessionController");
         AssertContains(scene, "EgoAnchorEval.EvalSessionHotkeyDriver");
-        AssertContains(scene, "holdLastPoseWhenUntracked: 1");
+        AssertContains(scene, "groundTruthTransform:");
+        AssertContains(scene, "anchorTransform:");
         AssertContains(scene, "objectId: controller_right");
+    }
+
+    private static void AssertPythonSessionReuseSelection()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "egoanchor_eval_reuse_smoke_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            WritePythonSession(root, "20260602_155000_controller_left", "controller_left", "left_runtime.jsonl", addUnityLog: false);
+            WritePythonSession(root, "20260602_155723_controller_right", "controller_right", "right_runtime.jsonl", addUnityLog: false);
+            WritePythonSession(root, "20260602_155900_controller_right", "controller_right", "used_runtime.jsonl", addUnityLog: true);
+
+            bool found = EvalSessionController.TryFindReusablePythonSession(
+                root,
+                "controller_right",
+                maxAgeMinutes: 120.0,
+                metadataFilename: "python_session.json",
+                out string sessionId,
+                out string sessionDir,
+                out string pythonLogFilename);
+
+            if (!found)
+            {
+                throw new InvalidOperationException("Expected reusable Python eval session was not found.");
+            }
+
+            AssertEquals("20260602_155723_controller_right", sessionId);
+            AssertEquals(Path.Combine(root, "20260602_155723_controller_right"), sessionDir);
+            AssertEquals("right_runtime.jsonl", pythonLogFilename);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static void WritePythonSession(string root, string sessionId, string objectId, string pythonLogFilename, bool addUnityLog)
+    {
+        string dir = Path.Combine(root, sessionId);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(
+            Path.Combine(dir, "python_session.json"),
+            $"{{\"session_id\":\"{sessionId}\",\"object_id\":\"{objectId}\",\"python_log_filename\":\"{pythonLogFilename}\",\"state\":\"python_started\"}}");
+        if (addUnityLog)
+        {
+            File.WriteAllText(Path.Combine(dir, $"{sessionId}_unity_capture.jsonl"), "{}\n");
+        }
     }
 
     private static void AssertHasMethod(Type type, string methodName)

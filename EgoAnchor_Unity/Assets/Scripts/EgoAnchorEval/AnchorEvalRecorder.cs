@@ -17,9 +17,13 @@ namespace EgoAnchorEval
         [Tooltip("输出日志中的变体标签，例如 raw、lowpass、kalman 或 controller。")]
         public string label;
 
-        /// <summary>该变体对应的 PoseToAnchorRuntime。</summary>
-        [Tooltip("该变体对应的 PoseToAnchorRuntime。")]
+        /// <summary>该变体对应的 PoseToAnchorRuntime，用于记录 source frame、policy、reliability 与 aligned raw 诊断。</summary>
+        [Tooltip("该变体对应的 PoseToAnchorRuntime，用于记录 source frame、policy、reliability 与 aligned raw 诊断；实际误差 pose 来自 anchorTransform。")]
         public PoseToAnchorRuntime runtime;
+
+        /// <summary>该变体实际用于显示/评估的 Anchor Transform。</summary>
+        [Tooltip("该变体实际用于显示/评估的 Anchor Transform。日志直接记录它的 world position/rotation；为空时该变体没有可评估 anchor pose。")]
+        public Transform anchorTransform;
 
         /// <summary>主变体会额外记录 aligned raw pose 与 reliability score。</summary>
         [Tooltip("主变体会额外记录 aligned raw pose 与 reliability score，供离线回放和 latency 统计使用。")]
@@ -31,26 +35,26 @@ namespace EgoAnchorEval
     /// </summary>
     public sealed class AnchorEvalRecorder : MonoBehaviour
     {
-        /// <summary>手柄 GT pose 提供者。</summary>
+        /// <summary>作为 GT 的场景 Transform，通常绑定 OVRControllerPrefab 根 Transform。</summary>
         [Header("Ground Truth")]
-        [Tooltip("手柄 GT pose 提供者。GT 只写评估日志，不进入锚定管线。")]
-        [SerializeField] private ControllerGroundTruthProvider gt;
+        [Tooltip("作为 GT 的场景 Transform，通常绑定 OVRControllerPrefab 根 Transform。日志直接记录它的 world position/rotation。")]
+        [SerializeField] private Transform groundTruthTransform;
 
-        /// <summary>头部中心参考 Transform，通常为 OVRCameraRig/CenterEyeAnchor。</summary>
-        [Tooltip("头部中心参考 Transform，通常为 OVRCameraRig/CenterEyeAnchor。")]
+        /// <summary>头部中心参考 Transform，用于记录 render/capture 时的头部位姿并分析头动 slip/jitter。</summary>
+        [Tooltip("头部中心参考 Transform，通常为 OVRCameraRig/CenterEyeAnchor。用于把 anchor 误差与快速头动、视角变化和 slip/jitter 关联起来。")]
         [SerializeField] private Transform headAnchor;
 
-        /// <summary>与主 runtime 一致的 frame alignment 参考相机。</summary>
+        /// <summary>与主 runtime 一致的 frame alignment 参考相机，用于记录 source frame 的相机位姿。</summary>
         [Header("Frame Alignment")]
-        [Tooltip("与主 runtime 一致的 frame alignment 参考相机。当前 Python pose 语义默认是 Left。")]
+        [Tooltip("与主 runtime 一致的 frame alignment 参考相机。当前 Python pose 语义默认是 Left；该字段用于写 capture camera pose 和 camera_reference。")]
         [SerializeField] private CameraReference alignmentReference = CameraReference.Left;
 
-        /// <summary>Quest stereo 采集源，用于订阅 frame_id 诞生事件。</summary>
-        [Tooltip("Quest stereo 采集源，用于订阅 frame_id 诞生事件。必须与运行时发送图像的 StereoFrameSource 是同一个实例。")]
+        /// <summary>Quest stereo 采集源，用于在 frame_id 诞生时记录 capture 行。</summary>
+        [Tooltip("Quest stereo 采集源，用于在 frame_id 诞生时记录 capture 行。必须与运行时发送图像的 StereoFrameSource 是同一个实例。")]
         [SerializeField] private StereoFrameSource stereoSource;
 
-        /// <summary>frame_id -> capture-time camera pose 缓存。</summary>
-        [Tooltip("frame_id -> capture-time camera pose 缓存。必须与 StereoFrameSource/PoseToAnchorRuntime 共用同一个实例。")]
+        /// <summary>frame_id -> capture-time camera pose/timing 缓存，用于相机位姿和延迟统计。</summary>
+        [Tooltip("frame_id -> capture-time camera pose/timing 缓存。用于记录 cam_pos、source_capture_mono_ms，并且必须与 StereoFrameSource/PoseToAnchorRuntime 共用同一个实例。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>需要记录的 runtime 变体列表。</summary>
@@ -69,6 +73,18 @@ namespace EgoAnchorEval
 
         /// <summary>复用的变体快照缓冲，避免 LateUpdate 高频分配列表。</summary>
         private readonly List<RecordedVariantSnapshot> variantSnapshots = new List<RecordedVariantSnapshot>();
+
+        /// <summary>没有可用 GT pose。</summary>
+        public const string SourceNone = "none";
+
+        /// <summary>Transform pose 来源。</summary>
+        public const string SourceTransform = "transform";
+
+        /// <summary>写入 manifest 的 GT 来源标识。</summary>
+        public string ManifestGtSource => groundTruthTransform != null ? SourceTransform : "transform_missing";
+
+        /// <summary>写入 manifest 的 GT Transform 名称。</summary>
+        public string ManifestGtTransform => groundTruthTransform != null ? groundTruthTransform.name : string.Empty;
 
         /// <summary>
         /// 开始写入评估日志。
@@ -147,8 +163,9 @@ namespace EgoAnchorEval
                 return;
             }
 
-            ControllerGroundTruthSample gtSample = ReadGroundTruthSample();
-            bool cameraValid = TryGetCameraPose(frameId, out Pose cameraPose);
+            PoseSample gtSample = ReadGroundTruthSample();
+            bool hasFrameRecord = TryGetFrameRecord(frameId, out FramePoseRecord frameRecord);
+            bool cameraValid = TryGetCameraPose(hasFrameRecord, frameRecord, out Pose cameraPose);
             Pose headPose = ResolveHeadPose();
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             captureWriter.WriteLine(AnchorEvalJson.BuildCaptureLine(
@@ -158,11 +175,11 @@ namespace EgoAnchorEval
                 headPose,
                 cameraPose,
                 gtSample.Pose,
-                gtSample.Tracked,
                 gtSample.HasPose,
                 gtSample.PoseSource,
-                gtSample.HoldAgeMs,
-                cameraValid));
+                cameraValid,
+                hasFrameRecord ? frameRecord.UnityFrame : Time.frameCount,
+                alignmentReference.ToString()));
         }
 
         /// <summary>
@@ -175,7 +192,7 @@ namespace EgoAnchorEval
                 return;
             }
 
-            ControllerGroundTruthSample gtSample = ReadGroundTruthSample();
+            PoseSample gtSample = ReadGroundTruthSample();
             double monoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Pose headPose = ResolveHeadPose();
@@ -186,11 +203,10 @@ namespace EgoAnchorEval
                 sourceFrameId,
                 headPose,
                 gtSample.Pose,
-                gtSample.Tracked,
                 gtSample.HasPose,
                 gtSample.PoseSource,
-                gtSample.HoldAgeMs,
-                variantSnapshots));
+                variantSnapshots,
+                Time.frameCount));
         }
 
         /// <summary>
@@ -220,25 +236,34 @@ namespace EgoAnchorEval
         }
 
         /// <summary>
-        /// 读取手柄 GT sample；provider 缺失时返回无 pose。
+        /// 读取手柄 GT sample；Transform 缺失时返回无 pose。
         /// </summary>
-        private ControllerGroundTruthSample ReadGroundTruthSample()
+        private PoseSample ReadGroundTruthSample()
         {
-            if (gt != null && gt.TryGetWorldPoseSample(out ControllerGroundTruthSample sample))
+            if (groundTruthTransform != null)
             {
-                return sample;
+                return new PoseSample(true, ReadTransformPose(groundTruthTransform), SourceTransform);
             }
 
-            return new ControllerGroundTruthSample(false, Pose.identity, false, ControllerGroundTruthProvider.SourceNone, 0.0);
+            return new PoseSample(false, Pose.identity, SourceNone);
         }
 
         /// <summary>
-        /// 按 frame_id 从历史缓存取采集时刻参考相机 pose。
+        /// 按 frame_id 从历史缓存取采集时刻记录。
         /// </summary>
-        private bool TryGetCameraPose(long frameId, out Pose cameraPose)
+        private bool TryGetFrameRecord(long frameId, out FramePoseRecord record)
+        {
+            record = default;
+            return framePoseHistory != null && framePoseHistory.TryGet(frameId, out record);
+        }
+
+        /// <summary>
+        /// 按 frame record 读取采集时刻参考相机 pose。
+        /// </summary>
+        private bool TryGetCameraPose(bool hasFrameRecord, FramePoseRecord record, out Pose cameraPose)
         {
             cameraPose = Pose.identity;
-            if (framePoseHistory == null || !framePoseHistory.TryGet(frameId, out FramePoseRecord record))
+            if (!hasFrameRecord)
             {
                 return false;
             }
@@ -277,9 +302,11 @@ namespace EgoAnchorEval
                 string label = string.IsNullOrEmpty(recorded.label) ? $"variant_{i}" : recorded.label;
                 Pose stablePose = Pose.identity;
                 Pose rawPose = Pose.identity;
-                bool hasStable = runtime != null && runtime.TryGetStablePose(out stablePose);
+                string anchorPoseSource = SourceNone;
+                bool hasStable = TryReadAnchorPose(recorded.anchorTransform, out stablePose, out anchorPoseSource);
                 bool hasRaw = runtime != null && runtime.TryGetRawPose(out rawPose);
                 long sourceFrameId = runtime != null ? runtime.LatestAlignedFrameId : -1;
+                bool hasSourceTiming = TryGetFrameRecord(sourceFrameId, out FramePoseRecord sourceRecord);
                 string state = runtime != null ? runtime.CurrentAnchorState.ToString() : "MissingRuntime";
                 string action = runtime != null ? runtime.LatestPolicyAction : string.Empty;
                 string reason = runtime != null ? runtime.LatestPolicyReason : string.Empty;
@@ -303,6 +330,10 @@ namespace EgoAnchorEval
                     reason,
                     phase,
                     failure,
+                    anchorPoseSource,
+                    hasSourceTiming,
+                    hasSourceTiming ? sourceRecord.SenderMonoMs : double.NaN,
+                    hasSourceTiming ? sourceRecord.UnityFrame : -1,
                     recorded.isPrimary,
                     hasRaw,
                     rawPose,
@@ -315,6 +346,54 @@ namespace EgoAnchorEval
             }
 
             return primaryFrameId;
+        }
+
+        /// <summary>
+        /// 读取实际 Anchor Transform；未绑定时该变体没有可评估 anchor pose。
+        /// </summary>
+        private static bool TryReadAnchorPose(Transform anchorTransform, out Pose pose, out string poseSource)
+        {
+            if (anchorTransform != null)
+            {
+                pose = ReadTransformPose(anchorTransform);
+                poseSource = SourceTransform;
+                return true;
+            }
+
+            pose = Pose.identity;
+            poseSource = SourceNone;
+            return false;
+        }
+
+        /// <summary>
+        /// 读取 Transform 的 Unity world pose。
+        /// </summary>
+        private static Pose ReadTransformPose(Transform source)
+        {
+            return new Pose(source.position, source.rotation);
+        }
+
+        /// <summary>
+        /// 一次 Transform pose 采样结果。
+        /// </summary>
+        private readonly struct PoseSample
+        {
+            /// <summary>是否有可写入日志的 pose。</summary>
+            public readonly bool HasPose;
+
+            /// <summary>当前输出的 Unity world pose。</summary>
+            public readonly Pose Pose;
+
+            /// <summary>pose 来源，例如 transform 或 none。</summary>
+            public readonly string PoseSource;
+
+            /// <summary>构造 pose 采样结果。</summary>
+            public PoseSample(bool hasPose, Pose pose, string poseSource)
+            {
+                HasPose = hasPose;
+                Pose = pose;
+                PoseSource = poseSource ?? SourceNone;
+            }
         }
     }
 }
