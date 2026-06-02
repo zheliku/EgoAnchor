@@ -1,0 +1,11 @@
+condition,label,n,lag_ms,correlation,insufficient_data
+fast_head,kalman,1553,,,True
+fast_head,raw,1553,,,True
+object_motion,kalman,3407,400.0,0.46656512977145465,False
+object_motion,raw,3407,366.6666666666667,0.44728119727322385,False
+slow_head,kalman,2009,,,True
+slow_head,raw,2009,,,True
+static,kalman,3318,,,True
+static,raw,3318,,,True
+unlabeled,kalman,831,,,True
+unlabeled,raw,831,,,True

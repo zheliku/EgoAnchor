@@ -64,6 +64,9 @@
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\Generated\Common.cs" Link="Generated\Common.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\Generated\Anchor.cs" Link="Generated\Anchor.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Protocol\SubjectNames.cs" Link="Protocol\SubjectNames.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Alignment\CameraReference.cs" Link="Alignment\CameraReference.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Alignment\FramePoseHistory.cs" Link="Alignment\FramePoseHistory.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Alignment\CameraPoseFrameAligner.cs" Link="Alignment\CameraPoseFrameAligner.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyDecision.cs" Link="Policy\AnchorPolicyDecision.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorObservation.cs" Link="Policy\AnchorObservation.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorLifecycleEvent.cs" Link="Policy\AnchorLifecycleEvent.cs" />

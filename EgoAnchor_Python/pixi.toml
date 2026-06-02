@@ -183,3 +183,7 @@ python src/tracking_server.py --object controller_right
 controller_left ={ cmd = """
 python src/tracking_server.py --object controller_left
 """ }
+
+eval = { cmd = "python eval/run_eval.py" } # 运行完整离线评估；使用 pixi run eval --session-dir data/eval/<session_id>
+eval-metrics = { cmd = "python eval/run_eval.py --only metrics" } # 只导出指标表格与 GT/anchor sanity；仍需传 --session-dir
+eval-figures = { cmd = "python eval/run_eval.py --only figures" } # 只导出图表与 sanity；仍需传 --session-dir

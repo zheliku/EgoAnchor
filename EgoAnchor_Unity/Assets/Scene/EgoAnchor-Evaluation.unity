@@ -560,10 +560,12 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    applyOffset: 0
-    positionOffset: {x: 0, y: 0, z: 0}
-    rotationOffsetEuler: {x: 0, y: 0, z: 0}
-    offsetInAnchorLocal: 1
+    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
@@ -2631,10 +2633,12 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    applyOffset: 0
-    positionOffset: {x: 0, y: 0, z: 0}
-    rotationOffsetEuler: {x: 0, y: 0, z: 0}
-    offsetInAnchorLocal: 1
+    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors: []
   policyHost: {fileID: 0}
   diagnostics:
@@ -2861,11 +2865,11 @@ MonoBehaviour:
   recordedRuntimes:
   - label: kalman
     runtime: {fileID: 160200731}
-    anchorTransform: {fileID: 0}
+    anchorTransform: {fileID: 160200733}
     isPrimary: 1
   - label: raw
     runtime: {fileID: 1137170458}
-    anchorTransform: {fileID: 0}
+    anchorTransform: {fileID: 1137170460}
     isPrimary: 0
 --- !u!4 &1262713666
 Transform:
@@ -2902,7 +2906,7 @@ MonoBehaviour:
   reuseLatestPythonSession: 1
   maxPythonSessionAgeMinutes: 180
   pythonSessionMetadataFilename: python_session.json
-  sessionNotes: 
+  sessionNotes: 11
 --- !u!114 &1262713668
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,0 +1,5 @@
+condition,label,n,lag_ms,correlation,insufficient_data
+static,kalman,1016,,,True
+static,raw,0,,,True
+unlabeled,kalman,101,,,True
+unlabeled,raw,0,,,True

@@ -67,6 +67,7 @@ gt_pose_valid=true
 gt_pose_source="transform"
 gt_pos=[groundTruthTransform.position]
 gt_rot=[groundTruthTransform.rotation xyzw]
+gt_euler_deg=[groundTruthTransform.rotation.eulerAngles xyz, 0-360]
 ```
 
 如果没有绑定 `groundTruthTransform`，该帧会写入：
@@ -76,6 +77,7 @@ gt_pose_valid=false
 gt_pose_source="none"
 gt_pos=null
 gt_rot=null
+gt_euler_deg=null
 ```
 
 因此正式录制前必须绑定正确 Transform。若 `OVRControllerPrefab` 静止时自身停止更新，评估日志也会忠实记录这个 Transform 的最后显示状态。
@@ -156,11 +158,11 @@ dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj 
 期望输出检查：
 
 - `*_unity_capture.jsonl`、`*_unity_output.jsonl` 和 `session_manifest.json` 都存在。
-- capture 行包含递增的 `frame_id`、`capture_utc/local`、`gt_pose_source`、`gt_pose_valid`、`gt_pos` 和 `gt_rot`。
+- capture 行包含递增的 `frame_id`、`capture_utc/local`、`gt_pose_source`、`gt_pose_valid`、`gt_pos`、`gt_rot` 和 `[0,360)` 的 `gt_euler_deg`。
 - output 行包含 `variants`，其中有 `raw` 和主稳定变体。
 - output 行包含 `render_utc/local`。
-- 每个变体包含 `anchor_pose_source`、`source_capture_mono_ms` 和 `source_capture_unity_frame`，可直接计算 `render_mono_ms - source_capture_mono_ms`。
-- 主变体包含 `aligned_raw_pos`、`aligned_raw_rot` 和 `reliability_score`。
+- 每个变体包含 `anchor_pose_source`、`source_capture_mono_ms`、`source_capture_unity_frame` 和 `[0,360)` 的 `stable_euler_deg`，可直接计算 `render_mono_ms - source_capture_mono_ms`。
+- 主变体包含 `aligned_raw_pos`、`aligned_raw_rot`、`aligned_raw_euler_deg` 和 `reliability_score`。
 - `gt_pose_source` 应为 `transform`；如果出现 `none`，说明本轮没有绑定 `groundTruthTransform`。
 - validator 打印非零的 `capture_rows`、`output_rows`、包含 `raw` 的 `variant_labels`，以及 `python_pose_frame_matches`。
 

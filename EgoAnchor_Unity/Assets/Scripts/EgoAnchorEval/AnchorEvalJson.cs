@@ -238,7 +238,7 @@ namespace EgoAnchorEval
         }
 
         /// <summary>
-        /// 写入 position/rotation 两个属性；无位姿时写 null。
+        /// 写入 position、rotation 四元数和 0-360 欧拉角三个属性；无位姿时写 null。
         /// </summary>
         private static void AppendPoseProperties(StringBuilder builder, ref bool first, string posName, string rotName, Pose pose, bool hasPose)
         {
@@ -256,6 +256,16 @@ namespace EgoAnchorEval
             if (hasPose)
             {
                 AppendQuaternion(builder, pose.rotation);
+            }
+            else
+            {
+                builder.Append("null");
+            }
+
+            AppendName(builder, ref first, EulerNameFromRotName(rotName));
+            if (hasPose)
+            {
+                AppendVector3(builder, ToEuler360(pose.rotation));
             }
             else
             {
@@ -360,6 +370,72 @@ namespace EgoAnchorEval
             builder.Append(',');
             AppendFloat(builder, value.w);
             builder.Append(']');
+        }
+
+        /// <summary>
+        /// 根据 `*_rot` 字段名生成对应的 `*_euler_deg` 字段名。
+        /// </summary>
+        private static string EulerNameFromRotName(string rotName)
+        {
+            const string suffix = "_rot";
+            if (!string.IsNullOrEmpty(rotName) && rotName.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                return rotName.Substring(0, rotName.Length - suffix.Length) + "_euler_deg";
+            }
+
+            return (rotName ?? string.Empty) + "_euler_deg";
+        }
+
+        /// <summary>
+        /// 把 Unity Quaternion 转为 Inspector 风格欧拉角，并规范到 [0, 360)。
+        /// </summary>
+        private static Vector3 ToEuler360(Quaternion value)
+        {
+            double x = value.x;
+            double y = value.y;
+            double z = value.z;
+            double w = value.w;
+            double norm = Math.Sqrt(x * x + y * y + z * z + w * w);
+            if (norm <= double.Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            x /= norm;
+            y /= norm;
+            z /= norm;
+            w /= norm;
+
+            double sinX = 2.0 * (w * x + y * z);
+            double cosX = 1.0 - 2.0 * (x * x + y * y);
+            double eulerX = Math.Atan2(sinX, cosX) * 57.29577951308232;
+
+            double sinY = 2.0 * (w * y - z * x);
+            sinY = Math.Max(-1.0, Math.Min(1.0, sinY));
+            double eulerY = Math.Asin(sinY) * 57.29577951308232;
+
+            double sinZ = 2.0 * (w * z + x * y);
+            double cosZ = 1.0 - 2.0 * (y * y + z * z);
+            double eulerZ = Math.Atan2(sinZ, cosZ) * 57.29577951308232;
+
+            return new Vector3(
+                NormalizeAngle360((float)eulerX),
+                NormalizeAngle360((float)eulerY),
+                NormalizeAngle360((float)eulerZ));
+        }
+
+        /// <summary>
+        /// 把角度规范到 [0, 360)，避免日志中出现负角度。
+        /// </summary>
+        private static float NormalizeAngle360(float value)
+        {
+            float normalized = value % 360.0f;
+            if (normalized < 0.0f)
+            {
+                normalized += 360.0f;
+            }
+
+            return Math.Abs(normalized - 360.0f) <= 1e-5f ? 0.0f : normalized;
         }
 
         /// <summary>

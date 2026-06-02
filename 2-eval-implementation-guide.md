@@ -1,7 +1,7 @@
 # EgoAnchor 评估系统 — 分步实现指导（执行手册）
 
 > 配套计划：[`1-anchor-inherited-cook.md`](1-anchor-inherited-cook.md)。本文是它的**逐步执行版**，每个 Stage 给出：要写什么、为什么、关键代码骨架、验收标准。
-> 执行顺序：**Unity 采集（U0→U4）→ Python 分析（P0→P4）→ 端到端测试（T）**。每个 Stage 验收通过后再进下一个。
+> 执行顺序：**Unity 采集（U0→U4）→ Python 分析（P0→P3）→ 端到端测试（T）**。每个 Stage 验收通过后再进下一个。
 > 原则：measure-first，不改 anchor 算法本体；评估代码与 runtime 物理+编译期隔离；录一次离线算所有。
 
 ---
@@ -30,9 +30,9 @@ Unity session_id 使用人类可读时间命名，默认格式为 `yyyyMMdd_HHmm
 
 - Python `pose_result.pose_matrix_cv_camera`：OpenCV 左目相机系（x右 y下 z前），16 个 float 行主序。
 - Unity 侧 GT / anchor / 头 / 相机 pose：全部记 **Unity 世界系**（左手系，y上）。
-- GT（手柄）：`OVRInput` 局部位姿 → 经 `OVRCameraRig.trackingSpace` 变换到 Unity 世界系。Meta 手柄静止一段时间可能因省电报告 `tracked=false`；评估侧不伪装实时追踪，而是缓存最后一次 live tracked pose，继续写 `gt_pose_source="hold_last"`、`gt_tracked=false`、`gt_hold_age_ms`，供静态段离线使用并保留真实性标记。
-- anchor（被评估输出）：`PoseToAnchorRuntime.TryGetStablePose/TryGetRawPose` 已是 Unity 世界系。
-- 因此**离线指标全在 Unity 世界系算**，Python camera-space 矩阵只在 RQ1（arrival-time vs frame-aligned 离线重算）时才用到，需配合 `unity_capture` 的相机世界位姿做组合。
+- GT（手柄）：当前主线直接记录场景中绑定的 `groundTruthTransform`（通常为 `OVRControllerPrefab` 根 Transform）的 Unity 世界位姿，日志写 `gt_pose_source="transform"`、`gt_source="transform"`、`gt_transform=<TransformName>`。因此 GT 与 anchor 都是 Unity 世界系 Transform pose，不再经过 `OVRInput` SDK 原点。
+- anchor（被评估输出）：`AnchorEvalRecorder.recordedRuntimes[*].anchorTransform` 的 Unity 世界位姿；主变体额外记录 `PoseToAnchorRuntime.TryGetRawPose` 得到的 `aligned_raw_pos/rot` 作为离线诊断输入。
+- 因此**离线指标全在 Unity 世界系直接比较 GT Transform 与 anchor Transform**。Python camera-space 矩阵只在 RQ1（arrival-time vs frame-aligned 离线重算）时才用到，需配合 `unity_capture` 的相机世界位姿做组合。
 
 ### 0.3 时间戳约定
 
@@ -120,49 +120,28 @@ FrameCaptured?.Invoke(currentFrameId, senderMonoMs);
 
 ---
 
-## Stage U1 — ControllerGroundTruthProvider（GT 来源）
+## Stage U1 — Transform GT 绑定（GT 来源）
 
-**目标**：把 Meta SDK 手柄局部位姿变换到 Unity 世界系，输出统一 `(Pose, bool tracked)`。
+**目标**：直接把场景中代表真实控制器/目标物体的 Transform 作为 Unity 世界系 GT。当前主线已采用此路径，替代旧 `ControllerGroundTruthProvider` / `OVRInput` SDK 原点方案。
 
 ### U1.1 实现
 
+`AnchorEvalRecorder` 暴露：
+
 ```csharp
-using UnityEngine;
+[Tooltip("作为 GT 的场景 Transform，通常绑定 OVRControllerPrefab 根 Transform。")]
+[SerializeField] private Transform groundTruthTransform;
 
-namespace EgoAnchorEval
-{
-    /// <summary>左/右手柄 → Unity 世界系 GT pose + tracked 标志。GT 绝不进锚定管线。</summary>
-    public sealed class ControllerGroundTruthProvider : MonoBehaviour
-    {
-        [Tooltip("场景中的 OVRCameraRig，用于把手柄局部位姿变到世界系。")]
-        [SerializeField] private OVRCameraRig cameraRig;
-        [Tooltip("本 session 追踪的手柄：必须与 Python --object controller_left/right 及 manifest gt_source 三者一致。")]
-        [SerializeField] private OVRInput.Controller controller = OVRInput.Controller.RTouch;
-
-        public OVRInput.Controller Controller => controller;
-
-        public bool TryGetWorldPose(out Pose worldPose, out bool tracked)
-        {
-            worldPose = Pose.identity; tracked = false;
-            if (cameraRig == null || cameraRig.trackingSpace == null) return false;
-            Vector3 localPos = OVRInput.GetLocalControllerPosition(controller);
-            Quaternion localRot = OVRInput.GetLocalControllerRotation(controller);
-            Transform space = cameraRig.trackingSpace;
-            worldPose = new Pose(space.TransformPoint(localPos), space.rotation * localRot);
-            tracked = OVRInput.GetControllerPositionTracked(controller)
-                   && OVRInput.GetControllerOrientationTracked(controller);
-            return true;
-        }
-    }
-}
+public string ManifestGtSource => groundTruthTransform != null ? "transform" : "transform_missing";
+public string ManifestGtTransform => groundTruthTransform != null ? groundTruthTransform.name : string.Empty;
 ```
 
-要点：`cameraRig` 用 serialized field 拖拽（项目既有约定，无 `FindObjectOfType`）；OVRInput 每帧只更新一次，capture 回调与 LateUpdate 同帧读得同值，所以采集时刻与渲染时刻共用同一 provider 实例无冲突。
+采样时只读取 `groundTruthTransform.position/rotation`，写入 `gt_pose_valid`、`gt_pose_source`、`gt_pos/gt_rot`。GT 仍只进入 Eval asmdef，不进入 anchor runtime。
 
 ### U1.2 验收
 
-- 新建 `EvalRig` 空物体挂本组件，`cameraRig` 拖入场景 `OVRCameraRig`，`controller` 选 RTouch。
-- 临时在 `Update` 里 `if (TryGetWorldPose(out var p, out var t)) Debug.Log($"{controller} {p.position} tracked={t}")`。戴上头显、握住右手柄移动，确认位置随手柄变化、`tracked=true`；手柄背到身后 `tracked` 变 false。切 LTouch 重测左手柄。验证后删临时代码。
+- `AnchorEvalRecorder.groundTruthTransform` 拖入本轮被追踪控制器可视 Transform（例如 `OVRControllerPrefab`），不要拖 `AnchorObject` 或任何被评估输出。
+- Play 后录几秒，确认 capture/output 均写 `gt_pose_valid=true`、`gt_pose_source="transform"`，并且 `session_manifest.json` 写 `gt_source="transform"`、`gt_transform` 为正确 Transform 名称。
 
 ---
 
@@ -178,6 +157,7 @@ public struct RecordedRuntime
 {
     public string label;                 // "raw" / "lowpass" / "kalman" / "controller"
     public PoseToAnchorRuntime runtime;  // 拖入对应 runtime
+    public Transform anchorTransform;    // 实际被评估的输出 Transform
     public bool isPrimary;               // 主变体额外记 aligned_raw + reliability（回放输入）
 }
 ```
@@ -187,7 +167,7 @@ public struct RecordedRuntime
 ```csharp
 public sealed class AnchorEvalRecorder : MonoBehaviour
 {
-    [SerializeField] private ControllerGroundTruthProvider gt;
+    [SerializeField] private Transform groundTruthTransform;
     [SerializeField] private Transform headAnchor;            // CenterEyeAnchor
     [SerializeField] private CameraReference alignmentReference = CameraReference.Left; // 与主 runtime 一致
     [SerializeField] private StereoFrameSource stereoSource;
@@ -221,16 +201,16 @@ public sealed class AnchorEvalRecorder : MonoBehaviour
 private void OnFrameCaptured(long frameId, double captureMonoMs)
 {
     if (!recording) return;
-    gt.TryGetWorldPoseSample(out ControllerGroundTruthSample gtSample);
+    PoseSample gtSample = ReadGroundTruthSample();
     framePoseHistory.TryGet(frameId, out FramePoseRecord rec);
     rec.TryGetCameraPose(alignmentReference, out Pose camPose);
     Pose head = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
     double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     // 手写 JSON 一行：event=unity_capture, frame_id, capture_mono_ms, capture_unix_ms,
-    //   head_pos/rot, cam_pos/rot, gt_pos/rot, gt_tracked,
-    //   gt_pose_valid, gt_pose_source(live_tracked/hold_last/ovr_untracked), gt_hold_age_ms
+    //   head_pos/rot, cam_pos/rot, gt_pos/rot,
+    //   gt_pose_valid, gt_pose_source(transform/none), capture_unity_frame, camera_reference
     captureWriter.WriteLine(BuildCaptureLine(frameId, captureMonoMs, unixMs, head, camPose, gtSample.Pose,
-        gtSample.Tracked, gtSample.HasPose, gtSample.PoseSource, gtSample.HoldAgeMs));
+        gtSample.HasPose, gtSample.PoseSource));
 }
 ```
 
@@ -242,7 +222,7 @@ private void OnFrameCaptured(long frameId, double captureMonoMs)
 void LateUpdate()
 {
     if (!recording) return;
-    gt.TryGetWorldPoseSample(out ControllerGroundTruthSample gtSample);
+    PoseSample gtSample = ReadGroundTruthSample();
     double monoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
     double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     Pose head = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
@@ -250,7 +230,7 @@ void LateUpdate()
     // 遍历 recordedRuntimes 组 variants 数组：
     foreach (var rr in recordedRuntimes) {
         var rt = rr.runtime;
-        bool has = rt.TryGetStablePose(out Pose stable);
+        bool has = TryReadAnchorPose(rr.anchorTransform, out Pose stable, out string anchorPoseSource);
         long srcFrame = rt.LatestAlignedFrameId;
         string state = rt.CurrentAnchorState.ToString();   // AnchorState enum
         string action = rt.LatestPolicyAction, reason = rt.LatestPolicyReason;
@@ -261,8 +241,8 @@ void LateUpdate()
         }
     }
     // source_frame_id 取主变体的 LatestAlignedFrameId
-    outputWriter.WriteLine(BuildOutputLine(monoMs, unixMs, head, gtSample.Pose, gtSample.Tracked,
-        gtSample.HasPose, gtSample.PoseSource, gtSample.HoldAgeMs, /*variants*/));
+    outputWriter.WriteLine(BuildOutputLine(monoMs, unixMs, head, gtSample.Pose,
+        gtSample.HasPose, gtSample.PoseSource, /*variants*/));
 }
 ```
 
@@ -287,7 +267,6 @@ void LateUpdate()
 public sealed class EvalSessionController : MonoBehaviour
 {
     [SerializeField] private AnchorEvalRecorder recorder;
-    [SerializeField] private ControllerGroundTruthProvider gt;
     [SerializeField] private string outputRoot;          // data/eval 绝对路径
     [SerializeField] private string objectId = "controller_right";  // controller_left / controller_right
     [SerializeField] private bool reuseLatestPythonSession = true;  // 先找 Python 已创建的共享 session
@@ -327,23 +306,23 @@ public sealed class EvalSessionController : MonoBehaviour
     public void Mark(string type) => markers.Add((type, Time.realtimeSinceStartupAsDouble * 1000.0));
     // WriteManifest：手写 session_manifest.json，含
     //   session_id, object_id, unity_run_mode="editor_link",
-    //   gt_source = controller==LTouch?"ovr_ltouch":"ovr_rtouch",
+    //   gt_source="transform", gt_transform=recorder.ManifestGtTransform,
     //   mono_to_unix_offset_ms, condition_spans[], event_markers[],
     //   variant_labels[], python_log_filename(从 python_session.json 自动填入；旧数据可手动覆盖), notes,
-    //   gt_hold_policy, hold_last_when_untracked, max_hold_age_ms
+    //   session_start/stop mono/unix/utc/local
 }
 ```
 
 **UI 绑定**：场景已有 `Button_Reset/Resume/Pause/ForceReacquire`。新增 `Button_EvalStart/Stop`，或 Editor 下挂 `EvalSessionHotkeyDriver`，用 Unity 新 Input System（`Keyboard.current` / `Key`）触发 `StartSession/StopSession`；条件切换/事件标记也用按钮或键盘（数字键 1-7 对应 7 个条件段，0 结束当前段，O/V/R 标 occlusion/out_of_view/recovery）。录制时单手操作友好。
 
-> `gt_source` / `objectId` / Python `--object` / provider 的 `controller` **四者必须一致**，否则标定 X 会用错手柄。建议 `StartSession` 里加断言日志：打印三者，人工核对。
+> `gt_source` / `gt_transform` / `objectId` / Python `--object` **必须人工核对一致**。当前主线 `gt_source="transform"`，应确认 `gt_transform` 指向本轮被追踪的真实控制器可视 Transform，而不是 HMD、anchor 输出或无关代理物体。
 
 ### U3.1 验收
 
 - 点 Start 或按 F7 → 切几个 condition（看 Console 或临时 UI 文本）→ 标一个 event → Stop/F8。
-- 确认 `session_manifest.json` 生成，`condition_spans` 时间区间连续不重叠、`gt_source` 与 provider 的 controller 对应。
+- 确认 `session_manifest.json` 生成，`condition_spans` 时间区间连续不重叠、`gt_source="transform"` 且 `gt_transform` 是本轮 GT Transform。
 - 确认 capture/output 两份日志在该 session 目录下，文件名含 session_id。
-- 若手柄静止后 Meta SDK 报 `tracked=false`，确认日志继续写 pose 且 `gt_pose_source="hold_last"`、`gt_tracked=false`，不要把缓存 pose 当作 live tracked。
+- 确认 capture/output 中 `gt_pose_valid=true` 时 `gt_pose_source="transform"`，`gt_pos/gt_rot` 为 Unity 世界系 Transform pose；若 Transform 未绑定，则必须显式写 `gt_pose_valid=false`、`gt_pose_source="none"`。
 
 ---
 
@@ -355,11 +334,11 @@ public sealed class EvalSessionController : MonoBehaviour
 
 现有场景 `Server` 下已有：`AnchorRuntimeHub`、`AnchorPolicyHost`、`AnchorObject`(stable)、`AnchorObject Raw`、`StereoFrameSource`、`FramePoseHistory`、`CameraInfoSource`，以及 `OVRCameraRig/CenterEyeAnchor`。
 
-1. 新建空 GameObject `EvalRig`（挂 `Server` 下），挂 `AnchorEvalRecorder` + `EvalSessionController` + `ControllerGroundTruthProvider` + `EvalSessionHotkeyDriver`。
-2. `ControllerGroundTruthProvider.cameraRig` ← 场景 `OVRCameraRig`；`controller` ← 本轮手柄。
-3. `AnchorEvalRecorder`：`gt`←同物体 provider；`headAnchor`←`CenterEyeAnchor`；`stereoSource`/`framePoseHistory`←场景对应组件（与 runtime 同实例）；`alignmentReference`←`Left`（与主 runtime 一致）。
-4. `recordedRuntimes` 列表：先连两项 —— `AnchorObject`(label="kalman" 或当前 stable 配置, isPrimary=true) 与 `AnchorObject Raw`(label="raw")。RQ2 ablation 时再加 lowpass/policy 变体子物体（往 `AnchorRuntimeHub.runtimes` 加 + 拖进本 list，纯场景配置）。
-5. `EvalSessionController`：`recorder`/`gt` 拖入，`outputRoot` 填 `data/eval` 绝对路径，`objectId` 设对，`reuseLatestPythonSession` 保持勾选。
+1. 新建空 GameObject `EvalRig`（挂 `Server` 下），挂 `AnchorEvalRecorder` + `EvalSessionController` + `EvalSessionHotkeyDriver`。
+2. `AnchorEvalRecorder.groundTruthTransform` ← 本轮被评估的控制器可视 Transform（当前样例为 `OVRControllerPrefab`）；不要绑定 anchor 输出 Transform。
+3. `AnchorEvalRecorder.headAnchor`←`CenterEyeAnchor`；`stereoSource`/`framePoseHistory`←场景对应组件（与 runtime 同实例）；`alignmentReference`←`Left`（与主 runtime 一致）。
+4. `recordedRuntimes` 列表：先连两项 —— `AnchorObject`(label="kalman" 或当前 stable 配置, `anchorTransform` 绑定该输出 Transform, isPrimary=true) 与 `AnchorObject Raw`(label="raw", `anchorTransform` 绑定 raw 输出 Transform)。RQ2 ablation 时再加 lowpass/policy 变体子物体（往 `AnchorRuntimeHub.runtimes` 加 + 拖进本 list，纯场景配置）。
+5. `EvalSessionController`：`recorder` 拖入，`outputRoot` 填 `data/eval` 绝对路径，`objectId` 设对，`reuseLatestPythonSession` 保持勾选。
 6. UI/热键绑定 Start/Stop/condition/mark；当前场景可直接用 `EvalSessionHotkeyDriver`：F7 Start、F8 Stop、1-7 条件段、0 结束段、O/V/R 事件标记。
 
 ### U4.2 验收（本阶段 Unity 侧完成定义）
@@ -371,7 +350,7 @@ public sealed class EvalSessionController : MonoBehaviour
 - **frame_id 对齐验证**：取 capture 中任一 `frame_id`，在同目录 `<session_id>_python_runtime.jsonl` 里 grep 到同 `frame_id` 的 `pose_result`（证明三方 join 可行）。
 - 录制后可直接跑 `dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj -- --session-dir EgoAnchor_Python\data\eval\<session_id> --require-python-join`，自动检查三份 Unity 日志、manifest、raw/主变体字段、GT 字段与 Python `frame_id` join。
 - output 的 `variants` 含 raw + 主变体，主变体有 `aligned_raw_pos/rot` + `reliability_score`。
-- capture/output 均含 `gt_pose_valid`、`gt_pose_source`、`gt_hold_age_ms`；静止省电导致停追踪时允许 `hold_last`，但必须保留 `gt_tracked=false`。
+- capture/output 均含 `gt_pose_valid`、`gt_pose_source`；当前 Transform GT 路径不再写 `gt_tracked/gt_hold_age_ms`。
 - 无明显掉帧/卡顿（若 90fps 写盘卡，把 output 降到 ~30Hz：LateUpdate 里按时间间隔节流）。
 
 > ⚠️ Unity 侧到此可交付。Python 侧（P0-P4）可并行开工，但**端到端验收（Stage T）依赖一份真实录制数据**，建议 U4 跑出一份 ~3 分钟的完整协议数据备用。
@@ -432,7 +411,7 @@ def label_conditions(df, manifest, mono_col: str) -> pd.DataFrame:  # 按 condit
 要点：
 - `output` 的 `variants` 数组**展平成长表**（每 variant 一行，列 `label`），方便 `groupby("label")` 算各变体指标。
 - Python 日志路径：默认从 `manifest["python_log_filename"]` 取，自动配对成功时它指向同目录 `<session_id>_python_runtime.jsonl`；为空时回退到"同目录唯一非 Unity .jsonl"或让 CLI 显式传 `--python-log`。
-- `gt_tracked=false` 的行打 `valid=False` 列，各指标默认 `df[df.valid]`。
+- `gt_pose_valid=false` 的行打 `valid=False` 列，各指标默认 `df[df.valid]`。
 - 坐标系：所有 pos/quat 已是 Unity 世界系（capture/output），pose_result 是 OpenCV 相机系（仅 RQ1 用）。
 
 ### P1.3 验收
@@ -444,109 +423,80 @@ def label_conditions(df, manifest, mono_col: str) -> pd.DataFrame:  # 按 condit
 
 ---
 
-## Stage P2 — eval/calib：hand-eye 标定常量 X（对齐正确性硬证据）
+## Stage P2 — eval/metrics：Transform GT 直接评估指标
 
-**目标**：求 `X = C_T_A`（手柄 SDK 原点系 → mesh/anchor 原点系），使 `W_T_A = W_T_C · X`。**左右手柄各标一份**。
+**目标**：基于当前 Unity Transform GT 日志直接计算 anchor error、latency、jitter、lag、slip、jump suppression、recovery 等论文指标。原 `eval/calib/hand_eye.py` 不再作为执行阶段：它只适用于 `OVRInput` SDK 原点与 mesh/anchor 原点不一致的旧方案；当前 `gt_source="transform"` 已把 GT 写成被评估对象的 Unity 世界 Transform pose，继续求 `X` 会把算法误差错误吸收到标定偏置里。
 
-### P2.1 `eval/calib/hand_eye.py`
-
-```python
-def estimate_hand_eye(
-    w_T_c: np.ndarray,    # (N,4,4) GT 手柄世界位姿
-    w_T_a: np.ndarray,    # (N,4,4) anchor 世界位姿（取高可靠+静态子集）
-    use_ransac: bool = True,
-) -> tuple[np.ndarray, dict]:  # 返回 X(4,4) + 诊断
-    ...
-```
-
-算法：
-1. 每帧 `X_i = inv(W_T_C_i) @ W_T_A_i`，理论全相等。
-2. **旋转**：各 `X_i` 取四元数（先统一符号，与首个点积为正），累加外积 `M = Σ qᵢqᵢᵀ`，取最大特征向量 → chordal L2 均值。
-3. **平移**：旋转定后 `t_X = median_i(t_i)`（对离群鲁棒）。
-4. **RANSAC**：用 static + 高 reliability 子集做内点，剔坏 anchor 帧。
-5. **可观测性校验**：若手柄旋转激励不足（旋转范围 < 阈值），诊断里报警 —— 要求录制协议第 4 段含充分三轴旋转。
-
-诊断输出（写进 report）：`X` 的**逐帧残差方差**（用 `X` 反算每帧 `W_T_C·X` 与 `W_T_A` 的 e_t/e_r 残差）。残差小 = 对齐正确，这是整套评估可信的硬证据。
-
-> 关键：标定数据取 `object_motion` 段（手柄充分运动，激励旋转维）+ 高 reliability + 排除 `gt_tracked=false`。`X` 按 `manifest.object_id` 缓存到 `report/hand_eye_<object_id>.json`，**不可跨手柄复用**。
-
-### P2.2 验收
-
-- 用 `object_motion` 段数据跑 `estimate_hand_eye`，打印 `X` 和残差统计。
-- 残差 e_t 中位数应在合理小量级（视 mesh 原点与 SDK 原点偏置而定，关键是**方差小**、各帧一致）。
-- 旋转激励不足时确实报警（可故意只喂 static 段验证报警触发）。
-- 单测：构造已知 `X_true`，合成 `W_T_A = W_T_C · X_true` + 小噪声，断言恢复的 `X ≈ X_true`。
-
----
-
-## Stage P3 — eval/metrics：几何工具 + 八个指标
-
-**目标**：实现 common 几何工具和八指标。按依赖顺序：common → anchor_error → latency → jitter → slip → jump_suppression → lag → recovery。
-
-### P3.1 `eval/metrics/common.py`（先做，其他都依赖）
+### P2.1 `eval/metrics/common.py`（先做，其他都依赖）
 
 ```python
-def mat_to_pos_quat(T): ...                 # (4,4) → (pos(3,), quat(4,) xyzw)
-def pos_quat_to_mat(p, q): ...
-def pose_error(w_T_c, X, w_T_a):            # E = inv(W_T_C·X)·W_T_A → (e_t[m], e_r[deg])
-def angle_deg(q): ...                        # 四元数 → 旋转角度
-def slerp_lerp_resample(t_src, p, q, t_dst): # 位姿重采样到目标时间网格（lag/回放对齐）
-def highpass(signal, dt, cutoff_hz): ...     # 去慢漂留抖动（jitter）
-def project_point(K, w_T_cam, p_world): ...  # 世界点 → 头相机像面（slip 屏幕空间）
+def mat_to_pos_quat(T): ...                  # (4,4) → (pos(3,), quat(4,) xyzw)
+def pos_quat_to_mat(p, q): ...               # Unity world pos/quat → (4,4)
+def pose_error(gt_pos, gt_quat, anchor_pos, anchor_quat): ...  # 直接比较 GT Transform 与 anchor Transform
+def angle_deg(q): ...                         # 四元数 → 旋转角度
+def slerp_lerp_resample(t_src, p, q, t_dst):  # 位姿重采样到目标时间网格（lag/回放对齐）
+def highpass(signal, dt, cutoff_hz): ...      # 去慢漂留抖动（jitter）
+def project_point(K, w_T_cam, p_world): ...   # 世界点 → 头相机像面（slip 屏幕空间）
 ```
 
-记每帧误差 `E = inv(W_T_C·X)·W_T_A`，`e_t=‖E.t‖`(m)、`e_r=angle(E.R)`(deg)。
+误差统一定义为 `E = inv(W_T_GT) · W_T_Anchor`，`e_t=‖E.t‖`(m)、`e_r=angle(E.R)`(deg)。对主变体可同时计算 `aligned_raw_pos/rot` 误差，用于 raw 输入质量诊断；正式 variant 指标默认使用 `stable_pos/stable_rot` 且 `has_stable=true` 的行。
 
-### P3.2 八指标（每个一个文件，输入 joined DataFrame + X + manifest，输出指标 dict）
+### P2.2 指标文件
 
 | # | 文件 | 定义 |
 |---|---|---|
-| 1 | `anchor_error.py` | 每条件报 `e_t,e_r` 的 RMSE/median/p95。用 stable 变体接受该 frame_id 时的值 |
-| 2 | `slip.py` | 屏幕空间：anchor 原点与 GT 原点用头相机 intrinsics 投影，`slip_px=‖proj(W_T_A)−proj(W_T_C·X)‖`，头动窗报峰值/RMS，并与头部 yaw 角速度相关 |
-| 3 | `jitter.py` | GT 速度<阈自动切静止窗，对 stable 位姿高通去慢漂后报位置/旋转 std/RMS。raw vs lowpass vs kalman vs controller 同窗对比 |
-| 4 | `lag.py` | anchor 与 GT 位置重采样到均匀网格，速度信号归一化互相关 `lag=argmax`；快速平移段报阶跃响应上升时间(到90%) |
-| 5 | `latency.py` | 每 frame_id `t_apply−t_capture`（Unity 单调钟）；分模块用 Python timing；网络腿用墙钟相减。报 P50/90/95 + breakdown |
-| 6 | `recovery.py` | manifest 遮挡/出视野/返回标记 + anchor_state 流 + 误差回落阈。`recovery_time`=重现标记→首次持续 accepted 且 e_t<阈 |
-| 7 | `jump_suppression.py` | raw（不拦尖峰）vs controller（抑制后）：误差尖峰计数+幅度；统计 policy reject 原因分布 |
-| 8 | task/主观 | 本轮不实现，只在 manifest 留 event marker 钩子 |
+| 1 | `anchor_error.py` | 各条件 × 各变体的 `e_t,e_r` RMSE/median/p95。输入为 output 长表，直接比较 `gt_pos/gt_rot` 与 `stable_pos/stable_rot`。 |
+| 2 | `slip.py` | 屏幕空间：anchor 原点与 GT 原点用头相机或近似相机内参投影，`slip_px=‖proj(anchor)−proj(gt)‖`，报 RMS/peak，并可关联头部角速度。 |
+| 3 | `jitter.py` | GT 速度低于阈值的静止窗内，对 anchor 位姿高通去慢漂后报位置/旋转 std/RMS；raw vs lowpass vs kalman vs controller 同窗对比。 |
+| 4 | `lag.py` | anchor 与 GT 位置重采样到均匀网格，速度信号归一化互相关 `lag=argmax`；快速平移段报阶跃响应上升时间(到90%)。 |
+| 5 | `latency.py` | 每 frame_id 首次应用 tick 的 `t_apply−t_capture`（Unity 单调钟）；分模块用 Python timing；报 P50/90/95 + breakdown。 |
+| 6 | `recovery.py` | manifest 遮挡/出视野/返回标记 + anchor_state 流 + 误差回落阈。`recovery_time`=重现标记→首次持续 accepted 且 e_t<阈。 |
+| 7 | `jump_suppression.py` | raw（不拦尖峰）vs controller/stable（抑制后）：误差尖峰计数+幅度；统计 policy reject 原因分布。 |
+| 8 | task/主观 | 本轮不实现，只在 manifest 留 event marker 钩子。 |
 
-**头相机 intrinsics（slip 用）**：从 Python `camera_info`（已有 K）或 CameraInfoSource 取；若缺，可用近似 FOV 构造 K（slip 横向对比仍有效，绝对像素值标注近似）。
+### P2.3 GT/anchor 语义一致性 sanity check
 
-### P3.3 验收
+`run_eval.py` 每次输出 `report/gt_anchor_sanity.json`：
 
-- 每个指标用 U4 真实数据跑出数字，量级合理（如 static jitter << object_motion 期间误差）。
-- `common.py` 几何工具有单测（往返 `mat↔pos_quat`、已知旋转的 `angle_deg`、重采样保形）。
-- raw vs stable 的 jitter 对比符合直觉（stable 抖动更低，但 lag 更大 —— tradeoff 可见）。
+- `gt_source`、`gt_transform`、`object_id`、`variant_labels`。
+- 每个 variant 可评估行数、GT 有效行数、`anchor_pose_source` 分布。
+- 主变体 `aligned_raw` 与 GT 的直接误差摘要（若存在），用于快速发现 GT 绑错物体或 anchor 输出未生效。
+
+### P2.4 验收
+
+- 每个指标用 U4 真实数据跑出数字；若某项因数据不足（例如没有 `has_stable=true` 或没有 recovery marker）无法计算，应输出 `insufficient_data` 而不是崩溃。
+- `common.py` 几何工具有单测（往返 `mat↔pos_quat`、已知旋转的 `angle_deg`、重采样保形、直接 pose error）。
+- raw vs stable 的 jitter/lag 对比在有对应数据时可见；无 stable 行时报告里清楚标注本 session 只能做 raw/latency/loader smoke。
 
 ---
 
-## Stage P4 — eval/report + run_eval + pixi 任务
+## Stage P3 — eval/report + run_eval + pixi 任务
 
 **目标**：一条命令产出某 session 全部表图。
 
-### P4.1 `eval/report/tables.py` + `figures.py`
+### P3.1 `eval/report/tables.py` + `figures.py`
 
 - `tables.py`（pandas → 论文 Table 2/3）：各条件 × 各变体的 error/jitter/slip 汇总表；latency breakdown 表（capture/network/yolo/depth/cutie/pose/apply 的 P50/90/95）。导出 CSV + markdown。
-- `figures.py`（matplotlib）：误差时间线（叠 condition 区间底色）；四变体 jitter-lag 散点（凸显 tradeoff）；slip vs 头部角速度；latency breakdown 堆叠条；recovery 时间线；**EgoAnchor 各变体 vs SDK GT 同图**（标注"视觉-only，物体无传感器"，凸显优势叙事）。导出 PNG + PDF（论文用矢量）。
+- `figures.py`（matplotlib）：误差时间线（叠 condition 区间底色）；四变体 jitter-lag 散点（凸显 tradeoff）；slip vs 头部角速度；latency breakdown 堆叠条；recovery 时间线；**EgoAnchor 各变体 vs Transform GT 同图**（标注"视觉-only，物体无传感器"，凸显优势叙事）。导出 PNG + PDF（论文用矢量）。
 
-### P4.2 `eval/run_eval.py`（CLI 主入口）
+### P3.2 `eval/run_eval.py`（CLI 主入口）
 
-流程：`load_session` → `estimate_hand_eye`（缓存 X 到 report）→ 各 metric 按条件计算 → `tables`/`figures` 输出 → 写 `report/`。支持 `--only calib|figures|metrics` 分步调试。
+流程：`load_session` → `label_conditions` → `compute_all_metrics` → `write_tables/write_figures` → `write gt_anchor_sanity.json` → 写 `report/`。支持 `--only metrics|figures|tables|sanity|all` 分步调试。
 
-### P4.3 pixi 任务（加到 `EgoAnchor_Python/pixi.toml [tasks]`）
+### P3.3 pixi 任务（加到 `EgoAnchor_Python/pixi.toml [tasks]`）
 
 ```toml
-eval         = "python eval/run_eval.py --session-dir data/eval/{session}"
-eval-calib   = "python eval/run_eval.py --session-dir data/eval/{session} --only calib"
-eval-figures = "python eval/run_eval.py --session-dir data/eval/{session} --only figures"
+eval         = "python eval/run_eval.py"
+eval-metrics = "python eval/run_eval.py --only metrics"
+eval-figures = "python eval/run_eval.py --only figures"
 ```
 
-依赖 numpy/scipy/pandas/matplotlib/opencv 均已在环境（确认；缺则加 pixi 依赖）。
+使用方式：`pixi run eval --session-dir data/eval/<session_id>`。依赖 numpy/scipy/pandas/matplotlib/opencv 均已在环境（确认；缺则加 pixi 依赖）。
 
-### P4.4 验收
+### P3.4 验收
 
 - `pixi run eval --session-dir data/eval/<session>` 一条命令跑通，`report/` 出全部表+图。
-- 图能直接看懂：误差时间线有 condition 底色、latency 堆叠条各模块清晰、jitter-lag 散点四变体分离。
+- 图能直接看懂：误差时间线有 condition 底色、latency 堆叠条各模块清晰、jitter-lag 散点在有足够数据时显示各变体差异。
 
 ---
 
@@ -569,10 +519,10 @@ eval-figures = "python eval/run_eval.py --session-dir data/eval/{session} --only
 ### T.2 验收清单（=整个 P1 阶段的 Definition of Done）
 
 - [ ] 跑完整协议，产出三份 Unity 日志 + manifest，`frame_id` 与 Python `pose_result` 完全对应（join 无大量丢帧）。
-- [ ] `estimate_hand_eye` 的 `X` 逐帧残差方差小（对齐正确硬证据，已写进 report）。
-- [ ] `pixi run eval` 一条命令产出：RQ1（arrival-time vs frame-aligned 的 anchor error/slip）、end-to-end latency breakdown（P50/90/95 含分模块）、当前 stable 与 raw 的 jitter/slip/anchor-error/jump suppression 表与图。
-- [ ] 左右手柄各自用对应 `X` 出独立指标，未混用。
-- [ ] 这套基线数字存档，作为后续 P2（几何质量评分）/P3（统一 SE(3) filter）所有改动的对照组。
+- [ ] `report/gt_anchor_sanity.json` 证明 `gt_source="transform"`、`gt_transform`、`object_id` 与变体输出语义一致；直接世界系误差量级合理。
+- [ ] `pixi run eval` 一条命令产出：RQ1（arrival-time vs frame-aligned 的 anchor error/slip，若当前数据具备）、end-to-end latency breakdown（P50/90/95 含分模块）、当前 stable 与 raw 的 jitter/slip/anchor-error/jump suppression 表与图。
+- [ ] 左右手柄各自使用对应 Transform GT session 独立出指标，未混用 session 或 object_id。
+- [ ] 这套基线数字存档，作为后续几何质量评分/统一 SE(3) filter 所有改动的对照组。
 
 ### T.3 P1b 回放（可选，为 P3 铺路，最后做）
 
@@ -584,5 +534,5 @@ eval-figures = "python eval/run_eval.py --session-dir data/eval/{session} --only
 
 1. **先 U0-U2**（骨架+缝+recorder 雏形），跑出哪怕几秒的两份日志 —— 早验证比写全再验证省事。
 2. **U3-U4** 补 session 管理 + 真机跑一份 ~3 分钟数据。
-3. **P0 立刻做**（独立、低风险，补 latency 字段），然后 P1-P4 对着真实数据写，避免对空 schema 编程。
+3. **P0 立刻做**（独立、低风险，补 latency 字段），然后 P1-P3 对着真实数据写，避免对空 schema 编程。
 4. 每个 Stage 验收过了我再开下一个；卡住就回到对应源文件核对，不堆叠假设。

@@ -66,8 +66,12 @@ static class Program
         AssertContains(capture, "\"capture_local\":\"");
         AssertContains(capture, "\"cam_valid\":true");
         AssertContains(capture, "\"camera_reference\":\"Left\"");
+        AssertContains(capture, "\"head_euler_deg\":[");
+        AssertContains(capture, "\"cam_euler_deg\":[");
+        AssertContains(capture, "\"gt_euler_deg\":[0,0,0]");
         AssertContains(capture, "\"gt_pose_valid\":true");
         AssertContains(capture, "\"gt_pose_source\":\"transform\"");
+        AssertEuler360Output();
 
         var variants = new List<RecordedVariantSnapshot>
         {
@@ -105,15 +109,19 @@ static class Program
         AssertContains(output, "\"render_unity_frame\":456");
         AssertContains(output, "\"render_utc\":\"1970-01-01T00:00:02.000Z\"");
         AssertContains(output, "\"render_local\":\"");
+        AssertContains(output, "\"head_euler_deg\":[");
+        AssertContains(output, "\"gt_euler_deg\":[0,0,0]");
         AssertContains(output, "\"gt_pose_source\":\"transform\"");
         AssertContains(output, "\"variants\":[");
         AssertContains(output, "\"label\":\"kalman\"");
+        AssertContains(output, "\"stable_euler_deg\":[0,0,0]");
         AssertContains(output, "\"anchor_pose_source\":\"transform\"");
         AssertContains(output, "\"source_capture_mono_ms\":12.5");
         AssertContains(output, "\"source_capture_unity_frame\":123");
         AssertContains(output, "\"latest_phase\":\"tracking\"");
         AssertContains(output, "\"latest_failure\":\"\"");
         AssertContains(output, "\"aligned_raw_pos\":[4,5,6]");
+        AssertContains(output, "\"aligned_raw_euler_deg\":[");
         AssertContains(output, "\"reliability_score\":0.75");
 
         string manifest = EvalSessionManifestJson.BuildManifest(
@@ -222,6 +230,23 @@ static class Program
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    private static void AssertEuler360Output()
+    {
+        float halfRad = -30.0f * (float)Math.PI / 360.0f;
+        Pose negativeEulerPose = new Pose(Vector3.zero, new Quaternion(0.0f, (float)Math.Sin(halfRad), 0.0f, (float)Math.Cos(halfRad)));
+        string json = AnchorEvalJson.BuildCaptureLine(
+            1,
+            1.0,
+            1.0,
+            negativeEulerPose,
+            negativeEulerPose,
+            negativeEulerPose,
+            gtPoseValid: true,
+            gtPoseSource: "transform");
+
+        AssertContains(json, "\"gt_euler_deg\":[0,330,0]");
     }
 
     private static void WritePythonSession(string root, string sessionId, string objectId, string pythonLogFilename, bool addUnityLog)

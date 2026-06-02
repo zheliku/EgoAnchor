@@ -560,10 +560,12 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    applyOffset: 0
-    positionOffset: {x: 0, y: 0, z: 0}
-    rotationOffsetEuler: {x: 0, y: 0, z: 0}
-    offsetInAnchorLocal: 1
+    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
@@ -2625,10 +2627,12 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    applyOffset: 0
-    positionOffset: {x: 0, y: 0, z: 0}
-    rotationOffsetEuler: {x: 0, y: 0, z: 0}
-    offsetInAnchorLocal: 1
+    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors: []
   policyHost: {fileID: 0}
   diagnostics:

@@ -1,4 +1,6 @@
 using System;
+using System.Reflection;
+using EgoAnchor.Alignment;
 using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
 using UnityEngine;
@@ -83,6 +85,8 @@ static class Program
         Pose alignedRotated = CameraLocalToWorld(rotatedCameraPose, rotatedLocalPose);
         Assert(Vector3.Distance(alignedFirst.position, alignedRotated.position) < 0.001f, "frame-aligned position should not follow pure head rotation");
         Assert(QuaternionAngleDegrees(alignedFirst.rotation, alignedRotated.rotation) < 0.1f, "frame-aligned rotation should not follow pure head rotation");
+        AssertParallelPoseOffsets();
+        AssertLegacyOffsetApiRemoved();
 
         controller.NotifyReacquire(sampleTimeSeconds: 1.3, "smoke");
         Assert(controller.State == AnchorState.Relocalizing, "reacquire should enter Relocalizing");
@@ -108,6 +112,60 @@ static class Program
 
         Console.WriteLine("Anchor policy smoke passed.");
         return 0;
+    }
+
+    private static void AssertParallelPoseOffsets()
+    {
+        AnchorPoseTransform transform = AnchorPoseTransform.OpenCvToUnityDefault;
+        Vector3 cameraLocalOffset = new Vector3(0.10f, 0.02f, -0.03f);
+        Vector3 anchorLocalOffset = new Vector3(-0.04f, 0.05f, 0.06f);
+        Vector3 worldOffset = new Vector3(0.07f, -0.08f, 0.09f);
+        Vector3 cameraLocalRotation = new Vector3(7f, -11f, 13f);
+        Vector3 anchorLocalRotation = new Vector3(-5f, 9f, 4f);
+        Vector3 worldRotation = new Vector3(3f, 6f, -8f);
+        transform.SetPositionOffsets(cameraLocalOffset, anchorLocalOffset, worldOffset);
+        transform.SetRotationOffsets(cameraLocalRotation, anchorLocalRotation, worldRotation);
+
+        Pose cameraWorldPose = new Pose(new Vector3(1.0f, 0.5f, -0.25f), YawDegrees(90f));
+        Pose cameraLocalPose = new Pose(new Vector3(0.2f, 0.3f, 1.2f), YawDegrees(20f));
+        Pose cameraOffsetPose = transform.ApplyCameraLocalOffsets(cameraLocalPose);
+        Pose alignedPose = CameraLocalToWorld(cameraWorldPose, cameraOffsetPose);
+        Pose finalPose = transform.ApplyFrameAlignedOffsets(alignedPose);
+
+        Vector3 expectedPosition = CameraLocalToWorld(cameraWorldPose, cameraLocalPose).position
+            + Rotate(cameraWorldPose.rotation, cameraLocalOffset)
+            + Rotate(alignedPose.rotation, anchorLocalOffset)
+            + worldOffset;
+        Quaternion expectedRotation = Multiply(
+            Multiply(
+                EulerZxy(worldRotation),
+                Multiply(cameraWorldPose.rotation, Multiply(EulerZxy(cameraLocalRotation), cameraLocalPose.rotation))
+            ),
+            EulerZxy(anchorLocalRotation)
+        );
+        Assert(Vector3.Distance(finalPose.position, expectedPosition) < 0.001f, "camera/anchor/world position offsets should all apply in parallel");
+        Assert(QuaternionAngleDegrees(finalPose.rotation, expectedRotation) < 0.1f, "camera/anchor/world rotation offsets should all apply in parallel");
+    }
+
+    private static void AssertLegacyOffsetApiRemoved()
+    {
+        Type type = typeof(AnchorPoseTransform);
+        BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        foreach (string fieldName in new[] { "applyOffset", "positionOffset", "rotationOffsetEuler", "offsetInAnchorLocal" })
+        {
+            Assert(type.GetField(fieldName, flags) == null, $"legacy offset field should be removed: {fieldName}");
+        }
+
+        foreach (string propertyName in new[] { "ApplyOffsetEnabled", "PositionOffset", "RotationOffsetEuler", "OffsetInAnchorLocal" })
+        {
+            Assert(type.GetProperty(propertyName, flags) == null, $"legacy offset property should be removed: {propertyName}");
+        }
+
+        foreach (string methodName in new[] { "SetOffset", "ApplyFixedOffset", "ApplyCameraLocalPositionOffset" })
+        {
+            Assert(type.GetMethod(methodName, flags) == null, $"legacy offset method should be removed: {methodName}");
+        }
     }
 
     private static void Assert(bool condition, string message)
@@ -141,6 +199,22 @@ static class Program
         return new Quaternion(0f, (float)Math.Sin(radians * 0.5), 0f, (float)Math.Cos(radians * 0.5));
     }
 
+    private static Quaternion EulerZxy(Vector3 eulerDeg)
+    {
+        Quaternion z = AxisAngle(new Vector3(0f, 0f, 1f), eulerDeg.z);
+        Quaternion x = AxisAngle(new Vector3(1f, 0f, 0f), eulerDeg.x);
+        Quaternion y = AxisAngle(new Vector3(0f, 1f, 0f), eulerDeg.y);
+        return Normalize(Multiply(y, Multiply(x, z)));
+    }
+
+    private static Quaternion AxisAngle(Vector3 axis, float degrees)
+    {
+        double halfRad = degrees * Math.PI / 360.0;
+        float sin = (float)Math.Sin(halfRad);
+        float cos = (float)Math.Cos(halfRad);
+        return new Quaternion(axis.x * sin, axis.y * sin, axis.z * sin, cos);
+    }
+
     private static Quaternion Inverse(Quaternion q)
     {
         float norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
@@ -155,6 +229,18 @@ static class Program
             a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
             a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
         );
+    }
+
+    private static Quaternion Normalize(Quaternion q)
+    {
+        double norm = Math.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        if (norm <= 1e-12)
+        {
+            return Quaternion.identity;
+        }
+
+        float inv = (float)(1.0 / norm);
+        return new Quaternion(q.x * inv, q.y * inv, q.z * inv, q.w * inv);
     }
 
     private static Vector3 Rotate(Quaternion q, Vector3 v)

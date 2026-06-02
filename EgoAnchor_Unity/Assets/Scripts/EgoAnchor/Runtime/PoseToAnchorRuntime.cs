@@ -14,7 +14,7 @@ namespace EgoAnchor.Runtime
     ///
     /// 这是 Unity Anchor Runtime 的核心组合点：它接收 Python 返回的 camera-space PoseResult，
     /// 调用 CameraPoseFrameAligner 得到 frame-aligned raw world pose，再按处理器链得到 stable pose。
-    /// 对齐策略、参考相机选择和实验性固定偏移都集中在这里，避免 DynamicObjectAnchor 或网络层分散修改坐标。
+    /// 对齐策略、参考相机选择和三路 pose 补偿都集中在这里，避免 DynamicObjectAnchor 或网络层分散修改坐标。
     ///
     /// reliability-aware policy 可把低可靠 pose、跳变和短时缺失转化为 Hold/Coast/Lost 等
     /// anchor 行为；关闭 policy 时仍保留 raw + processor chain baseline，便于论文对照。
@@ -46,8 +46,8 @@ namespace EgoAnchor.Runtime
         [Tooltip("Unity 本地选择的对齐参考相机。Left 是当前 Python pose 的语义默认值；Right/Center/None 仅用于本地对照、补偿或诊断，不需要服务器知道。")]
         [SerializeField] private CameraReference alignmentReference = CameraReference.Left;
 
-        /// <summary>camera-local 轴翻转和 frame-aligned 后固定偏移的统一配置。</summary>
-        [Tooltip("camera-local 轴翻转和 frame-aligned 后固定偏移的统一配置。测试鼠标模型时可直接关闭 Flip Y，而不需要修改代码。")]
+        /// <summary>camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。</summary>
+        [Tooltip("camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。测试鼠标模型时可直接关闭 Flip Y，或在 Position/Rotation Offsets 中叠加三种补偿。")]
         [SerializeField] private AnchorPoseTransform poseTransform = AnchorPoseTransform.OpenCvToUnityDefault;
 
         [Header("Anchor Processors")]

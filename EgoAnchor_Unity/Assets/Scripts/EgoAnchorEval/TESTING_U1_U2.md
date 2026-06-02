@@ -36,9 +36,9 @@ dotnet build EgoAnchor_Unity\Assembly-CSharp.csproj --no-restore
 1. 保持 Quest Link 可用并进入 Play Mode。
 2. 按 `F7` 开始录制，移动被选中的手柄 2-3 秒，再按 `F8` 停止。
 3. 打开 Console 打印的 session 目录中的 `<session_id>_unity_capture.jsonl`。
-4. 任取一行，确认 `gt_pose_source="transform"`，并把 `gt_pos/gt_rot` 与 `AnchorEvalRecorder.groundTruthTransform` 在 Inspector 中看到的 Transform 对比。
+4. 任取一行，确认 `gt_pose_source="transform"`，并把 `gt_pos/gt_rot` 与 `AnchorEvalRecorder.groundTruthTransform` 在 Inspector 中看到的 Transform 对比；同时确认 `gt_euler_deg` 是 `[0,360)` 区间的 xyz 欧拉角。
 
-期望结果：`gt_pos/gt_rot` 与绑定的 GT Transform 一致，并随手柄模型移动而变化。
+期望结果：`gt_pos/gt_rot` 与绑定的 GT Transform 一致，并随手柄模型移动而变化；`gt_euler_deg` 只用于人工阅读，正式离线计算仍使用 `gt_rot` 四元数。
 
 ## U2 Recorder 测试
 
@@ -60,8 +60,8 @@ EgoAnchor_Python/data/eval/manual_smoke/<session_id>/
 
 期望内容：
 
-- capture 行包含递增的 `frame_id`、`capture_mono_ms`、`capture_unity_frame`、`head_pos`、`cam_pos`、`gt_pos`、`gt_pose_valid` 和 `gt_pose_source`。
+- capture 行包含递增的 `frame_id`、`capture_mono_ms`、`capture_unity_frame`、`head_pos/head_euler_deg`、`cam_pos/cam_euler_deg`、`gt_pos/gt_euler_deg`、`gt_pose_valid` 和 `gt_pose_source`。
 - output 行包含 `render_mono_ms`、`render_unity_frame`、`source_frame_id`、`gt_pos` 和 `variants` 数组。
-- 每个变体包含 `stable_pos/stable_rot`、`anchor_pose_source`、`source_capture_mono_ms` 和 `source_capture_unity_frame`。
-- 主变体包含 `aligned_raw_pos`、`aligned_raw_rot` 和 `reliability_score`。
+- 每个变体包含 `stable_pos/stable_rot/stable_euler_deg`、`anchor_pose_source`、`source_capture_mono_ms` 和 `source_capture_unity_frame`。
+- 主变体包含 `aligned_raw_pos`、`aligned_raw_rot`、`aligned_raw_euler_deg` 和 `reliability_score`。
 - output 行数应高于 capture 行数。

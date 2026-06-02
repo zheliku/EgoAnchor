@@ -1,0 +1,11 @@
+condition,label,n,spike_count,spike_threshold_m,max_translation_error_m,policy_reject_count,top_policy_reasons
+fast_head,kalman,1553,300,0.05,0.07825319120023666,0,
+fast_head,raw,1553,526,0.05,0.10678620189726104,0,
+object_motion,kalman,3407,960,0.05,0.18562684227237106,0,
+object_motion,raw,3407,761,0.05,0.17875376843269078,0,
+slow_head,kalman,2009,23,0.05,0.0586339932456456,0,
+slow_head,raw,2009,24,0.05,0.09136277442335959,0,
+static,kalman,3318,0,0.05,0.025756065015637,0,
+static,raw,3318,0,0.05,0.02818452387145599,0,
+unlabeled,kalman,831,0,0.05,0.029475453550455725,0,
+unlabeled,raw,831,0,0.05,0.0430183329081621,0,
