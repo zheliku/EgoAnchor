@@ -1,0 +1,9 @@
+condition,label,n,spike_count,spike_threshold_m,max_translation_error_m,policy_reject_count,top_policy_reasons
+fast_head,kalman,1589,0,0.05,0.041371997175356424,0,
+fast_head,raw,1589,120,0.05,0.07858575909951566,0,
+slow_head,kalman,1398,0,0.05,0.041401943131801955,0,
+slow_head,raw,1398,31,0.05,0.06631704464886683,0,
+static,kalman,1652,0,0.05,0.011441311536410061,0,
+static,raw,1652,0,0.05,0.015655309773844855,0,
+unlabeled,kalman,185,0,0.05,0.009560258772472983,0,
+unlabeled,raw,185,0,0.05,0.010774224701211067,0,

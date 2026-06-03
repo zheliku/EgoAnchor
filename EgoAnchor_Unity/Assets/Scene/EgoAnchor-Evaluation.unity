@@ -219,7 +219,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalRotation.x
@@ -231,15 +231,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a8b94e2cfb80adf4ea99c414a13cc226, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -560,11 +560,11 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
     anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
     worldPositionOffset: {x: 0, y: 0, z: 0}
     cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
-    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors:
   - {fileID: 160200735}
@@ -813,27 +813,27 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1ca30660481f9aa4ab30aef4a409a116, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -1534,6 +1534,10 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 1846668450}
+    - target: {fileID: 1168042862842845266, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_showState
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _leftEyeAnchor
       value: 
@@ -1593,6 +1597,10 @@ PrefabInstance:
     - target: {fileID: 4397664628265918113, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4615743173934549582, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_Enabled
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5801245061754409418, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _playerEyes
@@ -1814,19 +1822,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 052067f6653b80144a6d7d4a5294dcc7, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 052067f6653b80144a6d7d4a5294dcc7, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 052067f6653b80144a6d7d4a5294dcc7, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 052067f6653b80144a6d7d4a5294dcc7, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 052067f6653b80144a6d7d4a5294dcc7, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2633,11 +2641,11 @@ MonoBehaviour:
     flipX: 0
     flipY: 1
     flipZ: 0
-    cameraLocalPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
     anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
     worldPositionOffset: {x: 0, y: 0, z: 0}
     cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
-    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   processors: []
   policyHost: {fileID: 0}
@@ -3306,7 +3314,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalRotation.x
@@ -3318,15 +3326,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: ac4e329056ddb8f43a21283d4f216817, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -3722,6 +3730,10 @@ PrefabInstance:
     - target: {fileID: 11400000, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
       propertyPath: requestScenePermissionOnStartup
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
+      propertyPath: SimultaneousHandsAndControllersEnabled
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
       propertyPath: requestPassthroughCameraAccessPermissionOnStartup

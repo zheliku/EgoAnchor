@@ -1,0 +1,9 @@
+condition,label,n,lag_ms,correlation,insufficient_data
+fast_head,kalman,1589,,,True
+fast_head,raw,1589,,,True
+slow_head,kalman,1398,,,True
+slow_head,raw,1398,,,True
+static,kalman,1652,,,True
+static,raw,1652,,,True
+unlabeled,kalman,185,,,True
+unlabeled,raw,185,,,True

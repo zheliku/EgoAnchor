@@ -1,3 +1,0 @@
-condition,label,n,slip_rms_px,slip_peak_px,insufficient_data
-static,kalman,1016,33.77911044166577,73.04929009453797,False
-unlabeled,kalman,101,69.93488920630233,75.78535976886127,False
