@@ -140,6 +140,26 @@ def _make_camera_info() -> quest_pb2.QuestCameraInfo:
 class QuestPosePipelineSegmenterTest(unittest.TestCase):
     """验证 pipeline 对分割后端只依赖统一接口。"""
 
+    def test_track_deltas_reports_translation_and_rotation(self) -> None:
+        """相邻 pose 的平移和旋转增量应稳定供可靠性评分使用。"""
+
+        previous = np.eye(4, dtype=np.float64)
+        current = np.eye(4, dtype=np.float64)
+        current[0, 3] = 0.3
+        current[:3, :3] = np.array(
+            [
+                [0.0, -1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+
+        translation_m, rotation_deg = QuestPosePipeline._track_deltas(current, previous)
+
+        self.assertAlmostEqual(translation_m, 0.3)
+        self.assertAlmostEqual(rotation_deg, 90.0)
+
     def test_segmenter_name_is_used_as_mask_source(self) -> None:
         """SAM3 后端进入 pipeline 时 diagnostics.mask_source 应显示 sam3。"""
 

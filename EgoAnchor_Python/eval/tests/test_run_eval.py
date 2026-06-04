@@ -65,6 +65,10 @@ class RunEvalTest(unittest.TestCase):
             latency = metrics.tables["latency_summary"]
             self.assertIn("capture_to_apply_p50_ms", latency.columns)
             self.assertGreater(float(latency.iloc[0]["capture_to_apply_p50_ms"]), 0.0)
+            self.assertIn("reliability_diagnostics_summary", metrics.tables)
+            self.assertIn("reliability_score_histogram", metrics.tables)
+            self.assertIn("track_consistency_histogram", metrics.tables)
+            self.assertIn("policy_distribution", metrics.tables)
 
             sanity = metrics.sanity
             self.assertEqual(sanity["gt_source"], "transform")
@@ -84,6 +88,10 @@ class RunEvalTest(unittest.TestCase):
             self.assertTrue((report_dir / "pose_offset_summary.csv").is_file())
             self.assertFalse((report_dir / "aligned_raw_offset_summary.csv").is_file())
             self.assertTrue((report_dir / "latency_summary.csv").is_file())
+            self.assertTrue((report_dir / "reliability_diagnostics_summary.csv").is_file())
+            self.assertTrue((report_dir / "reliability_score_histogram.csv").is_file())
+            self.assertTrue((report_dir / "track_consistency_histogram.csv").is_file())
+            self.assertTrue((report_dir / "policy_distribution.csv").is_file())
             self.assertTrue((report_dir / "summary.md").is_file())
             self.assertTrue((report_dir / "error_timeline.png").is_file())
             self.assertTrue((report_dir / "latency_breakdown.png").is_file())

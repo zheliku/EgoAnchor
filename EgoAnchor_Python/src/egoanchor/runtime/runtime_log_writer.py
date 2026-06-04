@@ -100,8 +100,12 @@ class RuntimeLogWriter:
 
         self.logger.write(event_type, **fields)
 
-    def pose_result(self, msg: object, *, state: RuntimeState) -> None:
-        """记录 PoseResult 的论文相关摘要字段。"""
+    def pose_result(self, msg: object, *, state: RuntimeState, diagnostics: object | None = None) -> None:
+        """记录 PoseResult 的论文相关摘要字段。
+
+        `diagnostics` 是不进入 Protobuf 的 runtime 旁路，用于保存渲染一致性等
+        Python-only 诊断量，便于离线分析 score 分布和一致性开销。
+        """
 
         if not self.pose_results:
             return
@@ -128,6 +132,15 @@ class RuntimeLogWriter:
             server_receive_mono_ms=float(getattr(msg, "server_receive_mono_ms", 0.0)),
             server_publish_mono_ms=float(getattr(msg, "server_publish_mono_ms", 0.0)),
         )
+        if diagnostics is not None:
+            fields.update(
+                depth_quality_score=float(getattr(diagnostics, "depth_quality_score", 0.0)),
+                track_consistency=float(getattr(diagnostics, "track_consistency", -1.0)),
+                consistency_mask_iou=float(getattr(diagnostics, "consistency_mask_iou", 0.0)),
+                consistency_depth_inlier=float(getattr(diagnostics, "consistency_depth_inlier", 0.0)),
+                consistency_depth_residual_m=float(getattr(diagnostics, "consistency_depth_residual_m", 0.0)),
+                consistency_ms=float(getattr(diagnostics, "consistency_ms", 0.0)),
+            )
         fields.update(self.pose_factory.build(msg))
         self.event("pose_result", **fields)
 

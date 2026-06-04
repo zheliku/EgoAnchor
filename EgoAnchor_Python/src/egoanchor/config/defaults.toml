@@ -53,6 +53,18 @@ process_height = 480 # 算法处理图像高度；当前 pose debug 固定缩放
 min_depth = 0.1 # 有效深度下限，单位米；低于该值会置零。
 max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可适当增大，但过大可能引入背景深度噪声。
 
+[reliability.consistency]
+enabled = false # 是否启用渲染一致性检测；真机联调稳定后再设为 true。
+mode = "score_only" # score_only=只降分写 flag 不重注册；re_register=确认误报率后再启用连续低一致性重注册。
+re_register_threshold = 0.35 # 一致性低于该值且持续若干帧后触发 RE_REGISTER，仅 re_register 模式生效。
+min_track_frames = 2 # 连续多少帧低一致性才判定锁错或漂移，避免单帧误触发。
+warmup_frames = 3 # 重注册后跳过一致性判定的帧数，避免重注册自激循环。
+iou_weight = 0.6 # 综合分中 mask IoU 权重。
+depth_weight = 0.4 # 综合分中深度 inlier 权重。
+depth_inlier_thresh_m = 0.02 # 深度残差 inlier 阈值，单位米。
+downscale = 2 # 一致性渲染下采样倍数，越大越快但越粗。
+min_render_area_px = 50 # 渲染前景过少时判为无效信号，不触发重注册。
+
 [module.segmenter]
 type = "yoloe26" # 分割后端；默认 yoloe26，可显式改为 sam3。
 prompt = "little white cube" # 文本提示词，用于定位目标物体；YOLOE-26 和 SAM3 共用。

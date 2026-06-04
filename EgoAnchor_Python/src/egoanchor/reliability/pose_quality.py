@@ -1,16 +1,18 @@
-"""轻量 pose observation 可靠性评分。
-
-当前只用于 Python debug HUD，不把它宣称为最终 adaptive controller。后续接入
-NATS/status 时，可继续把 flags 作为诊断信息上报。
-"""
+"""轻量 pose observation 可靠性评分。"""
 
 from __future__ import annotations
 
 from egoanchor.perception import PoseObservation
 
+JUMP_TRANSLATION_THRESHOLD_M = 0.6
+"""接近该平移跳变门限时降低可靠性，单位米；与默认 FoundationPose track jump 配置一致。"""
+
+JUMP_ROTATION_THRESHOLD_DEG = 100.0
+"""接近该旋转跳变门限时降低可靠性，单位度；与默认 FoundationPose track jump 配置一致。"""
+
 
 def score_observation(observation: PoseObservation) -> tuple[float, tuple[str, ...]]:
-    """根据 depth、mask、phase 和 has_pose 生成 0..1 可靠性评分。"""
+    """根据一致性、depth、跳变幅度、mask 和 phase 生成 0..1 可靠性评分。"""
 
     flags: list[str] = []
     if not observation.has_pose:
@@ -22,33 +24,90 @@ def score_observation(observation: PoseObservation) -> tuple[float, tuple[str, .
             flags.append("no_mask")
         return 0.0, tuple(flags)
 
-    score = 1.0
-    if observation.phase in {"TRACK", "REGISTER", "RE_REGISTER"}:
-        score *= 1.0
-    else:
-        score *= 0.7
+    phase_weight = 1.0
+    if observation.phase not in {"TRACK", "REGISTER", "RE_REGISTER"}:
+        phase_weight = 0.7
         flags.append(f"phase_{observation.phase.lower()}")
 
+    consistency_score = _consistency_score(observation, flags)
+    depth_score = score_depth_quality(observation)
+    _append_depth_flags(observation, flags)
+    jump_score = _jump_score(observation, flags)
+    mask_factor = _mask_factor(observation, flags)
+    reject_factor = _track_reject_factor(observation, flags)
+    score = phase_weight * consistency_score * depth_score * jump_score * mask_factor * reject_factor
+    return _clamp01(score), tuple(flags)
+
+
+def score_depth_quality(observation: PoseObservation) -> float:
+    """把 mask 内有效深度比例映射为可单独展示的 0..1 深度质量子分。"""
+
+    valid_in_mask = float(observation.depth_valid_in_mask)
+    ramp = _clamp01((valid_in_mask - 0.05) / 0.30)
+    score = 0.3 + ramp * 0.7
+    if observation.depth_valid_ratio < 0.05:
+        score *= 0.65
+    return _clamp01(score)
+
+
+def _consistency_score(observation: PoseObservation, flags: list[str]) -> float:
+    """把渲染一致性转为主可靠性子分。"""
+
+    consistency = float(observation.track_consistency)
+    if consistency < 0.0:
+        flags.append("no_consistency_signal")
+        return 1.0
+    score = _clamp01(consistency)
+    if score < 0.5:
+        flags.append("consistency_low")
+    return score
+
+
+def _append_depth_flags(observation: PoseObservation, flags: list[str]) -> None:
+    """根据 depth 诊断追加解释性 flags。"""
+
     if observation.depth_valid_in_mask < 0.08:
-        score *= 0.35
         flags.append("depth_in_mask_low")
     elif observation.depth_valid_in_mask < 0.2:
-        score *= 0.65
         flags.append("depth_in_mask_mid")
 
     if observation.depth_valid_ratio < 0.05:
-        score *= 0.65
         flags.append("depth_ratio_low")
 
+
+def _jump_score(observation: PoseObservation, flags: list[str]) -> float:
+    """把相邻 pose 增量映射为接近跳变门限的惩罚。"""
+
+    translation_ratio = abs(float(observation.last_translation_delta_m)) / max(JUMP_TRANSLATION_THRESHOLD_M, 1e-6)
+    rotation_ratio = abs(float(observation.last_rotation_delta_deg)) / max(JUMP_ROTATION_THRESHOLD_DEG, 1e-6)
+    score = _clamp01(1.0 - max(translation_ratio, rotation_ratio))
+    if score < 0.5:
+        flags.append("near_jump_limit")
+    return score
+
+
+def _mask_factor(observation: PoseObservation, flags: list[str]) -> float:
+    """保留 mask 面积异常的乘性因子。"""
+
     if observation.mask_area_ratio < 0.002:
-        score *= 0.5
         flags.append("mask_too_small")
+        return 0.5
     elif observation.mask_area_ratio > 0.65:
-        score *= 0.55
         flags.append("mask_too_large")
+        return 0.55
+    return 1.0
+
+
+def _track_reject_factor(observation: PoseObservation, flags: list[str]) -> float:
+    """保留近期 track reject 的乘性因子。"""
 
     if observation.track_reject_count > 0:
-        score *= max(0.25, 1.0 - min(observation.track_reject_count, 5) * 0.12)
         flags.append("recent_track_reject")
+        return max(0.25, 1.0 - min(observation.track_reject_count, 5) * 0.12)
+    return 1.0
 
-    return float(max(0.0, min(1.0, score))), tuple(flags)
+
+def _clamp01(value: float) -> float:
+    """限制数值到 0..1。"""
+
+    return float(max(0.0, min(1.0, value)))

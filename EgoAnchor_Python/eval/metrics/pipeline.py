@@ -12,6 +12,7 @@ from eval.io import SessionLogs, label_conditions
 
 from .anchor_error import compute_anchor_error, summarize_pose_offset
 from .common import pose_error
+from .diagnostics import compute_reliability_diagnostics
 from .jitter import compute_jitter
 from .jump_suppression import compute_jump_suppression
 from .lag import compute_lag
@@ -38,6 +39,7 @@ def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
     anchor_detail, anchor_summary = compute_anchor_error(output)
     latency_detail, latency_summary = compute_latency(output, logs.pose)
     slip_detail, slip_summary = compute_slip(output)
+    reliability = compute_reliability_diagnostics(logs.pose, output, anchor_detail)
     tables = {
         "anchor_error_detail": anchor_detail,
         "anchor_error_summary": anchor_summary,
@@ -50,6 +52,10 @@ def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
         "lag_summary": compute_lag(output),
         "jump_suppression_summary": compute_jump_suppression(anchor_detail),
         "recovery_summary": compute_recovery(anchor_detail, logs.manifest),
+        "reliability_diagnostics_summary": reliability.summary,
+        "reliability_score_histogram": reliability.score_histogram,
+        "track_consistency_histogram": reliability.consistency_histogram,
+        "policy_distribution": reliability.policy_distribution,
     }
     return MetricsResult(tables=tables, sanity=build_sanity(logs, output))
 

@@ -26,6 +26,17 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.module.sam3.checkpoint_path, "sam3/assets/sam3_ckpt/sam3.pt")
         self.assertTrue(cfg.module.sam3.async_segmentation)
 
+    def test_render_consistency_defaults_are_shadow_mode(self) -> None:
+        """渲染一致性默认必须关闭，开启后也先只做 score_only。"""
+
+        cfg = load_config()
+
+        self.assertFalse(cfg.reliability.consistency.enabled)
+        self.assertEqual(cfg.reliability.consistency.mode, "score_only")
+        self.assertAlmostEqual(cfg.reliability.consistency.re_register_threshold, 0.35)
+        self.assertEqual(cfg.reliability.consistency.min_track_frames, 2)
+        self.assertEqual(cfg.reliability.consistency.warmup_frames, 3)
+
     def test_normalize_segmenter_type_accepts_sam3(self) -> None:
         """工厂层应接受 sam3 作为显式分割后端。"""
 

@@ -57,12 +57,13 @@ pixi run python .\src\tracking_server.py
 pixi run python .\src\tracking_server.py --log DEBUG
 pixi run python .\src\tracking_server.py --object blue_mouse
 pixi run python .\src\tracking_server.py --object earphone
+pixi run python .\src\tracking_server.py --object controller_right
 pixi run python .\src\tracking_server.py --config .\path\to\override.toml
 ```
 
 默认配置会启用 `[network.message_plane]`，并连接 `nats://127.0.0.1:4222` 发布 `PoseResult`。端到端 Unity anchor 测试前，需要先启动本机或开发机上的 `nats-server`，并确保 Unity `NatsControlClient.natsUrl` 指向同一个地址。若只想做 Python-only debug，可在 override TOML 中设置 `network.message_plane.enabled = false`。
 
-目标物体统一写在 `src/egoanchor/config/objects.toml`。当前对象名包括 `blue_mouse`、`pink_mouse`、`earphone` 和 `controller`；每个对象直接写与 `defaults.toml` 一致的嵌套覆盖表，例如 `[objects.pink_mouse.module.segmenter]` 和 `[objects.pink_mouse.module.foundationpose]`，避免扁平字段名和默认配置字段发生歧义。加载顺序是 `defaults.toml -> objects.toml 中的 --object -> --config 临时覆盖`。`earphone` 会显式切到 SAM3，默认主线仍保持 YOLOE-26。
+目标物体统一写在 `src/egoanchor/config/objects.toml`。当前对象名包括 `blue_mouse`、`pink_mouse`、`earphone`、`controller_right` 和 `controller_left`；每个对象直接写与 `defaults.toml` 一致的嵌套覆盖表，例如 `[objects.pink_mouse.module.segmenter]` 和 `[objects.pink_mouse.module.foundationpose]`，避免扁平字段名和默认配置字段发生歧义。加载顺序是 `defaults.toml -> objects.toml 中的 --object -> --config 临时覆盖`。`earphone` 会显式切到 SAM3，默认主线仍保持 YOLOE-26。
 
 OpenCV 热键：
 

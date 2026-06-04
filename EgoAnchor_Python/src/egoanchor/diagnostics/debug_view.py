@@ -64,7 +64,7 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
     lines = [
         f"stage={diagnostics.stage} phase={diagnostics.phase} frame={diagnostics.frame_id}",
         f"pose={observation.has_pose if observation else False} source={observation.pose_source if observation else 'NONE'} score={observation.reliability_score if observation else 0.0:.2f}",
-        f"det={diagnostics.det_count} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f}",
+        f"det={diagnostics.det_count} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f} depthScore={observation.depth_quality_score if observation else diagnostics.depth_quality_score:.2f}",
         f"depth med/iqr={diagnostics.depth_median_in_mask:.2f}/{diagnostics.depth_iqr_in_mask:.2f}m fps={diagnostics.fps:.1f}",
         f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
     ]

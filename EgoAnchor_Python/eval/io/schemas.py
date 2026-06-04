@@ -278,6 +278,12 @@ class PoseResultRow:
     pose_ms: float
     server_receive_mono_ms: float
     server_publish_mono_ms: float
+    depth_quality_score: float
+    track_consistency: float
+    consistency_mask_iou: float
+    consistency_depth_inlier: float
+    consistency_depth_residual_m: float
+    consistency_ms: float
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -305,6 +311,12 @@ class PoseResultRow:
             pose_ms=_optional_float(row, "pose_ms", np.nan),
             server_receive_mono_ms=_optional_float(row, "server_receive_mono_ms", np.nan),
             server_publish_mono_ms=_optional_float(row, "server_publish_mono_ms", np.nan),
+            depth_quality_score=_optional_float(row, "depth_quality_score", np.nan),
+            track_consistency=_optional_float(row, "track_consistency", -1.0),
+            consistency_mask_iou=_optional_float(row, "consistency_mask_iou", 0.0),
+            consistency_depth_inlier=_optional_float(row, "consistency_depth_inlier", 0.0),
+            consistency_depth_residual_m=_optional_float(row, "consistency_depth_residual_m", 0.0),
+            consistency_ms=_optional_float(row, "consistency_ms", 0.0),
             raw=dict(row),
         )
 
@@ -336,6 +348,12 @@ class PoseResultRow:
             "pose_ms": self.pose_ms,
             "server_receive_mono_ms": self.server_receive_mono_ms,
             "server_publish_mono_ms": self.server_publish_mono_ms,
+            "depth_quality_score": self.depth_quality_score,
+            "track_consistency": self.track_consistency,
+            "consistency_mask_iou": self.consistency_mask_iou,
+            "consistency_depth_inlier": self.consistency_depth_inlier,
+            "consistency_depth_residual_m": self.consistency_depth_residual_m,
+            "consistency_ms": self.consistency_ms,
         }
 
 

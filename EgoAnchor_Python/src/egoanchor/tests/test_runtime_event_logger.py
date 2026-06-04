@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.config import load_config
@@ -142,7 +143,15 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
 
             try:
-                runtime.log_writer.pose_result(PoseMsg(), state=runtime.state)
+                diagnostics = SimpleNamespace(
+                    depth_quality_score=0.66,
+                    track_consistency=0.64,
+                    consistency_mask_iou=0.52,
+                    consistency_depth_inlier=0.81,
+                    consistency_depth_residual_m=0.012,
+                    consistency_ms=4.5,
+                )
+                runtime.log_writer.pose_result(PoseMsg(), state=runtime.state, diagnostics=diagnostics)
             finally:
                 runtime.log_writer.close()
 
@@ -163,6 +172,12 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertEqual(len(row["pose_matrix_cv_camera"]), 16)
             self.assertEqual(row["pose_jump_translation_m"], 0.0)
             self.assertEqual(row["pose_jump_rotation_deg"], 0.0)
+            self.assertAlmostEqual(row["depth_quality_score"], 0.66)
+            self.assertAlmostEqual(row["track_consistency"], 0.64)
+            self.assertAlmostEqual(row["consistency_mask_iou"], 0.52)
+            self.assertAlmostEqual(row["consistency_depth_inlier"], 0.81)
+            self.assertAlmostEqual(row["consistency_depth_residual_m"], 0.012)
+            self.assertAlmostEqual(row["consistency_ms"], 4.5)
 
 
 if __name__ == "__main__":

@@ -230,7 +230,7 @@ class TrackingRuntime:
             output = self.pipeline.process(self.receiver.get_latest_stereo(), self.receiver.get_latest_camera_info())
             if output.new_frame_processed and output.observation is not None:
                 self._update_state_from_observation(output.observation)
-                self._publish_observation(output.observation)
+                self._publish_observation(output.observation, diagnostics=output.diagnostics)
             self._maybe_publish_heartbeat()
             return RuntimeTickResult(pipeline_output=output if return_debug else None, new_frame_processed=output.new_frame_processed)
         except Exception as exc:
@@ -308,11 +308,11 @@ class TrackingRuntime:
             python_log_filename=str(getattr(logging_cfg, "filename", "")),
         )
 
-    def _publish_observation(self, observation) -> None:
+    def _publish_observation(self, observation, *, diagnostics=None) -> None:
         """把当前帧观测转换为 PoseResult 并投递到 NATS。"""
 
         msg = self.pose_result_factory.build(observation)
-        self.log_writer.pose_result(msg, state=self.state)
+        self.log_writer.pose_result(msg, state=self.state, diagnostics=diagnostics)
         if self.pose_publisher is None or not self.pose_publisher.enabled:
             return
         self.pose_publish_attempts += 1

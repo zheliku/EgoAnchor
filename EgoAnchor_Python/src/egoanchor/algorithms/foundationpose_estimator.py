@@ -473,6 +473,55 @@ class FoundationPoseObjectEstimator:
         )
         return vis
 
+    def render_depth_mask(
+        self,
+        pose_cv_camera: np.ndarray,
+        output_size: tuple[int, int],
+        cam_k: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """按给定 OpenCV camera-space pose 渲染 mesh depth 与二值 mask。
+
+        这是 reliability 层唯一使用的渲染 facade。内部复用 FoundationPose 已创建的
+        `glctx` 和 `mesh_tensors`，并把第三方 CUDA/Tensor 输出立即转换为 CPU numpy，
+        避免上层模块持有 GPU tensor 或访问 estimator 内部结构。
+        """
+
+        def render_once() -> tuple[np.ndarray, np.ndarray]:
+            """执行一次 nvdiffrast 渲染并返回 CPU numpy 结果。"""
+
+            import torch
+
+            utils_mod = importlib.import_module("FoundationPose.Utils") if "FoundationPose.Utils" in sys.modules else importlib.import_module("Utils")
+            render_fn = getattr(utils_mod, "nvdiffrast_render")
+            out_h, out_w = (int(output_size[0]), int(output_size[1]))
+            k = np.asarray(cam_k if cam_k is not None else self.cam_k, dtype=np.float64).reshape(3, 3)
+            pose = np.asarray(pose_cv_camera, dtype=np.float32).reshape(1, 4, 4)
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            pose_tensor = torch.as_tensor(pose, dtype=torch.float32, device=device)
+            with torch.no_grad():
+                _color, depth, _normal = render_fn(
+                    k,
+                    out_h,
+                    out_w,
+                    pose_tensor,
+                    self.estimator.glctx,
+                    self.estimator.mesh_tensors,
+                    output_size=(out_h, out_w),
+                )
+            if hasattr(depth, "detach"):
+                depth_np = depth.detach().cpu().numpy()
+            else:
+                depth_np = np.asarray(depth)
+            depth_np = np.asarray(depth_np, dtype=np.float32)
+            if depth_np.ndim == 3:
+                depth_np = depth_np[0]
+            if depth_np.ndim == 4:
+                depth_np = depth_np[0, ..., 0]
+            render_mask = depth_np > 0.0
+            return depth_np, render_mask
+
+        return self.call_with_logging_control(render_once, enable_logging=self.enable_logging)
+
     def reset(self) -> None:
         """重置 FoundationPose 时序状态，使下一帧重新 register。"""
 

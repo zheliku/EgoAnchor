@@ -101,6 +101,30 @@ class FrameDiagnostics:
     depth_iqr_in_mask: float = 0.0
     """mask 内深度 IQR。"""
 
+    depth_quality_score: float = 0.0
+    """仅由 depth 有效率估计的子分，范围 0..1，用于 HUD/日志诊断。"""
+
+    track_consistency: float = -1.0
+    """渲染-重投影一致性分，0..1；-1 表示本帧无信号。"""
+
+    consistency_mask_iou: float = 0.0
+    """渲染 mask 与观测 mask 的 IoU。"""
+
+    consistency_depth_inlier: float = 0.0
+    """渲染深度与观测深度在交集区域的 inlier 比例。"""
+
+    consistency_depth_residual_m: float = 0.0
+    """渲染深度与观测深度的中位残差，单位米。"""
+
+    consistency_ms: float = 0.0
+    """渲染一致性检测耗时，单位毫秒。"""
+
+    last_translation_delta_m: float = 0.0
+    """上一接受 pose 到当前 pose 的平移增量，单位米。"""
+
+    last_rotation_delta_deg: float = 0.0
+    """上一接受 pose 到当前 pose 的旋转增量，单位度。"""
+
     fps: float = 0.0
     """pipeline FPS EMA。"""
 
@@ -168,6 +192,12 @@ class PipelineTrackingState:
     tracked_mask_lost_count: int = 0
     """已注册阶段连续缺失有效 Cutie mask 的帧数。"""
 
+    low_consistency_count: int = 0
+    """连续低渲染一致性帧数；仅 re_register 模式用于触发软 track-loss。"""
+
+    frames_since_register: int = 0
+    """最近一次 register/re-register 后已经处理的 track 帧数，用于 warmup。"""
+
     def bump_generation(self) -> None:
         """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""
 
@@ -177,3 +207,5 @@ class PipelineTrackingState:
         self.last_pose = None
         self.track_reject_count = 0
         self.tracked_mask_lost_count = 0
+        self.low_consistency_count = 0
+        self.frames_since_register = 0

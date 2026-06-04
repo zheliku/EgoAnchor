@@ -14,14 +14,17 @@ from .common import (
     slerp_lerp_resample,
     wrap_angle_360_deg,
 )
+from .diagnostics import ReliabilityDiagnosticsResult, compute_reliability_diagnostics
 from .pipeline import MetricsResult, build_sanity, compute_all_metrics
 
 __all__ = [
     "MetricsResult",
+    "ReliabilityDiagnosticsResult",
     "angle_deg",
     "build_sanity",
     "compute_all_metrics",
     "compute_anchor_error",
+    "compute_reliability_diagnostics",
     "highpass",
     "mat_to_pos_quat",
     "normalize_quat",

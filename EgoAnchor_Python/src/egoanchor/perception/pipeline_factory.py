@@ -141,6 +141,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     cutie_cfg = cfg.module.cutie
     calib_cfg = cfg.pipeline.calibration
     depth_cfg = cfg.pipeline.depth
+    consistency_cfg = getattr(getattr(cfg, "reliability", SimpleNamespace()), "consistency", SimpleNamespace())
     debug_cfg = cfg.debug
 
     segmenter_type = normalize_segmenter_type(segmenter_cfg)
@@ -261,4 +262,14 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         show_mask_snapshot=bool(debug_cfg.show_mask_snapshot),
         mask_snapshot_window=str(debug_cfg.mask_snapshot_window),
         async_segmentation=bool(_cfg_get(sam3_cfg, "async_segmentation", segmenter_type == "sam3")) if segmenter_type == "sam3" else False,
+        enable_render_consistency=bool(_cfg_get(consistency_cfg, "enabled", False)),
+        consistency_mode=str(_cfg_get(consistency_cfg, "mode", "score_only")),
+        consistency_re_register_threshold=float(_cfg_get(consistency_cfg, "re_register_threshold", 0.35)),
+        consistency_min_track_frames=int(_cfg_get(consistency_cfg, "min_track_frames", 2)),
+        consistency_warmup_frames=int(_cfg_get(consistency_cfg, "warmup_frames", 3)),
+        consistency_iou_weight=float(_cfg_get(consistency_cfg, "iou_weight", 0.6)),
+        consistency_depth_weight=float(_cfg_get(consistency_cfg, "depth_weight", 0.4)),
+        consistency_depth_inlier_thresh_m=float(_cfg_get(consistency_cfg, "depth_inlier_thresh_m", 0.02)),
+        consistency_downscale=int(_cfg_get(consistency_cfg, "downscale", 2)),
+        consistency_min_render_area_px=int(_cfg_get(consistency_cfg, "min_render_area_px", 50)),
     )

@@ -1,8 +1,8 @@
 # EgoAnchor 目标物体覆盖配置。
-# 使用方式：pixi run python .\src\tracking_server.py --object blue_mouse
+# 使用方式：pixi run python .\src\tracking_server.py --object blue_mouse 或 --object controller_right
 
 [objects.blue_mouse.module.segmenter]
-prompt = "blue mouse" # 文本提示词；若检测不到，可运行时用 --prompt 或临时 TOML 覆盖。
+prompt = "blue mouse" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
 confidence_threshold = 0.3 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
 
 [objects.blue_mouse.module.foundationpose]
@@ -10,7 +10,7 @@ mesh_path = "data/model/blue_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh
 symmetry_mode = "none" # 鼠标不是 cube 对称体，不能沿用 cube 对称约束。
 
 [objects.pink_mouse.module.segmenter]
-prompt = "pink mouse" # 文本提示词；若检测不到，可运行时用 --prompt 或临时 TOML 覆盖。
+prompt = "pink mouse" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
 confidence_threshold = 0.2 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
 
 [objects.pink_mouse.module.foundationpose]
@@ -27,8 +27,8 @@ mesh_path = "data/model/earphone.glb" # 相对 EgoAnchor_Python 的目标 mesh �
 symmetry_mode = "none" # 耳机盒不是 cube 对称体，不能沿用 cube 对称约束。
 
 [objects.controller_right.module.segmenter]
-# type = "sam3" # 控制器目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
-prompt = "quest 3 controller" # 文本提示词；若检测不到，可运行时用 --prompt 或临时 TOML 覆盖。
+# type = "sam3" # 如需让控制器目标改用 SAM3，可取消注释；主默认配置仍保持 yoloe26。
+prompt = "quest 3 controller" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
 confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
 
 [objects.controller_right.module.foundationpose]
@@ -36,8 +36,8 @@ mesh_path = "data/model/MetaQuestTouchPlus_Right.glb" # 相对 EgoAnchor_Python 
 symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
 
 [objects.controller_left.module.segmenter]
-# type = "sam3" # 控制器目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
-prompt = "quest 3 controller" # 文本提示词；若检测不到，可运行时用 --prompt 或临时 TOML 覆盖。
+# type = "sam3" # 如需让控制器目标改用 SAM3，可取消注释；主默认配置仍保持 yoloe26。
+prompt = "quest 3 controller" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
 confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
 
 [objects.controller_left.module.foundationpose]
