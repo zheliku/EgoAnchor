@@ -10,8 +10,7 @@ from pathlib import Path
 
 from egoanchor.config import load_config
 from egoanchor.protocol import SubjectRegistry
-from egoanchor.runtime import TrackingRuntime
-from egoanchor.runtime.eval_session import create_eval_session
+from egoanchor.runtime import TrackingRuntime, create_eval_session
 
 
 class EvalSessionCoordinatorTest(unittest.TestCase):

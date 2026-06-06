@@ -18,7 +18,9 @@ from .act_ckpt_utils import activation_ckpt_wrapper
 from .box_ops import box_cxcywh_to_xyxy
 from .geometry_encoders import Prompt
 from .model_misc import inverse_sigmoid
+from egoanchor.utils import get_thirdparty_logger
 
+log = get_thirdparty_logger("sam3")
 
 def _update_out(out, out_name, out_value, auxiliary=True, update_aux=True):
     out[out_name] = out_value[-1] if auxiliary else out_value
@@ -542,7 +544,7 @@ class Sam3Image(torch.nn.Module):
         find_target = input.find_targets[0]
 
         if find_input.input_points is not None and find_input.input_points.numel() > 0:
-            print("Warning: Point prompts are ignored in PCS.")
+            log.warning("Point prompts are ignored in PCS.")
 
         num_interactive_steps = 0 if self.training else self.num_interactive_steps_val
         geometric_prompt = Prompt(

@@ -2,12 +2,11 @@
 
 保留旧主线验证过的 FFS 调用策略：优先 TensorRT，失败时可按配置回退
 PyTorch；但本文件不 import v1/v2 模块，只通过项目内 Fast-FoundationStereo
-目录动态加载第三方实现。
+包级入口导入第三方实现，不在适配器里修改 `sys.path`。
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
 import sys
 import time
@@ -17,6 +16,8 @@ from typing import Any
 
 import cv2
 import numpy as np
+
+from egoanchor.utils import configure_thirdparty_logging
 
 
 def _ensure_three_channel(image: np.ndarray) -> np.ndarray:
@@ -44,7 +45,7 @@ class _PyTorchStereoBackend:
         if self.host.optimize_build_volume != "triton":
             return
         try:
-            importlib.import_module("triton")
+            import triton  # noqa: F401
         except Exception:
             logging.warning("未检测到 triton，optimize_build_volume 回退为 pytorch1。")
             self.host.optimize_build_volume = "pytorch1"
@@ -215,6 +216,7 @@ class FastFoundationStereoDepth:
         trt_platform_tag: str = "",
         trt_feature_engine_path: str = "",
         trt_post_engine_path: str = "",
+        enable_logging: bool = False,
         project_root: str | Path | None = None,
     ) -> None:
         """保存推理参数并初始化 PyTorch/TRT 后端。"""
@@ -258,6 +260,9 @@ class FastFoundationStereoDepth:
         self.trt_post_engine_path = str(trt_post_engine_path)
         """显式 post runner engine 路径。"""
 
+        self.enable_logging = bool(enable_logging)
+        """是否允许 FFS 内部 stdout/stderr/logging 输出到 console。"""
+
         self.runtime_backend = "pytorch"
         """当前实际使用的后端名称，仅用于日志和诊断。"""
 
@@ -276,26 +281,21 @@ class FastFoundationStereoDepth:
         self.ffs_root = self.project_root / "Fast-FoundationStereo"
         """Fast-FoundationStereo 子工程根目录。"""
 
-        if str(self.ffs_root) not in sys.path:
-            sys.path.append(str(self.ffs_root))
-
-        core_utils = importlib.import_module("core.utils.utils")
-        utils_mod = importlib.import_module("Utils")
         import torch
+
+        self._configure_ffs_logging(self.enable_logging)
+        InputPadder, amp_dtype, set_seed = self._load_ffs_symbols()
 
         self.torch = torch
         """运行时 torch 模块引用。"""
 
-        self.InputPadder = core_utils.InputPadder
+        self.InputPadder = InputPadder
         """FFS 输入 padding 工具类。"""
 
-        self.AMP_DTYPE = utils_mod.AMP_DTYPE
+        self.AMP_DTYPE = amp_dtype
         """FFS 项目定义的 autocast dtype。"""
 
-        self.set_logging_format = utils_mod.set_logging_format
-        """FFS 项目日志格式设置函数。"""
-
-        self.set_seed = utils_mod.set_seed
+        self.set_seed = set_seed
         """FFS 项目随机种子设置函数。"""
 
         self.model_root_dir, self.model_pth_path = self._resolve_model_paths(model_dir)
@@ -307,7 +307,6 @@ class FastFoundationStereoDepth:
         self._trt_backend = _TrtStereoBackend(self)
         """TensorRT 后端实例。"""
 
-        self.set_logging_format(level=logging.INFO)
         self.torch.autograd.set_grad_enabled(False)
 
         runtime_device = str(device)
@@ -339,10 +338,7 @@ class FastFoundationStereoDepth:
 
         if self.use_trt:
             try:
-                core_mod = importlib.import_module("core.foundation_stereo")
-                omegaconf_mod = importlib.import_module("omegaconf")
-                self.TrtRunner = core_mod.TrtRunner
-                self.OmegaConf = omegaconf_mod.OmegaConf
+                self.TrtRunner, self.OmegaConf = self._load_trt_symbols()
             except Exception as exc:
                 if self.trt_strict:
                     raise RuntimeError("TRT 依赖导入失败。") from exc
@@ -361,6 +357,30 @@ class FastFoundationStereoDepth:
         if self.device.type == "cuda":
             self.torch.backends.cuda.matmul.allow_tf32 = True
             self.torch.backends.cudnn.allow_tf32 = True
+
+    @staticmethod
+    def _configure_ffs_logging(enabled: bool) -> None:
+        """配置 FFS 子工程 logger，默认不向 console 传播。"""
+
+        configure_thirdparty_logging("ffs", enabled)
+
+    @staticmethod
+    def _load_ffs_symbols() -> tuple[Any, Any, Any]:
+        """导入 FFS 公共工具符号，运行时路径由 Pixi 环境负责。"""
+
+        from core.utils.utils import InputPadder
+        import Utils as ffs_utils
+
+        return InputPadder, ffs_utils.AMP_DTYPE, ffs_utils.set_seed
+
+    @staticmethod
+    def _load_trt_symbols() -> tuple[Any, Any]:
+        """导入 FFS TensorRT runner 和 OmegaConf 类型。"""
+
+        from core.foundation_stereo import TrtRunner
+        from omegaconf import OmegaConf
+
+        return TrtRunner, OmegaConf
 
     def _resolve_model_paths(self, model_dir: str | Path) -> tuple[Path, Path | None]:
         """解析 FFS 权重目录或 pth 文件路径。"""

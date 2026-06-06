@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 import math
 import time
+from dataclasses import replace
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult
 from egoanchor.protocol import extract_session_id, quest_pb2
 from egoanchor.reliability import RenderConsistencyChecker, score_observation_breakdown
 
@@ -23,6 +24,9 @@ from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, Pi
 from .pose_observation import PoseObservation
 from .quest_calibration import QuestStereoCalibration
 from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
+
+if TYPE_CHECKING:
+    from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult
 
 
 class QuestPosePipeline:
@@ -946,13 +950,6 @@ class QuestPosePipeline:
         return t_delta, r_delta
 
     @staticmethod
-    def _rotation_angle_deg(rotation_delta: np.ndarray) -> float:
-        """由相对旋转矩阵计算角度差。"""
-
-        trace = float(np.trace(rotation_delta))
-        return QuestPosePipeline._rotation_angle_from_trace_deg(trace)
-
-    @staticmethod
     def _rotation_angle_from_trace_deg(trace: float) -> float:
         """由相对旋转矩阵 trace 计算角度差。"""
 
@@ -1022,23 +1019,8 @@ class QuestPosePipeline:
         diagnostics.score_jump = breakdown.jump_score
         diagnostics.score_mask = breakdown.mask_score
         diagnostics.score_reject = breakdown.reject_score
-        return PoseObservation(
-            **{
-                field_name: getattr(observation, field_name)
-                for field_name in observation.__dataclass_fields__
-                if field_name
-                not in {
-                    "reliability_score",
-                    "reliability_flags",
-                    "depth_quality_score",
-                    "score_phase",
-                    "score_consistency",
-                    "score_depth",
-                    "score_jump",
-                    "score_mask",
-                    "score_reject",
-                }
-            },
+        return replace(
+            observation,
             depth_quality_score=breakdown.depth_score,
             score_phase=breakdown.phase_score,
             score_consistency=breakdown.consistency_score,

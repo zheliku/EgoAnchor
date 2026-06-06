@@ -7,11 +7,11 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 
-from Utils import *
-from datareader import *
+from FoundationPose.Utils import *
+from FoundationPose.datareader import *
 import itertools
-from learning.training.predict_score import *
-from learning.training.predict_pose_refine import *
+from FoundationPose.learning.training.predict_score import *
+from FoundationPose.learning.training.predict_pose_refine import *
 import yaml
 import tempfile
 from pathlib import Path

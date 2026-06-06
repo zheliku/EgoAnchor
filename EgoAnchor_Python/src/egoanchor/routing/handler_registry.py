@@ -21,25 +21,34 @@ class HandlerContext:
     """
 
     commands: object | None = None
+    """runtime command 队列；未配置时 command handler 会返回 UNAVAILABLE。"""
+
     dedup: object | None = None
+    """request_id 幂等缓存；测试或禁用命令面时可为空。"""
 
 
 class Handler(Protocol):
     """subject handler 函数协议。"""
 
-    def __call__(self, ctx: HandlerContext, message: Message) -> Message | None: ...
+    def __call__(self, ctx: HandlerContext, message: Message) -> Message | None:
+        """处理已解析 Protobuf 消息，并按 subject 模式返回可选 reply。"""
+        ...
 
 
 class HandlerRegistry:
     """subject -> handler 的注册与分发器。"""
 
     def __init__(self) -> None:
+        """初始化空 handler 表。"""
+
         self._handlers: dict[str, Handler] = {}
 
     def request(self, subject: str) -> Callable[[Handler], Handler]:
         """注册 request/reply handler。"""
 
         def decorator(handler: Handler) -> Handler:
+            """把 handler 绑定到指定 subject，并返回原函数便于测试直接调用。"""
+
             if subject in self._handlers:
                 raise ValueError(f"handler already registered for subject={subject!r}")
             self._handlers[subject] = handler
@@ -54,11 +63,6 @@ class HandlerRegistry:
             return self._handlers[subject]
         except KeyError as exc:
             raise KeyError(f"no handler registered for subject={subject!r}") from exc
-
-    def dispatch(self, subject: str, ctx: HandlerContext, message: Message) -> Message | None:
-        """调用同步 handler 并返回可选 reply message。"""
-
-        return self.get(subject)(ctx, message)
 
 
 __all__ = ["Handler", "HandlerContext", "HandlerRegistry"]

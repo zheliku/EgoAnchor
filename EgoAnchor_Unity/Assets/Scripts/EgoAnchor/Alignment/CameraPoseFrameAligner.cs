@@ -72,7 +72,6 @@ namespace EgoAnchor.Alignment
                 return false;
             }
 
-            usedReference = alignmentReference;
             return TryAlign(poseResult.Header.FrameId, cvCameraPose, usedReference, out worldPose);
         }
 

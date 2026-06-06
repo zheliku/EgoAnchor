@@ -1,4 +1,3 @@
-using System;
 using EgoAnchor.Protocol.Generated;
 using Meta.XR;
 using UnityEngine;
@@ -43,7 +42,6 @@ namespace EgoAnchor.Quest
             PassthroughCameraAccess.CameraIntrinsics leftIntr = leftCameraAccess.Intrinsics;
             PassthroughCameraAccess.CameraIntrinsics rightIntr = rightCameraAccess.Intrinsics;
             Vector2Int leftRes = leftCameraAccess.CurrentResolution;
-            Vector2Int rightRes = rightCameraAccess.CurrentResolution;
 
             int sensorWidth = leftIntr.SensorResolution.x;
             int sensorHeight = leftIntr.SensorResolution.y;
@@ -81,7 +79,6 @@ namespace EgoAnchor.Quest
 
             // 当前协议只有一组 current_width/current_height 字段，按旧约定填左目当前分辨率。
             // 如果左右分辨率未来可能不同，应在 proto 中非破坏性追加右目 current 字段。
-            _ = rightRes;
             return true;
         }
 

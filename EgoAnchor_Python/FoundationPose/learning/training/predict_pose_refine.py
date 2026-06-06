@@ -8,17 +8,16 @@
 
 
 import functools
-import os,sys,kornia
+import os,sys,kornia,warnings
 import time
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f'{code_dir}/../../')
 import numpy as np
 import torch
 from omegaconf import OmegaConf
-from learning.models.refine_network import RefineNet
-from learning.datasets.h5_dataset import *
-from Utils import *
-from datareader import *
+from FoundationPose.learning.models.refine_network import RefineNet
+from FoundationPose.learning.datasets.h5_dataset import *
+from FoundationPose.Utils import *
+from FoundationPose.datareader import *
 
 
 
@@ -152,7 +151,9 @@ class PoseRefinePredictor:
     @rgb: np array (H,W,3)
     @ob_in_cams: np array (N,4,4)
     '''
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    with warnings.catch_warnings():
+      warnings.filterwarnings("ignore", message=r"torch\.set_default_tensor_type\(\) is deprecated", category=UserWarning)
+      torch.set_default_tensor_type('torch.cuda.FloatTensor')
     logging.info(f'ob_in_cams:{ob_in_cams.shape}')
     tf_to_center = np.eye(4)
     ob_centered_in_cams = ob_in_cams
@@ -187,7 +188,7 @@ class PoseRefinePredictor:
         A = torch.cat([pose_data.rgbAs[b:b+bs].cuda(), pose_data.xyz_mapAs[b:b+bs].cuda()], dim=1).float()
         B = torch.cat([pose_data.rgbBs[b:b+bs].cuda(), pose_data.xyz_mapBs[b:b+bs].cuda()], dim=1).float()
         logging.info("forward start")
-        with torch.cuda.amp.autocast(enabled=self.amp):
+        with torch.amp.autocast('cuda', enabled=self.amp):
           output = self.model(A,B)
         for k in output:
           output[k] = output[k].float()
@@ -293,4 +294,3 @@ class PoseRefinePredictor:
       return B_in_cams_out, canvas
 
     return B_in_cams_out, None
-

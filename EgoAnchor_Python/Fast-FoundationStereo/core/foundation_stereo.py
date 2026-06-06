@@ -3,9 +3,12 @@ import torch,pdb,logging,timm
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import sys,os
-code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f'{code_dir}/../')
+import sys
+from egoanchor.utils import get_thirdparty_logger
+_logging_module = logging
+logging = get_thirdparty_logger("ffs")
+
+
 from core.update import BasicSelectiveMultiUpdateBlock
 from core.extractor import ContextNetSharedBackbone, Feature
 from core.geometry import Combined_Geo_Encoding_Volume

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from egoanchor.diagnostics.debug_view import draw_hud, make_score_debug_view
+from egoanchor.diagnostics import draw_pose_hud as draw_hud, make_score_debug_view
 from egoanchor.perception import FrameDiagnostics, PoseObservation
 
 

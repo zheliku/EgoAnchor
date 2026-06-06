@@ -2,28 +2,21 @@
 
 本适配器属于 algorithms 层，只封装 object-in-camera pose 的 register、track
 和可视化能力，不理解网络、runtime 命令或 Unity world anchor。实现上通过项目内
-FoundationPose 子工程动态加载依赖，不引用 v1/v2 代码。
+FoundationPose 包级入口导入第三方实现，不在适配器里修改 `sys.path`。
 """
 
 from __future__ import annotations
 
-import importlib
-import io
-import ctypes
 import logging
-import os
-import sys
-import tempfile
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Any, Callable, Iterator, TypeVar, cast
+from types import ModuleType
+from typing import Any, cast
 
 import numpy as np
 import trimesh
 from PIL import Image
 
-T = TypeVar("T")
-"""保留被包装函数返回类型的泛型变量。"""
+from egoanchor.utils import configure_thirdparty_logging
 
 
 class FoundationPoseObjectEstimator:
@@ -91,140 +84,41 @@ class FoundationPoseObjectEstimator:
 
         if not self.mesh_path.is_file():
             raise FileNotFoundError(f"FoundationPose mesh 不存在: {self.mesh_path}")
-        if str(self.project_root) not in sys.path:
-            sys.path.append(str(self.project_root))
-        if str(self.foundationpose_root) not in sys.path:
-            sys.path.append(str(self.foundationpose_root))
 
-        est_mod, utils_mod = self.load_modules_with_logging_control(self._load_foundationpose_modules, enable_logging=self.enable_logging)
+        self._configure_foundationpose_logging(self.enable_logging)
+        est_mod, utils_mod, score_mod, refine_mod = self._load_foundationpose_modules()
+        self.foundationpose_estimator_module = est_mod
+        """FoundationPose.estimater 模块引用；用于创建原版 estimator。"""
 
-        def resolve_symbol(name: str) -> Any:
-            """从 FoundationPose estimater 或 Utils 中解析运行符号。"""
+        self.foundationpose_utils = utils_mod
+        """FoundationPose.Utils 模块引用；后续渲染 facade 复用它，避免重复动态导入。"""
 
-            if hasattr(est_mod, name):
-                return getattr(est_mod, name)
-            if hasattr(utils_mod, name):
-                return getattr(utils_mod, name)
-            raise RuntimeError(f"FoundationPose 符号缺失: {name}")
+        self.foundationpose_score_module = score_mod
+        """FoundationPose score predictor 模块引用。"""
 
-        self.ScorePredictor = resolve_symbol("ScorePredictor")
-        """FoundationPose score predictor 类型。"""
+        self.foundationpose_refine_module = refine_mod
+        """FoundationPose pose refine predictor 模块引用。"""
 
-        self.PoseRefinePredictor = resolve_symbol("PoseRefinePredictor")
-        """FoundationPose pose refine predictor 类型。"""
-
-        self.dr = resolve_symbol("dr")
-        """FoundationPose 内部 nvdiffrast 模块引用。"""
-
-        self.FoundationPose = resolve_symbol("FoundationPose")
-        """FoundationPose estimator 类型。"""
-
-        self.draw_posed_3d_box = resolve_symbol("draw_posed_3d_box")
-        """绘制目标 3D 包围盒的工具函数。"""
-
-        self.draw_xyz_axis = resolve_symbol("draw_xyz_axis")
-        """绘制目标坐标轴的工具函数。"""
-
-        self.call_with_logging_control(self._load_mesh_and_create_estimator, enable_logging=self.enable_logging)
+        self._load_mesh_and_create_estimator()
         if self.enable_logging:
             logging.info("FoundationPose estimator initialized: mesh=%s", self.mesh_path)
 
     @staticmethod
-    def call_with_logging_control(func: Callable[..., T], *args: Any, enable_logging: bool = False, **kwargs: Any) -> T:
-        """按配置调用第三方函数，并可临时抑制 stdout/stderr/logging。
+    def _configure_foundationpose_logging(enabled: bool) -> None:
+        """配置 FoundationPose 子工程 logger，默认不向 console 传播。"""
 
-        FoundationPose 内部有若干 print/logging/进度输出。默认把它们收进内存缓冲区，避免高频
-        register/track 时盖住 EgoAnchor 自己的系统日志；关闭抑制后保留原始输出，便于
-        专门排查 FoundationPose 子工程内部问题。部分 CUDA/渲染依赖会绕过 Python
-        `print` 直接写进进程 stdout/stderr 文件描述符，因此这里同时重定向 Python
-        stream 和 fd=1/2。
-        """
-
-        if enable_logging:
-            return func(*args, **kwargs)
-        previous_disable_level = logging.root.manager.disable
-        try:
-            logging.disable(logging.CRITICAL)
-            with FoundationPoseObjectEstimator._suppress_process_output():
-                return func(*args, **kwargs)
-        finally:
-            logging.disable(previous_disable_level)
+        configure_thirdparty_logging("foundationpose", enabled)
 
     @staticmethod
-    @contextmanager
-    def _suppress_process_output() -> Iterator[None]:
-        """临时吞掉 Python stream 和底层 fd stdout/stderr 输出。"""
+    def _load_foundationpose_modules() -> tuple[ModuleType, ModuleType, ModuleType, ModuleType]:
+        """导入 FoundationPose estimator 与训练预测模块。"""
 
-        FoundationPoseObjectEstimator._flush_c_stdio()
-        saved_stdout_fd = os.dup(1)
-        saved_stderr_fd = os.dup(2)
-        with tempfile.TemporaryFile() as sink_stdout, tempfile.TemporaryFile() as sink_stderr:
-            try:
-                os.dup2(sink_stdout.fileno(), 1)
-                os.dup2(sink_stderr.fileno(), 2)
-                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    yield
-            finally:
-                FoundationPoseObjectEstimator._flush_c_stdio()
-                os.dup2(saved_stdout_fd, 1)
-                os.dup2(saved_stderr_fd, 2)
-                os.close(saved_stdout_fd)
-                os.close(saved_stderr_fd)
+        from FoundationPose import Utils as utils_mod
 
-    @staticmethod
-    def _flush_c_stdio() -> None:
-        """尽量 flush 当前平台 C runtime 的 stdio，避免恢复 fd 后吐出旧缓冲。"""
-
-        candidates: tuple[str | None, ...]
-        if os.name == "nt":
-            candidates = ("ucrtbase", "msvcrt")
-        elif sys.platform == "darwin":
-            candidates = (None, "libSystem.B.dylib")
-        else:
-            candidates = (None, "libc.so.6")
-
-        for name in candidates:
-            try:
-                libc = ctypes.CDLL(name) if name is not None else ctypes.CDLL(None)
-                fflush = libc.fflush
-                fflush.argtypes = [ctypes.c_void_p]
-                fflush.restype = ctypes.c_int
-                fflush(None)
-            except Exception:
-                continue
-
-    @staticmethod
-    def load_modules_with_logging_control(
-        loader: Callable[[], tuple[Any, Any]],
-        *,
-        enable_logging: bool = False,
-    ) -> tuple[Any, Any]:
-        """按配置加载 FoundationPose 模块，并抑制 import 阶段的第三方输出。"""
-
-        return FoundationPoseObjectEstimator.call_with_logging_control(loader, enable_logging=enable_logging)
-
-    @staticmethod
-    def _load_foundationpose_modules() -> tuple[Any, Any]:
-        """导入 FoundationPose estimator 与 Utils，并兼容原工程的顶层 Utils import。"""
-
-        try:
-            utils_mod = importlib.import_module("FoundationPose.Utils")
-        except ModuleNotFoundError:
-            utils_mod = importlib.import_module("Utils")
-
-        old_utils_module = sys.modules.get("Utils")
-        sys.modules["Utils"] = utils_mod
-        try:
-            try:
-                est_mod = importlib.import_module("FoundationPose.estimater")
-            except ModuleNotFoundError:
-                est_mod = importlib.import_module("estimater")
-        finally:
-            if old_utils_module is None:
-                sys.modules.pop("Utils", None)
-            else:
-                sys.modules["Utils"] = old_utils_module
-        return est_mod, utils_mod
+        from FoundationPose import estimater as est_mod
+        from FoundationPose.learning.training import predict_pose_refine as refine_mod
+        from FoundationPose.learning.training import predict_score as score_mod
+        return est_mod, utils_mod, score_mod, refine_mod
 
     def update_camera_matrix(self, cam_k: np.ndarray) -> None:
         """更新运行时相机内参矩阵，不重建 FoundationPose 重模型。
@@ -258,10 +152,10 @@ class FoundationPoseObjectEstimator:
         model_normals = self._get_safe_vertex_normals(self.mesh)
         """传给 FoundationPose 的顶点法线；优先使用 mesh 自带法线，失败时手动估计。"""
 
-        scorer = self.ScorePredictor()
-        refiner = self.PoseRefinePredictor()
-        glctx = self.dr.RasterizeCudaContext()
-        self.estimator = self.FoundationPose(
+        scorer = self.foundationpose_score_module.ScorePredictor()
+        refiner = self.foundationpose_refine_module.PoseRefinePredictor()
+        glctx = self.foundationpose_utils.dr.RasterizeCudaContext()
+        self.estimator = self.foundationpose_estimator_module.FoundationPose(
             model_pts=self.mesh.vertices,
             model_normals=model_normals,
             symmetry_tfs=self.symmetry_tfs,
@@ -430,14 +324,12 @@ class FoundationPoseObjectEstimator:
         """初始注册：RGB-D + mask -> object-in-camera pose。"""
 
         mask_u8 = (mask > 0).astype(np.uint8) * 255
-        pose = self.call_with_logging_control(
-            self.estimator.register,
+        pose = self.estimator.register(
             K=self.cam_k,
             rgb=rgb,
             depth=np.asarray(depth, dtype=np.float64),
             ob_mask=mask_u8,
             iteration=self.est_refine_iter,
-            enable_logging=self.enable_logging,
         )
         self._initialized = True
         return np.asarray(pose, dtype=np.float64).reshape(4, 4)
@@ -447,13 +339,11 @@ class FoundationPoseObjectEstimator:
 
         if not self._initialized:
             raise RuntimeError("FoundationPose 尚未 register，不能直接 track。")
-        pose = self.call_with_logging_control(
-            self.estimator.track_one,
+        pose = self.estimator.track_one(
             rgb=rgb,
             depth=np.asarray(depth, dtype=np.float64),
             K=self.cam_k,
             iteration=self.track_refine_iter,
-            enable_logging=self.enable_logging,
         )
         return np.asarray(pose, dtype=np.float64).reshape(4, 4)
 
@@ -461,8 +351,8 @@ class FoundationPoseObjectEstimator:
         """在 RGB 图上绘制目标 3D 包围盒和坐标轴。"""
 
         center_pose = self._pose_for_centered_mesh(pose)
-        vis = self.draw_posed_3d_box(self.cam_k, img=rgb, ob_in_cam=center_pose, bbox=self.bbox)
-        vis = self.draw_xyz_axis(
+        vis = self.foundationpose_utils.draw_posed_3d_box(self.cam_k, img=rgb, ob_in_cam=center_pose, bbox=self.bbox)
+        vis = self.foundationpose_utils.draw_xyz_axis(
             vis,
             ob_in_cam=center_pose,
             scale=float(axis_scale),
@@ -481,7 +371,38 @@ class FoundationPoseObjectEstimator:
         `mesh_tensors`，因此渲染和绘制时要乘回 `inv(to_origin)`。
         """
 
-        return np.asarray(pose_cv_camera, dtype=np.float64).reshape(4, 4) @ np.linalg.inv(self.to_origin)
+        pose = np.asarray(pose_cv_camera, dtype=np.float64).reshape(4, 4)
+        to_origin = np.asarray(self.to_origin, dtype=np.float64).reshape(4, 4)
+        if self._is_translation_to_origin(to_origin):
+            offset = -to_origin[:3, 3]
+            out = pose.copy()
+            for row in range(3):
+                out[row, 3] = (
+                    pose[row, 3]
+                    + pose[row, 0] * offset[0]
+                    + pose[row, 1] * offset[1]
+                    + pose[row, 2] * offset[2]
+                )
+            return out
+        return pose @ np.linalg.inv(to_origin)
+
+    def _inverse_to_origin(self) -> np.ndarray:
+        """返回 `to_origin` 的逆；常规平移矩阵走显式逆，避免触发重型线性代数库。"""
+
+        to_origin = np.asarray(self.to_origin, dtype=np.float64).reshape(4, 4)
+        if self._is_translation_to_origin(to_origin):
+            inv = np.eye(4, dtype=np.float64)
+            inv[:3, 3] = -to_origin[:3, 3]
+            return inv
+        return np.linalg.inv(to_origin)
+
+    @staticmethod
+    def _is_translation_to_origin(to_origin: np.ndarray) -> bool:
+        """判断 `to_origin` 是否为当前适配器生成的纯平移矩阵。"""
+
+        linear_error = float(np.max(np.abs(to_origin[:3, :3] - np.eye(3, dtype=np.float64))))
+        last_row_error = float(np.max(np.abs(to_origin[3, :] - np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64))))
+        return linear_error <= 1e-12 and last_row_error <= 1e-12
 
     def _mesh_tensors_for_render(self) -> Any:
         """获取 FoundationPose rasterizer 可用的 mesh_tensors，缺失时按内部 mesh 重建。"""
@@ -492,8 +413,7 @@ class FoundationPoseObjectEstimator:
         mesh = getattr(self.estimator, "mesh", None)
         if mesh is None:
             raise RuntimeError("FoundationPose estimator 缺少 mesh_tensors 和 mesh，无法渲染一致性。")
-        utils_mod = importlib.import_module("FoundationPose.Utils") if "FoundationPose.Utils" in sys.modules else importlib.import_module("Utils")
-        make_mesh_tensors = getattr(utils_mod, "make_mesh_tensors")
+        make_mesh_tensors = getattr(self.foundationpose_utils, "make_mesh_tensors")
         mesh_tensors = make_mesh_tensors(mesh)
         self.estimator.mesh_tensors = mesh_tensors
         return mesh_tensors
@@ -516,8 +436,7 @@ class FoundationPoseObjectEstimator:
 
             import torch
 
-            utils_mod = importlib.import_module("FoundationPose.Utils") if "FoundationPose.Utils" in sys.modules else importlib.import_module("Utils")
-            render_fn = getattr(utils_mod, "nvdiffrast_render")
+            render_fn = getattr(self.foundationpose_utils, "nvdiffrast_render")
             out_h, out_w = (int(output_size[0]), int(output_size[1]))
             k = np.asarray(cam_k if cam_k is not None else self.cam_k, dtype=np.float64).reshape(3, 3)
             pose = self._pose_for_centered_mesh(pose_cv_camera).astype(np.float32).reshape(1, 4, 4)
@@ -546,7 +465,7 @@ class FoundationPoseObjectEstimator:
             render_mask = depth_np > 0.0
             return depth_np, render_mask
 
-        return self.call_with_logging_control(render_once, enable_logging=self.enable_logging)
+        return render_once()
 
     def reset(self) -> None:
         """重置 FoundationPose 时序状态，使下一帧重新 register。"""

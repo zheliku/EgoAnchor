@@ -8,8 +8,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from egoanchor.diagnostics import RuntimeEventLogger
-from egoanchor.runtime.runtime_state import RuntimeState
 from egoanchor.utils import rotation_matrix_to_quaternion
+from .runtime_state import RuntimeState
 
 
 class PoseLogFactory:
@@ -233,4 +233,4 @@ class RuntimeLogWriter:
         return bool(getattr(logging_cfg, name, default))
 
 
-__all__ = ["RuntimeLogWriter"]
+__all__ = ["PoseLogFactory", "RuntimeLogWriter"]

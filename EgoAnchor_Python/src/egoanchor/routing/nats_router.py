@@ -25,6 +25,8 @@ class NatsRouter:
         handlers: HandlerRegistry,
         context: HandlerContext,
     ) -> None:
+        """保存 subject/protobuf/handler 注册表和 handler 上下文。"""
+
         self._subjects = subjects
         self._protobufs = protobufs
         self._handlers = handlers
@@ -36,7 +38,7 @@ class NatsRouter:
         spec = self._subjects.require(subject)
         try:
             message = self._protobufs.parse(spec.protobuf, payload)
-            result = self._handlers.dispatch(subject, self._context, message)
+            result = self._handlers.get(subject)(self._context, message)
             if spec.mode == "request_reply":
                 if result is None:
                     raise RuntimeError(f"request handler returned no reply for subject={subject!r}")

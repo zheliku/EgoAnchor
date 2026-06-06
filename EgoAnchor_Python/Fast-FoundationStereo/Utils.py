@@ -7,6 +7,12 @@ except Exception:
 import numpy as np
 import yaml
 
+from egoanchor.utils import get_thirdparty_logger, is_thirdparty_logging_enabled
+
+_logging_module = logging
+logging = get_thirdparty_logger("ffs")
+
+
 try:
     import open3d as o3d
 except:
@@ -15,10 +21,11 @@ except:
 AMP_DTYPE = torch.float16
 
 
-def set_logging_format(level=logging.INFO):
-    importlib.reload(logging)
+def set_logging_format(level=_logging_module.INFO):
+    if not is_thirdparty_logging_enabled("ffs"):
+        return
     FORMAT = "%(message)s"
-    logging.basicConfig(level=level, format=FORMAT, datefmt="%m-%d|%H:%M:%S")
+    _logging_module.basicConfig(level=level, format=FORMAT, datefmt="%m-%d|%H:%M:%S")
 
 
 def set_seed(random_seed):

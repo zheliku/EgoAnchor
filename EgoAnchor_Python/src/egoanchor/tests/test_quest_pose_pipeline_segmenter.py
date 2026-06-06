@@ -12,7 +12,7 @@ import numpy as np
 
 from egoanchor.algorithms import SegmenterResult
 from egoanchor.protocol import common_pb2, quest_pb2
-from egoanchor.perception.quest_pose_pipeline import FrameDiagnostics, PipelineStepTiming, QuestPosePipeline
+from egoanchor.perception import FrameDiagnostics, PipelineStepTiming, QuestPosePipeline
 
 
 class _FakeSegmenter:

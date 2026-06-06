@@ -7,7 +7,10 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 
-import os, sys, time,torch,pickle,trimesh,itertools,pdb,zipfile,datetime,imageio,gzip,logging,joblib,importlib,uuid,signal,multiprocessing,psutil,subprocess,tarfile,scipy,argparse
+import os, sys, time,torch,pickle,trimesh,itertools,pdb,zipfile,datetime,imageio,gzip,logging,joblib,importlib,uuid,signal,multiprocessing,psutil,subprocess,tarfile,scipy,argparse,warnings
+import contextlib as _contextlib
+import io as _io
+from egoanchor.utils import get_thirdparty_logger, is_thirdparty_logging_enabled
 from pytorch3d.transforms import so3_log_map,so3_exp_map,se3_exp_map,se3_log_map,matrix_to_axis_angle,matrix_to_euler_angles,euler_angles_to_matrix, rotation_6d_to_matrix
 from pytorch3d.renderer import FoVPerspectiveCameras, PerspectiveCameras, look_at_view_transform, look_at_rotation, RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams, SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex
 from pytorch3d.renderer.mesh.rasterize_meshes import barycentric_coordinates
@@ -35,24 +38,40 @@ from scipy.spatial import cKDTree
 from collections import OrderedDict
 import ruamel.yaml
 yaml = ruamel.yaml.YAML()
+_logging_module = logging
+logging = get_thirdparty_logger("foundationpose")
+
+
+@_contextlib.contextmanager
+def _suppress_stdio_when_logging_disabled():
+  """在 FoundationPose 默认静默模式下吞掉 import 阶段的第三方 stdout/stderr。"""
+  if is_thirdparty_logging_enabled("foundationpose"):
+    yield
+    return
+  with _contextlib.redirect_stdout(_io.StringIO()), _contextlib.redirect_stderr(_io.StringIO()):
+    yield
+
+
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(code_dir)
-# sys.path.append(f"{code_dir}/mycpp/build")
 try:
   import kornia
 except:
   kornia = None
 try:
-  import mycpp.build.mycpp as mycpp
+  import FoundationPose.mycpp.build.mycpp as mycpp
 except:
-  mycpp = None
+  try:
+    import mycpp.build.mycpp as mycpp
+  except:
+    mycpp = None
 try:
-  from bundlesdf.mycuda import common
+  from FoundationPose.bundlesdf.mycuda import common
 except:
   common = None
 try:
   import warp as wp
-  wp.init()
+  with _suppress_stdio_when_logging_disabled():
+    wp.init()
 except:
   wp = None
 enable_timer = 0
@@ -91,10 +110,11 @@ COLOR_MAP=np.array([[0, 0, 0], #Ignore
                     ])
 
 
-def set_logging_format(level=logging.INFO):
-  importlib.reload(logging)
+def set_logging_format(level=_logging_module.INFO):
+  if not is_thirdparty_logging_enabled("foundationpose"):
+    return
   FORMAT = '[%(funcName)s()] %(message)s'
-  logging.basicConfig(level=level, format=FORMAT)
+  _logging_module.basicConfig(level=level, format=FORMAT)
 
 set_logging_format()
 
@@ -598,7 +618,9 @@ def compute_crop_window_tf_batch(pts=None, H=None, W=None, poses=None, K=None, c
     return tf
 
   B = len(poses)
-  torch.set_default_tensor_type('torch.cuda.FloatTensor')
+  with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message=r"torch\.set_default_tensor_type\(\) is deprecated", category=UserWarning)
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
   if method=='box_3d':
     radius = mesh_diameter*crop_ratio/2
     offsets = torch.tensor([0,0,0,
@@ -968,13 +990,13 @@ class OctreeManager:
     Return:
         ray_depths_in_out: traveling times, NOT the Z value; invalid will be zeros
     """
-    from mycuda import common
+    from FoundationPose.bundlesdf.mycuda import common
     import kaolin
 
     ray_index, rays_pid, depth_in_out = kaolin.render.spc.unbatched_raytrace(self.octree,self.vox_point_all_levels,self.pyramids[0],self.exsum,rays_o,rays_d,level=level,return_depth=True,with_exit=True)
     if ray_index.size()[0] == 0:
       pdb.set_trace()
-      print("[WARNING] batch has 0 intersections!!")
+      logging.warning("[WARNING] batch has 0 intersections!!")
       ray_depths_in_out = torch.zeros((rays_o.shape[0],1,2))
       rays_pid = -torch.ones_like(rays_o[:, :1])
       rays_near = torch.zeros_like(rays_o[:, :1])

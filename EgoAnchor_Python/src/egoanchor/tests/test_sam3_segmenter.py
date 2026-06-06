@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from egoanchor.algorithms.sam3_segmenter import disable_sam3_position_precompute, select_best_sam3_mask
+from egoanchor.algorithms import disable_sam3_position_precompute, select_best_sam3_mask
 
 
 class Sam3MaskSelectionTest(unittest.TestCase):

@@ -14,7 +14,7 @@ from enum import Enum
 from google.protobuf.message import Message
 
 from egoanchor.protocol import AnchorControlRequest, CommandAck
-from egoanchor.runtime.runtime_state import RuntimeState
+from .runtime_state import RuntimeState
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,8 +53,13 @@ class RuntimeCommand:
 
 @dataclass(slots=True)
 class _DedupEntry:
+    """幂等缓存中的单个 request_id 记录。"""
+
     ack: CommandAck
+    """首次处理该 request_id 时返回的 ack 副本。"""
+
     expires_mono_ms: float
+    """该缓存记录过期的本地单调时间，单位毫秒。"""
 
 
 class CommandDedupStore:
@@ -115,9 +120,16 @@ _PRIORITY = {
 
 @dataclass(order=True)
 class _QueueItem:
+    """CommandQueue 内部 heap item。"""
+
     priority: int
+    """命令优先级；数值越小越先执行。"""
+
     sequence: int
+    """入队序号；同优先级下保持 FIFO。"""
+
     command: RuntimeCommand = field(compare=False)
+    """实际 runtime command；不参与 heap 比较。"""
 
 
 class CommandQueue:
@@ -139,11 +151,6 @@ class CommandQueue:
                 return False
             heapq.heappush(self._items, _QueueItem(_PRIORITY.get(command.command_type, 100), next(self._seq), command))
             return True
-
-    def accept(self, command_type: CommandType, message: Message) -> bool:
-        """从 protobuf command message 构造 RuntimeCommand 并入队。"""
-
-        return self.put(RuntimeCommand.from_message(command_type, message))
 
     def pop_many(self, limit: int) -> list[RuntimeCommand]:
         """最多取出 limit 条命令，未取出的命令留在队列中保持原顺序。"""
@@ -177,8 +184,8 @@ class CommandExecutionResult:
     """是否重置 tracking 状态；由 TrackingRuntime 在主线程顺序执行。"""
 
 
-CommandHandler = Callable[["CommandExecutor", RuntimeCommand], CommandExecutionResult]
-"""CommandExecutor + RuntimeCommand -> CommandExecutionResult 的命令解释函数类型。"""
+CommandHandler = Callable[[RuntimeCommand], CommandExecutionResult]
+"""RuntimeCommand -> CommandExecutionResult 的命令解释函数类型。"""
 
 COMMAND_HANDLERS: dict[CommandType, CommandHandler] = {}
 """模块级 command handler 注册表；通过 @command_handler 自动填充。"""
@@ -227,49 +234,39 @@ class CommandExecutor:
         if handler is None:
             LOGGER.warning("[CommandExecutor] ignore unknown command_type=%s request_id=%s", command.command_type, command.request_id)
             return CommandExecutionResult()
-        return handler(self, command)
-
-    def interpret_control(self, command: RuntimeCommand) -> CommandExecutionResult:
-        """解释 control command，并按 action 注册表继续分发。"""
-
-        action = int(getattr(command.message, "action", AnchorControlRequest.CONTROL_ACTION_UNSPECIFIED))
-        handler = CONTROL_ACTION_HANDLERS.get(action)
-        if handler is None:
-            LOGGER.warning("[CommandExecutor] ignore unknown control action=%s request_id=%s", action, command.request_id)
-            return CommandExecutionResult()
-        return handler(self, command)
+        return handler(command)
 
 
 @command_handler(CommandType.RESET)
-def interpret_reset(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
+def interpret_reset(_command: RuntimeCommand) -> CommandExecutionResult:
     """解释 reset command。"""
 
-    _ = executor
-    _ = command
     return CommandExecutionResult(reset_tracking=True)
 
 
 @command_handler(CommandType.REACQUIRE)
-def interpret_reacquire(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
+def interpret_reacquire(_command: RuntimeCommand) -> CommandExecutionResult:
     """解释 reacquire command。"""
 
-    _ = executor
-    _ = command
     return CommandExecutionResult(reset_tracking=True)
 
 
 @command_handler(CommandType.CONTROL)
-def interpret_control(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
-    """解释 control command；具体 action 由当前 CommandExecutor 的 action 注册表分发。"""
+def interpret_control(command: RuntimeCommand) -> CommandExecutionResult:
+    """解释 control command，并按 action 注册表继续分发。"""
 
-    return executor.interpret_control(command)
+    action = int(getattr(command.message, "action", AnchorControlRequest.CONTROL_ACTION_UNSPECIFIED))
+    handler = CONTROL_ACTION_HANDLERS.get(action)
+    if handler is None:
+        LOGGER.warning("[CommandExecutor] ignore unknown control action=%s request_id=%s", action, command.request_id)
+        return CommandExecutionResult()
+    return handler(command)
 
 
 @control_action_handler(AnchorControlRequest.SET_STAGE)
-def interpret_set_stage(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
+def interpret_set_stage(command: RuntimeCommand) -> CommandExecutionResult:
     """解释 SET_STAGE control action。"""
 
-    _ = executor
     stage = int(getattr(command.message, "stage", 0))
     if 1 <= stage <= 4:
         return CommandExecutionResult(stage=stage)
@@ -278,20 +275,16 @@ def interpret_set_stage(executor: CommandExecutor, command: RuntimeCommand) -> C
 
 
 @control_action_handler(AnchorControlRequest.PAUSE)
-def interpret_pause(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
+def interpret_pause(_command: RuntimeCommand) -> CommandExecutionResult:
     """解释 PAUSE control action。"""
 
-    _ = executor
-    _ = command
     return CommandExecutionResult(paused=True)
 
 
 @control_action_handler(AnchorControlRequest.RESUME)
-def interpret_resume(executor: CommandExecutor, command: RuntimeCommand) -> CommandExecutionResult:
+def interpret_resume(_command: RuntimeCommand) -> CommandExecutionResult:
     """解释 RESUME control action。"""
 
-    _ = executor
-    _ = command
     return CommandExecutionResult(paused=False)
 
 
@@ -342,11 +335,10 @@ class CommandPump:
     def _publish_command_status(self, command: RuntimeCommand, result: CommandExecutionResult) -> None:
         """发布 runtime command 执行后的状态事件。"""
 
-        command_value = command.command_type.value
-        if command_value == "reset":
+        if command.command_type == CommandType.RESET:
             self._publish_state(RuntimeState.DETECTING, event="RESET_APPLIED", message="reset command 已在 runtime 线程执行。", request_id=command.request_id)
             return
-        if command_value == "reacquire":
+        if command.command_type == CommandType.REACQUIRE:
             self._publish_state(
                 RuntimeState.REACQUIRING,
                 event="REACQUIRE_STARTED",

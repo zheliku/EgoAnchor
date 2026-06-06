@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from egoanchor.app.tracking_server import should_show_waiting_frame
+from egoanchor.app import should_show_waiting_frame
 
 
 class TrackingServerAppTest(unittest.TestCase):

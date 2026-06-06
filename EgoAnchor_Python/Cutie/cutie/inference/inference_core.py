@@ -11,8 +11,10 @@ from cutie.inference.object_manager import ObjectManager
 from cutie.inference.image_feature_store import ImageFeatureStore
 from cutie.model.cutie import CUTIE
 from cutie.utils.tensor_utils import pad_divide_by, unpad, aggregate
+from egoanchor.utils import get_thirdparty_logger
 
-log = logging.getLogger()
+
+log = get_thirdparty_logger("cutie")
 
 
 class InferenceCore:
@@ -92,7 +94,7 @@ class InferenceCore:
         """
         if prob.shape[1] == 0:
             # nothing to add
-            log.warn('Trying to add an empty object mask to memory!')
+            log.warning('Trying to add an empty object mask to memory!')
             return
 
         if force_permanent:
@@ -145,7 +147,7 @@ class InferenceCore:
             assert bs == 1
 
         if not self.memory.engaged:
-            log.warn('Trying to segment without any memory!')
+            log.warning('Trying to segment without any memory!')
             return torch.zeros((1, key.shape[-2] * 16, key.shape[-1] * 16),
                                device=key.device,
                                dtype=key.dtype)
@@ -289,7 +291,7 @@ class InferenceCore:
                 if len(objects) == 0:
                     if delete_buffer:
                         self.image_feature_store.delete(self.curr_ti)
-                    log.warn('Trying to insert an empty mask as memory!')
+                    log.warning('Trying to insert an empty mask as memory!')
                     return torch.zeros((1, key.shape[-2] * 16, key.shape[-1] * 16),
                                        device=key.device,
                                        dtype=key.dtype)

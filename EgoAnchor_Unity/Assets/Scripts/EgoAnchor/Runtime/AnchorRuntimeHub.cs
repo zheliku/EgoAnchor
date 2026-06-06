@@ -113,7 +113,7 @@ namespace EgoAnchor.Runtime
             EnsureRuntimeList();
             received++;
 
-            if (runtimes == null || runtimes.Count == 0)
+            if (runtimes.Count == 0)
             {
                 failed++;
                 MaybeLogStats();
@@ -154,7 +154,7 @@ namespace EgoAnchor.Runtime
         public int PublishStatus(AnchorStatusEvent status)
         {
             EnsureRuntimeList();
-            if (status == null || runtimes == null || runtimes.Count == 0)
+            if (status == null || runtimes.Count == 0)
             {
                 return 0;
             }
@@ -184,7 +184,7 @@ namespace EgoAnchor.Runtime
         public int PublishHeartbeat(ServerHeartbeat heartbeat)
         {
             EnsureRuntimeList();
-            if (heartbeat == null || runtimes == null || runtimes.Count == 0)
+            if (heartbeat == null || runtimes.Count == 0)
             {
                 return 0;
             }

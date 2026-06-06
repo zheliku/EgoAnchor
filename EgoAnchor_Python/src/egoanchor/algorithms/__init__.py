@@ -8,8 +8,6 @@ Unity world anchor 或 runtime 状态机。外部代码应从 `egoanchor.algorit
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
-from typing import Any
 
 import numpy as np
 
@@ -54,25 +52,11 @@ class MaskTrackResult:
     """tracker 输出的二值或标签 mask，shape 与输入图像一致。"""
 
 
-_LAZY_EXPORTS = {
-    "Yoloe26Segmenter": "egoanchor.algorithms.yoloe26_segmenter",
-    "Sam3Segmenter": "egoanchor.algorithms.sam3_segmenter",
-    "FastFoundationStereoDepth": "egoanchor.algorithms.fast_foundationstereo_depth",
-    "FoundationPoseObjectEstimator": "egoanchor.algorithms.foundationpose_estimator",
-    "CutieMaskTracker": "egoanchor.algorithms.cutie_mask_tracker",
-}
-
-
-def __getattr__(name: str) -> Any:
-    """惰性加载重模型适配器，避免普通 import 触发 CUDA/torch 初始化。"""
-
-    module_name = _LAZY_EXPORTS.get(name)
-    if module_name is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    module = import_module(module_name)
-    value = getattr(module, name)
-    globals()[name] = value
-    return value
+from .cutie_mask_tracker import CutieMaskTracker
+from .fast_foundationstereo_depth import FastFoundationStereoDepth
+from .foundationpose_estimator import FoundationPoseObjectEstimator
+from .sam3_segmenter import Sam3Segmenter, disable_sam3_position_precompute, select_best_sam3_mask
+from .yoloe26_segmenter import Yoloe26Segmenter
 
 
 __all__ = [
@@ -80,6 +64,8 @@ __all__ = [
     "MaskTrackResult",
     "Yoloe26Segmenter",
     "Sam3Segmenter",
+    "select_best_sam3_mask",
+    "disable_sam3_position_precompute",
     "FastFoundationStereoDepth",
     "FoundationPoseObjectEstimator",
     "CutieMaskTracker",

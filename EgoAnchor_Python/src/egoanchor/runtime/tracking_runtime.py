@@ -16,18 +16,18 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from egoanchor.protocol import ProtobufRegistry, QUEST_CAMERA_INFO, QUEST_STEREO, SubjectRegistry
-from egoanchor.runtime.commands import (
+from egoanchor.transport import NatsMessageClient, NatsMessageSettings, ProtobufPublisher
+from .commands import (
     CommandDedupStore,
     CommandExecutor,
     CommandPump,
     CommandQueue,
 )
-from egoanchor.runtime.eval_session import create_eval_session
-from egoanchor.runtime.message_factories import HeartbeatFactory, PoseResultFactory, StatusEventFactory
-from egoanchor.runtime.quest_stream_receiver import QuestStreamReceiver
-from egoanchor.runtime.runtime_log_writer import RuntimeLogWriter
-from egoanchor.runtime.runtime_state import RuntimeState
-from egoanchor.transport import NatsMessageClient, NatsMessageSettings, ProtobufPublisher
+from .eval_session import create_eval_session
+from .message_factories import HeartbeatFactory, PoseResultFactory, StatusEventFactory
+from .quest_stream_receiver import QuestStreamReceiver
+from .runtime_log_writer import RuntimeLogWriter
+from .runtime_state import RuntimeState
 
 LOGGER = logging.getLogger(__name__)
 """runtime 层日志记录器。"""

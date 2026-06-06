@@ -52,19 +52,11 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
-        /// 把一条 status event 广播给所有 runtime。
-        /// </summary>
-        public void Publish(AnchorStatusEvent status)
-        {
-            dispatched += runtimeHub.PublishStatus(status);
-        }
-
-        /// <summary>
         /// 处理已解析 status event。
         /// </summary>
         protected override void OnParsed(AnchorStatusEvent message)
         {
-            Publish(message);
+            dispatched += runtimeHub.PublishStatus(message);
         }
     }
 }

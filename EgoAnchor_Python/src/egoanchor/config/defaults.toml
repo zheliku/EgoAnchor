@@ -87,6 +87,7 @@ device = "auto" # SAM3 推理设备：auto、cpu 或 cuda。
 load_from_hf = false # 是否允许 SAM3 从 HuggingFace 下载权重；主线默认关闭，避免调试时触发网络依赖。
 disable_position_precompute = true # 是否跳过 SAM3 构建阶段的位置编码预计算慢路径；当前未启用 torch.compile，建议保持 true。
 async_segmentation = true # 是否在 tracking_server 主线中后台异步执行 SAM3 分割；true 时相机/debug 窗口不等待 SAM3 推理完成。
+enable_logging = false # 是否允许 SAM3 内部 stdout/stderr/logging 输出到 console；默认关闭，避免模型加载刷屏遮住系统日志。
 
 [module.ffs]
 model_dir = "Fast-FoundationStereo/weights/23-36-37" # Fast-FoundationStereo 权重目录或 pth 文件路径，相对 EgoAnchor_Python。
@@ -104,6 +105,7 @@ trt_tag = "" # 显式 TRT artifact tag；空值按尺寸/iters/max_disp 自动�
 trt_platform_tag = "" # 显式 TRT 平台标签；空值自动识别 win/linux/mac。
 trt_feature_engine_path = "" # 显式 feature runner engine 路径；空值自动查找。
 trt_post_engine_path = "" # 显式 post runner engine 路径；空值自动查找。
+enable_logging = false # 是否允许 FFS 内部 stdout/stderr/logging 输出到 console；默认关闭，且不调用原工程会重置全局 logging 的格式函数。
 
 [module.foundationpose]
 mesh_path = "data/model/cube.stl" # FoundationPose 目标物体 mesh 路径，相对 EgoAnchor_Python。

@@ -7,7 +7,6 @@ ZMQ/NATS、Quest frame_id、FoundationPose 或 Unity anchor 语义。
 
 from __future__ import annotations
 
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -17,6 +16,7 @@ import numpy as np
 from PIL import Image
 
 from egoanchor.algorithms import SegmenterResult
+from egoanchor.utils import configure_thirdparty_logging
 
 
 def _to_numpy(value: Any) -> np.ndarray:
@@ -139,6 +139,7 @@ class Sam3Segmenter:
         device: str = "auto",
         load_from_hf: bool = False,
         disable_position_precompute: bool = True,
+        enable_logging: bool = False,
     ) -> None:
         """加载 SAM3 image model，并设置初始文本提示词。"""
 
@@ -166,6 +167,9 @@ class Sam3Segmenter:
         self.disable_position_precompute = bool(disable_position_precompute)
         """是否跳过 SAM3 构建阶段的位置编码预计算慢路径。"""
 
+        self.enable_logging = bool(enable_logging)
+        """是否允许 SAM3 内部 stdout/stderr/logging 输出到 console。"""
+
         self._prompt = _normalize_prompt(init_prompt)
         """当前文本提示词缓存。"""
 
@@ -173,10 +177,9 @@ class Sam3Segmenter:
             raise FileNotFoundError(f"SAM3 仓库目录不存在: {self.repo_path}")
         if not self.checkpoint_path.is_file() and not self.load_from_hf:
             raise FileNotFoundError(f"SAM3 checkpoint 不存在: {self.checkpoint_path}")
-        self._ensure_repo_on_path()
 
-        from sam3.model.sam3_image_processor import Sam3Processor
-        import sam3.model_builder as sam3_model_builder
+        self._configure_sam3_logging(self.enable_logging)
+        Sam3Processor, sam3_model_builder = self._load_sam3_symbols()
 
         if self.disable_position_precompute:
             disable_sam3_position_precompute(sam3_model_builder)
@@ -197,12 +200,20 @@ class Sam3Segmenter:
         )
         """SAM3 image processor。"""
 
-    def _ensure_repo_on_path(self) -> None:
-        """把项目内 SAM3 仓库加入 sys.path，避免要求用户额外安装 editable 包。"""
+    @staticmethod
+    def _configure_sam3_logging(enabled: bool) -> None:
+        """配置 SAM3 子工程 logger，默认不向 console 传播。"""
 
-        repo_text = str(self.repo_path)
-        if repo_text not in sys.path:
-            sys.path.insert(0, repo_text)
+        configure_thirdparty_logging("sam3", enabled)
+
+    @staticmethod
+    def _load_sam3_symbols() -> tuple[Any, Any]:
+        """导入 SAM3 image processor 和 builder，便于统一控制第三方 import 输出。"""
+
+        from sam3.model.sam3_image_processor import Sam3Processor
+        import sam3.model_builder as sam3_model_builder
+
+        return Sam3Processor, sam3_model_builder
 
     @staticmethod
     def _normalize_device(device: str) -> str:

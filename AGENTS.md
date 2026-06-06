@@ -285,6 +285,7 @@ IEEE VR 2027 论文定位：
 - Windows 重建 `.pixi/envs/default` 失败时，先关闭 VS Code Python LSP、Black Formatter、残留 Python 进程，避免文件占用。
 - FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；FFS ONNX/TRT artifact 也由 build task 生成。
 - Unity 依赖由 `EgoAnchor_Unity/Packages/manifest.json` 管理；主线依赖 Google.Protobuf、NATS.Net、NetMQ 等。
+- Pixi activation 与 VSCode `python.analysis.extraPaths` 负责暴露 `EgoAnchor_Python`、`src`、`Fast-FoundationStereo`、`Cutie`、`sam3` 等本地算法包根；`src/egoanchor/algorithms` 适配器不得再手动修改 `sys.path`。第三方库 console 输出由 `egoanchor.utils` 包级入口下的第三方日志工具统一接管，适配器只从 `module.foundationpose/cutie/ffs/sam3.enable_logging` 传入开关，默认关闭。
 
 ## 关键历史约束：不要回退
 

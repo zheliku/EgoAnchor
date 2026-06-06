@@ -12,6 +12,7 @@ import logging
 import threading
 from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
+from contextlib import suppress
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -257,14 +258,11 @@ class NatsMessageClient:
 
         if self._nc is None:
             return
-        try:
+        with suppress(Exception):
             await self._nc.flush(timeout=0.2)
-        except Exception:
-            pass
-        try:
+
+        with suppress(Exception):
             await self._nc.close()
-        except Exception:
-            pass
         self._nc = None
         self._subscriptions.clear()
 

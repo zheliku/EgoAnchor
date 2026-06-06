@@ -6,6 +6,7 @@ import logging
 
 import torch
 import torch.nn.functional as F
+from egoanchor.utils import get_thirdparty_logger
 from sam3.model.memory import SimpleMaskEncoder
 from sam3.model.sam3_tracker_utils import get_1d_sine_pe, select_closest_cond_frames
 from sam3.sam.mask_decoder import MaskDecoder, MLP
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
+logging = get_thirdparty_logger("sam3")
 
 
 class Sam3TrackerBase(torch.nn.Module):
@@ -1079,7 +1081,7 @@ class Sam3TrackerBase(torch.nn.Module):
             past_out = output_dict["non_cond_frame_outputs"].get(past_frame_idx, None)
 
             if past_out is not None:
-                print(past_out.get("eff_iou_score", 0))
+                logging.info("eff_iou_score=%s", past_out.get("eff_iou_score", 0))
                 if (
                     self.use_memory_selection
                     and past_out.get("eff_iou_score", 0) < self.mf_threshold

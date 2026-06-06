@@ -25,12 +25,12 @@ from egoanchor.protocol import (
     ResetTrackingRequest,
 )
 from egoanchor.routing import HandlerContext, HandlerRegistry
-from egoanchor.runtime import CommandType
+from egoanchor.runtime import CommandType, RuntimeCommand
 
 LOGGER = logging.getLogger(__name__)
 
 
-def _ack_for(message: Message, *, accepted: bool, status: str, text: str, code: str = "") -> Message:
+def _ack_for(message: Message, *, accepted: bool, status: str, text: str, code: str = "") -> CommandAck:
     """根据 request message 构造 CommandAck，并复制 header 便于追踪。"""
 
     source_header = getattr(message, "header", None)
@@ -91,7 +91,7 @@ def _validate(message: Message, command_type: CommandType) -> tuple[bool, str]:
     return False, f"unsupported command type: {command_type.value}"
 
 
-def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) -> Message:
+def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) -> CommandAck:
     """通用命令接受逻辑。"""
 
     header = getattr(message, "header", None)
@@ -123,7 +123,7 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
 
     if ctx.commands is None:
         ack = _ack_for(message, accepted=False, status="UNAVAILABLE", text="command queue is not configured", code="UNAVAILABLE")
-    elif ctx.commands.accept(command_type, message):
+    elif ctx.commands.put(RuntimeCommand.from_message(command_type, message)):
         ack = _ack_for(message, accepted=True, status="ACCEPTED", text=f"{command_type.value} accepted")
     else:
         ack = _ack_for(message, accepted=False, status="RESOURCE_EXHAUSTED", text="command queue is full", code="RESOURCE_EXHAUSTED")

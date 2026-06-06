@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 
 from egoanchor.config import load_config
-from egoanchor.perception.pipeline_factory import normalize_segmenter_type
+from egoanchor.perception import normalize_segmenter_type
 
 
 class SegmenterConfigTest(unittest.TestCase):

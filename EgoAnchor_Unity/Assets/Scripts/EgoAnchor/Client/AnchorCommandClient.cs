@@ -339,6 +339,7 @@ namespace EgoAnchor.Client
         /// 记录 Python CommandAck；accepted 只表示 Python 已接收命令，不在 ack 阶段清理本地 anchor 状态。
         /// </summary>
         /// <param name="subject">对应 command subject。</param>
+        /// <param name="requestId">本次 command request_id。</param>
         /// <param name="ack">Python 返回的 ack。</param>
         private void ApplyAck(string subject, string requestId, CommandAck ack)
         {
@@ -370,6 +371,7 @@ namespace EgoAnchor.Client
         /// 记录命令发送异常或超时。
         /// </summary>
         /// <param name="subject">对应 command subject。</param>
+        /// <param name="requestId">本次 command request_id；发送前失败时可为空。</param>
         /// <param name="message">异常文本。</param>
         private void RecordFailure(string subject, string requestId, string message)
         {

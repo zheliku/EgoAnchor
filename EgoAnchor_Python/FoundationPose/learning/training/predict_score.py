@@ -16,12 +16,11 @@ import torch.distributed as dist
 from omegaconf import OmegaConf
 from tqdm import tqdm
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f'{code_dir}/../../../')
-from learning.datasets.h5_dataset import *
-from learning.models.score_network import *
-from learning.datasets.pose_dataset import *
-from Utils import *
-from datareader import *
+from FoundationPose.learning.datasets.h5_dataset import *
+from FoundationPose.learning.models.score_network import *
+from FoundationPose.learning.datasets.pose_dataset import *
+from FoundationPose.Utils import *
+from FoundationPose.datareader import *
 
 
 def vis_batch_data_scores(pose_data, ids, scores, pad_margin=5):
@@ -190,7 +189,7 @@ class ScorePredictor:
         if pose_data.normalAs is not None:
           A = torch.cat([A, pose_data.normalAs.cuda().float()], dim=1)
           B = torch.cat([B, pose_data.normalBs.cuda().float()], dim=1)
-        with torch.cuda.amp.autocast(enabled=self.amp):
+        with torch.amp.autocast('cuda', enabled=self.amp):
           output = self.model(A, B, L=len(A))
         scores_cur = output["score_logit"].float().reshape(-1)
         ids.append(scores_cur.argmax()+b)
@@ -224,4 +223,3 @@ class ScorePredictor:
       return scores, canvas
 
     return scores, None
-

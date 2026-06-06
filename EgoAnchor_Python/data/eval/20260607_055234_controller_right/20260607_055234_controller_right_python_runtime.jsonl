@@ -1,0 +1,2 @@
+{"event":"status_event","session_id":"20260607_055234_controller_right","log_filename":"20260607_055234_controller_right_python_runtime.jsonl","created_unix_ms":1780782759927.5063,"mono_ms":17073609.0,"previous_state":"BOOTING","state":"STOPPED","status_event":"RUNTIME_STOPPED","message":"TrackingRuntime 已停止。","request_id":"","frame_id":-1,"error_code":""}
+{"event":"runtime_stopped","session_id":"20260607_055234_controller_right","log_filename":"20260607_055234_controller_right_python_runtime.jsonl","created_unix_ms":1780782759929.02,"mono_ms":17073609.0,"state":"STOPPED"}

@@ -42,19 +42,11 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
-        /// 把一条 heartbeat 广播给所有 runtime。
-        /// </summary>
-        public void Publish(ServerHeartbeat heartbeat)
-        {
-            dispatched += runtimeHub.PublishHeartbeat(heartbeat);
-        }
-
-        /// <summary>
         /// 处理已解析 heartbeat。
         /// </summary>
         protected override void OnParsed(ServerHeartbeat message)
         {
-            Publish(message);
+            dispatched += runtimeHub.PublishHeartbeat(message);
         }
     }
 }

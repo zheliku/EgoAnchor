@@ -10,9 +10,8 @@
 
 import os,sys,h5py,bisect,io,json
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f'{code_dir}/../../../../')
-from Utils import *
-from learning.datasets.pose_dataset import *
+from FoundationPose.Utils import *
+from FoundationPose.learning.datasets.pose_dataset import *
 
 
 
@@ -217,4 +216,3 @@ class PoseRefinePairH5Dataset(PairH5Dataset):
 
     batch = self.transform_depth_to_xyzmap(batch, H_ori, W_ori, bound=bound)
     return batch
-

@@ -63,7 +63,7 @@ namespace EgoAnchor.Policy
                 return state;
             }
 
-            return TransitionTo(AnchorState.Tracking, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.Tracking, reason);
         }
 
         /// <summary>
@@ -79,7 +79,7 @@ namespace EgoAnchor.Policy
                 return state;
             }
 
-            return TransitionTo(AnchorState.FrozenUncertain, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.FrozenUncertain, reason);
         }
 
         /// <summary>
@@ -99,20 +99,20 @@ namespace EgoAnchor.Policy
 
             if (!hasStablePose)
             {
-                return TransitionTo(AnchorState.Searching, reason, sampleTimeSeconds);
+                return TransitionTo(AnchorState.Searching, reason);
             }
 
             if (secondsSinceReliablePose <= coastTimeoutSeconds)
             {
-                return TransitionTo(AnchorState.Coasting, reason, sampleTimeSeconds);
+                return TransitionTo(AnchorState.Coasting, reason);
             }
 
             if (secondsSinceReliablePose >= lostTimeoutSeconds)
             {
-                return TransitionTo(AnchorState.Lost, reason, sampleTimeSeconds);
+                return TransitionTo(AnchorState.Lost, reason);
             }
 
-            return TransitionTo(AnchorState.FrozenUncertain, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.FrozenUncertain, reason);
         }
 
         /// <summary>
@@ -123,7 +123,7 @@ namespace EgoAnchor.Policy
         /// <returns>当前状态。</returns>
         public AnchorState OnReset(double sampleTimeSeconds, string reason)
         {
-            return TransitionTo(AnchorState.Searching, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.Searching, reason);
         }
 
         /// <summary>
@@ -134,7 +134,7 @@ namespace EgoAnchor.Policy
         /// <returns>当前状态。</returns>
         public AnchorState OnReacquire(double sampleTimeSeconds, string reason)
         {
-            return TransitionTo(AnchorState.Relocalizing, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.Relocalizing, reason);
         }
 
         /// <summary>
@@ -150,7 +150,7 @@ namespace EgoAnchor.Policy
                 stateBeforePause = state;
             }
 
-            return TransitionTo(AnchorState.Paused, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.Paused, reason);
         }
 
         /// <summary>
@@ -167,7 +167,7 @@ namespace EgoAnchor.Policy
                 target = AnchorState.Searching;
             }
 
-            return TransitionTo(target, reason, sampleTimeSeconds);
+            return TransitionTo(target, reason);
         }
 
         /// <summary>
@@ -178,7 +178,7 @@ namespace EgoAnchor.Policy
         /// <returns>当前状态。</returns>
         public AnchorState OnError(double sampleTimeSeconds, string reason)
         {
-            return TransitionTo(AnchorState.Error, reason, sampleTimeSeconds);
+            return TransitionTo(AnchorState.Error, reason);
         }
 
         /// <summary>
@@ -188,7 +188,7 @@ namespace EgoAnchor.Policy
         /// <param name="reason">清空原因。</param>
         public void Clear(double sampleTimeSeconds, string reason)
         {
-            TransitionTo(AnchorState.Uninitialized, reason, sampleTimeSeconds);
+            TransitionTo(AnchorState.Uninitialized, reason);
             stateBeforePause = AnchorState.Uninitialized;
         }
 
@@ -197,9 +197,8 @@ namespace EgoAnchor.Policy
         /// </summary>
         /// <param name="nextState">目标状态。</param>
         /// <param name="reason">转移原因。</param>
-        /// <param name="sampleTimeSeconds">当前 Unity 单调时间，单位秒。</param>
         /// <returns>转移后的状态。</returns>
-        private AnchorState TransitionTo(AnchorState nextState, string reason, double sampleTimeSeconds)
+        private AnchorState TransitionTo(AnchorState nextState, string reason)
         {
             AnchorState previous = state;
             state = nextState;

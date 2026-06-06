@@ -11,8 +11,9 @@ from cutie.model.utils.memory_utils import *
 from cutie.model.transformer.object_transformer import QueryTransformer
 from cutie.model.transformer.object_summarizer import ObjectSummarizer
 from cutie.utils.tensor_utils import aggregate
+from egoanchor.utils import get_thirdparty_logger
 
-log = logging.getLogger()
+log = get_thirdparty_logger("cutie.model")
 
 
 class CUTIE(nn.Module):

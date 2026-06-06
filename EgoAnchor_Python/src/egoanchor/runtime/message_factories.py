@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from egoanchor.perception import PoseObservation
 from egoanchor.protocol import anchor_pb2, common_pb2
-from egoanchor.runtime.runtime_state import RuntimeState, runtime_state_value
+from .runtime_state import RuntimeState, runtime_state_value
 
 SCHEMA_VERSION = "v1"
 """当前共享协议 schema 版本字符串。"""

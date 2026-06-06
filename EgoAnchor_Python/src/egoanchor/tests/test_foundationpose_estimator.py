@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from egoanchor.algorithms.foundationpose_estimator import FoundationPoseObjectEstimator
+from egoanchor.algorithms import FoundationPoseObjectEstimator
 
 
 class FoundationPoseObjectEstimatorTest(unittest.TestCase):
@@ -23,7 +23,8 @@ class FoundationPoseObjectEstimatorTest(unittest.TestCase):
 
         render_pose = estimator._pose_for_centered_mesh(pose)
 
-        expected = pose @ np.linalg.inv(estimator.to_origin)
+        expected = pose.copy()
+        expected[:3, 3] = pose[:3, 3] - estimator.to_origin[:3, 3]
         self.assertTrue(np.allclose(render_pose, expected))
 
 

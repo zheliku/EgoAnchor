@@ -13,7 +13,6 @@ from typing import Any
 
 import numpy as np
 
-from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Sam3Segmenter, Yoloe26Segmenter
 from .quest_pose_pipeline import QuestPosePipeline
 
 
@@ -132,6 +131,8 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     到达后，pipeline 会只更新 K 并 reset 时序状态，不重建 scorer/refiner 重模型。
     """
 
+    from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Sam3Segmenter, Yoloe26Segmenter
+
     python_root = Path(cfg.paths.python_root)
     segmenter_cfg = cfg.module.segmenter
     yolo_cfg = cfg.module.yoloe
@@ -170,6 +171,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
             device=str(sam3_cfg.device),
             load_from_hf=bool(sam3_cfg.load_from_hf),
             disable_position_precompute=bool(_cfg_get(sam3_cfg, "disable_position_precompute", True)),
+            enable_logging=bool(_cfg_get(sam3_cfg, "enable_logging", False)),
         )
 
     depth_estimator = FastFoundationStereoDepth(
@@ -188,6 +190,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         trt_platform_tag=str(ffs_cfg.trt_platform_tag),
         trt_feature_engine_path=str(ffs_cfg.trt_feature_engine_path),
         trt_post_engine_path=str(ffs_cfg.trt_post_engine_path),
+        enable_logging=bool(_cfg_get(ffs_cfg, "enable_logging", False)),
         project_root=python_root,
     )
 

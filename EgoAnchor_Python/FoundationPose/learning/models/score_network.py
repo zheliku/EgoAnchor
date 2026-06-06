@@ -10,16 +10,13 @@
 import os,sys
 import numpy as np
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(code_dir)
-sys.path.append(f'{code_dir}/../../../../')
-from Utils import *
+from FoundationPose.Utils import *
 from functools import partial
 import torch.nn.functional as F
 import torch
 import torch.nn as nn
 import cv2
-from network_modules import *
-from Utils import *
+from FoundationPose.learning.models.network_modules import *
 
 
 

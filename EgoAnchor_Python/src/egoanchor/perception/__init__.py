@@ -7,32 +7,13 @@ perception 层负责把 Quest stereo/camera_info 转换成 camera-space PoseObse
 
 from __future__ import annotations
 
-from importlib import import_module
-from typing import Any
-
-from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
-from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
 from .pose_observation import PoseObservation
 from .quest_calibration import QuestStereoCalibration
 from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
-
-
-_LAZY_EXPORTS = {
-    "QuestPosePipeline": "egoanchor.perception.quest_pose_pipeline",
-    "build_quest_pose_pipeline": "egoanchor.perception.pipeline_factory",
-}
-
-
-def __getattr__(name: str) -> Any:
-    """惰性导出真实 pipeline，避免 import perception 包时加载模型依赖。"""
-
-    module_name = _LAZY_EXPORTS.get(name)
-    if module_name is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    module = import_module(module_name)
-    value = getattr(module, name)
-    globals()[name] = value
-    return value
+from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
+from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
+from .quest_pose_pipeline import QuestPosePipeline
+from .pipeline_factory import build_quest_pose_pipeline, normalize_segmenter_type
 
 
 __all__ = [
@@ -51,5 +32,6 @@ __all__ = [
     "QuestPosePipeline",
     "QuestPosePipelineOutput",
     "build_quest_pose_pipeline",
+    "normalize_segmenter_type",
 ]
 

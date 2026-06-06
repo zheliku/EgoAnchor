@@ -6,13 +6,15 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
-from egoanchor.algorithms import SegmenterResult
-from .quest_frame import DecodedQuestStereoFrame
 from egoanchor.utils import LatestValueStore
+from .quest_frame import DecodedQuestStereoFrame
+
+if TYPE_CHECKING:
+    from egoanchor.algorithms import SegmenterResult
 
 LOGGER = logging.getLogger(__name__)
 """异步分割 worker 日志记录器。"""

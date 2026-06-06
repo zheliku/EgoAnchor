@@ -45,6 +45,17 @@ def _create_fixed_window(name: str, width: int, height: int) -> None:
     cv2.resizeWindow(name, max(int(width), 1), max(int(height), 1))
 
 
+def _destroy_window_if_created(name: str, created: bool) -> None:
+    """仅销毁已经创建过的 OpenCV 窗口，避免启动失败时掩盖真实异常。"""
+
+    if not created:
+        return
+    try:
+        cv2.destroyWindow(name)
+    except cv2.error as exc:
+        logging.debug("OpenCV 窗口销毁失败，忽略清理异常: window=%s error=%s", name, exc)
+
+
 def run_tracking_server(config_path: str | None = None, object_name: str | None = None) -> None:
     """运行 Python-only pose estimation debug server。"""
 
@@ -59,12 +70,16 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     waiting = make_pose_waiting_image(int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height), "EgoAnchor Pose Debug")
     last_wait_log_time = 0.0
     has_debug_frame = False
+    debug_window_created = False
+    score_window_created = False
 
     try:
         logging.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
         _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
+        debug_window_created = True
         _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 540)))
+        score_window_created = True
         cv2.imshow(debug_window, waiting)
         logging.info("[TrackingServer] listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
 
@@ -117,8 +132,8 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
             has_debug_frame = True
     finally:
         runtime.close()
-        cv2.destroyWindow(debug_window)
-        cv2.destroyWindow(score_window)
+        _destroy_window_if_created(debug_window, debug_window_created)
+        _destroy_window_if_created(score_window, score_window_created)
 
 
 def main() -> None:

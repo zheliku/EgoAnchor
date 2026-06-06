@@ -13,8 +13,7 @@ from typing import Iterator, List, Optional, Set, Union
 import numpy as np
 import torch
 code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f'{code_dir}/../../../../')
-from Utils import *
+from FoundationPose.Utils import *
 
 
 @dataclass
@@ -132,4 +131,3 @@ class BatchPoseData:
         if self.__dict__[k] is not None:
           out.__dict__[k] = self.__dict__[k][ids.to(self.__dict__[k].device)]
       return out
-
