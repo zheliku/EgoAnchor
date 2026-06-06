@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from egoanchor.perception import PoseObservation
 
 JUMP_TRANSLATION_THRESHOLD_M = 0.6
@@ -11,8 +13,37 @@ JUMP_ROTATION_THRESHOLD_DEG = 100.0
 """接近该旋转跳变门限时降低可靠性，单位度；与默认 FoundationPose track jump 配置一致。"""
 
 
-def score_observation(observation: PoseObservation) -> tuple[float, tuple[str, ...]]:
-    """根据一致性、depth、跳变幅度、mask 和 phase 生成 0..1 可靠性评分。"""
+@dataclass(frozen=True, slots=True)
+class PoseQualityBreakdown:
+    """Pose reliability 评分分解，便于 HUD/日志逐项诊断。"""
+
+    final_score: float
+    """最终可靠性分，范围 0..1。"""
+
+    phase_score: float
+    """pipeline phase 子分。"""
+
+    consistency_score: float
+    """渲染一致性子分。"""
+
+    depth_score: float
+    """mask/depth 有效率子分。"""
+
+    jump_score: float
+    """相邻 pose 跳变子分。"""
+
+    mask_score: float
+    """mask 面积子分。"""
+
+    reject_score: float
+    """近期 track reject 子分。"""
+
+    flags: tuple[str, ...]
+    """解释最终分数的 flags。"""
+
+
+def score_observation_breakdown(observation: PoseObservation) -> PoseQualityBreakdown:
+    """根据一致性、depth、跳变幅度、mask 和 phase 生成完整评分分解。"""
 
     flags: list[str] = []
     if not observation.has_pose:
@@ -22,7 +53,16 @@ def score_observation(observation: PoseObservation) -> tuple[float, tuple[str, .
             flags.append("no_valid_depth_in_mask")
         if observation.mask_area_ratio <= 0.0:
             flags.append("no_mask")
-        return 0.0, tuple(flags)
+        return PoseQualityBreakdown(
+            final_score=0.0,
+            phase_score=0.0,
+            consistency_score=0.0,
+            depth_score=0.0,
+            jump_score=0.0,
+            mask_score=0.0,
+            reject_score=0.0,
+            flags=tuple(flags),
+        )
 
     phase_weight = 1.0
     if observation.phase not in {"TRACK", "REGISTER", "RE_REGISTER"}:
@@ -36,7 +76,16 @@ def score_observation(observation: PoseObservation) -> tuple[float, tuple[str, .
     mask_factor = _mask_factor(observation, flags)
     reject_factor = _track_reject_factor(observation, flags)
     score = phase_weight * consistency_score * depth_score * jump_score * mask_factor * reject_factor
-    return _clamp01(score), tuple(flags)
+    return PoseQualityBreakdown(
+        final_score=_clamp01(score),
+        phase_score=_clamp01(phase_weight),
+        consistency_score=_clamp01(consistency_score),
+        depth_score=_clamp01(depth_score),
+        jump_score=_clamp01(jump_score),
+        mask_score=_clamp01(mask_factor),
+        reject_score=_clamp01(reject_factor),
+        flags=tuple(flags),
+    )
 
 
 def score_depth_quality(observation: PoseObservation) -> float:
@@ -55,6 +104,9 @@ def _consistency_score(observation: PoseObservation, flags: list[str]) -> float:
 
     consistency = float(observation.track_consistency)
     if consistency < 0.0:
+        if observation.consistency_expected:
+            flags.append("consistency_missing_expected")
+            return 0.30
         flags.append("no_consistency_signal")
         return 1.0
     score = _clamp01(consistency)

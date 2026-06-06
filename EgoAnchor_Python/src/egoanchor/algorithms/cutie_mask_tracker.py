@@ -16,7 +16,9 @@ import numpy as np
 import torch
 from torchvision.transforms.functional import to_tensor
 
-from egoanchor.algorithms import FoundationPoseObjectEstimator, MaskTrackResult
+from egoanchor.algorithms import MaskTrackResult
+
+from .foundationpose_estimator import FoundationPoseObjectEstimator
 
 
 class CutieMaskTracker:

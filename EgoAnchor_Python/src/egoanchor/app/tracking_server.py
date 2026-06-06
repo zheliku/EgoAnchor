@@ -9,7 +9,7 @@ import time
 import cv2
 
 from egoanchor.config import load_config
-from egoanchor.diagnostics import make_pose_waiting_image, stack_pose_stereo, tile_pose_depth_dashboard
+from egoanchor.diagnostics import make_pose_waiting_image, make_score_debug_view, tile_pose_depth_dashboard
 from egoanchor.protocol import SubjectRegistry
 from egoanchor.runtime import TrackingRuntime
 
@@ -55,7 +55,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
 
     runtime = TrackingRuntime(cfg, subjects)
     debug_window = str(pose_cfg.debug_window_name)
-    stereo_window = str(pose_cfg.stereo_window_name)
+    score_window = str(getattr(pose_cfg, "score_window_name", "EgoAnchor Score Debug"))
     waiting = make_pose_waiting_image(int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height), "EgoAnchor Pose Debug")
     last_wait_log_time = 0.0
     has_debug_frame = False
@@ -64,7 +64,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
         logging.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
         _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
-        _create_fixed_window(stereo_window, int(pose_cfg.stereo_window_width), int(pose_cfg.stereo_window_height))
+        _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 540)))
         cv2.imshow(debug_window, waiting)
         logging.info("[TrackingServer] listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
 
@@ -105,14 +105,20 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                 max_depth=float(depth_cfg.max_depth),
             )
             cv2.imshow(debug_window, dashboard)
+            score_debug = make_score_debug_view(
+                output.diagnostics,
+                output.observation,
+                width=int(getattr(pose_cfg, "score_window_width", 960)),
+                height=int(getattr(pose_cfg, "score_window_height", 540)),
+                min_depth=float(depth_cfg.min_depth),
+                max_depth=float(depth_cfg.max_depth),
+            )
+            cv2.imshow(score_window, score_debug)
             has_debug_frame = True
-
-            stereo = stack_pose_stereo(output.diagnostics.left_bgr, output.diagnostics.right_bgr)
-            cv2.imshow(stereo_window, stereo)
     finally:
         runtime.close()
         cv2.destroyWindow(debug_window)
-        cv2.destroyWindow(stereo_window)
+        cv2.destroyWindow(score_window)
 
 
 def main() -> None:

@@ -390,6 +390,8 @@ class TrtRunner(nn.Module):
     self.post_context = self.post_engine.create_execution_context()
     self.max_disp = args.max_disp
     self.cv_group = args.get('cv_group', 8)
+    self.trt_stream = torch.cuda.Stream()
+    """专用于 TensorRT + 中间 Torch kernel 的非默认 CUDA stream。"""
 
   def trt_dtype_to_torch(self, dt):
     import tensorrt as trt
@@ -432,15 +434,20 @@ class TrtRunner(nn.Module):
 
   def forward(self, image1, image2):
     import tensorrt as trt
-    feat_out = self.run_trt(self.feature_engine, self.feature_context, {'left': image1, 'right': image2})
-    gwc_volume = build_gwc_volume_triton(feat_out['features_left_04'].half(), feat_out['features_right_04'].half(), self.args.max_disp//4, self.cv_group, normalize=self.args.normalize)
-    post_inputs = feat_out
-    post_inputs['gwc_volume'] = gwc_volume
-    in_names = self.get_io_tensor_names(self.post_engine, trt.TensorIOMode.INPUT)
-    tmp_keys = list(post_inputs.keys())
-    for k in tmp_keys:
-      if k not in in_names:
-        del post_inputs[k]
-    out = self.run_trt(self.post_engine, self.post_context, post_inputs)
-    disp = out['disp']
+    caller_stream = torch.cuda.current_stream()
+    self.trt_stream.wait_stream(caller_stream)
+    with torch.cuda.stream(self.trt_stream):
+      feat_out = self.run_trt(self.feature_engine, self.feature_context, {'left': image1, 'right': image2})
+      gwc_volume = build_gwc_volume_triton(feat_out['features_left_04'].half(), feat_out['features_right_04'].half(), self.args.max_disp//4, self.cv_group, normalize=self.args.normalize)
+      post_inputs = feat_out
+      post_inputs['gwc_volume'] = gwc_volume
+      in_names = self.get_io_tensor_names(self.post_engine, trt.TensorIOMode.INPUT)
+      tmp_keys = list(post_inputs.keys())
+      for k in tmp_keys:
+        if k not in in_names:
+          del post_inputs[k]
+      out = self.run_trt(self.post_engine, self.post_context, post_inputs)
+      disp = out['disp']
+    caller_stream.wait_stream(self.trt_stream)
+    disp.record_stream(caller_stream)
     return disp

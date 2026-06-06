@@ -39,7 +39,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 - Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
 - Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python reliability：TRACK 阶段可通过 `defaults.toml` 的 `[reliability.consistency]` 显式启用渲染-重投影一致性检测（默认关闭，先用 `mode="score_only"` shadow mode），通过 FoundationPose 适配器 facade 渲染 depth/mask，与 Cutie mask 和 FFS depth 比较，写入 `track_consistency`、IoU、depth inlier、`consistency_ms` 等 JSONL 旁路字段；`PoseResult` 仍只使用既有 `reliability_score`/`reliability_flags`，不改 proto。
+- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.consistency]` 渲染-重投影一致性检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 渲染 depth/mask，与 Cutie mask 和 FFS depth 比较，写入 `track_consistency`、IoU、depth inlier、`consistency_ms` 等 JSONL 旁路字段；`PoseResult` 仍只使用既有 `reliability_score`/`reliability_flags`，不改 proto。
 - Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
@@ -92,7 +92,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - 每个 `.toml` 参数必须在同一行末尾写中文注释；新增参数时同步默认值、加载点、使用点和测试。
 - 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`reliability.consistency`、`module.segmenter/yoloe/sam3/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
 - `module.segmenter.type` 支持 `yoloe26` 和 `sam3`；默认必须保持 `yoloe26`，耳机盒等覆盖配置可显式切到 `sam3`。`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold` 是 YOLOE/SAM3 共用阈值；后端专属配置只保留权重、输入尺寸、设备、异步等参数。SAM3 本地仓库和 checkpoint 默认位于 `EgoAnchor_Python/sam3` 与 `sam3/assets/sam3_ckpt/sam3.pt`；`module.sam3.async_segmentation=true` 只异步初始分割，不把 FoundationPose/Cutie 移出 `TrackingRuntime` owner 线程。
-- `reliability.consistency.enabled=false` 是默认值；开启后先用 `mode="score_only"` 观察分布和误报率，只有确认后再切 `mode="re_register"`。无效信号（warmup、无 Cutie mask、depth in mask 过低、渲染面积太小或 K 缺失）只写 `no_consistency_signal`，不得触发重注册。
+- `reliability.consistency.enabled=true` 是默认值；真机联调已验证可默认采集一致性信号，但仍保持 `mode="score_only"`，只有确认误报率后再切 `mode="re_register"`。无效信号（warmup、无 Cutie mask、depth in mask 过低、渲染面积太小或 K 缺失）只写 `no_consistency_signal`，不得触发重注册。
 - `runtime.logging.eval_session_enabled=true` 时，Python 启动会创建 `data/eval/<yyyyMMdd_HHmmss_object_id>/python_session.json`，runtime JSONL 默认写入同目录 `<session_id>_python_runtime.jsonl`；Unity eval 录制优先复用这个目录，不再手填 `pythonLogFilename`。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 

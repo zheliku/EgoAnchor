@@ -151,7 +151,7 @@ class CommandQueueTest(unittest.TestCase):
         )
         self.assertTrue(queue.put(fourth))
 
-        remaining = queue.drain()
+        remaining = queue.pop_many(len(queue))
         self.assertEqual([command.request_id for command in remaining], ["control-3", "control-4"])
 
 

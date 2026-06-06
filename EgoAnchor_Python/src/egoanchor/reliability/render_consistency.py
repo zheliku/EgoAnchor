@@ -29,11 +29,29 @@ class RenderConsistencyResult:
     depth_median_residual_m: float
     """交集有效深度残差中位数，单位米。"""
 
+    render_visible_ratio: float
+    """渲染前景中被观测 mask 覆盖的比例，遮挡或 mask 缩小时会下降。"""
+
     render_area_px: int
     """渲染前景像素数量。"""
 
     valid: bool
     """本帧一致性信号是否足够可靠；false 时 caller 只能当作无信号。"""
+
+    status: str = "invalid"
+    """一致性信号状态；valid、render_exception、render_area_tiny、observed_empty 等。"""
+
+    render_mask: np.ndarray | None = None
+    """用于 debug 的下采样渲染 mask。"""
+
+    observed_mask: np.ndarray | None = None
+    """用于 debug 的下采样观测 mask。"""
+
+    render_depth_m: np.ndarray | None = None
+    """用于 debug 的下采样渲染 depth。"""
+
+    observed_depth_m: np.ndarray | None = None
+    """用于 debug 的下采样观测 depth。"""
 
 
 class RenderConsistencyChecker:
@@ -85,7 +103,7 @@ class RenderConsistencyChecker:
         obs_depth = np.asarray(observed_depth_m, dtype=np.float32)
         obs_mask = np.asarray(observed_mask) > 0
         if obs_depth.ndim != 2 or obs_mask.ndim != 2 or obs_depth.shape != obs_mask.shape:
-            return self._invalid_result()
+            return self._invalid_result(status="input_shape_invalid")
 
         height, width = obs_depth.shape
         out_h = max(1, height // self.downscale)
@@ -100,7 +118,7 @@ class RenderConsistencyChecker:
             )
         except Exception as exc:
             LOGGER.warning("渲染一致性检测失败，将本帧视为无信号: %s", exc)
-            return self._invalid_result()
+            return self._invalid_result(status="render_exception")
 
         obs_mask_small = self._resize_mask(obs_mask, (out_h, out_w))
         obs_depth_small = self._resize_depth(obs_depth, (out_h, out_w))
@@ -134,7 +152,7 @@ class RenderConsistencyChecker:
         render_depth = np.asarray(render_depth_m, dtype=np.float32)
         observed_depth = np.asarray(observed_depth_m, dtype=np.float32)
         if render.shape != observed.shape or render_depth.shape != render.shape or observed_depth.shape != render.shape:
-            return RenderConsistencyChecker._invalid_result()
+            return RenderConsistencyChecker._invalid_result(status="map_shape_invalid")
 
         render_area = int(np.count_nonzero(render))
         observed_area = int(np.count_nonzero(observed))
@@ -143,6 +161,7 @@ class RenderConsistencyChecker:
         intersection = render & observed
         intersection_area = int(np.count_nonzero(intersection))
         mask_iou = float(intersection_area) / float(union_area) if union_area > 0 else 0.0
+        render_visible_ratio = float(intersection_area) / float(render_area) if render_area > 0 else 0.0
 
         valid_depth = intersection & np.isfinite(render_depth) & np.isfinite(observed_depth) & (render_depth > 0.0) & (observed_depth > 0.0)
         residual = np.abs(render_depth[valid_depth] - observed_depth[valid_depth])
@@ -154,15 +173,28 @@ class RenderConsistencyChecker:
             depth_median = 0.0
 
         weight_sum = max(float(iou_weight) + float(depth_weight), 1e-6)
-        consistency = RenderConsistencyChecker._clamp01((float(iou_weight) * mask_iou + float(depth_weight) * depth_inlier) / weight_sum)
+        raw_consistency = (float(iou_weight) * mask_iou + float(depth_weight) * depth_inlier) / weight_sum
+        consistency = RenderConsistencyChecker._clamp01(raw_consistency * render_visible_ratio)
         valid = render_area >= int(min_render_area_px) and observed_area > 0
+        if valid:
+            status = "valid"
+        elif render_area < int(min_render_area_px):
+            status = "render_area_tiny"
+        else:
+            status = "observed_empty"
         return RenderConsistencyResult(
             consistency=consistency,
             mask_iou=RenderConsistencyChecker._clamp01(mask_iou),
             depth_inlier_ratio=RenderConsistencyChecker._clamp01(depth_inlier),
             depth_median_residual_m=max(0.0, depth_median),
+            render_visible_ratio=RenderConsistencyChecker._clamp01(render_visible_ratio),
             render_area_px=render_area,
             valid=bool(valid),
+            status=status,
+            render_mask=render.copy(),
+            observed_mask=observed.copy(),
+            render_depth_m=render_depth.copy(),
+            observed_depth_m=observed_depth.copy(),
         )
 
     @staticmethod
@@ -194,7 +226,7 @@ class RenderConsistencyChecker:
         return cv2.resize(np.asarray(depth, dtype=np.float32), (out_w, out_h), interpolation=cv2.INTER_NEAREST)
 
     @staticmethod
-    def _invalid_result() -> RenderConsistencyResult:
+    def _invalid_result(status: str = "invalid") -> RenderConsistencyResult:
         """构造无效一致性信号。"""
 
         return RenderConsistencyResult(
@@ -202,8 +234,10 @@ class RenderConsistencyChecker:
             mask_iou=0.0,
             depth_inlier_ratio=0.0,
             depth_median_residual_m=0.0,
+            render_visible_ratio=0.0,
             render_area_px=0,
             valid=False,
+            status=str(status),
         )
 
     @staticmethod

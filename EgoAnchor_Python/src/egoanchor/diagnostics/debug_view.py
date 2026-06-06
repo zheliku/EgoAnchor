@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from egoanchor.diagnostics import fit_to_size, stack_stereo
+from .image_utils import fit_to_size, stack_stereo
 from egoanchor.perception import PoseObservation
 
 if TYPE_CHECKING:
@@ -88,6 +88,66 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
     return output
 
 
+def make_score_debug_view(
+    diagnostics: FrameDiagnostics,
+    observation: PoseObservation | None,
+    width: int = 960,
+    height: int = 540,
+    min_depth: float = 0.1,
+    max_depth: float = 5.0,
+) -> np.ndarray:
+    """构建独立 reliability / render consistency 调试窗口。"""
+
+    canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
+    half_w = max(canvas.shape[1] // 2, 1)
+    half_h = max(canvas.shape[0] // 2, 1)
+    panels = [
+        (_mask_panel(diagnostics.consistency_render_mask, "render mask", (0, 255, 120)), 0, 0),
+        (_mask_panel(diagnostics.consistency_observed_mask, "observed mask", (0, 220, 255)), half_w, 0),
+        (colorize_depth(diagnostics.consistency_render_depth, min_depth=min_depth, max_depth=max_depth), 0, half_h),
+        (colorize_depth(diagnostics.consistency_observed_depth, min_depth=min_depth, max_depth=max_depth), half_w, half_h),
+    ]
+    labels = [
+        ("render mask", 14, half_h - 14),
+        ("observed mask", half_w + 14, half_h - 14),
+        ("render depth", 14, canvas.shape[0] - 14),
+        ("observed depth", half_w + 14, canvas.shape[0] - 14),
+    ]
+    for panel, x, y in panels:
+        fitted = fit_to_size(panel, half_w, half_h)
+        canvas[y : y + half_h, x : x + half_w] = fitted
+    for text, x, y in labels:
+        cv2.putText(canvas, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+
+    lines = [
+        f"score={observation.reliability_score if observation else 0.0:.2f} phase={diagnostics.score_phase:.2f} cons={diagnostics.score_consistency:.2f} depth={diagnostics.score_depth:.2f} jump={diagnostics.score_jump:.2f} mask={diagnostics.score_mask:.2f} reject={diagnostics.score_reject:.2f}",
+        f"track_cons={diagnostics.track_consistency:.2f} iou={diagnostics.consistency_mask_iou:.2f} visible={diagnostics.consistency_render_visible_ratio:.2f} depthIn={diagnostics.consistency_depth_inlier:.2f} depthRes={diagnostics.consistency_depth_residual_m:.3f}m {diagnostics.consistency_ms:.1f}ms",
+        f"status={diagnostics.consistency_status} expected={diagnostics.consistency_expected} renderArea={diagnostics.consistency_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
+    ]
+    if observation and observation.reliability_flags:
+        lines.append("flags=" + ",".join(observation.reliability_flags[:8]))
+    y = 24
+    for text in lines:
+        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
+        y += 24
+    return canvas
+
+
+def _mask_panel(mask: np.ndarray | None, title: str, color: tuple[int, int, int]) -> np.ndarray:
+    """把二值 mask 转为彩色 debug panel。"""
+
+    if mask is None:
+        image = np.zeros((240, 320, 3), dtype=np.uint8)
+        cv2.putText(image, "no signal", (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 160, 255), 1, cv2.LINE_AA)
+    else:
+        mask_u8 = (np.asarray(mask) > 0).astype(np.uint8)
+        image = np.zeros((mask_u8.shape[0], mask_u8.shape[1], 3), dtype=np.uint8)
+        image[mask_u8 > 0] = color
+    cv2.putText(image, title, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    return image
+
+
 def tile_pose_depth_dashboard(
     diagnostics: FrameDiagnostics,
     observation: PoseObservation | None,
@@ -127,4 +187,3 @@ def tile_pose_depth_dashboard(
     for text, x, y in labels:
         cv2.putText(dashboard, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
     return dashboard
-

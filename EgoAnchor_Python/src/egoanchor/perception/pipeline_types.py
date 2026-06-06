@@ -8,7 +8,7 @@ from enum import StrEnum
 
 import numpy as np
 
-from egoanchor.perception import PoseObservation
+from .pose_observation import PoseObservation
 
 
 @dataclass(slots=True)
@@ -104,8 +104,32 @@ class FrameDiagnostics:
     depth_quality_score: float = 0.0
     """仅由 depth 有效率估计的子分，范围 0..1，用于 HUD/日志诊断。"""
 
+    score_phase: float = 0.0
+    """reliability 最终分中的 phase 子分。"""
+
+    score_consistency: float = 0.0
+    """reliability 最终分中的渲染一致性子分。"""
+
+    score_depth: float = 0.0
+    """reliability 最终分中的 depth 子分。"""
+
+    score_jump: float = 0.0
+    """reliability 最终分中的相邻 pose 跳变子分。"""
+
+    score_mask: float = 0.0
+    """reliability 最终分中的 mask 面积子分。"""
+
+    score_reject: float = 0.0
+    """reliability 最终分中的 track reject 子分。"""
+
     track_consistency: float = -1.0
     """渲染-重投影一致性分，0..1；-1 表示本帧无信号。"""
+
+    consistency_expected: bool = False
+    """本帧是否已经满足一致性检测前置条件；为 true 但无信号时应降低可靠性。"""
+
+    consistency_status: str = "disabled"
+    """渲染一致性检测状态，用于解释 score 窗口黑屏或无信号原因。"""
 
     consistency_mask_iou: float = 0.0
     """渲染 mask 与观测 mask 的 IoU。"""
@@ -113,11 +137,29 @@ class FrameDiagnostics:
     consistency_depth_inlier: float = 0.0
     """渲染深度与观测深度在交集区域的 inlier 比例。"""
 
+    consistency_render_visible_ratio: float = 0.0
+    """渲染前景中被观测 mask 覆盖的比例，遮挡时会下降。"""
+
+    consistency_render_area_px: int = 0
+    """一致性检测下采样图上的渲染前景像素数。"""
+
     consistency_depth_residual_m: float = 0.0
     """渲染深度与观测深度的中位残差，单位米。"""
 
     consistency_ms: float = 0.0
     """渲染一致性检测耗时，单位毫秒。"""
+
+    consistency_render_mask: np.ndarray | None = None
+    """一致性检测下采样后的渲染 mask，用于独立 debug 窗口。"""
+
+    consistency_observed_mask: np.ndarray | None = None
+    """一致性检测下采样后的观测 mask，用于独立 debug 窗口。"""
+
+    consistency_render_depth: np.ndarray | None = None
+    """一致性检测下采样后的渲染 depth，用于独立 debug 窗口。"""
+
+    consistency_observed_depth: np.ndarray | None = None
+    """一致性检测下采样后的观测 depth，用于独立 debug 窗口。"""
 
     last_translation_delta_m: float = 0.0
     """上一接受 pose 到当前 pose 的平移增量，单位米。"""

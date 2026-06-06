@@ -114,11 +114,6 @@ class ZmqTopicSubscriber:
             self.store.update(topic, payload)
         return latest
 
-    def get_latest_payload(self, topic: str) -> bytes | None:
-        """读取某个 topic 的跨 tick 最新 payload。"""
-
-        return self.store.latest_payload_by_topic.get(topic)
-
     def get_stats(self) -> ZmqTopicSubscriberStats:
         """返回累计接收统计。"""
 
@@ -153,13 +148,3 @@ class ZmqTopicSubscriber:
             logging.warning("[ZmqTopicSubscriber] receive error: %s", exc)
             return None
 
-    def __enter__(self) -> "ZmqTopicSubscriber":
-        """支持 `with` 语句自动启动接收器。"""
-
-        self.start()
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """离开 `with` 语句时自动关闭接收器。"""
-
-        self.close()

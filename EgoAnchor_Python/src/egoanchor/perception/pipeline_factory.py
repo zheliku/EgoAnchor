@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, Sam3Segmenter, Yoloe26Segmenter
-from egoanchor.perception import QuestPosePipeline
+from .quest_pose_pipeline import QuestPosePipeline
 
 
 def _resolve_path(path_value: str | Path, python_root: Path) -> Path:

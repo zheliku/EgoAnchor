@@ -27,7 +27,7 @@ from egoanchor.runtime.message_factories import HeartbeatFactory, PoseResultFact
 from egoanchor.runtime.quest_stream_receiver import QuestStreamReceiver
 from egoanchor.runtime.runtime_log_writer import RuntimeLogWriter
 from egoanchor.runtime.runtime_state import RuntimeState
-from egoanchor.transport import NatsMessageClient, NatsMessageSettings, PoseResultPublisher, ProtobufPublisher
+from egoanchor.transport import NatsMessageClient, NatsMessageSettings, ProtobufPublisher
 
 LOGGER = logging.getLogger(__name__)
 """runtime 层日志记录器。"""
@@ -111,7 +111,7 @@ class TrackingRuntime:
             queue=self.command_queue,
             executor=self.command_executor,
             execute_per_tick=int(getattr(command_cfg, "execute_per_tick", 8)),
-            log_execution=self._log_command_execution,
+            log_execution=self.log_writer.command_execution,
             set_paused=lambda value: setattr(self, "paused", bool(value)),
             set_stage=self._set_pipeline_stage,
             reset_tracking=self._reset_pipeline_tracking,
@@ -123,7 +123,7 @@ class TrackingRuntime:
         self.nats_client: NatsMessageClient | None = None
         """共享 NATS bytes client；pose/status/heartbeat publisher 复用同一连接。"""
 
-        self.pose_publisher: PoseResultPublisher | None = None
+        self.pose_publisher: ProtobufPublisher | None = None
         """NATS PoseResult 发布器；配置关闭时为 None。"""
 
         self.status_publisher: ProtobufPublisher | None = None
@@ -287,7 +287,7 @@ class TrackingRuntime:
         client = NatsMessageClient(settings)
         self._attach_command_router(client)
         self.nats_client = client
-        self.pose_publisher = PoseResultPublisher(client, subject=settings.pose_result_subject, max_pending_futures=settings.max_pending_futures)
+        self.pose_publisher = ProtobufPublisher(client, subject=settings.pose_result_subject, max_pending_futures=settings.max_pending_futures)
         self.status_publisher = ProtobufPublisher(client, subject=settings.anchor_status_subject, max_pending_futures=settings.max_pending_futures)
         self.heartbeat_publisher = ProtobufPublisher(client, subject=settings.server_heartbeat_subject, max_pending_futures=settings.max_pending_futures)
 
@@ -316,7 +316,7 @@ class TrackingRuntime:
         if self.pose_publisher is None or not self.pose_publisher.enabled:
             return
         self.pose_publish_attempts += 1
-        if self.pose_publisher.publish_pose_result(msg):
+        if self.pose_publisher.publish(msg):
             self.pose_publish_submitted += 1
 
     def _publish_status(self, msg) -> None:
@@ -449,11 +449,6 @@ class TrackingRuntime:
         from egoanchor.protocol import common_pb2
 
         return common_pb2.ErrorInfo(code=str(code or ""), message=str(message or ""), details=str(details or ""))
-
-    def _log_command_execution(self, command, result, queue_length: int) -> None:
-        """记录 runtime 线程实际执行 command 的时间点和动作。"""
-
-        self.log_writer.command_execution(command, result, queue_length=queue_length)
 
     def _set_pipeline_stage(self, stage: int) -> None:
         """由 CommandPump 在 owner 线程切换 pipeline stage。"""

@@ -10,21 +10,15 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
+from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
+from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
 from .pose_observation import PoseObservation
 from .quest_calibration import QuestStereoCalibration
 from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
 
 
 _LAZY_EXPORTS = {
-    "AsyncSegmenterJob": "egoanchor.perception.async_segmenter",
-    "AsyncSegmenterWorker": "egoanchor.perception.async_segmenter",
-    "SegmenterBackend": "egoanchor.perception.async_segmenter",
-    "FrameDiagnostics": "egoanchor.perception.pipeline_types",
-    "MaskSource": "egoanchor.perception.pipeline_types",
-    "PipelineStepTiming": "egoanchor.perception.pipeline_types",
-    "PipelineTrackingState": "egoanchor.perception.pipeline_types",
     "QuestPosePipeline": "egoanchor.perception.quest_pose_pipeline",
-    "QuestPosePipelineOutput": "egoanchor.perception.pipeline_types",
     "build_quest_pose_pipeline": "egoanchor.perception.pipeline_factory",
 }
 

@@ -6,16 +6,6 @@ import cv2
 import numpy as np
 
 
-def fit_to_width(image: np.ndarray, width: int) -> np.ndarray:
-    """按目标宽度等比缩放图像。"""
-
-    target_width = max(int(width), 1)
-    if image.shape[1] == target_width:
-        return image
-    height = max(1, int(image.shape[0] * target_width / max(image.shape[1], 1)))
-    return cv2.resize(image, (target_width, height), interpolation=cv2.INTER_AREA if target_width < image.shape[1] else cv2.INTER_LINEAR)
-
-
 def fit_to_size(image: np.ndarray, width: int, height: int) -> np.ndarray:
     """缩放并居中填充到固定大小。"""
 
@@ -56,4 +46,4 @@ def stack_stereo(left_bgr: np.ndarray | None, right_bgr: np.ndarray | None) -> n
     return np.hstack([left_bgr, right_bgr])
 
 
-__all__ = ["fit_to_size", "fit_to_width", "stack_stereo"]
+__all__ = ["fit_to_size", "stack_stereo"]

@@ -54,7 +54,7 @@ min_depth = 0.1 # 有效深度下限，单位米；低于该值会置零。
 max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可适当增大，但过大可能引入背景深度噪声。
 
 [reliability.consistency]
-enabled = false # 是否启用渲染一致性检测；真机联调稳定后再设为 true。
+enabled = true # 是否启用渲染一致性检测；已通过真机联调，默认开启但仍由 mode 控制是否触发重注册。
 mode = "score_only" # score_only=只降分写 flag 不重注册；re_register=确认误报率后再启用连续低一致性重注册。
 re_register_threshold = 0.35 # 一致性低于该值且持续若干帧后触发 RE_REGISTER，仅 re_register 模式生效。
 min_track_frames = 2 # 连续多少帧低一致性才判定锁错或漂移，避免单帧误触发。
@@ -136,8 +136,8 @@ enable_logging = false # 是否允许 Cutie 内部 stdout/stderr/logging 输出�
 [debug]
 enable_tracking_window = true # tracking_server 是否默认显示 OpenCV debug 窗口；当前 Python debug 阶段保持开启。
 pipeline_stats_interval = 30 # 每处理多少帧打印一次 pose pipeline 性能统计。
-show_mask_snapshot = true # 首次有效 mask 时是否弹出真实下游 mask 快照。
-mask_snapshot_window = "EgoAnchor Mask Snapshot" # mask snapshot 的 OpenCV 窗口名。
+show_mask_snapshot = true # register/re-register 成功时是否刷新显示真实用于注册的目标 mask。
+mask_snapshot_window = "EgoAnchor Register Mask" # register/re-register mask snapshot 的 OpenCV 窗口名。
 mask_snapshot_width = 1440 # mask snapshot 固定窗口宽度，单位像素；当前预留给后续扩展。
 mask_snapshot_height = 420 # mask snapshot 固定窗口高度，单位像素；当前预留给后续扩展。
 
@@ -150,9 +150,9 @@ wait_log_interval_s = 3.0 # 尚未收到 stereo 时等待日志输出间隔，�
 
 [demo.pose]
 debug_window_name = "EgoAnchor Pose Debug" # Python 本地 pose debug 主窗口名。
-stereo_window_name = "EgoAnchor Stereo" # Python 本地 stereo 辅助窗口名。
+score_window_name = "EgoAnchor Score Debug" # Python 本地评分与渲染一致性调试窗口名。
 debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
 debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
-stereo_window_width = 1280 # stereo 辅助窗口固定宽度，单位像素。
-stereo_window_height = 480 # stereo 辅助窗口固定高度，单位像素。
+score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
+score_window_height = 540 # 评分调试窗口固定高度，单位像素。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。

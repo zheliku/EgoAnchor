@@ -65,18 +65,6 @@ namespace EgoAnchor.Alignment
         }
 
         /// <summary>
-        /// 兼容旧调用：只记录左目 pose，并把右目/中心也退化为同一个 pose。
-        /// </summary>
-        /// <param name="frameId">与 QuestStereoFrame.header.frame_id 完全一致的帧号。</param>
-        /// <param name="cameraPose">采集时刻左目 camera world pose。</param>
-        /// <param name="senderMonoMs">Unity 发送侧单调时钟毫秒。</param>
-        /// <param name="unityFrame">Unity Time.frameCount。</param>
-        public void Record(long frameId, Pose cameraPose, double senderMonoMs, int unityFrame)
-        {
-            Record(frameId, cameraPose, cameraPose, cameraPose, senderMonoMs, unityFrame);
-        }
-
-        /// <summary>
         /// 尝试按 frame_id 查询历史 camera pose。
         /// </summary>
         /// <param name="frameId">待查询的帧号。</param>
@@ -114,9 +102,6 @@ namespace EgoAnchor.Alignment
         /// <summary>采集时刻中心参考 camera world pose。</summary>
         public readonly Pose CenterCameraPose;
 
-        /// <summary>兼容旧代码的 camera pose 访问器，等价于左目 camera pose。</summary>
-        public readonly Pose CameraPose;
-
         /// <summary>Unity 发送侧单调时钟毫秒。</summary>
         public readonly double SenderMonoMs;
 
@@ -136,7 +121,6 @@ namespace EgoAnchor.Alignment
             LeftCameraPose = leftCameraPose;
             RightCameraPose = rightCameraPose;
             CenterCameraPose = centerCameraPose;
-            CameraPose = leftCameraPose;
             SenderMonoMs = senderMonoMs;
             UnityFrame = unityFrame;
         }

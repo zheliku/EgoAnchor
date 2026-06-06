@@ -134,9 +134,19 @@ class RuntimeLogWriter:
         )
         if diagnostics is not None:
             fields.update(
+                score_phase=float(getattr(diagnostics, "score_phase", 0.0)),
+                score_consistency=float(getattr(diagnostics, "score_consistency", 0.0)),
+                score_depth=float(getattr(diagnostics, "score_depth", 0.0)),
+                score_jump=float(getattr(diagnostics, "score_jump", 0.0)),
+                score_mask=float(getattr(diagnostics, "score_mask", 0.0)),
+                score_reject=float(getattr(diagnostics, "score_reject", 0.0)),
                 depth_quality_score=float(getattr(diagnostics, "depth_quality_score", 0.0)),
                 track_consistency=float(getattr(diagnostics, "track_consistency", -1.0)),
+                consistency_expected=bool(getattr(diagnostics, "consistency_expected", False)),
+                consistency_status=str(getattr(diagnostics, "consistency_status", "")),
                 consistency_mask_iou=float(getattr(diagnostics, "consistency_mask_iou", 0.0)),
+                consistency_render_visible_ratio=float(getattr(diagnostics, "consistency_render_visible_ratio", 0.0)),
+                consistency_render_area_px=int(getattr(diagnostics, "consistency_render_area_px", 0)),
                 consistency_depth_inlier=float(getattr(diagnostics, "consistency_depth_inlier", 0.0)),
                 consistency_depth_residual_m=float(getattr(diagnostics, "consistency_depth_residual_m", 0.0)),
                 consistency_ms=float(getattr(diagnostics, "consistency_ms", 0.0)),
@@ -177,7 +187,7 @@ class RuntimeLogWriter:
             error_code=str(heartbeat.last_error.code) if heartbeat.last_error is not None else "",
         )
 
-    def command_execution(self, command: object, result: object, *, queue_length: int) -> None:
+    def command_execution(self, command: object, result: object, queue_length: int) -> None:
         """记录 runtime 线程实际执行 command 的时间点和动作。"""
 
         if not self.commands:

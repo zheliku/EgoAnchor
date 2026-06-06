@@ -10,7 +10,6 @@ from .zmq_topic_subscriber import LatestTopicPayloadStore, ZmqTopicSubscriber, Z
 _LAZY_EXPORTS = {
     "NatsMessageClient": "egoanchor.transport.nats_client",
     "NatsMessageSettings": "egoanchor.transport.nats_client",
-    "PoseResultPublisher": "egoanchor.transport.nats_client",
     "ProtobufPublisher": "egoanchor.transport.nats_client",
 }
 
@@ -31,7 +30,6 @@ __all__ = [
     "LatestTopicPayloadStore",
     "NatsMessageClient",
     "NatsMessageSettings",
-    "PoseResultPublisher",
     "ProtobufPublisher",
     "ZmqTopicSubscriber",
     "ZmqTopicSubscriberStats",

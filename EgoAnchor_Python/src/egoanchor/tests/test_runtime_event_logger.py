@@ -144,9 +144,19 @@ class RuntimeEventLoggerTest(unittest.TestCase):
 
             try:
                 diagnostics = SimpleNamespace(
+                    score_phase=1.0,
+                    score_consistency=0.64,
+                    score_depth=0.66,
+                    score_jump=0.95,
+                    score_mask=1.0,
+                    score_reject=1.0,
                     depth_quality_score=0.66,
                     track_consistency=0.64,
+                    consistency_expected=True,
+                    consistency_status="valid",
                     consistency_mask_iou=0.52,
+                    consistency_render_visible_ratio=0.72,
+                    consistency_render_area_px=512,
                     consistency_depth_inlier=0.81,
                     consistency_depth_residual_m=0.012,
                     consistency_ms=4.5,
@@ -172,9 +182,19 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertEqual(len(row["pose_matrix_cv_camera"]), 16)
             self.assertEqual(row["pose_jump_translation_m"], 0.0)
             self.assertEqual(row["pose_jump_rotation_deg"], 0.0)
+            self.assertAlmostEqual(row["score_phase"], 1.0)
+            self.assertAlmostEqual(row["score_consistency"], 0.64)
+            self.assertAlmostEqual(row["score_depth"], 0.66)
+            self.assertAlmostEqual(row["score_jump"], 0.95)
+            self.assertAlmostEqual(row["score_mask"], 1.0)
+            self.assertAlmostEqual(row["score_reject"], 1.0)
             self.assertAlmostEqual(row["depth_quality_score"], 0.66)
             self.assertAlmostEqual(row["track_consistency"], 0.64)
+            self.assertTrue(row["consistency_expected"])
+            self.assertEqual(row["consistency_status"], "valid")
             self.assertAlmostEqual(row["consistency_mask_iou"], 0.52)
+            self.assertAlmostEqual(row["consistency_render_visible_ratio"], 0.72)
+            self.assertEqual(row["consistency_render_area_px"], 512)
             self.assertAlmostEqual(row["consistency_depth_inlier"], 0.81)
             self.assertAlmostEqual(row["consistency_depth_residual_m"], 0.012)
             self.assertAlmostEqual(row["consistency_ms"], 4.5)

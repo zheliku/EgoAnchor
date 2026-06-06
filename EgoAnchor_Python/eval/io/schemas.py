@@ -278,9 +278,19 @@ class PoseResultRow:
     pose_ms: float
     server_receive_mono_ms: float
     server_publish_mono_ms: float
+    score_phase: float
+    score_consistency: float
+    score_depth: float
+    score_jump: float
+    score_mask: float
+    score_reject: float
     depth_quality_score: float
     track_consistency: float
+    consistency_expected: bool
+    consistency_status: str
     consistency_mask_iou: float
+    consistency_render_visible_ratio: float
+    consistency_render_area_px: int
     consistency_depth_inlier: float
     consistency_depth_residual_m: float
     consistency_ms: float
@@ -311,9 +321,19 @@ class PoseResultRow:
             pose_ms=_optional_float(row, "pose_ms", np.nan),
             server_receive_mono_ms=_optional_float(row, "server_receive_mono_ms", np.nan),
             server_publish_mono_ms=_optional_float(row, "server_publish_mono_ms", np.nan),
+            score_phase=_optional_float(row, "score_phase", np.nan),
+            score_consistency=_optional_float(row, "score_consistency", np.nan),
+            score_depth=_optional_float(row, "score_depth", np.nan),
+            score_jump=_optional_float(row, "score_jump", np.nan),
+            score_mask=_optional_float(row, "score_mask", np.nan),
+            score_reject=_optional_float(row, "score_reject", np.nan),
             depth_quality_score=_optional_float(row, "depth_quality_score", np.nan),
             track_consistency=_optional_float(row, "track_consistency", -1.0),
+            consistency_expected=_optional_bool(row, "consistency_expected", False),
+            consistency_status=str(row.get("consistency_status", "")),
             consistency_mask_iou=_optional_float(row, "consistency_mask_iou", 0.0),
+            consistency_render_visible_ratio=_optional_float(row, "consistency_render_visible_ratio", 0.0),
+            consistency_render_area_px=int(_optional_float(row, "consistency_render_area_px", 0.0)),
             consistency_depth_inlier=_optional_float(row, "consistency_depth_inlier", 0.0),
             consistency_depth_residual_m=_optional_float(row, "consistency_depth_residual_m", 0.0),
             consistency_ms=_optional_float(row, "consistency_ms", 0.0),
@@ -348,9 +368,19 @@ class PoseResultRow:
             "pose_ms": self.pose_ms,
             "server_receive_mono_ms": self.server_receive_mono_ms,
             "server_publish_mono_ms": self.server_publish_mono_ms,
+            "score_phase": self.score_phase,
+            "score_consistency": self.score_consistency,
+            "score_depth": self.score_depth,
+            "score_jump": self.score_jump,
+            "score_mask": self.score_mask,
+            "score_reject": self.score_reject,
             "depth_quality_score": self.depth_quality_score,
             "track_consistency": self.track_consistency,
+            "consistency_expected": self.consistency_expected,
+            "consistency_status": self.consistency_status,
             "consistency_mask_iou": self.consistency_mask_iou,
+            "consistency_render_visible_ratio": self.consistency_render_visible_ratio,
+            "consistency_render_area_px": self.consistency_render_area_px,
             "consistency_depth_inlier": self.consistency_depth_inlier,
             "consistency_depth_residual_m": self.consistency_depth_residual_m,
             "consistency_ms": self.consistency_ms,

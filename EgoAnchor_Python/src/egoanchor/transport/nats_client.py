@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -127,12 +127,6 @@ class NatsMessageClient:
         return self.settings.enabled
 
     @property
-    def url(self) -> str:
-        """当前 NATS server URL。"""
-
-        return self.settings.url
-
-    @property
     def loop(self) -> asyncio.AbstractEventLoop | None:
         """返回后台 event loop；未启动时为 None。"""
 
@@ -143,12 +137,6 @@ class NatsMessageClient:
         """是否已有可发布的 NATS 连接。"""
 
         return self._nc is not None
-
-    @property
-    def is_started(self) -> bool:
-        """NATS 后台线程是否已经启动。"""
-
-        return self._started
 
     @property
     def connect_failed_count(self) -> int:
@@ -212,12 +200,6 @@ class NatsMessageClient:
         """登记一个 bytes 订阅；必须在 start 前调用。"""
 
         self._pending_subscriptions.append((subject, callback))
-
-    def add_subscriptions(self, specs: Iterable[tuple[str, MessageCallback]]) -> None:
-        """批量登记订阅。"""
-
-        for subject, callback in specs:
-            self.add_subscription(subject, callback)
 
     def _run_loop_thread(self) -> None:
         """后台线程入口：创建并运行 asyncio event loop。"""
@@ -414,13 +396,4 @@ class ProtobufPublisher:
         self._pending = remaining
 
 
-class PoseResultPublisher(ProtobufPublisher):
-    """PoseResult 发布器的语义别名。"""
-
-    def publish_pose_result(self, msg: ProtobufMessage) -> bool:
-        """发布一条 Protobuf PoseResult。"""
-
-        return self.publish(msg)
-
-
-__all__ = ["MessageCallback", "NatsMessageClient", "NatsMessageSettings", "PoseResultPublisher", "ProtobufPublisher"]
+__all__ = ["MessageCallback", "NatsMessageClient", "NatsMessageSettings", "ProtobufPublisher"]

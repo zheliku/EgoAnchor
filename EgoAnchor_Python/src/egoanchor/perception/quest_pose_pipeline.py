@@ -15,23 +15,14 @@ import cv2
 import numpy as np
 
 from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult
-from egoanchor.perception import (
-    AsyncSegmenterJob,
-    AsyncSegmenterWorker,
-    DecodedQuestStereoFrame,
-    FrameDiagnostics,
-    MaskSource,
-    PipelineStepTiming,
-    PipelineTrackingState,
-    PoseObservation,
-    QuestStereoCalibration,
-    QuestPosePipelineOutput,
-    SegmenterBackend,
-    decode_quest_stereo_frame,
-    preprocess_stereo_pair,
-)
 from egoanchor.protocol import extract_session_id, quest_pb2
-from egoanchor.reliability import RenderConsistencyChecker, score_depth_quality, score_observation
+from egoanchor.reliability import RenderConsistencyChecker, score_observation_breakdown
+
+from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
+from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
+from .pose_observation import PoseObservation
+from .quest_calibration import QuestStereoCalibration
+from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
 
 
 class QuestPosePipeline:
@@ -212,9 +203,6 @@ class QuestPosePipeline:
         self._processed_count = 0
         """累计处理帧数。"""
 
-        self._mask_snapshot_shown = False
-        """mask snapshot 是否已经显示过。"""
-
     def set_stage(self, stage: int) -> None:
         """设置 debug stage，并限制在 1..4。"""
 
@@ -333,6 +321,11 @@ class QuestPosePipeline:
         worker.submit(current_job)
         current_diagnostics.phase = "WAIT_SEGMENTATION"
         self._apply_segmenter_snapshot(current_diagnostics)
+        rgb = cv2.cvtColor(current_job.left_bgr, cv2.COLOR_BGR2RGB)
+        right_rgb = cv2.cvtColor(current_job.right_bgr, cv2.COLOR_BGR2RGB)
+        depth = self._filter_depth(self._predict_depth(rgb, right_rgb, current_timing))
+        current_diagnostics.depth = depth
+        self._update_depth_diagnostics(current_diagnostics, depth, None)
         current_timing.finalize(t_total)
         return QuestPosePipelineOutput(observation=None, diagnostics=current_diagnostics, timing=current_timing, new_frame_processed=True)
 
@@ -435,14 +428,16 @@ class QuestPosePipeline:
         t_total: float,
         async_seg_result: SegmenterResult | None,
     ) -> tuple[np.ndarray | None, QuestPosePipelineOutput | None]:
-        """执行 detect 或 Cutie mask 阶段；stage<=2 时直接返回输出。"""
+        """执行 detect 或 Cutie mask 阶段；stage<=2 时直接返回输出。
+
+        未注册且暂时没有 mask 时仍继续后续 FFS depth，让启动阶段的深度面板
+        能显示实时估计结果；register 前置条件仍在深度之后统一判断。
+        """
 
         if not self.tracking_state.has_registered:
             mask = self._detect_initial_mask(left_bgr, diagnostics, timing, async_seg_result)
             if self.stage <= 2:
                 return mask, self._finish_frame(decoded, "MASK_ONLY", False, None, "NONE", diagnostics, timing, t_total, "stage_mask_only")
-            if mask is None:
-                return None, self._finish_frame(decoded, "NO_MASK", False, None, "NONE", diagnostics, timing, t_total, "no_mask")
             return mask, None
 
         mask, cutie_bbox = self._track_cutie_mask(rgb, timing)
@@ -473,7 +468,6 @@ class QuestPosePipeline:
         mask = (seg_result.mask_bw > 0).astype(np.uint8)
         diagnostics.mask = mask
         diagnostics.mask_source = self.segmenter_name
-        self._show_mask_snapshot_once(mask)
         return mask
 
     def _run_depth_stage(
@@ -526,6 +520,8 @@ class QuestPosePipeline:
                 update_fps=True,
             )
 
+        if not self.tracking_state.has_registered and (mask is None or np.count_nonzero(mask) <= 0):
+            return self._finish_frame(decoded, "NO_MASK", False, None, "NONE", diagnostics, timing, t_total, "no_mask")
         if not self.tracking_state.has_registered and diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             return self._finish_frame(decoded, "REJECT_DEPTH", False, None, "NONE", diagnostics, timing, t_total, "depth_in_mask_low")
         return None
@@ -725,7 +721,6 @@ class QuestPosePipeline:
         redetect_mask = (seg_result.mask_bw > 0).astype(np.uint8)
         diagnostics.mask = redetect_mask
         diagnostics.mask_source = self.segmenter_name
-        self._show_mask_snapshot_once(redetect_mask)
         self._update_depth_diagnostics(diagnostics, depth, redetect_mask)
         if diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             return None, "NONE", "REDETECT_REJECT_DEPTH"
@@ -836,6 +831,7 @@ class QuestPosePipeline:
         self.tracking_state.tracked_mask_lost_count = 0
         self.tracking_state.low_consistency_count = 0
         self.tracking_state.frames_since_register = 0
+        self._show_register_mask_snapshot(mask, phase)
         self._initialize_cutie(rgb, mask, timing)
         return pose, pose_source, phase
 
@@ -896,24 +892,39 @@ class QuestPosePipeline:
 
         checker = self.consistency_checker
         state = self.tracking_state
+        diagnostics.consistency_expected = False
         if checker is None:
+            diagnostics.consistency_status = "disabled"
             return None
         if self.cam_k is None:
+            diagnostics.consistency_status = "no_k"
             return None
         if state.frames_since_register < self.consistency_warmup_frames:
+            diagnostics.consistency_status = "warmup"
             return None
         if mask is None or np.count_nonzero(mask) <= 0:
+            diagnostics.consistency_status = "no_mask"
             return None
         if diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
+            diagnostics.consistency_status = "depth_low"
             return None
 
+        diagnostics.consistency_expected = True
+        diagnostics.consistency_status = "rendering"
         t0 = time.perf_counter()
         result = checker.evaluate(self.estimator, pose, mask, depth)
         diagnostics.consistency_ms = (time.perf_counter() - t0) * 1000.0
         diagnostics.track_consistency = result.consistency if result.valid else -1.0
+        diagnostics.consistency_status = result.status
         diagnostics.consistency_mask_iou = result.mask_iou
         diagnostics.consistency_depth_inlier = result.depth_inlier_ratio
         diagnostics.consistency_depth_residual_m = result.depth_median_residual_m
+        diagnostics.consistency_render_visible_ratio = result.render_visible_ratio
+        diagnostics.consistency_render_area_px = result.render_area_px
+        diagnostics.consistency_render_mask = result.render_mask
+        diagnostics.consistency_observed_mask = result.observed_mask
+        diagnostics.consistency_render_depth = result.render_depth_m
+        diagnostics.consistency_observed_depth = result.observed_depth_m
         if not result.valid:
             return None
         return result.consistency
@@ -979,10 +990,20 @@ class QuestPosePipeline:
             depth_median_in_mask=diagnostics.depth_median_in_mask,
             depth_iqr_in_mask=diagnostics.depth_iqr_in_mask,
             depth_quality_score=diagnostics.depth_quality_score,
+            score_phase=diagnostics.score_phase,
+            score_consistency=diagnostics.score_consistency,
+            score_depth=diagnostics.score_depth,
+            score_jump=diagnostics.score_jump,
+            score_mask=diagnostics.score_mask,
+            score_reject=diagnostics.score_reject,
             mask_area_ratio=diagnostics.mask_area_ratio,
+            consistency_expected=diagnostics.consistency_expected,
+            consistency_status=diagnostics.consistency_status,
             track_consistency=diagnostics.track_consistency,
             consistency_mask_iou=diagnostics.consistency_mask_iou,
             consistency_depth_inlier=diagnostics.consistency_depth_inlier,
+            consistency_render_visible_ratio=diagnostics.consistency_render_visible_ratio,
+            consistency_render_area_px=diagnostics.consistency_render_area_px,
             last_translation_delta_m=diagnostics.last_translation_delta_m,
             last_rotation_delta_deg=diagnostics.last_rotation_delta_deg,
             track_reject_count=self.tracking_state.track_reject_count,
@@ -993,28 +1014,50 @@ class QuestPosePipeline:
             total_ms=timing.total_ms,
             failure_reason=failure_reason,
         )
-        score, flags = score_observation(observation)
-        depth_quality = score_depth_quality(observation)
-        diagnostics.depth_quality_score = depth_quality
+        breakdown = score_observation_breakdown(observation)
+        diagnostics.depth_quality_score = breakdown.depth_score
+        diagnostics.score_phase = breakdown.phase_score
+        diagnostics.score_consistency = breakdown.consistency_score
+        diagnostics.score_depth = breakdown.depth_score
+        diagnostics.score_jump = breakdown.jump_score
+        diagnostics.score_mask = breakdown.mask_score
+        diagnostics.score_reject = breakdown.reject_score
         return PoseObservation(
             **{
                 field_name: getattr(observation, field_name)
                 for field_name in observation.__dataclass_fields__
-                if field_name not in {"reliability_score", "reliability_flags", "depth_quality_score"}
+                if field_name
+                not in {
+                    "reliability_score",
+                    "reliability_flags",
+                    "depth_quality_score",
+                    "score_phase",
+                    "score_consistency",
+                    "score_depth",
+                    "score_jump",
+                    "score_mask",
+                    "score_reject",
+                }
             },
-            depth_quality_score=depth_quality,
-            reliability_score=score,
-            reliability_flags=flags,
+            depth_quality_score=breakdown.depth_score,
+            score_phase=breakdown.phase_score,
+            score_consistency=breakdown.consistency_score,
+            score_depth=breakdown.depth_score,
+            score_jump=breakdown.jump_score,
+            score_mask=breakdown.mask_score,
+            score_reject=breakdown.reject_score,
+            reliability_score=breakdown.final_score,
+            reliability_flags=breakdown.flags,
         )
 
-    def _show_mask_snapshot_once(self, mask: np.ndarray) -> None:
-        """按配置显示一次真实下游 mask，便于确认 YOLOE prompt 质量。"""
+    def _show_register_mask_snapshot(self, mask: np.ndarray, phase: str) -> None:
+        """每次 register/re-register 成功时刷新显示实际用于注册的 mask。"""
 
-        if not self.show_mask_snapshot or self._mask_snapshot_shown:
+        if not self.show_mask_snapshot:
             return
-        mask_vis = (mask > 0).astype(np.uint8) * 255
+        mask_vis = cv2.cvtColor((mask > 0).astype(np.uint8) * 255, cv2.COLOR_GRAY2BGR)
+        cv2.putText(mask_vis, f"{phase} mask", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 120), 2, cv2.LINE_AA)
         cv2.imshow(self.mask_snapshot_window, mask_vis)
-        self._mask_snapshot_shown = True
 
     def _update_fps(self) -> None:
         """更新 pipeline FPS EMA。"""

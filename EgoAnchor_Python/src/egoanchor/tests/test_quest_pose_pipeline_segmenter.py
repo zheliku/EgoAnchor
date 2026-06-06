@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
 
 import cv2
@@ -42,12 +43,41 @@ class _FakeSegmenter:
         )
 
 
+class _EmptySegmenter:
+    """单测用空分割器，模拟启动阶段尚未找到目标。"""
+
+    def __init__(self) -> None:
+        """初始化调用计数。"""
+
+        self.calls = 0
+
+    def infer(self, image_bgr: np.ndarray, prompt: str | list[str] | None = None) -> SegmenterResult:
+        """返回无 mask 的分割结果。"""
+
+        self.calls += 1
+        return SegmenterResult(
+            overlay_bgr=image_bgr.copy(),
+            mask_bw=None,
+            det_count=0,
+            infer_ms=1.0,
+            prompt=["unit test"],
+            selected_index=-1,
+            mask_area_ratio=0.0,
+        )
+
+
 class _FakeDepthEstimator:
     """单测用深度估计器，返回稳定小深度图。"""
+
+    def __init__(self) -> None:
+        """初始化调用计数。"""
+
+        self.calls = 0
 
     def predict_depth(self, left_rgb: np.ndarray, right_rgb: np.ndarray, fx: float, baseline: float) -> np.ndarray:
         """返回全图有效深度，避免真实 FFS 依赖。"""
 
+        self.calls += 1
         return np.full(left_rgb.shape[:2], 1.0, dtype=np.float32)
 
 
@@ -181,13 +211,36 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertEqual(diagnostics.mask_source, "sam3")
         self.assertEqual(timing.yolo_ms, 1.5)
 
+    def test_startup_without_mask_still_predicts_depth(self) -> None:
+        """启动阶段未找到目标 mask 时也应运行 FFS depth，避免 depth 面板黑屏。"""
+
+        depth_estimator = _FakeDepthEstimator()
+        pipeline = QuestPosePipeline(
+            segmenter=_EmptySegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=depth_estimator,
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+
+        self.assertIsNotNone(output.observation)
+        self.assertFalse(output.observation.has_pose)
+        self.assertEqual(output.observation.phase, "NO_MASK")
+        self.assertEqual(depth_estimator.calls, 1)
+        self.assertIsNotNone(output.diagnostics.depth)
+        self.assertGreater(float(np.mean(output.diagnostics.depth)), 0.0)
+
     def test_async_sam3_first_frame_returns_without_waiting_for_segmentation(self) -> None:
         """SAM3 异步模式下，第一帧只提交后台分割，不应阻塞 pipeline 主循环。"""
 
         pipeline = QuestPosePipeline(
             segmenter=_FakeSegmenter(delay_s=0.2),
             segmenter_name="sam3",
-            depth_estimator=_FakeDepthEstimator(),
+            depth_estimator=(depth_estimator := _FakeDepthEstimator()),
             foundationpose_estimator=_FakeFoundationPoseEstimator(),
             cutie_tracker=None,
             process_width=8,
@@ -203,6 +256,8 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertLess(elapsed_s, 0.1)
         self.assertEqual(output.diagnostics.phase, "WAIT_SEGMENTATION")
         self.assertIsNone(output.observation)
+        self.assertEqual(depth_estimator.calls, 1)
+        self.assertIsNotNone(output.diagnostics.depth)
 
     def test_async_sam3_registers_with_the_frame_that_produced_mask(self) -> None:
         """后台 mask 完成后，应使用同一帧 RGB/mask 进入 FoundationPose register。"""
@@ -272,6 +327,30 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertEqual(second.observation.pose_source, "RE_REGISTER")
         self.assertEqual(second.observation.phase, "RE_REGISTER")
         self.assertEqual(len(estimator.register_calls), 2)
+
+    def test_register_mask_snapshot_refreshes_on_each_register(self) -> None:
+        """register 和 re-register 成功时都应刷新显示实际用于注册的 mask。"""
+
+        estimator = _FakeFoundationPoseEstimator()
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=estimator,
+            cutie_tracker=_EmptyCutieTracker(),
+            process_width=8,
+            process_height=8,
+            cutie_enabled=True,
+            tracked_mask_lost_frames=1,
+            show_mask_snapshot=True,
+            mask_snapshot_window="unit mask",
+        )
+
+        with patch("egoanchor.perception.quest_pose_pipeline.cv2.imshow") as imshow:
+            pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+            pipeline.process(_make_stereo_frame(2, (10, 20, 30)), _make_camera_info())
+
+        self.assertEqual(imshow.call_count, 2)
 
     def test_mask_lost_counter_survives_wrong_track_pose_until_threshold(self) -> None:
         """即使 FoundationPose 仍返回 TRACK，空 Cutie mask 也应累计到阈值触发重注册。"""

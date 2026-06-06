@@ -54,12 +54,6 @@ class RuntimeEventLogger:
         """上一次 flush 之后写入的行数。"""
 
     @property
-    def session_dir(self) -> Path:
-        """返回日志根目录；保留该属性便于旧测试/调用方读取。"""
-
-        return self.output_dir
-
-    @property
     def log_path(self) -> Path:
         """返回当前 JSONL 文件路径。"""
 

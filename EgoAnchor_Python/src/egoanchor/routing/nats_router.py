@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from egoanchor.protocol import ProtobufRegistry, SubjectRegistry
-from egoanchor.routing import HandlerContext, HandlerRegistry
+from .handler_registry import HandlerContext, HandlerRegistry
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class NatsRouter:
         spec = self._subjects.require(subject)
         try:
             message = self._protobufs.parse(spec.protobuf, payload)
-            result = await self._handlers.dispatch(subject, self._context, message)
+            result = self._handlers.dispatch(subject, self._context, message)
             if spec.mode == "request_reply":
                 if result is None:
                     raise RuntimeError(f"request handler returned no reply for subject={subject!r}")

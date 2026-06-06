@@ -11,7 +11,7 @@ from typing import Protocol
 import numpy as np
 
 from egoanchor.algorithms import SegmenterResult
-from egoanchor.perception import DecodedQuestStereoFrame
+from .quest_frame import DecodedQuestStereoFrame
 from egoanchor.utils import LatestValueStore
 
 LOGGER = logging.getLogger(__name__)

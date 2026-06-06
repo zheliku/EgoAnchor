@@ -24,9 +24,19 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
                 "pose_matrix_cv_camera": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0],
                 "pose_score": 0.73,
                 "reliability_flags": ["consistency_low"],
+                "score_phase": 1.0,
+                "score_consistency": 0.42,
+                "score_depth": 0.71,
+                "score_jump": 0.95,
+                "score_mask": 1.0,
+                "score_reject": 1.0,
                 "depth_quality_score": 0.71,
                 "track_consistency": 0.42,
+                "consistency_expected": True,
+                "consistency_status": "valid",
                 "consistency_mask_iou": 0.35,
+                "consistency_render_visible_ratio": 0.52,
+                "consistency_render_area_px": 128,
                 "consistency_depth_inlier": 0.58,
                 "consistency_depth_residual_m": 0.014,
                 "consistency_ms": 4.2,
@@ -36,9 +46,19 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
 
         record = row.to_record()
 
+        self.assertAlmostEqual(record["score_phase"], 1.0)
+        self.assertAlmostEqual(record["score_consistency"], 0.42)
+        self.assertAlmostEqual(record["score_depth"], 0.71)
+        self.assertAlmostEqual(record["score_jump"], 0.95)
+        self.assertAlmostEqual(record["score_mask"], 1.0)
+        self.assertAlmostEqual(record["score_reject"], 1.0)
         self.assertAlmostEqual(record["depth_quality_score"], 0.71)
         self.assertAlmostEqual(record["track_consistency"], 0.42)
+        self.assertTrue(record["consistency_expected"])
+        self.assertEqual(record["consistency_status"], "valid")
         self.assertAlmostEqual(record["consistency_mask_iou"], 0.35)
+        self.assertAlmostEqual(record["consistency_render_visible_ratio"], 0.52)
+        self.assertEqual(record["consistency_render_area_px"], 128)
         self.assertAlmostEqual(record["consistency_depth_inlier"], 0.58)
         self.assertAlmostEqual(record["consistency_depth_residual_m"], 0.014)
         self.assertAlmostEqual(record["consistency_ms"], 4.2)

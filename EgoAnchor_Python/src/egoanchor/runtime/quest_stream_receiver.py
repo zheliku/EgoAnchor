@@ -207,14 +207,3 @@ class QuestStreamReceiver:
             invalid_multipart=topic_stats.invalid_multipart,
             zmq_errors=topic_stats.zmq_errors,
         )
-
-    def __enter__(self) -> "QuestStreamReceiver":
-        """支持 `with` 语句自动启动接收器。"""
-
-        self.start()
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """离开 `with` 语句时自动关闭接收器。"""
-
-        self.close()

@@ -145,15 +145,6 @@ class CommandQueue:
 
         return self.put(RuntimeCommand.from_message(command_type, message))
 
-    def drain(self) -> list[RuntimeCommand]:
-        """一次性取出全部命令，保持优先级顺序。"""
-
-        with self._lock:
-            out: list[RuntimeCommand] = []
-            while self._items:
-                out.append(heapq.heappop(self._items).command)
-            return out
-
     def pop_many(self, limit: int) -> list[RuntimeCommand]:
         """最多取出 limit 条命令，未取出的命令留在队列中保持原顺序。"""
 
@@ -229,30 +220,10 @@ def control_action_handler(action: int) -> Callable[[CommandHandler], CommandHan
 class CommandExecutor:
     """把 RuntimeCommand 转换成 TrackingRuntime 可执行动作。"""
 
-    def __init__(self) -> None:
-        """初始化命令解释注册表。"""
-
-        self._command_handlers = dict(COMMAND_HANDLERS)
-        self._control_handlers = dict(CONTROL_ACTION_HANDLERS)
-
-    def register_command(self, command_type: CommandType, handler: CommandHandler) -> None:
-        """注册一个 runtime command 类型解释函数。"""
-
-        if command_type in self._command_handlers:
-            raise ValueError(f"command handler already registered for {command_type!r}")
-        self._command_handlers[command_type] = handler
-
-    def register_control_action(self, action: int, handler: CommandHandler) -> None:
-        """注册一个 AnchorControlRequest action 解释函数。"""
-
-        if action in self._control_handlers:
-            raise ValueError(f"control action handler already registered for {action!r}")
-        self._control_handlers[int(action)] = handler
-
     def interpret(self, command: RuntimeCommand) -> CommandExecutionResult:
         """解释一条命令；不直接接触 pipeline/GPU 对象。"""
 
-        handler = self._command_handlers.get(command.command_type)
+        handler = COMMAND_HANDLERS.get(command.command_type)
         if handler is None:
             LOGGER.warning("[CommandExecutor] ignore unknown command_type=%s request_id=%s", command.command_type, command.request_id)
             return CommandExecutionResult()
@@ -262,7 +233,7 @@ class CommandExecutor:
         """解释 control command，并按 action 注册表继续分发。"""
 
         action = int(getattr(command.message, "action", AnchorControlRequest.CONTROL_ACTION_UNSPECIFIED))
-        handler = self._control_handlers.get(action)
+        handler = CONTROL_ACTION_HANDLERS.get(action)
         if handler is None:
             LOGGER.warning("[CommandExecutor] ignore unknown control action=%s request_id=%s", action, command.request_id)
             return CommandExecutionResult()

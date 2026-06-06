@@ -6,8 +6,7 @@ handler 只做 protobuf 已解析后的轻量校验、dedup、写 command queue 
 
 from __future__ import annotations
 
-import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -28,7 +27,7 @@ class HandlerContext:
 class Handler(Protocol):
     """subject handler 函数协议。"""
 
-    def __call__(self, ctx: HandlerContext, message: Message) -> Message | None | Awaitable[Message | None]: ...
+    def __call__(self, ctx: HandlerContext, message: Message) -> Message | None: ...
 
 
 class HandlerRegistry:
@@ -40,12 +39,13 @@ class HandlerRegistry:
     def request(self, subject: str) -> Callable[[Handler], Handler]:
         """注册 request/reply handler。"""
 
-        return self._register(subject)
+        def decorator(handler: Handler) -> Handler:
+            if subject in self._handlers:
+                raise ValueError(f"handler already registered for subject={subject!r}")
+            self._handlers[subject] = handler
+            return handler
 
-    def subscribe(self, subject: str) -> Callable[[Handler], Handler]:
-        """注册 pub/sub handler。首期主要预留给未来 Python 接收配置/调试消息。"""
-
-        return self._register(subject)
+        return decorator
 
     def get(self, subject: str) -> Handler:
         """读取 subject 对应 handler；未注册时抛出清晰错误。"""
@@ -55,27 +55,10 @@ class HandlerRegistry:
         except KeyError as exc:
             raise KeyError(f"no handler registered for subject={subject!r}") from exc
 
-    async def dispatch(self, subject: str, ctx: HandlerContext, message: Message) -> Message | None:
-        """调用 handler，并兼容同步/异步返回。"""
+    def dispatch(self, subject: str, ctx: HandlerContext, message: Message) -> Message | None:
+        """调用同步 handler 并返回可选 reply message。"""
 
-        result = self.get(subject)(ctx, message)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    def subjects(self) -> tuple[str, ...]:
-        """返回已注册 subject 列表。"""
-
-        return tuple(self._handlers.keys())
-
-    def _register(self, subject: str) -> Callable[[Handler], Handler]:
-        def decorator(handler: Handler) -> Handler:
-            if subject in self._handlers:
-                raise ValueError(f"handler already registered for subject={subject!r}")
-            self._handlers[subject] = handler
-            return handler
-
-        return decorator
+        return self.get(subject)(ctx, message)
 
 
 __all__ = ["Handler", "HandlerContext", "HandlerRegistry"]

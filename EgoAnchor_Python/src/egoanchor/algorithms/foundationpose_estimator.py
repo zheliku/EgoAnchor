@@ -460,7 +460,7 @@ class FoundationPoseObjectEstimator:
     def visualize_pose(self, rgb: np.ndarray, pose: np.ndarray, axis_scale: float = 0.1, thickness: int = 3) -> np.ndarray:
         """在 RGB 图上绘制目标 3D 包围盒和坐标轴。"""
 
-        center_pose = np.asarray(pose, dtype=np.float64).reshape(4, 4) @ np.linalg.inv(self.to_origin)
+        center_pose = self._pose_for_centered_mesh(pose)
         vis = self.draw_posed_3d_box(self.cam_k, img=rgb, ob_in_cam=center_pose, bbox=self.bbox)
         vis = self.draw_xyz_axis(
             vis,
@@ -472,6 +472,31 @@ class FoundationPoseObjectEstimator:
             is_input_rgb=True,
         )
         return vis
+
+    def _pose_for_centered_mesh(self, pose_cv_camera: np.ndarray) -> np.ndarray:
+        """把外部 object pose 转成 FoundationPose 内部 centered mesh pose。
+
+        FoundationPose 的 register/track 返回值已经乘过 `get_tf_to_centered_mesh()`，
+        语义是原始 object pose。内部 rasterizer 使用的是减去 model center 后的
+        `mesh_tensors`，因此渲染和绘制时要乘回 `inv(to_origin)`。
+        """
+
+        return np.asarray(pose_cv_camera, dtype=np.float64).reshape(4, 4) @ np.linalg.inv(self.to_origin)
+
+    def _mesh_tensors_for_render(self) -> Any:
+        """获取 FoundationPose rasterizer 可用的 mesh_tensors，缺失时按内部 mesh 重建。"""
+
+        mesh_tensors = getattr(self.estimator, "mesh_tensors", None)
+        if mesh_tensors is not None:
+            return mesh_tensors
+        mesh = getattr(self.estimator, "mesh", None)
+        if mesh is None:
+            raise RuntimeError("FoundationPose estimator 缺少 mesh_tensors 和 mesh，无法渲染一致性。")
+        utils_mod = importlib.import_module("FoundationPose.Utils") if "FoundationPose.Utils" in sys.modules else importlib.import_module("Utils")
+        make_mesh_tensors = getattr(utils_mod, "make_mesh_tensors")
+        mesh_tensors = make_mesh_tensors(mesh)
+        self.estimator.mesh_tensors = mesh_tensors
+        return mesh_tensors
 
     def render_depth_mask(
         self,
@@ -495,17 +520,18 @@ class FoundationPoseObjectEstimator:
             render_fn = getattr(utils_mod, "nvdiffrast_render")
             out_h, out_w = (int(output_size[0]), int(output_size[1]))
             k = np.asarray(cam_k if cam_k is not None else self.cam_k, dtype=np.float64).reshape(3, 3)
-            pose = np.asarray(pose_cv_camera, dtype=np.float32).reshape(1, 4, 4)
+            pose = self._pose_for_centered_mesh(pose_cv_camera).astype(np.float32).reshape(1, 4, 4)
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             pose_tensor = torch.as_tensor(pose, dtype=torch.float32, device=device)
+            mesh_tensors = self._mesh_tensors_for_render()
             with torch.no_grad():
                 _color, depth, _normal = render_fn(
-                    k,
-                    out_h,
-                    out_w,
-                    pose_tensor,
-                    self.estimator.glctx,
-                    self.estimator.mesh_tensors,
+                    K=k,
+                    H=out_h,
+                    W=out_w,
+                    ob_in_cams=pose_tensor,
+                    glctx=self.estimator.glctx,
+                    mesh_tensors=mesh_tensors,
                     output_size=(out_h, out_w),
                 )
             if hasattr(depth, "detach"):
