@@ -6,12 +6,16 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import zmq
+
+from egoanchor.utils import get_logger
+
+LOGGER = get_logger(__name__, component="ZmqTopicSubscriber")
+"""ZMQ topic subscriber 日志记录器。"""
 
 
 @dataclass(frozen=True)
@@ -76,7 +80,7 @@ class ZmqTopicSubscriber:
         if self._started:
             return
         self._started = True
-        logging.info("[ZmqTopicSubscriber] starting")
+        LOGGER.info("starting")
         socket = self._ctx.socket(zmq.SUB)
         socket.setsockopt(zmq.RCVHWM, self.hwm)
         if self.topics:
@@ -91,7 +95,7 @@ class ZmqTopicSubscriber:
             socket.close(linger=0)
             self._started = False
             raise
-        logging.info("[ZmqTopicSubscriber] listening endpoint=%s topics=%s hwm=%d", self.endpoint, self.topics or ("*",), self.hwm)
+        LOGGER.info("listening endpoint=%s topics=%s hwm=%d", self.endpoint, self.topics or ("*",), self.hwm)
 
     def close(self) -> None:
         """关闭 SUB socket，linger=0 避免退出 demo 时阻塞。"""
@@ -99,7 +103,7 @@ class ZmqTopicSubscriber:
         if not self._started:
             return
         self._started = False
-        logging.info("[ZmqTopicSubscriber] closing")
+        LOGGER.info("closing")
         if self._socket is not None:
             self._socket.close(linger=0)
             self._socket = None
@@ -138,13 +142,13 @@ class ZmqTopicSubscriber:
 
                 if len(parts) != 2:
                     self.store.invalid_multipart += 1
-                    logging.warning("[ZmqTopicSubscriber] drop invalid multipart len=%d", len(parts))
+                    LOGGER.warning("drop invalid multipart len=%d", len(parts))
                     continue
                 topic = parts[0].decode("utf-8", errors="replace")
                 latest[topic] = bytes(parts[1])
             return latest
         except zmq.ZMQError as exc:
             self.store.zmq_errors += 1
-            logging.warning("[ZmqTopicSubscriber] receive error: %s", exc)
+            LOGGER.warning("receive error: %s", exc)
             return None
 

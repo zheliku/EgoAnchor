@@ -7,12 +7,11 @@ Router 不包含 reset/reacquire/control 的业务 if-else。
 
 from __future__ import annotations
 
-import logging
-
 from egoanchor.protocol import ProtobufRegistry, SubjectRegistry
+from egoanchor.utils import get_logger
 from .handler_registry import HandlerContext, HandlerRegistry
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__, component="NatsRouter")
 
 
 class NatsRouter:
@@ -43,12 +42,12 @@ class NatsRouter:
                 if result is None:
                     raise RuntimeError(f"request handler returned no reply for subject={subject!r}")
                 response = self._protobufs.serialize(result)
-                LOGGER.debug("[NatsRouter] request subject=%s reply_bytes=%d", subject, len(response))
+                LOGGER.debug("request subject=%s reply_bytes=%d", subject, len(response))
                 return response
-            LOGGER.debug("[NatsRouter] pubsub subject=%s payload_bytes=%d", subject, len(payload))
+            LOGGER.debug("pubsub subject=%s payload_bytes=%d", subject, len(payload))
             return None
         except Exception:
-            LOGGER.exception("[NatsRouter] failed subject=%s has_reply=%s", subject, bool(reply))
+            LOGGER.exception("failed subject=%s has_reply=%s", subject, bool(reply))
             raise
 
 

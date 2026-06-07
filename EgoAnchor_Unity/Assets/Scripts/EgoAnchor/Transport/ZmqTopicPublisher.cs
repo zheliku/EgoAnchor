@@ -1,4 +1,5 @@
 using System;
+using EgoAnchor.Diagnostics;
 using NetMQ;
 using NetMQ.Sockets;
 using UnityEngine;
@@ -14,6 +15,9 @@ namespace EgoAnchor.Transport
     /// </summary>
     public sealed class ZmqTopicPublisher : IDisposable
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<ZmqTopicPublisher>();
+
         /// <summary>NetMQ PUB socket；为空表示尚未连接或已释放。</summary>
         private PublisherSocket socket;
 
@@ -66,7 +70,7 @@ namespace EgoAnchor.Transport
                 throw;
             }
 
-            Debug.Log($"[ZmqTopicPublisher] connected endpoint={endpoint}, hwm={sendHighWatermark}");
+            Log.Info($"connected endpoint={endpoint}, hwm={sendHighWatermark}");
         }
 
         /// <summary>
@@ -117,7 +121,7 @@ namespace EgoAnchor.Transport
             }
             catch (Exception exc)
             {
-                Debug.LogWarning($"[ZmqTopicPublisher] socket close ignored: {exc.Message}");
+                Log.Warning($"socket close ignored: {exc.Message}");
             }
             finally
             {
@@ -155,7 +159,7 @@ namespace EgoAnchor.Transport
             }
             catch (Exception exc)
             {
-                Debug.LogWarning($"[ZmqTopicPublisher] cleanup ignored ({reason}): {exc.Message}");
+                Log.Warning($"cleanup ignored ({reason}): {exc.Message}");
             }
         }
     }

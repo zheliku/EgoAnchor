@@ -20,6 +20,7 @@ EgoAnchor 是面向 passthrough mixed reality 的 **frame-aligned、world-consis
 
 - Python 业务代码优先从包级入口导入，例如 `from egoanchor.algorithms import ...`、`from egoanchor.perception import ...`、`from egoanchor.runtime import ...`、`from egoanchor.protocol import ...`。不要在业务代码里深层导入具体文件。生成的 `*_pb2.py` 内部 import 例外。
 - 代码需要详细中文说明。配置 `.toml` 的每个参数都要有同一行末尾中文注释；类、成员变量和每个方法应有中文 docstring 或 XML summary / Tooltip。
+- 日志输出统一走项目门面：Python 使用 `egoanchor.utils.get_logger(...)` 与入口 `configure_logging(...)`，Unity 使用 `EgoAnchorLog.For<T>()`。日志消息本身不要手写 `[ClassName]` 前缀；component、等级、时间和彩色结构前缀由 logger/formatter 统一生成。
 - 命名不要过度冗长，能清楚表达职责即可。类名优先写具体职责，不把 `DataPlane`、`ControlPlane` 之类架构词塞进每个文件名。
 - 修改代码要按全局架构考虑模块配合、导入关系和协议契约；不要只在局部补补丁。
 - 新增行为应先补测试或 smoke 验证。配置、文档、生成代码除外，但仍要有可复现验证命令。

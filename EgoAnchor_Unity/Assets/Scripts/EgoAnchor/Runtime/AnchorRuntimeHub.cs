@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol.Generated;
 using UnityEngine;
 
@@ -18,6 +19,9 @@ namespace EgoAnchor.Runtime
     /// </summary>
     public sealed class AnchorRuntimeHub : MonoBehaviour
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorRuntimeHub>();
+
         /// <summary>接收 pose/status/heartbeat 的 runtime 列表。</summary>
         [Header("Targets")]
         [Tooltip("接收 pose/status/heartbeat 的 runtime 列表。用于同时驱动 raw baseline、smoothed 输出和 reliability-aware policy。")]
@@ -230,8 +234,8 @@ namespace EgoAnchor.Runtime
             if (received > 0 && received - lastLoggedReceived >= statsIntervalMessages)
             {
                 lastLoggedReceived = received;
-                Debug.Log(
-                    $"[AnchorRuntimeHub] received={received}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, " +
+                Log.Info(
+                    $"received={received}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, " +
                     $"failed={failed}, statusDispatched={statusDispatched}, heartbeatDispatched={heartbeatDispatched}",
                     this
                 );

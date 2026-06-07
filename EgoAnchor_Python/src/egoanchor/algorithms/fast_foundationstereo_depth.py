@@ -7,7 +7,6 @@ PyTorch；但本文件不 import v1/v2 模块，只通过项目内 Fast-Foundati
 
 from __future__ import annotations
 
-import logging
 import sys
 import time
 from contextlib import nullcontext
@@ -17,7 +16,10 @@ from typing import Any
 import cv2
 import numpy as np
 
-from egoanchor.utils import configure_thirdparty_logging
+from egoanchor.utils import configure_thirdparty_logging, get_logger
+
+LOGGER = get_logger(__name__, component="FFS")
+"""FFS 适配器日志记录器。"""
 
 
 def _ensure_three_channel(image: np.ndarray) -> np.ndarray:
@@ -47,7 +49,7 @@ class _PyTorchStereoBackend:
         try:
             import triton  # noqa: F401
         except Exception:
-            logging.warning("未检测到 triton，optimize_build_volume 回退为 pytorch1。")
+            LOGGER.warning("未检测到 triton，optimize_build_volume 回退为 pytorch1。")
             self.host.optimize_build_volume = "pytorch1"
 
     def load_model(self) -> None:
@@ -176,7 +178,7 @@ class _TrtStereoBackend:
             self.host.trt_runner = self.host.TrtRunner(cfg, str(feature_engine_path), str(post_engine_path))
             self.host.trt_input_hw = (infer_h, infer_w)
             self.host.runtime_backend = "trt"
-            logging.info("FFS TRT runner ready: tag=%s size=%dx%d feature=%s post=%s", tag, infer_h, infer_w, feature_engine_path.name, post_engine_path.name)
+            LOGGER.info("FFS TRT runner ready: tag=%s size=%dx%d feature=%s post=%s", tag, infer_h, infer_w, feature_engine_path.name, post_engine_path.name)
         except Exception as exc:
             self.host._fallback_to_pytorch("创建 TRT runner 失败", exc)
 
@@ -311,7 +313,7 @@ class FastFoundationStereoDepth:
 
         runtime_device = str(device)
         if runtime_device == "cuda" and not self.torch.cuda.is_available():
-            logging.warning("CUDA 不可用，FFS 自动回退 CPU。")
+            LOGGER.warning("CUDA 不可用，FFS 自动回退 CPU。")
             runtime_device = "cpu"
         self.device = self.torch.device(runtime_device)
         """FFS 实际推理设备。"""
@@ -319,12 +321,12 @@ class FastFoundationStereoDepth:
         if self.use_trt and self.device.type != "cuda":
             if self.trt_strict:
                 raise RuntimeError("TRT 仅支持 CUDA，但当前 device 不是 cuda。")
-            logging.warning("当前 device=%s，TRT 不可用，自动回退 PyTorch。", self.device)
+            LOGGER.warning("当前 device=%s，TRT 不可用，自动回退 PyTorch。", self.device)
             self.use_trt = False
 
         if self.seed >= 0:
             self.set_seed(self.seed)
-            logging.info("FFS 使用确定性模式 seed=%d", self.seed)
+            LOGGER.info("FFS 使用确定性模式 seed=%d", self.seed)
         else:
             self.torch.backends.cudnn.deterministic = False
             if self.device.type == "cuda":
@@ -342,7 +344,7 @@ class FastFoundationStereoDepth:
             except Exception as exc:
                 if self.trt_strict:
                     raise RuntimeError("TRT 依赖导入失败。") from exc
-                logging.warning("TRT 依赖导入失败，自动回退 PyTorch。错误: %s", exc)
+                LOGGER.warning("TRT 依赖导入失败，自动回退 PyTorch。错误: %s", exc)
                 self.use_trt = False
 
         if not self.use_trt:
@@ -350,7 +352,7 @@ class FastFoundationStereoDepth:
             self._pt_backend.load_model()
         else:
             self.runtime_backend = "trt"
-            logging.debug("FFS TRT 模式启用，首次推理将按输入尺寸匹配 engine。")
+            LOGGER.debug("FFS TRT 模式启用，首次推理将按输入尺寸匹配 engine。")
 
         if hasattr(self.torch, "set_float32_matmul_precision"):
             self.torch.set_float32_matmul_precision("high")
@@ -408,7 +410,7 @@ class FastFoundationStereoDepth:
             if exc is not None:
                 raise RuntimeError(message) from exc
             raise RuntimeError(message)
-        logging.warning("%s，自动回退 PyTorch。%s", message, f"错误: {exc}" if exc is not None else "")
+        LOGGER.warning("%s，自动回退 PyTorch。%s", message, f"错误: {exc}" if exc is not None else "")
         self.use_trt = False
         self.trt_runner = None
         self.trt_input_hw = None
@@ -446,6 +448,6 @@ class FastFoundationStereoDepth:
         if self.scale != 1.0:
             depth_meter = cv2.resize(depth_meter, dsize=(left_image.shape[1], left_image.shape[0]), interpolation=cv2.INTER_LINEAR)
         depth_meter[~np.isfinite(depth_meter)] = 0.0
-        logging.debug("[FFS] backend=%s forward_ms=%.1f", self.runtime_backend, forward_ms)
+        LOGGER.debug("backend=%s forward_ms=%.1f", self.runtime_backend, forward_ms)
         return depth_meter.astype(np.float32)
 

@@ -7,7 +7,6 @@ CommandAck.accepted=true 只表示 server 接受命令，不表示命令已经�
 
 from __future__ import annotations
 
-import logging
 import time
 from functools import partial
 
@@ -26,8 +25,9 @@ from egoanchor.protocol import (
 )
 from egoanchor.routing import HandlerContext, HandlerRegistry
 from egoanchor.runtime import CommandType, RuntimeCommand
+from egoanchor.utils import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__, component="CommandHandler")
 
 
 def _ack_for(message: Message, *, accepted: bool, status: str, text: str, code: str = "") -> CommandAck:
@@ -98,7 +98,7 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
     request_id = str(getattr(header, "request_id", ""))
     if not request_id:
         ack = _ack_for(message, accepted=False, status="INVALID_ARGUMENT", text="header.request_id is required", code="INVALID_ARGUMENT")
-        LOGGER.info("[CommandHandler] type=%s accepted=false status=%s", command_type.value, ack.status)
+        LOGGER.info("type=%s accepted=false status=%s", command_type.value, ack.status)
         return ack
 
     valid, invalid_reason = _validate(message, command_type)
@@ -107,7 +107,7 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
         if ctx.dedup is not None:
             ctx.dedup.remember(request_id, ack)
         LOGGER.info(
-            "[CommandHandler] type=%s request_id=%s accepted=false status=%s reason=%s",
+            "type=%s request_id=%s accepted=false status=%s reason=%s",
             command_type.value,
             request_id,
             ack.status,
@@ -118,7 +118,7 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
     if ctx.dedup is not None:
         duplicate = ctx.dedup.get(request_id)
         if duplicate is not None:
-            LOGGER.info("[CommandHandler] type=%s request_id=%s duplicate=true", command_type.value, request_id)
+            LOGGER.info("type=%s request_id=%s duplicate=true", command_type.value, request_id)
             return duplicate
 
     if ctx.commands is None:
@@ -131,7 +131,7 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
     if ctx.dedup is not None:
         ctx.dedup.remember(request_id, ack)
     LOGGER.info(
-        "[CommandHandler] type=%s request_id=%s anchor_id=%s accepted=%s status=%s queue=%s",
+        "type=%s request_id=%s anchor_id=%s accepted=%s status=%s queue=%s",
         command_type.value,
         request_id,
         getattr(header, "anchor_id", ""),

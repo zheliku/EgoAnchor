@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from egoanchor.utils import clamp01
+
 if TYPE_CHECKING:
     from egoanchor.perception import PoseObservation
 
@@ -79,13 +81,13 @@ def score_observation_breakdown(observation: PoseObservation) -> PoseQualityBrea
     reject_factor = _track_reject_factor(observation, flags)
     score = phase_weight * consistency_score * depth_score * jump_score * mask_factor * reject_factor
     return PoseQualityBreakdown(
-        final_score=_clamp01(score),
-        phase_score=_clamp01(phase_weight),
-        consistency_score=_clamp01(consistency_score),
-        depth_score=_clamp01(depth_score),
-        jump_score=_clamp01(jump_score),
-        mask_score=_clamp01(mask_factor),
-        reject_score=_clamp01(reject_factor),
+        final_score=clamp01(score),
+        phase_score=clamp01(phase_weight),
+        consistency_score=clamp01(consistency_score),
+        depth_score=clamp01(depth_score),
+        jump_score=clamp01(jump_score),
+        mask_score=clamp01(mask_factor),
+        reject_score=clamp01(reject_factor),
         flags=tuple(flags),
     )
 
@@ -94,11 +96,11 @@ def score_depth_quality(observation: PoseObservation) -> float:
     """把 mask 内有效深度比例映射为可单独展示的 0..1 深度质量子分。"""
 
     valid_in_mask = float(observation.depth_valid_in_mask)
-    ramp = _clamp01((valid_in_mask - 0.05) / 0.30)
+    ramp = clamp01((valid_in_mask - 0.05) / 0.30)
     score = 0.3 + ramp * 0.7
     if observation.depth_valid_ratio < 0.05:
         score *= 0.65
-    return _clamp01(score)
+    return clamp01(score)
 
 
 def _consistency_score(observation: PoseObservation, flags: list[str]) -> float:
@@ -111,7 +113,7 @@ def _consistency_score(observation: PoseObservation, flags: list[str]) -> float:
             return 0.30
         flags.append("no_consistency_signal")
         return 1.0
-    score = _clamp01(consistency)
+    score = clamp01(consistency)
     if score < 0.5:
         flags.append("consistency_low")
     return score
@@ -134,7 +136,7 @@ def _jump_score(observation: PoseObservation, flags: list[str]) -> float:
 
     translation_ratio = abs(float(observation.last_translation_delta_m)) / max(JUMP_TRANSLATION_THRESHOLD_M, 1e-6)
     rotation_ratio = abs(float(observation.last_rotation_delta_deg)) / max(JUMP_ROTATION_THRESHOLD_DEG, 1e-6)
-    score = _clamp01(1.0 - max(translation_ratio, rotation_ratio))
+    score = clamp01(1.0 - max(translation_ratio, rotation_ratio))
     if score < 0.5:
         flags.append("near_jump_limit")
     return score
@@ -159,9 +161,3 @@ def _track_reject_factor(observation: PoseObservation, flags: list[str]) -> floa
         flags.append("recent_track_reject")
         return max(0.25, 1.0 - min(observation.track_reject_count, 5) * 0.12)
     return 1.0
-
-
-def _clamp01(value: float) -> float:
-    """限制数值到 0..1。"""
-
-    return float(max(0.0, min(1.0, value)))

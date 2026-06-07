@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol;
 using EgoAnchor.Transport;
 using UnityEngine;
@@ -24,6 +25,9 @@ namespace EgoAnchor.Client
     /// </summary>
     public sealed class NatsControlClient : MonoBehaviour
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<NatsControlClient>();
+
         /// <summary>NATS server URL。</summary>
         [Header("Network / NATS")]
         [Tooltip("NATS server URL。开发机默认 nats://127.0.0.1:4222；Quest 真机部署时应通过 UI/PlayerPrefs 注入开发机 IP。")]
@@ -208,8 +212,8 @@ namespace EgoAnchor.Client
             bytesClient.Subscribe(SubjectNames.AnchorStatus, EnqueueStatusEvent);
             bytesClient.Subscribe(SubjectNames.ServerHeartbeat, EnqueueHeartbeat);
             bytesClient.Start();
-            Debug.Log(
-                $"[NatsControlClient] subscribing pose={SubjectNames.PoseResult}, " +
+            Log.Info(
+                $"subscribing pose={SubjectNames.PoseResult}, " +
                 $"status={SubjectNames.AnchorStatus}, heartbeat={SubjectNames.ServerHeartbeat}",
                 this
             );
@@ -345,8 +349,8 @@ namespace EgoAnchor.Client
             if (received > 0 && received - lastLoggedReceived >= statsIntervalMessages)
             {
                 lastLoggedReceived = received;
-                Debug.Log(
-                    $"[NatsControlClient] pose={receivedPoseResults}, status={receivedStatusEvents}, heartbeat={receivedHeartbeats}, " +
+                Log.Info(
+                    $"pose={receivedPoseResults}, status={receivedStatusEvents}, heartbeat={receivedHeartbeats}, " +
                     $"pendingPose={poseResultPayloads.Count}, pendingStatus={statusPayloads.Count}, pendingHeartbeat={heartbeatPayloads.Count}, " +
                     $"droppedLatest={DroppedInUnityQueueCount}, droppedStatus={DroppedStatusEventCount}",
                     this

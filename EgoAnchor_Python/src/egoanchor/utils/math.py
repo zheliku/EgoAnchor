@@ -5,6 +5,12 @@ from __future__ import annotations
 import math
 
 
+def clamp01(value: float) -> float:
+    """限制数值到闭区间 0..1。"""
+
+    return float(max(0.0, min(1.0, value)))
+
+
 def rotation_matrix_to_quaternion(matrix: tuple[float, ...]) -> tuple[float, float, float, float]:
     """把 row-major 4x4 旋转部分转换为归一化四元数 x/y/z/w。"""
 
@@ -40,4 +46,4 @@ def rotation_matrix_to_quaternion(matrix: tuple[float, ...]) -> tuple[float, flo
     return qx / norm, qy / norm, qz / norm, qw / norm
 
 
-__all__ = ["rotation_matrix_to_quaternion"]
+__all__ = ["clamp01", "rotation_matrix_to_quaternion"]

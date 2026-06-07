@@ -7,7 +7,6 @@ frame-aligned anchor 显示；Unity world 变换与平滑仍完全在 Unity 侧�
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from egoanchor.protocol import ProtobufRegistry, QUEST_CAMERA_INFO, QUEST_STEREO, SubjectRegistry
 from egoanchor.transport import NatsMessageClient, NatsMessageSettings, ProtobufPublisher
+from egoanchor.utils import get_logger
 from .commands import (
     CommandDedupStore,
     CommandExecutor,
@@ -29,7 +29,7 @@ from .quest_stream_receiver import QuestStreamReceiver
 from .runtime_log_writer import RuntimeLogWriter
 from .runtime_state import RuntimeState
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__, component="TrackingRuntime")
 """runtime 层日志记录器。"""
 
 if TYPE_CHECKING:
@@ -430,7 +430,7 @@ class TrackingRuntime:
         )
         self._publish_status(status)
         self.log_writer.status(status, previous=previous)
-        LOGGER.info("[TrackingRuntime] state=%s event=%s message=%s", state.value, event_name, status.message)
+        LOGGER.info("state=%s event=%s message=%s", state.value, event_name, status.message)
 
     def _update_runtime_fps(self) -> None:
         """更新 runtime tick 频率 EMA。"""

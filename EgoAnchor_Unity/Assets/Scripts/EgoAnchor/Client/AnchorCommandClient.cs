@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol;
 using EgoAnchor.Protocol.Generated;
 using Google.Protobuf;
@@ -22,6 +23,9 @@ namespace EgoAnchor.Client
     /// </summary>
     public sealed class AnchorCommandClient : MonoBehaviour
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorCommandClient>();
+
         /// <summary>NATS 消息面客户端。</summary>
         [Header("Transport")]
         [Tooltip("NATS 消息面客户端。必须与 PoseResultReceiver 使用同一个 NATS server。")]
@@ -359,8 +363,8 @@ namespace EgoAnchor.Client
 
             if (logCommandAck)
             {
-                Debug.Log(
-                    $"[AnchorCommandClient] subject={subject}, request_id={requestId}, " +
+                Log.Info(
+                    $"subject={subject}, request_id={requestId}, " +
                     $"accepted={accepted}, duplicate={duplicate}, status={status}, message={message}",
                     this
                 );
@@ -379,7 +383,7 @@ namespace EgoAnchor.Client
             string errorMessage = message ?? string.Empty;
             if (logCommandAck)
             {
-                Debug.LogWarning($"[AnchorCommandClient] command failed subject={subject}, request_id={requestId}, error={errorMessage}", this);
+                Log.Warning($"command failed subject={subject}, request_id={requestId}, error={errorMessage}", this);
             }
         }
 

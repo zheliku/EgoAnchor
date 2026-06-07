@@ -18,6 +18,7 @@ import torch
 from ultralytics import YOLOE
 
 from egoanchor.algorithms import SegmenterResult
+from egoanchor.utils import ensure_bgr_u8
 
 
 class Yoloe26Segmenter:
@@ -99,20 +100,6 @@ class Yoloe26Segmenter:
             raise ValueError("YOLOE prompt 不能为空。")
         return items
 
-    @staticmethod
-    def _ensure_bgr_u8(image: np.ndarray) -> np.ndarray:
-        """把输入图像统一成 OpenCV BGR uint8 三通道。"""
-
-        if image.ndim == 2:
-            out = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-        elif image.ndim == 3:
-            out = image[..., :3]
-        else:
-            raise ValueError("image 维度不正确，应为 (H,W) 或 (H,W,C)。")
-        if out.dtype != np.uint8:
-            out = np.clip(out, 0, 255).astype(np.uint8)
-        return out
-
     def set_prompt(self, prompt: str | list[str]) -> None:
         """更新文本提示词；只有内容变化时才调用模型 set_classes。"""
 
@@ -126,7 +113,7 @@ class Yoloe26Segmenter:
 
         if prompt is not None:
             self.set_prompt(prompt)
-        frame = self._ensure_bgr_u8(image_bgr)
+        frame = ensure_bgr_u8(image_bgr, subject="image ")
 
         t0 = time.perf_counter()
         result = self.model.predict(

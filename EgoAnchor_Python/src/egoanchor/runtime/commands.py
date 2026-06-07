@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import heapq
 import itertools
-import logging
 import threading
 import time
 from collections.abc import Callable
@@ -14,9 +13,10 @@ from enum import Enum
 from google.protobuf.message import Message
 
 from egoanchor.protocol import AnchorControlRequest, CommandAck
+from egoanchor.utils import get_logger
 from .runtime_state import RuntimeState
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__, component="RuntimeCommand")
 
 
 class CommandType(str, Enum):
@@ -232,7 +232,7 @@ class CommandExecutor:
 
         handler = COMMAND_HANDLERS.get(command.command_type)
         if handler is None:
-            LOGGER.warning("[CommandExecutor] ignore unknown command_type=%s request_id=%s", command.command_type, command.request_id)
+            LOGGER.warning("ignore unknown command_type=%s request_id=%s", command.command_type, command.request_id)
             return CommandExecutionResult()
         return handler(command)
 
@@ -258,7 +258,7 @@ def interpret_control(command: RuntimeCommand) -> CommandExecutionResult:
     action = int(getattr(command.message, "action", AnchorControlRequest.CONTROL_ACTION_UNSPECIFIED))
     handler = CONTROL_ACTION_HANDLERS.get(action)
     if handler is None:
-        LOGGER.warning("[CommandExecutor] ignore unknown control action=%s request_id=%s", action, command.request_id)
+        LOGGER.warning("ignore unknown control action=%s request_id=%s", action, command.request_id)
         return CommandExecutionResult()
     return handler(command)
 
@@ -270,7 +270,7 @@ def interpret_set_stage(command: RuntimeCommand) -> CommandExecutionResult:
     stage = int(getattr(command.message, "stage", 0))
     if 1 <= stage <= 4:
         return CommandExecutionResult(stage=stage)
-    LOGGER.warning("[CommandExecutor] ignore invalid SET_STAGE stage=%s request_id=%s", stage, command.request_id)
+    LOGGER.warning("ignore invalid SET_STAGE stage=%s request_id=%s", stage, command.request_id)
     return CommandExecutionResult()
 
 

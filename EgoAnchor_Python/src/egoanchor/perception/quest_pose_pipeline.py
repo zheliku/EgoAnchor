@@ -7,7 +7,6 @@ Quest Protobuf 消息，输出 camera-space PoseObservation 和 OpenCV debug 图
 
 from __future__ import annotations
 
-import logging
 import math
 import time
 from dataclasses import replace
@@ -18,6 +17,7 @@ import numpy as np
 
 from egoanchor.protocol import extract_session_id, quest_pb2
 from egoanchor.reliability import RenderConsistencyChecker, score_observation_breakdown
+from egoanchor.utils import get_logger
 
 from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
 from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
@@ -27,6 +27,9 @@ from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, pre
 
 if TYPE_CHECKING:
     from egoanchor.algorithms import CutieMaskTracker, FastFoundationStereoDepth, FoundationPoseObjectEstimator, SegmenterResult
+
+LOGGER = get_logger(__name__, component="QuestPosePipeline")
+"""Quest pose pipeline 日志记录器。"""
 
 
 class QuestPosePipeline:
@@ -231,7 +234,7 @@ class QuestPosePipeline:
             self.estimator.reset()
         if self.cutie is not None:
             self.cutie.reset()
-        logging.info("pose pipeline tracking state reset")
+        LOGGER.info("pose pipeline tracking state reset")
 
     def process(self, stereo_msg: quest_pb2.QuestStereoFrame | None, camera_info_msg: quest_pb2.QuestCameraInfo | None) -> QuestPosePipelineOutput:
         """处理最新 Quest stereo/camera_info 并返回 debug 输出。"""
@@ -611,7 +614,7 @@ class QuestPosePipeline:
             self._segmenter_worker.clear()
         if self.cutie is not None:
             self.cutie.reset()
-        logging.info("calibration updated: calib=%dx%d baseline=%.4fm fx=%.1f", calibration.calib_width, calibration.calib_height, calibration.baseline_m, self.cam_k[0, 0])
+        LOGGER.info("calibration updated: calib=%dx%d baseline=%.4fm fx=%.1f", calibration.calib_width, calibration.calib_height, calibration.baseline_m, self.cam_k[0, 0])
 
     def _apply_segmenter_snapshot(self, diagnostics: FrameDiagnostics) -> None:
         """把异步分割 worker 状态填入 diagnostics，供 HUD/日志显示。"""
@@ -752,7 +755,7 @@ class QuestPosePipeline:
             pose = self.estimator.track(rgb, depth)
             timing.pose_ms = (time.perf_counter() - t_pose) * 1000.0
         except Exception as exc:
-            logging.warning("FoundationPose track 失败: %s", exc)
+            LOGGER.warning("FoundationPose track 失败: %s", exc)
             state.has_registered = False
             state.tracked_mask_lost_count = 0
             self.estimator.reset()
@@ -767,7 +770,7 @@ class QuestPosePipeline:
 
         if self._is_track_jump(pose):
             state.track_reject_count += 1
-            logging.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
+            LOGGER.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
             state.has_registered = False
             state.tracked_mask_lost_count = 0
             state.low_consistency_count = 0
@@ -778,7 +781,7 @@ class QuestPosePipeline:
             if self.accept_track_jump_without_mask and state.track_reject_count < self.max_consecutive_track_rejects:
                 state.has_registered = True
                 state.last_pose = pose
-                logging.warning("FoundationPose track pose 跳变但无 re-register mask，暂时接受该 pose。")
+                LOGGER.warning("FoundationPose track pose 跳变但无 re-register mask，暂时接受该 pose。")
                 return pose, "TRACK_ACCEPTED_JUMP", "TRACK_ACCEPTED_JUMP"
             return None, "NONE", "TRACK_REJECT"
 
@@ -787,7 +790,7 @@ class QuestPosePipeline:
             state.low_consistency_count += 1
             if self.consistency_mode == "re_register" and state.low_consistency_count >= self.consistency_min_track_frames:
                 state.track_reject_count += 1
-                logging.warning(
+                LOGGER.warning(
                     "FoundationPose track 一致性过低，尝试 re-register。consistency=%.3f low_count=%d reject_count=%d",
                     consistency,
                     state.low_consistency_count,
@@ -826,7 +829,7 @@ class QuestPosePipeline:
         except Exception as exc:
             timing.pose_ms += (time.perf_counter() - t_pose) * 1000.0
             self.tracking_state.has_registered = False
-            logging.warning("FoundationPose register 失败: %s", exc)
+            LOGGER.warning("FoundationPose register 失败: %s", exc)
             return None, "NONE", "REGISTER_FAILED"
 
         self.tracking_state.has_registered = True
@@ -852,7 +855,7 @@ class QuestPosePipeline:
         except Exception as exc:
             timing.cutie_ms += (time.perf_counter() - t_cutie) * 1000.0
             self.tracking_state.cutie_ready = False
-            logging.warning("Cutie 跟踪失败，将继续尝试 FoundationPose track: %s", exc)
+            LOGGER.warning("Cutie 跟踪失败，将继续尝试 FoundationPose track: %s", exc)
             return None, empty_bbox
 
         bbox = [int(v) for v in track_result.bbox_xywh]
@@ -875,7 +878,7 @@ class QuestPosePipeline:
             self.tracking_state.cutie_ready = True
         except Exception as exc:
             self.tracking_state.cutie_ready = False
-            logging.warning("Cutie 初始化失败，将跳过 2D mask tracking: %s", exc)
+            LOGGER.warning("Cutie 初始化失败，将跳过 2D mask tracking: %s", exc)
 
     def _is_track_jump(self, pose: np.ndarray) -> bool:
         """检测相邻帧 pose 是否出现过大跳变。"""
@@ -1062,7 +1065,7 @@ class QuestPosePipeline:
 
         if self.log_stats_interval <= 0 or self._processed_count % self.log_stats_interval != 0:
             return
-        logging.info(
+        LOGGER.info(
             "pose frame=%s phase=%s has_pose=%s det=%d depth(mask)=%.3f depthScore=%.2f mask=%.3f score=%.2f fps=%.1f total=%.1fms",
             observation.frame_id,
             observation.phase,

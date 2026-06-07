@@ -569,7 +569,7 @@ MonoBehaviour:
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
-  policyHost: {fileID: 1039886366}
+  policyHost: {fileID: 0}
   diagnostics:
     latestAlignedFrameId: -1
     latestPhase: 
@@ -578,6 +578,22 @@ MonoBehaviour:
     latestPolicyAction: 
     latestPolicyReason: 
     latestReliabilityScore: 1
+    latestScorePhase: 0
+    latestScoreConsistency: 0
+    latestScoreDepth: 0
+    latestScoreJump: 0
+    latestScoreMask: 0
+    latestScoreReject: 0
+    latestTrackConsistency: -1
+    latestConsistencyMaskIou: 0
+    latestConsistencyDepthInlier: 0
+    latestConsistencyDepthAlignment: 0
+    latestConsistencyRenderVisibleRatio: 0
+    latestConsistencyObservedVisibleRatio: 0
+    latestConsistencyDepthResidualMeters: 0
+    latestConsistencyRenderAreaPixels: 0
+    latestConsistencyExpected: 0
+    latestConsistencyStatus: 
     latestServerState: 
     latestServerEvent: 
     latestHeartbeatInputReady: 0
@@ -615,6 +631,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1039886365}
   - {fileID: 722913590}
   - {fileID: 4868159}
   m_Father: {fileID: 0}
@@ -2373,7 +2390,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1085434120}
+  m_Father: {fileID: 160200733}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1039886366
 MonoBehaviour:
@@ -2474,7 +2491,6 @@ Transform:
   - {fileID: 287376995}
   - {fileID: 733706455}
   - {fileID: 1588420537}
-  - {fileID: 1039886365}
   - {fileID: 1262713666}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -2657,6 +2673,22 @@ MonoBehaviour:
     latestPolicyAction: 
     latestPolicyReason: 
     latestReliabilityScore: 1
+    latestScorePhase: 0
+    latestScoreConsistency: 0
+    latestScoreDepth: 0
+    latestScoreJump: 0
+    latestScoreMask: 0
+    latestScoreReject: 0
+    latestTrackConsistency: -1
+    latestConsistencyMaskIou: 0
+    latestConsistencyDepthInlier: 0
+    latestConsistencyDepthAlignment: 0
+    latestConsistencyRenderVisibleRatio: 0
+    latestConsistencyObservedVisibleRatio: 0
+    latestConsistencyDepthResidualMeters: 0
+    latestConsistencyRenderAreaPixels: 0
+    latestConsistencyExpected: 0
+    latestConsistencyStatus: 
     latestServerState: 
     latestServerEvent: 
     latestHeartbeatInputReady: 0

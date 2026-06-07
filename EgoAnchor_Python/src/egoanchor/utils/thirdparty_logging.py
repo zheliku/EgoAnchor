@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import warnings
 
+from .logger import get_logger, set_logger_output_enabled
+
 _LOGGER_PREFIX = "egoanchor.thirdparty"
 _ENABLED: dict[str, bool] = {}
 
@@ -34,22 +36,14 @@ def _apply_logger_state(normalized: str, enabled: bool) -> logging.Logger:
     """把某个第三方库及其已创建子 logger 同步到同一启用状态。"""
 
     logger_name = f"{_LOGGER_PREFIX}.{normalized}"
-    logger = logging.getLogger(logger_name)
-    _set_logger_enabled(logger, enabled)
+    logger = get_logger(logger_name)
+    set_logger_output_enabled(logger, enabled)
     for existing_name, existing_logger in logging.Logger.manager.loggerDict.items():
         if not isinstance(existing_logger, logging.Logger):
             continue
         if existing_name.startswith(f"{logger_name}."):
-            _set_logger_enabled(existing_logger, enabled)
+            set_logger_output_enabled(existing_logger, enabled)
     return logger
-
-
-def _set_logger_enabled(logger: logging.Logger, enabled: bool) -> None:
-    """应用第三方 logger 的 console 输出开关。"""
-
-    logger.propagate = True
-    logger.disabled = not enabled
-    logger.setLevel(logging.NOTSET if enabled else logging.CRITICAL + 1)
 
 
 def _install_warning_filters(name: str) -> None:
@@ -75,7 +69,7 @@ def get_thirdparty_logger(name: str) -> logging.Logger:
     """获取第三方库专用 logger，并同步当前启用状态。"""
 
     normalized = _normalize_name(name)
-    logger = logging.getLogger(f"{_LOGGER_PREFIX}.{normalized}")
+    logger = get_logger(f"{_LOGGER_PREFIX}.{normalized}")
     enabled = is_thirdparty_logging_enabled(normalized)
-    _set_logger_enabled(logger, enabled)
+    set_logger_output_enabled(logger, enabled)
     return logger

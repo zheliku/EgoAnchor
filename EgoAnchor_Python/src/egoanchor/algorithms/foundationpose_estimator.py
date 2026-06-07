@@ -7,7 +7,6 @@ FoundationPose 包级入口导入第三方实现，不在适配器里修改 `sys
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -16,7 +15,10 @@ import numpy as np
 import trimesh
 from PIL import Image
 
-from egoanchor.utils import configure_thirdparty_logging
+from egoanchor.utils import configure_thirdparty_logging, get_logger
+
+LOGGER = get_logger(__name__, component="FoundationPose")
+"""FoundationPose 适配器日志记录器。"""
 
 
 class FoundationPoseObjectEstimator:
@@ -101,7 +103,7 @@ class FoundationPoseObjectEstimator:
 
         self._load_mesh_and_create_estimator()
         if self.enable_logging:
-            logging.info("FoundationPose estimator initialized: mesh=%s", self.mesh_path)
+            LOGGER.info("FoundationPose estimator initialized: mesh=%s", self.mesh_path)
 
     @staticmethod
     def _configure_foundationpose_logging(enabled: bool) -> None:
@@ -183,14 +185,14 @@ class FoundationPoseObjectEstimator:
         should_apply_color = self.force_apply_color or image is None or not hasattr(image, "convert")
         if not should_apply_color:
             self._set_texture_visual(image)
-            logging.info("FoundationPose mesh 使用模型自带纹理: mesh=%s image_size=%s", self.mesh_path, getattr(image, "size", None))
+            LOGGER.info("FoundationPose mesh 使用模型自带纹理: mesh=%s image_size=%s", self.mesh_path, getattr(image, "size", None))
             return
 
         color = np.asarray(self.apply_color, dtype=np.uint8).reshape(1, 1, 3)
         texture = np.tile(color, (10, 10, 1))
         self._set_texture_visual(Image.fromarray(texture))
         reason = "force_apply_color=true" if self.force_apply_color else "模型纹理不可被 FoundationPose 读取"
-        logging.info("FoundationPose mesh 使用纯色纹理 fallback: mesh=%s reason=%s", self.mesh_path, reason)
+        LOGGER.info("FoundationPose mesh 使用纯色纹理 fallback: mesh=%s reason=%s", self.mesh_path, reason)
 
     @staticmethod
     def _extract_material_image(material: Any) -> Any | None:
@@ -258,7 +260,7 @@ class FoundationPoseObjectEstimator:
             if normals.shape == np.asarray(mesh.vertices).shape and np.all(np.isfinite(normals)):
                 return normals
         except Exception as exc:
-            logging.warning("读取 mesh.vertex_normals 失败，改用手动法线估计: %s", exc)
+            LOGGER.warning("读取 mesh.vertex_normals 失败，改用手动法线估计: %s", exc)
         return self._estimate_vertex_normals(np.asarray(mesh.vertices, dtype=np.float64), np.asarray(mesh.faces, dtype=np.int64))
 
     @staticmethod
@@ -476,4 +478,3 @@ class FoundationPoseObjectEstimator:
                 delattr(self.estimator, "pose_last")
             except Exception:
                 self.estimator.pose_last = None
-

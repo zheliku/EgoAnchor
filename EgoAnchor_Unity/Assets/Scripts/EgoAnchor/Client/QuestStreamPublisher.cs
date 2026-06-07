@@ -1,4 +1,5 @@
 using System;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol;
 using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Quest;
@@ -18,6 +19,9 @@ namespace EgoAnchor.Client
     /// </summary>
     public sealed class QuestStreamPublisher : MonoBehaviour
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<QuestStreamPublisher>();
+
         /// <summary>重新创建 publisher 的最小间隔，避免连接失败时每帧狂重试。</summary>
         private const double PublisherRetryIntervalSeconds = 1.0;
 
@@ -253,8 +257,8 @@ namespace EgoAnchor.Client
             if (total > 0 && total - lastLoggedTotal >= statsIntervalFrames)
             {
                 lastLoggedTotal = total;
-                Debug.Log(
-                    $"[QuestStreamPublisher] stereo={sentStereo}, camera_info={sentCameraInfo}, " +
+                Log.Info(
+                    $"stereo={sentStereo}, camera_info={sentCameraInfo}, " +
                     $"dropped={dropped}, captureFailed={captureFailed}, endpoint={publisher?.Endpoint}",
                     this);
             }
@@ -341,7 +345,7 @@ namespace EgoAnchor.Client
             }
             catch (Exception exc)
             {
-                Debug.LogWarning($"[QuestStreamPublisher] publisher connect failed, will retry: {exc.Message}", this);
+                Log.Warning($"publisher connect failed, will retry: {exc.Message}", this);
                 DisposePublisher();
                 return false;
             }

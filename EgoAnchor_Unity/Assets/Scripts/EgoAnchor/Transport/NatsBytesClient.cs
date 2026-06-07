@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using EgoAnchor.Diagnostics;
 using NATS.Client.Core;
 using NATS.Net;
 using UnityEngine;
@@ -17,6 +18,9 @@ namespace EgoAnchor.Transport
     /// </summary>
     public sealed class NatsBytesClient
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<NatsBytesClient>();
+
         /// <summary>bytes payload 回调。</summary>
         /// <param name="payload">收到的非空 payload。</param>
         public delegate void PayloadHandler(byte[] payload);
@@ -221,7 +225,7 @@ namespace EgoAnchor.Transport
                 client = localClient;
                 await localClient.ConnectAsync();
                 connectReady?.TrySetResult(true);
-                Debug.Log($"[NatsBytesClient] connected url={settings.Url}", logContext);
+                Log.Info($"connected url={settings.Url}", logContext);
 
                 List<Task> tasks = new List<Task>(subscriptions.Count);
                 foreach ((string subject, PayloadHandler handler) in subscriptions)
@@ -238,7 +242,7 @@ namespace EgoAnchor.Transport
             catch (Exception ex)
             {
                 connectReady?.TrySetException(ex);
-                Debug.LogError($"[NatsBytesClient] receive loop failed: {ex}", logContext);
+                Log.Error($"receive loop failed: {ex}", logContext);
             }
             finally
             {

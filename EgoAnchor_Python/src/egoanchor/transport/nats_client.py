@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
@@ -20,6 +19,10 @@ from typing import Any
 from google.protobuf.message import Message as ProtobufMessage
 
 from egoanchor.protocol import ANCHOR_STATUS, POSE_RESULT, SERVER_HEARTBEAT
+from egoanchor.utils import get_logger
+
+LOGGER = get_logger(__name__, component="NatsMessageClient")
+"""NATS transport 日志记录器。"""
 
 MessageCallback = Callable[[str, bytes, str | None], Awaitable[bytes | None]]
 """NATS bytes callback 类型：输入 subject/payload/reply，输出可选 reply payload。"""
@@ -149,12 +152,12 @@ class NatsMessageClient:
         """启动后台 NATS event loop 并尝试连接。"""
 
         if not self.enabled:
-            logging.info("[NatsMessageClient] network.message_plane.enabled=false，消息面保持关闭。")
+            LOGGER.info("network.message_plane.enabled=false，消息面保持关闭。")
             return
         if self._started:
             return
         self._started = True
-        logging.info("[NatsMessageClient] starting")
+        LOGGER.info("starting")
 
         self._closed = False
         self._ready.clear()
@@ -163,7 +166,7 @@ class NatsMessageClient:
         if self.settings.wait_ready_on_start:
             timeout_s = max(float(self.settings.connect_timeout_s) + 0.5, 0.5)
             if not self._ready.wait(timeout=timeout_s):
-                logging.warning("[NatsMessageClient] 等待 NATS 首次连接超时，后续消息会在连接可用前被丢弃。")
+                LOGGER.warning("等待 NATS 首次连接超时，后续消息会在连接可用前被丢弃。")
 
     def close(self) -> None:
         """关闭后台 NATS 连接和 event loop。"""
@@ -171,7 +174,7 @@ class NatsMessageClient:
         if not self._started:
             return
         self._started = False
-        logging.info("[NatsMessageClient] closing")
+        LOGGER.info("closing")
         self._closed = True
         loop = self._loop
         if loop is None:
@@ -182,7 +185,7 @@ class NatsMessageClient:
                 future = asyncio.run_coroutine_threadsafe(self._close_async(), loop)
                 future.result(timeout=1.0)
             except Exception as exc:  # pragma: no cover - 退出路径只记录，不影响进程关闭
-                logging.debug("[NatsMessageClient] 关闭 NATS 时出现非致命异常：%s", exc)
+                LOGGER.debug("关闭 NATS 时出现非致命异常：%s", exc)
             loop.call_soon_threadsafe(loop.stop)
 
         if self._thread is not None:
@@ -228,11 +231,11 @@ class NatsMessageClient:
                 max_reconnect_attempts=-1,
             )
             await self._attach_pending_subscriptions()
-            logging.info("[NatsMessageClient] connected url=%s", self.settings.url)
+            LOGGER.info("connected url=%s", self.settings.url)
         except Exception as exc:
             self._nc = None
             self._connect_failed += 1
-            logging.error("[NatsMessageClient] 连接 NATS 失败 url=%s：%s", self.settings.url, exc)
+            LOGGER.error("连接 NATS 失败 url=%s：%s", self.settings.url, exc)
         finally:
             self._ready.set()
 
@@ -251,7 +254,7 @@ class NatsMessageClient:
                     await self._nc.publish(msg.reply, response)
 
             self._subscriptions.append(await self._nc.subscribe(subject, cb=_wrapped))
-            logging.info("[NatsMessageClient] subscribed subject=%s", subject)
+            LOGGER.info("subscribed subject=%s", subject)
 
     async def _close_async(self) -> None:
         """异步关闭 NATS 连接。"""
@@ -374,7 +377,7 @@ class ProtobufPublisher:
             self._published += 1
         except Exception as exc:
             self._failed += 1
-            logging.debug("[ProtobufPublisher] publish 失败 subject=%s：%s", self.subject, exc)
+            LOGGER.debug("publish 失败 subject=%s：%s", self.subject, exc)
 
     def _drain_completed_futures(self) -> None:
         """清理已完成 Future，并观察异常，避免后台异常泄漏。"""
@@ -390,7 +393,7 @@ class ProtobufPublisher:
                 future.result()
             except Exception as exc:
                 self._failed += 1
-                logging.debug("[ProtobufPublisher] 后台 publish future 异常：%s", exc)
+                LOGGER.debug("后台 publish future 异常：%s", exc)
         self._pending = remaining
 
 

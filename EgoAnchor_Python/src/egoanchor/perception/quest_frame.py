@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from egoanchor.protocol import quest_pb2
+from egoanchor.utils import ensure_bgr_u8
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,21 +54,6 @@ def decode_quest_stereo_frame(msg: quest_pb2.QuestStereoFrame) -> DecodedQuestSt
         left_bgr=left,
         right_bgr=right,
     )
-
-
-def ensure_bgr_u8(image: np.ndarray) -> np.ndarray:
-    """把灰度/浮点/多通道图像统一成 OpenCV BGR uint8 三通道。"""
-
-    if image.ndim == 2:
-        out = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    elif image.ndim == 3:
-        out = image[..., :3]
-    else:
-        raise ValueError("图像维度不正确，应为 (H,W) 或 (H,W,C)。")
-
-    if out.dtype != np.uint8:
-        out = np.clip(out, 0, 255).astype(np.uint8)
-    return out
 
 
 def preprocess_stereo_pair(left: np.ndarray, right: np.ndarray, target_width: int, target_height: int) -> tuple[np.ndarray, np.ndarray]:

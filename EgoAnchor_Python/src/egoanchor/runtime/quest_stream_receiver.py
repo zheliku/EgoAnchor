@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -14,7 +13,10 @@ from google.protobuf.message import DecodeError
 
 from egoanchor.protocol import QUEST_CAMERA_INFO, QUEST_STEREO, extract_client_id, extract_frame_id, extract_session_id, quest_pb2
 from egoanchor.transport import ZmqTopicSubscriber
-from egoanchor.utils import LatestValueStore
+from egoanchor.utils import LatestValueStore, get_logger
+
+LOGGER = get_logger(__name__, component="QuestStreamReceiver")
+"""Quest stream receiver 日志记录器。"""
 
 
 @dataclass(frozen=True)
@@ -182,10 +184,10 @@ class QuestStreamReceiver:
                     self.store.update_camera_info(msg)
                     decoded[topic] = msg
                 else:
-                    logging.debug("[QuestStreamReceiver] ignore unknown topic=%s", topic)
+                    LOGGER.debug("ignore unknown topic=%s", topic)
             except DecodeError:
                 self.store.mark_decode_failed()
-                logging.warning("[QuestStreamReceiver] protobuf decode failed topic=%s bytes=%d", topic, len(payload))
+                LOGGER.warning("protobuf decode failed topic=%s bytes=%d", topic, len(payload))
         return decoded
 
     def get_latest_stereo(self) -> quest_pb2.QuestStereoFrame | None:

@@ -1,3 +1,4 @@
+using EgoAnchor.Diagnostics;
 using Google.Protobuf;
 using UnityEngine;
 
@@ -12,6 +13,9 @@ namespace EgoAnchor.Client
     /// <typeparam name="TMessage">Protobuf 消息类型。</typeparam>
     public abstract class NatsTypedReceiver<TMessage> : MonoBehaviour where TMessage : class, IMessage<TMessage>
     {
+        /// <summary>统一日志通道。</summary>
+        private readonly EgoAnchorLog.Channel log;
+
         /// <summary>NATS 消息面客户端。</summary>
         [Header("Inputs")]
         [Tooltip("NATS 消息面客户端。只负责连接和 payload 队列，不直接解码 Protobuf。")]
@@ -55,6 +59,14 @@ namespace EgoAnchor.Client
         protected virtual string ExtraStats => string.Empty;
 
         /// <summary>
+        /// 创建 typed receiver，并用具体子类名作为日志 component。
+        /// </summary>
+        protected NatsTypedReceiver()
+        {
+            log = EgoAnchorLog.For(GetType().Name);
+        }
+
+        /// <summary>
         /// Unity Update：主线程 drain payload、解析 Protobuf，并交给子类处理。
         /// </summary>
         private void Update()
@@ -79,7 +91,7 @@ namespace EgoAnchor.Client
                 catch (InvalidProtocolBufferException ex)
                 {
                     parseFailed++;
-                    Debug.LogWarning($"[{ReceiverName}] Protobuf 解码失败：{ex.Message}", this);
+                    log.Warning($"Protobuf 解码失败：{ex.Message}", this);
                 }
             }
 
@@ -121,8 +133,8 @@ namespace EgoAnchor.Client
             {
                 lastLoggedTotal = total;
                 string extra = ExtraStats;
-                Debug.Log(
-                    $"[{ReceiverName}] decoded={decoded}, parseFailed={parseFailed}, skippedOlder={skippedOlder}" +
+                log.Info(
+                    $"decoded={decoded}, parseFailed={parseFailed}, skippedOlder={skippedOlder}" +
                     (string.IsNullOrEmpty(extra) ? string.Empty : $", {extra}"),
                     this
                 );

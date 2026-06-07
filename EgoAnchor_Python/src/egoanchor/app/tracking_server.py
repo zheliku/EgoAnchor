@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import time
 
 import cv2
@@ -12,6 +11,10 @@ from egoanchor.config import load_config
 from egoanchor.diagnostics import make_pose_waiting_image, make_score_debug_view, tile_pose_depth_dashboard
 from egoanchor.protocol import SubjectRegistry
 from egoanchor.runtime import TrackingRuntime
+from egoanchor.utils import configure_logging, get_logger
+
+LOGGER = get_logger(__name__, component="TrackingServer")
+"""Python pose debug 应用日志记录器。"""
 
 
 def _handle_key(runtime: TrackingRuntime, key: int) -> bool:
@@ -22,7 +25,7 @@ def _handle_key(runtime: TrackingRuntime, key: int) -> bool:
     if key in (ord("1"), ord("2"), ord("3"), ord("4")):
         stage = key - ord("0")
         runtime.set_stage(stage)
-        logging.info("切换 pose debug stage=%d", stage)
+        LOGGER.info("切换 pose debug stage=%d", stage)
     elif key in (ord("r"), ord("R")):
         runtime.reset_tracking_state()
     return True
@@ -53,7 +56,7 @@ def _destroy_window_if_created(name: str, created: bool) -> None:
     try:
         cv2.destroyWindow(name)
     except cv2.error as exc:
-        logging.debug("OpenCV 窗口销毁失败，忽略清理异常: window=%s error=%s", name, exc)
+        LOGGER.debug("OpenCV 窗口销毁失败，忽略清理异常: window=%s error=%s", name, exc)
 
 
 def run_tracking_server(config_path: str | None = None, object_name: str | None = None) -> None:
@@ -74,14 +77,14 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     score_window_created = False
 
     try:
-        logging.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
+        LOGGER.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
         _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
         debug_window_created = True
         _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 540)))
         score_window_created = True
         cv2.imshow(debug_window, waiting)
-        logging.info("[TrackingServer] listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
+        LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
 
         while True:
             key = cv2.waitKey(1) & 0xFF
@@ -95,8 +98,8 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                 if now - last_wait_log_time >= float(pose_cfg.wait_log_interval_s):
                     stats = runtime.get_stats()
                     publish_stats = runtime.get_pose_publish_stats()
-                    logging.info(
-                        "[TrackingServer] waiting/idle received=%d stereo=%d camera_info=%d decode_failed=%d latest_frame=%s pose_pub=%s/%s failed=%s",
+                    LOGGER.info(
+                        "waiting/idle received=%d stereo=%d camera_info=%d decode_failed=%d latest_frame=%s pose_pub=%s/%s failed=%s",
                         stats.received,
                         stats.decoded_stereo,
                         stats.decoded_camera_info,
@@ -143,8 +146,8 @@ def main() -> None:
     parser.add_argument("--config", default=None, help="可选 TOML 配置路径；默认使用包内 defaults.toml")
     parser.add_argument("--object", dest="object_name", default=None, help="目标物体名；来自 src/egoanchor/config/objects.toml")
     parser.add_argument("--log", default="INFO", help="日志级别，例如 DEBUG/INFO/WARNING")
+    parser.add_argument("--log-color", choices=("auto", "always", "never"), default="auto", help="console 日志颜色：auto/always/never")
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, str(args.log).upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(args.log, force=True, color=args.log_color)
     run_tracking_server(args.config, args.object_name)
-
