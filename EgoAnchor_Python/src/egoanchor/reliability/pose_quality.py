@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from egoanchor.perception import PoseObservation
+if TYPE_CHECKING:
+    from egoanchor.perception import PoseObservation
 
 JUMP_TRANSLATION_THRESHOLD_M = 0.6
 """接近该平移跳变门限时降低可靠性，单位米；与默认 FoundationPose track jump 配置一致。"""

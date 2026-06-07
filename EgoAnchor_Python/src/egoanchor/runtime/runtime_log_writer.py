@@ -146,8 +146,10 @@ class RuntimeLogWriter:
                 consistency_status=str(getattr(diagnostics, "consistency_status", "")),
                 consistency_mask_iou=float(getattr(diagnostics, "consistency_mask_iou", 0.0)),
                 consistency_render_visible_ratio=float(getattr(diagnostics, "consistency_render_visible_ratio", 0.0)),
+                consistency_observed_visible_ratio=float(getattr(diagnostics, "consistency_observed_visible_ratio", 0.0)),
                 consistency_render_area_px=int(getattr(diagnostics, "consistency_render_area_px", 0)),
                 consistency_depth_inlier=float(getattr(diagnostics, "consistency_depth_inlier", 0.0)),
+                consistency_depth_alignment=float(getattr(diagnostics, "consistency_depth_alignment", 0.0)),
                 consistency_depth_residual_m=float(getattr(diagnostics, "consistency_depth_residual_m", 0.0)),
                 consistency_ms=float(getattr(diagnostics, "consistency_ms", 0.0)),
             )

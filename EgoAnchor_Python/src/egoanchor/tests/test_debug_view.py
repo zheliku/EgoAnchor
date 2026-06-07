@@ -47,7 +47,9 @@ class DebugViewTest(unittest.TestCase):
             track_consistency=0.42,
             consistency_mask_iou=0.3,
             consistency_render_visible_ratio=0.5,
+            consistency_observed_visible_ratio=0.6,
             consistency_depth_inlier=0.7,
+            consistency_depth_alignment=0.65,
             consistency_status="render_invalid",
             consistency_render_area_px=0,
             consistency_ms=4.0,
@@ -68,7 +70,9 @@ class DebugViewTest(unittest.TestCase):
         self.assertEqual(view.shape[:2], (360, 640))
         self.assertTrue(any("phase=1.00" in text for text in texts))
         self.assertTrue(any("cons=0.42" in text for text in texts))
-        self.assertTrue(any("visible=0.50" in text for text in texts))
+        self.assertTrue(any("renderCov=0.50" in text for text in texts))
+        self.assertTrue(any("obsCov=0.60" in text for text in texts))
+        self.assertTrue(any("depthAlign=0.65" in text for text in texts))
         self.assertTrue(any("status=render_invalid" in text for text in texts))
 
 

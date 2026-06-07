@@ -1,5 +1,39 @@
 # EgoAnchor Anchor 效果优化计划（Phase B：算法优化）
 
+## 当前评分机制复盘与本轮修订
+
+当前 pose reliability 已不是单一 `reliability_score` 黑盒，而是明确拆成：
+
+```text
+final_score = phase_score * consistency_score * depth_score * jump_score * mask_score * reject_score
+```
+
+其中 `depth_score` 只表示 FFS 在 mask 内是否有可用深度；真正用于判断 pose 是否贴合物体表面的信号应是渲染一致性里的 `consistency_depth_alignment`。这两者必须分开看，否则会把“深度存在”误读成“pose 深度正确”。
+
+本轮针对两个缺陷已落地以下修订：
+
+1. **遮挡/错姿态不能再靠 mask 拿高分**：`RenderConsistencyChecker` 不再用 mask IoU 与 depth inlier 的简单加权平均。新公式把 `consistency_depth_alignment` 作为一致性上限的一部分，并用 `render_visible_ratio` 做遮挡置信度折减；当错误 pose 的投影刚好贴住当前可见 mask、但渲染表面深度与 FFS 观测深度不符时，`track_consistency` 会被压低，不应再升到 0.7-0.8。
+2. **score debug 窗口补全分块数据**：`EgoAnchor Score Debug` 现在显示六个乘性子分文本和条形块，同时显示 `track_consistency`、`consistency_mask_iou`、`consistency_render_visible_ratio`、`consistency_observed_visible_ratio`、`consistency_depth_inlier`、`consistency_depth_alignment`、深度残差、状态和耗时。
+3. **PoseResult 追加详细评分字段**：共享 proto 只追加字段号，不重排旧字段。Unity 现在能接收 `score_phase/score_consistency/score_depth/score_jump/score_mask/score_reject` 和渲染一致性细项，`PoseToAnchorRuntime.RuntimeDiagnostics` 已暴露这些值供 Inspector 和后续 policy/HUD 调参。
+
+### 关于“mask 区域深度对比”的判断
+
+这个方向是可行且必要的，但要注意三点：
+
+- 对比对象应是 **FFS 观测深度** 与 **当前 pose 渲染出的 mesh 表面深度**，不是只比较 mask 面积或 bbox。只有这样才能抓住“2D 看起来刚好、3D 表面其实错位”的坏 pose。
+- 深度对比只应在有效交集区域内统计，同时记录 `render_visible_ratio` 和 `observed_visible_ratio`。部分遮挡时，正确 pose 的完整渲染 mask 可能大于可见 mask，不能简单把缺失区域全当坏 pose；但可见区域太小也必须降低置信度。
+- `depth_valid_in_mask` 是输入深度质量门槛，`consistency_depth_alignment` 才是 pose 质量信号。后续调参时优先看 `depthAlign` 与 `depthRes`，不要只看 `depthScore`。
+
+### Python / Unity 决策边界
+
+推荐边界如下：
+
+- **Python 负责感知和可解释质量评估**：输出 camera-space pose、总分、flags、六个子分、渲染一致性细项；并维护 FoundationPose/Cutie 的模型状态。
+- **Unity 负责 anchor 行为决策**：基于 PoseResult 详细字段、frame alignment、pose innovation、heartbeat 和 no-pose 序列，决定 Accept、Reject、Hold、Coast、Lost、Relocalizing 等 MR anchor 生命周期行为。
+- **Python 的 re_register 是感知管线自恢复，不是 Unity anchor policy**：是否重注册必须由 Python 执行，因为 FoundationPose/Cutie/GPU 状态在 Python owner 线程里。默认继续保持 `reliability.consistency.mode="score_only"`；只有录制遮挡/错姿态 session 证明误报率可接受后，再考虑把 Python 的感知自恢复切到 `re_register`。
+
+下一步应先录制包含“部分遮挡、错误 pose 贴合可见 mask、出视野后重获”的 session，离线画出 `reliability_score`、`track_consistency`、`depthAlign`、`depthRes`、`renderCov/obsCov` 分布，再决定阈值和是否启用 `re_register`。Unity 侧后续可基于新增字段补 HUD，并在 policy 中优先使用总分与 flags；更细的字段先用于解释和调参，暂不直接引入复杂规则。
+
 ## Context（为什么做这件事）
 
 P1 的评估系统已落地，跑出了第一批定量数据。用最新一轮 `20260603_220619_controller_right` 的原始日志交叉验证后，发现**数据重新定义了问题**，不能照直觉优化：

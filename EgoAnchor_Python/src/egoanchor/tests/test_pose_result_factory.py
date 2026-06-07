@@ -40,6 +40,22 @@ class PoseResultFactoryTest(unittest.TestCase):
             depth_valid_ratio=0.55,
             depth_valid_in_mask=0.37,
             mask_area_ratio=0.08,
+            score_phase=1.0,
+            score_consistency=0.64,
+            score_depth=0.91,
+            score_jump=0.95,
+            score_mask=1.0,
+            score_reject=1.0,
+            track_consistency=0.64,
+            consistency_mask_iou=0.72,
+            consistency_depth_inlier=0.58,
+            consistency_depth_alignment=0.61,
+            consistency_render_visible_ratio=0.83,
+            consistency_observed_visible_ratio=0.91,
+            consistency_depth_residual_m=0.018,
+            consistency_render_area_px=512,
+            consistency_expected=True,
+            consistency_status="valid",
             reliability_score=0.72,
             reliability_flags=("track_pose", "depth_medium"),
         )
@@ -51,6 +67,22 @@ class PoseResultFactoryTest(unittest.TestCase):
         self.assertEqual(list(result.reliability_flags), ["track_pose", "depth_medium"])
         self.assertAlmostEqual(result.depth_valid_in_mask, 0.37, places=5)
         self.assertAlmostEqual(result.mask_area_ratio, 0.08, places=5)
+        self.assertAlmostEqual(result.score_phase, 1.0, places=5)
+        self.assertAlmostEqual(result.score_consistency, 0.64, places=5)
+        self.assertAlmostEqual(result.score_depth, 0.91, places=5)
+        self.assertAlmostEqual(result.score_jump, 0.95, places=5)
+        self.assertAlmostEqual(result.score_mask, 1.0, places=5)
+        self.assertAlmostEqual(result.score_reject, 1.0, places=5)
+        self.assertAlmostEqual(result.track_consistency, 0.64, places=5)
+        self.assertAlmostEqual(result.consistency_mask_iou, 0.72, places=5)
+        self.assertAlmostEqual(result.consistency_depth_inlier, 0.58, places=5)
+        self.assertAlmostEqual(result.consistency_depth_alignment, 0.61, places=5)
+        self.assertAlmostEqual(result.consistency_render_visible_ratio, 0.83, places=5)
+        self.assertAlmostEqual(result.consistency_observed_visible_ratio, 0.91, places=5)
+        self.assertAlmostEqual(result.consistency_depth_residual_m, 0.018, places=5)
+        self.assertEqual(result.consistency_render_area_px, 512)
+        self.assertTrue(result.consistency_expected)
+        self.assertEqual(result.consistency_status, "valid")
         self.assertEqual(result.pose_source, "TRACK")
 
 

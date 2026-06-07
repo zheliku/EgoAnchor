@@ -147,7 +147,7 @@ namespace EgoAnchor.Runtime
             }
 
             diagnostics.latestPhase = result.Phase ?? string.Empty;
-            diagnostics.latestReliabilityScore = ReadReliabilityScore(result);
+            CapturePoseDiagnostics(result);
             double now = Time.realtimeSinceStartupAsDouble;
             if (!result.HasPose)
             {
@@ -373,6 +373,31 @@ namespace EgoAnchor.Runtime
             {
                 hasStablePose = false;
             }
+        }
+
+        /// <summary>
+        /// 从 PoseResult 捕获 Python 感知评分细项，供 Unity Inspector 和后续 policy 调参使用。
+        /// </summary>
+        /// <param name="result">Python 发布的 PoseResult。</param>
+        private void CapturePoseDiagnostics(PoseResult result)
+        {
+            diagnostics.latestReliabilityScore = ReadReliabilityScore(result);
+            diagnostics.latestScorePhase = result?.ScorePhase ?? 0.0f;
+            diagnostics.latestScoreConsistency = result?.ScoreConsistency ?? 0.0f;
+            diagnostics.latestScoreDepth = result?.ScoreDepth ?? 0.0f;
+            diagnostics.latestScoreJump = result?.ScoreJump ?? 0.0f;
+            diagnostics.latestScoreMask = result?.ScoreMask ?? 0.0f;
+            diagnostics.latestScoreReject = result?.ScoreReject ?? 0.0f;
+            diagnostics.latestTrackConsistency = result?.TrackConsistency ?? -1.0f;
+            diagnostics.latestConsistencyMaskIou = result?.ConsistencyMaskIou ?? 0.0f;
+            diagnostics.latestConsistencyDepthInlier = result?.ConsistencyDepthInlier ?? 0.0f;
+            diagnostics.latestConsistencyDepthAlignment = result?.ConsistencyDepthAlignment ?? 0.0f;
+            diagnostics.latestConsistencyRenderVisibleRatio = result?.ConsistencyRenderVisibleRatio ?? 0.0f;
+            diagnostics.latestConsistencyObservedVisibleRatio = result?.ConsistencyObservedVisibleRatio ?? 0.0f;
+            diagnostics.latestConsistencyDepthResidualMeters = result?.ConsistencyDepthResidualM ?? 0.0f;
+            diagnostics.latestConsistencyRenderAreaPixels = result?.ConsistencyRenderAreaPx ?? 0;
+            diagnostics.latestConsistencyExpected = result?.ConsistencyExpected ?? false;
+            diagnostics.latestConsistencyStatus = result?.ConsistencyStatus ?? string.Empty;
         }
 
         /// <summary>
@@ -683,6 +708,70 @@ namespace EgoAnchor.Runtime
             /// <summary>最近一次 reliability score。</summary>
             [Tooltip("最近一次 PoseResult.reliability_score。旧协议或缺省字段会按 1.0 处理。")]
             public float latestReliabilityScore = 1.0f;
+
+            /// <summary>最近一次 phase 子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_phase，用于确认最终评分中的 phase 乘性项。")]
+            public float latestScorePhase;
+
+            /// <summary>最近一次渲染一致性子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_consistency，用于确认渲染 mask/depth 一致性是否压低总分。")]
+            public float latestScoreConsistency;
+
+            /// <summary>最近一次深度可用性子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_depth，表示 mask 内有效深度比例对应的乘性项。")]
+            public float latestScoreDepth;
+
+            /// <summary>最近一次相邻 pose 跳变子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_jump，接近 Python track jump 阈值时会降低。")]
+            public float latestScoreJump;
+
+            /// <summary>最近一次 mask 面积子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_mask，mask 过大或过小时会降低。")]
+            public float latestScoreMask;
+
+            /// <summary>最近一次 track reject 子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_reject，近期 track reject 越多越低。")]
+            public float latestScoreReject;
+
+            /// <summary>最近一次渲染-重投影一致性总分。</summary>
+            [Tooltip("最近一次 PoseResult.track_consistency；-1 表示 Python 本帧没有有效一致性信号。")]
+            public float latestTrackConsistency = -1.0f;
+
+            /// <summary>最近一次渲染 mask 与观测 mask IoU。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_mask_iou，表示渲染前景与观测 mask 的轮廓重叠。")]
+            public float latestConsistencyMaskIou;
+
+            /// <summary>最近一次渲染深度 inlier 比例。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_depth_inlier，表示交集区域内 FFS 深度与渲染表面深度接近的比例。")]
+            public float latestConsistencyDepthInlier;
+
+            /// <summary>最近一次连续深度对齐分。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_depth_alignment，由 depth inlier 和中位残差共同得到。")]
+            public float latestConsistencyDepthAlignment;
+
+            /// <summary>最近一次渲染前景可见覆盖率。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_render_visible_ratio，遮挡或观测 mask 过小时会下降。")]
+            public float latestConsistencyRenderVisibleRatio;
+
+            /// <summary>最近一次观测 mask 被渲染解释的覆盖率。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_observed_visible_ratio，低值表示 pose 没覆盖可见物体区域。")]
+            public float latestConsistencyObservedVisibleRatio;
+
+            /// <summary>最近一次深度中位残差。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_depth_residual_m，单位米。")]
+            public float latestConsistencyDepthResidualMeters;
+
+            /// <summary>最近一次一致性渲染前景像素数。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_render_area_px，用于判断一致性信号是否过小。")]
+            public int latestConsistencyRenderAreaPixels;
+
+            /// <summary>最近一次 Python 是否预期一致性信号有效。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_expected。true 但 track_consistency=-1 时通常表示渲染失败或输入不满足。")]
+            public bool latestConsistencyExpected;
+
+            /// <summary>最近一次一致性状态文本。</summary>
+            [Tooltip("最近一次 PoseResult.consistency_status，例如 valid、warmup、no_mask、depth_low 或 render_exception。")]
+            public string latestConsistencyStatus = "";
 
             /// <summary>最近一次 Python AnchorStatusEvent 状态。</summary>
             [Tooltip("最近一次 Python AnchorStatusEvent.state。该字段只用于诊断，不等同于 Unity anchor state。")]

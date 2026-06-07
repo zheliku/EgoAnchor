@@ -155,9 +155,11 @@ class RuntimeEventLoggerTest(unittest.TestCase):
                     consistency_expected=True,
                     consistency_status="valid",
                     consistency_mask_iou=0.52,
+                    consistency_observed_visible_ratio=0.88,
                     consistency_render_visible_ratio=0.72,
                     consistency_render_area_px=512,
                     consistency_depth_inlier=0.81,
+                    consistency_depth_alignment=0.74,
                     consistency_depth_residual_m=0.012,
                     consistency_ms=4.5,
                 )
@@ -193,9 +195,11 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertTrue(row["consistency_expected"])
             self.assertEqual(row["consistency_status"], "valid")
             self.assertAlmostEqual(row["consistency_mask_iou"], 0.52)
+            self.assertAlmostEqual(row["consistency_observed_visible_ratio"], 0.88)
             self.assertAlmostEqual(row["consistency_render_visible_ratio"], 0.72)
             self.assertEqual(row["consistency_render_area_px"], 512)
             self.assertAlmostEqual(row["consistency_depth_inlier"], 0.81)
+            self.assertAlmostEqual(row["consistency_depth_alignment"], 0.74)
             self.assertAlmostEqual(row["consistency_depth_residual_m"], 0.012)
             self.assertAlmostEqual(row["consistency_ms"], 4.5)
 

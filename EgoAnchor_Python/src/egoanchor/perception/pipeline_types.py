@@ -137,8 +137,14 @@ class FrameDiagnostics:
     consistency_depth_inlier: float = 0.0
     """渲染深度与观测深度在交集区域的 inlier 比例。"""
 
+    consistency_depth_alignment: float = 0.0
+    """由深度 inlier 和中位残差共同得到的连续深度对齐分。"""
+
     consistency_render_visible_ratio: float = 0.0
     """渲染前景中被观测 mask 覆盖的比例，遮挡时会下降。"""
+
+    consistency_observed_visible_ratio: float = 0.0
+    """观测 mask 中被渲染前景解释的比例，低值表示 pose 未覆盖可见区域。"""
 
     consistency_render_area_px: int = 0
     """一致性检测下采样图上的渲染前景像素数。"""

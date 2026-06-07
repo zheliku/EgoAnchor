@@ -922,8 +922,10 @@ class QuestPosePipeline:
         diagnostics.consistency_status = result.status
         diagnostics.consistency_mask_iou = result.mask_iou
         diagnostics.consistency_depth_inlier = result.depth_inlier_ratio
+        diagnostics.consistency_depth_alignment = result.depth_alignment_score
         diagnostics.consistency_depth_residual_m = result.depth_median_residual_m
         diagnostics.consistency_render_visible_ratio = result.render_visible_ratio
+        diagnostics.consistency_observed_visible_ratio = result.observed_visible_ratio
         diagnostics.consistency_render_area_px = result.render_area_px
         diagnostics.consistency_render_mask = result.render_mask
         diagnostics.consistency_observed_mask = result.observed_mask
@@ -999,7 +1001,10 @@ class QuestPosePipeline:
             track_consistency=diagnostics.track_consistency,
             consistency_mask_iou=diagnostics.consistency_mask_iou,
             consistency_depth_inlier=diagnostics.consistency_depth_inlier,
+            consistency_depth_alignment=diagnostics.consistency_depth_alignment,
             consistency_render_visible_ratio=diagnostics.consistency_render_visible_ratio,
+            consistency_observed_visible_ratio=diagnostics.consistency_observed_visible_ratio,
+            consistency_depth_residual_m=diagnostics.consistency_depth_residual_m,
             consistency_render_area_px=diagnostics.consistency_render_area_px,
             last_translation_delta_m=diagnostics.last_translation_delta_m,
             last_rotation_delta_deg=diagnostics.last_rotation_delta_deg,

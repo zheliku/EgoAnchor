@@ -121,8 +121,9 @@ def make_score_debug_view(
 
     lines = [
         f"score={observation.reliability_score if observation else 0.0:.2f} phase={diagnostics.score_phase:.2f} cons={diagnostics.score_consistency:.2f} depth={diagnostics.score_depth:.2f} jump={diagnostics.score_jump:.2f} mask={diagnostics.score_mask:.2f} reject={diagnostics.score_reject:.2f}",
-        f"track_cons={diagnostics.track_consistency:.2f} iou={diagnostics.consistency_mask_iou:.2f} visible={diagnostics.consistency_render_visible_ratio:.2f} depthIn={diagnostics.consistency_depth_inlier:.2f} depthRes={diagnostics.consistency_depth_residual_m:.3f}m {diagnostics.consistency_ms:.1f}ms",
-        f"status={diagnostics.consistency_status} expected={diagnostics.consistency_expected} renderArea={diagnostics.consistency_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
+        f"track_cons={diagnostics.track_consistency:.2f} iou={diagnostics.consistency_mask_iou:.2f} renderCov={diagnostics.consistency_render_visible_ratio:.2f} obsCov={diagnostics.consistency_observed_visible_ratio:.2f}",
+        f"depthIn={diagnostics.consistency_depth_inlier:.2f} depthAlign={diagnostics.consistency_depth_alignment:.2f} depthRes={diagnostics.consistency_depth_residual_m:.3f}m status={diagnostics.consistency_status} {diagnostics.consistency_ms:.1f}ms",
+        f"expected={diagnostics.consistency_expected} renderArea={diagnostics.consistency_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
     ]
     if observation and observation.reliability_flags:
         lines.append("flags=" + ",".join(observation.reliability_flags[:8]))
@@ -131,6 +132,7 @@ def make_score_debug_view(
         cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
         cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
         y += 24
+    _draw_score_bars(canvas, diagnostics, x=12, y=y + 4, width=min(420, canvas.shape[1] - 24), row_h=20)
     return canvas
 
 
@@ -146,6 +148,33 @@ def _mask_panel(mask: np.ndarray | None, title: str, color: tuple[int, int, int]
         image[mask_u8 > 0] = color
     cv2.putText(image, title, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
     return image
+
+
+def _draw_score_bars(canvas: np.ndarray, diagnostics: FrameDiagnostics, x: int, y: int, width: int, row_h: int) -> None:
+    """在 score debug 画面绘制六个乘性子分条，便于现场观察是哪一项降分。"""
+
+    items = [
+        ("phase", diagnostics.score_phase),
+        ("cons", diagnostics.score_consistency),
+        ("depth", diagnostics.score_depth),
+        ("jump", diagnostics.score_jump),
+        ("mask", diagnostics.score_mask),
+        ("reject", diagnostics.score_reject),
+    ]
+    label_w = 70
+    bar_w = max(int(width) - label_w - 54, 1)
+    for index, (name, value) in enumerate(items):
+        row_y = int(y + index * row_h)
+        score = float(max(0.0, min(1.0, value)))
+        fill = int(round(bar_w * score))
+        cv2.putText(canvas, name, (x, row_y + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(canvas, name, (x, row_y + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 240, 255), 1, cv2.LINE_AA)
+        bar_x = x + label_w
+        cv2.rectangle(canvas, (bar_x, row_y + 4), (bar_x + bar_w, row_y + 16), (55, 55, 55), 1)
+        color = (0, 210, 80) if score >= 0.65 else (0, 180, 255) if score >= 0.35 else (0, 90, 255)
+        cv2.rectangle(canvas, (bar_x + 1, row_y + 5), (bar_x + fill, row_y + 15), color, -1)
+        cv2.putText(canvas, f"{score:.2f}", (bar_x + bar_w + 8, row_y + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(canvas, f"{score:.2f}", (bar_x + bar_w + 8, row_y + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 240, 255), 1, cv2.LINE_AA)
 
 
 def tile_pose_depth_dashboard(

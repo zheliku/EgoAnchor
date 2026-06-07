@@ -18,7 +18,7 @@ class RenderConsistencyCheckerTest(unittest.TestCase):
         render_mask = np.array([[1, 1], [0, 0]], dtype=bool)
         observed_mask = np.array([[1, 1], [0, 0]], dtype=bool)
         render_depth = np.array([[1.0, 1.0], [0.0, 0.0]], dtype=np.float32)
-        observed_depth = np.array([[1.0, 1.01], [0.0, 0.0]], dtype=np.float32)
+        observed_depth = np.array([[1.0, 1.0], [0.0, 0.0]], dtype=np.float32)
 
         full = RenderConsistencyChecker._score_from_maps(
             render_mask,
@@ -73,7 +73,7 @@ class RenderConsistencyCheckerTest(unittest.TestCase):
         self.assertAlmostEqual(result.mask_iou, 1.0 / 3.0)
         self.assertAlmostEqual(result.render_visible_ratio, 0.5)
         self.assertAlmostEqual(result.depth_inlier_ratio, 1.0)
-        self.assertLess(result.consistency, 0.35)
+        self.assertLess(result.consistency, 0.5)
 
     def test_score_from_maps_penalizes_occluded_observed_subset(self) -> None:
         """观测 mask 明显小于渲染 mask 时，即使深度匹配也应明显降分。"""
@@ -96,9 +96,36 @@ class RenderConsistencyCheckerTest(unittest.TestCase):
         self.assertTrue(result.valid)
         self.assertAlmostEqual(result.render_visible_ratio, 0.5)
         self.assertAlmostEqual(result.depth_inlier_ratio, 1.0)
-        self.assertLess(result.consistency, 0.5)
+        self.assertLess(result.consistency, 0.7)
         self.assertEqual(result.render_mask.shape, render_mask.shape)
         self.assertEqual(result.observed_mask.shape, observed_mask.shape)
+
+    def test_score_from_maps_caps_high_mask_score_when_depth_disagrees(self) -> None:
+        """mask 完全贴合但表面深度明显不对时，不能继续给高一致性分。"""
+
+        render_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        observed_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        render_depth = np.ones((2, 2), dtype=np.float32)
+        observed_depth = np.full((2, 2), 1.12, dtype=np.float32)
+
+        result = RenderConsistencyChecker._score_from_maps(
+            render_mask,
+            observed_mask,
+            render_depth,
+            observed_depth,
+            iou_weight=0.6,
+            depth_weight=0.4,
+            depth_inlier_thresh_m=0.02,
+            min_render_area_px=1,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertAlmostEqual(result.mask_iou, 1.0)
+        self.assertAlmostEqual(result.observed_visible_ratio, 1.0)
+        self.assertAlmostEqual(result.render_visible_ratio, 1.0)
+        self.assertAlmostEqual(result.depth_inlier_ratio, 0.0)
+        self.assertLess(result.depth_alignment_score, 0.2)
+        self.assertLess(result.consistency, 0.35)
 
     def test_score_from_maps_marks_tiny_render_invalid(self) -> None:
         """渲染前景太小时只提供无效信号，避免触发重注册。"""

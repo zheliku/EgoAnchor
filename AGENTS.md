@@ -39,7 +39,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 - Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
 - Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.consistency]` 渲染-重投影一致性检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 渲染 depth/mask，与 Cutie mask 和 FFS depth 比较，写入 `track_consistency`、IoU、depth inlier、`consistency_ms` 等 JSONL 旁路字段；`PoseResult` 仍只使用既有 `reliability_score`/`reliability_flags`，不改 proto。
+- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.consistency]` 渲染-重投影一致性检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 渲染 depth/mask，与 Cutie mask 和 FFS depth 比较，写入 `track_consistency`、IoU、depth inlier、depth alignment、render/observed coverage、`consistency_ms` 等 JSONL 字段；`PoseResult` 追加携带六个评分子分和一致性细项，Unity 可用于 Inspector/HUD/policy 调参。
 - Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
@@ -47,7 +47,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 - Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持 raw baseline 与 smoothed/runtime policy 使用同一 pose 输入。
 - Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
 - Unity `AnchorLowPassPoseProcessor`、`AnchorKalmanPoseProcessor`：当前 stable baseline。
-- Unity `Policy/AnchorStateMachine`、`AnchorPolicyHost` 与 `PolicyController`：基础 reliability-aware anchor policy 已接入，可根据 PoseResult 可靠性、frame alignment 失败、pose jump 和连续 no-pose 输出 Accept/Reject/Coast/Hold/Lost/Relocalizing 等行为；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。
+- Unity `Policy/AnchorStateMachine`、`AnchorPolicyHost` 与 `PolicyController`：基础 reliability-aware anchor policy 已接入，可根据 PoseResult 可靠性、frame alignment 失败、pose jump 和连续 no-pose 输出 Accept/Reject/Coast/Hold/Lost/Relocalizing 等行为；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。Python 的 `re_register` 只属于感知管线自恢复，因为 FoundationPose/Cutie/GPU 状态由 Python owner 线程维护；Unity 负责 MR anchor 行为决策，不直接重置 Python 模型状态。
 - Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
 
 ## 常用入口与验证
@@ -113,7 +113,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 |---|---|---|---|---|
 | `egoanchor.v1.quest.stereo` | Unity -> Python | ZMQ | `QuestStereoFrame` | 高频双目 JPEG，latest-only |
 | `egoanchor.v1.quest.camera_info` | Unity -> Python | ZMQ | `QuestCameraInfo` | 低频标定，独立 latest cache |
-| `egoanchor.v1.pose.result` | Python -> Unity | NATS | `PoseResult` | 小型 pose 结果，latest-only |
+| `egoanchor.v1.pose.result` | Python -> Unity | NATS | `PoseResult` | 小型 pose 结果，latest-only；携带总分、flags、六个评分子分和渲染一致性细项 |
 | `egoanchor.v1.anchor.status` | Python -> Unity | NATS | `AnchorStatusEvent` | 状态事件流，reset/reacquire/pause/resume/state/error 闭环 |
 | `egoanchor.v1.server.heartbeat` | Python -> Unity | NATS | `ServerHeartbeat` | 低频服务与输入健康状态，latest-only |
 | `egoanchor.v1.cmd.anchor.reset` | Unity -> Python | NATS request/reply | `ResetTrackingRequest -> CommandAck` | ack 只表示接受/拒绝 |
@@ -135,15 +135,15 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store；内部包含 topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
 - `src/egoanchor/runtime/commands.py`：命令模型、命令队列、request_id TTL 幂等、runtime 内解释命令，以及在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue command 的 pump。
 - `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat，并把 command/logging 细节委托给 runtime helper。
-- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射。
+- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射；PoseResult 必须透传 `score_phase/score_consistency/score_depth/score_jump/score_mask/score_reject` 与渲染一致性细项。
 - `src/egoanchor/runtime/eval_session.py`：Python 先启动时创建共享评估 session 目录和 `python_session.json`，供 Unity Start/F7 自动复用。
 - `src/egoanchor/runtime/runtime_log_writer.py`：集中写入 PoseResult/status/heartbeat/command JSONL 结构化事件；eval session 启用时写入 `data/eval/<session_id>/<session_id>_python_runtime.jsonl`，否则回退到 `runtime_logs`。
 - `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。SAM3 异步模式只把分割模型放入 latest-only worker；worker 输出携带原始 decoded frame/left/right 图，主 pipeline 线程消费后再做 depth/register。
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
 - `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
 - `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose 适配器；公开 `render_depth_mask(...)` facade 给 reliability 层使用，reliability 代码不得直接访问第三方 estimator 内部 `glctx/mesh_tensors`。
-- `src/egoanchor/reliability/render_consistency.py`：渲染-重投影一致性检测器；纯数学 `_score_from_maps` 可无 GPU 单测。
-- `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，消费渲染一致性、depth 质量、相邻 pose jump、mask 面积和 track reject，输出 `reliability_score` 与 flags。
+- `src/egoanchor/reliability/render_consistency.py`：渲染-重投影一致性检测器；纯数学 `_score_from_maps` 可无 GPU 单测。评分不能只靠 mask IoU，`consistency_depth_alignment` 必须参与上限，避免错误 pose 的 2D 投影刚好贴合可见 mask 时得到高分；`render_visible_ratio` 和 `observed_visible_ratio` 用于区分遮挡、可见区域过小和 pose 未覆盖可见物体。
+- `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，消费渲染一致性、depth 质量、相邻 pose jump、mask 面积和 track reject，输出 `reliability_score`、flags 和 `phase/consistency/depth/jump/mask/reject` 六个子分。
 - `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard 等诊断工具；窗口创建辅助由 app 层就近维护。
 - `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/consistency 直方图、policy action/reason 分布、spike 漏检和 consistency 开销统计；不导入 runtime 或模型。
 - `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
@@ -197,7 +197,7 @@ Unity 命名/目录规则：
 
 - Python OpenCV 热键：`1/2/3/4` 切 stage；`r` reset；`q`/`ESC` 退出。
 - 调试顺序：stage 1 看输入 -> stage 2 看 mask -> stage 3 看 depth/mask 对齐 -> stage 4 看 register/track。
-- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、`depth_quality_score`/HUD `depthScore`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`track_consistency`、`consistency_mask_iou`、`consistency_depth_inlier`、`consistency_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
+- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、`depth_quality_score`/HUD `depthScore`、`score_phase/score_consistency/score_depth/score_jump/score_mask/score_reject`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`track_consistency`、`consistency_mask_iou`、`consistency_depth_inlier`、`consistency_depth_alignment`、`consistency_render_visible_ratio`、`consistency_observed_visible_ratio`、`consistency_depth_residual_m`、`consistency_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
 - stereo 收不到但 camera_info 能收到：查 Unity stereo source、左右 camera `IsPlaying`、ZMQ publisher、Python 接收 HWM。
 - camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
@@ -208,7 +208,7 @@ Unity 命名/目录规则：
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
 - track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
 - `track_consistency=-1`：表示本帧无有效一致性信号，不是坏 pose；查是否启用 `reliability.consistency.enabled`、是否在 TRACK 且 Cutie mask 非空、`depth_valid_in_mask` 是否足够、warmup 是否结束、K 是否已更新。
-- `consistency_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask/depth 与观测 mask/depth 方向是否一致，再考虑调 `downscale`、`depth_inlier_thresh_m` 或阈值。
+- `consistency_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask/depth 与观测 mask/depth 方向是否一致；再看 `depthAlign/depthRes` 判断是否是深度不对，或看 `renderCov/obsCov` 判断是否是遮挡/可见区域过小；最后才考虑调 `downscale`、`depth_inlier_thresh_m` 或阈值。
 - NATS 命令无 ack：查 `nats-server` 是否启动、Unity/Python NATS URL 是否指向同一地址、防火墙 4222、Python `network.message_plane.enabled`。
 
 ## 后续实现规划
