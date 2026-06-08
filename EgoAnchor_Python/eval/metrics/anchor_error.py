@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .common import pose_error, quat_to_euler_deg, relative_rotation_quat, wrap_angle_360_deg
+from .common import is_pose_value, pose_error, quat_to_euler_deg, relative_rotation_quat, wrap_angle_360_deg
+from .stats import finite_percentile, rms
 
 
 DETAIL_COLUMNS = [
@@ -86,10 +86,10 @@ def compute_anchor_error(output: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     mask = (
         output["valid"].fillna(False).astype(bool)
         & output["has_stable"].fillna(False).astype(bool)
-        & output["gt_pos"].map(_is_pose_value)
-        & output["gt_rot"].map(_is_pose_value)
-        & output["stable_pos"].map(_is_pose_value)
-        & output["stable_rot"].map(_is_pose_value)
+        & output["gt_pos"].map(is_pose_value)
+        & output["gt_rot"].map(is_pose_value)
+        & output["stable_pos"].map(is_pose_value)
+        & output["stable_rot"].map(is_pose_value)
     )
     for _, row in output.loc[mask].iterrows():
         translation_m, rotation_deg = pose_error(row["gt_pos"], row["gt_rot"], row["stable_pos"], row["stable_rot"])
@@ -135,12 +135,12 @@ def summarize_anchor_error(detail: pd.DataFrame) -> pd.DataFrame:
                 "condition": condition,
                 "label": label,
                 "n": int(len(group)),
-                "translation_rmse_m": _rmse(t),
+                "translation_rmse_m": rms(t),
                 "translation_median_m": float(np.nanmedian(t)),
-                "translation_p95_m": float(np.nanpercentile(t, 95)),
-                "rotation_rmse_deg": _rmse(r),
+                "translation_p95_m": finite_percentile(t, 95),
+                "rotation_rmse_deg": rms(r),
                 "rotation_median_deg": float(np.nanmedian(r)),
-                "rotation_p95_deg": float(np.nanpercentile(r, 95)),
+                "rotation_p95_deg": finite_percentile(r, 95),
             }
         )
     return pd.DataFrame.from_records(rows, columns=SUMMARY_COLUMNS)
@@ -188,8 +188,8 @@ def summarize_pose_offset(detail: pd.DataFrame) -> pd.DataFrame:
                 "position_offset_std_z_m": float(position_std[2]),
                 "position_offset_median_norm_m": float(np.linalg.norm(position_median)),
                 "position_residual_after_median_p50_m": float(np.nanmedian(residual_norm)),
-                "position_residual_after_median_p95_m": float(np.nanpercentile(residual_norm, 95)),
-                "position_residual_after_median_rmse_m": _rmse(residual_norm),
+                "position_residual_after_median_p95_m": finite_percentile(residual_norm, 95),
+                "position_residual_after_median_rmse_m": rms(residual_norm),
                 "rotation_offset_mean_euler_x_deg": float(euler_mean[0]),
                 "rotation_offset_mean_euler_y_deg": float(euler_mean[1]),
                 "rotation_offset_mean_euler_z_deg": float(euler_mean[2]),
@@ -200,24 +200,10 @@ def summarize_pose_offset(detail: pd.DataFrame) -> pd.DataFrame:
                 "rotation_offset_std_euler_y_deg": float(euler_std[1]),
                 "rotation_offset_std_euler_z_deg": float(euler_std[2]),
                 "rotation_offset_median_deg": float(np.nanmedian(group["rotation_error_deg"].to_numpy(dtype=float))),
-                "rotation_offset_p95_deg": float(np.nanpercentile(group["rotation_error_deg"].to_numpy(dtype=float), 95)),
+                "rotation_offset_p95_deg": finite_percentile(group["rotation_error_deg"].to_numpy(dtype=float), 95),
             }
         )
     return pd.DataFrame.from_records(rows, columns=OFFSET_SUMMARY_COLUMNS)
-
-
-def _is_pose_value(value: object) -> bool:
-    """判断 object 列中是否有可用 pose 数组。"""
-
-    return value is not None and not (isinstance(value, float) and math.isnan(value))
-
-
-def _rmse(values: np.ndarray) -> float:
-    """计算 RMSE，忽略 NaN。"""
-
-    if values.size == 0:
-        return float("nan")
-    return float(np.sqrt(np.nanmean(values * values)))
 
 
 def _unwrap_angle_deg(values: np.ndarray) -> np.ndarray:

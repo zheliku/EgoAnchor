@@ -14,8 +14,8 @@ from egoanchor.perception import FrameDiagnostics, PoseObservation
 class DebugViewTest(unittest.TestCase):
     """验证 HUD 暴露真机联调需要直接看的关键分数。"""
 
-    def test_hud_prints_depth_quality_score(self) -> None:
-        """HUD 应显示 depth 子分，避免只看到最终 reliability score。"""
+    def test_hud_prints_depth_alignment_score(self) -> None:
+        """HUD 应显示 depth 对齐子分，避免只看到最终 reliability score。"""
 
         image = np.zeros((120, 320, 3), dtype=np.uint8)
         diagnostics = FrameDiagnostics(depth_valid_in_mask=0.2, depth_valid_ratio=0.5)
@@ -24,7 +24,7 @@ class DebugViewTest(unittest.TestCase):
             phase="TRACK",
             pose_source="TRACK",
             reliability_score=0.73,
-            depth_quality_score=0.65,
+            score_depth=0.65,
         )
         texts: list[str] = []
 
@@ -35,31 +35,33 @@ class DebugViewTest(unittest.TestCase):
         self.assertTrue(any("depthScore=0.65" in text for text in texts))
 
     def test_score_debug_view_prints_score_breakdown(self) -> None:
-        """独立评分窗口应显示所有评分子分和一致性分解。"""
+        """独立评分窗口应显示所有评分子分和渲染质量分解。"""
 
         diagnostics = FrameDiagnostics(
             score_phase=1.0,
-            score_consistency=0.42,
+            score_reprojection=0.42,
             score_depth=0.65,
             score_jump=0.8,
             score_mask=0.9,
             score_reject=1.0,
-            track_consistency=0.42,
-            consistency_mask_iou=0.3,
-            consistency_render_visible_ratio=0.5,
-            consistency_observed_visible_ratio=0.6,
-            consistency_depth_inlier=0.7,
-            consistency_depth_alignment=0.65,
-            consistency_status="render_invalid",
-            consistency_render_area_px=0,
-            consistency_ms=4.0,
+            score_confidence=0.75,
+            track_reprojection=0.42,
+            render_quality_mask_iou=0.3,
+            render_quality_area_ratio_score=0.25,
+            render_quality_render_visible_ratio=0.5,
+            render_quality_observed_visible_ratio=0.6,
+            render_quality_depth_inlier=0.7,
+            render_quality_depth_alignment=0.65,
+            render_quality_status="render_invalid",
+            render_quality_render_area_px=0,
+            render_quality_ms=4.0,
         )
         observation = PoseObservation(
             has_pose=True,
             phase="TRACK",
             pose_source="TRACK",
             reliability_score=0.2,
-            reliability_flags=("consistency_low",),
+            reliability_flags=("reprojection_low",),
         )
         texts: list[str] = []
 
@@ -69,7 +71,9 @@ class DebugViewTest(unittest.TestCase):
 
         self.assertEqual(view.shape[:2], (360, 640))
         self.assertTrue(any("phase=1.00" in text for text in texts))
-        self.assertTrue(any("cons=0.42" in text for text in texts))
+        self.assertTrue(any("reproj=0.42" in text for text in texts))
+        self.assertTrue(any("conf=0.75" in text for text in texts))
+        self.assertTrue(any("area=0.25" in text for text in texts))
         self.assertTrue(any("renderCov=0.50" in text for text in texts))
         self.assertTrue(any("obsCov=0.60" in text for text in texts))
         self.assertTrue(any("depthAlign=0.65" in text for text in texts))

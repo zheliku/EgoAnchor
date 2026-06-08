@@ -27,7 +27,7 @@ namespace EgoAnchor.Policy
         /// <summary>Python 是否报告原始 PoseResult.has_pose=true。</summary>
         public readonly bool HasServerPose;
 
-        /// <summary>Python 感知侧可靠性评分，范围 0..1；旧协议或缺省时为 1。</summary>
+        /// <summary>Python 感知侧可靠性评分，范围 0..1。</summary>
         public readonly float ReliabilityScore;
 
         /// <summary>Python 感知侧可靠性 flags。</summary>
@@ -38,6 +38,9 @@ namespace EgoAnchor.Policy
 
         /// <summary>pose 来源，例如 TRACK、REGISTER、RE_REGISTER 或 NONE。</summary>
         public readonly string PoseSource;
+
+        /// <summary>当前观测是否来自 register/re-register 路径。</summary>
+        public readonly bool IsRelocalization;
 
         /// <summary>缺失、拒绝或对齐失败原因。</summary>
         public readonly string FailureReason;
@@ -55,6 +58,7 @@ namespace EgoAnchor.Policy
             string[] reliabilityFlags,
             string phase,
             string poseSource,
+            bool isRelocalization,
             string failureReason)
         {
             FrameId = frameId;
@@ -66,6 +70,7 @@ namespace EgoAnchor.Policy
             ReliabilityFlags = reliabilityFlags ?? Array.Empty<string>();
             Phase = phase ?? string.Empty;
             PoseSource = poseSource ?? string.Empty;
+            IsRelocalization = isRelocalization;
             FailureReason = failureReason ?? string.Empty;
         }
 
@@ -99,6 +104,7 @@ namespace EgoAnchor.Policy
                 reliabilityFlags ?? Array.Empty<string>(),
                 phase,
                 poseSource,
+                IsRegisterLike(phase) || IsRegisterLike(poseSource),
                 failureReason: string.Empty
             );
         }
@@ -123,6 +129,7 @@ namespace EgoAnchor.Policy
                 Array.Empty<string>(),
                 phase,
                 poseSource: "NONE",
+                isRelocalization: false,
                 failureReason: failureReason
             );
         }
@@ -147,8 +154,20 @@ namespace EgoAnchor.Policy
                 Array.Empty<string>(),
                 phase,
                 poseSource: "ALIGN_FAILED",
+                isRelocalization: false,
                 failureReason: failureReason
             );
+        }
+
+        /// <summary>
+        /// 判断 Python phase/source 文本是否表示 register 或 re-register。
+        /// </summary>
+        /// <param name="value">Python 侧 phase 或 pose_source。</param>
+        /// <returns>是否属于重定位观测。</returns>
+        private static bool IsRegisterLike(string value)
+        {
+            return !string.IsNullOrEmpty(value)
+                && value.IndexOf("REGISTER", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

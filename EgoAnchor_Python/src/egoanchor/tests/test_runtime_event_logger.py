@@ -145,23 +145,24 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             try:
                 diagnostics = SimpleNamespace(
                     score_phase=1.0,
-                    score_consistency=0.64,
+                    score_reprojection=0.64,
                     score_depth=0.66,
                     score_jump=0.95,
                     score_mask=1.0,
                     score_reject=1.0,
-                    depth_quality_score=0.66,
-                    track_consistency=0.64,
-                    consistency_expected=True,
-                    consistency_status="valid",
-                    consistency_mask_iou=0.52,
-                    consistency_observed_visible_ratio=0.88,
-                    consistency_render_visible_ratio=0.72,
-                    consistency_render_area_px=512,
-                    consistency_depth_inlier=0.81,
-                    consistency_depth_alignment=0.74,
-                    consistency_depth_residual_m=0.012,
-                    consistency_ms=4.5,
+                    score_confidence=0.8,
+                    track_reprojection=0.64,
+                    render_quality_expected=True,
+                    render_quality_status="valid",
+                    render_quality_mask_iou=0.52,
+                    render_quality_area_ratio_score=0.43,
+                    render_quality_observed_visible_ratio=0.88,
+                    render_quality_render_visible_ratio=0.72,
+                    render_quality_render_area_px=512,
+                    render_quality_depth_inlier=0.81,
+                    render_quality_depth_alignment=0.74,
+                    render_quality_depth_residual_m=0.012,
+                    render_quality_ms=4.5,
                 )
                 runtime.log_writer.pose_result(PoseMsg(), state=runtime.state, diagnostics=diagnostics)
             finally:
@@ -185,23 +186,24 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertEqual(row["pose_jump_translation_m"], 0.0)
             self.assertEqual(row["pose_jump_rotation_deg"], 0.0)
             self.assertAlmostEqual(row["score_phase"], 1.0)
-            self.assertAlmostEqual(row["score_consistency"], 0.64)
+            self.assertAlmostEqual(row["score_reprojection"], 0.64)
             self.assertAlmostEqual(row["score_depth"], 0.66)
             self.assertAlmostEqual(row["score_jump"], 0.95)
             self.assertAlmostEqual(row["score_mask"], 1.0)
             self.assertAlmostEqual(row["score_reject"], 1.0)
-            self.assertAlmostEqual(row["depth_quality_score"], 0.66)
-            self.assertAlmostEqual(row["track_consistency"], 0.64)
-            self.assertTrue(row["consistency_expected"])
-            self.assertEqual(row["consistency_status"], "valid")
-            self.assertAlmostEqual(row["consistency_mask_iou"], 0.52)
-            self.assertAlmostEqual(row["consistency_observed_visible_ratio"], 0.88)
-            self.assertAlmostEqual(row["consistency_render_visible_ratio"], 0.72)
-            self.assertEqual(row["consistency_render_area_px"], 512)
-            self.assertAlmostEqual(row["consistency_depth_inlier"], 0.81)
-            self.assertAlmostEqual(row["consistency_depth_alignment"], 0.74)
-            self.assertAlmostEqual(row["consistency_depth_residual_m"], 0.012)
-            self.assertAlmostEqual(row["consistency_ms"], 4.5)
+            self.assertAlmostEqual(row["score_confidence"], 0.8)
+            self.assertAlmostEqual(row["track_reprojection"], 0.64)
+            self.assertTrue(row["render_quality_expected"])
+            self.assertEqual(row["render_quality_status"], "valid")
+            self.assertAlmostEqual(row["render_quality_mask_iou"], 0.52)
+            self.assertAlmostEqual(row["render_quality_area_ratio_score"], 0.43)
+            self.assertAlmostEqual(row["render_quality_observed_visible_ratio"], 0.88)
+            self.assertAlmostEqual(row["render_quality_render_visible_ratio"], 0.72)
+            self.assertEqual(row["render_quality_render_area_px"], 512)
+            self.assertAlmostEqual(row["render_quality_depth_inlier"], 0.81)
+            self.assertAlmostEqual(row["render_quality_depth_alignment"], 0.74)
+            self.assertAlmostEqual(row["render_quality_depth_residual_m"], 0.012)
+            self.assertAlmostEqual(row["render_quality_ms"], 4.5)
 
 
 if __name__ == "__main__":

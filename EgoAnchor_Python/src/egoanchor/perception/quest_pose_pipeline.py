@@ -16,8 +16,8 @@ import cv2
 import numpy as np
 
 from egoanchor.protocol import extract_session_id, quest_pb2
-from egoanchor.reliability import RenderConsistencyChecker, score_observation_breakdown
-from egoanchor.utils import get_logger
+from egoanchor.reliability import ConfidenceAccumulator, RenderQualityChecker, score_observation_breakdown
+from egoanchor.utils import clamp, get_logger
 
 from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
 from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
@@ -61,16 +61,16 @@ class QuestPosePipeline:
         show_mask_snapshot: bool = False,
         mask_snapshot_window: str = "EgoAnchor mask",
         async_segmentation: bool = False,
-        enable_render_consistency: bool = False,
-        consistency_mode: str = "score_only",
-        consistency_re_register_threshold: float = 0.35,
-        consistency_min_track_frames: int = 2,
-        consistency_warmup_frames: int = 3,
-        consistency_iou_weight: float = 0.6,
-        consistency_depth_weight: float = 0.4,
-        consistency_depth_inlier_thresh_m: float = 0.02,
-        consistency_downscale: int = 2,
-        consistency_min_render_area_px: int = 50,
+        enable_render_quality: bool = False,
+        render_quality_mode: str = "score_only",
+        render_quality_re_register_threshold: float = 0.35,
+        render_quality_min_track_frames: int = 2,
+        render_quality_warmup_frames: int = 3,
+        render_quality_depth_distance_ratio: float = 0.02,
+        render_quality_depth_min_inlier_thresh_m: float = 0.005,
+        render_quality_depth_min_coverage: float = 0.10,
+        render_quality_downscale: int = 2,
+        render_quality_min_render_area_px: int = 50,
     ) -> None:
         """注入算法组件和 pipeline 策略参数。"""
 
@@ -146,33 +146,33 @@ class QuestPosePipeline:
         self.async_segmentation = bool(async_segmentation)
         """是否把初始分割阶段放到后台线程。"""
 
-        self.enable_render_consistency = bool(enable_render_consistency)
-        """是否启用渲染-重投影一致性检测。"""
+        self.enable_render_quality = bool(enable_render_quality)
+        """是否启用渲染质量检测。"""
 
-        self.consistency_mode = str(consistency_mode or "score_only").strip().lower()
-        """一致性低分处理模式：score_only 只降分，re_register 可触发软重注册。"""
+        self.render_quality_mode = str(render_quality_mode or "score_only").strip().lower()
+        """渲染质量低分处理模式：score_only 只降分，re_register 可触发软重注册。"""
 
-        self.consistency_re_register_threshold = float(consistency_re_register_threshold)
-        """连续低于该一致性分数时可触发 re-register。"""
+        self.render_quality_re_register_threshold = float(render_quality_re_register_threshold)
+        """连续低于该重投影分数时可触发 re-register。"""
 
-        self.consistency_min_track_frames = max(1, int(consistency_min_track_frames))
-        """连续多少帧低一致性才触发重注册，避免单帧误报。"""
+        self.render_quality_min_track_frames = max(1, int(render_quality_min_track_frames))
+        """连续多少帧低重投影分才触发重注册，避免单帧误报。"""
 
-        self.consistency_warmup_frames = max(0, int(consistency_warmup_frames))
-        """register/re-register 后跳过一致性判定的帧数。"""
+        self.render_quality_warmup_frames = max(0, int(render_quality_warmup_frames))
+        """register/re-register 后跳过渲染质量判定的帧数。"""
 
-        self.consistency_checker = (
-            RenderConsistencyChecker(
-                iou_weight=consistency_iou_weight,
-                depth_weight=consistency_depth_weight,
-                depth_inlier_thresh_m=consistency_depth_inlier_thresh_m,
-                min_render_area_px=consistency_min_render_area_px,
-                downscale=consistency_downscale,
+        self.render_quality_checker = (
+            RenderQualityChecker(
+                depth_distance_ratio=render_quality_depth_distance_ratio,
+                depth_min_inlier_thresh_m=render_quality_depth_min_inlier_thresh_m,
+                depth_min_coverage=render_quality_depth_min_coverage,
+                min_render_area_px=render_quality_min_render_area_px,
+                downscale=render_quality_downscale,
             )
-            if self.enable_render_consistency
+            if self.enable_render_quality
             else None
         )
-        """渲染一致性检测器；配置关闭时为 None。"""
+        """一次渲染后拆分重投影和深度对齐的质量检测器；配置关闭时为 None。"""
 
         self._segmenter_worker: AsyncSegmenterWorker | None = AsyncSegmenterWorker(segmenter) if self.async_segmentation else None
         """异步分割 worker；同步模式下为 None。"""
@@ -195,6 +195,9 @@ class QuestPosePipeline:
         self.tracking_state = PipelineTrackingState()
         """FoundationPose/Cutie 时序跟踪状态。"""
 
+        self.confidence_accumulator = ConfidenceAccumulator()
+        """连续高质量 pose 的可靠性 warmup 计数器。"""
+
         self._last_frame_id: int | None = None
         """上一帧处理过的 frame_id，避免重复处理。"""
 
@@ -213,7 +216,7 @@ class QuestPosePipeline:
     def set_stage(self, stage: int) -> None:
         """设置 debug stage，并限制在 1..4。"""
 
-        self.stage = max(1, min(4, int(stage)))
+        self.stage = int(clamp(stage, 1, 4))
 
     def close(self) -> None:
         """关闭 pipeline 持有的后台资源。"""
@@ -226,6 +229,7 @@ class QuestPosePipeline:
         """重置时序跟踪状态，下一帧重新分割/register。"""
 
         self.tracking_state.bump_generation()
+        self.confidence_accumulator.reset()
         self._last_frame_id = None
         self._last_session_id = ""
         if self._segmenter_worker is not None:
@@ -406,6 +410,7 @@ class QuestPosePipeline:
         diagnostics.left_bgr = left_bgr
         diagnostics.right_bgr = right_bgr
         diagnostics.frame_id = decoded.frame_id
+        diagnostics.frame_dt_s = self._estimate_frame_dt_s(decoded)
         self._apply_segmenter_snapshot(diagnostics)
 
         rgb = cv2.cvtColor(left_bgr, cv2.COLOR_BGR2RGB)
@@ -683,6 +688,18 @@ class QuestPosePipeline:
             diagnostics.depth_median_in_mask = float(q50)
             diagnostics.depth_iqr_in_mask = float(q75 - q25)
 
+    def _estimate_frame_dt_s(self, decoded: DecodedQuestStereoFrame) -> float:
+        """估计当前处理帧与上一处理帧之间的时间间隔，供 jump_score 自适应阈值使用。"""
+
+        state = self.tracking_state
+        current_ms = float(decoded.sender_mono_ms) if decoded.sender_mono_ms is not None else time.perf_counter() * 1000.0
+        if state.last_sender_mono_ms is None:
+            state.last_sender_mono_ms = current_ms
+            return 1.0 / 30.0
+        dt_s = max((current_ms - state.last_sender_mono_ms) / 1000.0, 1e-3)
+        state.last_sender_mono_ms = current_ms
+        return dt_s
+
     def _try_recover_from_tracked_mask_loss(
         self,
         left_bgr: np.ndarray,
@@ -773,8 +790,9 @@ class QuestPosePipeline:
             LOGGER.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
             state.has_registered = False
             state.tracked_mask_lost_count = 0
-            state.low_consistency_count = 0
+            state.low_reprojection_count = 0
             state.frames_since_register = 0
+            self.confidence_accumulator.reset()
             self.estimator.reset()
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
@@ -785,21 +803,22 @@ class QuestPosePipeline:
                 return pose, "TRACK_ACCEPTED_JUMP", "TRACK_ACCEPTED_JUMP"
             return None, "NONE", "TRACK_REJECT"
 
-        consistency = self._check_track_consistency(pose, depth, mask, diagnostics)
-        if consistency is not None and consistency < self.consistency_re_register_threshold:
-            state.low_consistency_count += 1
-            if self.consistency_mode == "re_register" and state.low_consistency_count >= self.consistency_min_track_frames:
+        reprojection = self._check_render_quality(pose, rgb, depth, mask, diagnostics)
+        if reprojection is not None and reprojection < self.render_quality_re_register_threshold:
+            state.low_reprojection_count += 1
+            if self.render_quality_mode == "re_register" and state.low_reprojection_count >= self.render_quality_min_track_frames:
                 state.track_reject_count += 1
                 LOGGER.warning(
-                    "FoundationPose track 一致性过低，尝试 re-register。consistency=%.3f low_count=%d reject_count=%d",
-                    consistency,
-                    state.low_consistency_count,
+                    "FoundationPose track 重投影分过低，尝试 re-register。reprojection=%.3f low_count=%d reject_count=%d",
+                    reprojection,
+                    state.low_reprojection_count,
                     state.track_reject_count,
                 )
                 state.has_registered = False
                 state.tracked_mask_lost_count = 0
-                state.low_consistency_count = 0
+                state.low_reprojection_count = 0
                 state.frames_since_register = 0
+                self.confidence_accumulator.reset()
                 self.estimator.reset()
                 if (
                     state.track_reject_count < self.max_consecutive_track_rejects
@@ -808,9 +827,9 @@ class QuestPosePipeline:
                     and np.count_nonzero(mask) > 0
                 ):
                     return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-                return None, "NONE", "LOW_CONSISTENCY"
+                return None, "NONE", "LOW_REPROJECTION"
         else:
-            state.low_consistency_count = 0
+            state.low_reprojection_count = 0
 
         state.track_reject_count = 0
         if mask is not None and np.count_nonzero(mask) > 0:
@@ -836,8 +855,9 @@ class QuestPosePipeline:
         self.tracking_state.last_pose = pose
         self.tracking_state.track_reject_count = 0
         self.tracking_state.tracked_mask_lost_count = 0
-        self.tracking_state.low_consistency_count = 0
+        self.tracking_state.low_reprojection_count = 0
         self.tracking_state.frames_since_register = 0
+        self.confidence_accumulator.reset()
         self._show_register_mask_snapshot(mask, phase)
         self._initialize_cutie(rgb, mask, timing)
         return pose, pose_source, phase
@@ -888,55 +908,63 @@ class QuestPosePipeline:
         t_delta, r_delta = self._track_deltas(pose, self.tracking_state.last_pose)
         return t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg
 
-    def _check_track_consistency(
+    def _check_render_quality(
         self,
         pose: np.ndarray,
+        rgb: np.ndarray,
         depth: np.ndarray,
         mask: np.ndarray | None,
         diagnostics: FrameDiagnostics,
     ) -> float | None:
-        """对 TRACK pose 做渲染一致性检测；无效条件只返回 None，不触发重注册。"""
+        """对 TRACK pose 做渲染质量检测；仅返回颜色重投影分用于软重注册阈值。"""
 
-        checker = self.consistency_checker
+        checker = self.render_quality_checker
         state = self.tracking_state
-        diagnostics.consistency_expected = False
+        diagnostics.render_quality_expected = False
         if checker is None:
-            diagnostics.consistency_status = "disabled"
+            diagnostics.render_quality_status = "disabled"
             return None
         if self.cam_k is None:
-            diagnostics.consistency_status = "no_k"
+            diagnostics.render_quality_status = "no_k"
             return None
-        if state.frames_since_register < self.consistency_warmup_frames:
-            diagnostics.consistency_status = "warmup"
+        if state.frames_since_register < self.render_quality_warmup_frames:
+            diagnostics.render_quality_status = "warmup"
             return None
         if mask is None or np.count_nonzero(mask) <= 0:
-            diagnostics.consistency_status = "no_mask"
-            return None
-        if diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
-            diagnostics.consistency_status = "depth_low"
+            diagnostics.render_quality_status = "no_mask"
             return None
 
-        diagnostics.consistency_expected = True
-        diagnostics.consistency_status = "rendering"
+        diagnostics.render_quality_expected = True
+        diagnostics.render_quality_status = "rendering"
         t0 = time.perf_counter()
-        result = checker.evaluate(self.estimator, pose, mask, depth)
-        diagnostics.consistency_ms = (time.perf_counter() - t0) * 1000.0
-        diagnostics.track_consistency = result.consistency if result.valid else -1.0
-        diagnostics.consistency_status = result.status
-        diagnostics.consistency_mask_iou = result.mask_iou
-        diagnostics.consistency_depth_inlier = result.depth_inlier_ratio
-        diagnostics.consistency_depth_alignment = result.depth_alignment_score
-        diagnostics.consistency_depth_residual_m = result.depth_median_residual_m
-        diagnostics.consistency_render_visible_ratio = result.render_visible_ratio
-        diagnostics.consistency_observed_visible_ratio = result.observed_visible_ratio
-        diagnostics.consistency_render_area_px = result.render_area_px
-        diagnostics.consistency_render_mask = result.render_mask
-        diagnostics.consistency_observed_mask = result.observed_mask
-        diagnostics.consistency_render_depth = result.render_depth_m
-        diagnostics.consistency_observed_depth = result.observed_depth_m
-        if not result.valid:
+        result = checker.evaluate(
+            self.estimator,
+            pose,
+            rgb,
+            mask,
+            depth,
+            depth_coverage=diagnostics.depth_valid_in_mask,
+        )
+        diagnostics.render_quality_ms = (time.perf_counter() - t0) * 1000.0
+        diagnostics.track_reprojection = result.reprojection_score if result.reprojection_valid else -1.0
+        diagnostics.render_quality_status = result.status
+        diagnostics.render_quality_mask_iou = result.mask_iou
+        diagnostics.render_quality_depth_inlier = result.depth_inlier_ratio
+        diagnostics.render_quality_depth_alignment = result.depth_alignment_score
+        diagnostics.render_quality_area_ratio_score = result.area_ratio_score
+        diagnostics.render_quality_depth_residual_m = result.depth_median_residual_m
+        diagnostics.render_quality_render_visible_ratio = result.render_visible_ratio
+        diagnostics.render_quality_observed_visible_ratio = result.observed_visible_ratio
+        diagnostics.render_quality_render_area_px = result.render_area_px
+        diagnostics.render_quality_render_mask = result.render_mask
+        diagnostics.render_quality_observed_mask = result.observed_mask
+        diagnostics.render_quality_render_depth = result.render_depth_m
+        diagnostics.render_quality_observed_depth = result.observed_depth_m
+        diagnostics.render_quality_render_rgb = result.render_rgb
+        diagnostics.render_quality_observed_rgb = result.observed_rgb
+        if not result.reprojection_valid:
             return None
-        return result.consistency
+        return result.reprojection_score
 
     @staticmethod
     def _track_deltas(pose: np.ndarray, previous_pose: np.ndarray | None) -> tuple[float, float]:
@@ -958,7 +986,7 @@ class QuestPosePipeline:
     def _rotation_angle_from_trace_deg(trace: float) -> float:
         """由相对旋转矩阵 trace 计算角度差。"""
 
-        cos_theta = max(-1.0, min(1.0, (trace - 1.0) * 0.5))
+        cos_theta = clamp((trace - 1.0) * 0.5, -1.0, 1.0)
         return math.degrees(math.acos(cos_theta))
 
     def _make_observation(
@@ -991,26 +1019,28 @@ class QuestPosePipeline:
             depth_valid_in_mask=diagnostics.depth_valid_in_mask,
             depth_median_in_mask=diagnostics.depth_median_in_mask,
             depth_iqr_in_mask=diagnostics.depth_iqr_in_mask,
-            depth_quality_score=diagnostics.depth_quality_score,
             score_phase=diagnostics.score_phase,
-            score_consistency=diagnostics.score_consistency,
+            score_reprojection=diagnostics.score_reprojection,
             score_depth=diagnostics.score_depth,
             score_jump=diagnostics.score_jump,
             score_mask=diagnostics.score_mask,
             score_reject=diagnostics.score_reject,
+            score_confidence=diagnostics.score_confidence,
             mask_area_ratio=diagnostics.mask_area_ratio,
-            consistency_expected=diagnostics.consistency_expected,
-            consistency_status=diagnostics.consistency_status,
-            track_consistency=diagnostics.track_consistency,
-            consistency_mask_iou=diagnostics.consistency_mask_iou,
-            consistency_depth_inlier=diagnostics.consistency_depth_inlier,
-            consistency_depth_alignment=diagnostics.consistency_depth_alignment,
-            consistency_render_visible_ratio=diagnostics.consistency_render_visible_ratio,
-            consistency_observed_visible_ratio=diagnostics.consistency_observed_visible_ratio,
-            consistency_depth_residual_m=diagnostics.consistency_depth_residual_m,
-            consistency_render_area_px=diagnostics.consistency_render_area_px,
+            render_quality_expected=diagnostics.render_quality_expected,
+            render_quality_status=diagnostics.render_quality_status,
+            track_reprojection=diagnostics.track_reprojection,
+            render_quality_mask_iou=diagnostics.render_quality_mask_iou,
+            render_quality_depth_inlier=diagnostics.render_quality_depth_inlier,
+            render_quality_depth_alignment=diagnostics.render_quality_depth_alignment,
+            render_quality_area_ratio_score=diagnostics.render_quality_area_ratio_score,
+            render_quality_render_visible_ratio=diagnostics.render_quality_render_visible_ratio,
+            render_quality_observed_visible_ratio=diagnostics.render_quality_observed_visible_ratio,
+            render_quality_depth_residual_m=diagnostics.render_quality_depth_residual_m,
+            render_quality_render_area_px=diagnostics.render_quality_render_area_px,
             last_translation_delta_m=diagnostics.last_translation_delta_m,
             last_rotation_delta_deg=diagnostics.last_rotation_delta_deg,
+            frame_dt_s=diagnostics.frame_dt_s,
             track_reject_count=self.tracking_state.track_reject_count,
             yolo_ms=timing.yolo_ms,
             depth_ms=timing.depth_ms,
@@ -1019,23 +1049,23 @@ class QuestPosePipeline:
             total_ms=timing.total_ms,
             failure_reason=failure_reason,
         )
-        breakdown = score_observation_breakdown(observation)
-        diagnostics.depth_quality_score = breakdown.depth_score
+        breakdown = score_observation_breakdown(observation, confidence_accumulator=self.confidence_accumulator)
         diagnostics.score_phase = breakdown.phase_score
-        diagnostics.score_consistency = breakdown.consistency_score
+        diagnostics.score_reprojection = breakdown.reprojection_score
         diagnostics.score_depth = breakdown.depth_score
         diagnostics.score_jump = breakdown.jump_score
         diagnostics.score_mask = breakdown.mask_score
         diagnostics.score_reject = breakdown.reject_score
+        diagnostics.score_confidence = breakdown.confidence_score
         return replace(
             observation,
-            depth_quality_score=breakdown.depth_score,
             score_phase=breakdown.phase_score,
-            score_consistency=breakdown.consistency_score,
+            score_reprojection=breakdown.reprojection_score,
             score_depth=breakdown.depth_score,
             score_jump=breakdown.jump_score,
             score_mask=breakdown.mask_score,
             score_reject=breakdown.reject_score,
+            score_confidence=breakdown.confidence_score,
             reliability_score=breakdown.final_score,
             reliability_flags=breakdown.flags,
         )
@@ -1066,13 +1096,13 @@ class QuestPosePipeline:
         if self.log_stats_interval <= 0 or self._processed_count % self.log_stats_interval != 0:
             return
         LOGGER.info(
-            "pose frame=%s phase=%s has_pose=%s det=%d depth(mask)=%.3f depthScore=%.2f mask=%.3f score=%.2f fps=%.1f total=%.1fms",
+            "pose frame=%s phase=%s has_pose=%s det=%d depth(mask)=%.3f depthAlign=%.2f mask=%.3f score=%.2f fps=%.1f total=%.1fms",
             observation.frame_id,
             observation.phase,
             observation.has_pose,
             diagnostics.det_count,
             diagnostics.depth_valid_in_mask,
-            observation.depth_quality_score,
+            observation.score_depth,
             diagnostics.mask_area_ratio,
             observation.reliability_score,
             observation.fps,

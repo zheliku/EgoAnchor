@@ -40,7 +40,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 - Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
 - Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.consistency]` 渲染-重投影一致性检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 渲染 depth/mask，与 Cutie mask 和 FFS depth 比较，写入 `track_consistency`、IoU、depth inlier、depth alignment、render/observed coverage、`consistency_ms` 等 JSONL 字段；`PoseResult` 追加携带六个评分子分和一致性细项，Unity 可用于 Inspector/HUD/policy 调参。
+- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.render_quality]` 渲染质量检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 一次渲染 color/depth/mask，再由 `ReprojectionChecker` 只在 Cutie mask 与投影 mask 交集区域计算 LAB 颜色重投影分，由 `DepthAlignmentChecker` 只在同一交集区域计算渲染深度与 FFS 深度对齐分；Cutie mask 面积 / 渲染投影面积作为独立 `score_mask` 连续信号，写入 `render_quality_area_ratio_score`、`track_reprojection`、IoU、depth inlier、depth alignment、render/observed coverage、`render_quality_ms` 等 JSONL 字段；`PoseResult` 追加携带 `phase/reprojection/depth/jump/mask/reject/confidence` 评分子分和渲染质量细项，Unity 可用于 Inspector/HUD/policy 调参。
 - Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
@@ -91,9 +91,9 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - 目标物体覆盖配置：`EgoAnchor_Python/src/egoanchor/config/objects.toml`，入口通过 `--object blue_mouse` / `pink_mouse` / `earphone` / `controller_right` / `controller_left` 选择；显式 `--config` 仍可在对象配置之后做临时覆盖。
 - 加载器：`EgoAnchor_Python/src/egoanchor/config/runtime_config.py`。
 - 每个 `.toml` 参数必须在同一行末尾写中文注释；新增参数时同步默认值、加载点、使用点和测试。
-- 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`reliability.consistency`、`module.segmenter/yoloe/sam3/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
+- 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`reliability.render_quality`、`module.segmenter/yoloe/sam3/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
 - `module.segmenter.type` 支持 `yoloe26` 和 `sam3`；默认必须保持 `yoloe26`，耳机盒等覆盖配置可显式切到 `sam3`。`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold` 是 YOLOE/SAM3 共用阈值；后端专属配置只保留权重、输入尺寸、设备、异步等参数。SAM3 本地仓库和 checkpoint 默认位于 `EgoAnchor_Python/sam3` 与 `sam3/assets/sam3_ckpt/sam3.pt`；`module.sam3.async_segmentation=true` 只异步初始分割，不把 FoundationPose/Cutie 移出 `TrackingRuntime` owner 线程。
-- `reliability.consistency.enabled=true` 是默认值；真机联调已验证可默认采集一致性信号，但仍保持 `mode="score_only"`，只有确认误报率后再切 `mode="re_register"`。无效信号（warmup、无 Cutie mask、depth in mask 过低、渲染面积太小或 K 缺失）只写 `no_consistency_signal`，不得触发重注册。
+- `reliability.render_quality.enabled=true` 是默认值；真机联调已验证可默认采集渲染质量信号，但仍保持 `mode="score_only"`，只有确认误报率后再切 `mode="re_register"`。无效重投影信号（warmup、无 Cutie mask、渲染面积太小或 K 缺失）只写 `no_reprojection_signal` 或对应 status，不得触发重注册；depth 覆盖不足只让 `score_depth=0.5` 中性降级。
 - `runtime.logging.eval_session_enabled=true` 时，Python 启动会创建 `data/eval/<yyyyMMdd_HHmmss_object_id>/python_session.json`，runtime JSONL 默认写入同目录 `<session_id>_python_runtime.jsonl`；Unity eval 录制优先复用这个目录，不再手填 `pythonLogFilename`。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
@@ -114,7 +114,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 |---|---|---|---|---|
 | `egoanchor.v1.quest.stereo` | Unity -> Python | ZMQ | `QuestStereoFrame` | 高频双目 JPEG，latest-only |
 | `egoanchor.v1.quest.camera_info` | Unity -> Python | ZMQ | `QuestCameraInfo` | 低频标定，独立 latest cache |
-| `egoanchor.v1.pose.result` | Python -> Unity | NATS | `PoseResult` | 小型 pose 结果，latest-only；携带总分、flags、六个评分子分和渲染一致性细项 |
+| `egoanchor.v1.pose.result` | Python -> Unity | NATS | `PoseResult` | 小型 pose 结果，latest-only；携带总分、flags、七个评分子分和渲染质量细项 |
 | `egoanchor.v1.anchor.status` | Python -> Unity | NATS | `AnchorStatusEvent` | 状态事件流，reset/reacquire/pause/resume/state/error 闭环 |
 | `egoanchor.v1.server.heartbeat` | Python -> Unity | NATS | `ServerHeartbeat` | 低频服务与输入健康状态，latest-only |
 | `egoanchor.v1.cmd.anchor.reset` | Unity -> Python | NATS request/reply | `ResetTrackingRequest -> CommandAck` | ack 只表示接受/拒绝 |
@@ -136,17 +136,19 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store；内部包含 topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
 - `src/egoanchor/runtime/commands.py`：命令模型、命令队列、request_id TTL 幂等、runtime 内解释命令，以及在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue command 的 pump。
 - `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat，并把 command/logging 细节委托给 runtime helper。
-- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射；PoseResult 必须透传 `score_phase/score_consistency/score_depth/score_jump/score_mask/score_reject` 与渲染一致性细项。
+- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射；PoseResult 必须透传 `score_phase/score_reprojection/score_depth/score_jump/score_mask/score_reject/score_confidence` 与渲染质量细项，其中 `score_reprojection` 当前语义是交集区域颜色重投影分。
 - `src/egoanchor/runtime/eval_session.py`：Python 先启动时创建共享评估 session 目录和 `python_session.json`，供 Unity Start/F7 自动复用。
 - `src/egoanchor/runtime/runtime_log_writer.py`：集中写入 PoseResult/status/heartbeat/command JSONL 结构化事件；eval session 启用时写入 `data/eval/<session_id>/<session_id>_python_runtime.jsonl`，否则回退到 `runtime_logs`。
 - `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。SAM3 异步模式只把分割模型放入 latest-only worker；worker 输出携带原始 decoded frame/left/right 图，主 pipeline 线程消费后再做 depth/register。
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
 - `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
-- `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose 适配器；公开 `render_depth_mask(...)` facade 给 reliability 层使用，reliability 代码不得直接访问第三方 estimator 内部 `glctx/mesh_tensors`。
-- `src/egoanchor/reliability/render_consistency.py`：渲染-重投影一致性检测器；纯数学 `_score_from_maps` 可无 GPU 单测。评分不能只靠 mask IoU，`consistency_depth_alignment` 必须参与上限，避免错误 pose 的 2D 投影刚好贴合可见 mask 时得到高分；`render_visible_ratio` 和 `observed_visible_ratio` 用于区分遮挡、可见区域过小和 pose 未覆盖可见物体。
-- `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，消费渲染一致性、depth 质量、相邻 pose jump、mask 面积和 track reject，输出 `reliability_score`、flags 和 `phase/consistency/depth/jump/mask/reject` 六个子分。
+- `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose 适配器；公开 `render_color_depth_mask(...)` facade 给 reliability 层使用，reliability 代码不得直接访问第三方 estimator 内部 `glctx/mesh_tensors`。
+- `src/egoanchor/reliability/reprojection.py`：重投影评分器；只消费渲染 color/mask 与观测 RGB/mask，重投影分只来自交集区域 LAB 颜色相似度，IoU、覆盖率和面积比仅作为诊断与 `score_mask` 来源。
+- `src/egoanchor/reliability/depth_alignment.py`：深度对齐评分器；只消费渲染 depth、观测 depth 和交集 mask，按物体距离自适应 depth inlier 阈值，覆盖不足时给中性分。
+- `src/egoanchor/reliability/render_quality.py`：一次渲染后协调 `ReprojectionChecker` 与 `DepthAlignmentChecker`，保持性能不变但拆清重投影和 depth 职责。
+- `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，采用 `Gate(phase/reject) × Quality(reprojection/depth/mask/jump 加权和) × Confidence`，输出 `reliability_score`、flags 和 `phase/reprojection/depth/jump/mask/reject/confidence` 子分。
 - `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard 等诊断工具；窗口创建辅助由 app 层就近维护。
-- `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/consistency 直方图、policy action/reason 分布、spike 漏检和 consistency 开销统计；不导入 runtime 或模型。
+- `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/track_reprojection 直方图、policy action/reason 分布、spike 漏检和 render_quality 开销统计；不导入 runtime 或模型。
 - `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
 
 ### Unity
@@ -198,7 +200,7 @@ Unity 命名/目录规则：
 
 - Python OpenCV 热键：`1/2/3/4` 切 stage；`r` reset；`q`/`ESC` 退出。
 - 调试顺序：stage 1 看输入 -> stage 2 看 mask -> stage 3 看 depth/mask 对齐 -> stage 4 看 register/track。
-- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、`depth_quality_score`/HUD `depthScore`、`score_phase/score_consistency/score_depth/score_jump/score_mask/score_reject`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`track_consistency`、`consistency_mask_iou`、`consistency_depth_inlier`、`consistency_depth_alignment`、`consistency_render_visible_ratio`、`consistency_observed_visible_ratio`、`consistency_depth_residual_m`、`consistency_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
+- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、`depth_quality_score`/HUD `depthAlign`、`score_phase/score_reprojection/score_depth/score_jump/score_mask/score_reject/score_confidence`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`track_reprojection`、`render_quality_area_ratio_score`、`render_quality_mask_iou`、`render_quality_depth_inlier`、`render_quality_depth_alignment`、`render_quality_render_visible_ratio`、`render_quality_observed_visible_ratio`、`render_quality_depth_residual_m`、`render_quality_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`score_reprojection` 和 `track_reprojection` 当前语义是交集区域颜色重投影分，`score_mask` 当前优先来自 Cutie mask 面积 / 渲染投影面积。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
 - stereo 收不到但 camera_info 能收到：查 Unity stereo source、左右 camera `IsPlaying`、ZMQ publisher、Python 接收 HWM。
 - camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
@@ -208,8 +210,8 @@ Unity 命名/目录规则：
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
 - track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
-- `track_consistency=-1`：表示本帧无有效一致性信号，不是坏 pose；查是否启用 `reliability.consistency.enabled`、是否在 TRACK 且 Cutie mask 非空、`depth_valid_in_mask` 是否足够、warmup 是否结束、K 是否已更新。
-- `consistency_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask/depth 与观测 mask/depth 方向是否一致；再看 `depthAlign/depthRes` 判断是否是深度不对，或看 `renderCov/obsCov` 判断是否是遮挡/可见区域过小；最后才考虑调 `downscale`、`depth_inlier_thresh_m` 或阈值。
+- `track_reprojection=-1`：表示本帧无有效重投影信号，不是坏 pose；查是否启用 `reliability.render_quality.enabled`、是否在 TRACK 且 Cutie mask 非空、渲染面积是否过小、warmup 是否结束、K 是否已更新。
+- `reprojection_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask 与观测 mask 方向是否一致，再看 LAB 颜色是否因纹理/光照差异过大；`depth_alignment_low` 则看 `depthAlign/depthRes` 判断是否是深度不对；遮挡或可见面积过小优先看 `render_quality_area_ratio_score`/`score_mask`，`renderCov/obsCov` 只作为投影与观测 mask 相对位置诊断；最后才考虑调 `downscale`、`depth_distance_ratio` 或阈值。
 - NATS 命令无 ack：查 `nats-server` 是否启动、Unity/Python NATS URL 是否指向同一地址、防火墙 4222、Python `network.message_plane.enabled`。
 
 ## 后续实现规划

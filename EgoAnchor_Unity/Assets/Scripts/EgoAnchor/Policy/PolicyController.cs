@@ -79,7 +79,7 @@ namespace EgoAnchor.Policy
                 return HandleMissing(observation);
             }
 
-            if (IsRelocalizationObservation(observation) && observation.ReliabilityScore >= reliabilityGate.MinHoldScore)
+            if (observation.IsRelocalization && observation.ReliabilityScore >= reliabilityGate.MinHoldScore)
             {
                 return AcceptStablePose(observation, "relocalize_accept");
             }
@@ -225,19 +225,6 @@ namespace EgoAnchor.Policy
             predictor.Observe(stablePose, observation.SampleTimeSeconds);
             AnchorState state = stateMachine.OnReliablePose(observation.SampleTimeSeconds, reason);
             return new AnchorPolicyDecision(AnchorPolicyAction.Accept, state, true, stablePose, reason);
-        }
-
-        /// <summary>
-        /// 判断当前观测是否来自 Python 重新注册路径；该类 pose 允许跨越旧 stable pose 的大位移。
-        /// </summary>
-        /// <param name="observation">Unity anchor policy 观测。</param>
-        /// <returns>是否为 register/re-register 观测。</returns>
-        private static bool IsRelocalizationObservation(AnchorObservation observation)
-        {
-            string source = observation.PoseSource ?? string.Empty;
-            string phase = observation.Phase ?? string.Empty;
-            return source.IndexOf("REGISTER", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || phase.IndexOf("REGISTER", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>

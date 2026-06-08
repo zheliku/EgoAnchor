@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .common import slerp_lerp_resample
+from .common import is_pose_value, slerp_lerp_resample
 
 
 SUMMARY_COLUMNS = ["condition", "label", "n", "lag_ms", "correlation", "insufficient_data"]
@@ -23,10 +23,10 @@ def compute_lag(output: pd.DataFrame, *, sample_hz: float = 30.0, max_lag_ms: fl
         usable = group[
             group["valid"].fillna(False).astype(bool)
             & group["has_stable"].fillna(False).astype(bool)
-            & group["gt_pos"].map(lambda value: value is not None)
-            & group["gt_rot"].map(lambda value: value is not None)
-            & group["stable_pos"].map(lambda value: value is not None)
-            & group["stable_rot"].map(lambda value: value is not None)
+            & group["gt_pos"].map(is_pose_value)
+            & group["gt_rot"].map(is_pose_value)
+            & group["stable_pos"].map(is_pose_value)
+            & group["stable_rot"].map(is_pose_value)
         ].sort_values("render_mono_ms")
         if len(usable) < 4:
             rows.append(_insufficient(condition, label, len(usable)))

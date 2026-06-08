@@ -22,7 +22,7 @@ class PipelineTrackingStateTest(unittest.TestCase):
             last_pose=np.eye(4),
             track_reject_count=2,
             tracked_mask_lost_count=3,
-            low_consistency_count=2,
+            low_reprojection_count=2,
             frames_since_register=5,
         )
 
@@ -34,7 +34,7 @@ class PipelineTrackingStateTest(unittest.TestCase):
         self.assertIsNone(state.last_pose)
         self.assertEqual(state.track_reject_count, 0)
         self.assertEqual(state.tracked_mask_lost_count, 0)
-        self.assertEqual(state.low_consistency_count, 0)
+        self.assertEqual(state.low_reprojection_count, 0)
         self.assertEqual(state.frames_since_register, 0)
 
 

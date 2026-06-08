@@ -5,8 +5,7 @@ namespace EgoAnchor.Policy
     /// <summary>
     /// 根据 Python perception reliability score 和 flags 判断当前 pose 是否可用于 anchor 更新。
     ///
-    /// 本类不重新运行视觉算法，只消费 PoseResult 中已经携带的诊断量。旧协议没有
-    /// reliability_score 时，PoseToAnchorRuntime 会传入默认 1.0，使 gate 保持向后兼容。
+    /// 本类不重新运行视觉算法，只消费 PoseResult 中已经携带的诊断量。
     /// </summary>
     public sealed class ReliabilityGate
     {

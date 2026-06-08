@@ -5,10 +5,23 @@ from __future__ import annotations
 import math
 
 
+def clamp(value: float, lower: float, upper: float) -> float:
+    """把数值限制到给定闭区间；NaN 退化为下界。"""
+
+    lower_bound = float(lower)
+    upper_bound = float(upper)
+    if lower_bound > upper_bound:
+        lower_bound, upper_bound = upper_bound, lower_bound
+    number = float(value)
+    if math.isnan(number):
+        return lower_bound
+    return float(max(lower_bound, min(upper_bound, number)))
+
+
 def clamp01(value: float) -> float:
     """限制数值到闭区间 0..1。"""
 
-    return float(max(0.0, min(1.0, value)))
+    return clamp(value, 0.0, 1.0)
 
 
 def rotation_matrix_to_quaternion(matrix: tuple[float, ...]) -> tuple[float, float, float, float]:
@@ -46,4 +59,4 @@ def rotation_matrix_to_quaternion(matrix: tuple[float, ...]) -> tuple[float, flo
     return qx / norm, qy / norm, qz / norm, qw / norm
 
 
-__all__ = ["clamp01", "rotation_matrix_to_quaternion"]
+__all__ = ["clamp", "clamp01", "rotation_matrix_to_quaternion"]

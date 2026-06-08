@@ -101,14 +101,11 @@ class FrameDiagnostics:
     depth_iqr_in_mask: float = 0.0
     """mask 内深度 IQR。"""
 
-    depth_quality_score: float = 0.0
-    """仅由 depth 有效率估计的子分，范围 0..1，用于 HUD/日志诊断。"""
-
     score_phase: float = 0.0
     """reliability 最终分中的 phase 子分。"""
 
-    score_consistency: float = 0.0
-    """reliability 最终分中的渲染一致性子分。"""
+    score_reprojection: float = 0.0
+    """reliability 最终分中的颜色重投影子分；协议字段名为 score_reprojection。"""
 
     score_depth: float = 0.0
     """reliability 最终分中的 depth 子分。"""
@@ -122,56 +119,71 @@ class FrameDiagnostics:
     score_reject: float = 0.0
     """reliability 最终分中的 track reject 子分。"""
 
-    track_consistency: float = -1.0
-    """渲染-重投影一致性分，0..1；-1 表示本帧无信号。"""
+    score_confidence: float = 0.0
+    """reliability 最终分中的连续高质量跟踪置信子分。"""
 
-    consistency_expected: bool = False
-    """本帧是否已经满足一致性检测前置条件；为 true 但无信号时应降低可靠性。"""
+    track_reprojection: float = -1.0
+    """TRACK 阶段颜色重投影分，0..1；-1 表示本帧无有效重投影信号。"""
 
-    consistency_status: str = "disabled"
-    """渲染一致性检测状态，用于解释 score 窗口黑屏或无信号原因。"""
+    render_quality_expected: bool = False
+    """本帧是否已经满足渲染质量检测前置条件；为 true 但无信号时应降低可靠性。"""
 
-    consistency_mask_iou: float = 0.0
+    render_quality_status: str = "disabled"
+    """渲染质量检测状态，用于解释 score 窗口黑屏或无信号原因。"""
+
+    render_quality_mask_iou: float = 0.0
     """渲染 mask 与观测 mask 的 IoU。"""
 
-    consistency_depth_inlier: float = 0.0
+    render_quality_depth_inlier: float = 0.0
     """渲染深度与观测深度在交集区域的 inlier 比例。"""
 
-    consistency_depth_alignment: float = 0.0
+    render_quality_depth_alignment: float = 0.0
     """由深度 inlier 和中位残差共同得到的连续深度对齐分。"""
 
-    consistency_render_visible_ratio: float = 0.0
+    render_quality_area_ratio_score: float = 0.0
+    """观测 Cutie mask 面积 / 渲染投影面积的比例分，低值表示遮挡或投影面积过大。"""
+
+    render_quality_render_visible_ratio: float = 0.0
     """渲染前景中被观测 mask 覆盖的比例，遮挡时会下降。"""
 
-    consistency_observed_visible_ratio: float = 0.0
+    render_quality_observed_visible_ratio: float = 0.0
     """观测 mask 中被渲染前景解释的比例，低值表示 pose 未覆盖可见区域。"""
 
-    consistency_render_area_px: int = 0
-    """一致性检测下采样图上的渲染前景像素数。"""
+    render_quality_render_area_px: int = 0
+    """渲染质量检测下采样图上的渲染前景像素数。"""
 
-    consistency_depth_residual_m: float = 0.0
+    render_quality_depth_residual_m: float = 0.0
     """渲染深度与观测深度的中位残差，单位米。"""
 
-    consistency_ms: float = 0.0
-    """渲染一致性检测耗时，单位毫秒。"""
+    render_quality_ms: float = 0.0
+    """渲染质量检测耗时，单位毫秒。"""
 
-    consistency_render_mask: np.ndarray | None = None
-    """一致性检测下采样后的渲染 mask，用于独立 debug 窗口。"""
+    render_quality_render_mask: np.ndarray | None = None
+    """渲染质量检测下采样后的渲染 mask，用于独立 debug 窗口。"""
 
-    consistency_observed_mask: np.ndarray | None = None
-    """一致性检测下采样后的观测 mask，用于独立 debug 窗口。"""
+    render_quality_observed_mask: np.ndarray | None = None
+    """渲染质量检测下采样后的观测 mask，用于独立 debug 窗口。"""
 
-    consistency_render_depth: np.ndarray | None = None
-    """一致性检测下采样后的渲染 depth，用于独立 debug 窗口。"""
+    render_quality_render_depth: np.ndarray | None = None
+    """渲染质量检测下采样后的渲染 depth，用于独立 debug 窗口。"""
 
-    consistency_observed_depth: np.ndarray | None = None
-    """一致性检测下采样后的观测 depth，用于独立 debug 窗口。"""
+    render_quality_observed_depth: np.ndarray | None = None
+    """渲染质量检测下采样后的观测 depth，用于独立 debug 窗口。"""
+
+    render_quality_render_rgb: np.ndarray | None = None
+    """渲染质量检测下采样后的渲染 RGB，用于独立 debug 窗口。"""
+
+    render_quality_observed_rgb: np.ndarray | None = None
+    """渲染质量检测下采样后的观测 RGB，用于独立 debug 窗口。"""
 
     last_translation_delta_m: float = 0.0
     """上一接受 pose 到当前 pose 的平移增量，单位米。"""
 
     last_rotation_delta_deg: float = 0.0
     """上一接受 pose 到当前 pose 的旋转增量，单位度。"""
+
+    frame_dt_s: float = 0.0
+    """当前处理 pose 与上一处理 pose 的帧间隔，单位秒。"""
 
     fps: float = 0.0
     """pipeline FPS EMA。"""
@@ -240,11 +252,14 @@ class PipelineTrackingState:
     tracked_mask_lost_count: int = 0
     """已注册阶段连续缺失有效 Cutie mask 的帧数。"""
 
-    low_consistency_count: int = 0
-    """连续低渲染一致性帧数；仅 re_register 模式用于触发软 track-loss。"""
+    low_reprojection_count: int = 0
+    """连续低颜色重投影分帧数；仅 re_register 模式用于触发软 track-loss。"""
 
     frames_since_register: int = 0
     """最近一次 register/re-register 后已经处理的 track 帧数，用于 warmup。"""
+
+    last_sender_mono_ms: float | None = None
+    """上一条进入 pose 评分的 Unity 发送端时间戳，单位毫秒。"""
 
     def bump_generation(self) -> None:
         """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""
@@ -255,5 +270,6 @@ class PipelineTrackingState:
         self.last_pose = None
         self.track_reject_count = 0
         self.tracked_mask_lost_count = 0
-        self.low_consistency_count = 0
+        self.low_reprojection_count = 0
         self.frames_since_register = 0
+        self.last_sender_mono_ms = None

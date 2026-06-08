@@ -1,4 +1,4 @@
-"""可靠性与一致性轻量分布诊断。"""
+"""可靠性与渲染质量轻量分布诊断。"""
 
 from __future__ import annotations
 
@@ -8,19 +8,21 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .stats import finite_percentile
+
 
 @dataclass(frozen=True)
 class ReliabilityDiagnosticsResult:
     """可靠性诊断输出表集合。"""
 
     summary: pd.DataFrame
-    """单行汇总，包括 score 展开程度、一致性有效帧数和一致性耗时。"""
+    """单行汇总，包括 score 展开程度、重投影有效帧数和渲染质量耗时。"""
 
     score_histogram: pd.DataFrame
     """`pose_score` 的 0..1 直方图。"""
 
-    consistency_histogram: pd.DataFrame
-    """有效 `track_consistency` 的 0..1 直方图。"""
+    track_reprojection_histogram: pd.DataFrame
+    """有效 `track_reprojection` 的 0..1 直方图。"""
 
     policy_distribution: pd.DataFrame
     """Unity policy action/reason 分布计数。"""
@@ -36,19 +38,19 @@ def compute_reliability_diagnostics(
     """计算不依赖 GT 标定的 reliability 轻量诊断。
 
     该函数只消费离线 DataFrame，不导入 runtime 或模型。它回答两个问题：
-    score 是否仍坍缩、一致性检测开销是否可接受，以及 Unity policy 是否真的在
+    score 是否仍坍缩、渲染质量检测开销是否可接受，以及 Unity policy 是否真的在
     产生 reject/hold/coast 等动作。
     """
 
     pose_frame = pose.copy() if pose is not None else pd.DataFrame()
     scores = _numeric_series(pose_frame, "pose_score")
-    consistency = _numeric_series(pose_frame, "track_consistency")
-    valid_consistency = consistency[consistency >= 0.0]
-    consistency_ms = _numeric_series(pose_frame, "consistency_ms")
-    if not valid_consistency.empty and not consistency_ms.empty:
-        consistency_ms = consistency_ms.loc[valid_consistency.index]
+    track_reprojection = _numeric_series(pose_frame, "track_reprojection")
+    valid_track_reprojection = track_reprojection[track_reprojection >= 0.0]
+    render_quality_ms = _numeric_series(pose_frame, "render_quality_ms")
+    if not valid_track_reprojection.empty and not render_quality_ms.empty:
+        render_quality_ms = render_quality_ms.loc[valid_track_reprojection.index]
     else:
-        consistency_ms = pd.Series(dtype=float)
+        render_quality_ms = pd.Series(dtype=float)
 
     summary = pd.DataFrame.from_records(
         [
@@ -59,13 +61,13 @@ def compute_reliability_diagnostics(
                 "score_mode_share": _mode_share(scores),
                 "score_min": _nan_stat(scores, np.nanmin),
                 "score_p50": _nan_stat(scores, np.nanmedian),
-                "score_p95": _nan_percentile(scores, 95),
-                "consistency_valid_count": int(len(valid_consistency)),
-                "consistency_min": _nan_stat(valid_consistency, np.nanmin),
-                "consistency_p50": _nan_stat(valid_consistency, np.nanmedian),
-                "consistency_p95": _nan_percentile(valid_consistency, 95),
-                "consistency_ms_p50": _nan_stat(consistency_ms, np.nanmedian),
-                "consistency_ms_p95": _nan_percentile(consistency_ms, 95),
+                "score_p95": finite_percentile(scores, 95),
+                "track_reprojection_valid_count": int(len(valid_track_reprojection)),
+                "track_reprojection_min": _nan_stat(valid_track_reprojection, np.nanmin),
+                "track_reprojection_p50": _nan_stat(valid_track_reprojection, np.nanmedian),
+                "track_reprojection_p95": finite_percentile(valid_track_reprojection, 95),
+                "render_quality_ms_p50": _nan_stat(render_quality_ms, np.nanmedian),
+                "render_quality_ms_p95": finite_percentile(render_quality_ms, 95),
                 **_spike_summary(anchor_error_detail, spike_threshold_m=spike_threshold_m),
             }
         ]
@@ -74,7 +76,7 @@ def compute_reliability_diagnostics(
     return ReliabilityDiagnosticsResult(
         summary=summary,
         score_histogram=_histogram(scores, value_name="pose_score"),
-        consistency_histogram=_histogram(valid_consistency, value_name="track_consistency"),
+        track_reprojection_histogram=_histogram(valid_track_reprojection, value_name="track_reprojection"),
         policy_distribution=_policy_distribution(output),
     )
 
@@ -165,14 +167,6 @@ def _nan_stat(values: pd.Series, fn: Any) -> float:
     if values.empty:
         return float("nan")
     return float(fn(values.to_numpy(dtype=float)))
-
-
-def _nan_percentile(values: pd.Series, percentile: float) -> float:
-    """对非空 Series 计算百分位；空输入返回 NaN。"""
-
-    if values.empty:
-        return float("nan")
-    return float(np.nanpercentile(values.to_numpy(dtype=float), percentile))
 
 
 __all__ = ["ReliabilityDiagnosticsResult", "compute_reliability_diagnostics"]

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using EgoAnchor.Alignment;
 using EgoAnchor.Policy;
 using EgoAnchor.Processors;
@@ -231,14 +230,12 @@ namespace EgoAnchor.Runtime
 
             if (policyHost != null)
             {
-                AnchorObservation observation = AnchorObservation.FromAlignedPose(
+                AnchorObservation observation = PoseResultPolicyMapper.FromAlignedPose(
                     frameId,
                     worldPose,
                     sampleTime,
-                    ReadReliabilityScore(sourceResult),
-                    ReadReliabilityFlags(sourceResult),
-                    sourceResult?.Phase ?? diagnostics.latestPhase,
-                    sourceResult?.PoseSource ?? string.Empty
+                    sourceResult,
+                    diagnostics.latestPhase
                 );
                 AnchorPolicyDecision decision = policyHost.AcceptPose(observation);
                 ApplyPolicyDecision(decision, frameId);
@@ -381,58 +378,25 @@ namespace EgoAnchor.Runtime
         /// <param name="result">Python 发布的 PoseResult。</param>
         private void CapturePoseDiagnostics(PoseResult result)
         {
-            diagnostics.latestReliabilityScore = ReadReliabilityScore(result);
+            diagnostics.latestReliabilityScore = PoseResultPolicyMapper.ReadReliabilityScore(result);
             diagnostics.latestScorePhase = result?.ScorePhase ?? 0.0f;
-            diagnostics.latestScoreConsistency = result?.ScoreConsistency ?? 0.0f;
+            diagnostics.latestScoreReprojection = result?.ScoreReprojection ?? 0.0f;
             diagnostics.latestScoreDepth = result?.ScoreDepth ?? 0.0f;
             diagnostics.latestScoreJump = result?.ScoreJump ?? 0.0f;
             diagnostics.latestScoreMask = result?.ScoreMask ?? 0.0f;
             diagnostics.latestScoreReject = result?.ScoreReject ?? 0.0f;
-            diagnostics.latestTrackConsistency = result?.TrackConsistency ?? -1.0f;
-            diagnostics.latestConsistencyMaskIou = result?.ConsistencyMaskIou ?? 0.0f;
-            diagnostics.latestConsistencyDepthInlier = result?.ConsistencyDepthInlier ?? 0.0f;
-            diagnostics.latestConsistencyDepthAlignment = result?.ConsistencyDepthAlignment ?? 0.0f;
-            diagnostics.latestConsistencyRenderVisibleRatio = result?.ConsistencyRenderVisibleRatio ?? 0.0f;
-            diagnostics.latestConsistencyObservedVisibleRatio = result?.ConsistencyObservedVisibleRatio ?? 0.0f;
-            diagnostics.latestConsistencyDepthResidualMeters = result?.ConsistencyDepthResidualM ?? 0.0f;
-            diagnostics.latestConsistencyRenderAreaPixels = result?.ConsistencyRenderAreaPx ?? 0;
-            diagnostics.latestConsistencyExpected = result?.ConsistencyExpected ?? false;
-            diagnostics.latestConsistencyStatus = result?.ConsistencyStatus ?? string.Empty;
-        }
-
-        /// <summary>
-        /// 从 PoseResult 读取 reliability score；旧协议/缺省字段按 1.0 向后兼容。
-        /// </summary>
-        private static float ReadReliabilityScore(PoseResult result)
-        {
-            if (result == null)
-            {
-                return 1.0f;
-            }
-
-            if (result.ReliabilityScore > 0.0f)
-            {
-                return Mathf.Clamp01(result.ReliabilityScore);
-            }
-
-            bool hasNewDiagnostics = (result.ReliabilityFlags != null && result.ReliabilityFlags.Count > 0)
-                || result.DepthValidInMask > 0.0f
-                || result.MaskAreaRatio > 0.0f
-                || !string.IsNullOrEmpty(result.PoseSource);
-            return hasNewDiagnostics ? 0.0f : 1.0f;
-        }
-
-        /// <summary>
-        /// 从 PoseResult 读取 reliability flags。
-        /// </summary>
-        private static string[] ReadReliabilityFlags(PoseResult result)
-        {
-            if (result == null || result.ReliabilityFlags == null || result.ReliabilityFlags.Count == 0)
-            {
-                return Array.Empty<string>();
-            }
-
-            return result.ReliabilityFlags.ToArray();
+            diagnostics.latestScoreConfidence = result?.ScoreConfidence ?? 0.0f;
+            diagnostics.latestTrackReprojection = result?.TrackReprojection ?? -1.0f;
+            diagnostics.latestRenderQualityMaskIou = result?.RenderQualityMaskIou ?? 0.0f;
+            diagnostics.latestRenderQualityAreaRatioScore = result?.RenderQualityAreaRatioScore ?? 0.0f;
+            diagnostics.latestRenderQualityDepthInlier = result?.RenderQualityDepthInlier ?? 0.0f;
+            diagnostics.latestRenderQualityDepthAlignment = result?.RenderQualityDepthAlignment ?? 0.0f;
+            diagnostics.latestRenderQualityRenderVisibleRatio = result?.RenderQualityRenderVisibleRatio ?? 0.0f;
+            diagnostics.latestRenderQualityObservedVisibleRatio = result?.RenderQualityObservedVisibleRatio ?? 0.0f;
+            diagnostics.latestRenderQualityDepthResidualMeters = result?.RenderQualityDepthResidualM ?? 0.0f;
+            diagnostics.latestRenderQualityRenderAreaPixels = result?.RenderQualityRenderAreaPx ?? 0;
+            diagnostics.latestRenderQualityExpected = result?.RenderQualityExpected ?? false;
+            diagnostics.latestRenderQualityStatus = result?.RenderQualityStatus ?? string.Empty;
         }
 
         /// <summary>
@@ -706,19 +670,19 @@ namespace EgoAnchor.Runtime
             public string latestPolicyReason = "";
 
             /// <summary>最近一次 reliability score。</summary>
-            [Tooltip("最近一次 PoseResult.reliability_score。旧协议或缺省字段会按 1.0 处理。")]
+            [Tooltip("最近一次 PoseResult.reliability_score，按协议值直接限制到 0..1。")]
             public float latestReliabilityScore = 1.0f;
 
             /// <summary>最近一次 phase 子分。</summary>
             [Tooltip("最近一次 PoseResult.score_phase，用于确认最终评分中的 phase 乘性项。")]
             public float latestScorePhase;
 
-            /// <summary>最近一次渲染一致性子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_consistency，用于确认渲染 mask/depth 一致性是否压低总分。")]
-            public float latestScoreConsistency;
+            /// <summary>最近一次重投影子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_reprojection，语义是投影与 Cutie mask 交集区域内的 RGB/LAB 颜色相似度。")]
+            public float latestScoreReprojection;
 
-            /// <summary>最近一次深度可用性子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_depth，表示 mask 内有效深度比例对应的乘性项。")]
+            /// <summary>最近一次深度对齐子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_depth，表示渲染深度与观测深度在 mask 交集内的对齐质量。")]
             public float latestScoreDepth;
 
             /// <summary>最近一次相邻 pose 跳变子分。</summary>
@@ -726,52 +690,60 @@ namespace EgoAnchor.Runtime
             public float latestScoreJump;
 
             /// <summary>最近一次 mask 面积子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_mask，mask 过大或过小时会降低。")]
+            [Tooltip("最近一次 PoseResult.score_mask，当前优先来自 Cutie mask 面积 / 渲染投影面积，低值表示可见区域过小或遮挡严重。")]
             public float latestScoreMask;
 
             /// <summary>最近一次 track reject 子分。</summary>
             [Tooltip("最近一次 PoseResult.score_reject，近期 track reject 越多越低。")]
             public float latestScoreReject;
 
-            /// <summary>最近一次渲染-重投影一致性总分。</summary>
-            [Tooltip("最近一次 PoseResult.track_consistency；-1 表示 Python 本帧没有有效一致性信号。")]
-            public float latestTrackConsistency = -1.0f;
+            /// <summary>最近一次连续高质量跟踪置信子分。</summary>
+            [Tooltip("最近一次 PoseResult.score_confidence，表示 Python 端连续高质量 pose warmup 的置信释放程度。")]
+            public float latestScoreConfidence;
+
+            /// <summary>最近一次 TRACK 重投影分。</summary>
+            [Tooltip("最近一次 PoseResult.track_reprojection，当前语义是 TRACK 阶段重投影分；-1 表示 Python 本帧没有有效重投影信号。")]
+            public float latestTrackReprojection = -1.0f;
 
             /// <summary>最近一次渲染 mask 与观测 mask IoU。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_mask_iou，表示渲染前景与观测 mask 的轮廓重叠。")]
-            public float latestConsistencyMaskIou;
+            [Tooltip("最近一次 PoseResult.render_quality_mask_iou，表示渲染前景与观测 mask 的轮廓重叠。")]
+            public float latestRenderQualityMaskIou;
+
+            /// <summary>最近一次 Cutie mask 面积与渲染投影面积比例。</summary>
+            [Tooltip("最近一次 PoseResult.render_quality_area_ratio_score，等于 Cutie mask 面积 / 渲染投影面积并限制在 0..1，用于解释 score_mask。")]
+            public float latestRenderQualityAreaRatioScore;
 
             /// <summary>最近一次渲染深度 inlier 比例。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_depth_inlier，表示交集区域内 FFS 深度与渲染表面深度接近的比例。")]
-            public float latestConsistencyDepthInlier;
+            [Tooltip("最近一次 PoseResult.render_quality_depth_inlier，表示交集区域内 FFS 深度与渲染表面深度接近的比例。")]
+            public float latestRenderQualityDepthInlier;
 
             /// <summary>最近一次连续深度对齐分。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_depth_alignment，由 depth inlier 和中位残差共同得到。")]
-            public float latestConsistencyDepthAlignment;
+            [Tooltip("最近一次 PoseResult.render_quality_depth_alignment，由 depth inlier 和中位残差共同得到。")]
+            public float latestRenderQualityDepthAlignment;
 
             /// <summary>最近一次渲染前景可见覆盖率。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_render_visible_ratio，遮挡或观测 mask 过小时会下降。")]
-            public float latestConsistencyRenderVisibleRatio;
+            [Tooltip("最近一次 PoseResult.render_quality_render_visible_ratio，遮挡或观测 mask 过小时会下降。")]
+            public float latestRenderQualityRenderVisibleRatio;
 
             /// <summary>最近一次观测 mask 被渲染解释的覆盖率。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_observed_visible_ratio，低值表示 pose 没覆盖可见物体区域。")]
-            public float latestConsistencyObservedVisibleRatio;
+            [Tooltip("最近一次 PoseResult.render_quality_observed_visible_ratio，低值表示 pose 没覆盖可见物体区域。")]
+            public float latestRenderQualityObservedVisibleRatio;
 
             /// <summary>最近一次深度中位残差。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_depth_residual_m，单位米。")]
-            public float latestConsistencyDepthResidualMeters;
+            [Tooltip("最近一次 PoseResult.render_quality_depth_residual_m，单位米。")]
+            public float latestRenderQualityDepthResidualMeters;
 
-            /// <summary>最近一次一致性渲染前景像素数。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_render_area_px，用于判断一致性信号是否过小。")]
-            public int latestConsistencyRenderAreaPixels;
+            /// <summary>最近一次渲染质量检测的渲染前景像素数。</summary>
+            [Tooltip("最近一次 PoseResult.render_quality_render_area_px，用于判断渲染质量信号是否过小。")]
+            public int latestRenderQualityRenderAreaPixels;
 
-            /// <summary>最近一次 Python 是否预期一致性信号有效。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_expected。true 但 track_consistency=-1 时通常表示渲染失败或输入不满足。")]
-            public bool latestConsistencyExpected;
+            /// <summary>最近一次 Python 是否预期渲染质量信号有效。</summary>
+            [Tooltip("最近一次 PoseResult.render_quality_expected。true 但 track_reprojection=-1 时通常表示渲染失败、warmup 或重投影输入不满足。")]
+            public bool latestRenderQualityExpected;
 
-            /// <summary>最近一次一致性状态文本。</summary>
-            [Tooltip("最近一次 PoseResult.consistency_status，例如 valid、warmup、no_mask、depth_low 或 render_exception。")]
-            public string latestConsistencyStatus = "";
+            /// <summary>最近一次渲染质量状态文本。</summary>
+            [Tooltip("最近一次 PoseResult.render_quality_status，例如 valid、warmup、no_mask、depth_low 或 render_exception。")]
+            public string latestRenderQualityStatus = "";
 
             /// <summary>最近一次 Python AnchorStatusEvent 状态。</summary>
             [Tooltip("最近一次 Python AnchorStatusEvent.state。该字段只用于诊断，不等同于 Unity anchor state。")]

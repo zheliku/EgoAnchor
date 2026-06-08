@@ -25,21 +25,23 @@ message PoseResult {
   double server_receive_mono_ms = 16;
   double server_publish_mono_ms = 17;
   float score_phase = 18;
-  float score_consistency = 19;
+  float score_reprojection = 19;
   float score_depth = 20;
   float score_jump = 21;
   float score_mask = 22;
   float score_reject = 23;
-  float track_consistency = 24;
-  float consistency_mask_iou = 25;
-  float consistency_depth_inlier = 26;
-  float consistency_render_visible_ratio = 27;
-  float consistency_depth_residual_m = 28;
-  string consistency_status = 29;
-  int32 consistency_render_area_px = 30;
-  bool consistency_expected = 31;
-  float consistency_observed_visible_ratio = 32;
-  float consistency_depth_alignment = 33;
+  float track_reprojection = 24;
+  float render_quality_mask_iou = 25;
+  float render_quality_depth_inlier = 26;
+  float render_quality_render_visible_ratio = 27;
+  float render_quality_depth_residual_m = 28;
+  string render_quality_status = 29;
+  int32 render_quality_render_area_px = 30;
+  bool render_quality_expected = 31;
+  float render_quality_observed_visible_ratio = 32;
+  float render_quality_depth_alignment = 33;
+  float score_confidence = 34;
+  float render_quality_area_ratio_score = 35;
 }
 
 message AnchorStatusEvent {

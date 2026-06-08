@@ -414,26 +414,26 @@ class FoundationPoseObjectEstimator:
             return mesh_tensors
         mesh = getattr(self.estimator, "mesh", None)
         if mesh is None:
-            raise RuntimeError("FoundationPose estimator 缺少 mesh_tensors 和 mesh，无法渲染一致性。")
+            raise RuntimeError("FoundationPose estimator 缺少 mesh_tensors 和 mesh，无法渲染质量图。")
         make_mesh_tensors = getattr(self.foundationpose_utils, "make_mesh_tensors")
         mesh_tensors = make_mesh_tensors(mesh)
         self.estimator.mesh_tensors = mesh_tensors
         return mesh_tensors
 
-    def render_depth_mask(
+    def render_color_depth_mask(
         self,
         pose_cv_camera: np.ndarray,
         output_size: tuple[int, int],
         cam_k: np.ndarray | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """按给定 OpenCV camera-space pose 渲染 mesh depth 与二值 mask。
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """按给定 OpenCV camera-space pose 渲染 mesh color、depth 与二值 mask。
 
         这是 reliability 层唯一使用的渲染 facade。内部复用 FoundationPose 已创建的
         `glctx` 和 `mesh_tensors`，并把第三方 CUDA/Tensor 输出立即转换为 CPU numpy，
         避免上层模块持有 GPU tensor 或访问 estimator 内部结构。
         """
 
-        def render_once() -> tuple[np.ndarray, np.ndarray]:
+        def render_once() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
             """执行一次 nvdiffrast 渲染并返回 CPU numpy 结果。"""
 
             import torch
@@ -446,7 +446,7 @@ class FoundationPoseObjectEstimator:
             pose_tensor = torch.as_tensor(pose, dtype=torch.float32, device=device)
             mesh_tensors = self._mesh_tensors_for_render()
             with torch.no_grad():
-                _color, depth, _normal = render_fn(
+                color, depth, _normal = render_fn(
                     K=k,
                     H=out_h,
                     W=out_w,
@@ -455,19 +455,46 @@ class FoundationPoseObjectEstimator:
                     mesh_tensors=mesh_tensors,
                     output_size=(out_h, out_w),
                 )
+            if hasattr(color, "detach"):
+                color_np = color.detach().cpu().numpy()
+            else:
+                color_np = np.asarray(color)
             if hasattr(depth, "detach"):
                 depth_np = depth.detach().cpu().numpy()
             else:
                 depth_np = np.asarray(depth)
+            color_np = self._render_color_to_rgb_u8(color_np)
             depth_np = np.asarray(depth_np, dtype=np.float32)
             if depth_np.ndim == 3:
                 depth_np = depth_np[0]
             if depth_np.ndim == 4:
                 depth_np = depth_np[0, ..., 0]
             render_mask = depth_np > 0.0
-            return depth_np, render_mask
+            return color_np, depth_np, render_mask
 
         return render_once()
+
+    @staticmethod
+    def _render_color_to_rgb_u8(color: np.ndarray) -> np.ndarray:
+        """把 renderer 输出规范化为 RGB uint8，供 LAB 颜色评分使用。"""
+
+        out = np.asarray(color)
+        if out.ndim == 4:
+            out = out[0]
+        if out.ndim == 2:
+            out = np.repeat(out[..., None], 3, axis=2)
+        if out.ndim != 3:
+            raise ValueError("渲染 color 维度不正确，应为 (H,W,C)。")
+        out = out[..., :3]
+        if out.size <= 0:
+            raise ValueError("渲染 color 为空。")
+        if np.issubdtype(out.dtype, np.floating):
+            finite = out[np.isfinite(out)]
+            if finite.size <= 0:
+                raise ValueError("渲染 color 没有有限像素。")
+            if float(np.max(finite)) <= 1.0:
+                out = out * 255.0
+        return np.clip(out, 0, 255).astype(np.uint8)
 
     def reset(self) -> None:
         """重置 FoundationPose 时序状态，使下一帧重新 register。"""

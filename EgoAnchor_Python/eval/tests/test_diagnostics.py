@@ -13,8 +13,8 @@ from eval.metrics.diagnostics import compute_reliability_diagnostics
 class ReliabilityDiagnosticsTest(unittest.TestCase):
     """验证 Python reliability 分布诊断不依赖 runtime 或模型。"""
 
-    def test_pose_result_row_preserves_consistency_fields(self) -> None:
-        """runtime JSONL 中的一致性旁路字段应进入 pose DataFrame。"""
+    def test_pose_result_row_preserves_render_quality_fields(self) -> None:
+        """runtime JSONL 中的渲染质量旁路字段应进入 pose DataFrame。"""
 
         row = PoseResultRow.from_dict(
             {
@@ -23,23 +23,26 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
                 "has_pose": True,
                 "pose_matrix_cv_camera": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0],
                 "pose_score": 0.73,
-                "reliability_flags": ["consistency_low"],
+                "reliability_flags": ["reprojection_low"],
                 "score_phase": 1.0,
-                "score_consistency": 0.42,
+                "score_reprojection": 0.42,
                 "score_depth": 0.71,
                 "score_jump": 0.95,
                 "score_mask": 1.0,
                 "score_reject": 1.0,
-                "depth_quality_score": 0.71,
-                "track_consistency": 0.42,
-                "consistency_expected": True,
-                "consistency_status": "valid",
-                "consistency_mask_iou": 0.35,
-                "consistency_render_visible_ratio": 0.52,
-                "consistency_render_area_px": 128,
-                "consistency_depth_inlier": 0.58,
-                "consistency_depth_residual_m": 0.014,
-                "consistency_ms": 4.2,
+                "score_confidence": 0.88,
+                "track_reprojection": 0.42,
+                "render_quality_expected": True,
+                "render_quality_status": "valid",
+                "render_quality_mask_iou": 0.35,
+                "render_quality_area_ratio_score": 0.31,
+                "render_quality_render_visible_ratio": 0.52,
+                "render_quality_observed_visible_ratio": 0.63,
+                "render_quality_render_area_px": 128,
+                "render_quality_depth_inlier": 0.58,
+                "render_quality_depth_alignment": 0.62,
+                "render_quality_depth_residual_m": 0.014,
+                "render_quality_ms": 4.2,
             },
             source="unit",
         )
@@ -47,37 +50,40 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         record = row.to_record()
 
         self.assertAlmostEqual(record["score_phase"], 1.0)
-        self.assertAlmostEqual(record["score_consistency"], 0.42)
+        self.assertAlmostEqual(record["score_reprojection"], 0.42)
         self.assertAlmostEqual(record["score_depth"], 0.71)
         self.assertAlmostEqual(record["score_jump"], 0.95)
         self.assertAlmostEqual(record["score_mask"], 1.0)
         self.assertAlmostEqual(record["score_reject"], 1.0)
-        self.assertAlmostEqual(record["depth_quality_score"], 0.71)
-        self.assertAlmostEqual(record["track_consistency"], 0.42)
-        self.assertTrue(record["consistency_expected"])
-        self.assertEqual(record["consistency_status"], "valid")
-        self.assertAlmostEqual(record["consistency_mask_iou"], 0.35)
-        self.assertAlmostEqual(record["consistency_render_visible_ratio"], 0.52)
-        self.assertEqual(record["consistency_render_area_px"], 128)
-        self.assertAlmostEqual(record["consistency_depth_inlier"], 0.58)
-        self.assertAlmostEqual(record["consistency_depth_residual_m"], 0.014)
-        self.assertAlmostEqual(record["consistency_ms"], 4.2)
+        self.assertAlmostEqual(record["score_confidence"], 0.88)
+        self.assertAlmostEqual(record["track_reprojection"], 0.42)
+        self.assertTrue(record["render_quality_expected"])
+        self.assertEqual(record["render_quality_status"], "valid")
+        self.assertAlmostEqual(record["render_quality_mask_iou"], 0.35)
+        self.assertAlmostEqual(record["render_quality_area_ratio_score"], 0.31)
+        self.assertAlmostEqual(record["render_quality_render_visible_ratio"], 0.52)
+        self.assertAlmostEqual(record["render_quality_observed_visible_ratio"], 0.63)
+        self.assertEqual(record["render_quality_render_area_px"], 128)
+        self.assertAlmostEqual(record["render_quality_depth_inlier"], 0.58)
+        self.assertAlmostEqual(record["render_quality_depth_alignment"], 0.62)
+        self.assertAlmostEqual(record["render_quality_depth_residual_m"], 0.014)
+        self.assertAlmostEqual(record["render_quality_ms"], 4.2)
 
     def test_compute_reliability_diagnostics_summarizes_distribution(self) -> None:
-        """诊断应输出 score 展开程度、一致性开销和 policy 分布。"""
+        """诊断应输出 score 展开程度、渲染质量开销和 policy 分布。"""
 
         pose = pd.DataFrame(
             {
                 "pose_score": [1.0, 1.0, 0.4],
-                "track_consistency": [-1.0, 0.8, 0.3],
-                "consistency_ms": [0.0, 4.0, 6.0],
+                "track_reprojection": [-1.0, 0.8, 0.3],
+                "render_quality_ms": [0.0, 4.0, 6.0],
             }
         )
         output = pd.DataFrame(
             {
                 "label": ["policy", "policy", "raw"],
                 "policy_action": ["Accept", "Reject", "Hold"],
-                "policy_reason": ["score_accept", "consistency_low", "coast"],
+                "policy_reason": ["score_accept", "reprojection_low", "coast"],
             }
         )
 
@@ -87,11 +93,11 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         self.assertEqual(int(summary["pose_rows"]), 3)
         self.assertEqual(int(summary["score_unique_count"]), 2)
         self.assertAlmostEqual(float(summary["score_mode_share"]), 2.0 / 3.0)
-        self.assertEqual(int(summary["consistency_valid_count"]), 2)
-        self.assertAlmostEqual(float(summary["consistency_ms_p50"]), 5.0)
-        self.assertAlmostEqual(float(summary["consistency_ms_p95"]), 5.9)
+        self.assertEqual(int(summary["track_reprojection_valid_count"]), 2)
+        self.assertAlmostEqual(float(summary["render_quality_ms_p50"]), 5.0)
+        self.assertAlmostEqual(float(summary["render_quality_ms_p95"]), 5.9)
         self.assertEqual(int(result.score_histogram["count"].sum()), 3)
-        self.assertEqual(int(result.consistency_histogram["count"].sum()), 2)
+        self.assertEqual(int(result.track_reprojection_histogram["count"].sum()), 2)
         self.assertEqual(int(result.policy_distribution["count"].sum()), 3)
 
 

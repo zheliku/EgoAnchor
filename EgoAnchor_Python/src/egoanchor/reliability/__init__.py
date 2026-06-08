@@ -1,13 +1,19 @@
 """reliability 包级入口。"""
 
-from .pose_quality import PoseQualityBreakdown, score_depth_quality, score_observation_breakdown
-from .render_consistency import RenderConsistencyChecker, RenderConsistencyResult
+from .depth_alignment import DepthAlignmentChecker, DepthAlignmentResult
+from .pose_quality import ConfidenceAccumulator, PoseQualityBreakdown, score_observation_breakdown
+from .render_quality import RenderQualityChecker, RenderQualityResult
+from .reprojection import ReprojectionChecker, ReprojectionResult
 
 __all__ = [
+    "ConfidenceAccumulator",
+    "DepthAlignmentChecker",
+    "DepthAlignmentResult",
     "PoseQualityBreakdown",
-    "RenderConsistencyChecker",
-    "RenderConsistencyResult",
-    "score_depth_quality",
+    "RenderQualityChecker",
+    "RenderQualityResult",
+    "ReprojectionChecker",
+    "ReprojectionResult",
     "score_observation_breakdown",
 ]
 

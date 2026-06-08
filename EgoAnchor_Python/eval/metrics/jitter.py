@@ -7,7 +7,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .common import angle_deg, highpass, normalize_quat
+from .common import angle_deg, highpass, is_pose_value, relative_rotation_quat
+from .stats import rms
 
 
 SUMMARY_COLUMNS = [
@@ -49,7 +50,7 @@ def compute_jitter(output: pd.DataFrame, *, speed_threshold_mps: float = 0.03, c
                 "condition": condition,
                 "label": label,
                 "n": int(len(sample)),
-                "position_jitter_rms_m": float(np.sqrt(np.mean(residual_norm * residual_norm))),
+                "position_jitter_rms_m": rms(residual_norm),
                 "position_jitter_std_m": float(np.std(residual_norm)),
                 "rotation_jitter_rms_deg": rot_jitter,
                 "insufficient_data": False,
@@ -64,9 +65,9 @@ def _usable_pose_rows(group: pd.DataFrame) -> pd.DataFrame:
     return group[
         group["valid"].fillna(False).astype(bool)
         & group["has_stable"].fillna(False).astype(bool)
-        & group["gt_pos"].map(lambda value: value is not None)
-        & group["stable_pos"].map(lambda value: value is not None)
-        & group["stable_rot"].map(lambda value: value is not None)
+        & group["gt_pos"].map(is_pose_value)
+        & group["stable_pos"].map(is_pose_value)
+        & group["stable_rot"].map(is_pose_value)
     ].copy()
 
 
@@ -102,39 +103,12 @@ def _rotation_jitter_deg(quaternions: np.ndarray) -> float:
 
     if len(quaternions) == 0:
         return np.nan
-    reference = normalize_quat(quaternions[0])
+    reference = quaternions[0]
     values = []
     for quat in quaternions:
-        q = normalize_quat(quat)
-        q = q if float(np.dot(q, reference)) >= 0.0 else -q
-        delta = _quat_multiply(_quat_inverse(reference), q)
-        values.append(angle_deg(delta))
+        values.append(angle_deg(relative_rotation_quat(reference, quat)))
     arr = np.asarray(values, dtype=float)
-    return float(np.sqrt(np.mean(arr * arr)))
-
-
-def _quat_inverse(quat: np.ndarray) -> np.ndarray:
-    """返回单位四元数逆。"""
-
-    return np.array([-quat[0], -quat[1], -quat[2], quat[3]], dtype=float)
-
-
-def _quat_multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """xyzw 四元数乘法。"""
-
-    ax, ay, az, aw = a
-    bx, by, bz, bw = b
-    return normalize_quat(
-        np.array(
-            [
-                aw * bx + ax * bw + ay * bz - az * by,
-                aw * by - ax * bz + ay * bw + az * bx,
-                aw * bz + ax * by - ay * bx + az * bw,
-                aw * bw - ax * bx - ay * by - az * bz,
-            ],
-            dtype=float,
-        )
-    )
+    return rms(arr)
 
 
 def _insufficient(condition: str, label: str, count: int) -> dict[str, Any]:

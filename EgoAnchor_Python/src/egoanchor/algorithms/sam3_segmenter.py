@@ -17,24 +17,7 @@ from PIL import Image
 
 from egoanchor.algorithms import SegmenterResult
 from egoanchor.utils import configure_thirdparty_logging, ensure_bgr_u8
-
-
-def _to_numpy(value: Any) -> np.ndarray:
-    """把 torch.Tensor 或 numpy-like 对象统一转为 numpy.ndarray。"""
-
-    if hasattr(value, "detach"):
-        return value.detach().cpu().numpy()
-    return np.asarray(value)
-
-
-def _normalize_prompt(prompt: str | list[str]) -> list[str]:
-    """把 prompt 统一成非空字符串列表。"""
-
-    items = [prompt] if isinstance(prompt, str) else list(prompt)
-    normalized = [item.strip() for item in items if item.strip()]
-    if not normalized:
-        raise ValueError("SAM3 prompt 不能为空。")
-    return normalized
+from .segmenter_utils import normalize_prompt, select_best_mask, to_numpy
 
 
 def select_best_sam3_mask(
@@ -49,45 +32,7 @@ def select_best_sam3_mask(
     即使分数高也会被跳过，避免误把无效检测当作目标。
     """
 
-    height, width = int(frame_shape[0]), int(frame_shape[1])
-    empty = np.zeros((height, width), dtype=np.uint8)
-    masks_np = _to_numpy(masks)
-    if masks_np.size == 0:
-        return empty, -1, 0.0, -1.0
-    masks_np = np.asarray(masks_np)
-    if masks_np.ndim == 4 and masks_np.shape[1] == 1:
-        masks_np = masks_np[:, 0, :, :]
-    elif masks_np.ndim == 2:
-        masks_np = masks_np[None, :, :]
-    if masks_np.ndim != 3:
-        raise ValueError(f"SAM3 masks 维度不正确，应为 (N,H,W) 或 (N,1,H,W)，实际为 {masks_np.shape}")
-
-    binary_masks = (masks_np >= float(threshold)).astype(np.uint8) * 255
-    mask_count = int(binary_masks.shape[0])
-    has_scores = scores is not None
-    if not has_scores:
-        score_values = np.ones((mask_count,), dtype=np.float32)
-    else:
-        score_values = _to_numpy(scores).astype(np.float32).reshape(-1)[:mask_count]
-        if score_values.shape[0] < mask_count:
-            pad = np.ones((mask_count - score_values.shape[0],), dtype=np.float32)
-            score_values = np.concatenate([score_values, pad])
-
-    areas = np.count_nonzero(binary_masks.reshape(mask_count, -1), axis=1)
-    valid = areas > 0
-    if not np.any(valid):
-        return empty, -1, 0.0, -1.0
-
-    ranked_scores = score_values.copy()
-    ranked_scores[~valid] = -1.0
-    selected_index = int(np.argmax(ranked_scores))
-    mask_bw = binary_masks[selected_index]
-    if mask_bw.shape[:2] != (height, width):
-        mask_bw = cv2.resize(mask_bw, (width, height), interpolation=cv2.INTER_NEAREST)
-
-    area_ratio = float(np.count_nonzero(mask_bw)) / float(max(mask_bw.size, 1))
-    selected_score = float(score_values[selected_index]) if has_scores else -1.0
-    return mask_bw, selected_index, area_ratio, selected_score
+    return select_best_mask(masks, scores, frame_shape, threshold)
 
 
 def disable_sam3_position_precompute(model_builder_module: Any) -> None:
@@ -156,7 +101,7 @@ class Sam3Segmenter:
         self.enable_logging = bool(enable_logging)
         """是否允许 SAM3 内部 stdout/stderr/logging 输出到 console。"""
 
-        self._prompt = _normalize_prompt(init_prompt)
+        self._prompt = normalize_prompt(init_prompt, "SAM3")
         """当前文本提示词缓存。"""
 
         if not self.repo_path.is_dir():
@@ -218,7 +163,7 @@ class Sam3Segmenter:
     def set_prompt(self, prompt: str | list[str]) -> None:
         """更新文本提示词缓存。"""
 
-        self._prompt = _normalize_prompt(prompt)
+        self._prompt = normalize_prompt(prompt, "SAM3")
 
     def infer(self, image_bgr: np.ndarray, prompt: str | list[str] | None = None) -> SegmenterResult:
         """执行单帧 SAM3 文本提示分割。"""
@@ -292,13 +237,13 @@ class Sam3Segmenter:
             cv2.drawContours(overlay, contours, -1, (0, 255, 255), 2)
 
         if selected_index >= 0 and boxes is not None:
-            boxes_np = _to_numpy(boxes).reshape(-1, 4)
+            boxes_np = to_numpy(boxes).reshape(-1, 4)
             if selected_index < boxes_np.shape[0]:
                 x0, y0, x1, y1 = [int(round(float(v))) for v in boxes_np[selected_index]]
                 cv2.rectangle(overlay, (x0, y0), (x1, y1), (0, 255, 255), 2)
                 label = f"sam3 {selected_index}"
                 if scores is not None:
-                    scores_np = _to_numpy(scores).reshape(-1)
+                    scores_np = to_numpy(scores).reshape(-1)
                     if selected_index < scores_np.shape[0]:
                         label += f" {float(scores_np[selected_index]):.2f}"
                 cv2.putText(overlay, label, (max(x0, 0), max(y0 - 8, 16)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2, cv2.LINE_AA)

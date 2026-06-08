@@ -279,21 +279,24 @@ class PoseResultRow:
     server_receive_mono_ms: float
     server_publish_mono_ms: float
     score_phase: float
-    score_consistency: float
+    score_reprojection: float
     score_depth: float
     score_jump: float
     score_mask: float
     score_reject: float
-    depth_quality_score: float
-    track_consistency: float
-    consistency_expected: bool
-    consistency_status: str
-    consistency_mask_iou: float
-    consistency_render_visible_ratio: float
-    consistency_render_area_px: int
-    consistency_depth_inlier: float
-    consistency_depth_residual_m: float
-    consistency_ms: float
+    score_confidence: float
+    track_reprojection: float
+    render_quality_expected: bool
+    render_quality_status: str
+    render_quality_mask_iou: float
+    render_quality_area_ratio_score: float
+    render_quality_render_visible_ratio: float
+    render_quality_observed_visible_ratio: float
+    render_quality_render_area_px: int
+    render_quality_depth_inlier: float
+    render_quality_depth_alignment: float
+    render_quality_depth_residual_m: float
+    render_quality_ms: float
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -322,21 +325,24 @@ class PoseResultRow:
             server_receive_mono_ms=_optional_float(row, "server_receive_mono_ms", np.nan),
             server_publish_mono_ms=_optional_float(row, "server_publish_mono_ms", np.nan),
             score_phase=_optional_float(row, "score_phase", np.nan),
-            score_consistency=_optional_float(row, "score_consistency", np.nan),
+            score_reprojection=_optional_float(row, "score_reprojection", np.nan),
             score_depth=_optional_float(row, "score_depth", np.nan),
             score_jump=_optional_float(row, "score_jump", np.nan),
             score_mask=_optional_float(row, "score_mask", np.nan),
             score_reject=_optional_float(row, "score_reject", np.nan),
-            depth_quality_score=_optional_float(row, "depth_quality_score", np.nan),
-            track_consistency=_optional_float(row, "track_consistency", -1.0),
-            consistency_expected=_optional_bool(row, "consistency_expected", False),
-            consistency_status=str(row.get("consistency_status", "")),
-            consistency_mask_iou=_optional_float(row, "consistency_mask_iou", 0.0),
-            consistency_render_visible_ratio=_optional_float(row, "consistency_render_visible_ratio", 0.0),
-            consistency_render_area_px=int(_optional_float(row, "consistency_render_area_px", 0.0)),
-            consistency_depth_inlier=_optional_float(row, "consistency_depth_inlier", 0.0),
-            consistency_depth_residual_m=_optional_float(row, "consistency_depth_residual_m", 0.0),
-            consistency_ms=_optional_float(row, "consistency_ms", 0.0),
+            score_confidence=_optional_float(row, "score_confidence", np.nan),
+            track_reprojection=_optional_float(row, "track_reprojection", -1.0),
+            render_quality_expected=_optional_bool(row, "render_quality_expected", False),
+            render_quality_status=str(row.get("render_quality_status", "")),
+            render_quality_mask_iou=_optional_float(row, "render_quality_mask_iou", 0.0),
+            render_quality_area_ratio_score=_optional_float(row, "render_quality_area_ratio_score", 0.0),
+            render_quality_render_visible_ratio=_optional_float(row, "render_quality_render_visible_ratio", 0.0),
+            render_quality_observed_visible_ratio=_optional_float(row, "render_quality_observed_visible_ratio", 0.0),
+            render_quality_render_area_px=int(_optional_float(row, "render_quality_render_area_px", 0.0)),
+            render_quality_depth_inlier=_optional_float(row, "render_quality_depth_inlier", 0.0),
+            render_quality_depth_alignment=_optional_float(row, "render_quality_depth_alignment", 0.0),
+            render_quality_depth_residual_m=_optional_float(row, "render_quality_depth_residual_m", 0.0),
+            render_quality_ms=_optional_float(row, "render_quality_ms", 0.0),
             raw=dict(row),
         )
 
@@ -369,21 +375,24 @@ class PoseResultRow:
             "server_receive_mono_ms": self.server_receive_mono_ms,
             "server_publish_mono_ms": self.server_publish_mono_ms,
             "score_phase": self.score_phase,
-            "score_consistency": self.score_consistency,
+            "score_reprojection": self.score_reprojection,
             "score_depth": self.score_depth,
             "score_jump": self.score_jump,
             "score_mask": self.score_mask,
             "score_reject": self.score_reject,
-            "depth_quality_score": self.depth_quality_score,
-            "track_consistency": self.track_consistency,
-            "consistency_expected": self.consistency_expected,
-            "consistency_status": self.consistency_status,
-            "consistency_mask_iou": self.consistency_mask_iou,
-            "consistency_render_visible_ratio": self.consistency_render_visible_ratio,
-            "consistency_render_area_px": self.consistency_render_area_px,
-            "consistency_depth_inlier": self.consistency_depth_inlier,
-            "consistency_depth_residual_m": self.consistency_depth_residual_m,
-            "consistency_ms": self.consistency_ms,
+            "score_confidence": self.score_confidence,
+            "track_reprojection": self.track_reprojection,
+            "render_quality_expected": self.render_quality_expected,
+            "render_quality_status": self.render_quality_status,
+            "render_quality_mask_iou": self.render_quality_mask_iou,
+            "render_quality_area_ratio_score": self.render_quality_area_ratio_score,
+            "render_quality_render_visible_ratio": self.render_quality_render_visible_ratio,
+            "render_quality_observed_visible_ratio": self.render_quality_observed_visible_ratio,
+            "render_quality_render_area_px": self.render_quality_render_area_px,
+            "render_quality_depth_inlier": self.render_quality_depth_inlier,
+            "render_quality_depth_alignment": self.render_quality_depth_alignment,
+            "render_quality_depth_residual_m": self.render_quality_depth_residual_m,
+            "render_quality_ms": self.render_quality_ms,
         }
 
 

@@ -13,6 +13,8 @@ import numpy as np
 from scipy.signal import butter, filtfilt
 from scipy.spatial.transform import Rotation, Slerp
 
+from egoanchor.utils import clamp
+
 
 def normalize_quat(q: Iterable[float]) -> np.ndarray:
     """归一化 xyzw 四元数，并把零长度输入退化为 identity。"""
@@ -22,6 +24,12 @@ def normalize_quat(q: Iterable[float]) -> np.ndarray:
     if norm <= 1e-12:
         return np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
     return quat / norm
+
+
+def is_pose_value(value: object) -> bool:
+    """判断 DataFrame object 列中是否包含可用 pose 数组。"""
+
+    return value is not None and not (isinstance(value, float) and math.isnan(value))
 
 
 def mat_to_pos_quat(transform: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -101,7 +109,7 @@ def angle_deg(quat: Iterable[float]) -> float:
     """返回 xyzw 四元数表示的最小旋转角度，单位为度。"""
 
     q = normalize_quat(quat)
-    w = max(-1.0, min(1.0, abs(float(q[3]))))
+    w = clamp(abs(float(q[3])), -1.0, 1.0)
     return float(math.degrees(2.0 * math.acos(w)))
 
 
@@ -206,6 +214,7 @@ def project_point(k: np.ndarray, w_t_cam: np.ndarray, p_world: Iterable[float]) 
 __all__ = [
     "angle_deg",
     "highpass",
+    "is_pose_value",
     "mat_to_pos_quat",
     "normalize_quat",
     "pose_error",

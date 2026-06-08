@@ -7,7 +7,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .common import pos_quat_to_mat, project_point
+from .common import is_pose_value, pos_quat_to_mat, project_point
+from .stats import rms
 
 
 DETAIL_COLUMNS = ["render_mono_ms", "condition", "label", "source_frame_id", "slip_px"]
@@ -24,8 +25,8 @@ def compute_slip(output: pd.DataFrame, k: np.ndarray | None = None) -> tuple[pd.
     mask = (
         output["valid"].fillna(False).astype(bool)
         & output["has_stable"].fillna(False).astype(bool)
-        & output["gt_pos"].map(lambda value: value is not None)
-        & output["stable_pos"].map(lambda value: value is not None)
+        & output["gt_pos"].map(is_pose_value)
+        & output["stable_pos"].map(is_pose_value)
     )
     for _, row in output.loc[mask].iterrows():
         w_t_head = pos_quat_to_mat(row["head_pos"], row["head_rot"])
@@ -62,7 +63,7 @@ def summarize_slip(detail: pd.DataFrame) -> pd.DataFrame:
                 "condition": condition,
                 "label": label,
                 "n": int(slip.size),
-                "slip_rms_px": float(np.sqrt(np.mean(slip * slip))),
+                "slip_rms_px": rms(slip),
                 "slip_peak_px": float(np.max(slip)),
                 "insufficient_data": False,
             }

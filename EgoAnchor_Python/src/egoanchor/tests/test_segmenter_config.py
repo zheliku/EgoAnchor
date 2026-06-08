@@ -26,16 +26,21 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.module.sam3.checkpoint_path, "sam3/assets/sam3_ckpt/sam3.pt")
         self.assertTrue(cfg.module.sam3.async_segmentation)
 
-    def test_render_consistency_defaults_to_score_only(self) -> None:
-        """渲染一致性默认开启，但仍保持 score_only，不直接触发重注册。"""
+    def test_render_quality_defaults_to_score_only(self) -> None:
+        """渲染质量检测默认开启，但仍保持 score_only，不直接触发重注册。"""
 
         cfg = load_config()
 
-        self.assertTrue(cfg.reliability.consistency.enabled)
-        self.assertEqual(cfg.reliability.consistency.mode, "score_only")
-        self.assertAlmostEqual(cfg.reliability.consistency.re_register_threshold, 0.35)
-        self.assertEqual(cfg.reliability.consistency.min_track_frames, 2)
-        self.assertEqual(cfg.reliability.consistency.warmup_frames, 3)
+        self.assertTrue(cfg.reliability.render_quality.enabled)
+        self.assertEqual(cfg.reliability.render_quality.mode, "score_only")
+        self.assertAlmostEqual(cfg.reliability.render_quality.re_register_threshold, 0.35)
+        self.assertEqual(cfg.reliability.render_quality.min_track_frames, 2)
+        self.assertEqual(cfg.reliability.render_quality.warmup_frames, 3)
+        self.assertFalse(hasattr(cfg.reliability.render_quality, "geometry_weight"))
+        self.assertFalse(hasattr(cfg.reliability.render_quality, "color_weight"))
+        self.assertAlmostEqual(cfg.reliability.render_quality.depth_distance_ratio, 0.02)
+        self.assertAlmostEqual(cfg.reliability.render_quality.depth_min_inlier_thresh_m, 0.005)
+        self.assertAlmostEqual(cfg.reliability.render_quality.depth_min_coverage, 0.10)
 
     def test_pose_debug_uses_score_window_without_stereo_window(self) -> None:
         """pose debug 应使用独立评分窗口，不再配置旧 stereo 辅助窗口。"""

@@ -7,6 +7,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .stats import finite_percentile
+
 
 DETAIL_COLUMNS = [
     "label",
@@ -109,15 +111,15 @@ def summarize_latency(detail: pd.DataFrame) -> pd.DataFrame:
                 "condition": condition,
                 "label": label,
                 "n": int(len(group)),
-                "capture_to_apply_p50_ms": _percentile(group["capture_to_apply_ms"], 50),
-                "capture_to_apply_p90_ms": _percentile(group["capture_to_apply_ms"], 90),
-                "capture_to_apply_p95_ms": _percentile(group["capture_to_apply_ms"], 95),
-                "perception_total_p50_ms": _percentile(group["perception_total_ms"], 50),
-                "yolo_p50_ms": _percentile(group["yolo_ms"], 50),
-                "depth_p50_ms": _percentile(group["depth_ms"], 50),
-                "cutie_p50_ms": _percentile(group["cutie_ms"], 50),
-                "pose_p50_ms": _percentile(group["pose_ms"], 50),
-                "publish_to_apply_est_p50_ms": _percentile(group["publish_to_apply_est_ms"], 50),
+                "capture_to_apply_p50_ms": finite_percentile(group["capture_to_apply_ms"], 50),
+                "capture_to_apply_p90_ms": finite_percentile(group["capture_to_apply_ms"], 90),
+                "capture_to_apply_p95_ms": finite_percentile(group["capture_to_apply_ms"], 95),
+                "perception_total_p50_ms": finite_percentile(group["perception_total_ms"], 50),
+                "yolo_p50_ms": finite_percentile(group["yolo_ms"], 50),
+                "depth_p50_ms": finite_percentile(group["depth_ms"], 50),
+                "cutie_p50_ms": finite_percentile(group["cutie_ms"], 50),
+                "pose_p50_ms": finite_percentile(group["pose_ms"], 50),
+                "publish_to_apply_est_p50_ms": finite_percentile(group["publish_to_apply_est_ms"], 50),
             }
         )
     return pd.DataFrame.from_records(rows, columns=SUMMARY_COLUMNS)
@@ -130,16 +132,6 @@ def _float(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return np.nan
-
-
-def _percentile(series: pd.Series, percentile: float) -> float:
-    """忽略 NaN 的百分位。"""
-
-    values = series.to_numpy(dtype=float)
-    values = values[np.isfinite(values)]
-    if values.size == 0:
-        return np.nan
-    return float(np.percentile(values, percentile))
 
 
 def _empty_detail() -> pd.DataFrame:

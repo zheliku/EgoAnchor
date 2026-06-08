@@ -25,7 +25,7 @@ namespace EgoAnchor.Protocol.Generated {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "Chhwcm90b2NvbC92MS9hbmNob3IucHJvdG8SC3Byb3RvY29sLnYxGhhwcm90",
-            "b2NvbC92MS9jb21tb24ucHJvdG8izgcKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
+            "b2NvbC92MS9jb21tb24ucHJvdG8irggKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
             "GAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchIQCghoYXNfcG9z",
             "ZRgCIAEoCBI1ChVwb3NlX21hdHJpeF9jdl9jYW1lcmEYAyABKAsyFi5wcm90",
             "b2NvbC52MS5NYXRyaXg0eDQSDQoFcGhhc2UYBCABKAkSDQoFc3RhZ2UYBSAB",
@@ -37,46 +37,48 @@ namespace EgoAnchor.Protocol.Generated {
             "DSABKAISFwoPbWFza19hcmVhX3JhdGlvGA4gASgCEhMKC3Bvc2Vfc291cmNl",
             "GA8gASgJEh4KFnNlcnZlcl9yZWNlaXZlX21vbm9fbXMYECABKAESHgoWc2Vy",
             "dmVyX3B1Ymxpc2hfbW9ub19tcxgRIAEoARITCgtzY29yZV9waGFzZRgSIAEo",
-            "AhIZChFzY29yZV9jb25zaXN0ZW5jeRgTIAEoAhITCgtzY29yZV9kZXB0aBgU",
-            "IAEoAhISCgpzY29yZV9qdW1wGBUgASgCEhIKCnNjb3JlX21hc2sYFiABKAIS",
-            "FAoMc2NvcmVfcmVqZWN0GBcgASgCEhkKEXRyYWNrX2NvbnNpc3RlbmN5GBgg",
-            "ASgCEhwKFGNvbnNpc3RlbmN5X21hc2tfaW91GBkgASgCEiAKGGNvbnNpc3Rl",
-            "bmN5X2RlcHRoX2lubGllchgaIAEoAhIoCiBjb25zaXN0ZW5jeV9yZW5kZXJf",
-            "dmlzaWJsZV9yYXRpbxgbIAEoAhIkChxjb25zaXN0ZW5jeV9kZXB0aF9yZXNp",
-            "ZHVhbF9tGBwgASgCEhoKEmNvbnNpc3RlbmN5X3N0YXR1cxgdIAEoCRIiChpj",
-            "b25zaXN0ZW5jeV9yZW5kZXJfYXJlYV9weBgeIAEoBRIcChRjb25zaXN0ZW5j",
-            "eV9leHBlY3RlZBgfIAEoCBIqCiJjb25zaXN0ZW5jeV9vYnNlcnZlZF92aXNp",
-            "YmxlX3JhdGlvGCAgASgCEiMKG2NvbnNpc3RlbmN5X2RlcHRoX2FsaWdubWVu",
-            "dBghIAEoAiKVAQoRQW5jaG9yU3RhdHVzRXZlbnQSKgoGaGVhZGVyGAEgASgL",
-            "MhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchINCgVzdGF0ZRgCIAEoCRIN",
-            "CgVldmVudBgDIAEoCRIPCgdtZXNzYWdlGAQgASgJEiUKBWVycm9yGAUgASgL",
-            "MhYucHJvdG9jb2wudjEuRXJyb3JJbmZvIpICCg9TZXJ2ZXJIZWFydGJlYXQS",
-            "KgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchIN",
-            "CgVzdGF0ZRgCIAEoCRITCgtpbnB1dF9yZWFkeRgDIAEoCBIeChZsYXRlc3Rf",
-            "c3RlcmVvX2ZyYW1lX2lkGAQgASgDEhsKE2NhbWVyYV9pbmZvX3ZlcnNpb24Y",
-            "BSABKAMSEwoLcnVudGltZV9mcHMYBiABKAISEwoLcHVibGlzaF9mcHMYByAB",
-            "KAISKgoKbGFzdF9lcnJvchgIIAEoCzIWLnByb3RvY29sLnYxLkVycm9ySW5m",
-            "bxIcChRjb21tYW5kX3F1ZXVlX2xlbmd0aBgJIAEoBSKEAQoUUmVzZXRUcmFj",
-            "a2luZ1JlcXVlc3QSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wudjEuTWVz",
-            "c2FnZUhlYWRlchIVCg1jbGVhcl9maWx0ZXJzGAIgASgIEhkKEWNsZWFyX2Fu",
-            "Y2hvcl9wb3NlGAMgASgIEg4KBnJlYXNvbhgEIAEoCSKoAgoWUmVhY3F1aXJl",
-            "QW5jaG9yUmVxdWVzdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5N",
-            "ZXNzYWdlSGVhZGVyEj8KBG1vZGUYAiABKA4yMS5wcm90b2NvbC52MS5SZWFj",
-            "cXVpcmVBbmNob3JSZXF1ZXN0LlJlYWNxdWlyZU1vZGUSHAoUY2xlYXJfdHJh",
-            "Y2tpbmdfZmlyc3QYAyABKAgSFwoPcHJvbXB0X292ZXJyaWRlGAQgASgJEhIK",
-            "CnRpbWVvdXRfbXMYBSABKAEiVgoNUmVhY3F1aXJlTW9kZRIUChBORVhUX1ZB",
-            "TElEX0ZSQU1FEAASHQoZTEFURVNUX0ZSQU1FX0lGX0FWQUlMQUJMRRABEhAK",
-            "DEZPUkNFX0RFVEVDVBACIvkBChRBbmNob3JDb250cm9sUmVxdWVzdBIqCgZo",
-            "ZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVhZGVyEj8KBmFj",
-            "dGlvbhgCIAEoDjIvLnByb3RvY29sLnYxLkFuY2hvckNvbnRyb2xSZXF1ZXN0",
-            "LkNvbnRyb2xBY3Rpb24SDQoFc3RhZ2UYAyABKAUSDgoGcmVhc29uGAQgASgJ",
-            "IlUKDUNvbnRyb2xBY3Rpb24SHgoaQ09OVFJPTF9BQ1RJT05fVU5TUEVDSUZJ",
-            "RUQQABINCglTRVRfU1RBR0UQARIJCgVQQVVTRRACEgoKBlJFU1VNRRADQhiq",
-            "AhVFZ29BbmNob3IuUHJvdG9jb2wuVjFiBnByb3RvMw=="));
+            "AhIaChJzY29yZV9yZXByb2plY3Rpb24YEyABKAISEwoLc2NvcmVfZGVwdGgY",
+            "FCABKAISEgoKc2NvcmVfanVtcBgVIAEoAhISCgpzY29yZV9tYXNrGBYgASgC",
+            "EhQKDHNjb3JlX3JlamVjdBgXIAEoAhIaChJ0cmFja19yZXByb2plY3Rpb24Y",
+            "GCABKAISHwoXcmVuZGVyX3F1YWxpdHlfbWFza19pb3UYGSABKAISIwobcmVu",
+            "ZGVyX3F1YWxpdHlfZGVwdGhfaW5saWVyGBogASgCEisKI3JlbmRlcl9xdWFs",
+            "aXR5X3JlbmRlcl92aXNpYmxlX3JhdGlvGBsgASgCEicKH3JlbmRlcl9xdWFs",
+            "aXR5X2RlcHRoX3Jlc2lkdWFsX20YHCABKAISHQoVcmVuZGVyX3F1YWxpdHlf",
+            "c3RhdHVzGB0gASgJEiUKHXJlbmRlcl9xdWFsaXR5X3JlbmRlcl9hcmVhX3B4",
+            "GB4gASgFEh8KF3JlbmRlcl9xdWFsaXR5X2V4cGVjdGVkGB8gASgIEi0KJXJl",
+            "bmRlcl9xdWFsaXR5X29ic2VydmVkX3Zpc2libGVfcmF0aW8YICABKAISJgoe",
+            "cmVuZGVyX3F1YWxpdHlfZGVwdGhfYWxpZ25tZW50GCEgASgCEhgKEHNjb3Jl",
+            "X2NvbmZpZGVuY2UYIiABKAISJwofcmVuZGVyX3F1YWxpdHlfYXJlYV9yYXRp",
+            "b19zY29yZRgjIAEoAiKVAQoRQW5jaG9yU3RhdHVzRXZlbnQSKgoGaGVhZGVy",
+            "GAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchINCgVzdGF0ZRgC",
+            "IAEoCRINCgVldmVudBgDIAEoCRIPCgdtZXNzYWdlGAQgASgJEiUKBWVycm9y",
+            "GAUgASgLMhYucHJvdG9jb2wudjEuRXJyb3JJbmZvIpICCg9TZXJ2ZXJIZWFy",
+            "dGJlYXQSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhl",
+            "YWRlchINCgVzdGF0ZRgCIAEoCRITCgtpbnB1dF9yZWFkeRgDIAEoCBIeChZs",
+            "YXRlc3Rfc3RlcmVvX2ZyYW1lX2lkGAQgASgDEhsKE2NhbWVyYV9pbmZvX3Zl",
+            "cnNpb24YBSABKAMSEwoLcnVudGltZV9mcHMYBiABKAISEwoLcHVibGlzaF9m",
+            "cHMYByABKAISKgoKbGFzdF9lcnJvchgIIAEoCzIWLnByb3RvY29sLnYxLkVy",
+            "cm9ySW5mbxIcChRjb21tYW5kX3F1ZXVlX2xlbmd0aBgJIAEoBSKEAQoUUmVz",
+            "ZXRUcmFja2luZ1JlcXVlc3QSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wu",
+            "djEuTWVzc2FnZUhlYWRlchIVCg1jbGVhcl9maWx0ZXJzGAIgASgIEhkKEWNs",
+            "ZWFyX2FuY2hvcl9wb3NlGAMgASgIEg4KBnJlYXNvbhgEIAEoCSKoAgoWUmVh",
+            "Y3F1aXJlQW5jaG9yUmVxdWVzdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2Nv",
+            "bC52MS5NZXNzYWdlSGVhZGVyEj8KBG1vZGUYAiABKA4yMS5wcm90b2NvbC52",
+            "MS5SZWFjcXVpcmVBbmNob3JSZXF1ZXN0LlJlYWNxdWlyZU1vZGUSHAoUY2xl",
+            "YXJfdHJhY2tpbmdfZmlyc3QYAyABKAgSFwoPcHJvbXB0X292ZXJyaWRlGAQg",
+            "ASgJEhIKCnRpbWVvdXRfbXMYBSABKAEiVgoNUmVhY3F1aXJlTW9kZRIUChBO",
+            "RVhUX1ZBTElEX0ZSQU1FEAASHQoZTEFURVNUX0ZSQU1FX0lGX0FWQUlMQUJM",
+            "RRABEhAKDEZPUkNFX0RFVEVDVBACIvkBChRBbmNob3JDb250cm9sUmVxdWVz",
+            "dBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVhZGVy",
+            "Ej8KBmFjdGlvbhgCIAEoDjIvLnByb3RvY29sLnYxLkFuY2hvckNvbnRyb2xS",
+            "ZXF1ZXN0LkNvbnRyb2xBY3Rpb24SDQoFc3RhZ2UYAyABKAUSDgoGcmVhc29u",
+            "GAQgASgJIlUKDUNvbnRyb2xBY3Rpb24SHgoaQ09OVFJPTF9BQ1RJT05fVU5T",
+            "UEVDSUZJRUQQABINCglTRVRfU1RBR0UQARIJCgVQQVVTRRACEgoKBlJFU1VN",
+            "RRADQhiqAhVFZ29BbmNob3IuUHJvdG9jb2wuVjFiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::EgoAnchor.Protocol.Generated.CommonReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError", "ReliabilityScore", "ReliabilityFlags", "DepthValidInMask", "MaskAreaRatio", "PoseSource", "ServerReceiveMonoMs", "ServerPublishMonoMs", "ScorePhase", "ScoreConsistency", "ScoreDepth", "ScoreJump", "ScoreMask", "ScoreReject", "TrackConsistency", "ConsistencyMaskIou", "ConsistencyDepthInlier", "ConsistencyRenderVisibleRatio", "ConsistencyDepthResidualM", "ConsistencyStatus", "ConsistencyRenderAreaPx", "ConsistencyExpected", "ConsistencyObservedVisibleRatio", "ConsistencyDepthAlignment" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError", "ReliabilityScore", "ReliabilityFlags", "DepthValidInMask", "MaskAreaRatio", "PoseSource", "ServerReceiveMonoMs", "ServerPublishMonoMs", "ScorePhase", "ScoreReprojection", "ScoreDepth", "ScoreJump", "ScoreMask", "ScoreReject", "TrackReprojection", "RenderQualityMaskIou", "RenderQualityDepthInlier", "RenderQualityRenderVisibleRatio", "RenderQualityDepthResidualM", "RenderQualityStatus", "RenderQualityRenderAreaPx", "RenderQualityExpected", "RenderQualityObservedVisibleRatio", "RenderQualityDepthAlignment", "ScoreConfidence", "RenderQualityAreaRatioScore" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.AnchorStatusEvent), global::EgoAnchor.Protocol.Generated.AnchorStatusEvent.Parser, new[]{ "Header", "State", "Event", "Message", "Error" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ServerHeartbeat), global::EgoAnchor.Protocol.Generated.ServerHeartbeat.Parser, new[]{ "Header", "State", "InputReady", "LatestStereoFrameId", "CameraInfoVersion", "RuntimeFps", "PublishFps", "LastError", "CommandQueueLength" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ResetTrackingRequest), global::EgoAnchor.Protocol.Generated.ResetTrackingRequest.Parser, new[]{ "Header", "ClearFilters", "ClearAnchorPose", "Reason" }, null, null, null, null),
@@ -141,21 +143,23 @@ namespace EgoAnchor.Protocol.Generated {
       serverReceiveMonoMs_ = other.serverReceiveMonoMs_;
       serverPublishMonoMs_ = other.serverPublishMonoMs_;
       scorePhase_ = other.scorePhase_;
-      scoreConsistency_ = other.scoreConsistency_;
+      scoreReprojection_ = other.scoreReprojection_;
       scoreDepth_ = other.scoreDepth_;
       scoreJump_ = other.scoreJump_;
       scoreMask_ = other.scoreMask_;
       scoreReject_ = other.scoreReject_;
-      trackConsistency_ = other.trackConsistency_;
-      consistencyMaskIou_ = other.consistencyMaskIou_;
-      consistencyDepthInlier_ = other.consistencyDepthInlier_;
-      consistencyRenderVisibleRatio_ = other.consistencyRenderVisibleRatio_;
-      consistencyDepthResidualM_ = other.consistencyDepthResidualM_;
-      consistencyStatus_ = other.consistencyStatus_;
-      consistencyRenderAreaPx_ = other.consistencyRenderAreaPx_;
-      consistencyExpected_ = other.consistencyExpected_;
-      consistencyObservedVisibleRatio_ = other.consistencyObservedVisibleRatio_;
-      consistencyDepthAlignment_ = other.consistencyDepthAlignment_;
+      trackReprojection_ = other.trackReprojection_;
+      renderQualityMaskIou_ = other.renderQualityMaskIou_;
+      renderQualityDepthInlier_ = other.renderQualityDepthInlier_;
+      renderQualityRenderVisibleRatio_ = other.renderQualityRenderVisibleRatio_;
+      renderQualityDepthResidualM_ = other.renderQualityDepthResidualM_;
+      renderQualityStatus_ = other.renderQualityStatus_;
+      renderQualityRenderAreaPx_ = other.renderQualityRenderAreaPx_;
+      renderQualityExpected_ = other.renderQualityExpected_;
+      renderQualityObservedVisibleRatio_ = other.renderQualityObservedVisibleRatio_;
+      renderQualityDepthAlignment_ = other.renderQualityDepthAlignment_;
+      scoreConfidence_ = other.scoreConfidence_;
+      renderQualityAreaRatioScore_ = other.renderQualityAreaRatioScore_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -380,15 +384,15 @@ namespace EgoAnchor.Protocol.Generated {
       }
     }
 
-    /// <summary>Field number for the "score_consistency" field.</summary>
-    public const int ScoreConsistencyFieldNumber = 19;
-    private float scoreConsistency_;
+    /// <summary>Field number for the "score_reprojection" field.</summary>
+    public const int ScoreReprojectionFieldNumber = 19;
+    private float scoreReprojection_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ScoreConsistency {
-      get { return scoreConsistency_; }
+    public float ScoreReprojection {
+      get { return scoreReprojection_; }
       set {
-        scoreConsistency_ = value;
+        scoreReprojection_ = value;
       }
     }
 
@@ -440,123 +444,147 @@ namespace EgoAnchor.Protocol.Generated {
       }
     }
 
-    /// <summary>Field number for the "track_consistency" field.</summary>
-    public const int TrackConsistencyFieldNumber = 24;
-    private float trackConsistency_;
+    /// <summary>Field number for the "track_reprojection" field.</summary>
+    public const int TrackReprojectionFieldNumber = 24;
+    private float trackReprojection_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float TrackConsistency {
-      get { return trackConsistency_; }
+    public float TrackReprojection {
+      get { return trackReprojection_; }
       set {
-        trackConsistency_ = value;
+        trackReprojection_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_mask_iou" field.</summary>
-    public const int ConsistencyMaskIouFieldNumber = 25;
-    private float consistencyMaskIou_;
+    /// <summary>Field number for the "render_quality_mask_iou" field.</summary>
+    public const int RenderQualityMaskIouFieldNumber = 25;
+    private float renderQualityMaskIou_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyMaskIou {
-      get { return consistencyMaskIou_; }
+    public float RenderQualityMaskIou {
+      get { return renderQualityMaskIou_; }
       set {
-        consistencyMaskIou_ = value;
+        renderQualityMaskIou_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_depth_inlier" field.</summary>
-    public const int ConsistencyDepthInlierFieldNumber = 26;
-    private float consistencyDepthInlier_;
+    /// <summary>Field number for the "render_quality_depth_inlier" field.</summary>
+    public const int RenderQualityDepthInlierFieldNumber = 26;
+    private float renderQualityDepthInlier_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyDepthInlier {
-      get { return consistencyDepthInlier_; }
+    public float RenderQualityDepthInlier {
+      get { return renderQualityDepthInlier_; }
       set {
-        consistencyDepthInlier_ = value;
+        renderQualityDepthInlier_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_render_visible_ratio" field.</summary>
-    public const int ConsistencyRenderVisibleRatioFieldNumber = 27;
-    private float consistencyRenderVisibleRatio_;
+    /// <summary>Field number for the "render_quality_render_visible_ratio" field.</summary>
+    public const int RenderQualityRenderVisibleRatioFieldNumber = 27;
+    private float renderQualityRenderVisibleRatio_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyRenderVisibleRatio {
-      get { return consistencyRenderVisibleRatio_; }
+    public float RenderQualityRenderVisibleRatio {
+      get { return renderQualityRenderVisibleRatio_; }
       set {
-        consistencyRenderVisibleRatio_ = value;
+        renderQualityRenderVisibleRatio_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_depth_residual_m" field.</summary>
-    public const int ConsistencyDepthResidualMFieldNumber = 28;
-    private float consistencyDepthResidualM_;
+    /// <summary>Field number for the "render_quality_depth_residual_m" field.</summary>
+    public const int RenderQualityDepthResidualMFieldNumber = 28;
+    private float renderQualityDepthResidualM_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyDepthResidualM {
-      get { return consistencyDepthResidualM_; }
+    public float RenderQualityDepthResidualM {
+      get { return renderQualityDepthResidualM_; }
       set {
-        consistencyDepthResidualM_ = value;
+        renderQualityDepthResidualM_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_status" field.</summary>
-    public const int ConsistencyStatusFieldNumber = 29;
-    private string consistencyStatus_ = "";
+    /// <summary>Field number for the "render_quality_status" field.</summary>
+    public const int RenderQualityStatusFieldNumber = 29;
+    private string renderQualityStatus_ = "";
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public string ConsistencyStatus {
-      get { return consistencyStatus_; }
+    public string RenderQualityStatus {
+      get { return renderQualityStatus_; }
       set {
-        consistencyStatus_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+        renderQualityStatus_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
       }
     }
 
-    /// <summary>Field number for the "consistency_render_area_px" field.</summary>
-    public const int ConsistencyRenderAreaPxFieldNumber = 30;
-    private int consistencyRenderAreaPx_;
+    /// <summary>Field number for the "render_quality_render_area_px" field.</summary>
+    public const int RenderQualityRenderAreaPxFieldNumber = 30;
+    private int renderQualityRenderAreaPx_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public int ConsistencyRenderAreaPx {
-      get { return consistencyRenderAreaPx_; }
+    public int RenderQualityRenderAreaPx {
+      get { return renderQualityRenderAreaPx_; }
       set {
-        consistencyRenderAreaPx_ = value;
+        renderQualityRenderAreaPx_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_expected" field.</summary>
-    public const int ConsistencyExpectedFieldNumber = 31;
-    private bool consistencyExpected_;
+    /// <summary>Field number for the "render_quality_expected" field.</summary>
+    public const int RenderQualityExpectedFieldNumber = 31;
+    private bool renderQualityExpected_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public bool ConsistencyExpected {
-      get { return consistencyExpected_; }
+    public bool RenderQualityExpected {
+      get { return renderQualityExpected_; }
       set {
-        consistencyExpected_ = value;
+        renderQualityExpected_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_observed_visible_ratio" field.</summary>
-    public const int ConsistencyObservedVisibleRatioFieldNumber = 32;
-    private float consistencyObservedVisibleRatio_;
+    /// <summary>Field number for the "render_quality_observed_visible_ratio" field.</summary>
+    public const int RenderQualityObservedVisibleRatioFieldNumber = 32;
+    private float renderQualityObservedVisibleRatio_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyObservedVisibleRatio {
-      get { return consistencyObservedVisibleRatio_; }
+    public float RenderQualityObservedVisibleRatio {
+      get { return renderQualityObservedVisibleRatio_; }
       set {
-        consistencyObservedVisibleRatio_ = value;
+        renderQualityObservedVisibleRatio_ = value;
       }
     }
 
-    /// <summary>Field number for the "consistency_depth_alignment" field.</summary>
-    public const int ConsistencyDepthAlignmentFieldNumber = 33;
-    private float consistencyDepthAlignment_;
+    /// <summary>Field number for the "render_quality_depth_alignment" field.</summary>
+    public const int RenderQualityDepthAlignmentFieldNumber = 33;
+    private float renderQualityDepthAlignment_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ConsistencyDepthAlignment {
-      get { return consistencyDepthAlignment_; }
+    public float RenderQualityDepthAlignment {
+      get { return renderQualityDepthAlignment_; }
       set {
-        consistencyDepthAlignment_ = value;
+        renderQualityDepthAlignment_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "score_confidence" field.</summary>
+    public const int ScoreConfidenceFieldNumber = 34;
+    private float scoreConfidence_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float ScoreConfidence {
+      get { return scoreConfidence_; }
+      set {
+        scoreConfidence_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "render_quality_area_ratio_score" field.</summary>
+    public const int RenderQualityAreaRatioScoreFieldNumber = 35;
+    private float renderQualityAreaRatioScore_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float RenderQualityAreaRatioScore {
+      get { return renderQualityAreaRatioScore_; }
+      set {
+        renderQualityAreaRatioScore_ = value;
       }
     }
 
@@ -593,21 +621,23 @@ namespace EgoAnchor.Protocol.Generated {
       if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(ServerReceiveMonoMs, other.ServerReceiveMonoMs)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(ServerPublishMonoMs, other.ServerPublishMonoMs)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScorePhase, other.ScorePhase)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreConsistency, other.ScoreConsistency)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreReprojection, other.ScoreReprojection)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreDepth, other.ScoreDepth)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreJump, other.ScoreJump)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreMask, other.ScoreMask)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreReject, other.ScoreReject)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(TrackConsistency, other.TrackConsistency)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyMaskIou, other.ConsistencyMaskIou)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyDepthInlier, other.ConsistencyDepthInlier)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyRenderVisibleRatio, other.ConsistencyRenderVisibleRatio)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyDepthResidualM, other.ConsistencyDepthResidualM)) return false;
-      if (ConsistencyStatus != other.ConsistencyStatus) return false;
-      if (ConsistencyRenderAreaPx != other.ConsistencyRenderAreaPx) return false;
-      if (ConsistencyExpected != other.ConsistencyExpected) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyObservedVisibleRatio, other.ConsistencyObservedVisibleRatio)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ConsistencyDepthAlignment, other.ConsistencyDepthAlignment)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(TrackReprojection, other.TrackReprojection)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityMaskIou, other.RenderQualityMaskIou)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityDepthInlier, other.RenderQualityDepthInlier)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityRenderVisibleRatio, other.RenderQualityRenderVisibleRatio)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityDepthResidualM, other.RenderQualityDepthResidualM)) return false;
+      if (RenderQualityStatus != other.RenderQualityStatus) return false;
+      if (RenderQualityRenderAreaPx != other.RenderQualityRenderAreaPx) return false;
+      if (RenderQualityExpected != other.RenderQualityExpected) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityObservedVisibleRatio, other.RenderQualityObservedVisibleRatio)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityDepthAlignment, other.RenderQualityDepthAlignment)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreConfidence, other.ScoreConfidence)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(RenderQualityAreaRatioScore, other.RenderQualityAreaRatioScore)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -633,21 +663,23 @@ namespace EgoAnchor.Protocol.Generated {
       if (ServerReceiveMonoMs != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(ServerReceiveMonoMs);
       if (ServerPublishMonoMs != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(ServerPublishMonoMs);
       if (ScorePhase != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScorePhase);
-      if (ScoreConsistency != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreConsistency);
+      if (ScoreReprojection != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreReprojection);
       if (ScoreDepth != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreDepth);
       if (ScoreJump != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreJump);
       if (ScoreMask != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreMask);
       if (ScoreReject != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreReject);
-      if (TrackConsistency != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(TrackConsistency);
-      if (ConsistencyMaskIou != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyMaskIou);
-      if (ConsistencyDepthInlier != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyDepthInlier);
-      if (ConsistencyRenderVisibleRatio != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyRenderVisibleRatio);
-      if (ConsistencyDepthResidualM != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyDepthResidualM);
-      if (ConsistencyStatus.Length != 0) hash ^= ConsistencyStatus.GetHashCode();
-      if (ConsistencyRenderAreaPx != 0) hash ^= ConsistencyRenderAreaPx.GetHashCode();
-      if (ConsistencyExpected != false) hash ^= ConsistencyExpected.GetHashCode();
-      if (ConsistencyObservedVisibleRatio != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyObservedVisibleRatio);
-      if (ConsistencyDepthAlignment != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ConsistencyDepthAlignment);
+      if (TrackReprojection != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(TrackReprojection);
+      if (RenderQualityMaskIou != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityMaskIou);
+      if (RenderQualityDepthInlier != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityDepthInlier);
+      if (RenderQualityRenderVisibleRatio != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityRenderVisibleRatio);
+      if (RenderQualityDepthResidualM != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityDepthResidualM);
+      if (RenderQualityStatus.Length != 0) hash ^= RenderQualityStatus.GetHashCode();
+      if (RenderQualityRenderAreaPx != 0) hash ^= RenderQualityRenderAreaPx.GetHashCode();
+      if (RenderQualityExpected != false) hash ^= RenderQualityExpected.GetHashCode();
+      if (RenderQualityObservedVisibleRatio != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityObservedVisibleRatio);
+      if (RenderQualityDepthAlignment != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityDepthAlignment);
+      if (ScoreConfidence != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreConfidence);
+      if (RenderQualityAreaRatioScore != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(RenderQualityAreaRatioScore);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -735,9 +767,9 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(149, 1);
         output.WriteFloat(ScorePhase);
       }
-      if (ScoreConsistency != 0F) {
+      if (ScoreReprojection != 0F) {
         output.WriteRawTag(157, 1);
-        output.WriteFloat(ScoreConsistency);
+        output.WriteFloat(ScoreReprojection);
       }
       if (ScoreDepth != 0F) {
         output.WriteRawTag(165, 1);
@@ -755,45 +787,53 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(189, 1);
         output.WriteFloat(ScoreReject);
       }
-      if (TrackConsistency != 0F) {
+      if (TrackReprojection != 0F) {
         output.WriteRawTag(197, 1);
-        output.WriteFloat(TrackConsistency);
+        output.WriteFloat(TrackReprojection);
       }
-      if (ConsistencyMaskIou != 0F) {
+      if (RenderQualityMaskIou != 0F) {
         output.WriteRawTag(205, 1);
-        output.WriteFloat(ConsistencyMaskIou);
+        output.WriteFloat(RenderQualityMaskIou);
       }
-      if (ConsistencyDepthInlier != 0F) {
+      if (RenderQualityDepthInlier != 0F) {
         output.WriteRawTag(213, 1);
-        output.WriteFloat(ConsistencyDepthInlier);
+        output.WriteFloat(RenderQualityDepthInlier);
       }
-      if (ConsistencyRenderVisibleRatio != 0F) {
+      if (RenderQualityRenderVisibleRatio != 0F) {
         output.WriteRawTag(221, 1);
-        output.WriteFloat(ConsistencyRenderVisibleRatio);
+        output.WriteFloat(RenderQualityRenderVisibleRatio);
       }
-      if (ConsistencyDepthResidualM != 0F) {
+      if (RenderQualityDepthResidualM != 0F) {
         output.WriteRawTag(229, 1);
-        output.WriteFloat(ConsistencyDepthResidualM);
+        output.WriteFloat(RenderQualityDepthResidualM);
       }
-      if (ConsistencyStatus.Length != 0) {
+      if (RenderQualityStatus.Length != 0) {
         output.WriteRawTag(234, 1);
-        output.WriteString(ConsistencyStatus);
+        output.WriteString(RenderQualityStatus);
       }
-      if (ConsistencyRenderAreaPx != 0) {
+      if (RenderQualityRenderAreaPx != 0) {
         output.WriteRawTag(240, 1);
-        output.WriteInt32(ConsistencyRenderAreaPx);
+        output.WriteInt32(RenderQualityRenderAreaPx);
       }
-      if (ConsistencyExpected != false) {
+      if (RenderQualityExpected != false) {
         output.WriteRawTag(248, 1);
-        output.WriteBool(ConsistencyExpected);
+        output.WriteBool(RenderQualityExpected);
       }
-      if (ConsistencyObservedVisibleRatio != 0F) {
+      if (RenderQualityObservedVisibleRatio != 0F) {
         output.WriteRawTag(133, 2);
-        output.WriteFloat(ConsistencyObservedVisibleRatio);
+        output.WriteFloat(RenderQualityObservedVisibleRatio);
       }
-      if (ConsistencyDepthAlignment != 0F) {
+      if (RenderQualityDepthAlignment != 0F) {
         output.WriteRawTag(141, 2);
-        output.WriteFloat(ConsistencyDepthAlignment);
+        output.WriteFloat(RenderQualityDepthAlignment);
+      }
+      if (ScoreConfidence != 0F) {
+        output.WriteRawTag(149, 2);
+        output.WriteFloat(ScoreConfidence);
+      }
+      if (RenderQualityAreaRatioScore != 0F) {
+        output.WriteRawTag(157, 2);
+        output.WriteFloat(RenderQualityAreaRatioScore);
       }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
@@ -874,9 +914,9 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(149, 1);
         output.WriteFloat(ScorePhase);
       }
-      if (ScoreConsistency != 0F) {
+      if (ScoreReprojection != 0F) {
         output.WriteRawTag(157, 1);
-        output.WriteFloat(ScoreConsistency);
+        output.WriteFloat(ScoreReprojection);
       }
       if (ScoreDepth != 0F) {
         output.WriteRawTag(165, 1);
@@ -894,45 +934,53 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(189, 1);
         output.WriteFloat(ScoreReject);
       }
-      if (TrackConsistency != 0F) {
+      if (TrackReprojection != 0F) {
         output.WriteRawTag(197, 1);
-        output.WriteFloat(TrackConsistency);
+        output.WriteFloat(TrackReprojection);
       }
-      if (ConsistencyMaskIou != 0F) {
+      if (RenderQualityMaskIou != 0F) {
         output.WriteRawTag(205, 1);
-        output.WriteFloat(ConsistencyMaskIou);
+        output.WriteFloat(RenderQualityMaskIou);
       }
-      if (ConsistencyDepthInlier != 0F) {
+      if (RenderQualityDepthInlier != 0F) {
         output.WriteRawTag(213, 1);
-        output.WriteFloat(ConsistencyDepthInlier);
+        output.WriteFloat(RenderQualityDepthInlier);
       }
-      if (ConsistencyRenderVisibleRatio != 0F) {
+      if (RenderQualityRenderVisibleRatio != 0F) {
         output.WriteRawTag(221, 1);
-        output.WriteFloat(ConsistencyRenderVisibleRatio);
+        output.WriteFloat(RenderQualityRenderVisibleRatio);
       }
-      if (ConsistencyDepthResidualM != 0F) {
+      if (RenderQualityDepthResidualM != 0F) {
         output.WriteRawTag(229, 1);
-        output.WriteFloat(ConsistencyDepthResidualM);
+        output.WriteFloat(RenderQualityDepthResidualM);
       }
-      if (ConsistencyStatus.Length != 0) {
+      if (RenderQualityStatus.Length != 0) {
         output.WriteRawTag(234, 1);
-        output.WriteString(ConsistencyStatus);
+        output.WriteString(RenderQualityStatus);
       }
-      if (ConsistencyRenderAreaPx != 0) {
+      if (RenderQualityRenderAreaPx != 0) {
         output.WriteRawTag(240, 1);
-        output.WriteInt32(ConsistencyRenderAreaPx);
+        output.WriteInt32(RenderQualityRenderAreaPx);
       }
-      if (ConsistencyExpected != false) {
+      if (RenderQualityExpected != false) {
         output.WriteRawTag(248, 1);
-        output.WriteBool(ConsistencyExpected);
+        output.WriteBool(RenderQualityExpected);
       }
-      if (ConsistencyObservedVisibleRatio != 0F) {
+      if (RenderQualityObservedVisibleRatio != 0F) {
         output.WriteRawTag(133, 2);
-        output.WriteFloat(ConsistencyObservedVisibleRatio);
+        output.WriteFloat(RenderQualityObservedVisibleRatio);
       }
-      if (ConsistencyDepthAlignment != 0F) {
+      if (RenderQualityDepthAlignment != 0F) {
         output.WriteRawTag(141, 2);
-        output.WriteFloat(ConsistencyDepthAlignment);
+        output.WriteFloat(RenderQualityDepthAlignment);
+      }
+      if (ScoreConfidence != 0F) {
+        output.WriteRawTag(149, 2);
+        output.WriteFloat(ScoreConfidence);
+      }
+      if (RenderQualityAreaRatioScore != 0F) {
+        output.WriteRawTag(157, 2);
+        output.WriteFloat(RenderQualityAreaRatioScore);
       }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
@@ -996,7 +1044,7 @@ namespace EgoAnchor.Protocol.Generated {
       if (ScorePhase != 0F) {
         size += 2 + 4;
       }
-      if (ScoreConsistency != 0F) {
+      if (ScoreReprojection != 0F) {
         size += 2 + 4;
       }
       if (ScoreDepth != 0F) {
@@ -1011,34 +1059,40 @@ namespace EgoAnchor.Protocol.Generated {
       if (ScoreReject != 0F) {
         size += 2 + 4;
       }
-      if (TrackConsistency != 0F) {
+      if (TrackReprojection != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyMaskIou != 0F) {
+      if (RenderQualityMaskIou != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyDepthInlier != 0F) {
+      if (RenderQualityDepthInlier != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyRenderVisibleRatio != 0F) {
+      if (RenderQualityRenderVisibleRatio != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyDepthResidualM != 0F) {
+      if (RenderQualityDepthResidualM != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyStatus.Length != 0) {
-        size += 2 + pb::CodedOutputStream.ComputeStringSize(ConsistencyStatus);
+      if (RenderQualityStatus.Length != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeStringSize(RenderQualityStatus);
       }
-      if (ConsistencyRenderAreaPx != 0) {
-        size += 2 + pb::CodedOutputStream.ComputeInt32Size(ConsistencyRenderAreaPx);
+      if (RenderQualityRenderAreaPx != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeInt32Size(RenderQualityRenderAreaPx);
       }
-      if (ConsistencyExpected != false) {
+      if (RenderQualityExpected != false) {
         size += 2 + 1;
       }
-      if (ConsistencyObservedVisibleRatio != 0F) {
+      if (RenderQualityObservedVisibleRatio != 0F) {
         size += 2 + 4;
       }
-      if (ConsistencyDepthAlignment != 0F) {
+      if (RenderQualityDepthAlignment != 0F) {
+        size += 2 + 4;
+      }
+      if (ScoreConfidence != 0F) {
+        size += 2 + 4;
+      }
+      if (RenderQualityAreaRatioScore != 0F) {
         size += 2 + 4;
       }
       if (_unknownFields != null) {
@@ -1117,8 +1171,8 @@ namespace EgoAnchor.Protocol.Generated {
       if (other.ScorePhase != 0F) {
         ScorePhase = other.ScorePhase;
       }
-      if (other.ScoreConsistency != 0F) {
-        ScoreConsistency = other.ScoreConsistency;
+      if (other.ScoreReprojection != 0F) {
+        ScoreReprojection = other.ScoreReprojection;
       }
       if (other.ScoreDepth != 0F) {
         ScoreDepth = other.ScoreDepth;
@@ -1132,35 +1186,41 @@ namespace EgoAnchor.Protocol.Generated {
       if (other.ScoreReject != 0F) {
         ScoreReject = other.ScoreReject;
       }
-      if (other.TrackConsistency != 0F) {
-        TrackConsistency = other.TrackConsistency;
+      if (other.TrackReprojection != 0F) {
+        TrackReprojection = other.TrackReprojection;
       }
-      if (other.ConsistencyMaskIou != 0F) {
-        ConsistencyMaskIou = other.ConsistencyMaskIou;
+      if (other.RenderQualityMaskIou != 0F) {
+        RenderQualityMaskIou = other.RenderQualityMaskIou;
       }
-      if (other.ConsistencyDepthInlier != 0F) {
-        ConsistencyDepthInlier = other.ConsistencyDepthInlier;
+      if (other.RenderQualityDepthInlier != 0F) {
+        RenderQualityDepthInlier = other.RenderQualityDepthInlier;
       }
-      if (other.ConsistencyRenderVisibleRatio != 0F) {
-        ConsistencyRenderVisibleRatio = other.ConsistencyRenderVisibleRatio;
+      if (other.RenderQualityRenderVisibleRatio != 0F) {
+        RenderQualityRenderVisibleRatio = other.RenderQualityRenderVisibleRatio;
       }
-      if (other.ConsistencyDepthResidualM != 0F) {
-        ConsistencyDepthResidualM = other.ConsistencyDepthResidualM;
+      if (other.RenderQualityDepthResidualM != 0F) {
+        RenderQualityDepthResidualM = other.RenderQualityDepthResidualM;
       }
-      if (other.ConsistencyStatus.Length != 0) {
-        ConsistencyStatus = other.ConsistencyStatus;
+      if (other.RenderQualityStatus.Length != 0) {
+        RenderQualityStatus = other.RenderQualityStatus;
       }
-      if (other.ConsistencyRenderAreaPx != 0) {
-        ConsistencyRenderAreaPx = other.ConsistencyRenderAreaPx;
+      if (other.RenderQualityRenderAreaPx != 0) {
+        RenderQualityRenderAreaPx = other.RenderQualityRenderAreaPx;
       }
-      if (other.ConsistencyExpected != false) {
-        ConsistencyExpected = other.ConsistencyExpected;
+      if (other.RenderQualityExpected != false) {
+        RenderQualityExpected = other.RenderQualityExpected;
       }
-      if (other.ConsistencyObservedVisibleRatio != 0F) {
-        ConsistencyObservedVisibleRatio = other.ConsistencyObservedVisibleRatio;
+      if (other.RenderQualityObservedVisibleRatio != 0F) {
+        RenderQualityObservedVisibleRatio = other.RenderQualityObservedVisibleRatio;
       }
-      if (other.ConsistencyDepthAlignment != 0F) {
-        ConsistencyDepthAlignment = other.ConsistencyDepthAlignment;
+      if (other.RenderQualityDepthAlignment != 0F) {
+        RenderQualityDepthAlignment = other.RenderQualityDepthAlignment;
+      }
+      if (other.ScoreConfidence != 0F) {
+        ScoreConfidence = other.ScoreConfidence;
+      }
+      if (other.RenderQualityAreaRatioScore != 0F) {
+        RenderQualityAreaRatioScore = other.RenderQualityAreaRatioScore;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1266,7 +1326,7 @@ namespace EgoAnchor.Protocol.Generated {
             break;
           }
           case 157: {
-            ScoreConsistency = input.ReadFloat();
+            ScoreReprojection = input.ReadFloat();
             break;
           }
           case 165: {
@@ -1286,43 +1346,51 @@ namespace EgoAnchor.Protocol.Generated {
             break;
           }
           case 197: {
-            TrackConsistency = input.ReadFloat();
+            TrackReprojection = input.ReadFloat();
             break;
           }
           case 205: {
-            ConsistencyMaskIou = input.ReadFloat();
+            RenderQualityMaskIou = input.ReadFloat();
             break;
           }
           case 213: {
-            ConsistencyDepthInlier = input.ReadFloat();
+            RenderQualityDepthInlier = input.ReadFloat();
             break;
           }
           case 221: {
-            ConsistencyRenderVisibleRatio = input.ReadFloat();
+            RenderQualityRenderVisibleRatio = input.ReadFloat();
             break;
           }
           case 229: {
-            ConsistencyDepthResidualM = input.ReadFloat();
+            RenderQualityDepthResidualM = input.ReadFloat();
             break;
           }
           case 234: {
-            ConsistencyStatus = input.ReadString();
+            RenderQualityStatus = input.ReadString();
             break;
           }
           case 240: {
-            ConsistencyRenderAreaPx = input.ReadInt32();
+            RenderQualityRenderAreaPx = input.ReadInt32();
             break;
           }
           case 248: {
-            ConsistencyExpected = input.ReadBool();
+            RenderQualityExpected = input.ReadBool();
             break;
           }
           case 261: {
-            ConsistencyObservedVisibleRatio = input.ReadFloat();
+            RenderQualityObservedVisibleRatio = input.ReadFloat();
             break;
           }
           case 269: {
-            ConsistencyDepthAlignment = input.ReadFloat();
+            RenderQualityDepthAlignment = input.ReadFloat();
+            break;
+          }
+          case 277: {
+            ScoreConfidence = input.ReadFloat();
+            break;
+          }
+          case 285: {
+            RenderQualityAreaRatioScore = input.ReadFloat();
             break;
           }
         }
@@ -1429,7 +1497,7 @@ namespace EgoAnchor.Protocol.Generated {
             break;
           }
           case 157: {
-            ScoreConsistency = input.ReadFloat();
+            ScoreReprojection = input.ReadFloat();
             break;
           }
           case 165: {
@@ -1449,43 +1517,51 @@ namespace EgoAnchor.Protocol.Generated {
             break;
           }
           case 197: {
-            TrackConsistency = input.ReadFloat();
+            TrackReprojection = input.ReadFloat();
             break;
           }
           case 205: {
-            ConsistencyMaskIou = input.ReadFloat();
+            RenderQualityMaskIou = input.ReadFloat();
             break;
           }
           case 213: {
-            ConsistencyDepthInlier = input.ReadFloat();
+            RenderQualityDepthInlier = input.ReadFloat();
             break;
           }
           case 221: {
-            ConsistencyRenderVisibleRatio = input.ReadFloat();
+            RenderQualityRenderVisibleRatio = input.ReadFloat();
             break;
           }
           case 229: {
-            ConsistencyDepthResidualM = input.ReadFloat();
+            RenderQualityDepthResidualM = input.ReadFloat();
             break;
           }
           case 234: {
-            ConsistencyStatus = input.ReadString();
+            RenderQualityStatus = input.ReadString();
             break;
           }
           case 240: {
-            ConsistencyRenderAreaPx = input.ReadInt32();
+            RenderQualityRenderAreaPx = input.ReadInt32();
             break;
           }
           case 248: {
-            ConsistencyExpected = input.ReadBool();
+            RenderQualityExpected = input.ReadBool();
             break;
           }
           case 261: {
-            ConsistencyObservedVisibleRatio = input.ReadFloat();
+            RenderQualityObservedVisibleRatio = input.ReadFloat();
             break;
           }
           case 269: {
-            ConsistencyDepthAlignment = input.ReadFloat();
+            RenderQualityDepthAlignment = input.ReadFloat();
+            break;
+          }
+          case 277: {
+            ScoreConfidence = input.ReadFloat();
+            break;
+          }
+          case 285: {
+            RenderQualityAreaRatioScore = input.ReadFloat();
             break;
           }
         }

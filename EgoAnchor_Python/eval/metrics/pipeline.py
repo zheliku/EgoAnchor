@@ -11,7 +11,7 @@ import pandas as pd
 from eval.io import SessionLogs, label_conditions
 
 from .anchor_error import compute_anchor_error, summarize_pose_offset
-from .common import pose_error
+from .common import is_pose_value, pose_error
 from .diagnostics import compute_reliability_diagnostics
 from .jitter import compute_jitter
 from .jump_suppression import compute_jump_suppression
@@ -19,6 +19,7 @@ from .lag import compute_lag
 from .latency import compute_latency
 from .recovery import compute_recovery
 from .slip import compute_slip
+from .stats import finite_percentile
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
         "recovery_summary": compute_recovery(anchor_detail, logs.manifest),
         "reliability_diagnostics_summary": reliability.summary,
         "reliability_score_histogram": reliability.score_histogram,
-        "track_consistency_histogram": reliability.consistency_histogram,
+        "track_reprojection_histogram": reliability.track_reprojection_histogram,
         "policy_distribution": reliability.policy_distribution,
     }
     return MetricsResult(tables=tables, sanity=build_sanity(logs, output))
@@ -88,10 +89,10 @@ def build_sanity(logs: SessionLogs, output: pd.DataFrame) -> dict[str, Any]:
     aligned_raw = output[
         output["is_primary"].fillna(False).astype(bool)
         & output["has_aligned_raw"].fillna(False).astype(bool)
-        & output["gt_pos"].map(lambda value: value is not None)
-        & output["gt_rot"].map(lambda value: value is not None)
-        & output["aligned_raw_pos"].map(lambda value: value is not None)
-        & output["aligned_raw_rot"].map(lambda value: value is not None)
+        & output["gt_pos"].map(is_pose_value)
+        & output["gt_rot"].map(is_pose_value)
+        & output["aligned_raw_pos"].map(is_pose_value)
+        & output["aligned_raw_rot"].map(is_pose_value)
     ]
     sanity["aligned_raw_error"] = _aligned_raw_error_summary(aligned_raw)
     return sanity
@@ -113,7 +114,7 @@ def _aligned_raw_error_summary(rows: pd.DataFrame) -> dict[str, Any]:
     return {
         "n": int(len(rows)),
         "translation_median_m": float(np.nanmedian(t_arr)),
-        "translation_p95_m": float(np.nanpercentile(t_arr, 95)),
+        "translation_p95_m": finite_percentile(t_arr, 95),
         "rotation_median_deg": float(np.nanmedian(r_arr)),
     }
 

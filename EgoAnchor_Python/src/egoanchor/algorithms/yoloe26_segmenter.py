@@ -10,15 +10,14 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any, cast
 
-import cv2
 import numpy as np
 import torch
 from ultralytics import YOLOE
 
 from egoanchor.algorithms import SegmenterResult
 from egoanchor.utils import ensure_bgr_u8
+from .segmenter_utils import normalize_prompt, select_best_mask
 
 
 class Yoloe26Segmenter:
@@ -90,20 +89,10 @@ class Yoloe26Segmenter:
         if self.mobileclip2_path.name != "mobileclip2_b.ts" and not std_name.exists():
             shutil.copy2(self.mobileclip2_path, std_name)
 
-    @staticmethod
-    def _normalize_prompt(prompt: str | list[str]) -> list[str]:
-        """把 prompt 统一成非空字符串列表。"""
-
-        items = [prompt] if isinstance(prompt, str) else list(prompt)
-        items = [item.strip() for item in items if item.strip()]
-        if not items:
-            raise ValueError("YOLOE prompt 不能为空。")
-        return items
-
     def set_prompt(self, prompt: str | list[str]) -> None:
         """更新文本提示词；只有内容变化时才调用模型 set_classes。"""
 
-        prompt_list = self._normalize_prompt(prompt)
+        prompt_list = normalize_prompt(prompt, "YOLOE")
         if prompt_list != self._prompt:
             self.model.set_classes(prompt_list)
             self._prompt = prompt_list
@@ -136,30 +125,19 @@ class Yoloe26Segmenter:
         if result.masks is None or result.masks.data is None or len(result.masks.data) == 0:
             mask_bw = np.zeros(frame.shape[:2], dtype=np.uint8)
         else:
-            masks_data = cast(Any, result.masks.data)
-            masks = masks_data.detach().cpu().numpy() if hasattr(masks_data, "detach") else np.asarray(masks_data)
-            binary_masks = (masks >= self.mask_threshold).astype(np.uint8) * 255
-
-            scores = np.ones((binary_masks.shape[0],), dtype=np.float32)
+            scores = None
             if result.boxes is not None and getattr(result.boxes, "conf", None) is not None:
-                conf = result.boxes.conf
-                scores = conf.detach().cpu().numpy().astype(np.float32) if hasattr(conf, "detach") else np.asarray(conf, dtype=np.float32)
+                scores = result.boxes.conf
+            mask_bw, selected_index, mask_area_ratio, selected_score = select_best_mask(
+                masks=result.masks.data,
+                scores=scores,
+                frame_shape=frame.shape[:2],
+                threshold=self.mask_threshold,
+                missing_score=1.0,
+            )
 
-            areas = binary_masks.reshape(binary_masks.shape[0], -1).sum(axis=1)
-            valid = areas > 0
-            if np.any(valid):
-                score = scores[: binary_masks.shape[0]].copy()
-                score[~valid] = -1.0
-                selected_index = int(np.argmax(score))
-                selected_score = float(score[selected_index])
-                mask_bw = binary_masks[selected_index]
-            else:
-                mask_bw = np.zeros(frame.shape[:2], dtype=np.uint8)
-
-        if mask_bw.shape[:2] != frame.shape[:2]:
-            mask_bw = cv2.resize(mask_bw, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
-
-        mask_area_ratio = float(np.count_nonzero(mask_bw)) / float(max(mask_bw.size, 1))
+        if selected_index < 0:
+            mask_area_ratio = 0.0
         return SegmenterResult(
             overlay_bgr=overlay,
             mask_bw=mask_bw,

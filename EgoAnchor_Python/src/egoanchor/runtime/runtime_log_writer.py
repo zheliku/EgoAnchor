@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from egoanchor.diagnostics import RuntimeEventLogger
-from egoanchor.utils import rotation_matrix_to_quaternion
+from egoanchor.utils import clamp, rotation_matrix_to_quaternion
 from .runtime_state import RuntimeState
 
 
@@ -44,7 +44,7 @@ class PoseLogFactory:
             jump_t = (dx * dx + dy * dy + dz * dz) ** 0.5
             pqx, pqy, pqz, pqw = rotation_matrix_to_quaternion(prev)
             dot = abs(qx * pqx + qy * pqy + qz * pqz + qw * pqw)
-            dot = max(-1.0, min(1.0, dot))
+            dot = clamp(dot, -1.0, 1.0)
             jump_r = math.degrees(2.0 * math.acos(dot))
         self.last_pose_matrix = values
         return {
@@ -103,8 +103,8 @@ class RuntimeLogWriter:
     def pose_result(self, msg: object, *, state: RuntimeState, diagnostics: object | None = None) -> None:
         """记录 PoseResult 的论文相关摘要字段。
 
-        `diagnostics` 是不进入 Protobuf 的 runtime 旁路，用于保存渲染一致性等
-        Python-only 诊断量，便于离线分析 score 分布和一致性开销。
+        `diagnostics` 是不进入 Protobuf 的 runtime 旁路，用于保存渲染质量等
+        Python-only 诊断量，便于离线分析 score 分布和渲染质量开销。
         """
 
         if not self.pose_results:
@@ -135,23 +135,24 @@ class RuntimeLogWriter:
         if diagnostics is not None:
             fields.update(
                 score_phase=float(getattr(diagnostics, "score_phase", 0.0)),
-                score_consistency=float(getattr(diagnostics, "score_consistency", 0.0)),
+                score_reprojection=float(getattr(diagnostics, "score_reprojection", 0.0)),
                 score_depth=float(getattr(diagnostics, "score_depth", 0.0)),
                 score_jump=float(getattr(diagnostics, "score_jump", 0.0)),
                 score_mask=float(getattr(diagnostics, "score_mask", 0.0)),
                 score_reject=float(getattr(diagnostics, "score_reject", 0.0)),
-                depth_quality_score=float(getattr(diagnostics, "depth_quality_score", 0.0)),
-                track_consistency=float(getattr(diagnostics, "track_consistency", -1.0)),
-                consistency_expected=bool(getattr(diagnostics, "consistency_expected", False)),
-                consistency_status=str(getattr(diagnostics, "consistency_status", "")),
-                consistency_mask_iou=float(getattr(diagnostics, "consistency_mask_iou", 0.0)),
-                consistency_render_visible_ratio=float(getattr(diagnostics, "consistency_render_visible_ratio", 0.0)),
-                consistency_observed_visible_ratio=float(getattr(diagnostics, "consistency_observed_visible_ratio", 0.0)),
-                consistency_render_area_px=int(getattr(diagnostics, "consistency_render_area_px", 0)),
-                consistency_depth_inlier=float(getattr(diagnostics, "consistency_depth_inlier", 0.0)),
-                consistency_depth_alignment=float(getattr(diagnostics, "consistency_depth_alignment", 0.0)),
-                consistency_depth_residual_m=float(getattr(diagnostics, "consistency_depth_residual_m", 0.0)),
-                consistency_ms=float(getattr(diagnostics, "consistency_ms", 0.0)),
+                score_confidence=float(getattr(diagnostics, "score_confidence", 0.0)),
+                track_reprojection=float(getattr(diagnostics, "track_reprojection", -1.0)),
+                render_quality_expected=bool(getattr(diagnostics, "render_quality_expected", False)),
+                render_quality_status=str(getattr(diagnostics, "render_quality_status", "")),
+                render_quality_mask_iou=float(getattr(diagnostics, "render_quality_mask_iou", 0.0)),
+                render_quality_area_ratio_score=float(getattr(diagnostics, "render_quality_area_ratio_score", 0.0)),
+                render_quality_render_visible_ratio=float(getattr(diagnostics, "render_quality_render_visible_ratio", 0.0)),
+                render_quality_observed_visible_ratio=float(getattr(diagnostics, "render_quality_observed_visible_ratio", 0.0)),
+                render_quality_render_area_px=int(getattr(diagnostics, "render_quality_render_area_px", 0)),
+                render_quality_depth_inlier=float(getattr(diagnostics, "render_quality_depth_inlier", 0.0)),
+                render_quality_depth_alignment=float(getattr(diagnostics, "render_quality_depth_alignment", 0.0)),
+                render_quality_depth_residual_m=float(getattr(diagnostics, "render_quality_depth_residual_m", 0.0)),
+                render_quality_ms=float(getattr(diagnostics, "render_quality_ms", 0.0)),
             )
         fields.update(self.pose_factory.build(msg))
         self.event("pose_result", **fields)
