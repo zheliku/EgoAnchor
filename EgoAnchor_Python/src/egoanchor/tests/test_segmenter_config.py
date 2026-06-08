@@ -41,6 +41,19 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertAlmostEqual(cfg.reliability.render_quality.depth_distance_ratio, 0.02)
         self.assertAlmostEqual(cfg.reliability.render_quality.depth_min_inlier_thresh_m, 0.005)
         self.assertAlmostEqual(cfg.reliability.render_quality.depth_min_coverage, 0.10)
+        self.assertAlmostEqual(cfg.reliability.render_quality.color_l_weight, 0.5)
+        self.assertAlmostEqual(cfg.reliability.render_quality.color_inlier_thresh, 18.0)
+
+    def test_pose_score_defaults_match_geometric_core_plan(self) -> None:
+        """Pose score 默认配置应使用几何合取核和有界调制参数。"""
+
+        cfg = load_config()
+
+        self.assertAlmostEqual(cfg.reliability.pose_score.geo_floor, 0.05)
+        self.assertAlmostEqual(cfg.reliability.pose_score.reproj_weight, 0.5)
+        self.assertAlmostEqual(cfg.reliability.pose_score.depth_weight, 0.5)
+        self.assertAlmostEqual(cfg.reliability.pose_score.mask_floor, 0.5)
+        self.assertAlmostEqual(cfg.reliability.pose_score.jump_floor, 0.6)
 
     def test_pose_debug_uses_score_window_without_stereo_window(self) -> None:
         """pose debug 应使用独立评分窗口，不再配置旧 stereo 辅助窗口。"""
@@ -49,7 +62,7 @@ class SegmenterConfigTest(unittest.TestCase):
 
         self.assertEqual(cfg.demo.pose.score_window_name, "EgoAnchor Score Debug")
         self.assertEqual(cfg.demo.pose.score_window_width, 960)
-        self.assertEqual(cfg.demo.pose.score_window_height, 540)
+        self.assertEqual(cfg.demo.pose.score_window_height, 800)
         self.assertFalse(hasattr(cfg.demo.pose, "stereo_window_name"))
 
     def test_normalize_segmenter_type_accepts_sam3(self) -> None:

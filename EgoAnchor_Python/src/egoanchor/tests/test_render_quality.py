@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+import cv2
 import numpy as np
 
 from egoanchor.reliability import DepthAlignmentChecker, RenderQualityChecker, ReprojectionChecker
@@ -66,6 +67,80 @@ class ReprojectionCheckerTest(unittest.TestCase):
         self.assertAlmostEqual(result.mask_iou, 0.25)
         self.assertAlmostEqual(result.render_visible_ratio, 0.25)
         self.assertAlmostEqual(result.observed_visible_ratio, 1.0)
+
+    def test_brightness_gain_invariant_stays_high(self) -> None:
+        """同色相、仅整体亮度增益不同的渲染与真实图应保持高颜色分。"""
+
+        mask = np.ones((4, 4), dtype=bool)
+        render_rgb = np.full((4, 4, 3), 90, dtype=np.uint8)
+        observed_rgb = np.full((4, 4, 3), 210, dtype=np.uint8)
+
+        result = ReprojectionChecker._score_from_maps(
+            render_rgb,
+            observed_rgb,
+            mask,
+            mask,
+            min_render_area_px=1,
+        )
+
+        self.assertGreater(result.color_similarity, 0.85)
+
+    def test_double_peak_brightness_invariant(self) -> None:
+        """黑白双峰物体中白面增亮、黑面不变时，颜色分应保持稳定。"""
+
+        mask = np.ones((4, 4), dtype=bool)
+        render_rgb = np.full((4, 4, 3), 40, dtype=np.uint8)
+        render_rgb[:, 2:] = 190
+        observed_rgb = np.full((4, 4, 3), 40, dtype=np.uint8)
+        observed_rgb[:, 2:] = 235
+
+        result = ReprojectionChecker._score_from_maps(
+            render_rgb,
+            observed_rgb,
+            mask,
+            mask,
+            min_render_area_px=1,
+        )
+
+        self.assertGreater(result.color_similarity, 0.8)
+
+    def test_white_balance_offset_invariant(self) -> None:
+        """观测图整体暖偏时，应通过 a/b 中心化消除白平衡误罚。"""
+
+        mask = np.ones((4, 4), dtype=bool)
+        render_rgb = np.full((4, 4, 3), 150, dtype=np.uint8)
+        render_lab = cv2.cvtColor(render_rgb, cv2.COLOR_RGB2LAB).astype(np.int16)
+        observed_lab = render_lab.copy()
+        observed_lab[..., 1] += 15
+        observed_lab[..., 2] += 15
+        observed_rgb = cv2.cvtColor(np.clip(observed_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
+
+        result = ReprojectionChecker._score_from_maps(
+            render_rgb,
+            observed_rgb,
+            mask,
+            mask,
+            min_render_area_px=1,
+        )
+
+        self.assertGreater(result.color_similarity, 0.85)
+
+    def test_wrong_object_hue_scores_low(self) -> None:
+        """色相明显不同的错物体仍应被显著降分。"""
+
+        mask = np.ones((4, 4), dtype=bool)
+        render_rgb = np.full((4, 4, 3), (40, 40, 220), dtype=np.uint8)
+        observed_rgb = np.full((4, 4, 3), (220, 120, 40), dtype=np.uint8)
+
+        result = ReprojectionChecker._score_from_maps(
+            render_rgb,
+            observed_rgb,
+            mask,
+            mask,
+            min_render_area_px=1,
+        )
+
+        self.assertLess(result.color_similarity, 0.4)
 
 
 class DepthAlignmentCheckerTest(unittest.TestCase):

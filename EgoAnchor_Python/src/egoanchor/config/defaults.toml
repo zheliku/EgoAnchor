@@ -64,6 +64,15 @@ depth_min_inlier_thresh_m = 0.005 # 深度 inlier 阈值下限，单位米，避
 depth_min_coverage = 0.10 # mask 内有效深度覆盖率低于该值时 depth_score 返回中性 0.5。
 downscale = 2 # 渲染质量检测下采样倍数，越大越快但越粗。
 min_render_area_px = 50 # 渲染前景过少时判为无效信号，不触发重注册。
+color_l_weight = 0.5 # LAB 亮度 L 在颜色 inlier 距离中的权重；L 已做仿射归一，灰白物体需要保留亮度区分。
+color_inlier_thresh = 18.0 # 加权 LAB 距离小于该值的像素计为颜色 inlier；误报多调大，漏报多调小。
+
+[reliability.pose_score]
+geo_floor = 0.05 # 几何核单维最低值；避免有效低分在几何平均中变成硬零。
+reproj_weight = 0.5 # 重投影颜色分在几何核中的相对权重。
+depth_weight = 0.5 # 深度对齐分在几何核中的相对权重。
+mask_floor = 0.5 # mask 调制因子下限；遮挡或可见面积少时只温和降权。
+jump_floor = 0.6 # jump 调制因子下限；快速运动时只温和降权。
 
 [module.segmenter]
 type = "yoloe26" # 分割后端；默认 yoloe26，可显式改为 sam3。
@@ -156,5 +165,5 @@ score_window_name = "EgoAnchor Score Debug" # Python 本地评分与渲染质量
 debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
 debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
 score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
-score_window_height = 540 # 评分调试窗口固定高度，单位像素。
+score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡四宫格图像。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。

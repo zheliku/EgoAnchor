@@ -18,7 +18,7 @@ class ReprojectionResult:
     """重投影颜色分，范围 0..1；只来自 Cutie mask 与投影 mask 交集区域。"""
 
     color_similarity: float
-    """重叠核心区域的 LAB 颜色相似度。"""
+    """重叠核心区域的颜色 inlier 比例，表示加权 LAB 距离低于阈值的像素占比。"""
 
     area_ratio_score: float
     """观测 mask 面积与渲染投影面积的比例分，低值表示遮挡或投影面积明显过大。"""
@@ -60,11 +60,22 @@ class ReprojectionResult:
 class ReprojectionChecker:
     """只评估渲染 RGB 与观测 RGB 在可见交集内的颜色相似度。"""
 
-    def __init__(self, min_render_area_px: int = 50) -> None:
-        """保存最小渲染面积。"""
+    def __init__(
+        self,
+        min_render_area_px: int = 50,
+        color_l_weight: float = 0.5,
+        color_inlier_thresh: float = 18.0,
+    ) -> None:
+        """保存最小渲染面积与颜色度量参数。"""
 
         self.min_render_area_px = max(1, int(min_render_area_px))
         """渲染前景过小时判为无效信号的像素阈值。"""
+
+        self.color_l_weight = clamp01(float(color_l_weight))
+        """LAB 亮度通道 L 在归一化颜色距离中的权重。"""
+
+        self.color_inlier_thresh = max(1.0, float(color_inlier_thresh))
+        """加权 LAB 距离小于该阈值的像素计为颜色 inlier。"""
 
     def score_maps(
         self,
@@ -81,6 +92,8 @@ class ReprojectionChecker:
             render_mask,
             observed_mask,
             min_render_area_px=self.min_render_area_px,
+            color_l_weight=self.color_l_weight,
+            color_inlier_thresh=self.color_inlier_thresh,
         )
 
     @staticmethod
@@ -91,6 +104,8 @@ class ReprojectionChecker:
         observed_mask: np.ndarray,
         *,
         min_render_area_px: int,
+        color_l_weight: float = 0.5,
+        color_inlier_thresh: float = 18.0,
     ) -> ReprojectionResult:
         """纯数组版本，便于无 GPU 单测；几何量只作为诊断输出。"""
 
@@ -116,7 +131,13 @@ class ReprojectionChecker:
         render_visible_ratio = float(intersection_area) / float(render_area) if render_area > 0 else 0.0
         observed_visible_ratio = float(intersection_area) / float(observed_area) if observed_area > 0 else 0.0
         area_ratio_score = min(float(observed_area) / float(render_area), 1.0) if render_area > 0 else 0.0
-        color_similarity = ReprojectionChecker._color_similarity_lab(render_rgb, observed_rgb_u8, intersection)
+        color_similarity = ReprojectionChecker._color_similarity_lab(
+            render_rgb,
+            observed_rgb_u8,
+            intersection,
+            l_weight=color_l_weight,
+            inlier_thresh=color_inlier_thresh,
+        )
         score = clamp01(color_similarity)
 
         valid = render_area >= int(min_render_area_px) and observed_area > 0
@@ -145,8 +166,19 @@ class ReprojectionChecker:
         )
 
     @staticmethod
-    def _color_similarity_lab(render_rgb: np.ndarray, observed_rgb: np.ndarray, intersection: np.ndarray) -> float:
-        """在重叠核心区域计算 LAB 颜色相似度，排除 mask 边缘锯齿。"""
+    def _color_similarity_lab(
+        render_rgb: np.ndarray,
+        observed_rgb: np.ndarray,
+        intersection: np.ndarray,
+        *,
+        l_weight: float = 0.5,
+        inlier_thresh: float = 18.0,
+    ) -> float:
+        """在重叠核心区域计算光照不变的 LAB 颜色 inlier 比例。
+
+        渲染为无光照纯反照率，真实图含光照和白平衡偏移。这里先对 L 做鲁棒仿射
+        对齐，再消除小幅全局 a/b 色偏，最后统计加权 LAB 距离低于阈值的像素比例。
+        """
 
         if int(np.count_nonzero(intersection)) <= 0:
             return 0.0
@@ -155,10 +187,52 @@ class ReprojectionChecker:
             core_mask = intersection
         render_lab = cv2.cvtColor(render_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
         observed_lab = cv2.cvtColor(observed_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-        diff = np.linalg.norm(render_lab[core_mask] - observed_lab[core_mask], axis=1)
+        render_core = render_lab[core_mask].copy()
+        observed_core = observed_lab[core_mask].copy()
+        if render_core.shape[0] <= 0:
+            return 0.0
+        render_core[:, 0] = ReprojectionChecker._align_luminance(render_core[:, 0], observed_core[:, 0])
+        render_core[:, 1:], observed_core[:, 1:] = ReprojectionChecker._normalize_chroma(
+            render_core[:, 1:],
+            observed_core[:, 1:],
+            inlier_thresh=max(1.0, float(inlier_thresh)),
+        )
+        weights = np.array([clamp01(l_weight), 1.0, 1.0], dtype=np.float32)
+        diff = np.linalg.norm((render_core - observed_core) * weights, axis=1)
         if diff.size <= 0:
             return 0.0
-        return clamp01(1.0 - float(np.mean(diff)) / 180.0)
+        return clamp01(float(np.mean(diff < max(1.0, float(inlier_thresh)))))
+
+    @staticmethod
+    def _align_luminance(render_l: np.ndarray, observed_l: np.ndarray) -> np.ndarray:
+        """用 25/75 分位点把渲染 L 仿射映射到观测 L，吸收亮度增益和偏置。"""
+
+        render_values = np.asarray(render_l, dtype=np.float32)
+        observed_values = np.asarray(observed_l, dtype=np.float32)
+        render_p25, render_p75 = np.percentile(render_values, [25.0, 75.0])
+        observed_p25, observed_p75 = np.percentile(observed_values, [25.0, 75.0])
+        render_span = float(render_p75 - render_p25)
+        if abs(render_span) < 3.0:
+            gain = 1.0
+            bias = float(np.median(observed_values) - np.median(render_values))
+        else:
+            gain = float((observed_p75 - observed_p25) / render_span)
+            bias = float(observed_p25 - gain * render_p25)
+        return np.clip(render_values * gain + bias, 0.0, 255.0)
+
+    @staticmethod
+    def _normalize_chroma(render_ab: np.ndarray, observed_ab: np.ndarray, *, inlier_thresh: float) -> tuple[np.ndarray, np.ndarray]:
+        """消除小幅全局白平衡色偏；色度差过大时保留原始 a/b 以惩罚错物体。"""
+
+        render_values = np.asarray(render_ab, dtype=np.float32).copy()
+        observed_values = np.asarray(observed_ab, dtype=np.float32).copy()
+        render_center = np.median(render_values, axis=0)
+        observed_center = np.median(observed_values, axis=0)
+        center_delta = float(np.linalg.norm(render_center - observed_center))
+        if center_delta <= max(30.0, float(inlier_thresh) * 2.0):
+            render_values -= render_center
+            observed_values -= observed_center
+        return render_values, observed_values
 
     @staticmethod
     def _erode_intersection_core(intersection: np.ndarray) -> np.ndarray:
@@ -196,6 +270,7 @@ class ReprojectionChecker:
             finite = arr[np.isfinite(arr)]
             if finite.size <= 0:
                 raise ValueError("重投影颜色图没有有限像素。")
+            # 约定：浮点 color 要么在 [0,1]，要么已是 [0,255]；不支持其它中间范围。
             if float(np.max(finite)) <= 1.0:
                 arr = arr * 255.0
         return np.clip(arr, 0, 255).astype(np.uint8)

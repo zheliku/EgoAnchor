@@ -28,7 +28,7 @@ class RenderQualityResult:
     """渲染 mask 与观测 mask 的 IoU。"""
 
     color_similarity: float
-    """重叠核心区域的 LAB 颜色相似度。"""
+    """重叠核心区域的颜色 inlier 比例。"""
 
     area_ratio_score: float
     """观测 Cutie mask 面积 / 渲染投影面积的比例分，低值表示遮挡或投影面积过大。"""
@@ -85,12 +85,16 @@ class RenderQualityChecker:
         depth_min_inlier_thresh_m: float = 0.005,
         depth_min_coverage: float = 0.10,
         min_render_area_px: int = 50,
+        color_l_weight: float = 0.5,
+        color_inlier_thresh: float = 18.0,
         downscale: int = 2,
     ) -> None:
         """保存渲染质量参数并构造两个专责 checker。"""
 
         self.reprojection = ReprojectionChecker(
             min_render_area_px=min_render_area_px,
+            color_l_weight=color_l_weight,
+            color_inlier_thresh=color_inlier_thresh,
         )
         """重投影 checker，只管可见交集内的颜色相似度。"""
 

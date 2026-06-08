@@ -94,15 +94,18 @@ def make_score_debug_view(
     diagnostics: FrameDiagnostics,
     observation: PoseObservation | None,
     width: int = 960,
-    height: int = 540,
+    height: int = 800,
     min_depth: float = 0.1,
     max_depth: float = 5.0,
 ) -> np.ndarray:
     """构建独立 reliability / render quality 调试窗口。"""
 
     canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
+    lines = _score_debug_lines(diagnostics, observation)
+    banner_h = min(_score_banner_height(len(lines)), max(canvas.shape[0] - 2, 1))
+    panel_area_h = max(canvas.shape[0] - banner_h, 2)
     half_w = max(canvas.shape[1] // 2, 1)
-    half_h = max(canvas.shape[0] // 2, 1)
+    half_h = max(panel_area_h // 2, 1)
     panels = [
         (
             _overlap_rgb_panel(
@@ -111,7 +114,7 @@ def make_score_debug_view(
                 diagnostics.render_quality_observed_mask,
             ),
             0,
-            0,
+            banner_h,
         ),
         (
             _rgb_mask_panel(
@@ -121,7 +124,7 @@ def make_score_debug_view(
                 (0, 255, 120),
             ),
             half_w,
-            0,
+            banner_h,
         ),
         (
             _depth_region_panel(
@@ -133,7 +136,7 @@ def make_score_debug_view(
                 (0, 255, 120),
             ),
             0,
-            half_h,
+            banner_h + half_h,
         ),
         (
             _depth_region_panel(
@@ -145,12 +148,24 @@ def make_score_debug_view(
                 (255, 255, 0),
             ),
             half_w,
-            half_h,
+            banner_h + half_h,
         ),
     ]
     for panel, x, y in panels:
         fitted = fit_to_size(panel, half_w, half_h)
         canvas[y : y + half_h, x : x + half_w] = fitted
+
+    y = 24
+    for text in lines:
+        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
+        y += 24
+    _draw_score_bars(canvas, diagnostics, x=12, y=y + 4, width=min(420, canvas.shape[1] - 24), row_h=20)
+    return canvas
+
+
+def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservation | None) -> list[str]:
+    """生成 score debug 顶部横幅文本，集中维护字段顺序。"""
 
     lines = [
         f"score={observation.reliability_score if observation else 0.0:.2f} phase={diagnostics.score_phase:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} jump={diagnostics.score_jump:.2f} mask={diagnostics.score_mask:.2f} reject={diagnostics.score_reject:.2f} conf={diagnostics.score_confidence:.2f}",
@@ -160,13 +175,15 @@ def make_score_debug_view(
     ]
     if observation and observation.reliability_flags:
         lines.append("flags=" + ",".join(observation.reliability_flags[:8]))
-    y = 24
-    for text in lines:
-        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
-        y += 24
-    _draw_score_bars(canvas, diagnostics, x=12, y=y + 4, width=min(420, canvas.shape[1] - 24), row_h=20)
-    return canvas
+    return lines
+
+
+def _score_banner_height(line_count: int) -> int:
+    """按文本行和七条 score bar 动态计算顶部横幅高度。"""
+
+    text_h = max(int(line_count), 1) * 24
+    score_bar_h = 7 * 20
+    return text_h + score_bar_h + 36
 
 
 def _overlap_rgb_panel(observed_rgb: np.ndarray | None, render_mask: np.ndarray | None, observed_mask: np.ndarray | None) -> np.ndarray:

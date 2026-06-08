@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from egoanchor.protocol import extract_session_id, quest_pb2
-from egoanchor.reliability import ConfidenceAccumulator, RenderQualityChecker, score_observation_breakdown
+from egoanchor.reliability import ConfidenceAccumulator, PoseScoreConfig, RenderQualityChecker, score_observation_breakdown
 from egoanchor.utils import clamp, get_logger
 
 from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
@@ -71,6 +71,9 @@ class QuestPosePipeline:
         render_quality_depth_min_coverage: float = 0.10,
         render_quality_downscale: int = 2,
         render_quality_min_render_area_px: int = 50,
+        render_quality_color_l_weight: float = 0.5,
+        render_quality_color_inlier_thresh: float = 18.0,
+        pose_score_config: PoseScoreConfig | None = None,
     ) -> None:
         """注入算法组件和 pipeline 策略参数。"""
 
@@ -167,12 +170,17 @@ class QuestPosePipeline:
                 depth_min_inlier_thresh_m=render_quality_depth_min_inlier_thresh_m,
                 depth_min_coverage=render_quality_depth_min_coverage,
                 min_render_area_px=render_quality_min_render_area_px,
+                color_l_weight=render_quality_color_l_weight,
+                color_inlier_thresh=render_quality_color_inlier_thresh,
                 downscale=render_quality_downscale,
             )
             if self.enable_render_quality
             else None
         )
         """一次渲染后拆分重投影和深度对齐的质量检测器；配置关闭时为 None。"""
+
+        self.pose_score_config = pose_score_config or PoseScoreConfig()
+        """Pose reliability quality 合成参数，用于几何核与有界调制。"""
 
         self._segmenter_worker: AsyncSegmenterWorker | None = AsyncSegmenterWorker(segmenter) if self.async_segmentation else None
         """异步分割 worker；同步模式下为 None。"""
@@ -1049,7 +1057,11 @@ class QuestPosePipeline:
             total_ms=timing.total_ms,
             failure_reason=failure_reason,
         )
-        breakdown = score_observation_breakdown(observation, confidence_accumulator=self.confidence_accumulator)
+        breakdown = score_observation_breakdown(
+            observation,
+            confidence_accumulator=self.confidence_accumulator,
+            config=self.pose_score_config,
+        )
         diagnostics.score_phase = breakdown.phase_score
         diagnostics.score_reprojection = breakdown.reprojection_score
         diagnostics.score_depth = breakdown.depth_score

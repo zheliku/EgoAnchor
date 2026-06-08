@@ -79,6 +79,33 @@ class DebugViewTest(unittest.TestCase):
         self.assertTrue(any("depthAlign=0.65" in text for text in texts))
         self.assertTrue(any("status=render_invalid" in text for text in texts))
 
+    def test_score_debug_view_reserves_top_banner(self) -> None:
+        """评分窗口顶部应保留文本横幅，不让四宫格图像压住诊断文字。"""
+
+        mask = np.ones((16, 16), dtype=bool)
+        diagnostics = FrameDiagnostics(
+            render_quality_observed_rgb=np.full((16, 16, 3), 255, dtype=np.uint8),
+            render_quality_render_rgb=np.full((16, 16, 3), 180, dtype=np.uint8),
+            render_quality_render_mask=mask,
+            render_quality_observed_mask=mask,
+            render_quality_render_depth=np.ones((16, 16), dtype=np.float32),
+            render_quality_observed_depth=np.ones((16, 16), dtype=np.float32),
+        )
+
+        view = make_score_debug_view(diagnostics, None, width=640, height=360)
+        expected_banner_h = 4 * 24 + 7 * 20 + 36
+
+        self.assertLess(float(np.mean(view[5])), 20.0)
+        self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
+        self.assertGreater(float(np.mean(view[expected_banner_h + 8])), 20.0)
+
+    def test_score_debug_view_default_size_matches_config(self) -> None:
+        """评分窗口工具默认尺寸应与 defaults.toml 中的 960x800 保持一致。"""
+
+        view = make_score_debug_view(FrameDiagnostics(), None)
+
+        self.assertEqual(view.shape[:2], (800, 960))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,229 +1,99 @@
 
-# EgoAnchor 重投影颜色评分改进执行手册
+## Code-review 发现(按严重度排序)
 
-## 背景与目标
+### 🔴 高:无几何证据的帧反而得满分(融合层真实回归)
 
-当前 `reproj=0.44` 偏低的根因:渲染是 **无光照纯反照率** (`use_light=False`),真实图有光照;而 [reprojection.py:161-166](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L161-L166) 把 LAB 的**亮度通道 L** 全额计入距离、 **无亮度归一化** 、 **除数 180 偏小** 、用 **mean** 受边缘离群拖累。
+[pose_quality.py:177](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L177) `_geometry_core` 在 reproj 和 depth **都 invalid** 时返回 `1.0`。触发链:TRACK 帧 + `track_reprojection<0` + `render_quality_expected=False` → reproj 返回 `(1.0, valid=False)` 被排除;depth 无信号 → `(0.5, valid=False)` 被排除;`weight_sum=0` → core=1.0;mask/jump 正常 → modulator≈1 →  **quality≈1.0** 。
 
-改造目标:让颜色度量 **对光照不变** ——只惩罚"色相错"(投到错物体),不惩罚"渲染没打光"(亮度系统差)。共  **3 处源码改动 + 1 处配置 + 单测 + code-review 修补** ,全部可回放调参。
+后果:渲染质量未就绪/被禁用时, **任意 pose(包括错的)都拿 ~1.0 可靠性** ,通过 `GOOD_SCORE_THRESH=0.6` 积累 confidence、通过 Unity gate。旧的加权和模型会用中性 0.5 项把它压到中档。你的新测试 `test_missing_depth_signal_does_not_enter_geometry_core` 断言 `final_score > 0.7` ——  **等于把这个回归固化成了"预期行为"** ,需要重新审视。
 
-配置注入链(已核实):
-`defaults.toml` → [pipeline_factory.py:268-277](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/pipeline_factory.py#L268-L277) → `QuestPosePipeline.__init__` → [render_quality.py:92-94](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/render_quality.py#L92-L94) → `ReprojectionChecker`
+> 附带:[pose_quality.py:62](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L62) 两个权重都允许为 0,配错时同样静默退化为 1.0,无告警。
 
----
+### 🟡 中:`_align_luminance` 观测亮度平坦时 gain=0 塌缩
 
-## 改动 1 — 重写颜色度量(核心)
+[reprojection.py:219](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L219) 当观测核心区 L 近乎均匀(过曝白面/平光表面,`observed_p75-observed_p25≈0`)且 `render_span≥3` → `gain=0` → 所有渲染 L 映射成同一常数 = 观测 L → ΔL≡0 → L 项(权重 0.5)完全失效 → inlier 比例虚高 →  **错物体/遮挡也能当颜色 inlier** 。
 
-**文件:** [reprojection.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py)
+### 🟡 中:`color_inlier_thresh` 一个旋钮控两件事
 
-### 1.1 `__init__`(当前 66-70 行)新增两个参数
+[reprojection.py:232](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L232) `inlier_thresh` 既是逐像素 inlier 距离,又是色度中心化的判定边界 `max(30, 2*thresh)`。调大它想"放宽容忍"时, **同时悄悄关掉了色相区分** (中心化阈值升到 80,几乎总是触发,把全局 a/b 偏移抹掉)→ 错色物体不再被惩罚。
 
-```python
-def __init__(self, min_render_area_px: int = 50, color_l_weight: float = 0.3, color_divisor: float = 70.0) -> None:
-    """保存最小渲染面积与颜色度量参数。"""
+### 🟡 中:色度中心化阈值(默认 36)过大
 
-    self.min_render_area_px = max(1, int(min_render_area_px))
-    """渲染前景过小时判为无效信号的像素阈值。"""
+[reprojection.py:232](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L232) `center_delta ≤ 36` 就去偏。LAB 的 a/b 跨度约 ±127,系统性偏 36 以内的"中等错色物体"会被抹掉色差当 inlier → "惩罚错物体"分支只对极端错色生效。
 
-    self.color_l_weight = clamp01(float(color_l_weight))
-    """LAB 亮度通道 L 在颜色距离中的权重；低值降低对光照差的敏感度。"""
+### 🟢 低:下游阈值未随几何平均量级重标定
 
-    self.color_divisor = max(1.0, float(color_divisor))
-    """颜色距离归一化除数;越小越严格,需配合 L 对齐后的距离量级调参。"""
-```
+* [quest_pose_pipeline.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/quest_pose_pipeline.py) `re_register_threshold=0.35`(仅 re_register 模式,当前 score_only 不触发)
+* `GOOD_SCORE_THRESH=0.6`
+* Unity `ReliabilityGate` 的 `0.35/0.12`
 
-### 1.2 `score_maps`(当前 72-87 行)把新参数透传
+inlier 比例分布和几何平均量级都和旧加权和不同,这些常数没重标。**当前 score_only 模式下风险低,但切 re_register 或上 Unity 前必须回放重标。**
 
-在 `_score_from_maps(...)` 调用里追加:
+### 🟢 低:横幅被 cap 时四宫格塌成 1px
 
-```python
-        return self._score_from_maps(
-            render_color_rgb,
-            observed_rgb,
-            render_mask,
-            observed_mask,
-            min_render_area_px=self.min_render_area_px,
-            color_l_weight=self.color_l_weight,
-            color_divisor=self.color_divisor,
-        )
-```
-
-### 1.3 `_score_from_maps`(当前 89-97 行)签名加 keyword-only 默认值
-
-> 必须给默认值——现有单测 [test_render_quality.py:24-37](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/tests/test_render_quality.py#L24-L37) 直接以 `min_render_area_px=1` 调用这个 staticmethod,不能破坏。
-
-```python
-    @staticmethod
-    def _score_from_maps(
-        render_color_rgb: np.ndarray,
-        observed_rgb: np.ndarray,
-        render_mask: np.ndarray,
-        observed_mask: np.ndarray,
-        *,
-        min_render_area_px: int,
-        color_l_weight: float = 0.3,
-        color_divisor: float = 70.0,
-    ) -> ReprojectionResult:
-```
-
-然后把当前第 123 行的调用改成:
-
-```python
-        color_similarity = ReprojectionChecker._color_similarity_lab(
-            render_rgb, observed_rgb_u8, intersection, l_weight=color_l_weight, divisor=color_divisor
-        )
-```
-
-### 1.4 重写 `_color_similarity_lab`(当前 152-166 行)
-
-核心三步: **L 中位数对齐 → L 低权重加权 → median 聚合** 。
-
-```python
-    @staticmethod
-    def _color_similarity_lab(
-        render_rgb: np.ndarray,
-        observed_rgb: np.ndarray,
-        intersection: np.ndarray,
-        *,
-        l_weight: float = 0.3,
-        divisor: float = 70.0,
-    ) -> float:
-        """在重叠核心区域计算光照不变的 LAB 颜色相似度。
-
-        渲染为无光照纯反照率,真实图含光照,二者亮度存在系统性偏移。这里先把渲染 L
-        的中位数对齐到观测 L,再以低权重计入 L、全权重计入 a/b,最后用 median 聚合,
-        使分数主要反映色相一致性而非曝光差异。
-        """
-
-        if int(np.count_nonzero(intersection)) <= 0:
-            return 0.0
-        core_mask = ReprojectionChecker._erode_intersection_core(intersection)
-        if int(np.count_nonzero(core_mask)) <= 0:
-            core_mask = intersection
-        render_lab = cv2.cvtColor(render_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-        observed_lab = cv2.cvtColor(observed_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-        render_core = render_lab[core_mask].copy()
-        observed_core = observed_lab[core_mask]
-        if render_core.shape[0] <= 0:
-            return 0.0
-        l_offset = float(np.median(observed_core[:, 0]) - np.median(render_core[:, 0]))
-        render_core[:, 0] += l_offset
-        weights = np.array([clamp01(l_weight), 1.0, 1.0], dtype=np.float32)
-        diff = np.linalg.norm((render_core - observed_core) * weights, axis=1)
-        if diff.size <= 0:
-            return 0.0
-        return clamp01(1.0 - float(np.median(diff)) / max(1.0, float(divisor)))
-```
-
-**除数取值依据:** OpenCV 对 uint8 做 `RGB2LAB` 时 L/a/b 均缩放到 `[0,255]`,中性灰 a=b=128。L 对齐后,"色相完全错"(a、b 各偏 ~80)的加权距离 ≈ `sqrt(80²+80²) ≈ 113`,故除数 60–80 能让错色映射到接近 0;先用 **70** 起步,再按回放调。
+[debug_view.py:105](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/diagnostics/debug_view.py#L105) 窗口过小或 flag 行过多时 `banner_h` 被钳到 `height-2`,`half_h=1`,四宫格塌成 1px 而文本仍画。纯诊断,无崩溃,低优先级。
 
 ---
 
-## 改动 2 — 参数配置化(贯通全链)
+## 最终落地方案
 
-### 2.1 `RenderQualityChecker.__init__`([render_quality.py:82-95](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/render_quality.py#L82-L95))
+分两阶段。**阶段一修融合层 bug(独立、紧急);阶段二把颜色度量换成最终的梯度方向版(顺带消灭中findings 3/4/5)。**
 
-入参加 `color_l_weight: float = 0.3, color_divisor: float = 70.0`,并传入 `ReprojectionChecker`:
+### 阶段一:修融合层(改 [pose_quality.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py))
 
-```python
-        self.reprojection = ReprojectionChecker(
-            min_render_area_px=min_render_area_px,
-            color_l_weight=color_l_weight,
-            color_divisor=color_divisor,
-        )
+ **A1. 无证据帧不得给满分** (对应🔴)。`_geometry_core` 的 `weight_sum<=0` 分支不要返回 1.0。改为返回 **中性 0.5** ,并追加 flag `no_geometry_evidence`。这恢复旧模型"无信号→中性"的安全语义,且与 depth 的中性 0.5 哲学一致。同步**修正测试** `test_missing_depth_signal_does_not_enter_geometry_core`:断言从 `final_score>0.7` 改为落在中性档(~0.45–0.55),不再把回归固化为预期。
+
+ **A2. 两权重全 0 保护** (对应🔴附带)。`PoseScoreConfig.__post_init__` 里若 `reproj_weight+depth_weight==0`,回退到默认 0.5/0.5 并记一条 warning,避免静默失效。
+
+### 阶段二:颜色度量换成"梯度方向 inlier(主)+ 通用颜色 tiebreaker(辅)"(改 [reprojection.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py))
+
+这一步把当前 `_color_similarity_lab`(仿射 L + 去偏 + inlier)整体替换。 **替换后,findings 3、4、5 自动消失** (不再有 `_align_luminance` 的 gain 塌缩、不再有 `inlier_thresh` 双重职责、不再有色度中心化阈值)。
+
+**B1. `_gradient_inlier_score`(主)** — 渲染侧自适应闸门 + 方向 inlier 比例:
+
+```
+core = _erode_intersection_core(render & observed)
+灰度 → Sobel gx,gy → mag, theta
+thresh = percentile(render_mag[core], grad_percentile)   # 自适应,不挑物体
+gate = core ∩ (render_mag > thresh)
+若 count(gate) < edge_min_pixels: return 0.5             # 信号不足→中性(交给 mask/depth)
+a = |cos(theta_render[gate] - theta_obs[gate])|          # mod π,吸收明暗翻转
+score_grad = mean(a > cos(edge_angle_tol_deg))           # inlier 比例,容忍尖锐遮挡
 ```
 
-### 2.2 `QuestPosePipeline.__init__`([quest_pose_pipeline.py:64-73](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/quest_pose_pipeline.py#L64-L73) 入参 + 164-174 构造)
+* **渲染侧闸门** (只用 `render_mag` 选像素):手的边缘因渲染侧无对应而进不来。
+* **inlier 比例** :尖锐/柔和遮挡都只是少数 outlier,被天然容忍。
+* **自适应百分位阈值 + 只看方向** :光照不变、不挑物体。
 
-入参列表加:
+**B2. `_color_tiebreaker_score`(辅,通用)** — 核心区转 HSV,按**饱和度加权**算 hue 直方图相关;低饱和(黑/白/灰/金属)权重≈0 → 自动退场,返回中性。 **不做任何对齐** ,对所有物体一视同仁。
 
-```python
-        render_quality_color_l_weight: float = 0.3,
-        render_quality_color_divisor: float = 70.0,
-```
+ **B3. 合成** :`color_similarity = clamp01(score_grad^edge_exp · score_color^color_exp)`,默认 `edge_exp=0.85, color_exp=0.15`(梯度主导)。
 
-`RenderQualityChecker(...)` 构造处(164-174)加:
+ **B4. 诊断字段** :`ReprojectionResult` 加 `grad_score`/`color_tiebreak_score`(带默认值,纯诊断),经 `RenderQualityResult`→`FrameDiagnostics` 传到 debug 文本,显示 `reproj=0.82 (grad=0.86 col=0.55)`。
 
-```python
-                color_l_weight=render_quality_color_l_weight,
-                color_divisor=render_quality_color_divisor,
-```
+ **B5. 参数与配置** :`__init__` 删 `color_l_weight`/`color_inlier_thresh`,加 `grad_percentile=60`、`edge_angle_tol_deg=22.5`、`edge_min_pixels=50`、`edge_exp=0.85`、`color_exp=0.15`、`color_sat_min=30`。同步 4 处配置链([render_quality.py:88-97](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/render_quality.py#L88-L97)、[pipeline_factory.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/pipeline_factory.py)、[quest_pose_pipeline.py:74-75](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/quest_pose_pipeline.py#L74-L75)、[defaults.toml:67-68](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/config/defaults.toml#L67-L68))。
 
-### 2.3 工厂 `build_quest_pose_pipeline`([pipeline_factory.py:268-277](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/perception/pipeline_factory.py#L268-L277) 末尾)
+ **B6. 单测** (替换当前 4 个仿射颜色用例,它们测的是被删的逻辑):
 
-在 `render_quality_min_render_area_px=...` 之后追加:
+* `test_grad_invariant_to_lighting` / `test_grad_invariant_to_contrast_flip`
+* `test_grad_adaptive_threshold_low_contrast_object`(不挑物体)
+* `test_grad_tolerates_sharp_occluder`(🎯尖锐遮挡,inlier 容忍,降幅<0.2)
+* `test_color_tiebreaker_neutral_on_low_saturation`(低饱和退场)
+* `test_color_tiebreaker_helps_textureless_colored`(无纹理彩色块靠 color 区分)
+* `test_wrong_object_low`(护栏,<0.4)
 
-```python
-        render_quality_color_l_weight=float(_cfg_get(render_quality_cfg, "color_l_weight", 0.3)),
-        render_quality_color_divisor=float(_cfg_get(render_quality_cfg, "color_divisor", 70.0)),
-```
+### 阶段三:低优先级(可选,回放后)
 
-### 2.4 `defaults.toml`([defaults.toml:56-66](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/config/defaults.toml#L66) `[reliability.render_quality]` 末尾)
-
-```toml
-color_l_weight = 0.3 # LAB 亮度 L 在颜色距离中的权重；渲染无光照、真实图有光照时调低可降低误罚。
-color_divisor = 70.0 # 颜色距离归一化除数；L 对齐后距离量级变小，越小越严格，建议回放调参。
-```
+* 横幅 cap 时保证四宫格最小高度(对应🟢),或 banner 超限时压缩字号。
+* 切 re_register / 上 Unity 前,用 `data/eval/*/` 回放重标 `0.35`/`0.6`/Unity 阈值(对应🟢)。**现在 score_only 模式不动。**
 
 ---
 
-## 改动 3 — 单测
-
-**文件:** [test_render_quality.py](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/tests/test_render_quality.py)
-
-现有 `test_reprojection_scores_lab_color_in_overlap`(红 vs 绿,色相差大)仍应通过(`diff.score < same.score`)。**新增两个用例**锁定新语义:
-
-```python
-    def test_same_hue_different_brightness_stays_high(self) -> None:
-        """同色相、仅亮度不同(模拟无光照渲染 vs 有光照真实图)应保持高分。"""
-
-        mask = np.ones((4, 4), dtype=bool)
-        render_rgb = np.full((4, 4, 3), 90, dtype=np.uint8)    # 暗灰
-        observed_rgb = np.full((4, 4, 3), 200, dtype=np.uint8)  # 亮灰、同色相
-
-        result = ReprojectionChecker._score_from_maps(
-            render_rgb, observed_rgb, mask, mask, min_render_area_px=1
-        )
-        self.assertGreater(result.color_similarity, 0.85)
-
-    def test_different_hue_scores_low(self) -> None:
-        """色相明显不同(投到错物体)应被显著降分。"""
-
-        mask = np.ones((4, 4), dtype=bool)
-        render_rgb = np.full((4, 4, 3), (40, 40, 220), dtype=np.uint8)   # 蓝
-        observed_rgb = np.full((4, 4, 3), (220, 120, 40), dtype=np.uint8)  # 橙
-
-        result = ReprojectionChecker._score_from_maps(
-            render_rgb, observed_rgb, mask, mask, min_render_area_px=1
-        )
-        self.assertLess(result.color_similarity, 0.5)
-```
-
-> 注意:用 `4x4` 而非 `2x2`,避免 `_erode_intersection_core` 的 `< 9 像素` 早退分支干扰断言。
-
----
-
-## 改动 4 — code-review 修补(同段代码顺手清理)
-
-1. **`_ensure_rgb_u8` 浮点判定隐患** — [reprojection.py:200-206](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L200-L206):`max(finite) <= 1.0` 才乘 255,对 `(1.0, 255]` 中间范围浮点会误判。当前路径(renderer 输出已归一)安全,但建议加一行注释说明假设:`# 约定:浮点 color 要么在 [0,1],要么已是 [0,255];不支持其它中间范围`。低优先级, **不改逻辑只加注释** 。
-2. **深度魔法数 `3.0`** — [depth_alignment.py:142](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/reliability/depth_alignment.py#L142):`median_residual / (thresh * 3.0)`。本次不动逻辑,补注释:`# 残差达 inlier 阈值 3 倍时 median_score 归零`。若后续要调,再提为配置项。
-3. **mean→median** — 已在改动 1.4 内一并解决(颜色聚合改 median),无需单独处理。
-
----
-
-## 验证步骤
-
-1. **跑相关单测** (在 `EgoAnchor_Python` 目录,PowerShell):
+## 验证
 
 ```powershell
-   python -m pytest src/egoanchor/tests/test_render_quality.py src/egoanchor/tests/test_pose_quality.py -q
+cd p:\VSCode-Project\EgoAnchor\EgoAnchor_Python
+pixi run python -m unittest egoanchor.tests.test_render_quality egoanchor.tests.test_pose_quality egoanchor.tests.test_debug_view
 ```
 
-   (该项目测试基于 `unittest`,`pytest` 可直接收集;若无 pytest 则 `python -m unittest egoanchor.tests.test_render_quality`)
-
-1. **回放调参** — 用 `data/eval/*/...python_runtime.jsonl` 已有帧回放,对比改前/改后 `reproj` 分布。目标:`IoU>0.7` 的几何正确帧颜色分普遍升到  **0.7+** ,真正投错物体的帧仍  **<0.4** 。据此微调 `color_divisor`(更严→调小)和 `color_l_weight`(光照差仍误罚→调更小)。
-
-## 注意的连带影响(不用改,但要心里有数)
-
-* **`re_register_threshold = 0.35`** ([defaults.toml:59](vscode-webview://0ing7s3qthfm1egtmcptmcesnb5om9gpk2n7io0qq2pr7figqgvn/EgoAnchor_Python/src/egoanchor/config/defaults.toml#L59)):分数整体抬升后,该阈值语义变化。当前 `mode="score_only"` 不触发重注册, **安全** ;若将来切到 `re_register` 模式,需重新标定此阈值。
-* **`pose_quality.py` 下游阈值** (`reprojection_low` 的 0.5、`GOOD_SCORE_THRESH=0.6`):颜色分抬升后这些会更易满足,confidence 积累更顺,正是期望效果, **无需改** 。
+回放多物体序列(不只手柄):转动看 grad 压平光照波动、尖锐遮挡帧看 inlier 只小降、debug 文本看 grad/col 分别值。

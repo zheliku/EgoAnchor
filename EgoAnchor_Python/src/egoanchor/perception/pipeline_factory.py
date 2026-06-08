@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from egoanchor.reliability import PoseScoreConfig
+
 from .quest_pose_pipeline import QuestPosePipeline
 
 
@@ -142,7 +144,9 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     cutie_cfg = cfg.module.cutie
     calib_cfg = cfg.pipeline.calibration
     depth_cfg = cfg.pipeline.depth
-    render_quality_cfg = getattr(getattr(cfg, "reliability", SimpleNamespace()), "render_quality", SimpleNamespace())
+    reliability_cfg = getattr(cfg, "reliability", SimpleNamespace())
+    render_quality_cfg = getattr(reliability_cfg, "render_quality", SimpleNamespace())
+    pose_score_cfg = getattr(reliability_cfg, "pose_score", SimpleNamespace())
     debug_cfg = cfg.debug
 
     segmenter_type = normalize_segmenter_type(segmenter_cfg)
@@ -239,6 +243,14 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
 
     foundationpose_estimator = foundationpose_factory(bootstrap_k)
     cutie_tracker = cutie_factory() if bool(cutie_cfg.enabled) else None
+    # Pose reliability 合成配置；缺省时保持几何核默认参数。
+    pose_score_config = PoseScoreConfig(
+        geo_floor=float(_cfg_get(pose_score_cfg, "geo_floor", 0.05)),
+        reproj_weight=float(_cfg_get(pose_score_cfg, "reproj_weight", 0.5)),
+        depth_weight=float(_cfg_get(pose_score_cfg, "depth_weight", 0.5)),
+        mask_floor=float(_cfg_get(pose_score_cfg, "mask_floor", 0.5)),
+        jump_floor=float(_cfg_get(pose_score_cfg, "jump_floor", 0.6)),
+    )
 
     return QuestPosePipeline(
         segmenter=segmenter,
@@ -275,4 +287,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         render_quality_depth_min_coverage=float(_cfg_get(render_quality_cfg, "depth_min_coverage", 0.10)),
         render_quality_downscale=int(_cfg_get(render_quality_cfg, "downscale", 2)),
         render_quality_min_render_area_px=int(_cfg_get(render_quality_cfg, "min_render_area_px", 50)),
+        render_quality_color_l_weight=float(_cfg_get(render_quality_cfg, "color_l_weight", 0.5)),
+        render_quality_color_inlier_thresh=float(_cfg_get(render_quality_cfg, "color_inlier_thresh", 18.0)),
+        pose_score_config=pose_score_config,
     )

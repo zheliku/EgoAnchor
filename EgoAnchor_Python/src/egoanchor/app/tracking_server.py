@@ -81,7 +81,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
         runtime.start()
         _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
         debug_window_created = True
-        _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 540)))
+        _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 800)))
         score_window_created = True
         cv2.imshow(debug_window, waiting)
         LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
@@ -127,7 +127,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                 output.diagnostics,
                 output.observation,
                 width=int(getattr(pose_cfg, "score_window_width", 960)),
-                height=int(getattr(pose_cfg, "score_window_height", 540)),
+                height=int(getattr(pose_cfg, "score_window_height", 800)),
                 min_depth=float(depth_cfg.min_depth),
                 max_depth=float(depth_cfg.max_depth),
             )

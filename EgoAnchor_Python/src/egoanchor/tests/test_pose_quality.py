@@ -41,6 +41,40 @@ class PoseQualityTest(unittest.TestCase):
         self.assertLess(score, 0.75)
         self.assertIn("reprojection_missing_expected", flags)
 
+    def test_effective_low_depth_pulls_down_geometry_core(self) -> None:
+        """重投影高但深度有效低分时，几何合取核应把最终分拉到低档。"""
+
+        breakdown = score_observation_breakdown(
+            self._track_observation(
+                track_reprojection=0.81,
+                render_quality_status="valid",
+                render_quality_depth_alignment=0.0,
+                render_quality_depth_inlier=0.0,
+                render_quality_depth_residual_m=0.048,
+            )
+        )
+
+        self.assertAlmostEqual(breakdown.reprojection_score, 0.81)
+        self.assertAlmostEqual(breakdown.depth_score, 0.0)
+        self.assertLess(breakdown.final_score, 0.35)
+        self.assertIn("depth_alignment_low", breakdown.flags)
+
+    def test_missing_depth_signal_does_not_enter_geometry_core(self) -> None:
+        """深度覆盖不足时仍显示中性 depth_score，但不参与几何核惩罚。"""
+
+        breakdown = score_observation_breakdown(
+            self._track_observation(
+                track_reprojection=0.81,
+                render_quality_status="render_exception",
+                render_quality_depth_alignment=0.0,
+                depth_valid_in_mask=0.04,
+            )
+        )
+
+        self.assertAlmostEqual(breakdown.depth_score, 0.5)
+        self.assertGreater(breakdown.final_score, 0.7)
+        self.assertIn("depth_coverage_insufficient", breakdown.flags)
+
     def test_depth_alignment_is_quality_signal(self) -> None:
         """depth_score 应来自渲染深度对齐，而不是 mask 内有效深度覆盖率满分。"""
 
@@ -180,6 +214,8 @@ class PoseQualityTest(unittest.TestCase):
         render_quality_expected: bool = False,
         render_quality_area_ratio_score: float = 1.0,
         render_quality_render_area_px: int = 0,
+        render_quality_depth_inlier: float | None = None,
+        render_quality_depth_residual_m: float = 0.0,
     ) -> PoseObservation:
         """构造 TRACK 阶段的最小评分样本。"""
 
@@ -213,10 +249,13 @@ class PoseQualityTest(unittest.TestCase):
             render_quality_status=render_quality_status,
             track_reprojection=track_reprojection,
             render_quality_mask_iou=max(track_reprojection, 0.0),
-            render_quality_depth_inlier=max(render_quality_depth_alignment, 0.0),
+            render_quality_depth_inlier=render_quality_depth_inlier
+            if render_quality_depth_inlier is not None
+            else max(render_quality_depth_alignment, 0.0),
             render_quality_depth_alignment=render_quality_depth_alignment,
             render_quality_area_ratio_score=render_quality_area_ratio_score,
             render_quality_render_area_px=render_quality_render_area_px,
+            render_quality_depth_residual_m=render_quality_depth_residual_m,
             last_translation_delta_m=last_translation_delta_m,
             last_rotation_delta_deg=last_rotation_delta_deg,
             frame_dt_s=frame_dt_s,

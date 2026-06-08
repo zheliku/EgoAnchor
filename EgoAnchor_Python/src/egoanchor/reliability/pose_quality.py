@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -9,18 +10,6 @@ from egoanchor.utils import clamp, clamp01
 
 if TYPE_CHECKING:
     from egoanchor.perception import PoseObservation
-
-REPROJECTION_WEIGHT = 0.35
-"""Quality 层中重投影颜色分权重。"""
-
-DEPTH_WEIGHT = 0.30
-"""Quality 层中深度对齐分权重。"""
-
-MASK_WEIGHT = 0.25
-"""Quality 层中可见 mask 面积比例分权重。"""
-
-JUMP_WEIGHT = 0.10
-"""Quality 层中相邻 pose 跳变分权重。"""
 
 BASE_SOFT_TRANSLATION_M = 0.03
 """30fps 基准下平移超过该值开始轻微降分，单位米。"""
@@ -45,6 +34,35 @@ WARMUP_FRAMES = 10
 
 GOOD_SCORE_THRESH = 0.6
 """Quality 分不低于该阈值时认为本帧有助于积累连续置信。"""
+
+
+@dataclass(frozen=True, slots=True)
+class PoseScoreConfig:
+    """Pose quality 合成参数，控制几何合取核和非几何调制幅度。"""
+
+    geo_floor: float = 0.05
+    """几何核单维最低值；避免有效低分在几何平均里变成硬零。"""
+
+    reproj_weight: float = 0.5
+    """重投影颜色分在几何核里的相对权重。"""
+
+    depth_weight: float = 0.5
+    """深度对齐分在几何核里的相对权重。"""
+
+    mask_floor: float = 0.5
+    """mask 调制因子的下限；遮挡或可见面积少时只温和降权。"""
+
+    jump_floor: float = 0.6
+    """jump 调制因子的下限；快速运动时只温和降权。"""
+
+    def __post_init__(self) -> None:
+        """归一化配置值，避免 TOML 临时调参造成非法对数或负权重。"""
+
+        object.__setattr__(self, "geo_floor", clamp(float(self.geo_floor), 1e-6, 1.0))
+        object.__setattr__(self, "reproj_weight", max(0.0, float(self.reproj_weight)))
+        object.__setattr__(self, "depth_weight", max(0.0, float(self.depth_weight)))
+        object.__setattr__(self, "mask_floor", clamp01(float(self.mask_floor)))
+        object.__setattr__(self, "jump_floor", clamp01(float(self.jump_floor)))
 
 
 class ConfidenceAccumulator:
@@ -110,7 +128,7 @@ class PoseQualityBreakdown:
     """Gate 层总分，用于诊断 phase/reject 是否压低上限。"""
 
     quality_score: float
-    """Quality 层加权总分，用于诊断连续质量信号。"""
+    """Quality 层总分，由几何合取核和 mask/jump 有界调制相乘得到。"""
 
     flags: tuple[str, ...]
     """解释最终分数的 flags。"""
@@ -119,9 +137,11 @@ class PoseQualityBreakdown:
 def score_observation_breakdown(
     observation: PoseObservation,
     confidence_accumulator: ConfidenceAccumulator | None = None,
+    config: PoseScoreConfig | None = None,
 ) -> PoseQualityBreakdown:
     """按 Gate × Quality × Confidence 生成完整评分分解。"""
 
+    score_config = config or PoseScoreConfig()
     flags: list[str] = []
     if not observation.has_pose:
         if confidence_accumulator is not None:
@@ -151,15 +171,21 @@ def score_observation_breakdown(
     reject_score = _track_reject_factor(observation, flags)
     gate_score = clamp01(phase_score * reject_score)
 
-    reprojection_score = _reprojection_score(observation, flags)
-    depth_score = _depth_score(observation, flags)
+    reprojection_score, reprojection_valid = _reprojection_score(observation, flags)
+    depth_score, depth_valid = _depth_score(observation, flags)
     jump_score = _jump_score(observation, flags)
-    quality_score = clamp01(
-        REPROJECTION_WEIGHT * reprojection_score
-        + DEPTH_WEIGHT * depth_score
-        + MASK_WEIGHT * mask_score
-        + JUMP_WEIGHT * jump_score
+    core_score = _geometry_core(
+        reprojection_score=reprojection_score,
+        reprojection_valid=reprojection_valid,
+        depth_score=depth_score,
+        depth_valid=depth_valid,
+        config=score_config,
     )
+    modulation_score = _bounded_modulator(mask_score, score_config.mask_floor) * _bounded_modulator(
+        jump_score,
+        score_config.jump_floor,
+    )
+    quality_score = clamp01(core_score * modulation_score)
 
     confidence_score = 1.0
     if confidence_accumulator is not None:
@@ -190,41 +216,73 @@ def _phase_score(observation: PoseObservation, flags: list[str]) -> float:
     return 0.7
 
 
-def _reprojection_score(observation: PoseObservation, flags: list[str]) -> float:
+def _reprojection_score(observation: PoseObservation, flags: list[str]) -> tuple[float, bool]:
     """把重投影质量信号映射为 Quality 层子分。"""
 
     reprojection = float(observation.track_reprojection)
     if reprojection < 0.0:
         if observation.render_quality_expected:
             flags.append("reprojection_missing_expected")
-            return 0.30
+            return 0.30, True
         flags.append("no_reprojection_signal")
-        return 1.0
+        return 1.0, False
     score = clamp01(reprojection)
     if score < 0.5:
         flags.append("reprojection_low")
-    return score
+    return score, True
 
 
-def _depth_score(observation: PoseObservation, flags: list[str] | None) -> float:
+def _depth_score(observation: PoseObservation, flags: list[str] | None) -> tuple[float, bool]:
     """把深度对齐质量映射为 Quality 层子分。"""
 
     depth_coverage = clamp01(float(observation.depth_valid_in_mask))
     if depth_coverage < MIN_DEPTH_COVERAGE:
         _append_flag(flags, "depth_coverage_insufficient")
-        return 0.5
+        return 0.5, False
 
     alignment = clamp01(float(observation.render_quality_depth_alignment))
     if _has_render_depth_signal(observation):
         if alignment < 0.5:
             _append_flag(flags, "depth_alignment_low")
-        return alignment
+        return alignment, True
 
     if observation.render_quality_expected:
         _append_flag(flags, "depth_alignment_missing_expected")
     else:
         _append_flag(flags, "no_depth_alignment_signal")
-    return 0.5
+    return 0.5, False
+
+
+def _geometry_core(
+    *,
+    reprojection_score: float,
+    reprojection_valid: bool,
+    depth_score: float,
+    depth_valid: bool,
+    config: PoseScoreConfig,
+) -> float:
+    """对有效几何证据取加权几何平均；两路都无信号时保持中性。"""
+
+    weighted_log_sum = 0.0
+    weight_sum = 0.0
+    if reprojection_valid and config.reproj_weight > 0.0:
+        value = max(clamp01(float(reprojection_score)), config.geo_floor)
+        weighted_log_sum += config.reproj_weight * math.log(value)
+        weight_sum += config.reproj_weight
+    if depth_valid and config.depth_weight > 0.0:
+        value = max(clamp01(float(depth_score)), config.geo_floor)
+        weighted_log_sum += config.depth_weight * math.log(value)
+        weight_sum += config.depth_weight
+    if weight_sum <= 0.0:
+        return 1.0
+    return clamp01(math.exp(weighted_log_sum / weight_sum))
+
+
+def _bounded_modulator(score: float, floor: float) -> float:
+    """把非几何子分映射到 [floor, 1]，只作为温和调制项。"""
+
+    lower = clamp01(float(floor))
+    return clamp01(lower + (1.0 - lower) * clamp01(float(score)))
 
 
 def _has_render_depth_signal(observation: PoseObservation) -> bool:

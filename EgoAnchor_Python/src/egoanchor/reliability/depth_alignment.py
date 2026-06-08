@@ -139,6 +139,7 @@ class DepthAlignmentChecker:
 
         inlier_ratio = float(np.mean(residual < thresh))
         median_residual = float(np.median(residual))
+        # 残差达 inlier 阈值 3 倍时 median_score 归零。
         median_score = clamp01(1.0 - median_residual / (thresh * 3.0))
         score = clamp01(0.5 * inlier_ratio + 0.5 * median_score)
         return DepthAlignmentResult(
