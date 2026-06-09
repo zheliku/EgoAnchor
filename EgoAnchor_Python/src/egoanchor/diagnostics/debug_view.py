@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from egoanchor.perception import PoseObservation
+from egoanchor.reliability import ReprojectionChecker, ReprojectionDiffMaps
 from egoanchor.utils import clamp01
 
 from .image_utils import fit_to_size, stack_stereo
@@ -104,8 +105,11 @@ def make_score_debug_view(
     lines = _score_debug_lines(diagnostics, observation)
     banner_h = min(_score_banner_height(len(lines)), max(canvas.shape[0] - 2, 1))
     panel_area_h = max(canvas.shape[0] - banner_h, 2)
-    half_w = max(canvas.shape[1] // 2, 1)
-    half_h = max(panel_area_h // 2, 1)
+    col_w = max(canvas.shape[1] // 3, 1)
+    row_h = max(panel_area_h // 2, 1)
+    right_w = max(canvas.shape[1] - col_w * 2, 1)
+    bottom_h = max(panel_area_h - row_h, 1)
+    diff_maps = _reprojection_diff_maps(diagnostics)
     panels = [
         (
             _overlap_rgb_panel(
@@ -115,6 +119,26 @@ def make_score_debug_view(
             ),
             0,
             banner_h,
+            col_w,
+            row_h,
+        ),
+        (
+            _aligned_projection_panel(
+                diff_maps,
+                diagnostics.render_quality_render_rgb,
+                diagnostics.render_quality_render_mask,
+            ),
+            col_w,
+            banner_h,
+            col_w,
+            row_h,
+        ),
+        (
+            _lab_residual_panel(diff_maps),
+            col_w * 2,
+            banner_h,
+            right_w,
+            row_h,
         ),
         (
             _rgb_mask_panel(
@@ -123,8 +147,10 @@ def make_score_debug_view(
                 "render RGB / projection",
                 (0, 255, 120),
             ),
-            half_w,
-            banner_h,
+            0,
+            banner_h + row_h,
+            col_w,
+            bottom_h,
         ),
         (
             _depth_region_panel(
@@ -135,8 +161,10 @@ def make_score_debug_view(
                 max_depth,
                 (0, 255, 120),
             ),
-            0,
-            banner_h + half_h,
+            col_w,
+            banner_h + row_h,
+            col_w,
+            bottom_h,
         ),
         (
             _depth_region_panel(
@@ -147,13 +175,15 @@ def make_score_debug_view(
                 max_depth,
                 (255, 255, 0),
             ),
-            half_w,
-            banner_h + half_h,
+            col_w * 2,
+            banner_h + row_h,
+            right_w,
+            bottom_h,
         ),
     ]
-    for panel, x, y in panels:
-        fitted = fit_to_size(panel, half_w, half_h)
-        canvas[y : y + half_h, x : x + half_w] = fitted
+    for panel, x, y, panel_w, panel_h in panels:
+        fitted = fit_to_size(panel, panel_w, panel_h)
+        canvas[y : y + panel_h, x : x + panel_w] = fitted
 
     y = 24
     for text in lines:
@@ -203,6 +233,57 @@ def _overlap_rgb_panel(observed_rgb: np.ndarray | None, render_mask: np.ndarray 
     _draw_mask_contour(image, render, (0, 255, 120))
     _draw_mask_contour(image, observed, (255, 255, 0))
     _put_panel_title(image, "observed RGB / overlap")
+    return image
+
+
+def _reprojection_diff_maps(diagnostics: FrameDiagnostics) -> ReprojectionDiffMaps | None:
+    """用重投影 checker 的同源逻辑生成 ZNCC debug 三联图数据。"""
+
+    if (
+        diagnostics.render_quality_render_rgb is None
+        or diagnostics.render_quality_observed_rgb is None
+        or diagnostics.render_quality_render_mask is None
+        or diagnostics.render_quality_observed_mask is None
+    ):
+        return None
+    try:
+        return ReprojectionChecker.color_diff_maps(
+            diagnostics.render_quality_render_rgb,
+            diagnostics.render_quality_observed_rgb,
+            diagnostics.render_quality_render_mask,
+            diagnostics.render_quality_observed_mask,
+        )
+    except ValueError:
+        return None
+
+
+def _aligned_projection_panel(
+    diff_maps: ReprojectionDiffMaps | None,
+    render_rgb: np.ndarray | None,
+    render_mask: np.ndarray | None,
+) -> np.ndarray:
+    """显示按 LAB 零均值统计量对齐后的渲染投影。"""
+
+    if diff_maps is None:
+        return _rgb_mask_panel(render_rgb, render_mask, "zero-mean render unavailable", (0, 255, 120))
+    image = _ensure_bgr(diff_maps.aligned_render_rgb, "no aligned render")
+    mask_bool = _resize_mask_like(render_mask, image)
+    if mask_bool is not None:
+        image[~mask_bool] = (0, 0, 0)
+        image = overlay_mask_contour(image, mask_bool, color=(0, 255, 120))
+    _put_panel_title(image, "zero-mean render / projection")
+    return image
+
+
+def _lab_residual_panel(diff_maps: ReprojectionDiffMaps | None) -> np.ndarray:
+    """显示 LAB z-score 残差热力图，标题中标出 ZNCC 分。"""
+
+    if diff_maps is None:
+        image = np.zeros((240, 320, 3), dtype=np.uint8)
+        cv2.putText(image, "no LAB residual", (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 160, 255), 1, cv2.LINE_AA)
+        return image
+    image = diff_maps.residual_heatmap_bgr.copy()
+    _put_panel_title(image, f"LAB residual ZNCC={diff_maps.score:.2f}")
     return image
 
 

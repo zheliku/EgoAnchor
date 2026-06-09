@@ -99,6 +99,32 @@ class DebugViewTest(unittest.TestCase):
         self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
         self.assertGreater(float(np.mean(view[expected_banner_h + 8])), 20.0)
 
+    def test_score_debug_view_has_diff_triptych(self) -> None:
+        """评分窗口应包含原图、零均值投影和 LAB 残差三联图。"""
+
+        mask = np.ones((24, 24), dtype=bool)
+        yy, xx = np.indices((24, 24), dtype=np.uint8)
+        render_rgb = np.dstack([40 + xx * 4, 80 + yy * 3, 180 - xx * 2]).astype(np.uint8)
+        observed_rgb = np.clip(render_rgb.astype(np.float32) * 0.75 + 35.0, 0, 255).astype(np.uint8)
+        diagnostics = FrameDiagnostics(
+            render_quality_observed_rgb=observed_rgb,
+            render_quality_render_rgb=render_rgb,
+            render_quality_render_mask=mask,
+            render_quality_observed_mask=mask,
+            render_quality_render_depth=np.ones((24, 24), dtype=np.float32),
+            render_quality_observed_depth=np.ones((24, 24), dtype=np.float32),
+        )
+        texts: list[str] = []
+
+        with patch("egoanchor.diagnostics.debug_view.cv2.putText") as put_text:
+            put_text.side_effect = lambda img, text, *args, **kwargs: texts.append(str(text)) or img
+            view = make_score_debug_view(diagnostics, None, width=720, height=480)
+
+        self.assertEqual(view.shape[:2], (480, 720))
+        self.assertTrue(any("observed RGB / overlap" in text for text in texts))
+        self.assertTrue(any("zero-mean render / projection" in text for text in texts))
+        self.assertTrue(any("LAB residual ZNCC=" in text for text in texts))
+
     def test_score_debug_view_default_size_matches_config(self) -> None:
         """评分窗口工具默认尺寸应与 defaults.toml 中的 960x800 保持一致。"""
 

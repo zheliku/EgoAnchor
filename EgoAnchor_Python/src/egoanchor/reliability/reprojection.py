@@ -18,7 +18,7 @@ class ReprojectionResult:
     """重投影颜色分，范围 0..1；只来自 Cutie mask 与投影 mask 交集区域。"""
 
     color_similarity: float
-    """重叠核心区域的颜色 inlier 比例，表示加权 LAB 距离低于阈值的像素占比。"""
+    """重叠核心区域的 LAB ZNCC 映射分，0.5 表示纯色或零方差信号。"""
 
     area_ratio_score: float
     """观测 mask 面积与渲染投影面积的比例分，低值表示遮挡或投影面积明显过大。"""
@@ -39,7 +39,10 @@ class ReprojectionResult:
     """观测前景像素数量。"""
 
     valid: bool
-    """本帧重投影信号是否可用于可靠性评分。"""
+    """本帧重投影几何信号是否可用（渲染面积足够且有观测前景）。"""
+
+    color_valid: bool = True
+    """颜色 ZNCC 是否有可用方差；纯色/无纹理交集为 False，调用方应把颜色项排除而非惩罚。"""
 
     status: str = "invalid"
     """重投影信号状态，例如 valid、map_shape_invalid、render_area_tiny。"""
@@ -57,14 +60,30 @@ class ReprojectionResult:
     """用于 debug 的观测 RGB。"""
 
 
+@dataclass(frozen=True, slots=True)
+class ReprojectionDiffMaps:
+    """重投影颜色 ZNCC 的可视化中间结果。"""
+
+    aligned_render_rgb: np.ndarray
+    """按观测 LAB 均值/方差重映射后的渲染 RGB，用于直观看零均值对齐结果。"""
+
+    residual_heatmap_bgr: np.ndarray
+    """LAB z-score 残差热力图，BGR 格式。"""
+
+    core_mask: np.ndarray
+    """参与 ZNCC 计算的交集核心 mask。"""
+
+    score: float
+    """与 _color_similarity_lab 相同的 ZNCC 映射分，范围 0..1。"""
+
+
 class ReprojectionChecker:
     """只评估渲染 RGB 与观测 RGB 在可见交集内的颜色相似度。"""
 
     def __init__(
         self,
         min_render_area_px: int = 50,
-        color_l_weight: float = 0.5,
-        color_inlier_thresh: float = 18.0,
+        color_l_weight: float = 0.3,
     ) -> None:
         """保存最小渲染面积与颜色度量参数。"""
 
@@ -72,10 +91,7 @@ class ReprojectionChecker:
         """渲染前景过小时判为无效信号的像素阈值。"""
 
         self.color_l_weight = clamp01(float(color_l_weight))
-        """LAB 亮度通道 L 在归一化颜色距离中的权重。"""
-
-        self.color_inlier_thresh = max(1.0, float(color_inlier_thresh))
-        """加权 LAB 距离小于该阈值的像素计为颜色 inlier。"""
+        """LAB ZNCC 中亮度通道 L 的相对权重。"""
 
     def score_maps(
         self,
@@ -93,7 +109,6 @@ class ReprojectionChecker:
             observed_mask,
             min_render_area_px=self.min_render_area_px,
             color_l_weight=self.color_l_weight,
-            color_inlier_thresh=self.color_inlier_thresh,
         )
 
     @staticmethod
@@ -104,8 +119,7 @@ class ReprojectionChecker:
         observed_mask: np.ndarray,
         *,
         min_render_area_px: int,
-        color_l_weight: float = 0.5,
-        color_inlier_thresh: float = 18.0,
+        color_l_weight: float = 0.3,
     ) -> ReprojectionResult:
         """纯数组版本，便于无 GPU 单测；几何量只作为诊断输出。"""
 
@@ -131,12 +145,11 @@ class ReprojectionChecker:
         render_visible_ratio = float(intersection_area) / float(render_area) if render_area > 0 else 0.0
         observed_visible_ratio = float(intersection_area) / float(observed_area) if observed_area > 0 else 0.0
         area_ratio_score = min(float(observed_area) / float(render_area), 1.0) if render_area > 0 else 0.0
-        color_similarity = ReprojectionChecker._color_similarity_lab(
+        color_similarity, color_valid = ReprojectionChecker._color_similarity_lab(
             render_rgb,
             observed_rgb_u8,
             intersection,
             l_weight=color_l_weight,
-            inlier_thresh=color_inlier_thresh,
         )
         score = clamp01(color_similarity)
 
@@ -158,6 +171,7 @@ class ReprojectionChecker:
             render_area_px=render_area,
             observed_area_px=observed_area,
             valid=bool(valid),
+            color_valid=bool(color_valid),
             status=status,
             render_mask=render.copy(),
             observed_mask=observed.copy(),
@@ -171,68 +185,116 @@ class ReprojectionChecker:
         observed_rgb: np.ndarray,
         intersection: np.ndarray,
         *,
-        l_weight: float = 0.5,
-        inlier_thresh: float = 18.0,
-    ) -> float:
-        """在重叠核心区域计算光照不变的 LAB 颜色 inlier 比例。
+        l_weight: float = 0.3,
+    ) -> tuple[float, bool]:
+        """在重叠核心区域计算 LAB 三通道零均值归一化相关分。
 
-        渲染为无光照纯反照率，真实图含光照和白平衡偏移。这里先对 L 做鲁棒仿射
-        对齐，再消除小幅全局 a/b 色偏，最后统计加权 LAB 距离低于阈值的像素比例。
+        返回 (score, color_valid)。color_valid 为 False 表示核心区域无颜色方差
+        （纯色/无纹理物体），此时 score 为中性 0.5，调用方应把颜色项排除而非据此降分。
+        空交集是另一回事：pose 投影到错误位置，返回 (0.0, True) 保留惩罚，是坏-pose 信号。
         """
 
         if int(np.count_nonzero(intersection)) <= 0:
-            return 0.0
-        core_mask = ReprojectionChecker._erode_intersection_core(intersection)
-        if int(np.count_nonzero(core_mask)) <= 0:
-            core_mask = intersection
+            return 0.0, True
         render_lab = cv2.cvtColor(render_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
         observed_lab = cv2.cvtColor(observed_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-        render_core = render_lab[core_mask].copy()
-        observed_core = observed_lab[core_mask].copy()
-        if render_core.shape[0] <= 0:
-            return 0.0
-        render_core[:, 0] = ReprojectionChecker._align_luminance(render_core[:, 0], observed_core[:, 0])
-        render_core[:, 1:], observed_core[:, 1:] = ReprojectionChecker._normalize_chroma(
-            render_core[:, 1:],
-            observed_core[:, 1:],
-            inlier_thresh=max(1.0, float(inlier_thresh)),
+        core_mask = ReprojectionChecker._core_mask(intersection)
+        return ReprojectionChecker._lab_zncc_score(render_lab[core_mask], observed_lab[core_mask], l_weight=l_weight)
+
+    @staticmethod
+    def color_diff_maps(
+        render_rgb: np.ndarray,
+        observed_rgb: np.ndarray,
+        render_mask: np.ndarray,
+        observed_mask: np.ndarray,
+        *,
+        l_weight: float = 0.3,
+    ) -> ReprojectionDiffMaps:
+        """生成与 ZNCC 评分同源的对齐投影和 LAB 残差热力图。"""
+
+        render_rgb_u8 = ReprojectionChecker._ensure_rgb_u8(render_rgb)
+        observed_rgb_u8 = ReprojectionChecker._ensure_rgb_u8(observed_rgb)
+        render = np.asarray(render_mask) > 0
+        observed = np.asarray(observed_mask) > 0
+        intersection = render & observed
+        if render_rgb_u8.shape[:2] != intersection.shape or observed_rgb_u8.shape[:2] != intersection.shape:
+            raise ValueError("重投影 debug 图像和 mask 尺寸不一致。")
+
+        render_lab = cv2.cvtColor(render_rgb_u8, cv2.COLOR_RGB2LAB).astype(np.float32)
+        observed_lab = cv2.cvtColor(observed_rgb_u8, cv2.COLOR_RGB2LAB).astype(np.float32)
+        core_mask = ReprojectionChecker._core_mask(intersection)
+        score, _color_valid = ReprojectionChecker._lab_zncc_score(render_lab[core_mask], observed_lab[core_mask], l_weight=l_weight)
+        aligned_lab, residual = ReprojectionChecker._lab_diff_visual_maps(render_lab, observed_lab, core_mask, l_weight=l_weight)
+        aligned_rgb = cv2.cvtColor(np.clip(aligned_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
+        heatmap_input = np.clip(residual * 42.0, 0, 255).astype(np.uint8)
+        heatmap = cv2.applyColorMap(heatmap_input, cv2.COLORMAP_JET)
+        heatmap[~core_mask] = (0, 0, 0)
+        return ReprojectionDiffMaps(
+            aligned_render_rgb=aligned_rgb,
+            residual_heatmap_bgr=heatmap,
+            core_mask=core_mask,
+            score=score,
         )
+
+    @staticmethod
+    def _lab_zncc_score(render_core_lab: np.ndarray, observed_core_lab: np.ndarray, *, l_weight: float) -> tuple[float, bool]:
+        """对 LAB 核心像素做加权 ZNCC，并把 [-1,1] 映射到 [0,1]。
+
+        返回 (score, color_valid)。当任一侧核心区域颜色方差为零（纯色/无纹理）时，
+        ZNCC 无定义，返回 (0.5, False)，由调用方决定排除颜色项而非据此降分。
+        """
+
+        if render_core_lab.size <= 0 or observed_core_lab.size <= 0:
+            return 0.0, True
         weights = np.array([clamp01(l_weight), 1.0, 1.0], dtype=np.float32)
-        diff = np.linalg.norm((render_core - observed_core) * weights, axis=1)
-        if diff.size <= 0:
-            return 0.0
-        return clamp01(float(np.mean(diff < max(1.0, float(inlier_thresh)))))
+        render_centered = (np.asarray(render_core_lab, dtype=np.float32) - np.mean(render_core_lab, axis=0)) * weights
+        observed_centered = (np.asarray(observed_core_lab, dtype=np.float32) - np.mean(observed_core_lab, axis=0)) * weights
+        numerator = float(np.sum(render_centered * observed_centered))
+        render_energy = float(np.sum(render_centered * render_centered))
+        observed_energy = float(np.sum(observed_centered * observed_centered))
+        denominator = float(np.sqrt(render_energy * observed_energy))
+        if denominator <= 1e-6:
+            return 0.5, False
+        zncc = numerator / denominator
+        return clamp01((zncc + 1.0) * 0.5), True
 
     @staticmethod
-    def _align_luminance(render_l: np.ndarray, observed_l: np.ndarray) -> np.ndarray:
-        """用 25/75 分位点把渲染 L 仿射映射到观测 L，吸收亮度增益和偏置。"""
+    def _lab_diff_visual_maps(
+        render_lab: np.ndarray,
+        observed_lab: np.ndarray,
+        core_mask: np.ndarray,
+        *,
+        l_weight: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """按核心区域统计量生成对齐后的渲染 LAB 和逐像素 z-score 残差。"""
 
-        render_values = np.asarray(render_l, dtype=np.float32)
-        observed_values = np.asarray(observed_l, dtype=np.float32)
-        render_p25, render_p75 = np.percentile(render_values, [25.0, 75.0])
-        observed_p25, observed_p75 = np.percentile(observed_values, [25.0, 75.0])
-        render_span = float(render_p75 - render_p25)
-        if abs(render_span) < 3.0:
-            gain = 1.0
-            bias = float(np.median(observed_values) - np.median(render_values))
-        else:
-            gain = float((observed_p75 - observed_p25) / render_span)
-            bias = float(observed_p25 - gain * render_p25)
-        return np.clip(render_values * gain + bias, 0.0, 255.0)
+        render_core = render_lab[core_mask]
+        observed_core = observed_lab[core_mask]
+        if render_core.size <= 0 or observed_core.size <= 0:
+            return render_lab.copy(), np.zeros(render_lab.shape[:2], dtype=np.float32)
+
+        render_mean = np.mean(render_core, axis=0)
+        observed_mean = np.mean(observed_core, axis=0)
+        render_std = np.std(render_core, axis=0)
+        observed_std = np.std(observed_core, axis=0)
+        safe_render_std = np.where(render_std > 1e-6, render_std, 1.0).astype(np.float32)
+        safe_observed_std = np.where(observed_std > 1e-6, observed_std, 1.0).astype(np.float32)
+        render_z = (render_lab - render_mean) / safe_render_std
+        observed_z = (observed_lab - observed_mean) / safe_observed_std
+        aligned_lab = render_z * observed_std + observed_mean
+        weights = np.array([clamp01(l_weight), 1.0, 1.0], dtype=np.float32)
+        residual = np.linalg.norm((render_z - observed_z) * weights, axis=2)
+        residual[~core_mask] = 0.0
+        return aligned_lab, residual
 
     @staticmethod
-    def _normalize_chroma(render_ab: np.ndarray, observed_ab: np.ndarray, *, inlier_thresh: float) -> tuple[np.ndarray, np.ndarray]:
-        """消除小幅全局白平衡色偏；色度差过大时保留原始 a/b 以惩罚错物体。"""
+    def _core_mask(intersection: np.ndarray) -> np.ndarray:
+        """取得用于 ZNCC 的交集核心区域，核心为空时退回完整交集。"""
 
-        render_values = np.asarray(render_ab, dtype=np.float32).copy()
-        observed_values = np.asarray(observed_ab, dtype=np.float32).copy()
-        render_center = np.median(render_values, axis=0)
-        observed_center = np.median(observed_values, axis=0)
-        center_delta = float(np.linalg.norm(render_center - observed_center))
-        if center_delta <= max(30.0, float(inlier_thresh) * 2.0):
-            render_values -= render_center
-            observed_values -= observed_center
-        return render_values, observed_values
+        core_mask = ReprojectionChecker._erode_intersection_core(intersection)
+        if int(np.count_nonzero(core_mask)) <= 0:
+            return np.asarray(intersection) > 0
+        return core_mask
 
     @staticmethod
     def _erode_intersection_core(intersection: np.ndarray) -> np.ndarray:
@@ -289,8 +351,9 @@ class ReprojectionChecker:
             render_area_px=0,
             observed_area_px=0,
             valid=False,
+            color_valid=False,
             status=str(status),
         )
 
 
-__all__ = ["ReprojectionChecker", "ReprojectionResult"]
+__all__ = ["ReprojectionChecker", "ReprojectionDiffMaps", "ReprojectionResult"]

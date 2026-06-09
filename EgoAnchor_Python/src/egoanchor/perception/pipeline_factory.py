@@ -287,7 +287,6 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         render_quality_depth_min_coverage=float(_cfg_get(render_quality_cfg, "depth_min_coverage", 0.10)),
         render_quality_downscale=int(_cfg_get(render_quality_cfg, "downscale", 2)),
         render_quality_min_render_area_px=int(_cfg_get(render_quality_cfg, "min_render_area_px", 50)),
-        render_quality_color_l_weight=float(_cfg_get(render_quality_cfg, "color_l_weight", 0.5)),
-        render_quality_color_inlier_thresh=float(_cfg_get(render_quality_cfg, "color_inlier_thresh", 18.0)),
+        render_quality_color_l_weight=float(_cfg_get(render_quality_cfg, "color_l_weight", 0.3)),
         pose_score_config=pose_score_config,
     )

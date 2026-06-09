@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from egoanchor.perception import PoseObservation
-from egoanchor.reliability import ConfidenceAccumulator, score_observation_breakdown
+from egoanchor.reliability import ConfidenceAccumulator, PoseScoreConfig, score_observation_breakdown
 
 
 class PoseQualityTest(unittest.TestCase):
@@ -31,15 +31,19 @@ class PoseQualityTest(unittest.TestCase):
         self.assertGreater(score, 0.80)
         self.assertIn("no_reprojection_signal", flags)
 
-    def test_score_penalizes_expected_missing_reprojection(self) -> None:
-        """开启重投影检测后若 TRACK 阶段仍无信号，不应继续给接近 1 的高分。"""
+    def test_score_excludes_missing_reprojection_instead_of_penalizing(self) -> None:
+        """开启重投影检测但本帧无可用颜色信号（如纯色物体）时，应排除颜色项而非惩罚。"""
 
-        score, flags = self._score_and_flags(
+        excluded_score, excluded_flags = self._score_and_flags(
             self._track_observation(track_reprojection=-1.0, render_quality_expected=True)
         )
+        baseline_score, _ = self._score_and_flags(
+            self._track_observation(track_reprojection=-1.0, render_quality_expected=False)
+        )
 
-        self.assertLess(score, 0.75)
-        self.assertIn("reprojection_missing_expected", flags)
+        self.assertAlmostEqual(excluded_score, baseline_score)
+        self.assertIn("no_reprojection_signal", excluded_flags)
+        self.assertNotIn("reprojection_missing_expected", excluded_flags)
 
     def test_effective_low_depth_pulls_down_geometry_core(self) -> None:
         """重投影高但深度有效低分时，几何合取核应把最终分拉到低档。"""
@@ -70,10 +74,33 @@ class PoseQualityTest(unittest.TestCase):
                 depth_valid_in_mask=0.04,
             )
         )
+        accumulator = ConfidenceAccumulator()
+        seeded = score_observation_breakdown(
+            self._track_observation(
+                track_reprojection=0.81,
+                render_quality_status="render_exception",
+                render_quality_depth_alignment=0.0,
+                depth_valid_in_mask=0.04,
+            ),
+            confidence_accumulator=accumulator,
+        )
+        latest = breakdown
+        for _ in range(4):
+            latest = score_observation_breakdown(
+                self._track_observation(
+                    track_reprojection=-1.0,
+                    render_quality_status="warmup",
+                    render_quality_depth_alignment=0.0,
+                    depth_valid_in_mask=0.04,
+                ),
+                confidence_accumulator=accumulator,
+            )
 
         self.assertAlmostEqual(breakdown.depth_score, 0.5)
         self.assertGreater(breakdown.final_score, 0.7)
         self.assertIn("depth_coverage_insufficient", breakdown.flags)
+        self.assertIn("quality_pending", latest.flags)
+        self.assertAlmostEqual(latest.confidence_score, seeded.confidence_score)
 
     def test_depth_alignment_is_quality_signal(self) -> None:
         """depth_score 应来自渲染深度对齐，而不是 mask 内有效深度覆盖率满分。"""
@@ -167,6 +194,44 @@ class PoseQualityTest(unittest.TestCase):
         self.assertAlmostEqual(first.confidence_score, 0.55)
         self.assertAlmostEqual(latest.confidence_score, 1.0)
         self.assertLess(first.final_score, latest.final_score)
+
+    def test_warmup_frames_do_not_ramp_confidence(self) -> None:
+        """无几何证据的 warmup 帧应信任 pose 但不虚攒 confidence。"""
+
+        accumulator = ConfidenceAccumulator()
+        first = score_observation_breakdown(
+            self._track_observation(
+                track_reprojection=-1.0,
+                render_quality_status="warmup",
+                depth_valid_in_mask=0.04,
+                render_quality_depth_alignment=0.0,
+            ),
+            confidence_accumulator=accumulator,
+        )
+        latest = first
+        for _ in range(5):
+            latest = score_observation_breakdown(
+                self._track_observation(
+                    track_reprojection=-1.0,
+                    render_quality_status="warmup",
+                    depth_valid_in_mask=0.04,
+                    render_quality_depth_alignment=0.0,
+                ),
+                confidence_accumulator=accumulator,
+            )
+
+        self.assertGreater(first.final_score, 0.45)
+        self.assertAlmostEqual(first.confidence_score, 0.5)
+        self.assertAlmostEqual(latest.confidence_score, 0.5)
+        self.assertIn("quality_pending", latest.flags)
+
+    def test_both_weights_zero_falls_back(self) -> None:
+        """重投影和深度权重都清零时，应回退 0.5/0.5 避免几何核无效。"""
+
+        config = PoseScoreConfig(reproj_weight=0.0, depth_weight=0.0)
+
+        self.assertAlmostEqual(config.reproj_weight, 0.5)
+        self.assertAlmostEqual(config.depth_weight, 0.5)
 
     def test_score_breakdown_exposes_gate_quality_confidence_formula(self) -> None:
         """评分分解应暴露 Gate、Quality 和 Confidence，供 HUD 逐项显示。"""

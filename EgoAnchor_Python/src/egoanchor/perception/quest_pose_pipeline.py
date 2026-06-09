@@ -71,8 +71,7 @@ class QuestPosePipeline:
         render_quality_depth_min_coverage: float = 0.10,
         render_quality_downscale: int = 2,
         render_quality_min_render_area_px: int = 50,
-        render_quality_color_l_weight: float = 0.5,
-        render_quality_color_inlier_thresh: float = 18.0,
+        render_quality_color_l_weight: float = 0.3,
         pose_score_config: PoseScoreConfig | None = None,
     ) -> None:
         """注入算法组件和 pipeline 策略参数。"""
@@ -171,7 +170,6 @@ class QuestPosePipeline:
                 depth_min_coverage=render_quality_depth_min_coverage,
                 min_render_area_px=render_quality_min_render_area_px,
                 color_l_weight=render_quality_color_l_weight,
-                color_inlier_thresh=render_quality_color_inlier_thresh,
                 downscale=render_quality_downscale,
             )
             if self.enable_render_quality
@@ -954,7 +952,9 @@ class QuestPosePipeline:
             depth_coverage=diagnostics.depth_valid_in_mask,
         )
         diagnostics.render_quality_ms = (time.perf_counter() - t0) * 1000.0
-        diagnostics.track_reprojection = result.reprojection_score if result.reprojection_valid else -1.0
+        # 纯色/无纹理物体 color_valid=False：颜色 ZNCC 无方差，置 -1.0 让评分层排除颜色项而非按中性 0.5 降分。
+        color_usable = result.reprojection_valid and result.color_valid
+        diagnostics.track_reprojection = result.reprojection_score if color_usable else -1.0
         diagnostics.render_quality_status = result.status
         diagnostics.render_quality_mask_iou = result.mask_iou
         diagnostics.render_quality_depth_inlier = result.depth_inlier_ratio
@@ -970,7 +970,7 @@ class QuestPosePipeline:
         diagnostics.render_quality_observed_depth = result.observed_depth_m
         diagnostics.render_quality_render_rgb = result.render_rgb
         diagnostics.render_quality_observed_rgb = result.observed_rgb
-        if not result.reprojection_valid:
+        if not color_usable:
             return None
         return result.reprojection_score
 

@@ -59,8 +59,13 @@ class PoseScoreConfig:
         """归一化配置值，避免 TOML 临时调参造成非法对数或负权重。"""
 
         object.__setattr__(self, "geo_floor", clamp(float(self.geo_floor), 1e-6, 1.0))
-        object.__setattr__(self, "reproj_weight", max(0.0, float(self.reproj_weight)))
-        object.__setattr__(self, "depth_weight", max(0.0, float(self.depth_weight)))
+        reproj_weight = max(0.0, float(self.reproj_weight))
+        depth_weight = max(0.0, float(self.depth_weight))
+        if reproj_weight + depth_weight <= 0.0:
+            reproj_weight = 0.5
+            depth_weight = 0.5
+        object.__setattr__(self, "reproj_weight", reproj_weight)
+        object.__setattr__(self, "depth_weight", depth_weight)
         object.__setattr__(self, "mask_floor", clamp01(float(self.mask_floor)))
         object.__setattr__(self, "jump_floor", clamp01(float(self.jump_floor)))
 
@@ -80,9 +85,15 @@ class ConfidenceAccumulator:
         self.consecutive_good = 0
         """当前连续高质量帧计数。"""
 
-    def update(self, quality_score: float) -> float:
-        """更新连续帧计数，并返回 0.5..1.0 的 confidence ramp。"""
+    def update(self, quality_score: float, *, evidence: bool = True) -> float:
+        """更新连续帧计数，并返回 0.5..1.0 的 confidence ramp。
 
+        evidence=False 表示本帧没有重投影或深度几何证据，计数原地保持。
+        """
+
+        if not evidence:
+            ramp = float(self.consecutive_good) / float(self.warmup_frames)
+            return clamp01(0.5 + 0.5 * ramp)
         if clamp01(float(quality_score)) >= self.good_score_thresh:
             self.consecutive_good = min(self.consecutive_good + 1, self.warmup_frames)
         else:
@@ -173,6 +184,9 @@ def score_observation_breakdown(
 
     reprojection_score, reprojection_valid = _reprojection_score(observation, flags)
     depth_score, depth_valid = _depth_score(observation, flags)
+    has_evidence = reprojection_valid or depth_valid
+    if not has_evidence:
+        flags.append("quality_pending")
     jump_score = _jump_score(observation, flags)
     core_score = _geometry_core(
         reprojection_score=reprojection_score,
@@ -189,7 +203,7 @@ def score_observation_breakdown(
 
     confidence_score = 1.0
     if confidence_accumulator is not None:
-        confidence_score = confidence_accumulator.update(quality_score)
+        confidence_score = confidence_accumulator.update(quality_score, evidence=has_evidence)
 
     final_score = clamp01(gate_score * quality_score * confidence_score)
     return PoseQualityBreakdown(
@@ -217,13 +231,15 @@ def _phase_score(observation: PoseObservation, flags: list[str]) -> float:
 
 
 def _reprojection_score(observation: PoseObservation, flags: list[str]) -> tuple[float, bool]:
-    """把重投影质量信号映射为 Quality 层子分。"""
+    """把重投影质量信号映射为 Quality 层子分。
+
+    track_reprojection<0 表示本帧没有可用颜色信号（未启用、渲染退化或纯色/无纹理物体）。
+    这些情况一律把颜色项排除出几何核（返回 valid=False），而不是惩罚：纯色物体的低分
+    会冤枉正确 pose，而真正的坏 pose 已由深度对齐和 mask 面积子分负责拦截。
+    """
 
     reprojection = float(observation.track_reprojection)
     if reprojection < 0.0:
-        if observation.render_quality_expected:
-            flags.append("reprojection_missing_expected")
-            return 0.30, True
         flags.append("no_reprojection_signal")
         return 1.0, False
     score = clamp01(reprojection)
@@ -261,7 +277,7 @@ def _geometry_core(
     depth_valid: bool,
     config: PoseScoreConfig,
 ) -> float:
-    """对有效几何证据取加权几何平均；两路都无信号时保持中性。"""
+    """对有效几何证据取加权几何平均；两路都无信号时保持当前 pose 信任。"""
 
     weighted_log_sum = 0.0
     weight_sum = 0.0

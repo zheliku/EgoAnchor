@@ -3,7 +3,7 @@
 from .depth_alignment import DepthAlignmentChecker, DepthAlignmentResult
 from .pose_quality import ConfidenceAccumulator, PoseQualityBreakdown, PoseScoreConfig, score_observation_breakdown
 from .render_quality import RenderQualityChecker, RenderQualityResult
-from .reprojection import ReprojectionChecker, ReprojectionResult
+from .reprojection import ReprojectionChecker, ReprojectionDiffMaps, ReprojectionResult
 
 __all__ = [
     "ConfidenceAccumulator",
@@ -14,6 +14,7 @@ __all__ = [
     "RenderQualityChecker",
     "RenderQualityResult",
     "ReprojectionChecker",
+    "ReprojectionDiffMaps",
     "ReprojectionResult",
     "score_observation_breakdown",
 ]
