@@ -38,6 +38,19 @@ class PoseLogFactoryTest(unittest.TestCase):
 
         self.assertEqual(fields["pose_jump_translation_m"], 0.0)
 
+    def test_non_finite_pose_matrix_resets_jump_state(self) -> None:
+        """非有限矩阵不应进入 JSONL pose 字段，也不应污染下一帧 jump。"""
+
+        factory = PoseLogFactory()
+        pose = PoseResult(has_pose=True, pose_matrix_cv_camera=Matrix4x4(values=(1, 0, 0, 0.1, 0, 1, 0, 0.2, 0, 0, 1, 0.3, 0, 0, 0, 1)))
+        bad_pose = PoseResult(has_pose=True, pose_matrix_cv_camera=Matrix4x4(values=(1, 0, 0, float("nan"), 0, 1, 0, 0.2, 0, 0, 1, 0.3, 0, 0, 0, 1)))
+
+        factory.build(pose)
+        self.assertEqual(factory.build(bad_pose), {})
+        fields = factory.build(pose)
+
+        self.assertEqual(fields["pose_jump_translation_m"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

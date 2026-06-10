@@ -21,9 +21,6 @@ namespace EgoAnchor.Client
         /// <summary>累计分发给 runtime 的 heartbeat 次数。</summary>
         private int dispatched;
 
-        /// <summary>接收器日志名称。</summary>
-        protected override string ReceiverName => nameof(ServerHeartbeatReceiver);
-
         /// <summary>ServerHeartbeat Protobuf parser。</summary>
         protected override MessageParser<ServerHeartbeat> Parser => ServerHeartbeat.Parser;
 
@@ -31,7 +28,7 @@ namespace EgoAnchor.Client
         protected override bool CanReceive => runtimeHub != null;
 
         /// <summary>聚合日志附加分发数量。</summary>
-        protected override string ExtraStats => $"dispatched={dispatched}, hubRuntimes={runtimeHub.RuntimeCount}";
+        protected override string ExtraStats => $"dispatched={dispatched}, hubRuntimes={(runtimeHub == null ? 0 : runtimeHub.RuntimeCount)}";
 
         /// <summary>
         /// 从 latest-only heartbeat queue 取出最新 payload。

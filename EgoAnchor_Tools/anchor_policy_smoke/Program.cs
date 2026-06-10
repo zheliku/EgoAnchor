@@ -1,8 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using EgoAnchor.Alignment;
+using EgoAnchor.Client;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
+using EgoAnchor.Runtime;
+using EgoAnchor.Transport;
 using UnityEngine;
 
 static class Program
@@ -17,6 +25,11 @@ static class Program
         );
         Assert(first.Action == AnchorPolicyAction.Accept, "first reliable pose should be accepted");
         Assert(first.State == AnchorState.Tracking, "first reliable pose should enter Tracking");
+
+        ReliabilityScore uppercaseFlag = new ReliabilityGate().Evaluate(
+            AnchorObservation.FromAlignedPose(10, firstPose, sampleTimeSeconds: 0.01, reliabilityScore: 0.95f, reliabilityFlags: new[] { "INVALID_POSE" })
+        );
+        Assert(uppercaseFlag.Level == ReliabilityLevel.Reject, "reliability reject flags should be matched case-insensitively");
 
         Pose jumpPose = new Pose(new Vector3(2f, 0f, 0f), Quaternion.identity);
         AnchorPolicyDecision jump = controller.AcceptPose(
@@ -58,20 +71,35 @@ static class Program
         Assert(relocalized.State == AnchorState.Tracking, "re-register pose should return policy to Tracking");
         Assert(Vector3.Distance(relocalized.OutputPose.position, relocalizedPose.position) < 0.001f, "re-register pose should update stable pose");
 
+        Pose invalidRelocalizedPose = new Pose(new Vector3(-1.5f, 0.4f, 0f), Quaternion.identity);
+        AnchorPolicyDecision invalidRelocalized = controller.AcceptPose(
+            AnchorObservation.FromAlignedPose(
+                7,
+                invalidRelocalizedPose,
+                sampleTimeSeconds: 2.34,
+                reliabilityScore: 0.95f,
+                reliabilityFlags: new[] { "INVALID_POSE" },
+                phase: "RE_REGISTER",
+                poseSource: "RE_REGISTER"
+            )
+        );
+        Assert(invalidRelocalized.Action == AnchorPolicyAction.Reject, "re-register pose with hard reject flag should not bypass reliability gate");
+        Assert(invalidRelocalized.HasOutputPose && Vector3.Distance(invalidRelocalized.OutputPose.position, relocalizedPose.position) < 0.001f, "invalid re-register should keep previous stable pose");
+
         AnchorPolicyDecision recovered = controller.AcceptPose(
-            AnchorObservation.FromAlignedPose(7, relocalizedPose, sampleTimeSeconds: 2.36, reliabilityScore: 0.9f)
+            AnchorObservation.FromAlignedPose(8, relocalizedPose, sampleTimeSeconds: 2.36, reliabilityScore: 0.9f)
         );
         Assert(recovered.Action == AnchorPolicyAction.Accept, "reliable pose should recover from Lost");
         Assert(recovered.State == AnchorState.Tracking, "reliable pose after Lost should return Tracking");
 
         AnchorPolicyDecision coast = controller.AcceptPose(
-            AnchorObservation.MissingPose(8, sampleTimeSeconds: 2.55, "no_pose")
+            AnchorObservation.MissingPose(9, sampleTimeSeconds: 2.55, "no_pose")
         );
         Assert(coast.Action == AnchorPolicyAction.Coast, "short missing pose after reliable update should coast");
         Assert(coast.State == AnchorState.Coasting, "short missing pose after reliable update should enter Coasting");
 
         AnchorPolicyDecision lost = controller.AcceptPose(
-            AnchorObservation.MissingPose(9, sampleTimeSeconds: 4.6, "no_pose_timeout")
+            AnchorObservation.MissingPose(10, sampleTimeSeconds: 4.6, "no_pose_timeout")
         );
         Assert(lost.Action == AnchorPolicyAction.Hold, "long missing pose should hold last output");
         Assert(lost.State == AnchorState.Lost, "long missing pose should enter Lost");
@@ -101,6 +129,22 @@ static class Program
             CommandQueueLength = 2,
         };
         Assert(!heartbeat.InputReady, "heartbeat smoke should expose input readiness");
+        Assert(!PoseToAnchorRuntime.IsErrorHeartbeat(heartbeat), "input-not-ready heartbeat without server error should not be treated as error");
+
+        ServerHeartbeat errorStateHeartbeat = new ServerHeartbeat
+        {
+            State = "ERROR",
+            InputReady = true,
+        };
+        Assert(PoseToAnchorRuntime.IsErrorHeartbeat(errorStateHeartbeat), "heartbeat ERROR state should enter local error flow even without last_error");
+
+        ServerHeartbeat lastErrorHeartbeat = new ServerHeartbeat
+        {
+            State = "TRACKING",
+            InputReady = true,
+            LastError = new ErrorInfo { Code = "NATS_DOWN" },
+        };
+        Assert(PoseToAnchorRuntime.IsErrorHeartbeat(lastErrorHeartbeat), "heartbeat last_error.code should enter local error flow");
 
         AnchorStatusEvent status = new AnchorStatusEvent
         {
@@ -109,9 +153,257 @@ static class Program
             Message = "smoke",
         };
         Assert(status.Event == "REACQUIRE_STARTED", "status smoke should expose event name");
+        Assert(PoseToAnchorRuntime.IsReacquireStartedStatus(status.Event), "REACQUIRE_STARTED should enter local relocalizing flow");
+        Assert(!PoseToAnchorRuntime.IsReacquireStartedStatus("REACQUIRE_SUCCEEDED"), "REACQUIRE_SUCCEEDED should not be treated as a new reacquire start");
+        Assert(!PoseToAnchorRuntime.IsReacquireStartedStatus("REACQUIRE_RESTARTED"), "only the exact started event should enter local relocalizing flow");
+        Assert(PoseToAnchorRuntime.IsResetAppliedStatus("RESET_APPLIED"), "RESET_APPLIED should enter local reset flow");
+        Assert(!PoseToAnchorRuntime.IsResetAppliedStatus("RESET_FAILED"), "RESET_FAILED should not be treated as an applied reset");
+        Assert(PoseToAnchorRuntime.IsPauseAppliedStatus("PAUSE_APPLIED"), "PAUSE_APPLIED should enter local pause flow");
+        Assert(!PoseToAnchorRuntime.IsPauseAppliedStatus("PAUSE_REJECTED"), "PAUSE_REJECTED should not be treated as an applied pause");
+        Assert(PoseToAnchorRuntime.IsResumeAppliedStatus("RESUME_APPLIED"), "RESUME_APPLIED should enter local resume flow");
+        Assert(!PoseToAnchorRuntime.IsResumeAppliedStatus("RESUME_FAILED"), "RESUME_FAILED should not be treated as an applied resume");
+        AssertAnchorRuntimeHubCountsOnlyActiveTargets();
+        AssertAnchorRuntimeHubIsolatesRuntimeExceptions();
+        AssertNatsBytesClientSubscriptionOrder();
+        AssertNatsBytesClientRequestCancelsOnStop();
+        AssertQueuesCanBeCleared();
+        AssertNatsControlClientStopClearsPayloadQueues();
+        AssertPoseRuntimeIgnoresPoseWhilePaused();
+        AssertPoseRuntimeRejectsNonFinitePoseMatrix();
+        AssertPolicyHoldAndRejectDoNotAdvanceProcessors();
 
         Console.WriteLine("Anchor policy smoke passed.");
         return 0;
+    }
+
+    private static void AssertQueuesCanBeCleared()
+    {
+        LatestOnlyQueue<byte[]> latest = new LatestOnlyQueue<byte[]>(4);
+        latest.Enqueue(new byte[] { 1 });
+        latest.Enqueue(new byte[] { 2 });
+        latest.Clear();
+        Assert(!latest.TryDequeueLatest(out _, out int skippedOlder), "latest-only queue Clear should remove pending payloads");
+        Assert(skippedOlder == 0, "empty latest-only queue should report no skipped payloads");
+
+        EventQueue<byte[]> events = new EventQueue<byte[]>(4);
+        events.Enqueue(new byte[] { 1 });
+        events.Enqueue(new byte[] { 2 });
+        events.Clear();
+        Assert(!events.TryDequeue(out _), "event queue Clear should remove pending events");
+    }
+
+    private static void AssertNatsControlClientStopClearsPayloadQueues()
+    {
+        NatsControlClient controlClient = (NatsControlClient)RuntimeHelpers.GetUninitializedObject(typeof(NatsControlClient));
+        MakeUnityObjectNonNull(controlClient);
+        BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(NatsControlClient).GetField("poseResultPayloads", flags).SetValue(controlClient, SeedLatestQueue());
+        typeof(NatsControlClient).GetField("statusPayloads", flags).SetValue(controlClient, SeedEventQueue());
+        typeof(NatsControlClient).GetField("heartbeatPayloads", flags).SetValue(controlClient, SeedLatestQueue());
+        typeof(NatsControlClient).GetField("bytesClient", flags).SetValue(
+            controlClient,
+            new NatsBytesClient(new NatsBytesClient.Settings("nats://127.0.0.1:4222", 1, false, 0.1f, 0.1f), null)
+        );
+
+        controlClient.StopClient();
+
+        Assert(controlClient.PendingPoseResultCount == 0, "StopClient should clear stale pose payloads");
+        Assert(controlClient.PendingStatusEventCount == 0, "StopClient should clear stale status events");
+        Assert(controlClient.PendingHeartbeatCount == 0, "StopClient should clear stale heartbeat payloads");
+    }
+
+    private static LatestOnlyQueue<byte[]> SeedLatestQueue()
+    {
+        LatestOnlyQueue<byte[]> queue = new LatestOnlyQueue<byte[]>(4);
+        queue.Enqueue(new byte[] { 1 });
+        return queue;
+    }
+
+    private static EventQueue<byte[]> SeedEventQueue()
+    {
+        EventQueue<byte[]> queue = new EventQueue<byte[]>(4);
+        queue.Enqueue(new byte[] { 1 });
+        return queue;
+    }
+
+    private static void AssertPoseRuntimeIgnoresPoseWhilePaused()
+    {
+        PoseToAnchorRuntime runtime = CreatePoseRuntimeForSmoke();
+        Pose firstPose = new Pose(Vector3.zero, Quaternion.identity);
+        Pose pausedPose = new Pose(new Vector3(3f, 0f, 0f), Quaternion.identity);
+
+        InvokeAlignedWorldPose(runtime, 1, firstPose, sampleTime: 0.0);
+        RuntimeDiagnostics(runtime).currentAnchorState = AnchorState.Paused;
+        InvokeAlignedWorldPose(runtime, 2, pausedPose, sampleTime: 0.1);
+
+        Assert(runtime.CurrentAnchorState == AnchorState.Paused, "paused runtime should remain Paused after receiving a pose");
+        Assert(runtime.TryGetStablePose(out Pose stablePose), "paused runtime should keep previous stable pose");
+        Assert(Vector3.Distance(stablePose.position, firstPose.position) < 0.001f, "paused runtime should ignore later pose updates");
+    }
+
+    private static void AssertPoseRuntimeRejectsNonFinitePoseMatrix()
+    {
+        PoseResult result = new PoseResult
+        {
+            Header = new MessageHeader { FrameId = 12 },
+            HasPose = true,
+            PoseMatrixCvCamera = new EgoAnchor.Protocol.Generated.Matrix4x4(),
+        };
+        for (int i = 0; i < 16; i++)
+        {
+            result.PoseMatrixCvCamera.Values.Add(i == 0 ? float.NaN : 0f);
+        }
+
+        Assert(!PoseToAnchorRuntime.HasFinitePoseMatrix(result), "non-finite pose matrix should be rejected before frame alignment");
+
+        result.PoseMatrixCvCamera.Values[0] = 1f;
+        result.PoseMatrixCvCamera.Values[5] = 1f;
+        result.PoseMatrixCvCamera.Values[10] = 1f;
+        result.PoseMatrixCvCamera.Values[15] = 1f;
+        Assert(PoseToAnchorRuntime.HasFinitePoseMatrix(result), "finite 4x4 pose matrix should pass validation");
+    }
+
+    private static void AssertPolicyHoldAndRejectDoNotAdvanceProcessors()
+    {
+        MethodInfo method = typeof(PoseToAnchorRuntime).GetMethod("ShouldAdvanceProcessors", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert(method != null, "PoseToAnchorRuntime should expose a private processor advancement predicate for policy actions");
+        Assert((bool)method.Invoke(null, new object[] { AnchorPolicyAction.Accept }), "Accept policy action should advance processors");
+        Assert((bool)method.Invoke(null, new object[] { AnchorPolicyAction.Coast }), "Coast policy action should advance processors");
+        Assert(!(bool)method.Invoke(null, new object[] { AnchorPolicyAction.Reject }), "Reject policy action should keep stable pose without advancing processors");
+        Assert(!(bool)method.Invoke(null, new object[] { AnchorPolicyAction.Hold }), "Hold policy action should keep stable pose without advancing processors");
+    }
+
+    private static PoseToAnchorRuntime CreatePoseRuntimeForSmoke()
+    {
+        PoseToAnchorRuntime runtime = (PoseToAnchorRuntime)RuntimeHelpers.GetUninitializedObject(typeof(PoseToAnchorRuntime));
+        MakeUnityObjectNonNull(runtime);
+        typeof(PoseToAnchorRuntime)
+            .GetField("diagnostics", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(runtime, new PoseToAnchorRuntime.RuntimeDiagnostics());
+        return runtime;
+    }
+
+    private static PoseToAnchorRuntime.RuntimeDiagnostics RuntimeDiagnostics(PoseToAnchorRuntime runtime)
+    {
+        return (PoseToAnchorRuntime.RuntimeDiagnostics)typeof(PoseToAnchorRuntime)
+            .GetField("diagnostics", BindingFlags.Instance | BindingFlags.NonPublic)
+            .GetValue(runtime);
+    }
+
+    private static void InvokeAlignedWorldPose(PoseToAnchorRuntime runtime, long frameId, Pose pose, double sampleTime)
+    {
+        MethodInfo method = typeof(PoseToAnchorRuntime).GetMethod(
+            "AcceptWorldPose",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            null,
+            new[] { typeof(long), typeof(Pose), typeof(PoseResult), typeof(double) },
+            null
+        );
+        method.Invoke(runtime, new object[] { frameId, pose, null, sampleTime });
+    }
+
+    private static void AssertNatsBytesClientSubscriptionOrder()
+    {
+        NatsBytesClient client = new NatsBytesClient(
+            new NatsBytesClient.Settings("nats://127.0.0.1:4222", 1, false, 0.1f, 0.1f),
+            null
+        );
+        client.Subscribe("egoanchor.test", _ => { });
+
+        FieldInfo isRunningField = typeof(NatsBytesClient).GetField("isRunning", BindingFlags.Instance | BindingFlags.NonPublic);
+        isRunningField.SetValue(client, true);
+
+        bool failedFast = false;
+        try
+        {
+            client.Subscribe("egoanchor.late", _ => { });
+        }
+        catch (InvalidOperationException ex)
+        {
+            failedFast = ex.Message.Contains("Start 前调用", StringComparison.Ordinal);
+        }
+
+        Assert(failedFast, "NatsBytesClient should reject subscriptions registered after Start");
+    }
+
+    private static void AssertNatsBytesClientRequestCancelsOnStop()
+    {
+        NatsBytesClient client = new NatsBytesClient(
+            new NatsBytesClient.Settings("nats://127.0.0.1:4222", 1, false, 0.1f, 0.1f),
+            null
+        );
+        BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(NatsBytesClient).GetField("isRunning", flags).SetValue(client, true);
+        typeof(NatsBytesClient).GetField("cts", flags).SetValue(client, new CancellationTokenSource());
+        typeof(NatsBytesClient)
+            .GetField("connectReady", flags)
+            .SetValue(client, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+
+        Task<byte[]> request = client.RequestAsync("egoanchor.test", new byte[] { 1 }, 5.0f);
+        client.Stop();
+        Task completed = Task.WhenAny(request, Task.Delay(TimeSpan.FromSeconds(1))).GetAwaiter().GetResult();
+
+        Assert(ReferenceEquals(completed, request), "NatsBytesClient.Stop should cancel a request waiting for connection readiness");
+        Assert(request.IsCanceled || request.IsFaulted && request.Exception?.GetBaseException() is OperationCanceledException, "stopped request should finish as cancellation");
+    }
+
+    private static void AssertAnchorRuntimeHubCountsOnlyActiveTargets()
+    {
+        AnchorRuntimeHub hub = (AnchorRuntimeHub)RuntimeHelpers.GetUninitializedObject(typeof(AnchorRuntimeHub));
+        Type type = typeof(AnchorRuntimeHub);
+        BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        FieldInfo runtimesField = type.GetField("runtimes", flags);
+        FieldInfo failedField = type.GetField("failed", flags);
+
+        runtimesField.SetValue(hub, new List<PoseToAnchorRuntime> { null });
+        Assert(hub.RuntimeCount == 0, "hub runtime count should ignore null inspector slots");
+
+        hub.Publish(new PoseResult());
+        Assert((int)failedField.GetValue(hub) == 1, "pose publish without active runtime should count as dispatch failure");
+    }
+
+    private static void AssertAnchorRuntimeHubIsolatesRuntimeExceptions()
+    {
+        bool oldLoggingEnabled = EgoAnchorLog.Enabled;
+        EgoAnchorLog.Enabled = false;
+        try
+        {
+            AnchorRuntimeHub hub = (AnchorRuntimeHub)RuntimeHelpers.GetUninitializedObject(typeof(AnchorRuntimeHub));
+            Type type = typeof(AnchorRuntimeHub);
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo poseExceptionsField = type.GetField("poseDispatchExceptions", flags);
+            FieldInfo statusExceptionsField = type.GetField("statusDispatchExceptions", flags);
+            MethodInfo tryAcceptPose = type.GetMethod("TryAcceptPose", flags);
+            MethodInfo tryNotifyStatus = type.GetMethod("TryNotifyStatus", flags);
+            PoseToAnchorRuntime brokenRuntime = (PoseToAnchorRuntime)RuntimeHelpers.GetUninitializedObject(typeof(PoseToAnchorRuntime));
+
+            object[] brokenPoseArgs =
+            {
+                brokenRuntime,
+                new PoseResult { Header = new MessageHeader { FrameId = 1 }, HasPose = false },
+                null,
+            };
+            bool brokenPoseOk = (bool)tryAcceptPose.Invoke(hub, brokenPoseArgs);
+
+            Assert(!brokenPoseOk, "hub should isolate a pose dispatch exception");
+            Assert((int)poseExceptionsField.GetValue(hub) == 1, "hub should count pose dispatch exceptions per runtime");
+
+            AnchorStatusEvent status = new AnchorStatusEvent { State = "LOST", Event = "LOST", Message = "smoke" };
+            bool brokenStatusOk = (bool)tryNotifyStatus.Invoke(hub, new object[] { brokenRuntime, status });
+            Assert(!brokenStatusOk, "hub should isolate a status dispatch exception");
+            Assert((int)statusExceptionsField.GetValue(hub) == 1, "hub should count status dispatch exceptions per runtime");
+        }
+        finally
+        {
+            EgoAnchorLog.Enabled = oldLoggingEnabled;
+        }
+    }
+
+    private static void MakeUnityObjectNonNull(UnityEngine.Object unityObject)
+    {
+        BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(UnityEngine.Object).GetField("m_CachedPtr", flags)?.SetValue(unityObject, new IntPtr(1));
+        typeof(UnityEngine.Object).GetField("m_InstanceID", flags)?.SetValue(unityObject, 1);
     }
 
     private static void AssertParallelPoseOffsets()

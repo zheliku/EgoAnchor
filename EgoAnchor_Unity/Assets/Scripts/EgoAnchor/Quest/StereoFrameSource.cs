@@ -1,5 +1,6 @@
 using System;
 using EgoAnchor.Alignment;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol.Generated;
 using Google.Protobuf;
 using Meta.XR;
@@ -15,6 +16,12 @@ namespace EgoAnchor.Quest
     /// </summary>
     public sealed class StereoFrameSource : MonoBehaviour
     {
+        /// <summary>统一日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<StereoFrameSource>();
+
+        /// <summary>高频采集失败的日志限频间隔。</summary>
+        private const int FailureLogInterval = 120;
+
         /// <summary>左目 PassthroughCameraAccess。</summary>
         [Header("Passthrough Cameras")]
         [Tooltip("左目 PassthroughCameraAccess。需要处于 IsPlaying 状态，并用于记录 frame-aligned 左目 camera world pose。")]
@@ -59,6 +66,15 @@ namespace EgoAnchor.Quest
         /// <summary>单调递增 frame_id。</summary>
         private long frameId;
 
+        /// <summary>读取 Passthrough camera pose 失败次数。</summary>
+        private int cameraPoseFailures;
+
+        /// <summary>图像读回或 JPEG 编码失败次数。</summary>
+        private int imageEncodeFailures;
+
+        /// <summary>FrameCaptured 订阅者异常次数。</summary>
+        private int frameCapturedCallbackFailures;
+
         /// <summary>采集并记录一帧 frame_id 相机位姿后触发；参数为 (frameId, captureMonoMs)。无订阅者时零成本。</summary>
         public event Action<long, double> FrameCaptured;
 
@@ -94,31 +110,45 @@ namespace EgoAnchor.Quest
                 leftCameraPose = leftCameraAccess.GetCameraPose();
                 rightCameraPose = rightCameraAccess.GetCameraPose();
             }
-            catch (Exception)
+            catch (Exception exc)
             {
+                cameraPoseFailures++;
+                LogCaptureFailure("camera_pose", cameraPoseFailures, exc);
                 return false;
             }
 
             Pose centerCameraPose = ResolveCenterCameraPose(leftCameraPose, rightCameraPose);
 
-            EnsureCaptureBuffers(leftTexture, rightTexture);
-
             double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             long currentFrameId = ++frameId;
             int unityFrame = Time.frameCount;
 
-            Graphics.Blit(leftTexture, leftRenderTexture);
-            Graphics.Blit(rightTexture, rightRenderTexture);
+            byte[] leftJpeg;
+            byte[] rightJpeg;
+            try
+            {
+                EnsureCaptureBuffers(leftTexture, rightTexture);
+                Graphics.Blit(leftTexture, leftRenderTexture);
+                Graphics.Blit(rightTexture, rightRenderTexture);
+                leftJpeg = EncodeRenderTextureToJpeg(leftRenderTexture, leftReadbackTexture);
+                rightJpeg = EncodeRenderTextureToJpeg(rightRenderTexture, rightReadbackTexture);
+            }
+            catch (Exception exc)
+            {
+                imageEncodeFailures++;
+                LogCaptureFailure("image_encode", imageEncodeFailures, exc);
+                return false;
+            }
 
-            byte[] leftJpeg = EncodeRenderTextureToJpeg(leftRenderTexture, leftReadbackTexture);
-            byte[] rightJpeg = EncodeRenderTextureToJpeg(rightRenderTexture, rightReadbackTexture);
             if (leftJpeg == null || rightJpeg == null)
             {
+                imageEncodeFailures++;
+                LogCaptureFailure("image_encode_empty", imageEncodeFailures, null);
                 return false;
             }
 
             framePoseHistory?.Record(currentFrameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
-            FrameCaptured?.Invoke(currentFrameId, senderMonoMs);
+            NotifyFrameCaptured(currentFrameId, senderMonoMs);
 
             frame = new QuestStereoFrame
             {
@@ -132,6 +162,43 @@ namespace EgoAnchor.Quest
                 JpegQuality = jpegQuality
             };
             return true;
+        }
+
+        /// <summary>
+        /// 安全通知采集事件，避免诊断订阅者异常打断 stereo 数据面发送。
+        /// </summary>
+        private void NotifyFrameCaptured(long currentFrameId, double senderMonoMs)
+        {
+            Action<long, double> handlers = FrameCaptured;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<long, double>)handler).Invoke(currentFrameId, senderMonoMs);
+                }
+                catch (Exception exc)
+                {
+                    frameCapturedCallbackFailures++;
+                    LogCaptureFailure("frame_captured_callback", frameCapturedCallbackFailures, exc);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 限频输出采集失败日志，保留真机排查线索但避免每帧刷屏。
+        /// </summary>
+        private void LogCaptureFailure(string stage, int count, Exception exc)
+        {
+            if (count <= 3 || count % FailureLogInterval == 0)
+            {
+                string detail = exc == null ? "empty result" : exc.Message;
+                Log.Warning($"capture failed stage={stage}, count={count}, reason={detail}", this);
+            }
         }
 
         /// <summary>

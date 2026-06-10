@@ -34,8 +34,11 @@ class DecodedQuestStereoFrame:
     right_bgr: np.ndarray
     """右目 BGR uint8 图像。"""
 
+    server_receive_mono_ms: float = 0.0
+    """Python ZMQ 接收该 stereo payload 的本地单调时间戳，单位毫秒；未知时为 0。"""
 
-def decode_quest_stereo_frame(msg: quest_pb2.QuestStereoFrame) -> DecodedQuestStereoFrame | None:
+
+def decode_quest_stereo_frame(msg: quest_pb2.QuestStereoFrame, *, server_receive_mono_ms: float = 0.0) -> DecodedQuestStereoFrame | None:
     """把 QuestStereoFrame 中的左右 JPEG 解码为 OpenCV BGR 图像。"""
 
     if not msg.left_image_jpeg or not msg.right_image_jpeg:
@@ -53,6 +56,7 @@ def decode_quest_stereo_frame(msg: quest_pb2.QuestStereoFrame) -> DecodedQuestSt
         unity_frame=int(header.unity_frame) if header is not None else None,
         left_bgr=left,
         right_bgr=right,
+        server_receive_mono_ms=float(server_receive_mono_ms),
     )
 
 

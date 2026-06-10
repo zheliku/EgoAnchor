@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 import uuid
 from datetime import datetime
@@ -74,7 +75,7 @@ class RuntimeEventLogger:
         }
         row.update(self._json_safe(fields))
         handle = self._ensure_file()
-        handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
         self._written_since_flush += 1
         if self._written_since_flush >= self.flush_every:
             handle.flush()
@@ -102,8 +103,10 @@ class RuntimeEventLogger:
     def _json_safe(cls, value: Any) -> Any:
         """把常见对象递归转换成 JSON 可写结构。"""
 
-        if value is None or isinstance(value, (str, int, float, bool)):
+        if value is None or isinstance(value, (str, int, bool)):
             return value
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
         if isinstance(value, dict):
             return {str(key): cls._json_safe(item) for key, item in value.items()}
         if isinstance(value, (list, tuple, set)):

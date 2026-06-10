@@ -12,7 +12,7 @@ import numpy as np
 
 from egoanchor.algorithms import SegmenterResult
 from egoanchor.protocol import common_pb2, quest_pb2
-from egoanchor.perception import FrameDiagnostics, PipelineStepTiming, QuestPosePipeline
+from egoanchor.perception import AsyncSegmenterJob, AsyncSegmenterOutput, DecodedQuestStereoFrame, FrameDiagnostics, PipelineStepTiming, QuestPosePipeline
 
 
 class _FakeSegmenter:
@@ -84,10 +84,12 @@ class _FakeDepthEstimator:
 class _FakeFoundationPoseEstimator:
     """单测用 FoundationPose 估计器，记录 register 输入。"""
 
-    def __init__(self) -> None:
+    def __init__(self, fail_visualize: bool = False) -> None:
         """初始化 register 记录。"""
 
         self.register_calls: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        self.fail_visualize = bool(fail_visualize)
+        """是否让 visualize_pose 抛异常，用于验证 debug 失败不影响 pose 输出。"""
 
     def update_camera_matrix(self, cam_k: np.ndarray) -> None:
         """测试中不需要真实相机矩阵更新。"""
@@ -109,7 +111,31 @@ class _FakeFoundationPoseEstimator:
     def visualize_pose(self, rgb: np.ndarray, pose: np.ndarray) -> np.ndarray:
         """直接返回输入图，避免绘制依赖。"""
 
+        if self.fail_visualize:
+            raise RuntimeError("visualize failed")
         return rgb.copy()
+
+
+class _InvalidRegisterPoseEstimator(_FakeFoundationPoseEstimator):
+    """单测用 FoundationPose 估计器，register 返回非有限 pose。"""
+
+    def register(self, rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """返回包含 NaN 的 4x4 pose，模拟模型异常输出。"""
+
+        pose = super().register(rgb, depth, mask)
+        pose[0, 3] = np.nan
+        return pose
+
+
+class _InvalidTrackPoseEstimator(_FakeFoundationPoseEstimator):
+    """单测用 FoundationPose 估计器，track 返回非有限 pose。"""
+
+    def track(self, rgb: np.ndarray, depth: np.ndarray) -> np.ndarray:
+        """返回包含 NaN 的 4x4 pose，模拟 track 阶段异常输出。"""
+
+        pose = np.eye(4, dtype=np.float64)
+        pose[1, 3] = np.nan
+        return pose
 
 
 class _EmptyCutieTracker:
@@ -125,6 +151,27 @@ class _EmptyCutieTracker:
         """返回空 mask，模拟目标出镜或 Cutie 丢失目标。"""
 
         return SimpleNamespace(mask=np.zeros(rgb.shape[:2], dtype=np.uint8), bbox_xywh=[-1, -1, 0, 0])
+
+
+class _CompletedAsyncWorker:
+    """单测用异步 worker，只返回预置 completed output。"""
+
+    def __init__(self, completed: AsyncSegmenterOutput) -> None:
+        """保存待消费的异步分割结果。"""
+
+        self.completed = completed
+
+    def take_completed(self) -> AsyncSegmenterOutput | None:
+        """模拟 AsyncSegmenterWorker.take_completed。"""
+
+        completed = self.completed
+        self.completed = None
+        return completed
+
+    def snapshot(self) -> SimpleNamespace:
+        """返回 diagnostics 需要的最小状态快照。"""
+
+        return SimpleNamespace(busy=False, submitted=1, completed=1, dropped=0, error="")
 
 
 def _make_stereo_frame(frame_id: int, color_bgr: tuple[int, int, int]) -> quest_pb2.QuestStereoFrame:
@@ -164,6 +211,19 @@ def _make_camera_info() -> quest_pb2.QuestCameraInfo:
         sensor_height=8,
         current_width=8,
         current_height=8,
+    )
+
+
+def _make_decoded_frame(frame_id: int) -> DecodedQuestStereoFrame:
+    """创建无需 JPEG 解码的最小 decoded stereo frame。"""
+
+    image = np.zeros((8, 8, 3), dtype=np.uint8)
+    return DecodedQuestStereoFrame(
+        frame_id=frame_id,
+        sender_mono_ms=None,
+        unity_frame=None,
+        left_bgr=image,
+        right_bgr=image,
     )
 
 
@@ -225,14 +285,37 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
             process_height=8,
         )
 
-        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info(), server_receive_mono_ms=222.5)
 
         self.assertIsNotNone(output.observation)
         self.assertFalse(output.observation.has_pose)
         self.assertEqual(output.observation.phase, "NO_MASK")
+        self.assertAlmostEqual(output.observation.server_receive_mono_ms, 222.5)
         self.assertEqual(depth_estimator.calls, 1)
         self.assertIsNotNone(output.diagnostics.depth)
         self.assertGreater(float(np.mean(output.diagnostics.depth)), 0.0)
+
+    def test_invalid_camera_info_waits_for_next_valid_calibration(self) -> None:
+        """无效 camera_info 不应把 pipeline 变成 runtime 异常。"""
+
+        depth_estimator = _FakeDepthEstimator()
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=depth_estimator,
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), quest_pb2.QuestCameraInfo())
+
+        self.assertIsNotNone(output.observation)
+        self.assertFalse(output.observation.has_pose)
+        self.assertEqual(output.observation.phase, "WAIT_CALIBRATION")
+        self.assertEqual(output.observation.failure_reason, "invalid_calibration")
+        self.assertEqual(depth_estimator.calls, 0)
 
     def test_async_sam3_first_frame_returns_without_waiting_for_segmentation(self) -> None:
         """SAM3 异步模式下，第一帧只提交后台分割，不应阻塞 pipeline 主循环。"""
@@ -258,6 +341,70 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertIsNone(output.observation)
         self.assertEqual(depth_estimator.calls, 1)
         self.assertIsNotNone(output.diagnostics.depth)
+
+    def test_pose_visualization_failure_does_not_drop_pose(self) -> None:
+        """debug 可视化失败时仍应保留本帧有效 pose 输出。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_FakeFoundationPoseEstimator(fail_visualize=True),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+
+        self.assertIsNotNone(output.observation)
+        self.assertTrue(output.observation.has_pose)
+        self.assertEqual(output.observation.pose_source, "REGISTER")
+        self.assertIsNone(output.diagnostics.pose_vis_bgr)
+
+    def test_invalid_register_pose_becomes_no_pose_without_exception(self) -> None:
+        """FoundationPose register 返回 NaN/Inf 时应降级为 no-pose，而不是打断 runtime。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_InvalidRegisterPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        output = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+
+        self.assertIsNotNone(output.observation)
+        self.assertFalse(output.observation.has_pose)
+        self.assertEqual(output.observation.phase, "REGISTER_FAILED")
+        self.assertEqual(output.observation.failure_reason, "register_failed")
+        self.assertIsNone(output.observation.pose_matrix_cv_camera)
+        self.assertFalse(pipeline.tracking_state.has_registered)
+
+    def test_invalid_track_pose_clears_registration_without_exception(self) -> None:
+        """FoundationPose track 返回 NaN/Inf 时应清空注册状态，等待后续重获。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_InvalidTrackPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        second = pipeline.process(_make_stereo_frame(2, (10, 20, 30)), _make_camera_info())
+
+        self.assertTrue(first.observation.has_pose)
+        self.assertIsNotNone(second.observation)
+        self.assertFalse(second.observation.has_pose)
+        self.assertEqual(second.observation.phase, "TRACK_FAILED")
+        self.assertFalse(pipeline.tracking_state.has_registered)
 
     def test_async_sam3_registers_with_the_frame_that_produced_mask(self) -> None:
         """后台 mask 完成后，应使用同一帧 RGB/mask 进入 FoundationPose register。"""
@@ -300,6 +447,59 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
             self.assertLess(float(np.mean(np.abs(registered_rgb.astype(np.int16) - expected_rgb.astype(np.int16)))), 2.0)
         finally:
             pipeline.close()
+
+    def test_duplicate_frame_is_rejected_before_jpeg_decode(self) -> None:
+        """重复 frame_id 应在 header 阶段丢弃，避免高频 latest cache 重复解 JPEG。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        with patch("egoanchor.perception.quest_pose_pipeline.decode_quest_stereo_frame") as decode:
+            second = pipeline.process(_make_stereo_frame(1, (200, 210, 220)), _make_camera_info())
+
+        self.assertTrue(first.new_frame_processed)
+        self.assertFalse(second.new_frame_processed)
+        self.assertEqual(second.diagnostics.phase, "DUPLICATE_FRAME")
+        decode.assert_not_called()
+
+    def test_stale_async_segmentation_error_is_discarded(self) -> None:
+        """旧 generation/session 的异步分割异常不应污染当前 pipeline 状态。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="sam3",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+        job = AsyncSegmenterJob(
+            decoded=_make_decoded_frame(7),
+            session_id="old-session",
+            left_bgr=np.zeros((8, 8, 3), dtype=np.uint8),
+            right_bgr=np.zeros((8, 8, 3), dtype=np.uint8),
+            generation=pipeline.tracking_state.generation,
+        )
+        pipeline.async_segmentation = True
+        pipeline._segmenter_worker = _CompletedAsyncWorker(
+            AsyncSegmenterOutput(job=job, result=None, elapsed_ms=1.0, error="RuntimeError: stale")
+        )
+        pipeline._last_session_id = "current-session"
+        pipeline.cam_k = np.eye(3, dtype=np.float32)
+        pipeline.calibration = object()
+
+        output = pipeline._take_ready_async_segmentation(time.perf_counter())
+
+        self.assertIsNone(output)
 
     def test_registered_pipeline_re_registers_when_cutie_mask_is_lost(self) -> None:
         """已注册后若 Cutie mask 连续丢失，应主动用检测 mask 重注册。"""

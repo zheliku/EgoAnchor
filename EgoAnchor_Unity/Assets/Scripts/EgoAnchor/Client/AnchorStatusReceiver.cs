@@ -27,9 +27,6 @@ namespace EgoAnchor.Client
         /// <summary>累计分发给 runtime 的事件次数。</summary>
         private int dispatched;
 
-        /// <summary>接收器日志名称。</summary>
-        protected override string ReceiverName => nameof(AnchorStatusReceiver);
-
         /// <summary>AnchorStatusEvent Protobuf parser。</summary>
         protected override MessageParser<AnchorStatusEvent> Parser => AnchorStatusEvent.Parser;
 
@@ -40,7 +37,7 @@ namespace EgoAnchor.Client
         protected override bool CanReceive => runtimeHub != null;
 
         /// <summary>聚合日志附加分发数量。</summary>
-        protected override string ExtraStats => $"dispatched={dispatched}, hubRuntimes={runtimeHub.RuntimeCount}";
+        protected override string ExtraStats => $"dispatched={dispatched}, hubRuntimes={(runtimeHub == null ? 0 : runtimeHub.RuntimeCount)}";
 
         /// <summary>
         /// 从 status event queue 取出一条 payload。

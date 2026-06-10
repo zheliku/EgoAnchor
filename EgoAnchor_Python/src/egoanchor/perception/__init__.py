@@ -10,7 +10,7 @@ from __future__ import annotations
 from .pose_observation import PoseObservation
 from .quest_calibration import QuestStereoCalibration
 from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, preprocess_stereo_pair
-from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
+from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterOutput, AsyncSegmenterWorker, SegmenterBackend
 from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
 from .quest_pose_pipeline import QuestPosePipeline
 from .pipeline_factory import build_quest_pose_pipeline, normalize_segmenter_type
@@ -23,6 +23,7 @@ __all__ = [
     "decode_quest_stereo_frame",
     "preprocess_stereo_pair",
     "AsyncSegmenterJob",
+    "AsyncSegmenterOutput",
     "AsyncSegmenterWorker",
     "SegmenterBackend",
     "FrameDiagnostics",

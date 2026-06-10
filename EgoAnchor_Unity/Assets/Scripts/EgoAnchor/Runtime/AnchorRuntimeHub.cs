@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol.Generated;
 using UnityEngine;
@@ -40,6 +41,12 @@ namespace EgoAnchor.Runtime
         /// <summary>累计接收 PoseResult 数。</summary>
         private int received;
 
+        /// <summary>累计接收 AnchorStatusEvent 数。</summary>
+        private int receivedStatusEvents;
+
+        /// <summary>累计接收 ServerHeartbeat 数。</summary>
+        private int receivedHeartbeats;
+
         /// <summary>累计 runtime 成功对齐次数。</summary>
         private int aligned;
 
@@ -55,11 +62,20 @@ namespace EgoAnchor.Runtime
         /// <summary>累计分发 ServerHeartbeat 的 runtime 次数。</summary>
         private int heartbeatDispatched;
 
-        /// <summary>上次打印统计时的接收数量。</summary>
-        private int lastLoggedReceived;
+        /// <summary>PoseResult 分发时 runtime 抛出的异常次数。</summary>
+        private int poseDispatchExceptions;
 
-        /// <summary>只读 runtime 数。</summary>
-        public int RuntimeCount => runtimes?.Count ?? 0;
+        /// <summary>AnchorStatusEvent 分发时 runtime 抛出的异常次数。</summary>
+        private int statusDispatchExceptions;
+
+        /// <summary>ServerHeartbeat 分发时 runtime 抛出的异常次数。</summary>
+        private int heartbeatDispatchExceptions;
+
+        /// <summary>上次打印统计时的总输入消息数量。</summary>
+        private int lastLoggedTotalMessages;
+
+        /// <summary>当前实际可派发的 runtime 数；忽略 Inspector 列表中的空槽位。</summary>
+        public int RuntimeCount => CountActiveRuntimes();
 
         /// <summary>
         /// Inspector 修改时确保列表非空。
@@ -117,13 +133,7 @@ namespace EgoAnchor.Runtime
             EnsureRuntimeList();
             received++;
 
-            if (runtimes.Count == 0)
-            {
-                failed++;
-                MaybeLogStats();
-                return;
-            }
-
+            int activeRuntimeCount = 0;
             foreach (PoseToAnchorRuntime runtime in runtimes)
             {
                 if (runtime == null)
@@ -131,7 +141,13 @@ namespace EgoAnchor.Runtime
                     continue;
                 }
 
-                PoseToAnchorRuntime.AcceptResult acceptResult = runtime.AcceptPoseResult(result);
+                activeRuntimeCount++;
+                if (!TryAcceptPose(runtime, result, out PoseToAnchorRuntime.AcceptResult acceptResult))
+                {
+                    failed++;
+                    continue;
+                }
+
                 switch (acceptResult)
                 {
                     case PoseToAnchorRuntime.AcceptResult.Aligned:
@@ -147,6 +163,11 @@ namespace EgoAnchor.Runtime
                 }
             }
 
+            if (activeRuntimeCount == 0)
+            {
+                failed++;
+            }
+
             MaybeLogStats();
         }
 
@@ -158,8 +179,15 @@ namespace EgoAnchor.Runtime
         public int PublishStatus(AnchorStatusEvent status)
         {
             EnsureRuntimeList();
-            if (status == null || runtimes.Count == 0)
+            if (status == null)
             {
+                return 0;
+            }
+
+            receivedStatusEvents++;
+            if (runtimes.Count == 0)
+            {
+                MaybeLogStats();
                 return 0;
             }
 
@@ -171,7 +199,11 @@ namespace EgoAnchor.Runtime
                     continue;
                 }
 
-                runtime.NotifyStatusEvent(status);
+                if (!TryNotifyStatus(runtime, status))
+                {
+                    continue;
+                }
+
                 count++;
             }
 
@@ -188,8 +220,15 @@ namespace EgoAnchor.Runtime
         public int PublishHeartbeat(ServerHeartbeat heartbeat)
         {
             EnsureRuntimeList();
-            if (heartbeat == null || runtimes.Count == 0)
+            if (heartbeat == null)
             {
+                return 0;
+            }
+
+            receivedHeartbeats++;
+            if (runtimes.Count == 0)
+            {
+                MaybeLogStats();
                 return 0;
             }
 
@@ -201,7 +240,11 @@ namespace EgoAnchor.Runtime
                     continue;
                 }
 
-                runtime.NotifyHeartbeat(heartbeat);
+                if (!TryNotifyHeartbeat(runtime, heartbeat))
+                {
+                    continue;
+                }
+
                 count++;
             }
 
@@ -222,6 +265,95 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
+        /// 统计实际可派发的 runtime，避免把 Inspector 中遗留的空槽位算作有效目标。
+        /// </summary>
+        private int CountActiveRuntimes()
+        {
+            if (runtimes == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (PoseToAnchorRuntime runtime in runtimes)
+            {
+                if (runtime != null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// 安全分发 PoseResult，避免单个 runtime 异常阻断其他 baseline/runtime。
+        /// </summary>
+        private bool TryAcceptPose(PoseToAnchorRuntime runtime, PoseResult result, out PoseToAnchorRuntime.AcceptResult acceptResult)
+        {
+            try
+            {
+                acceptResult = runtime.AcceptPoseResult(result);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                acceptResult = PoseToAnchorRuntime.AcceptResult.AlignFailed;
+                poseDispatchExceptions++;
+                LogDispatchException("PoseResult", poseDispatchExceptions, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 安全分发 AnchorStatusEvent，避免单个 runtime 异常阻断其他 runtime。
+        /// </summary>
+        private bool TryNotifyStatus(PoseToAnchorRuntime runtime, AnchorStatusEvent status)
+        {
+            try
+            {
+                runtime.NotifyStatusEvent(status);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                statusDispatchExceptions++;
+                LogDispatchException("AnchorStatusEvent", statusDispatchExceptions, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 安全分发 ServerHeartbeat，避免单个 runtime 异常阻断其他 runtime。
+        /// </summary>
+        private bool TryNotifyHeartbeat(PoseToAnchorRuntime runtime, ServerHeartbeat heartbeat)
+        {
+            try
+            {
+                runtime.NotifyHeartbeat(heartbeat);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                heartbeatDispatchExceptions++;
+                LogDispatchException("ServerHeartbeat", heartbeatDispatchExceptions, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 限频输出 runtime 分发异常，保留诊断但避免每帧刷屏。
+        /// </summary>
+        private void LogDispatchException(string payloadName, int exceptionCount, Exception ex)
+        {
+            int interval = Mathf.Max(1, statsIntervalMessages);
+            if (exceptionCount <= 3 || exceptionCount % interval == 0)
+            {
+                Log.Error($"{payloadName} dispatch exception count={exceptionCount}: {ex}", this);
+            }
+        }
+
+        /// <summary>
         /// 周期性输出分发统计。
         /// </summary>
         private void MaybeLogStats()
@@ -231,12 +363,15 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            if (received > 0 && received - lastLoggedReceived >= statsIntervalMessages)
+            int totalMessages = received + receivedStatusEvents + receivedHeartbeats;
+            if (totalMessages > 0 && totalMessages - lastLoggedTotalMessages >= statsIntervalMessages)
             {
-                lastLoggedReceived = received;
+                lastLoggedTotalMessages = totalMessages;
                 Log.Info(
-                    $"received={received}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, " +
-                    $"failed={failed}, statusDispatched={statusDispatched}, heartbeatDispatched={heartbeatDispatched}",
+                    $"pose={received}, status={receivedStatusEvents}, heartbeat={receivedHeartbeats}, runtimes={RuntimeCount}, aligned={aligned}, noPose={noPose}, " +
+                    $"failed={failed}, statusDispatched={statusDispatched}, heartbeatDispatched={heartbeatDispatched}, " +
+                    $"poseDispatchExceptions={poseDispatchExceptions}, statusDispatchExceptions={statusDispatchExceptions}, " +
+                    $"heartbeatDispatchExceptions={heartbeatDispatchExceptions}",
                     this
                 );
             }

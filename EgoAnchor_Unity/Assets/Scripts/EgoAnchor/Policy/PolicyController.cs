@@ -79,12 +79,16 @@ namespace EgoAnchor.Policy
                 return HandleMissing(observation);
             }
 
-            if (observation.IsRelocalization && observation.ReliabilityScore >= reliabilityGate.MinHoldScore)
+            ReliabilityScore reliability = reliabilityGate.Evaluate(observation);
+            if (
+                observation.IsRelocalization
+                && observation.ReliabilityScore >= reliabilityGate.MinHoldScore
+                && reliability.Level != ReliabilityLevel.Reject
+            )
             {
                 return AcceptStablePose(observation, "relocalize_accept");
             }
 
-            ReliabilityScore reliability = reliabilityGate.Evaluate(observation);
             if (reliability.Level != ReliabilityLevel.Accept)
             {
                 AnchorState holdState = HandleLowReliability(observation, reliability.Reason);

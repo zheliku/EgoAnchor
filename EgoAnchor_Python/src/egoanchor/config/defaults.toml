@@ -21,6 +21,7 @@ connect_timeout_s = 2.0 # 初次连接 NATS 的超时时间，单位秒。
 request_timeout_s = 1.0 # 预留给未来 request/reply 命令的默认超时，当前阶段不使用。
 max_pending_futures = 32 # 后台 publish Future 最大积压数；超过后丢弃新 pose，保持 latest-only。
 wait_ready_on_start = false # 启动时是否等待 NATS 首次连接；false 可避免 nats-server 未启动时阻塞模型加载。
+initial_retry_interval_s = 1.0 # 首次连接失败后的后台重试间隔，单位秒；允许 nats-server 晚于 Python 启动。
 
 [runtime.commands]
 max_queue_size = 128 # NATS command handler 接受后的内存队列容量；handler 只 ack/enqueue，不直接操作 pipeline。

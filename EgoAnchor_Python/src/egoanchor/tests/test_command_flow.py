@@ -49,7 +49,7 @@ class CommandFlowTest(unittest.IsolatedAsyncioTestCase):
         dedup = CommandDedupStore(ttl_ms=60_000)
         router = self._make_router(queue, dedup)
         request = ResetTrackingRequest(
-            header=MessageHeader(request_id="req-reset-1", anchor_id="default", client_id="unity-test"),
+            header=MessageHeader(message_id="unity-message-1", request_id="req-reset-1", anchor_id="default", client_id="unity-test"),
             clear_filters=True,
             clear_anchor_pose=True,
             reason="unit_test",
@@ -60,6 +60,13 @@ class CommandFlowTest(unittest.IsolatedAsyncioTestCase):
         ack.ParseFromString(reply)
         self.assertTrue(ack.accepted)
         self.assertFalse(ack.duplicate)
+        self.assertEqual(ack.header.request_id, "req-reset-1")
+        self.assertEqual(ack.header.anchor_id, "default")
+        self.assertEqual(ack.header.client_id, "unity-test")
+        self.assertEqual(ack.header.schema_version, "v1")
+        self.assertNotEqual(ack.header.message_id, request.header.message_id)
+        self.assertGreater(ack.header.sender_mono_ms, 0.0)
+        self.assertGreater(ack.header.created_unix_ms, 0.0)
         self.assertEqual(len(queue), 1)
 
         duplicate_reply = await router.handle_message(CMD_ANCHOR_RESET, request.SerializeToString(), reply="_INBOX.test")
@@ -67,6 +74,7 @@ class CommandFlowTest(unittest.IsolatedAsyncioTestCase):
         duplicate_ack.ParseFromString(duplicate_reply)
         self.assertTrue(duplicate_ack.accepted)
         self.assertTrue(duplicate_ack.duplicate)
+        self.assertEqual(duplicate_ack.header.message_id, ack.header.message_id)
         self.assertEqual(len(queue), 1)
 
     async def test_invalid_set_stage_is_rejected(self) -> None:
@@ -85,7 +93,62 @@ class CommandFlowTest(unittest.IsolatedAsyncioTestCase):
         ack = CommandAck()
         ack.ParseFromString(reply)
         self.assertFalse(ack.accepted)
+        self.assertFalse(ack.duplicate)
         self.assertEqual(ack.status, "INVALID_ARGUMENT")
+        self.assertEqual(len(queue), 0)
+
+        duplicate_reply = await router.handle_message(CMD_ANCHOR_CONTROL, request.SerializeToString(), reply="_INBOX.test")
+        duplicate_ack = CommandAck()
+        duplicate_ack.ParseFromString(duplicate_reply)
+        self.assertFalse(duplicate_ack.accepted)
+        self.assertTrue(duplicate_ack.duplicate)
+        self.assertEqual(duplicate_ack.status, "INVALID_ARGUMENT")
+        self.assertEqual(len(queue), 0)
+
+    async def test_malformed_request_gets_error_ack(self) -> None:
+        """命令 payload 不是合法 protobuf 时应返回拒绝 ack，避免 Unity 等到 request 超时。"""
+
+        router = self._make_router(CommandQueue(max_size=4), CommandDedupStore(ttl_ms=60_000))
+
+        reply = await router.handle_message(CMD_ANCHOR_RESET, b"\xff", reply="_INBOX.test")
+        ack = CommandAck()
+        ack.ParseFromString(reply)
+
+        self.assertFalse(ack.accepted)
+        self.assertFalse(ack.duplicate)
+        self.assertEqual(ack.status, "INVALID_ARGUMENT")
+        self.assertEqual(ack.error.code, "INVALID_ARGUMENT")
+        self.assertEqual(ack.message, "request protobuf payload is malformed")
+        self.assertNotEqual(ack.header.message_id, "")
+        self.assertEqual(ack.header.schema_version, "v1")
+
+    async def test_missing_handler_gets_error_ack(self) -> None:
+        """subject 契约存在但 handler 漏注册时应返回 UNIMPLEMENTED ack。"""
+
+        queue = CommandQueue(max_size=4)
+        dedup = CommandDedupStore(ttl_ms=60_000)
+        router = NatsRouter(
+            SubjectRegistry.load(),
+            ProtobufRegistry(),
+            HandlerRegistry(),
+            HandlerContext(commands=queue, dedup=dedup),
+        )
+        request = ResetTrackingRequest(
+            header=MessageHeader(request_id="req-missing-handler", anchor_id="default", client_id="unity-test"),
+            reason="unit_test",
+        )
+
+        reply = await router.handle_message(CMD_ANCHOR_RESET, request.SerializeToString(), reply="_INBOX.test")
+        ack = CommandAck()
+        ack.ParseFromString(reply)
+
+        self.assertFalse(ack.accepted)
+        self.assertFalse(ack.duplicate)
+        self.assertEqual(ack.status, "UNIMPLEMENTED")
+        self.assertEqual(ack.error.code, "UNIMPLEMENTED")
+        self.assertEqual(ack.header.request_id, "req-missing-handler")
+        self.assertEqual(ack.header.anchor_id, "default")
+        self.assertEqual(ack.header.client_id, "unity-test")
         self.assertEqual(len(queue), 0)
 
 

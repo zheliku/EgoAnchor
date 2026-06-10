@@ -112,6 +112,66 @@ namespace EgoAnchor.Runtime
         public bool LatestHeartbeatInputReady => diagnostics.latestHeartbeatInputReady;
 
         /// <summary>
+        /// 判断 Python status event 是否表示 reacquire 刚开始。
+        /// </summary>
+        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
+        /// <returns>仅 REACQUIRE_STARTED 这类开始事件返回 true。</returns>
+        public static bool IsReacquireStartedStatus(string eventName)
+        {
+            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
+            return normalized == "REACQUIRE_STARTED";
+        }
+
+        /// <summary>
+        /// 判断 Python status event 是否表示 reset 已经在 runtime 线程执行。
+        /// </summary>
+        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
+        /// <returns>仅 RESET_APPLIED 返回 true。</returns>
+        public static bool IsResetAppliedStatus(string eventName)
+        {
+            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
+            return normalized == "RESET_APPLIED";
+        }
+
+        /// <summary>
+        /// 判断 Python status event 是否表示 pause 已经在 runtime 线程执行。
+        /// </summary>
+        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
+        /// <returns>仅 PAUSE_APPLIED 返回 true。</returns>
+        public static bool IsPauseAppliedStatus(string eventName)
+        {
+            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
+            return normalized == "PAUSE_APPLIED";
+        }
+
+        /// <summary>
+        /// 判断 Python status event 是否表示 resume 已经在 runtime 线程执行。
+        /// </summary>
+        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
+        /// <returns>仅 RESUME_APPLIED 返回 true。</returns>
+        public static bool IsResumeAppliedStatus(string eventName)
+        {
+            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
+            return normalized == "RESUME_APPLIED";
+        }
+
+        /// <summary>
+        /// 判断 ServerHeartbeat 是否表示 Python server 处于错误状态。
+        /// </summary>
+        /// <param name="heartbeat">Python 发布的 ServerHeartbeat。</param>
+        /// <returns>heartbeat.state 为 ERROR，或 last_error.code 非空时返回 true。</returns>
+        public static bool IsErrorHeartbeat(ServerHeartbeat heartbeat)
+        {
+            if (heartbeat == null)
+            {
+                return false;
+            }
+
+            string state = (heartbeat.State ?? string.Empty).ToUpperInvariant();
+            return state == "ERROR" || (heartbeat.LastError != null && !string.IsNullOrEmpty(heartbeat.LastError.Code));
+        }
+
+        /// <summary>
         /// Unity Awake：构造 frame aligner。
         /// </summary>
         private void Awake()
@@ -147,22 +207,30 @@ namespace EgoAnchor.Runtime
 
             diagnostics.latestPhase = result.Phase ?? string.Empty;
             CapturePoseDiagnostics(result);
-            double now = Time.realtimeSinceStartupAsDouble;
+            if (IsPausedLocally())
+            {
+                SetFailure("paused");
+                diagnostics.latestPolicyAction = "paused";
+                diagnostics.latestPolicyReason = "pose_ignored_while_paused";
+                return AcceptResult.NoPose;
+            }
+
             if (!result.HasPose)
             {
                 string reason = string.IsNullOrEmpty(result.LastError?.Code) ? "no_pose" : result.LastError.Code;
                 SetFailure(reason);
-                NotifyMissingPose(result.Header.FrameId, now, reason, diagnostics.latestPhase);
+                NotifyMissingPose(result.Header.FrameId, FailureSampleTime(), reason, diagnostics.latestPhase);
                 return AcceptResult.NoPose;
             }
 
-            if (result.PoseMatrixCvCamera == null || result.PoseMatrixCvCamera.Values == null || result.PoseMatrixCvCamera.Values.Count != 16)
+            if (!HasFinitePoseMatrix(result))
             {
                 SetFailure("invalid_matrix");
-                NotifyAlignFailure(result.Header.FrameId, now, "invalid_matrix", diagnostics.latestPhase);
+                NotifyAlignFailure(result.Header.FrameId, FailureSampleTime(), "invalid_matrix", diagnostics.latestPhase);
                 return AcceptResult.InvalidMatrix;
             }
 
+            double now = Time.realtimeSinceStartupAsDouble;
             if (aligner == null)
             {
                 RebuildAligner();
@@ -216,6 +284,43 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
+        /// 判断当前本地 anchor runtime 是否处于暂停状态。
+        /// </summary>
+        private bool IsPausedLocally()
+        {
+            return diagnostics.currentAnchorState == AnchorState.Paused || (policyHost != null && policyHost.State == AnchorState.Paused);
+        }
+
+        /// <summary>
+        /// 获取失败观测使用的采样时间；未启用 policy 时失败时间不会进入状态机，可避免无意义读取 Unity Time。
+        /// </summary>
+        private double FailureSampleTime()
+        {
+            return policyHost == null ? 0.0 : Time.realtimeSinceStartupAsDouble;
+        }
+
+        /// <summary>
+        /// 判断 PoseResult 中的 4x4 pose matrix 是否存在且全为有限数。
+        /// </summary>
+        public static bool HasFinitePoseMatrix(PoseResult result)
+        {
+            if (result?.PoseMatrixCvCamera == null || result.PoseMatrixCvCamera.Values == null || result.PoseMatrixCvCamera.Values.Count != 16)
+            {
+                return false;
+            }
+
+            foreach (float value in result.PoseMatrixCvCamera.Values)
+            {
+                if (float.IsNaN(value) || float.IsInfinity(value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// 接收已完成 frame alignment 的 world pose，并按配置运行 baseline 或 reliability-aware policy。
         /// </summary>
         /// <param name="frameId">该 world pose 对应的 frame_id。</param>
@@ -224,6 +329,14 @@ namespace EgoAnchor.Runtime
         /// <param name="sampleTime">当前 Unity 单调时间，单位秒。</param>
         private void AcceptWorldPose(long frameId, Pose worldPose, PoseResult sourceResult, double sampleTime)
         {
+            if (IsPausedLocally())
+            {
+                diagnostics.latestPolicyAction = "paused";
+                diagnostics.latestPolicyReason = "pose_ignored_while_paused";
+                diagnostics.latestFailure = "paused";
+                return;
+            }
+
             rawPose = worldPose;
             hasRawPose = true;
             diagnostics.latestAlignedFrameId = frameId;
@@ -363,7 +476,9 @@ namespace EgoAnchor.Runtime
             diagnostics.currentAnchorState = decision.State;
             if (decision.HasOutputPose)
             {
-                stablePose = RunProcessors(decision.OutputPose, frameId, Time.realtimeSinceStartupAsDouble);
+                stablePose = ShouldAdvanceProcessors(decision.Action)
+                    ? RunProcessors(decision.OutputPose, frameId, Time.realtimeSinceStartupAsDouble)
+                    : decision.OutputPose;
                 hasStablePose = true;
             }
             else
@@ -373,30 +488,38 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
+        /// 判断本次 policy 输出是否应推进 processor 状态。
+        /// </summary>
+        private static bool ShouldAdvanceProcessors(AnchorPolicyAction action)
+        {
+            return action == AnchorPolicyAction.Accept || action == AnchorPolicyAction.Coast;
+        }
+
+        /// <summary>
         /// 从 PoseResult 捕获 Python 感知评分细项，供 Unity Inspector 和后续 policy 调参使用。
         /// </summary>
         /// <param name="result">Python 发布的 PoseResult。</param>
         private void CapturePoseDiagnostics(PoseResult result)
         {
             diagnostics.latestReliabilityScore = PoseResultPolicyMapper.ReadReliabilityScore(result);
-            diagnostics.latestScorePhase = result?.ScorePhase ?? 0.0f;
-            diagnostics.latestScoreReprojection = result?.ScoreReprojection ?? 0.0f;
-            diagnostics.latestScoreDepth = result?.ScoreDepth ?? 0.0f;
-            diagnostics.latestScoreJump = result?.ScoreJump ?? 0.0f;
-            diagnostics.latestScoreMask = result?.ScoreMask ?? 0.0f;
-            diagnostics.latestScoreReject = result?.ScoreReject ?? 0.0f;
-            diagnostics.latestScoreConfidence = result?.ScoreConfidence ?? 0.0f;
-            diagnostics.latestTrackReprojection = result?.TrackReprojection ?? -1.0f;
-            diagnostics.latestRenderQualityMaskIou = result?.RenderQualityMaskIou ?? 0.0f;
-            diagnostics.latestRenderQualityAreaRatioScore = result?.RenderQualityAreaRatioScore ?? 0.0f;
-            diagnostics.latestRenderQualityDepthInlier = result?.RenderQualityDepthInlier ?? 0.0f;
-            diagnostics.latestRenderQualityDepthAlignment = result?.RenderQualityDepthAlignment ?? 0.0f;
-            diagnostics.latestRenderQualityRenderVisibleRatio = result?.RenderQualityRenderVisibleRatio ?? 0.0f;
-            diagnostics.latestRenderQualityObservedVisibleRatio = result?.RenderQualityObservedVisibleRatio ?? 0.0f;
-            diagnostics.latestRenderQualityDepthResidualMeters = result?.RenderQualityDepthResidualM ?? 0.0f;
-            diagnostics.latestRenderQualityRenderAreaPixels = result?.RenderQualityRenderAreaPx ?? 0;
-            diagnostics.latestRenderQualityExpected = result?.RenderQualityExpected ?? false;
-            diagnostics.latestRenderQualityStatus = result?.RenderQualityStatus ?? string.Empty;
+            diagnostics.latestScorePhase = result.ScorePhase;
+            diagnostics.latestScoreReprojection = result.ScoreReprojection;
+            diagnostics.latestScoreDepth = result.ScoreDepth;
+            diagnostics.latestScoreJump = result.ScoreJump;
+            diagnostics.latestScoreMask = result.ScoreMask;
+            diagnostics.latestScoreReject = result.ScoreReject;
+            diagnostics.latestScoreConfidence = result.ScoreConfidence;
+            diagnostics.latestTrackReprojection = result.TrackReprojection;
+            diagnostics.latestRenderQualityMaskIou = result.RenderQualityMaskIou;
+            diagnostics.latestRenderQualityAreaRatioScore = result.RenderQualityAreaRatioScore;
+            diagnostics.latestRenderQualityDepthInlier = result.RenderQualityDepthInlier;
+            diagnostics.latestRenderQualityDepthAlignment = result.RenderQualityDepthAlignment;
+            diagnostics.latestRenderQualityRenderVisibleRatio = result.RenderQualityRenderVisibleRatio;
+            diagnostics.latestRenderQualityObservedVisibleRatio = result.RenderQualityObservedVisibleRatio;
+            diagnostics.latestRenderQualityDepthResidualMeters = result.RenderQualityDepthResidualM;
+            diagnostics.latestRenderQualityRenderAreaPixels = result.RenderQualityRenderAreaPx;
+            diagnostics.latestRenderQualityExpected = result.RenderQualityExpected;
+            diagnostics.latestRenderQualityStatus = result.RenderQualityStatus ?? string.Empty;
         }
 
         /// <summary>
@@ -431,25 +554,25 @@ namespace EgoAnchor.Runtime
             string eventName = (diagnostics.latestServerEvent ?? string.Empty).ToUpperInvariant();
             string serverState = (diagnostics.latestServerState ?? string.Empty).ToUpperInvariant();
 
-            if (eventName.Contains("RESET"))
+            if (IsResetAppliedStatus(eventName))
             {
                 NotifyResetAccepted(clearProcessors: true, clearAnchorPose: false, reason);
                 return;
             }
 
-            if (eventName.Contains("REACQUIRE"))
+            if (IsReacquireStartedStatus(eventName))
             {
-                NotifyReacquireAccepted(eventName.Contains("STARTED"), reason);
+                NotifyReacquireAccepted(clearPose: true, reason);
                 return;
             }
 
-            if (eventName.Contains("PAUSE") || serverState == "PAUSED")
+            if (IsPauseAppliedStatus(eventName) || serverState == "PAUSED")
             {
                 NotifyPauseAccepted(reason);
                 return;
             }
 
-            if (eventName.Contains("RESUME"))
+            if (IsResumeAppliedStatus(eventName))
             {
                 NotifyResumeAccepted(reason);
                 return;
@@ -489,18 +612,19 @@ namespace EgoAnchor.Runtime
             diagnostics.latestHeartbeatInputReady = heartbeat.InputReady;
             diagnostics.latestHeartbeatReceiveTime = Time.realtimeSinceStartupAsDouble;
             diagnostics.latestServerState = heartbeat.State ?? diagnostics.latestServerState;
+            if (IsErrorHeartbeat(heartbeat))
+            {
+                diagnostics.currentAnchorState = AnchorState.Error;
+                diagnostics.latestPolicyAction = "heartbeat_error";
+                diagnostics.latestPolicyReason = string.IsNullOrEmpty(heartbeat.LastError?.Code) ? "server_error" : heartbeat.LastError.Code;
+                return;
+            }
+
             if (!heartbeat.InputReady && diagnostics.currentAnchorState != AnchorState.Paused)
             {
                 diagnostics.currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
                 diagnostics.latestPolicyAction = "heartbeat";
                 diagnostics.latestPolicyReason = "input_not_ready";
-            }
-
-            if (heartbeat.LastError != null && !string.IsNullOrEmpty(heartbeat.LastError.Code))
-            {
-                diagnostics.currentAnchorState = AnchorState.Error;
-                diagnostics.latestPolicyAction = "heartbeat_error";
-                diagnostics.latestPolicyReason = heartbeat.LastError.Code;
             }
         }
 
@@ -632,6 +756,10 @@ namespace EgoAnchor.Runtime
             {
                 policyHost.Clear(Time.realtimeSinceStartupAsDouble, "cleared_by_status");
                 SyncPolicyDiagnostics();
+            }
+            else
+            {
+                diagnostics.currentAnchorState = AnchorState.Searching;
             }
         }
 

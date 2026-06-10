@@ -8,8 +8,32 @@ from types import SimpleNamespace
 from typing import Any
 
 from egoanchor.diagnostics import RuntimeEventLogger
-from egoanchor.utils import clamp, rotation_matrix_to_quaternion
+from egoanchor.utils import clamp, get_logger, rotation_matrix_to_quaternion
 from .runtime_state import RuntimeState
+
+LOGGER = get_logger(__name__, component="RuntimeLogWriter")
+"""runtime 结构化日志写入器自身的诊断日志。"""
+
+
+def _optional_error_code(message: object, field_name: str) -> str:
+    """按 Protobuf presence 读取可选 ErrorInfo.code。"""
+
+    has_field = getattr(message, "HasField", None)
+    if callable(has_field):
+        try:
+            if not bool(has_field(field_name)):
+                return ""
+        except ValueError:
+            return _error_code_from_attribute(message, field_name)
+
+    return _error_code_from_attribute(message, field_name)
+
+
+def _error_code_from_attribute(message: object, field_name: str) -> str:
+    """从普通对象属性读取 ErrorInfo.code，兼容单测替身对象。"""
+
+    error = getattr(message, field_name, None)
+    return str(getattr(error, "code", "") or "") if error is not None else ""
 
 
 class PoseLogFactory:
@@ -27,11 +51,11 @@ class PoseLogFactory:
             self.last_pose_matrix = None
             return {}
         matrix = getattr(getattr(msg, "pose_matrix_cv_camera", None), "values", None)
-        if matrix is None or len(matrix) != 16:
+        values = self._finite_pose_matrix(matrix)
+        if values is None:
             self.last_pose_matrix = None
             return {}
 
-        values = tuple(float(v) for v in matrix)
         tx, ty, tz = values[3], values[7], values[11]
         qx, qy, qz, qw = rotation_matrix_to_quaternion(values)
         jump_t = 0.0
@@ -60,6 +84,20 @@ class PoseLogFactory:
             "pose_jump_translation_m": jump_t,
             "pose_jump_rotation_deg": jump_r,
         }
+
+    @staticmethod
+    def _finite_pose_matrix(matrix: object) -> tuple[float, ...] | None:
+        """读取 4x4 pose 矩阵；长度错误或非有限值会丢弃该 pose 日志字段。"""
+
+        if matrix is None:
+            return None
+        try:
+            values = tuple(float(v) for v in matrix)  # type: ignore[union-attr]
+        except (TypeError, ValueError):
+            return None
+        if len(values) != 16:
+            return None
+        return values if all(math.isfinite(value) for value in values) else None
 
 
 class RuntimeLogWriter:
@@ -90,15 +128,26 @@ class RuntimeLogWriter:
         self.pose_factory = PoseLogFactory()
         """PoseResult 额外 pose 字段构造器。"""
 
+        self.log_write_failures = 0
+        """JSONL 写入失败次数；日志写入失败不应阻断实时链路。"""
+
     def close(self) -> None:
         """关闭底层日志文件。"""
 
-        self.logger.close()
+        try:
+            self.logger.close()
+        except Exception as exc:  # pragma: no cover - 退出路径只做 best-effort 收尾
+            LOGGER.debug("关闭 runtime JSONL 日志失败，已忽略：%s", exc)
 
     def event(self, event_type: str, **fields: Any) -> None:
         """写入一条通用 runtime 事件。"""
 
-        self.logger.write(event_type, **fields)
+        try:
+            self.logger.write(event_type, **fields)
+        except Exception as exc:
+            self.log_write_failures += 1
+            if self._should_report_log_failure():
+                LOGGER.warning("runtime JSONL 写入失败，已跳过 event=%s failures=%d：%s", event_type, self.log_write_failures, exc)
 
     def pose_result(self, msg: object, *, state: RuntimeState, diagnostics: object | None = None) -> None:
         """记录 PoseResult 的论文相关摘要字段。
@@ -170,7 +219,7 @@ class RuntimeLogWriter:
             message=str(status.message),
             request_id=str(status.header.request_id),
             frame_id=int(status.header.frame_id),
-            error_code=str(status.error.code) if status.error is not None else "",
+            error_code=_optional_error_code(status, "error"),
         )
 
     def heartbeat(self, heartbeat: object) -> None:
@@ -187,7 +236,7 @@ class RuntimeLogWriter:
             runtime_fps=float(heartbeat.runtime_fps),
             publish_fps=float(heartbeat.publish_fps),
             command_queue_length=int(heartbeat.command_queue_length),
-            error_code=str(heartbeat.last_error.code) if heartbeat.last_error is not None else "",
+            error_code=_optional_error_code(heartbeat, "last_error"),
         )
 
     def command_execution(self, command: object, result: object, queue_length: int) -> None:
@@ -234,6 +283,12 @@ class RuntimeLogWriter:
 
         logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
         return bool(getattr(logging_cfg, name, default))
+
+    def _should_report_log_failure(self) -> bool:
+        """按指数式间隔报告日志写入失败，避免磁盘故障时刷屏。"""
+
+        count = self.log_write_failures
+        return count <= 3 or count in (10, 100) or count % 1000 == 0
 
 
 __all__ = ["PoseLogFactory", "RuntimeLogWriter"]

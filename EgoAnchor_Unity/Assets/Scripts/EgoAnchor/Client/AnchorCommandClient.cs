@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EgoAnchor.Diagnostics;
@@ -66,8 +67,14 @@ namespace EgoAnchor.Client
         /// <summary>累计异常/超时数。</summary>
         private int failedCommands;
 
-        /// <summary>最近一次 request 取消源。</summary>
-        private CancellationTokenSource requestCts;
+        /// <summary>正在等待 reply 的 request 取消源列表。</summary>
+        private readonly List<CancellationTokenSource> inFlightRequests = new List<CancellationTokenSource>();
+
+        /// <summary>保护 in-flight request 列表的锁。</summary>
+        private readonly object inFlightLock = new object();
+
+        /// <summary>组件是否正在销毁；销毁后不再应用 ack 统计。</summary>
+        private bool isDestroying;
 
         /// <summary>累计发送命令数。</summary>
         public int SentCommands => sentCommands;
@@ -193,7 +200,7 @@ namespace EgoAnchor.Client
         /// <param name="clearTrackingFirst">Python 执行 reacquire 前是否先清空旧 tracking 状态。</param>
         /// <param name="promptOverride">可选 prompt 覆盖；当前 Python 仅透传保留，不动态改 YOLOE prompt。</param>
         /// <param name="timeoutMs">重获取超时语义预留；当前 ack 不等待执行完成。</param>
-        /// <param name="reason">命令原因，写入 header/message 日志。</param>
+        /// <param name="reason">命令原因。当前 ReacquireAnchorRequest 协议没有 reason 字段，该参数只保留调用侧语义。</param>
         /// <param name="token">外部取消信号。</param>
         /// <returns>Python 返回的 CommandAck；异常时返回 null。</returns>
         public async Task<CommandAck> ReacquireAsync(
@@ -212,7 +219,6 @@ namespace EgoAnchor.Client
                 PromptOverride = promptOverride ?? string.Empty,
                 TimeoutMs = timeoutMs,
             };
-            request.Header.MessageId = $"{request.Header.MessageId}_{reason ?? string.Empty}";
             return await SendCommandAsync(SubjectNames.ReacquireAnchor, request, token);
         }
 
@@ -245,9 +251,25 @@ namespace EgoAnchor.Client
         /// </summary>
         public void CancelPendingCommand()
         {
+            CancellationTokenSource[] pending;
+            lock (inFlightLock)
+            {
+                pending = inFlightRequests.ToArray();
+            }
+
             try
             {
-                requestCts?.Cancel();
+                foreach (CancellationTokenSource source in pending)
+                {
+                    try
+                    {
+                        source.Cancel();
+                    }
+                    catch
+                    {
+                        // 单个 request 已结束或 CTS 已释放时，不影响其它 in-flight request 的取消。
+                    }
+                }
             }
             catch
             {
@@ -264,6 +286,12 @@ namespace EgoAnchor.Client
         /// <returns>CommandAck；发送失败时返回 null。</returns>
         private async Task<CommandAck> SendCommandAsync(string subject, IMessage request, CancellationToken token)
         {
+            if (isDestroying)
+            {
+                RecordFailure(subject, string.Empty, "component_destroying");
+                return null;
+            }
+
             if (natsClient == null)
             {
                 RecordFailure(subject, string.Empty, "missing_nats_control_client");
@@ -271,7 +299,7 @@ namespace EgoAnchor.Client
             }
 
             using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            requestCts = linkedCts;
+            RegisterInFlightRequest(linkedCts);
             MessageHeader header = ExtractHeader(request);
             string requestId = header?.RequestId ?? string.Empty;
             sentCommands++;
@@ -279,6 +307,11 @@ namespace EgoAnchor.Client
             try
             {
                 byte[] replyPayload = await natsClient.RequestAsync(subject, request.ToByteArray(), requestTimeoutSeconds, linkedCts.Token);
+                if (isDestroying)
+                {
+                    return null;
+                }
+
                 CommandAck ack = CommandAck.Parser.ParseFrom(replyPayload);
                 ApplyAck(subject, requestId, ack);
                 return ack;
@@ -290,10 +323,7 @@ namespace EgoAnchor.Client
             }
             finally
             {
-                if (ReferenceEquals(requestCts, linkedCts))
-                {
-                    requestCts = null;
-                }
+                UnregisterInFlightRequest(linkedCts);
             }
         }
 
@@ -336,6 +366,28 @@ namespace EgoAnchor.Client
                     return control.Header;
                 default:
                     return null;
+            }
+        }
+
+        /// <summary>
+        /// 登记一条正在等待 reply 的 command request。
+        /// </summary>
+        private void RegisterInFlightRequest(CancellationTokenSource source)
+        {
+            lock (inFlightLock)
+            {
+                inFlightRequests.Add(source);
+            }
+        }
+
+        /// <summary>
+        /// 移除一条已结束的 command request。
+        /// </summary>
+        private void UnregisterInFlightRequest(CancellationTokenSource source)
+        {
+            lock (inFlightLock)
+            {
+                inFlightRequests.Remove(source);
             }
         }
 
@@ -392,9 +444,8 @@ namespace EgoAnchor.Client
         /// </summary>
         private void OnDestroy()
         {
+            isDestroying = true;
             CancelPendingCommand();
-            requestCts?.Dispose();
-            requestCts = null;
         }
     }
 }

@@ -66,6 +66,9 @@ class NatsMessageSettings:
     wait_ready_on_start: bool = False
     """start 时是否等待首次连接完成；关闭可避免 nats-server 未启动时阻塞模型加载。"""
 
+    initial_retry_interval_s: float = 1.0
+    """首次连接失败后的后台重试间隔，单位秒；仅在关闭前生效。"""
+
     @classmethod
     def from_config(cls, cfg: SimpleNamespace) -> "NatsMessageSettings":
         """从 TOML 配置读取 NATS 消息面参数。"""
@@ -83,6 +86,7 @@ class NatsMessageSettings:
             request_timeout_s=float(getattr(message, "request_timeout_s", 1.0)),
             max_pending_futures=int(getattr(message, "max_pending_futures", 32)),
             wait_ready_on_start=bool(getattr(message, "wait_ready_on_start", False)),
+            initial_retry_interval_s=float(getattr(message, "initial_retry_interval_s", 1.0)),
         )
 
 
@@ -106,8 +110,14 @@ class NatsMessageClient:
         self._thread: threading.Thread | None = None
         """承载 event loop 的后台线程。"""
 
+        self._connect_task: asyncio.Task[None] | None = None
+        """首次连接/后台重试任务；关闭时需要显式取消，避免 loop 退出遗留 pending task。"""
+
         self._ready = threading.Event()
         """首次连接尝试完成事件；用于可选等待。"""
+
+        self._loop_ready = threading.Event()
+        """后台 event loop 已创建事件；用于 start 后立刻 close 的收尾同步。"""
 
         self._closed = False
         """关闭标记；用于避免退出时继续重连或发布。"""
@@ -123,6 +133,12 @@ class NatsMessageClient:
 
         self._connect_failed = 0
         """NATS 连接失败计数。"""
+
+        self._subscription_callback_failed = 0
+        """订阅 callback 执行失败次数；仅用于诊断后台 request/reply 异常。"""
+
+        self._subscription_reply_failed = 0
+        """订阅 reply 发布失败次数；仅用于诊断回包链路异常。"""
 
     @property
     def enabled(self) -> bool:
@@ -148,6 +164,18 @@ class NatsMessageClient:
 
         return self._connect_failed
 
+    @property
+    def subscription_callback_failed_count(self) -> int:
+        """累计订阅 callback 异常次数。"""
+
+        return self._subscription_callback_failed
+
+    @property
+    def subscription_reply_failed_count(self) -> int:
+        """累计订阅 reply 发布异常次数。"""
+
+        return self._subscription_reply_failed
+
     def start(self) -> None:
         """启动后台 NATS event loop 并尝试连接。"""
 
@@ -161,6 +189,7 @@ class NatsMessageClient:
 
         self._closed = False
         self._ready.clear()
+        self._loop_ready.clear()
         self._thread = threading.Thread(target=self._run_loop_thread, name="EgoAnchorV3NatsMessageClient", daemon=True)
         self._thread.start()
         if self.settings.wait_ready_on_start:
@@ -176,8 +205,13 @@ class NatsMessageClient:
         self._started = False
         LOGGER.info("closing")
         self._closed = True
+        if self._thread is not None and self._loop is None:
+            self._loop_ready.wait(timeout=0.5)
         loop = self._loop
         if loop is None:
+            if self._thread is not None:
+                self._thread.join(timeout=1.0)
+            self._thread = None
             return
 
         if loop.is_running():
@@ -192,6 +226,7 @@ class NatsMessageClient:
             self._thread.join(timeout=1.0)
         self._thread = None
         self._loop = None
+        self._loop_ready.clear()
 
     async def publish(self, subject: str, payload: bytes) -> None:
         """向指定 subject 发布 bytes payload。"""
@@ -203,6 +238,8 @@ class NatsMessageClient:
     def add_subscription(self, subject: str, callback: MessageCallback) -> None:
         """登记一个 bytes 订阅；必须在 start 前调用。"""
 
+        if self._started:
+            raise RuntimeError("NatsMessageClient.add_subscription 必须在 start 前调用。")
         self._pending_subscriptions.append((subject, callback))
 
     def _run_loop_thread(self) -> None:
@@ -210,15 +247,49 @@ class NatsMessageClient:
 
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        self._loop.create_task(self._connect_async())
+        self._loop_ready.set()
+        if self._closed:
+            self._loop.close()
+            return
+        self._connect_task = self._loop.create_task(self._connect_until_ready_async())
         try:
             self._loop.run_forever()
         finally:
+            self._loop.run_until_complete(self._cancel_connect_task_async())
             self._loop.run_until_complete(self._close_async())
             self._loop.close()
 
-    async def _connect_async(self) -> None:
-        """连接 NATS；运行期导入 nats-py，保证关闭消息面时不触发依赖加载。"""
+    async def _connect_until_ready_async(self) -> None:
+        """持续尝试建立首次 NATS 连接，避免 server 晚启动后消息面永久不可用。"""
+
+        first_attempt = True
+        retry_interval_s = max(float(self.settings.initial_retry_interval_s), 0.1)
+        while not self._closed:
+            if await self._connect_once_async():
+                return
+            if first_attempt:
+                self._ready.set()
+                first_attempt = False
+            try:
+                await asyncio.sleep(retry_interval_s)
+            except asyncio.CancelledError:
+                return
+
+        self._ready.set()
+
+    async def _cancel_connect_task_async(self) -> None:
+        """取消首次连接重试任务，确保 event loop 关闭前没有遗留 task。"""
+
+        task = self._connect_task
+        self._connect_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    async def _connect_once_async(self) -> bool:
+        """执行一次首次连接尝试；成功后绑定 start 前登记的订阅。"""
 
         try:
             import nats  # type: ignore
@@ -231,13 +302,14 @@ class NatsMessageClient:
                 max_reconnect_attempts=-1,
             )
             await self._attach_pending_subscriptions()
+            self._ready.set()
             LOGGER.info("connected url=%s", self.settings.url)
+            return True
         except Exception as exc:
             self._nc = None
             self._connect_failed += 1
             LOGGER.error("连接 NATS 失败 url=%s：%s", self.settings.url, exc)
-        finally:
-            self._ready.set()
+            return False
 
     async def _attach_pending_subscriptions(self) -> None:
         """把 start 前登记的 subscriptions 绑定到 nats-py。"""
@@ -246,12 +318,24 @@ class NatsMessageClient:
             return
         for subject, callback in self._pending_subscriptions:
 
-            async def _wrapped(msg: Any, *, _callback: MessageCallback = callback) -> None:
+            async def _wrapped(msg: Any, *, _callback: MessageCallback = callback, _subject: str = subject) -> None:
                 """把 nats-py msg 转换成统一 bytes callback。"""
 
-                response = await _callback(str(msg.subject), bytes(msg.data), getattr(msg, "reply", None) or None)
-                if getattr(msg, "reply", None) and response is not None:
-                    await self._nc.publish(msg.reply, response)
+                reply = getattr(msg, "reply", None) or None
+                try:
+                    response = await _callback(str(msg.subject), bytes(msg.data), reply)
+                except Exception as exc:
+                    self._subscription_callback_failed += 1
+                    LOGGER.warning("NATS request callback 失败 subject=%s reply=%s：%s", _subject, bool(reply), exc)
+                    return
+                if not reply or response is None:
+                    return
+                try:
+                    if self._nc is not None:
+                        await self._nc.publish(reply, response)
+                except Exception as exc:
+                    self._subscription_reply_failed += 1
+                    LOGGER.warning("NATS request reply 发布失败 subject=%s reply=%s：%s", _subject, reply, exc)
 
             self._subscriptions.append(await self._nc.subscribe(subject, cb=_wrapped))
             LOGGER.info("subscribed subject=%s", subject)

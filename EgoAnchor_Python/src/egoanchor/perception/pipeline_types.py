@@ -261,15 +261,21 @@ class PipelineTrackingState:
     last_sender_mono_ms: float | None = None
     """上一条进入 pose 评分的 Unity 发送端时间戳，单位毫秒。"""
 
+    def clear_registration(self, *, reset_reject_count: bool = True) -> None:
+        """清空依赖当前 register/track 的状态，保留代数和帧时间历史。"""
+
+        self.has_registered = False
+        self.cutie_ready = False
+        self.last_pose = None
+        if reset_reject_count:
+            self.track_reject_count = 0
+        self.tracked_mask_lost_count = 0
+        self.low_reprojection_count = 0
+        self.frames_since_register = 0
+
     def bump_generation(self) -> None:
         """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""
 
         self.generation += 1
-        self.has_registered = False
-        self.cutie_ready = False
-        self.last_pose = None
-        self.track_reject_count = 0
-        self.tracked_mask_lost_count = 0
-        self.low_reprojection_count = 0
-        self.frames_since_register = 0
+        self.clear_registration(reset_reject_count=True)
         self.last_sender_mono_ms = None

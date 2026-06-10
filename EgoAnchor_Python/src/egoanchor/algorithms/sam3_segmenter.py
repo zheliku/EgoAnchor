@@ -188,6 +188,7 @@ class Sam3Segmenter:
             try:
                 self.processor.reset_all_prompts(state)
             except Exception:
+                # SAM3 某些版本在没有历史 prompt 时会抛异常；下一步 set_text_prompt 会重建状态。
                 pass
             output = self.processor.set_text_prompt(state=state, prompt=prompt_text)
             masks = output.get("masks", np.empty((0, frame.shape[0], frame.shape[1]), dtype=np.uint8))

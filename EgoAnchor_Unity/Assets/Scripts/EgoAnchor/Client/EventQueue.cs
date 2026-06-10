@@ -54,5 +54,15 @@ namespace EgoAnchor.Client
         {
             return queue.TryDequeue(out value);
         }
+
+        /// <summary>
+        /// 清空当前积压事件；用于 NATS Stop/Start 时避免旧 status event 跨连接重放。
+        /// </summary>
+        public void Clear()
+        {
+            while (queue.TryDequeue(out _))
+            {
+            }
+        }
     }
 }

@@ -36,6 +36,9 @@ class QuestInputStats:
     latest_camera_info_frame_id: int | None
     latest_session_id: str
     latest_client_id: str
+    latest_stereo_receive_mono_ms: float | None
+    """Python 接收最新 stereo payload 的本地单调时间戳，单位毫秒。"""
+
     latest_stereo_age_ms: float | None
     latest_camera_info_age_ms: float | None
 
@@ -50,6 +53,7 @@ class LatestQuestInputStore:
         self._camera_info_store: LatestValueStore[quest_pb2.QuestCameraInfo] = LatestValueStore()
         self.latest_stereo_frame_id: int | None = None
         self.latest_camera_info_frame_id: int | None = None
+        self.latest_stereo_receive_mono_ms: float | None = None
         self.latest_session_id = ""
         self.latest_stereo_session_id = ""
         self.latest_camera_info_session_id = ""
@@ -73,25 +77,29 @@ class LatestQuestInputStore:
 
         return self._camera_info_store.peek()
 
-    def update_stereo(self, msg: quest_pb2.QuestStereoFrame) -> bool:
+    def update_stereo(self, msg: quest_pb2.QuestStereoFrame, *, receive_mono_ms: float | None = None) -> bool:
         """更新 stereo 最新帧；同一 Unity 会话内 frame_id 倒退或重复时丢弃。"""
 
         frame_id = extract_frame_id(msg)
         session_id = extract_session_id(msg)
         client_id = extract_client_id(msg)
-        same_session = not session_id or not self.latest_stereo_session_id or session_id == self.latest_stereo_session_id
+        stereo_session_changed = bool(session_id and self.latest_stereo_session_id and session_id != self.latest_stereo_session_id)
+        camera_info_session_changed = bool(session_id and self.latest_camera_info_session_id and session_id != self.latest_camera_info_session_id)
 
-        if same_session and frame_id is not None and self.latest_stereo_frame_id is not None and frame_id <= self.latest_stereo_frame_id:
+        if not stereo_session_changed and frame_id is not None and self.latest_stereo_frame_id is not None and frame_id <= self.latest_stereo_frame_id:
             self.stale_stereo_dropped += 1
             return False
 
-        if not same_session:
+        if stereo_session_changed or camera_info_session_changed:
             self.stream_restarts += 1
-            self._stereo_store.clear()
-            self.latest_stereo_frame_id = None
+            if stereo_session_changed:
+                self._clear_stereo_cache()
+            if camera_info_session_changed:
+                self._clear_camera_info_cache()
 
         self._stereo_store.put(msg, count_drop=True)
         self.latest_stereo_frame_id = frame_id
+        self.latest_stereo_receive_mono_ms = float(receive_mono_ms) if receive_mono_ms is not None else time.perf_counter() * 1000.0
         self.latest_stereo_session_id = session_id or self.latest_stereo_session_id
         self.latest_session_id = self.latest_stereo_session_id or self.latest_camera_info_session_id
         self.latest_client_id = client_id or self.latest_client_id
@@ -101,13 +109,34 @@ class LatestQuestInputStore:
     def update_camera_info(self, msg: quest_pb2.QuestCameraInfo) -> None:
         """更新 camera_info 最新值，并递增独立版本号。"""
 
+        session_id = extract_session_id(msg)
+        if session_id and self.latest_stereo_session_id and session_id != self.latest_stereo_session_id:
+            self.stream_restarts += 1
+            self._clear_stereo_cache()
+
         self._camera_info_store.put(msg, count_drop=True)
         self.latest_camera_info_frame_id = extract_frame_id(msg)
-        self.latest_camera_info_session_id = extract_session_id(msg) or self.latest_camera_info_session_id
+        self.latest_camera_info_session_id = session_id or self.latest_camera_info_session_id
         self.latest_session_id = self.latest_stereo_session_id or self.latest_camera_info_session_id
         self.latest_client_id = extract_client_id(msg) or self.latest_client_id
         self.decoded_camera_info += 1
         self.camera_info_version += 1
+
+    def _clear_stereo_cache(self) -> None:
+        """清空当前 stereo latest cache 及其 session 影子状态。"""
+
+        self._stereo_store.clear()
+        self.latest_stereo_frame_id = None
+        self.latest_stereo_receive_mono_ms = None
+        self.latest_stereo_session_id = ""
+
+    def _clear_camera_info_cache(self) -> None:
+        """清空当前 camera_info latest cache 及其版本状态。"""
+
+        self._camera_info_store.clear()
+        self.latest_camera_info_frame_id = None
+        self.latest_camera_info_session_id = ""
+        self.camera_info_version = 0
 
     def mark_decode_failed(self) -> None:
         """记录一次 Protobuf 解码失败。"""
@@ -132,6 +161,7 @@ class LatestQuestInputStore:
             latest_camera_info_frame_id=self.latest_camera_info_frame_id,
             latest_session_id=self.latest_session_id,
             latest_client_id=self.latest_client_id,
+            latest_stereo_receive_mono_ms=self.latest_stereo_receive_mono_ms,
             latest_stereo_age_ms=self._stereo_store.age_ms(now_ms),
             latest_camera_info_age_ms=self._camera_info_store.age_ms(now_ms),
         )
@@ -176,7 +206,8 @@ class QuestStreamReceiver:
                 if topic == QUEST_STEREO:
                     msg = quest_pb2.QuestStereoFrame()
                     msg.ParseFromString(payload)
-                    if self.store.update_stereo(msg):
+                    receive_mono_ms = self.subscriber.store.latest_rx_mono_ms_by_topic.get(topic)
+                    if self.store.update_stereo(msg, receive_mono_ms=receive_mono_ms):
                         decoded[topic] = msg
                 elif topic == QUEST_CAMERA_INFO:
                     msg = quest_pb2.QuestCameraInfo()
@@ -199,6 +230,12 @@ class QuestStreamReceiver:
         """读取最新 camera_info。"""
 
         return self.store.latest_camera_info
+
+    def get_latest_stereo_receive_mono_ms(self) -> float:
+        """读取最新 stereo payload 的 Python 接收时间；未知时返回 0。"""
+
+        value = self.store.latest_stereo_receive_mono_ms
+        return float(value) if value is not None else 0.0
 
     def get_stats(self) -> QuestInputStats:
         """合并 ZMQ 与 Protobuf 层统计。"""

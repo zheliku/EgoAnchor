@@ -102,6 +102,11 @@ namespace EgoAnchor.Transport
         /// </summary>
         public void Subscribe(string subject, PayloadHandler handler)
         {
+            if (isRunning)
+            {
+                throw new InvalidOperationException("NatsBytesClient.Subscribe 必须在 Start 前调用。");
+            }
+
             if (string.IsNullOrWhiteSpace(subject))
             {
                 throw new ArgumentException("NATS subject 不能为空。", nameof(subject));
@@ -126,9 +131,11 @@ namespace EgoAnchor.Transport
             }
 
             isRunning = true;
-            connectReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            cts = new CancellationTokenSource();
-            receiveTask = Task.Run(() => ReceiveLoopAsync(cts.Token));
+            CancellationTokenSource localCts = new CancellationTokenSource();
+            TaskCompletionSource<bool> localConnectReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            cts = localCts;
+            connectReady = localConnectReady;
+            receiveTask = Task.Run(() => ReceiveLoopAsync(localConnectReady, localCts.Token));
         }
 
         /// <summary>
@@ -151,7 +158,10 @@ namespace EgoAnchor.Transport
                 Start();
             }
 
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            CancellationTokenSource lifetimeCts = cts;
+            using CancellationTokenSource timeoutCts = lifetimeCts == null
+                ? CancellationTokenSource.CreateLinkedTokenSource(token)
+                : CancellationTokenSource.CreateLinkedTokenSource(token, lifetimeCts.Token);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(Mathf.Max(0.1f, timeoutSeconds)));
 
             Task readyTask = connectReady?.Task;
@@ -188,6 +198,7 @@ namespace EgoAnchor.Transport
             cts = null;
             receiveTask = null;
             connectReady?.TrySetCanceled();
+            connectReady = null;
             isRunning = false;
 
             try
@@ -206,8 +217,9 @@ namespace EgoAnchor.Transport
         /// <summary>
         /// 后台 NATS 订阅循环。
         /// </summary>
-        private async Task ReceiveLoopAsync(CancellationToken token)
+        private async Task ReceiveLoopAsync(TaskCompletionSource<bool> localConnectReady, CancellationToken token)
         {
+            NatsClient localClient = null;
             try
             {
                 NatsOpts opts = new NatsOpts
@@ -221,10 +233,19 @@ namespace EgoAnchor.Transport
                     SubPendingChannelFullMode = BoundedChannelFullMode.DropOldest,
                 };
 
-                NatsClient localClient = new NatsClient(opts, BoundedChannelFullMode.DropOldest);
+                localClient = new NatsClient(opts, BoundedChannelFullMode.DropOldest);
                 client = localClient;
-                await localClient.ConnectAsync();
-                connectReady?.TrySetResult(true);
+                Task connectTask = localClient.ConnectAsync().AsTask();
+                try
+                {
+                    await WaitWithCancellationAsync(connectTask, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    ObserveTaskFailure(connectTask);
+                    throw;
+                }
+                localConnectReady?.TrySetResult(true);
                 Log.Info($"connected url={settings.Url}", logContext);
 
                 List<Task> tasks = new List<Task>(subscriptions.Count);
@@ -237,24 +258,40 @@ namespace EgoAnchor.Transport
             }
             catch (OperationCanceledException)
             {
-                connectReady?.TrySetCanceled();
+                localConnectReady?.TrySetCanceled();
             }
             catch (Exception ex)
             {
-                connectReady?.TrySetException(ex);
+                localConnectReady?.TrySetException(ex);
                 Log.Error($"receive loop failed: {ex}", logContext);
             }
             finally
             {
-                isRunning = false;
+                if (ReferenceEquals(connectReady, localConnectReady))
+                {
+                    client = null;
+                    cts = null;
+                    receiveTask = null;
+                    isRunning = false;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    DisposeClientWithoutBlocking(localClient);
+                }
+                else if (localClient != null)
+                {
+                    DisposeClientWithoutBlocking(localClient);
+                }
             }
         }
 
         /// <summary>
         /// 后台订阅单个 subject，并把非空 payload 交给回调。
         /// </summary>
-        private static async Task ReceiveSubscriptionAsync(NatsClient localClient, string subject, PayloadHandler handler, CancellationToken token)
+        private async Task ReceiveSubscriptionAsync(NatsClient localClient, string subject, PayloadHandler handler, CancellationToken token)
         {
+            int handlerExceptions = 0;
             await foreach (NatsMsg<byte[]> msg in localClient.SubscribeAsync<byte[]>(subject, cancellationToken: token))
             {
                 if (token.IsCancellationRequested)
@@ -265,8 +302,27 @@ namespace EgoAnchor.Transport
                 byte[] data = msg.Data;
                 if (data != null && data.Length > 0)
                 {
-                    handler(data);
+                    try
+                    {
+                        handler(data);
+                    }
+                    catch (Exception ex)
+                    {
+                        handlerExceptions++;
+                        LogSubscriptionHandlerException(subject, handlerExceptions, ex);
+                    }
                 }
+            }
+        }
+
+        /// <summary>
+        /// 限频记录订阅回调异常，避免单个 handler 打断整条 NATS 接收循环。
+        /// </summary>
+        private void LogSubscriptionHandlerException(string subject, int exceptionCount, Exception ex)
+        {
+            if (exceptionCount <= 3 || exceptionCount % 100 == 0)
+            {
+                Log.Error($"subscription handler exception subject={subject}, count={exceptionCount}: {ex}", logContext);
             }
         }
 
@@ -314,6 +370,24 @@ namespace EgoAnchor.Transport
             catch
             {
                 // Play Mode/Domain Reload 退出时不因关闭异常打断 Unity。
+            }
+        }
+
+        /// <summary>
+        /// 观察已被取消等待的后台任务，避免后续连接失败变成未观察异常。
+        /// </summary>
+        private static async void ObserveTaskFailure(Task task)
+        {
+            try
+            {
+                if (task != null)
+                {
+                    await task;
+                }
+            }
+            catch
+            {
+                // 取消 Stop 路径只需要观察异常，不向 Unity 主循环冒泡。
             }
         }
 

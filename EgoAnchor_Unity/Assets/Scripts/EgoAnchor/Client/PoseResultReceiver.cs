@@ -19,9 +19,6 @@ namespace EgoAnchor.Client
         [Tooltip("Anchor runtime 分发中心。负责把同一条 PoseResult 广播给一个或多个 PoseToAnchorRuntime。")]
         [SerializeField] private AnchorRuntimeHub runtimeHub;
 
-        /// <summary>接收器日志名称。</summary>
-        protected override string ReceiverName => nameof(PoseResultReceiver);
-
         /// <summary>PoseResult Protobuf parser。</summary>
         protected override MessageParser<PoseResult> Parser => PoseResult.Parser;
 
@@ -29,7 +26,7 @@ namespace EgoAnchor.Client
         protected override bool CanReceive => runtimeHub != null;
 
         /// <summary>聚合日志附加 runtime 数量。</summary>
-        protected override string ExtraStats => $"hubRuntimes={runtimeHub.RuntimeCount}";
+        protected override string ExtraStats => $"hubRuntimes={(runtimeHub == null ? 0 : runtimeHub.RuntimeCount)}";
 
         /// <summary>
         /// 从 latest-only pose queue 取出最新 payload。

@@ -13,6 +13,10 @@ from typing import Protocol
 from google.protobuf.message import Message
 
 
+class HandlerNotRegisteredError(KeyError):
+    """subject 在契约中存在，但没有注册对应 handler。"""
+
+
 @dataclass(slots=True)
 class HandlerContext:
     """handler 执行上下文。
@@ -62,7 +66,7 @@ class HandlerRegistry:
         try:
             return self._handlers[subject]
         except KeyError as exc:
-            raise KeyError(f"no handler registered for subject={subject!r}") from exc
+            raise HandlerNotRegisteredError(f"no handler registered for subject={subject!r}") from exc
 
 
-__all__ = ["Handler", "HandlerContext", "HandlerRegistry"]
+__all__ = ["Handler", "HandlerContext", "HandlerNotRegisteredError", "HandlerRegistry"]

@@ -107,6 +107,9 @@ namespace EgoAnchor.Client
         /// <summary>累计 request/reply 失败数量。</summary>
         private int failedRequests;
 
+        /// <summary>当前 NATS 连接代号；Stop/Start 后旧后台回调会被丢弃。</summary>
+        private int connectionGeneration;
+
         /// <summary>当前配置的 NATS 服务地址。</summary>
         public string NatsUrl => natsUrl;
 
@@ -200,6 +203,8 @@ namespace EgoAnchor.Client
             }
 
             EnsureQueue();
+            int generation = Interlocked.Increment(ref connectionGeneration);
+            ClearPayloadQueues();
             NatsBytesClient.Settings settings = new NatsBytesClient.Settings(
                 natsUrl,
                 pendingCapacity,
@@ -208,9 +213,9 @@ namespace EgoAnchor.Client
                 reconnectWaitMaxSeconds
             );
             bytesClient = new NatsBytesClient(settings, this);
-            bytesClient.Subscribe(SubjectNames.PoseResult, EnqueuePoseResult);
-            bytesClient.Subscribe(SubjectNames.AnchorStatus, EnqueueStatusEvent);
-            bytesClient.Subscribe(SubjectNames.ServerHeartbeat, EnqueueHeartbeat);
+            bytesClient.Subscribe(SubjectNames.PoseResult, data => EnqueuePoseResult(data, generation));
+            bytesClient.Subscribe(SubjectNames.AnchorStatus, data => EnqueueStatusEvent(data, generation));
+            bytesClient.Subscribe(SubjectNames.ServerHeartbeat, data => EnqueueHeartbeat(data, generation));
             bytesClient.Start();
             Log.Info(
                 $"subscribing pose={SubjectNames.PoseResult}, " +
@@ -305,8 +310,13 @@ namespace EgoAnchor.Client
         /// <summary>
         /// 写入 latest-only PoseResult 队列。
         /// </summary>
-        private void EnqueuePoseResult(byte[] data)
+        private void EnqueuePoseResult(byte[] data, int generation)
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                return;
+            }
+
             EnsureQueue();
             poseResultPayloads.Enqueue(data);
             Interlocked.Increment(ref receivedPoseResults);
@@ -316,8 +326,13 @@ namespace EgoAnchor.Client
         /// <summary>
         /// 写入 AnchorStatusEvent 事件队列。
         /// </summary>
-        private void EnqueueStatusEvent(byte[] data)
+        private void EnqueueStatusEvent(byte[] data, int generation)
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                return;
+            }
+
             EnsureQueue();
             statusPayloads.Enqueue(data);
             Interlocked.Increment(ref receivedStatusEvents);
@@ -327,8 +342,13 @@ namespace EgoAnchor.Client
         /// <summary>
         /// 写入 latest-only ServerHeartbeat 队列。
         /// </summary>
-        private void EnqueueHeartbeat(byte[] data)
+        private void EnqueueHeartbeat(byte[] data, int generation)
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                return;
+            }
+
             EnsureQueue();
             heartbeatPayloads.Enqueue(data);
             Interlocked.Increment(ref receivedHeartbeats);
@@ -359,6 +379,14 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
+        /// 判断后台回调是否来自当前 NATS 连接。
+        /// </summary>
+        private bool IsCurrentGeneration(int generation)
+        {
+            return Volatile.Read(ref connectionGeneration) == generation;
+        }
+
+        /// <summary>
         /// 确保 latest-only payload 队列已创建。
         /// </summary>
         private void EnsureQueue()
@@ -375,6 +403,17 @@ namespace EgoAnchor.Client
             {
                 heartbeatPayloads = new LatestOnlyQueue<byte[]>(pendingCapacity);
             }
+        }
+
+        /// <summary>
+        /// 清空当前连接残留 payload，避免 Stop/Start 后消费旧 pose 或旧状态事件。
+        /// </summary>
+        private void ClearPayloadQueues()
+        {
+            EnsureQueue();
+            poseResultPayloads.Clear();
+            statusPayloads.Clear();
+            heartbeatPayloads.Clear();
         }
 
         /// <summary>
@@ -415,13 +454,10 @@ namespace EgoAnchor.Client
         /// </summary>
         public void StopClient()
         {
-            if (bytesClient == null)
-            {
-                return;
-            }
-
-            bytesClient.Stop();
+            Interlocked.Increment(ref connectionGeneration);
+            bytesClient?.Stop();
             bytesClient = null;
+            ClearPayloadQueues();
         }
     }
 }

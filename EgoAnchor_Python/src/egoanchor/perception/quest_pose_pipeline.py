@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from egoanchor.protocol import extract_session_id, quest_pb2
+from egoanchor.protocol import extract_frame_id, extract_session_id, quest_pb2
 from egoanchor.reliability import ConfidenceAccumulator, PoseScoreConfig, RenderQualityChecker, score_observation_breakdown
 from egoanchor.utils import clamp, get_logger
 
@@ -246,7 +246,13 @@ class QuestPosePipeline:
             self.cutie.reset()
         LOGGER.info("pose pipeline tracking state reset")
 
-    def process(self, stereo_msg: quest_pb2.QuestStereoFrame | None, camera_info_msg: quest_pb2.QuestCameraInfo | None) -> QuestPosePipelineOutput:
+    def process(
+        self,
+        stereo_msg: quest_pb2.QuestStereoFrame | None,
+        camera_info_msg: quest_pb2.QuestCameraInfo | None,
+        *,
+        server_receive_mono_ms: float = 0.0,
+    ) -> QuestPosePipelineOutput:
         """处理最新 Quest stereo/camera_info 并返回 debug 输出。"""
 
         timing = PipelineStepTiming()
@@ -254,7 +260,25 @@ class QuestPosePipeline:
         t_total = time.perf_counter()
 
         if camera_info_msg is not None:
-            self._refresh_calibration(camera_info_msg)
+            try:
+                self._refresh_calibration(camera_info_msg)
+            except ValueError as exc:
+                LOGGER.warning("Quest camera_info 无效，继续等待有效标定: %s", exc)
+                if self.calibration is None or self.cam_k is None:
+                    diagnostics.phase = "WAIT_CALIBRATION"
+                    timing.finalize(t_total)
+                    obs = self._make_observation(
+                        None,
+                        diagnostics.phase,
+                        False,
+                        None,
+                        "NONE",
+                        diagnostics,
+                        timing,
+                        failure_reason="invalid_calibration",
+                        server_receive_mono_ms=server_receive_mono_ms,
+                    )
+                    return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
 
         ready_output = self._take_ready_async_segmentation(t_total)
         if ready_output is not None:
@@ -264,21 +288,33 @@ class QuestPosePipeline:
             diagnostics.phase = "WAIT_STREAM"
             return QuestPosePipelineOutput(observation=None, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
 
-        decoded = decode_quest_stereo_frame(stereo_msg)
-        if decoded is None:
-            diagnostics.phase = "DECODE_FAILED"
-            obs = self._make_observation(None, "DECODE_FAILED", False, None, "NONE", diagnostics, timing, failure_reason="decode_failed")
-            return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
-
+        frame_id = extract_frame_id(stereo_msg)
         session_id = extract_session_id(stereo_msg)
         same_session = not session_id or not self._last_session_id or session_id == self._last_session_id
-        if same_session and decoded.frame_id is not None and decoded.frame_id == self._last_frame_id:
+        if same_session and frame_id is not None and frame_id == self._last_frame_id:
             ready_output = self._take_ready_async_segmentation(t_total)
             if ready_output is not None:
                 return ready_output
             diagnostics.phase = "DUPLICATE_FRAME"
-            diagnostics.frame_id = decoded.frame_id
+            diagnostics.frame_id = frame_id
             return QuestPosePipelineOutput(observation=None, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
+
+        decoded = decode_quest_stereo_frame(stereo_msg, server_receive_mono_ms=server_receive_mono_ms)
+        if decoded is None:
+            diagnostics.phase = "DECODE_FAILED"
+            diagnostics.frame_id = frame_id
+            obs = self._make_observation(
+                None,
+                "DECODE_FAILED",
+                False,
+                None,
+                "NONE",
+                diagnostics,
+                timing,
+                failure_reason="decode_failed",
+                server_receive_mono_ms=server_receive_mono_ms,
+            )
+            return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=False)
 
         if not same_session:
             self.reset_tracking_state()
@@ -371,6 +407,11 @@ class QuestPosePipeline:
         )
         self._apply_segmenter_snapshot(result_diagnostics)
 
+        same_generation = result_job.generation == self.tracking_state.generation
+        same_session = not self._last_session_id or not result_job.session_id or result_job.session_id == self._last_session_id
+        if not same_generation or not same_session:
+            return None
+
         if completed.error:
             result_diagnostics.phase = "SEGMENTATION_FAILED"
             result_timing.finalize(t_total)
@@ -386,9 +427,7 @@ class QuestPosePipeline:
             )
             return QuestPosePipelineOutput(observation=obs, diagnostics=result_diagnostics, timing=result_timing, new_frame_processed=True)
 
-        same_generation = result_job.generation == self.tracking_state.generation
-        same_session = not self._last_session_id or not result_job.session_id or result_job.session_id == self._last_session_id
-        if completed.result is None or not same_generation or not same_session:
+        if completed.result is None:
             return None
 
         return self._process_prepared_frame(
@@ -459,7 +498,12 @@ class QuestPosePipeline:
             return mask, None
 
         mask, cutie_bbox = self._track_cutie_mask(rgb, timing)
-        diagnostics.cutie_bbox_xywh = tuple(int(v) for v in cutie_bbox)
+        diagnostics.cutie_bbox_xywh = (
+            int(cutie_bbox[0]),
+            int(cutie_bbox[1]),
+            int(cutie_bbox[2]),
+            int(cutie_bbox[3]),
+        )
         if mask is not None:
             diagnostics.mask = mask
             diagnostics.mask_source = MaskSource.CUTIE.value
@@ -593,8 +637,12 @@ class QuestPosePipeline:
         if pose is not None and self.estimator is not None:
             if rgb is None:
                 raise RuntimeError("生成 pose 可视化时缺少 RGB 图像。")
-            pose_vis_rgb = self.estimator.visualize_pose(rgb, pose)
-            diagnostics.pose_vis_bgr = cv2.cvtColor(pose_vis_rgb, cv2.COLOR_RGB2BGR)
+            try:
+                pose_vis_rgb = self.estimator.visualize_pose(rgb, pose)
+                diagnostics.pose_vis_bgr = cv2.cvtColor(pose_vis_rgb, cv2.COLOR_RGB2BGR)
+            except Exception as exc:
+                diagnostics.pose_vis_bgr = None
+                LOGGER.warning("FoundationPose pose 可视化失败，跳过本帧 debug 图: %s", exc)
 
         timing.finalize(t_total)
         if update_fps:
@@ -650,6 +698,15 @@ class QuestPosePipeline:
         result = self.segmenter.infer(left_bgr)
         timing.yolo_ms = result.infer_ms if result.infer_ms > 0 else (time.perf_counter() - t0) * 1000.0
         return result
+
+    def _clear_registered_state(self, *, reset_reject_count: bool) -> None:
+        """丢弃当前 register/track 状态，并重置依赖该状态的算法组件。"""
+
+        self.tracking_state.clear_registration(reset_reject_count=reset_reject_count)
+        self.confidence_accumulator.reset()
+        self.estimator.reset()
+        if self.cutie is not None:
+            self.cutie.reset()
 
     def _predict_depth(self, left_rgb: np.ndarray, right_rgb: np.ndarray, timing: PipelineStepTiming) -> np.ndarray:
         """执行 FFS 深度估计并记录耗时。"""
@@ -730,14 +787,7 @@ class QuestPosePipeline:
         if state.tracked_mask_lost_count < self.tracked_mask_lost_frames:
             return None
 
-        state.has_registered = False
-        state.cutie_ready = False
-        state.last_pose = None
-        state.track_reject_count = 0
-        state.tracked_mask_lost_count = 0
-        self.estimator.reset()
-        if self.cutie is not None:
-            self.cutie.reset()
+        self._clear_registered_state(reset_reject_count=True)
 
         seg_result = self._run_segmenter(left_bgr, timing)
         diagnostics.det_count = int(seg_result.det_count)
@@ -779,10 +829,16 @@ class QuestPosePipeline:
             timing.pose_ms = (time.perf_counter() - t_pose) * 1000.0
         except Exception as exc:
             LOGGER.warning("FoundationPose track 失败: %s", exc)
-            state.has_registered = False
-            state.tracked_mask_lost_count = 0
-            self.estimator.reset()
             state.track_reject_count += 1
+            self._clear_registered_state(reset_reject_count=False)
+            if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
+                return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
+            return None, "NONE", "TRACK_FAILED"
+        pose = self._normalize_pose_matrix(pose)
+        if pose is None:
+            LOGGER.warning("FoundationPose track 返回无效 pose，尝试 re-register。")
+            state.track_reject_count += 1
+            self._clear_registered_state(reset_reject_count=False)
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
             return None, "NONE", "TRACK_FAILED"
@@ -794,12 +850,7 @@ class QuestPosePipeline:
         if self._is_track_jump(pose):
             state.track_reject_count += 1
             LOGGER.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
-            state.has_registered = False
-            state.tracked_mask_lost_count = 0
-            state.low_reprojection_count = 0
-            state.frames_since_register = 0
-            self.confidence_accumulator.reset()
-            self.estimator.reset()
+            self._clear_registered_state(reset_reject_count=False)
             if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
             if self.accept_track_jump_without_mask and state.track_reject_count < self.max_consecutive_track_rejects:
@@ -820,12 +871,7 @@ class QuestPosePipeline:
                     state.low_reprojection_count,
                     state.track_reject_count,
                 )
-                state.has_registered = False
-                state.tracked_mask_lost_count = 0
-                state.low_reprojection_count = 0
-                state.frames_since_register = 0
-                self.confidence_accumulator.reset()
-                self.estimator.reset()
+                self._clear_registered_state(reset_reject_count=False)
                 if (
                     state.track_reject_count < self.max_consecutive_track_rejects
                     and self.re_register_on_track_lost
@@ -855,6 +901,11 @@ class QuestPosePipeline:
             timing.pose_ms += (time.perf_counter() - t_pose) * 1000.0
             self.tracking_state.has_registered = False
             LOGGER.warning("FoundationPose register 失败: %s", exc)
+            return None, "NONE", "REGISTER_FAILED"
+        pose = self._normalize_pose_matrix(pose)
+        if pose is None:
+            self.tracking_state.has_registered = False
+            LOGGER.warning("FoundationPose register 返回无效 pose，跳过本帧。")
             return None, "NONE", "REGISTER_FAILED"
 
         self.tracking_state.has_registered = True
@@ -1007,19 +1058,24 @@ class QuestPosePipeline:
         diagnostics: FrameDiagnostics,
         timing: PipelineStepTiming,
         failure_reason: str,
+        server_receive_mono_ms: float = 0.0,
     ) -> PoseObservation:
         """把 pipeline 内部状态打包为 PoseObservation，并附加 reliability score。"""
 
         diagnostics.phase = phase
         diagnostics.failure_reason = failure_reason
-        pose_flat = tuple(float(x) for x in pose.reshape(-1)) if pose is not None else None
+        pose_matrix = self._normalize_pose_matrix(pose)
+        actual_has_pose = bool(has_pose and pose_matrix is not None)
+        pose_flat = tuple(float(x) for x in pose_matrix.reshape(-1)) if actual_has_pose and pose_matrix is not None else None
+        receive_mono_ms = float(decoded.server_receive_mono_ms) if decoded is not None else float(server_receive_mono_ms)
         observation = PoseObservation(
-            has_pose=bool(has_pose),
+            has_pose=actual_has_pose,
             phase=phase,
             frame_id=decoded.frame_id if decoded is not None else diagnostics.frame_id,
+            server_receive_mono_ms=receive_mono_ms,
             pose_matrix_cv_camera=pose_flat,
             pose_source=pose_source,
-            tracking_state_hint="TRACKING" if has_pose else "DETECTING",
+            tracking_state_hint="TRACKING" if actual_has_pose else "DETECTING",
             stage=self.stage,
             det_count=diagnostics.det_count,
             fps=self._fps,
@@ -1081,6 +1137,18 @@ class QuestPosePipeline:
             reliability_score=breakdown.final_score,
             reliability_flags=breakdown.flags,
         )
+
+    @staticmethod
+    def _normalize_pose_matrix(pose: np.ndarray | None) -> np.ndarray | None:
+        """把 estimator pose 规范为有限 4x4 矩阵；无效时返回 None。"""
+
+        if pose is None:
+            return None
+        try:
+            matrix = np.asarray(pose, dtype=np.float64).reshape(4, 4)
+        except (TypeError, ValueError):
+            return None
+        return matrix if np.all(np.isfinite(matrix)) else None
 
     def _show_register_mask_snapshot(self, mask: np.ndarray, phase: str) -> None:
         """每次 register/re-register 成功时刷新显示实际用于注册的 mask。"""

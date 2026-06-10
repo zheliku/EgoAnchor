@@ -187,29 +187,39 @@ class TrackingRuntime:
             return
         from egoanchor.perception import build_quest_pose_pipeline
 
-        self.receiver.start()
-        if self.pose_publisher is not None:
-            self.pose_publisher.start()
-        self.pipeline = build_quest_pose_pipeline(self.cfg)
-        self.pipeline.set_stage(int(self.cfg.server.run_stage))
-        self.started = True
-        self.log_writer.event("runtime_started", endpoint=self.endpoint, run_stage=int(self.cfg.server.run_stage), state=self.state.value)
-        self._set_state(RuntimeState.WAITING_INPUT, event="RUNTIME_STARTED", message="TrackingRuntime 已启动，等待 Quest 输入。")
+        try:
+            self.receiver.start()
+            if self.pose_publisher is not None:
+                self.pose_publisher.start()
+            self.pipeline = build_quest_pose_pipeline(self.cfg)
+            self.pipeline.set_stage(int(self.cfg.server.run_stage))
+            self.started = True
+            self.log_writer.event("runtime_started", endpoint=self.endpoint, run_stage=int(self.cfg.server.run_stage), state=self.state.value)
+            self._set_state(RuntimeState.WAITING_INPUT, event="RUNTIME_STARTED", message="TrackingRuntime 已启动，等待 Quest 输入。")
+        except Exception:
+            self._cleanup_started_resources()
+            raise
 
     def close(self) -> None:
         """关闭 receiver 与 NATS publisher；OpenCV 窗口由 app 层关闭。"""
 
         self._set_state(RuntimeState.STOPPED, event="RUNTIME_STOPPED", message="TrackingRuntime 已停止。")
         self.log_writer.event("runtime_stopped", state=RuntimeState.STOPPED.value)
+        self._cleanup_started_resources()
+        self.started = False
+
+    def _cleanup_started_resources(self) -> None:
+        """清理已启动的 receiver、NATS client、pipeline 和日志句柄。"""
+
         if self.pipeline is not None and hasattr(self.pipeline, "close"):
             self.pipeline.close()
+        self.pipeline = None
         if self.pose_publisher is not None:
             self.pose_publisher.close()
         elif self.nats_client is not None:
             self.nats_client.close()
         self.receiver.close()
         self.log_writer.close()
-        self.started = False
 
     def tick(self, return_debug: bool = True) -> RuntimeTickResult:
         """poll latest Quest input，并在有新 stereo 时运行 pose pipeline。"""
@@ -227,7 +237,11 @@ class TrackingRuntime:
                 return RuntimeTickResult(pipeline_output=None, new_frame_processed=False)
 
             self._refresh_input_state_before_pipeline()
-            output = self.pipeline.process(self.receiver.get_latest_stereo(), self.receiver.get_latest_camera_info())
+            output = self.pipeline.process(
+                self.receiver.get_latest_stereo(),
+                self.receiver.get_latest_camera_info(),
+                server_receive_mono_ms=self.receiver.get_latest_stereo_receive_mono_ms(),
+            )
             if output.new_frame_processed and output.observation is not None:
                 self._update_state_from_observation(output.observation)
                 self._publish_observation(output.observation, diagnostics=output.diagnostics)

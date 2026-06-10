@@ -68,7 +68,7 @@ class AsyncSegmenterSnapshot:
     """后台分割 worker 的轻量状态快照。"""
 
     busy: bool
-    """后台线程是否正在推理或已有待处理帧。"""
+    """后台线程是否正在推理、已有待处理帧或有未消费结果。"""
 
     submitted: int
     """累计接受的帧数。"""
@@ -177,7 +177,7 @@ class AsyncSegmenterWorker:
 
         with self._condition:
             return AsyncSegmenterSnapshot(
-                busy=self._busy or self._pending is not None,
+                busy=self._busy or self._pending is not None or self._completed_output.peek() is not None,
                 submitted=self._submitted,
                 completed=self._completed,
                 dropped=self._dropped,

@@ -62,6 +62,7 @@ class HeartbeatFactoryTest(unittest.TestCase):
 
         input_stats = SimpleNamespace(
             latest_stereo_frame_id=99,
+            latest_camera_info_frame_id=99,
             camera_info_version=3,
             decoded_stereo=10,
             decoded_camera_info=2,
@@ -84,11 +85,29 @@ class HeartbeatFactoryTest(unittest.TestCase):
         self.assertAlmostEqual(heartbeat.publish_fps, 12.25, places=4)
         self.assertEqual(heartbeat.command_queue_length, 5)
 
+    def test_build_heartbeat_preserves_zero_frame_id(self) -> None:
+        """Unity 首帧 frame_id=0 是合法值，不应被默认值逻辑改写成 -1。"""
+
+        input_stats = SimpleNamespace(
+            latest_stereo_frame_id=0,
+            latest_camera_info_frame_id=0,
+            camera_info_version=1,
+            decoded_stereo=1,
+            decoded_camera_info=1,
+        )
+
+        heartbeat = HeartbeatFactory().build(RuntimeState.TRACKING, input_stats=input_stats)
+
+        self.assertTrue(heartbeat.input_ready)
+        self.assertEqual(heartbeat.latest_stereo_frame_id, 0)
+        self.assertEqual(heartbeat.header.frame_id, 0)
+
     def test_build_heartbeat_marks_not_ready_without_calibration(self) -> None:
         """有 stereo 但无 camera_info 时应明确标记 input_ready=false。"""
 
         input_stats = SimpleNamespace(
             latest_stereo_frame_id=12,
+            latest_camera_info_frame_id=None,
             camera_info_version=0,
             decoded_stereo=4,
             decoded_camera_info=0,
@@ -99,6 +118,23 @@ class HeartbeatFactoryTest(unittest.TestCase):
         self.assertFalse(heartbeat.input_ready)
         self.assertEqual(heartbeat.latest_stereo_frame_id, 12)
         self.assertEqual(heartbeat.camera_info_version, 0)
+
+    def test_build_heartbeat_marks_not_ready_after_stereo_cache_cleared(self) -> None:
+        """历史 decoded 计数不应让已清空的 latest stereo 继续显示为 ready。"""
+
+        input_stats = SimpleNamespace(
+            latest_stereo_frame_id=None,
+            latest_camera_info_frame_id=0,
+            camera_info_version=1,
+            decoded_stereo=4,
+            decoded_camera_info=2,
+        )
+
+        heartbeat = HeartbeatFactory().build(RuntimeState.WAITING_INPUT, input_stats=input_stats)
+
+        self.assertFalse(heartbeat.input_ready)
+        self.assertEqual(heartbeat.latest_stereo_frame_id, -1)
+        self.assertEqual(heartbeat.camera_info_version, 1)
 
 
 if __name__ == "__main__":

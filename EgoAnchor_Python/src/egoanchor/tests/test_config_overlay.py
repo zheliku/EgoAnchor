@@ -23,6 +23,14 @@ class ConfigOverlayTest(unittest.TestCase):
         self.assertEqual(cfg.module.foundationpose.mesh_path, "data/model/earphone.glb")
         self.assertEqual(cfg.module.foundationpose.symmetry_mode, "none")
 
+    def test_object_name_is_normalized_for_runtime_object_id(self) -> None:
+        """对象名首尾空格不应污染 eval session 使用的 runtime.object_id。"""
+
+        cfg = load_config(object_name=" earphone ")
+
+        self.assertEqual(cfg.module.segmenter.type, "sam3")
+        self.assertEqual(cfg.runtime.object_id, "earphone")
+
     def test_config_file_can_override_selected_object(self) -> None:
         """显式 TOML 覆盖文件应在对象配置之后应用，便于临时调参。"""
 

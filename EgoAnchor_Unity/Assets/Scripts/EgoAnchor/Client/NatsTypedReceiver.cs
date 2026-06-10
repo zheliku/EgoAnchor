@@ -1,3 +1,4 @@
+using System;
 using EgoAnchor.Diagnostics;
 using Google.Protobuf;
 using UnityEngine;
@@ -37,14 +38,14 @@ namespace EgoAnchor.Client
         /// <summary>累计 Protobuf 解码失败数。</summary>
         private int parseFailed;
 
+        /// <summary>累计已解析消息分发失败数。</summary>
+        private int dispatchFailed;
+
         /// <summary>latest-only 消费跳过的旧 payload 数。</summary>
         private int skippedOlder;
 
         /// <summary>上次打印统计时的总处理数。</summary>
         private int lastLoggedTotal;
-
-        /// <summary>接收器日志名称。</summary>
-        protected abstract string ReceiverName { get; }
 
         /// <summary>当前消息类型的 Protobuf parser。</summary>
         protected abstract MessageParser<TMessage> Parser { get; }
@@ -82,16 +83,27 @@ namespace EgoAnchor.Client
             {
                 processedThisFrame++;
                 skippedOlder += skippedOlderPayloads;
+                TMessage message;
                 try
                 {
-                    TMessage message = Parser.ParseFrom(payload);
-                    decoded++;
-                    OnParsed(message);
+                    message = Parser.ParseFrom(payload);
                 }
                 catch (InvalidProtocolBufferException ex)
                 {
                     parseFailed++;
                     log.Warning($"Protobuf 解码失败：{ex.Message}", this);
+                    continue;
+                }
+
+                decoded++;
+                try
+                {
+                    OnParsed(message);
+                }
+                catch (Exception ex)
+                {
+                    dispatchFailed++;
+                    LogDispatchFailure(ex);
                 }
             }
 
@@ -134,10 +146,22 @@ namespace EgoAnchor.Client
                 lastLoggedTotal = total;
                 string extra = ExtraStats;
                 log.Info(
-                    $"decoded={decoded}, parseFailed={parseFailed}, skippedOlder={skippedOlder}" +
+                    $"decoded={decoded}, parseFailed={parseFailed}, dispatchFailed={dispatchFailed}, skippedOlder={skippedOlder}" +
                     (string.IsNullOrEmpty(extra) ? string.Empty : $", {extra}"),
                     this
                 );
+            }
+        }
+
+        /// <summary>
+        /// 限频记录主线程分发异常，避免一个 receiver 子类阻断 Unity Update。
+        /// </summary>
+        private void LogDispatchFailure(Exception ex)
+        {
+            int interval = Mathf.Max(1, statsIntervalMessages);
+            if (dispatchFailed <= 3 || dispatchFailed % interval == 0)
+            {
+                log.Error($"Protobuf 分发失败 count={dispatchFailed}: {ex}", this);
             }
         }
     }

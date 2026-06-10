@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.config import load_config
-from egoanchor.protocol import SubjectRegistry
-from egoanchor.runtime import RuntimeState, TrackingRuntime
+from egoanchor.protocol import ErrorInfo, MessageHeader, SubjectRegistry, anchor_pb2
+from egoanchor.runtime import RuntimeLogWriter, RuntimeState, TrackingRuntime
 
 
 class RuntimeEventLoggerTest(unittest.TestCase):
@@ -75,6 +75,39 @@ class RuntimeEventLoggerTest(unittest.TestCase):
 
             self.assertFalse(output_dir.exists())
 
+    def test_logger_replaces_non_finite_numbers_with_null(self) -> None:
+        """JSONL 不应写出 NaN/Infinity 这类非标准 JSON token。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = RuntimeEventLogger(enabled=True, output_dir=Path(tmp), session_id="session-a", flush_every=1)
+
+            logger.write("pose_result", score=float("nan"), values=[1.0, float("inf"), -float("inf")])
+            logger.close()
+
+            text = logger.log_path.read_text(encoding="utf-8").strip()
+            self.assertNotIn("NaN", text)
+            self.assertNotIn("Infinity", text)
+            row = json.loads(text)
+            self.assertIsNone(row["score"])
+            self.assertEqual(row["values"], [1.0, None, None])
+
+    def test_runtime_log_writer_does_not_raise_when_jsonl_write_fails(self) -> None:
+        """JSONL 磁盘/序列化失败不应打断实时 pose 发布链路。"""
+
+        cfg = load_config()
+        writer = RuntimeLogWriter(cfg, session_id="session-a")
+
+        def fail_write(event: str, **fields: object) -> None:
+            """模拟底层日志写入失败。"""
+
+            raise OSError("disk unavailable")
+
+        writer.logger.write = fail_write  # type: ignore[method-assign]
+
+        writer.event("pose_result", frame_id=1)
+
+        self.assertEqual(writer.log_write_failures, 1)
+
     def test_tracking_runtime_status_log_keeps_status_event_name(self) -> None:
         """状态事件中的 event 字段不应和 JSONL 事件类型参数冲突。"""
 
@@ -95,6 +128,39 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertEqual(row["event"], "status_event")
             self.assertEqual(row["status_event"], "RUNTIME_STARTED")
             self.assertEqual(row["state"], "WAITING_INPUT")
+
+    def test_runtime_log_uses_error_presence_for_status_and_heartbeat(self) -> None:
+        """可选 ErrorInfo 未设置时不应靠默认子消息对象判断为有错误。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.output_dir = tmp
+            cfg.runtime.logging.eval_session_enabled = False
+            writer = RuntimeLogWriter(cfg, session_id="session-a")
+            status = anchor_pb2.AnchorStatusEvent(
+                header=MessageHeader(frame_id=1),
+                state="WAITING_INPUT",
+                event="INPUT_WAIT",
+                message="waiting",
+            )
+            heartbeat = anchor_pb2.ServerHeartbeat(
+                header=MessageHeader(frame_id=2),
+                state="ERROR",
+                input_ready=False,
+                last_error=ErrorInfo(code="NATS_DOWN"),
+            )
+
+            try:
+                writer.status(status, previous=RuntimeState.WAITING_INPUT)
+                writer.heartbeat(heartbeat)
+            finally:
+                writer.close()
+
+            rows = [json.loads(line) for line in writer.logger.log_path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(rows[0]["event"], "status_event")
+            self.assertEqual(rows[0]["error_code"], "")
+            self.assertEqual(rows[1]["event"], "server_heartbeat")
+            self.assertEqual(rows[1]["error_code"], "NATS_DOWN")
 
     def test_tracking_runtime_pose_log_records_pose_diagnostics(self) -> None:
         """成功追踪时 pose 日志应记录分数、位移和相邻跳变量。"""

@@ -102,11 +102,12 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
     便于先选择目标物体，再用本地 TOML 做临时调参。
     """
 
+    normalized_object_name = str(object_name).strip() if object_name is not None else ""
     with DEFAULT_CONFIG_PATH.open("rb") as f:
         data = tomllib.load(f)
 
     if object_name is not None:
-        data = _merge_dict(data, load_object_override(object_name))
+        data = _merge_dict(data, load_object_override(normalized_object_name))
 
     if config_path is not None:
         path = Path(config_path)
@@ -122,5 +123,5 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
         subjects_path=repo_root / "EgoAnchor_Protocol" / "subjects.v1.json",
         objects_path=OBJECT_CONFIG_PATH,
     )
-    cfg.runtime.object_id = str(object_name or getattr(cfg.runtime, "object_id", "default") or "default")
+    cfg.runtime.object_id = normalized_object_name or str(getattr(cfg.runtime, "object_id", "default") or "default")
     return cfg

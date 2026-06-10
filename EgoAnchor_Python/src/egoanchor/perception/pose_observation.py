@@ -18,6 +18,9 @@ class PoseObservation:
     frame_id: int | None = None
     """Unity/Quest frame_id，用于未来 Unity frame-aligned anchor 回查。"""
 
+    server_receive_mono_ms: float = 0.0
+    """Python ZMQ 接收该 stereo frame 的本地单调时间戳，单位毫秒；未知时为 0。"""
+
     pose_matrix_cv_camera: tuple[float, ...] | None = None
     """OpenCV camera 坐标系 4x4 object pose，row-major 展平；无 pose 时为 None。"""
 

@@ -69,6 +69,16 @@ namespace EgoAnchor.Client
 
             return hasValue;
         }
+
+        /// <summary>
+        /// 清空当前积压元素；用于 NATS Stop/Start 时丢弃旧连接残留 payload。
+        /// </summary>
+        public void Clear()
+        {
+            while (queue.TryDequeue(out _))
+            {
+            }
+        }
     }
 
 }

@@ -8,6 +8,7 @@ CommandAck.accepted=true 只表示 server 接受命令，不表示命令已经�
 from __future__ import annotations
 
 import time
+import uuid
 from functools import partial
 
 from google.protobuf.message import Message
@@ -37,13 +38,18 @@ def _ack_for(message: Message, *, accepted: bool, status: str, text: str, code: 
     header = MessageHeader(schema_version="v1")
     if source_header is not None:
         header.CopyFrom(source_header)
+    accepted_mono_ms = time.monotonic() * 1000.0
+    header.message_id = uuid.uuid4().hex
+    header.sender_mono_ms = accepted_mono_ms
+    header.created_unix_ms = time.time() * 1000.0
+    header.schema_version = "v1"
     ack = CommandAck(
         header=header,
         accepted=accepted,
         duplicate=False,
         status=status,
         message=text,
-        accepted_mono_ms=time.monotonic() * 1000.0,
+        accepted_mono_ms=accepted_mono_ms,
     )
     if code:
         ack.error.CopyFrom(ErrorInfo(code=code, message=text))
@@ -101,6 +107,12 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
         LOGGER.info("type=%s accepted=false status=%s", command_type.value, ack.status)
         return ack
 
+    if ctx.dedup is not None:
+        duplicate = ctx.dedup.get(request_id)
+        if duplicate is not None:
+            LOGGER.info("type=%s request_id=%s duplicate=true", command_type.value, request_id)
+            return duplicate
+
     valid, invalid_reason = _validate(message, command_type)
     if not valid:
         ack = _ack_for(message, accepted=False, status="INVALID_ARGUMENT", text=invalid_reason, code="INVALID_ARGUMENT")
@@ -114,12 +126,6 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
             invalid_reason,
         )
         return ack
-
-    if ctx.dedup is not None:
-        duplicate = ctx.dedup.get(request_id)
-        if duplicate is not None:
-            LOGGER.info("type=%s request_id=%s duplicate=true", command_type.value, request_id)
-            return duplicate
 
     if ctx.commands is None:
         ack = _ack_for(message, accepted=False, status="UNAVAILABLE", text="command queue is not configured", code="UNAVAILABLE")

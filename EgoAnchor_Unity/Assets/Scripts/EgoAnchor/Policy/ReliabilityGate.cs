@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
@@ -78,7 +79,7 @@ namespace EgoAnchor.Policy
 
             foreach (string flag in observation.ReliabilityFlags)
             {
-                if (!string.IsNullOrEmpty(flag) && flag.Contains(token))
+                if (!string.IsNullOrEmpty(flag) && flag.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return true;
                 }
