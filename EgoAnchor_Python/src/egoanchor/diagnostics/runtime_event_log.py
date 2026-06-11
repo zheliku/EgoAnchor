@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
 
+import numpy as np
+
 
 class RuntimeEventLogger:
     """把论文实验关心的 runtime 事件写入 JSONL。
@@ -107,6 +109,16 @@ class RuntimeEventLogger:
             return value
         if isinstance(value, float):
             return value if math.isfinite(value) else None
+        # numpy 标量不是 Python 内建类型，必须先转回内建类型，否则会落到 str() 分支被写成字符串。
+        if isinstance(value, np.floating):
+            scalar = float(value)
+            return scalar if math.isfinite(scalar) else None
+        if isinstance(value, np.integer):
+            return int(value)
+        if isinstance(value, np.bool_):
+            return bool(value)
+        if isinstance(value, np.ndarray):
+            return [cls._json_safe(item) for item in value.tolist()]
         if isinstance(value, dict):
             return {str(key): cls._json_safe(item) for key, item in value.items()}
         if isinstance(value, (list, tuple, set)):

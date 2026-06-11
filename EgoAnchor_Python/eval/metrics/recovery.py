@@ -80,8 +80,11 @@ def _first_sustained_recovery(group: pd.DataFrame, threshold_m: float, hold_ms: 
         if not ok:
             continue
         end_time = times[index] + hold_ms
-        window = good[index : np.searchsorted(times, end_time, side="right")]
-        if window.size > 0 and np.all(window):
+        stop = int(np.searchsorted(times, end_time, side="right"))
+        window = good[index:stop]
+        # 要求窗口确实覆盖完整 hold_ms：日志在 hold 窗口结束前截断时不算持续恢复。
+        spans_hold = window.size > 0 and times[stop - 1] - times[index] >= hold_ms
+        if spans_hold and np.all(window):
             return float(times[index])
     return np.nan
 

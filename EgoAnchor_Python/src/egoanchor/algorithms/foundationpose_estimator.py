@@ -388,16 +388,6 @@ class FoundationPoseObjectEstimator:
             return out
         return pose @ np.linalg.inv(to_origin)
 
-    def _inverse_to_origin(self) -> np.ndarray:
-        """返回 `to_origin` 的逆；常规平移矩阵走显式逆，避免触发重型线性代数库。"""
-
-        to_origin = np.asarray(self.to_origin, dtype=np.float64).reshape(4, 4)
-        if self._is_translation_to_origin(to_origin):
-            inv = np.eye(4, dtype=np.float64)
-            inv[:3, 3] = -to_origin[:3, 3]
-            return inv
-        return np.linalg.inv(to_origin)
-
     @staticmethod
     def _is_translation_to_origin(to_origin: np.ndarray) -> bool:
         """判断 `to_origin` 是否为当前适配器生成的纯平移矩阵。"""
@@ -433,46 +423,41 @@ class FoundationPoseObjectEstimator:
         避免上层模块持有 GPU tensor 或访问 estimator 内部结构。
         """
 
-        def render_once() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            """执行一次 nvdiffrast 渲染并返回 CPU numpy 结果。"""
+        import torch
 
-            import torch
-
-            render_fn = getattr(self.foundationpose_utils, "nvdiffrast_render")
-            out_h, out_w = (int(output_size[0]), int(output_size[1]))
-            k = np.asarray(cam_k if cam_k is not None else self.cam_k, dtype=np.float64).reshape(3, 3)
-            pose = self._pose_for_centered_mesh(pose_cv_camera).astype(np.float32).reshape(1, 4, 4)
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            pose_tensor = torch.as_tensor(pose, dtype=torch.float32, device=device)
-            mesh_tensors = self._mesh_tensors_for_render()
-            with torch.no_grad():
-                color, depth, _normal = render_fn(
-                    K=k,
-                    H=out_h,
-                    W=out_w,
-                    ob_in_cams=pose_tensor,
-                    glctx=self.estimator.glctx,
-                    mesh_tensors=mesh_tensors,
-                    output_size=(out_h, out_w),
-                )
-            if hasattr(color, "detach"):
-                color_np = color.detach().cpu().numpy()
-            else:
-                color_np = np.asarray(color)
-            if hasattr(depth, "detach"):
-                depth_np = depth.detach().cpu().numpy()
-            else:
-                depth_np = np.asarray(depth)
-            color_np = self._render_color_to_rgb_u8(color_np)
-            depth_np = np.asarray(depth_np, dtype=np.float32)
-            if depth_np.ndim == 3:
-                depth_np = depth_np[0]
-            if depth_np.ndim == 4:
-                depth_np = depth_np[0, ..., 0]
-            render_mask = depth_np > 0.0
-            return color_np, depth_np, render_mask
-
-        return render_once()
+        render_fn = getattr(self.foundationpose_utils, "nvdiffrast_render")
+        out_h, out_w = (int(output_size[0]), int(output_size[1]))
+        k = np.asarray(cam_k if cam_k is not None else self.cam_k, dtype=np.float64).reshape(3, 3)
+        pose = self._pose_for_centered_mesh(pose_cv_camera).astype(np.float32).reshape(1, 4, 4)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        pose_tensor = torch.as_tensor(pose, dtype=torch.float32, device=device)
+        mesh_tensors = self._mesh_tensors_for_render()
+        with torch.no_grad():
+            color, depth, _normal = render_fn(
+                K=k,
+                H=out_h,
+                W=out_w,
+                ob_in_cams=pose_tensor,
+                glctx=self.estimator.glctx,
+                mesh_tensors=mesh_tensors,
+                output_size=(out_h, out_w),
+            )
+        if hasattr(color, "detach"):
+            color_np = color.detach().cpu().numpy()
+        else:
+            color_np = np.asarray(color)
+        if hasattr(depth, "detach"):
+            depth_np = depth.detach().cpu().numpy()
+        else:
+            depth_np = np.asarray(depth)
+        color_np = self._render_color_to_rgb_u8(color_np)
+        depth_np = np.asarray(depth_np, dtype=np.float32)
+        if depth_np.ndim == 3:
+            depth_np = depth_np[0]
+        if depth_np.ndim == 4:
+            depth_np = depth_np[0, ..., 0]
+        render_mask = depth_np > 0.0
+        return color_np, depth_np, render_mask
 
     @staticmethod
     def _render_color_to_rgb_u8(color: np.ndarray) -> np.ndarray:

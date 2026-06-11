@@ -48,13 +48,19 @@ namespace EgoAnchor.Runtime
         [SerializeField] private bool applyRotation = true;
 
         /// <summary>没有有效 pose 时是否保持上一帧 Transform。</summary>
-        [Tooltip("没有有效 pose 时是否保持上一帧 Transform。建议保持开启，避免 has_pose=false 时物体跳回原点。")]
+        [Tooltip("没有有效 pose 时是否保持上一帧 Transform。开启时物体停在最后一帧位置；关闭时隐藏物体渲染，避免停留在已失效的旧 pose。")]
         [SerializeField] private bool holdLastPoseWhenMissing = true;
 
         [Header("Debug")]
         /// <summary>最近一次成功应用的 frame_id。</summary>
         [Tooltip("最近一次成功应用的 frame_id。只用于 Inspector/日志诊断。")]
         [SerializeField] private long lastAppliedFrameId = -1;
+
+        /// <summary>目标下的渲染器缓存，用于 missing 时隐藏/恢复显示。</summary>
+        private Renderer[] targetRenderers;
+
+        /// <summary>当前是否因缺失 pose 而隐藏了渲染器。</summary>
+        private bool renderersHidden;
 
         /// <summary>
         /// Unity Reset：默认应用到自身 Transform。
@@ -66,7 +72,7 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
-        /// Unity Awake：补齐目标 Transform。
+        /// Unity Awake：补齐目标 Transform 并缓存渲染器。
         /// </summary>
         private void Awake()
         {
@@ -79,6 +85,8 @@ namespace EgoAnchor.Runtime
             {
                 runtime = GetComponent<PoseToAnchorRuntime>();
             }
+
+            targetRenderers = targetTransform.GetComponentsInChildren<Renderer>(true);
         }
 
         /// <summary>
@@ -100,9 +108,12 @@ namespace EgoAnchor.Runtime
                 if (!holdLastPoseWhenMissing)
                 {
                     lastAppliedFrameId = -1;
+                    SetRenderersHidden(true);
                 }
                 return;
             }
+
+            SetRenderersHidden(false);
 
             if (applyPosition)
             {
@@ -115,6 +126,27 @@ namespace EgoAnchor.Runtime
             }
 
             lastAppliedFrameId = runtime.LatestAlignedFrameId;
+        }
+
+        /// <summary>
+        /// 切换目标渲染器可见性；只在状态变化时写入，避免每帧刷新。
+        /// </summary>
+        /// <param name="hidden">是否隐藏渲染器。</param>
+        private void SetRenderersHidden(bool hidden)
+        {
+            if (hidden == renderersHidden || targetRenderers == null)
+            {
+                return;
+            }
+
+            renderersHidden = hidden;
+            foreach (Renderer item in targetRenderers)
+            {
+                if (item != null)
+                {
+                    item.enabled = !hidden;
+                }
+            }
         }
     }
 }

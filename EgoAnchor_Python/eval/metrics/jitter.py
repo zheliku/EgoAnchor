@@ -80,8 +80,11 @@ def _static_mask(group: pd.DataFrame, threshold_mps: float) -> np.ndarray:
         return np.zeros(len(group), dtype=bool)
     dt = np.diff(time_s)
     dt[dt <= 1e-9] = np.nan
-    speed = np.zeros(len(group), dtype=float)
-    speed[1:] = np.linalg.norm(np.diff(pos, axis=0), axis=1) / dt
+    step_speed = np.linalg.norm(np.diff(pos, axis=0), axis=1) / dt
+    # speed[i] 取相邻两帧位移速度；首帧没有前一帧，复用次帧速度，避免被当成静止。
+    speed = np.empty(len(group), dtype=float)
+    speed[1:] = step_speed
+    speed[0] = step_speed[0] if step_speed.size > 0 else np.inf
     speed[~np.isfinite(speed)] = np.inf
     if np.all(speed > threshold_mps):
         return np.ones(len(group), dtype=bool)

@@ -248,24 +248,24 @@ def _reprojection_score(observation: PoseObservation, flags: list[str]) -> tuple
     return score, True
 
 
-def _depth_score(observation: PoseObservation, flags: list[str] | None) -> tuple[float, bool]:
+def _depth_score(observation: PoseObservation, flags: list[str]) -> tuple[float, bool]:
     """把深度对齐质量映射为 Quality 层子分。"""
 
     depth_coverage = clamp01(float(observation.depth_valid_in_mask))
     if depth_coverage < MIN_DEPTH_COVERAGE:
-        _append_flag(flags, "depth_coverage_insufficient")
+        flags.append("depth_coverage_insufficient")
         return 0.5, False
 
     alignment = clamp01(float(observation.render_quality_depth_alignment))
     if _has_render_depth_signal(observation):
         if alignment < 0.5:
-            _append_flag(flags, "depth_alignment_low")
+            flags.append("depth_alignment_low")
         return alignment, True
 
     if observation.render_quality_expected:
-        _append_flag(flags, "depth_alignment_missing_expected")
+        flags.append("depth_alignment_missing_expected")
     else:
-        _append_flag(flags, "no_depth_alignment_signal")
+        flags.append("no_depth_alignment_signal")
     return 0.5, False
 
 
@@ -373,10 +373,3 @@ def _soft_limit_score(value: float, soft_limit: float, hard_limit: float) -> flo
     if value <= soft:
         return 1.0
     return clamp01(1.0 - (float(value) - soft) / (hard - soft))
-
-
-def _append_flag(flags: list[str] | None, flag: str) -> None:
-    """仅在 caller 需要 flags 时追加诊断文本。"""
-
-    if flags is not None:
-        flags.append(flag)

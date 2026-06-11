@@ -159,6 +159,27 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
+        /// Python 报告不可恢复错误时调用，驱动状态机进入 Error。
+        /// </summary>
+        /// <param name="sampleTimeSeconds">当前 Unity 单调时间，单位秒。</param>
+        /// <param name="reason">错误原因。</param>
+        public void NotifyError(double sampleTimeSeconds, string reason)
+        {
+            stateMachine.OnError(sampleTimeSeconds, reason);
+        }
+
+        /// <summary>
+        /// Python 报告目标丢失时调用，驱动状态机进入 Lost。
+        /// </summary>
+        /// <param name="sampleTimeSeconds">当前 Unity 单调时间，单位秒。</param>
+        /// <param name="reason">丢失原因。</param>
+        public void NotifyLost(double sampleTimeSeconds, string reason)
+        {
+            lowReliabilityStartTimeSeconds = -1.0;
+            stateMachine.OnMissingPose(sampleTimeSeconds, double.PositiveInfinity, hasStablePose, reason);
+        }
+
+        /// <summary>
         /// 清空本地 policy 状态。
         /// </summary>
         /// <param name="sampleTimeSeconds">当前 Unity 单调时间，单位秒。</param>

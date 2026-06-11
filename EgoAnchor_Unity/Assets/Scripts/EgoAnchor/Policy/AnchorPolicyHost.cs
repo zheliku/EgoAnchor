@@ -123,6 +123,26 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
+        /// Python status/heartbeat 报告错误时通知 policy。
+        /// </summary>
+        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
+        /// <param name="reason">错误原因。</param>
+        public void NotifyError(double sampleTimeSeconds, string reason)
+        {
+            Controller.NotifyError(sampleTimeSeconds, reason);
+        }
+
+        /// <summary>
+        /// Python status 报告目标丢失时通知 policy。
+        /// </summary>
+        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
+        /// <param name="reason">丢失原因。</param>
+        public void NotifyLost(double sampleTimeSeconds, string reason)
+        {
+            Controller.NotifyLost(sampleTimeSeconds, reason);
+        }
+
+        /// <summary>
         /// 清空 policy 内部 stable pose 和状态机。
         /// </summary>
         /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>

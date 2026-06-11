@@ -145,13 +145,6 @@ class ReprojectionChecker:
         render_visible_ratio = float(intersection_area) / float(render_area) if render_area > 0 else 0.0
         observed_visible_ratio = float(intersection_area) / float(observed_area) if observed_area > 0 else 0.0
         area_ratio_score = min(float(observed_area) / float(render_area), 1.0) if render_area > 0 else 0.0
-        color_similarity, color_valid = ReprojectionChecker._color_similarity_lab(
-            render_rgb,
-            observed_rgb_u8,
-            intersection,
-            l_weight=color_l_weight,
-        )
-        score = clamp01(color_similarity)
 
         valid = render_area >= int(min_render_area_px) and observed_area > 0
         if valid:
@@ -160,6 +153,18 @@ class ReprojectionChecker:
             status = "render_area_tiny"
         else:
             status = "observed_empty"
+
+        # 几何无效时颜色重投影分会被上层丢弃，跳过 LAB 转换与 ZNCC，省掉热路径上的无用计算。
+        if valid:
+            color_similarity, color_valid = ReprojectionChecker._color_similarity_lab(
+                render_rgb,
+                observed_rgb_u8,
+                intersection,
+                l_weight=color_l_weight,
+            )
+        else:
+            color_similarity, color_valid = 0.0, False
+        score = clamp01(color_similarity)
 
         return ReprojectionResult(
             score=score,

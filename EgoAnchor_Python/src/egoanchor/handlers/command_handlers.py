@@ -134,7 +134,9 @@ def _accept(ctx: HandlerContext, message: Message, command_type: CommandType) ->
     else:
         ack = _ack_for(message, accepted=False, status="RESOURCE_EXHAUSTED", text="command queue is full", code="RESOURCE_EXHAUSTED")
 
-    if ctx.dedup is not None:
+    # 只缓存确定性结果（接受或参数非法）。UNAVAILABLE/RESOURCE_EXHAUSTED 是瞬时状态，
+    # 缓存会让客户端在 TTL 内用同一 request_id 重试时拿到陈旧失败 ack，反而无法恢复。
+    if ctx.dedup is not None and ack.accepted:
         ctx.dedup.remember(request_id, ack)
     LOGGER.info(
         "type=%s request_id=%s anchor_id=%s accepted=%s status=%s queue=%s",

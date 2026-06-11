@@ -32,6 +32,12 @@ LOGGER = get_logger(__name__, component="QuestPosePipeline")
 """Quest pose pipeline 日志记录器。"""
 
 
+def _mask_has_pixels(mask: np.ndarray | None) -> bool:
+    """判断 mask 是否存在且包含前景像素。"""
+
+    return mask is not None and np.count_nonzero(mask) > 0
+
+
 class QuestPosePipeline:
     """Quest object pose estimation pipeline。"""
 
@@ -582,7 +588,7 @@ class QuestPosePipeline:
                 update_fps=True,
             )
 
-        if not self.tracking_state.has_registered and (mask is None or np.count_nonzero(mask) <= 0):
+        if not self.tracking_state.has_registered and not _mask_has_pixels(mask):
             return self._finish_frame(decoded, "NO_MASK", False, None, "NONE", diagnostics, timing, t_total, "no_mask")
         if not self.tracking_state.has_registered and diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             return self._finish_frame(decoded, "REJECT_DEPTH", False, None, "NONE", diagnostics, timing, t_total, "depth_in_mask_low")
@@ -818,7 +824,7 @@ class QuestPosePipeline:
 
         state = self.tracking_state
         if not state.has_registered:
-            if mask is None or np.count_nonzero(mask) <= 0:
+            if not _mask_has_pixels(mask):
                 return None, "NONE", "NO_MASK"
             state.tracked_mask_lost_count = 0
             return self._try_register(rgb, depth, mask, timing, pose_source="REGISTER", phase="REGISTER")
@@ -830,28 +836,22 @@ class QuestPosePipeline:
         except Exception as exc:
             LOGGER.warning("FoundationPose track 失败: %s", exc)
             state.track_reject_count += 1
-            self._clear_registered_state(reset_reject_count=False)
-            if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
-                return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-            return None, "NONE", "TRACK_FAILED"
+            return self._re_register_or_fail(rgb, depth, mask, timing, "TRACK_FAILED")
         pose = self._normalize_pose_matrix(pose)
         if pose is None:
             LOGGER.warning("FoundationPose track 返回无效 pose，尝试 re-register。")
             state.track_reject_count += 1
-            self._clear_registered_state(reset_reject_count=False)
-            if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
-                return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-            return None, "NONE", "TRACK_FAILED"
+            return self._re_register_or_fail(rgb, depth, mask, timing, "TRACK_FAILED")
 
         t_delta, r_delta = self._track_deltas(pose, state.last_pose)
         diagnostics.last_translation_delta_m = t_delta
         diagnostics.last_rotation_delta_deg = r_delta
 
-        if self._is_track_jump(pose):
+        if t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg:
             state.track_reject_count += 1
             LOGGER.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
             self._clear_registered_state(reset_reject_count=False)
-            if self.re_register_on_track_lost and mask is not None and np.count_nonzero(mask) > 0:
+            if self.re_register_on_track_lost and _mask_has_pixels(mask):
                 return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
             if self.accept_track_jump_without_mask and state.track_reject_count < self.max_consecutive_track_rejects:
                 state.has_registered = True
@@ -872,23 +872,33 @@ class QuestPosePipeline:
                     state.track_reject_count,
                 )
                 self._clear_registered_state(reset_reject_count=False)
-                if (
-                    state.track_reject_count < self.max_consecutive_track_rejects
-                    and self.re_register_on_track_lost
-                    and mask is not None
-                    and np.count_nonzero(mask) > 0
-                ):
+                if state.track_reject_count < self.max_consecutive_track_rejects and self.re_register_on_track_lost and _mask_has_pixels(mask):
                     return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
                 return None, "NONE", "LOW_REPROJECTION"
         else:
             state.low_reprojection_count = 0
 
         state.track_reject_count = 0
-        if mask is not None and np.count_nonzero(mask) > 0:
+        if _mask_has_pixels(mask):
             state.tracked_mask_lost_count = 0
         state.last_pose = pose
         state.frames_since_register += 1
         return pose, "TRACK", "TRACK"
+
+    def _re_register_or_fail(
+        self,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        mask: np.ndarray | None,
+        timing: PipelineStepTiming,
+        fail_phase: str,
+    ) -> tuple[np.ndarray | None, str, str]:
+        """track 失效后的统一处理：清空注册态，有 mask 时立即 re-register，否则回报失败。"""
+
+        self._clear_registered_state(reset_reject_count=False)
+        if self.re_register_on_track_lost and _mask_has_pixels(mask):
+            return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
+        return None, "NONE", fail_phase
 
     def _try_register(self, rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray, timing: PipelineStepTiming, pose_source: str, phase: str) -> tuple[np.ndarray | None, str, str]:
         """执行 FoundationPose register，并初始化可选 Cutie。"""
@@ -957,14 +967,6 @@ class QuestPosePipeline:
             self.tracking_state.cutie_ready = False
             LOGGER.warning("Cutie 初始化失败，将跳过 2D mask tracking: %s", exc)
 
-    def _is_track_jump(self, pose: np.ndarray) -> bool:
-        """检测相邻帧 pose 是否出现过大跳变。"""
-
-        if self.tracking_state.last_pose is None:
-            return False
-        t_delta, r_delta = self._track_deltas(pose, self.tracking_state.last_pose)
-        return t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg
-
     def _check_render_quality(
         self,
         pose: np.ndarray,
@@ -987,7 +989,7 @@ class QuestPosePipeline:
         if state.frames_since_register < self.render_quality_warmup_frames:
             diagnostics.render_quality_status = "warmup"
             return None
-        if mask is None or np.count_nonzero(mask) <= 0:
+        if not _mask_has_pixels(mask):
             diagnostics.render_quality_status = "no_mask"
             return None
 

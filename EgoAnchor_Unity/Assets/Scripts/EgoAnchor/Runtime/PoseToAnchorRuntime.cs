@@ -580,7 +580,15 @@ namespace EgoAnchor.Runtime
 
             if (serverState == "LOST")
             {
-                diagnostics.currentAnchorState = AnchorState.Lost;
+                if (policyHost != null)
+                {
+                    policyHost.NotifyLost(Time.realtimeSinceStartupAsDouble, reason);
+                    SyncPolicyDiagnostics();
+                }
+                else
+                {
+                    diagnostics.currentAnchorState = AnchorState.Lost;
+                }
                 diagnostics.latestPolicyAction = "server_status";
                 diagnostics.latestPolicyReason = reason;
                 return;
@@ -588,9 +596,18 @@ namespace EgoAnchor.Runtime
 
             if (serverState == "ERROR" || status.Error != null && !string.IsNullOrEmpty(status.Error.Code))
             {
-                diagnostics.currentAnchorState = AnchorState.Error;
+                string errorReason = string.IsNullOrEmpty(status.Error?.Code) ? reason : status.Error.Code;
+                if (policyHost != null)
+                {
+                    policyHost.NotifyError(Time.realtimeSinceStartupAsDouble, errorReason);
+                    SyncPolicyDiagnostics();
+                }
+                else
+                {
+                    diagnostics.currentAnchorState = AnchorState.Error;
+                }
                 diagnostics.latestPolicyAction = "server_error";
-                diagnostics.latestPolicyReason = string.IsNullOrEmpty(status.Error?.Code) ? reason : status.Error.Code;
+                diagnostics.latestPolicyReason = errorReason;
                 return;
             }
 
@@ -614,9 +631,18 @@ namespace EgoAnchor.Runtime
             diagnostics.latestServerState = heartbeat.State ?? diagnostics.latestServerState;
             if (IsErrorHeartbeat(heartbeat))
             {
-                diagnostics.currentAnchorState = AnchorState.Error;
+                string errorReason = string.IsNullOrEmpty(heartbeat.LastError?.Code) ? "server_error" : heartbeat.LastError.Code;
+                if (policyHost != null)
+                {
+                    policyHost.NotifyError(Time.realtimeSinceStartupAsDouble, errorReason);
+                    SyncPolicyDiagnostics();
+                }
+                else
+                {
+                    diagnostics.currentAnchorState = AnchorState.Error;
+                }
                 diagnostics.latestPolicyAction = "heartbeat_error";
-                diagnostics.latestPolicyReason = string.IsNullOrEmpty(heartbeat.LastError?.Code) ? "server_error" : heartbeat.LastError.Code;
+                diagnostics.latestPolicyReason = errorReason;
                 return;
             }
 

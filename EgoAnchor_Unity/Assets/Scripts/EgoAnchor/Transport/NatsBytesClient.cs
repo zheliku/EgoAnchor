@@ -275,14 +275,8 @@ namespace EgoAnchor.Transport
                     isRunning = false;
                 }
 
-                if (token.IsCancellationRequested)
-                {
-                    DisposeClientWithoutBlocking(localClient);
-                }
-                else if (localClient != null)
-                {
-                    DisposeClientWithoutBlocking(localClient);
-                }
+                // DisposeClientWithoutBlocking 内部已处理 null，取消与正常结束走同一释放路径。
+                DisposeClientWithoutBlocking(localClient);
             }
         }
 

@@ -376,9 +376,6 @@ class ProtobufPublisher:
         self._pending: list[Future[None]] = []
         """尚未完成的后台 publish Future。"""
 
-        self._submitted = 0
-        """成功提交到后台 event loop 的消息数量。"""
-
         self._published = 0
         """后台 publish 协程成功返回的消息数量。"""
 
@@ -390,12 +387,6 @@ class ProtobufPublisher:
         """当前发布链路是否启用。"""
 
         return self.client.enabled
-
-    @property
-    def submitted_count(self) -> int:
-        """已提交到后台 event loop 的消息数量。"""
-
-        return self._submitted
 
     @property
     def published_count(self) -> int:
@@ -450,7 +441,6 @@ class ProtobufPublisher:
         payload = msg.SerializeToString()
         future: Future[None] = asyncio.run_coroutine_threadsafe(self._publish_bytes(payload), loop)
         self._pending.append(future)
-        self._submitted += 1
         return True
 
     async def _publish_bytes(self, payload: bytes) -> None:

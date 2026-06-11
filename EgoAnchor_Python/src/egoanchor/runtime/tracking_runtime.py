@@ -140,18 +140,6 @@ class TrackingRuntime:
         self.pose_publish_submitted = 0
         """成功提交到后台 NATS event loop 的 PoseResult 数量。"""
 
-        self.status_publish_attempts = 0
-        """已尝试发布 AnchorStatusEvent 的次数。"""
-
-        self.status_publish_submitted = 0
-        """成功提交到后台 NATS event loop 的 AnchorStatusEvent 数量。"""
-
-        self.heartbeat_publish_attempts = 0
-        """已尝试发布 ServerHeartbeat 的次数。"""
-
-        self.heartbeat_publish_submitted = 0
-        """成功提交到后台 NATS event loop 的 ServerHeartbeat 数量。"""
-
         heartbeat_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "heartbeat", SimpleNamespace())
         self.heartbeat_interval_s = max(0.1, float(getattr(heartbeat_cfg, "interval_s", 1.0)))
         """ServerHeartbeat 发布间隔，单位秒。"""
@@ -338,9 +326,7 @@ class TrackingRuntime:
 
         if self.status_publisher is None or not self.status_publisher.enabled:
             return
-        self.status_publish_attempts += 1
-        if self.status_publisher.publish(msg):
-            self.status_publish_submitted += 1
+        self.status_publisher.publish(msg)
 
     def _publish_heartbeat(self) -> None:
         """构造并发布 ServerHeartbeat。"""
@@ -356,9 +342,7 @@ class TrackingRuntime:
         self.log_writer.heartbeat(msg)
         if self.heartbeat_publisher is None or not self.heartbeat_publisher.enabled:
             return
-        self.heartbeat_publish_attempts += 1
-        if self.heartbeat_publisher.publish(msg):
-            self.heartbeat_publish_submitted += 1
+        self.heartbeat_publisher.publish(msg)
 
     def _maybe_publish_heartbeat(self) -> None:
         """按固定低频发布 ServerHeartbeat。"""
