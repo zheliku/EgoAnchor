@@ -313,6 +313,8 @@ namespace EgoAnchorEval
                 string phase = runtime != null ? runtime.LatestPhase : string.Empty;
                 string failure = runtime != null ? runtime.LatestFailure : "missing_runtime";
                 float reliability = runtime != null ? runtime.LatestReliabilityScore : 0.0f;
+                string motionState = runtime != null ? runtime.CurrentMotionStateName : string.Empty;
+                double predictAheadMs = runtime != null ? runtime.LatestPredictAheadMs : double.NaN;
 
                 if (recorded.isPrimary && !hasPrimary)
                 {
@@ -337,7 +339,9 @@ namespace EgoAnchorEval
                     recorded.isPrimary,
                     hasRaw,
                     rawPose,
-                    reliability));
+                    reliability,
+                    motionState,
+                    predictAheadMs));
             }
 
             if (!hasPrimary && variantSnapshots.Count > 0)

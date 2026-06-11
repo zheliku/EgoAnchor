@@ -1,85 +1,115 @@
+using EgoAnchor.Diagnostics;
+using EgoAnchor.Runtime;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// PoseToAnchorRuntime 旁路挂载的 reliability-aware anchor policy 宿主。
+    /// PoseToAnchorRuntime 旁路挂载的自适应 anchor policy 宿主。
     ///
-    /// 本组件只负责持有 Inspector 阈值和 PolicyController 生命周期。是否启用 policy
+    /// 本组件只负责持有 Inspector 参数包和 PolicyController 生命周期。是否启用 policy
     /// 由 PoseToAnchorRuntime 是否引用该组件决定；网络接收、frame alignment、Transform
-    /// 应用仍分别保留在各自层里。
+    /// 应用仍分别保留在各自层里。Inspector 修改参数时热更生效，不清空滤波历史。
+    /// 一个 host 只服务一个 runtime（内部含独占滤波状态），Bind 守卫防止误共享。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
     {
-        /// <summary>直接接受 pose 的最低可靠性评分。</summary>
-        [Header("Reliability Gate")]
-        [Tooltip("直接接受 pose 的最低可靠性评分。PoseResult.reliability_score 低于该值时不会更新 stable pose。")]
-        [Range(0f, 1f)]
-        [SerializeField] private float minAcceptScore = 0.35f;
+        /// <summary>组件日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorPolicyHost>();
 
-        /// <summary>进入 hold/freeze 的最低可靠性评分。</summary>
-        [Tooltip("进入 hold/freeze 的最低可靠性评分。低于该值时更快进入 Lost；高于该值但低于接受阈值时保持上一 stable pose。")]
-        [Range(0f, 1f)]
-        [SerializeField] private float minHoldScore = 0.12f;
-
-        /// <summary>单次更新允许的最大平移跳变，单位米。</summary>
-        [Header("Innovation Gate")]
-        [Tooltip("单次更新允许的最大 world-space 平移跳变，单位米。超过后拒绝本帧 pose，避免 anchor 瞬移。")]
-        [Min(0.001f)]
-        [SerializeField] private float maxTranslationJumpMeters = 0.80f;
-
-        /// <summary>单次更新允许的最大旋转跳变，单位度。</summary>
-        [Tooltip("单次更新允许的最大 world-space 旋转跳变，单位度。超过后拒绝本帧 pose。")]
-        [Min(1f)]
-        [SerializeField] private float maxRotationJumpDegrees = 90f;
-
-        /// <summary>短时 coasting 的时间上限，单位秒。</summary>
-        [Header("Lifecycle")]
-        [Tooltip("短时没有 pose 时允许 predictor/coasting 的时间上限，单位秒。")]
-        [Min(0.01f)]
-        [SerializeField] private float coastTimeoutSeconds = 0.45f;
-
-        /// <summary>进入 Lost 的无可靠 pose 时间，单位秒。</summary>
-        [Tooltip("连续没有可靠 pose 超过该时间后进入 Lost，单位秒。")]
-        [Min(0.05f)]
-        [SerializeField] private float lostTimeoutSeconds = 2.0f;
+        /// <summary>自适应 anchor 控制器参数包。</summary>
+        [Tooltip("自适应 anchor 控制器参数包：评分门控、跳变门控、位置/旋转滤波噪声、运动分类与时序续航。运行中修改即时生效，不清空滤波历史。")]
+        [SerializeField] private AnchorPolicyConfig config = new AnchorPolicyConfig();
 
         /// <summary>当前 policy controller。</summary>
         private PolicyController controller;
 
+        /// <summary>当前绑定的 runtime；host 内含独占滤波状态，只允许一个。</summary>
+        private PoseToAnchorRuntime boundOwner;
+
         /// <summary>当前 policy 状态。</summary>
         public AnchorState State => Controller.State;
 
-        /// <summary>policy 是否已有 stable pose。</summary>
-        public bool HasStablePose => Controller.HasStablePose;
+        /// <summary>当前运动状态。</summary>
+        public AnchorMotionState MotionState => Controller.MotionState;
 
-        /// <summary>当前 policy stable pose。</summary>
-        public Pose StablePose => Controller.StablePose;
+        /// <summary>当前估计线速度模长，单位米/秒。</summary>
+        public float SpeedMps => Controller.SpeedMps;
+
+        /// <summary>当前估计角速度模长，单位度/秒。</summary>
+        public float AngularSpeedDps => Controller.AngularSpeedDps;
+
+        /// <summary>最近一次门控的位置 innovation 马氏距离平方。</summary>
+        public float LastInnovationPosD2 => Controller.LastInnovationPosD2;
+
+        /// <summary>最近一次门控的位置有效测量噪声，单位 m^2。</summary>
+        public float LastREffPos => Controller.LastREffPos;
+
+        /// <summary>最近一次 Advance 实际使用的前推时长，单位秒。</summary>
+        public float PredictAheadSeconds => Controller.PredictAheadSeconds;
+
+        /// <summary>累计接受的测量数（含贴合接受）。</summary>
+        public long AcceptedCount => Controller.AcceptedCount;
+
+        /// <summary>累计拒绝的测量数。</summary>
+        public long RejectedCount => Controller.RejectedCount;
 
         /// <summary>
         /// Unity Awake：构造 policy controller。
         /// </summary>
         private void Awake()
         {
-            Rebuild();
+            EnsureController();
         }
 
         /// <summary>
-        /// Inspector 修改阈值时重建 policy controller。
+        /// Inspector 修改参数时热更 controller，不重建、不清空滤波历史。
         /// </summary>
         private void OnValidate()
         {
-            Rebuild();
+            config ??= new AnchorPolicyConfig();
+            config.Validate();
+            controller?.ApplyConfig(config);
         }
 
         /// <summary>
-        /// 输入一帧观测并返回 policy 决策。
+        /// 绑定唯一的宿主 runtime。host 内含独占滤波状态，被第二个 runtime 复用会互相污染。
+        /// </summary>
+        /// <param name="owner">请求绑定的 runtime。</param>
+        public void Bind(PoseToAnchorRuntime owner)
+        {
+            if (owner == null)
+            {
+                return;
+            }
+
+            if (boundOwner != null && boundOwner != owner)
+            {
+                Log.Error($"AnchorPolicyHost 已绑定 {boundOwner.name}，拒绝再绑定 {owner.name}；每个 policy runtime 需要独立的 host 实例。", this);
+                return;
+            }
+
+            boundOwner = owner;
+        }
+
+        /// <summary>
+        /// 输入一帧观测并返回输入分类决策。渲染输出请使用 Advance。
         /// </summary>
         /// <param name="observation">Unity anchor policy 观测。</param>
         /// <returns>本帧 policy 决策。</returns>
         public AnchorPolicyDecision AcceptPose(AnchorObservation observation)
         {
             return Controller.AcceptPose(observation);
+        }
+
+        /// <summary>
+        /// 每渲染帧推进计时并输出当前 anchor pose。
+        /// </summary>
+        /// <param name="nowSeconds">当前 Unity 单调时间，单位秒。</param>
+        /// <returns>本帧 anchor 输出。</returns>
+        public AnchorPolicyOutput Advance(double nowSeconds)
+        {
+            return Controller.Advance(nowSeconds);
         }
 
         /// <summary>
@@ -143,7 +173,7 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
-        /// 清空 policy 内部 stable pose 和状态机。
+        /// 清空 policy 内部滤波状态和状态机。
         /// </summary>
         /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
         /// <param name="reason">清空原因。</param>
@@ -152,30 +182,23 @@ namespace EgoAnchor.Policy
             Controller.Clear(sampleTimeSeconds, reason);
         }
 
-        /// <summary>
-        /// 重新构造 policy controller。会清空 policy 内部历史状态。
-        /// </summary>
-        public void Rebuild()
-        {
-            controller = new PolicyController(
-                new ReliabilityGate(minAcceptScore, minHoldScore),
-                new InnovationGate(maxTranslationJumpMeters, maxRotationJumpDegrees),
-                new AnchorPredictor(coastTimeoutSeconds),
-                new AnchorStateMachine(coastTimeoutSeconds, lostTimeoutSeconds)
-            );
-        }
-
         /// <summary>确保 controller 存在并返回。</summary>
         private PolicyController Controller
         {
             get
             {
-                if (controller == null)
-                {
-                    Rebuild();
-                }
-
+                EnsureController();
                 return controller;
+            }
+        }
+
+        /// <summary>按当前参数包构造 controller（仅在尚不存在时）。</summary>
+        private void EnsureController()
+        {
+            if (controller == null)
+            {
+                config ??= new AnchorPolicyConfig();
+                controller = new PolicyController(config);
             }
         }
     }

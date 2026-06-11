@@ -1,5 +1,3 @@
-using UnityEngine;
-
 namespace EgoAnchor.Policy
 {
     /// <summary>
@@ -7,21 +5,28 @@ namespace EgoAnchor.Policy
     /// </summary>
     public enum AnchorPolicyAction
     {
-        /// <summary>接受本帧 pose，并更新 raw/stable anchor。</summary>
+        /// <summary>接受本帧测量，滤波器正常校正。</summary>
         Accept,
 
-        /// <summary>拒绝本帧 pose，并保持上一 stable anchor。</summary>
+        /// <summary>拒绝本帧测量（低分或跳变超阈）。</summary>
         Reject,
 
-        /// <summary>短时缺失 pose，用预测或上一 stable anchor 续航。</summary>
+        /// <summary>本帧无测量且处于短时续航窗口内。</summary>
         Coast,
 
-        /// <summary>保持上一 stable anchor，不进行外推。</summary>
+        /// <summary>保持上一输出，不更新滤波器。</summary>
         Hold,
+
+        /// <summary>贴合接受：滤波器硬重置到本帧测量（首测量、重定位、瞬移恢复）。</summary>
+        Snap,
     }
 
     /// <summary>
-    /// anchor policy 单次决策结果。
+    /// anchor policy 对单帧观测的输入分类结果。
+    ///
+    /// 自统一滤波重构后，决策不再携带输出 pose：渲染输出统一由每帧
+    /// PolicyController.Advance 返回的 AnchorPolicyOutput 提供，
+    /// 本结构只用于诊断、日志与离线 policy 分布统计。
     /// </summary>
     public readonly struct AnchorPolicyDecision
     {
@@ -31,12 +36,6 @@ namespace EgoAnchor.Policy
         /// <summary>决策后的 anchor 状态。</summary>
         public readonly AnchorState State;
 
-        /// <summary>是否有可输出的 stable pose。</summary>
-        public readonly bool HasOutputPose;
-
-        /// <summary>输出 stable pose；HasOutputPose=false 时为 Pose.identity。</summary>
-        public readonly Pose OutputPose;
-
         /// <summary>本次决策原因。</summary>
         public readonly string Reason;
 
@@ -45,15 +44,11 @@ namespace EgoAnchor.Policy
         /// </summary>
         /// <param name="action">本次策略动作。</param>
         /// <param name="state">决策后的 anchor 状态。</param>
-        /// <param name="hasOutputPose">是否有可输出的 stable pose。</param>
-        /// <param name="outputPose">输出 stable pose。</param>
         /// <param name="reason">本次决策原因。</param>
-        public AnchorPolicyDecision(AnchorPolicyAction action, AnchorState state, bool hasOutputPose, Pose outputPose, string reason)
+        public AnchorPolicyDecision(AnchorPolicyAction action, AnchorState state, string reason)
         {
             Action = action;
             State = state;
-            HasOutputPose = hasOutputPose;
-            OutputPose = outputPose;
             Reason = reason ?? string.Empty;
         }
     }

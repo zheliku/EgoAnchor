@@ -19,7 +19,8 @@ namespace EgoAnchor.Runtime
         /// </summary>
         /// <param name="frameId">已对齐 pose 对应的 Quest stereo frame_id。</param>
         /// <param name="worldPose">frame-aligned Unity world pose。</param>
-        /// <param name="sampleTime">Unity 单调时间，单位秒。</param>
+        /// <param name="sampleTime">观测到达 Unity 的单调时间，单位秒。</param>
+        /// <param name="captureTimeSeconds">该 frame_id 的 Unity 采集单调时间，单位秒；小于 0 表示未知。</param>
         /// <param name="result">源 PoseResult；测试直接注入时可为空。</param>
         /// <param name="fallbackPhase">源 PoseResult 缺失时使用的 phase 诊断文本。</param>
         /// <returns>可交给 AnchorPolicyHost 的观测。</returns>
@@ -27,6 +28,7 @@ namespace EgoAnchor.Runtime
             long frameId,
             Pose worldPose,
             double sampleTime,
+            double captureTimeSeconds,
             PoseResult result,
             string fallbackPhase)
         {
@@ -37,7 +39,8 @@ namespace EgoAnchor.Runtime
                 ReadReliabilityScore(result),
                 ReadReliabilityFlags(result),
                 result?.Phase ?? fallbackPhase ?? string.Empty,
-                result?.PoseSource ?? string.Empty
+                result?.PoseSource ?? string.Empty,
+                captureTimeSeconds
             );
         }
 

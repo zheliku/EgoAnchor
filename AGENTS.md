@@ -67,7 +67,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 - Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持 raw baseline 与 smoothed/runtime policy 使用同一 pose 输入。
 - Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
 - Unity `AnchorLowPassPoseProcessor`、`AnchorKalmanPoseProcessor`：当前 stable baseline。
-- Unity `Policy/AnchorStateMachine`、`AnchorPolicyHost` 与 `PolicyController`：基础 reliability-aware anchor policy 已接入，可根据 PoseResult 可靠性、frame alignment 失败、pose jump 和连续 no-pose 输出 Accept/Reject/Coast/Hold/Lost/Relocalizing 等行为；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。Python 的 `re_register` 只属于感知管线自恢复，因为 FoundationPose/Cutie/GPU 状态由 Python owner 线程维护；Unity 负责 MR anchor 行为决策，不直接重置 Python 模型状态。
+- Unity `Policy/` 自适应 anchor 控制器：`PolicyController` 组合 `AnchorMeasurementGate`（分数滞回 + 马氏 innovation + 重定位旁路 + 瞬移恢复）、`AnchorPoseFilter`（统一 6DoF 自适应滤波：位置常速度 Kalman + 误差态四元数/角速度，测量噪声按 reliability_score 与静止/运动状态自适应）、`MotionStateClassifier`（测量散布窗口判静止，ZUPT 减抖）与 `AnchorStateMachine`。消息入口 `AcceptPose` 只提交测量；渲染帧入口 `Advance` 按 capture 时间轴把提交态预测到渲染时刻输出（延迟隐藏上限 `maxPredictAheadSeconds`），并独立推进 Coasting/FrozenUncertain/Lost 计时，感知停发也能正常退化。policy 路径不经过 processor 链；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。Python 的 `re_register` 只属于感知管线自恢复，因为 FoundationPose/Cutie/GPU 状态由 Python owner 线程维护；Unity 负责 MR anchor 行为决策，不直接重置 Python 模型状态。使用与调参见仓库根 `ANCHOR_CONTROLLER_GUIDE.md`。
 - Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
 
 ## 常用入口与验证
@@ -190,9 +190,9 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `Assets/Scripts/EgoAnchor/Client/ServerHeartbeatReceiver.cs`：主线程 latest-drain、解析 `ServerHeartbeat`，转交 `PoseToAnchorRuntime` 更新链路健康诊断。
 - `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
 - `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
-- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，并按 processor chain 或 reliability-aware policy 生成 stable pose；no-pose、align failure、server notification 与 policy decision 应用集中在同一文件内分区维护。
-- `Assets/Scripts/EgoAnchor/Processors/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与当前 baseline。
-- `Assets/Scripts/EgoAnchor/Policy/`：Unity anchor 侧可靠性感知策略、观测、决策 DTO 与生命周期状态；`ReliabilityGate` 评估 score/flags，`InnovationGate` 拒绝大跳变，`AnchorPredictor` 做短时 coasting，`PolicyController` 组合 gate/predict/state，`AnchorPolicyHost` 作为可挂载 policy 组件。
+- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，baseline 模式按 processor chain 生成 stable pose，policy 模式由消息提交测量（含 capture 时间回查）、每帧 `LateUpdate` 调 `AdvanceAnchorOutput` 输出预测位姿（`[DefaultExecutionOrder(-50)]` 保证先于 DynamicObjectAnchor/recorder）；no-pose、align failure、server notification 与 policy decision 应用集中在同一文件内分区维护。
+- `Assets/Scripts/EgoAnchor/Processors/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与论文 baseline，保持冻结不改以保证对照可比性。
+- `Assets/Scripts/EgoAnchor/Policy/`：统一自适应 anchor 控制器。`AnchorPolicyConfig` 参数包（Inspector 热更不清状态）、`AnchorPoseFilter` 6DoF 滤波核（提交态 + 瞬态预测、ZUPT、FreezeCoast 封账保证冻结显示连续）、`AnchorMeasurementGate` 门控（分数滞回、马氏 innovation、绝对兜底、瞬移恢复）、`MotionStateClassifier` 静止/运动分类、`PolicyController` 编排、`AnchorPolicyOutput` 每帧输出、`AnchorPolicyHost` 可挂载宿主（Bind 守卫 1:1）。核心类均为 plain C#、时间显式传入，可被 anchor_policy_smoke 直接驱动；不要在其中读取 Unity `Time`。
 - `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
 - `Assets/Scene/`：当前主线测试场景工作区。
 
@@ -225,7 +225,7 @@ Unity 命名/目录规则：
 - camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
 - Unity `PoseResultReceiver` decoded 增加但 aligned 为 0：查 `AnchorRuntimeHub` runtime 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用、`alignmentReference` 是否正确、Python 是否原样透传 frame_id。
-- raw 物体正常但 smoothed 不动：查 `PoseToAnchorRuntime.processors`、processor 是否启用、`DynamicObjectAnchor.outputMode` 是否为 `Smoothed`。
+- raw 物体正常但 smoothed 不动：baseline 模式查 `PoseToAnchorRuntime.processors`、processor 是否启用；policy 模式查 `policyHost` 绑定、`latestPolicyAction/Reason`（score_hold/score_reject 是分数门，stale_measurement 是时序守卫）、`currentMotionState`；`DynamicObjectAnchor.outputMode` 是否为 `Smoothed`。
 - mask 不稳：调 `module.segmenter.prompt`、`module.segmenter.confidence_threshold`、`module.segmenter.mask_threshold`、`module.segmenter.max_det`，并用 `debug.show_mask_snapshot=true`、`pixi run tool-yoloe26-mask` 或 `pixi run tool-sam3-mask` 看真实下游 mask；若 YOLOE 语义误检仍高，可显式切 `module.segmenter.type="sam3"`。
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
@@ -247,11 +247,12 @@ Unity 命名/目录规则：
 
 ### Phase B：Unity reliability-aware anchor controller
 
-- 基础 `AnchorStateMachine` / `AnchorPolicyHost` / `PolicyController` 已完成并通过本地 smoke；`AnchorStatusEvent` 与 `ServerHeartbeat` 已接入 Unity runtime，下一步是回包年龄、实验日志和 HUD。
-- 输入已覆盖 `PoseResult` 可靠性字段、frame history 命中、pose innovation、连续 no-pose、heartbeat/input health；待补回包年龄。
-- 输出已覆盖 `Accept`、`Hold`、`Coast`、`Reject`、`Lost`、`Relocalizing` 等 anchor 行为；后续需要补 UI/HUD 和事件记录。
-- 保留 raw、low-pass、Kalman baseline；full method 通过给 `PoseToAnchorRuntime.policyHost` 绑定 `Policy/AnchorPolicyHost` 启用。
+- 统一自适应控制器已落地并通过 smoke：测量门控（分数滞回/马氏 innovation/重定位旁路/瞬移恢复）、可靠性与运动状态自适应 6DoF 滤波、静止 ZUPT 减抖、capture 时间轴 + 渲染帧预测输出、消息解耦的 Coasting/Frozen/Lost 计时。回归门在 `EgoAnchor_Tools/anchor_policy_smoke`（13 个场景，含静抖必须优于旧 Slerp 基线的 PRIMARY 闸门）。
+- 输入已覆盖 `PoseResult` 可靠性字段、frame history 命中、capture 时间、pose innovation、连续 no-pose、heartbeat/input health；待补回包年龄。
+- 输出已覆盖 `Accept`、`Snap`、`Hold`、`Coast`、`Reject`、`Lost`、`Relocalizing` 等 anchor 行为与每帧 `AnchorPolicyOutput`（含 motion_state、predict_ahead）；eval JSONL 变体已携带 `motion_state`/`predict_ahead_ms`。后续需要补 UI/HUD。
+- 保留 raw、low-pass、Kalman baseline；full method 通过给 `PoseToAnchorRuntime.policyHost` 绑定 `Policy/AnchorPolicyHost` 启用（policy runtime 的 processors 必须留空）。场景挂载与调参见 `ANCHOR_CONTROLLER_GUIDE.md`。
 - 不要把 controller 写进 `NatsControlClient`、`PoseResultReceiver` 或 `DynamicObjectAnchor`；它应保持在 anchor runtime/policy 层。
+- 下一步：真机按 condition 录制 raw/kalman/controller 三变体（静置、慢/快手持、短遮挡、出视野重获、低分遮挡），用 `eval/run_eval.py` 出 jitter/lag/slip/recovery/policy_distribution 证据。
 
 ### Phase C：端到端与论文实验
 

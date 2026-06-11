@@ -92,7 +92,9 @@ static class Program
                 isPrimary: true,
                 hasAlignedRawPose: true,
                 alignedRawPose: camera,
-                reliabilityScore: 0.75f)
+                reliabilityScore: 0.75f,
+                motionState: "Static",
+                predictAheadMs: 8.5)
         };
         string output = AnchorEvalJson.BuildOutputLine(
             20.0,
@@ -120,6 +122,8 @@ static class Program
         AssertContains(output, "\"source_capture_unity_frame\":123");
         AssertContains(output, "\"latest_phase\":\"tracking\"");
         AssertContains(output, "\"latest_failure\":\"\"");
+        AssertContains(output, "\"motion_state\":\"Static\"");
+        AssertContains(output, "\"predict_ahead_ms\":8.5");
         AssertContains(output, "\"aligned_raw_pos\":[4,5,6]");
         AssertContains(output, "\"aligned_raw_euler_deg\":[");
         AssertContains(output, "\"reliability_score\":0.75");

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EgoAnchor.Alignment;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Policy;
 using EgoAnchor.Processors;
 using EgoAnchor.Protocol.Generated;
@@ -15,11 +16,17 @@ namespace EgoAnchor.Runtime
     /// 调用 CameraPoseFrameAligner 得到 frame-aligned raw world pose，再按处理器链得到 stable pose。
     /// 对齐策略、参考相机选择和三路 pose 补偿都集中在这里，避免 DynamicObjectAnchor 或网络层分散修改坐标。
     ///
-    /// reliability-aware policy 可把低可靠 pose、跳变和短时缺失转化为 Hold/Coast/Lost 等
-    /// anchor 行为；关闭 policy 时仍保留 raw + processor chain baseline，便于论文对照。
+    /// 绑定 policyHost 时走统一自适应控制器：消息只提交测量（带 capture 时间），
+    /// stable pose 由每帧 LateUpdate 的 Advance 输出（预测到渲染时刻），processors 被忽略；
+    /// 关闭 policy 时仍保留 raw + processor chain baseline，便于论文对照。
+    /// LateUpdate 顺序提前（-50），保证 DynamicObjectAnchor 与 eval recorder 读到本帧输出。
     /// </summary>
+    [DefaultExecutionOrder(-50)]
     public sealed class PoseToAnchorRuntime : MonoBehaviour
     {
+        /// <summary>组件日志通道。</summary>
+        private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<PoseToAnchorRuntime>();
+
         /// <summary>接收 PoseResult 后的处理结果，供上层统计和调试。</summary>
         public enum AcceptResult
         {
@@ -51,12 +58,12 @@ namespace EgoAnchor.Runtime
 
         [Header("Anchor Processors")]
         /// <summary>按顺序处理 raw world pose 的处理器列表。</summary>
-        [Tooltip("按顺序处理 frame-aligned raw world pose 的处理器列表。例如只放 Kalman，或 Kalman 后接轻量 LowPass。为空时 stable 直接等于 raw。")]
+        [Tooltip("按顺序处理 frame-aligned raw world pose 的处理器列表（baseline 路径）。绑定 policyHost 时本列表被忽略，统一滤波由 policy 内部完成。")]
         [SerializeField] private List<AnchorPoseProcessor> processors = new List<AnchorPoseProcessor>();
 
         [Header("Reliability Policy")]
-        /// <summary>可选 reliability-aware anchor policy 宿主。</summary>
-        [Tooltip("可选 reliability-aware anchor policy 宿主。绑定后低分 pose、跳变和短时缺失会进入 Reject/Hold/Coast/Lost；为空时保持 raw + processor baseline。")]
+        /// <summary>可选自适应 anchor policy 宿主。</summary>
+        [Tooltip("可选自适应 anchor policy 宿主。绑定后由统一控制器完成门控、滤波、续航与每帧渲染输出，processors 被忽略；为空时保持 raw + processor baseline。")]
         [SerializeField] private AnchorPolicyHost policyHost;
 
         [Header("Debug")]
@@ -101,6 +108,12 @@ namespace EgoAnchor.Runtime
 
         /// <summary>最近一次 reliability score。</summary>
         public float LatestReliabilityScore => diagnostics.latestReliabilityScore;
+
+        /// <summary>当前运动状态名（Unknown/Static/Moving），policy 模式下有效。</summary>
+        public string CurrentMotionStateName => diagnostics.currentMotionState;
+
+        /// <summary>最近一次渲染输出的前推时长，单位毫秒，policy 模式下有效。</summary>
+        public double LatestPredictAheadMs => diagnostics.latestPredictAheadMs;
 
         /// <summary>最近一次 Python AnchorStatusEvent.state。</summary>
         public string LatestServerState => diagnostics.latestServerState;
@@ -172,11 +185,31 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
-        /// Unity Awake：构造 frame aligner。
+        /// Unity Awake：构造 frame aligner 并绑定 policy host。
         /// </summary>
         private void Awake()
         {
             RebuildAligner();
+            if (policyHost != null)
+            {
+                policyHost.Bind(this);
+                if (processors != null && processors.Count > 0)
+                {
+                    Log.Info("已绑定 policyHost，processors 列表在 policy 路径中被忽略；baseline 对照请使用未绑定 policy 的 runtime。", this);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Unity LateUpdate：policy 模式下每渲染帧推进控制器计时并输出 stable pose。
+        /// 执行顺序为 -50，先于 DynamicObjectAnchor 与 eval recorder 的默认 LateUpdate。
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (policyHost != null)
+            {
+                AdvanceAnchorOutput(Time.realtimeSinceStartupAsDouble);
+            }
         }
 
         /// <summary>
@@ -263,10 +296,11 @@ namespace EgoAnchor.Runtime
 
         /// <summary>
         /// 尝试获取当前稳定 anchor pose。
-        /// 当前 stable 等于 processor chain 输出；若关闭处理器链，则 stable 直接等于 raw。
+        /// policy 模式下 stable 由每帧 Advance 输出（预测到渲染时刻）；
+        /// baseline 模式下等于 processor chain 输出，链为空时直接等于 raw。
         /// </summary>
         /// <param name="pose">当前 stable world pose。</param>
-        /// <returns>是否已有 stable/raw pose。</returns>
+        /// <returns>是否已有 stable pose。</returns>
         public bool TryGetStablePose(out Pose pose)
         {
             pose = stablePose;
@@ -321,12 +355,12 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
-        /// 接收已完成 frame alignment 的 world pose，并按配置运行 baseline 或 reliability-aware policy。
+        /// 接收已完成 frame alignment 的 world pose，并按配置运行 baseline 或自适应 policy。
         /// </summary>
         /// <param name="frameId">该 world pose 对应的 frame_id。</param>
         /// <param name="worldPose">Unity world 坐标 pose。</param>
         /// <param name="sourceResult">源 PoseResult；测试直接注入时可为空。</param>
-        /// <param name="sampleTime">当前 Unity 单调时间，单位秒。</param>
+        /// <param name="sampleTime">观测到达 Unity 的单调时间，单位秒。</param>
         private void AcceptWorldPose(long frameId, Pose worldPose, PoseResult sourceResult, double sampleTime)
         {
             if (IsPausedLocally())
@@ -347,11 +381,12 @@ namespace EgoAnchor.Runtime
                     frameId,
                     worldPose,
                     sampleTime,
+                    ResolveCaptureTimeSeconds(frameId),
                     sourceResult,
                     diagnostics.latestPhase
                 );
                 AnchorPolicyDecision decision = policyHost.AcceptPose(observation);
-                ApplyPolicyDecision(decision, frameId);
+                ApplyPolicyDecision(decision);
             }
             else
             {
@@ -361,6 +396,21 @@ namespace EgoAnchor.Runtime
                 diagnostics.latestPolicyAction = "baseline_accept";
                 diagnostics.latestPolicyReason = "policy_disabled";
             }
+        }
+
+        /// <summary>
+        /// 按 frame_id 回查该帧的 Unity 采集单调时间，作为滤波器测量时间戳。
+        /// </summary>
+        /// <param name="frameId">Quest stereo frame_id。</param>
+        /// <returns>采集时间（秒）；查不到时返回 -1，policy 退化使用到达时间。</returns>
+        private double ResolveCaptureTimeSeconds(long frameId)
+        {
+            if (framePoseHistory != null && framePoseHistory.TryGet(frameId, out FramePoseRecord record))
+            {
+                return record.SenderMonoMs / 1000.0;
+            }
+
+            return -1.0;
         }
 
         /// <summary>
@@ -447,7 +497,7 @@ namespace EgoAnchor.Runtime
             }
 
             AnchorPolicyDecision decision = policyHost.AcceptPose(AnchorObservation.MissingPose(frameId, sampleTime, reason, phase));
-            ApplyPolicyDecision(decision, frameId);
+            ApplyPolicyDecision(decision);
         }
 
         /// <summary>
@@ -463,36 +513,53 @@ namespace EgoAnchor.Runtime
             }
 
             AnchorPolicyDecision decision = policyHost.AcceptPose(AnchorObservation.AlignFailed(frameId, sampleTime, reason, phase));
-            ApplyPolicyDecision(decision, frameId);
+            ApplyPolicyDecision(decision);
         }
 
         /// <summary>
-        /// 应用 anchor policy 决策到 stable pose 和 Inspector 诊断。
+        /// 把 policy 输入分类决策写入 Inspector 诊断。
+        /// stable pose 不在这里更新：渲染输出统一由每帧 AdvanceAnchorOutput 产生，
+        /// 从而保证 policy 输出不再二次经过 processor 链。
         /// </summary>
-        private void ApplyPolicyDecision(AnchorPolicyDecision decision, long frameId)
+        private void ApplyPolicyDecision(AnchorPolicyDecision decision)
         {
             diagnostics.latestPolicyAction = decision.Action.ToString();
             diagnostics.latestPolicyReason = decision.Reason;
             diagnostics.currentAnchorState = decision.State;
-            if (decision.HasOutputPose)
+            if (policyHost != null)
             {
-                stablePose = ShouldAdvanceProcessors(decision.Action)
-                    ? RunProcessors(decision.OutputPose, frameId, Time.realtimeSinceStartupAsDouble)
-                    : decision.OutputPose;
+                diagnostics.latestInnovationPosD2 = policyHost.LastInnovationPosD2;
+                diagnostics.latestEffectiveMeasurementNoise = policyHost.LastREffPos;
+            }
+        }
+
+        /// <summary>
+        /// policy 模式下推进控制器计时并刷新 stable pose 输出。
+        /// LateUpdate 每帧调用；smoke 测试可显式传入时间直接驱动。
+        /// </summary>
+        /// <param name="nowSeconds">当前 Unity 单调时间，单位秒。</param>
+        public void AdvanceAnchorOutput(double nowSeconds)
+        {
+            if (policyHost == null)
+            {
+                return;
+            }
+
+            AnchorPolicyOutput output = policyHost.Advance(nowSeconds);
+            diagnostics.currentAnchorState = output.State;
+            diagnostics.currentMotionState = output.MotionState.ToString();
+            diagnostics.latestPredictAheadMs = output.PredictAheadSeconds * 1000f;
+            diagnostics.latestSpeedMps = policyHost.SpeedMps;
+            diagnostics.latestAngularSpeedDps = policyHost.AngularSpeedDps;
+            if (output.HasPose)
+            {
+                stablePose = output.Pose;
                 hasStablePose = true;
             }
             else
             {
                 hasStablePose = false;
             }
-        }
-
-        /// <summary>
-        /// 判断本次 policy 输出是否应推进 processor 状态。
-        /// </summary>
-        private static bool ShouldAdvanceProcessors(AnchorPolicyAction action)
-        {
-            return action == AnchorPolicyAction.Accept || action == AnchorPolicyAction.Coast;
         }
 
         /// <summary>
@@ -918,6 +985,30 @@ namespace EgoAnchor.Runtime
             /// <summary>最近一次实际使用的对齐参考相机。</summary>
             [Tooltip("最近一次实际使用的对齐参考相机。用于确认当前是 Left/Right/Center/None 哪一种对齐。")]
             public CameraReference latestUsedReference = CameraReference.Left;
+
+            /// <summary>当前运动状态名。</summary>
+            [Tooltip("当前运动状态：Unknown/Static/Moving。Static 表示控制器进入静止模式（强平滑 + 不外推），仅 policy 模式下更新。")]
+            public string currentMotionState = "";
+
+            /// <summary>最近一次估计线速度模长。</summary>
+            [Tooltip("最近一次滤波估计的线速度模长，单位米/秒。仅 policy 模式下更新。")]
+            public float latestSpeedMps;
+
+            /// <summary>最近一次估计角速度模长。</summary>
+            [Tooltip("最近一次滤波估计的角速度模长，单位度/秒。仅 policy 模式下更新。")]
+            public float latestAngularSpeedDps;
+
+            /// <summary>最近一次位置 innovation 马氏距离平方。</summary>
+            [Tooltip("最近一次测量门控的位置 innovation 马氏距离平方。超过 chi2 阈值的测量会被拒绝。仅 policy 模式下更新。")]
+            public float latestInnovationPosD2;
+
+            /// <summary>最近一次位置有效测量噪声。</summary>
+            [Tooltip("最近一次按可靠性分与静止状态放大后的位置测量噪声，单位 m^2。越大表示本帧测量权重越低。仅 policy 模式下更新。")]
+            public float latestEffectiveMeasurementNoise;
+
+            /// <summary>最近一次渲染输出前推时长。</summary>
+            [Tooltip("最近一次渲染输出实际使用的前推时长，单位毫秒。跟踪态为延迟隐藏量，续航态为已外推时长。仅 policy 模式下更新。")]
+            public double latestPredictAheadMs;
         }
 
         #endregion

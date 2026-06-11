@@ -70,13 +70,14 @@
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Alignment\CameraPoseFrameAligner.cs" Link="Alignment\CameraPoseFrameAligner.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\EgoAnchorLog.cs" Link="Diagnostics\EgoAnchorLog.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyDecision.cs" Link="Policy\AnchorPolicyDecision.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyOutput.cs" Link="Policy\AnchorPolicyOutput.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorObservation.cs" Link="Policy\AnchorObservation.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorLifecycleEvent.cs" Link="Policy\AnchorLifecycleEvent.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorStateMachine.cs" Link="Policy\AnchorStateMachine.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\ReliabilityScore.cs" Link="Policy\ReliabilityScore.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\ReliabilityGate.cs" Link="Policy\ReliabilityGate.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\InnovationGate.cs" Link="Policy\InnovationGate.cs" />
-    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPredictor.cs" Link="Policy\AnchorPredictor.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyConfig.cs" Link="Policy\AnchorPolicyConfig.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPoseFilter.cs" Link="Policy\AnchorPoseFilter.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorMeasurementGate.cs" Link="Policy\AnchorMeasurementGate.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\MotionStateClassifier.cs" Link="Policy\MotionStateClassifier.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\PolicyController.cs" Link="Policy\PolicyController.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyHost.cs" Link="Policy\AnchorPolicyHost.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Processors\AnchorPoseProcessor.cs" Link="Processors\AnchorPoseProcessor.cs" />

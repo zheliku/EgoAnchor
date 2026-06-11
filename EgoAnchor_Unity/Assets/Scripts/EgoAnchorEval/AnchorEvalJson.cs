@@ -38,6 +38,12 @@ namespace EgoAnchorEval
         /// <summary>最近一次 runtime 对齐或 pose 失败原因。</summary>
         public readonly string LatestFailure;
 
+        /// <summary>当前运动状态（Unknown/Static/Moving）；非 policy 变体为空字符串。</summary>
+        public readonly string MotionState;
+
+        /// <summary>最近一次渲染输出的前推时长，单位毫秒；非 policy 变体写 null。</summary>
+        public readonly double PredictAheadMs;
+
         /// <summary>stable_pos/stable_rot 的采样来源，例如 transform 或 none。</summary>
         public readonly string AnchorPoseSource;
 
@@ -82,7 +88,9 @@ namespace EgoAnchorEval
             bool isPrimary,
             bool hasAlignedRawPose,
             Pose alignedRawPose,
-            float reliabilityScore)
+            float reliabilityScore,
+            string motionState,
+            double predictAheadMs)
         {
             Label = label ?? string.Empty;
             SourceFrameId = sourceFrameId;
@@ -101,6 +109,8 @@ namespace EgoAnchorEval
             HasAlignedRawPose = hasAlignedRawPose;
             AlignedRawPose = alignedRawPose;
             ReliabilityScore = reliabilityScore;
+            MotionState = motionState ?? string.Empty;
+            PredictAheadMs = predictAheadMs;
         }
     }
 
@@ -228,6 +238,8 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "policy_reason", variant.PolicyReason);
             AppendStringProperty(builder, ref first, "latest_phase", variant.LatestPhase);
             AppendStringProperty(builder, ref first, "latest_failure", variant.LatestFailure);
+            AppendStringProperty(builder, ref first, "motion_state", variant.MotionState);
+            AppendDoubleProperty(builder, ref first, "predict_ahead_ms", variant.PredictAheadMs);
             if (variant.IsPrimary)
             {
                 AppendBoolProperty(builder, ref first, "has_aligned_raw", variant.HasAlignedRawPose);
