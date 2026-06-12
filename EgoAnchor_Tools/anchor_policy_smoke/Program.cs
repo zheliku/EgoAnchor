@@ -26,11 +26,16 @@ static class Program
         // ===== 统一自适应控制器场景断言 =====
         AssertFirstPoseSnaps();
         AssertStaticJitterSuppression();
+        AssertStaticClassifierUsesWindowDispersion();
         AssertStaticOutputLockSuppressesSmallSlip();
+        AssertMovingOutputDoesNotLockBeforeClassifierStatic();
         AssertMovingResponseAndPerFrameOutput();
         AssertLowRateMotionIsInterpolated();
         AssertScoreHysteresis();
         AssertLowScoreDoesNotDrag();
+        AssertLowScoreTrackPoseFailsSoftWhenPlausible();
+        AssertLowScoreTrackMotionExitsStatic();
+        AssertLowScoreTrackJumpStillRejected();
         AssertTeleportRecovery();
         AssertRotationJumpRecoversSoftly();
         AssertStaticRotationStartsMoving();
@@ -253,6 +258,68 @@ static class Program
         Assert(Vector3.Distance(released.position, locked.position) > 0.004f, "static output lock should release when the target clearly moves");
     }
 
+    /// <summary>S2c：静止分类使用窗口散布而不是首样本锚点，能容忍围绕真实位置的对称残差。</summary>
+    private static void AssertStaticClassifierUsesWindowDispersion()
+    {
+        AnchorPolicyConfig config = new AnchorPolicyConfig
+        {
+            staticEnterRadius = 0.012f,
+            staticEnterDuration = 0.45f,
+        };
+        PolicyController controller = new PolicyController(config);
+        Pose truth = new Pose(new Vector3(0.3f, -0.2f, 1.0f), Quaternion.identity);
+        double firstStaticTime = -1.0;
+
+        for (int k = 0; k < 24; k++)
+        {
+            double t = k * MsgDt;
+            float offset = k % 2 == 0 ? 0.010f : -0.010f;
+            Pose residualPose = new Pose(truth.position + new Vector3(offset, 0f, 0f), truth.rotation);
+            controller.AcceptPose(MakeTrackObservation(k + 1, residualPose, t, 0.9f));
+            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
+            {
+                controller.Advance(ta);
+            }
+
+            if (firstStaticTime < 0.0 && controller.MotionState == AnchorMotionState.Static)
+            {
+                firstStaticTime = t;
+            }
+        }
+
+        Assert(firstStaticTime >= 0.0 && firstStaticTime <= 1.0, $"centered residuals should enter Static via window dispersion, got {firstStaticTime:F2}s");
+    }
+
+    /// <summary>S2d：classifier 未确认 Static 时，低速真实运动也不能被渲染输出层偷偷锁住。</summary>
+    private static void AssertMovingOutputDoesNotLockBeforeClassifierStatic()
+    {
+        AnchorPolicyConfig config = new AnchorPolicyConfig
+        {
+            staticEnterRadius = 0.001f,
+            staticEnterDuration = 10f,
+        };
+        PolicyController controller = new PolicyController(config);
+        Vector3 start = new Vector3(0.3f, -0.2f, 1.0f);
+        Vector3 velocity = new Vector3(0.025f, 0f, 0f);
+        Pose firstOutput = Pose.identity;
+        Pose lastOutput = Pose.identity;
+
+        for (int k = 0; k < 30; k++)
+        {
+            double t = k * 0.20;
+            Pose measured = new Pose(start + velocity * (float)t, Quaternion.identity);
+            controller.AcceptPose(MakeTrackObservation(k + 1, measured, t, 0.9f));
+            lastOutput = controller.Advance(t + 3 * FrameDt).Pose;
+            if (k == 0)
+            {
+                firstOutput = lastOutput;
+            }
+        }
+
+        Assert(controller.MotionState != AnchorMotionState.Static, "test setup should keep classifier out of Static");
+        Assert(Vector3.Distance(lastOutput.position, firstOutput.position) > 0.05f, "moving output must keep following sustained slow motion before Static is confirmed");
+    }
+
     /// <summary>
     /// S3：匀速运动 + 120ms 管线延迟下，渲染时刻预测应显著降低误差，
     /// 且无新消息时相邻两帧输出仍连续变化（逐帧运动，而不是消息阶梯）。
@@ -319,12 +386,15 @@ static class Program
         PolicyController controller = new PolicyController();
         Vector3 startPos = new Vector3(0f, 0f, 1f);
         Vector3 velocity = new Vector3(0.35f, 0f, 0f);
-        Quaternion rotation = Quaternion.identity;
+        const float yawRateDps = 45f;
         const double lowRateMsgDt = 0.22;
         const double latency = 0.22;
         const int messageCount = 35;
         int movingRenderSteps = 0;
+        int rotatingRenderSteps = 0;
         int renderSteps = 0;
+        int zeroRun = 0;
+        int maxZeroRun = 0;
         Pose previousOutput = Pose.identity;
         bool hasPreviousOutput = false;
 
@@ -332,7 +402,7 @@ static class Program
         {
             double capture = k * lowRateMsgDt;
             double arrival = capture + latency;
-            Pose measured = new Pose(startPos + velocity * (float)capture, rotation);
+            Pose measured = new Pose(startPos + velocity * (float)capture, YawDegrees(yawRateDps * (float)capture));
             controller.AcceptPose(MakeTrackObservation(k + 1, measured, arrival, 0.9f, capture));
 
             double nextArrival = arrival + lowRateMsgDt;
@@ -342,9 +412,22 @@ static class Program
                 if (capture > 1.0 && hasPreviousOutput)
                 {
                     renderSteps++;
-                    if (Vector3.Distance(output.Pose.position, previousOutput.position) > 0.0002f)
+                    bool moved = Vector3.Distance(output.Pose.position, previousOutput.position) > 0.0002f;
+                    bool rotated = QuaternionAngleDegrees(output.Pose.rotation, previousOutput.rotation) > 0.02f;
+                    if (moved)
                     {
                         movingRenderSteps++;
+                        zeroRun = 0;
+                    }
+                    else
+                    {
+                        zeroRun++;
+                        maxZeroRun = Math.Max(maxZeroRun, zeroRun);
+                    }
+
+                    if (rotated)
+                    {
+                        rotatingRenderSteps++;
                     }
                 }
 
@@ -354,7 +437,10 @@ static class Program
         }
 
         float movingRatio = renderSteps > 0 ? (float)movingRenderSteps / renderSteps : 0f;
-        Assert(movingRatio > 0.55f, $"low-rate motion should be spread across render frames (movingRatio={movingRatio:F2})");
+        float rotatingRatio = renderSteps > 0 ? (float)rotatingRenderSteps / renderSteps : 0f;
+        Assert(movingRatio > 0.75f, $"low-rate translation should be spread across render frames (movingRatio={movingRatio:F2})");
+        Assert(rotatingRatio > 0.65f, $"low-rate rotation should be spread across render frames (rotatingRatio={rotatingRatio:F2})");
+        Assert(maxZeroRun <= 3, $"low-rate motion should not contain long still runs between source frames (maxZeroRun={maxZeroRun})");
     }
 
     /// <summary>S4：分数滞回——已跟踪时 0.30 分仍接受；冷启动 0.30 分不接受。</summary>
@@ -392,6 +478,84 @@ static class Program
 
         AnchorPolicyDecision reject = controller.AcceptPose(MakeTrackObservation(7, offsetPose, 6 * MsgDt, 0.05f));
         Assert(reject.Action == AnchorPolicyAction.Reject, "score below hold minimum should reject outright");
+    }
+
+    /// <summary>S5b：已有跟踪后，低分但连续合理的 TRACK pose 应低权重进入滤波，不能让 anchor 长时间 Lost。</summary>
+    private static void AssertLowScoreTrackPoseFailsSoftWhenPlausible()
+    {
+        PolicyController controller = new PolicyController();
+        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
+        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
+        controller.Advance(FrameDt);
+
+        AnchorPolicyDecision decision = default;
+        Pose output = basePose;
+        const double lowRateDt = 0.40;
+        for (int i = 1; i <= 24; i++)
+        {
+            double t = i * lowRateDt;
+            Pose lowScorePose = new Pose(basePose.position + new Vector3(0.012f * i, 0f, 0f), Quaternion.identity);
+            decision = controller.AcceptPose(MakeTrackObservation(10 + i, lowScorePose, t, 0.04f));
+            for (double ta = t + FrameDt; ta < t + lowRateDt; ta += FrameDt)
+            {
+                output = controller.Advance(ta).Pose;
+            }
+        }
+
+        Assert(decision.Action == AnchorPolicyAction.Accept, "plausible low-score TRACK pose should be accepted fail-soft after tracking is established");
+        Assert(decision.Reason == "low_score_track", "plausible low-score TRACK pose should be labeled low_score_track");
+        Assert(decision.State == AnchorState.Tracking, "each low-score fail-soft pose should refresh the lifecycle to Tracking");
+        Assert(controller.State == AnchorState.Tracking || controller.State == AnchorState.Coasting, "low-score fail-soft streak should not degrade to Frozen/Lost");
+        Assert(Vector3.Distance(output.position, basePose.position) > 0.05f, "low-score fail-soft tracking should still move the output over sustained motion");
+    }
+
+    /// <summary>S5c：已进入 Static 后，低分但连续合理的 TRACK 运动也必须解锁并恢复跟随。</summary>
+    private static void AssertLowScoreTrackMotionExitsStatic()
+    {
+        PolicyController controller = new PolicyController();
+        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
+        for (int i = 0; i < 14; i++)
+        {
+            double t = i * MsgDt;
+            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, t, 0.9f));
+            controller.Advance(t + FrameDt);
+        }
+
+        Assert(controller.MotionState == AnchorMotionState.Static, "seeded stable stream should enter Static before low-score motion probe");
+        Pose locked = controller.Advance(14 * MsgDt + FrameDt).Pose;
+
+        AnchorPolicyDecision decision = default;
+        Pose output = locked;
+        for (int i = 0; i < 10; i++)
+        {
+            double t = (15 + i) * MsgDt;
+            Pose movingPose = new Pose(basePose.position + new Vector3(0.012f * (i + 1), 0f, 0f), Quaternion.identity);
+            decision = controller.AcceptPose(MakeTrackObservation(50 + i, movingPose, t, 0.04f));
+            output = controller.Advance(t + 4 * FrameDt).Pose;
+        }
+
+        Assert(decision.Action == AnchorPolicyAction.Accept, "low-score TRACK motion should be accepted fail-soft after Static");
+        Assert(decision.Reason == "low_score_track", "low-score TRACK motion after Static should keep the fail-soft reason");
+        Assert(controller.MotionState == AnchorMotionState.Moving, "low-score TRACK motion should exit Static");
+        Assert(controller.State == AnchorState.Tracking || controller.State == AnchorState.Coasting, "low-score TRACK motion should not leave the anchor Lost");
+        Assert(Vector3.Distance(output.position, locked.position) > 0.02f, "output should release the static lock and follow sustained low-score TRACK motion");
+    }
+
+    /// <summary>S5d：低分 TRACK pose 若是大跳变，仍应拒绝，避免低质量外点拖拽 anchor。</summary>
+    private static void AssertLowScoreTrackJumpStillRejected()
+    {
+        PolicyController controller = new PolicyController();
+        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
+        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
+        controller.Advance(FrameDt);
+
+        Pose jumpedPose = new Pose(basePose.position + new Vector3(0.35f, 0f, 0f), Quaternion.identity);
+        AnchorPolicyDecision decision = controller.AcceptPose(MakeTrackObservation(2, jumpedPose, MsgDt, 0.04f));
+        Pose output = controller.Advance(MsgDt + 3 * FrameDt).Pose;
+
+        Assert(decision.Action == AnchorPolicyAction.Reject, "low-score large TRACK jump should still be rejected");
+        Assert(decision.Reason == "score_reject", "low-score large TRACK jump should keep the score rejection reason");
+        Assert(Vector3.Distance(output.position, jumpedPose.position) > 0.20f, "rejected low-score jump should not drag the output");
     }
 
     /// <summary>S6：单帧大跳变拒绝；连续高分且互相一致的新位置达到次数后判定真实瞬移并贴合恢复。</summary>
@@ -1029,6 +1193,14 @@ static class Program
 
         FramePoseSample delayedThird = buffer.Select(third, 1);
         Assert(Math.Abs(delayedThird.LeftCameraPose.position.x - 2f) < 1e-5f, "one-frame delay should keep advancing through history");
+
+        FramePoseDelayBuffer twoFrameBuffer = new FramePoseDelayBuffer();
+        FramePoseSample twoFrameCold = twoFrameBuffer.Select(first, 2);
+        FramePoseSample twoFrameWarmup = twoFrameBuffer.Select(second, 2);
+        FramePoseSample delayedByTwo = twoFrameBuffer.Select(third, 2);
+        Assert(Math.Abs(twoFrameCold.LeftCameraPose.position.x - 1f) < 1e-5f, "two-frame delay should fall back to current sample while cold");
+        Assert(Math.Abs(twoFrameWarmup.LeftCameraPose.position.x - 2f) < 1e-5f, "two-frame delay should keep using current sample until enough history exists");
+        Assert(Math.Abs(delayedByTwo.LeftCameraPose.position.x - 1f) < 1e-5f, "two-frame delay should return the sample two successful captures earlier");
 
         FramePoseSample immediate = buffer.Select(MakeFramePoseSample(4f, 1099.0, 13), 0);
         Assert(Math.Abs(immediate.LeftCameraPose.position.x - 4f) < 1e-5f, "zero delay should return current sample and clear history");

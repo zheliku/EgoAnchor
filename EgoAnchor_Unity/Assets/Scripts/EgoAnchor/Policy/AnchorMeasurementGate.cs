@@ -65,9 +65,9 @@ namespace EgoAnchor.Policy
     /// <summary>
     /// 统一测量门控：决定一帧 pose 测量是接受、贴合接受、保持还是拒绝。
     ///
-    /// 判定顺序：硬拒绝 flag -> 重定位旁路 -> 首测量 -> 分数滞回 ->
-    /// 静止退出探测 -> 马氏 innovation（相对滤波器预测位姿与协方差，位置/旋转分别判定，
-    /// 外加绝对兜底）-> 硬平移瞬移恢复或中等平移/大旋转软恢复。
+    /// 判定顺序：硬拒绝 flag -> 重定位旁路 -> 首测量 -> 分数滞回 /
+    /// 低分 TRACK fail-soft -> 静止退出探测 -> 马氏 innovation（相对滤波器预测位姿与协方差，
+    /// 位置/旋转分别判定，外加绝对兜底）-> 硬平移瞬移恢复或中等平移/大旋转软恢复。
     /// 同时计算按可靠性分与静止状态放大后的有效测量噪声，供滤波器使用。
     /// </summary>
     public sealed class AnchorMeasurementGate
@@ -168,14 +168,17 @@ namespace EgoAnchor.Policy
                 return new AnchorGateResult(AnchorGateAction.Reject, "score_reject", rEffPos, rEffRot, none);
             }
 
-            if (score < config.holdScoreMin)
+            bool belowHoldScore = score < config.holdScoreMin;
+            bool canFailSoftTrack = belowHoldScore && CanFailSoftTrack(in observation);
+            if (belowHoldScore && !canFailSoftTrack)
             {
                 inAcceptBand = false;
                 return new AnchorGateResult(AnchorGateAction.Reject, "score_reject", rEffPos, rEffRot, none);
             }
 
             float scoreThreshold = inAcceptBand ? config.acceptScoreStay : config.acceptScoreEnter;
-            if (score < scoreThreshold)
+            bool belowAcceptScore = score < scoreThreshold;
+            if (belowAcceptScore && !canFailSoftTrack)
             {
                 inAcceptBand = false;
                 return new AnchorGateResult(AnchorGateAction.Hold, "score_hold", rEffPos, rEffRot, none);
@@ -224,10 +227,31 @@ namespace EgoAnchor.Policy
                         }
                     }
                 }
+                else if (canFailSoftTrack && !jump.HasHardJump && IsTrustedMotion(in innovation))
+                {
+                    MarkAccepted();
+                    return new AnchorGateResult(
+                        AnchorGateAction.Accept,
+                        "low_score_track",
+                        rEffPos,
+                        rEffRot,
+                        innovation,
+                        forceMoving: true);
+                }
                 else
                 {
                     ResetTeleportRecovery();
                     ResetSoftRecovery();
+                }
+
+                if (belowHoldScore)
+                {
+                    return new AnchorGateResult(AnchorGateAction.Reject, "score_reject", rEffPos, rEffRot, innovation);
+                }
+
+                if (belowAcceptScore)
+                {
+                    return new AnchorGateResult(AnchorGateAction.Hold, "score_hold", rEffPos, rEffRot, innovation);
                 }
 
                 return new AnchorGateResult(AnchorGateAction.Reject, jump.Reason, rEffPos, rEffRot, innovation);
@@ -236,11 +260,11 @@ namespace EgoAnchor.Policy
             MarkAccepted();
             return new AnchorGateResult(
                 AnchorGateAction.Accept,
-                forceMoving ? "motion_start" : "score_accept",
+                belowAcceptScore ? "low_score_track" : forceMoving ? "motion_start" : "score_accept",
                 rEffPos,
                 rEffRot,
                 innovation,
-                forceMoving);
+                forceMoving || belowAcceptScore);
         }
 
         /// <summary>
@@ -262,6 +286,18 @@ namespace EgoAnchor.Policy
             return innovation.PosD2 > config.motionSpikeD2
                 || innovation.TranslationMeters > config.staticExitDisplacement
                 || innovation.RotationDegrees > config.staticExitRotationDeg;
+        }
+
+        /// <summary>
+        /// 已有跟踪状态下，低分 TRACK pose 不再直接判死刑；只要后续 innovation 判定没有大跳变，
+        /// 它仍可作为低权重测量进入滤波，避免 depth/reprojection 误报导致 anchor 长时间 Lost。
+        /// 冷启动和重定位仍受高分门控约束。
+        /// </summary>
+        private static bool CanFailSoftTrack(in AnchorObservation observation)
+        {
+            return observation.HasServerPose
+                && (ContainsText(observation.Phase, "TRACK") || ContainsText(observation.PoseSource, "TRACK"))
+                && !observation.IsRelocalization;
         }
 
         /// <summary>
@@ -461,6 +497,16 @@ namespace EgoAnchor.Policy
         {
             return ContainsFlag(observation.ReliabilityFlags, "no_pose")
                 || ContainsFlag(observation.ReliabilityFlags, "invalid_pose");
+        }
+
+        /// <summary>
+        /// 大小写不敏感地判断文本是否包含指定片段。
+        /// </summary>
+        private static bool ContainsText(string value, string token)
+        {
+            return !string.IsNullOrEmpty(value)
+                && !string.IsNullOrEmpty(token)
+                && value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>

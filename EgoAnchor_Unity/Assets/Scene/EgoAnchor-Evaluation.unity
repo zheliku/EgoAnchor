@@ -1484,7 +1484,7 @@ MonoBehaviour:
   rightCameraAccess: {fileID: 880946284}
   centerReferenceOverride: {fileID: 0}
   framePoseHistory: {fileID: 1015685191}
-  cameraPoseDelayFrames: 1
+  cameraPoseDelayFrames: 2
   outputScale: 1
   jpegQuality: 85
 --- !u!114 &727659788

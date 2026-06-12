@@ -1,0 +1,9 @@
+{
+  "session_id": "20260613_012345_controller_right",
+  "object_id": "controller_right",
+  "python_log_filename": "20260613_012345_controller_right_python_runtime.jsonl",
+  "python_log_relative_path": "20260613_012345_controller_right_python_runtime.jsonl",
+  "created_unix_ms": 1781285025065.4644,
+  "created_utc": "2026-06-12T17:23:45.065Z",
+  "state": "python_started"
+}
