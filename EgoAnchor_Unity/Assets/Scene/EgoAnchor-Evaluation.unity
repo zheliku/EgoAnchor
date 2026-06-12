@@ -535,7 +535,6 @@ GameObject:
   - component: {fileID: 160200731}
   - component: {fileID: 160200735}
   - component: {fileID: 160200734}
-  - component: {fileID: 160200736}
   m_Layer: 0
   m_Name: AnchorObject
   m_TagString: Untagged
@@ -570,7 +569,7 @@ MonoBehaviour:
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
-  policyHost: {fileID: 160200736}
+  policyHost: {fileID: 1039886366}
   diagnostics:
     latestAlignedFrameId: -1
     latestPhase: 
@@ -678,53 +677,6 @@ MonoBehaviour:
   positionProcessNoise: 0.02
   rotationResponseSpeed: 8
   snapOnFirstPose: 1
---- !u!114 &160200736
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 160200730}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  config:
-    acceptScoreEnter: 0.35
-    acceptScoreStay: 0.25
-    holdScoreMin: 0.12
-    relocalizeMinScore: 0.12
-    innovationPosChi2Gate: 16
-    innovationRotChi2Gate: 11
-    maxTranslationJumpMeters: 0.8
-    maxRotationJumpDegrees: 90
-    stuckRecoveryCount: 5
-    stuckConsistencyMeters: 0.1
-    stuckConsistencyDegrees: 15
-    positionMeasurementNoise: 0.000004
-    staticMeasurementNoiseScale: 100
-    scoreNoiseFloor: 0.2
-    processNoiseMoving: 0.02
-    processNoiseStatic: 0.00001
-    rotationMeasurementNoise: 0.0003
-    rotationProcessNoise: 0.02
-    rotationProcessNoiseStatic: 0.001
-    angularVelocityGainBeta: 0.3
-    angularVelocityMaxDps: 200
-    angularVelocityDampingTau: 0.5
-    staticEnterRadius: 0.012
-    staticEnterRotationDeg: 2.5
-    staticEnterDuration: 0.5
-    motionSpikeD2: 6
-    staticExitDisplacement: 0.02
-    staticExitRotationDeg: 3
-    coastGraceSeconds: 0.18
-    maxCoastSeconds: 0.45
-    lostTimeoutSeconds: 2
-    maxPredictAheadSeconds: 0.15
-    velocityDampingTauSeconds: 0.3
-    maxMeasurementAgeSeconds: 1
 --- !u!1 &209670095
 GameObject:
   m_ObjectHideFlags: 0
@@ -1532,6 +1484,7 @@ MonoBehaviour:
   rightCameraAccess: {fileID: 880946284}
   centerReferenceOverride: {fileID: 0}
   framePoseHistory: {fileID: 1015685191}
+  cameraPoseDelayFrames: 1
   outputScale: 1
   jpegQuality: 85
 --- !u!114 &727659788
@@ -2469,6 +2422,12 @@ MonoBehaviour:
     innovationRotChi2Gate: 11
     maxTranslationJumpMeters: 0.8
     maxRotationJumpDegrees: 90
+    trustedMotionTranslationMeters: 0.18
+    trustedMotionRotationDegrees: 45
+    softRecoveryCount: 2
+    softRecoveryConsistencyMeters: 0.15
+    softRecoveryConsistencyDegrees: 45
+    softRecoveryRotationNoiseScale: 2
     stuckRecoveryCount: 5
     stuckConsistencyMeters: 0.1
     stuckConsistencyDegrees: 15
@@ -2483,18 +2442,28 @@ MonoBehaviour:
     angularVelocityGainBeta: 0.3
     angularVelocityMaxDps: 200
     angularVelocityDampingTau: 0.5
+    maxRotationCorrectionDegrees: 45
     staticEnterRadius: 0.012
     staticEnterRotationDeg: 2.5
     staticEnterDuration: 0.5
     motionSpikeD2: 6
-    staticExitDisplacement: 0.02
-    staticExitRotationDeg: 3
-    coastGraceSeconds: 0.18
+    staticExitDisplacement: 0.01
+    staticExitRotationDeg: 1.5
+    coastGraceSeconds: 0.3
     maxCoastSeconds: 0.45
     lostTimeoutSeconds: 2
     maxPredictAheadSeconds: 0.15
+    maxRotationPredictAheadSeconds: 0.05
     velocityDampingTauSeconds: 0.3
     maxMeasurementAgeSeconds: 1
+    staticOutputReleaseMeters: 0.02
+    staticOutputReleaseDegrees: 3
+    staticOutputSmoothingTauSeconds: 0.3
+    maxStaticOutputSpeedMps: 0.05
+    maxStaticOutputAngularSpeedDps: 45
+    movingOutputSmoothingTauSeconds: 0.04
+    maxOutputSpeedMps: 3
+    maxOutputAngularSpeedDps: 720
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,0 +1,26 @@
+label,policy_action,policy_reason,count
+kalman,Accept,motion_start,524
+kalman,Accept,rotation_recovery,87
+kalman,Accept,score_accept,7771
+kalman,Accept,trusted_motion,411
+kalman,Hold,no_mask,261
+kalman,Hold,score_hold,34
+kalman,Reject,rotation_innovation_d2_102.6,12
+kalman,Reject,rotation_innovation_d2_12.5,13
+kalman,Reject,rotation_innovation_d2_127.6,15
+kalman,Reject,rotation_innovation_d2_13.6,14
+kalman,Reject,rotation_innovation_d2_157.3,13
+kalman,Reject,rotation_innovation_d2_18.1,12
+kalman,Reject,rotation_innovation_d2_33.1,12
+kalman,Reject,rotation_innovation_d2_76.1,11
+kalman,Reject,rotation_innovation_d2_78.2,13
+kalman,Reject,rotation_innovation_d2_99.7,14
+kalman,Reject,rotation_jump_144.1deg,11
+kalman,Reject,score_reject,1249
+kalman,Reject,stale_measurement,13
+kalman,server_status,DETECTING -> TRACKING,12
+kalman,server_status,TRACKING -> DETECTING,5
+raw,baseline_accept,policy_disabled,10229
+raw,no_pose,no_mask,261
+raw,server_status,DETECTING -> TRACKING,12
+raw,server_status,TRACKING -> DETECTING,5

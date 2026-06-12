@@ -27,6 +27,9 @@ namespace EgoAnchor.Policy
         /// <summary>静止/运动状态分类器。</summary>
         private readonly MotionStateClassifier classifier;
 
+        /// <summary>渲染输出平滑器。</summary>
+        private readonly AnchorOutputSmoother outputSmoother;
+
         /// <summary>anchor 生命周期状态机。</summary>
         private AnchorStateMachine stateMachine;
 
@@ -71,6 +74,7 @@ namespace EgoAnchor.Policy
             filter = new AnchorPoseFilter(this.config);
             gate = new AnchorMeasurementGate(this.config);
             classifier = new MotionStateClassifier(this.config);
+            outputSmoother = new AnchorOutputSmoother(this.config);
             stateMachine = new AnchorStateMachine(this.config.maxCoastSeconds, this.config.lostTimeoutSeconds);
         }
 
@@ -130,6 +134,7 @@ namespace EgoAnchor.Policy
             filter.ApplyConfig(newConfig);
             gate.ApplyConfig(newConfig);
             classifier.ApplyConfig(newConfig);
+            outputSmoother.ApplyConfig(newConfig);
 
             if (timeoutsChanged)
             {
@@ -176,6 +181,7 @@ namespace EgoAnchor.Policy
                 case AnchorGateAction.AcceptSnap:
                 {
                     filter.Snap(observation.WorldPose, measurementTime);
+                    outputSmoother.Snap(observation.WorldPose, observation.SampleTimeSeconds);
                     classifier.Reset();
                     lastAcceptSampleTime = observation.SampleTimeSeconds;
                     lastMeasurementCaptureTime = measurementTime;
@@ -235,9 +241,11 @@ namespace EgoAnchor.Policy
             {
                 lastPredictAheadSeconds = 0f;
                 filter.FreezeCoast(nowSeconds);
+                Pose pausedPose = filter.PredictAt(nowSeconds, AnchorPredictMode.Hold);
+                pausedPose = outputSmoother.Advance(pausedPose, AnchorPredictMode.Hold, AnchorState.Paused, classifier.IsStatic, nowSeconds);
                 return new AnchorPolicyOutput(
                     filter.HasState,
-                    filter.PredictAt(nowSeconds, AnchorPredictMode.Hold),
+                    pausedPose,
                     AnchorState.Paused,
                     classifier.State,
                     0f,
@@ -294,6 +302,7 @@ namespace EgoAnchor.Policy
             }
 
             Pose pose = filter.PredictAt(nowSeconds, mode);
+            pose = outputSmoother.Advance(pose, mode, state, classifier.IsStatic, nowSeconds);
             lastPredictAheadSeconds = ComputePredictAhead(nowSeconds, mode);
             return new AnchorPolicyOutput(true, pose, state, classifier.State, lastPredictAheadSeconds, gapReason);
         }
@@ -415,6 +424,7 @@ namespace EgoAnchor.Policy
             filter.Reset();
             gate.Reset();
             classifier.Reset();
+            outputSmoother.Reset();
             lastAcceptSampleTime = -1.0;
             lastMeasurementCaptureTime = -1.0;
             outputFrozen = false;

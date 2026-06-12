@@ -1,0 +1,11 @@
+condition,label,n,spike_count,spike_threshold_m,max_translation_error_m,policy_reject_count,top_policy_reasons
+fast_head,kalman,1790,0,0.05,0.04844306730811414,38,score_reject:26;rotation_innovation_d2_18.1:12
+fast_head,raw,1790,14,0.05,0.0650500040588169,0,
+object_motion,kalman,3593,2062,0.05,0.5738118559660429,1263,score_reject:1187;rotation_innovation_d2_13.6:14;stale_measurement:13;rotation_innovation_d2_78.2:13;rotation_innovation_d2_157.3:13
+object_motion,raw,3593,2446,0.05,0.7869658224191984,0,
+slow_head,kalman,1,0,0.05,0.014988481779464422,0,
+slow_head,raw,1,0,0.05,0.015346489913549628,0,
+static,kalman,4617,199,0.05,0.10603733275451951,101,score_reject:36;rotation_innovation_d2_127.6:15;rotation_innovation_d2_99.7:14;rotation_innovation_d2_12.5:13;rotation_innovation_d2_102.6:12
+static,raw,4617,185,0.05,0.09536705165258395,0,
+unlabeled,kalman,506,0,0.05,0.031124969657177974,0,
+unlabeled,raw,506,0,0.05,0.03396741926979122,0,

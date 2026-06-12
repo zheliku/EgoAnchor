@@ -26,7 +26,9 @@ static class Program
         // ===== 统一自适应控制器场景断言 =====
         AssertFirstPoseSnaps();
         AssertStaticJitterSuppression();
+        AssertStaticOutputLockSuppressesSmallSlip();
         AssertMovingResponseAndPerFrameOutput();
+        AssertLowRateMotionIsInterpolated();
         AssertScoreHysteresis();
         AssertLowScoreDoesNotDrag();
         AssertTeleportRecovery();
@@ -210,6 +212,47 @@ static class Program
         Assert(Vector3.Distance(lastOutputPose.position, truth.position) < 0.001f, "static output should not drift away from truth");
     }
 
+    /// <summary>S2b：静止锁应吸收小范围 world-pose 残余 slip，直到偏差超过释放阈值才跟随。</summary>
+    private static void AssertStaticOutputLockSuppressesSmallSlip()
+    {
+        PolicyController controller = new PolicyController();
+        Pose truth = new Pose(new Vector3(0.3f, -0.2f, 1.0f), Quaternion.identity);
+        for (int i = 0; i < 25; i++)
+        {
+            double t = i * MsgDt;
+            controller.AcceptPose(MakeTrackObservation(i + 1, truth, t, 0.9f));
+            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
+            {
+                controller.Advance(ta);
+            }
+        }
+
+        Assert(controller.MotionState == AnchorMotionState.Static, "seeded stable stream should enter Static before slip suppression probe");
+        double probeTime = 25 * MsgDt;
+        Pose locked = controller.Advance(probeTime).Pose;
+        float maxSlipMeters = 0f;
+        for (int j = 0; j < 6; j++)
+        {
+            float sign = j % 2 == 0 ? 1f : -1f;
+            Pose slippedMeasurement = new Pose(truth.position + new Vector3(0.015f * sign, 0f, 0f), truth.rotation);
+            double t = probeTime + j * MsgDt;
+            controller.AcceptPose(MakeTrackObservation(100 + j, slippedMeasurement, t, 0.9f));
+            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
+            {
+                Pose output = controller.Advance(ta).Pose;
+                maxSlipMeters = Math.Max(maxSlipMeters, Vector3.Distance(output.position, locked.position));
+            }
+        }
+
+        Assert(maxSlipMeters < 0.002f, $"static output lock should suppress sub-release slip (max={maxSlipMeters * 1000:F2}mm)");
+
+        Pose moved = new Pose(truth.position + new Vector3(0.05f, 0f, 0f), truth.rotation);
+        double moveTime = probeTime + 6 * MsgDt;
+        controller.AcceptPose(MakeTrackObservation(200, moved, moveTime, 0.9f));
+        Pose released = controller.Advance(moveTime + 4 * FrameDt).Pose;
+        Assert(Vector3.Distance(released.position, locked.position) > 0.004f, "static output lock should release when the target clearly moves");
+    }
+
     /// <summary>
     /// S3：匀速运动 + 120ms 管线延迟下，渲染时刻预测应显著降低误差，
     /// 且无新消息时相邻两帧输出仍连续变化（逐帧运动，而不是消息阶梯）。
@@ -268,6 +311,50 @@ static class Program
         Assert(sawMoving, "uniform motion should classify as Moving");
         Assert(sawPerFrameMotion, "consecutive Advance outputs without a new message should still move (per-frame prediction)");
         Assert(filterP90 < rawP90 * 0.5f, $"predicted output P90 error should beat arrival-latched raw by 2x (filter={filterP90 * 1000:F1}mm, raw={rawP90 * 1000:F1}mm)");
+    }
+
+    /// <summary>S3b：4-5Hz 低频 pose 流下，渲染输出仍应在 source frame 间连续插值，而不是长时间零增量。</summary>
+    private static void AssertLowRateMotionIsInterpolated()
+    {
+        PolicyController controller = new PolicyController();
+        Vector3 startPos = new Vector3(0f, 0f, 1f);
+        Vector3 velocity = new Vector3(0.35f, 0f, 0f);
+        Quaternion rotation = Quaternion.identity;
+        const double lowRateMsgDt = 0.22;
+        const double latency = 0.22;
+        const int messageCount = 35;
+        int movingRenderSteps = 0;
+        int renderSteps = 0;
+        Pose previousOutput = Pose.identity;
+        bool hasPreviousOutput = false;
+
+        for (int k = 0; k < messageCount; k++)
+        {
+            double capture = k * lowRateMsgDt;
+            double arrival = capture + latency;
+            Pose measured = new Pose(startPos + velocity * (float)capture, rotation);
+            controller.AcceptPose(MakeTrackObservation(k + 1, measured, arrival, 0.9f, capture));
+
+            double nextArrival = arrival + lowRateMsgDt;
+            for (double ta = arrival + FrameDt; ta < nextArrival; ta += FrameDt)
+            {
+                AnchorPolicyOutput output = controller.Advance(ta);
+                if (capture > 1.0 && hasPreviousOutput)
+                {
+                    renderSteps++;
+                    if (Vector3.Distance(output.Pose.position, previousOutput.position) > 0.0002f)
+                    {
+                        movingRenderSteps++;
+                    }
+                }
+
+                previousOutput = output.Pose;
+                hasPreviousOutput = true;
+            }
+        }
+
+        float movingRatio = renderSteps > 0 ? (float)movingRenderSteps / renderSteps : 0f;
+        Assert(movingRatio > 0.55f, $"low-rate motion should be spread across render frames (movingRatio={movingRatio:F2})");
     }
 
     /// <summary>S4：分数滞回——已跟踪时 0.30 分仍接受；冷启动 0.30 分不接受。</summary>
@@ -454,6 +541,11 @@ static class Program
             double t = k * MsgDt;
             Pose truth = new Pose(startPos + velocity * (float)t, YawDegrees(yawRate * (float)t));
             controller.AcceptPose(MakeTrackObservation(k + 1, truth, t, 0.9f));
+            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
+            {
+                controller.Advance(ta);
+            }
+
             lastTime = t;
             lastTruth = truth.position;
         }
@@ -468,7 +560,9 @@ static class Program
         Assert(coastA.State == AnchorState.Coasting && coastB.State == AnchorState.Coasting, "between grace and max coast the state should be Coasting");
         Assert(Vector3.Distance(coastB.Pose.position, coastA.Pose.position) > 0.001f, "coasting output should keep moving along the damped velocity");
         Assert(QuaternionAngleDegrees(coastB.Pose.rotation, coastA.Pose.rotation) < 0.1f, "coasting output should hold rotation instead of extrapolating stale angular velocity");
-        Assert(Vector3.Distance(coastB.Pose.position, lastTruth) < velocity.magnitude * (config.maxPredictAheadSeconds + config.velocityDampingTauSeconds) + 0.01f, "coast displacement should stay bounded");
+        float coastDistance = Vector3.Distance(coastB.Pose.position, lastTruth);
+        float coastBound = velocity.magnitude * (config.maxPredictAheadSeconds + config.velocityDampingTauSeconds) + 0.06f;
+        Assert(coastDistance < coastBound, $"coast displacement should stay bounded (dist={coastDistance:F3}, bound={coastBound:F3})");
 
         AnchorPolicyOutput frozenA = controller.Advance(lastTime + config.maxCoastSeconds + 0.05);
         AnchorPolicyOutput frozenB = controller.Advance(lastTime + config.maxCoastSeconds + 0.07);

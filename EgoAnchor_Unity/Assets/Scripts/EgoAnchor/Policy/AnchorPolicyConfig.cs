@@ -186,6 +186,39 @@ namespace EgoAnchor.Policy
         [Tooltip("测量采集时间早于当前超过该值时直接丢弃，单位秒。用于时钟异常或缓存陈旧的保护。")]
         [Min(0.1f)] public float maxMeasurementAgeSeconds = 1.0f;
 
+        /// <summary>静止输出锁定的位置释放阈值，单位米。</summary>
+        [Header("渲染输出")]
+        [Tooltip("进入静止后，渲染输出会锁定在当前 world pose；目标 pose 与锁定 pose 的位置差超过该阈值才释放并跟随。用于吸收 frame alignment 残余抖动和头动诱发的小漂移。")]
+        [Min(0.001f)] public float staticOutputReleaseMeters = 0.02f;
+
+        /// <summary>静止输出锁定的旋转释放阈值，单位度。</summary>
+        [Tooltip("进入静止后，渲染输出会锁定在当前旋转；目标 pose 与锁定旋转差超过该阈值才释放并跟随。")]
+        [Min(0.1f)] public float staticOutputReleaseDegrees = 3.0f;
+
+        /// <summary>静止输出慢速归中的时间常数，单位秒。</summary>
+        [Tooltip("静止锁定期间，渲染输出仍会以该时间常数慢速追踪滤波后的静止均值，避免锁在进入静止瞬间的随机偏差上。")]
+        [Min(0.01f)] public float staticOutputSmoothingTauSeconds = 0.30f;
+
+        /// <summary>静止锁定期间最大归中线速度，单位米/秒。</summary>
+        [Tooltip("静止锁定期间渲染输出慢速归中的最大线速度，单位米/秒。该值应远小于运动输出速度，用于避免头动残余误差被快速显示出来。")]
+        [Min(0.001f)] public float maxStaticOutputSpeedMps = 0.05f;
+
+        /// <summary>静止锁定期间最大归中角速度，单位度/秒。</summary>
+        [Tooltip("静止锁定期间渲染输出慢速归中的最大角速度，单位度/秒。该值应远小于运动输出角速度。")]
+        [Min(0.1f)] public float maxStaticOutputAngularSpeedDps = 45f;
+
+        /// <summary>运动输出追踪目标的时间常数，单位秒。</summary>
+        [Tooltip("运动状态下渲染输出追踪滤波目标 pose 的时间常数，单位秒。用于把低频 pose 更新摊到高帧率渲染帧上；越小越跟手，越大越顺滑但延迟更高。")]
+        [Min(0.001f)] public float movingOutputSmoothingTauSeconds = 0.04f;
+
+        /// <summary>渲染输出最大线速度，单位米/秒。</summary>
+        [Tooltip("渲染输出每秒允许移动的最大距离，单位米/秒。限制单帧目标跳变造成的显示速度尖峰。")]
+        [Min(0.01f)] public float maxOutputSpeedMps = 3.0f;
+
+        /// <summary>渲染输出最大角速度，单位度/秒。</summary>
+        [Tooltip("渲染输出每秒允许旋转的最大角度，单位度/秒。限制单帧旋转目标跳变造成的显示速度尖峰。")]
+        [Min(1f)] public float maxOutputAngularSpeedDps = 720f;
+
         /// <summary>
         /// 归一参数之间的约束关系，供 Inspector 修改后调用。
         /// </summary>
@@ -205,6 +238,14 @@ namespace EgoAnchor.Policy
             maxCoastSeconds = Mathf.Max(maxCoastSeconds, coastGraceSeconds);
             lostTimeoutSeconds = Mathf.Max(lostTimeoutSeconds, maxCoastSeconds);
             maxRotationPredictAheadSeconds = Mathf.Clamp(maxRotationPredictAheadSeconds, 0f, maxPredictAheadSeconds);
+            staticOutputReleaseMeters = Mathf.Max(staticOutputReleaseMeters, staticExitDisplacement);
+            staticOutputReleaseDegrees = Mathf.Max(staticOutputReleaseDegrees, staticExitRotationDeg);
+            staticOutputSmoothingTauSeconds = Mathf.Max(staticOutputSmoothingTauSeconds, 0.01f);
+            maxStaticOutputSpeedMps = Mathf.Max(maxStaticOutputSpeedMps, 0.001f);
+            maxStaticOutputAngularSpeedDps = Mathf.Max(maxStaticOutputAngularSpeedDps, 0.1f);
+            movingOutputSmoothingTauSeconds = Mathf.Max(movingOutputSmoothingTauSeconds, 0.001f);
+            maxOutputSpeedMps = Mathf.Max(maxOutputSpeedMps, 0.01f);
+            maxOutputAngularSpeedDps = Mathf.Max(maxOutputAngularSpeedDps, 1f);
         }
     }
 }

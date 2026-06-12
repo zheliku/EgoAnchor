@@ -76,6 +76,7 @@
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorStateMachine.cs" Link="Policy\AnchorStateMachine.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPolicyConfig.cs" Link="Policy\AnchorPolicyConfig.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorPoseFilter.cs" Link="Policy\AnchorPoseFilter.cs" />
+    <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorOutputSmoother.cs" Link="Policy\AnchorOutputSmoother.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\AnchorMeasurementGate.cs" Link="Policy\AnchorMeasurementGate.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\MotionStateClassifier.cs" Link="Policy\MotionStateClassifier.cs" />
     <Compile Include="..\..\EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\PolicyController.cs" Link="Policy\PolicyController.cs" />
