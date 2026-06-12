@@ -186,6 +186,11 @@ namespace EgoAnchor.Policy
                 }
                 case AnchorGateAction.Accept:
                 {
+                    if (gateResult.ForceMoving)
+                    {
+                        filter.SetStaticMode(false);
+                    }
+
                     filter.Correct(observation.WorldPose, measurementTime, gateResult.REffPos, gateResult.REffRot);
                     classifier.Observe(observation.WorldPose, in lastInnovation, measurementTime);
                     filter.SetStaticMode(classifier.IsStatic);

@@ -151,4 +151,86 @@ namespace EgoAnchor.Alignment
             }
         }
     }
+
+    /// <summary>
+    /// 一次待写入 frame history 的多参考相机 pose 采样。
+    /// </summary>
+    public readonly struct FramePoseSample
+    {
+        /// <summary>采样时刻左目 camera world pose。</summary>
+        public readonly Pose LeftCameraPose;
+
+        /// <summary>采样时刻右目 camera world pose。</summary>
+        public readonly Pose RightCameraPose;
+
+        /// <summary>采样时刻中心参考 camera world pose。</summary>
+        public readonly Pose CenterCameraPose;
+
+        /// <summary>采样时刻 Unity 单调时钟毫秒。</summary>
+        public readonly double SenderMonoMs;
+
+        /// <summary>采样时刻 Unity 帧号。</summary>
+        public readonly int UnityFrame;
+
+        /// <summary>
+        /// 构造相机 pose 采样。
+        /// </summary>
+        public FramePoseSample(
+            Pose leftCameraPose,
+            Pose rightCameraPose,
+            Pose centerCameraPose,
+            double senderMonoMs,
+            int unityFrame)
+        {
+            LeftCameraPose = leftCameraPose;
+            RightCameraPose = rightCameraPose;
+            CenterCameraPose = centerCameraPose;
+            SenderMonoMs = senderMonoMs;
+            UnityFrame = unityFrame;
+        }
+    }
+
+    /// <summary>
+    /// 采集端相机 pose 延迟缓冲。
+    ///
+    /// Quest Passthrough texture 可能相对当前 Unity camera pose 晚一帧左右；本缓冲让
+    /// StereoFrameSource 可以把当前图像 frame_id 绑定到更早的 camera pose，减少快速头动时
+    /// 静止物体跟随头显漂移。该类不依赖 MonoBehaviour，便于 smoke 直接验证。
+    /// </summary>
+    public sealed class FramePoseDelayBuffer
+    {
+        /// <summary>按采样顺序保存最近的相机 pose。</summary>
+        private readonly Queue<FramePoseSample> samples = new Queue<FramePoseSample>();
+
+        /// <summary>
+        /// 按延迟帧数选择用于当前图像 frame_id 的相机 pose。
+        /// </summary>
+        /// <param name="current">当前 Unity tick 读到的相机 pose。</param>
+        /// <param name="delayFrames">希望回退的成功采集帧数；0 表示直接使用当前 pose。</param>
+        /// <returns>用于 frame alignment 的相机 pose 采样。</returns>
+        public FramePoseSample Select(FramePoseSample current, int delayFrames)
+        {
+            if (delayFrames <= 0)
+            {
+                Clear();
+                return current;
+            }
+
+            samples.Enqueue(current);
+            while (samples.Count > delayFrames + 1)
+            {
+                samples.Dequeue();
+            }
+
+            return samples.Count > delayFrames ? samples.Dequeue() : current;
+        }
+
+        /// <summary>
+        /// 清空延迟缓冲，避免相机暂停或配置切换后复用过旧 pose。
+        /// </summary>
+        public void Clear()
+        {
+            samples.Clear();
+        }
+    }
 }

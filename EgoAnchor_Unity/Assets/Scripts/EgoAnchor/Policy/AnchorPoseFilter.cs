@@ -10,10 +10,10 @@ namespace EgoAnchor.Policy
         /// <summary>保持提交位姿，不做任何外推。</summary>
         Hold,
 
-        /// <summary>跟踪外推：常速度前推到目标时刻，地平线被 maxPredictAheadSeconds 截断；静止模式下退化为保持。</summary>
+        /// <summary>跟踪外推：位置和旋转分别按各自地平线前推；静止模式下退化为保持。</summary>
         Track,
 
-        /// <summary>续航外推：速度按时间常数指数阻尼，位移有界，用于测量缺失的 Coasting 段。</summary>
+        /// <summary>续航外推：位置速度按时间常数指数阻尼，旋转保持提交态，用于测量缺失的 Coasting 段。</summary>
         Coast,
     }
 
@@ -214,7 +214,7 @@ namespace EgoAnchor.Policy
 
             float q = ProcessNoise();
             float hPos = CoastHorizon(gap, config.velocityDampingTauSeconds);
-            float hRot = CoastHorizon(gap, config.angularVelocityDampingTau);
+            float hRot = 0f;
 
             xAxis.FreezeCoast(gap, hPos, q);
             yAxis.FreezeCoast(gap, hPos, q);
@@ -259,13 +259,17 @@ namespace EgoAnchor.Policy
             Quaternion measuredRotation = AlignSign(orientation, NormalizeQuaternion(measured.rotation));
             Vector3 theta = QuaternionLog(MultiplyQuaternion(ConjugateQuaternion(orientation), measuredRotation));
             float k = rotationVariance / Mathf.Max(rotationVariance + Mathf.Max(rRot, 1e-9f), 1e-12f);
-            orientation = NormalizeQuaternion(MultiplyQuaternion(orientation, QuaternionExp(theta * k)));
+            Vector3 thetaStep = ClampMagnitude(theta * k, config.maxRotationCorrectionDegrees * Mathf.Deg2Rad);
+            float effectiveK = theta.sqrMagnitude > 1e-12f
+                ? Mathf.Clamp01(thetaStep.magnitude / theta.magnitude)
+                : k;
+            orientation = NormalizeQuaternion(MultiplyQuaternion(orientation, QuaternionExp(thetaStep)));
 
             float maxOmegaRad = config.angularVelocityMaxDps * Mathf.Deg2Rad;
-            Vector3 omegaCorrection = theta * (config.angularVelocityGainBeta * k / Mathf.Max(dt, 1e-3f));
+            Vector3 omegaCorrection = thetaStep * (config.angularVelocityGainBeta / Mathf.Max(dt, 1e-3f));
             angularVelocityRad += ClampMagnitude(omegaCorrection, maxOmegaRad);
             angularVelocityRad = ClampMagnitude(angularVelocityRad, maxOmegaRad);
-            rotationVariance *= 1f - k;
+            rotationVariance *= 1f - effectiveK;
 
             if (staticMode)
             {
@@ -339,11 +343,11 @@ namespace EgoAnchor.Policy
             {
                 case AnchorPredictMode.Track when !staticMode:
                     hPos = Mathf.Min(gap, config.maxPredictAheadSeconds);
-                    hRot = hPos;
+                    hRot = Mathf.Min(gap, config.maxRotationPredictAheadSeconds);
                     break;
                 case AnchorPredictMode.Coast:
                     hPos = CoastHorizon(gap, config.velocityDampingTauSeconds);
-                    hRot = CoastHorizon(gap, config.angularVelocityDampingTau);
+                    hRot = 0f;
                     break;
                 default:
                     hPos = 0f;

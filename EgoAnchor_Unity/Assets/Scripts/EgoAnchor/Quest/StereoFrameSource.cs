@@ -40,6 +40,11 @@ namespace EgoAnchor.Quest
         [Tooltip("frame_id -> 采集时刻 left/right/center camera pose 的环形缓存。后续 PoseResult 回来后必须用它做 frame-aligned world anchor。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
+        /// <summary>用于 frame alignment 的相机 pose 回退帧数。</summary>
+        [Tooltip("用于 frame alignment 的相机 pose 回退帧数。Quest Passthrough texture 往往比当前头显 pose 晚一帧；默认回退 1 个成功采集帧，减少快速转头时静止物体跟随头显漂移。")]
+        [Min(0)]
+        [SerializeField] private int cameraPoseDelayFrames = 1;
+
         /// <summary>输出图像缩放比例。</summary>
         [Header("Encoding")]
         [Tooltip("输出图像相对原始 texture 的缩放比例。降低比例可减小 JPEG 大小和编码耗时，但会影响算法输入质量。")]
@@ -74,6 +79,9 @@ namespace EgoAnchor.Quest
 
         /// <summary>FrameCaptured 订阅者异常次数。</summary>
         private int frameCapturedCallbackFailures;
+
+        /// <summary>用于补偿 passthrough 图像与当前相机 pose 时间差的短历史缓冲。</summary>
+        private readonly FramePoseDelayBuffer framePoseDelayBuffer = new FramePoseDelayBuffer();
 
         /// <summary>采集并记录一帧 frame_id 相机位姿后触发；参数为 (frameId, captureMonoMs)。无订阅者时零成本。</summary>
         public event Action<long, double> FrameCaptured;
@@ -122,6 +130,12 @@ namespace EgoAnchor.Quest
             double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             long currentFrameId = ++frameId;
             int unityFrame = Time.frameCount;
+            FramePoseSample currentPoseSample = new FramePoseSample(
+                leftCameraPose,
+                rightCameraPose,
+                centerCameraPose,
+                senderMonoMs,
+                unityFrame);
 
             byte[] leftJpeg;
             byte[] rightJpeg;
@@ -147,7 +161,14 @@ namespace EgoAnchor.Quest
                 return false;
             }
 
-            framePoseHistory?.Record(currentFrameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
+            FramePoseSample alignmentPoseSample = framePoseDelayBuffer.Select(currentPoseSample, Mathf.Max(0, cameraPoseDelayFrames));
+            framePoseHistory?.Record(
+                currentFrameId,
+                alignmentPoseSample.LeftCameraPose,
+                alignmentPoseSample.RightCameraPose,
+                alignmentPoseSample.CenterCameraPose,
+                senderMonoMs,
+                unityFrame);
             NotifyFrameCaptured(currentFrameId, senderMonoMs);
 
             frame = new QuestStereoFrame
