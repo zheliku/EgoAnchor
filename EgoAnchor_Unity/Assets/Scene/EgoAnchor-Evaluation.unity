@@ -535,6 +535,7 @@ GameObject:
   - component: {fileID: 160200731}
   - component: {fileID: 160200735}
   - component: {fileID: 160200734}
+  - component: {fileID: 160200736}
   m_Layer: 0
   m_Name: AnchorObject
   m_TagString: Untagged
@@ -569,7 +570,7 @@ MonoBehaviour:
   processors:
   - {fileID: 160200735}
   - {fileID: 160200734}
-  policyHost: {fileID: 0}
+  policyHost: {fileID: 160200736}
   diagnostics:
     latestAlignedFrameId: -1
     latestPhase: 
@@ -579,26 +580,34 @@ MonoBehaviour:
     latestPolicyReason: 
     latestReliabilityScore: 1
     latestScorePhase: 0
-    latestScoreConsistency: 0
+    latestScoreReprojection: 0
     latestScoreDepth: 0
     latestScoreJump: 0
     latestScoreMask: 0
     latestScoreReject: 0
-    latestTrackConsistency: -1
-    latestConsistencyMaskIou: 0
-    latestConsistencyDepthInlier: 0
-    latestConsistencyDepthAlignment: 0
-    latestConsistencyRenderVisibleRatio: 0
-    latestConsistencyObservedVisibleRatio: 0
-    latestConsistencyDepthResidualMeters: 0
-    latestConsistencyRenderAreaPixels: 0
-    latestConsistencyExpected: 0
-    latestConsistencyStatus: 
+    latestScoreConfidence: 0
+    latestTrackReprojection: -1
+    latestRenderQualityMaskIou: 0
+    latestRenderQualityAreaRatioScore: 0
+    latestRenderQualityDepthInlier: 0
+    latestRenderQualityDepthAlignment: 0
+    latestRenderQualityRenderVisibleRatio: 0
+    latestRenderQualityObservedVisibleRatio: 0
+    latestRenderQualityDepthResidualMeters: 0
+    latestRenderQualityRenderAreaPixels: 0
+    latestRenderQualityExpected: 0
+    latestRenderQualityStatus: 
     latestServerState: 
     latestServerEvent: 
     latestHeartbeatInputReady: 0
     latestHeartbeatReceiveTime: -1
     latestUsedReference: 1
+    currentMotionState: 
+    latestSpeedMps: 0
+    latestAngularSpeedDps: 0
+    latestInnovationPosD2: 0
+    latestEffectiveMeasurementNoise: 0
+    latestPredictAheadMs: 0
 --- !u!114 &160200732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -669,6 +678,53 @@ MonoBehaviour:
   positionProcessNoise: 0.02
   rotationResponseSpeed: 8
   snapOnFirstPose: 1
+--- !u!114 &160200736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 160200730}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  config:
+    acceptScoreEnter: 0.35
+    acceptScoreStay: 0.25
+    holdScoreMin: 0.12
+    relocalizeMinScore: 0.12
+    innovationPosChi2Gate: 16
+    innovationRotChi2Gate: 11
+    maxTranslationJumpMeters: 0.8
+    maxRotationJumpDegrees: 90
+    stuckRecoveryCount: 5
+    stuckConsistencyMeters: 0.1
+    stuckConsistencyDegrees: 15
+    positionMeasurementNoise: 0.000004
+    staticMeasurementNoiseScale: 100
+    scoreNoiseFloor: 0.2
+    processNoiseMoving: 0.02
+    processNoiseStatic: 0.00001
+    rotationMeasurementNoise: 0.0003
+    rotationProcessNoise: 0.02
+    rotationProcessNoiseStatic: 0.001
+    angularVelocityGainBeta: 0.3
+    angularVelocityMaxDps: 200
+    angularVelocityDampingTau: 0.5
+    staticEnterRadius: 0.012
+    staticEnterRotationDeg: 2.5
+    staticEnterDuration: 0.5
+    motionSpikeD2: 6
+    staticExitDisplacement: 0.02
+    staticExitRotationDeg: 3
+    coastGraceSeconds: 0.18
+    maxCoastSeconds: 0.45
+    lostTimeoutSeconds: 2
+    maxPredictAheadSeconds: 0.15
+    velocityDampingTauSeconds: 0.3
+    maxMeasurementAgeSeconds: 1
 --- !u!1 &209670095
 GameObject:
   m_ObjectHideFlags: 0
@@ -2404,12 +2460,41 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  minAcceptScore: 0.35
-  minHoldScore: 0.12
-  maxTranslationJumpMeters: 0.8
-  maxRotationJumpDegrees: 90
-  coastTimeoutSeconds: 0.45
-  lostTimeoutSeconds: 2
+  config:
+    acceptScoreEnter: 0.35
+    acceptScoreStay: 0.25
+    holdScoreMin: 0.12
+    relocalizeMinScore: 0.12
+    innovationPosChi2Gate: 16
+    innovationRotChi2Gate: 11
+    maxTranslationJumpMeters: 0.8
+    maxRotationJumpDegrees: 90
+    stuckRecoveryCount: 5
+    stuckConsistencyMeters: 0.1
+    stuckConsistencyDegrees: 15
+    positionMeasurementNoise: 0.000004
+    staticMeasurementNoiseScale: 100
+    scoreNoiseFloor: 0.2
+    processNoiseMoving: 0.02
+    processNoiseStatic: 0.00001
+    rotationMeasurementNoise: 0.0003
+    rotationProcessNoise: 0.02
+    rotationProcessNoiseStatic: 0.001
+    angularVelocityGainBeta: 0.3
+    angularVelocityMaxDps: 200
+    angularVelocityDampingTau: 0.5
+    staticEnterRadius: 0.012
+    staticEnterRotationDeg: 2.5
+    staticEnterDuration: 0.5
+    motionSpikeD2: 6
+    staticExitDisplacement: 0.02
+    staticExitRotationDeg: 3
+    coastGraceSeconds: 0.18
+    maxCoastSeconds: 0.45
+    lostTimeoutSeconds: 2
+    maxPredictAheadSeconds: 0.15
+    velocityDampingTauSeconds: 0.3
+    maxMeasurementAgeSeconds: 1
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2674,26 +2759,34 @@ MonoBehaviour:
     latestPolicyReason: 
     latestReliabilityScore: 1
     latestScorePhase: 0
-    latestScoreConsistency: 0
+    latestScoreReprojection: 0
     latestScoreDepth: 0
     latestScoreJump: 0
     latestScoreMask: 0
     latestScoreReject: 0
-    latestTrackConsistency: -1
-    latestConsistencyMaskIou: 0
-    latestConsistencyDepthInlier: 0
-    latestConsistencyDepthAlignment: 0
-    latestConsistencyRenderVisibleRatio: 0
-    latestConsistencyObservedVisibleRatio: 0
-    latestConsistencyDepthResidualMeters: 0
-    latestConsistencyRenderAreaPixels: 0
-    latestConsistencyExpected: 0
-    latestConsistencyStatus: 
+    latestScoreConfidence: 0
+    latestTrackReprojection: -1
+    latestRenderQualityMaskIou: 0
+    latestRenderQualityAreaRatioScore: 0
+    latestRenderQualityDepthInlier: 0
+    latestRenderQualityDepthAlignment: 0
+    latestRenderQualityRenderVisibleRatio: 0
+    latestRenderQualityObservedVisibleRatio: 0
+    latestRenderQualityDepthResidualMeters: 0
+    latestRenderQualityRenderAreaPixels: 0
+    latestRenderQualityExpected: 0
+    latestRenderQualityStatus: 
     latestServerState: 
     latestServerEvent: 
     latestHeartbeatInputReady: 0
     latestHeartbeatReceiveTime: -1
     latestUsedReference: 1
+    currentMotionState: 
+    latestSpeedMps: 0
+    latestAngularSpeedDps: 0
+    latestInnovationPosD2: 0
+    latestEffectiveMeasurementNoise: 0
+    latestPredictAheadMs: 0
 --- !u!114 &1137170459
 MonoBehaviour:
   m_ObjectHideFlags: 0
