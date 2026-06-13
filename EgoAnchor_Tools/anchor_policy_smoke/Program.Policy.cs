@@ -241,6 +241,103 @@ static partial class Program
         Assert(highAhead > lowAhead, "EgoAnchor estimator should damp prediction when accepted score is low");
     }
 
+    /// <summary>
+    /// 验证 EgoAnchor 会用连续测量的观测速度补偿 capture-to-render 延迟。
+    /// </summary>
+    private static void AssertEgoAnchorEstimatorUsesObservedVelocity()
+    {
+        EgoAnchorEstimatorModule estimator = CreateModule<EgoAnchorEstimatorModule>();
+        estimator.Snap(MakeTrackObservation(1, new Pose(Vector3.zero, Quaternion.identity), 0.0, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(2, new Pose(new Vector3(0.20f, 0.0f, 0.0f), Quaternion.identity), 0.1, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(3, new Pose(new Vector3(0.40f, 0.0f, 0.0f), Quaternion.identity), 0.2, 1.0f));
+
+        AnchorEstimate ahead = estimator.PredictAt(0.36);
+
+        Assert(ahead.Pose.position.x > 0.58f, $"egoanchor_estimator should use observed velocity for lag compensation, got x={ahead.Pose.position.x:F3}");
+    }
+
+    /// <summary>
+    /// 验证 EgoAnchor 在连续测量显示目标停住后，会快速衰减旧速度，避免停靠后继续冲。
+    /// </summary>
+    private static void AssertEgoAnchorEstimatorDampsVelocityAfterObservedStop()
+    {
+        EgoAnchorEstimatorModule estimator = CreateModule<EgoAnchorEstimatorModule>();
+        estimator.Snap(MakeTrackObservation(1, new Pose(Vector3.zero, Quaternion.identity), 0.0, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(2, new Pose(new Vector3(0.20f, 0.0f, 0.0f), Quaternion.identity), 0.1, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(3, new Pose(new Vector3(0.40f, 0.0f, 0.0f), Quaternion.identity), 0.2, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(4, new Pose(new Vector3(0.40f, 0.0f, 0.0f), Quaternion.identity), 0.3, 1.0f));
+        estimator.UpdateEstimate(MakeTrackObservation(5, new Pose(new Vector3(0.40f, 0.0f, 0.0f), Quaternion.identity), 0.4, 1.0f));
+
+        AnchorEstimate ahead = estimator.PredictAt(0.56);
+
+        Assert(ahead.Pose.position.x < 0.46f, $"egoanchor_estimator should damp velocity after observed stop, got x={ahead.Pose.position.x:F3}");
+    }
+
+    /// <summary>
+    /// 验证 policy host 对外报告的是 estimator 实际使用的预测窗口，而不是未截断的输入年龄。
+    /// </summary>
+    private static void AssertPolicyHostReportsActualPredictionWindow()
+    {
+        AnchorPolicyHost host = CreatePolicyHost(CreateModule<NullGateModule>(), CreateModule<KalmanEstimatorModule>(), CreateModule<PassThroughOutputModule>());
+        FeedLinearMotion(host, score: 1.0f);
+        AnchorPolicyOutput output = host.Advance(1.10);
+        Assert(output.HasPose, "policy host should keep a pose before Lost while coasting");
+        Assert(Math.Abs(output.PredictAheadSeconds - 0.18f) < 0.001f, $"policy host should report actual estimator prediction window, got {output.PredictAheadSeconds:F3}s");
+    }
+
+    /// <summary>
+    /// 验证 estimator 在长 stale gap 内使用各自安全窗口，而不是按输入年龄无限前推。
+    /// </summary>
+    private static void AssertEstimatorsClampLongPredictionWindow()
+    {
+        (AnchorEstimatorModule estimator, float expectedAhead)[] cases =
+        {
+            (CreateModule<LowPassEstimatorModule>(), 0.18f),
+            (CreateModule<KalmanEstimatorModule>(), 0.18f),
+            (CreateModule<OneEuroEstimatorModule>(), 0.12f),
+            (CreateModule<EgoAnchorEstimatorModule>(), 0.16f),
+        };
+
+        foreach ((AnchorEstimatorModule estimator, float expectedAhead) in cases)
+        {
+            FeedLinearMotion(estimator, score: 1.0f);
+            AnchorEstimate estimate = estimator.PredictAt(1.10);
+            Assert(
+                Math.Abs(estimate.PredictAheadSeconds - expectedAhead) < 0.001f,
+                $"{estimator.ModuleName} should clamp long prediction to {expectedAhead:F2}s, got {estimate.PredictAheadSeconds:F3}s");
+        }
+    }
+
+    /// <summary>
+    /// 验证 OneEuro 只负责短窗口补帧，长时间无新测量时不能继续按旧速度漂移。
+    /// </summary>
+    private static void AssertOneEuroStopsFreeRunAfterPredictionCap()
+    {
+        OneEuroEstimatorModule estimator = CreateModule<OneEuroEstimatorModule>();
+        FeedLinearMotion(estimator, score: 1.0f);
+        AnchorEstimate atCap = estimator.PredictAt(0.62);
+        AnchorEstimate stale = estimator.PredictAt(0.95);
+        AssertPoseNear(stale.Pose, atCap.Pose, 0.0001f, 0.01f, "oneeuro_vanilla should stop free-run drift after its short prediction cap");
+    }
+
+    /// <summary>
+    /// 验证 Inspector 误把 OneEuro 前推窗口设得过大时，模块仍只做短窗口补帧。
+    /// </summary>
+    private static void AssertOneEuroClampsUnsafeInspectorPredictionCap()
+    {
+        OneEuroEstimatorModule estimator = CreateModule<OneEuroEstimatorModule>();
+        typeof(OneEuroEstimatorModule)
+            .GetField("maxPredictAheadSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(estimator, 0.45f);
+        FeedLinearMotion(estimator, score: 1.0f);
+
+        AnchorEstimate stale = estimator.PredictAt(1.10);
+
+        Assert(
+            Math.Abs(stale.PredictAheadSeconds - 0.12f) < 0.001f,
+            $"oneeuro_vanilla should hard-clamp unsafe Inspector prediction cap to 0.12s, got {stale.PredictAheadSeconds:F3}s");
+    }
+
     private static void AssertBaselineEstimatorsIgnoreReliabilityScore()
     {
         Type[] types =
@@ -291,6 +388,39 @@ static partial class Program
         Assert(released.position.x > 0.04f, "static output stage should release when motion exceeds threshold");
     }
 
+    /// <summary>
+    /// 验证 baseline 默认不会被观测运动保持逻辑污染，静止判定仍来自 estimator 当前速度。
+    /// </summary>
+    private static void AssertPolicyHostDoesNotApplyObservedMotionHoldByDefault()
+    {
+        AnchorPolicyHost host = CreatePolicyHost(CreateModule<NullGateModule>(), CreateModule<RawEstimatorModule>(), CreateModule<StaticLockRateLimitOutputModule>());
+        host.AcceptPose(MakeTrackObservation(1, Pose.identity, 0.0, 1.0f));
+        host.AcceptPose(MakeTrackObservation(2, new Pose(new Vector3(0.20f, 0.0f, 0.0f), Quaternion.identity), 0.1, 1.0f));
+
+        AnchorPolicyOutput output = host.Advance(0.35);
+
+        Assert(output.MotionState == AnchorMotionState.Static, $"observed motion hold should be opt-in, got {output.MotionState}");
+        Assert(host.LatestStaticLocked, "default host should allow static output stage to lock when estimator reports zero velocity");
+    }
+
+    /// <summary>
+    /// 验证最近测量已经显示目标在移动时，policy 不会因为 estimator 当前速度为零而误触发静止锁。
+    /// </summary>
+    private static void AssertPolicyHostKeepsRecentObservedMotionMoving()
+    {
+        AnchorPolicyHost host = CreatePolicyHost(CreateModule<NullGateModule>(), CreateModule<RawEstimatorModule>(), CreateModule<StaticLockRateLimitOutputModule>());
+        typeof(AnchorPolicyHost)
+            .GetField("enableObservedMotionHold", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(host, true);
+        host.AcceptPose(MakeTrackObservation(1, Pose.identity, 0.0, 1.0f));
+        host.AcceptPose(MakeTrackObservation(2, new Pose(new Vector3(0.20f, 0.0f, 0.0f), Quaternion.identity), 0.1, 1.0f));
+
+        AnchorPolicyOutput output = host.Advance(0.35);
+
+        Assert(output.MotionState == AnchorMotionState.Moving, $"recent observed motion should keep output in Moving, got {output.MotionState}");
+        Assert(!host.LatestStaticLocked, "recent observed motion should not enter static lock even if estimator velocity is zero");
+    }
+
     private static void AssertRateLimitPreventsSingleFrameJump()
     {
         StaticLockRateLimitOutputModule output = CreateModule<StaticLockRateLimitOutputModule>();
@@ -298,6 +428,52 @@ static partial class Program
         output.Condition(new AnchorEstimate(Pose.identity, Vector3.zero, Vector3.zero, 0.0), 0.0, moving);
         Pose limited = output.Condition(new AnchorEstimate(new Pose(new Vector3(10.0f, 0f, 0f), Quaternion.identity), Vector3.zero, Vector3.zero, FrameDt), FrameDt, moving);
         Assert(limited.position.x < 0.1f, "rate limit should prevent a single-frame translation jump");
+    }
+
+    /// <summary>
+    /// 验证移动显示输出的速度是连续爬升的，而不是第一帧就跳到最大限速。
+    /// </summary>
+    private static void AssertRateLimitRampsTranslationVelocity()
+    {
+        StaticLockRateLimitOutputModule output = CreateModule<StaticLockRateLimitOutputModule>();
+        OutputContext moving = new OutputContext(0.0, 0.0, 1.0f, AnchorState.Tracking, AnchorMotionState.Moving);
+        output.Condition(new AnchorEstimate(Pose.identity, Vector3.zero, Vector3.zero, 0.0), 0.0, moving);
+        Pose first = output.Condition(new AnchorEstimate(new Pose(new Vector3(1.0f, 0f, 0f), Quaternion.identity), Vector3.zero, Vector3.zero, FrameDt), FrameDt, moving);
+        Pose second = output.Condition(new AnchorEstimate(new Pose(new Vector3(1.0f, 0f, 0f), Quaternion.identity), Vector3.zero, Vector3.zero, FrameDt * 2.0), FrameDt * 2.0, moving);
+        float firstStep = first.position.x;
+        float secondStep = second.position.x - first.position.x;
+        Assert(firstStep < 0.010f, $"first output step should be acceleration-limited, got {firstStep:F4}m");
+        Assert(secondStep > firstStep, "second output step should ramp up after the first acceleration-limited step");
+    }
+
+    /// <summary>
+    /// 验证加速度限制不会让真实快速平移修正长时间卡在旧位置。
+    /// </summary>
+    private static void AssertRateLimitCatchesFastTranslationQuickly()
+    {
+        StaticLockRateLimitOutputModule output = CreateModule<StaticLockRateLimitOutputModule>();
+        OutputContext moving = new OutputContext(0.0, 0.0, 1.0f, AnchorState.Tracking, AnchorMotionState.Moving);
+        output.Condition(new AnchorEstimate(Pose.identity, Vector3.zero, Vector3.zero, 0.0), 0.0, moving);
+        Pose pose = Pose.identity;
+        for (int i = 1; i <= 3; i++)
+        {
+            pose = output.Condition(new AnchorEstimate(new Pose(new Vector3(0.20f, 0f, 0f), Quaternion.identity), Vector3.zero, Vector3.zero, FrameDt * i), FrameDt * i, moving);
+        }
+
+        Assert(pose.position.x > 0.050f, $"fast translation catch-up should reach at least 5cm in three frames, got {pose.position.x:F4}m");
+    }
+
+    /// <summary>
+    /// 验证快速手柄旋转不会被显示限速长时间拖在旧角度。
+    /// </summary>
+    private static void AssertRateLimitAllowsFastControllerRotation()
+    {
+        StaticLockRateLimitOutputModule output = CreateModule<StaticLockRateLimitOutputModule>();
+        OutputContext moving = new OutputContext(0.0, 0.0, 1.0f, AnchorState.Tracking, AnchorMotionState.Moving);
+        output.Condition(new AnchorEstimate(Pose.identity, Vector3.zero, Vector3.zero, 0.0), 0.0, moving);
+        Pose rotated = output.Condition(new AnchorEstimate(new Pose(Vector3.zero, YawDegrees(40.0f)), Vector3.zero, Vector3.zero, 0.10), 0.10, moving);
+        float residual = QuaternionAngleDegrees(rotated.rotation, YawDegrees(40.0f));
+        Assert(residual < 1.0f, $"fast controller rotation should not be held near the old angle, residual {residual:F2}deg");
     }
 
     private static void AssertPassThroughDoesNotModifyPose()
@@ -427,6 +603,9 @@ static partial class Program
         };
     }
 
+    /// <summary>
+    /// 创建所有 baseline 与 EgoAnchor estimator，用于共享契约测试。
+    /// </summary>
     private static AnchorEstimatorModule[] BaselineAndEgoEstimators()
     {
         return new AnchorEstimatorModule[]
@@ -489,6 +668,18 @@ static partial class Program
             {
                 estimator.UpdateEstimate(observation);
             }
+        }
+    }
+
+    /// <summary>
+    /// 向 policy host 输入一段匀速平移测量，用于测试 host 级 Advance 行为。
+    /// </summary>
+    private static void FeedLinearMotion(AnchorPolicyHost host, float score)
+    {
+        for (int i = 0; i <= 5; i++)
+        {
+            Pose pose = new Pose(new Vector3(i * 0.05f, 0f, 0f), Quaternion.identity);
+            host.AcceptPose(MakeTrackObservation(i + 1, pose, i * 0.1, score));
         }
     }
 

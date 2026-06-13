@@ -38,6 +38,22 @@ namespace EgoAnchor.Policy
         [Tooltip("允许预测到最近测量之后的最大时长，单位秒。")]
         [SerializeField] private float maxPredictAheadSeconds = 0.16f;
 
+        /// <summary>观测速度融合比例。</summary>
+        [Tooltip("观测速度融合比例；用连续测量差分速度校正 Kalman 速度，改善 capture-to-render 延迟补偿。")]
+        [SerializeField] private float observedVelocityBlend = 0.85f;
+
+        /// <summary>判定观测平移停止的速度阈值，单位 m/s。</summary>
+        [Tooltip("判定观测平移停止的速度阈值，单位 m/s；低于该值时快速衰减旧速度。")]
+        [SerializeField] private float observedStopSpeedThresholdMps = 0.05f;
+
+        /// <summary>判定观测旋转停止的角速度阈值，单位 deg/s。</summary>
+        [Tooltip("判定观测旋转停止的角速度阈值，单位 deg/s；低于该值时快速衰减旧角速度。")]
+        [SerializeField] private float observedStopAngularThresholdDps = 6.0f;
+
+        /// <summary>观测停止时保留的旧速度比例。</summary>
+        [Tooltip("观测停止时保留的旧速度比例；越低越快停住，越高越平滑。")]
+        [SerializeField] private float observedStopVelocityKeep = 0.10f;
+
         private int defaultsInitializedVersion = DefaultsVersion;
         private ConstVelocityKalman x;
         private ConstVelocityKalman y;
@@ -47,6 +63,9 @@ namespace EgoAnchor.Policy
         private ConstVelocityKalman rz;
         private Quaternion rotationReference = Quaternion.identity;
         private double lastTimeSeconds;
+        private Pose lastMeasurementPose = Pose.identity;
+        private double lastMeasurementTimeSeconds;
+        private bool hasLastMeasurementPose;
         private float latestScore = 1.0f;
         private bool hasEstimate;
 
@@ -78,6 +97,9 @@ namespace EgoAnchor.Policy
             ry.Reset(0.0f, rotationMeasurementNoise, 1.0f);
             rz.Reset(0.0f, rotationMeasurementNoise, 1.0f);
             lastTimeSeconds = MeasurementTime(observation);
+            lastMeasurementPose = observation.WorldPose;
+            lastMeasurementTimeSeconds = lastTimeSeconds;
+            hasLastMeasurementPose = true;
             latestScore = observation.ReliabilityScore;
             hasEstimate = true;
         }
@@ -93,6 +115,7 @@ namespace EgoAnchor.Policy
             }
 
             double time = MeasurementTime(observation);
+            bool hasObservedVelocity = TryComputeObservedVelocity(observation.WorldPose, time, out Vector3 observedLinear, out Vector3 observedAngular);
             PredictStateTo(time);
             float multiplier = ReliabilityNoiseMultiplier(observation.ReliabilityScore);
             float posNoise = positionMeasurementNoise * multiplier;
@@ -107,6 +130,14 @@ namespace EgoAnchor.Policy
             rx.Correct(measuredError.x, rotNoise);
             ry.Correct(measuredError.y, rotNoise);
             rz.Correct(measuredError.z, rotNoise);
+            if (hasObservedVelocity)
+            {
+                BlendObservedVelocity(observedLinear, observedAngular, observation.ReliabilityScore);
+            }
+
+            lastMeasurementPose = observation.WorldPose;
+            lastMeasurementTimeSeconds = time;
+            hasLastMeasurementPose = true;
             latestScore = Mathf.Clamp01(observation.ReliabilityScore);
         }
 
@@ -125,7 +156,7 @@ namespace EgoAnchor.Policy
             Vector3 position = new Vector3(x.Position, y.Position, z.Position) + linear * ahead;
             Vector3 rotVector = new Vector3(rx.Position, ry.Position, rz.Position) + angular * ahead;
             Pose pose = new Pose(position, AnchorMath.Multiply(rotationReference, AnchorMath.Exp(rotVector)));
-            return new AnchorEstimate(pose, linear, angular, renderTimeSeconds, latestScore, latestScore);
+            return new AnchorEstimate(pose, linear, angular, renderTimeSeconds, latestScore, latestScore, ahead);
         }
 
         /// <summary>清空状态并恢复 headless 默认参数。</summary>
@@ -140,6 +171,9 @@ namespace EgoAnchor.Policy
             rz.Clear();
             rotationReference = Quaternion.identity;
             lastTimeSeconds = 0.0;
+            lastMeasurementPose = Pose.identity;
+            lastMeasurementTimeSeconds = 0.0;
+            hasLastMeasurementPose = false;
             latestScore = 1.0f;
             hasEstimate = false;
         }
@@ -165,6 +199,46 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(new Vector3(rx.Position, ry.Position, rz.Position)));
+        }
+
+        private bool TryComputeObservedVelocity(Pose measurementPose, double timeSeconds, out Vector3 linearVelocity, out Vector3 angularVelocity)
+        {
+            linearVelocity = Vector3.zero;
+            angularVelocity = Vector3.zero;
+            if (!hasLastMeasurementPose)
+            {
+                return false;
+            }
+
+            float dt = Mathf.Max((float)(timeSeconds - lastMeasurementTimeSeconds), 0.0f);
+            if (dt <= 1e-5f)
+            {
+                return false;
+            }
+
+            linearVelocity = (measurementPose.position - lastMeasurementPose.position) / dt;
+            angularVelocity = AnchorMath.AngularVelocity(lastMeasurementPose.rotation, measurementPose.rotation, dt);
+            return true;
+        }
+
+        private void BlendObservedVelocity(Vector3 observedLinear, Vector3 observedAngular, float score)
+        {
+            float blend = Mathf.Clamp01(observedVelocityBlend) * Mathf.Clamp01(score);
+            bool observedStopped = observedLinear.magnitude <= observedStopSpeedThresholdMps
+                && observedAngular.magnitude * Mathf.Rad2Deg <= observedStopAngularThresholdDps;
+            if (observedStopped)
+            {
+                observedLinear *= Mathf.Clamp01(observedStopVelocityKeep);
+                observedAngular *= Mathf.Clamp01(observedStopVelocityKeep);
+                blend = Mathf.Max(blend, 0.90f);
+            }
+
+            x.BlendVelocity(observedLinear.x, blend);
+            y.BlendVelocity(observedLinear.y, blend);
+            z.BlendVelocity(observedLinear.z, blend);
+            rx.BlendVelocity(observedAngular.x, blend);
+            ry.BlendVelocity(observedAngular.y, blend);
+            rz.BlendVelocity(observedAngular.z, blend);
         }
 
         private float ReliabilityNoiseMultiplier(float score)
@@ -193,6 +267,10 @@ namespace EgoAnchor.Policy
             lowScoreNoiseMultiplier = 16.0f;
             lowScoreVelocityKeep = 0.20f;
             maxPredictAheadSeconds = 0.16f;
+            observedVelocityBlend = 0.85f;
+            observedStopSpeedThresholdMps = 0.05f;
+            observedStopAngularThresholdDps = 6.0f;
+            observedStopVelocityKeep = 0.10f;
             defaultsInitializedVersion = DefaultsVersion;
         }
 

@@ -1,0 +1,2 @@
+pose_rows,score_unique_count,score_mode,score_mode_share,score_min,score_p50,score_p95,track_reprojection_valid_count,track_reprojection_min,track_reprojection_p50,track_reprojection_p95,render_quality_ms_p50,render_quality_ms_p95,spike_threshold_m,spike_count,spike_missed_count,spike_missed_rate
+985,435,0.0,0.5390862944162437,0.0,0.0,0.9492440938949585,429,0.4208050149572966,0.948703935100121,0.9674425779579702,5.510799994226545,8.448499982478097,0.05,1894,1894,1.0

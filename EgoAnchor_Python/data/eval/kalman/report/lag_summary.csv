@@ -1,0 +1,3 @@
+condition,label,n,lag_ms,correlation,insufficient_data
+unlabeled,kalman,1270,500.00000000000006,0.4662323560450547,False
+unlabeled,raw,1270,400.0,0.45186847570933786,False

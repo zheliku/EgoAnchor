@@ -9,6 +9,7 @@ namespace EgoAnchor.Policy
     public sealed class OneEuroEstimatorModule : AnchorEstimatorModule
     {
         private const int DefaultsVersion = 1;
+        private const float SafeMaxPredictAheadSeconds = 0.12f;
 
         /// <summary>最低截止频率，单位 Hz。</summary>
         [Tooltip("最低截止频率，单位 Hz；越低越平滑。")]
@@ -22,9 +23,9 @@ namespace EgoAnchor.Policy
         [Tooltip("导数低通截止频率，单位 Hz。")]
         [SerializeField] private float derivativeCutoff = 1.0f;
 
-        /// <summary>允许预测到最近测量之后的最大时长，单位秒。</summary>
-        [Tooltip("允许预测到最近测量之后的最大时长，单位秒。")]
-        [SerializeField] private float maxPredictAheadSeconds = 0.12f;
+        /// <summary>允许预测到最近测量之后的最大时长，单位秒；One Euro 只做短窗口补帧。</summary>
+        [Tooltip("允许预测到最近测量之后的最大时长，单位秒；One Euro 只做短窗口补帧，运行时硬上限为 0.12s。")]
+        [SerializeField] private float maxPredictAheadSeconds = SafeMaxPredictAheadSeconds;
 
         private int defaultsInitializedVersion = DefaultsVersion;
         private OneEuroVector3 positionFilter;
@@ -96,9 +97,9 @@ namespace EgoAnchor.Policy
         public override AnchorEstimate PredictAt(double renderTimeSeconds)
         {
             EnsureDefaults();
-            float ahead = hasEstimate ? Mathf.Clamp((float)(renderTimeSeconds - lastTimeSeconds), 0.0f, maxPredictAheadSeconds) : 0.0f;
+            float ahead = hasEstimate ? Mathf.Clamp((float)(renderTimeSeconds - lastTimeSeconds), 0.0f, EffectiveMaxPredictAheadSeconds()) : 0.0f;
             Pose predicted = AnchorMath.Integrate(filteredPose, linearVelocity, angularVelocityRad, ahead);
-            return new AnchorEstimate(predicted, linearVelocity, angularVelocityRad, renderTimeSeconds, 1.0f, latestScore);
+            return new AnchorEstimate(predicted, linearVelocity, angularVelocityRad, renderTimeSeconds, 1.0f, latestScore, ahead);
         }
 
         /// <summary>清空滤波状态并恢复 headless 默认参数。</summary>
@@ -123,15 +124,21 @@ namespace EgoAnchor.Policy
                 minCutoff = 1.0f;
                 beta = 0.25f;
                 derivativeCutoff = 1.0f;
-                maxPredictAheadSeconds = 0.12f;
+                maxPredictAheadSeconds = SafeMaxPredictAheadSeconds;
                 defaultsInitializedVersion = DefaultsVersion;
             }
 
+            maxPredictAheadSeconds = Mathf.Clamp(maxPredictAheadSeconds, 0.0f, SafeMaxPredictAheadSeconds);
             if (positionFilter == null || rotationFilter == null)
             {
                 positionFilter = new OneEuroVector3(minCutoff, beta, derivativeCutoff);
                 rotationFilter = new OneEuroRotation(minCutoff, beta, derivativeCutoff);
             }
+        }
+
+        private float EffectiveMaxPredictAheadSeconds()
+        {
+            return Mathf.Clamp(maxPredictAheadSeconds, 0.0f, SafeMaxPredictAheadSeconds);
         }
 
         private static double MeasurementTime(in AnchorObservation observation)

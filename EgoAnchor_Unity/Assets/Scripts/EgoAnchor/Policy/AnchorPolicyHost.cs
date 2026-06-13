@@ -48,10 +48,30 @@ namespace EgoAnchor.Policy
         [Tooltip("判定静止的角速度阈值，单位 deg/s；用于 output stage 静止锁上下文。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
+        /// <summary>是否用连续测量的运动证据短时间保持 Moving 状态。</summary>
+        [Tooltip("是否用连续测量的运动证据短时间保持 Moving 状态；仅给带静止锁的 EgoAnchor 策略启用，baseline 默认关闭。")]
+        [SerializeField] private bool enableObservedMotionHold = false;
+
+        /// <summary>按连续测量判定真实运动的线速度阈值，单位 m/s。</summary>
+        [Tooltip("按连续测量判定真实运动的线速度阈值，单位 m/s；用于避免刚运动或刚停下时误触发静止锁。")]
+        [SerializeField] private float observedMotionSpeedThresholdMps = 0.05f;
+
+        /// <summary>按连续测量判定真实旋转的角速度阈值，单位 deg/s。</summary>
+        [Tooltip("按连续测量判定真实旋转的角速度阈值，单位 deg/s；用于避免快速旋转时误触发静止锁。")]
+        [SerializeField] private float observedMotionAngularThresholdDps = 8.0f;
+
+        /// <summary>最近观测到真实运动后保持 Moving 状态的时间，单位秒。</summary>
+        [Tooltip("最近观测到真实运动后保持 Moving 状态的时间，单位秒；应覆盖常见 capture-to-render 延迟。")]
+        [SerializeField] private float observedMotionHoldSeconds = 0.65f;
+
         private int defaultsInitializedVersion = DefaultsVersion;
         private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
         private double lastAcceptedTimeSeconds = -1.0;
+        private double lastAcceptedObservationTimeSeconds = -1.0;
+        private double lastObservedMotionTimeSeconds = -1.0;
+        private Pose lastAcceptedObservationPose = Pose.identity;
+        private bool hasAcceptedObservationPose;
         private float latestAcceptedScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
         private GateDecision latestGateDecision = GateDecision.Hold("initialized");
@@ -143,6 +163,10 @@ namespace EgoAnchor.Policy
             {
                 lostTimeoutSeconds = coastTimeoutSeconds * 3.0f;
             }
+
+            observedMotionSpeedThresholdMps = Mathf.Max(observedMotionSpeedThresholdMps, staticSpeedThresholdMps);
+            observedMotionAngularThresholdDps = Mathf.Max(observedMotionAngularThresholdDps, staticAngularSpeedThresholdDps);
+            observedMotionHoldSeconds = Mathf.Max(observedMotionHoldSeconds, coastTimeoutSeconds);
         }
 
         /// <summary>
@@ -248,10 +272,8 @@ namespace EgoAnchor.Policy
             }
 
             AnchorEstimate estimate = estimatorModule.PredictAt(nowSeconds);
-            UpdateMotionState();
-            predictAheadSeconds = lastAcceptedTimeSeconds >= 0.0
-                ? Mathf.Max((float)(nowSeconds - lastAcceptedTimeSeconds), 0.0f)
-                : 0.0f;
+            UpdateMotionState(nowSeconds);
+            predictAheadSeconds = estimate.PredictAheadSeconds;
             OutputContext context = new OutputContext(
                 lastAcceptedTimeSeconds,
                 gap,
@@ -318,10 +340,11 @@ namespace EgoAnchor.Policy
         private void OnAcceptedObservation(in AnchorObservation observation, double nowSeconds)
         {
             AcceptedCount++;
+            UpdateObservedMotion(observation, nowSeconds);
             lastAcceptedTimeSeconds = nowSeconds;
             latestAcceptedScore = observation.ReliabilityScore;
             stateMachine.OnReliablePose(nowSeconds, latestGateDecision.Reason);
-            UpdateMotionState();
+            UpdateMotionState(nowSeconds);
         }
 
         private void OnMissingObservation(double nowSeconds, string reason)
@@ -330,8 +353,14 @@ namespace EgoAnchor.Policy
             stateMachine.OnMissingPose(nowSeconds, gap, estimatorModule.HasEstimate, string.IsNullOrEmpty(reason) ? "missing_pose" : reason);
         }
 
-        private void UpdateMotionState()
+        private void UpdateMotionState(double nowSeconds)
         {
+            if (enableObservedMotionHold && lastObservedMotionTimeSeconds >= 0.0 && nowSeconds - lastObservedMotionTimeSeconds <= observedMotionHoldSeconds)
+            {
+                motionState = AnchorMotionState.Moving;
+                return;
+            }
+
             if (SpeedMps <= staticSpeedThresholdMps && AngularSpeedDps <= staticAngularSpeedThresholdDps)
             {
                 motionState = estimatorModule != null && estimatorModule.HasEstimate ? AnchorMotionState.Static : AnchorMotionState.Unknown;
@@ -341,12 +370,42 @@ namespace EgoAnchor.Policy
             motionState = AnchorMotionState.Moving;
         }
 
+        private void UpdateObservedMotion(in AnchorObservation observation, double nowSeconds)
+        {
+            if (!observation.HasAlignedPose)
+            {
+                return;
+            }
+
+            if (hasAcceptedObservationPose)
+            {
+                float dt = Mathf.Max((float)(nowSeconds - lastAcceptedObservationTimeSeconds), 0.0f);
+                if (dt > 1e-5f)
+                {
+                    float observedSpeed = Vector3.Distance(lastAcceptedObservationPose.position, observation.WorldPose.position) / dt;
+                    float observedAngularSpeed = AnchorMath.AngleDegrees(lastAcceptedObservationPose.rotation, observation.WorldPose.rotation) / dt;
+                    if (observedSpeed >= observedMotionSpeedThresholdMps || observedAngularSpeed >= observedMotionAngularThresholdDps)
+                    {
+                        lastObservedMotionTimeSeconds = nowSeconds;
+                    }
+                }
+            }
+
+            lastAcceptedObservationPose = observation.WorldPose;
+            lastAcceptedObservationTimeSeconds = nowSeconds;
+            hasAcceptedObservationPose = true;
+        }
+
         private void ResetModules()
         {
             gateModule?.ResetModule();
             estimatorModule?.ResetModule();
             outputModule?.ResetModule();
             lastAcceptedTimeSeconds = -1.0;
+            lastAcceptedObservationTimeSeconds = -1.0;
+            lastObservedMotionTimeSeconds = -1.0;
+            lastAcceptedObservationPose = Pose.identity;
+            hasAcceptedObservationPose = false;
             latestAcceptedScore = 1.0f;
             motionState = AnchorMotionState.Unknown;
             predictAheadSeconds = 0.0f;
@@ -371,6 +430,10 @@ namespace EgoAnchor.Policy
                 lostTimeoutSeconds = 2.0f;
                 staticSpeedThresholdMps = 0.015f;
                 staticAngularSpeedThresholdDps = 1.5f;
+                enableObservedMotionHold = false;
+                observedMotionSpeedThresholdMps = 0.05f;
+                observedMotionAngularThresholdDps = 8.0f;
+                observedMotionHoldSeconds = 0.65f;
                 strategyLabel = string.Empty;
                 defaultsInitializedVersion = DefaultsVersion;
             }

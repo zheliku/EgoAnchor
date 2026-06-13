@@ -1,7 +1,9 @@
 ﻿<Solution>
-  <Project Path="VHierarchy.csproj" />
-  <Project Path="EgoAnchorEval.csproj" />
   <Project Path="EgoAnchor.csproj" />
+  <Project Path="VHierarchy.csproj" />
+  <Project Path="HighlightPlus.Demo.csproj" />
+  <Project Path="HighlightPlus.Runtime.csproj" />
+  <Project Path="EgoAnchorEval.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="Proxima.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
@@ -9,4 +11,5 @@
   <Project Path="Assembly-CSharp.csproj" />
   <Project Path="Proxima.Editor.csproj" />
   <Project Path="VFavorites.csproj" />
+  <Project Path="HighlightPlus.Editor.csproj" />
 </Solution>

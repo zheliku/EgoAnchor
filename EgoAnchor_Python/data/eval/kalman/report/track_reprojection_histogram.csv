@@ -1,0 +1,11 @@
+value,bin_left,bin_right,count
+track_reprojection,0.0,0.1,0
+track_reprojection,0.1,0.2,0
+track_reprojection,0.2,0.30000000000000004,0
+track_reprojection,0.30000000000000004,0.4,0
+track_reprojection,0.4,0.5,3
+track_reprojection,0.5,0.6000000000000001,5
+track_reprojection,0.6000000000000001,0.7000000000000001,1
+track_reprojection,0.7000000000000001,0.8,6
+track_reprojection,0.8,0.9,15
+track_reprojection,0.9,1.0,127

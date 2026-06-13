@@ -1,0 +1,3 @@
+condition,label,n,spike_count,spike_threshold_m,max_translation_error_m,policy_reject_count,top_policy_reasons
+unlabeled,kalman,5872,1520,0.05,1.605677237815108,240,score_hold:228;stale_measurement:12
+unlabeled,raw,5872,1636,0.05,1.6058322528358049,0,

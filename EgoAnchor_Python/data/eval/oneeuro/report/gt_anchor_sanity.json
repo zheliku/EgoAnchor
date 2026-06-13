@@ -1,0 +1,36 @@
+{
+  "session_id": "20260614_015559_controller_right",
+  "object_id": "controller_right",
+  "gt_source": "transform",
+  "gt_transform": "OVRControllerPrefab",
+  "variant_labels": [
+    "kalman",
+    "raw"
+  ],
+  "capture_rows": 2129,
+  "output_rows": 11744,
+  "pose_rows": 662,
+  "gt_valid_output_rows": 11744,
+  "variants": {
+    "kalman": {
+      "rows": 5872,
+      "stable_rows": 5872,
+      "anchor_pose_source_counts": {
+        "transform": 5872
+      }
+    },
+    "raw": {
+      "rows": 5872,
+      "stable_rows": 5872,
+      "anchor_pose_source_counts": {
+        "transform": 5872
+      }
+    }
+  },
+  "aligned_raw_error": {
+    "n": 5872,
+    "translation_median_m": 0.019193400848832178,
+    "translation_p95_m": 0.3837803996090046,
+    "rotation_median_deg": 6.113022006002214
+  }
+}

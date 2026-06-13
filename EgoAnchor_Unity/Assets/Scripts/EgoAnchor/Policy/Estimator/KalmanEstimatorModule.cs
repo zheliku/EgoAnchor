@@ -120,7 +120,7 @@ namespace EgoAnchor.Policy
                 rz.Position + rz.Velocity * ahead
             );
             Pose pose = new Pose(position, AnchorMath.Multiply(rotationReference, AnchorMath.Exp(rotVector)));
-            return new AnchorEstimate(pose, LinearVelocity, AngularVelocityRad, renderTimeSeconds, 1.0f, latestScore);
+            return new AnchorEstimate(pose, LinearVelocity, AngularVelocityRad, renderTimeSeconds, 1.0f, latestScore, ahead);
         }
 
         /// <summary>清空 Kalman 状态并恢复 headless 默认参数。</summary>

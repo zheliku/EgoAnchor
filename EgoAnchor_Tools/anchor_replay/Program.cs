@@ -396,8 +396,12 @@ static class Program
         private readonly AnchorStateMachine stateMachine = new AnchorStateMachine();
         private GateDecision latestGate = GateDecision.Hold("initialized");
         private double lastAcceptedTime = -1.0;
+        private double lastAcceptedObservationTime = -1.0;
+        private double lastObservedMotionTime = -1.0;
         private float latestScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
+        private Pose lastAcceptedObservationPose = Pose.identity;
+        private bool hasAcceptedObservationPose;
         private Pose lastPose = Pose.identity;
         private bool hasLastPose;
         private int zeroRun;
@@ -432,6 +436,7 @@ static class Program
                     Estimator.UpdateEstimate(observation);
                 }
 
+                UpdateObservedMotion(observation, time);
                 lastAcceptedTime = time;
                 latestScore = observation.ReliabilityScore;
                 stateMachine.OnReliablePose(time, latestGate.Reason);
@@ -470,13 +475,50 @@ static class Program
             }
 
             AnchorEstimate estimate = Estimator.PredictAt(renderSeconds);
-            motionState = Estimator.LinearVelocity.magnitude < 0.015f && Estimator.AngularVelocityRad.magnitude * Mathf.Rad2Deg < 1.5f
-                ? AnchorMotionState.Static
-                : AnchorMotionState.Moving;
+            UpdateMotionState(renderSeconds);
             OutputContext context = new OutputContext(lastAcceptedTime, gap, latestScore, stateMachine.State, motionState);
             Pose pose = Output.Condition(estimate, renderSeconds, context);
             UpdateMetrics(row, pose, gap);
-            return MakeSnapshot(row, true, pose, stateMachine.State, (float)gap);
+            return MakeSnapshot(row, true, pose, stateMachine.State, estimate.PredictAheadSeconds);
+        }
+
+        private void UpdateObservedMotion(AnchorObservation observation, double time)
+        {
+            if (!observation.HasAlignedPose)
+            {
+                return;
+            }
+
+            if (hasAcceptedObservationPose)
+            {
+                float dt = Mathf.Max((float)(time - lastAcceptedObservationTime), 0.0f);
+                if (dt > 1e-5f)
+                {
+                    float observedSpeed = Vector3.Distance(lastAcceptedObservationPose.position, observation.WorldPose.position) / dt;
+                    float observedAngularSpeed = QuaternionAngleDegrees(lastAcceptedObservationPose.rotation, observation.WorldPose.rotation) / dt;
+                    if (observedSpeed >= 0.05f || observedAngularSpeed >= 8.0f)
+                    {
+                        lastObservedMotionTime = time;
+                    }
+                }
+            }
+
+            lastAcceptedObservationPose = observation.WorldPose;
+            lastAcceptedObservationTime = time;
+            hasAcceptedObservationPose = true;
+        }
+
+        private void UpdateMotionState(double time)
+        {
+            if (lastObservedMotionTime >= 0.0 && time - lastObservedMotionTime <= 0.65)
+            {
+                motionState = AnchorMotionState.Moving;
+                return;
+            }
+
+            motionState = Estimator.LinearVelocity.magnitude < 0.015f && Estimator.AngularVelocityRad.magnitude * Mathf.Rad2Deg < 1.5f
+                ? AnchorMotionState.Static
+                : AnchorMotionState.Moving;
         }
 
         private RecordedVariantSnapshot MakeSnapshot(ReplayRow row, bool hasPose, Pose pose, AnchorState state, float predictAhead)

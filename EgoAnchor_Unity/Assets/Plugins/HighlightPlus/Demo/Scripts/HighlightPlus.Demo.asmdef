@@ -1,0 +1,17 @@
+{
+    "name": "HighlightPlus.Demo",
+    "rootNamespace": "HighlightPlus.Demos",
+    "references": [
+        "HighlightPlus.Runtime",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

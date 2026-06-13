@@ -28,11 +28,23 @@ namespace EgoAnchor.Policy
 
         /// <summary>最大输出平移速度，单位 m/s。</summary>
         [Tooltip("最大输出平移速度，单位 m/s。")]
-        [SerializeField] private float maxOutputMetersPerSecond = 1.2f;
+        [SerializeField] private float maxOutputMetersPerSecond = 4.0f;
 
         /// <summary>最大输出旋转速度，单位 deg/s。</summary>
         [Tooltip("最大输出旋转速度，单位 deg/s。")]
-        [SerializeField] private float maxOutputDegreesPerSecond = 180.0f;
+        [SerializeField] private float maxOutputDegreesPerSecond = 720.0f;
+
+        /// <summary>是否启用输出加速度限制。</summary>
+        [Tooltip("是否启用输出加速度限制；让显示速度连续变化，减少速度突变造成的卡顿。")]
+        [SerializeField] private bool enableAccelerationLimit = true;
+
+        /// <summary>最大输出平移加速度，单位 m/s^2。</summary>
+        [Tooltip("最大输出平移加速度，单位 m/s^2；越大越跟手，越小越平滑。")]
+        [SerializeField] private float maxOutputAccelerationMetersPerSecond2 = 80.0f;
+
+        /// <summary>最大输出角加速度，单位 deg/s^2。</summary>
+        [Tooltip("最大输出角加速度，单位 deg/s^2；越大越跟手，越小越平滑。")]
+        [SerializeField] private float maxOutputAngularAccelerationDegreesPerSecond2 = 28800.0f;
 
         private int defaultsInitializedVersion = DefaultsVersion;
         private Pose lockedPose = Pose.identity;
@@ -40,6 +52,8 @@ namespace EgoAnchor.Policy
         private double lastOutputTimeSeconds;
         private bool hasLock;
         private bool hasOutput;
+        private Vector3 outputVelocity;
+        private Vector3 outputAngularVelocityRad;
         private float lastResidualMeters;
         private float lastResidualDegrees;
         private bool isStaticLocked;
@@ -79,12 +93,22 @@ namespace EgoAnchor.Policy
                 {
                     conditioned = lastOutputPose;
                 }
+                else if (enableAccelerationLimit)
+                {
+                    conditioned = ApplyAccelerationLimitedRate(conditioned, dt);
+                }
                 else
                 {
                     float maxMeters = Mathf.Max(maxOutputMetersPerSecond, 0.0f) * dt;
                     float maxDegrees = Mathf.Max(maxOutputDegreesPerSecond, 0.0f) * dt;
                     conditioned = AnchorMath.ClampPoseDelta(lastOutputPose, conditioned, maxMeters, maxDegrees);
                 }
+            }
+
+            if (isStaticLocked)
+            {
+                outputVelocity = Vector3.zero;
+                outputAngularVelocityRad = Vector3.zero;
             }
 
             lastResidualMeters = Vector3.Distance(estimate.Pose.position, conditioned.position);
@@ -104,9 +128,87 @@ namespace EgoAnchor.Policy
             lastOutputTimeSeconds = 0.0;
             hasLock = false;
             hasOutput = false;
+            outputVelocity = Vector3.zero;
+            outputAngularVelocityRad = Vector3.zero;
             lastResidualMeters = 0.0f;
             lastResidualDegrees = 0.0f;
             isStaticLocked = false;
+        }
+
+        private Pose ApplyAccelerationLimitedRate(in Pose target, float dt)
+        {
+            Vector3 position = ApplyTranslationRate(target.position, dt);
+            Quaternion rotation = ApplyRotationRate(target.rotation, dt);
+            return new Pose(position, rotation);
+        }
+
+        private Vector3 ApplyTranslationRate(Vector3 targetPosition, float dt)
+        {
+            Vector3 toTarget = targetPosition - lastOutputPose.position;
+            if (toTarget.sqrMagnitude <= 1e-12f)
+            {
+                outputVelocity = Vector3.zero;
+                return targetPosition;
+            }
+
+            Vector3 desiredVelocity = toTarget / dt;
+            float maxSpeed = Mathf.Max(maxOutputMetersPerSecond, 0.0f);
+            if (maxSpeed > 0.0f && desiredVelocity.magnitude > maxSpeed)
+            {
+                desiredVelocity = desiredVelocity.normalized * maxSpeed;
+            }
+
+            float maxDeltaSpeed = Mathf.Max(maxOutputAccelerationMetersPerSecond2, 0.0f) * dt;
+            outputVelocity = MoveVectorTowards(outputVelocity, desiredVelocity, maxDeltaSpeed);
+            Vector3 step = outputVelocity * dt;
+            if (step.magnitude >= toTarget.magnitude)
+            {
+                outputVelocity = desiredVelocity;
+                return targetPosition;
+            }
+
+            return lastOutputPose.position + step;
+        }
+
+        private Quaternion ApplyRotationRate(Quaternion targetRotation, float dt)
+        {
+            Quaternion alignedTarget = AnchorMath.AlignHemisphere(lastOutputPose.rotation, targetRotation);
+            Vector3 toTarget = AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(lastOutputPose.rotation), alignedTarget));
+            if (toTarget.sqrMagnitude <= 1e-12f)
+            {
+                outputAngularVelocityRad = Vector3.zero;
+                return alignedTarget;
+            }
+
+            Vector3 desiredAngularVelocity = toTarget / dt;
+            float maxAngularSpeed = Mathf.Max(maxOutputDegreesPerSecond, 0.0f) * Mathf.Deg2Rad;
+            if (maxAngularSpeed > 0.0f && desiredAngularVelocity.magnitude > maxAngularSpeed)
+            {
+                desiredAngularVelocity = desiredAngularVelocity.normalized * maxAngularSpeed;
+            }
+
+            float maxDeltaAngularSpeed = Mathf.Max(maxOutputAngularAccelerationDegreesPerSecond2, 0.0f) * Mathf.Deg2Rad * dt;
+            outputAngularVelocityRad = MoveVectorTowards(outputAngularVelocityRad, desiredAngularVelocity, maxDeltaAngularSpeed);
+            Vector3 step = outputAngularVelocityRad * dt;
+            if (step.magnitude >= toTarget.magnitude)
+            {
+                outputAngularVelocityRad = desiredAngularVelocity;
+                return alignedTarget;
+            }
+
+            return AnchorMath.Multiply(lastOutputPose.rotation, AnchorMath.Exp(step));
+        }
+
+        private static Vector3 MoveVectorTowards(Vector3 current, Vector3 target, float maxDelta)
+        {
+            Vector3 delta = target - current;
+            float distance = delta.magnitude;
+            if (distance <= maxDelta || distance <= 1e-8f)
+            {
+                return target;
+            }
+
+            return current + delta / distance * Mathf.Max(maxDelta, 0.0f);
         }
 
         private Pose ApplyStaticLock(Pose estimatePose)
@@ -143,8 +245,11 @@ namespace EgoAnchor.Policy
             staticReleaseMeters = 0.030f;
             staticReleaseDegrees = 3.0f;
             enableRateLimit = true;
-            maxOutputMetersPerSecond = 1.2f;
-            maxOutputDegreesPerSecond = 180.0f;
+            maxOutputMetersPerSecond = 4.0f;
+            maxOutputDegreesPerSecond = 720.0f;
+            enableAccelerationLimit = true;
+            maxOutputAccelerationMetersPerSecond2 = 80.0f;
+            maxOutputAngularAccelerationDegreesPerSecond2 = 28800.0f;
             defaultsInitializedVersion = DefaultsVersion;
         }
     }

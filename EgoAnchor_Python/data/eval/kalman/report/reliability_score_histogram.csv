@@ -1,0 +1,11 @@
+value,bin_left,bin_right,count
+pose_score,0.0,0.1,82
+pose_score,0.1,0.2,0
+pose_score,0.2,0.30000000000000004,1
+pose_score,0.30000000000000004,0.4,0
+pose_score,0.4,0.5,2
+pose_score,0.5,0.6000000000000001,10
+pose_score,0.6000000000000001,0.7000000000000001,3
+pose_score,0.7000000000000001,0.8,7
+pose_score,0.8,0.9,22
+pose_score,0.9,1.0,99

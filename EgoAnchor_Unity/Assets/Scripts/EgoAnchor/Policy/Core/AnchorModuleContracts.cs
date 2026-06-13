@@ -44,6 +44,9 @@ namespace EgoAnchor.Policy
         /// <summary>最近一次进入估计器的感知可靠性分数，范围 0..1。</summary>
         public readonly float ReliabilityScore;
 
+        /// <summary>本次估计实际使用的前推时长，单位秒；已包含 estimator 内部安全上限。</summary>
+        public readonly float PredictAheadSeconds;
+
         /// <summary>
         /// 构造 anchor 估计快照。
         /// </summary>
@@ -53,7 +56,8 @@ namespace EgoAnchor.Policy
             Vector3 angularVelocityRad,
             double timeSeconds,
             float confidence = 1.0f,
-            float reliabilityScore = 1.0f)
+            float reliabilityScore = 1.0f,
+            float predictAheadSeconds = 0.0f)
         {
             Pose = pose;
             LinearVelocity = linearVelocity;
@@ -61,6 +65,7 @@ namespace EgoAnchor.Policy
             TimeSeconds = timeSeconds;
             Confidence = Mathf.Clamp01(confidence);
             ReliabilityScore = Mathf.Clamp01(reliabilityScore);
+            PredictAheadSeconds = Mathf.Max(predictAheadSeconds, 0.0f);
         }
 
         /// <summary>

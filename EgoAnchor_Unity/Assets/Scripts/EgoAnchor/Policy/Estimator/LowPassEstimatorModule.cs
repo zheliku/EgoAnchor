@@ -98,7 +98,7 @@ namespace EgoAnchor.Policy
             EnsureDefaults();
             float ahead = hasEstimate ? Mathf.Clamp((float)(renderTimeSeconds - lastTimeSeconds), 0.0f, maxPredictAheadSeconds) : 0.0f;
             Pose predicted = AnchorMath.Integrate(filteredPose, linearVelocity, angularVelocityRad, ahead);
-            return new AnchorEstimate(predicted, linearVelocity, angularVelocityRad, renderTimeSeconds, 1.0f, latestScore);
+            return new AnchorEstimate(predicted, linearVelocity, angularVelocityRad, renderTimeSeconds, 1.0f, latestScore, ahead);
         }
 
         /// <summary>清空估计状态并恢复 headless 默认参数。</summary>
