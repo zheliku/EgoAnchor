@@ -41,9 +41,9 @@ namespace EgoAnchor.Quest
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>用于 frame alignment 的相机 pose 回退帧数。</summary>
-        [Tooltip("用于 frame alignment 的相机 pose 回退帧数。Quest Passthrough texture 往往比当前头显 pose 晚约两帧；默认回退 2 个成功采集帧，减少快速转头时静止物体跟随头显漂移。")]
+        [Tooltip("用于 frame alignment 的相机 pose 回退帧数。Quest Passthrough texture 往往比当前头显 pose 晚约两帧；默认回退 1 个成功采集帧，减少快速转头时静止物体跟随头显漂移。")]
         [Min(0)]
-        [SerializeField] private int cameraPoseDelayFrames = 2;
+        [SerializeField] private int cameraPoseDelayFrames = 1;
 
         /// <summary>输出图像缩放比例。</summary>
         [Header("Encoding")]
