@@ -115,7 +115,22 @@ class VariantRow:
     has_aligned_raw: bool
     aligned_raw_pos: np.ndarray | None
     aligned_raw_rot: np.ndarray | None
+    has_arrival_time_raw: bool
+    arrival_time_raw_pos: np.ndarray | None
+    arrival_time_raw_rot: np.ndarray | None
+    arrival_time_raw_mono_ms: float
+    arrival_time_raw_unity_frame: int
+    arrival_time_camera_reference: str
     reliability_score: float
+    strategy_label: str
+    gate_module: str
+    estimator_module: str
+    output_module: str
+    config_hash: str
+    latest_residual_meters: float
+    latest_residual_degrees: float
+    latest_accepted_score: float
+    latest_static_locked: bool
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -127,6 +142,7 @@ class VariantRow:
         is_primary = _bool(row, "is_primary", context)
         has_source_capture_timing = _bool(row, "has_source_capture_timing", context)
         has_aligned_raw = _optional_bool(row, "has_aligned_raw", False)
+        has_arrival_time_raw = _optional_bool(row, "has_arrival_time_raw", False)
         return cls(
             label=_str(row, "label", context),
             is_primary=is_primary,
@@ -151,7 +167,36 @@ class VariantRow:
             has_aligned_raw=has_aligned_raw,
             aligned_raw_pos=_optional_array(row, "aligned_raw_pos", 3, context, allow_none=not has_aligned_raw),
             aligned_raw_rot=_optional_array(row, "aligned_raw_rot", 4, context, allow_none=not has_aligned_raw),
+            has_arrival_time_raw=has_arrival_time_raw,
+            arrival_time_raw_pos=_optional_array(
+                row,
+                "arrival_time_raw_pos",
+                3,
+                context,
+                allow_missing=True,
+                allow_none=not has_arrival_time_raw,
+            ),
+            arrival_time_raw_rot=_optional_array(
+                row,
+                "arrival_time_raw_rot",
+                4,
+                context,
+                allow_missing=True,
+                allow_none=not has_arrival_time_raw,
+            ),
+            arrival_time_raw_mono_ms=_optional_float(row, "arrival_time_raw_mono_ms", np.nan),
+            arrival_time_raw_unity_frame=int(_optional_float(row, "arrival_time_raw_unity_frame", -1.0)),
+            arrival_time_camera_reference=str(row.get("arrival_time_camera_reference", "")),
             reliability_score=_optional_float(row, "reliability_score", np.nan),
+            strategy_label=str(row.get("strategy_label", "")),
+            gate_module=str(row.get("gate_module", "")),
+            estimator_module=str(row.get("estimator_module", "")),
+            output_module=str(row.get("output_module", "")),
+            config_hash=str(row.get("config_hash", "")),
+            latest_residual_meters=_optional_float(row, "latest_residual_meters", np.nan),
+            latest_residual_degrees=_optional_float(row, "latest_residual_degrees", np.nan),
+            latest_accepted_score=_optional_float(row, "latest_accepted_score", np.nan),
+            latest_static_locked=_optional_bool(row, "latest_static_locked", False),
             raw=dict(row),
         )
 
@@ -177,7 +222,22 @@ class VariantRow:
             "has_aligned_raw": self.has_aligned_raw,
             "aligned_raw_pos": self.aligned_raw_pos,
             "aligned_raw_rot": self.aligned_raw_rot,
+            "has_arrival_time_raw": self.has_arrival_time_raw,
+            "arrival_time_raw_pos": self.arrival_time_raw_pos,
+            "arrival_time_raw_rot": self.arrival_time_raw_rot,
+            "arrival_time_raw_mono_ms": self.arrival_time_raw_mono_ms,
+            "arrival_time_raw_unity_frame": self.arrival_time_raw_unity_frame,
+            "arrival_time_camera_reference": self.arrival_time_camera_reference,
             "reliability_score": self.reliability_score,
+            "strategy_label": self.strategy_label,
+            "gate_module": self.gate_module,
+            "estimator_module": self.estimator_module,
+            "output_module": self.output_module,
+            "config_hash": self.config_hash,
+            "latest_residual_meters": self.latest_residual_meters,
+            "latest_residual_degrees": self.latest_residual_degrees,
+            "latest_accepted_score": self.latest_accepted_score,
+            "latest_static_locked": self.latest_static_locked,
         }
 
 
@@ -405,6 +465,7 @@ class Manifest:
     condition_spans: list[dict[str, Any]]
     event_markers: list[dict[str, Any]]
     variant_labels: list[str]
+    variant_configs: list[dict[str, Any]]
     python_log_filename: str
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -416,18 +477,22 @@ class Manifest:
         condition_spans = row.get("condition_spans", [])
         event_markers = row.get("event_markers", [])
         variant_labels = row.get("variant_labels", [])
+        variant_configs = row.get("variant_configs", [])
         if not isinstance(condition_spans, list):
             raise SchemaError(f"{context}: condition_spans 应为 list。")
         if not isinstance(event_markers, list):
             raise SchemaError(f"{context}: event_markers 应为 list。")
         if not isinstance(variant_labels, list):
             raise SchemaError(f"{context}: variant_labels 应为 list。")
+        if not isinstance(variant_configs, list):
+            raise SchemaError(f"{context}: variant_configs 应为 list。")
         return cls(
             session_id=_str(row, "session_id", context),
             object_id=_str(row, "object_id", context),
             condition_spans=[dict(span) if isinstance(span, Mapping) else {"value": span} for span in condition_spans],
             event_markers=[dict(marker) if isinstance(marker, Mapping) else {"value": marker} for marker in event_markers],
             variant_labels=[str(label) for label in variant_labels],
+            variant_configs=[dict(config) if isinstance(config, Mapping) else {"value": config} for config in variant_configs],
             python_log_filename=str(row.get("python_log_filename", "")),
             raw=dict(row),
         )
@@ -533,12 +598,13 @@ def _optional_array(
     length: int,
     context: str,
     *,
+    allow_missing: bool = False,
     allow_none: bool = False,
 ) -> np.ndarray | None:
     """读取可选固定长度 float array 字段。"""
 
     if field_name not in row:
-        if allow_none:
+        if allow_missing or allow_none:
             return None
         raise SchemaError(f"{context}: 缺少字段 {field_name}。")
     value = row[field_name]

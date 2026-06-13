@@ -52,6 +52,52 @@ namespace EgoAnchorEval
     }
 
     /// <summary>
+    /// 评估 session 中一个 runtime variant 的策略配置快照。
+    /// </summary>
+    public readonly struct EvalVariantConfig
+    {
+        /// <summary>输出日志中的 variant label。</summary>
+        public readonly string Label;
+
+        /// <summary>pipeline strategy label。</summary>
+        public readonly string StrategyLabel;
+
+        /// <summary>gate module 名称。</summary>
+        public readonly string GateModule;
+
+        /// <summary>estimator module 名称。</summary>
+        public readonly string EstimatorModule;
+
+        /// <summary>output module 名称。</summary>
+        public readonly string OutputModule;
+
+        /// <summary>参数稳定摘要。</summary>
+        public readonly string ConfigHash;
+
+        /// <summary>模块序列化字段明文参数。</summary>
+        public readonly IReadOnlyDictionary<string, string> Parameters;
+
+        /// <summary>构造 variant 配置快照。</summary>
+        public EvalVariantConfig(
+            string label,
+            string strategyLabel,
+            string gateModule,
+            string estimatorModule,
+            string outputModule,
+            string configHash,
+            IReadOnlyDictionary<string, string> parameters)
+        {
+            Label = label ?? string.Empty;
+            StrategyLabel = strategyLabel ?? string.Empty;
+            GateModule = gateModule ?? string.Empty;
+            EstimatorModule = estimatorModule ?? string.Empty;
+            OutputModule = outputModule ?? string.Empty;
+            ConfigHash = configHash ?? string.Empty;
+            Parameters = parameters ?? new Dictionary<string, string>();
+        }
+    }
+
+    /// <summary>
     /// session_manifest.json 构造工具；保持手写 JSON，避免 Unity JsonUtility 的数组/精度限制。
     /// </summary>
     public static class EvalSessionManifestJson
@@ -71,6 +117,7 @@ namespace EgoAnchorEval
             IReadOnlyList<EvalConditionSpan> conditionSpans,
             IReadOnlyList<EvalEventMarker> eventMarkers,
             IReadOnlyList<string> variantLabels,
+            IReadOnlyList<EvalVariantConfig> variantConfigs,
             string pythonLogFilename,
             string sessionNotes)
         {
@@ -90,10 +137,60 @@ namespace EgoAnchorEval
             AppendConditionSpans(builder, ref first, conditionSpans, monoToUnixOffsetMs);
             AppendEventMarkers(builder, ref first, eventMarkers, monoToUnixOffsetMs);
             AppendStringArray(builder, ref first, "variant_labels", variantLabels);
+            AppendVariantConfigs(builder, ref first, variantConfigs);
             AppendStringProperty(builder, ref first, "python_log_filename", pythonLogFilename);
             AppendStringProperty(builder, ref first, "notes", sessionNotes);
             builder.Append('}');
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// 写入 variant_configs 数组。
+        /// </summary>
+        private static void AppendVariantConfigs(StringBuilder builder, ref bool firstProperty, IReadOnlyList<EvalVariantConfig> configs)
+        {
+            AppendName(builder, ref firstProperty, "variant_configs");
+            builder.Append('[');
+            if (configs != null)
+            {
+                for (int i = 0; i < configs.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        builder.Append(',');
+                    }
+
+                    bool first = true;
+                    builder.Append('{');
+                    AppendStringProperty(builder, ref first, "label", configs[i].Label);
+                    AppendStringProperty(builder, ref first, "strategy_label", configs[i].StrategyLabel);
+                    AppendStringProperty(builder, ref first, "gate_module", configs[i].GateModule);
+                    AppendStringProperty(builder, ref first, "estimator_module", configs[i].EstimatorModule);
+                    AppendStringProperty(builder, ref first, "output_module", configs[i].OutputModule);
+                    AppendStringProperty(builder, ref first, "config_hash", configs[i].ConfigHash);
+                    AppendStringDictionary(builder, ref first, "parameters", configs[i].Parameters);
+                    builder.Append('}');
+                }
+            }
+            builder.Append(']');
+        }
+
+        /// <summary>
+        /// 写入字符串字典属性。
+        /// </summary>
+        private static void AppendStringDictionary(StringBuilder builder, ref bool firstProperty, string name, IReadOnlyDictionary<string, string> values)
+        {
+            AppendName(builder, ref firstProperty, name);
+            builder.Append('{');
+            if (values != null)
+            {
+                bool first = true;
+                foreach (KeyValuePair<string, string> item in values)
+                {
+                    AppendStringProperty(builder, ref first, item.Key, item.Value);
+                }
+            }
+            builder.Append('}');
         }
 
         /// <summary>

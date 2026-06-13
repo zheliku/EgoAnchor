@@ -1,10 +1,10 @@
-# Anchor Pipeline Modular Architecture Implementation Plan
+# Anchor Policy Modular Architecture Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 Unity anchor runtime 重构为可插拔、可并行对比、可离线回放的 anchor pipeline。所有 baseline 和 EgoAnchor 方法必须共享同一 frame-aligned raw pose 输入、同一 capture/render 时间轴、同一 `Advance(now)` 输出契约。
+**Goal:** 把 Unity anchor runtime 重构为可插拔、可并行对比、可离线回放的 anchor policy。所有 baseline 和 EgoAnchor 方法必须共享同一 frame-aligned raw pose 输入、同一 capture/render 时间轴、同一 `Advance(now)` 输出契约。
 
-**Architecture:** Python 感知、Protobuf、ZMQ/NATS、`FramePoseHistory` 和 `CameraPoseFrameAligner` 不改。Unity anchor 侧新增模块化 pipeline：`GateModule -> EstimatorModule -> OutputStageModule`，其中 `EstimatorModule` 负责滤波、升采样和预测。Inspector 不用 enum 下拉选策略；每个 anchor 的 `AnchorPipelineHost` 引用三类抽象 `MonoBehaviour` 模块基类：`AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule`。具体模块子类自己声明 `[SerializeField]` 参数，这些参数直接显示在 Inspector 上；模块子类直接实现 `Evaluate / Snap / Update / PredictAt / Condition / ResetModule`，不额外封装 config/data 类，也不再额外封装 `AnchorGate`、`AnchorEstimator`、`AnchorOutputStage` 这类 core 类型。
+**Architecture:** Python 感知、Protobuf、ZMQ/NATS、`FramePoseHistory` 和 `CameraPoseFrameAligner` 不改。Unity anchor 侧新增模块化 policy：`GateModule -> EstimatorModule -> OutputStageModule`，其中 `EstimatorModule` 负责滤波、升采样和预测。Inspector 不用 enum 下拉选策略；每个 anchor 的 `AnchorPolicyHost` 引用三类抽象 `MonoBehaviour` 模块基类：`AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule`。具体模块子类自己声明 `[SerializeField]` 参数，这些参数直接显示在 Inspector 上；模块子类直接实现 `Evaluate / Snap / Update / PredictAt / Condition / ResetModule`，不额外封装 config/data 类，也不再额外封装 `AnchorGate`、`AnchorEstimator`、`AnchorOutputStage` 这类 core 类型。模块文件按职责分成 `Policy/Core`、`Policy/Gate`、`Policy/Estimator`、`Policy/Output` 四个目录，不再保留 `Policy/Pipeline` 中间层。
 
 **Tech Stack:** Unity C#、abstract MonoBehaviour module components、plain C# math/DTO helpers、`EgoAnchor_Tools/anchor_policy_smoke`、`EgoAnchor_Tools/anchor_replay`（headless dotnet 策略分析回放，主力）、Unity `AnchorTrajectoryPlayer`（视频回放）+ 可选 batchmode 一致性抽查、`dotnet build`、`EgoAnchor_Python/eval` JSONL 指标框架、真实录制 fixture `EgoAnchor_Python/data/eval/offline_data`。
 
@@ -18,9 +18,9 @@
 
 1. 不直接把当前 policy 改成 One Euro。先统一 runtime 契约，让 raw、low-pass、Kalman、vanilla One Euro、EgoAnchor 都能在渲染帧 `Advance(now)`。
 2. 不在 Unity Inspector 用 enum 选模块，也不使用 interface 字段。Inspector 侧用抽象 `MonoBehaviour` 基类引用：`AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule`。字段不能写成裸 `MonoBehaviour`，只能接收继承对应抽象基类的模块脚本。
-3. module component 本身就是策略实现，不再包一层 core 策略对象。参数字段直接写在具体 module 子类里；算法方法也写在 module 子类里。模块不得在内部读取 `UnityEngine.Time`，时间只能由 `AnchorPipelineHost` 显式传入。
+3. module component 本身就是策略实现，不再包一层 core 策略对象。参数字段直接写在具体 module 子类里；算法方法也写在 module 子类里。模块不得在内部读取 `UnityEngine.Time`，时间只能由 `AnchorPolicyHost` 显式传入。
 4. `EgoAnchor_Python/data/eval/offline_data` 是阶段 A 默认离线测试输入。它是真实实时数据，不是 toy fixture；用于先回答 baseline 是否公平、旧 `kalman` 是否真的比 raw 好、EgoAnchor 是否值得写成论文贡献。
-5. 过渡期保留旧 `policyHost` 和 `processors`。新 `pipelineHost` 优先，其次旧 `policyHost`，最后 legacy `processors`。等 smoke、Unity build、Unity offline replay 和一次真机录制都通过后再删旧代码。
+5. 不保留旧 controller、旧 processor 链或旧 host 兼容路径。`PoseToAnchorRuntime` 只绑定新的 `AnchorPolicyHost`；raw、low-pass、Kalman、One Euro 和 EgoAnchor 都用 Gate/Estimator/Output module 组合表达。
 
 ## 1. 当前项目事实
 
@@ -28,9 +28,9 @@
 
 - `AnchorRuntimeHub` 已经把一条 `PoseResult` 广播给多个 `PoseToAnchorRuntime`。这正好支持同一输入流驱动多个 baseline/method。
 - `AnchorEvalRecorder` 已经支持 `recordedRuntimes`，并把每个 runtime 写成 `unity_output.jsonl` 的一个 `variants[]` 元素。每个 variant 有 `label`、`stable_pos`、`stable_rot`、`anchor_state`、`policy_action`、`policy_reason`、`source_capture_mono_ms` 等字段。
-- 当前 `PoseToAnchorRuntime.processors` 只在 pose 到达时跑 `RunProcessors(...)`。`AnchorLowPassPoseProcessor` 和 `AnchorKalmanPoseProcessor` 没有每渲染帧 `Advance(now)`。
-- 当前 `policyHost` 路径每帧在 `LateUpdate` 调 `AdvanceAnchorOutput(Time.realtimeSinceStartupAsDouble)`。因此旧 baseline 和 policy 在 lag/latency 上不是同一比赛规则。
-- `DynamicObjectAnchor` 仍用 `PoseOutputMode Raw/Smoothed` enum 选择输出。这不是本次公平性问题的根因，但会影响用户希望的“通过 Inspector 明确指定输出源”。计划中会迁移为 `AnchorPoseSource` component。
+- `PoseToAnchorRuntime` 只负责 frame-aligned world pose 输入和 `AnchorPolicyHost` 输出推进；旧 controller/filter/processor 链和旧 Raw/Smoothed 输出模式不再保留。
+- 当前 `policyHost` 路径每帧在 `LateUpdate` 调 `AdvanceAnchorOutput(Time.realtimeSinceStartupAsDouble)`。所有 baseline 和 method 在同一 capture/render 时间轴上比较。
+- `DynamicObjectAnchor` 只读取 `TryGetStablePose(...)`，raw/stable 差异全部由 `AnchorPolicyHost` module 组合表达。
 
 真实离线数据：
 
@@ -112,15 +112,16 @@ latency_summary:
 新增共享 DTO 和数学工具放在现有 `Policy/` 边界内，避免引入新的顶层架构目录。这里不定义 `AnchorGate`、`AnchorEstimator`、`AnchorOutputStage`、`AnchorStrategy` 这类二次抽象；策略行为直接写在对应 module component 子类中。
 
 ```text
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Core/
-  AnchorEstimate.cs
-  GateDecision.cs
-  OutputContext.cs
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core/
+  AnchorModuleContracts.cs
+  AnchorPolicyTypes.cs
 
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Math/
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core/
   AnchorMath.cs
-  OneEuroFilter.cs
+
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/
   ConstVelocityKalman.cs
+  OneEuroEstimatorModule.cs 内部私有 OneEuro helper
 ```
 
 共享 DTO：
@@ -156,19 +157,23 @@ AnchorMotionState
 
 ### 3.2 Inspector component modules
 
-Inspector 不放 enum，也不使用 interface 字段。新增抽象 `MonoBehaviour` 模块基类，`AnchorPipelineHost` 序列化引用这些基类。参数字段写在具体模块子类里，Unity Inspector 直接显示这些 `[SerializeField]` 字段；不要再封装 `ScoreJumpGateConfig`、`KalmanEstimatorConfig` 这类独立数据段。这样配置仍在 Inspector 上，但只有继承对应抽象基类的模块脚本能被拖进字段：
+Inspector 不放 enum，也不使用 interface 字段。新增抽象 `MonoBehaviour` 模块基类，`AnchorPolicyHost` 序列化引用这些基类。参数字段写在具体模块子类里，Unity Inspector 直接显示这些 `[SerializeField]` 字段；不要再封装 `ScoreJumpGateConfig`、`KalmanEstimatorConfig` 这类独立数据段。这样配置仍在 Inspector 上，但只有继承对应抽象基类的模块脚本能被拖进字段：
 
 ```text
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate/
   AnchorGateModule.cs
   NullGateModule.cs
   ScoreJumpGateModule.cs
+
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/
   AnchorEstimatorModule.cs
   RawEstimatorModule.cs
   LowPassEstimatorModule.cs
   KalmanEstimatorModule.cs
   OneEuroEstimatorModule.cs
   EgoAnchorEstimatorModule.cs
+
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output/
   AnchorOutputStageModule.cs
   PassThroughOutputModule.cs
   StaticLockRateLimitOutputModule.cs
@@ -280,10 +285,10 @@ namespace EgoAnchor.Policy
 
 没有参数的模块可以只有 `ModuleName`、核心方法和 `ResetModule()`。有参数的 gate、estimator、output module 都按上面方式写字段，不另外做参数包，也不创建对应 core 对象。
 
-`AnchorPipelineHost` 负责组装：
+`AnchorPolicyHost` 负责组装：
 
 ```text
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPipelineHost.cs
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPolicyHost.cs
 ```
 
 字段：
@@ -311,52 +316,35 @@ NotifyReset/NotifyReacquire/NotifyPause/NotifyResume/NotifyLost/NotifyError/Clea
 ```text
 AnchorObject_raw_zoh
   PoseToAnchorRuntime
-  AnchorPipelineHost
+  AnchorPolicyHost
   NullGateModule
   RawEstimatorModule
   PassThroughOutputModule
-  StableAnchorPoseSource
   DynamicObjectAnchor
 
 AnchorObject_egoanchor_full
   PoseToAnchorRuntime
-  AnchorPipelineHost
+  AnchorPolicyHost
   ScoreJumpGateModule
   EgoAnchorEstimatorModule
   StaticLockRateLimitOutputModule
-  StableAnchorPoseSource
   DynamicObjectAnchor
 ```
 
-切换方法是在同一个 GameObject 上挂对应模块组件，并在 `AnchorPipelineHost` 的三个抽象基类字段中拖拽引用；不用 enum，也不用 interface 字段。
+切换方法是在同一个 GameObject 上挂对应模块组件，并在 `AnchorPolicyHost` 的三个抽象基类字段中拖拽引用；不用 enum，也不用 interface 字段。
 
-### 3.3 Output source component
+### 3.3 DynamicObjectAnchor 输出契约
 
-`DynamicObjectAnchor` 当前有 `PoseOutputMode Raw/Smoothed` enum。迁移为组件引用：
+`DynamicObjectAnchor` 当前有 `PoseOutputMode Raw/Smoothed` enum。该 enum 属于旧 raw/stable 双路输出错误，应删除，不再用 `AnchorPoseSource`、`RawAnchorPoseSource`、`StableAnchorPoseSource` 继续包装它。
+
+新契约：
 
 ```text
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/AnchorPoseSource.cs
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/RawAnchorPoseSource.cs
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/StableAnchorPoseSource.cs
+DynamicObjectAnchor
+  -> PoseToAnchorRuntime.TryGetStablePose(...)
 ```
 
-基类：
-
-```csharp
-namespace EgoAnchor.Runtime
-{
-    /// <summary>
-    /// DynamicObjectAnchor 的 pose 输入源。用组件引用替代 Raw/Smoothed enum。
-    /// </summary>
-    public abstract class AnchorPoseSource : MonoBehaviour
-    {
-        public abstract bool TryGetPose(out Pose pose);
-        public abstract long LatestFrameId { get; }
-    }
-}
-```
-
-`DynamicObjectAnchor` 只引用 `AnchorPoseSource poseSource`。迁移期可以保留旧 enum 一个版本，但最终 scene 迁移完成后删除。
+所有策略，包括 `raw_zoh`，都必须通过 `AnchorPolicyHost` 产生 stable/final pose。`raw_zoh` 的 stable pose 等于 frame-aligned 原始 Python pose 的 ZOH 输出；不再通过 `DynamicObjectAnchor` 选择 Raw/Smoothed。这样 scene 上每个对比 object 都有一个 `PoseToAnchorRuntime + AnchorPolicyHost + Gate/Estimator/Output module + DynamicObjectAnchor`，差异只来自 pipeline 模块组合。
 
 ## 4. Baseline 与模块组合
 
@@ -509,9 +497,8 @@ capture/output/pose 均非空；pose_has_pose 命中数量大于 0。
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Core/AnchorEstimate.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Core/GateDecision.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Core/OutputContext.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core/AnchorModuleContracts.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core/AnchorPolicyTypes.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/AnchorPolicySmoke.csproj`
 
 - [ ] Step 1.1: 写 `AnchorEstimate`，字段为 `Pose`、`LinearVelocity`、`AngularVelocityRad`、`TimeSeconds`、`Confidence`、`ReliabilityScore`。不要命名为 `AnchorState`。
@@ -524,7 +511,7 @@ capture/output/pose 均非空；pose_has_pose 命中数量大于 0。
 Run:
 
 ```powershell
-rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\Pipeline
+rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy
 dotnet run --project EgoAnchor_Tools\anchor_policy_smoke\AnchorPolicySmoke.csproj
 ```
 
@@ -538,9 +525,9 @@ rg 无输出；现有 smoke 仍通过。
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/AnchorGateModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/AnchorEstimatorModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/AnchorOutputStageModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate/AnchorGateModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/AnchorEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output/AnchorOutputStageModule.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/AnchorPolicySmoke.csproj`
 
 - [ ] Step 2.1: 写三类抽象 `MonoBehaviour` 基类，字段和方法都加中文 summary。基类直接暴露运行时方法：`Evaluate`、`Snap/UpdateEstimate/PredictAt`、`Condition`、`ResetModule`，不暴露 `Create...()`。
@@ -574,22 +561,21 @@ Expected:
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Math/AnchorMath.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Math/OneEuroFilter.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Math/ConstVelocityKalman.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core/AnchorMath.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/ConstVelocityKalman.cs`
+- Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/OneEuroEstimatorModule.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
 - [ ] Step 3.1: `AnchorMath` 提供 `Normalize`、`AlignHemisphere`、`Inverse`、`Log`、`Exp`、`AngleDegrees`、`Integrate`、`ClampPoseDelta`。
-- [ ] Step 3.2: `OneEuroFilter` 提供 `OneEuroFloat`、`OneEuroVector3`、`OneEuroRotation`。旋转必须用四元数 log/exp，不用 Euler。
-- [ ] Step 3.3: `ConstVelocityKalman` 是一维位置+速度常速度 Kalman。`Predict(dt)` 和 `Correct(measurement, r)` 分开。
+- [ ] Step 3.1b: 平移和旋转必须一起实现。旋转统一用四元数同半球对齐 + log/exp 切空间，不允许只实现平移或用 Euler 角滤波代替旋转滤波。
+- [ ] Step 3.2: `OneEuroEstimatorModule` 内部私有实现 `OneEuroFloat`、`OneEuroVector3`、`OneEuroRotation`，不要再暴露独立 One Euro helper 文件。实现参考 Casiez/Roussel/Vogel 的 One Euro Filter 原始公式：`cutoff = min_cutoff + beta * |dx_hat|`，`alpha = 1 / (1 + tau / dt)`，`tau = 1 / (2π cutoff)`；旋转版本在四元数 log/exp 切空间中过滤，不用 Euler。
+- [ ] Step 3.3: `ConstVelocityKalman` 是一维位置+速度常速度 Kalman。`Predict(dt)` 和 `Correct(measurement, r)` 分开；位置 estimator 用 3 个轴向 Kalman，旋转 estimator 用四元数误差状态和角速度估计适配同一 `PredictAt(renderTime)` 契约，不允许只更新位置。
 - [ ] Step 3.4: 增加 smoke：
 
 ```text
 AssertQuaternionLogExpRoundTrips()
 AssertQuaternionHemisphereAlignmentUsesShortestArc()
-AssertOneEuroStaticNoiseIsSmoothed()
-AssertOneEuroFastMotionReducesLag()
-AssertConstVelocityKalmanPredictsBetweenSamples()
+AssertEstimatorRotationsPredictBetweenSamples()
 ```
 
 Run:
@@ -608,8 +594,8 @@ Expected:
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/NullGateModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/ScoreJumpGateModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate/NullGateModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate/ScoreJumpGateModule.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
 - [ ] Step 4.1: `NullGateModule.Evaluate(...)` 只做必要有效性检查，不使用 score。
@@ -669,18 +655,18 @@ AssertScoreGateModuleEvaluatesDirectly()
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/RawEstimatorModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/LowPassEstimatorModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/KalmanEstimatorModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/OneEuroEstimatorModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/EgoAnchorEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/RawEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/LowPassEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/KalmanEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/OneEuroEstimatorModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator/EgoAnchorEstimatorModule.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
 - [ ] Step 5.1: `RawEstimatorModule`：`PredictAt` 直接返回最近测量，label `raw_zoh`。
 - [ ] Step 5.2: `LowPassEstimatorModule`：位置 EMA、旋转 Slerp、有限差分速度，`PredictAt` 可线性外推。
-- [ ] Step 5.3: `KalmanEstimatorModule`：常速度 Kalman，第一批 `kalman_cv` 不用 score 改 R。若实现 score-aware 版本，另起 label。
-- [ ] Step 5.4: `OneEuroEstimatorModule`：vanilla One Euro，`scoreWeight=1`。
-- [ ] Step 5.5: `EgoAnchorEstimatorModule`：score-adaptive One Euro + 有界前推。低 score 同时降低 update weight 和缩短 effective predict ahead。
+- [ ] Step 5.3: `KalmanEstimatorModule`：常速度 Kalman，第一批 `kalman_cv` 不用 score 改 R。位置用 3 个 `ConstVelocityKalman`；旋转用四元数误差状态 + 角速度，`PredictAt` 同时预测位置和旋转。若实现 score-aware 版本，另起 label。
+- [ ] Step 5.4: `OneEuroEstimatorModule`：vanilla One Euro，`scoreWeight=1`。位置用 `OneEuroVector3`；旋转用 `OneEuroRotation`，四元数 log/exp，不用 Euler。
+- [ ] Step 5.5: `EgoAnchorEstimatorModule`：score-adaptive One Euro + 有界前推。低 score 同时降低 update weight 和缩短 effective predict ahead；平移和旋转都要受同一 score-aware 策略约束。
 - [ ] Step 5.6: estimator module component 各自直接暴露专属 Inspector 参数。不要共用一个巨型 config，也不要为每个 estimator 再建单独 data/config 类。
 - [ ] Step 5.7: smoke：
 
@@ -689,7 +675,9 @@ AssertAllEstimatorsSnapThenOutputPose()
 AssertRawEstimatorIsZeroOrderHold()
 AssertLowPassEstimatorMovesBetweenSamplesWhenPredictionEnabled()
 AssertKalmanEstimatorPredictsConstantVelocityBetweenSamples()
+AssertKalmanEstimatorPredictsRotationBetweenSamples()
 AssertOneEuroEstimatorProducesContinuousRenderOutput()
+AssertOneEuroEstimatorSmoothsRotationWithoutEulerArtifacts()
 AssertEgoAnchorEstimatorModuleDampsPredictionWhenScoreDrops()
 AssertBaselineEstimatorsIgnoreReliabilityScore()
 AssertEstimatorModulesCreateExpectedEstimatorNames()
@@ -707,8 +695,8 @@ LowPass/Kalman/OneEuro/EgoAnchor 在 prediction enabled 时 maxZeroRun <= 4。
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/PassThroughOutputModule.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Pipeline/Modules/StaticLockRateLimitOutputModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output/PassThroughOutputModule.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output/StaticLockRateLimitOutputModule.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
 - [ ] Step 6.1: `PassThroughOutputModule.Condition(...)` 直接返回 `estimate.Pose`。
@@ -741,17 +729,17 @@ AssertRateLimitPreventsSingleFrameJump()
 AssertPassThroughDoesNotModifyPose()
 ```
 
-### Task 7: AnchorPipelineHost 编排模块
+### Task 7: AnchorPolicyHost 编排模块
 
 **Files:**
 
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPipelineHost.cs`
+- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPolicyHost.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
-- [ ] Step 7.1: `AnchorPipelineHost` 直接组合 `AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule` 和 `AnchorStateMachine`。不创建 `AnchorPipeline` 或 `AnchorStrategy` core 类。
+- [ ] Step 7.1: `AnchorPolicyHost` 直接组合 `AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule` 和 `AnchorStateMachine`。不创建 `AnchorPipeline` 或 `AnchorStrategy` core 类。
 - [ ] Step 7.2: `AcceptMeasurement` 只提交测量，不输出 stable pose：先调用 `gateModule.Evaluate(...)`，再根据 gate action 调 `estimatorModule.Snap(...)` 或 `estimatorModule.UpdateEstimate(...)`。
 - [ ] Step 7.3: `Advance(now)` 是唯一 stable pose 输出入口：调用 `estimatorModule.PredictAt(now)`，再调用 `outputModule.Condition(...)`。
-- [ ] Step 7.4: `AnchorPipelineHost` 引用三个 module component，并实现 `Bind(PoseToAnchorRuntime owner)` 1:1 守卫。
+- [ ] Step 7.4: `AnchorPolicyHost` 引用三个 module component，并实现 `Bind(PoseToAnchorRuntime owner)` 1:1 守卫。
 - [ ] Step 7.5: host 暴露诊断：
 
 ```text
@@ -772,12 +760,16 @@ AngularSpeedDps
 - [ ] Step 7.6: smoke：
 
 ```text
-AssertPipelineHostMapsGateActionsToPolicyDecision()
-AssertPipelineHostAdvancesEveryRenderFrame()
-AssertPipelineHostCoastsThenFreezesThenLost()
-AssertPipelineHostRequiresExplicitModules()
-AssertPipelineHostDoesNotUseEnumSelection()
-AssertPipelineHostHotReloadPreservesPoseWhenOnlyParametersChange()
+AssertPolicyHostMapsGateActionsToPolicyDecision()
+AssertPolicyHostAdvancesEveryRenderFrame()
+AssertPolicyHostCoastsThenFreezesThenLost()
+AssertPolicyHostRequiresExplicitModules()
+AssertPolicyHostDoesNotUseEnumSelection()
+AssertPolicyHostMapsGateActionsToPolicyDecision()
+AssertPolicyHostAdvancesEveryRenderFrame()
+AssertPolicyHostCoastsThenFreezesThenLost()
+AssertPolicyHostRequiresExplicitModules()
+AssertPolicyHostDoesNotUseEnumSelection()
 ```
 
 ### Task 8: 接入 PoseToAnchorRuntime 和 DynamicObjectAnchor
@@ -785,31 +777,27 @@ AssertPipelineHostHotReloadPreservesPoseWhenOnlyParametersChange()
 **Files:**
 
 - Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/AnchorPoseSource.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/RawAnchorPoseSource.cs`
-- Create: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/StableAnchorPoseSource.cs`
 - Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`
 - Modify: `EgoAnchor_Tools/anchor_policy_smoke/Program.cs`
 
-- [ ] Step 8.1: `PoseToAnchorRuntime` 新增：
+- [ ] Step 8.1: `PoseToAnchorRuntime` 只保留新的 `AnchorPolicyHost` 引用：
 
 ```csharp
-/// <summary>可选模块化 anchor pipeline 宿主。绑定后优先于旧 policyHost 和 processors。</summary>
-[Tooltip("可选模块化 anchor pipeline 宿主。绑定后优先于旧 policyHost 和 processors；用于公平 baseline/ours 对比。")]
-[SerializeField] private AnchorPipelineHost pipelineHost;
+/// <summary>Unity 侧 anchor policy 宿主。</summary>
+[Tooltip("Unity 侧 anchor policy 宿主。所有 baseline 和 EgoAnchor 方法都通过该 host 的 Gate/Estimator/Output 模块表达。")]
+[SerializeField] private AnchorPolicyHost policyHost;
 ```
 
-- [ ] Step 8.2: 优先级固定：
+- [ ] Step 8.2: 不再保留旧优先级链：
 
 ```text
-pipelineHost != null -> 新 pipeline
-pipelineHost == null && policyHost != null -> 旧 policy
-pipelineHost == null && policyHost == null -> legacy processors
+policyHost != null -> AnchorPolicyHost module path
+policyHost == null -> 不输出 stable pose，并记录 policy_host_required
 ```
 
-- [ ] Step 8.3: `LateUpdate` 在 `pipelineHost` 或 `policyHost` 存在时调用 `AdvanceAnchorOutput(now)`。
-- [ ] Step 8.4: `NotifyReset/Reacquire/Pause/Resume/Lost/Error/Clear` 支持 pipelineHost，且不同时通知两个 host。
-- [ ] Step 8.5: `RuntimeDiagnostics` 新增 strategy metadata：
+- [ ] Step 8.3: `LateUpdate` 在 `policyHost` 存在时调用 `AdvanceAnchorOutput(now)`。
+- [ ] Step 8.4: `NotifyReset/Reacquire/Pause/Resume/Lost/Error/Clear` 只通知 `policyHost`。
+- [ ] Step 8.5: `PoseToAnchorRuntime` 直接暴露 strategy metadata：
 
 ```text
 strategyLabel
@@ -822,17 +810,14 @@ latestAcceptedScore
 latestStaticLocked
 ```
 
-旧 `latestInnovationPosD2/latestEffectiveMeasurementNoise` 对 pipelineHost 写 `NaN`，清理阶段再删除。
-
-- [ ] Step 8.6: `DynamicObjectAnchor` 改为引用 `AnchorPoseSource`。迁移期可保留旧 enum fallback，但新 scene 必须使用 source component。
+- [ ] Step 8.6: `DynamicObjectAnchor` 删除 `PoseOutputMode Raw/Smoothed`，也不新增 `AnchorPoseSource` 包装层。它只引用 `PoseToAnchorRuntime runtime` 并读取 `TryGetStablePose(...)`；`raw_zoh` 通过 policy module 输出 stable pose，因此不需要 Transform 应用层再选择 Raw。
 - [ ] Step 8.7: smoke：
 
 ```text
-AssertPipelinePathSkipsProcessors()
-AssertPipelineHostTakesPriorityOverLegacyPolicyHost()
-AssertLegacyPolicyPathStillWorksWhenPipelineMissing()
-AssertProcessorPathStillWorksWhenNoHostBound()
-AssertDynamicObjectAnchorReadsPoseSourceComponent()
+AssertPolicyRuntimeUsesPolicyHostOnly()
+AssertPoseToAnchorRuntimeUsesPolicyHostField()
+AssertDynamicObjectAnchorReadsRuntimeStablePoseOnly()
+AssertDynamicObjectAnchorHasNoRawSmoothedEnum()
 ```
 
 Run:
@@ -872,13 +857,7 @@ config_hash
 
 - [ ] Step 9.1b（参数可复现，配合 Task 10 回放）: manifest 的 `variant_configs[]` 除 `config_hash` 外，必须把每个 module 的 `[SerializeField]` 字段以 `name->value` 明文键值对一并写出（反射枚举字段，纯标量/向量）。Task 10 headless 回放据此**反射逐字段注入**到对应 module 实例，精确复现该次录制的参数。`config_hash` 仅作快速比对，注入靠明文键值；两者都来自同一次反射枚举，保证一致。
 
-- [ ] Step 9.2: 对旧 policy/processor 写兼容值：
-
-```text
-legacy_policy
-legacy_processor
-```
-
+- [ ] Step 9.2: 未绑定 `AnchorPolicyHost` 的 runtime 不写旧兼容 label；模块字段为空并通过 smoke/build 暴露绑定问题。
 - [ ] Step 9.3: Python schema 只做可选读取，不破坏旧日志。`VariantRow.raw` 继续保留原字段。
 - [ ] Step 9.4: Manifest 增加 `variant_configs` 数组，记录每个 label 的模块组合和 Inspector 字段摘要。这里是日志 schema 名称，不是 Unity 运行时配置类。
 - [ ] Step 9.5: eval 单测验证新旧日志都可读。
@@ -908,8 +887,8 @@ OK
 - Create: `EgoAnchor_Tools/anchor_replay/Program.cs`
 - Modify: `EgoAnchor_Python/eval/tests/test_run_eval.py`
 
-- [ ] Step 10.1: 新建 `anchor_replay` dotnet 工程，照搬 `anchor_policy_smoke` 的 `<Reference UnityEngine.dll>` + `<Compile Include>` 方式，include `Policy/Pipeline/**`（Core/Math/Modules）+ 复用的 `AnchorObservation/AnchorPolicyDecision/AnchorPolicyOutput/AnchorStateMachine/CameraPoseFrameAligner` 等源。
-- [ ] Step 10.2: replay runner 用 `GetUninitializedObject` 实例化所需 module component，反射逐字段注入该策略参数（见 Task 9 的参数注入约定），构建 `AnchorPipelineHost` 等价编排（或直接调用 host 的 headless 构造路径），按 `offline_data` 的 capture 时间喂 `AcceptMeasurement`、按 `render_mono_ms` 网格调 `Advance`。
+- [ ] Step 10.1: 新建 `anchor_replay` dotnet 工程，照搬 `anchor_policy_smoke` 的 `<Reference UnityEngine.dll>` + `<Compile Include>` 方式，include `Policy/Core|Gate|Estimator|Output` + 复用的 `AnchorObservation/AnchorPolicyDecision/AnchorPolicyOutput/AnchorStateMachine/CameraPoseFrameAligner` 等源。
+- [ ] Step 10.2: replay runner 用 `GetUninitializedObject` 实例化所需 module component，反射逐字段注入该策略参数（见 Task 9 的参数注入约定），构建 `AnchorPolicyHost` 等价编排（或直接调用 host 的 headless 构造路径），按 `offline_data` 的 capture 时间喂 `AcceptMeasurement`、按 `render_mono_ms` 网格调 `Advance`。
 - [ ] Step 10.2b（可选一致性抽查）: 另留 Unity batchmode 入口 `AnchorOfflineReplayCli.Run`，偶尔比对 dotnet 回放与 Unity 实例化行为是否一致（防 headless 反射路径漂移）。**这不是主力分析路径，CI/日常调参用 10.2 的 dotnet。**
 
 ```powershell
@@ -954,6 +933,7 @@ lost_count
 ```
 
 - [ ] Step 10.6: replay output 采用现有 `unity_output` 兼容结构，让 Python eval 可直接读。
+- [ ] Step 10.7: 实现完成后必须先用 `offline_data` 跑一次真实 replay，再接 Python eval，避免只通过 toy smoke 但真实日志字段或时序有 bug。
 
 Run:
 
@@ -1128,11 +1108,10 @@ egoanchor_full
 
 ```text
 PoseToAnchorRuntime
-AnchorPipelineHost
+AnchorPolicyHost
 对应 GateModule
 对应 EstimatorModule
 对应 OutputStageModule
-StableAnchorPoseSource
 DynamicObjectAnchor
 ```
 
@@ -1145,9 +1124,10 @@ DynamicObjectAnchor
 raw_zoh 有明显 ZOH 阶梯。
 kalman_cv/oneeuro_vanilla/egoanchor_full 在两测量间有连续输出。
 recorder 写出的 variants 包含全部 label。
+DynamicObjectAnchor 不包含 Raw/Smoothed 输出模式选择。
 ```
 
-### Task 16: 清理 legacy 和文档同步
+### Task 16: 文档同步和旧路径审计
 
 **Files:**
 
@@ -1155,22 +1135,21 @@ recorder 写出的 variants 包含全部 label。
 - Modify: `AGENTS.md`
 - Modify: `2026-EgoAnchor/egoanchor_cn_outline.tex`
 - Modify: `2026-EgoAnchor/egoanchor_cn_v1.tex`
-- Delete after migration: old `Processors/` and old policy helper files if no longer referenced.
+- Delete: old policy helper files and processor directory if any stale copy reappears.
 
 - [ ] Step 16.1: 更新 guide，说明 component 挂载方式、五个 baseline、offline replay、Unity replay。
 - [ ] Step 16.2: 更新 `AGENTS.md` 用户维护区块之外的事实。不得改 `USER-MAINTAINED-REQUIREMENTS`。
 - [ ] Step 16.3: 论文只写已验证事实。`egoanchor_full` 没打赢 `kalman_cv/oneeuro_vanilla` 前，不把 score-aware policy 写成贡献。
-- [ ] Step 16.4: 清理旧代码前搜索引用：
+- [ ] Step 16.4: 搜索确认旧代码没有回流：
 
 ```powershell
-rg "policyHost|processors|AnchorMeasurementGate|AnchorOutputSmoother|MotionStateClassifier" EgoAnchor_Unity\Assets\Scripts\EgoAnchor EgoAnchor_Tools\anchor_policy_smoke ANCHOR_CONTROLLER_GUIDE.md AGENTS.md
+rg "legacy processor|old policy controller|Pipeline\\Modules" EgoAnchor_Unity\Assets\Scripts\EgoAnchor EgoAnchor_Tools\anchor_policy_smoke ANCHOR_CONTROLLER_GUIDE.md AGENTS.md
 ```
 
-清理条件：
+预期：
 
 ```text
-pipelineHost 通过 smoke、Unity build、Unity offline replay、至少一次真机多 variant 录制。
-scene 不再引用旧 policyHost/processors。
+代码、smoke、guide 和 AGENTS 都不再引用旧 host、旧 controller 或旧 processor 类。
 ```
 
 ## 7. 完整验证门
@@ -1208,7 +1187,7 @@ pixi run python -m eval.run_eval --session-dir .\data\eval\offline_data --output
 代码搜索：
 
 ```powershell
-rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy\Pipeline
+rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy
 rg -n "enum .*Mode|AnchorGateMode|AnchorEstimatorMode|AnchorOutputStageMode" EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Runtime
 ```
 
@@ -1216,7 +1195,7 @@ Expected:
 
 ```text
 第一条无输出。
-第二条不应出现新的 Inspector module selection enum。过渡期如果 DynamicObjectAnchor 旧 output enum 仍存在，必须在迁移任务中标明；最终清理后无输出。
+第二条不应出现新的 Inspector module selection enum，也不应保留 DynamicObjectAnchor 的 Raw/Smoothed 输出 enum。
 ```
 
 ## 8. 论文实验映射
@@ -1261,7 +1240,7 @@ egoanchor_full + score-aware reacquire
 - 所有 estimator 都实现 `PredictAt(renderTime)`。
 - baseline 不使用 score；EgoAnchor 的 score 特化只在 `ScoreJumpGateModule` 和 `EgoAnchorEstimatorModule`。
 - `PoseToAnchorRuntime` 默认仍使用 frame_id capture-time 对齐。
-- `DynamicObjectAnchor` 不包含滤波、状态机、网络、recovery 逻辑。
+- `DynamicObjectAnchor` 不包含滤波、状态机、网络、recovery 逻辑，也不包含 Raw/Smoothed 输出模式选择；它只应用 `PoseToAnchorRuntime` 的 final/stable pose。
 - `AnchorEvalRecorder` 能记录多 strategy variant 和模块元数据。
 - Unity offline replay 能用 `offline_data` 同一份 aligned raw 输入重跑所有策略。
 - Python eval 能读取 replay output 并生成同一套表。
@@ -1278,11 +1257,11 @@ egoanchor_full + score-aware reacquire
 | 风险 | 处理 |
 | --- | --- |
 | Unity 不能序列化 interface 字段 | Inspector 字段使用抽象 `MonoBehaviour` module 基类；模块子类直接实现行为，不使用 `IAnchor*` interface，也不新增 `AnchorGate/AnchorEstimator/AnchorOutputStage` core 类型。 |
-| 直接替换旧 policyHost 破坏 status/reset/pause | 采用 `pipelineHost > policyHost > processors` 过渡优先级，清理延后。 |
+| scene 仍绑定旧脚本 GUID | 不保留代码兼容层；scene 迁移单独执行，把每个 variant 明确绑定 `PoseToAnchorRuntime + AnchorPolicyHost + modules + DynamicObjectAnchor`。 |
 | baseline 偷用 score 影响论文公平性 | 第一批 `kalman_cv/oneeuro_vanilla/lowpass_predict/raw_zoh` 明确忽略 score；score-aware Kalman 单独 label。 |
 | replay 与 Unity 实时行为漂移 | offline replay 在 Unity 内实例化同一套 module component，不维护第二套策略实现。 |
 | `offline_data` 没有 condition spans | 第一批分析 condition 为 `unlabeled`，只做 baseline 行为和参数筛选；正式论文数据需要重新录 condition spans。 |
-| 旧 scene 引用 enum/outputMode | 先兼容，scene 迁移单独执行；最终用 `AnchorPoseSource` 替代。 |
+| 旧 scene 引用 enum/outputMode | 不再保留兼容层；代码删除 Raw/Smoothed 输出 enum。scene 迁移单独执行，所有 baseline 通过独立 runtime + pipeline label 表达。 |
 | EgoAnchor 打不过 Kalman | 这不是失败；论文主贡献回到 frame-aligned pose-to-anchor，policy 降级为实现细节。 |
 
 ## 11. 执行顺序

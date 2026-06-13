@@ -69,6 +69,12 @@ class RunEvalTest(unittest.TestCase):
             self.assertIn("reliability_score_histogram", metrics.tables)
             self.assertIn("track_reprojection_histogram", metrics.tables)
             self.assertIn("policy_distribution", metrics.tables)
+            rq1 = metrics.tables["rq1_raw_mapping_error_summary"]
+            self.assertEqual(set(rq1["label"]), {"arrival_time_raw", "frame_aligned_raw"})
+            frame_aligned = rq1[(rq1["condition"] == "static") & (rq1["label"] == "frame_aligned_raw")].iloc[0]
+            arrival_time = rq1[(rq1["condition"] == "static") & (rq1["label"] == "arrival_time_raw")].iloc[0]
+            self.assertAlmostEqual(float(frame_aligned["translation_median_m"]), 0.02, places=9)
+            self.assertAlmostEqual(float(arrival_time["translation_median_m"]), 0.07, places=9)
 
             sanity = metrics.sanity
             self.assertEqual(sanity["gt_source"], "transform")
@@ -85,6 +91,8 @@ class RunEvalTest(unittest.TestCase):
 
             self.assertTrue((report_dir / "gt_anchor_sanity.json").is_file())
             self.assertTrue((report_dir / "anchor_error_summary.csv").is_file())
+            self.assertTrue((report_dir / "rq1_raw_mapping_error_summary.csv").is_file())
+            self.assertTrue((report_dir / "rq1_raw_mapping_slip_summary.csv").is_file())
             self.assertTrue((report_dir / "pose_offset_summary.csv").is_file())
             self.assertFalse((report_dir / "aligned_raw_offset_summary.csv").is_file())
             self.assertTrue((report_dir / "latency_summary.csv").is_file())
@@ -95,6 +103,21 @@ class RunEvalTest(unittest.TestCase):
             self.assertTrue((report_dir / "summary.md").is_file())
             self.assertTrue((report_dir / "error_timeline.png").is_file())
             self.assertTrue((report_dir / "latency_breakdown.png").is_file())
+
+    def test_run_eval_accepts_output_log_override(self) -> None:
+        """run_eval 应能用 replay output 替代 session 原始 unity_output。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_metric_session(Path(tmp))
+            replay_dir = session_dir / "anchor_replay"
+            replay_dir.mkdir()
+            replay_log = replay_dir / "anchor_replay_output.jsonl"
+            replay_log.write_text((session_dir / "metric-session_unity_output.jsonl").read_text(encoding="utf-8"), encoding="utf-8")
+
+            report_dir = run_eval(session_dir, output_log=replay_log, report_dir=replay_dir / "report", only="tables")
+
+            self.assertTrue((report_dir / "anchor_error_summary.csv").is_file())
+            self.assertTrue((report_dir / "policy_distribution.csv").is_file())
 
     def test_run_eval_script_entrypoint_resolves_eval_package(self) -> None:
         """直接执行 python eval/run_eval.py 时应能解析顶层 eval 包。"""
@@ -287,6 +310,12 @@ def _variant(
                 "has_aligned_raw": True,
                 "aligned_raw_pos": (np.asarray(gt_pos, dtype=float) + np.array([offset * 2.0, 0.0, 0.0])).tolist(),
                 "aligned_raw_rot": [0.0, 0.0, 0.0, 1.0],
+                "has_arrival_time_raw": True,
+                "arrival_time_raw_pos": (np.asarray(gt_pos, dtype=float) + np.array([offset * 2.0 + 0.05, 0.0, 0.0])).tolist(),
+                "arrival_time_raw_rot": [0.0, 0.0, 0.0, 1.0],
+                "arrival_time_raw_mono_ms": 100.0 + source_frame_id * 50.0,
+                "arrival_time_raw_unity_frame": 200 + source_frame_id,
+                "arrival_time_camera_reference": "Left",
                 "reliability_score": 0.9,
             }
         )

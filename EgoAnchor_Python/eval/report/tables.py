@@ -18,6 +18,8 @@ SUMMARY_TABLES = [
     "latency_summary",
     "jitter_summary",
     "slip_summary",
+    "rq1_raw_mapping_error_summary",
+    "rq1_raw_mapping_slip_summary",
     "lag_summary",
     "jump_suppression_summary",
     "recovery_summary",

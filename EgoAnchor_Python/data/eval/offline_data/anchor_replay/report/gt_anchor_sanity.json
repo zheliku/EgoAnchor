@@ -1,0 +1,64 @@
+{
+  "session_id": "20260613_181828_controller_right",
+  "object_id": "controller_right",
+  "gt_source": "transform",
+  "gt_transform": "OVRControllerPrefab",
+  "variant_labels": [
+    "kalman",
+    "raw"
+  ],
+  "capture_rows": 1152,
+  "output_rows": 19242,
+  "pose_rows": 460,
+  "gt_valid_output_rows": 19242,
+  "variants": {
+    "egoanchor_full": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    },
+    "egoanchor_no_static": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    },
+    "kalman_cv": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    },
+    "lowpass_predict": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    },
+    "oneeuro_vanilla": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    },
+    "raw_zoh": {
+      "rows": 3207,
+      "stable_rows": 3207,
+      "anchor_pose_source_counts": {
+        "replay": 3207
+      }
+    }
+  },
+  "aligned_raw_error": {
+    "n": 3207,
+    "translation_median_m": 0.022627067430798776,
+    "translation_p95_m": 0.08858345358497507,
+    "rotation_median_deg": 6.4805383721999945
+  }
+}

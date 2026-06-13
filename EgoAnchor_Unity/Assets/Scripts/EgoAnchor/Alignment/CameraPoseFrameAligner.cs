@@ -76,6 +76,48 @@ namespace EgoAnchor.Alignment
         }
 
         /// <summary>
+        /// 从 PoseResult 读取 camera-space pose，并使用当前最新 camera pose 做 arrival-time 对照映射。
+        /// 该方法只用于 RQ1 诊断；正式 anchor 仍应使用 TryAlign(frame_id, ...) 的 capture-time 对齐。
+        /// </summary>
+        /// <param name="poseResult">Python 发布的 camera-space PoseResult。</param>
+        /// <param name="worldPose">成功时输出 arrival-time raw world pose。</param>
+        /// <param name="usedReference">本次用于组合 camera-local pose 的参考相机。</param>
+        /// <param name="cameraRecord">本次使用的最新 camera pose 记录。</param>
+        /// <returns>是否成功得到 arrival-time raw world pose。</returns>
+        public bool TryAlignWithLatestCameraPose(
+            PoseResult poseResult,
+            out Pose worldPose,
+            out CameraReference usedReference,
+            out FramePoseRecord cameraRecord)
+        {
+            worldPose = default;
+            usedReference = alignmentReference;
+            cameraRecord = default;
+            if (poseResult == null || !poseResult.HasPose)
+            {
+                return false;
+            }
+
+            if (!TryReadOpenCvCameraPose(poseResult.PoseMatrixCvCamera, out Pose cvCameraPose))
+            {
+                return false;
+            }
+
+            if (usedReference == CameraReference.None)
+            {
+                return TryAlignWithCameraPose(cvCameraPose, Pose.identity, usedReference, out worldPose);
+            }
+
+            if (framePoseHistory == null || !framePoseHistory.TryGetLatest(out cameraRecord))
+            {
+                return false;
+            }
+
+            return cameraRecord.TryGetCameraPose(usedReference, out Pose cameraWorldPose)
+                && TryAlignWithCameraPose(cvCameraPose, cameraWorldPose, usedReference, out worldPose);
+        }
+
+        /// <summary>
         /// 已解出 camera-local pose 时，按 frame_id 对齐到 Unity world。
         /// </summary>
         /// <param name="frameId">PoseResult 对应的 stereo frame_id。</param>
@@ -120,6 +162,39 @@ namespace EgoAnchor.Alignment
             if (!framePoseHistory.TryGet(frameId, out FramePoseRecord record) || !record.TryGetCameraPose(reference, out Pose cameraWorldPose))
             {
                 return false;
+            }
+
+            Pose alignedWorldPose = new Pose(
+                cameraWorldPose.position + cameraWorldPose.rotation * unityCameraLocalPose.position,
+                cameraWorldPose.rotation * unityCameraLocalPose.rotation
+            );
+            worldPose = poseTransform.ApplyFrameAlignedOffsets(alignedWorldPose);
+            return true;
+        }
+
+        /// <summary>
+        /// 已解出 camera-local pose 时，直接使用调用方提供的 camera world pose 组合到 Unity world。
+        /// 该方法给 arrival-time raw 诊断复用同一套轴翻转和 offset 逻辑。
+        /// </summary>
+        /// <param name="cvCameraPose">OpenCV camera 坐标系下的 object pose。</param>
+        /// <param name="cameraWorldPose">arrival-time 参考相机 world pose。</param>
+        /// <param name="reference">用于诊断记录的参考相机。</param>
+        /// <param name="worldPose">成功时输出 Unity world pose。</param>
+        /// <returns>是否成功完成坐标转换。</returns>
+        public bool TryAlignWithCameraPose(Pose cvCameraPose, Pose cameraWorldPose, CameraReference reference, out Pose worldPose)
+        {
+            worldPose = default;
+
+            if (!poseTransform.TryApplyAxisFlip(cvCameraPose, out Pose unityCameraLocalPose))
+            {
+                return false;
+            }
+
+            unityCameraLocalPose = poseTransform.ApplyCameraLocalOffsets(unityCameraLocalPose);
+            if (reference == CameraReference.None)
+            {
+                worldPose = poseTransform.ApplyFrameAlignedOffsets(unityCameraLocalPose);
+                return true;
             }
 
             Pose alignedWorldPose = new Pose(

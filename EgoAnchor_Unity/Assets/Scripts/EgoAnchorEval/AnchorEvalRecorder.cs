@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Reflection;
+using System.Text;
 using EgoAnchor.Alignment;
+using EgoAnchor.Policy;
 using EgoAnchor.Quest;
 using EgoAnchor.Runtime;
 using UnityEngine;
@@ -74,6 +78,9 @@ namespace EgoAnchorEval
         /// <summary>复用的变体快照缓冲，避免 LateUpdate 高频分配列表。</summary>
         private readonly List<RecordedVariantSnapshot> variantSnapshots = new List<RecordedVariantSnapshot>();
 
+        /// <summary>录制开始时缓存的 variant config hash，避免每渲染帧反射。</summary>
+        private readonly Dictionary<string, string> variantConfigHashes = new Dictionary<string, string>();
+
         /// <summary>没有可用 GT pose。</summary>
         public const string SourceNone = "none";
 
@@ -96,6 +103,7 @@ namespace EgoAnchorEval
             StopRecording();
             captureWriter = new JsonlFileWriter(capturePath);
             outputWriter = new JsonlFileWriter(outputPath);
+            RefreshVariantConfigHashCache();
             recording = true;
         }
 
@@ -110,6 +118,7 @@ namespace EgoAnchorEval
             captureWriter = null;
             outputWriter = null;
             variantSnapshots.Clear();
+            variantConfigHashes.Clear();
         }
 
         /// <summary>
@@ -228,10 +237,33 @@ namespace EgoAnchorEval
 
             for (int i = 0; i < recordedRuntimes.Count; i++)
             {
-                string label = string.IsNullOrEmpty(recordedRuntimes[i].label)
-                    ? $"variant_{i}"
-                    : recordedRuntimes[i].label;
+                string label = ResolveVariantLabel(recordedRuntimes[i], i);
                 labels.Add(label);
+            }
+        }
+
+        /// <summary>
+        /// 收集当前配置的 runtime 变体模块组合和 Inspector 参数，用于写 session manifest。
+        /// </summary>
+        /// <param name="configs">接收配置快照的列表；调用前会被清空。</param>
+        public void CollectVariantConfigs(List<EvalVariantConfig> configs)
+        {
+            if (configs == null)
+            {
+                return;
+            }
+
+            configs.Clear();
+            if (recordedRuntimes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < recordedRuntimes.Count; i++)
+            {
+                RecordedRuntime recorded = recordedRuntimes[i];
+                string label = ResolveVariantLabel(recorded, i);
+                configs.Add(BuildVariantConfig(recorded, label));
             }
         }
 
@@ -299,12 +331,14 @@ namespace EgoAnchorEval
             {
                 RecordedRuntime recorded = recordedRuntimes[i];
                 PoseToAnchorRuntime runtime = recorded.runtime;
-                string label = string.IsNullOrEmpty(recorded.label) ? $"variant_{i}" : recorded.label;
+                string label = ResolveVariantLabel(recorded, i);
                 Pose stablePose = Pose.identity;
                 Pose rawPose = Pose.identity;
+                Pose arrivalTimeRawPose = Pose.identity;
                 string anchorPoseSource = SourceNone;
                 bool hasStable = TryReadAnchorPose(recorded.anchorTransform, out stablePose, out anchorPoseSource);
                 bool hasRaw = runtime != null && runtime.TryGetRawPose(out rawPose);
+                bool hasArrivalTimeRaw = runtime != null && runtime.TryGetArrivalTimeRawPose(out arrivalTimeRawPose);
                 long sourceFrameId = runtime != null ? runtime.LatestAlignedFrameId : -1;
                 bool hasSourceTiming = TryGetFrameRecord(sourceFrameId, out FramePoseRecord sourceRecord);
                 string state = runtime != null ? runtime.CurrentAnchorState.ToString() : "MissingRuntime";
@@ -315,6 +349,15 @@ namespace EgoAnchorEval
                 float reliability = runtime != null ? runtime.LatestReliabilityScore : 0.0f;
                 string motionState = runtime != null ? runtime.CurrentMotionStateName : string.Empty;
                 double predictAheadMs = runtime != null ? runtime.LatestPredictAheadMs : double.NaN;
+                string strategyLabel = runtime != null ? runtime.StrategyLabel : string.Empty;
+                string gateModule = runtime != null ? runtime.GateModuleName : string.Empty;
+                string estimatorModule = runtime != null ? runtime.EstimatorModuleName : string.Empty;
+                string outputModule = runtime != null ? runtime.OutputModuleName : string.Empty;
+                string configHash = ResolveCachedConfigHash(recorded, label);
+                float residualMeters = runtime != null ? runtime.LatestResidualMeters : float.NaN;
+                float residualDegrees = runtime != null ? runtime.LatestResidualDegrees : float.NaN;
+                float acceptedScore = runtime != null ? runtime.LatestAcceptedScore : float.NaN;
+                bool staticLocked = runtime != null && runtime.LatestStaticLocked;
 
                 if (recorded.isPrimary && !hasPrimary)
                 {
@@ -339,9 +382,23 @@ namespace EgoAnchorEval
                     recorded.isPrimary,
                     hasRaw,
                     rawPose,
+                    recorded.isPrimary && hasArrivalTimeRaw,
+                    arrivalTimeRawPose,
+                    runtime != null ? runtime.LatestArrivalTimeRawMonoMs : double.NaN,
+                    runtime != null ? runtime.LatestArrivalTimeRawUnityFrame : -1,
+                    runtime != null ? runtime.LatestArrivalTimeCameraReference.ToString() : string.Empty,
                     reliability,
                     motionState,
-                    predictAheadMs));
+                    predictAheadMs,
+                    strategyLabel,
+                    gateModule,
+                    estimatorModule,
+                    outputModule,
+                    configHash,
+                    residualMeters,
+                    residualDegrees,
+                    acceptedScore,
+                    staticLocked));
             }
 
             if (!hasPrimary && variantSnapshots.Count > 0)
@@ -367,6 +424,210 @@ namespace EgoAnchorEval
             pose = Pose.identity;
             poseSource = SourceNone;
             return false;
+        }
+
+        /// <summary>
+        /// 解析 recorded runtime 的稳定 label。
+        /// </summary>
+        private static string ResolveVariantLabel(RecordedRuntime recorded, int index)
+        {
+            return string.IsNullOrEmpty(recorded.label) ? $"variant_{index}" : recorded.label;
+        }
+
+        /// <summary>
+        /// 录制开始时缓存每个 variant 的配置摘要。
+        /// </summary>
+        private void RefreshVariantConfigHashCache()
+        {
+            variantConfigHashes.Clear();
+            if (recordedRuntimes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < recordedRuntimes.Count; i++)
+            {
+                string label = ResolveVariantLabel(recordedRuntimes[i], i);
+                variantConfigHashes[label] = BuildVariantConfig(recordedRuntimes[i], label).ConfigHash;
+            }
+        }
+
+        /// <summary>
+        /// 从缓存取配置摘要，缺失时即时计算。
+        /// </summary>
+        private string ResolveCachedConfigHash(RecordedRuntime recorded, string label)
+        {
+            if (variantConfigHashes.TryGetValue(label, out string hash))
+            {
+                return hash;
+            }
+
+            hash = BuildVariantConfig(recorded, label).ConfigHash;
+            variantConfigHashes[label] = hash;
+            return hash;
+        }
+
+        /// <summary>
+        /// 为一个 recorded runtime 生成模块组合和序列化字段快照。
+        /// </summary>
+        private static EvalVariantConfig BuildVariantConfig(RecordedRuntime recorded, string label)
+        {
+            PoseToAnchorRuntime runtime = recorded.runtime;
+            AnchorPolicyHost policy = runtime != null ? runtime.PolicyHost : null;
+            string strategyLabel = FirstNonEmpty(runtime != null ? runtime.StrategyLabel : string.Empty, label);
+            string gateModule = FirstNonEmpty(policy != null ? policy.GateModuleName : string.Empty, runtime != null ? runtime.GateModuleName : string.Empty);
+            string estimatorModule = FirstNonEmpty(policy != null ? policy.EstimatorModuleName : string.Empty, runtime != null ? runtime.EstimatorModuleName : string.Empty);
+            string outputModule = FirstNonEmpty(policy != null ? policy.OutputModuleName : string.Empty, runtime != null ? runtime.OutputModuleName : string.Empty);
+            SortedDictionary<string, string> parameters = new SortedDictionary<string, string>(StringComparer.Ordinal);
+
+            if (policy != null)
+            {
+                CollectModuleParameters(parameters, "gate", policy.GateModule);
+                CollectModuleParameters(parameters, "estimator", policy.EstimatorModule);
+                CollectModuleParameters(parameters, "output", policy.OutputModule);
+            }
+
+            string configHash = ComputeConfigHash(label, strategyLabel, gateModule, estimatorModule, outputModule, parameters);
+            return new EvalVariantConfig(label, strategyLabel, gateModule, estimatorModule, outputModule, configHash, parameters);
+        }
+
+        /// <summary>
+        /// 收集一个 module 上所有 [SerializeField] 字段。
+        /// </summary>
+        private static void CollectModuleParameters(SortedDictionary<string, string> parameters, string prefix, MonoBehaviour module)
+        {
+            if (module == null)
+            {
+                return;
+            }
+
+            Type type = module.GetType();
+            while (type != null && type != typeof(MonoBehaviour))
+            {
+                FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                foreach (FieldInfo field in fields)
+                {
+                    if (field.GetCustomAttribute(typeof(SerializeField)) == null)
+                    {
+                        continue;
+                    }
+
+                    parameters[$"{prefix}.{field.Name}"] = FormatParameterValue(field.GetValue(module));
+                }
+
+                type = type.BaseType;
+            }
+        }
+
+        /// <summary>
+        /// 把字段值转换为 invariant 明文。
+        /// </summary>
+        private static string FormatParameterValue(object value)
+        {
+            if (value == null)
+            {
+                return "";
+            }
+
+            switch (value)
+            {
+                case float f:
+                    return f.ToString("R", CultureInfo.InvariantCulture);
+                case double d:
+                    return d.ToString("R", CultureInfo.InvariantCulture);
+                case int i:
+                    return i.ToString(CultureInfo.InvariantCulture);
+                case long l:
+                    return l.ToString(CultureInfo.InvariantCulture);
+                case bool b:
+                    return b ? "true" : "false";
+                case string s:
+                    return s;
+                case Vector2 v2:
+                    return FormatVector(v2.x, v2.y);
+                case Vector3 v3:
+                    return FormatVector(v3.x, v3.y, v3.z);
+                case Vector4 v4:
+                    return FormatVector(v4.x, v4.y, v4.z, v4.w);
+                case Quaternion q:
+                    return FormatVector(q.x, q.y, q.z, q.w);
+                default:
+                    return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
+            }
+        }
+
+        /// <summary>
+        /// 按数组文本格式写入向量参数。
+        /// </summary>
+        private static string FormatVector(params float[] values)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.Append('[');
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append(',');
+                }
+
+                builder.Append(values[i].ToString("R", CultureInfo.InvariantCulture));
+            }
+            builder.Append(']');
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// 计算稳定 FNV-1a 配置摘要。
+        /// </summary>
+        private static string ComputeConfigHash(
+            string label,
+            string strategyLabel,
+            string gateModule,
+            string estimatorModule,
+            string outputModule,
+            SortedDictionary<string, string> parameters)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.Append(label).Append('|')
+                .Append(strategyLabel).Append('|')
+                .Append(gateModule).Append('|')
+                .Append(estimatorModule).Append('|')
+                .Append(outputModule);
+            foreach (KeyValuePair<string, string> item in parameters)
+            {
+                builder.Append('|').Append(item.Key).Append('=').Append(item.Value);
+            }
+
+            unchecked
+            {
+                const ulong offset = 14695981039346656037UL;
+                const ulong prime = 1099511628211UL;
+                ulong hash = offset;
+                byte[] bytes = Encoding.UTF8.GetBytes(builder.ToString());
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    hash ^= bytes[i];
+                    hash *= prime;
+                }
+
+                return hash.ToString("x16", CultureInfo.InvariantCulture);
+            }
+        }
+
+        /// <summary>
+        /// 返回第一段非空字符串。
+        /// </summary>
+        private static string FirstNonEmpty(params string[] values)
+        {
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(values[i]))
+                {
+                    return values[i];
+                }
+            }
+
+            return string.Empty;
         }
 
         /// <summary>

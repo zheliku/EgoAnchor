@@ -1,118 +1,204 @@
-# EgoAnchor Unity 自适应 Anchor 控制器使用指南
+# EgoAnchor Unity anchor policy 使用指南
 
-本文档说明 Unity 侧 anchor 控制器重构后系统怎么跑、哪里变了、场景怎么挂、参数怎么调。面向的读者是项目维护者本人和后续接手的人。
+本文档记录当前 Unity 侧 anchor policy 的挂载方式、baseline 组合、离线回放和排查方法。正式路径是每个对比物体一套 `PoseToAnchorRuntime + AnchorPolicyHost + Gate/Estimator/Output module + DynamicObjectAnchor`。
 
-## 一句话总结
+## 当前流程
 
-Unity 的 Policy 层重写为一个统一的自适应控制器：消息到达时只做"测量提交"（门控 + 滤波），每个渲染帧由 `Advance` 把滤波状态预测到当前时刻输出。静止时强平滑减抖，运动时低延迟跟随并隐藏管线延迟，感知断流时按 Coasting → FrozenUncertain → Lost 退化。
+Python、协议、ZMQ/NATS 和 frame alignment 不变。Unity 收到 `PoseResult` 后仍然先用 `frame_id` 回查采集时刻的 camera pose，再把 Python OpenCV camera-space pose 转成 Unity world pose。
 
-## 运行步骤（与之前相同）
+anchor 侧改成两级时钟：
 
-Python 侧本轮零改动，命令照旧：
+```text
+pose 到达时钟:
+  PoseToAnchorRuntime -> AnchorPolicyHost.AcceptPose
+  -> GateModule.Evaluate
+  -> EstimatorModule.Snap / UpdateEstimate
 
-```powershell
-# EgoAnchor_Python 目录
-pixi run python .\src\tracking_server.py
+渲染帧时钟:
+  PoseToAnchorRuntime.LateUpdate -> AnchorPolicyHost.Advance(now)
+  -> EstimatorModule.PredictAt(now)
+  -> OutputStageModule.Condition
+  -> DynamicObjectAnchor.TryGetStablePose
 ```
 
-NATS server、ZMQ 端口（15557）、`--object` 参数、OpenCV 调试热键全部不变。Unity 侧照常 Play / 部署 Quest，启动顺序也不变（先 nats-server，再 Python，再 Unity）。
+`DynamicObjectAnchor` 现在只读 runtime 的 stable/final pose 并应用 Transform。它没有 Raw/Smoothed 输出模式，也不做滤波、门控、网络或 recovery。
 
-唯一的行为差异在 Unity 内部：绑定了 `AnchorPolicyHost` 的 runtime 现在每个渲染帧都会更新 stable pose，而不是等 pose 消息到达。
+## 模块目录
 
-## 哪里改进了
+模块按职责放在四个目录，Unity 侧不再保留 `Policy/Pipeline` 中间层，避免和 Python 感知 pipeline 混名：
 
-| 旧行为 | 新行为 |
-| --- | --- |
-| Policy 输出再过一遍 Kalman + LowPass processor（双重/三重滤波，参数互不知情） | Policy 路径完全不经过 processor 链，门控与滤波在同一个模型里共享协方差 |
-| 旋转只有固定速率 Slerp，静止旋转抖动实测 1.27° | 旋转是带角速度的误差态四元数滤波，静止模式下 smoke 实测抖动约 0.07°（合成噪声 σ=0.5°） |
-| 滤波强度固定，"稳"和"跟手"只能选一个折中 | 测量噪声按 `reliability_score` 和静止/运动状态自适应：低分帧权重低，静止帧测量噪声放大 100 倍 |
-| stable pose 只在消息到达时变化（10-30Hz 阶梯），Python 停发后 anchor 永久冻结 | 每渲染帧 `Advance` 输出预测位姿（72-90Hz 连续运动）；断流时计时照常推进，0.45s 内阻尼外推，2s 后 Lost |
-| 测量时间戳用消息到达时刻，80-300ms 管线延迟直接变成显示滞后 | 测量时间戳用该 frame_id 的 Unity 采集时刻（`FramePoseHistory`），输出向渲染时刻前推至多 0.15s，隐藏大部分延迟 |
-| 跳变门用固定阈值对比上一输出，快速运动时误拒，物体被挪动后永远拒绝 | 马氏距离门控对比预测位姿，断流后协方差增长、门自动变宽；连续 5 帧高分且互相一致的"跳变"判定为真实瞬移，直接贴合 |
-| coast 只外推位置，旋转不动 | coast 同时外推位置和旋转，速度按时间常数阻尼，位移有上界 |
-| Inspector 改参数会重建 controller、清空滤波历史 | 参数热更生效，滤波历史保留 |
+```text
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator
+EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output
+```
 
-涉及的核心文件：
+共享 DTO 和数学工具在：
 
-- 新增：`Policy/AnchorPolicyConfig.cs`（参数包）、`Policy/AnchorPoseFilter.cs`（6DoF 滤波核）、`Policy/AnchorMeasurementGate.cs`（门控）、`Policy/MotionStateClassifier.cs`（静止/运动分类）、`Policy/AnchorPolicyOutput.cs`（每帧输出）
-- 重写：`Policy/PolicyController.cs`、`Policy/AnchorPolicyHost.cs`、`Policy/AnchorObservation.cs`、`Policy/AnchorPolicyDecision.cs`、`Runtime/PoseToAnchorRuntime.cs`、`Runtime/PoseResultPolicyMapper.cs`
-- 删除：`AnchorPredictor.cs`、`ReliabilityGate.cs`、`InnovationGate.cs`、`ReliabilityScore.cs`（职责被吸收）
-- 不动：`Processors/` 三个 baseline 文件、`AnchorStateMachine.cs`、对齐层、网络层、协议、Python 全部
+```text
+Policy/Core
+Policy/Estimator/ConstVelocityKalman.cs
+```
 
-## Unity 场景怎么挂
+Inspector 不用 enum 选择策略。`AnchorPolicyHost` 直接引用三个抽象 `MonoBehaviour` 基类字段：
 
-### 完整方法（自适应控制器）
+```text
+AnchorGateModule
+AnchorEstimatorModule
+AnchorOutputStageModule
+```
 
-1. 给场景里的 anchor 对象（或任意空物体）添加 `AnchorPolicyHost` 组件。
-2. 在对应的 `PoseToAnchorRuntime` 的 Inspector 里，把 `Policy Host` 字段拖成这个组件。
-3. 把这个 runtime 的 `Processors` 列表清空。绑定 policyHost 后该列表会被忽略（Awake 时打印一条 Info 提醒），留着只会造成误解。主场景 `EgoAnchor.unity` 的 policy runtime 目前挂着 Kalman + LowPass 两个 processor，需要手动清掉。
-4. `DynamicObjectAnchor.outputMode` 选 `Smoothed`。
+具体参数写在模块组件自己的 `[SerializeField]` 字段里。模块内部不得读取 `UnityEngine.Time`；时间只能由 `PoseToAnchorRuntime` / `AnchorPolicyHost` 显式传入。
 
-一个 host 只能服务一个 runtime（内部有独占的滤波状态）。多个 policy runtime 就挂多个 host，误共享会在 Console 报 Error。
+## 推荐挂载
 
-### Baseline 对照（论文矩阵）
+每个 baseline 或 method 用独立 GameObject，避免共享滤波状态。
 
-baseline 路径完全没变：
+```text
+AnchorObject_raw_zoh
+  PoseToAnchorRuntime
+  AnchorPolicyHost
+  NullGateModule
+  RawEstimatorModule
+  PassThroughOutputModule
+  DynamicObjectAnchor
 
-- raw：`policyHost` 为空，`processors` 为空
-- kalman：`policyHost` 为空，`processors` 里放 `AnchorKalmanPoseProcessor`
-- lowpass：`policyHost` 为空，`processors` 里放 `AnchorLowPassPoseProcessor`
-- controller（完整方法）：`policyHost` 绑定，`processors` 为空
+AnchorObject_egoanchor_full
+  PoseToAnchorRuntime
+  AnchorPolicyHost
+  ScoreJumpGateModule
+  EgoAnchorEstimatorModule
+  StaticLockRateLimitOutputModule
+  DynamicObjectAnchor
+```
 
-### Eval 录制场景（三变体同录）
+场景绑定要点：
 
-在 `EgoAnchor-Evaluation.unity` 中：
+1. `AnchorRuntimeHub.runtimes` 绑定全部 runtime，让同一条 `PoseResult` 同时驱动所有策略。
+2. 每个 `PoseToAnchorRuntime` 的 `Policy Host` 指向自己的 `AnchorPolicyHost`。
+3. 每个 `AnchorPolicyHost` 的 gate、estimator、output 字段拖入同一物体上的对应 module。
+4. `DynamicObjectAnchor.runtime` 指向同一个 `PoseToAnchorRuntime`。
+5. `AnchorEvalRecorder.recordedRuntimes` 用正式 label 记录每个 runtime 和 Transform。
 
-1. 复制现有 kalman runtime 节点，命名 controller，绑定独立的 `AnchorPolicyHost`，清空 processors，配一个自己的 anchor 物体（`DynamicObjectAnchor` 指向新 runtime）。
-2. 把新 runtime 注册进 `AnchorRuntimeHub` 的 runtime 列表。
-3. 在 `AnchorEvalRecorder` 的 `Recorded Runtimes` 里加一项：label 填 `controller`，runtime 和 anchorTransform 指向新节点。建议把 `isPrimary` 移到 controller 变体上。
-4. 录制输出的 JSONL 中，controller 变体会多两个字段：`motion_state`（Unknown/Static/Moving）和 `predict_ahead_ms`（本帧前推时长）。Python eval 按字段名取值，新字段不影响现有指标。
+## 正式策略 label
 
-## Inspector 参数速查
+| label | Gate | Estimator | Output | score |
+| --- | --- | --- | --- | --- |
+| `raw_zoh` | `NullGateModule` | `RawEstimatorModule` | `PassThroughOutputModule` | 忽略 |
+| `lowpass_predict` | `NullGateModule` | `LowPassEstimatorModule` | `PassThroughOutputModule` | 忽略 |
+| `kalman_cv` | `NullGateModule` | `KalmanEstimatorModule` | `PassThroughOutputModule` | 忽略 |
+| `oneeuro_vanilla` | `NullGateModule` | `OneEuroEstimatorModule` | `PassThroughOutputModule` | 忽略 |
+| `egoanchor_no_static` | `ScoreJumpGateModule` | `EgoAnchorEstimatorModule` | `PassThroughOutputModule` | 使用 |
+| `egoanchor_full` | `ScoreJumpGateModule` | `EgoAnchorEstimatorModule` | `StaticLockRateLimitOutputModule` | 使用 |
 
-参数都在 `AnchorPolicyHost` 的 config 里，分六组。运行中修改即时生效，不清滤波历史。每个字段的 Tooltip 写了单位和调整方向，这里只列最常动的：
+baseline 不读取 reliability score。若以后要做 score-aware Kalman，必须另起 label，例如 `kalman_score_adaptive`，不要覆盖 `kalman_cv`。
 
-| 参数 | 默认 | 什么时候动它 |
-| --- | --- | --- |
-| acceptScoreEnter / acceptScoreStay | 0.35 / 0.25 | Python 评分分布变化后重标。enter 是冷启动门槛，stay 是已跟踪时的滞回下限 |
-| positionMeasurementNoise | 4e-6 m²（σ≈2mm） | 感知位置噪声明显不同时改成实测 σ² |
-| rotationMeasurementNoise | 3e-4 rad²（σ≈1°） | 同上，旋转通道 |
-| staticMeasurementNoiseScale | 100 | 静止还嫌抖就加大；静止后小幅修正跟不上就减小 |
-| staticEnterRadius / staticEnterDuration | 12mm / 0.5s | 半径要 ≥ 位置噪声 σ 的 4 倍，否则噪声会反复打断静止判定 |
-| maxPredictAheadSeconds | 0.15s | 延迟隐藏量。设 0 关闭前推（仍每帧推进计时）；运动时输出发飘就调小 |
-| coastGraceSeconds | 0.18s | 要大于 pose 消息间隔（10Hz 流 ≥0.1s），否则消息间隙会被误判断流 |
-| maxCoastSeconds / lostTimeoutSeconds | 0.45s / 2.0s | 断流外推上限 / 进 Lost 的时长 |
+## 旋转实现约定
 
-## 诊断怎么看
+所有 estimator 都必须同时处理 position 和 rotation。
 
-`PoseToAnchorRuntime` 的 Inspector 诊断区新增了几个字段：
+- `KalmanEstimatorModule`：平移是常速度 Kalman；旋转在四元数参考姿态的 Log/Exp 切空间中过滤，状态包含角速度。
+- `OneEuroEstimatorModule`：平移按 One Euro 的速度自适应截止频率过滤；旋转同样在四元数切空间中过滤，不使用 Euler 角。
+- `LowPassEstimatorModule`、`EgoAnchorEstimatorModule`：预测和输出都同时更新平移与旋转。
 
-- `currentMotionState`：Static 说明静止模式生效（强平滑、不外推）。物体明明在动却显示 Static，查 staticExit 阈值。
-- `latestSpeedMps` / `latestAngularSpeedDps`：滤波估计的速度。静止时应趋近 0。
-- `latestInnovationPosD2`：测量门控的马氏距离平方。持续超过 16 说明测量和预测严重不符（真实瞬移或感知锁错）。
-- `latestEffectiveMeasurementNoise`：本帧实际用的测量噪声。低分帧和静止帧会明显变大。
-- `latestPredictAheadMs`：本帧前推时长。跟踪态约等于管线延迟（封顶 150ms），coast 态等于断流时长。
-- `latestPolicyAction`：新增 `Snap` 动作，表示贴合接受（首测量、重定位、瞬移恢复），原因看 `latestPolicyReason`（`first_accept` / `relocalize_accept` / `teleport_recovery`）。
+实现时核对的公开算法来源：Kalman 原始线性滤波/预测论文，以及 Casiez、Roussel、Vogel 的 One Euro Filter 论文与官方页面。工程里做了 Unity 输入输出适配：world pose 输入、capture/render 时间显式传入、rotation 用 quaternion tangent-space 表达。
 
-常见现象排查：
+## 离线分析回放
 
-- anchor 不动、状态 FrozenUncertain：看 `latestPolicyReason`。`score_hold`/`score_reject` 是分数不够（查 Python 评分），`stale_measurement` 是时序异常（查 FramePoseHistory 容量是否被打满）。
-- 物体被挪动后 anchor 卡在原地：正常情况下连续 5 帧高分测量后会出现 `teleport_recovery` 并贴合。一直没恢复说明分数不到 acceptScoreEnter。
-- 运动时输出超前或回弹：调小 maxPredictAheadSeconds。
-- 静止时偶尔轻微滑动后回位：是静止窗口被噪声打断、短暂回到运动模式。加大 staticEnterRadius。
+主力分析回放是 headless dotnet，不启动 Unity Editor。它读取 `offline_data` 的 `aligned_raw`，用同一份 world pose 输入重跑全部策略。
+
+```powershell
+dotnet run --project EgoAnchor_Tools\anchor_replay\AnchorReplay.csproj -- --session EgoAnchor_Python\data\eval\offline_data --out EgoAnchor_Python\data\eval\offline_data\anchor_replay
+```
+
+输出：
+
+```text
+anchor_replay_output.jsonl
+anchor_replay_summary.csv
+anchor_replay_config.json
+```
+
+再接 Python eval：
+
+```powershell
+cd EgoAnchor_Python
+pixi run python -m eval.run_eval --session-dir .\data\eval\offline_data --output-log .\data\eval\offline_data\anchor_replay\anchor_replay_output.jsonl --report-dir .\data\eval\offline_data\anchor_replay\report --only tables
+```
+
+当前 `offline_data` 没有 condition spans，所以第一轮只用于检查字段、时序、公平 baseline 和明显 bug。不要从这一个 fixture 得出论文级结论。
+
+## Unity 回放和视频
+
+Unity 内有两类回放组件，目的不同。
+
+`RecordedAnchorReplaySource` / `RecordedAnchorReplayController`：读取录制日志中的 `aligned_raw`，向指定 `PoseToAnchorRuntime` 注入 replay observation，用于在 Unity 里看 pipeline 行为。定量指标仍以 headless `anchor_replay` 为准。
+
+`AnchorTrajectoryPlayer`：只播放日志里已经录出的 `stable_pos/stable_rot`。这是 supplementary video 的主路径，用来复现已有轨迹，不参与算法评估。
+
+## Recovery
+
+`AnchorRecoveryController` 是正交层，放在 `Runtime/`。它只观察 runtime 诊断并通过 `AnchorCommandClient` / `IAnchorCommandSender` 发送 reacquire command，不参与 Gate/Estimator/Output，也不把 `CommandAck.accepted=true` 当作恢复完成。`IAnchorCommandSender` 是 `AnchorCommandClient.cs` 内的窄测试契约，不单独占文件。
+
+固定触发 reason：
+
+```text
+auto_reacquire_low_score
+auto_reacquire_lost
+auto_reacquire_no_pose
+input_not_ready_wait
+```
+
+RQ2 比较滤波/同步策略时应关闭 recovery。RQ3 再单独比较 recovery disabled、timeout-only 和 score-aware reacquire。
+
+## RQ1 arrival-time 诊断
+
+默认 anchor 仍使用 capture-time frame alignment。新增的 `arrival_time_raw` 只是诊断字段，用 pose 到达/渲染时刻的 latest camera pose 做对照。
+
+RQ1 只比较：
+
+```text
+frame_aligned_raw
+arrival_time_raw
+```
+
+不要把 filter、score gate 或 recovery 混入 RQ1。
+
+## 常见排查
+
+- runtime 收到 pose 但物体不动：先看 `PoseToAnchorRuntime.policyHost` 是否绑定，再看 host 的 gate/estimator/output 三个 module 字段是否为空。
+- `raw_zoh` 不输出：确认它也走 `AnchorPolicyHost + RawEstimatorModule + PassThroughOutputModule`，不要找 Transform 应用层输出模式。
+- 多个物体输出完全一样或状态互相影响：检查是否多个 runtime 共用同一个 `AnchorPolicyHost` 或 estimator module。每个 runtime 需要独立模块实例。
+- baseline 看起来用到了 score：检查 gate 是否是 `NullGateModule`，estimator 是否是 vanilla baseline module。
+- policy 每帧不更新：确认 `PoseToAnchorRuntime.policyHost` 已绑定，且 `AnchorPolicyHost.Advance(now)` 没有因为缺模块抛错。
+- arrival-time 诊断为空：检查 `FramePoseHistory.TryGetLatest(...)` 是否有缓存，以及 `AnchorEvalRecorder` 是否记录 primary runtime。
 
 ## 验证命令
 
 ```powershell
-# 仓库根：行为断言（13 个场景：静抖、响应、滞回、瞬移恢复、断流退化、热更……）
 dotnet run --project EgoAnchor_Tools\anchor_policy_smoke\AnchorPolicySmoke.csproj
-
-# 仓库根：编译
+dotnet run --project EgoAnchor_Tools\eval_writer_smoke\EvalWriterSmoke.csproj
 dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
 
-# 录制后的会话检查与离线指标
-dotnet run --project EgoAnchor_Tools\eval_session_check\EvalSessionCheck.csproj -- --session-dir <dir>
-python eval\run_eval.py --session-dir <dir>    # EgoAnchor_Python 目录
+cd EgoAnchor_Python
+pixi run python -m unittest discover -s eval -p "test_*.py"
 ```
 
-真机录制建议每条 session 同录 raw / kalman / controller 三变体，按 condition 标注：静置 30 秒（看 jitter）、慢速和快速手持移动（看 lag 和阶梯消失）、短遮挡（看 coast）、出视野再回来（看 recovery 和 teleport_recovery 路径）、部分遮挡致低分（看 Reject/Hold 占比和输出是否被坏 pose 拖偏）。
+离线 fixture 验证：
+
+```powershell
+dotnet run --project EgoAnchor_Tools\anchor_replay\AnchorReplay.csproj -- --session EgoAnchor_Python\data\eval\offline_data --out EgoAnchor_Python\data\eval\offline_data\anchor_replay
+
+cd EgoAnchor_Python
+pixi run python -m eval.run_eval --session-dir .\data\eval\offline_data --output-log .\data\eval\offline_data\anchor_replay\anchor_replay_output.jsonl --report-dir .\data\eval\offline_data\anchor_replay\report --only tables
+```
+
+清理检查：
+
+```powershell
+rg -n "PoseOutputMode|AnchorPoseSource|RawAnchorPoseSource|StableAnchorPoseSource|Pipeline\\Modules|Pipeline/Modules" EgoAnchor_Unity\Assets\Scripts\EgoAnchor
+rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy
+```
+
+第一条不应命中已废弃的输出模式和 PoseSource 包装层；第二条不应命中 policy 模块读取 Unity 时间。

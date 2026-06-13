@@ -12,10 +12,11 @@
 2. 代码需要有充分的中文说明。`.toml` 配置的每个参数都要在同一行末尾写中文注释；类、成员变量和每个方法也要补充中文说明。
 3. 命名保持清楚、克制，不要为了“完整”把名字写得过长。
 4. 修改代码前先从项目整体判断影响范围，检查模块配合、引用关系和架构边界。不要只做局部补丁，也不要零散修补。
-5. 先读懂项目和计划，再严格按计划实现代码。发现计划与项目事实冲突时，及时指出并说明影响。
+5. 先读懂项目和计划，再严格按计划实现代码。发现计划与项目事实冲突时，及时指出并说明影响。过程中有任何问题请及时和我讨论交流，如果遇到任何不合理的事情立刻和我报告。
 6. 重构时不要兼容已废弃的旧代码、旧接口或旧路径。
 7. 使用 Code Simplifier 优化项目代码；处理文档和语言表述时使用 humanizer-zh。
-8. 处理复杂或大型任务时，可以使用子智能体辅助，加快梳理、审查和验证。
+8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
+9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
 
@@ -64,11 +65,11 @@ EgoAnchor 固定采用双平面/三语义通道：
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
 - Unity `NatsControlClient`：订阅 PoseResult latest queue、ServerHeartbeat latest queue 和 AnchorStatusEvent event queue，并提供 bytes request/reply。
-- Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持 raw baseline 与 smoothed/runtime policy 使用同一 pose 输入。
+- Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持多个 pipeline label 使用同一 frame-aligned raw pose 输入。
 - Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
-- Unity `AnchorLowPassPoseProcessor`、`AnchorKalmanPoseProcessor`：当前 stable baseline。
-- Unity `Policy/` 自适应 anchor 控制器：`PolicyController` 组合 `AnchorMeasurementGate`（分数滞回 + 马氏 innovation + 重定位旁路 + 瞬移恢复）、`AnchorPoseFilter`（统一 6DoF 自适应滤波：位置常速度 Kalman + 误差态四元数/角速度，测量噪声按 reliability_score 与静止/运动状态自适应）、`MotionStateClassifier`（测量散布窗口判静止，ZUPT 减抖）与 `AnchorStateMachine`。消息入口 `AcceptPose` 只提交测量；渲染帧入口 `Advance` 按 capture 时间轴把提交态预测到渲染时刻输出（延迟隐藏上限 `maxPredictAheadSeconds`），并独立推进 Coasting/FrozenUncertain/Lost 计时，感知停发也能正常退化。policy 路径不经过 processor 链；`PoseToAnchorRuntime.policyHost` 为空时保留 raw/processor baseline 对照。Python 的 `re_register` 只属于感知管线自恢复，因为 FoundationPose/Cutie/GPU 状态由 Python owner 线程维护；Unity 负责 MR anchor 行为决策，不直接重置 Python 模型状态。使用与调参见仓库根 `ANCHOR_CONTROLLER_GUIDE.md`。
+- Unity `Policy/` 模块化 anchor policy：`AnchorPolicyHost` 显式组合 `Policy/Gate`、`Policy/Estimator`、`Policy/Output` 下的 `AnchorGateModule`、`AnchorEstimatorModule`、`AnchorOutputStageModule`；共享 DTO 和数学工具在 `Policy/Core`。消息入口只提交测量，渲染帧入口 `Advance(now)` 调 estimator 的 `PredictAt(now)` 并经 output stage 输出 final/stable pose。正式 label 包括 `raw_zoh`、`lowpass_predict`、`kalman_cv`、`oneeuro_vanilla`、`egoanchor_no_static`、`egoanchor_full`；baseline 忽略 score，EgoAnchor 变体才使用 `ScoreJumpGateModule` / `EgoAnchorEstimatorModule`。模块不得读取 Unity `Time`，时间由 runtime 显式传入。旧 processor 路径和旧 policy controller 已删除，不再兼容。
 - Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
+- Unity `AnchorRecoveryController`：正交 recovery 层，放在 `Runtime/`，只观察 runtime 诊断并通过 `AnchorCommandClient` / `IAnchorCommandSender` 发送 reacquire command；`IAnchorCommandSender` 是 `AnchorCommandClient.cs` 内的窄测试契约，不再单独成文件。固定 reason 为 `auto_reacquire_low_score`、`auto_reacquire_lost`、`auto_reacquire_no_pose`、`input_not_ready_wait`。RQ2 关闭 recovery，RQ3 再单独比较 recovery 策略。
 
 ## 常用入口与验证
 
@@ -90,6 +91,14 @@ pixi run python -m unittest discover -s eval -p "test_*.py"
 
 ```powershell
 dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
+```
+
+Unity anchor pipeline smoke 与离线回放：
+
+```powershell
+dotnet run --project EgoAnchor_Tools\anchor_policy_smoke\AnchorPolicySmoke.csproj
+dotnet run --project EgoAnchor_Tools\eval_writer_smoke\EvalWriterSmoke.csproj
+dotnet run --project EgoAnchor_Tools\anchor_replay\AnchorReplay.csproj -- --session EgoAnchor_Python\data\eval\offline_data --out EgoAnchor_Python\data\eval\offline_data\anchor_replay
 ```
 
 协议生成在 `EgoAnchor_Python` 目录运行，确保使用 pixi 环境中的 `protoc`：
@@ -189,11 +198,12 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `Assets/Scripts/EgoAnchor/Client/AnchorStatusReceiver.cs`：主线程按事件顺序解析 `AnchorStatusEvent`，转交 `PoseToAnchorRuntime` 更新本地 lifecycle，不修改 Transform。
 - `Assets/Scripts/EgoAnchor/Client/ServerHeartbeatReceiver.cs`：主线程 latest-drain、解析 `ServerHeartbeat`，转交 `PoseToAnchorRuntime` 更新链路健康诊断。
 - `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
-- `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于 raw vs smoothed/policy 对照。
-- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；保留 raw pose，baseline 模式按 processor chain 生成 stable pose，policy 模式由消息提交测量（含 capture 时间回查）、每帧 `LateUpdate` 调 `AdvanceAnchorOutput` 输出预测位姿（`[DefaultExecutionOrder(-50)]` 保证先于 DynamicObjectAnchor/recorder）；no-pose、align failure、server notification 与 policy decision 应用集中在同一文件内分区维护。
-- `Assets/Scripts/EgoAnchor/Processors/AnchorPoseProcessor.cs`、`AnchorKalmanPoseProcessor.cs`、`AnchorLowPassPoseProcessor.cs`：可插拔处理器与论文 baseline，保持冻结不改以保证对照可比性。
-- `Assets/Scripts/EgoAnchor/Policy/`：统一自适应 anchor 控制器。`AnchorPolicyConfig` 参数包（Inspector 热更不清状态）、`AnchorPoseFilter` 6DoF 滤波核（提交态 + 瞬态预测、ZUPT、FreezeCoast 封账保证冻结显示连续）、`AnchorMeasurementGate` 门控（分数滞回、马氏 innovation、绝对兜底、瞬移恢复）、`MotionStateClassifier` 静止/运动分类、`PolicyController` 编排、`AnchorPolicyOutput` 每帧输出、`AnchorPolicyHost` 可挂载宿主（Bind 守卫 1:1）。核心类均为 plain C#、时间显式传入，可被 anchor_policy_smoke 直接驱动；不要在其中读取 Unity `Time`。
-- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime raw/stable pose 并应用 Transform，不承载滤波、状态机或网络逻辑。
+- `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于多 pipeline label 公平对照。
+- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；默认用 capture-time frame alignment 生成 aligned raw world pose，再提交给 `policyHost`（新 `AnchorPolicyHost`）。每帧 `LateUpdate` 调 `AdvanceAnchorOutput` 输出预测位姿（`[DefaultExecutionOrder(-50)]` 保证先于 DynamicObjectAnchor/recorder）。该文件还生成 `arrival_time_raw` 诊断，只用于 RQ1 对照，不改变默认 anchor 输出。
+- `Assets/Scripts/EgoAnchor/Policy/`：anchor policy 实现。主线是 `AnchorPolicyHost` + `Policy/Core|Gate|Estimator|Output` 模块；所有 estimator 的 `PredictAt(renderTime)` 同时处理平移和旋转。`AnchorMotionState` 已并入 `Policy/Core/AnchorPolicyTypes.cs`，仍作为公开类型给 runtime/output/replay 共用。旧 controller/filter/gate/smoother/config 和 processor 目录已删除。
+- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime stable/final pose 并应用 Transform，不承载滤波、状态机、网络、recovery，也不再提供 Raw/Smoothed 输出模式。
+- `Assets/Scripts/EgoAnchor/Runtime/AnchorRecoveryController.cs`：自动 reacquire 控制层；只发送 command，不解释 ack 为恢复完成。
+- `Assets/Scripts/EgoAnchorEval/RecordedAnchorReplaySource.cs`、`RecordedAnchorReplayController.cs`、`AnchorTrajectoryPlayer.cs`：Unity 内 replay 组件。前两者用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录 stable 轨迹，用于视频复现。
 - `Assets/Scene/`：当前主线测试场景工作区。
 
 Unity 命名/目录规则：
@@ -203,8 +213,7 @@ Unity 命名/目录规则：
 - `Transport/` 放纯网络 socket/bytes client，不理解 Quest 或 anchor 语义。
 - `Client/` 放把 source、transport、runtime 组合成场景组件的客户端脚本。
 - `Runtime/` 放 pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
-- `Policy/` 放 reliability-aware policy 实现、observation/decision DTO 和 state machine；不再保留旧的 policy host 基类。
-- `Processors/` 放 raw -> stable pose processor 基类与 Kalman/LowPass baseline。
+- `Policy/` 放 anchor policy 实现、observation/decision DTO、state machine 和模块化 Gate/Estimator/Output。新增共享类型放 `Policy/Core`，新增模块按 `Policy/Gate`、`Policy/Estimator`、`Policy/Output` 分目录；不要再建 `Pipeline`、`Pipeline/Modules`，也不要恢复旧 processor 目录。
 - 新增脚本应写清中文 `<summary>` 和 Inspector 参数 `[Tooltip]`，尤其是端口、帧率、HWM、缓存容量、坐标/时间语义。
 
 ## 标定、深度与坐标约定
@@ -225,7 +234,7 @@ Unity 命名/目录规则：
 - camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
 - Unity `PoseResultReceiver` decoded 增加但 aligned 为 0：查 `AnchorRuntimeHub` runtime 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用、`alignmentReference` 是否正确、Python 是否原样透传 frame_id。
-- raw 物体正常但 smoothed 不动：baseline 模式查 `PoseToAnchorRuntime.processors`、processor 是否启用；policy 模式查 `policyHost` 绑定、`latestPolicyAction/Reason`（score_hold/score_reject 是分数门，stale_measurement 是时序守卫）、`currentMotionState`；`DynamicObjectAnchor.outputMode` 是否为 `Smoothed`。
+- runtime 收到 pose 但物体不动：先查 `PoseToAnchorRuntime.policyHost`、`AnchorPolicyHost` 的 gate/estimator/output 三个 module 是否显式绑定；再看 `latestPolicyAction/Reason`、`currentMotionState`、`LatestAlignedFrameId`。`DynamicObjectAnchor` 已无 Raw/Smoothed 输出模式，`raw_zoh` 也必须通过 policy module 输出 stable/final pose。
 - mask 不稳：调 `module.segmenter.prompt`、`module.segmenter.confidence_threshold`、`module.segmenter.mask_threshold`、`module.segmenter.max_det`，并用 `debug.show_mask_snapshot=true`、`pixi run tool-yoloe26-mask` 或 `pixi run tool-sam3-mask` 看真实下游 mask；若 YOLOE 语义误检仍高，可显式切 `module.segmenter.type="sam3"`。
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
@@ -245,14 +254,14 @@ Unity 命名/目录规则：
 - 导出 CSV/JSONL，按 session 分目录保存，不写进高频日志。
 - 做 fake replay 或 recorded session 入口，用同一输入离线比较多种 anchor policy。
 
-### Phase B：Unity reliability-aware anchor controller
+### Phase B：Unity modular anchor policy
 
-- 统一自适应控制器已落地并通过 smoke：测量门控（分数滞回/马氏 innovation/重定位旁路/瞬移恢复）、可靠性与运动状态自适应 6DoF 滤波、静止 ZUPT 减抖、capture 时间轴 + 渲染帧预测输出、消息解耦的 Coasting/Frozen/Lost 计时。回归门在 `EgoAnchor_Tools/anchor_policy_smoke`（13 个场景，含静抖必须优于旧 Slerp 基线的 PRIMARY 闸门）。
-- 输入已覆盖 `PoseResult` 可靠性字段、frame history 命中、capture 时间、pose innovation、连续 no-pose、heartbeat/input health；待补回包年龄。
-- 输出已覆盖 `Accept`、`Snap`、`Hold`、`Coast`、`Reject`、`Lost`、`Relocalizing` 等 anchor 行为与每帧 `AnchorPolicyOutput`（含 motion_state、predict_ahead）；eval JSONL 变体已携带 `motion_state`/`predict_ahead_ms`。后续需要补 UI/HUD。
-- 保留 raw、low-pass、Kalman baseline；full method 通过给 `PoseToAnchorRuntime.policyHost` 绑定 `Policy/AnchorPolicyHost` 启用（policy runtime 的 processors 必须留空）。场景挂载与调参见 `ANCHOR_CONTROLLER_GUIDE.md`。
-- 不要把 controller 写进 `NatsControlClient`、`PoseResultReceiver` 或 `DynamicObjectAnchor`；它应保持在 anchor runtime/policy 层。
-- 下一步：真机按 condition 录制 raw/kalman/controller 三变体（静置、慢/快手持、短遮挡、出视野重获、低分遮挡），用 `eval/run_eval.py` 出 jitter/lag/slip/recovery/policy_distribution 证据。
+- 模块化 policy 已进入主线：`AnchorPolicyHost` 组合 Gate/Estimator/Output module，所有策略共享同一 aligned raw pose 输入、capture/render 时间轴和 `Advance(now)` 输出契约。
+- baseline label 固定为 `raw_zoh`、`lowpass_predict`、`kalman_cv`、`oneeuro_vanilla`；EgoAnchor label 为 `egoanchor_no_static`、`egoanchor_full`。baseline 不读取 score。
+- `EgoAnchor_Tools/anchor_replay` 是默认离线分析入口，可直接对 `EgoAnchor_Python/data/eval/offline_data` 重跑所有策略，并把 replay output 接回 Python eval。
+- Unity replay 分两类：`RecordedAnchorReplaySource` 用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录 stable 轨迹用于 supplementary video。
+- Recovery 由 `AnchorRecoveryController` 单独负责，RQ2 默认关闭，RQ3 再单独比较。
+- 下一步：迁移 Unity scene 到多 runtime pipeline 绑定，真机按 condition 录制多策略变体，再用 `anchor_replay` 和 `eval/run_eval.py` 出 jitter/lag/slip/recovery/policy_distribution 证据。
 
 ### Phase C：端到端与论文实验
 

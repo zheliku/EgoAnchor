@@ -46,6 +46,43 @@ def compute_slip(output: pd.DataFrame, k: np.ndarray | None = None) -> tuple[pd.
     return detail, summarize_slip(detail)
 
 
+def build_raw_mapping_output(output: pd.DataFrame) -> pd.DataFrame:
+    """从 primary variant 构造 RQ1 raw mapping 对照表。
+
+    返回的 DataFrame 只包含两个 synthetic label：
+    `frame_aligned_raw` 使用默认 capture-time frame alignment 的 aligned_raw；
+    `arrival_time_raw` 使用到达时参考相机 pose 的诊断 raw。该表不包含滤波、gate 或 recovery 输出。
+    """
+
+    if output.empty:
+        return output.iloc[0:0].copy()
+
+    records: list[dict[str, Any]] = []
+    primary = output[output["is_primary"].fillna(False).astype(bool)]
+    for _, row in primary.iterrows():
+        _append_raw_mapping_record(
+            records,
+            row,
+            "frame_aligned_raw",
+            bool(row.get("has_aligned_raw", False)),
+            row.get("aligned_raw_pos"),
+            row.get("aligned_raw_rot"),
+        )
+        _append_raw_mapping_record(
+            records,
+            row,
+            "arrival_time_raw",
+            bool(row.get("has_arrival_time_raw", False)),
+            row.get("arrival_time_raw_pos"),
+            row.get("arrival_time_raw_rot"),
+        )
+
+    if not records:
+        columns = list(output.columns)
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame.from_records(records)
+
+
 def summarize_slip(detail: pd.DataFrame) -> pd.DataFrame:
     """按 condition × label 汇总 slip。"""
 
@@ -79,6 +116,34 @@ def default_intrinsics(width: float = 640.0, height: float = 480.0, fov_deg: flo
     return np.array([[fx, 0.0, width * 0.5], [0.0, fy, height * 0.5], [0.0, 0.0, 1.0]], dtype=float)
 
 
+def _append_raw_mapping_record(
+    records: list[dict[str, Any]],
+    row: pd.Series,
+    label: str,
+    has_pose: bool,
+    pos: Any,
+    rot: Any,
+) -> None:
+    """追加一行 synthetic raw mapping 输出。"""
+
+    if not has_pose or not is_pose_value(pos) or not is_pose_value(rot):
+        return
+    record = row.to_dict()
+    record.update(
+        {
+            "label": label,
+            "has_stable": True,
+            "stable_pos": pos,
+            "stable_rot": rot,
+            "anchor_state": "RawMappingDiagnostic",
+            "policy_action": "diagnostic",
+            "policy_reason": label,
+            "anchor_pose_source": "raw_mapping_diagnostic",
+        }
+    )
+    records.append(record)
+
+
 def _insufficient(condition: str, label: str, count: int) -> dict[str, Any]:
     """构造数据不足行。"""
 
@@ -104,4 +169,4 @@ def _empty_summary() -> pd.DataFrame:
     return pd.DataFrame(columns=SUMMARY_COLUMNS)
 
 
-__all__ = ["compute_slip", "default_intrinsics", "summarize_slip"]
+__all__ = ["build_raw_mapping_output", "compute_slip", "default_intrinsics", "summarize_slip"]

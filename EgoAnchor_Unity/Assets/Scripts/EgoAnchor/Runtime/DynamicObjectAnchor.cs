@@ -6,25 +6,15 @@ namespace EgoAnchor.Runtime
     /// dynamic object anchor Transform 应用组件。
     ///
     /// 该组件是场景中真正移动虚拟物体的薄封装：
-    /// - 从 PoseToAnchorRuntime 读取 raw 或 stable world pose。
+    /// - 从 PoseToAnchorRuntime 读取 stable/final world pose。
     /// - 把 pose 应用到当前 Transform 或指定目标 Transform。
     /// - 不订阅网络，不解码 Protobuf，不做平滑或状态机。
     ///
-    /// 论文/实验对照：同一 PoseToAnchorRuntime 可以驱动两个 DynamicObjectAnchor，
-    /// 一个选择 Raw（不处理 baseline），另一个选择 Smoothed（processor chain 输出）。
+    /// 论文/实验对照由多个 PoseToAnchorRuntime + AnchorPolicyHost module 组合表达；
+    /// raw_zoh 也是 policy stable/final 输出，不在 Transform 应用层选择 raw/stable 双路模式。
     /// </summary>
     public sealed class DynamicObjectAnchor : MonoBehaviour
     {
-        /// <summary>Transform 应用哪一种 runtime 输出。</summary>
-        public enum PoseOutputMode
-        {
-            /// <summary>不做平滑，直接应用 frame-aligned raw world pose。</summary>
-            Raw,
-
-            /// <summary>应用 PoseToAnchorRuntime 的 stable/processor-chain 输出。</summary>
-            Smoothed,
-        }
-
         /// <summary>Pose-to-Anchor runtime。</summary>
         [Header("Runtime")]
         [Tooltip("Pose-to-Anchor runtime。该组件只读 runtime 输出，不订阅网络。")]
@@ -33,10 +23,6 @@ namespace EgoAnchor.Runtime
         /// <summary>要应用 pose 的目标 Transform。</summary>
         [Tooltip("要应用 pose 的目标 Transform。为空时应用到当前 GameObject。")]
         [SerializeField] private Transform targetTransform;
-
-        /// <summary>输出模式。</summary>
-        [Tooltip("输出模式：Raw 用于不处理 baseline；Smoothed 读取 PoseToAnchorRuntime 的 stable/processor-chain 输出。")]
-        [SerializeField] private PoseOutputMode outputMode = PoseOutputMode.Smoothed;
 
         /// <summary>是否应用 position。</summary>
         [Header("Apply")]
@@ -99,9 +85,7 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            bool hasPose = outputMode == PoseOutputMode.Raw
-                ? runtime.TryGetRawPose(out Pose pose)
-                : runtime.TryGetStablePose(out pose);
+            bool hasPose = runtime.TryGetStablePose(out Pose pose);
 
             if (!hasPose)
             {
@@ -150,5 +134,3 @@ namespace EgoAnchor.Runtime
         }
     }
 }
-
-

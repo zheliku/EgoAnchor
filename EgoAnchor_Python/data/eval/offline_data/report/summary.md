@@ -42,6 +42,18 @@
 | unlabeled | kalman | 3207 | 26.1062 | 102.945 | False |
 | unlabeled | raw | 3207 | 25.9358 | 106.623 | False |
 
+## rq1_raw_mapping_error_summary
+
+| condition | label | n | translation_rmse_m | translation_median_m | translation_p95_m | rotation_rmse_deg | rotation_median_deg | rotation_p95_deg |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| unlabeled | frame_aligned_raw | 3207 | 0.0400881 | 0.022627 | 0.0885835 | 18.5511 | 6.48054 | 42.0046 |
+
+## rq1_raw_mapping_slip_summary
+
+| condition | label | n | slip_rms_px | slip_peak_px | insufficient_data |
+| --- | --- | --- | --- | --- | --- |
+| unlabeled | frame_aligned_raw | 3207 | 25.9358 | 106.623 | False |
+
 ## lag_summary
 
 | condition | label | n | lag_ms | correlation | insufficient_data |

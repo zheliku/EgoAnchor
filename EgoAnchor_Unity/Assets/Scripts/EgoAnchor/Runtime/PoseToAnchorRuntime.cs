@@ -1,30 +1,21 @@
 using System;
-using System.Collections.Generic;
 using EgoAnchor.Alignment;
 using EgoAnchor.Diagnostics;
 using EgoAnchor.Policy;
-using EgoAnchor.Processors;
 using EgoAnchor.Protocol.Generated;
 using UnityEngine;
 
 namespace EgoAnchor.Runtime
 {
     /// <summary>
-    /// Pose-to-Anchor runtime。
-    ///
-    /// 这是 Unity Anchor Runtime 的核心组合点：它接收 Python 返回的 camera-space PoseResult，
-    /// 调用 CameraPoseFrameAligner 得到 frame-aligned raw world pose，再按处理器链得到 stable pose。
-    /// 对齐策略、参考相机选择和三路 pose 补偿都集中在这里，避免 DynamicObjectAnchor 或网络层分散修改坐标。
-    ///
-    /// 绑定 policyHost 时走统一自适应控制器：消息只提交测量（带 capture 时间），
-    /// stable pose 由每帧 LateUpdate 的 Advance 输出（预测到渲染时刻），processors 被忽略；
-    /// 关闭 policy 时仍保留 raw + processor chain baseline，便于论文对照。
-    /// LateUpdate 顺序提前（-50），保证 DynamicObjectAnchor 与 eval recorder 读到本帧输出。
+    /// Pose-to-anchor 组合点。
+    /// 它只负责把 Python camera-space pose 映射到 Unity world pose，并把 aligned raw pose
+    /// 提交给 Unity 侧 AnchorPolicyHost。raw_zoh、lowpass、Kalman、OneEuro 和 EgoAnchor
+    /// 都必须通过 policy module 组合表达，不再保留 legacy processor 或旧 policy 兼容路径。
     /// </summary>
     [DefaultExecutionOrder(-50)]
     public sealed class PoseToAnchorRuntime : MonoBehaviour
     {
-        /// <summary>组件日志通道。</summary>
         private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<PoseToAnchorRuntime>();
 
         /// <summary>接收 PoseResult 后的处理结果，供上层统计和调试。</summary>
@@ -49,130 +40,145 @@ namespace EgoAnchor.Runtime
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>Unity 本地覆盖的对齐参考相机。</summary>
-        [Tooltip("Unity 本地选择的对齐参考相机。Left 是当前 Python pose 的语义默认值；Right/Center/None 仅用于本地对照、补偿或诊断，不需要服务器知道。")]
+        [Tooltip("Unity 本地选择的对齐参考相机。Left 是当前 Python pose 的语义默认值；Right/Center/None 仅用于本地对照、补偿或诊断。")]
         [SerializeField] private CameraReference alignmentReference = CameraReference.Left;
 
         /// <summary>camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。</summary>
-        [Tooltip("camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。测试鼠标模型时可直接关闭 Flip Y，或在 Position/Rotation Offsets 中叠加三种补偿。")]
+        [Tooltip("camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。")]
         [SerializeField] private AnchorPoseTransform poseTransform = AnchorPoseTransform.OpenCvToUnityDefault;
 
-        [Header("Anchor Processors")]
-        /// <summary>按顺序处理 raw world pose 的处理器列表。</summary>
-        [Tooltip("按顺序处理 frame-aligned raw world pose 的处理器列表（baseline 路径）。绑定 policyHost 时本列表被忽略，统一滤波由 policy 内部完成。")]
-        [SerializeField] private List<AnchorPoseProcessor> processors = new List<AnchorPoseProcessor>();
-
-        [Header("Reliability Policy")]
-        /// <summary>可选自适应 anchor policy 宿主。</summary>
-        [Tooltip("可选自适应 anchor policy 宿主。绑定后由统一控制器完成门控、滤波、续航与每帧渲染输出，processors 被忽略；为空时保持 raw + processor baseline。")]
+        /// <summary>Unity 侧 anchor policy 宿主。</summary>
+        [Header("Anchor Policy")]
+        [Tooltip("Unity 侧 anchor policy 宿主。所有 baseline 和 EgoAnchor 方法都通过该 host 的 Gate/Estimator/Output 模块表达。")]
         [SerializeField] private AnchorPolicyHost policyHost;
 
-        [Header("Debug")]
-        [Tooltip("PoseToAnchorRuntime 最近一次处理诊断。")]
-        [SerializeField] private RuntimeDiagnostics diagnostics = new RuntimeDiagnostics();
-
-        /// <summary>frame-aligned 坐标转换器。</summary>
         private CameraPoseFrameAligner aligner;
-
-        /// <summary>最近一次成功对齐的 raw world pose。</summary>
         private Pose rawPose;
-
-        /// <summary>最近一次处理器链输出的 stable world pose。</summary>
         private Pose stablePose;
-
-        /// <summary>是否已有 raw pose。</summary>
+        private Pose arrivalTimeRawPose;
         private bool hasRawPose;
-
-        /// <summary>是否已有 stable pose。</summary>
         private bool hasStablePose;
+        private bool hasArrivalTimeRawPose;
+
+        private long latestAlignedFrameId = -1;
+        private string latestPhase = "";
+        private string latestFailure = "";
+        private string latestPolicyAction = "";
+        private string latestPolicyReason = "";
+        private float latestReliabilityScore = 1.0f;
+        private AnchorState currentAnchorState = AnchorState.Uninitialized;
+        private AnchorMotionState currentMotionState = AnchorMotionState.Unknown;
+        private double latestPredictAheadMs = double.NaN;
+        private string latestServerState = "";
+        private bool latestHeartbeatInputReady;
+        private double latestArrivalTimeRawMonoMs = double.NaN;
+        private int latestArrivalTimeRawUnityFrame = -1;
+        private CameraReference latestArrivalTimeCameraReference = CameraReference.Left;
 
         /// <summary>最近成功对齐的 frame_id。</summary>
-        public long LatestAlignedFrameId => diagnostics.latestAlignedFrameId;
+        public long LatestAlignedFrameId => latestAlignedFrameId;
 
         /// <summary>最近一次 PoseResult phase。</summary>
-        public string LatestPhase => diagnostics.latestPhase;
+        public string LatestPhase => latestPhase;
 
         /// <summary>最近一次失败原因。</summary>
-        public string LatestFailure => diagnostics.latestFailure;
-
-        /// <summary>最近一次实际使用的对齐参考相机。</summary>
-        public CameraReference LatestUsedReference => diagnostics.latestUsedReference;
+        public string LatestFailure => latestFailure;
 
         /// <summary>当前 Unity anchor 生命周期状态。</summary>
-        public AnchorState CurrentAnchorState => diagnostics.currentAnchorState;
+        public AnchorState CurrentAnchorState => policyHost != null ? policyHost.State : currentAnchorState;
 
         /// <summary>最近一次 anchor policy 动作。</summary>
-        public string LatestPolicyAction => diagnostics.latestPolicyAction;
+        public string LatestPolicyAction => latestPolicyAction;
 
         /// <summary>最近一次 anchor policy 原因。</summary>
-        public string LatestPolicyReason => diagnostics.latestPolicyReason;
+        public string LatestPolicyReason => latestPolicyReason;
 
         /// <summary>最近一次 reliability score。</summary>
-        public float LatestReliabilityScore => diagnostics.latestReliabilityScore;
+        public float LatestReliabilityScore => latestReliabilityScore;
 
-        /// <summary>当前运动状态名（Unknown/Static/Moving），policy 模式下有效。</summary>
-        public string CurrentMotionStateName => diagnostics.currentMotionState;
+        /// <summary>当前运动状态名。</summary>
+        public string CurrentMotionStateName => currentMotionState.ToString();
 
-        /// <summary>最近一次渲染输出的前推时长，单位毫秒，policy 模式下有效。</summary>
-        public double LatestPredictAheadMs => diagnostics.latestPredictAheadMs;
+        /// <summary>最近一次渲染输出的前推时长，单位毫秒。</summary>
+        public double LatestPredictAheadMs => latestPredictAheadMs;
+
+        /// <summary>当前 eval 策略 label。</summary>
+        public string StrategyLabel => policyHost != null ? policyHost.StrategyLabel : "";
+
+        /// <summary>当前绑定的 Unity policy host，只用于 eval 配置摘要。</summary>
+        public AnchorPolicyHost PolicyHost => policyHost;
+
+        /// <summary>当前 gate module 名称。</summary>
+        public string GateModuleName => policyHost != null ? policyHost.GateModuleName : "";
+
+        /// <summary>当前 estimator module 名称。</summary>
+        public string EstimatorModuleName => policyHost != null ? policyHost.EstimatorModuleName : "";
+
+        /// <summary>当前 output module 名称。</summary>
+        public string OutputModuleName => policyHost != null ? policyHost.OutputModuleName : "";
+
+        /// <summary>最近一次 output stage 平移残差，单位米。</summary>
+        public float LatestResidualMeters => policyHost != null ? policyHost.LatestResidualMeters : float.NaN;
+
+        /// <summary>最近一次 output stage 旋转残差，单位度。</summary>
+        public float LatestResidualDegrees => policyHost != null ? policyHost.LatestResidualDegrees : float.NaN;
+
+        /// <summary>最近一次被 policy 接受的可靠性分数。</summary>
+        public float LatestAcceptedScore => policyHost != null ? policyHost.LatestAcceptedScore : float.NaN;
+
+        /// <summary>最近一次 policy 输出是否静止锁定。</summary>
+        public bool LatestStaticLocked => policyHost != null && policyHost.LatestStaticLocked;
+
+        /// <summary>最近一次 arrival-time raw 诊断时间，单位毫秒。</summary>
+        public double LatestArrivalTimeRawMonoMs => latestArrivalTimeRawMonoMs;
+
+        /// <summary>最近一次 arrival-time raw 诊断对应的 Unity frame。</summary>
+        public int LatestArrivalTimeRawUnityFrame => latestArrivalTimeRawUnityFrame;
+
+        /// <summary>最近一次 arrival-time raw 诊断使用的参考相机。</summary>
+        public CameraReference LatestArrivalTimeCameraReference => latestArrivalTimeCameraReference;
 
         /// <summary>最近一次 Python AnchorStatusEvent.state。</summary>
-        public string LatestServerState => diagnostics.latestServerState;
-
-        /// <summary>最近一次 Python AnchorStatusEvent.event。</summary>
-        public string LatestServerEvent => diagnostics.latestServerEvent;
+        public string LatestServerState => latestServerState;
 
         /// <summary>最近一次 ServerHeartbeat.input_ready。</summary>
-        public bool LatestHeartbeatInputReady => diagnostics.latestHeartbeatInputReady;
+        public bool LatestHeartbeatInputReady => latestHeartbeatInputReady;
 
         /// <summary>
         /// 判断 Python status event 是否表示 reacquire 刚开始。
         /// </summary>
-        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
-        /// <returns>仅 REACQUIRE_STARTED 这类开始事件返回 true。</returns>
         public static bool IsReacquireStartedStatus(string eventName)
         {
-            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
-            return normalized == "REACQUIRE_STARTED";
+            return (eventName ?? string.Empty).ToUpperInvariant() == "REACQUIRE_STARTED";
         }
 
         /// <summary>
         /// 判断 Python status event 是否表示 reset 已经在 runtime 线程执行。
         /// </summary>
-        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
-        /// <returns>仅 RESET_APPLIED 返回 true。</returns>
         public static bool IsResetAppliedStatus(string eventName)
         {
-            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
-            return normalized == "RESET_APPLIED";
+            return (eventName ?? string.Empty).ToUpperInvariant() == "RESET_APPLIED";
         }
 
         /// <summary>
         /// 判断 Python status event 是否表示 pause 已经在 runtime 线程执行。
         /// </summary>
-        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
-        /// <returns>仅 PAUSE_APPLIED 返回 true。</returns>
         public static bool IsPauseAppliedStatus(string eventName)
         {
-            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
-            return normalized == "PAUSE_APPLIED";
+            return (eventName ?? string.Empty).ToUpperInvariant() == "PAUSE_APPLIED";
         }
 
         /// <summary>
         /// 判断 Python status event 是否表示 resume 已经在 runtime 线程执行。
         /// </summary>
-        /// <param name="eventName">AnchorStatusEvent.event 原始字符串。</param>
-        /// <returns>仅 RESUME_APPLIED 返回 true。</returns>
         public static bool IsResumeAppliedStatus(string eventName)
         {
-            string normalized = (eventName ?? string.Empty).ToUpperInvariant();
-            return normalized == "RESUME_APPLIED";
+            return (eventName ?? string.Empty).ToUpperInvariant() == "RESUME_APPLIED";
         }
 
         /// <summary>
         /// 判断 ServerHeartbeat 是否表示 Python server 处于错误状态。
         /// </summary>
-        /// <param name="heartbeat">Python 发布的 ServerHeartbeat。</param>
-        /// <returns>heartbeat.state 为 ERROR，或 last_error.code 非空时返回 true。</returns>
         public static bool IsErrorHeartbeat(ServerHeartbeat heartbeat)
         {
             if (heartbeat == null)
@@ -181,29 +187,22 @@ namespace EgoAnchor.Runtime
             }
 
             string state = (heartbeat.State ?? string.Empty).ToUpperInvariant();
-            return state == "ERROR" || (heartbeat.LastError != null && !string.IsNullOrEmpty(heartbeat.LastError.Code));
+            return state == "ERROR" || heartbeat.LastError != null && !string.IsNullOrEmpty(heartbeat.LastError.Code);
         }
 
-        /// <summary>
-        /// Unity Awake：构造 frame aligner 并绑定 policy host。
-        /// </summary>
         private void Awake()
         {
             RebuildAligner();
-            if (policyHost != null)
+            if (policyHost == null)
             {
-                policyHost.Bind(this);
-                if (processors != null && processors.Count > 0)
-                {
-                    Log.Info("已绑定 policyHost，processors 列表在 policy 路径中被忽略；baseline 对照请使用未绑定 policy 的 runtime。", this);
-                }
+                Log.Warning("PoseToAnchorRuntime 未绑定 AnchorPolicyHost；该 runtime 不会输出 stable pose。", this);
+                return;
             }
+
+            policyHost.Bind(this);
+            SyncPolicyState();
         }
 
-        /// <summary>
-        /// Unity LateUpdate：policy 模式下每渲染帧推进控制器计时并输出 stable pose。
-        /// 执行顺序为 -50，先于 DynamicObjectAnchor 与 eval recorder 的默认 LateUpdate。
-        /// </summary>
         private void LateUpdate()
         {
             if (policyHost != null)
@@ -212,24 +211,14 @@ namespace EgoAnchor.Runtime
             }
         }
 
-        /// <summary>
-        /// Inspector 修改时确保列表非空。
-        /// </summary>
         private void OnValidate()
         {
-            if (processors == null)
-            {
-                processors = new List<AnchorPoseProcessor>();
-            }
-
             RebuildAligner();
         }
 
         /// <summary>
         /// 接收并处理一条 Python 发布的 camera-space PoseResult。
         /// </summary>
-        /// <param name="result">Python 发布的 PoseResult。</param>
-        /// <returns>本条结果的处理状态。</returns>
         public AcceptResult AcceptPoseResult(PoseResult result)
         {
             if (result == null || result.Header == null)
@@ -238,28 +227,30 @@ namespace EgoAnchor.Runtime
                 return AcceptResult.AlignFailed;
             }
 
-            diagnostics.latestPhase = result.Phase ?? string.Empty;
-            CapturePoseDiagnostics(result);
+            latestPhase = result.Phase ?? string.Empty;
+            latestReliabilityScore = PoseResultPolicyMapper.ReadReliabilityScore(result);
             if (IsPausedLocally())
             {
                 SetFailure("paused");
-                diagnostics.latestPolicyAction = "paused";
-                diagnostics.latestPolicyReason = "pose_ignored_while_paused";
+                latestPolicyAction = "paused";
+                latestPolicyReason = "pose_ignored_while_paused";
                 return AcceptResult.NoPose;
             }
 
             if (!result.HasPose)
             {
+                hasArrivalTimeRawPose = false;
                 string reason = string.IsNullOrEmpty(result.LastError?.Code) ? "no_pose" : result.LastError.Code;
                 SetFailure(reason);
-                NotifyMissingPose(result.Header.FrameId, FailureSampleTime(), reason, diagnostics.latestPhase);
+                NotifyMissingPose(result.Header.FrameId, FailureSampleTime(), reason, latestPhase);
                 return AcceptResult.NoPose;
             }
 
             if (!HasFinitePoseMatrix(result))
             {
+                hasArrivalTimeRawPose = false;
                 SetFailure("invalid_matrix");
-                NotifyAlignFailure(result.Header.FrameId, FailureSampleTime(), "invalid_matrix", diagnostics.latestPhase);
+                NotifyAlignFailure(result.Header.FrameId, FailureSampleTime(), "invalid_matrix", latestPhase);
                 return AcceptResult.InvalidMatrix;
             }
 
@@ -269,68 +260,75 @@ namespace EgoAnchor.Runtime
                 RebuildAligner();
             }
 
-            if (aligner == null || !aligner.TryAlign(result, out Pose worldPose, out CameraReference usedReference))
+            CaptureArrivalTimeRaw(result, now);
+            if (aligner == null || !aligner.TryAlign(result, out Pose worldPose, out _))
             {
                 string reason = $"align_failed_frame_{result.Header.FrameId}";
                 SetFailure(reason);
-                NotifyAlignFailure(result.Header.FrameId, now, reason, diagnostics.latestPhase);
+                NotifyAlignFailure(result.Header.FrameId, now, reason, latestPhase);
                 return AcceptResult.AlignFailed;
             }
 
-            diagnostics.latestUsedReference = usedReference;
             AcceptWorldPose(result.Header.FrameId, worldPose, result, now);
-            diagnostics.latestFailure = string.Empty;
+            latestFailure = string.Empty;
             return AcceptResult.Aligned;
         }
 
-        /// <summary>
-        /// 尝试获取当前 raw anchor pose，不经过任何平滑。
-        /// </summary>
-        /// <param name="pose">当前 raw world pose。</param>
-        /// <returns>是否已有 raw pose。</returns>
+        /// <summary>尝试获取当前 raw anchor pose，不经过任何 policy 输出整形。</summary>
         public bool TryGetRawPose(out Pose pose)
         {
             pose = rawPose;
             return hasRawPose;
         }
 
-        /// <summary>
-        /// 尝试获取当前稳定 anchor pose。
-        /// policy 模式下 stable 由每帧 Advance 输出（预测到渲染时刻）；
-        /// baseline 模式下等于 processor chain 输出，链为空时直接等于 raw。
-        /// </summary>
-        /// <param name="pose">当前 stable world pose。</param>
-        /// <returns>是否已有 stable pose。</returns>
+        /// <summary>尝试获取当前 stable/final anchor pose。</summary>
         public bool TryGetStablePose(out Pose pose)
         {
             pose = stablePose;
             return hasStablePose;
         }
 
+        /// <summary>尝试获取 arrival-time raw 诊断 pose。</summary>
+        public bool TryGetArrivalTimeRawPose(out Pose pose)
+        {
+            pose = arrivalTimeRawPose;
+            return hasArrivalTimeRawPose;
+        }
+
         /// <summary>
         /// 外部测试可直接注入 world pose，绕过 NATS/Protobuf/frame history。
         /// </summary>
-        /// <param name="frameId">该 world pose 对应的 frame_id。</param>
-        /// <param name="worldPose">Unity world 坐标 pose。</param>
         public void AcceptWorldPose(long frameId, Pose worldPose)
         {
             AcceptWorldPose(frameId, worldPose, null, Time.realtimeSinceStartupAsDouble);
         }
 
         /// <summary>
-        /// 判断当前本地 anchor runtime 是否处于暂停状态。
+        /// Unity 录制日志回放专用入口：接收已经是 Unity world 坐标的 aligned raw pose。
         /// </summary>
-        private bool IsPausedLocally()
+        public void AcceptAlignedWorldPoseForReplay(
+            long frameId,
+            Pose worldPose,
+            double captureTimeSeconds,
+            float reliabilityScore,
+            string[] reliabilityFlags,
+            string phase,
+            string poseSource,
+            double sampleTimeSeconds)
         {
-            return diagnostics.currentAnchorState == AnchorState.Paused || (policyHost != null && policyHost.State == AnchorState.Paused);
-        }
-
-        /// <summary>
-        /// 获取失败观测使用的采样时间；未启用 policy 时失败时间不会进入状态机，可避免无意义读取 Unity Time。
-        /// </summary>
-        private double FailureSampleTime()
-        {
-            return policyHost == null ? 0.0 : Time.realtimeSinceStartupAsDouble;
+            latestPhase = phase ?? string.Empty;
+            latestReliabilityScore = Mathf.Clamp01(reliabilityScore);
+            AnchorObservation observation = AnchorObservation.FromAlignedPose(
+                frameId,
+                worldPose,
+                sampleTimeSeconds,
+                reliabilityScore,
+                reliabilityFlags ?? Array.Empty<string>(),
+                phase ?? string.Empty,
+                poseSource ?? string.Empty,
+                captureTimeSeconds);
+            AcceptWorldPose(frameId, worldPose, observation);
+            latestFailure = string.Empty;
         }
 
         /// <summary>
@@ -354,55 +352,47 @@ namespace EgoAnchor.Runtime
             return true;
         }
 
-        /// <summary>
-        /// 接收已完成 frame alignment 的 world pose，并按配置运行 baseline 或自适应 policy。
-        /// </summary>
-        /// <param name="frameId">该 world pose 对应的 frame_id。</param>
-        /// <param name="worldPose">Unity world 坐标 pose。</param>
-        /// <param name="sourceResult">源 PoseResult；测试直接注入时可为空。</param>
-        /// <param name="sampleTime">观测到达 Unity 的单调时间，单位秒。</param>
         private void AcceptWorldPose(long frameId, Pose worldPose, PoseResult sourceResult, double sampleTime)
+        {
+            AnchorObservation observation = PoseResultPolicyMapper.FromAlignedPose(
+                frameId,
+                worldPose,
+                sampleTime,
+                ResolveCaptureTimeSeconds(frameId),
+                sourceResult,
+                latestPhase
+            );
+            AcceptWorldPose(frameId, worldPose, observation);
+        }
+
+        private void AcceptWorldPose(long frameId, Pose worldPose, in AnchorObservation observation)
         {
             if (IsPausedLocally())
             {
-                diagnostics.latestPolicyAction = "paused";
-                diagnostics.latestPolicyReason = "pose_ignored_while_paused";
-                diagnostics.latestFailure = "paused";
+                latestPolicyAction = "paused";
+                latestPolicyReason = "pose_ignored_while_paused";
+                latestFailure = "paused";
                 return;
             }
 
             rawPose = worldPose;
             hasRawPose = true;
-            diagnostics.latestAlignedFrameId = frameId;
+            latestAlignedFrameId = frameId;
 
-            if (policyHost != null)
+            if (policyHost == null)
             {
-                AnchorObservation observation = PoseResultPolicyMapper.FromAlignedPose(
-                    frameId,
-                    worldPose,
-                    sampleTime,
-                    ResolveCaptureTimeSeconds(frameId),
-                    sourceResult,
-                    diagnostics.latestPhase
-                );
-                AnchorPolicyDecision decision = policyHost.AcceptPose(observation);
-                ApplyPolicyDecision(decision);
+                hasStablePose = false;
+                currentAnchorState = AnchorState.Searching;
+                latestPolicyAction = "missing_policy_host";
+                latestPolicyReason = "policy_host_required";
+                return;
             }
-            else
-            {
-                stablePose = RunProcessors(worldPose, frameId, sampleTime);
-                hasStablePose = true;
-                diagnostics.currentAnchorState = AnchorState.Tracking;
-                diagnostics.latestPolicyAction = "baseline_accept";
-                diagnostics.latestPolicyReason = "policy_disabled";
-            }
+
+            AnchorPolicyDecision decision = policyHost.AcceptPose(observation);
+            ApplyPolicyDecision(decision);
+            SyncPolicyState();
         }
 
-        /// <summary>
-        /// 按 frame_id 回查该帧的 Unity 采集单调时间，作为滤波器测量时间戳。
-        /// </summary>
-        /// <param name="frameId">Quest stereo frame_id。</param>
-        /// <returns>采集时间（秒）；查不到时返回 -1，policy 退化使用到达时间。</returns>
         private double ResolveCaptureTimeSeconds(long frameId)
         {
             if (framePoseHistory != null && framePoseHistory.TryGet(frameId, out FramePoseRecord record))
@@ -413,52 +403,16 @@ namespace EgoAnchor.Runtime
             return -1.0;
         }
 
-        /// <summary>
-        /// 重置所有 anchor pose processor 的内部状态。
-        /// </summary>
-        public void ResetProcessors()
+        private bool IsPausedLocally()
         {
-            if (processors == null)
-            {
-                return;
-            }
-
-            foreach (AnchorPoseProcessor processor in processors)
-            {
-                if (processor != null)
-                {
-                    processor.ResetProcessor();
-                }
-            }
-            hasStablePose = false;
+            return CurrentAnchorState == AnchorState.Paused;
         }
 
-        /// <summary>
-        /// 按配置顺序运行处理器链。
-        /// </summary>
-        private Pose RunProcessors(Pose inputPose, long frameId, double sampleTime)
+        private double FailureSampleTime()
         {
-            if (processors == null || processors.Count == 0)
-            {
-                return inputPose;
-            }
-
-            Pose current = inputPose;
-            foreach (AnchorPoseProcessor processor in processors)
-            {
-                if (processor == null)
-                {
-                    continue;
-                }
-
-                current = processor.Process(current, frameId, sampleTime);
-            }
-            return current;
+            return policyHost == null ? 0.0 : Time.realtimeSinceStartupAsDouble;
         }
 
-        /// <summary>
-        /// 重新构造 frame aligner。
-        /// </summary>
         private void RebuildAligner()
         {
             aligner = framePoseHistory != null || alignmentReference == CameraReference.None
@@ -466,78 +420,54 @@ namespace EgoAnchor.Runtime
                 : null;
             if (aligner == null)
             {
-                diagnostics.latestFailure = "missing_frame_pose_history";
+                latestFailure = "missing_frame_pose_history";
             }
         }
 
-        /// <summary>
-        /// 写入最近失败原因。
-        /// </summary>
         private void SetFailure(string reason)
         {
-            diagnostics.latestFailure = reason;
+            latestFailure = reason;
         }
 
-        #region Pose Failures And Policy Decisions
-
-        /// <summary>
-        /// 处理 no-pose 观测，让状态机看到缺失事件。
-        /// </summary>
         private void NotifyMissingPose(long frameId, double sampleTime, string reason, string phase)
         {
             if (policyHost == null)
             {
-                diagnostics.latestPolicyAction = "no_pose";
-                diagnostics.latestPolicyReason = reason;
-                if (!hasStablePose && !hasRawPose)
-                {
-                    diagnostics.currentAnchorState = AnchorState.Searching;
-                }
+                latestPolicyAction = "no_pose";
+                latestPolicyReason = reason;
+                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
                 return;
             }
 
             AnchorPolicyDecision decision = policyHost.AcceptPose(AnchorObservation.MissingPose(frameId, sampleTime, reason, phase));
             ApplyPolicyDecision(decision);
+            SyncPolicyState();
         }
 
-        /// <summary>
-        /// 处理 frame alignment 或协议解析失败，让状态机看到失败事件。
-        /// </summary>
         private void NotifyAlignFailure(long frameId, double sampleTime, string reason, string phase)
         {
             if (policyHost == null)
             {
-                diagnostics.latestPolicyAction = "align_failed";
-                diagnostics.latestPolicyReason = reason;
+                latestPolicyAction = "align_failed";
+                latestPolicyReason = reason;
                 return;
             }
 
             AnchorPolicyDecision decision = policyHost.AcceptPose(AnchorObservation.AlignFailed(frameId, sampleTime, reason, phase));
             ApplyPolicyDecision(decision);
+            SyncPolicyState();
         }
 
-        /// <summary>
-        /// 把 policy 输入分类决策写入 Inspector 诊断。
-        /// stable pose 不在这里更新：渲染输出统一由每帧 AdvanceAnchorOutput 产生，
-        /// 从而保证 policy 输出不再二次经过 processor 链。
-        /// </summary>
         private void ApplyPolicyDecision(AnchorPolicyDecision decision)
         {
-            diagnostics.latestPolicyAction = decision.Action.ToString();
-            diagnostics.latestPolicyReason = decision.Reason;
-            diagnostics.currentAnchorState = decision.State;
-            if (policyHost != null)
-            {
-                diagnostics.latestInnovationPosD2 = policyHost.LastInnovationPosD2;
-                diagnostics.latestEffectiveMeasurementNoise = policyHost.LastREffPos;
-            }
+            latestPolicyAction = decision.Action.ToString();
+            latestPolicyReason = decision.Reason;
+            currentAnchorState = decision.State;
         }
 
         /// <summary>
         /// policy 模式下推进控制器计时并刷新 stable pose 输出。
-        /// LateUpdate 每帧调用；smoke 测试可显式传入时间直接驱动。
         /// </summary>
-        /// <param name="nowSeconds">当前 Unity 单调时间，单位秒。</param>
         public void AdvanceAnchorOutput(double nowSeconds)
         {
             if (policyHost == null)
@@ -546,11 +476,9 @@ namespace EgoAnchor.Runtime
             }
 
             AnchorPolicyOutput output = policyHost.Advance(nowSeconds);
-            diagnostics.currentAnchorState = output.State;
-            diagnostics.currentMotionState = output.MotionState.ToString();
-            diagnostics.latestPredictAheadMs = output.PredictAheadSeconds * 1000f;
-            diagnostics.latestSpeedMps = policyHost.SpeedMps;
-            diagnostics.latestAngularSpeedDps = policyHost.AngularSpeedDps;
+            currentAnchorState = output.State;
+            currentMotionState = output.MotionState;
+            latestPredictAheadMs = output.PredictAheadSeconds * 1000f;
             if (output.HasPose)
             {
                 stablePose = output.Pose;
@@ -562,52 +490,44 @@ namespace EgoAnchor.Runtime
             }
         }
 
-        /// <summary>
-        /// 从 PoseResult 捕获 Python 感知评分细项，供 Unity Inspector 和后续 policy 调参使用。
-        /// </summary>
-        /// <param name="result">Python 发布的 PoseResult。</param>
-        private void CapturePoseDiagnostics(PoseResult result)
+        private void CaptureArrivalTimeRaw(PoseResult result, double arrivalTimeSeconds)
         {
-            diagnostics.latestReliabilityScore = PoseResultPolicyMapper.ReadReliabilityScore(result);
-            diagnostics.latestScorePhase = result.ScorePhase;
-            diagnostics.latestScoreReprojection = result.ScoreReprojection;
-            diagnostics.latestScoreDepth = result.ScoreDepth;
-            diagnostics.latestScoreJump = result.ScoreJump;
-            diagnostics.latestScoreMask = result.ScoreMask;
-            diagnostics.latestScoreReject = result.ScoreReject;
-            diagnostics.latestScoreConfidence = result.ScoreConfidence;
-            diagnostics.latestTrackReprojection = result.TrackReprojection;
-            diagnostics.latestRenderQualityMaskIou = result.RenderQualityMaskIou;
-            diagnostics.latestRenderQualityAreaRatioScore = result.RenderQualityAreaRatioScore;
-            diagnostics.latestRenderQualityDepthInlier = result.RenderQualityDepthInlier;
-            diagnostics.latestRenderQualityDepthAlignment = result.RenderQualityDepthAlignment;
-            diagnostics.latestRenderQualityRenderVisibleRatio = result.RenderQualityRenderVisibleRatio;
-            diagnostics.latestRenderQualityObservedVisibleRatio = result.RenderQualityObservedVisibleRatio;
-            diagnostics.latestRenderQualityDepthResidualMeters = result.RenderQualityDepthResidualM;
-            diagnostics.latestRenderQualityRenderAreaPixels = result.RenderQualityRenderAreaPx;
-            diagnostics.latestRenderQualityExpected = result.RenderQualityExpected;
-            diagnostics.latestRenderQualityStatus = result.RenderQualityStatus ?? string.Empty;
-        }
-
-        /// <summary>
-        /// 从 policy controller 同步 Inspector 诊断。
-        /// </summary>
-        private void SyncPolicyDiagnostics()
-        {
-            if (policyHost != null)
+            hasArrivalTimeRawPose = false;
+            latestArrivalTimeRawMonoMs = double.NaN;
+            latestArrivalTimeRawUnityFrame = -1;
+            latestArrivalTimeCameraReference = alignmentReference;
+            if (aligner == null)
             {
-                diagnostics.currentAnchorState = policyHost.State;
+                return;
             }
+
+            if (!aligner.TryAlignWithLatestCameraPose(result, out Pose arrivalPose, out CameraReference usedReference, out _))
+            {
+                return;
+            }
+
+            arrivalTimeRawPose = arrivalPose;
+            hasArrivalTimeRawPose = true;
+            latestArrivalTimeRawMonoMs = arrivalTimeSeconds * 1000.0;
+            latestArrivalTimeRawUnityFrame = Time.frameCount;
+            latestArrivalTimeCameraReference = usedReference;
         }
 
-        #endregion
+        private void SyncPolicyState()
+        {
+            if (policyHost == null)
+            {
+                return;
+            }
 
-        #region Server Notifications
+            currentAnchorState = policyHost.State;
+            currentMotionState = policyHost.MotionState;
+            latestPredictAheadMs = policyHost.PredictAheadSeconds * 1000f;
+        }
 
         /// <summary>
         /// 接收 Python AnchorStatusEvent，并映射到 Unity anchor lifecycle。
         /// </summary>
-        /// <param name="status">Python 发布的 AnchorStatusEvent。</param>
         public void NotifyStatusEvent(AnchorStatusEvent status)
         {
             if (status == null)
@@ -615,33 +535,33 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            diagnostics.latestServerState = status.State ?? string.Empty;
-            diagnostics.latestServerEvent = status.Event ?? string.Empty;
-            string reason = string.IsNullOrEmpty(status.Message) ? diagnostics.latestServerEvent : status.Message;
-            string eventName = (diagnostics.latestServerEvent ?? string.Empty).ToUpperInvariant();
-            string serverState = (diagnostics.latestServerState ?? string.Empty).ToUpperInvariant();
+            latestServerState = status.State ?? string.Empty;
+            string serverEvent = status.Event ?? string.Empty;
+            string reason = string.IsNullOrEmpty(status.Message) ? serverEvent : status.Message;
+            string eventName = serverEvent.ToUpperInvariant();
+            string serverState = latestServerState.ToUpperInvariant();
 
             if (IsResetAppliedStatus(eventName))
             {
-                NotifyResetAccepted(clearProcessors: true, clearAnchorPose: false, reason);
+                NotifyReset(clearAnchorPose: false, reason);
                 return;
             }
 
             if (IsReacquireStartedStatus(eventName))
             {
-                NotifyReacquireAccepted(clearPose: true, reason);
+                NotifyReacquire(clearPose: true, reason);
                 return;
             }
 
             if (IsPauseAppliedStatus(eventName) || serverState == "PAUSED")
             {
-                NotifyPauseAccepted(reason);
+                NotifyPause(reason);
                 return;
             }
 
             if (IsResumeAppliedStatus(eventName))
             {
-                NotifyResumeAccepted(reason);
+                NotifyResume(reason);
                 return;
             }
 
@@ -650,42 +570,31 @@ namespace EgoAnchor.Runtime
                 if (policyHost != null)
                 {
                     policyHost.NotifyLost(Time.realtimeSinceStartupAsDouble, reason);
-                    SyncPolicyDiagnostics();
+                    SyncPolicyState();
                 }
                 else
                 {
-                    diagnostics.currentAnchorState = AnchorState.Lost;
+                    currentAnchorState = AnchorState.Lost;
                 }
-                diagnostics.latestPolicyAction = "server_status";
-                diagnostics.latestPolicyReason = reason;
+                latestPolicyAction = "server_status";
+                latestPolicyReason = reason;
                 return;
             }
 
             if (serverState == "ERROR" || status.Error != null && !string.IsNullOrEmpty(status.Error.Code))
             {
                 string errorReason = string.IsNullOrEmpty(status.Error?.Code) ? reason : status.Error.Code;
-                if (policyHost != null)
-                {
-                    policyHost.NotifyError(Time.realtimeSinceStartupAsDouble, errorReason);
-                    SyncPolicyDiagnostics();
-                }
-                else
-                {
-                    diagnostics.currentAnchorState = AnchorState.Error;
-                }
-                diagnostics.latestPolicyAction = "server_error";
-                diagnostics.latestPolicyReason = errorReason;
+                NotifyError(errorReason, "server_error");
                 return;
             }
 
-            diagnostics.latestPolicyAction = "server_status";
-            diagnostics.latestPolicyReason = reason;
+            latestPolicyAction = "server_status";
+            latestPolicyReason = reason;
         }
 
         /// <summary>
         /// 接收 Python ServerHeartbeat，并在输入未就绪或服务错误时更新本地 anchor 状态。
         /// </summary>
-        /// <param name="heartbeat">Python 发布的 ServerHeartbeat。</param>
         public void NotifyHeartbeat(ServerHeartbeat heartbeat)
         {
             if (heartbeat == null)
@@ -693,325 +602,116 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            diagnostics.latestHeartbeatInputReady = heartbeat.InputReady;
-            diagnostics.latestHeartbeatReceiveTime = Time.realtimeSinceStartupAsDouble;
-            diagnostics.latestServerState = heartbeat.State ?? diagnostics.latestServerState;
+            latestHeartbeatInputReady = heartbeat.InputReady;
+            latestServerState = heartbeat.State ?? latestServerState;
             if (IsErrorHeartbeat(heartbeat))
             {
                 string errorReason = string.IsNullOrEmpty(heartbeat.LastError?.Code) ? "server_error" : heartbeat.LastError.Code;
-                if (policyHost != null)
-                {
-                    policyHost.NotifyError(Time.realtimeSinceStartupAsDouble, errorReason);
-                    SyncPolicyDiagnostics();
-                }
-                else
-                {
-                    diagnostics.currentAnchorState = AnchorState.Error;
-                }
-                diagnostics.latestPolicyAction = "heartbeat_error";
-                diagnostics.latestPolicyReason = errorReason;
+                NotifyError(errorReason, "heartbeat_error");
                 return;
             }
 
-            if (!heartbeat.InputReady && diagnostics.currentAnchorState != AnchorState.Paused)
+            if (!heartbeat.InputReady && CurrentAnchorState != AnchorState.Paused)
             {
-                diagnostics.currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
-                diagnostics.latestPolicyAction = "heartbeat";
-                diagnostics.latestPolicyReason = "input_not_ready";
+                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
+                latestPolicyAction = "heartbeat";
+                latestPolicyReason = "input_not_ready";
             }
         }
 
-        #endregion
-
-        #region Policy Notifications
-
-        /// <summary>
-        /// 本地收到 reset accepted 或状态事件时通知 anchor policy。
-        /// </summary>
-        /// <param name="clearProcessors">是否同时清理 processor 状态。</param>
-        /// <param name="clearAnchorPose">是否清空 raw/stable pose。</param>
-        /// <param name="reason">reset 原因。</param>
-        public void NotifyResetAccepted(bool clearProcessors, bool clearAnchorPose, string reason)
+        private void NotifyReset(bool clearAnchorPose, string reason)
         {
-            if (clearProcessors)
-            {
-                ResetProcessors();
-            }
-
             if (clearAnchorPose)
             {
-                hasRawPose = false;
-                hasStablePose = false;
-                diagnostics.latestAlignedFrameId = -1;
+                ClearLocalPoses();
             }
 
             if (policyHost != null)
             {
                 policyHost.NotifyReset(Time.realtimeSinceStartupAsDouble, reason);
-                SyncPolicyDiagnostics();
+                SyncPolicyState();
             }
             else
             {
-                diagnostics.currentAnchorState = AnchorState.Searching;
+                currentAnchorState = AnchorState.Searching;
             }
-            diagnostics.latestFailure = reason ?? "reset";
-            diagnostics.latestPolicyAction = "reset";
-            diagnostics.latestPolicyReason = reason ?? "reset";
+            latestFailure = reason ?? "reset";
+            latestPolicyAction = "reset";
+            latestPolicyReason = reason ?? "reset";
         }
 
-        /// <summary>
-        /// 本地收到 reacquire accepted 或状态事件时通知 anchor policy。
-        /// </summary>
-        /// <param name="clearPose">是否清空当前 raw/stable pose。</param>
-        /// <param name="reason">reacquire 原因。</param>
-        public void NotifyReacquireAccepted(bool clearPose, string reason)
+        private void NotifyReacquire(bool clearPose, string reason)
         {
-            ResetProcessors();
             if (clearPose)
             {
-                hasRawPose = false;
-                hasStablePose = false;
-                diagnostics.latestAlignedFrameId = -1;
+                ClearLocalPoses();
             }
 
             if (policyHost != null)
             {
                 policyHost.NotifyReacquire(Time.realtimeSinceStartupAsDouble, reason);
-                SyncPolicyDiagnostics();
+                SyncPolicyState();
             }
             else
             {
-                diagnostics.currentAnchorState = AnchorState.Relocalizing;
+                currentAnchorState = AnchorState.Relocalizing;
             }
-            diagnostics.latestFailure = reason ?? "reacquire";
-            diagnostics.latestPolicyAction = "reacquire";
-            diagnostics.latestPolicyReason = reason ?? "reacquire";
+            latestFailure = reason ?? "reacquire";
+            latestPolicyAction = "reacquire";
+            latestPolicyReason = reason ?? "reacquire";
         }
 
-        /// <summary>
-        /// 通知本地 anchor policy 暂停更新。
-        /// </summary>
-        /// <param name="reason">暂停原因。</param>
-        public void NotifyPauseAccepted(string reason)
+        private void NotifyPause(string reason)
         {
             if (policyHost != null)
             {
                 policyHost.NotifyPause(Time.realtimeSinceStartupAsDouble, reason);
-                SyncPolicyDiagnostics();
+                SyncPolicyState();
             }
             else
             {
-                diagnostics.currentAnchorState = AnchorState.Paused;
+                currentAnchorState = AnchorState.Paused;
             }
-            diagnostics.latestPolicyAction = "pause";
-            diagnostics.latestPolicyReason = reason ?? "pause";
+            latestPolicyAction = "pause";
+            latestPolicyReason = reason ?? "pause";
         }
 
-        /// <summary>
-        /// 通知本地 anchor policy 恢复更新。
-        /// </summary>
-        /// <param name="reason">恢复原因。</param>
-        public void NotifyResumeAccepted(string reason)
+        private void NotifyResume(string reason)
         {
             if (policyHost != null)
             {
                 policyHost.NotifyResume(Time.realtimeSinceStartupAsDouble, reason);
-                SyncPolicyDiagnostics();
+                SyncPolicyState();
             }
             else
             {
-                diagnostics.currentAnchorState = hasStablePose || hasRawPose ? AnchorState.Tracking : AnchorState.Searching;
+                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.Tracking : AnchorState.Searching;
             }
-            diagnostics.latestPolicyAction = "resume";
-            diagnostics.latestPolicyReason = reason ?? "resume";
+            latestPolicyAction = "resume";
+            latestPolicyReason = reason ?? "resume";
         }
 
-        /// <summary>
-        /// 清空当前 raw/stable anchor pose 状态。
-        /// </summary>
-        /// <param name="clearProcessors">是否同时重置处理器内部状态。</param>
-        public void ClearPoseState(bool clearProcessors = true)
+        private void NotifyError(string reason, string action)
+        {
+            if (policyHost != null)
+            {
+                policyHost.NotifyError(Time.realtimeSinceStartupAsDouble, reason);
+                SyncPolicyState();
+            }
+            else
+            {
+                currentAnchorState = AnchorState.Error;
+            }
+            latestPolicyAction = action;
+            latestPolicyReason = reason;
+        }
+
+        private void ClearLocalPoses()
         {
             hasRawPose = false;
             hasStablePose = false;
-            diagnostics.latestAlignedFrameId = -1;
-            diagnostics.latestPhase = string.Empty;
-            diagnostics.latestFailure = "cleared_by_status";
-            diagnostics.latestPolicyAction = "clear";
-            diagnostics.latestPolicyReason = "cleared_by_status";
-
-            if (clearProcessors)
-            {
-                ResetProcessors();
-            }
-
-            if (policyHost != null)
-            {
-                policyHost.Clear(Time.realtimeSinceStartupAsDouble, "cleared_by_status");
-                SyncPolicyDiagnostics();
-            }
-            else
-            {
-                diagnostics.currentAnchorState = AnchorState.Searching;
-            }
+            hasArrivalTimeRawPose = false;
+            latestAlignedFrameId = -1;
         }
-
-        #endregion
-
-        #region Diagnostics
-
-        /// <summary>
-        /// PoseToAnchorRuntime 的 Inspector 诊断快照。
-        /// </summary>
-        [Serializable]
-        public sealed class RuntimeDiagnostics
-        {
-            /// <summary>最近成功对齐的 frame_id。</summary>
-            [Tooltip("最近成功对齐的 frame_id。只用于 Inspector/日志诊断。")]
-            public long latestAlignedFrameId = -1;
-
-            /// <summary>最近一次 PoseResult phase。</summary>
-            [Tooltip("最近一次 PoseResult phase。只用于 Inspector/日志诊断。")]
-            public string latestPhase = "";
-
-            /// <summary>最近一次失败原因。</summary>
-            [Tooltip("最近一次失败原因。空字符串表示最近一次处理没有失败。")]
-            public string latestFailure = "";
-
-            /// <summary>当前 Unity anchor 生命周期状态。</summary>
-            [Tooltip("当前 Unity anchor 生命周期状态。该状态属于 Unity anchor runtime，不等同于 Python pipeline phase。")]
-            public AnchorState currentAnchorState = AnchorState.Uninitialized;
-
-            /// <summary>最近一次 anchor policy 动作。</summary>
-            [Tooltip("最近一次 anchor policy 动作：Accept/Reject/Coast/Hold。关闭 reliability policy 时显示 baseline_accept/no_pose 等诊断文本。")]
-            public string latestPolicyAction = "";
-
-            /// <summary>最近一次 anchor policy 原因。</summary>
-            [Tooltip("最近一次 anchor policy 原因，例如 score_accept、translation_jump 或 no_pose。")]
-            public string latestPolicyReason = "";
-
-            /// <summary>最近一次 reliability score。</summary>
-            [Tooltip("最近一次 PoseResult.reliability_score，按协议值直接限制到 0..1。")]
-            public float latestReliabilityScore = 1.0f;
-
-            /// <summary>最近一次 phase 子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_phase，用于确认最终评分中的 phase 乘性项。")]
-            public float latestScorePhase;
-
-            /// <summary>最近一次重投影子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_reprojection，语义是投影与 Cutie mask 交集区域内的 RGB/LAB 颜色相似度。")]
-            public float latestScoreReprojection;
-
-            /// <summary>最近一次深度对齐子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_depth，表示渲染深度与观测深度在 mask 交集内的对齐质量。")]
-            public float latestScoreDepth;
-
-            /// <summary>最近一次相邻 pose 跳变子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_jump，接近 Python track jump 阈值时会降低。")]
-            public float latestScoreJump;
-
-            /// <summary>最近一次 mask 面积子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_mask，当前优先来自 Cutie mask 面积 / 渲染投影面积，低值表示可见区域过小或遮挡严重。")]
-            public float latestScoreMask;
-
-            /// <summary>最近一次 track reject 子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_reject，近期 track reject 越多越低。")]
-            public float latestScoreReject;
-
-            /// <summary>最近一次连续高质量跟踪置信子分。</summary>
-            [Tooltip("最近一次 PoseResult.score_confidence，表示 Python 端连续高质量 pose warmup 的置信释放程度。")]
-            public float latestScoreConfidence;
-
-            /// <summary>最近一次 TRACK 重投影分。</summary>
-            [Tooltip("最近一次 PoseResult.track_reprojection，当前语义是 TRACK 阶段重投影分；-1 表示 Python 本帧没有有效重投影信号。")]
-            public float latestTrackReprojection = -1.0f;
-
-            /// <summary>最近一次渲染 mask 与观测 mask IoU。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_mask_iou，表示渲染前景与观测 mask 的轮廓重叠。")]
-            public float latestRenderQualityMaskIou;
-
-            /// <summary>最近一次 Cutie mask 面积与渲染投影面积比例。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_area_ratio_score，等于 Cutie mask 面积 / 渲染投影面积并限制在 0..1，用于解释 score_mask。")]
-            public float latestRenderQualityAreaRatioScore;
-
-            /// <summary>最近一次渲染深度 inlier 比例。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_depth_inlier，表示交集区域内 FFS 深度与渲染表面深度接近的比例。")]
-            public float latestRenderQualityDepthInlier;
-
-            /// <summary>最近一次连续深度对齐分。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_depth_alignment，由 depth inlier 和中位残差共同得到。")]
-            public float latestRenderQualityDepthAlignment;
-
-            /// <summary>最近一次渲染前景可见覆盖率。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_render_visible_ratio，遮挡或观测 mask 过小时会下降。")]
-            public float latestRenderQualityRenderVisibleRatio;
-
-            /// <summary>最近一次观测 mask 被渲染解释的覆盖率。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_observed_visible_ratio，低值表示 pose 没覆盖可见物体区域。")]
-            public float latestRenderQualityObservedVisibleRatio;
-
-            /// <summary>最近一次深度中位残差。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_depth_residual_m，单位米。")]
-            public float latestRenderQualityDepthResidualMeters;
-
-            /// <summary>最近一次渲染质量检测的渲染前景像素数。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_render_area_px，用于判断渲染质量信号是否过小。")]
-            public int latestRenderQualityRenderAreaPixels;
-
-            /// <summary>最近一次 Python 是否预期渲染质量信号有效。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_expected。true 但 track_reprojection=-1 时通常表示渲染失败、warmup 或重投影输入不满足。")]
-            public bool latestRenderQualityExpected;
-
-            /// <summary>最近一次渲染质量状态文本。</summary>
-            [Tooltip("最近一次 PoseResult.render_quality_status，例如 valid、warmup、no_mask、depth_low 或 render_exception。")]
-            public string latestRenderQualityStatus = "";
-
-            /// <summary>最近一次 Python AnchorStatusEvent 状态。</summary>
-            [Tooltip("最近一次 Python AnchorStatusEvent.state。该字段只用于诊断，不等同于 Unity anchor state。")]
-            public string latestServerState = "";
-
-            /// <summary>最近一次 Python AnchorStatusEvent 事件名。</summary>
-            [Tooltip("最近一次 Python AnchorStatusEvent.event。用于观察 reset/reacquire/lost 等跨端状态闭环。")]
-            public string latestServerEvent = "";
-
-            /// <summary>最近一次 ServerHeartbeat 中的 input_ready。</summary>
-            [Tooltip("最近一次 ServerHeartbeat.input_ready。false 表示 Python 尚未具备 stereo+camera_info 输入。")]
-            public bool latestHeartbeatInputReady;
-
-            /// <summary>最近一次 ServerHeartbeat 的 Unity 接收时间。</summary>
-            [Tooltip("最近一次 ServerHeartbeat 被 Unity 主线程处理的时间，单位秒。")]
-            public double latestHeartbeatReceiveTime = -1.0;
-
-            /// <summary>最近一次实际使用的对齐参考相机。</summary>
-            [Tooltip("最近一次实际使用的对齐参考相机。用于确认当前是 Left/Right/Center/None 哪一种对齐。")]
-            public CameraReference latestUsedReference = CameraReference.Left;
-
-            /// <summary>当前运动状态名。</summary>
-            [Tooltip("当前运动状态：Unknown/Static/Moving。Static 表示控制器进入静止模式（强平滑 + 不外推），仅 policy 模式下更新。")]
-            public string currentMotionState = "";
-
-            /// <summary>最近一次估计线速度模长。</summary>
-            [Tooltip("最近一次滤波估计的线速度模长，单位米/秒。仅 policy 模式下更新。")]
-            public float latestSpeedMps;
-
-            /// <summary>最近一次估计角速度模长。</summary>
-            [Tooltip("最近一次滤波估计的角速度模长，单位度/秒。仅 policy 模式下更新。")]
-            public float latestAngularSpeedDps;
-
-            /// <summary>最近一次位置 innovation 马氏距离平方。</summary>
-            [Tooltip("最近一次测量门控的位置 innovation 马氏距离平方。超过 chi2 阈值的测量会被拒绝。仅 policy 模式下更新。")]
-            public float latestInnovationPosD2;
-
-            /// <summary>最近一次位置有效测量噪声。</summary>
-            [Tooltip("最近一次按可靠性分与静止状态放大后的位置测量噪声，单位 m^2。越大表示本帧测量权重越低。仅 policy 模式下更新。")]
-            public float latestEffectiveMeasurementNoise;
-
-            /// <summary>最近一次渲染输出前推时长。</summary>
-            [Tooltip("最近一次渲染输出实际使用的前推时长，单位毫秒。跟踪态为延迟隐藏量，续航态为已外推时长。仅 policy 模式下更新。")]
-            public double latestPredictAheadMs;
-        }
-
-        #endregion
     }
-
 }

@@ -5,79 +5,152 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// PoseToAnchorRuntime 旁路挂载的自适应 anchor policy 宿主。
-    ///
-    /// 本组件只负责持有 Inspector 参数包和 PolicyController 生命周期。是否启用 policy
-    /// 由 PoseToAnchorRuntime 是否引用该组件决定；网络接收、frame alignment、Transform
-    /// 应用仍分别保留在各自层里。Inspector 修改参数时热更生效，不清空滤波历史。
-    /// 一个 host 只服务一个 runtime（内部含独占滤波状态），Bind 守卫防止误共享。
+    /// Unity 侧 anchor policy 宿主。
+    /// 该组件直接组合 Gate、Estimator 和 Output 三类模块；Python 侧叫 pipeline，
+    /// Unity 前端负责 policy 决策，所以这里保留 AnchorPolicyHost 名称。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
     {
-        /// <summary>组件日志通道。</summary>
+        private const int DefaultsVersion = 1;
         private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorPolicyHost>();
 
-        /// <summary>自适应 anchor 控制器参数包。</summary>
-        [Tooltip("自适应 anchor 控制器参数包：评分门控、跳变门控、位置/旋转滤波噪声、运动分类与时序续航。运行中修改即时生效，不清空滤波历史。")]
-        [SerializeField] private AnchorPolicyConfig config = new AnchorPolicyConfig();
+        /// <summary>门控模块组件。</summary>
+        [Header("Policy Modules")]
+        [Tooltip("门控模块组件。只能引用继承 AnchorGateModule 的脚本，不使用 enum 选择策略。")]
+        [SerializeField] private AnchorGateModule gateModule;
 
-        /// <summary>当前 policy controller。</summary>
-        private PolicyController controller;
+        /// <summary>估计器模块组件。</summary>
+        [Tooltip("估计器模块组件。负责滤波、升采样和 PredictAt(renderTime)。")]
+        [SerializeField] private AnchorEstimatorModule estimatorModule;
 
-        /// <summary>当前绑定的 runtime；host 内含独占滤波状态，只允许一个。</summary>
+        /// <summary>输出整形模块组件。</summary>
+        [Tooltip("输出整形模块组件。负责静止锁、限速或直接透传，不修改 estimator 状态。")]
+        [SerializeField] private AnchorOutputStageModule outputModule;
+
+        /// <summary>策略 label；为空时使用 estimator module 名称。</summary>
+        [Tooltip("策略 label，写入 eval；为空时使用 estimator module 名称。")]
+        [SerializeField] private string strategyLabel = "";
+
+        /// <summary>短时无可靠测量的 coasting 时长，单位秒。</summary>
+        [Header("Lifecycle")]
+        [Tooltip("短时无可靠测量的 coasting 时长，单位秒。")]
+        [SerializeField] private float coastTimeoutSeconds = 0.45f;
+
+        /// <summary>长时间无可靠测量后进入 Lost 的时长，单位秒。</summary>
+        [Tooltip("长时间无可靠测量后进入 Lost 的时长，单位秒。")]
+        [SerializeField] private float lostTimeoutSeconds = 2.0f;
+
+        /// <summary>判定静止的线速度阈值，单位 m/s。</summary>
+        [Tooltip("判定静止的线速度阈值，单位 m/s；用于 output stage 静止锁上下文。")]
+        [SerializeField] private float staticSpeedThresholdMps = 0.015f;
+
+        /// <summary>判定静止的角速度阈值，单位 deg/s。</summary>
+        [Tooltip("判定静止的角速度阈值，单位 deg/s；用于 output stage 静止锁上下文。")]
+        [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
+
+        private int defaultsInitializedVersion = DefaultsVersion;
+        private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
+        private double lastAcceptedTimeSeconds = -1.0;
+        private float latestAcceptedScore = 1.0f;
+        private AnchorMotionState motionState = AnchorMotionState.Unknown;
+        private GateDecision latestGateDecision = GateDecision.Hold("initialized");
+        private float predictAheadSeconds;
 
-        /// <summary>当前 policy 状态。</summary>
-        public AnchorState State => Controller.State;
+        /// <summary>eval 使用的策略 label。</summary>
+        public string StrategyLabel => string.IsNullOrEmpty(strategyLabel) ? EstimatorModuleName : strategyLabel;
+
+        /// <summary>当前 gate module 名称。</summary>
+        public string GateModuleName => gateModule != null ? gateModule.ModuleName : "";
+
+        /// <summary>当前 gate module 组件引用，只用于 eval 配置摘要。</summary>
+        public AnchorGateModule GateModule => gateModule;
+
+        /// <summary>当前 estimator module 名称。</summary>
+        public string EstimatorModuleName => estimatorModule != null ? estimatorModule.ModuleName : "";
+
+        /// <summary>当前 estimator module 组件引用，只用于 eval 配置摘要。</summary>
+        public AnchorEstimatorModule EstimatorModule => estimatorModule;
+
+        /// <summary>当前 output module 名称。</summary>
+        public string OutputModuleName => outputModule != null ? outputModule.ModuleName : "";
+
+        /// <summary>当前 output module 组件引用，只用于 eval 配置摘要。</summary>
+        public AnchorOutputStageModule OutputModule => outputModule;
+
+        /// <summary>当前 anchor 生命周期状态。</summary>
+        public AnchorState State
+        {
+            get
+            {
+                EnsureDefaults();
+                return stateMachine.State;
+            }
+        }
 
         /// <summary>当前运动状态。</summary>
-        public AnchorMotionState MotionState => Controller.MotionState;
+        public AnchorMotionState MotionState => motionState;
 
-        /// <summary>当前估计线速度模长，单位米/秒。</summary>
-        public float SpeedMps => Controller.SpeedMps;
+        /// <summary>当前估计线速度模长，单位 m/s。</summary>
+        public float SpeedMps => estimatorModule != null ? estimatorModule.LinearVelocity.magnitude : 0.0f;
 
-        /// <summary>当前估计角速度模长，单位度/秒。</summary>
-        public float AngularSpeedDps => Controller.AngularSpeedDps;
+        /// <summary>当前估计角速度模长，单位 deg/s。</summary>
+        public float AngularSpeedDps => estimatorModule != null ? estimatorModule.AngularVelocityRad.magnitude * Mathf.Rad2Deg : 0.0f;
 
-        /// <summary>最近一次门控的位置 innovation 马氏距离平方。</summary>
-        public float LastInnovationPosD2 => Controller.LastInnovationPosD2;
+        /// <summary>最近一次 Advance 使用的前推时长，单位秒。</summary>
+        public float PredictAheadSeconds => predictAheadSeconds;
 
-        /// <summary>最近一次门控的位置有效测量噪声，单位 m^2。</summary>
-        public float LastREffPos => Controller.LastREffPos;
+        /// <summary>最近一次被接受测量的可靠性分数。</summary>
+        public float LatestAcceptedScore => latestAcceptedScore;
 
-        /// <summary>最近一次 Advance 实际使用的前推时长，单位秒。</summary>
-        public float PredictAheadSeconds => Controller.PredictAheadSeconds;
+        /// <summary>最近一次 gate/policy 动作。</summary>
+        public AnchorPolicyAction LatestAction => latestGateDecision.ToPolicyAction();
 
-        /// <summary>累计接受的测量数（含贴合接受）。</summary>
-        public long AcceptedCount => Controller.AcceptedCount;
+        /// <summary>最近一次 gate/policy 原因。</summary>
+        public string LatestReason => latestGateDecision.Reason;
 
-        /// <summary>累计拒绝的测量数。</summary>
-        public long RejectedCount => Controller.RejectedCount;
+        /// <summary>最近一次 output stage 平移残差，单位米。</summary>
+        public float LatestResidualMeters => outputModule != null ? outputModule.LastResidualMeters : float.NaN;
 
-        /// <summary>
-        /// Unity Awake：构造 policy controller。
-        /// </summary>
+        /// <summary>最近一次 output stage 旋转残差，单位度。</summary>
+        public float LatestResidualDegrees => outputModule != null ? outputModule.LastResidualDegrees : float.NaN;
+
+        /// <summary>最近一次输出是否被静止锁定。</summary>
+        public bool LatestStaticLocked => outputModule != null && outputModule.IsStaticLocked;
+
+        /// <summary>累计接受测量数。</summary>
+        public long AcceptedCount { get; private set; }
+
+        /// <summary>累计拒绝测量数。</summary>
+        public long RejectedCount { get; private set; }
+
+        /// <summary>Unity Awake：初始化模块状态。</summary>
         private void Awake()
         {
-            EnsureController();
+            EnsureDefaults();
+            ResetModules();
         }
 
-        /// <summary>
-        /// Inspector 修改参数时热更 controller，不重建、不清空滤波历史。
-        /// </summary>
+        /// <summary>Inspector 修改时修正生命周期参数。</summary>
         private void OnValidate()
         {
-            config ??= new AnchorPolicyConfig();
-            config.Validate();
-            controller?.ApplyConfig(config);
+            if (coastTimeoutSeconds <= 0.0f)
+            {
+                coastTimeoutSeconds = 0.45f;
+            }
+
+            if (lostTimeoutSeconds <= coastTimeoutSeconds)
+            {
+                lostTimeoutSeconds = coastTimeoutSeconds * 3.0f;
+            }
         }
 
         /// <summary>
-        /// 绑定唯一的宿主 runtime。host 内含独占滤波状态，被第二个 runtime 复用会互相污染。
+        /// 绑定唯一 runtime。policy 内含 estimator 状态，不能被多个 runtime 共享。
         /// </summary>
-        /// <param name="owner">请求绑定的 runtime。</param>
         public void Bind(PoseToAnchorRuntime owner)
         {
+            EnsureDefaults();
             if (owner == null)
             {
                 return;
@@ -85,7 +158,7 @@ namespace EgoAnchor.Policy
 
             if (boundOwner != null && boundOwner != owner)
             {
-                Log.Error($"AnchorPolicyHost 已绑定 {boundOwner.name}，拒绝再绑定 {owner.name}；每个 policy runtime 需要独立的 host 实例。", this);
+                Log.Error($"AnchorPolicyHost 已绑定 {boundOwner.name}，拒绝再绑定 {owner.name}；每个 runtime 需要独立 policy host。", this);
                 return;
             }
 
@@ -93,113 +166,229 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
-        /// 输入一帧观测并返回输入分类决策。渲染输出请使用 Advance。
+        /// 输入一帧测量并返回分类决策。该方法不输出 stable pose。
         /// </summary>
-        /// <param name="observation">Unity anchor policy 观测。</param>
-        /// <returns>本帧 policy 决策。</returns>
-        public AnchorPolicyDecision AcceptPose(AnchorObservation observation)
+        public AnchorPolicyDecision AcceptPose(in AnchorObservation observation)
         {
-            return Controller.AcceptPose(observation);
+            EnsureReady();
+            double now = ObservationTime(observation);
+            AnchorEstimate predicted = estimatorModule.HasEstimate
+                ? estimatorModule.PredictAt(now)
+                : AnchorEstimate.Stationary(Pose.identity, now);
+            latestGateDecision = gateModule.Evaluate(observation, predicted, estimatorModule.HasEstimate);
+
+            switch (latestGateDecision.Action)
+            {
+                case GateAction.Snap:
+                    if (observation.HasAlignedPose)
+                    {
+                        estimatorModule.Snap(observation);
+                        OnAcceptedObservation(observation, now);
+                    }
+                    else
+                    {
+                        OnMissingObservation(now, observation.FailureReason);
+                    }
+                    break;
+                case GateAction.Accept:
+                    if (observation.HasAlignedPose)
+                    {
+                        estimatorModule.UpdateEstimate(observation);
+                        OnAcceptedObservation(observation, now);
+                    }
+                    else
+                    {
+                        OnMissingObservation(now, observation.FailureReason);
+                    }
+                    break;
+                case GateAction.Reject:
+                    RejectedCount++;
+                    stateMachine.OnUncertainPose(now, latestGateDecision.Reason);
+                    break;
+                default:
+                    if (observation.HasAlignedPose)
+                    {
+                        stateMachine.OnUncertainPose(now, latestGateDecision.Reason);
+                    }
+                    else
+                    {
+                        OnMissingObservation(now, latestGateDecision.Reason);
+                    }
+                    break;
+            }
+
+            return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
         }
 
         /// <summary>
-        /// 每渲染帧推进计时并输出当前 anchor pose。
+        /// 每渲染帧输出当前 stable pose。
         /// </summary>
-        /// <param name="nowSeconds">当前 Unity 单调时间，单位秒。</param>
-        /// <returns>本帧 anchor 输出。</returns>
         public AnchorPolicyOutput Advance(double nowSeconds)
         {
-            return Controller.Advance(nowSeconds);
+            EnsureReady();
+            if (!estimatorModule.HasEstimate)
+            {
+                stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_estimate");
+                return AnchorPolicyOutput.None(stateMachine.State, "no_estimate");
+            }
+
+            double gap = lastAcceptedTimeSeconds >= 0.0 ? Mathf.Max((float)(nowSeconds - lastAcceptedTimeSeconds), 0.0f) : 0.0;
+            if (lastAcceptedTimeSeconds < 0.0)
+            {
+                stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_reliable_pose");
+            }
+            else if (gap > 0.0 && stateMachine.State != AnchorState.Paused)
+            {
+                stateMachine.OnMissingPose(nowSeconds, gap, true, "stale_measurement");
+            }
+
+            if (stateMachine.State == AnchorState.Lost || stateMachine.State == AnchorState.Error || stateMachine.State == AnchorState.Searching)
+            {
+                return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason);
+            }
+
+            AnchorEstimate estimate = estimatorModule.PredictAt(nowSeconds);
+            UpdateMotionState();
+            predictAheadSeconds = lastAcceptedTimeSeconds >= 0.0
+                ? Mathf.Max((float)(nowSeconds - lastAcceptedTimeSeconds), 0.0f)
+                : 0.0f;
+            OutputContext context = new OutputContext(
+                lastAcceptedTimeSeconds,
+                gap,
+                latestAcceptedScore,
+                stateMachine.State,
+                motionState
+            );
+            Pose pose = outputModule.Condition(estimate, nowSeconds, context);
+            return new AnchorPolicyOutput(true, pose, stateMachine.State, motionState, predictAheadSeconds, stateMachine.LastEvent.Reason);
         }
 
-        /// <summary>
-        /// reset command 或 status event 到达时通知 policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">reset 原因。</param>
+        /// <summary>reset command/status 到达时清空 policy。</summary>
         public void NotifyReset(double sampleTimeSeconds, string reason)
         {
-            Controller.NotifyReset(sampleTimeSeconds, reason);
+            ResetModules();
+            stateMachine.OnReset(sampleTimeSeconds, reason ?? "reset");
+            latestGateDecision = GateDecision.Hold(reason ?? "reset");
         }
 
-        /// <summary>
-        /// reacquire command 或 status event 到达时通知 policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">reacquire 原因。</param>
+        /// <summary>reacquire command/status 到达时进入 Relocalizing 并清空估计。</summary>
         public void NotifyReacquire(double sampleTimeSeconds, string reason)
         {
-            Controller.NotifyReacquire(sampleTimeSeconds, reason);
+            ResetModules();
+            stateMachine.OnReacquire(sampleTimeSeconds, reason ?? "reacquire");
+            latestGateDecision = GateDecision.Hold(reason ?? "reacquire");
         }
 
-        /// <summary>
-        /// 暂停本地 anchor policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">暂停原因。</param>
+        /// <summary>暂停本地 policy。</summary>
         public void NotifyPause(double sampleTimeSeconds, string reason)
         {
-            Controller.NotifyPause(sampleTimeSeconds, reason);
+            stateMachine.OnPause(sampleTimeSeconds, reason ?? "pause");
+            latestGateDecision = GateDecision.Hold(reason ?? "pause");
         }
 
-        /// <summary>
-        /// 恢复本地 anchor policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">恢复原因。</param>
+        /// <summary>恢复本地 policy。</summary>
         public void NotifyResume(double sampleTimeSeconds, string reason)
         {
-            Controller.NotifyResume(sampleTimeSeconds, reason);
+            stateMachine.OnResume(sampleTimeSeconds, reason ?? "resume");
+            latestGateDecision = GateDecision.Hold(reason ?? "resume");
         }
 
-        /// <summary>
-        /// Python status/heartbeat 报告错误时通知 policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">错误原因。</param>
-        public void NotifyError(double sampleTimeSeconds, string reason)
-        {
-            Controller.NotifyError(sampleTimeSeconds, reason);
-        }
-
-        /// <summary>
-        /// Python status 报告目标丢失时通知 policy。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">丢失原因。</param>
+        /// <summary>通知本地目标丢失。</summary>
         public void NotifyLost(double sampleTimeSeconds, string reason)
         {
-            Controller.NotifyLost(sampleTimeSeconds, reason);
+            stateMachine.OnMissingPose(sampleTimeSeconds, stateMachine.LostTimeoutSeconds, estimatorModule != null && estimatorModule.HasEstimate, reason ?? "lost");
+            latestGateDecision = GateDecision.Hold(reason ?? "lost");
         }
 
-        /// <summary>
-        /// 清空 policy 内部滤波状态和状态机。
-        /// </summary>
-        /// <param name="sampleTimeSeconds">Unity 单调时间，单位秒。</param>
-        /// <param name="reason">清空原因。</param>
+        /// <summary>通知本地错误。</summary>
+        public void NotifyError(double sampleTimeSeconds, string reason)
+        {
+            stateMachine.OnError(sampleTimeSeconds, reason ?? "error");
+            latestGateDecision = GateDecision.Reject(reason ?? "error");
+        }
+
+        /// <summary>清空状态机和所有模块。</summary>
         public void Clear(double sampleTimeSeconds, string reason)
         {
-            Controller.Clear(sampleTimeSeconds, reason);
+            ResetModules();
+            stateMachine.Clear(sampleTimeSeconds, reason ?? "clear");
+            latestGateDecision = GateDecision.Hold(reason ?? "clear");
         }
 
-        /// <summary>确保 controller 存在并返回。</summary>
-        private PolicyController Controller
+        private void OnAcceptedObservation(in AnchorObservation observation, double nowSeconds)
         {
-            get
+            AcceptedCount++;
+            lastAcceptedTimeSeconds = nowSeconds;
+            latestAcceptedScore = observation.ReliabilityScore;
+            stateMachine.OnReliablePose(nowSeconds, latestGateDecision.Reason);
+            UpdateMotionState();
+        }
+
+        private void OnMissingObservation(double nowSeconds, string reason)
+        {
+            double gap = lastAcceptedTimeSeconds >= 0.0 ? nowSeconds - lastAcceptedTimeSeconds : double.PositiveInfinity;
+            stateMachine.OnMissingPose(nowSeconds, gap, estimatorModule.HasEstimate, string.IsNullOrEmpty(reason) ? "missing_pose" : reason);
+        }
+
+        private void UpdateMotionState()
+        {
+            if (SpeedMps <= staticSpeedThresholdMps && AngularSpeedDps <= staticAngularSpeedThresholdDps)
             {
-                EnsureController();
-                return controller;
+                motionState = estimatorModule != null && estimatorModule.HasEstimate ? AnchorMotionState.Static : AnchorMotionState.Unknown;
+                return;
+            }
+
+            motionState = AnchorMotionState.Moving;
+        }
+
+        private void ResetModules()
+        {
+            gateModule?.ResetModule();
+            estimatorModule?.ResetModule();
+            outputModule?.ResetModule();
+            lastAcceptedTimeSeconds = -1.0;
+            latestAcceptedScore = 1.0f;
+            motionState = AnchorMotionState.Unknown;
+            predictAheadSeconds = 0.0f;
+            AcceptedCount = 0;
+            RejectedCount = 0;
+        }
+
+        private void EnsureReady()
+        {
+            EnsureDefaults();
+            if (gateModule == null || estimatorModule == null || outputModule == null)
+            {
+                throw new System.InvalidOperationException("AnchorPolicyHost 需要显式绑定 gateModule、estimatorModule 和 outputModule。");
             }
         }
 
-        /// <summary>按当前参数包构造 controller（仅在尚不存在时）。</summary>
-        private void EnsureController()
+        private void EnsureDefaults()
         {
-            if (controller == null)
+            if (defaultsInitializedVersion != DefaultsVersion)
             {
-                config ??= new AnchorPolicyConfig();
-                controller = new PolicyController(config);
+                coastTimeoutSeconds = 0.45f;
+                lostTimeoutSeconds = 2.0f;
+                staticSpeedThresholdMps = 0.015f;
+                staticAngularSpeedThresholdDps = 1.5f;
+                strategyLabel = string.Empty;
+                defaultsInitializedVersion = DefaultsVersion;
             }
+
+            if (stateMachine == null)
+            {
+                if (lostTimeoutSeconds <= coastTimeoutSeconds)
+                {
+                    lostTimeoutSeconds = coastTimeoutSeconds * 3.0f;
+                }
+
+                stateMachine = new AnchorStateMachine(coastTimeoutSeconds, lostTimeoutSeconds);
+            }
+        }
+
+        private static double ObservationTime(in AnchorObservation observation)
+        {
+            return observation.HasCaptureTime ? observation.CaptureTimeSeconds : observation.SampleTimeSeconds;
         }
     }
 }

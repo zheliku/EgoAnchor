@@ -23,6 +23,9 @@ namespace EgoAnchor.Alignment
         /// <summary>按写入顺序保存 frame_id，用于淘汰最旧记录。</summary>
         private readonly Queue<long> order = new Queue<long>();
 
+        /// <summary>最近一次写入的 frame_id，用于 arrival-time raw 诊断。</summary>
+        private long latestFrameId = -1;
+
         /// <summary>累计写入次数。</summary>
         public int RecordedCount { get; private set; }
 
@@ -47,6 +50,7 @@ namespace EgoAnchor.Alignment
             int unityFrame)
         {
             FramePoseRecord record = new FramePoseRecord(frameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
+            latestFrameId = frameId;
             if (records.ContainsKey(frameId))
             {
                 records[frameId] = record;
@@ -76,12 +80,25 @@ namespace EgoAnchor.Alignment
         }
 
         /// <summary>
+        /// 尝试读取最近一次记录的 camera pose。
+        /// 仅用于 arrival-time raw 对照诊断；正式 anchor 仍必须按 source frame_id 回查 capture-time pose。
+        /// </summary>
+        /// <param name="record">命中时输出最近记录。</param>
+        /// <returns>是否存在可用记录。</returns>
+        public bool TryGetLatest(out FramePoseRecord record)
+        {
+            record = default;
+            return latestFrameId >= 0 && records.TryGetValue(latestFrameId, out record);
+        }
+
+        /// <summary>
         /// 清空历史记录；后续 reset/reacquire 时可调用。
         /// </summary>
         public void Clear()
         {
             records.Clear();
             order.Clear();
+            latestFrameId = -1;
         }
     }
 

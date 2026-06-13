@@ -11,6 +11,31 @@ using UnityEngine;
 namespace EgoAnchor.Client
 {
     /// <summary>
+    /// Anchor recovery 层使用的最小命令发送契约。
+    /// 生产实现由 AnchorCommandClient 提供；smoke 测试可用 fake sender 避免连接 NATS。
+    /// </summary>
+    public interface IAnchorCommandSender
+    {
+        /// <summary>
+        /// 请求 Python runtime 重新获取目标。ack 只表示命令被接受或拒绝，不表示 recovery 已完成。
+        /// </summary>
+        /// <param name="mode">重获取模式。</param>
+        /// <param name="clearTrackingFirst">执行前是否先清空 Python 旧 tracking 状态。</param>
+        /// <param name="promptOverride">可选 prompt 覆盖。</param>
+        /// <param name="timeoutMs">重获取超时语义预留。</param>
+        /// <param name="reason">本地触发原因。</param>
+        /// <param name="token">取消信号。</param>
+        /// <returns>Python CommandAck；异常或超时时可返回 null。</returns>
+        Task<CommandAck> ReacquireAsync(
+            ReacquireAnchorRequest.Types.ReacquireMode mode,
+            bool clearTrackingFirst,
+            string promptOverride = "",
+            double timeoutMs = 0.0,
+            string reason = "unity_api",
+            CancellationToken token = default);
+    }
+
+    /// <summary>
     /// Anchor 命令客户端。
     ///
     /// 本类是 Unity 侧控制 pose 估计流程的公开 API 层：
@@ -22,7 +47,7 @@ namespace EgoAnchor.Client
     /// 本类只构造 typed Protobuf command，并通过 NatsControlClient 发送 request/reply；
     /// 它不直接操作 Python 模型，也不直接解析 PoseResult。
     /// </summary>
-    public sealed class AnchorCommandClient : MonoBehaviour
+    public sealed class AnchorCommandClient : MonoBehaviour, IAnchorCommandSender
     {
         /// <summary>统一日志通道。</summary>
         private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorCommandClient>();

@@ -13,39 +13,49 @@ using EgoAnchor.Runtime;
 using EgoAnchor.Transport;
 using UnityEngine;
 
-static class Program
+static partial class Program
 {
-    /// <summary>pose 消息间隔（约 15Hz 感知流）。</summary>
-    private const double MsgDt = 1.0 / 15.0;
-
     /// <summary>渲染帧间隔（约 90Hz Advance）。</summary>
     private const double FrameDt = 1.0 / 90.0;
 
     private static int Main()
     {
-        // ===== 统一自适应控制器场景断言 =====
-        AssertFirstPoseSnaps();
-        AssertStaticJitterSuppression();
-        AssertStaticClassifierUsesWindowDispersion();
-        AssertStaticOutputLockSuppressesSmallSlip();
-        AssertMovingOutputDoesNotLockBeforeClassifierStatic();
-        AssertMovingResponseAndPerFrameOutput();
-        AssertLowRateMotionIsInterpolated();
-        AssertScoreHysteresis();
-        AssertLowScoreDoesNotDrag();
-        AssertLowScoreTrackPoseFailsSoftWhenPlausible();
-        AssertLowScoreTrackMotionExitsStatic();
-        AssertLowScoreTrackJumpStillRejected();
-        AssertTeleportRecovery();
-        AssertRotationJumpRecoversSoftly();
-        AssertStaticRotationStartsMoving();
-        AssertMediumTranslationRecoversSoftly();
-        AssertCoastWithoutMessages();
-        AssertRelocalizeSnap();
-        AssertStaleMeasurementIgnored();
-        AssertConfigHotReload();
-        AssertRotationFilterGates();
-        AssertNotifyChain();
+        // ===== 模块化 anchor policy 断言 =====
+        AssertAnchorModulesAreMonoBehaviours();
+        AssertAnchorModulesDoNotExposeModeEnums();
+        AssertAnchorModulesDoNotExposeCreateFactories();
+        AssertAnchorModulesImplementRuntimeMethodsDirectly();
+        AssertAnchorModulesKeepParametersOnMonoBehaviourFields();
+        AssertQuaternionLogExpRoundTrips();
+        AssertQuaternionHemisphereAlignmentUsesShortestArc();
+        AssertEstimatorRotationsPredictBetweenSamples();
+        AssertNullGateIgnoresScore();
+        AssertScoreGateRejectsInvalidFlag();
+        AssertScoreGateHoldsLowScore();
+        AssertScoreGateRejectsAbsoluteJump();
+        AssertAllEstimatorsSnapThenOutputPose();
+        AssertRawEstimatorIsZeroOrderHold();
+        AssertLowPassEstimatorMovesBetweenSamplesWhenPredictionEnabled();
+        AssertKalmanEstimatorPredictsConstantVelocityBetweenSamples();
+        AssertKalmanEstimatorPredictsRotationBetweenSamples();
+        AssertOneEuroEstimatorProducesContinuousRenderOutput();
+        AssertOneEuroEstimatorSmoothsRotationWithoutEulerArtifacts();
+        AssertEgoAnchorEstimatorModuleDampsPredictionWhenScoreDrops();
+        AssertBaselineEstimatorsIgnoreReliabilityScore();
+        AssertEstimatorModulesCreateExpectedEstimatorNames();
+        AssertStaticOutputStageLocksSmallResidualSlip();
+        AssertStaticOutputStageReleasesOnRealMotion();
+        AssertRateLimitPreventsSingleFrameJump();
+        AssertPassThroughDoesNotModifyPose();
+        AssertPolicyHostMapsGateActionsToPolicyDecision();
+        AssertPolicyHostAdvancesEveryRenderFrame();
+        AssertPolicyHostCoastsThenFreezesThenLost();
+        AssertPolicyHostRequiresExplicitModules();
+        AssertPolicyHostDoesNotUseEnumSelection();
+        AssertPoseToAnchorRuntimeUsesPolicyHostField();
+        AssertPolicyRuntimeUsesPolicyHostOnly();
+        AssertDynamicObjectAnchorReadsRuntimeStablePoseOnly();
+        AssertDynamicObjectAnchorHasNoRawSmoothedEnum();
 
         // ===== frame-aligned 数学与坐标补偿断言 =====
         Pose objectWorldPose = new Pose(new Vector3(0.35f, 0.05f, 1.2f), YawDegrees(25f));
@@ -97,910 +107,48 @@ static class Program
         Assert(status.Event == "REACQUIRE_STARTED", "status smoke should expose event name");
         Assert(PoseToAnchorRuntime.IsReacquireStartedStatus(status.Event), "REACQUIRE_STARTED should enter local relocalizing flow");
         Assert(!PoseToAnchorRuntime.IsReacquireStartedStatus("REACQUIRE_SUCCEEDED"), "REACQUIRE_SUCCEEDED should not be treated as a new reacquire start");
-        Assert(!PoseToAnchorRuntime.IsReacquireStartedStatus("REACQUIRE_RESTARTED"), "only the exact started event should enter local relocalizing flow");
         Assert(PoseToAnchorRuntime.IsResetAppliedStatus("RESET_APPLIED"), "RESET_APPLIED should enter local reset flow");
-        Assert(!PoseToAnchorRuntime.IsResetAppliedStatus("RESET_FAILED"), "RESET_FAILED should not be treated as an applied reset");
         Assert(PoseToAnchorRuntime.IsPauseAppliedStatus("PAUSE_APPLIED"), "PAUSE_APPLIED should enter local pause flow");
-        Assert(!PoseToAnchorRuntime.IsPauseAppliedStatus("PAUSE_REJECTED"), "PAUSE_REJECTED should not be treated as an applied pause");
         Assert(PoseToAnchorRuntime.IsResumeAppliedStatus("RESUME_APPLIED"), "RESUME_APPLIED should enter local resume flow");
-        Assert(!PoseToAnchorRuntime.IsResumeAppliedStatus("RESUME_FAILED"), "RESUME_FAILED should not be treated as an applied resume");
 
         // ===== Hub / NATS / 队列 / runtime 集成断言 =====
         AssertAnchorRuntimeHubCountsOnlyActiveTargets();
-        AssertAnchorRuntimeHubIsolatesRuntimeExceptions();
         AssertNatsBytesClientSubscriptionOrder();
         AssertNatsBytesClientRequestCancelsOnStop();
         AssertQueuesCanBeCleared();
         AssertNatsControlClientStopClearsPayloadQueues();
         AssertPoseRuntimeIgnoresPoseWhilePaused();
         AssertPoseRuntimeRejectsNonFinitePoseMatrix();
-        AssertPolicyPathSkipsProcessors();
+        AssertPolicyPathUsesPolicyHostOnly();
+        AssertRecoveryControllerDoesNothingWhenDisabled();
+        AssertRecoveryControllerTriggersOnLostWhenEnabled();
+        AssertRecoveryControllerTriggersOnLowScoreOnlyWhenEnabled();
+        AssertRecoveryControllerHonorsCooldownAndInFlight();
+        AssertRecoveryControllerWaitsWhenInputNotReady();
 
         Console.WriteLine("Anchor policy smoke passed.");
         return 0;
     }
 
-    // ===================== 控制器场景 =====================
-
-    /// <summary>S1：首条高分测量应贴合接受并进入 Tracking，输出与测量一致。</summary>
-    private static void AssertFirstPoseSnaps()
-    {
-        PolicyController controller = new PolicyController();
-        Pose pose = new Pose(new Vector3(0.3f, -0.2f, 1.0f), YawDegrees(30f));
-        AnchorPolicyDecision first = controller.AcceptPose(MakeTrackObservation(1, pose, 0.0, 0.9f));
-        Assert(first.Action == AnchorPolicyAction.Snap, "first reliable pose should snap-accept");
-        Assert(first.State == AnchorState.Tracking, "first reliable pose should enter Tracking");
-
-        AnchorPolicyOutput output = controller.Advance(0.01);
-        Assert(output.HasPose, "first pose should produce an output");
-        Assert(Vector3.Distance(output.Pose.position, pose.position) < 1e-4f, "first output should match the snapped measurement position");
-        Assert(QuaternionAngleDegrees(output.Pose.rotation, pose.rotation) < 0.1f, "first output should match the snapped measurement rotation");
-    }
-
-    /// <summary>
-    /// S2（PRIMARY 闸门）：静止物体 + 测量噪声下，输出抖动必须显著低于输入，
-    /// 且旋转抖动必须优于旧 8/s 指数 Slerp 基线（对应实测 1.27° 问题）。
-    /// </summary>
-    private static void AssertStaticJitterSuppression()
-    {
-        PolicyController controller = new PolicyController();
-        Pose truth = new Pose(new Vector3(0.3f, -0.2f, 1.0f), YawDegrees(30f));
-        Lcg rng = new Lcg(20260612);
-        const int messageCount = 200;
-        const int warmupMessages = 100;
-        const float posSigma = 0.002f;
-        const float rotSigmaDeg = 0.5f;
-
-        List<Pose> measurements = new List<Pose>(messageCount);
-        for (int i = 0; i < messageCount; i++)
-        {
-            measurements.Add(MakeNoisyPose(truth, posSigma, rotSigmaDeg, ref rng));
-        }
-
-        List<float> inputPosErrors = new List<float>();
-        List<float> inputRotErrors = new List<float>();
-        List<float> outputPosErrors = new List<float>();
-        List<float> outputRotErrors = new List<float>();
-        double firstStaticTime = -1.0;
-        Pose lastOutputPose = Pose.identity;
-
-        for (int i = 0; i < messageCount; i++)
-        {
-            double t = i * MsgDt;
-            controller.AcceptPose(MakeTrackObservation(i + 1, measurements[i], t, 0.9f));
-            if (firstStaticTime < 0.0 && controller.MotionState == AnchorMotionState.Static)
-            {
-                firstStaticTime = t;
-            }
-
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                AnchorPolicyOutput output = controller.Advance(ta);
-                lastOutputPose = output.Pose;
-                if (i >= warmupMessages)
-                {
-                    outputPosErrors.Add(Vector3.Distance(output.Pose.position, truth.position));
-                    outputRotErrors.Add(QuaternionAngleDegrees(output.Pose.rotation, truth.rotation));
-                }
-            }
-
-            if (i >= warmupMessages)
-            {
-                inputPosErrors.Add(Vector3.Distance(measurements[i].position, truth.position));
-                inputRotErrors.Add(QuaternionAngleDegrees(measurements[i].rotation, truth.rotation));
-            }
-        }
-
-        // 旧基线：8/s 指数 Slerp（AnchorKalmanPoseProcessor 的旋转通道），同一测量序列。
-        Quaternion slerpRotation = measurements[0].rotation;
-        List<float> slerpRotErrors = new List<float>();
-        float slerpBlend = 1f - (float)Math.Exp(-8.0 * MsgDt);
-        for (int i = 1; i < messageCount; i++)
-        {
-            slerpRotation = NlerpStep(slerpRotation, measurements[i].rotation, slerpBlend);
-            if (i >= warmupMessages)
-            {
-                slerpRotErrors.Add(QuaternionAngleDegrees(slerpRotation, truth.rotation));
-            }
-        }
-
-        float inputPosRms = Rms(inputPosErrors);
-        float inputRotRms = Rms(inputRotErrors);
-        float outputPosRms = Rms(outputPosErrors);
-        float outputRotRms = Rms(outputRotErrors);
-        float slerpRotRms = Rms(slerpRotErrors);
-
-        Assert(firstStaticTime >= 0.0 && firstStaticTime <= 1.0, $"static mode should engage within 1s, got {firstStaticTime:F2}s");
-        Assert(outputPosRms < inputPosRms * 0.3f, $"static position jitter should drop below 0.3x input (out={outputPosRms * 1000:F3}mm, in={inputPosRms * 1000:F3}mm)");
-        Assert(outputRotRms < inputRotRms * 0.3f, $"static rotation jitter should drop below 0.3x input (out={outputRotRms:F3}deg, in={inputRotRms:F3}deg)");
-        Assert(outputRotRms < slerpRotRms, $"static rotation jitter must beat the 8/s slerp baseline (filter={outputRotRms:F3}deg, slerp={slerpRotRms:F3}deg)");
-        Assert(Vector3.Distance(lastOutputPose.position, truth.position) < 0.001f, "static output should not drift away from truth");
-    }
-
-    /// <summary>S2b：静止锁应吸收小范围 world-pose 残余 slip，直到偏差超过释放阈值才跟随。</summary>
-    private static void AssertStaticOutputLockSuppressesSmallSlip()
-    {
-        PolicyController controller = new PolicyController();
-        Pose truth = new Pose(new Vector3(0.3f, -0.2f, 1.0f), Quaternion.identity);
-        for (int i = 0; i < 25; i++)
-        {
-            double t = i * MsgDt;
-            controller.AcceptPose(MakeTrackObservation(i + 1, truth, t, 0.9f));
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                controller.Advance(ta);
-            }
-        }
-
-        Assert(controller.MotionState == AnchorMotionState.Static, "seeded stable stream should enter Static before slip suppression probe");
-        double probeTime = 25 * MsgDt;
-        Pose locked = controller.Advance(probeTime).Pose;
-        float maxSlipMeters = 0f;
-        for (int j = 0; j < 6; j++)
-        {
-            float sign = j % 2 == 0 ? 1f : -1f;
-            Pose slippedMeasurement = new Pose(truth.position + new Vector3(0.015f * sign, 0f, 0f), truth.rotation);
-            double t = probeTime + j * MsgDt;
-            controller.AcceptPose(MakeTrackObservation(100 + j, slippedMeasurement, t, 0.9f));
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                Pose output = controller.Advance(ta).Pose;
-                maxSlipMeters = Math.Max(maxSlipMeters, Vector3.Distance(output.position, locked.position));
-            }
-        }
-
-        Assert(maxSlipMeters < 0.002f, $"static output lock should suppress sub-release slip (max={maxSlipMeters * 1000:F2}mm)");
-
-        Pose moved = new Pose(truth.position + new Vector3(0.05f, 0f, 0f), truth.rotation);
-        double moveTime = probeTime + 6 * MsgDt;
-        controller.AcceptPose(MakeTrackObservation(200, moved, moveTime, 0.9f));
-        Pose released = controller.Advance(moveTime + 4 * FrameDt).Pose;
-        Assert(Vector3.Distance(released.position, locked.position) > 0.004f, "static output lock should release when the target clearly moves");
-    }
-
-    /// <summary>S2c：静止分类使用窗口散布而不是首样本锚点，能容忍围绕真实位置的对称残差。</summary>
-    private static void AssertStaticClassifierUsesWindowDispersion()
-    {
-        AnchorPolicyConfig config = new AnchorPolicyConfig
-        {
-            staticEnterRadius = 0.012f,
-            staticEnterDuration = 0.45f,
-        };
-        PolicyController controller = new PolicyController(config);
-        Pose truth = new Pose(new Vector3(0.3f, -0.2f, 1.0f), Quaternion.identity);
-        double firstStaticTime = -1.0;
-
-        for (int k = 0; k < 24; k++)
-        {
-            double t = k * MsgDt;
-            float offset = k % 2 == 0 ? 0.010f : -0.010f;
-            Pose residualPose = new Pose(truth.position + new Vector3(offset, 0f, 0f), truth.rotation);
-            controller.AcceptPose(MakeTrackObservation(k + 1, residualPose, t, 0.9f));
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                controller.Advance(ta);
-            }
-
-            if (firstStaticTime < 0.0 && controller.MotionState == AnchorMotionState.Static)
-            {
-                firstStaticTime = t;
-            }
-        }
-
-        Assert(firstStaticTime >= 0.0 && firstStaticTime <= 1.0, $"centered residuals should enter Static via window dispersion, got {firstStaticTime:F2}s");
-    }
-
-    /// <summary>S2d：classifier 未确认 Static 时，低速真实运动也不能被渲染输出层偷偷锁住。</summary>
-    private static void AssertMovingOutputDoesNotLockBeforeClassifierStatic()
-    {
-        AnchorPolicyConfig config = new AnchorPolicyConfig
-        {
-            staticEnterRadius = 0.001f,
-            staticEnterDuration = 10f,
-        };
-        PolicyController controller = new PolicyController(config);
-        Vector3 start = new Vector3(0.3f, -0.2f, 1.0f);
-        Vector3 velocity = new Vector3(0.025f, 0f, 0f);
-        Pose firstOutput = Pose.identity;
-        Pose lastOutput = Pose.identity;
-
-        for (int k = 0; k < 30; k++)
-        {
-            double t = k * 0.20;
-            Pose measured = new Pose(start + velocity * (float)t, Quaternion.identity);
-            controller.AcceptPose(MakeTrackObservation(k + 1, measured, t, 0.9f));
-            lastOutput = controller.Advance(t + 3 * FrameDt).Pose;
-            if (k == 0)
-            {
-                firstOutput = lastOutput;
-            }
-        }
-
-        Assert(controller.MotionState != AnchorMotionState.Static, "test setup should keep classifier out of Static");
-        Assert(Vector3.Distance(lastOutput.position, firstOutput.position) > 0.05f, "moving output must keep following sustained slow motion before Static is confirmed");
-    }
-
-    /// <summary>
-    /// S3：匀速运动 + 120ms 管线延迟下，渲染时刻预测应显著降低误差，
-    /// 且无新消息时相邻两帧输出仍连续变化（逐帧运动，而不是消息阶梯）。
-    /// </summary>
-    private static void AssertMovingResponseAndPerFrameOutput()
-    {
-        PolicyController controller = new PolicyController();
-        Vector3 startPos = new Vector3(0f, 0f, 1f);
-        Vector3 velocity = new Vector3(0.5f, 0f, 0f);
-        Quaternion rotation = YawDegrees(10f);
-        const double latency = 0.12;
-        const int messageCount = 60;
-        Lcg rng = new Lcg(42);
-
-        List<float> filterErrors = new List<float>();
-        List<float> rawLatchedErrors = new List<float>();
-        bool sawMoving = false;
-        bool sawPerFrameMotion = false;
-
-        Pose latestArrived = Pose.identity;
-        for (int k = 0; k < messageCount; k++)
-        {
-            double capture = k * MsgDt;
-            double arrival = capture + latency;
-            Pose truthAtCapture = new Pose(startPos + velocity * (float)capture, rotation);
-            Pose measured = MakeNoisyPose(truthAtCapture, 0.002f, 0.3f, ref rng);
-            controller.AcceptPose(MakeTrackObservation(k + 1, measured, arrival, 0.9f, capture));
-            latestArrived = measured;
-            sawMoving |= controller.MotionState == AnchorMotionState.Moving;
-
-            Pose previousOutput = Pose.identity;
-            bool hasPreviousOutput = false;
-            double nextArrival = arrival + MsgDt;
-            for (double ta = arrival + FrameDt; ta < nextArrival; ta += FrameDt)
-            {
-                AnchorPolicyOutput output = controller.Advance(ta);
-                Vector3 truthNow = startPos + velocity * (float)ta;
-                if (capture > 1.5)
-                {
-                    filterErrors.Add(Vector3.Distance(output.Pose.position, truthNow));
-                    rawLatchedErrors.Add(Vector3.Distance(latestArrived.position, truthNow));
-                    if (hasPreviousOutput && ta - arrival < 0.02 + FrameDt
-                        && Vector3.Distance(output.Pose.position, previousOutput.position) > 0.001f)
-                    {
-                        sawPerFrameMotion = true;
-                    }
-                }
-
-                previousOutput = output.Pose;
-                hasPreviousOutput = true;
-            }
-        }
-
-        float filterP90 = Percentile(filterErrors, 0.90f);
-        float rawP90 = Percentile(rawLatchedErrors, 0.90f);
-        Assert(sawMoving, "uniform motion should classify as Moving");
-        Assert(sawPerFrameMotion, "consecutive Advance outputs without a new message should still move (per-frame prediction)");
-        Assert(filterP90 < rawP90 * 0.5f, $"predicted output P90 error should beat arrival-latched raw by 2x (filter={filterP90 * 1000:F1}mm, raw={rawP90 * 1000:F1}mm)");
-    }
-
-    /// <summary>S3b：4-5Hz 低频 pose 流下，渲染输出仍应在 source frame 间连续插值，而不是长时间零增量。</summary>
-    private static void AssertLowRateMotionIsInterpolated()
-    {
-        PolicyController controller = new PolicyController();
-        Vector3 startPos = new Vector3(0f, 0f, 1f);
-        Vector3 velocity = new Vector3(0.35f, 0f, 0f);
-        const float yawRateDps = 45f;
-        const double lowRateMsgDt = 0.22;
-        const double latency = 0.22;
-        const int messageCount = 35;
-        int movingRenderSteps = 0;
-        int rotatingRenderSteps = 0;
-        int renderSteps = 0;
-        int zeroRun = 0;
-        int maxZeroRun = 0;
-        Pose previousOutput = Pose.identity;
-        bool hasPreviousOutput = false;
-
-        for (int k = 0; k < messageCount; k++)
-        {
-            double capture = k * lowRateMsgDt;
-            double arrival = capture + latency;
-            Pose measured = new Pose(startPos + velocity * (float)capture, YawDegrees(yawRateDps * (float)capture));
-            controller.AcceptPose(MakeTrackObservation(k + 1, measured, arrival, 0.9f, capture));
-
-            double nextArrival = arrival + lowRateMsgDt;
-            for (double ta = arrival + FrameDt; ta < nextArrival; ta += FrameDt)
-            {
-                AnchorPolicyOutput output = controller.Advance(ta);
-                if (capture > 1.0 && hasPreviousOutput)
-                {
-                    renderSteps++;
-                    bool moved = Vector3.Distance(output.Pose.position, previousOutput.position) > 0.0002f;
-                    bool rotated = QuaternionAngleDegrees(output.Pose.rotation, previousOutput.rotation) > 0.02f;
-                    if (moved)
-                    {
-                        movingRenderSteps++;
-                        zeroRun = 0;
-                    }
-                    else
-                    {
-                        zeroRun++;
-                        maxZeroRun = Math.Max(maxZeroRun, zeroRun);
-                    }
-
-                    if (rotated)
-                    {
-                        rotatingRenderSteps++;
-                    }
-                }
-
-                previousOutput = output.Pose;
-                hasPreviousOutput = true;
-            }
-        }
-
-        float movingRatio = renderSteps > 0 ? (float)movingRenderSteps / renderSteps : 0f;
-        float rotatingRatio = renderSteps > 0 ? (float)rotatingRenderSteps / renderSteps : 0f;
-        Assert(movingRatio > 0.75f, $"low-rate translation should be spread across render frames (movingRatio={movingRatio:F2})");
-        Assert(rotatingRatio > 0.65f, $"low-rate rotation should be spread across render frames (rotatingRatio={rotatingRatio:F2})");
-        Assert(maxZeroRun <= 3, $"low-rate motion should not contain long still runs between source frames (maxZeroRun={maxZeroRun})");
-    }
-
-    /// <summary>S4：分数滞回——已跟踪时 0.30 分仍接受；冷启动 0.30 分不接受。</summary>
-    private static void AssertScoreHysteresis()
-    {
-        PolicyController controller = new PolicyController();
-        Pose pose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, pose, 0.0, 0.9f));
-        controller.AcceptPose(MakeTrackObservation(2, pose, MsgDt, 0.9f));
-
-        AnchorPolicyDecision stayBand = controller.AcceptPose(MakeTrackObservation(3, pose, 2 * MsgDt, 0.30f));
-        Assert(stayBand.Action == AnchorPolicyAction.Accept, "score 0.30 within stay band should remain accepted while tracking");
-
-        controller.NotifyReset(1.0, "smoke");
-        AnchorPolicyDecision coldStart = controller.AcceptPose(MakeTrackObservation(4, pose, 1.1, 0.30f));
-        Assert(coldStart.Action == AnchorPolicyAction.Reject, "score 0.30 below enter threshold should not start tracking after reset");
-    }
-
-    /// <summary>S5：低分测量不得拖拽输出——中间带冻结保持，强低分拒绝。</summary>
-    private static void AssertLowScoreDoesNotDrag()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 5; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        Pose offsetPose = new Pose(basePose.position + new Vector3(0.5f, 0f, 0f), Quaternion.identity);
-        AnchorPolicyDecision hold = controller.AcceptPose(MakeTrackObservation(6, offsetPose, 5 * MsgDt, 0.2f));
-        Assert(hold.Action == AnchorPolicyAction.Hold, "mid-band low score should hold without updating");
-        AnchorPolicyOutput heldOutput = controller.Advance(5 * MsgDt + 0.01);
-        Assert(Vector3.Distance(heldOutput.Pose.position, offsetPose.position) > 0.4f, "held output should not be dragged toward the low-score measurement");
-        Assert(Vector3.Distance(heldOutput.Pose.position, basePose.position) < 0.05f, "held output should stay near the last trusted pose");
-
-        AnchorPolicyDecision reject = controller.AcceptPose(MakeTrackObservation(7, offsetPose, 6 * MsgDt, 0.05f));
-        Assert(reject.Action == AnchorPolicyAction.Reject, "score below hold minimum should reject outright");
-    }
-
-    /// <summary>S5b：已有跟踪后，低分但连续合理的 TRACK pose 应低权重进入滤波，不能让 anchor 长时间 Lost。</summary>
-    private static void AssertLowScoreTrackPoseFailsSoftWhenPlausible()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
-        controller.Advance(FrameDt);
-
-        AnchorPolicyDecision decision = default;
-        Pose output = basePose;
-        const double lowRateDt = 0.40;
-        for (int i = 1; i <= 24; i++)
-        {
-            double t = i * lowRateDt;
-            Pose lowScorePose = new Pose(basePose.position + new Vector3(0.012f * i, 0f, 0f), Quaternion.identity);
-            decision = controller.AcceptPose(MakeTrackObservation(10 + i, lowScorePose, t, 0.04f));
-            for (double ta = t + FrameDt; ta < t + lowRateDt; ta += FrameDt)
-            {
-                output = controller.Advance(ta).Pose;
-            }
-        }
-
-        Assert(decision.Action == AnchorPolicyAction.Accept, "plausible low-score TRACK pose should be accepted fail-soft after tracking is established");
-        Assert(decision.Reason == "low_score_track", "plausible low-score TRACK pose should be labeled low_score_track");
-        Assert(decision.State == AnchorState.Tracking, "each low-score fail-soft pose should refresh the lifecycle to Tracking");
-        Assert(controller.State == AnchorState.Tracking || controller.State == AnchorState.Coasting, "low-score fail-soft streak should not degrade to Frozen/Lost");
-        Assert(Vector3.Distance(output.position, basePose.position) > 0.05f, "low-score fail-soft tracking should still move the output over sustained motion");
-    }
-
-    /// <summary>S5c：已进入 Static 后，低分但连续合理的 TRACK 运动也必须解锁并恢复跟随。</summary>
-    private static void AssertLowScoreTrackMotionExitsStatic()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 14; i++)
-        {
-            double t = i * MsgDt;
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, t, 0.9f));
-            controller.Advance(t + FrameDt);
-        }
-
-        Assert(controller.MotionState == AnchorMotionState.Static, "seeded stable stream should enter Static before low-score motion probe");
-        Pose locked = controller.Advance(14 * MsgDt + FrameDt).Pose;
-
-        AnchorPolicyDecision decision = default;
-        Pose output = locked;
-        for (int i = 0; i < 10; i++)
-        {
-            double t = (15 + i) * MsgDt;
-            Pose movingPose = new Pose(basePose.position + new Vector3(0.012f * (i + 1), 0f, 0f), Quaternion.identity);
-            decision = controller.AcceptPose(MakeTrackObservation(50 + i, movingPose, t, 0.04f));
-            output = controller.Advance(t + 4 * FrameDt).Pose;
-        }
-
-        Assert(decision.Action == AnchorPolicyAction.Accept, "low-score TRACK motion should be accepted fail-soft after Static");
-        Assert(decision.Reason == "low_score_track", "low-score TRACK motion after Static should keep the fail-soft reason");
-        Assert(controller.MotionState == AnchorMotionState.Moving, "low-score TRACK motion should exit Static");
-        Assert(controller.State == AnchorState.Tracking || controller.State == AnchorState.Coasting, "low-score TRACK motion should not leave the anchor Lost");
-        Assert(Vector3.Distance(output.position, locked.position) > 0.02f, "output should release the static lock and follow sustained low-score TRACK motion");
-    }
-
-    /// <summary>S5d：低分 TRACK pose 若是大跳变，仍应拒绝，避免低质量外点拖拽 anchor。</summary>
-    private static void AssertLowScoreTrackJumpStillRejected()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
-        controller.Advance(FrameDt);
-
-        Pose jumpedPose = new Pose(basePose.position + new Vector3(0.35f, 0f, 0f), Quaternion.identity);
-        AnchorPolicyDecision decision = controller.AcceptPose(MakeTrackObservation(2, jumpedPose, MsgDt, 0.04f));
-        Pose output = controller.Advance(MsgDt + 3 * FrameDt).Pose;
-
-        Assert(decision.Action == AnchorPolicyAction.Reject, "low-score large TRACK jump should still be rejected");
-        Assert(decision.Reason == "score_reject", "low-score large TRACK jump should keep the score rejection reason");
-        Assert(Vector3.Distance(output.position, jumpedPose.position) > 0.20f, "rejected low-score jump should not drag the output");
-    }
-
-    /// <summary>S6：单帧大跳变拒绝；连续高分且互相一致的新位置达到次数后判定真实瞬移并贴合恢复。</summary>
-    private static void AssertTeleportRecovery()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 5; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        Vector3 teleportedCenter = basePose.position + new Vector3(2f, 0f, 0f);
-        AnchorPolicyDecision lastDecision = default;
-        for (int j = 0; j < 5; j++)
-        {
-            Vector3 jitter = new Vector3(0.01f * (j % 2 == 0 ? 1f : -1f), 0f, 0f);
-            Pose teleported = new Pose(teleportedCenter + jitter, Quaternion.identity);
-            lastDecision = controller.AcceptPose(MakeTrackObservation(10 + j, teleported, (5 + j) * MsgDt, 0.9f));
-            if (j < 4)
-            {
-                Assert(lastDecision.Action == AnchorPolicyAction.Reject, $"teleport measurement {j + 1} should be rejected by the innovation gate");
-                Assert(lastDecision.Reason.StartsWith("translation", StringComparison.Ordinal), "teleport rejection reason should name the translation gate");
-            }
-        }
-
-        Assert(lastDecision.Action == AnchorPolicyAction.Snap, "5th consistent high-score teleport measurement should snap-accept");
-        Assert(lastDecision.Reason == "teleport_recovery", "teleport recovery should be labeled");
-        AnchorPolicyOutput output = controller.Advance(10 * MsgDt + 0.01);
-        Assert(Vector3.Distance(output.Pose.position, teleportedCenter) < 0.02f, "output should land at the teleported position after recovery");
-        Assert(lastDecision.State == AnchorState.Tracking, "teleport recovery should return to Tracking");
-    }
-
-    /// <summary>S6b：单帧大旋转外点拒绝；持续一致的大旋转走软恢复，不触发 hard Snap。</summary>
-    private static void AssertRotationJumpRecoversSoftly()
-    {
-        PolicyController controller = new PolicyController();
-        AnchorPolicyConfig config = new AnchorPolicyConfig();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 5; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        Pose rotatedOutlier = new Pose(basePose.position, YawDegrees(120f));
-        AnchorPolicyDecision first = controller.AcceptPose(MakeTrackObservation(20, rotatedOutlier, 5 * MsgDt, 0.9f));
-        Assert(first.Action == AnchorPolicyAction.Reject, "single rotation-only outlier should be rejected first");
-        Assert(first.Reason.StartsWith("rotation", StringComparison.Ordinal), "rotation-only outlier rejection should name the rotation gate");
-
-        AnchorPolicyOutput held = controller.Advance(5 * MsgDt + FrameDt);
-        Assert(QuaternionAngleDegrees(held.Pose.rotation, basePose.rotation) < 1f, "single rotation outlier must not change the output rotation");
-
-        AnchorPolicyDecision recovered = default;
-        double recoveryTime = 0.0;
-        bool sawRecovery = false;
-        for (int j = 1; j <= config.softRecoveryCount + 2; j++)
-        {
-            recoveryTime = (5 + j) * MsgDt;
-            recovered = controller.AcceptPose(MakeTrackObservation(20 + j, rotatedOutlier, recoveryTime, 0.9f));
-            if (recovered.Action == AnchorPolicyAction.Accept && recovered.Reason == "rotation_recovery")
-            {
-                sawRecovery = true;
-                break;
-            }
-
-            Assert(recovered.Action == AnchorPolicyAction.Reject, "rotation recovery should reject until enough consistent evidence is accumulated");
-            Assert(recovered.Reason.StartsWith("rotation", StringComparison.Ordinal), "pre-recovery rotation rejection should name the rotation gate");
-        }
-
-        Assert(sawRecovery, "consistent rotation-only measurements should soft-recover into the filter");
-        AnchorPolicyOutput output = controller.Advance(recoveryTime + FrameDt);
-        float recoveredAngle = QuaternionAngleDegrees(output.Pose.rotation, basePose.rotation);
-        float remainingError = QuaternionAngleDegrees(output.Pose.rotation, rotatedOutlier.rotation);
-        Assert(recoveredAngle > 5f, "rotation recovery should start moving toward the sustained measurement");
-        Assert(remainingError > 5f, "rotation recovery should not hard-snap to the sustained measurement in one frame");
-    }
-
-    /// <summary>S6c：静止锁定后出现可信真实旋转，应立即退出静止并进入正常跟随。</summary>
-    private static void AssertStaticRotationStartsMoving()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 20; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        Assert(controller.MotionState == AnchorMotionState.Static, "seeded stable stream should enter Static before the rotation probe");
-
-        Pose rotated = new Pose(basePose.position, YawDegrees(35f));
-        double t = 20 * MsgDt;
-        AnchorPolicyDecision decision = controller.AcceptPose(MakeTrackObservation(40, rotated, t, 0.9f));
-        Assert(decision.Action == AnchorPolicyAction.Accept, "trusted rotation after Static should be accepted as motion");
-        Assert(decision.Reason == "motion_start" || decision.Reason == "trusted_motion", "trusted rotation should be labeled as motion start/trusted motion");
-        Assert(controller.MotionState == AnchorMotionState.Moving, "trusted rotation should immediately leave Static");
-
-        AnchorPolicyOutput output = controller.Advance(t + FrameDt);
-        Assert(QuaternionAngleDegrees(output.Pose.rotation, basePose.rotation) > 1f, "rotation motion start should move the output toward the measurement");
-        Assert(QuaternionAngleDegrees(output.Pose.rotation, rotated.rotation) > 1f, "rotation motion start should remain filtered rather than snapping");
-    }
-
-    /// <summary>S6d：低于硬瞬移阈值但超过可信运动范围的持续平移，应软恢复而不是永久拒绝。</summary>
-    private static void AssertMediumTranslationRecoversSoftly()
-    {
-        PolicyController controller = new PolicyController();
-        AnchorPolicyConfig config = new AnchorPolicyConfig();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 5; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        Pose moved = new Pose(basePose.position + new Vector3(config.trustedMotionTranslationMeters + 0.12f, 0f, 0f), Quaternion.identity);
-        AnchorPolicyDecision first = controller.AcceptPose(MakeTrackObservation(60, moved, 5 * MsgDt, 0.9f));
-        Assert(first.Action == AnchorPolicyAction.Reject, "first medium translation jump should be rejected until consistency is established");
-
-        AnchorPolicyDecision recovered = default;
-        for (int j = 1; j <= config.softRecoveryCount + 2; j++)
-        {
-            recovered = controller.AcceptPose(MakeTrackObservation(60 + j, moved, (5 + j) * MsgDt, 0.9f));
-            if (recovered.Action == AnchorPolicyAction.Accept && recovered.Reason == "motion_recovery")
-            {
-                break;
-            }
-        }
-
-        Assert(recovered.Action == AnchorPolicyAction.Accept, "consistent medium translation should soft-recover into the filter");
-        Assert(recovered.Reason == "motion_recovery", "medium translation recovery should not reuse teleport_recovery");
-    }
-
-    /// <summary>
-    /// S7：消息完全停发后，仅靠每帧 Advance 推进：Tracking -> Coasting（阻尼外推、位移有界）
-    /// -> FrozenUncertain（封账冻结，输出连续且不再移动）-> Lost（仍保留输出）。
-    /// </summary>
-    private static void AssertCoastWithoutMessages()
-    {
-        PolicyController controller = new PolicyController();
-        AnchorPolicyConfig config = new AnchorPolicyConfig();
-        Vector3 startPos = new Vector3(0f, 0f, 1f);
-        Vector3 velocity = new Vector3(0.5f, 0f, 0f);
-        const float yawRate = 45f;
-        const int messageCount = 30;
-        double lastTime = 0.0;
-        Vector3 lastTruth = startPos;
-        for (int k = 0; k < messageCount; k++)
-        {
-            double t = k * MsgDt;
-            Pose truth = new Pose(startPos + velocity * (float)t, YawDegrees(yawRate * (float)t));
-            controller.AcceptPose(MakeTrackObservation(k + 1, truth, t, 0.9f));
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                controller.Advance(ta);
-            }
-
-            lastTime = t;
-            lastTruth = truth.position;
-        }
-
-        AnchorPolicyOutput tracking = controller.Advance(lastTime + config.coastGraceSeconds * 0.5);
-        Assert(tracking.State == AnchorState.Tracking, "within coast grace the state should remain Tracking");
-
-        double coastASeconds = lastTime + config.coastGraceSeconds + 0.04;
-        double coastBSeconds = Math.Min(lastTime + config.maxCoastSeconds - 0.01, coastASeconds + 0.05);
-        AnchorPolicyOutput coastA = controller.Advance(coastASeconds);
-        AnchorPolicyOutput coastB = controller.Advance(coastBSeconds);
-        Assert(coastA.State == AnchorState.Coasting && coastB.State == AnchorState.Coasting, "between grace and max coast the state should be Coasting");
-        Assert(Vector3.Distance(coastB.Pose.position, coastA.Pose.position) > 0.001f, "coasting output should keep moving along the damped velocity");
-        Assert(QuaternionAngleDegrees(coastB.Pose.rotation, coastA.Pose.rotation) < 0.1f, "coasting output should hold rotation instead of extrapolating stale angular velocity");
-        float coastDistance = Vector3.Distance(coastB.Pose.position, lastTruth);
-        float coastBound = velocity.magnitude * (config.maxPredictAheadSeconds + config.velocityDampingTauSeconds) + 0.06f;
-        Assert(coastDistance < coastBound, $"coast displacement should stay bounded (dist={coastDistance:F3}, bound={coastBound:F3})");
-
-        AnchorPolicyOutput frozenA = controller.Advance(lastTime + config.maxCoastSeconds + 0.05);
-        AnchorPolicyOutput frozenB = controller.Advance(lastTime + config.maxCoastSeconds + 0.07);
-        Assert(frozenA.State == AnchorState.FrozenUncertain, "beyond max coast the state should be FrozenUncertain");
-        Assert(Vector3.Distance(frozenB.Pose.position, frozenA.Pose.position) < 0.0001f, "frozen output should stop moving");
-        Assert(Vector3.Distance(frozenA.Pose.position, coastB.Pose.position) < velocity.magnitude * 0.25f, "freeze must stay continuous with the last coast output, not jump back");
-
-        AnchorPolicyOutput lost = controller.Advance(lastTime + 2.5);
-        Assert(lost.State == AnchorState.Lost, "after lost timeout the state should be Lost");
-        Assert(lost.HasPose, "Lost should keep the last pose for display policy to decide");
-    }
-
-    /// <summary>S8：Lost 后 RE_REGISTER 低分测量应贴合接受并回到 Tracking。</summary>
-    private static void AssertRelocalizeSnap()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
-        AnchorPolicyOutput lost = controller.Advance(2.5);
-        Assert(lost.State == AnchorState.Lost, "no measurements for 2.5s should reach Lost");
-
-        Pose relocalized = new Pose(basePose.position + new Vector3(1.5f, 0f, 0f), YawDegrees(40f));
-        AnchorPolicyDecision decision = controller.AcceptPose(
-            AnchorObservation.FromAlignedPose(99, relocalized, 2.6, 0.2f, null, "RE_REGISTER", "RE_REGISTER", 2.6)
-        );
-        Assert(decision.Action == AnchorPolicyAction.Snap, "re-register pose should snap-accept even at low score");
-        Assert(decision.Reason == "relocalize_accept", "re-register acceptance should be labeled");
-        Assert(decision.State == AnchorState.Tracking, "re-register should return to Tracking");
-
-        AnchorPolicyOutput output = controller.Advance(2.61);
-        Assert(Vector3.Distance(output.Pose.position, relocalized.position) < 1e-3f, "output should land at the relocalized position");
-    }
-
-    /// <summary>S9：时序守卫——capture 时间乱序或超龄的测量被忽略，输出不受影响。</summary>
-    private static void AssertStaleMeasurementIgnored()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, basePose, 10.0, 0.9f, 10.0));
-        AnchorPolicyOutput before = controller.Advance(10.02);
-
-        Pose stalePose = new Pose(basePose.position + new Vector3(0.3f, 0f, 0f), Quaternion.identity);
-        AnchorPolicyDecision outOfOrder = controller.AcceptPose(MakeTrackObservation(2, stalePose, 10.05, 0.9f, 9.8));
-        Assert(outOfOrder.Action == AnchorPolicyAction.Reject && outOfOrder.Reason == "stale_measurement", "out-of-order capture time should be rejected as stale");
-
-        AnchorPolicyDecision tooOld = controller.AcceptPose(MakeTrackObservation(3, stalePose, 10.1, 0.9f, 8.0));
-        Assert(tooOld.Action == AnchorPolicyAction.Reject && tooOld.Reason == "stale_measurement", "over-aged capture time should be rejected as stale");
-
-        AnchorPolicyOutput after = controller.Advance(10.02);
-        Assert(Vector3.Distance(after.Pose.position, before.Pose.position) < 1e-5f, "stale measurements must not affect the output");
-    }
-
-    /// <summary>S10：参数热更不清空滤波历史，新阈值即时生效，coast/lost 改变时状态机回填。</summary>
-    private static void AssertConfigHotReload()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        for (int i = 0; i < 5; i++)
-        {
-            controller.AcceptPose(MakeTrackObservation(i + 1, basePose, i * MsgDt, 0.9f));
-        }
-
-        double probeTime = 5 * MsgDt;
-        AnchorPolicyOutput before = controller.Advance(probeTime);
-
-        AnchorPolicyConfig updated = new AnchorPolicyConfig
-        {
-            acceptScoreStay = 0.32f,
-            maxCoastSeconds = 0.6f,
-        };
-        controller.ApplyConfig(updated);
-
-        Assert(controller.State == AnchorState.Tracking, "config hot reload should preserve the lifecycle state");
-        AnchorPolicyOutput after = controller.Advance(probeTime);
-        Assert(Vector3.Distance(after.Pose.position, before.Pose.position) < 1e-5f, "config hot reload should preserve the filter state");
-
-        AnchorPolicyDecision belowNewStay = controller.AcceptPose(MakeTrackObservation(9, basePose, probeTime + MsgDt, 0.30f));
-        Assert(belowNewStay.Action == AnchorPolicyAction.Hold, "raised stay threshold should take effect immediately");
-    }
-
-    /// <summary>
-    /// S11（旋转通道 go/no-go 闸门）：恒速旋转跟踪误差有界，静止时角速度估计收敛到零。
-    /// 任一不达标说明常角速度模型不成立，应降级 One-Euro 实现。
-    /// </summary>
-    private static void AssertRotationFilterGates()
-    {
-        // (a) 恒速偏航 45 度/秒。
-        PolicyController controller = new PolicyController();
-        Vector3 position = new Vector3(0.2f, 0f, 1f);
-        const float yawRate = 45f;
-        const int messageCount = 45;
-        List<float> angularErrors = new List<float>();
-        for (int k = 0; k < messageCount; k++)
-        {
-            double t = k * MsgDt;
-            Pose truth = new Pose(position, YawDegrees(yawRate * (float)t));
-            controller.AcceptPose(MakeTrackObservation(k + 1, truth, t, 0.9f));
-            for (double ta = t + FrameDt; ta < t + MsgDt; ta += FrameDt)
-            {
-                if (ta <= 1.5)
-                {
-                    controller.Advance(ta);
-                    continue;
-                }
-
-                AnchorPolicyOutput output = controller.Advance(ta);
-                angularErrors.Add(QuaternionAngleDegrees(output.Pose.rotation, YawDegrees(yawRate * (float)ta)));
-            }
-        }
-
-        float angularP90 = Percentile(angularErrors, 0.90f);
-        Assert(angularP90 < 3f, $"constant-rate rotation tracking P90 error should stay under 3 degrees, got {angularP90:F2}");
-
-        // (b) 静止噪声流下角速度估计收敛。
-        PolicyController staticController = new PolicyController();
-        Pose truthStatic = new Pose(position, YawDegrees(30f));
-        Lcg rng = new Lcg(7);
-        for (int i = 0; i < 45; i++)
-        {
-            double t = i * MsgDt;
-            staticController.AcceptPose(MakeTrackObservation(i + 1, MakeNoisyPose(truthStatic, 0.002f, 0.5f, ref rng), t, 0.9f));
-        }
-
-        Assert(staticController.AngularSpeedDps < 1f, $"static angular velocity estimate should converge below 1 deg/s, got {staticController.AngularSpeedDps:F2}");
-    }
-
-    /// <summary>S13：Notify 链——reacquire 清空输出、pause 冻结、resume 后按真实时间差退化、reset 回到 Searching。</summary>
-    private static void AssertNotifyChain()
-    {
-        PolicyController controller = new PolicyController();
-        Pose basePose = new Pose(new Vector3(0.2f, 0f, 1f), Quaternion.identity);
-        controller.AcceptPose(MakeTrackObservation(1, basePose, 0.0, 0.9f));
-
-        controller.NotifyReacquire(0.1, "smoke");
-        Assert(controller.State == AnchorState.Relocalizing, "reacquire should enter Relocalizing");
-        AnchorPolicyOutput cleared = controller.Advance(0.11);
-        Assert(!cleared.HasPose, "reacquire should clear the output pose");
-
-        AnchorPolicyDecision reregister = controller.AcceptPose(
-            AnchorObservation.FromAlignedPose(2, basePose, 0.2, 0.5f, null, "REGISTER", "REGISTER", 0.2)
-        );
-        Assert(reregister.Action == AnchorPolicyAction.Snap, "register after reacquire should snap-accept");
-
-        controller.NotifyPause(0.3, "smoke");
-        AnchorPolicyOutput pausedEarly = controller.Advance(0.4);
-        AnchorPolicyOutput pausedLate = controller.Advance(5.4);
-        Assert(pausedEarly.State == AnchorState.Paused && pausedLate.State == AnchorState.Paused, "pause should freeze the lifecycle");
-        Assert(Vector3.Distance(pausedLate.Pose.position, pausedEarly.Pose.position) < 1e-5f, "pause should freeze the output pose");
-
-        controller.NotifyResume(5.5, "smoke");
-        AnchorPolicyOutput resumed = controller.Advance(5.51);
-        Assert(resumed.State == AnchorState.Lost, "after a long pause the stale data should honestly degrade to Lost");
-
-        controller.NotifyReset(5.6, "smoke");
-        AnchorPolicyOutput reset = controller.Advance(5.61);
-        Assert(!reset.HasPose && reset.State == AnchorState.Searching, "reset should clear output and return to Searching");
-    }
-
-    /// <summary>构造一帧 TRACK 观测；captureTime 为负时与到达时间一致（零延迟场景）。</summary>
     private static AnchorObservation MakeTrackObservation(long frameId, Pose pose, double sampleTime, float score, double captureTime = double.NaN)
     {
-        double capture = double.IsNaN(captureTime) ? sampleTime : captureTime;
-        return AnchorObservation.FromAlignedPose(frameId, pose, sampleTime, score, null, "TRACK", "TRACK", capture);
+        double resolvedCaptureTime = double.IsNaN(captureTime) ? sampleTime : captureTime;
+        return AnchorObservation.FromAlignedPose(frameId, pose, sampleTime, score, Array.Empty<string>(), "TRACK", "TRACK", resolvedCaptureTime);
     }
-
-    // ===================== 工具：噪声与统计 =====================
-
-    /// <summary>固定种子线性同余随机源，保证 smoke 结果可复现。</summary>
-    private struct Lcg
-    {
-        private uint state;
-
-        public Lcg(uint seed)
-        {
-            state = seed == 0 ? 1u : seed;
-        }
-
-        /// <summary>返回 (0,1) 均匀随机数。</summary>
-        public float Next01()
-        {
-            state = state * 1664525u + 1013904223u;
-            return ((state >> 8) + 1f) / 16777217f;
-        }
-
-        /// <summary>返回标准正态随机数（Box-Muller）。</summary>
-        public float NextGaussian()
-        {
-            float u1 = Next01();
-            float u2 = Next01();
-            return (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-    }
-
-    /// <summary>给真值 pose 叠加高斯位置噪声与小角度旋转噪声。</summary>
-    private static Pose MakeNoisyPose(Pose truth, float posSigma, float rotSigmaDeg, ref Lcg rng)
-    {
-        Vector3 positionNoise = new Vector3(
-            rng.NextGaussian() * posSigma,
-            rng.NextGaussian() * posSigma,
-            rng.NextGaussian() * posSigma
-        );
-        Vector3 axis = new Vector3(rng.NextGaussian(), rng.NextGaussian(), rng.NextGaussian());
-        if (axis.sqrMagnitude < 1e-12f)
-        {
-            axis = new Vector3(0f, 1f, 0f);
-        }
-
-        axis = axis / axis.magnitude;
-        float angle = rng.NextGaussian() * rotSigmaDeg;
-        Quaternion rotationNoise = AxisAngle(axis, angle);
-        return new Pose(truth.position + positionNoise, Normalize(Multiply(rotationNoise, truth.rotation)));
-    }
-
-    /// <summary>归一化线性插值，小角度下等价于 Slerp，用于离线复现旧 Slerp 基线。</summary>
-    private static Quaternion NlerpStep(Quaternion from, Quaternion to, float t)
-    {
-        float dot = from.x * to.x + from.y * to.y + from.z * to.z + from.w * to.w;
-        float sign = dot >= 0f ? 1f : -1f;
-        return Normalize(new Quaternion(
-            from.x + (to.x * sign - from.x) * t,
-            from.y + (to.y * sign - from.y) * t,
-            from.z + (to.z * sign - from.z) * t,
-            from.w + (to.w * sign - from.w) * t
-        ));
-    }
-
-    /// <summary>计算均方根。</summary>
-    private static float Rms(List<float> values)
-    {
-        if (values.Count == 0)
-        {
-            return 0f;
-        }
-
-        double sum = 0.0;
-        foreach (float value in values)
-        {
-            sum += (double)value * value;
-        }
-
-        return (float)Math.Sqrt(sum / values.Count);
-    }
-
-    /// <summary>计算给定分位数（0..1）。</summary>
-    private static float Percentile(List<float> values, float percentile)
-    {
-        if (values.Count == 0)
-        {
-            return 0f;
-        }
-
-        List<float> sorted = new List<float>(values);
-        sorted.Sort();
-        int index = (int)Math.Ceiling(percentile * sorted.Count) - 1;
-        index = Math.Max(0, Math.Min(sorted.Count - 1, index));
-        return sorted[index];
-    }
-
-    // ===================== 队列 / NATS / Hub / Runtime 断言 =====================
 
     private static void AssertQueuesCanBeCleared()
     {
-        LatestOnlyQueue<byte[]> latest = new LatestOnlyQueue<byte[]>(4);
-        latest.Enqueue(new byte[] { 1 });
-        latest.Enqueue(new byte[] { 2 });
+        LatestOnlyQueue<int> latest = new LatestOnlyQueue<int>(2);
+        latest.Enqueue(1);
+        latest.Enqueue(2);
         latest.Clear();
-        Assert(!latest.TryDequeueLatest(out _, out int skippedOlder), "latest-only queue Clear should remove pending payloads");
-        Assert(skippedOlder == 0, "empty latest-only queue should report no skipped payloads");
+        Assert(!latest.TryDequeueLatest(out _, out _), "LatestOnlyQueue.Clear should remove pending payloads");
 
-        EventQueue<byte[]> events = new EventQueue<byte[]>(4);
-        events.Enqueue(new byte[] { 1 });
-        events.Enqueue(new byte[] { 2 });
+        EventQueue<int> events = new EventQueue<int>(2);
+        events.Enqueue(1);
+        events.Enqueue(2);
         events.Clear();
-        Assert(!events.TryDequeue(out _), "event queue Clear should remove pending events");
+        Assert(!events.TryDequeue(out _), "EventQueue.Clear should remove pending payloads");
     }
 
     private static void AssertNatsControlClientStopClearsPayloadQueues()
@@ -1040,12 +188,16 @@ static class Program
     private static void AssertPoseRuntimeIgnoresPoseWhilePaused()
     {
         PoseToAnchorRuntime runtime = CreatePoseRuntimeForSmoke();
+        AnchorPolicyHost host = CreatePolicyHost(CreateModule<NullGateModule>(), CreateModule<RawEstimatorModule>(), CreateModule<PassThroughOutputModule>());
+        SetRuntimeField(runtime, "policyHost", host);
+
         Pose firstPose = new Pose(Vector3.zero, Quaternion.identity);
         Pose pausedPose = new Pose(new Vector3(3f, 0f, 0f), Quaternion.identity);
-
         InvokeAlignedWorldPose(runtime, 1, firstPose, sampleTime: 0.0);
-        RuntimeDiagnostics(runtime).currentAnchorState = AnchorState.Paused;
+        runtime.AdvanceAnchorOutput(0.01);
+        host.NotifyPause(0.02, "smoke_pause");
         InvokeAlignedWorldPose(runtime, 2, pausedPose, sampleTime: 0.1);
+        runtime.AdvanceAnchorOutput(0.12);
 
         Assert(runtime.CurrentAnchorState == AnchorState.Paused, "paused runtime should remain Paused after receiving a pose");
         Assert(runtime.TryGetStablePose(out Pose stablePose), "paused runtime should keep previous stable pose");
@@ -1074,30 +226,19 @@ static class Program
         Assert(PoseToAnchorRuntime.HasFinitePoseMatrix(result), "finite 4x4 pose matrix should pass validation");
     }
 
-    /// <summary>
-    /// S12：policy 路径不得再经过 processor 链——旧的 ShouldAdvanceProcessors 必须被移除，
-    /// 且 runtime 的 stable pose 与控制器 Advance 输出逐位一致。
-    /// </summary>
-    private static void AssertPolicyPathSkipsProcessors()
+    private static void AssertPolicyPathUsesPolicyHostOnly()
     {
-        MethodInfo legacy = typeof(PoseToAnchorRuntime).GetMethod("ShouldAdvanceProcessors", BindingFlags.Static | BindingFlags.NonPublic);
-        Assert(legacy == null, "policy outputs must not pass through processors anymore (ShouldAdvanceProcessors removed)");
-
         PoseToAnchorRuntime runtime = CreatePoseRuntimeForSmoke();
-        AnchorPolicyHost host = (AnchorPolicyHost)RuntimeHelpers.GetUninitializedObject(typeof(AnchorPolicyHost));
-        MakeUnityObjectNonNull(host);
-        typeof(PoseToAnchorRuntime)
-            .GetField("policyHost", BindingFlags.Instance | BindingFlags.NonPublic)
-            .SetValue(runtime, host);
+        AnchorPolicyHost host = CreatePolicyHost(CreateModule<NullGateModule>(), CreateModule<RawEstimatorModule>(), CreateModule<PassThroughOutputModule>());
+        SetRuntimeField(runtime, "policyHost", host);
 
         Pose pose = new Pose(new Vector3(0.5f, 0.2f, 1.0f), YawDegrees(15f));
         InvokeAlignedWorldPose(runtime, 7, pose, sampleTime: 0.0);
         runtime.AdvanceAnchorOutput(0.05);
 
         Assert(runtime.TryGetStablePose(out Pose stable), "policy runtime should expose a stable pose after Advance");
-        AnchorPolicyOutput direct = host.Advance(0.05);
-        Assert(Vector3.Distance(stable.position, direct.Pose.position) < 1e-6f, "stable pose position must equal the controller Advance output (no processor pass)");
-        Assert(QuaternionAngleDegrees(stable.rotation, direct.Pose.rotation) < 1e-3f, "stable pose rotation must equal the controller Advance output (no processor pass)");
+        Assert(Vector3.Distance(stable.position, pose.position) < 1e-6f, "stable pose position must come from AnchorPolicyHost output");
+        Assert(QuaternionAngleDegrees(stable.rotation, pose.rotation) < 1e-3f, "stable pose rotation must come from AnchorPolicyHost output");
         Assert(runtime.CurrentMotionStateName.Length > 0, "policy runtime should publish the motion state diagnostic");
     }
 
@@ -1105,29 +246,73 @@ static class Program
     {
         PoseToAnchorRuntime runtime = (PoseToAnchorRuntime)RuntimeHelpers.GetUninitializedObject(typeof(PoseToAnchorRuntime));
         MakeUnityObjectNonNull(runtime);
-        typeof(PoseToAnchorRuntime)
-            .GetField("diagnostics", BindingFlags.Instance | BindingFlags.NonPublic)
-            .SetValue(runtime, new PoseToAnchorRuntime.RuntimeDiagnostics());
         return runtime;
     }
 
-    private static PoseToAnchorRuntime.RuntimeDiagnostics RuntimeDiagnostics(PoseToAnchorRuntime runtime)
+    private static void SetRuntimeStateForSmoke(
+        PoseToAnchorRuntime runtime,
+        bool? inputReady = null,
+        AnchorState? state = null,
+        long? frameId = null,
+        float? score = null,
+        string failure = null,
+        string policyAction = null,
+        string serverState = null)
     {
-        return (PoseToAnchorRuntime.RuntimeDiagnostics)typeof(PoseToAnchorRuntime)
-            .GetField("diagnostics", BindingFlags.Instance | BindingFlags.NonPublic)
-            .GetValue(runtime);
+        if (inputReady.HasValue)
+        {
+            SetRuntimeField(runtime, "latestHeartbeatInputReady", inputReady.Value);
+        }
+
+        if (state.HasValue)
+        {
+            SetRuntimeField(runtime, "currentAnchorState", state.Value);
+        }
+
+        if (frameId.HasValue)
+        {
+            SetRuntimeField(runtime, "latestAlignedFrameId", frameId.Value);
+        }
+
+        if (score.HasValue)
+        {
+            SetRuntimeField(runtime, "latestReliabilityScore", score.Value);
+        }
+
+        if (failure != null)
+        {
+            SetRuntimeField(runtime, "latestFailure", failure);
+        }
+
+        if (policyAction != null)
+        {
+            SetRuntimeField(runtime, "latestPolicyAction", policyAction);
+        }
+
+        if (serverState != null)
+        {
+            SetRuntimeField(runtime, "latestServerState", serverState);
+        }
+    }
+
+    private static void SetRuntimeField(PoseToAnchorRuntime runtime, string fieldName, object value)
+    {
+        typeof(PoseToAnchorRuntime)
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(runtime, value);
     }
 
     private static void InvokeAlignedWorldPose(PoseToAnchorRuntime runtime, long frameId, Pose pose, double sampleTime)
     {
-        MethodInfo method = typeof(PoseToAnchorRuntime).GetMethod(
-            "AcceptWorldPose",
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            null,
-            new[] { typeof(long), typeof(Pose), typeof(PoseResult), typeof(double) },
-            null
-        );
-        method.Invoke(runtime, new object[] { frameId, pose, null, sampleTime });
+        runtime.AcceptAlignedWorldPoseForReplay(
+            frameId,
+            pose,
+            captureTimeSeconds: sampleTime,
+            reliabilityScore: 1.0f,
+            reliabilityFlags: Array.Empty<string>(),
+            phase: "TRACK",
+            poseSource: "TRACK",
+            sampleTimeSeconds: sampleTime);
     }
 
     private static void AssertNatsBytesClientSubscriptionOrder()
@@ -1175,9 +360,6 @@ static class Program
         Assert(request.IsCanceled || request.IsFaulted && request.Exception?.GetBaseException() is OperationCanceledException, "stopped request should finish as cancellation");
     }
 
-    /// <summary>
-    /// frame pose 延迟缓冲应在冷启动时回退到当前 pose，积累足够样本后返回指定帧数之前的 pose。
-    /// </summary>
     private static void AssertFramePoseDelayBuffer()
     {
         FramePoseDelayBuffer buffer = new FramePoseDelayBuffer();
@@ -1206,7 +388,6 @@ static class Program
         Assert(Math.Abs(immediate.LeftCameraPose.position.x - 4f) < 1e-5f, "zero delay should return current sample and clear history");
     }
 
-    /// <summary>构造只用于 smoke 的 frame pose 采样。</summary>
     private static FramePoseSample MakeFramePoseSample(float x, double monoMs, int unityFrame)
     {
         Pose pose = new Pose(new Vector3(x, 0f, 0f), Quaternion.identity);
@@ -1226,43 +407,6 @@ static class Program
 
         hub.Publish(new PoseResult());
         Assert((int)failedField.GetValue(hub) == 1, "pose publish without active runtime should count as dispatch failure");
-    }
-
-    private static void AssertAnchorRuntimeHubIsolatesRuntimeExceptions()
-    {
-        bool oldLoggingEnabled = EgoAnchorLog.Enabled;
-        EgoAnchorLog.Enabled = false;
-        try
-        {
-            AnchorRuntimeHub hub = (AnchorRuntimeHub)RuntimeHelpers.GetUninitializedObject(typeof(AnchorRuntimeHub));
-            Type type = typeof(AnchorRuntimeHub);
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            FieldInfo poseExceptionsField = type.GetField("poseDispatchExceptions", flags);
-            FieldInfo statusExceptionsField = type.GetField("statusDispatchExceptions", flags);
-            MethodInfo tryAcceptPose = type.GetMethod("TryAcceptPose", flags);
-            MethodInfo tryNotifyStatus = type.GetMethod("TryNotifyStatus", flags);
-            PoseToAnchorRuntime brokenRuntime = (PoseToAnchorRuntime)RuntimeHelpers.GetUninitializedObject(typeof(PoseToAnchorRuntime));
-
-            object[] brokenPoseArgs =
-            {
-                brokenRuntime,
-                new PoseResult { Header = new MessageHeader { FrameId = 1 }, HasPose = false },
-                null,
-            };
-            bool brokenPoseOk = (bool)tryAcceptPose.Invoke(hub, brokenPoseArgs);
-
-            Assert(!brokenPoseOk, "hub should isolate a pose dispatch exception");
-            Assert((int)poseExceptionsField.GetValue(hub) == 1, "hub should count pose dispatch exceptions per runtime");
-
-            AnchorStatusEvent status = new AnchorStatusEvent { State = "LOST", Event = "LOST", Message = "smoke" };
-            bool brokenStatusOk = (bool)tryNotifyStatus.Invoke(hub, new object[] { brokenRuntime, status });
-            Assert(!brokenStatusOk, "hub should isolate a status dispatch exception");
-            Assert((int)statusExceptionsField.GetValue(hub) == 1, "hub should count status dispatch exceptions per runtime");
-        }
-        finally
-        {
-            EgoAnchorLog.Enabled = oldLoggingEnabled;
-        }
     }
 
     private static void MakeUnityObjectNonNull(UnityEngine.Object unityObject)

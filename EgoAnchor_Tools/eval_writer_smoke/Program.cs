@@ -92,9 +92,23 @@ static class Program
                 isPrimary: true,
                 hasAlignedRawPose: true,
                 alignedRawPose: camera,
+                hasArrivalTimeRawPose: true,
+                arrivalTimeRawPose: new Pose(new Vector3(5f, 6f, 7f), Quaternion.identity),
+                arrivalTimeRawMonoMs: 18.5,
+                arrivalTimeRawUnityFrame: 321,
+                arrivalTimeCameraReference: "Left",
                 reliabilityScore: 0.75f,
                 motionState: "Static",
-                predictAheadMs: 8.5)
+                predictAheadMs: 8.5,
+                strategyLabel: "kalman_cv",
+                gateModule: "null_gate",
+                estimatorModule: "kalman_cv",
+                outputModule: "pass_through",
+                configHash: "abc123",
+                latestResidualMeters: 0.01f,
+                latestResidualDegrees: 0.2f,
+                latestAcceptedScore: 0.75f,
+                latestStaticLocked: false)
         };
         string output = AnchorEvalJson.BuildOutputLine(
             20.0,
@@ -126,6 +140,11 @@ static class Program
         AssertContains(output, "\"predict_ahead_ms\":8.5");
         AssertContains(output, "\"aligned_raw_pos\":[4,5,6]");
         AssertContains(output, "\"aligned_raw_euler_deg\":[");
+        AssertContains(output, "\"has_arrival_time_raw\":true");
+        AssertContains(output, "\"arrival_time_raw_pos\":[5,6,7]");
+        AssertContains(output, "\"arrival_time_raw_mono_ms\":18.5");
+        AssertContains(output, "\"arrival_time_raw_unity_frame\":321");
+        AssertContains(output, "\"arrival_time_camera_reference\":\"Left\"");
         AssertContains(output, "\"reliability_score\":0.75");
 
         string manifest = EvalSessionManifestJson.BuildManifest(
@@ -147,6 +166,7 @@ static class Program
                 new EvalEventMarker("occlusion", 25.0),
             },
             variantLabels: new[] { "kalman", "raw" },
+            variantConfigs: Array.Empty<EvalVariantConfig>(),
             pythonLogFilename: "",
             sessionNotes: "smoke \"notes\"");
         AssertContains(manifest, "\"session_id\":\"session_a\"");

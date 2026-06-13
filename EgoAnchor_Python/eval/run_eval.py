@@ -26,13 +26,14 @@ def run_eval(
     *,
     only: str = "all",
     python_log: Path | str | None = None,
+    output_log: Path | str | None = None,
     report_dir: Path | str | None = None,
 ) -> Path:
     """运行一个 session 的离线评估并返回 report 目录。"""
 
     session_path = Path(session_dir)
     output_dir = Path(report_dir) if report_dir is not None else session_path / "report"
-    logs = load_session(session_path, python_log=python_log)
+    logs = load_session(session_path, python_log=python_log, output_log=output_log)
     result = compute_all_metrics(logs)
 
     if only in ("all", "metrics", "tables"):
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run EgoAnchor offline eval for one session.")
     parser.add_argument("--session-dir", required=True, help="EgoAnchor_Python/data/eval/<session_id> 目录。")
     parser.add_argument("--python-log", default=None, help="可选 Python runtime JSONL，默认从 manifest 自动解析。")
+    parser.add_argument("--output-log", default=None, help="可选 Unity output/replay JSONL，默认读取 session 的 unity_output。")
     parser.add_argument("--report-dir", default=None, help="可选 report 输出目录，默认写到 session_dir/report。")
     parser.add_argument(
         "--only",
@@ -68,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.session_dir),
         only=args.only,
         python_log=Path(args.python_log) if args.python_log else None,
+        output_log=Path(args.output_log) if args.output_log else None,
         report_dir=Path(args.report_dir) if args.report_dir else None,
     )
     print(f"report_dir={report}")

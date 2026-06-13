@@ -1,0 +1,2 @@
+condition,label,n,translation_rmse_m,translation_median_m,translation_p95_m,rotation_rmse_deg,rotation_median_deg,rotation_p95_deg
+unlabeled,frame_aligned_raw,3207,0.04008805860548337,0.022627067430798776,0.08858345358497507,18.55108130339992,6.4805383721999945,42.00462971335784

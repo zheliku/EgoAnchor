@@ -533,8 +533,6 @@ GameObject:
   - component: {fileID: 160200733}
   - component: {fileID: 160200732}
   - component: {fileID: 160200731}
-  - component: {fileID: 160200735}
-  - component: {fileID: 160200734}
   m_Layer: 0
   m_Name: AnchorObject
   m_TagString: Untagged
@@ -566,47 +564,7 @@ MonoBehaviour:
     cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
-  processors:
-  - {fileID: 160200735}
-  - {fileID: 160200734}
   policyHost: {fileID: 1039886366}
-  diagnostics:
-    latestAlignedFrameId: -1
-    latestPhase: 
-    latestFailure: missing_frame_pose_history
-    currentAnchorState: 0
-    latestPolicyAction: 
-    latestPolicyReason: 
-    latestReliabilityScore: 1
-    latestScorePhase: 0
-    latestScoreReprojection: 0
-    latestScoreDepth: 0
-    latestScoreJump: 0
-    latestScoreMask: 0
-    latestScoreReject: 0
-    latestScoreConfidence: 0
-    latestTrackReprojection: -1
-    latestRenderQualityMaskIou: 0
-    latestRenderQualityAreaRatioScore: 0
-    latestRenderQualityDepthInlier: 0
-    latestRenderQualityDepthAlignment: 0
-    latestRenderQualityRenderVisibleRatio: 0
-    latestRenderQualityObservedVisibleRatio: 0
-    latestRenderQualityDepthResidualMeters: 0
-    latestRenderQualityRenderAreaPixels: 0
-    latestRenderQualityExpected: 0
-    latestRenderQualityStatus: 
-    latestServerState: 
-    latestServerEvent: 
-    latestHeartbeatInputReady: 0
-    latestHeartbeatReceiveTime: -1
-    latestUsedReference: 1
-    currentMotionState: 
-    latestSpeedMps: 0
-    latestAngularSpeedDps: 0
-    latestInnovationPosD2: 0
-    latestEffectiveMeasurementNoise: 0
-    latestPredictAheadMs: 0
 --- !u!114 &160200732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -621,7 +579,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 160200731}
   targetTransform: {fileID: 160200733}
-  outputMode: 1
   applyPosition: 1
   applyRotation: 1
   holdLastPoseWhenMissing: 1
@@ -644,39 +601,6 @@ Transform:
   - {fileID: 4868159}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &160200734
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 160200730}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7657f2f30d7136b4dab961e75a5f4111, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Processors.AnchorLowPassPoseProcessor
-  processorEnabled: 1
-  positionSmoothSpeed: 3
-  rotationSmoothSpeed: 3
-  snapOnFirstPose: 1
---- !u!114 &160200735
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 160200730}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1329d90362842694aa9891229aec38be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Processors.AnchorKalmanPoseProcessor
-  processorEnabled: 1
-  positionMeasurementNoise: 0.0004
-  positionProcessNoise: 0.02
-  rotationResponseSpeed: 8
-  snapOnFirstPose: 1
 --- !u!1 &209670095
 GameObject:
   m_ObjectHideFlags: 0
@@ -2379,6 +2303,11 @@ GameObject:
   m_Component:
   - component: {fileID: 1039886365}
   - component: {fileID: 1039886366}
+  - component: {fileID: 1039886369}
+  - component: {fileID: 1039886368}
+  - component: {fileID: 1039886367}
+  - component: {fileID: 1039886370}
+  - component: {fileID: 1039886371}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -2413,57 +2342,103 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  config:
-    acceptScoreEnter: 0.35
-    acceptScoreStay: 0.25
-    holdScoreMin: 0.12
-    relocalizeMinScore: 0.12
-    innovationPosChi2Gate: 16
-    innovationRotChi2Gate: 11
-    maxTranslationJumpMeters: 0.8
-    maxRotationJumpDegrees: 90
-    trustedMotionTranslationMeters: 0.18
-    trustedMotionRotationDegrees: 45
-    softRecoveryCount: 2
-    softRecoveryConsistencyMeters: 0.15
-    softRecoveryConsistencyDegrees: 45
-    softRecoveryRotationNoiseScale: 2
-    stuckRecoveryCount: 5
-    stuckConsistencyMeters: 0.1
-    stuckConsistencyDegrees: 15
-    positionMeasurementNoise: 0.000004
-    staticMeasurementNoiseScale: 100
-    scoreNoiseFloor: 0.2
-    processNoiseMoving: 0.02
-    processNoiseStatic: 0.00001
-    rotationMeasurementNoise: 0.0003
-    rotationProcessNoise: 0.02
-    rotationProcessNoiseStatic: 0.001
-    angularVelocityGainBeta: 0.3
-    angularVelocityMaxDps: 200
-    angularVelocityDampingTau: 0.5
-    maxRotationCorrectionDegrees: 45
-    staticEnterRadius: 0.012
-    staticEnterRotationDeg: 2.5
-    staticEnterDuration: 0.5
-    motionSpikeD2: 6
-    staticExitDisplacement: 0.01
-    staticExitRotationDeg: 1.5
-    coastGraceSeconds: 0.3
-    maxCoastSeconds: 0.45
-    lostTimeoutSeconds: 2
-    maxPredictAheadSeconds: 0.15
-    maxRotationPredictAheadSeconds: 0.05
-    velocityDampingTauSeconds: 0.3
-    maxMeasurementAgeSeconds: 1
-    staticOutputReleaseMeters: 0.02
-    staticOutputReleaseDegrees: 3
-    staticOutputSmoothingTauSeconds: 0.3
-    maxStaticOutputSpeedMps: 0.05
-    maxStaticOutputAngularSpeedDps: 45
-    movingOutputSmoothingTauSeconds: 0.04
-    maxOutputSpeedMps: 3
-    maxOutputAngularSpeedDps: 720
+  gateModule: {fileID: 1039886367}
+  estimatorModule: {fileID: 1039886371}
+  outputModule: {fileID: 1039886368}
+  strategyLabel: 
+  coastTimeoutSeconds: 0.45
+  lostTimeoutSeconds: 2
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+--- !u!114 &1039886367
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4566ba9f3f3a416489611564a782039a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ScoreJumpGateModule
+  startScoreMin: 0.35
+  trackScoreMin: 0.2
+  holdScoreMin: 0.12
+  relocalizeScoreMin: 0.12
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
+  maxMeasurementAgeSeconds: 1
+--- !u!114 &1039886368
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dda3b859f35c15e47a795dc5c544fc3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.StaticLockRateLimitOutputModule
+  enableStaticLock: 1
+  staticReleaseMeters: 0.03
+  staticReleaseDegrees: 3
+  enableRateLimit: 1
+  maxOutputMetersPerSecond: 1.2
+  maxOutputDegreesPerSecond: 180
+--- !u!114 &1039886369
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1259e51973fb1094399e039ac4a05d74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorEstimatorModule
+  positionProcessNoise: 0.16
+  positionMeasurementNoise: 0.00035
+  rotationProcessNoise: 0.35
+  rotationMeasurementNoise: 0.002
+  lowScoreNoiseMultiplier: 16
+  lowScoreVelocityKeep: 0.2
+  maxPredictAheadSeconds: 0.16
+--- !u!114 &1039886370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 635c137acf0e7024f9d583e52b363a3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanEstimatorModule
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
+  maxPredictAheadSeconds: 0.18
+--- !u!114 &1039886371
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3aa17528633c024e9b22491030388e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.OneEuroEstimatorModule
+  minCutoff: 1
+  beta: 0.25
+  derivativeCutoff: 1
+  maxPredictAheadSeconds: 0.42
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2717,45 +2692,7 @@ MonoBehaviour:
     cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
-  processors: []
   policyHost: {fileID: 0}
-  diagnostics:
-    latestAlignedFrameId: -1
-    latestPhase: 
-    latestFailure: missing_frame_pose_history
-    currentAnchorState: 0
-    latestPolicyAction: 
-    latestPolicyReason: 
-    latestReliabilityScore: 1
-    latestScorePhase: 0
-    latestScoreReprojection: 0
-    latestScoreDepth: 0
-    latestScoreJump: 0
-    latestScoreMask: 0
-    latestScoreReject: 0
-    latestScoreConfidence: 0
-    latestTrackReprojection: -1
-    latestRenderQualityMaskIou: 0
-    latestRenderQualityAreaRatioScore: 0
-    latestRenderQualityDepthInlier: 0
-    latestRenderQualityDepthAlignment: 0
-    latestRenderQualityRenderVisibleRatio: 0
-    latestRenderQualityObservedVisibleRatio: 0
-    latestRenderQualityDepthResidualMeters: 0
-    latestRenderQualityRenderAreaPixels: 0
-    latestRenderQualityExpected: 0
-    latestRenderQualityStatus: 
-    latestServerState: 
-    latestServerEvent: 
-    latestHeartbeatInputReady: 0
-    latestHeartbeatReceiveTime: -1
-    latestUsedReference: 1
-    currentMotionState: 
-    latestSpeedMps: 0
-    latestAngularSpeedDps: 0
-    latestInnovationPosD2: 0
-    latestEffectiveMeasurementNoise: 0
-    latestPredictAheadMs: 0
 --- !u!114 &1137170459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2770,7 +2707,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 1137170458}
   targetTransform: {fileID: 1137170460}
-  outputMode: 0
   applyPosition: 1
   applyRotation: 1
   holdLastPoseWhenMissing: 1

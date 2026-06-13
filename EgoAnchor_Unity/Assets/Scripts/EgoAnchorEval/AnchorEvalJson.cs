@@ -65,8 +65,50 @@ namespace EgoAnchorEval
         /// <summary>主变体 aligned raw pose。</summary>
         public readonly Pose AlignedRawPose;
 
+        /// <summary>主变体是否已有 arrival-time raw 诊断 pose。</summary>
+        public readonly bool HasArrivalTimeRawPose;
+
+        /// <summary>主变体 arrival-time raw 诊断 pose。</summary>
+        public readonly Pose ArrivalTimeRawPose;
+
+        /// <summary>主变体 arrival-time raw 诊断时间，单位毫秒。</summary>
+        public readonly double ArrivalTimeRawMonoMs;
+
+        /// <summary>主变体 arrival-time raw 诊断对应的 Unity frame。</summary>
+        public readonly int ArrivalTimeRawUnityFrame;
+
+        /// <summary>主变体 arrival-time raw 诊断使用的参考相机。</summary>
+        public readonly string ArrivalTimeCameraReference;
+
         /// <summary>主变体最近一次 reliability score。</summary>
         public readonly float ReliabilityScore;
+
+        /// <summary>策略 label，通常等于 pipeline strategy label。</summary>
+        public readonly string StrategyLabel;
+
+        /// <summary>gate module 名称。</summary>
+        public readonly string GateModule;
+
+        /// <summary>estimator module 名称。</summary>
+        public readonly string EstimatorModule;
+
+        /// <summary>output module 名称。</summary>
+        public readonly string OutputModule;
+
+        /// <summary>本次策略配置的稳定摘要。</summary>
+        public readonly string ConfigHash;
+
+        /// <summary>最近一次 output stage 平移残差，单位米。</summary>
+        public readonly float LatestResidualMeters;
+
+        /// <summary>最近一次 output stage 旋转残差，单位度。</summary>
+        public readonly float LatestResidualDegrees;
+
+        /// <summary>最近一次 pipeline 接受的可靠性分数。</summary>
+        public readonly float LatestAcceptedScore;
+
+        /// <summary>最近一次 output stage 是否静止锁定。</summary>
+        public readonly bool LatestStaticLocked;
 
         /// <summary>
         /// 构造变体输出快照。
@@ -88,9 +130,23 @@ namespace EgoAnchorEval
             bool isPrimary,
             bool hasAlignedRawPose,
             Pose alignedRawPose,
+            bool hasArrivalTimeRawPose,
+            Pose arrivalTimeRawPose,
+            double arrivalTimeRawMonoMs,
+            int arrivalTimeRawUnityFrame,
+            string arrivalTimeCameraReference,
             float reliabilityScore,
             string motionState,
-            double predictAheadMs)
+            double predictAheadMs,
+            string strategyLabel,
+            string gateModule,
+            string estimatorModule,
+            string outputModule,
+            string configHash,
+            float latestResidualMeters,
+            float latestResidualDegrees,
+            float latestAcceptedScore,
+            bool latestStaticLocked)
         {
             Label = label ?? string.Empty;
             SourceFrameId = sourceFrameId;
@@ -108,9 +164,23 @@ namespace EgoAnchorEval
             IsPrimary = isPrimary;
             HasAlignedRawPose = hasAlignedRawPose;
             AlignedRawPose = alignedRawPose;
+            HasArrivalTimeRawPose = hasArrivalTimeRawPose;
+            ArrivalTimeRawPose = arrivalTimeRawPose;
+            ArrivalTimeRawMonoMs = arrivalTimeRawMonoMs;
+            ArrivalTimeRawUnityFrame = arrivalTimeRawUnityFrame;
+            ArrivalTimeCameraReference = arrivalTimeCameraReference ?? string.Empty;
             ReliabilityScore = reliabilityScore;
             MotionState = motionState ?? string.Empty;
             PredictAheadMs = predictAheadMs;
+            StrategyLabel = strategyLabel ?? string.Empty;
+            GateModule = gateModule ?? string.Empty;
+            EstimatorModule = estimatorModule ?? string.Empty;
+            OutputModule = outputModule ?? string.Empty;
+            ConfigHash = configHash ?? string.Empty;
+            LatestResidualMeters = latestResidualMeters;
+            LatestResidualDegrees = latestResidualDegrees;
+            LatestAcceptedScore = latestAcceptedScore;
+            LatestStaticLocked = latestStaticLocked;
         }
     }
 
@@ -240,10 +310,24 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "latest_failure", variant.LatestFailure);
             AppendStringProperty(builder, ref first, "motion_state", variant.MotionState);
             AppendDoubleProperty(builder, ref first, "predict_ahead_ms", variant.PredictAheadMs);
+            AppendStringProperty(builder, ref first, "strategy_label", variant.StrategyLabel);
+            AppendStringProperty(builder, ref first, "gate_module", variant.GateModule);
+            AppendStringProperty(builder, ref first, "estimator_module", variant.EstimatorModule);
+            AppendStringProperty(builder, ref first, "output_module", variant.OutputModule);
+            AppendStringProperty(builder, ref first, "config_hash", variant.ConfigHash);
+            AppendFloatProperty(builder, ref first, "latest_residual_meters", variant.LatestResidualMeters);
+            AppendFloatProperty(builder, ref first, "latest_residual_degrees", variant.LatestResidualDegrees);
+            AppendFloatProperty(builder, ref first, "latest_accepted_score", variant.LatestAcceptedScore);
+            AppendBoolProperty(builder, ref first, "latest_static_locked", variant.LatestStaticLocked);
             if (variant.IsPrimary)
             {
                 AppendBoolProperty(builder, ref first, "has_aligned_raw", variant.HasAlignedRawPose);
                 AppendPoseProperties(builder, ref first, "aligned_raw_pos", "aligned_raw_rot", variant.AlignedRawPose, variant.HasAlignedRawPose);
+                AppendBoolProperty(builder, ref first, "has_arrival_time_raw", variant.HasArrivalTimeRawPose);
+                AppendPoseProperties(builder, ref first, "arrival_time_raw_pos", "arrival_time_raw_rot", variant.ArrivalTimeRawPose, variant.HasArrivalTimeRawPose);
+                AppendDoubleProperty(builder, ref first, "arrival_time_raw_mono_ms", variant.HasArrivalTimeRawPose ? variant.ArrivalTimeRawMonoMs : double.NaN);
+                AppendLongProperty(builder, ref first, "arrival_time_raw_unity_frame", variant.HasArrivalTimeRawPose ? variant.ArrivalTimeRawUnityFrame : -1);
+                AppendStringProperty(builder, ref first, "arrival_time_camera_reference", variant.ArrivalTimeCameraReference);
                 AppendFloatProperty(builder, ref first, "reliability_score", variant.ReliabilityScore);
             }
             builder.Append('}');

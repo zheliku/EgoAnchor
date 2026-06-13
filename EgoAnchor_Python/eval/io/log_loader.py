@@ -33,13 +33,19 @@ class SessionLogs:
     """原始 session_manifest.json 内容。"""
 
 
-def load_session(session_dir: Path | str, python_log: Path | str | None = None) -> SessionLogs:
+def load_session(
+    session_dir: Path | str,
+    python_log: Path | str | None = None,
+    output_log: Path | str | None = None,
+) -> SessionLogs:
     """加载一个 session 目录中的 Unity/Python 评估日志。
 
     Args:
         session_dir: `EgoAnchor_Python/data/eval/<session_id>` 目录。
         python_log: 可选 Python runtime JSONL；为空时按 manifest 或同目录唯一
             非 Unity JSONL 自动解析。
+        output_log: 可选 Unity output/replay JSONL；为空时读取 session 目录中的
+            `*_unity_output.jsonl`。
 
     Returns:
         `SessionLogs`，其中 capture/pose 已按 frame_id 建索引，output 已展平。
@@ -52,7 +58,7 @@ def load_session(session_dir: Path | str, python_log: Path | str | None = None) 
     manifest_path = session_path / "session_manifest.json"
     manifest = _load_manifest(manifest_path)
     capture_path = _resolve_unique_log(session_path, "*_unity_capture.jsonl", "unity_capture")
-    output_path = _resolve_unique_log(session_path, "*_unity_output.jsonl", "unity_output")
+    output_path = _resolve_existing_path(session_path, output_log, "output_log") if output_log is not None else _resolve_unique_log(session_path, "*_unity_output.jsonl", "unity_output")
     pose_path = _resolve_python_log(session_path, manifest, python_log)
 
     return SessionLogs(

@@ -76,6 +76,9 @@ namespace EgoAnchorEval
         /// <summary>manifest 写入时复用的变体标签列表。</summary>
         private readonly List<string> variantLabels = new List<string>();
 
+        /// <summary>manifest 写入时复用的变体配置列表。</summary>
+        private readonly List<EvalVariantConfig> variantConfigs = new List<EvalVariantConfig>();
+
         /// <summary>是否存在打开中的条件区间。</summary>
         private bool hasOpenSpan;
 
@@ -296,6 +299,8 @@ namespace EgoAnchorEval
 
             variantLabels.Clear();
             recorder?.CollectVariantLabels(variantLabels);
+            variantConfigs.Clear();
+            recorder?.CollectVariantConfigs(variantConfigs);
             string manifest = EvalSessionManifestJson.BuildManifest(
                 sessionId,
                 objectId,
@@ -308,6 +313,7 @@ namespace EgoAnchorEval
                 spans,
                 markers,
                 variantLabels,
+                variantConfigs,
                 ResolvePythonLogFilenameForManifest(),
                 sessionNotes);
             string manifestPath = Path.Combine(sessionDir, "session_manifest.json");

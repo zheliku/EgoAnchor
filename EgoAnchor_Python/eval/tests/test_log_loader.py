@@ -40,10 +40,19 @@ class LogLoaderTest(unittest.TestCase):
             primary = logs.output[(logs.output["tick_index"] == 0) & (logs.output["label"] == "kalman")].iloc[0]
             self.assertTrue(bool(primary["is_primary"]))
             self.assertAlmostEqual(float(primary["reliability_score"]), 0.8)
+            self.assertEqual(primary["strategy_label"], "kalman_cv")
+            self.assertEqual(primary["gate_module"], "null_gate")
+            self.assertEqual(primary["estimator_module"], "kalman_cv")
+            self.assertEqual(primary["output_module"], "pass_through")
+            self.assertEqual(primary["config_hash"], "abc123")
             self.assertEqual(primary["anchor_pose_source"], "transform")
             self.assertAlmostEqual(float(primary["source_capture_mono_ms"]), 100.0)
             self.assertEqual(int(primary["source_capture_unity_frame"]), 10)
             np.testing.assert_allclose(primary["aligned_raw_pos"], np.array([1.1, 2.1, 3.1]))
+            self.assertTrue(bool(primary["has_arrival_time_raw"]))
+            np.testing.assert_allclose(primary["arrival_time_raw_pos"], np.array([1.2, 2.2, 3.2]))
+            self.assertAlmostEqual(float(primary["arrival_time_raw_mono_ms"]), 125.0)
+            self.assertEqual(primary["arrival_time_camera_reference"], "Left")
 
             self.assertEqual(list(logs.pose.index), [1, 2])
             self.assertEqual(logs.pose.loc[1, "pose_matrix_cv_camera"].shape, (4, 4))
@@ -107,6 +116,17 @@ class LogLoaderTest(unittest.TestCase):
             ],
             "event_markers": [],
             "variant_labels": ["kalman", "raw"],
+            "variant_configs": [
+                {
+                    "label": "kalman",
+                    "strategy_label": "kalman_cv",
+                    "gate_module": "null_gate",
+                    "estimator_module": "kalman_cv",
+                    "output_module": "pass_through",
+                    "config_hash": "abc123",
+                    "parameters": {"estimator.positionMeasurementNoise": "0.0004"},
+                }
+            ],
         }
         (session_dir / "session_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -220,9 +240,24 @@ class LogLoaderTest(unittest.TestCase):
                     "policy_reason": "score_accept",
                     "latest_phase": "TRACK",
                     "latest_failure": "",
+                    "strategy_label": "kalman_cv",
+                    "gate_module": "null_gate",
+                    "estimator_module": "kalman_cv",
+                    "output_module": "pass_through",
+                    "config_hash": "abc123",
+                    "latest_residual_meters": 0.0,
+                    "latest_residual_degrees": 0.0,
+                    "latest_accepted_score": 0.8,
+                    "latest_static_locked": False,
                     "has_aligned_raw": True,
                     "aligned_raw_pos": [1.1, 2.1, 3.1],
                     "aligned_raw_rot": [0.0, 0.0, 0.0, 1.0],
+                    "has_arrival_time_raw": True,
+                    "arrival_time_raw_pos": [1.2, 2.2, 3.2],
+                    "arrival_time_raw_rot": [0.0, 0.0, 0.0, 1.0],
+                    "arrival_time_raw_mono_ms": 125.0,
+                    "arrival_time_raw_unity_frame": 25,
+                    "arrival_time_camera_reference": "Left",
                     "reliability_score": 0.8,
                 },
                 {
