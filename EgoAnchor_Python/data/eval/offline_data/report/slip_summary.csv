@@ -1,0 +1,3 @@
+condition,label,n,slip_rms_px,slip_peak_px,insufficient_data
+unlabeled,kalman,3207,26.106161620198417,102.94548053872552,False
+unlabeled,raw,3207,25.935845630570864,106.6234578214,False

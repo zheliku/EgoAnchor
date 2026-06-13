@@ -1,3 +1,10 @@
+EgoAnchor project note
+======================
+
+The active draft is `egoanchor_cn_v1.tex`, and the makefile now builds that
+file with `egoanchor_cn_refs.bib` by default. `template.tex` is a compact
+EgoAnchor submission scaffold, not the original VGTC sample paper.
+
 Created by Torsten Moeller (vis@cs.sfu.ca), April 6 2004
 modified by $Author: jpeltier $ $Date: 2007-04-03 16:51:34 -0700 (Tue, 03 Apr 2007) $
 modified by Tobias Isenberg, July 2016
@@ -21,9 +28,9 @@ It contains 11 files/directories:
 
 README          - this file
 vgtc.cls        - the VGTC class file, which should be placed, somewhere in the TeX search path (or in the local directory)
-template.tex    - an example paper
+template.tex    - a compact EgoAnchor submission scaffold
 template.bib    - a small bibliography file used by the example
-template.pdf    - an example proper pdf output in default conference mode
+template.pdf    - legacy example output from the original VGTC package, if present
 abbrv-doi*.bst  - four different versions to generate the bibliography including DOI output, with and without hyperref support, with and without narrow rendering of DOIs
 makefile        - makefile including bibtex compilation and proper PDF generation
 pictures/       - subdirectory with sample images, both in EPS and in direct pixel/vector format
@@ -42,18 +49,18 @@ Prior to "building" a paper please be sure to run
 
 This will ensure that the paper is built cleanly each and every time. We suggest to run this command before each new compilation.
 
-To compile the example, run
+To compile the EgoAnchor draft, run
 
   make
 
 or manually, if the makefile does not work for you
 
-  latex template
-  bibtex template
-  latex template
-  latex template
+  latex egoanchor_cn_v1
+  bibtex egoanchor_cn_v1
+  latex egoanchor_cn_v1
+  latex egoanchor_cn_v1
 
-If you run 'make' for the first time, a successful compilation will create a file called 'template.pdf'. Please make sure, that its layout is identical to the file 'template-journal.pdf' provided with this package.
+If you run 'make' for the first time, a successful compilation should create `egoanchor_cn_v1.pdf`.
 
 The included makefile also allows you to run each step of the process manually.  Below are a list of available options that may be passed to make
 
@@ -97,8 +104,8 @@ the errors produced when running make and we will work to figure out the
 resolution.
 
 
-To produce proper pdf output, please use:
-  dvips -t letter -Pdownload35 -Ppdf -G0 template.dvi -o template.ps
+To produce proper pdf output manually for EgoAnchor, use:
+  dvips -t letter -Pdownload35 -Ppdf -G0 egoanchor_cn_v1.dvi -o egoanchor_cn_v1.ps
 
 The "-Ppdf" and "-G0" flags should be specified in that order; reversing
 them does not work, and will result in unacceptable results.
@@ -117,7 +124,7 @@ that images are not downsampled or subsampled in the PDF creation process:
         -dSubsetFonts=true -dEmbedAllFonts=true \
         -dAutoFilterColorImages=false -dAutoFilterGrayImages=false \
         -dColorImageFilter=/FlateEncode -dGrayImageFilter=/FlateEncode \
-        -dMonoImageFilter=/FlateEncode template.ps template.pdf
+        -dMonoImageFilter=/FlateEncode egoanchor_cn_v1.ps egoanchor_cn_v1.pdf
 
 If you are using version 8.x of GhostScript, please use this method in
 place of the example above:
@@ -125,7 +132,7 @@ place of the example above:
  ps2pdf -dPDFSETTINGS=/prepress -dCompatibilityLevel=1.3 \
         -dAutoFilterColorImages=false -dAutoFilterGrayImages=false \
         -dColorImageFilter=/FlateEncode -dGrayImageFilter=/FlateEncode \
-        -dMonoImageFilter=/FlateEncode template.ps template.pdf
+        -dMonoImageFilter=/FlateEncode egoanchor_cn_v1.ps egoanchor_cn_v1.pdf
 
 This has been incorporated into the makefile and should no longer be needed
 unless you are building the PDF file manually.

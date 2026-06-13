@@ -1,0 +1,5 @@
+label,policy_action,policy_reason,count
+kalman,Accept,motion_start,191
+kalman,Accept,score_accept,2693
+kalman,Accept,trusted_motion,323
+raw,baseline_accept,policy_disabled,3207

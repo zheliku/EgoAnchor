@@ -1,3 +1,5 @@
+> 状态说明：本文档是早期讨论记录，保留用于追溯。当前主线以 `IEEEVR2027-paper-architecture.md` 和 `EgoAnchor-Evaluation-Plan.md` 为准；论文方法已从复杂 adaptive controller 收敛为 frame-aligned anchoring + reliability-gated One Euro controller，并要求同时对比 raw、low-pass、Kalman、vanilla One Euro 与改进 One Euro。下文关于 adaptive anchor controller 的内容应按这个新主线理解。
+
 论文定位
 
 我会把论文核心问题定成一句话：

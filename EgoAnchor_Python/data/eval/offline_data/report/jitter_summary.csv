@@ -1,0 +1,3 @@
+condition,label,n,position_jitter_rms_m,position_jitter_std_m,rotation_jitter_rms_deg,insufficient_data
+unlabeled,kalman,1297,0.03313775931009084,0.029496274923415694,67.48666924061914,False
+unlabeled,raw,1297,0.03060436643760819,0.027128795355381603,67.59222017465616,False

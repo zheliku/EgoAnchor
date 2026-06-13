@@ -1,3 +1,5 @@
+> 状态说明：本文档是早期讨论记录，保留用于追溯。当前主线以 `IEEEVR2027-paper-architecture.md` 和 `EgoAnchor-Evaluation-Plan.md` 为准；论文方法已从复杂 adaptive controller 收敛为 frame-aligned anchoring + reliability-gated One Euro controller，并要求同时对比 raw、low-pass、Kalman、vanilla One Euro 与改进 One Euro。下文关于较重 adaptive controller 的表述不再作为默认论文计划。
+
 先给结论：
 这个项目不应再包装成“VR pose tracking 工程”。  
 更合适的定位是：

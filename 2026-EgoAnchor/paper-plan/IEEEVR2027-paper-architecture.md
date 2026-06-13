@@ -2,7 +2,7 @@
 
 日期：2026-05-23  
 目标：IEEE VR 2027 papers track  
-状态：目标投稿版本蓝图。本文档允许把后续计划实现的可靠性感知控制、恢复实验和任务实验写入论文主线；但最终投稿前，所有“已实现”“已验证”“显著提升”等表述必须由代码、日志、实验数据和图表支撑。
+状态：目标投稿版本蓝图。本文档把论文方法收敛为 frame-aligned anchoring + 轻量 reliability-gated One Euro anchor controller；Kalman 保留为强 temporal baseline。最终投稿前，所有“已实现”“已验证”“显著提升”等表述必须由代码、日志、实验数据和图表支撑。
 
 ## 1. 投稿约束
 
@@ -53,7 +53,7 @@ IEEE VR 2027 官网已经公布会议时间和地点：2027 年 2 月 27 日至 
 
 目标论文主张：
 
-> EgoAnchor 说明，异步 6DoF pose stream 可以通过 frame-aligned reprojection 和 reliability-aware anchor update control，被转化为稳定、可恢复、世界一致的 MR object anchor。
+> EgoAnchor 说明，异步 6DoF pose stream 可以通过 frame-aligned reprojection 和轻量 reliability-gated One Euro anchor control，被转化为稳定、可恢复、世界一致的 MR object anchor。
 
 保底主张：
 
@@ -63,13 +63,13 @@ IEEE VR 2027 官网已经公布会议时间和地点：2027 年 2 月 27 日至 
 
 目标题目：
 
-> EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking and Reliability-Aware Anchor Control for Passthrough Mixed Reality
+> EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking with Reliability-Gated One Euro Anchor Control for Passthrough Mixed Reality
 
 更完整的描述性题目：
 
-> EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking and Reliability-Aware Anchor Control for World-Consistent Real-Object Anchoring in Passthrough Mixed Reality
+> EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking with Reliability-Gated One Euro Filtering for World-Consistent Real-Object Anchoring in Passthrough Mixed Reality
 
-如果 reliability-aware controller 没有足够实验支撑，则退回：
+如果轻量 One Euro controller 没有足够实验支撑，则退回：
 
 > EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking for World-Consistent Real-Object Anchoring in Passthrough Mixed Reality
 
@@ -77,16 +77,16 @@ IEEE VR 2027 官网已经公布会议时间和地点：2027 年 2 月 27 日至 
 
 ### 目标贡献
 
-这是 IEEE VR 2027 目标投稿版本的贡献组合，默认后续会补齐 controller、恢复机制和消融实验。
+这是 IEEE VR 2027 目标投稿版本的贡献组合。方法层不再把复杂 policy 作为卖点，而是把 One Euro 这种实时交互中常用的速度自适应低通作为核心滤波 baseline，并只加入 MR anchoring 必需的可靠性门控、静止锁定、有界前推和重获取生命周期。
 
 1. 提出 passthrough MR 中的 pose-to-anchor 问题表述，说明 camera-space 6DoF pose accuracy 本身不足以保证稳定、世界一致的 real-object anchoring。
-2. 提出 frame-aligned、reliability-aware 的动态锚定框架：每个 camera-space pose 通过 capture-time camera frame 映射到世界坐标，并在噪声、延迟和间歇丢失条件下控制 anchor 更新。
+2. 提出 frame-aligned、reliability-gated 的动态锚定框架：每个 camera-space pose 通过 capture-time camera frame 映射到世界坐标，并用 One Euro 滤波、有界前推、静止锁定和重获取生命周期处理噪声、延迟和间歇丢失。
 3. 实现 EgoAnchor 端到端系统：连接 Quest/Unity 头戴双目采集、Python 外部对象级感知、ZMQ Protobuf 数据面、NATS Protobuf pose/command 消息面，以及 Unity world-anchor 应用。
 4. 建立 anchor-centric evaluation：评价 world-space anchor error、head-motion-induced slip、jitter-lag tradeoff、端到端时延、遮挡/出视野恢复，以及可选任务可用性。
 
 ### 保底贡献
 
-若 reliability-aware lifecycle controller 最终无法完成，则论文退回到更保守的三条贡献：
+若 One Euro anchor controller 最终无法完成或没有数据优势，则论文退回到更保守的三条贡献：
 
 1. pose-to-anchor 问题表述与 frame-aligned anchoring 方法。
 2. EgoAnchor 端到端 passthrough MR real-object anchoring 系统。
@@ -99,8 +99,9 @@ IEEE VR 2027 官网已经公布会议时间和地点：2027 年 2 月 27 日至 
 | frame-aligned pose-to-anchor mapping | Unity v3 已通过 `FramePoseHistory` 和 `CameraPoseFrameAligner` 实现 | fake-pose 单测、Quest 实机日志、可视化视频 |
 | ZMQ data plane + NATS message/command plane | v3 skeleton/runtime 已有 | 端到端 smoke log、断连/失败诊断 |
 | low-pass/Kalman stable anchor baseline | Unity v3 已有 processors | jitter/lag 定量对比 |
+| vanilla One Euro baseline | 待实现或离线回放 | 与 low-pass/Kalman/modified One Euro 的稳定性和延迟对比 |
 | Python perception reliability score | 内部 scoring 已有，但未进 `PoseResult` proto | 追加 proto 字段、日志验证、Unity 侧消费 |
-| reliability-aware anchor lifecycle/state machine | 目标贡献，待实现 | controller、阈值、状态日志、消融实验 |
+| reliability-gated One Euro anchor controller | 目标贡献，已有实现计划 | controller、阈值、状态日志、vanilla One Euro/Kalman 消融实验 |
 | task/user benefit | 尚未测量 | 任务 benchmark 或合规 human study |
 
 ## 6. 论文结构
@@ -109,7 +110,7 @@ IEEE VR 2027 官网已经公布会议时间和地点：2027 年 2 月 27 日至 
 
 ### Abstract
 
-摘要要直接说明 pose-to-anchor 问题、EgoAnchor 方法、系统机制和核心结果。内部草稿可写入 reliability-aware control；最终投稿必须有对应实验结果。
+摘要要直接说明 pose-to-anchor 问题、EgoAnchor 方法、系统机制和核心结果。内部草稿可写入 reliability-gated One Euro control；最终投稿必须有对应实验结果。
 
 ### 1. Introduction
 
@@ -176,8 +177,8 @@ Arrival-time mapping: W_T_C(t_return) * C_T_O(t_capture)
 4.3 Latest-only asynchronous transport  
 说明为何高频 stereo/camera_info 走 ZMQ Protobuf data plane，而 pose/status/heartbeat/commands 走 NATS Protobuf message/command plane。把 latest-drain 和 stale-frame avoidance 与 anchor 低时延目标关联起来。
 
-4.4 Reliability-aware anchor control  
-这是目标论文中 frame alignment 之后最重要的方法层。controller 根据 pose reliability、frame-history validity、pose innovation、result age、heartbeat/status 等信息，在 Update、Smooth、Coast/Hold、Frozen/Lost、Reacquire 之间切换。raw、low-pass、Kalman 输出保留为 ablation baselines。
+4.4 Reliability-gated One Euro anchor control
+这是目标论文中 frame alignment 之后最重要的方法层，但要保持克制。One Euro filter 不是 VR 专属方法，而是面向实时交互噪声输入的速度自适应低通；它适合本文的低频、延迟、带噪 pose stream，因为参数少、响应性和稳定性 tradeoff 清楚。EgoAnchor 的方法应写成对 One Euro 的 MR anchoring 适配：先用 score/flag/jump 做简单门控，再对 position 和 quaternion log-space rotation 做 One Euro 更新，渲染帧做有界前推；静止窗口确认后锁定输出以吸收 residual slip；连续低分、no-pose 或 Lost 交给 reacquire 生命周期处理。raw、low-pass、Kalman 和 vanilla One Euro 输出保留为 ablation baselines。
 
 4.5 Diagnostics and command lifecycle  
 说明 reset/reacquire/control 的 request-reply ack 只代表 accepted/rejected，不代表执行完成；真正结果通过 status/pose events 反映。
@@ -191,7 +192,7 @@ Arrival-time mapping: W_T_C(t_return) * C_T_O(t_capture)
 - Quest/Unity front end：stereo capture、camera_info、frame pose history。
 - Python v3 runtime：single-owner perception pipeline、command queue/executor、pose publication。
 - Protocol：`subjects.v1.json`、Protobuf、ZMQ data plane、NATS message/command plane。
-- Unity anchor runtime：`PoseResultReceiver`、`PoseToAnchorRuntime`、`CameraPoseFrameAligner`、raw/stable processors、后续 policy controller。
+- Unity anchor runtime：`PoseResultReceiver`、`PoseToAnchorRuntime`、`CameraPoseFrameAligner`、raw/stable processors、后续 One Euro controller。
 - 硬件和软件：Quest 型号、PC GPU、Unity、Python、CUDA、TensorRT 版本。
 
 必须同步：旧稿中出现的 ZMQ + MessagePack 要更新为 v3 的 ZMQ Protobuf + NATS Protobuf。
@@ -203,8 +204,8 @@ Arrival-time mapping: W_T_C(t_return) * C_T_O(t_capture)
 RQ1：frame-aligned mapping 是否能在 head motion 和 latency 下提升 world-space anchoring？  
 主对比：arrival-time mapping vs frame-aligned mapping。
 
-RQ2：smoothing 和 reliability-aware update policy 如何影响 anchor stability 和 lag？  
-主对比：raw frame-aligned vs low-pass vs Kalman vs reliability-aware controller。
+RQ2：不同 temporal anchor filters 如何影响 anchor stability、lag 和错误更新？
+主对比：raw frame-aligned vs low-pass vs Kalman vs vanilla One Euro vs reliability-gated One Euro controller。
 
 RQ3：EgoAnchor 在遮挡、出视野和重新获取条件下如何表现？  
 主对比：always-update/no-recovery vs hold/coast/reacquire lifecycle。
@@ -218,7 +219,7 @@ RQ4，可选：更稳定的 anchor 是否改善任务表现或主观稳定感？
 
 - frame alignment 降低 head-motion-induced anchor slip。
 - stable anchor processors 降低 jitter，同时报告 lag tradeoff。
-- reliability-aware lifecycle 抑制大幅错误跳变，并改善恢复行为。
+- reliability-gated One Euro controller 在低参数量下改善 jitter-lag tradeoff，并抑制大幅错误跳变。
 - end-to-end latency 可解释且有分模块 breakdown。
 - 若有任务/用户实验，展示数值指标之外的实际可用性收益。
 
@@ -247,7 +248,7 @@ RQ4，可选：更稳定的 anchor 是否改善任务表现或主观稳定感？
 | per-frame pose accuracy 不足以解释 MR anchoring | head motion 下 arrival-time mapping 误差增大，即使 camera-space pose 相同 | 好的 pose tracker 应该足够 | 证明问题来自 coordinate-time mismatch，而不是 pose 网络本身 |
 | frame alignment 是 world consistency 的必要条件 | 对比 `t_capture` 与 `t_return` transform | XR runtime 已有 pose prediction | 外部感知 pose 绑定的是图像采集时刻，不是渲染时刻 |
 | latest-only transport 适合实时 anchor | latency 与 stale-frame drop 统计 | 丢帧浪费信息 | 对实时 anchor 而言，过时 pose 往往比缺失 pose 更危险 |
-| reliability-aware anchor behavior 提高可用性 | jitter、lag、jump suppression、recovery、任务指标 | filter 会增加延迟或隐藏错误 | 报告 stability-lag tradeoff，并保留 raw baseline |
+| reliability-gated One Euro anchor behavior 提高可用性 | jitter、lag、jump suppression、recovery、任务指标 | filter 会增加延迟或隐藏错误 | 同时报告 raw、low-pass、Kalman、vanilla One Euro 和 modified One Euro |
 | EgoAnchor 是 XR 系统贡献，不是 CV 拼装 | 系统闭环、VR/MR 文献、anchor-centric 指标 | 只是组合已有模块 | 贡献在 time/coordinate/update contract 以及 passthrough MR 评价 |
 
 ## 8. 实验矩阵
@@ -259,8 +260,9 @@ RQ4，可选：更稳定的 anchor 是否改善任务表现或主观稳定感？
 | Arrival-time mapping | 证明使用结果到达时刻 HMD pose 会导致错位 |
 | Frame-aligned raw | 隔离 frame alignment 效果，不引入平滑 |
 | Frame-aligned + low-pass | 简单稳定性 baseline |
-| Frame-aligned + Kalman | 当前 Unity v3 已有的强一点 temporal baseline |
-| Frame-aligned + reliability-aware controller | 目标最终方法 |
+| Frame-aligned + Kalman | 强 temporal baseline，检验状态估计类滤波是否足够 |
+| Frame-aligned + vanilla One Euro | 交互系统常用的速度自适应低通 baseline |
+| Frame-aligned + reliability-gated One Euro | 目标最终方法：One Euro + score/jump gate + static lock + bounded prediction + reacquire |
 | No recovery / always update | 展示遮挡和坏 pose 下的失败行为 |
 
 ### Conditions
@@ -286,7 +288,7 @@ RQ4，可选：更稳定的 anchor 是否改善任务表现或主观稳定感？
 | End-to-end latency | capture 到 Unity apply 的时延及分模块 breakdown |
 | Recovery success rate | 遮挡/出视野后恢复到有效 anchor 的比例 |
 | Recovery time | 物体重新出现到 stable accepted anchor 的时间 |
-| Rejection/jump suppression | reliability-aware controller 拒绝的大幅错误跳变数量与幅度 |
+| Rejection/jump suppression | reliability-gated controller 拒绝的大幅错误跳变数量与幅度 |
 | Task completion/perceived stability | 可选任务实验指标 |
 
 ### Ground Truth 建议
@@ -303,7 +305,7 @@ RQ4，可选：更稳定的 anchor 是否改善任务表现或主观稳定感？
 | Fig. 2 Problem diagram | `t_capture`、`t_return`、`t_render`，以及 arrival-time transform 为什么错 |
 | Fig. 3 System architecture | Quest/Unity、ZMQ data plane、Python runtime、NATS message/command plane、Unity anchor runtime |
 | Fig. 4 Frame alignment math | `frame_id -> capture-time camera pose -> world anchor` |
-| Fig. 5 Anchor lifecycle/controller | Update/Smooth/Coast/Frozen/Lost/Reacquire |
+| Fig. 5 One Euro anchor controller | score gate、One Euro update、static lock、bounded prediction、Hold/Lost/Reacquire |
 | Fig. 6 Experiment setup | 物体、HMD/camera path、ground truth setup |
 | Fig. 7 Main results | head motion 下 anchor error/slip |
 | Fig. 8 Robustness results | 遮挡/出视野恢复时间线 |
@@ -324,7 +326,7 @@ Supplementary video 应作为必要材料：展示 arrival-time vs frame-aligned
 3. 6DoF object pose estimation/tracking：model-based pose、RGB-D/stereo pose、register/track/re-register、recovery。
 4. Egocentric and passthrough MR datasets/evaluation：head-worn cameras、object interaction、first-person tracking。
 5. Stability and user perception：registration error、perceived object attachment、jitter/latency 下的 task performance。
-6. Robust filtering and lifecycle control：Kalman、One Euro filter、innovation gating、track management。
+6. Robust filtering and lifecycle control：Kalman、One Euro filter、simple gating、track management。
 
 示例搜索式：
 
@@ -339,12 +341,12 @@ Supplementary video 应作为必要材料：展示 arrival-time vs frame-aligned
 
 ## 11. 实现路线与论文主张对应
 
-规划假设：最终 IEEE VR 2027 论文可以把 reliability-aware control、恢复实验和可选任务评估作为目标内容写入架构。内部草稿中它们可以是计划中的方法；最终投稿前必须有实现和数据。
+规划假设：最终 IEEE VR 2027 论文可以把 reliability-gated One Euro control、恢复实验和可选任务评估作为目标内容写入架构。内部草稿中它们可以是计划中的方法；最终投稿前必须有实现和数据。
 
 Priority 0：论文源文件卫生
 
 - 将 v1/v2 表述更新为 v3：ZMQ Protobuf data plane + NATS Protobuf message/command plane。
-- 修正 `2026-EgoAnchor/makefile` 当前仍默认编译 `template.tex` 的问题。
+- 已修正 `2026-EgoAnchor/makefile` 默认编译目标：现在默认构建 `egoanchor_cn_v1.tex` 与 `egoanchor_cn_refs.bib`。
 - 用已验证的 VR/MR 与 pose-tracking 文献替换 placeholder bibliography。
 
 Priority 1：证据基础设施
@@ -360,13 +362,13 @@ Priority 2：论文指标所需协议字段
 
 Priority 3：Unity anchor policy
 
-- 实现显式 anchor state machine 或 policy controller。
-- raw、low-pass、Kalman、policy 输出必须可切换，以支持 ablation。
+- 将当前复杂 policy 收敛为 reliability-gated One Euro controller。
+- raw、low-pass、Kalman、vanilla One Euro、modified One Euro 输出必须可切换，以支持 ablation。
 - 记录 accept/reject/hold/reacquire 原因。
 
 Priority 4：技术实验
 
-- 先跑 frame-alignment ablation，这是最核心证据，不依赖完整 reliability controller。
+- 先跑 frame-alignment ablation，这是最核心证据，不依赖完整 One Euro controller。
 - 再跑 stability/filtering ablation。
 - 再跑 occlusion/out-of-view recovery。
 
@@ -381,7 +383,7 @@ Priority 5：可选任务实验
 | 风险 | 严重度 | 缓解 |
 |---|---:|---|
 | 论文读起来像 CV 模块拼装 | 高 | 以 pose-to-anchor、frame alignment、anchor metrics 和 VR/MR 文献开篇 |
-| 宣称 reliability-aware control 但没有证据 | 高 | 内部架构可以写，投稿稿必须有 controller、ablation 和 log |
+| 宣称 modified One Euro controller 有收益但没有证据 | 高 | 内部架构可以写，投稿稿必须有 vanilla One Euro/Kalman ablation 和 log |
 | 没有定量 ground truth | 高 | 建立可测量 object/HMD ground-truth setup |
 | VR/MR 文献薄弱 | 高 | related work 必须覆盖 anchor、latency、registration、user experience |
 | 双盲泄露 | 高 | 清理论文、视频、metadata、repo/path/ack 信息 |
@@ -392,10 +394,10 @@ Priority 5：可选任务实验
 
 ## 13. 近期行动
 
-1. 以 reliability-aware anchor-control paper 作为目标方案，frame-aligned system paper 作为 fallback。
+1. 以 frame-aligned anchoring + reliability-gated One Euro controller 作为目标方案，frame-aligned system paper 作为 fallback。
 2. 把 LaTeX 大纲更新为 v3 术语和目标论文结构。
 3. 实现 logging/replay，并优先跑 frame-alignment ablation。
-4. 明确 Unity controller 要消费哪些 reliability 指标，再追加 proto 字段。
+4. 明确 One Euro controller 要消费哪些 reliability 指标，避免为了 policy 复杂度追加过多 proto 字段。
 5. 写 introduction 前先建立 related-work matrix。
 
 建议内部里程碑：
@@ -403,7 +405,7 @@ Priority 5：可选任务实验
 | 时间窗口 | 里程碑 |
 |---|---|
 | 2026-05-23 到 2026-06-07 | 固定 claims、metrics、ground-truth setup、source matrix |
-| 2026-06-08 到 2026-06-30 | 实现 logging、reliability fields、policy-controller MVP |
+| 2026-06-08 到 2026-06-30 | 实现 logging、reliability fields、One Euro controller MVP |
 | 2026-07-01 到 2026-07-20 | 跑 frame-alignment、filtering、latency、recovery 实验 |
 | 2026-07-21 到 2026-08-05 | 可选任务/用户实验或 recorded-trace benchmark |
 | 2026-08-06 到 2026-08-25 | 写英文完整稿、生成图、制作 supplementary video |

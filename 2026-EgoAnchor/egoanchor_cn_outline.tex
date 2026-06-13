@@ -21,7 +21,7 @@
 % 因此不要再手动 \usepackage{hyperref} 或 \usepackage{cleveref}。
 \vgtcinsertpkg
 
-\title{EgoAnchor：面向透视混合现实的帧对齐真实物体锚定框架}
+\title{EgoAnchor：面向透视混合现实的帧对齐真实物体锚定与轻量 One Euro 控制}
 
 \author{作者待定}
 
@@ -33,9 +33,9 @@
 }
 
 \abstract{
-我们提出 EgoAnchor，一套面向 passthrough 场景的开放、可复现的真实物体锚定系统，仅依赖头戴式显示器的双目相机和物体 3D 模型输入即可实现对任意物体的 6DoF 姿态跟踪，并将其转化为稳定的世界坐标锚定结果。系统由 XR 前端与追踪后端组成，结合双目图像采集、语义定位、深度估计以及对象级 6DoF 姿态跟踪，通过帧对齐锚定机制将异步返回的相机坐标姿态一致映射到对应观测帧的应用世界坐标，从而缓解头动与推理时延耦合导致的空间错位。此外，EgoAnchor 结合几何一致性约束、低时延处理与可靠性感知更新，以支持头动、遮挡和跟踪退化条件下的持续锚定。本文将从锚定精度、稳定性、端到端时延与恢复能力等维度对系统进行评估，并分析异步 6DoF 感知转化为可用 MR 锚定结果的关键条件。}
+我们提出 EgoAnchor，一套面向 passthrough 场景的开放、可复现的真实物体锚定系统，仅依赖头戴式显示器的双目相机和物体 3D 模型输入即可实现对目标物体的 6DoF 姿态跟踪，并将其转化为稳定的世界坐标锚定结果。系统由 XR 前端与追踪后端组成，结合双目图像采集、语义定位、深度估计以及对象级 6DoF 姿态跟踪，通过帧对齐锚定机制将异步返回的相机坐标姿态一致映射到对应观测帧的应用世界坐标，从而缓解头动与推理时延耦合导致的空间错位。在 temporal anchor 层，论文计划评估轻量 reliability-gated One Euro 控制：用可靠性和跳变门控过滤不可信观测，再用速度自适应滤波、有界前推、静止锁定和重获取生命周期生成稳定输出。本文将从锚定精度、稳定性、端到端时延与恢复能力等维度对系统进行评估，并对比 raw、low-pass、Kalman、vanilla One Euro 与改进 One Euro，分析异步 6DoF 感知转化为可用 MR 锚定结果的关键条件。}
 
-\keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 异步感知, 低延迟系统}
+\keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 异步感知, One Euro 滤波, 低延迟系统}
 
 \begin{document}
 
@@ -48,7 +48,7 @@
 
 在 passthrough MR 中，高质量对象感知与交互实时性之间存在天然张力。为了获得更可靠的 6DoF 姿态估计，系统往往需要依赖头显外部的感知计算资源；然而，这种前后端分离会使观测、推理与锚定更新在时间上发生解耦，即使相机坐标系中的姿态估计是准确的，最终应用到世界坐标中的真实物体锚定仍可能因头动与时延而产生可见偏差。除此之外，真实物体锚定还需要同时处理感知与应用之间的几何一致性，以及遮挡、快速运动和跟踪退化条件下的恢复能力。这些挑战表明，passthrough MR 中的真实物体锚定并不是姿态估计结果的直接保证，而是一个需要在时间、几何与恢复三个层面协同设计的系统问题。
 
-为此，本文提出 EgoAnchor，一套面向 passthrough MR 的真实物体锚定系统。该系统由 XR 前端与追踪后端组成：前端负责采集头戴双目图像、相机信息和观测帧位姿，后端执行语义定位、双目深度估计以及对象级 6DoF 姿态跟踪。EgoAnchor 围绕世界一致、可恢复的真实物体锚定目标组织为一条面向异步感知的系统闭环。该闭环以\textbf{帧对齐锚定}为关键机制，并结合几何一致性约束、低时延处理与可靠性感知更新，使异步返回的对象级 6DoF 姿态能够被稳定地应用为世界坐标中的真实物体锚定结果。
+为此，本文提出 EgoAnchor，一套面向 passthrough MR 的真实物体锚定系统。该系统由 XR 前端与追踪后端组成：前端负责采集头戴双目图像、相机信息和观测帧位姿，后端执行语义定位、双目深度估计以及对象级 6DoF 姿态跟踪。EgoAnchor 围绕世界一致、可恢复的真实物体锚定目标组织为一条面向异步感知的系统闭环。该闭环以\textbf{帧对齐锚定}为关键机制；围绕 temporal anchor 层，本文将比较可靠性门控、One Euro 滤波、有界前推和重获取生命周期是否能进一步提升锚定稳定性与恢复行为。
 
 我们通过系统评估分析 EgoAnchor 的有效性，并将评价重点从传统的逐帧 pose accuracy 扩展到世界坐标中的锚定质量。除位姿误差外，本文进一步关注锚定误差、稳定性、端到端时延与恢复能力，并通过关键基线与消融实验分析帧对齐、更新策略与几何映射对系统行为的影响。本文旨在验证 EgoAnchor 在真实物体锚定任务中的系统可用性，并分析世界一致性、更新稳定性与恢复能力之间的关键关系。
 
@@ -128,17 +128,17 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 \]
 本节需要清楚比较两种做法：一是 frame-aligned anchoring，二是 arrival-time anchoring，并说明后者在快速头动和外部推理延迟条件下会造成显著的世界坐标错位。
 
-\subsection{可靠性感知的锚定更新与恢复}
-本节将“从 pose stream 到 anchor behavior”的控制层写成轻量但清晰的决策机制。EgoAnchor 不对每个返回 pose 都直接更新 anchor，而是结合当前观测的可靠性、深度有效性、tracking 状态、frame alignment 结果与 world-space pose innovation 决定如何更新。其最小形式包括：
+\subsection{轻量 One Euro 锚定更新与恢复}
+本节将“从 pose stream 到 anchor behavior”的控制层写成轻量但清晰的决策机制。EgoAnchor 不对每个返回 pose 都直接更新 anchor，而是结合当前观测的可靠性、tracking 状态、frame alignment 结果与 world-space pose jump 决定是否更新。其最小形式包括：
 \begin{itemize}
-  \item \textbf{输入：} 姿态可靠性、深度有效性、tracking 状态、头显运动强度、回包年龄；
-  \item \textbf{输出：} Update、Smooth、Hold、Reacquire 四种锚定模式；
+  \item \textbf{输入：} 姿态可靠性、tracking 状态、pose jump、回包年龄；
+  \item \textbf{输出：} One Euro Update、Static Lock、Bounded Prediction、Hold、Reacquire 等锚定模式；
   \item \textbf{原则：} 错误更新通常比短时保持更糟；系统应在高不确定性时抑制错误 anchor 更新。
 \end{itemize}
-当前实现采用规则式状态机，可按以下三个层次展开：
+当前目标实现采用 One Euro filter 作为滤波核心，并只加入 MR 锚定所需的门控和生命周期，可按以下三个层次展开：
 \begin{enumerate}
-  \item \textbf{可靠性估计：} 由 segmentation 质量、depth-in-mask、pose 跳变与 track 状态共同构成；
-  \item \textbf{更新策略：} 高可靠性时更新，边界情况时平滑，低可靠性时保持，失败时触发重获取；
+  \item \textbf{可靠性门控：} 由 pose score、flags、pose 跳变与 track 状态共同构成；
+  \item \textbf{滤波与输出：} 可信观测进入 One Euro，静止时锁定输出，运动时做有界前推；
   \item \textbf{生命周期管理：} Searching、Tracking、Coasting、Frozen、Lost / Relocalizing 等状态，以及各状态对可见性和交互的影响。
 \end{enumerate}
 本节的落点应是：EgoAnchor 的价值不在于单个模块的新颖性，而在于它把异步外部感知组织成一套适合 MR 应用层使用的更新与恢复机制。
@@ -160,7 +160,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 本文以 EgoAnchor 为实例化实现，评估的对象是“将异步 6DoF pose stream 转化为 world-consistent real-object anchoring 的系统方法”，而不仅是一个独立工程系统。围绕这一主张，全文聚焦以下三个研究问题：
 \begin{itemize}
   \item \textbf{RQ1：} 本文提出的 pose-to-anchor 框架能否在 passthrough MR 中将外部 6DoF pose tracking 转化为世界一致、稳定可用的真实物体锚定？
-  \item \textbf{RQ2：} 帧对齐与可靠性感知锚定控制这两个关键机制分别带来多大收益？
+  \item \textbf{RQ2：} low-pass、Kalman、vanilla One Euro 和 reliability-gated One Euro 在稳定性、响应延迟和错误更新上有什么差异？
   \item \textbf{RQ3：} 在头动、遮挡、出视野和跟踪退化条件下，该框架的时延、恢复能力与任务可用性如何？
 \end{itemize}
 本节的总纲是：本文评价的不只是 pose 是否准确，而是 anchor 是否在 MR 应用中真正可用。
@@ -180,7 +180,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 \end{enumerate}
 任务实验建议控制为一个轻量 within-subject study，包含两个条件与两个任务：
 \begin{enumerate}[label=\alph*.]
-  \item \textbf{条件设置：} Baseline 与 EgoAnchor full。Baseline 可定义为不带可靠性感知更新的 frame-aligned 版本；EgoAnchor full 则包含完整的锚定更新与恢复策略。
+  \item \textbf{条件设置：} Baseline 与 EgoAnchor full。Baseline 至少包括 frame-aligned raw、low-pass、Kalman 和 vanilla One Euro；EgoAnchor full 则包含 reliability-gated One Euro 与恢复策略。
   \item \textbf{任务 1：附着 / 对齐任务。} 参与者将虚拟标签、边框或按钮附着到真实物体指定区域，并在自然头动中完成对齐或确认操作。
   \item \textbf{任务 2：恢复 / 指认任务。} 参与者在遮挡或短时出视野后重新观察目标，并完成指认或确认操作，以评估重定位后的可用性。
 \end{enumerate}
@@ -199,7 +199,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 本节说明正文中的三组核心对比：
 \begin{enumerate}
   \item \textbf{整体效果：} EgoAnchor 与基础基线在锚定精度、稳定性与时延上的比较；
-  \item \textbf{关键消融：} frame alignment 与可靠性感知更新策略的贡献；
+  \item \textbf{关键消融：} frame alignment、Kalman/One Euro baseline 与 reliability-gated One Euro 更新策略的贡献；
   \item \textbf{鲁棒性与可用性：} 遮挡、出视野、恢复与任务实验结果。
 \end{enumerate}
 更细的位姿精度表、标定映射对比、感知栈差异和参数敏感性分析放入 supplementary。
@@ -210,7 +210,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 本节报告最终世界锚定误差、稳定性与端到端时延，并在必要时辅以 pose 精度作为支持性说明。重点是明确区分相机坐标下的 pose 误差与 Unity 世界坐标中的 anchor 误差，并说明二者为何并不等价。
 
 \subsection{关键机制消融}
-本节集中展示 frame alignment 与可靠性感知更新策略的收益，通过快速头动和异常观测条件下的定量与可视化结果说明：为什么错误时刻的坐标映射会造成世界错位，以及为什么错误更新往往比短时保持更糟。
+本节集中检验 frame alignment、vanilla One Euro 和 reliability-gated One Euro 的收益，通过快速头动和异常观测条件下的定量与可视化结果说明：为什么错误时刻的坐标映射会造成世界错位，为什么 Kalman 或 vanilla One Euro 不一定能处理坏 pose，以及为什么错误更新往往比短时保持更糟。
 
 \subsection{鲁棒性与任务可用性}
 本节报告遮挡、出视野和快速运动条件下的恢复成功率、恢复时间与失败模式，并汇报轻量任务实验中的客观和主观结果。任务实验重点回答：EgoAnchor 是否使参与者感到更稳定、更可信，并更有利于完成真实物体附着与恢复相关任务。
@@ -230,7 +230,7 @@ t_{\text{capture}},\quad t_{\text{return}},\quad t_{\text{render}}
 \end{itemize}
 
 \subsection{局限性与未来工作}
-本节讨论多物体扩展、头显端轻量部署、在线个性化和跨场景长期锚定等方向，并明确区分本文当前已实现的规则式 reliability-aware anchor controller 与未来更完整的学习式或任务自适应 temporal policy 设计。
+本节讨论多物体扩展、头显端轻量部署、在线个性化和跨场景长期锚定等方向，并明确区分本文当前目标中的轻量 One Euro controller 与未来更完整的学习式或任务自适应 temporal policy 设计。
 
 \section{结论}
 结论部分回到本文的核心问题：如何在异步感知、外部推理和头显持续运动条件下，将 6DoF object pose tracking 组织为稳定、世界一致且可恢复的真实物体锚定。写作重点是基于实验结果明确回答这一问题，并总结对后续 MR 对象锚定系统设计具有普遍意义的经验结论。

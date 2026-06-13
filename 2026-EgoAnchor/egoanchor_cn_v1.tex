@@ -21,21 +21,21 @@
 % 因此不要再手动 \usepackage{hyperref} 或 \usepackage{cleveref}。
 \vgtcinsertpkg
 
-\title{EgoAnchor：面向透视混合现实的帧对齐 6DoF 物体跟踪与可靠性感知锚定控制}
+\title{EgoAnchor：面向透视混合现实的帧对齐 6DoF 物体跟踪与轻量 One Euro 锚定控制}
 
 \author{作者待定}
 
 \teaser{
   \centering
   \fbox{\rule{0pt}{2.0in}\rule{0.95\linewidth}{0pt}}
-  \caption{目标 teaser 图。建议展示 Quest 透视双目采集、Python 外部 6DoF pose observation、基于 frame id 的 capture-time camera pose 回查、可靠性感知 anchor controller，以及 Unity 世界坐标中的真实物体锚定结果。}
+  \caption{目标 teaser 图。建议展示 Quest 透视双目采集、Python 外部 6DoF pose observation、基于 frame id 的 capture-time camera pose 回查、One Euro anchor controller，以及 Unity 世界坐标中的真实物体锚定结果。}
   \label{fig:teaser}
 }
 
 \abstract{
-我们提出 EgoAnchor，一套面向 passthrough mixed reality 的真实物体锚定框架，研究的问题不是如何单独提高某一帧图像中的 6DoF pose accuracy，而是如何在头显持续运动、外部感知异步返回、pose 低频且间歇失效的条件下，将 camera-space 6DoF object pose stream 转化为世界坐标中稳定、可恢复、可交互的 real-object anchor。EgoAnchor 由 Unity/Quest 前端与 Python 后端组成：前端采集双目 Passthrough Camera 图像、camera info 与观测帧 camera pose，后端执行 prompt-guided segmentation、双目度量深度估计与 model-based 6DoF register/track/re-register。系统的关键机制是 frame-aligned anchoring：每个返回 pose 都依据 \texttt{frame\_id} 回查观测帧采集时刻的相机世界位姿，而不是使用结果到达时刻的 HMD pose，从而显式解耦外部推理时延与头显运动。围绕这一机制，EgoAnchor 进一步引入 reliability-aware anchor control，根据 pose reliability、frame-history validity、pose innovation、result age 与 runtime status 在 Update、Smooth、Coast/Hold、Frozen/Lost 和 Reacquire 等锚定行为之间切换。本文将以 world-space anchor error、head-motion-induced slip、jitter-lag tradeoff、端到端 latency、遮挡/出视野恢复能力和任务可用性为核心指标，评估 EgoAnchor 将异步 6DoF pose stream 转化为可用 MR object anchor 的系统有效性。}
+我们提出 EgoAnchor，一套面向 passthrough mixed reality 的真实物体锚定框架。本文研究的问题不是如何单独提高某一帧图像中的 6DoF pose accuracy，而是如何在头显持续运动、外部感知异步返回、pose 低频且间歇失效的条件下，将 camera-space 6DoF object pose stream 转化为世界坐标中稳定、可恢复、可交互的 real-object anchor。EgoAnchor 由 Unity/Quest 前端与 Python 后端组成：前端采集双目 Passthrough Camera 图像、camera info 与观测帧 camera pose，后端执行 prompt-guided segmentation、双目度量深度估计与 model-based 6DoF register/track/re-register。系统的关键机制是 frame-aligned anchoring：每个返回 pose 都依据 \texttt{frame\_id} 回查观测帧采集时刻的相机世界位姿，而不是使用结果到达时刻的 HMD pose，从而解耦外部推理时延与头显运动。在此基础上，论文计划评估 reliability-gated One Euro anchor control：先用可靠性、状态和跳变约束过滤不可信观测，再用速度自适应 One Euro 滤波、有界前推、静止锁定和重获取生命周期生成每渲染帧 stable anchor。本文将以 world-space anchor error、head-motion-induced slip、jitter-lag tradeoff、端到端 latency、遮挡/出视野恢复能力和任务可用性为核心指标，并对比 raw、low-pass、Kalman、vanilla One Euro 与改进 One Euro，评估 EgoAnchor 将异步 6DoF pose stream 转化为可用 MR object anchor 的系统有效性。}
 
-\keywords{混合现实, 真实物体锚定, 对象中心锚定, 6DoF 姿态跟踪, 帧对齐, 可靠性感知控制, 异步感知}
+\keywords{混合现实, 真实物体锚定, 对象中心锚定, 6DoF 姿态跟踪, 帧对齐, One Euro 滤波, 异步感知}
 
 \begin{document}
 
@@ -52,14 +52,14 @@
 
 这一断层在外部感知架构下尤为明显。为了获得更强的对象级感知能力，系统通常将重计算 pipeline 放在 PC/GPU 后端执行；但图像采集、网络传输、模型推理、pose 回传和 Unity 应用更新因此发生时序解耦。即使 camera-space pose 本身准确，如果系统在 pose 到达时使用当前 HMD pose 完成世界坐标变换，而不是使用该观测帧采集时刻的 camera pose，最终 anchor 也会在快速头动下出现可见错位。进一步地，遮挡、出视野、mask/depth 退化和 pose jump 会使“每个 pose 都立即更新 anchor”的策略产生明显不稳定。
 
-本文将该问题概括为 \textbf{pose-to-anchor}：如何把异步返回、低频、带噪、会间歇缺失的 6DoF object pose observations 转化为世界一致、稳定、可恢复、可交互的 MR real-object anchor。我们提出 EgoAnchor，一套面向 passthrough MR 的 frame-aligned and reliability-aware real-object anchoring framework。EgoAnchor 不把 pose estimator 视为最终输出，而是将其视作不可靠观测，并通过 frame-aligned reprojection、latest-only transport、可靠性评分、anchor update policy 和 lifecycle management 生成应用层 anchor。
+本文将该问题概括为 \textbf{pose-to-anchor}：如何把异步返回、低频、带噪、会间歇缺失的 6DoF object pose observations 转化为世界一致、稳定、可恢复、可交互的 MR real-object anchor。我们提出 EgoAnchor，一套面向 passthrough MR 的 frame-aligned real-object anchoring framework。EgoAnchor 不把 pose estimator 视为最终输出，而是将其视作不可靠观测，并通过 frame-aligned reprojection、latest-only transport、可靠性门控、One Euro 滤波和 lifecycle management 生成应用层 anchor。
 
-EgoAnchor 的核心机制是 \textbf{frame-aligned anchoring}。系统在 Unity 侧为每个发送帧保存 capture-time camera world pose，并在 Python 返回 PoseResult 后按 \texttt{frame\_id} 回查该位姿。相机坐标系中的 object pose 因此被映射到真实观测时刻的世界坐标，而不是映射到结果回包时刻的头显坐标。围绕这一机制，本文进一步设计 \textbf{reliability-aware anchor control}：根据感知可靠性、frame history 命中、pose innovation、result age 和 runtime health，在 Update、Smooth、Coast/Hold、Frozen/Lost 与 Reacquire 等行为之间切换，避免错误更新比短时保持造成更严重的 MR 锚定失真。
+EgoAnchor 的核心机制是 \textbf{frame-aligned anchoring}。系统在 Unity 侧为每个发送帧保存 capture-time camera world pose，并在 Python 返回 PoseResult 后按 \texttt{frame\_id} 回查该位姿。相机坐标系中的 object pose 因此被映射到真实观测时刻的世界坐标，而不是映射到结果回包时刻的头显坐标。围绕这一机制，本文进一步规划轻量 \textbf{reliability-gated One Euro anchor control}：One Euro filter \cite{casiez2012oneeuro} 提供速度自适应低通，Kalman filter \cite{kalman1960new} 保留为状态估计类基线；EgoAnchor 只在 One Euro 之外加入 MR anchoring 必需的 score/jump gate、静止锁定、有界前推和 Reacquire 生命周期。最终是否把该控制器作为论文贡献，需要由 vanilla One Euro、Kalman 与改进 One Euro 的消融结果决定。
 
 本文的贡献如下：
 \begin{enumerate}
   \item 提出 passthrough MR 中的 \textbf{pose-to-anchor 问题表述}，说明 camera-space 6DoF pose accuracy 本身不足以保证真实物体在 MR 中稳定、世界一致、可恢复地锚定。
-  \item 提出 \textbf{frame-aligned and reliability-aware dynamic anchoring framework}，将每个异步返回的 object pose 通过 capture-time camera pose 映射到世界坐标，并根据观测可靠性控制 anchor 更新、保持与重获取。
+  \item 提出 \textbf{frame-aligned dynamic anchoring framework}，将每个异步返回的 object pose 通过 capture-time camera pose 映射到世界坐标；若实验支持，再将 reliability-gated One Euro 控制作为该框架的轻量 temporal anchor 层。
   \item 实现 \textbf{EgoAnchor} 端到端系统，打通 Quest/Unity 头戴双目透视采集、Python 外部对象级感知、ZMQ Protobuf 数据面、NATS Protobuf pose/command 消息面与 Unity world-anchor runtime。
   \item 建立一套 \textbf{anchor-centric evaluation}，从 world-space anchor error、head-motion-induced slip、jitter-lag tradeoff、latency、recovery 和任务可用性角度评估真实物体锚定，而不是只报告逐帧 pose accuracy。
 \end{enumerate}
@@ -113,7 +113,7 @@ EgoAnchor 将 pose estimator 的输出视为不可靠观测，而不是最终应
   \item 通过 frame id 和 capture-time camera pose history 完成 frame-aligned world mapping；
   \item 使用 latest-only transport 避免 stale frames 和过期 pose 污染实时 anchor；
   \item 估计 pose reliability，并基于 pose innovation、result age 和 runtime status 进行更新门控；
-  \item 在 Unity 侧维护 anchor lifecycle，输出 raw、baseline-stable 与 reliability-aware stable anchor。
+  \item 在 Unity 侧维护 anchor lifecycle，输出 raw、baseline-stable、vanilla One Euro 与 reliability-gated One Euro anchor。
 \end{enumerate}
 
 \subsection{对象中心感知管线}
@@ -144,26 +144,27 @@ EgoAnchor v3 采用双平面通信：
 \end{itemize}
 ZMQ 数据面使用 topic-level latest-drain，避免处理过期帧；NATS 消息面负责小型 pose result、状态事件、心跳和 request/reply command。该设计的论文论点是：实时 MR anchor 更关心最新一致状态，而不是完整消费所有过期观测。
 
-\subsection{可靠性感知的 Anchor 控制}
-Reliability-aware anchor controller 是目标论文的关键方法层。它的输入包括：
+\subsection{轻量 One Euro Anchor 控制}
+One Euro anchor controller 是目标论文的关键方法层，但不应写成复杂 policy。One Euro filter 本身来自实时交互系统中的噪声输入平滑，它不是 VR 专属算法；本文采用它，是因为 passthrough MR 中的外部 pose stream 具有低频、延迟、带噪和需要跟手响应的特点。EgoAnchor 的增量在于把 One Euro 放进 MR pose-to-anchor contract 中，并加入最少的可靠性门控和生命周期逻辑。Controller 的输入包括：
 \begin{itemize}
   \item Python 侧 reliability score 和 reliability flags；
   \item frame history 是否命中；
-  \item pose innovation，即当前观测与上一稳定 anchor/预测状态之间的平移和旋转差异；
+  \item pose jump，即当前观测与上一稳定 anchor/预测状态之间的平移和旋转差异；
   \item result age 和 end-to-end latency；
   \item runtime phase、track/re-register 状态、heartbeat 与 command 状态。
 \end{itemize}
 
 Controller 输出以下 anchor behavior：
 \begin{itemize}
-  \item \textbf{Update：} 高可靠、低 innovation 时直接更新；
-  \item \textbf{Smooth：} 中等可靠或轻微抖动时进入平滑更新；
+  \item \textbf{One Euro Update：} 可信观测进入位置通道和四元数 log-space 旋转通道的速度自适应滤波；
+  \item \textbf{Static Lock：} 测量窗口确认物体静止后锁定显示输出，吸收头显轻微晃动带来的 residual slip；
+  \item \textbf{Bounded Prediction：} 在渲染帧之间用受限线速度和角速度前推，避免 5Hz pose 流在 90Hz 显示中呈现阶梯感；
   \item \textbf{Coast/Hold：} 短时间无 pose 或低可靠 pose 时保持或短时预测；
   \item \textbf{Frozen/Lost：} 连续低可靠、frame miss 或 heartbeat 异常时停止信任新 pose；
   \item \textbf{Reacquire：} reset/reacquire command 或目标重新出现后重新注册 anchor。
 \end{itemize}
 
-核心原则是：在 MR 中，错误更新通常比短时保持更糟。论文需要通过消融实验展示 always update、简单 smoothing、Kalman baseline 与 reliability-aware controller 的差异。
+核心原则是：在 MR 中，错误更新通常比短时保持更糟。论文需要通过消融实验展示 always update、low-pass、Kalman、vanilla One Euro 与 EgoAnchor modified One Euro 的差异。若最终数据不能证明 modified One Euro 相比 vanilla One Euro 或 Kalman 有明确收益，则该控制器应降级为工程实现细节，论文主贡献回到 frame-aligned pose-to-anchor。
 
 \subsection{命令、状态与生命周期}
 NATS request/reply command 包括 reset、reacquire 和 control。command handler 只负责 parse、validate、dedup、enqueue 和 ack；pipeline/GPU 状态由 Python \texttt{TrackingRuntime} 单一 owner 顺序执行。ack 只表示命令已接受或拒绝，不表示重获取已成功。执行结果通过 \texttt{AnchorStatusEvent}、\texttt{ServerHeartbeat} 和后续 \texttt{PoseResult} 反映。Unity anchor lifecycle 应与 Python server state 分离，避免网络层、感知层和 Transform 应用混在一起。
@@ -189,7 +190,7 @@ Python v3 端由 \texttt{TrackingRuntime} 单一拥有 perception pipeline 和 G
 本节必须避免旧 v1 的 ZMQ + MessagePack 表述，除非放在历史实现对比中。
 
 \subsection{Unity Anchor Runtime}
-Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRuntime}、\texttt{CameraPoseFrameAligner}、\texttt{AnchorPoseProcessor}、low-pass/Kalman baseline processor 和后续 reliability-aware policy controller 组成。runtime 保留 raw world pose 和 stable world pose，便于论文中进行 raw、low-pass、Kalman 和 full controller 的 ablation。
+Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRuntime}、\texttt{CameraPoseFrameAligner}、\texttt{AnchorPoseProcessor}、low-pass/Kalman baseline processor 和 One Euro controller 组成。runtime 保留 raw world pose 和 stable world pose，便于论文中进行 raw、low-pass、Kalman、vanilla One Euro 和 modified One Euro 的 ablation。
 
 \subsection{诊断、日志与复现支持}
 为支撑论文实验，系统需要记录 frame id、timestamps、network receive/publish time、pose phase、det count、depth valid ratio、depth-in-mask、mask area ratio、reliability score、reliability flags、frame history hit/miss、anchor state、processor output 和 command state。最终实验应能从日志重放并计算 anchor error、jitter、slip、latency percentiles 和 recovery time。
@@ -200,7 +201,7 @@ Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRunti
 本文围绕四个研究问题组织实验：
 \begin{itemize}
   \item \textbf{RQ1：} frame-aligned mapping 是否能在头显运动和外部推理延迟下提升 world-space anchoring？
-  \item \textbf{RQ2：} low-pass、Kalman 和 reliability-aware update policy 如何影响 anchor stability、lag 和错误跳变？
+  \item \textbf{RQ2：} low-pass、Kalman、vanilla One Euro 和 reliability-gated One Euro 如何影响 anchor stability、lag 和错误跳变？
   \item \textbf{RQ3：} EgoAnchor 在遮挡、出视野、跟踪退化和 reacquire 条件下的恢复能力如何？
   \item \textbf{RQ4：} 更稳定、可恢复的 anchor 是否改善真实物体标注/确认任务中的客观表现或主观稳定感？
 \end{itemize}
@@ -212,7 +213,8 @@ Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRunti
   \item frame-aligned raw；
   \item frame-aligned + low-pass；
   \item frame-aligned + Kalman；
-  \item frame-aligned + reliability-aware controller；
+  \item frame-aligned + vanilla One Euro；
+  \item frame-aligned + reliability-gated One Euro；
   \item no recovery / always update。
 \end{enumerate}
 
@@ -228,7 +230,7 @@ Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRunti
   \item \textbf{Lag：} 真实变化或有效 pose 更新到 stable anchor 响应之间的延迟；
   \item \textbf{End-to-end latency：} capture 到 Unity apply 的时延及分模块 breakdown；
   \item \textbf{Recovery success/time：} 遮挡或出视野后恢复到 accepted stable anchor 的比例与时间；
-  \item \textbf{Jump rejection：} controller 拒绝的大幅错误 pose jump 数量和幅度；
+  \item \textbf{Jump rejection：} reliability-gated controller 拒绝的大幅错误 pose jump 数量和幅度；
   \item \textbf{Task usability：} 可选任务完成时间、成功率、主观稳定性和信任感评分。
 \end{itemize}
 
@@ -240,11 +242,11 @@ Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRunti
 \subsection{Frame Alignment 对世界一致性的影响}
 本节报告 arrival-time mapping 与 frame-aligned mapping 在静态观察、自然头动和快速头动下的 anchor error 与 head-motion-induced slip。目标论证：即使 camera-space pose 相同，错误的时间坐标组合也会造成 MR world anchor 错位。
 
-\subsection{稳定性、响应延迟与可靠性感知控制}
-本节比较 frame-aligned raw、low-pass、Kalman 和 reliability-aware controller 的 jitter、lag、jump rejection 和 stable anchor error。重点不是简单追求最平滑，而是展示稳定性与响应性之间的 tradeoff，以及 reliability gate 如何避免坏 pose 对 anchor 的破坏。
+\subsection{稳定性、响应延迟与 One Euro 控制}
+本节比较 frame-aligned raw、low-pass、Kalman、vanilla One Euro 和 EgoAnchor reliability-gated One Euro 的 jitter、lag、jump rejection 和 stable anchor error。重点不是简单追求最平滑，而是验证稳定性与响应性之间的 tradeoff，并检验 score/jump gate、static lock 和 bounded prediction 是否真的能减少坏 pose 对 anchor 的破坏。
 
 \subsection{遮挡、出视野与重获取}
-本节报告部分遮挡、完全出视野、重新观察和主动 reacquire 条件下的 recovery success rate、recovery time 和 failure taxonomy。结果应展示 always update / no recovery 为什么会失败，以及 lifecycle controller 如何在 Hold/Coast/Frozen/Lost/Reacquire 之间保持可解释行为。
+本节报告部分遮挡、完全出视野、重新观察和主动 reacquire 条件下的 recovery success rate、recovery time 和 failure taxonomy。结果应展示 always update / no recovery 为什么会失败，以及 One Euro anchor lifecycle 如何在 Hold/Coast/Frozen/Lost/Reacquire 之间保持可解释行为。
 
 \subsection{端到端时延与系统开销}
 本节给出 capture、JPEG encode、ZMQ transport、Python perception、NATS publish、Unity receive/apply 等分模块 latency breakdown，并报告 P50/P90/P95。讨论 latest-only strategy 如何减少 stale result 对 anchor 的影响。
@@ -267,14 +269,14 @@ Unity anchor runtime 由 \texttt{PoseResultReceiver}、\texttt{PoseToAnchorRunti
 未来方向包括多物体 real-object anchoring、头显端轻量部署、学习式 reliability model、跨场景长期持久化、与平台 spatial anchors 融合，以及更大规模任务/用户研究。
 
 \section{结论}
-本文围绕 passthrough MR 中的 pose-to-anchor 问题，提出 EgoAnchor 作为 frame-aligned and reliability-aware real-object anchoring framework。论文的核心结论应落在：可用的 MR object anchor 不由单帧 6DoF pose accuracy 自动保证，而需要 capture-time frame alignment、latest-only asynchronous transport、reliability-aware update control 和 anchor-centric evaluation 共同支撑。最终英文稿应基于实验结果明确量化这些机制对 world consistency、stability、latency 和 recovery 的影响。
+本文围绕 passthrough MR 中的 pose-to-anchor 问题，提出 EgoAnchor 作为 frame-aligned real-object anchoring framework。论文的核心结论应落在：可用的 MR object anchor 不由单帧 6DoF pose accuracy 自动保证，而需要 capture-time frame alignment、latest-only asynchronous transport、轻量 One Euro anchor control 和 anchor-centric evaluation 共同支撑。最终英文稿应基于实验结果明确量化这些机制对 world consistency、stability、latency 和 recovery 的影响。
 
 % 内部写作 checklist，不进入最终投稿正文：
 % 1. 2027 CFP 发布后复核页数、双盲、AI disclosure、supplementary video 和 ethics 要求。
 % 2. 将本中文稿最终改写为英文，并删除内部计划式措辞。
 % 3. 补齐 VR/MR related work，不让文献集中在 CV 模块。
 % 4. 修正 makefile 当前默认编译 template.tex 的问题。
-% 5. 完成 reliability-aware controller、logging/replay、ground truth 和 frame-alignment ablation。
+% 5. 完成 One Euro controller、logging/replay、ground truth 和 frame-alignment ablation。
 % 6. supplementary video 必须展示 arrival-time vs frame-aligned、raw vs stable、occlusion/reacquire 和任务 demo。
 
 \bibliographystyle{abbrv-doi-hyperref-narrow}

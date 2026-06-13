@@ -2,7 +2,7 @@
 
 > 配套文档：`IEEEVR2027-paper-architecture.md`（论文架构，本计划实现其 §8 实验矩阵）。
 > 阶段：评估底座（measure-first）。本阶段**不改动锚定算法本身**，只新增评估采集与离线分析能力。
-> 锁定决策：① Unity 跑在 **Editor + Quest Link（同机）**；② 定量 GT **使用左右手柄**（`controller_left` / `controller_right`，Meta SDK 自带 6DoF）；③ ablation 走 **P1a 实机并行录制 + P1b 确定性回放**。
+> 锁定决策：① Unity 跑在 **Editor + Quest Link（同机）**；② 定量 GT **使用左右手柄**（`controller_left` / `controller_right`，Meta SDK 自带 6DoF）；③ ablation 走 **P1a 实机并行录制 + P1b 确定性回放**；④ RQ2 必须同时比较 raw、low-pass、Kalman、vanilla One Euro 与 reliability-gated One Euro。
 
 ---
 
@@ -68,11 +68,11 @@ Editor+Link 的代价（写入论文 limitations）：Link 的真实网络/编�
 
 | 字段                                      | 说明                                                                      |
 | ----------------------------------------- | ------------------------------------------------------------------------- |
-| `label`                                 | 变体名（`"raw"` / `"lowpass"` / `"kalman"` / `"controller"` …）  |
+| `label`                                 | 变体名（`"raw"` / `"lowpass"` / `"kalman"` / `"one_euro"` / `"egoanchor_one_euro"` …）  |
 | `has_pose`                              | 该变体当前是否有可用 stable pose                                          |
 | `pos` / `rot`                         | 该变体显示位姿                                                            |
-| `anchor_state`                          | 该变体 policy 状态（Tracking/Coasting/Lost…，无 policy 则空）            |
-| `policy_action` / `policy_reason`     | accept/reject/hold 及原因（jump suppression 用）                          |
+| `anchor_state`                          | 该变体 anchor lifecycle 状态（Tracking/Coasting/Lost…，无 lifecycle 则空）            |
+| `policy_action` / `policy_reason`     | accept/reject/hold 及原因（jump suppression 用）；`one_euro` 可为空，`egoanchor_one_euro` 必填 |
 | `aligned_raw_pos` / `aligned_raw_rot` | **对齐后未滤波的 raw 世界位姿**（P1b 回放输入，只需在主变体记一次） |
 | `reliability_score`                     | 该 frame 的可靠性分（回放输入）                                           |
 
@@ -97,7 +97,7 @@ Editor+Link 的代价（写入论文 limitations）：Link 的真实网络/编�
 ### 2.4 关键设计点
 
 - **GT 记两个采样率**：每 frame_id 一份（给 anchor error 和标定），每渲染 tick 再记一份（给 lag/jitter 对连续真值的比较）。GT 一次 `OVRInput` 读，近零成本，渲染帧每帧记无压力。
-- **多变体同帧记录**：`AnchorRuntimeHub` 本就支持喂同一输入给 N 个 `PoseToAnchorRuntime`。RQ2 的 raw/low-pass/Kalman/controller 做成 N 个并行 runtime，**一次录制全拿到**，对比绝对公平（同一输入流）。
+- **多变体同帧记录**：`AnchorRuntimeHub` 本就支持喂同一输入给 N 个 `PoseToAnchorRuntime`。RQ2 的 raw/low-pass/Kalman/vanilla One Euro/reliability-gated One Euro 做成 N 个并行 runtime，**一次录制全拿到**，对比绝对公平（同一输入流）。
 - **RQ1 纯离线，不需独立 runtime**：有 `unity_capture` 的"采集时刻头位姿" + Python 的 camera-space 矩阵 `C_T_O` + `unity_output` 的"结果到达 tick 头位姿"，离线就能同时算 arrival-time 与 frame-aligned 两种映射并各自比 GT。
 
 ---
@@ -199,7 +199,7 @@ public sealed class JsonlFileWriter : IDisposable
 [Serializable]
 public struct RecordedRuntime
 {
-    public string label;                 // "raw" / "lowpass" / "kalman" / "controller"
+    public string label;                 // "raw" / "lowpass" / "kalman" / "one_euro" / "egoanchor_one_euro"
     public PoseToAnchorRuntime runtime;  // 拖入对应 runtime
     public bool isPrimary;               // 主变体：额外记 aligned_raw + reliability（回放输入）
 }
@@ -281,7 +281,7 @@ FrameCaptured?.Invoke(frameId, Time.realtimeSinceStartupAsDouble * 1000.0);
 1. 新建空 GameObject `EvalRig`（挂 `Server` 下），挂 `AnchorEvalRecorder` + `EvalSessionController` + `ControllerGroundTruthProvider`。
 2. `ControllerGroundTruthProvider.cameraRig` ← 场景 `OVRCameraRig`。
 3. `AnchorEvalRecorder` 各字段拖入：`gt` ← 同物体的 provider；`headAnchor` ← `CenterEyeAnchor`；`stereoSource`/`framePoseHistory`/`alignmentReference` ← 对应组件（与 runtime 配置一致）；`outputDir` ← `data/eval` 绝对路径。
-4. `recordedRuntimes` 列表：P1a 先连 `AnchorObject`(stable, isPrimary=true) 与 `AnchorObject Raw`(raw)。做 RQ2 ablation 时，往 `AnchorRuntimeHub.runtimes` 再加几个不同 processor/policy 配置的 runtime 子物体，然后也拖进这个 list——**纯场景配置，不改代码**。
+4. `recordedRuntimes` 列表：P1a 先连 `AnchorObject`(stable, isPrimary=true) 与 `AnchorObject Raw`(raw)。做 RQ2 ablation 时，往 `AnchorRuntimeHub.runtimes` 再加 lowpass、kalman、one_euro、egoanchor_one_euro 等 runtime 子物体，然后也拖进这个 list——**纯场景配置，不改代码**。
 5. UI：`EvalSessionController` 监听新增按钮/键盘。
 
 ---
@@ -393,11 +393,11 @@ def project_point(K, w_T_cam, p_world): ...         # 世界点 → 头相机像
 | - | -------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1 | **World-space anchor error**     | `anchor_error.py`     | 每条件报 `e_t,e_r` 的 RMSE/median/p95。用 stable 变体接受该 frame_id 时的值。                                                                                                                                    |
 | 2 | **Head-motion-induced slip**     | `slip.py`             | headline 用屏幕空间：anchor 原点与 GT 原点用头相机 intrinsics 投影到像面，`slip_px=‖proj(W_T_A)−proj(W_T_C·X)‖`，头动窗口报峰值/RMS，并与头部 yaw 角速度相关。辅助：世界空间下 anchor 位移与头速的相关分量。 |
-| 3 | **World-space jitter**           | `jitter.py`           | GT 速度<阈值自动切静止窗，对 stable 位姿高通去慢漂后报位置/旋转 std/RMS。raw vs lowpass vs kalman vs controller 同窗对比。                                                                                         |
+| 3 | **World-space jitter**           | `jitter.py`           | GT 速度<阈值自动切静止窗，对 stable 位姿高通去慢漂后报位置/旋转 std/RMS。raw vs lowpass vs kalman vs one_euro vs egoanchor_one_euro 同窗对比。                                                                                         |
 | 4 | **Lag**                          | `lag.py`              | anchor 与 GT 位置重采样到均匀网格，速度信号归一化互相关 `lag=argmax`；另在快速平移段报阶跃响应上升时间（到 90%）。                                                                                               |
 | 5 | **End-to-end latency**           | `latency.py`          | 每 frame_id `t_apply−t_capture`（Unity 单时钟）；分模块用 Python timing；网络腿用墙钟相减。报 P50/P90/P95 + breakdown（Table 3）。                                                                              |
 | 6 | **Recovery success rate / time** | `recovery.py`         | 用 manifest 的遮挡/出视野/返回标记 + anchor_state 流 + 误差回落阈值。`recovery_time` = 物体重现标记 → 首次持续"accepted 且 e_t<阈"。                                                                            |
-| 7 | **Jump rejection / suppression** | `jump_suppression.py` | 对比 raw（不拦的跳变尖峰）与 controller（抑制后）：误差尖峰计数 + 幅度；统计 Python re-register / Unity policy reject 原因。                                                                                       |
+| 7 | **Jump rejection / suppression** | `jump_suppression.py` | 对比 raw/vanilla One Euro（不拦或弱拦的跳变尖峰）与 egoanchor_one_euro（抑制后）：误差尖峰计数 + 幅度；统计 Python re-register / Unity reject/hold 原因。                                                                                       |
 | 8 | **Task / 主观**（可选）          | —                      | 本轮只留 event marker 钩子，不实现。                                                                                                                                                                               |
 
 ### 5.6 RQ → 指标 → 数据 映射（`run_eval.py` 产出）
@@ -405,7 +405,7 @@ def project_point(K, w_T_cam, p_world): ...         # 世界点 → 头相机像
 | RQ   | 主对比                                | 指标                                        | 数据来源                                                                |
 | ---- | ------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
 | RQ1  | arrival-time vs frame-aligned         | anchor error、slip                          | 离线：capture 头位姿 +`C_T_O`(pose_result) + arrival tick 头位姿 + GT |
-| RQ2  | raw / low-pass / Kalman / controller  | jitter、lag、jump suppression、stable error | 并行 runtime 的 `unity_output` + GT                                   |
+| RQ2  | raw / low-pass / Kalman / vanilla One Euro / reliability-gated One Euro | jitter、lag、jump suppression、stable error | 并行 runtime 的 `unity_output` + GT                                   |
 | RQ3  | always-update vs hold/coast/reacquire | recovery rate/time、failure taxonomy        | manifest 标记 + state 流 + error                                        |
 | 通用 | —                                    | end-to-end latency breakdown                | 三份日志 join                                                           |
 
@@ -415,7 +415,7 @@ def project_point(K, w_T_cam, p_world): ...         # 世界点 → 头相机像
 
 ## 6. P1b：确定性回放（RQ2 公平 + 可复现）
 
-目的：录一次真实 raw 流，让 RQ2 各 filter ablation 在**同一输入**上可复现地复算，且评估的是出货的 C# filter 本体（无 Python 重写偏差）。将来 P3 的新 filter 也能与 baselines 同输入公平对比。
+目的：录一次真实 raw 流，让 RQ2 各 filter ablation 在**同一输入**上可复现地复算，且评估的是出货的 C# filter 本体（无 Python 重写偏差）。这一步尤其用于区分 Kalman、vanilla One Euro 和 EgoAnchor 的 modified One Euro，而不是只证明“加滤波会更稳”。
 
 ### 6.1 天然注入缝（已存在，无需新增运行时接口）
 
@@ -456,7 +456,7 @@ public sealed class ReplayPoseSource : MonoBehaviour
   StereoFrameSource.FrameCaptured(frameId, t) ──► AnchorEvalRecorder.OnFrameCaptured
                                                       └─► unity_capture.jsonl（GT@capture + 相机/头位姿）
   每渲染 tick: AnchorEvalRecorder.LateUpdate
-                  └─► unity_output.jsonl（GT@tick + 各 variant 显示位姿 + 主变体 aligned_raw + reliability）
+                  └─► unity_output.jsonl（GT@tick + raw/lowpass/kalman/one_euro/egoanchor_one_euro 显示位姿 + 主变体 aligned_raw + reliability）
   Python 运行时已产出: <session>_pose_result（runtime_logs，含 C_T_O 矩阵 + timing）
   EvalSessionController ──► session_manifest.json（条件/事件标签 + 对时基准）
 
@@ -464,7 +464,7 @@ public sealed class ReplayPoseSource : MonoBehaviour
   load_session → estimate_hand_eye(X) → metrics/* 按条件计算 → report/ 表+图
 
 回放（P1b，可选复现）
-  ReplayPoseSource 读 aligned_raw 流 → AcceptWorldPose → 各 filter 变体 → 重录 unity_output → 同分析管线
+  ReplayPoseSource 读 aligned_raw 流 → AcceptWorldPose → 各 filter 变体（含 Kalman/One Euro）→ 重录 unity_output → 同分析管线
 ```
 
 ---

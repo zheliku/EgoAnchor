@@ -1,3 +1,5 @@
+> 状态说明：本文档是早期讨论记录，保留用于追溯。当前主线以 `IEEEVR2027-paper-architecture.md` 和 `EgoAnchor-Evaluation-Plan.md` 为准；论文方法已从复杂 reliability-aware policy 收敛为 frame-aligned anchoring + reliability-gated One Euro controller，并要求同时对比 raw、low-pass、Kalman、vanilla One Euro 与改进 One Euro。下文涉及 Mahalanobis、复杂 SE(3) policy 或大型状态机的内容只能作为历史备选，不再作为默认论文计划。
+
 结论：**“动态任意物体 6D pose tracking”已有大量研究；“XR 平台原生 anchor 技术”也很成熟；但“将低频、噪声、间歇失效的外部 6D pose 流转换为稳定、可交互、可恢复的 XR object anchor”仍然不是一个被平台成熟解决的问题。** 你的论文不应定位为“我实现了 FoundationPose + Unity 集成”，而应定位为：**Pose-to-Anchor / Reliability-Aware Dynamic Object Anchoring for XR**。
 
 ## 1. 目前 AR/VR/MR anchor 技术发展到什么程度？
