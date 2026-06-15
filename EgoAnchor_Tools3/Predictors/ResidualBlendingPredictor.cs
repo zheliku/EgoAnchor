@@ -35,6 +35,9 @@ namespace EgoAnchor.Tools3.Predictors
         private bool hasRendered;
         private Pose lastRender = Pose.Identity;
         private double lastRenderTime;
+        private double latencyEstimate; // 实测 now - 最近观测时间 的 EMA (自适应外推上限)
+        private const double ExtrapolationLatencyMultiplier = 1.0; // 外推上限 = 实测延迟 × 此倍数
+        private const double MaxExtrapolationHardCapSeconds = 0.3;  // 兜底硬上限
 
         /// <param name="model">可插拔运动模型。</param>
         /// <param name="decayPerFrame">每帧残差保留比例 (默认 0.9, 即每帧还 10% 的债)。</param>
@@ -56,6 +59,7 @@ namespace EgoAnchor.Tools3.Predictors
             hasRendered = false;
             lastRender = Pose.Identity;
             lastRenderTime = 0.0;
+            latencyEstimate = 0.0;
         }
 
         public void OnObservation(in Observation observation)
@@ -78,7 +82,7 @@ namespace EgoAnchor.Tools3.Predictors
 
             // 历史纠偏: 残差 = 旧渲染 pose ⊖ 新模型在"上一帧渲染时刻"的预测
             // (用 lastRenderTime 而非 now: 此刻 now 尚未渲染, renderedNow 对应的就是 lastRenderTime)
-            Pose modelAtRenderTime = model.PredictAt(lastRenderTime);
+            Pose modelAtRenderTime = model.PredictAt(ClampPredictTime(lastRenderTime));
             posResidual = renderedNow.Position - modelAtRenderTime.Position;
 
             // 旋转残差: 在新模型姿态参考系下, 旧渲染姿态相对新模型预测姿态的切空间偏移
@@ -93,8 +97,13 @@ namespace EgoAnchor.Tools3.Predictors
                 return Pose.Identity;
             }
 
-            // 1) 外推
-            Pose basePose = model.PredictAt(renderTimeSeconds);
+            // 更新实测采集-渲染延迟 (now - 最近观测时间), 自适应跟踪当前帧率/推理速度
+            double observedLatency = Math.Max(renderTimeSeconds - model.LastObservationTime, 0.0);
+            double follow = observedLatency > latencyEstimate ? 0.5 : 0.05;
+            latencyEstimate += follow * (observedLatency - latencyEstimate);
+
+            // 1) 外推 (限幅: 最多外推到"补偿当前实测延迟", 防止飞出去/急停冲过头)
+            Pose basePose = model.PredictAt(ClampPredictTime(renderTimeSeconds));
 
             // 2) 叠加当前残差 (还没还完的债)
             Vec3 pos = basePose.Position + posResidual;
@@ -115,6 +124,17 @@ namespace EgoAnchor.Tools3.Predictors
             lastRender = render;
             lastRenderTime = renderTimeSeconds;
             return render;
+        }
+
+        /// <summary>
+        /// 把预测时刻钳到 "最近观测时间 + 外推上限"。外推上限 = 实测延迟 × 倍数, 与硬上限取小。
+        /// 自适应: 延迟越小 (高 fps) 上限越小, 永远只外推刚好补偿延迟那么多。
+        /// </summary>
+        private double ClampPredictTime(double requestedTime)
+        {
+            double horizon = Math.Min(latencyEstimate * ExtrapolationLatencyMultiplier, MaxExtrapolationHardCapSeconds);
+            double horizonTime = model.LastObservationTime + horizon;
+            return requestedTime > horizonTime ? horizonTime : requestedTime;
         }
     }
 }

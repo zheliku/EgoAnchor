@@ -32,9 +32,10 @@ namespace EgoAnchor.Tools3.Predictors.Interp
         private readonly IControlPointSource source;
         private readonly SplineKind spline;
         private readonly List<ControlPoint> points = new();
-        private double delaySeconds = 0.2;        // 自适应估计的延迟 (= 一个观测周期)
-        private double gapSum;                      // 用于估计平均观测间隔
-        private int gapCount;
+        private double delaySeconds = 0.25;       // 实际延迟 (实测采集-渲染延迟 × 安全系数)
+        private double latencyEstimate;            // 实测 now - 最新控制点时间 的 EMA
+        private const double LatencySafetyMargin = 1.15;
+        private const double MinDelaySeconds = 0.25;
 
         public DelayedInterpolationPredictor(IControlPointSource source, SplineKind spline)
         {
@@ -52,27 +53,13 @@ namespace EgoAnchor.Tools3.Predictors.Interp
         {
             source.Reset();
             points.Clear();
-            delaySeconds = 0.2;
-            gapSum = 0.0;
-            gapCount = 0;
+            delaySeconds = MinDelaySeconds;
+            latencyEstimate = 0.0;
         }
 
         public void OnObservation(in Observation observation)
         {
             ControlPoint cp = source.Accept(observation);
-
-            if (points.Count > 0)
-            {
-                double gap = cp.Time - points[^1].Time;
-                if (gap > 1e-4)
-                {
-                    gapSum += gap;
-                    gapCount++;
-                    // 延迟 = 平均观测间隔 (一个周期), 自适应
-                    delaySeconds = gapSum / gapCount;
-                }
-            }
-
             points.Add(cp);
 
             // 控制点缓冲不需要太长, 保留最近若干个即可 (插值只用 t-Δ 附近的 2~4 个)
@@ -94,6 +81,13 @@ namespace EgoAnchor.Tools3.Predictors.Interp
                 return new Pose(points[0].Position, points[0].Rotation);
             }
 
+            // 关键修复: 延迟 = 实测"采集-渲染延迟" (= now - 最新控制点时间), 不是观测周期。
+            // 否则 target 比最新控制点还新 -> 退化成外推 -> 锯齿跳变 (真机表现)。
+            double observedLatency = Math.Max(renderTimeSeconds - points[^1].Time, 0.0);
+            double follow = observedLatency > latencyEstimate ? 0.5 : 0.05; // 快升慢降
+            latencyEstimate += follow * (observedLatency - latencyEstimate);
+            delaySeconds = Math.Max(latencyEstimate * LatencySafetyMargin, MinDelaySeconds);
+
             double target = renderTimeSeconds - delaySeconds;
 
             // target 早于最早控制点: 输出最早点 (启动阶段)
@@ -102,7 +96,7 @@ namespace EgoAnchor.Tools3.Predictors.Interp
                 return new Pose(points[0].Position, points[0].Rotation);
             }
 
-            // target 晚于最新控制点 (理论上不该, 除非延迟不足): 退化为外推最后一段, 但仍连续
+            // target 仍晚于最新控制点 (极端情况余量不足): 退化为外推最后一段, 但仍连续
             if (target >= points[^1].Time)
             {
                 return new Pose(points[^1].Position, points[^1].Rotation);

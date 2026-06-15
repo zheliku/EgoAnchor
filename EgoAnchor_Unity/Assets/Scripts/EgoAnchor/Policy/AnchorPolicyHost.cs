@@ -5,105 +5,116 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// Unity 侧 anchor policy 宿主。
-    /// 该组件直接组合 Gate、Estimator 和 Output 三类模块；Python 侧叫 pipeline，
-    /// Unity 前端负责 policy 决策，所以这里保留 AnchorPolicyHost 名称。
+    /// Unity 侧 anchor policy 宿主 (重构后)。
+    ///
+    /// 职责收敛为三件事：
+    ///   1. 持有两个可自由组合的模块：MotionModel (运动模型) + SmoothingStrategy (平滑策略)；
+    ///   2. 维护 anchor 生命周期状态机 (Tracking / Coasting / Lost / Reacquire ...)；
+    ///   3. 把观测喂给模块，并每渲染帧产出平滑 pose。
+    ///
+    /// 旧的 Gate / Estimator / Output 三模块拆分已移除。score-gating (拒绝低分/跳变坏观测)
+    /// 作为本 host 的可选内联功能 (默认关闭)，只有 EgoAnchor 方法需要时才在 Inspector 打开，
+    /// 不再是独立模块。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
+    /// 不再靠 estimator 内部限幅 predict-ahead，因此低频 pose 也能逐帧连续输出。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
     {
-        private const int DefaultsVersion = 1;
         private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorPolicyHost>();
 
-        /// <summary>门控模块组件。</summary>
-        [Header("Policy Modules")]
-        [Tooltip("门控模块组件。只能引用继承 AnchorGateModule 的脚本，不使用 enum 选择策略。")]
-        [SerializeField] private AnchorGateModule gateModule;
+        /// <summary>运动模型模块 (CV / Kalman / OneEuro)。</summary>
+        [Header("Modules (free 3x2 combination)")]
+        [Tooltip("运动模型模块：只能挂 MotionModel 子类 (ConstantVelocityModel / KalmanModel / OneEuroModel)。负责去噪 + 估计速度 + 外推。")]
+        [SerializeField] private MotionModel motionModel;
 
-        /// <summary>估计器模块组件。</summary>
-        [Tooltip("估计器模块组件。负责滤波、升采样和 PredictAt(renderTime)。")]
-        [SerializeField] private AnchorEstimatorModule estimatorModule;
+        /// <summary>平滑策略模块 (Blend / DelayedInterp)。</summary>
+        [Tooltip("平滑策略模块：只能挂 SmoothingStrategy 子类 (BlendStrategy=零延迟外推+残差融合 / DelayedInterpStrategy=延迟一周期+插值)。负责把低频 pose 变高频平滑。")]
+        [SerializeField] private SmoothingStrategy smoothingStrategy;
 
-        /// <summary>输出整形模块组件。</summary>
-        [Tooltip("输出整形模块组件。负责静止锁、限速或直接透传，不修改 estimator 状态。")]
-        [SerializeField] private AnchorOutputStageModule outputModule;
-
-        /// <summary>策略 label；为空时使用 estimator module 名称。</summary>
-        [Tooltip("策略 label，写入 eval；为空时使用 estimator module 名称。")]
+        /// <summary>策略 label；为空时用 "model+strategy" 自动拼。</summary>
+        [Tooltip("策略 label，写入 eval；为空时自动用 \"<model>_<strategy>\"。")]
         [SerializeField] private string strategyLabel = "";
+
+        /// <summary>是否启用 score/jump 门控 (拒绝坏观测)。只建议 EgoAnchor 方法开启。</summary>
+        [Header("Score Gate (EgoAnchor only, optional)")]
+        [Tooltip("是否启用 score/jump 门控：拒绝低可靠分或大跳变的坏观测。baseline 应关闭 (照单全收)；EgoAnchor 方法开启以证明鲁棒性。默认关闭。")]
+        [SerializeField] private bool enableScoreGate = false;
+
+        /// <summary>接受观测所需的最低可靠性分数。</summary>
+        [Tooltip("接受观测所需的最低可靠性分数 (0..1)。低于此值的观测被拒绝、不更新模型。仅在启用门控时生效。默认 0.2。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float minScore = 0.2f;
+
+        /// <summary>判定坏跳变的平移阈值，单位米。</summary>
+        [Tooltip("判定坏跳变的平移阈值 (米)：新观测相对当前预测的平移超过此值则拒绝。仅在启用门控时生效。默认 0.8。")]
+        [SerializeField] private float maxJumpMeters = 0.8f;
+
+        /// <summary>判定坏跳变的旋转阈值，单位度。</summary>
+        [Tooltip("判定坏跳变的旋转阈值 (度)：新观测相对当前预测的旋转超过此值则拒绝。仅在启用门控时生效。默认 120。")]
+        [SerializeField] private float maxJumpDegrees = 120f;
 
         /// <summary>短时无可靠测量的 coasting 时长，单位秒。</summary>
         [Header("Lifecycle")]
-        [Tooltip("短时无可靠测量的 coasting 时长，单位秒。")]
+        [Tooltip("短时无可靠测量时保持 Coasting (继续外推/插值) 的时长，单位秒。超过则进入更不确定状态。默认 0.45。")]
         [SerializeField] private float coastTimeoutSeconds = 0.45f;
 
         /// <summary>长时间无可靠测量后进入 Lost 的时长，单位秒。</summary>
-        [Tooltip("长时间无可靠测量后进入 Lost 的时长，单位秒。")]
+        [Tooltip("长时间无可靠测量后进入 Lost (停止输出) 的时长，单位秒。必须大于 coast。默认 2.0。")]
         [SerializeField] private float lostTimeoutSeconds = 2.0f;
 
         /// <summary>判定静止的线速度阈值，单位 m/s。</summary>
-        [Tooltip("判定静止的线速度阈值，单位 m/s；用于 output stage 静止锁上下文。")]
+        [Tooltip("判定运动/静止的线速度阈值，单位 m/s；仅用于 motionState 诊断。默认 0.015。")]
         [SerializeField] private float staticSpeedThresholdMps = 0.015f;
 
         /// <summary>判定静止的角速度阈值，单位 deg/s。</summary>
-        [Tooltip("判定静止的角速度阈值，单位 deg/s；用于 output stage 静止锁上下文。")]
+        [Tooltip("判定运动/静止的角速度阈值，单位 deg/s；仅用于 motionState 诊断。默认 1.5。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
-        /// <summary>是否用连续测量的运动证据短时间保持 Moving 状态。</summary>
-        [Tooltip("是否用连续测量的运动证据短时间保持 Moving 状态；仅给带静止锁的 EgoAnchor 策略启用，baseline 默认关闭。")]
-        [SerializeField] private bool enableObservedMotionHold = false;
-
-        /// <summary>按连续测量判定真实运动的线速度阈值，单位 m/s。</summary>
-        [Tooltip("按连续测量判定真实运动的线速度阈值，单位 m/s；用于避免刚运动或刚停下时误触发静止锁。")]
-        [SerializeField] private float observedMotionSpeedThresholdMps = 0.05f;
-
-        /// <summary>按连续测量判定真实旋转的角速度阈值，单位 deg/s。</summary>
-        [Tooltip("按连续测量判定真实旋转的角速度阈值，单位 deg/s；用于避免快速旋转时误触发静止锁。")]
-        [SerializeField] private float observedMotionAngularThresholdDps = 8.0f;
-
-        /// <summary>最近观测到真实运动后保持 Moving 状态的时间，单位秒。</summary>
-        [Tooltip("最近观测到真实运动后保持 Moving 状态的时间，单位秒；应覆盖常见 capture-to-render 延迟。")]
-        [SerializeField] private float observedMotionHoldSeconds = 0.65f;
-
-        private int defaultsInitializedVersion = DefaultsVersion;
         private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
         private double lastAcceptedTimeSeconds = -1.0;
-        private double lastAcceptedObservationTimeSeconds = -1.0;
-        private double lastObservedMotionTimeSeconds = -1.0;
-        private Pose lastAcceptedObservationPose = Pose.identity;
-        private bool hasAcceptedObservationPose;
         private float latestAcceptedScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
         private GateDecision latestGateDecision = GateDecision.Hold("initialized");
         private float predictAheadSeconds;
 
         /// <summary>eval 使用的策略 label。</summary>
-        public string StrategyLabel => string.IsNullOrEmpty(strategyLabel) ? EstimatorModuleName : strategyLabel;
+        public string StrategyLabel
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(strategyLabel))
+                {
+                    return strategyLabel;
+                }
 
-        /// <summary>当前 gate module 名称。</summary>
-        public string GateModuleName => gateModule != null ? gateModule.ModuleName : "";
+                return $"{ModelName}_{StrategyName}";
+            }
+        }
 
-        /// <summary>当前 gate module 组件引用，只用于 eval 配置摘要。</summary>
-        public AnchorGateModule GateModule => gateModule;
+        /// <summary>运动模型名 (eval 沿用 EstimatorModuleName 字段名以兼容旧分析管线)。</summary>
+        public string EstimatorModuleName => motionModel != null ? motionModel.ModelName : "";
 
-        /// <summary>当前 estimator module 名称。</summary>
-        public string EstimatorModuleName => estimatorModule != null ? estimatorModule.ModuleName : "";
+        /// <summary>平滑策略名 (eval 沿用 OutputModuleName 字段名)。</summary>
+        public string OutputModuleName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
 
-        /// <summary>当前 estimator module 组件引用，只用于 eval 配置摘要。</summary>
-        public AnchorEstimatorModule EstimatorModule => estimatorModule;
+        /// <summary>门控名 (eval 沿用 GateModuleName 字段名)。</summary>
+        public string GateModuleName => enableScoreGate ? "score_jump_gate" : "null_gate";
 
-        /// <summary>当前 output module 名称。</summary>
-        public string OutputModuleName => outputModule != null ? outputModule.ModuleName : "";
+        /// <summary>运动模型组件引用，仅用于 eval 配置摘要。</summary>
+        public MotionModel MotionModel => motionModel;
 
-        /// <summary>当前 output module 组件引用，只用于 eval 配置摘要。</summary>
-        public AnchorOutputStageModule OutputModule => outputModule;
+        /// <summary>平滑策略组件引用，仅用于 eval 配置摘要。</summary>
+        public SmoothingStrategy SmoothingStrategy => smoothingStrategy;
+
+        private string ModelName => motionModel != null ? motionModel.ModelName : "none";
+        private string StrategyName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "none";
 
         /// <summary>当前 anchor 生命周期状态。</summary>
         public AnchorState State
         {
             get
             {
-                EnsureDefaults();
+                EnsureStateMachine();
                 return stateMachine.State;
             }
         }
@@ -112,10 +123,10 @@ namespace EgoAnchor.Policy
         public AnchorMotionState MotionState => motionState;
 
         /// <summary>当前估计线速度模长，单位 m/s。</summary>
-        public float SpeedMps => estimatorModule != null ? estimatorModule.LinearVelocity.magnitude : 0.0f;
+        public float SpeedMps => motionModel != null ? motionModel.LinearVelocity.magnitude : 0.0f;
 
         /// <summary>当前估计角速度模长，单位 deg/s。</summary>
-        public float AngularSpeedDps => estimatorModule != null ? estimatorModule.AngularVelocityRad.magnitude * Mathf.Rad2Deg : 0.0f;
+        public float AngularSpeedDps => motionModel != null ? motionModel.AngularVelocityRad.magnitude * Mathf.Rad2Deg : 0.0f;
 
         /// <summary>最近一次 Advance 使用的前推时长，单位秒。</summary>
         public float PredictAheadSeconds => predictAheadSeconds;
@@ -129,14 +140,14 @@ namespace EgoAnchor.Policy
         /// <summary>最近一次 gate/policy 原因。</summary>
         public string LatestReason => latestGateDecision.Reason;
 
-        /// <summary>最近一次 output stage 平移残差，单位米。</summary>
-        public float LatestResidualMeters => outputModule != null ? outputModule.LastResidualMeters : float.NaN;
+        /// <summary>output stage 平移残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
+        public float LatestResidualMeters => float.NaN;
 
-        /// <summary>最近一次 output stage 旋转残差，单位度。</summary>
-        public float LatestResidualDegrees => outputModule != null ? outputModule.LastResidualDegrees : float.NaN;
+        /// <summary>output stage 旋转残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
+        public float LatestResidualDegrees => float.NaN;
 
-        /// <summary>最近一次输出是否被静止锁定。</summary>
-        public bool LatestStaticLocked => outputModule != null && outputModule.IsStaticLocked;
+        /// <summary>是否静止锁定 (本轮未实现 static-lock，固定 false)。</summary>
+        public bool LatestStaticLocked => false;
 
         /// <summary>累计接受测量数。</summary>
         public long AcceptedCount { get; private set; }
@@ -144,14 +155,16 @@ namespace EgoAnchor.Policy
         /// <summary>累计拒绝测量数。</summary>
         public long RejectedCount { get; private set; }
 
-        /// <summary>Unity Awake：初始化模块状态。</summary>
         private void Awake()
         {
-            EnsureDefaults();
+            EnsureStateMachine();
             ResetModules();
+            if (motionModel == null || smoothingStrategy == null)
+            {
+                Log.Warning("AnchorPolicyHost 未绑定 MotionModel 或 SmoothingStrategy；该 host 不会输出 pose。", this);
+            }
         }
 
-        /// <summary>Inspector 修改时修正生命周期参数。</summary>
         private void OnValidate()
         {
             if (coastTimeoutSeconds <= 0.0f)
@@ -163,18 +176,12 @@ namespace EgoAnchor.Policy
             {
                 lostTimeoutSeconds = coastTimeoutSeconds * 3.0f;
             }
-
-            observedMotionSpeedThresholdMps = Mathf.Max(observedMotionSpeedThresholdMps, staticSpeedThresholdMps);
-            observedMotionAngularThresholdDps = Mathf.Max(observedMotionAngularThresholdDps, staticAngularSpeedThresholdDps);
-            observedMotionHoldSeconds = Mathf.Max(observedMotionHoldSeconds, coastTimeoutSeconds);
         }
 
-        /// <summary>
-        /// 绑定唯一 runtime。policy 内含 estimator 状态，不能被多个 runtime 共享。
-        /// </summary>
+        /// <summary>绑定唯一 runtime。模块内含状态，不能被多个 runtime 共享。</summary>
         public void Bind(PoseToAnchorRuntime owner)
         {
-            EnsureDefaults();
+            EnsureStateMachine();
             if (owner == null)
             {
                 return;
@@ -182,75 +189,64 @@ namespace EgoAnchor.Policy
 
             if (boundOwner != null && boundOwner != owner)
             {
-                Log.Error($"AnchorPolicyHost 已绑定 {boundOwner.name}，拒绝再绑定 {owner.name}；每个 runtime 需要独立 policy host。", this);
+                Log.Error($"AnchorPolicyHost 已绑定 {boundOwner.name}，拒绝再绑定 {owner.name}；每个 runtime 需要独立 host。", this);
                 return;
             }
 
             boundOwner = owner;
         }
 
-        /// <summary>
-        /// 输入一帧测量并返回分类决策。该方法不输出 stable pose。
-        /// </summary>
+        /// <summary>输入一帧测量并返回分类决策。不输出 stable pose。</summary>
         public AnchorPolicyDecision AcceptPose(in AnchorObservation observation)
         {
             EnsureReady();
             double now = ObservationTime(observation);
-            AnchorEstimate predicted = estimatorModule.HasEstimate
-                ? estimatorModule.PredictAt(now)
-                : AnchorEstimate.Stationary(Pose.identity, now);
-            latestGateDecision = gateModule.Evaluate(observation, predicted, estimatorModule.HasEstimate);
 
-            switch (latestGateDecision.Action)
+            if (!observation.HasAlignedPose)
             {
-                case GateAction.Snap:
-                    if (observation.HasAlignedPose)
-                    {
-                        estimatorModule.Snap(observation);
-                        OnAcceptedObservation(observation, now);
-                    }
-                    else
-                    {
-                        OnMissingObservation(now, observation.FailureReason);
-                    }
-                    break;
-                case GateAction.Accept:
-                    if (observation.HasAlignedPose)
-                    {
-                        estimatorModule.UpdateEstimate(observation);
-                        OnAcceptedObservation(observation, now);
-                    }
-                    else
-                    {
-                        OnMissingObservation(now, observation.FailureReason);
-                    }
-                    break;
-                case GateAction.Reject:
-                    RejectedCount++;
-                    stateMachine.OnUncertainPose(now, latestGateDecision.Reason);
-                    break;
-                default:
-                    if (observation.HasAlignedPose)
-                    {
-                        stateMachine.OnUncertainPose(now, latestGateDecision.Reason);
-                    }
-                    else
-                    {
-                        OnMissingObservation(now, latestGateDecision.Reason);
-                    }
-                    break;
+                OnMissingObservation(now, observation.FailureReason);
+                latestGateDecision = GateDecision.Hold(string.IsNullOrEmpty(observation.FailureReason) ? "missing_pose" : observation.FailureReason);
+                return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
             }
+
+            // 可选 score/jump 门控 (仅 EgoAnchor 方法开启)
+            if (ShouldRejectObservation(observation, now, out string rejectReason))
+            {
+                RejectedCount++;
+                latestGateDecision = GateDecision.Reject(rejectReason);
+                stateMachine.OnUncertainPose(now, rejectReason);
+                return new AnchorPolicyDecision(AnchorPolicyAction.Reject, stateMachine.State, rejectReason);
+            }
+
+            // 首帧或重定位后 Snap，否则正常更新
+            bool snap = !motionModel.HasState;
+            if (snap)
+            {
+                motionModel.Snap(observation);
+                latestGateDecision = GateDecision.Snap("snap");
+            }
+            else
+            {
+                motionModel.UpdateState(observation);
+                latestGateDecision = GateDecision.Accept("accept");
+            }
+
+            smoothingStrategy.OnObservation(motionModel, observation);
+
+            AcceptedCount++;
+            lastAcceptedTimeSeconds = now;
+            latestAcceptedScore = observation.ReliabilityScore;
+            stateMachine.OnReliablePose(now, latestGateDecision.Reason);
+            UpdateMotionState();
 
             return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
         }
 
-        /// <summary>
-        /// 每渲染帧输出当前 stable pose。
-        /// </summary>
+        /// <summary>每渲染帧输出当前 stable pose。</summary>
         public AnchorPolicyOutput Advance(double nowSeconds)
         {
             EnsureReady();
-            if (!estimatorModule.HasEstimate)
+            if (!motionModel.HasState)
             {
                 stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_estimate");
                 return AnchorPolicyOutput.None(stateMachine.State, "no_estimate");
@@ -271,17 +267,9 @@ namespace EgoAnchor.Policy
                 return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason);
             }
 
-            AnchorEstimate estimate = estimatorModule.PredictAt(nowSeconds);
-            UpdateMotionState(nowSeconds);
-            predictAheadSeconds = estimate.PredictAheadSeconds;
-            OutputContext context = new OutputContext(
-                lastAcceptedTimeSeconds,
-                gap,
-                latestAcceptedScore,
-                stateMachine.State,
-                motionState
-            );
-            Pose pose = outputModule.Condition(estimate, nowSeconds, context);
+            Pose pose = smoothingStrategy.Output(motionModel, nowSeconds);
+            predictAheadSeconds = (float)gap;
+            UpdateMotionState();
             return new AnchorPolicyOutput(true, pose, stateMachine.State, motionState, predictAheadSeconds, stateMachine.LastEvent.Reason);
         }
 
@@ -318,7 +306,7 @@ namespace EgoAnchor.Policy
         /// <summary>通知本地目标丢失。</summary>
         public void NotifyLost(double sampleTimeSeconds, string reason)
         {
-            stateMachine.OnMissingPose(sampleTimeSeconds, stateMachine.LostTimeoutSeconds, estimatorModule != null && estimatorModule.HasEstimate, reason ?? "lost");
+            stateMachine.OnMissingPose(sampleTimeSeconds, stateMachine.LostTimeoutSeconds, motionModel != null && motionModel.HasState, reason ?? "lost");
             latestGateDecision = GateDecision.Hold(reason ?? "lost");
         }
 
@@ -337,75 +325,60 @@ namespace EgoAnchor.Policy
             latestGateDecision = GateDecision.Hold(reason ?? "clear");
         }
 
-        private void OnAcceptedObservation(in AnchorObservation observation, double nowSeconds)
+        private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
         {
-            AcceptedCount++;
-            UpdateObservedMotion(observation, nowSeconds);
-            lastAcceptedTimeSeconds = nowSeconds;
-            latestAcceptedScore = observation.ReliabilityScore;
-            stateMachine.OnReliablePose(nowSeconds, latestGateDecision.Reason);
-            UpdateMotionState(nowSeconds);
+            reason = string.Empty;
+            if (!enableScoreGate)
+            {
+                return false;
+            }
+
+            if (observation.ReliabilityScore < minScore)
+            {
+                reason = "low_score";
+                return true;
+            }
+
+            // 跳变检测：与当前预测比较 (需已有状态，且不是重定位帧)
+            if (motionModel.HasState && !observation.IsRelocalization)
+            {
+                Pose predicted = motionModel.PredictAt(now);
+                float dPos = Vector3.Distance(predicted.position, observation.WorldPose.position);
+                float dDeg = AnchorMath.AngleDegrees(predicted.rotation, observation.WorldPose.rotation);
+                if (dPos > maxJumpMeters || dDeg > maxJumpDegrees)
+                {
+                    reason = "jump";
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void OnMissingObservation(double nowSeconds, string reason)
         {
             double gap = lastAcceptedTimeSeconds >= 0.0 ? nowSeconds - lastAcceptedTimeSeconds : double.PositiveInfinity;
-            stateMachine.OnMissingPose(nowSeconds, gap, estimatorModule.HasEstimate, string.IsNullOrEmpty(reason) ? "missing_pose" : reason);
+            stateMachine.OnMissingPose(nowSeconds, gap, motionModel != null && motionModel.HasState, string.IsNullOrEmpty(reason) ? "missing_pose" : reason);
         }
 
-        private void UpdateMotionState(double nowSeconds)
+        private void UpdateMotionState()
         {
-            if (enableObservedMotionHold && lastObservedMotionTimeSeconds >= 0.0 && nowSeconds - lastObservedMotionTimeSeconds <= observedMotionHoldSeconds)
+            if (motionModel == null || !motionModel.HasState)
             {
-                motionState = AnchorMotionState.Moving;
+                motionState = AnchorMotionState.Unknown;
                 return;
             }
 
-            if (SpeedMps <= staticSpeedThresholdMps && AngularSpeedDps <= staticAngularSpeedThresholdDps)
-            {
-                motionState = estimatorModule != null && estimatorModule.HasEstimate ? AnchorMotionState.Static : AnchorMotionState.Unknown;
-                return;
-            }
-
-            motionState = AnchorMotionState.Moving;
-        }
-
-        private void UpdateObservedMotion(in AnchorObservation observation, double nowSeconds)
-        {
-            if (!observation.HasAlignedPose)
-            {
-                return;
-            }
-
-            if (hasAcceptedObservationPose)
-            {
-                float dt = Mathf.Max((float)(nowSeconds - lastAcceptedObservationTimeSeconds), 0.0f);
-                if (dt > 1e-5f)
-                {
-                    float observedSpeed = Vector3.Distance(lastAcceptedObservationPose.position, observation.WorldPose.position) / dt;
-                    float observedAngularSpeed = AnchorMath.AngleDegrees(lastAcceptedObservationPose.rotation, observation.WorldPose.rotation) / dt;
-                    if (observedSpeed >= observedMotionSpeedThresholdMps || observedAngularSpeed >= observedMotionAngularThresholdDps)
-                    {
-                        lastObservedMotionTimeSeconds = nowSeconds;
-                    }
-                }
-            }
-
-            lastAcceptedObservationPose = observation.WorldPose;
-            lastAcceptedObservationTimeSeconds = nowSeconds;
-            hasAcceptedObservationPose = true;
+            motionState = SpeedMps <= staticSpeedThresholdMps && AngularSpeedDps <= staticAngularSpeedThresholdDps
+                ? AnchorMotionState.Static
+                : AnchorMotionState.Moving;
         }
 
         private void ResetModules()
         {
-            gateModule?.ResetModule();
-            estimatorModule?.ResetModule();
-            outputModule?.ResetModule();
+            motionModel?.ResetModel();
+            smoothingStrategy?.ResetStrategy();
             lastAcceptedTimeSeconds = -1.0;
-            lastAcceptedObservationTimeSeconds = -1.0;
-            lastObservedMotionTimeSeconds = -1.0;
-            lastAcceptedObservationPose = Pose.identity;
-            hasAcceptedObservationPose = false;
             latestAcceptedScore = 1.0f;
             motionState = AnchorMotionState.Unknown;
             predictAheadSeconds = 0.0f;
@@ -415,29 +388,15 @@ namespace EgoAnchor.Policy
 
         private void EnsureReady()
         {
-            EnsureDefaults();
-            if (gateModule == null || estimatorModule == null || outputModule == null)
+            EnsureStateMachine();
+            if (motionModel == null || smoothingStrategy == null)
             {
-                throw new System.InvalidOperationException("AnchorPolicyHost 需要显式绑定 gateModule、estimatorModule 和 outputModule。");
+                throw new System.InvalidOperationException("AnchorPolicyHost 需要绑定 MotionModel 和 SmoothingStrategy。");
             }
         }
 
-        private void EnsureDefaults()
+        private void EnsureStateMachine()
         {
-            if (defaultsInitializedVersion != DefaultsVersion)
-            {
-                coastTimeoutSeconds = 0.45f;
-                lostTimeoutSeconds = 2.0f;
-                staticSpeedThresholdMps = 0.015f;
-                staticAngularSpeedThresholdDps = 1.5f;
-                enableObservedMotionHold = false;
-                observedMotionSpeedThresholdMps = 0.05f;
-                observedMotionAngularThresholdDps = 8.0f;
-                observedMotionHoldSeconds = 0.65f;
-                strategyLabel = string.Empty;
-                defaultsInitializedVersion = DefaultsVersion;
-            }
-
             if (stateMachine == null)
             {
                 if (lostTimeoutSeconds <= coastTimeoutSeconds)

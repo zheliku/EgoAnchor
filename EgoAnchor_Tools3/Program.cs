@@ -80,11 +80,12 @@ namespace EgoAnchor.Tools3
                 predictors.AddRange(rowB);
                 predictors.AddRange(rowC);
 
-                var simulator = new RealtimeSimulator(opt.RenderHz);
+                var simulator = new RealtimeSimulator(opt.RenderHz, opt.LatencyMs / 1000.0, opt.LatencyJitterMs / 1000.0);
                 var results = new List<SimResult>();
                 var resultByLabel = new Dictionary<string, SimResult>();
                 var allMetrics = new List<AlgorithmMetrics>();
 
+                Console.WriteLine($"采集-渲染延迟: {opt.LatencyMs:F0}ms (jitter ±{opt.LatencyJitterMs:F0}ms), 渲染: {opt.RenderHz:F0}fps");
                 Console.WriteLine($"{"algorithm",-22} {"render",7} {"stepRMS(mm)",12} {"lag(ms)",9} {"alignRMS(mm)",13} {"throughRMS(mm)",15}");
                 Console.WriteLine(new string('-', 82));
 
@@ -226,13 +227,20 @@ namespace EgoAnchor.Tools3
             public string OutputDir { get; private set; } = "";
             public double RenderHz { get; private set; } = 60.0;
             public double DecayPerFrame { get; private set; } = 0.9;
+            public double LatencyMs { get; private set; } = 300.0;
+            public double LatencyJitterMs { get; private set; } = 60.0;
+            public bool AutoLatency { get; private set; } = true;
             public (double start, double end)? Zoom { get; private set; }
 
             public static Options Parse(string[] args)
             {
                 string session = "", output = "";
                 double hz = 60.0;
+                bool autoHz = true; // 默认从录制数据实测渲染帧率
                 double decay = 0.9;
+                double latencyMs = 300.0;
+                double latencyJitterMs = 60.0;
+                bool autoLatency = true; // 默认从录制数据实测延迟
                 double? zoomStart = null, zoomEnd = null;
                 for (int i = 0; i < args.Length; i++)
                 {
@@ -246,9 +254,22 @@ namespace EgoAnchor.Tools3
                             break;
                         case "--render-hz" when i + 1 < args.Length:
                             hz = double.Parse(args[++i], CultureInfo.InvariantCulture);
+                            autoHz = false; // 显式指定则不自动测量
                             break;
                         case "--decay" when i + 1 < args.Length:
                             decay = double.Parse(args[++i], CultureInfo.InvariantCulture);
+                            break;
+                        case "--latency-ms" when i + 1 < args.Length:
+                            latencyMs = double.Parse(args[++i], CultureInfo.InvariantCulture);
+                            autoLatency = false; // 显式指定则不自动测量
+                            break;
+                        case "--latency-jitter-ms" when i + 1 < args.Length:
+                            latencyJitterMs = double.Parse(args[++i], CultureInfo.InvariantCulture);
+                            break;
+                        case "--no-latency":
+                            latencyMs = 0.0;
+                            latencyJitterMs = 0.0;
+                            autoLatency = false;
                             break;
                         case "--zoom-start" when i + 1 < args.Length:
                             zoomStart = double.Parse(args[++i], CultureInfo.InvariantCulture);
@@ -261,12 +282,24 @@ namespace EgoAnchor.Tools3
 
                 if (string.IsNullOrWhiteSpace(session))
                 {
-                    throw new ArgumentException("用法: --session <session_dir> [--out <output_dir>] [--render-hz 60] [--decay 0.9] [--zoom-start <s> --zoom-end <s>]");
+                    throw new ArgumentException("用法: --session <session_dir> [--out <dir>] [--render-hz 60] [--decay 0.9] [--latency-ms 300 | --no-latency] [--latency-jitter-ms 60] [--zoom-start <s> --zoom-end <s>]");
                 }
 
                 if (string.IsNullOrWhiteSpace(output))
                 {
                     output = Path.Combine(session, "tools3_upsample_sim");
+                }
+
+                // 自动测量延迟 + 渲染帧率, 让离线仿真匹配该 session 真机的真实时序
+                (double? latency, double? renderHz) = autoLatency || autoHz ? MeasureSessionTiming(session) : (null, null);
+                if (autoLatency && latency.HasValue)
+                {
+                    latencyMs = latency.Value;
+                }
+
+                if (autoHz && renderHz.HasValue)
+                {
+                    hz = renderHz.Value;
                 }
 
                 (double, double)? zoom = null;
@@ -275,7 +308,110 @@ namespace EgoAnchor.Tools3
                     zoom = (zoomStart.Value, zoomEnd.Value);
                 }
 
-                return new Options { SessionDir = session, OutputDir = output, RenderHz = hz, DecayPerFrame = decay, Zoom = zoom };
+                return new Options
+                {
+                    SessionDir = session,
+                    OutputDir = output,
+                    RenderHz = hz,
+                    DecayPerFrame = decay,
+                    LatencyMs = latencyMs,
+                    LatencyJitterMs = latencyJitterMs,
+                    AutoLatency = autoLatency,
+                    Zoom = zoom,
+                };
+            }
+
+            /// <summary>
+            /// 从录制的 *_unity_output.jsonl 实测真机时序, 让离线仿真对齐:
+            ///   - 采集-渲染延迟中位数 = 每帧 render_mono_ms - primary 的 source_capture_mono_ms;
+            ///   - 渲染帧率 = render_mono_ms 相邻间隔中位数的倒数。
+            /// </summary>
+            private static (double? latencyMs, double? renderHz) MeasureSessionTiming(string sessionDir)
+            {
+                string[] matches = Directory.GetFiles(sessionDir, "*_unity_output.jsonl", SearchOption.TopDirectoryOnly);
+                if (matches.Length != 1)
+                {
+                    return (null, null);
+                }
+
+                var latencies = new List<double>();
+                var renderTimes = new List<double>();
+                foreach (string line in File.ReadLines(matches[0]))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(line);
+                        var root = doc.RootElement;
+                        if (!root.TryGetProperty("render_mono_ms", out var rm) || rm.ValueKind != System.Text.Json.JsonValueKind.Number)
+                        {
+                            continue;
+                        }
+
+                        double renderMono = rm.GetDouble();
+                        renderTimes.Add(renderMono);
+
+                        if (root.TryGetProperty("variants", out var variants) && variants.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var v in variants.EnumerateArray())
+                            {
+                                if (v.TryGetProperty("is_primary", out var ip) && ip.ValueKind == System.Text.Json.JsonValueKind.True
+                                    && v.TryGetProperty("source_capture_mono_ms", out var sc) && sc.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                {
+                                    double lat = renderMono - sc.GetDouble();
+                                    if (lat >= 0 && lat < 2000)
+                                    {
+                                        latencies.Add(lat);
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // 跳过坏行
+                    }
+                }
+
+                double? latencyMs = null;
+                if (latencies.Count > 0)
+                {
+                    latencies.Sort();
+                    latencyMs = latencies[latencies.Count / 2];
+                }
+
+                double? renderHz = null;
+                if (renderTimes.Count >= 2)
+                {
+                    renderTimes.Sort();
+                    var gaps = new List<double>(renderTimes.Count - 1);
+                    for (int i = 1; i < renderTimes.Count; i++)
+                    {
+                        double g = renderTimes[i] - renderTimes[i - 1];
+                        if (g > 1e-3 && g < 1000)
+                        {
+                            gaps.Add(g);
+                        }
+                    }
+
+                    if (gaps.Count > 0)
+                    {
+                        gaps.Sort();
+                        double medianGapMs = gaps[gaps.Count / 2];
+                        if (medianGapMs > 1e-3)
+                        {
+                            renderHz = 1000.0 / medianGapMs;
+                        }
+                    }
+                }
+
+                return (latencyMs, renderHz);
             }
         }
     }

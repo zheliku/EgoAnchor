@@ -15,13 +15,34 @@ dotnet run --project EgoAnchor_Tools3/AnchorUpsampleSim3.csproj -c Release -- \
   --session <session_dir> \
   [--out <output_dir>] \
   [--render-hz 60] \
+  [--latency-ms 300 | --no-latency] [--latency-jitter-ms 60] \
   [--zoom-start 72.8 --zoom-end 75.7]
 ```
 
 - `--session`：eval session 目录（里面要有 `*_unity_output.jsonl`）
 - `--out`：输出目录，默认 `<session>/tools3_upsample_sim`
-- `--render-hz`：渲染帧率，默认 60
+- `--render-hz`：渲染帧率。**不指定则自动从录制实测**（取 `render_mono_ms` 间隔中位数）
+- `--latency-ms`：采集-渲染延迟（ms）。**不指定则自动从录制实测**（见下）。`--no-latency` 还原零延迟
+- `--latency-jitter-ms`：延迟抖动幅度（确定性，默认 60ms），模拟真机延迟非恒定
 - `--zoom-start/--zoom-end`：额外输出一个时间窗的放大图（看平滑细节，强烈建议用）
+
+---
+
+## ⚠️ 采集-渲染延迟（必读，否则离线结果不可信）
+
+**这是本工具最重要的一点。** 真机上一帧观测从被拍下（capture）到能用于渲染，要经过
+Python 推理（~159ms）+ 网络传输 + 排队，实测**采集-渲染延迟中位 ~300ms**，比观测周期（~208ms）还大。
+
+早期仿真在 capture 时刻就立即交付观测（零延迟），导致**「离线平滑、真机抖」**：
+离线 `now - 最近观测` 只有一帧（16ms），真机却有 300ms。C 路延迟插值尤其会被坑——
+离线看着完美，真机锯齿跳变。
+
+现在 `RealtimeSimulator` 把观测的**交付时刻**推迟到 `capture + 延迟(+抖动)`，而观测自带的时间戳
+仍是 capture 时间（与真机 `source_capture_mono_ms` 语义一致）。**默认自动从录制实测延迟和渲染帧率**
+（`render_mono_ms - source_capture_mono_ms` 中位数），让离线时序对齐该 session 真机。
+
+**所以：** 离线对比策略时**不要加 `--no-latency`**（那是旧的不可信行为）。默认即复现真机延迟。
+要专门看「无延迟理想情况」才用 `--no-latency`。
 
 已验证数据集：
 - `EgoAnchor_Python/data/eval/20260614_130324_controller_right`（464 帧观测，~4.65fps，99.7s）

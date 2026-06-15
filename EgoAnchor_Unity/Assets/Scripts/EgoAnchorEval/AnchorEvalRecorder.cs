@@ -482,9 +482,10 @@ namespace EgoAnchorEval
 
             if (policy != null)
             {
-                CollectModuleParameters(parameters, "gate", policy.GateModule);
-                CollectModuleParameters(parameters, "estimator", policy.EstimatorModule);
-                CollectModuleParameters(parameters, "output", policy.OutputModule);
+                // 新架构：运动模型 (estimator 维度) + 平滑策略 (output 维度)。gate 已收敛为 host 内联参数。
+                CollectModuleParameters(parameters, "estimator", policy.MotionModel);
+                CollectModuleParameters(parameters, "output", policy.SmoothingStrategy);
+                CollectModuleParameters(parameters, "host", policy);
             }
 
             string configHash = ComputeConfigHash(label, strategyLabel, gateModule, estimatorModule, outputModule, parameters);

@@ -845,9 +845,8 @@ GameObject:
   m_Component:
   - component: {fileID: 206209587}
   - component: {fileID: 206209583}
-  - component: {fileID: 206209586}
+  - component: {fileID: 206209589}
   - component: {fileID: 206209588}
-  - component: {fileID: 206209584}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -867,42 +866,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  gateModule: {fileID: 206209586}
-  estimatorModule: {fileID: 206209588}
-  outputModule: {fileID: 206209584}
+  motionModel: {fileID: 206209589}
+  smoothingStrategy: {fileID: 206209588}
   strategyLabel: 
+  enableScoreGate: 0
+  minScore: 0.2
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableObservedMotionHold: 0
-  observedMotionSpeedThresholdMps: 0.05
-  observedMotionAngularThresholdDps: 8
-  observedMotionHoldSeconds: 0.65
---- !u!114 &206209584
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 206209582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8ece61c70f654d48a8ff6b8040e9aeb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PassThroughOutputModule
---- !u!114 &206209586
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 206209582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d0de9fae7ed51a4085c4d2c9cdbccfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.NullGateModule
 --- !u!4 &206209587
 Transform:
   m_ObjectHideFlags: 0
@@ -927,13 +901,24 @@ MonoBehaviour:
   m_GameObject: {fileID: 206209582}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ddd2b4eb0ffb52d4d9e79d2dba7fdc22, type: 3}
+  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LowPassEstimatorModule
-  positionRate: 8
-  rotationRate: 8
-  velocityRate: 6
-  maxPredictAheadSeconds: 0.18
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.BlendStrategy
+  decayPerFrame: 0.9
+  extrapolationLatencyMultiplier: 1
+  maxExtrapolationSecondsHardCap: 0.3
+--- !u!114 &206209589
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 206209582}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
 --- !u!1 &209670095
 GameObject:
   m_ObjectHideFlags: 0
@@ -2460,9 +2445,8 @@ GameObject:
   m_Component:
   - component: {fileID: 637018053}
   - component: {fileID: 637018049}
-  - component: {fileID: 637018052}
-  - component: {fileID: 637018051}
-  - component: {fileID: 637018050}
+  - component: {fileID: 637018055}
+  - component: {fileID: 637018054}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -2482,58 +2466,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  gateModule: {fileID: 637018052}
-  estimatorModule: {fileID: 637018051}
-  outputModule: {fileID: 637018050}
+  motionModel: {fileID: 637018055}
+  smoothingStrategy: {fileID: 637018054}
   strategyLabel: 
+  enableScoreGate: 0
+  minScore: 0.2
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableObservedMotionHold: 0
-  observedMotionSpeedThresholdMps: 0.05
-  observedMotionAngularThresholdDps: 8
-  observedMotionHoldSeconds: 0.65
---- !u!114 &637018050
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 637018048}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8ece61c70f654d48a8ff6b8040e9aeb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PassThroughOutputModule
---- !u!114 &637018051
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 637018048}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3aa17528633c024e9b22491030388e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.OneEuroEstimatorModule
-  minCutoff: 1
-  beta: 0.25
-  derivativeCutoff: 1
-  maxPredictAheadSeconds: 0.12
---- !u!114 &637018052
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 637018048}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d0de9fae7ed51a4085c4d2c9cdbccfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.NullGateModule
 --- !u!4 &637018053
 Transform:
   m_ObjectHideFlags: 0
@@ -2549,6 +2492,36 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1852106716}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &637018054
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 637018048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.BlendStrategy
+  decayPerFrame: 0.9
+  extrapolationLatencyMultiplier: 1
+  maxExtrapolationSecondsHardCap: 0.3
+--- !u!114 &637018055
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 637018048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0775045992455dd4da165d5c787fa427, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.OneEuroModel
+  minCutoff: 1
+  beta: 0.25
+  derivativeCutoff: 1
 --- !u!1 &722913589
 GameObject:
   m_ObjectHideFlags: 0
@@ -3863,9 +3836,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1039886365}
   - component: {fileID: 1039886366}
-  - component: {fileID: 1039886367}
-  - component: {fileID: 1039886369}
   - component: {fileID: 1039886368}
+  - component: {fileID: 1039886367}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -3900,18 +3872,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  gateModule: {fileID: 1039886367}
-  estimatorModule: {fileID: 1039886369}
-  outputModule: {fileID: 1039886368}
+  motionModel: {fileID: 1039886368}
+  smoothingStrategy: {fileID: 1039886367}
   strategyLabel: 
+  enableScoreGate: 0
+  minScore: 0.2
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableObservedMotionHold: 1
-  observedMotionSpeedThresholdMps: 0.05
-  observedMotionAngularThresholdDps: 8
-  observedMotionHoldSeconds: 0.65
 --- !u!114 &1039886367
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3921,16 +3892,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1039886364}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4566ba9f3f3a416489611564a782039a, type: 3}
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ScoreJumpGateModule
-  startScoreMin: 0.35
-  trackScoreMin: 0.2
-  holdScoreMin: 0.12
-  relocalizeScoreMin: 0.12
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
-  maxMeasurementAgeSeconds: 1
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
 --- !u!114 &1039886368
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3940,41 +3907,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1039886364}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dda3b859f35c15e47a795dc5c544fc3a, type: 3}
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.StaticLockRateLimitOutputModule
-  enableStaticLock: 1
-  staticReleaseMeters: 0.03
-  staticReleaseDegrees: 3
-  enableRateLimit: 1
-  maxOutputMetersPerSecond: 4
-  maxOutputDegreesPerSecond: 720
-  enableAccelerationLimit: 1
-  maxOutputAccelerationMetersPerSecond2: 80
-  maxOutputAngularAccelerationDegreesPerSecond2: 28800
---- !u!114 &1039886369
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1039886364}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1259e51973fb1094399e039ac4a05d74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorEstimatorModule
-  positionProcessNoise: 0.16
-  positionMeasurementNoise: 0.00035
-  rotationProcessNoise: 0.35
-  rotationMeasurementNoise: 0.002
-  lowScoreNoiseMultiplier: 16
-  lowScoreVelocityKeep: 0.2
-  maxPredictAheadSeconds: 0.16
-  observedVelocityBlend: 0.85
-  observedStopSpeedThresholdMps: 0.05
-  observedStopAngularThresholdDps: 6
-  observedStopVelocityKeep: 0.1
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4570,19 +4509,19 @@ MonoBehaviour:
   stereoSource: {fileID: 727659787}
   framePoseHistory: {fileID: 1015685191}
   recordedRuntimes:
-  - label: egoanchor
+  - label: kalman+interp
     runtime: {fileID: 160200731}
     anchorTransform: {fileID: 160200733}
     isPrimary: 1
-  - label: kalman
+  - label: kalman+blend
     runtime: {fileID: 1430656898}
     anchorTransform: {fileID: 1430656900}
     isPrimary: 0
-  - label: oneeuro
+  - label: oneeuro+blend
     runtime: {fileID: 1852106714}
     anchorTransform: {fileID: 1852106716}
     isPrimary: 0
-  - label: lowpass
+  - label: cv+blend
     runtime: {fileID: 302482019}
     anchorTransform: {fileID: 302482021}
     isPrimary: 0
@@ -5611,9 +5550,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1484131517}
   - component: {fileID: 1484131521}
-  - component: {fileID: 1484131520}
-  - component: {fileID: 1484131519}
-  - component: {fileID: 1484131518}
+  - component: {fileID: 1484131523}
+  - component: {fileID: 1484131524}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -5636,42 +5574,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1137170460}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1484131518
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1484131516}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8ece61c70f654d48a8ff6b8040e9aeb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PassThroughOutputModule
---- !u!114 &1484131519
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1484131516}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d0de9fae7ed51a4085c4d2c9cdbccfc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.NullGateModule
---- !u!114 &1484131520
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1484131516}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 670819a6e714b3c4fb86754735fd14e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawEstimatorModule
 --- !u!114 &1484131521
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5684,18 +5586,41 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  gateModule: {fileID: 1484131519}
-  estimatorModule: {fileID: 1484131520}
-  outputModule: {fileID: 1484131518}
+  motionModel: {fileID: 1484131523}
+  smoothingStrategy: {fileID: 1484131524}
   strategyLabel: 
+  enableScoreGate: 0
+  minScore: 0.2
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableObservedMotionHold: 0
-  observedMotionSpeedThresholdMps: 0.05
-  observedMotionAngularThresholdDps: 8
-  observedMotionHoldSeconds: 0.65
+--- !u!114 &1484131523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1484131516}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
+--- !u!114 &1484131524
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1484131516}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
 --- !u!1001 &1535159674
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6356,7 +6281,6 @@ GameObject:
   - component: {fileID: 1774730471}
   - component: {fileID: 1774730465}
   - component: {fileID: 1774730473}
-  - component: {fileID: 1774730470}
   - component: {fileID: 1774730472}
   m_Layer: 0
   m_Name: AnchorPolicyHost
@@ -6377,35 +6301,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  gateModule: {fileID: 1774730473}
-  estimatorModule: {fileID: 1774730470}
-  outputModule: {fileID: 1774730472}
+  motionModel: {fileID: 1774730473}
+  smoothingStrategy: {fileID: 1774730472}
   strategyLabel: 
+  enableScoreGate: 0
+  minScore: 0.2
+  maxJumpMeters: 0.8
+  maxJumpDegrees: 120
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableObservedMotionHold: 0
-  observedMotionSpeedThresholdMps: 0.05
-  observedMotionAngularThresholdDps: 8
-  observedMotionHoldSeconds: 0.65
---- !u!114 &1774730470
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1774730464}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 635c137acf0e7024f9d583e52b363a3f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanEstimatorModule
-  positionProcessNoise: 0.2
-  positionMeasurementNoise: 0.0004
-  rotationProcessNoise: 0.4
-  rotationMeasurementNoise: 0.0025
-  maxPredictAheadSeconds: 0.18
 --- !u!4 &1774730471
 Transform:
   m_ObjectHideFlags: 0
@@ -6430,9 +6336,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1774730464}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8ece61c70f654d48a8ff6b8040e9aeb, type: 3}
+  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PassThroughOutputModule
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.BlendStrategy
+  decayPerFrame: 0.9
+  extrapolationLatencyMultiplier: 1
+  maxExtrapolationSecondsHardCap: 0.3
 --- !u!114 &1774730473
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6442,9 +6351,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1774730464}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d0de9fae7ed51a4085c4d2c9cdbccfc, type: 3}
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.NullGateModule
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
 --- !u!1001 &1803819639
 PrefabInstance:
   m_ObjectHideFlags: 0
