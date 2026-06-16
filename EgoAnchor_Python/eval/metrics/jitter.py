@@ -39,12 +39,12 @@ def compute_jitter(output: pd.DataFrame, *, speed_threshold_mps: float = 0.03, c
         if len(sample) < 3:
             rows.append(_insufficient(condition, label, len(sample)))
             continue
-        pos = np.vstack(sample["stable_pos"].to_numpy())
+        pos = np.vstack(sample["output_pos"].to_numpy())
         time_ms = sample["render_mono_ms"].to_numpy(dtype=float)
         dt = _median_dt_seconds(time_ms)
         residual = highpass(pos, dt=dt, cutoff_hz=cutoff_hz)
         residual_norm = np.linalg.norm(residual, axis=1)
-        rot_jitter = _rotation_jitter_deg(np.vstack(sample["stable_rot"].to_numpy()))
+        rot_jitter = _rotation_jitter_deg(np.vstack(sample["output_rot"].to_numpy()))
         rows.append(
             {
                 "condition": condition,
@@ -64,10 +64,10 @@ def _usable_pose_rows(group: pd.DataFrame) -> pd.DataFrame:
 
     return group[
         group["valid"].fillna(False).astype(bool)
-        & group["has_stable"].fillna(False).astype(bool)
+        & group["has_output_pose"].fillna(False).astype(bool)
         & group["gt_pos"].map(is_pose_value)
-        & group["stable_pos"].map(is_pose_value)
-        & group["stable_rot"].map(is_pose_value)
+        & group["output_pos"].map(is_pose_value)
+        & group["output_rot"].map(is_pose_value)
     ].copy()
 
 

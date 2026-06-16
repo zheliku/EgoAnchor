@@ -17,11 +17,11 @@ namespace EgoAnchorEval
         /// <summary>该变体当前输出位姿对应的源 frame_id。</summary>
         public readonly long SourceFrameId;
 
-        /// <summary>是否已有 stable pose。</summary>
-        public readonly bool HasStablePose;
+        /// <summary>本帧该变体是否产出了可用的 anchor 输出 pose。</summary>
+        public readonly bool HasOutputPose;
 
-        /// <summary>当前 stable pose；无位姿时按 identity 写出 null。</summary>
-        public readonly Pose StablePose;
+        /// <summary>当前 anchor 输出 pose；无位姿时按 identity 写出 null。</summary>
+        public readonly Pose OutputPose;
 
         /// <summary>当前 anchor 生命周期状态。</summary>
         public readonly string AnchorState;
@@ -44,7 +44,7 @@ namespace EgoAnchorEval
         /// <summary>最近一次渲染输出的前推时长，单位毫秒；非 policy 变体写 null。</summary>
         public readonly double PredictAheadMs;
 
-        /// <summary>stable_pos/stable_rot 的采样来源，例如 transform 或 none。</summary>
+        /// <summary>output_pos/output_rot 的采样来源，例如 transform 或 none。</summary>
         public readonly string AnchorPoseSource;
 
         /// <summary>是否拿到了 source frame 的采集时间。</summary>
@@ -86,14 +86,14 @@ namespace EgoAnchorEval
         /// <summary>策略 label，通常等于 pipeline strategy label。</summary>
         public readonly string StrategyLabel;
 
-        /// <summary>gate module 名称。</summary>
-        public readonly string GateModule;
+        /// <summary>gate 名称 (score_jump_gate / null_gate)。</summary>
+        public readonly string GateName;
 
-        /// <summary>estimator module 名称。</summary>
-        public readonly string EstimatorModule;
+        /// <summary>运动模型名称 (cv / kalman / oneeuro)。</summary>
+        public readonly string MotionModelName;
 
-        /// <summary>output module 名称。</summary>
-        public readonly string OutputModule;
+        /// <summary>平滑策略名称 (blend / interp_hermite / raw_passthrough)。</summary>
+        public readonly string SmoothingStrategyName;
 
         /// <summary>本次策略配置的稳定摘要。</summary>
         public readonly string ConfigHash;
@@ -116,8 +116,8 @@ namespace EgoAnchorEval
         public RecordedVariantSnapshot(
             string label,
             long sourceFrameId,
-            bool hasStablePose,
-            Pose stablePose,
+            bool hasOutputPose,
+            Pose outputPose,
             string anchorState,
             string policyAction,
             string policyReason,
@@ -139,9 +139,9 @@ namespace EgoAnchorEval
             string motionState,
             double predictAheadMs,
             string strategyLabel,
-            string gateModule,
-            string estimatorModule,
-            string outputModule,
+            string gateName,
+            string motionModelName,
+            string smoothingStrategyName,
             string configHash,
             float latestResidualMeters,
             float latestResidualDegrees,
@@ -150,8 +150,8 @@ namespace EgoAnchorEval
         {
             Label = label ?? string.Empty;
             SourceFrameId = sourceFrameId;
-            HasStablePose = hasStablePose;
-            StablePose = stablePose;
+            HasOutputPose = hasOutputPose;
+            OutputPose = outputPose;
             AnchorState = anchorState ?? string.Empty;
             PolicyAction = policyAction ?? string.Empty;
             PolicyReason = policyReason ?? string.Empty;
@@ -173,9 +173,9 @@ namespace EgoAnchorEval
             MotionState = motionState ?? string.Empty;
             PredictAheadMs = predictAheadMs;
             StrategyLabel = strategyLabel ?? string.Empty;
-            GateModule = gateModule ?? string.Empty;
-            EstimatorModule = estimatorModule ?? string.Empty;
-            OutputModule = outputModule ?? string.Empty;
+            GateName = gateName ?? string.Empty;
+            MotionModelName = motionModelName ?? string.Empty;
+            SmoothingStrategyName = smoothingStrategyName ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
             LatestResidualMeters = latestResidualMeters;
             LatestResidualDegrees = latestResidualDegrees;
@@ -289,8 +289,8 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "label", variant.Label);
             AppendBoolProperty(builder, ref first, "is_primary", variant.IsPrimary);
             AppendLongProperty(builder, ref first, "source_frame_id", variant.SourceFrameId);
-            AppendBoolProperty(builder, ref first, "has_stable", variant.HasStablePose);
-            AppendPoseProperties(builder, ref first, "stable_pos", "stable_rot", variant.StablePose, variant.HasStablePose);
+            AppendBoolProperty(builder, ref first, "has_output_pose", variant.HasOutputPose);
+            AppendPoseProperties(builder, ref first, "output_pos", "output_rot", variant.OutputPose, variant.HasOutputPose);
             AppendStringProperty(builder, ref first, "anchor_pose_source", variant.AnchorPoseSource);
             AppendBoolProperty(builder, ref first, "has_source_capture_timing", variant.HasSourceCaptureTiming);
             AppendDoubleProperty(
@@ -311,9 +311,9 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "motion_state", variant.MotionState);
             AppendDoubleProperty(builder, ref first, "predict_ahead_ms", variant.PredictAheadMs);
             AppendStringProperty(builder, ref first, "strategy_label", variant.StrategyLabel);
-            AppendStringProperty(builder, ref first, "gate_module", variant.GateModule);
-            AppendStringProperty(builder, ref first, "estimator_module", variant.EstimatorModule);
-            AppendStringProperty(builder, ref first, "output_module", variant.OutputModule);
+            AppendStringProperty(builder, ref first, "gate", variant.GateName);
+            AppendStringProperty(builder, ref first, "motion_model", variant.MotionModelName);
+            AppendStringProperty(builder, ref first, "smoothing_strategy", variant.SmoothingStrategyName);
             AppendStringProperty(builder, ref first, "config_hash", variant.ConfigHash);
             AppendFloatProperty(builder, ref first, "latest_residual_meters", variant.LatestResidualMeters);
             AppendFloatProperty(builder, ref first, "latest_residual_degrees", variant.LatestResidualDegrees);

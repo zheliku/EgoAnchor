@@ -58,6 +58,16 @@ def normalize_segmenter_type(segmenter_cfg: SimpleNamespace) -> str:
     return normalized
 
 
+def should_show_mask_snapshot(configured_snapshot: bool, tracking_window_enabled: bool) -> bool:
+    """判断是否允许 register mask snapshot 弹窗。
+
+    `debug.enable_tracking_window=false` 用于 Ubuntu headless/SSH 运行，此时即便
+    `debug.show_mask_snapshot=true` 也不能调用 OpenCV GUI API。
+    """
+
+    return bool(configured_snapshot) and bool(tracking_window_enabled)
+
+
 def _generate_cube_symmetry_tfs() -> np.ndarray:
     """生成立方体 24 个正交旋转对称变换。"""
 
@@ -148,6 +158,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
     render_quality_cfg = getattr(reliability_cfg, "render_quality", SimpleNamespace())
     pose_score_cfg = getattr(reliability_cfg, "pose_score", SimpleNamespace())
     debug_cfg = cfg.debug
+    tracking_window_enabled = bool(_cfg_get(debug_cfg, "enable_tracking_window", True))
 
     segmenter_type = normalize_segmenter_type(segmenter_cfg)
     confidence_threshold = float(_cfg_get(segmenter_cfg, "confidence_threshold", _cfg_get(yolo_cfg, "conf", _cfg_get(sam3_cfg, "confidence_threshold", 0.1))))
@@ -274,7 +285,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         cutie_enabled=bool(cutie_cfg.enabled),
         cutie_adjust_pose=bool(cutie_cfg.adjust_pose),
         log_stats_interval=int(debug_cfg.pipeline_stats_interval),
-        show_mask_snapshot=bool(debug_cfg.show_mask_snapshot),
+        show_mask_snapshot=should_show_mask_snapshot(bool(debug_cfg.show_mask_snapshot), tracking_window_enabled),
         mask_snapshot_window=str(debug_cfg.mask_snapshot_window),
         async_segmentation=bool(_cfg_get(sam3_cfg, "async_segmentation", segmenter_type == "sam3")) if segmenter_type == "sam3" else False,
         enable_render_quality=bool(_cfg_get(render_quality_cfg, "enabled", False)),

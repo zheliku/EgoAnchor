@@ -89,8 +89,7 @@ namespace EgoAnchor.Policy
             // 延迟设为它的安全倍数，保证插值目标稳稳落在已知点之间。
             float observedLatency = Mathf.Max((float)(nowSeconds - points[points.Count - 1].TimeSeconds), 0.0f);
             // 偏向跟随较大值 (快升慢降)，避免延迟不足导致外推
-            float follow = observedLatency > latencyEstimateSeconds ? 0.5f : 0.05f;
-            latencyEstimateSeconds = Mathf.Lerp(latencyEstimateSeconds, observedLatency, follow);
+            latencyEstimateSeconds = AnchorMath.UpdateAsymmetricEma(latencyEstimateSeconds, observedLatency);
             delaySeconds = Mathf.Max(latencyEstimateSeconds * Mathf.Clamp(latencySafetyMargin, 1.0f, 2.0f), minDelaySeconds);
 
             double target = nowSeconds - delaySeconds;
@@ -138,8 +137,7 @@ namespace EgoAnchor.Policy
             Vector3 pos = Spline.Hermite(p1.Pose.position, p1.LinearVelocity, p2.Pose.position, p2.LinearVelocity, u, span);
 
             // 旋转：在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite，切线用角速度
-            Quaternion r2Aligned = AnchorMath.AlignHemisphere(p1.Pose.rotation, p2.Pose.rotation);
-            Vector3 logEnd = AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(p1.Pose.rotation), r2Aligned));
+            Vector3 logEnd = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p2.Pose.rotation);
             Vector3 rotVec = Spline.Hermite(Vector3.zero, p1.AngularVelocityRad, logEnd, p2.AngularVelocityRad, u, span);
             Quaternion rot = AnchorMath.Multiply(p1.Pose.rotation, AnchorMath.Exp(rotVec));
             return new Pose(pos, rot);
@@ -154,19 +152,13 @@ namespace EgoAnchor.Policy
 
             Vector3 pos = Spline.CentripetalCatmullRom(p0.Pose.position, p1.Pose.position, p2.Pose.position, p3.Pose.position, u);
 
-            Vector3 l0 = LogRel(p1.Pose.rotation, p0.Pose.rotation);
+            Vector3 l0 = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p0.Pose.rotation);
             Vector3 l1 = Vector3.zero;
-            Vector3 l2 = LogRel(p1.Pose.rotation, p2.Pose.rotation);
-            Vector3 l3 = LogRel(p1.Pose.rotation, p3.Pose.rotation);
+            Vector3 l2 = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p2.Pose.rotation);
+            Vector3 l3 = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p3.Pose.rotation);
             Vector3 rotVec = Spline.CentripetalCatmullRom(l0, l1, l2, l3, u);
             Quaternion rot = AnchorMath.Multiply(p1.Pose.rotation, AnchorMath.Exp(rotVec));
             return new Pose(pos, rot);
-        }
-
-        private static Vector3 LogRel(Quaternion reference, Quaternion q)
-        {
-            Quaternion aligned = AnchorMath.AlignHemisphere(reference, q);
-            return AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(reference), aligned));
         }
     }
 }

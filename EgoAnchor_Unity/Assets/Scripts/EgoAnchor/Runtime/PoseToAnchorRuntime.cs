@@ -10,8 +10,8 @@ namespace EgoAnchor.Runtime
     /// <summary>
     /// Pose-to-anchor 组合点。
     /// 它只负责把 Python camera-space pose 映射到 Unity world pose，并把 aligned raw pose
-    /// 提交给 Unity 侧 AnchorPolicyHost。raw_zoh、lowpass、Kalman、OneEuro 和 EgoAnchor
-    /// 都必须通过 policy module 组合表达，不再保留 legacy processor 或旧 policy 兼容路径。
+    /// 提交给 Unity 侧 AnchorPolicyHost。ZOH、低通、Kalman、OneEuro 和 EgoAnchor 方法
+    /// 都通过 MotionModel + SmoothingStrategy 组合表达，不再保留 legacy processor 或旧 policy 兼容路径。
     /// </summary>
     [DefaultExecutionOrder(-50)]
     public sealed class PoseToAnchorRuntime : MonoBehaviour
@@ -49,15 +49,15 @@ namespace EgoAnchor.Runtime
 
         /// <summary>Unity 侧 anchor policy 宿主。</summary>
         [Header("Anchor Policy")]
-        [Tooltip("Unity 侧 anchor policy 宿主。所有 baseline 和 EgoAnchor 方法都通过该 host 的 Gate/Estimator/Output 模块表达。")]
+        [Tooltip("Unity 侧 anchor policy 宿主。持有 MotionModel + SmoothingStrategy 两个模块（可选内联 score 门控），每渲染帧输出平滑 anchor pose。")]
         [SerializeField] private AnchorPolicyHost policyHost;
 
         private CameraPoseFrameAligner aligner;
         private Pose rawPose;
-        private Pose stablePose;
+        private Pose outputPose;
         private Pose arrivalTimeRawPose;
         private bool hasRawPose;
-        private bool hasStablePose;
+        private bool hasOutputPose;
         private bool hasArrivalTimeRawPose;
 
         private long latestAlignedFrameId = -1;
@@ -108,14 +108,14 @@ namespace EgoAnchor.Runtime
         /// <summary>当前绑定的 Unity policy host，只用于 eval 配置摘要。</summary>
         public AnchorPolicyHost PolicyHost => policyHost;
 
-        /// <summary>当前 gate module 名称。</summary>
-        public string GateModuleName => policyHost != null ? policyHost.GateModuleName : "";
+        /// <summary>当前 gate 名称。</summary>
+        public string GateName => policyHost != null ? policyHost.GateName : "";
 
-        /// <summary>当前 estimator module 名称。</summary>
-        public string EstimatorModuleName => policyHost != null ? policyHost.EstimatorModuleName : "";
+        /// <summary>当前运动模型名称。</summary>
+        public string MotionModelName => policyHost != null ? policyHost.MotionModelName : "";
 
-        /// <summary>当前 output module 名称。</summary>
-        public string OutputModuleName => policyHost != null ? policyHost.OutputModuleName : "";
+        /// <summary>当前平滑策略名称。</summary>
+        public string SmoothingStrategyName => policyHost != null ? policyHost.SmoothingStrategyName : "";
 
         /// <summary>最近一次 output stage 平移残差，单位米。</summary>
         public float LatestResidualMeters => policyHost != null ? policyHost.LatestResidualMeters : float.NaN;
@@ -195,7 +195,7 @@ namespace EgoAnchor.Runtime
             RebuildAligner();
             if (policyHost == null)
             {
-                Log.Warning("PoseToAnchorRuntime 未绑定 AnchorPolicyHost；该 runtime 不会输出 stable pose。", this);
+                Log.Warning("PoseToAnchorRuntime 未绑定 AnchorPolicyHost；该 runtime 不会输出 anchor pose。", this);
                 return;
             }
 
@@ -281,11 +281,11 @@ namespace EgoAnchor.Runtime
             return hasRawPose;
         }
 
-        /// <summary>尝试获取当前 stable/final anchor pose。</summary>
-        public bool TryGetStablePose(out Pose pose)
+        /// <summary>尝试获取当前 anchor policy 每帧输出 pose。</summary>
+        public bool TryGetOutputPose(out Pose pose)
         {
-            pose = stablePose;
-            return hasStablePose;
+            pose = outputPose;
+            return hasOutputPose;
         }
 
         /// <summary>尝试获取 arrival-time raw 诊断 pose。</summary>
@@ -381,7 +381,7 @@ namespace EgoAnchor.Runtime
 
             if (policyHost == null)
             {
-                hasStablePose = false;
+                hasOutputPose = false;
                 currentAnchorState = AnchorState.Searching;
                 latestPolicyAction = "missing_policy_host";
                 latestPolicyReason = "policy_host_required";
@@ -435,7 +435,7 @@ namespace EgoAnchor.Runtime
             {
                 latestPolicyAction = "no_pose";
                 latestPolicyReason = reason;
-                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
+                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
                 return;
             }
 
@@ -466,7 +466,7 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
-        /// policy 模式下推进控制器计时并刷新 stable pose 输出。
+        /// 每渲染帧推进 anchor policy 并刷新输出 pose。
         /// </summary>
         public void AdvanceAnchorOutput(double nowSeconds)
         {
@@ -481,12 +481,12 @@ namespace EgoAnchor.Runtime
             latestPredictAheadMs = output.PredictAheadSeconds * 1000f;
             if (output.HasPose)
             {
-                stablePose = output.Pose;
-                hasStablePose = true;
+                outputPose = output.Pose;
+                hasOutputPose = true;
             }
             else
             {
-                hasStablePose = false;
+                hasOutputPose = false;
             }
         }
 
@@ -613,7 +613,7 @@ namespace EgoAnchor.Runtime
 
             if (!heartbeat.InputReady && CurrentAnchorState != AnchorState.Paused)
             {
-                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
+                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
                 latestPolicyAction = "heartbeat";
                 latestPolicyReason = "input_not_ready";
             }
@@ -685,7 +685,7 @@ namespace EgoAnchor.Runtime
             }
             else
             {
-                currentAnchorState = hasStablePose || hasRawPose ? AnchorState.Tracking : AnchorState.Searching;
+                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.Tracking : AnchorState.Searching;
             }
             latestPolicyAction = "resume";
             latestPolicyReason = reason ?? "resume";
@@ -709,7 +709,7 @@ namespace EgoAnchor.Runtime
         private void ClearLocalPoses()
         {
             hasRawPose = false;
-            hasStablePose = false;
+            hasOutputPose = false;
             hasArrivalTimeRawPose = false;
             latestAlignedFrameId = -1;
         }

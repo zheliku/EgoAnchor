@@ -58,7 +58,7 @@ namespace EgoAnchor.Policy
         {
             ConfigureFilters();
             Vector3 p = observation.WorldPose.position;
-            double t = MeasurementTime(observation);
+            double t = observation.MeasurementTimeSeconds;
             px.Snap(p.x, t);
             py.Snap(p.y, t);
             pz.Snap(p.z, t);
@@ -79,13 +79,13 @@ namespace EgoAnchor.Policy
             }
 
             Vector3 p = observation.WorldPose.position;
-            double t = MeasurementTime(observation);
+            double t = observation.MeasurementTimeSeconds;
             px.Update(p.x, t);
             py.Update(p.y, t);
             pz.Update(p.z, t);
 
             Quaternion measured = AnchorMath.AlignHemisphere(rotationReference, observation.WorldPose.rotation);
-            Vector3 err = AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(rotationReference), measured));
+            Vector3 err = AnchorMath.RelativeRotationLog(rotationReference, measured);
             rxFilter.Update(err.x, t);
             ryFilter.Update(err.y, t);
             rzFilter.Update(err.z, t);
@@ -134,11 +134,6 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(new Vector3(rxFilter.Value, ryFilter.Value, rzFilter.Value)));
-        }
-
-        private static double MeasurementTime(in AnchorObservation observation)
-        {
-            return observation.HasCaptureTime ? observation.CaptureTimeSeconds : observation.SampleTimeSeconds;
         }
     }
 }

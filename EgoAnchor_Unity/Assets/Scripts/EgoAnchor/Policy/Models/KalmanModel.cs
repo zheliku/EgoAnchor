@@ -8,8 +8,8 @@ namespace EgoAnchor.Policy
     /// 位置 x/y/z 三路一维 CV Kalman；旋转在最新姿态参考的切空间里三路 CV Kalman
     /// (估计姿态 + 角速度)。复用 ConstVelocityKalman struct。
     ///
-    /// 与旧 KalmanEstimatorModule 估计部分一致，但**去掉了 maxPredictAhead 限幅**——
-    /// 外推不再人为截断 (那正是旧版"平段+跳变"的根源)，平滑交给 SmoothingStrategy。
+    /// 估计部分是经典 CV Kalman，但**没有 maxPredictAhead 限幅**——
+    /// 外推不人为截断 (限幅正是旧版"平段+跳变"的根源)，平滑交给 SmoothingStrategy。
     /// </summary>
     public sealed class KalmanModel : MotionModel
     {
@@ -69,7 +69,7 @@ namespace EgoAnchor.Policy
             rx.Reset(0.0f, rotationMeasurementNoise, 1.0f);
             ry.Reset(0.0f, rotationMeasurementNoise, 1.0f);
             rz.Reset(0.0f, rotationMeasurementNoise, 1.0f);
-            lastTimeSeconds = MeasurementTime(observation);
+            lastTimeSeconds = observation.MeasurementTimeSeconds;
             hasState = true;
         }
 
@@ -81,7 +81,7 @@ namespace EgoAnchor.Policy
                 return;
             }
 
-            double t = MeasurementTime(observation);
+            double t = observation.MeasurementTimeSeconds;
             float dt = Mathf.Max((float)(t - lastTimeSeconds), 0.0f);
             x.Predict(dt, positionProcessNoise);
             y.Predict(dt, positionProcessNoise);
@@ -97,7 +97,7 @@ namespace EgoAnchor.Policy
             z.Correct(p.z, positionMeasurementNoise);
 
             Quaternion measured = AnchorMath.AlignHemisphere(CurrentRotation(), observation.WorldPose.rotation);
-            Vector3 err = AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(rotationReference), measured));
+            Vector3 err = AnchorMath.RelativeRotationLog(rotationReference, measured);
             rx.Correct(err.x, rotationMeasurementNoise);
             ry.Correct(err.y, rotationMeasurementNoise);
             rz.Correct(err.z, rotationMeasurementNoise);
@@ -135,11 +135,6 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(new Vector3(rx.Position, ry.Position, rz.Position)));
-        }
-
-        private static double MeasurementTime(in AnchorObservation observation)
-        {
-            return observation.HasCaptureTime ? observation.CaptureTimeSeconds : observation.SampleTimeSeconds;
         }
     }
 }

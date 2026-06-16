@@ -62,7 +62,7 @@ def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
         "recovery_summary": compute_recovery(anchor_detail, logs.manifest),
         "reliability_diagnostics_summary": reliability.summary,
         "reliability_score_histogram": reliability.score_histogram,
-        "track_reprojection_histogram": reliability.track_reprojection_histogram,
+        "color_reprojection_histogram": reliability.color_reprojection_histogram,
         "policy_distribution": reliability.policy_distribution,
     }
     return MetricsResult(tables=tables, sanity=build_sanity(logs, output))
@@ -85,7 +85,7 @@ def build_sanity(logs: SessionLogs, output: pd.DataFrame) -> dict[str, Any]:
         "variants": {},
     }
     for label, group in output.groupby("label", sort=True):
-        stable_mask = group["has_stable"].fillna(False).astype(bool)
+        stable_mask = group["has_output_pose"].fillna(False).astype(bool)
         source_counts = group["anchor_pose_source"].astype(str).value_counts().to_dict()
         sanity["variants"][str(label)] = {
             "rows": int(len(group)),

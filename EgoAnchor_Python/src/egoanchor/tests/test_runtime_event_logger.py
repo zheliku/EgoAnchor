@@ -217,8 +217,8 @@ class RuntimeEventLoggerTest(unittest.TestCase):
                     score_mask=1.0,
                     score_reject=1.0,
                     score_confidence=0.8,
-                    track_reprojection=0.64,
-                    render_quality_expected=True,
+                    color_reprojection=0.64,
+                    render_quality_evaluated=True,
                     render_quality_status="valid",
                     render_quality_mask_iou=0.52,
                     render_quality_area_ratio_score=0.43,
@@ -258,8 +258,8 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertAlmostEqual(row["score_mask"], 1.0)
             self.assertAlmostEqual(row["score_reject"], 1.0)
             self.assertAlmostEqual(row["score_confidence"], 0.8)
-            self.assertAlmostEqual(row["track_reprojection"], 0.64)
-            self.assertTrue(row["render_quality_expected"])
+            self.assertAlmostEqual(row["color_reprojection"], 0.64)
+            self.assertTrue(row["render_quality_evaluated"])
             self.assertEqual(row["render_quality_status"], "valid")
             self.assertAlmostEqual(row["render_quality_mask_iou"], 0.52)
             self.assertAlmostEqual(row["render_quality_area_ratio_score"], 0.43)

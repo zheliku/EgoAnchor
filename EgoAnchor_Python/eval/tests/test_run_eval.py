@@ -23,7 +23,7 @@ class RunEvalTest(unittest.TestCase):
     """验证 Transform GT session 能一条命令产出指标和 report。"""
 
     def test_compute_all_metrics_direct_transform_gt(self) -> None:
-        """metrics 应直接比较 gt_pos/gt_rot 与 stable_pos/stable_rot。"""
+        """metrics 应直接比较 gt_pos/gt_rot 与 output_pos/output_rot。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             session_dir = _write_metric_session(Path(tmp))
@@ -67,7 +67,7 @@ class RunEvalTest(unittest.TestCase):
             self.assertGreater(float(latency.iloc[0]["capture_to_apply_p50_ms"]), 0.0)
             self.assertIn("reliability_diagnostics_summary", metrics.tables)
             self.assertIn("reliability_score_histogram", metrics.tables)
-            self.assertIn("track_reprojection_histogram", metrics.tables)
+            self.assertIn("color_reprojection_histogram", metrics.tables)
             self.assertIn("policy_distribution", metrics.tables)
             rq1 = metrics.tables["rq1_raw_mapping_error_summary"]
             self.assertEqual(set(rq1["label"]), {"arrival_time_raw", "frame_aligned_raw"})
@@ -98,7 +98,7 @@ class RunEvalTest(unittest.TestCase):
             self.assertTrue((report_dir / "latency_summary.csv").is_file())
             self.assertTrue((report_dir / "reliability_diagnostics_summary.csv").is_file())
             self.assertTrue((report_dir / "reliability_score_histogram.csv").is_file())
-            self.assertTrue((report_dir / "track_reprojection_histogram.csv").is_file())
+            self.assertTrue((report_dir / "color_reprojection_histogram.csv").is_file())
             self.assertTrue((report_dir / "policy_distribution.csv").is_file())
             self.assertTrue((report_dir / "summary.md").is_file())
             self.assertTrue((report_dir / "error_timeline.png").is_file())
@@ -161,11 +161,11 @@ class RunEvalTest(unittest.TestCase):
             [
                 {
                     "valid": True,
-                    "has_stable": True,
+                    "has_output_pose": True,
                     "gt_pos": [0.0, 0.0, 1.0],
                     "gt_rot": [0.0, 0.0, 0.0, 1.0],
-                    "stable_pos": [0.0, 0.0, 1.0],
-                    "stable_rot": _axis_angle_z(-30.0),
+                    "output_pos": [0.0, 0.0, 1.0],
+                    "output_rot": _axis_angle_z(-30.0),
                     "tick_index": 1,
                     "render_mono_ms": 100.0,
                     "label": "kalman",
@@ -286,14 +286,14 @@ def _variant(
     """构造 output variant。"""
 
     stable = np.asarray(gt_pos, dtype=float) + np.array([offset, 0.0, 0.0])
-    stable_rot = _axis_angle_z(30.0) if is_primary else [0.0, 0.0, 0.0, 1.0]
+    output_rot = _axis_angle_z(30.0) if is_primary else [0.0, 0.0, 0.0, 1.0]
     row: dict[str, object] = {
         "label": label,
         "is_primary": is_primary,
         "source_frame_id": source_frame_id,
-        "has_stable": True,
-        "stable_pos": stable.tolist(),
-        "stable_rot": stable_rot,
+        "has_output_pose": True,
+        "output_pos": stable.tolist(),
+        "output_rot": output_rot,
         "anchor_pose_source": "transform",
         "has_source_capture_timing": True,
         "source_capture_mono_ms": 50.0 + source_frame_id * 50.0,

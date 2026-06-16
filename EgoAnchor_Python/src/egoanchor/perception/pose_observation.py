@@ -45,10 +45,10 @@ class PoseObservation:
     depth_valid_in_mask: float = 0.0
     """mask 内有效深度比例。"""
 
-    depth_median_in_mask: float = 0.0
+    depth_median_m: float = 0.0
     """mask 内有效深度中位数，单位米。"""
 
-    depth_iqr_in_mask: float = 0.0
+    depth_iqr_m: float = 0.0
     """mask 内有效深度四分位距，单位米。"""
 
     score_phase: float = 0.0
@@ -75,14 +75,14 @@ class PoseObservation:
     mask_area_ratio: float = 0.0
     """mask 前景面积占整图比例。"""
 
-    render_quality_expected: bool = False
-    """本帧是否已经满足渲染质量检测前置条件；为 true 但无信号时应降低可靠性。"""
+    render_quality_evaluated: bool = False
+    """本帧是否已经满足渲染质量检测前置条件并实际跑了检测；为 true 但无信号时应降低可靠性。"""
 
     render_quality_status: str = "disabled"
     """渲染质量检测状态，用于区分 disabled、warmup、render_exception、valid 等情况。"""
 
-    track_reprojection: float = -1.0
-    """TRACK 阶段颜色重投影分，范围 0..1；-1 表示本帧无有效重投影信号。"""
+    color_reprojection: float = -1.0
+    """颜色重投影分，范围 0..1；-1 表示本帧无有效重投影信号。"""
 
     render_quality_mask_iou: float = 0.0
     """渲染 mask 与观测 mask 的 IoU。"""

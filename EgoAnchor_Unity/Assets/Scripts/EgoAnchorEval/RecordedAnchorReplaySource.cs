@@ -16,7 +16,7 @@ namespace EgoAnchorEval
     {
         /// <summary>接收回放 aligned raw pose 的 runtime。</summary>
         [Header("Replay Input")]
-        [Tooltip("接收回放 aligned raw pose 的 PoseToAnchorRuntime。该 runtime 可挂载任意 Gate/Estimator/Output 模块组合。")]
+        [Tooltip("接收回放 aligned raw pose 的 PoseToAnchorRuntime。该 runtime 可挂载任意 MotionModel + SmoothingStrategy 模块组合。")]
         [SerializeField] private PoseToAnchorRuntime runtime;
 
         /// <summary>Unity eval 输出 JSONL 路径。</summary>

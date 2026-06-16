@@ -50,6 +50,7 @@ function Invoke-PythonProtoGeneration {
     if (-not (Test-Path (Join-Path $OutputRoot "egoanchor\protocol\__init__.py"))) {
         Set-Content -Path (Join-Path $OutputRoot "egoanchor\protocol\__init__.py") -Value "# protocol package`n" -Encoding UTF8
     }
+    Copy-Item -Path (Join-Path $ProtocolRoot "subjects.v1.json") -Destination (Join-Path $OutputRoot "egoanchor\protocol\subjects.v1.json") -Force
     $v1Init = @'
 """protocol.v1 生成代码包级入口。
 

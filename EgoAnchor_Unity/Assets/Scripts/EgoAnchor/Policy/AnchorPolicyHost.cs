@@ -15,7 +15,7 @@ namespace EgoAnchor.Policy
     /// 旧的 Gate / Estimator / Output 三模块拆分已移除。score-gating (拒绝低分/跳变坏观测)
     /// 作为本 host 的可选内联功能 (默认关闭)，只有 EgoAnchor 方法需要时才在 Inspector 打开，
     /// 不再是独立模块。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
-    /// 不再靠 estimator 内部限幅 predict-ahead，因此低频 pose 也能逐帧连续输出。
+    /// 不再靠运动模型内部限幅 predict-ahead，因此低频 pose 也能逐帧连续输出。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
     {
@@ -91,14 +91,14 @@ namespace EgoAnchor.Policy
             }
         }
 
-        /// <summary>运动模型名 (eval 沿用 EstimatorModuleName 字段名以兼容旧分析管线)。</summary>
-        public string EstimatorModuleName => motionModel != null ? motionModel.ModelName : "";
+        /// <summary>运动模型名 (CV / Kalman / OneEuro)。写入 eval 的 motion_model 字段。</summary>
+        public string MotionModelName => motionModel != null ? motionModel.ModelName : "";
 
-        /// <summary>平滑策略名 (eval 沿用 OutputModuleName 字段名)。</summary>
-        public string OutputModuleName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
+        /// <summary>平滑策略名 (Blend / DelayedInterp / RawPassthrough)。写入 eval 的 smoothing_strategy 字段。</summary>
+        public string SmoothingStrategyName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
 
-        /// <summary>门控名 (eval 沿用 GateModuleName 字段名)。</summary>
-        public string GateModuleName => enableScoreGate ? "score_jump_gate" : "null_gate";
+        /// <summary>门控名 (启用时 score_jump_gate，否则 null_gate)。写入 eval 的 gate 字段。</summary>
+        public string GateName => enableScoreGate ? "score_jump_gate" : "null_gate";
 
         /// <summary>运动模型组件引用，仅用于 eval 配置摘要。</summary>
         public MotionModel MotionModel => motionModel;
@@ -200,7 +200,7 @@ namespace EgoAnchor.Policy
         public AnchorPolicyDecision AcceptPose(in AnchorObservation observation)
         {
             EnsureReady();
-            double now = ObservationTime(observation);
+            double now = observation.MeasurementTimeSeconds;
 
             if (!observation.HasAlignedPose)
             {
@@ -406,11 +406,6 @@ namespace EgoAnchor.Policy
 
                 stateMachine = new AnchorStateMachine(coastTimeoutSeconds, lostTimeoutSeconds);
             }
-        }
-
-        private static double ObservationTime(in AnchorObservation observation)
-        {
-            return observation.HasCaptureTime ? observation.CaptureTimeSeconds : observation.SampleTimeSeconds;
         }
     }
 }

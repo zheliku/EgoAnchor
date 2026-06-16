@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 
 from egoanchor.config import load_config
-from egoanchor.perception import normalize_segmenter_type
+from egoanchor.perception import normalize_segmenter_type, should_show_mask_snapshot
 
 
 class SegmenterConfigTest(unittest.TestCase):
@@ -64,6 +64,28 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.demo.pose.score_window_width, 960)
         self.assertEqual(cfg.demo.pose.score_window_height, 800)
         self.assertFalse(hasattr(cfg.demo.pose, "stereo_window_name"))
+
+    def test_headless_tracking_disables_mask_snapshot_window(self) -> None:
+        """关闭 tracking window 时也应关闭 register mask snapshot 弹窗。"""
+
+        self.assertFalse(
+            should_show_mask_snapshot(
+                configured_snapshot=True,
+                tracking_window_enabled=False,
+            )
+        )
+        self.assertTrue(
+            should_show_mask_snapshot(
+                configured_snapshot=True,
+                tracking_window_enabled=True,
+            )
+        )
+        self.assertFalse(
+            should_show_mask_snapshot(
+                configured_snapshot=False,
+                tracking_window_enabled=True,
+            )
+        )
 
     def test_normalize_segmenter_type_accepts_sam3(self) -> None:
         """工厂层应接受 sam3 作为显式分割后端。"""

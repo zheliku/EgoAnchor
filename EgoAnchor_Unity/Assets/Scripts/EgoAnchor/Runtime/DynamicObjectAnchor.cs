@@ -6,12 +6,12 @@ namespace EgoAnchor.Runtime
     /// dynamic object anchor Transform 应用组件。
     ///
     /// 该组件是场景中真正移动虚拟物体的薄封装：
-    /// - 从 PoseToAnchorRuntime 读取 stable/final world pose。
+    /// - 从 PoseToAnchorRuntime 读取 anchor policy 每帧输出的 world pose。
     /// - 把 pose 应用到当前 Transform 或指定目标 Transform。
     /// - 不订阅网络，不解码 Protobuf，不做平滑或状态机。
     ///
     /// 论文/实验对照由多个 PoseToAnchorRuntime + AnchorPolicyHost module 组合表达；
-    /// raw_zoh 也是 policy stable/final 输出，不在 Transform 应用层选择 raw/stable 双路模式。
+    /// RawPassthroughStrategy（ZOH 零阶保持）也是 policy 输出的一种，不在 Transform 应用层选择双路模式。
     /// </summary>
     public sealed class DynamicObjectAnchor : MonoBehaviour
     {
@@ -85,7 +85,7 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            bool hasPose = runtime.TryGetStablePose(out Pose pose);
+            bool hasPose = runtime.TryGetOutputPose(out Pose pose);
 
             if (!hasPose)
             {

@@ -45,7 +45,7 @@ class DebugViewTest(unittest.TestCase):
             score_mask=0.9,
             score_reject=1.0,
             score_confidence=0.75,
-            track_reprojection=0.42,
+            color_reprojection=0.42,
             render_quality_mask_iou=0.3,
             render_quality_area_ratio_score=0.25,
             render_quality_render_visible_ratio=0.5,

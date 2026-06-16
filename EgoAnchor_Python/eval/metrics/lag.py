@@ -22,11 +22,11 @@ def compute_lag(output: pd.DataFrame, *, sample_hz: float = 30.0, max_lag_ms: fl
     for (condition, label), group in output.groupby(["condition", "label"], sort=True):
         usable = group[
             group["valid"].fillna(False).astype(bool)
-            & group["has_stable"].fillna(False).astype(bool)
+            & group["has_output_pose"].fillna(False).astype(bool)
             & group["gt_pos"].map(is_pose_value)
             & group["gt_rot"].map(is_pose_value)
-            & group["stable_pos"].map(is_pose_value)
-            & group["stable_rot"].map(is_pose_value)
+            & group["output_pos"].map(is_pose_value)
+            & group["output_rot"].map(is_pose_value)
         ].sort_values("render_mono_ms")
         if len(usable) < 4:
             rows.append(_insufficient(condition, label, len(usable)))
@@ -58,7 +58,7 @@ def _estimate_group_lag(group: pd.DataFrame, *, sample_hz: float, max_lag_ms: fl
 
     identity_quat = np.tile(np.array([0.0, 0.0, 0.0, 1.0]), (len(group), 1))
     gt_pos, _ = slerp_lerp_resample(times, np.vstack(group["gt_pos"].to_numpy()), identity_quat, grid)
-    anchor_pos, _ = slerp_lerp_resample(times, np.vstack(group["stable_pos"].to_numpy()), identity_quat, grid)
+    anchor_pos, _ = slerp_lerp_resample(times, np.vstack(group["output_pos"].to_numpy()), identity_quat, grid)
     axis = int(np.argmax(np.ptp(gt_pos, axis=0)))
     gt_signal = np.gradient(gt_pos[:, axis])
     anchor_signal = np.gradient(anchor_pos[:, axis])

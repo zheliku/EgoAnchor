@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from eval.io.log_loader import join_by_frame, label_conditions, load_session
-from eval.io.schemas import SchemaError
+from eval.io.schemas import SchemaError, VariantRow
 
 
 class LogLoaderTest(unittest.TestCase):
@@ -40,10 +40,10 @@ class LogLoaderTest(unittest.TestCase):
             primary = logs.output[(logs.output["tick_index"] == 0) & (logs.output["label"] == "kalman")].iloc[0]
             self.assertTrue(bool(primary["is_primary"]))
             self.assertAlmostEqual(float(primary["reliability_score"]), 0.8)
-            self.assertEqual(primary["strategy_label"], "kalman_cv")
-            self.assertEqual(primary["gate_module"], "null_gate")
-            self.assertEqual(primary["estimator_module"], "kalman_cv")
-            self.assertEqual(primary["output_module"], "pass_through")
+            self.assertEqual(primary["strategy_label"], "kalman_blend")
+            self.assertEqual(primary["gate"], "null_gate")
+            self.assertEqual(primary["motion_model"], "kalman")
+            self.assertEqual(primary["smoothing_strategy"], "blend")
             self.assertEqual(primary["config_hash"], "abc123")
             self.assertEqual(primary["anchor_pose_source"], "transform")
             self.assertAlmostEqual(float(primary["source_capture_mono_ms"]), 100.0)
@@ -101,6 +101,34 @@ class LogLoaderTest(unittest.TestCase):
             with self.assertRaisesRegex(SchemaError, "gt_pos"):
                 load_session(session_dir)
 
+    def test_variant_reads_module_keys(self) -> None:
+        """motion_model/smoothing_strategy/gate 应按新键名解析。"""
+
+        row = {
+            "label": "kalman",
+            "is_primary": False,
+            "source_frame_id": 7,
+            "has_output_pose": True,
+            "output_pos": [0.0, 0.0, 0.0],
+            "output_rot": [0.0, 0.0, 0.0, 1.0],
+            "anchor_state": "Tracking",
+            "policy_action": "Accept",
+            "policy_reason": "accept",
+            "latest_phase": "TRACK",
+            "latest_failure": "",
+            "anchor_pose_source": "transform",
+            "has_source_capture_timing": False,
+            "source_capture_mono_ms": None,
+            "source_capture_unity_frame": -1,
+            "gate": "null_gate",
+            "motion_model": "kalman",
+            "smoothing_strategy": "blend",
+        }
+        variant = VariantRow.from_dict(row)
+        self.assertEqual(variant.gate, "null_gate")
+        self.assertEqual(variant.motion_model, "kalman")
+        self.assertEqual(variant.smoothing_strategy, "blend")
+
     def _write_session(self, root: Path) -> Path:
         """写入一个最小可 join 的评估 session。"""
 
@@ -119,12 +147,12 @@ class LogLoaderTest(unittest.TestCase):
             "variant_configs": [
                 {
                     "label": "kalman",
-                    "strategy_label": "kalman_cv",
-                    "gate_module": "null_gate",
-                    "estimator_module": "kalman_cv",
-                    "output_module": "pass_through",
+                    "strategy_label": "kalman_blend",
+                    "gate": "null_gate",
+                    "motion_model": "kalman",
+                    "smoothing_strategy": "blend",
                     "config_hash": "abc123",
-                    "parameters": {"estimator.positionMeasurementNoise": "0.0004"},
+                    "parameters": {"motion_model.positionMeasurementNoise": "0.0004"},
                 }
             ],
         }
@@ -228,9 +256,9 @@ class LogLoaderTest(unittest.TestCase):
                     "label": "kalman",
                     "is_primary": True,
                     "source_frame_id": source_frame_id,
-                    "has_stable": True,
-                    "stable_pos": [1.0, 2.0, 3.0],
-                    "stable_rot": [0.0, 0.0, 0.0, 1.0],
+                    "has_output_pose": True,
+                    "output_pos": [1.0, 2.0, 3.0],
+                    "output_rot": [0.0, 0.0, 0.0, 1.0],
                     "anchor_pose_source": "transform",
                     "has_source_capture_timing": True,
                     "source_capture_mono_ms": 100.0,
@@ -240,10 +268,10 @@ class LogLoaderTest(unittest.TestCase):
                     "policy_reason": "score_accept",
                     "latest_phase": "TRACK",
                     "latest_failure": "",
-                    "strategy_label": "kalman_cv",
-                    "gate_module": "null_gate",
-                    "estimator_module": "kalman_cv",
-                    "output_module": "pass_through",
+                    "strategy_label": "kalman_blend",
+                    "gate": "null_gate",
+                    "motion_model": "kalman",
+                    "smoothing_strategy": "blend",
                     "config_hash": "abc123",
                     "latest_residual_meters": 0.0,
                     "latest_residual_degrees": 0.0,
@@ -264,9 +292,9 @@ class LogLoaderTest(unittest.TestCase):
                     "label": "raw",
                     "is_primary": False,
                     "source_frame_id": source_frame_id,
-                    "has_stable": True,
-                    "stable_pos": [1.1, 2.1, 3.1],
-                    "stable_rot": [0.0, 0.0, 0.0, 1.0],
+                    "has_output_pose": True,
+                    "output_pos": [1.1, 2.1, 3.1],
+                    "output_rot": [0.0, 0.0, 0.0, 1.0],
                     "anchor_pose_source": "transform",
                     "has_source_capture_timing": True,
                     "source_capture_mono_ms": 100.0,

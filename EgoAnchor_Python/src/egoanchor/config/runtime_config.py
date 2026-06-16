@@ -18,14 +18,11 @@ from typing import Any
 class RuntimePaths:
     """运行时常用路径集合。"""
 
-    repo_root: Path
-    """EgoAnchor 仓库根目录。"""
-
     python_root: Path
     """EgoAnchor_Python 项目根目录。"""
 
     protocol_root: Path
-    """共享协议目录。"""
+    """Python 运行时随包携带的协议资源目录。"""
 
     subjects_path: Path
     """共享 subject registry JSON 文件路径。"""
@@ -38,16 +35,16 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().with_name("defaults.toml")
 OBJECT_CONFIG_PATH = Path(__file__).resolve().with_name("objects.toml")
 
 
-def _repo_root() -> Path:
-    """返回仓库根目录 `EgoAnchor`。"""
-
-    return Path(__file__).resolve().parents[4]
-
-
 def _python_root() -> Path:
     """返回 `EgoAnchor_Python` 项目目录。"""
 
     return Path(__file__).resolve().parents[3]
+
+
+def _python_protocol_root() -> Path:
+    """返回 Python 运行时随包携带的协议资源目录。"""
+
+    return _python_root() / "src" / "egoanchor" / "protocol"
 
 
 def _dict_to_namespace(value: Any) -> Any:
@@ -115,12 +112,11 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
             data = _merge_dict(data, tomllib.load(f))
 
     cfg = _dict_to_namespace(data)
-    repo_root = _repo_root()
+    protocol_root = _python_protocol_root()
     cfg.paths = RuntimePaths(
-        repo_root=repo_root,
         python_root=_python_root(),
-        protocol_root=repo_root / "EgoAnchor_Protocol",
-        subjects_path=repo_root / "EgoAnchor_Protocol" / "subjects.v1.json",
+        protocol_root=protocol_root,
+        subjects_path=protocol_root / "subjects.v1.json",
         objects_path=OBJECT_CONFIG_PATH,
     )
     cfg.runtime.object_id = normalized_object_name or str(getattr(cfg.runtime, "object_id", "default") or "default")

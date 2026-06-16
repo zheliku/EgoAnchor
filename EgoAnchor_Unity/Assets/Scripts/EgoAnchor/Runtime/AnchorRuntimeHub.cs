@@ -9,13 +9,13 @@ namespace EgoAnchor.Runtime
     /// <summary>
     /// Anchor runtime 分发中心。
     ///
-    /// 一个 Python 目标 pose 流可以同时驱动多个 Unity anchor runtime：
-    /// - raw baseline runtime：不挂 processor，或 DynamicObjectAnchor 读取 Raw。
-    /// - smoothed runtime：挂 Kalman/LowPass 等 processor，DynamicObjectAnchor 读取 Smoothed。
+    /// 一个 Python 目标 pose 流可以同时驱动多个 Unity anchor runtime（对比多种模块组合）：
+    /// - raw 参照 runtime：ConstantVelocityModel + RawPassthroughStrategy（零阶保持）。
+    /// - 平滑 runtime：KalmanModel/OneEuroModel + BlendStrategy/DelayedInterpStrategy。
     ///
     /// 因此网络 receiver 不应该各自绑定单个 PoseToAnchorRuntime；它们只负责解码
     /// Protobuf，再把 PoseResult、AnchorStatusEvent、ServerHeartbeat 交给本 hub。
-    /// hub 在主线程顺序调用多个 runtime，保证 baseline 和 smoothed 对照使用完全相同的
+    /// hub 在主线程顺序调用多个 runtime，保证所有对照变体使用完全相同的
     /// pose/status/heartbeat 输入。
     /// </summary>
     public sealed class AnchorRuntimeHub : MonoBehaviour

@@ -4,7 +4,7 @@ namespace EgoAnchor.Policy
 {
     /// <summary>
     /// 一维位置+速度常速度 Kalman。
-    /// Predict 和 Correct 分开，供 estimator 在测量时钟和渲染时钟上明确驱动。
+    /// Predict 和 Correct 分开，供 MotionModel 在测量时钟和渲染时钟上明确驱动。
     /// </summary>
     internal struct ConstVelocityKalman
     {

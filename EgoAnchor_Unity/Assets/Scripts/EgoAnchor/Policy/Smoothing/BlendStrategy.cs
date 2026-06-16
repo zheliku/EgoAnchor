@@ -66,19 +66,16 @@ namespace EgoAnchor.Policy
 
             Pose modelAtRenderTime = model.PredictAt(ClampPredictTime(model, lastRenderTimeSeconds));
             posResidual = lastRender.position - modelAtRenderTime.position;
-
-            Quaternion rendAligned = AnchorMath.AlignHemisphere(modelAtRenderTime.rotation, lastRender.rotation);
-            rotResidual = AnchorMath.Log(AnchorMath.Multiply(AnchorMath.Inverse(modelAtRenderTime.rotation), rendAligned));
+            rotResidual = AnchorMath.RelativeRotationLog(modelAtRenderTime.rotation, lastRender.rotation);
         }
 
         public override Pose Output(MotionModel model, double nowSeconds)
         {
-            // 更新实测采集-渲染延迟 (now - 最近观测时间)，自适应跟踪当前帧率/推理速度
+            // 更新实测采集-渲染延迟 (now - 最近观测时间)，自适应跟踪当前帧率/推理速度 (快升慢降)
             if (model.HasState)
             {
                 float observedLatency = Mathf.Max((float)(nowSeconds - model.LastObservationTimeSeconds), 0.0f);
-                float follow = observedLatency > latencyEstimateSeconds ? 0.5f : 0.05f;
-                latencyEstimateSeconds = Mathf.Lerp(latencyEstimateSeconds, observedLatency, follow);
+                latencyEstimateSeconds = AnchorMath.UpdateAsymmetricEma(latencyEstimateSeconds, observedLatency);
             }
 
             // 1) 外推 (限幅：最多外推到"补偿当前实测延迟"，防止飞出去/急停冲过头)

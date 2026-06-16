@@ -66,11 +66,12 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     subjects = SubjectRegistry.load(cfg.paths.subjects_path)
     pose_cfg = cfg.demo.pose
     depth_cfg = cfg.pipeline.depth
+    show_tracking_window = bool(getattr(getattr(cfg, "debug", object()), "enable_tracking_window", True))
 
     runtime = TrackingRuntime(cfg, subjects)
     debug_window = str(pose_cfg.debug_window_name)
     score_window = str(getattr(pose_cfg, "score_window_name", "EgoAnchor Score Debug"))
-    waiting = make_pose_waiting_image(int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height), "EgoAnchor Pose Debug")
+    waiting = make_pose_waiting_image(int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height), "EgoAnchor Pose Debug") if show_tracking_window else None
     last_wait_log_time = 0.0
     has_debug_frame = False
     debug_window_created = False
@@ -79,19 +80,23 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     try:
         LOGGER.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
-        _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
-        debug_window_created = True
-        _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 800)))
-        score_window_created = True
-        cv2.imshow(debug_window, waiting)
-        LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
+        if show_tracking_window:
+            _create_fixed_window(debug_window, int(pose_cfg.debug_window_width), int(pose_cfg.debug_window_height))
+            debug_window_created = True
+            _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 800)))
+            score_window_created = True
+            cv2.imshow(debug_window, waiting)
+            LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
+        else:
+            LOGGER.info("listening on %s. OpenCV debug windows are disabled.", runtime.endpoint)
 
         while True:
-            key = cv2.waitKey(1) & 0xFF
-            if key != 255 and not _handle_key(runtime, key):
-                break
+            if show_tracking_window:
+                key = cv2.waitKey(1) & 0xFF
+                if key != 255 and not _handle_key(runtime, key):
+                    break
 
-            result = runtime.tick(return_debug=True)
+            result = runtime.tick(return_debug=show_tracking_window)
             output = result.pipeline_output
             if output is None or not result.new_frame_processed:
                 now = time.perf_counter()
@@ -110,8 +115,11 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                         publish_stats.get("failed", 0),
                     )
                     last_wait_log_time = now
-                if should_show_waiting_frame(has_debug_frame):
+                if show_tracking_window and waiting is not None and should_show_waiting_frame(has_debug_frame):
                     cv2.imshow(debug_window, waiting)
+                continue
+
+            if not show_tracking_window:
                 continue
 
             dashboard = tile_pose_depth_dashboard(

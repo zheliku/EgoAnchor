@@ -1,0 +1,61 @@
+{
+  "egoanchor.v1.quest.stereo": {
+    "transport": "zmq",
+    "direction": "unity_to_python",
+    "protobuf": "protocol.v1.QuestStereoFrame",
+    "mode": "pubsub",
+    "latest_only": true
+  },
+  "egoanchor.v1.quest.camera_info": {
+    "transport": "zmq",
+    "direction": "unity_to_python",
+    "protobuf": "protocol.v1.QuestCameraInfo",
+    "mode": "pubsub",
+    "latest_only": true
+  },
+  "egoanchor.v1.pose.result": {
+    "transport": "nats",
+    "direction": "python_to_unity",
+    "protobuf": "protocol.v1.PoseResult",
+    "mode": "pubsub",
+    "latest_only": true
+  },
+  "egoanchor.v1.anchor.status": {
+    "transport": "nats",
+    "direction": "python_to_unity",
+    "protobuf": "protocol.v1.AnchorStatusEvent",
+    "mode": "pubsub",
+    "latest_only": false
+  },
+  "egoanchor.v1.server.heartbeat": {
+    "transport": "nats",
+    "direction": "python_to_unity",
+    "protobuf": "protocol.v1.ServerHeartbeat",
+    "mode": "pubsub",
+    "latest_only": true
+  },
+  "egoanchor.v1.cmd.anchor.reset": {
+    "transport": "nats",
+    "direction": "unity_to_python",
+    "protobuf": "protocol.v1.ResetTrackingRequest",
+    "reply": "protocol.v1.CommandAck",
+    "mode": "request_reply",
+    "idempotent_by": "header.request_id"
+  },
+  "egoanchor.v1.cmd.anchor.reacquire": {
+    "transport": "nats",
+    "direction": "unity_to_python",
+    "protobuf": "protocol.v1.ReacquireAnchorRequest",
+    "reply": "protocol.v1.CommandAck",
+    "mode": "request_reply",
+    "idempotent_by": "header.request_id"
+  },
+  "egoanchor.v1.cmd.anchor.control": {
+    "transport": "nats",
+    "direction": "unity_to_python",
+    "protobuf": "protocol.v1.AnchorControlRequest",
+    "reply": "protocol.v1.CommandAck",
+    "mode": "request_reply",
+    "idempotent_by": "header.request_id"
+  }
+}

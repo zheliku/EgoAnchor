@@ -1,7 +1,7 @@
 """
 画出真机录制的各 anchor 策略的渲染轨迹曲线，诊断平滑度问题。
 
-输入：<session>/*_unity_output.jsonl （每渲染帧一行，含每个 variant 的 stable_pos/rot + aligned_raw）
+输入：<session>/*_unity_output.jsonl （每渲染帧一行，含每个 variant 的 output_pos/rot + aligned_raw）
 输出：<session>/strategy_plots/ 下的 PNG
 
 - 每个 variant 一张 6 子图 (X/Y/Z 位置 + 旋转向量 RotVec X/Y/Z)，叠加观测散点和渲染线
@@ -65,9 +65,9 @@ def load(session_dir):
                 label = v.get("label")
                 if label is None:
                     continue
-                if v.get("has_stable") and v.get("stable_pos") and v.get("stable_rot"):
+                if v.get("has_output_pose") and v.get("output_pos") and v.get("output_rot"):
                     render.setdefault(label, []).append(
-                        (t, np.array(v["stable_pos"], float), quat_to_rotvec_deg(v["stable_rot"]))
+                        (t, np.array(v["output_pos"], float), quat_to_rotvec_deg(v["output_rot"]))
                     )
                 # 观测（primary 的 aligned_raw，按 source_frame_id 去重）
                 if v.get("is_primary") and v.get("has_aligned_raw"):

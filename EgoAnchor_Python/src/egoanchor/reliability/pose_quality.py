@@ -233,12 +233,12 @@ def _phase_score(observation: PoseObservation, flags: list[str]) -> float:
 def _reprojection_score(observation: PoseObservation, flags: list[str]) -> tuple[float, bool]:
     """把重投影质量信号映射为 Quality 层子分。
 
-    track_reprojection<0 表示本帧没有可用颜色信号（未启用、渲染退化或纯色/无纹理物体）。
+    color_reprojection<0 表示本帧没有可用颜色信号（未启用、渲染退化或纯色/无纹理物体）。
     这些情况一律把颜色项排除出几何核（返回 valid=False），而不是惩罚：纯色物体的低分
     会冤枉正确 pose，而真正的坏 pose 已由深度对齐和 mask 面积子分负责拦截。
     """
 
-    reprojection = float(observation.track_reprojection)
+    reprojection = float(observation.color_reprojection)
     if reprojection < 0.0:
         flags.append("no_reprojection_signal")
         return 1.0, False
@@ -262,7 +262,7 @@ def _depth_score(observation: PoseObservation, flags: list[str]) -> tuple[float,
             flags.append("depth_alignment_low")
         return alignment, True
 
-    if observation.render_quality_expected:
+    if observation.render_quality_evaluated:
         flags.append("depth_alignment_missing_expected")
     else:
         flags.append("no_depth_alignment_signal")
@@ -353,7 +353,7 @@ def _has_projection_area_signal(observation: PoseObservation) -> bool:
     """判断本帧投影面积是否可用于 mask_score。"""
 
     status = str(observation.render_quality_status or "")
-    return observation.render_quality_render_area_px > 0 and (observation.track_reprojection >= 0.0 or status.startswith("valid"))
+    return observation.render_quality_render_area_px > 0 and (observation.color_reprojection >= 0.0 or status.startswith("valid"))
 
 
 def _track_reject_factor(observation: PoseObservation, flags: list[str]) -> float:

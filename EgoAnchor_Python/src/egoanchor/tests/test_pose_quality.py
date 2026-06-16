@@ -14,8 +14,8 @@ class PoseQualityTest(unittest.TestCase):
     def test_score_uses_reprojection_as_quality_signal(self) -> None:
         """低重投影分应降低 Quality，并写入 reprojection_low。"""
 
-        high_score, high_flags = self._score_and_flags(self._track_observation(track_reprojection=0.9))
-        low_score, low_flags = self._score_and_flags(self._track_observation(track_reprojection=0.3))
+        high_score, high_flags = self._score_and_flags(self._track_observation(color_reprojection=0.9))
+        low_score, low_flags = self._score_and_flags(self._track_observation(color_reprojection=0.3))
 
         self.assertGreater(high_score, 0.75)
         self.assertLess(low_score, high_score)
@@ -26,7 +26,7 @@ class PoseQualityTest(unittest.TestCase):
     def test_score_marks_missing_reprojection_without_penalty_when_disabled(self) -> None:
         """未启用重投影检测时应标记无信号，但不额外把 reprojection 当故障。"""
 
-        score, flags = self._score_and_flags(self._track_observation(track_reprojection=-1.0))
+        score, flags = self._score_and_flags(self._track_observation(color_reprojection=-1.0))
 
         self.assertGreater(score, 0.80)
         self.assertIn("no_reprojection_signal", flags)
@@ -35,10 +35,10 @@ class PoseQualityTest(unittest.TestCase):
         """开启重投影检测但本帧无可用颜色信号（如纯色物体）时，应排除颜色项而非惩罚。"""
 
         excluded_score, excluded_flags = self._score_and_flags(
-            self._track_observation(track_reprojection=-1.0, render_quality_expected=True)
+            self._track_observation(color_reprojection=-1.0, render_quality_evaluated=True)
         )
         baseline_score, _ = self._score_and_flags(
-            self._track_observation(track_reprojection=-1.0, render_quality_expected=False)
+            self._track_observation(color_reprojection=-1.0, render_quality_evaluated=False)
         )
 
         self.assertAlmostEqual(excluded_score, baseline_score)
@@ -50,7 +50,7 @@ class PoseQualityTest(unittest.TestCase):
 
         breakdown = score_observation_breakdown(
             self._track_observation(
-                track_reprojection=0.81,
+                color_reprojection=0.81,
                 render_quality_status="valid",
                 render_quality_depth_alignment=0.0,
                 render_quality_depth_inlier=0.0,
@@ -68,7 +68,7 @@ class PoseQualityTest(unittest.TestCase):
 
         breakdown = score_observation_breakdown(
             self._track_observation(
-                track_reprojection=0.81,
+                color_reprojection=0.81,
                 render_quality_status="render_exception",
                 render_quality_depth_alignment=0.0,
                 depth_valid_in_mask=0.04,
@@ -77,7 +77,7 @@ class PoseQualityTest(unittest.TestCase):
         accumulator = ConfidenceAccumulator()
         seeded = score_observation_breakdown(
             self._track_observation(
-                track_reprojection=0.81,
+                color_reprojection=0.81,
                 render_quality_status="render_exception",
                 render_quality_depth_alignment=0.0,
                 depth_valid_in_mask=0.04,
@@ -88,7 +88,7 @@ class PoseQualityTest(unittest.TestCase):
         for _ in range(4):
             latest = score_observation_breakdown(
                 self._track_observation(
-                    track_reprojection=-1.0,
+                    color_reprojection=-1.0,
                     render_quality_status="warmup",
                     render_quality_depth_alignment=0.0,
                     depth_valid_in_mask=0.04,
@@ -106,10 +106,10 @@ class PoseQualityTest(unittest.TestCase):
         """depth_score 应来自渲染深度对齐，而不是 mask 内有效深度覆盖率满分。"""
 
         stable_score, _ = self._score_and_flags(
-            self._track_observation(track_reprojection=0.9, render_quality_depth_alignment=0.9)
+            self._track_observation(color_reprojection=0.9, render_quality_depth_alignment=0.9)
         )
         low_depth_score, low_depth_flags = self._score_and_flags(
-            self._track_observation(track_reprojection=0.9, render_quality_depth_alignment=0.25)
+            self._track_observation(color_reprojection=0.9, render_quality_depth_alignment=0.25)
         )
 
         self.assertLess(low_depth_score, stable_score)
@@ -131,7 +131,7 @@ class PoseQualityTest(unittest.TestCase):
             self._track_observation(
                 render_quality_status="render_exception",
                 render_quality_depth_alignment=0.0,
-                depth_median_in_mask=0.4,
+                depth_median_m=0.4,
             )
         )
 
@@ -170,7 +170,7 @@ class PoseQualityTest(unittest.TestCase):
 
         breakdown = score_observation_breakdown(
             self._track_observation(
-                track_reprojection=0.95,
+                color_reprojection=0.95,
                 render_quality_depth_alignment=0.9,
                 render_quality_area_ratio_score=0.25,
                 render_quality_render_area_px=200,
@@ -201,7 +201,7 @@ class PoseQualityTest(unittest.TestCase):
         accumulator = ConfidenceAccumulator()
         first = score_observation_breakdown(
             self._track_observation(
-                track_reprojection=-1.0,
+                color_reprojection=-1.0,
                 render_quality_status="warmup",
                 depth_valid_in_mask=0.04,
                 render_quality_depth_alignment=0.0,
@@ -212,7 +212,7 @@ class PoseQualityTest(unittest.TestCase):
         for _ in range(5):
             latest = score_observation_breakdown(
                 self._track_observation(
-                    track_reprojection=-1.0,
+                    color_reprojection=-1.0,
                     render_quality_status="warmup",
                     depth_valid_in_mask=0.04,
                     render_quality_depth_alignment=0.0,
@@ -238,7 +238,7 @@ class PoseQualityTest(unittest.TestCase):
 
         accumulator = ConfidenceAccumulator()
         observation = self._track_observation(
-            track_reprojection=0.4,
+            color_reprojection=0.4,
             render_quality_depth_alignment=0.6,
             last_translation_delta_m=0.12,
             last_rotation_delta_deg=10.0,
@@ -267,16 +267,16 @@ class PoseQualityTest(unittest.TestCase):
     @staticmethod
     def _track_observation(
         *,
-        track_reprojection: float = 0.9,
+        color_reprojection: float = 0.9,
         render_quality_depth_alignment: float = 0.85,
         render_quality_status: str = "valid",
         depth_valid_in_mask: float = 0.35,
-        depth_median_in_mask: float = 0.5,
+        depth_median_m: float = 0.5,
         mask_area_ratio: float = 0.08,
         last_translation_delta_m: float = 0.01,
         last_rotation_delta_deg: float = 2.0,
         frame_dt_s: float = 1.0 / 30.0,
-        render_quality_expected: bool = False,
+        render_quality_evaluated: bool = False,
         render_quality_area_ratio_score: float = 1.0,
         render_quality_render_area_px: int = 0,
         render_quality_depth_inlier: float | None = None,
@@ -308,12 +308,12 @@ class PoseQualityTest(unittest.TestCase):
             pose_source="TRACK",
             depth_valid_ratio=0.55,
             depth_valid_in_mask=depth_valid_in_mask,
-            depth_median_in_mask=depth_median_in_mask,
+            depth_median_m=depth_median_m,
             mask_area_ratio=mask_area_ratio,
-            render_quality_expected=render_quality_expected,
+            render_quality_evaluated=render_quality_evaluated,
             render_quality_status=render_quality_status,
-            track_reprojection=track_reprojection,
-            render_quality_mask_iou=max(track_reprojection, 0.0),
+            color_reprojection=color_reprojection,
+            render_quality_mask_iou=max(color_reprojection, 0.0),
             render_quality_depth_inlier=render_quality_depth_inlier
             if render_quality_depth_inlier is not None
             else max(render_quality_depth_alignment, 0.0),

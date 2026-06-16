@@ -332,11 +332,11 @@ namespace EgoAnchorEval
                 RecordedRuntime recorded = recordedRuntimes[i];
                 PoseToAnchorRuntime runtime = recorded.runtime;
                 string label = ResolveVariantLabel(recorded, i);
-                Pose stablePose = Pose.identity;
+                Pose outputPose = Pose.identity;
                 Pose rawPose = Pose.identity;
                 Pose arrivalTimeRawPose = Pose.identity;
                 string anchorPoseSource = SourceNone;
-                bool hasStable = TryReadAnchorPose(recorded.anchorTransform, out stablePose, out anchorPoseSource);
+                bool hasOutputPose = TryReadAnchorPose(recorded.anchorTransform, out outputPose, out anchorPoseSource);
                 bool hasRaw = runtime != null && runtime.TryGetRawPose(out rawPose);
                 bool hasArrivalTimeRaw = runtime != null && runtime.TryGetArrivalTimeRawPose(out arrivalTimeRawPose);
                 long sourceFrameId = runtime != null ? runtime.LatestAlignedFrameId : -1;
@@ -350,9 +350,9 @@ namespace EgoAnchorEval
                 string motionState = runtime != null ? runtime.CurrentMotionStateName : string.Empty;
                 double predictAheadMs = runtime != null ? runtime.LatestPredictAheadMs : double.NaN;
                 string strategyLabel = runtime != null ? runtime.StrategyLabel : string.Empty;
-                string gateModule = runtime != null ? runtime.GateModuleName : string.Empty;
-                string estimatorModule = runtime != null ? runtime.EstimatorModuleName : string.Empty;
-                string outputModule = runtime != null ? runtime.OutputModuleName : string.Empty;
+                string gateName = runtime != null ? runtime.GateName : string.Empty;
+                string motionModelName = runtime != null ? runtime.MotionModelName : string.Empty;
+                string smoothingStrategyName = runtime != null ? runtime.SmoothingStrategyName : string.Empty;
                 string configHash = ResolveCachedConfigHash(recorded, label);
                 float residualMeters = runtime != null ? runtime.LatestResidualMeters : float.NaN;
                 float residualDegrees = runtime != null ? runtime.LatestResidualDegrees : float.NaN;
@@ -368,8 +368,8 @@ namespace EgoAnchorEval
                 variantSnapshots.Add(new RecordedVariantSnapshot(
                     label,
                     sourceFrameId,
-                    hasStable,
-                    stablePose,
+                    hasOutputPose,
+                    outputPose,
                     state,
                     action,
                     reason,
@@ -391,9 +391,9 @@ namespace EgoAnchorEval
                     motionState,
                     predictAheadMs,
                     strategyLabel,
-                    gateModule,
-                    estimatorModule,
-                    outputModule,
+                    gateName,
+                    motionModelName,
+                    smoothingStrategyName,
                     configHash,
                     residualMeters,
                     residualDegrees,
@@ -475,21 +475,21 @@ namespace EgoAnchorEval
             PoseToAnchorRuntime runtime = recorded.runtime;
             AnchorPolicyHost policy = runtime != null ? runtime.PolicyHost : null;
             string strategyLabel = FirstNonEmpty(runtime != null ? runtime.StrategyLabel : string.Empty, label);
-            string gateModule = FirstNonEmpty(policy != null ? policy.GateModuleName : string.Empty, runtime != null ? runtime.GateModuleName : string.Empty);
-            string estimatorModule = FirstNonEmpty(policy != null ? policy.EstimatorModuleName : string.Empty, runtime != null ? runtime.EstimatorModuleName : string.Empty);
-            string outputModule = FirstNonEmpty(policy != null ? policy.OutputModuleName : string.Empty, runtime != null ? runtime.OutputModuleName : string.Empty);
+            string gateName = FirstNonEmpty(policy != null ? policy.GateName : string.Empty, runtime != null ? runtime.GateName : string.Empty);
+            string motionModelName = FirstNonEmpty(policy != null ? policy.MotionModelName : string.Empty, runtime != null ? runtime.MotionModelName : string.Empty);
+            string smoothingStrategyName = FirstNonEmpty(policy != null ? policy.SmoothingStrategyName : string.Empty, runtime != null ? runtime.SmoothingStrategyName : string.Empty);
             SortedDictionary<string, string> parameters = new SortedDictionary<string, string>(StringComparer.Ordinal);
 
             if (policy != null)
             {
-                // 新架构：运动模型 (estimator 维度) + 平滑策略 (output 维度)。gate 已收敛为 host 内联参数。
-                CollectModuleParameters(parameters, "estimator", policy.MotionModel);
-                CollectModuleParameters(parameters, "output", policy.SmoothingStrategy);
+                // 新架构：运动模型 (motion_model 维度) + 平滑策略 (smoothing_strategy 维度)。gate 已收敛为 host 内联参数。
+                CollectModuleParameters(parameters, "motion_model", policy.MotionModel);
+                CollectModuleParameters(parameters, "smoothing_strategy", policy.SmoothingStrategy);
                 CollectModuleParameters(parameters, "host", policy);
             }
 
-            string configHash = ComputeConfigHash(label, strategyLabel, gateModule, estimatorModule, outputModule, parameters);
-            return new EvalVariantConfig(label, strategyLabel, gateModule, estimatorModule, outputModule, configHash, parameters);
+            string configHash = ComputeConfigHash(label, strategyLabel, gateName, motionModelName, smoothingStrategyName, parameters);
+            return new EvalVariantConfig(label, strategyLabel, gateName, motionModelName, smoothingStrategyName, configHash, parameters);
         }
 
         /// <summary>
@@ -583,17 +583,17 @@ namespace EgoAnchorEval
         private static string ComputeConfigHash(
             string label,
             string strategyLabel,
-            string gateModule,
-            string estimatorModule,
-            string outputModule,
+            string gate,
+            string motionModel,
+            string smoothingStrategy,
             SortedDictionary<string, string> parameters)
         {
             StringBuilder builder = new StringBuilder();
             builder.Append(label).Append('|')
                 .Append(strategyLabel).Append('|')
-                .Append(gateModule).Append('|')
-                .Append(estimatorModule).Append('|')
-                .Append(outputModule);
+                .Append(gate).Append('|')
+                .Append(motionModel).Append('|')
+                .Append(smoothingStrategy);
             foreach (KeyValuePair<string, string> item in parameters)
             {
                 builder.Append('|').Append(item.Key).Append('=').Append(item.Value);

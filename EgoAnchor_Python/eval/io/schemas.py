@@ -100,9 +100,9 @@ class VariantRow:
     label: str
     is_primary: bool
     source_frame_id: int
-    has_stable: bool
-    stable_pos: np.ndarray | None
-    stable_rot: np.ndarray | None
+    has_output_pose: bool
+    output_pos: np.ndarray | None
+    output_rot: np.ndarray | None
     anchor_state: str
     policy_action: str
     policy_reason: str
@@ -123,9 +123,9 @@ class VariantRow:
     arrival_time_camera_reference: str
     reliability_score: float
     strategy_label: str
-    gate_module: str
-    estimator_module: str
-    output_module: str
+    gate: str
+    motion_model: str
+    smoothing_strategy: str
     config_hash: str
     latest_residual_meters: float
     latest_residual_degrees: float
@@ -138,7 +138,7 @@ class VariantRow:
         """从 unity_output 的 variants 元素解析变体。"""
 
         context = _context(source, row)
-        has_stable = _bool(row, "has_stable", context)
+        has_output_pose = _bool(row, "has_output_pose", context)
         is_primary = _bool(row, "is_primary", context)
         has_source_capture_timing = _bool(row, "has_source_capture_timing", context)
         has_aligned_raw = _optional_bool(row, "has_aligned_raw", False)
@@ -147,9 +147,9 @@ class VariantRow:
             label=_str(row, "label", context),
             is_primary=is_primary,
             source_frame_id=_int(row, "source_frame_id", context),
-            has_stable=has_stable,
-            stable_pos=_array(row, "stable_pos", 3, context, allow_none=not has_stable),
-            stable_rot=_array(row, "stable_rot", 4, context, allow_none=not has_stable),
+            has_output_pose=has_output_pose,
+            output_pos=_array(row, "output_pos", 3, context, allow_none=not has_output_pose),
+            output_rot=_array(row, "output_rot", 4, context, allow_none=not has_output_pose),
             anchor_state=_str(row, "anchor_state", context),
             policy_action=_str(row, "policy_action", context),
             policy_reason=_str(row, "policy_reason", context),
@@ -189,9 +189,9 @@ class VariantRow:
             arrival_time_camera_reference=str(row.get("arrival_time_camera_reference", "")),
             reliability_score=_optional_float(row, "reliability_score", np.nan),
             strategy_label=str(row.get("strategy_label", "")),
-            gate_module=str(row.get("gate_module", "")),
-            estimator_module=str(row.get("estimator_module", "")),
-            output_module=str(row.get("output_module", "")),
+            gate=str(row.get("gate", "")),
+            motion_model=str(row.get("motion_model", "")),
+            smoothing_strategy=str(row.get("smoothing_strategy", "")),
             config_hash=str(row.get("config_hash", "")),
             latest_residual_meters=_optional_float(row, "latest_residual_meters", np.nan),
             latest_residual_degrees=_optional_float(row, "latest_residual_degrees", np.nan),
@@ -207,9 +207,9 @@ class VariantRow:
             "label": self.label,
             "is_primary": self.is_primary,
             "source_frame_id": self.source_frame_id,
-            "has_stable": self.has_stable,
-            "stable_pos": self.stable_pos,
-            "stable_rot": self.stable_rot,
+            "has_output_pose": self.has_output_pose,
+            "output_pos": self.output_pos,
+            "output_rot": self.output_rot,
             "anchor_state": self.anchor_state,
             "policy_action": self.policy_action,
             "policy_reason": self.policy_reason,
@@ -230,9 +230,9 @@ class VariantRow:
             "arrival_time_camera_reference": self.arrival_time_camera_reference,
             "reliability_score": self.reliability_score,
             "strategy_label": self.strategy_label,
-            "gate_module": self.gate_module,
-            "estimator_module": self.estimator_module,
-            "output_module": self.output_module,
+            "gate": self.gate,
+            "motion_model": self.motion_model,
+            "smoothing_strategy": self.smoothing_strategy,
             "config_hash": self.config_hash,
             "latest_residual_meters": self.latest_residual_meters,
             "latest_residual_degrees": self.latest_residual_degrees,
@@ -345,8 +345,8 @@ class PoseResultRow:
     score_mask: float
     score_reject: float
     score_confidence: float
-    track_reprojection: float
-    render_quality_expected: bool
+    color_reprojection: float
+    render_quality_evaluated: bool
     render_quality_status: str
     render_quality_mask_iou: float
     render_quality_area_ratio_score: float
@@ -391,8 +391,8 @@ class PoseResultRow:
             score_mask=_optional_float(row, "score_mask", np.nan),
             score_reject=_optional_float(row, "score_reject", np.nan),
             score_confidence=_optional_float(row, "score_confidence", np.nan),
-            track_reprojection=_optional_float(row, "track_reprojection", -1.0),
-            render_quality_expected=_optional_bool(row, "render_quality_expected", False),
+            color_reprojection=_optional_float(row, "color_reprojection", -1.0),
+            render_quality_evaluated=_optional_bool(row, "render_quality_evaluated", False),
             render_quality_status=str(row.get("render_quality_status", "")),
             render_quality_mask_iou=_optional_float(row, "render_quality_mask_iou", 0.0),
             render_quality_area_ratio_score=_optional_float(row, "render_quality_area_ratio_score", 0.0),
@@ -441,8 +441,8 @@ class PoseResultRow:
             "score_mask": self.score_mask,
             "score_reject": self.score_reject,
             "score_confidence": self.score_confidence,
-            "track_reprojection": self.track_reprojection,
-            "render_quality_expected": self.render_quality_expected,
+            "color_reprojection": self.color_reprojection,
+            "render_quality_evaluated": self.render_quality_evaluated,
             "render_quality_status": self.render_quality_status,
             "render_quality_mask_iou": self.render_quality_mask_iou,
             "render_quality_area_ratio_score": self.render_quality_area_ratio_score,

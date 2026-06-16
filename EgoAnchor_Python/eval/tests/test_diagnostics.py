@@ -31,8 +31,8 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
                 "score_mask": 1.0,
                 "score_reject": 1.0,
                 "score_confidence": 0.88,
-                "track_reprojection": 0.42,
-                "render_quality_expected": True,
+                "color_reprojection": 0.42,
+                "render_quality_evaluated": True,
                 "render_quality_status": "valid",
                 "render_quality_mask_iou": 0.35,
                 "render_quality_area_ratio_score": 0.31,
@@ -56,8 +56,8 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(record["score_mask"], 1.0)
         self.assertAlmostEqual(record["score_reject"], 1.0)
         self.assertAlmostEqual(record["score_confidence"], 0.88)
-        self.assertAlmostEqual(record["track_reprojection"], 0.42)
-        self.assertTrue(record["render_quality_expected"])
+        self.assertAlmostEqual(record["color_reprojection"], 0.42)
+        self.assertTrue(record["render_quality_evaluated"])
         self.assertEqual(record["render_quality_status"], "valid")
         self.assertAlmostEqual(record["render_quality_mask_iou"], 0.35)
         self.assertAlmostEqual(record["render_quality_area_ratio_score"], 0.31)
@@ -75,7 +75,7 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         pose = pd.DataFrame(
             {
                 "pose_score": [1.0, 1.0, 0.4],
-                "track_reprojection": [-1.0, 0.8, 0.3],
+                "color_reprojection": [-1.0, 0.8, 0.3],
                 "render_quality_ms": [0.0, 4.0, 6.0],
             }
         )
@@ -93,11 +93,11 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         self.assertEqual(int(summary["pose_rows"]), 3)
         self.assertEqual(int(summary["score_unique_count"]), 2)
         self.assertAlmostEqual(float(summary["score_mode_share"]), 2.0 / 3.0)
-        self.assertEqual(int(summary["track_reprojection_valid_count"]), 2)
+        self.assertEqual(int(summary["color_reprojection_valid_count"]), 2)
         self.assertAlmostEqual(float(summary["render_quality_ms_p50"]), 5.0)
         self.assertAlmostEqual(float(summary["render_quality_ms_p95"]), 5.9)
         self.assertEqual(int(result.score_histogram["count"].sum()), 3)
-        self.assertEqual(int(result.track_reprojection_histogram["count"].sum()), 2)
+        self.assertEqual(int(result.color_reprojection_histogram["count"].sum()), 2)
         self.assertEqual(int(result.policy_distribution["count"].sum()), 3)
 
 

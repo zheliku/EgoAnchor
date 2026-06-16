@@ -120,7 +120,19 @@ class FoundationPoseObjectEstimator:
         from FoundationPose import estimater as est_mod
         from FoundationPose.learning.training import predict_pose_refine as refine_mod
         from FoundationPose.learning.training import predict_score as score_mod
+        FoundationPoseObjectEstimator._ensure_mycpp_available(utils_mod)
         return est_mod, utils_mod, score_mod, refine_mod
+
+    @staticmethod
+    def _ensure_mycpp_available(utils_mod: ModuleType) -> None:
+        """确认 FoundationPose mycpp 扩展已编译并可导入。"""
+
+        if getattr(utils_mod, "mycpp", None) is not None:
+            return
+        raise RuntimeError(
+            "FoundationPose mycpp 扩展不可用。请先在 EgoAnchor_Python 目录运行 "
+            "`pixi run _build-fp`，Ubuntu 首次迁移和 Windows/Linux 切换后都需要重新编译。"
+        )
 
     def update_camera_matrix(self, cam_k: np.ndarray) -> None:
         """更新运行时相机内参矩阵，不重建 FoundationPose 重模型。

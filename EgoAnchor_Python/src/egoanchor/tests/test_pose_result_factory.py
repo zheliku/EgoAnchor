@@ -50,7 +50,7 @@ class PoseResultFactoryTest(unittest.TestCase):
             score_mask=1.0,
             score_reject=1.0,
             score_confidence=0.8,
-            track_reprojection=0.64,
+            color_reprojection=0.64,
             render_quality_mask_iou=0.72,
             render_quality_depth_inlier=0.58,
             render_quality_depth_alignment=0.61,
@@ -59,7 +59,7 @@ class PoseResultFactoryTest(unittest.TestCase):
             render_quality_observed_visible_ratio=0.91,
             render_quality_depth_residual_m=0.018,
             render_quality_render_area_px=512,
-            render_quality_expected=True,
+            render_quality_evaluated=True,
             render_quality_status="valid",
             reliability_score=0.72,
             reliability_flags=("track_pose", "depth_medium"),
@@ -81,7 +81,7 @@ class PoseResultFactoryTest(unittest.TestCase):
         self.assertAlmostEqual(result.score_mask, 1.0, places=5)
         self.assertAlmostEqual(result.score_reject, 1.0, places=5)
         self.assertAlmostEqual(result.score_confidence, 0.8, places=5)
-        self.assertAlmostEqual(result.track_reprojection, 0.64, places=5)
+        self.assertAlmostEqual(result.color_reprojection, 0.64, places=5)
         self.assertAlmostEqual(result.render_quality_mask_iou, 0.72, places=5)
         self.assertAlmostEqual(result.render_quality_depth_inlier, 0.58, places=5)
         self.assertAlmostEqual(result.render_quality_depth_alignment, 0.61, places=5)
@@ -90,7 +90,7 @@ class PoseResultFactoryTest(unittest.TestCase):
         self.assertAlmostEqual(result.render_quality_observed_visible_ratio, 0.91, places=5)
         self.assertAlmostEqual(result.render_quality_depth_residual_m, 0.018, places=5)
         self.assertEqual(result.render_quality_render_area_px, 512)
-        self.assertTrue(result.render_quality_expected)
+        self.assertTrue(result.render_quality_evaluated)
         self.assertEqual(result.render_quality_status, "valid")
         self.assertEqual(result.pose_source, "TRACK")
 
@@ -159,7 +159,7 @@ class PoseResultFactoryTest(unittest.TestCase):
             phase="WAIT_DETECT",
             frame_id=10,
             reliability_score=float("nan"),
-            track_reprojection=float("inf"),
+            color_reprojection=float("inf"),
             server_receive_mono_ms=float("inf"),
             total_ms=float("nan"),
             render_quality_render_area_px=float("nan"),  # type: ignore[arg-type]
@@ -169,7 +169,7 @@ class PoseResultFactoryTest(unittest.TestCase):
 
         self.assertFalse(result.has_pose)
         self.assertEqual(result.reliability_score, 0.0)
-        self.assertEqual(result.track_reprojection, -1.0)
+        self.assertEqual(result.color_reprojection, -1.0)
         self.assertEqual(result.server_receive_mono_ms, 0.0)
         self.assertEqual(result.timing.total_ms, 0.0)
         self.assertEqual(result.render_quality_render_area_px, 0)

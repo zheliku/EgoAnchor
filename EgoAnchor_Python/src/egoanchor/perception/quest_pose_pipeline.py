@@ -739,23 +739,23 @@ class QuestPosePipeline:
         diagnostics.depth_valid_ratio = float(np.count_nonzero(valid)) / float(valid.size) if valid.size else 0.0
         if mask is None:
             diagnostics.depth_valid_in_mask = 0.0
-            diagnostics.depth_median_in_mask = 0.0
-            diagnostics.depth_iqr_in_mask = 0.0
+            diagnostics.depth_median_m = 0.0
+            diagnostics.depth_iqr_m = 0.0
             return
         mask_bool = mask > 0
         mask_count = int(np.count_nonzero(mask_bool))
         diagnostics.mask_area_ratio = float(mask_count) / float(mask_bool.size) if mask_bool.size else 0.0
         if mask_count <= 0:
             diagnostics.depth_valid_in_mask = 0.0
-            diagnostics.depth_median_in_mask = 0.0
-            diagnostics.depth_iqr_in_mask = 0.0
+            diagnostics.depth_median_m = 0.0
+            diagnostics.depth_iqr_m = 0.0
             return
         in_mask = depth[mask_bool & valid]
         diagnostics.depth_valid_in_mask = float(in_mask.size) / float(mask_count)
         if in_mask.size > 0:
             q25, q50, q75 = np.percentile(in_mask, [25, 50, 75])
-            diagnostics.depth_median_in_mask = float(q50)
-            diagnostics.depth_iqr_in_mask = float(q75 - q25)
+            diagnostics.depth_median_m = float(q50)
+            diagnostics.depth_iqr_m = float(q75 - q25)
 
     def _estimate_frame_dt_s(self, decoded: DecodedQuestStereoFrame) -> float:
         """估计当前处理帧与上一处理帧之间的时间间隔，供 jump_score 自适应阈值使用。"""
@@ -979,7 +979,7 @@ class QuestPosePipeline:
 
         checker = self.render_quality_checker
         state = self.tracking_state
-        diagnostics.render_quality_expected = False
+        diagnostics.render_quality_evaluated = False
         if checker is None:
             diagnostics.render_quality_status = "disabled"
             return None
@@ -993,7 +993,7 @@ class QuestPosePipeline:
             diagnostics.render_quality_status = "no_mask"
             return None
 
-        diagnostics.render_quality_expected = True
+        diagnostics.render_quality_evaluated = True
         diagnostics.render_quality_status = "rendering"
         t0 = time.perf_counter()
         result = checker.evaluate(
@@ -1007,7 +1007,7 @@ class QuestPosePipeline:
         diagnostics.render_quality_ms = (time.perf_counter() - t0) * 1000.0
         # 纯色/无纹理物体 color_valid=False：颜色 ZNCC 无方差，置 -1.0 让评分层排除颜色项而非按中性 0.5 降分。
         color_usable = result.reprojection_valid and result.color_valid
-        diagnostics.track_reprojection = result.reprojection_score if color_usable else -1.0
+        diagnostics.color_reprojection = result.reprojection_score if color_usable else -1.0
         diagnostics.render_quality_status = result.status
         diagnostics.render_quality_mask_iou = result.mask_iou
         diagnostics.render_quality_depth_inlier = result.depth_inlier_ratio
@@ -1083,8 +1083,8 @@ class QuestPosePipeline:
             fps=self._fps,
             depth_valid_ratio=diagnostics.depth_valid_ratio,
             depth_valid_in_mask=diagnostics.depth_valid_in_mask,
-            depth_median_in_mask=diagnostics.depth_median_in_mask,
-            depth_iqr_in_mask=diagnostics.depth_iqr_in_mask,
+            depth_median_m=diagnostics.depth_median_m,
+            depth_iqr_m=diagnostics.depth_iqr_m,
             score_phase=diagnostics.score_phase,
             score_reprojection=diagnostics.score_reprojection,
             score_depth=diagnostics.score_depth,
@@ -1093,9 +1093,9 @@ class QuestPosePipeline:
             score_reject=diagnostics.score_reject,
             score_confidence=diagnostics.score_confidence,
             mask_area_ratio=diagnostics.mask_area_ratio,
-            render_quality_expected=diagnostics.render_quality_expected,
+            render_quality_evaluated=diagnostics.render_quality_evaluated,
             render_quality_status=diagnostics.render_quality_status,
-            track_reprojection=diagnostics.track_reprojection,
+            color_reprojection=diagnostics.color_reprojection,
             render_quality_mask_iou=diagnostics.render_quality_mask_iou,
             render_quality_depth_inlier=diagnostics.render_quality_depth_inlier,
             render_quality_depth_alignment=diagnostics.render_quality_depth_alignment,

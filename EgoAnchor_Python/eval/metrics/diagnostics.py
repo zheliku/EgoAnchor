@@ -21,8 +21,8 @@ class ReliabilityDiagnosticsResult:
     score_histogram: pd.DataFrame
     """`pose_score` 的 0..1 直方图。"""
 
-    track_reprojection_histogram: pd.DataFrame
-    """有效 `track_reprojection` 的 0..1 直方图。"""
+    color_reprojection_histogram: pd.DataFrame
+    """有效 `color_reprojection` 的 0..1 直方图。"""
 
     policy_distribution: pd.DataFrame
     """Unity policy action/reason 分布计数。"""
@@ -44,11 +44,11 @@ def compute_reliability_diagnostics(
 
     pose_frame = pose.copy() if pose is not None else pd.DataFrame()
     scores = _numeric_series(pose_frame, "pose_score")
-    track_reprojection = _numeric_series(pose_frame, "track_reprojection")
-    valid_track_reprojection = track_reprojection[track_reprojection >= 0.0]
+    color_reprojection = _numeric_series(pose_frame, "color_reprojection")
+    valid_color_reprojection = color_reprojection[color_reprojection >= 0.0]
     render_quality_ms = _numeric_series(pose_frame, "render_quality_ms")
-    if not valid_track_reprojection.empty and not render_quality_ms.empty:
-        render_quality_ms = render_quality_ms.loc[valid_track_reprojection.index]
+    if not valid_color_reprojection.empty and not render_quality_ms.empty:
+        render_quality_ms = render_quality_ms.loc[valid_color_reprojection.index]
     else:
         render_quality_ms = pd.Series(dtype=float)
 
@@ -62,10 +62,10 @@ def compute_reliability_diagnostics(
                 "score_min": _nan_stat(scores, np.nanmin),
                 "score_p50": _nan_stat(scores, np.nanmedian),
                 "score_p95": finite_percentile(scores, 95),
-                "track_reprojection_valid_count": int(len(valid_track_reprojection)),
-                "track_reprojection_min": _nan_stat(valid_track_reprojection, np.nanmin),
-                "track_reprojection_p50": _nan_stat(valid_track_reprojection, np.nanmedian),
-                "track_reprojection_p95": finite_percentile(valid_track_reprojection, 95),
+                "color_reprojection_valid_count": int(len(valid_color_reprojection)),
+                "color_reprojection_min": _nan_stat(valid_color_reprojection, np.nanmin),
+                "color_reprojection_p50": _nan_stat(valid_color_reprojection, np.nanmedian),
+                "color_reprojection_p95": finite_percentile(valid_color_reprojection, 95),
                 "render_quality_ms_p50": _nan_stat(render_quality_ms, np.nanmedian),
                 "render_quality_ms_p95": finite_percentile(render_quality_ms, 95),
                 **_spike_summary(anchor_error_detail, spike_threshold_m=spike_threshold_m),
@@ -76,7 +76,7 @@ def compute_reliability_diagnostics(
     return ReliabilityDiagnosticsResult(
         summary=summary,
         score_histogram=_histogram(scores, value_name="pose_score"),
-        track_reprojection_histogram=_histogram(valid_track_reprojection, value_name="track_reprojection"),
+        color_reprojection_histogram=_histogram(valid_color_reprojection, value_name="color_reprojection"),
         policy_distribution=_policy_distribution(output),
     )
 

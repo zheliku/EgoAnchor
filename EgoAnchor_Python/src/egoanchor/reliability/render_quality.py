@@ -22,7 +22,7 @@ class RenderQualityResult:
     """单帧渲染质量结果，拆分为重投影分和深度对齐分。"""
 
     reprojection_score: float
-    """重投影颜色分，范围 0..1；协议字段写入 score_reprojection/track_reprojection。"""
+    """重投影颜色分，范围 0..1；协议字段写入 score_reprojection/color_reprojection。"""
 
     mask_iou: float
     """渲染 mask 与观测 mask 的 IoU。"""

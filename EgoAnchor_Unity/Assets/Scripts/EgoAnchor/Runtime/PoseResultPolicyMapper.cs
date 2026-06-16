@@ -10,7 +10,7 @@ namespace EgoAnchor.Runtime
     /// PoseResult 到 Unity anchor policy 输入的字段映射器。
     ///
     /// 本类集中处理 Python 协议字段读取、默认值和 policy observation 构造；
-    /// PoseToAnchorRuntime 只负责 frame alignment、processor 和状态应用。
+    /// PoseToAnchorRuntime 只负责 frame alignment、喂 policy host 和状态应用。
     /// </summary>
     internal static class PoseResultPolicyMapper
     {

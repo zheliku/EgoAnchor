@@ -32,7 +32,7 @@ EgoAnchor 是面向 passthrough mixed reality 的 **frame-aligned、world-consis
 
 - `EgoAnchor_Python/`：Python 端位姿估计服务和当前主线实现。
 - `EgoAnchor_Unity/`：Unity/Quest 工程；采集 Passthrough Camera，发送图像/标定，接收 pose 并转换为 Unity world anchor。
-- `EgoAnchor_Protocol/`：共享协议源，包含 `subjects.v1.json`、`proto/protocol/v1/*.proto`、`tools/generate_proto.ps1`。
+- `EgoAnchor_Protocol/`：共享协议源，包含 `subjects.v1.json`、`proto/protocol/v1/*.proto`、`tools/generate_proto.ps1`；Python 运行时会读取同步到 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json` 的副本，便于只拷贝 `EgoAnchor_Python` 到 Ubuntu 运行。
 - `2026-EgoAnchor/`：论文材料；当前源文件包括 `egoanchor_cn_outline.tex`、`egoanchor_cn_v1.tex` 与 `egoanchor_cn_refs.bib`。
 - `EgoAnchor_Tools/`：与主系统分离的辅助工具脚本（部分旧工具 csproj 因 Policy 重构已无法编译）。
 - `EgoAnchor_Tools3/`：自包含的离线升采样仿真（不依赖 Unity DLL，自带 Vec3/Quat 数学）。用真机录制的观测离线对比所有平滑策略并出曲线，默认自动复现真机的采集-渲染延迟和渲染帧率，是当前主用离线分析工具。`EgoAnchor_Tools2`、`EgoAnchor_Tools` 内的同类项目由其他 AI 维护。
@@ -61,14 +61,14 @@ EgoAnchor 固定采用双平面/三语义通道：
 
 - Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
 - Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.render_quality]` 渲染质量检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 一次渲染 color/depth/mask，再由 `ReprojectionChecker` 只在 Cutie mask 与投影 mask 交集区域计算 LAB 颜色重投影分，由 `DepthAlignmentChecker` 只在同一交集区域计算渲染深度与 FFS 深度对齐分；Cutie mask 面积 / 渲染投影面积作为独立 `score_mask` 连续信号，写入 `render_quality_area_ratio_score`、`track_reprojection`、IoU、depth inlier、depth alignment、render/observed coverage、`render_quality_ms` 等 JSONL 字段；pose 可靠性分采用 `Gate(phase/reject) × Quality × Confidence`，其中 `Quality = geometry_core(reprojection, depth) × bounded_mod(mask, jump)`，只有有效几何信号进入几何合取核，mask/jump 只做有下限的温和调制；`PoseResult` 追加携带 `phase/reprojection/depth/jump/mask/reject/confidence` 评分子分和渲染质量细项，Unity 可用于 Inspector/HUD/policy 调参。
+- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.render_quality]` 渲染质量检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 一次渲染 color/depth/mask，再由 `ReprojectionChecker` 只在 Cutie mask 与投影 mask 交集区域计算 LAB 颜色重投影分，由 `DepthAlignmentChecker` 只在同一交集区域计算渲染深度与 FFS 深度对齐分；Cutie mask 面积 / 渲染投影面积作为独立 `score_mask` 连续信号，写入 `render_quality_area_ratio_score`、`color_reprojection`、IoU、depth inlier、depth alignment、render/observed coverage、`render_quality_ms` 等 JSONL 字段；pose 可靠性分采用 `Gate(phase/reject) × Quality × Confidence`，其中 `Quality = geometry_core(reprojection, depth) × bounded_mod(mask, jump)`，只有有效几何信号进入几何合取核，mask/jump 只做有下限的温和调制；`PoseResult` 追加携带 `phase/reprojection/depth/jump/mask/reject/confidence` 评分子分和渲染质量细项，Unity 可用于 Inspector/HUD/policy 调参。
 - Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
 - Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；支持 PlayerPrefs 注入 Python IP。
 - Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
 - Unity `NatsControlClient`：订阅 PoseResult latest queue、ServerHeartbeat latest queue 和 AnchorStatusEvent event queue，并提供 bytes request/reply。
 - Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持多个 pipeline label 使用同一 frame-aligned raw pose 输入。
 - Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
-- Unity `Policy/` 模块化 anchor policy（已重构为两模块自由组合 3×2）：`AnchorPolicyHost` 持有一个 `MotionModel`（运动模型）+ 一个 `SmoothingStrategy`（平滑策略），二者正交、可任意组合。`MotionModel` 子类在 `Policy/Models`：`ConstantVelocityModel`（CV 差分）/`KalmanModel`/`OneEuroModel`，对外提供 `PredictAt(t)`（**不限幅外推**，给 B 路）和 `LatestControlPoint`（给 C 路插值）。`SmoothingStrategy` 子类在 `Policy/Smoothing`：`BlendStrategy`（B 路：高频外推+误差融合，零延迟）/`DelayedInterpStrategy`（C 路：延迟一周期+Hermite/向心 Catmull-Rom 插值）/`RawPassthroughStrategy`（纯零阶保持，真 raw 对照）。共享 DTO、状态机和数学在 `Policy/Core`；纯数学 `ConstVelocityKalman`/`ScalarOneEuro`/`Spline` 在 `Policy/Math`。消息入口 `AcceptPose` 只提交测量（可选内联 score/jump 门控，只 EgoAnchor 方法开），渲染帧入口 `Advance(now)` 调 `strategy.Output(model, now)` 输出 stable pose。eval 兼容字段：`EstimatorModuleName`→运动模型名，`OutputModuleName`→策略名，`GateModuleName`→门控状态。模块不读 Unity `Time`，时间由 runtime 显式传入。**旧的 Gate/Estimator/Output 三模块拆分（含 `raw_zoh`/`lowpass_predict`/`kalman_cv`/`oneeuro_vanilla`/`egoanchor_*` estimator/gate/output 类）已全部删除，不再兼容。**
+- Unity `Policy/` 模块化 anchor policy（已重构为两模块自由组合 3×2）：`AnchorPolicyHost` 持有一个 `MotionModel`（运动模型）+ 一个 `SmoothingStrategy`（平滑策略），二者正交、可任意组合。`MotionModel` 子类在 `Policy/Models`：`ConstantVelocityModel`（CV 差分）/`KalmanModel`/`OneEuroModel`，对外提供 `PredictAt(t)`（**不限幅外推**，给 B 路）和 `LatestControlPoint`（给 C 路插值）。`SmoothingStrategy` 子类在 `Policy/Smoothing`：`BlendStrategy`（B 路：高频外推+误差融合，零延迟）/`DelayedInterpStrategy`（C 路：延迟一周期+Hermite/向心 Catmull-Rom 插值）/`RawPassthroughStrategy`（纯零阶保持，真 raw 对照）。数据契约 DTO（`AnchorObservation`/`AnchorPolicyDecision`/`AnchorPolicyOutput`/`GateDecision`）在 `Policy/Contracts`，生命周期状态机与枚举（`AnchorStateMachine`/`AnchorPolicyTypes`）在 `Policy/Lifecycle`，纯数学（`AnchorMath`/`ConstVelocityKalman`/`ScalarOneEuro`/`Spline`）在 `Policy/Math`。消息入口 `AcceptPose` 只提交测量（可选内联 score/jump 门控，只 EgoAnchor 方法开），渲染帧入口 `Advance(now)` 调 `strategy.Output(model, now)` 输出每帧 anchor pose。eval 字段名：C# 属性 `MotionModelName`/`SmoothingStrategyName`/`GateName`，对应 JSONL wire key `motion_model`/`smoothing_strategy`/`gate`（旧名 `estimator_module`/`output_module`/`gate_module` 已废弃，历史录制已迁移到新键，读写两端都不留兼容层）；变体每帧输出 pose 的 wire key 是 `has_output_pose`/`output_pos`/`output_rot`（旧名 `has_stable`/`stable_pos`/`stable_rot`，对应 `AnchorEvalJson.RecordedVariantSnapshot.HasOutputPose`/`OutputPose`、runtime API `PoseToAnchorRuntime.TryGetOutputPose`）；`PoseResult` proto 字段 `color_reprojection`（旧名 `track_reprojection`）和 `render_quality_evaluated`（旧名 `render_quality_expected`）也已改名（proto 字段号不变、二进制 wire 兼容，重新生成 `anchor_pb2.py`+`Anchor.cs`）。`score_phase` 等 `score_*` 子分保持原名（与 6 个兄弟字段一致，不是错名）。模块不读 Unity `Time`，时间由 runtime 显式传入。**旧的 Gate/Estimator/Output 三模块拆分（含 `raw_zoh`/`lowpass_predict`/`kalman_cv`/`oneeuro_vanilla`/`egoanchor_*` estimator/gate/output 类）已全部删除，不再兼容。**
   关键修复（真机延迟自适应）：真机采集-渲染延迟实测中位 ~300ms（Python 推理 159ms + 传输 + 陈旧）>> 观测周期 ~208ms。C 路延迟必须 = **实测采集-渲染延迟**（`DelayedInterpStrategy` 每帧测 `now-最新控制点时间` 的 EMA × 1.15），不是观测周期，否则插值目标比最新点还新 → 退化外推 → 锯齿跳变。B 路外推上限 = **实测延迟 × 倍数**（`BlendStrategy` 自适应），防急停冲过头。两者都不绑 fps，换更快显卡延迟自动变小、上限自动跟着减小。
 - Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
 - Unity `AnchorRecoveryController`：正交 recovery 层，放在 `Runtime/`，只观察 runtime 诊断并通过 `AnchorCommandClient` / `IAnchorCommandSender` 发送 reacquire command；`IAnchorCommandSender` 是 `AnchorCommandClient.cs` 内的窄测试契约，不再单独成文件。固定 reason 为 `auto_reacquire_low_score`、`auto_reacquire_lost`、`auto_reacquire_no_pose`、`input_not_ready_wait`。RQ2 关闭 recovery，RQ3 再单独比较 recovery 策略。
@@ -133,10 +133,10 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 
 ### 共享协议
 
-- 唯一 channel 契约：`EgoAnchor_Protocol/subjects.v1.json`。
+- 唯一 channel 源契约：`EgoAnchor_Protocol/subjects.v1.json`；Python 运行时副本位于 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json`，由协议生成脚本同步。
 - Proto 源：`EgoAnchor_Protocol/proto/protocol/v1/common.proto`、`quest.proto`、`anchor.proto`。
 - 默认生成输出：
-  - Python：`EgoAnchor_Python/src/egoanchor/protocol/v1/*_pb2.py`
+  - Python：`EgoAnchor_Python/src/egoanchor/protocol/v1/*_pb2.py` 与 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json`
   - Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/Generated/*.cs`
   - Unity subject 常量：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/SubjectNames.cs`
 - 字段号进入共享 proto 后不得重排。删除字段必须在 proto 中 `reserved` 字段号和字段名。
@@ -162,7 +162,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/tracking_server.py`：当前主入口 wrapper，调用 `egoanchor.app.tracking_server`。
 - `tools/sam3/sam3_mask.py`：RealSense + SAM3 prompt mask 调参入口；顶部常量配置 prompt、置信度、分辨率和相机参数。
 - `src/egoanchor/config/`：轻量配置。配置层只读 TOML，不导入 ZMQ/OpenCV/模型。
-- `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口。
+- `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口；内含运行时 `subjects.v1.json` 副本，协议生成脚本会从 `EgoAnchor_Protocol/subjects.v1.json` 同步更新。
 - `src/egoanchor/transport/zmq_topic_subscriber.py`：通用 ZMQ SUB；只负责 socket、multipart topic bytes、topic latest-drain，不导入 Protobuf/OpenCV/模型。
 - `src/egoanchor/transport/nats_client.py`：唯一 NATS transport 文件；负责后台 asyncio NATS 连接、bytes publish/subscribe/request-reply callback 和 publish 限流，不理解 perception 或 Unity anchor。
 - `src/egoanchor/routing/`：`HandlerRegistry`、`NatsRouter`、`iter_nats_request_specs`；负责 subject -> protobuf parse -> handler -> reply serialize。
@@ -182,7 +182,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `src/egoanchor/reliability/render_quality.py`：一次渲染后协调 `ReprojectionChecker` 与 `DepthAlignmentChecker`，保持性能不变但拆清重投影和 depth 职责。
 - `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，采用 `Gate(phase/reject) × Quality × Confidence`；`Quality` 由 reprojection/depth 有效几何信号的加权几何平均乘以 mask/jump 有界调制得到，输出 `reliability_score`、flags 和 `phase/reprojection/depth/jump/mask/reject/confidence` 子分。
 - `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard 等诊断工具；窗口创建辅助由 app 层就近维护。
-- `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/track_reprojection 直方图、policy action/reason 分布、spike 漏检和 render_quality 开销统计；不导入 runtime 或模型。
+- `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/color_reprojection 直方图、policy action/reason 分布、spike 漏检和 render_quality 开销统计；不导入 runtime 或模型。
 - `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
 
 ### Unity
@@ -205,10 +205,10 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 - `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
 - `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于多 pipeline label 公平对照。
 - `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；默认用 capture-time frame alignment 生成 aligned raw world pose，再提交给 `policyHost`（新 `AnchorPolicyHost`）。每帧 `LateUpdate` 调 `AdvanceAnchorOutput` 输出预测位姿（`[DefaultExecutionOrder(-50)]` 保证先于 DynamicObjectAnchor/recorder）。该文件还生成 `arrival_time_raw` 诊断，只用于 RQ1 对照，不改变默认 anchor 输出。
-- `Assets/Scripts/EgoAnchor/Policy/`：anchor policy 实现。主线是 `AnchorPolicyHost` + 两个可自由组合的模块基类：`Policy/Models/MotionModel`（CV/Kalman/OneEuro）和 `Policy/Smoothing/SmoothingStrategy`（Blend/DelayedInterp/RawPassthrough）。共享 DTO/状态机在 `Policy/Core`，纯数学在 `Policy/Math`。运动模型的 `PredictAt(renderTime)` 同时处理平移和旋转，且**不限幅外推**（平滑交给策略）。`AnchorMotionState` 在 `Policy/Core/AnchorPolicyTypes.cs`。旧 Gate/Estimator/Output 三模块目录、旧 controller/filter/gate/smoother/config/processor 目录已删除。参数说明与场景挂载见 `Policy/README.md`。
-- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime stable/final pose 并应用 Transform，不承载滤波、状态机、网络、recovery，也不再提供 Raw/Smoothed 输出模式。
+- `Assets/Scripts/EgoAnchor/Policy/`：anchor policy 实现。主线是 `AnchorPolicyHost` + 两个可自由组合的模块基类：`Policy/Models/MotionModel`（CV/Kalman/OneEuro）和 `Policy/Smoothing/SmoothingStrategy`（Blend/DelayedInterp/RawPassthrough）。数据契约 DTO 在 `Policy/Contracts`，生命周期状态机/枚举在 `Policy/Lifecycle`，纯数学在 `Policy/Math`。运动模型的 `PredictAt(renderTime)` 同时处理平移和旋转，且**不限幅外推**（平滑交给策略）。`AnchorMotionState` 在 `Policy/Lifecycle/AnchorPolicyTypes.cs`。旧 Gate/Estimator/Output 三模块目录、旧 controller/filter/gate/smoother/config/processor 目录已删除。参数说明与场景挂载见 `Policy/README.md`。
+- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime 每帧 anchor 输出 pose（`TryGetOutputPose`）并应用 Transform，不承载滤波、状态机、网络、recovery，也不再提供 Raw/Smoothed 输出模式。
 - `Assets/Scripts/EgoAnchor/Runtime/AnchorRecoveryController.cs`：自动 reacquire 控制层；只发送 command，不解释 ack 为恢复完成。
-- `Assets/Scripts/EgoAnchorEval/RecordedAnchorReplaySource.cs`、`RecordedAnchorReplayController.cs`、`AnchorTrajectoryPlayer.cs`：Unity 内 replay 组件。前两者用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录 stable 轨迹，用于视频复现。
+- `Assets/Scripts/EgoAnchorEval/RecordedAnchorReplaySource.cs`、`RecordedAnchorReplayController.cs`、`AnchorTrajectoryPlayer.cs`：Unity 内 replay 组件。前两者用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录的 anchor 输出轨迹（`output_pos`/`output_rot`），用于视频复现。
 - `Assets/Scene/`：当前主线测试场景工作区。
 
 Unity 命名/目录规则：
@@ -218,7 +218,7 @@ Unity 命名/目录规则：
 - `Transport/` 放纯网络 socket/bytes client，不理解 Quest 或 anchor 语义。
 - `Client/` 放把 source、transport、runtime 组合成场景组件的客户端脚本。
 - `Runtime/` 放 pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
-- `Policy/` 放 anchor policy 实现、observation/decision DTO、state machine 和两类可组合模块。新增共享类型放 `Policy/Core`，纯数学放 `Policy/Math`，运动模型放 `Policy/Models`（继承 `MotionModel`），平滑策略放 `Policy/Smoothing`（继承 `SmoothingStrategy`）；不要再建 `Pipeline`、`Pipeline/Modules` 或旧 `Gate`/`Estimator`/`Output`/`processor` 目录。
+- `Policy/` 放 anchor policy 实现、observation/decision DTO、state machine 和两类可组合模块。数据契约 DTO 放 `Policy/Contracts`，生命周期状态机/枚举放 `Policy/Lifecycle`，纯数学放 `Policy/Math`，运动模型放 `Policy/Models`（继承 `MotionModel`），平滑策略放 `Policy/Smoothing`（继承 `SmoothingStrategy`）；不要再建 `Pipeline`、`Pipeline/Modules`、旧 `Gate`/`Estimator`/`Output`/`processor` 目录，也不要再用已删除的 `Policy/Core` 杂物目录。
 - 新增脚本应写清中文 `<summary>` 和 Inspector 参数 `[Tooltip]`，尤其是端口、帧率、HWM、缓存容量、坐标/时间语义。
 
 ## 标定、深度与坐标约定
@@ -234,7 +234,7 @@ Unity 命名/目录规则：
 
 - Python OpenCV 热键：`1/2/3/4` 切 stage；`r` reset；`q`/`ESC` 退出。
 - 调试顺序：stage 1 看输入 -> stage 2 看 mask -> stage 3 看 depth/mask 对齐 -> stage 4 看 register/track。
-- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、HUD `depthScore`、HUD `depthAlign`、`score_phase/score_reprojection/score_depth/score_jump/score_mask/score_reject/score_confidence`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`track_reprojection`、`render_quality_area_ratio_score`、`render_quality_mask_iou`、`render_quality_depth_inlier`、`render_quality_depth_alignment`、`render_quality_render_visible_ratio`、`render_quality_observed_visible_ratio`、`render_quality_depth_residual_m`、`render_quality_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`score_reprojection` 和 `track_reprojection` 当前语义是交集区域颜色重投影分，`score_depth` 是 pose 评分里的 depth 子分，`score_mask` 当前优先来自 Cutie mask 面积 / 渲染投影面积。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
+- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、HUD `depthScore`、HUD `depthAlign`、`score_phase/score_reprojection/score_depth/score_jump/score_mask/score_reject/score_confidence`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`color_reprojection`、`render_quality_area_ratio_score`、`render_quality_mask_iou`、`render_quality_depth_inlier`、`render_quality_depth_alignment`、`render_quality_render_visible_ratio`、`render_quality_observed_visible_ratio`、`render_quality_depth_residual_m`、`render_quality_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`score_reprojection` 和 `color_reprojection` 当前语义是交集区域颜色重投影分（`color_reprojection` 旧名 `track_reprojection`），`score_depth` 是 pose 评分里的 depth 子分，`score_mask` 当前优先来自 Cutie mask 面积 / 渲染投影面积。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
 - stereo 收不到但 camera_info 能收到：查 Unity stereo source、左右 camera `IsPlaying`、ZMQ publisher、Python 接收 HWM。
 - camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
 - Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
@@ -245,7 +245,7 @@ Unity 命名/目录规则：
 - `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
 - register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
 - track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
-- `track_reprojection=-1`：表示本帧无有效重投影信号，不是坏 pose；查是否启用 `reliability.render_quality.enabled`、是否在 TRACK 且 Cutie mask 非空、渲染面积是否过小、warmup 是否结束、K 是否已更新。
+- `color_reprojection=-1`：表示本帧无有效重投影信号，不是坏 pose；查是否启用 `reliability.render_quality.enabled`、是否在 TRACK 且 Cutie mask 非空、渲染面积是否过小、warmup 是否结束、K 是否已更新。
 - `reprojection_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask 与观测 mask 方向是否一致，再看 LAB 颜色是否因纹理/光照差异过大；`depth_alignment_low` 则看 `depthAlign/depthRes` 判断是否是深度不对；遮挡或可见面积过小优先看 `render_quality_area_ratio_score`/`score_mask`，`renderCov/obsCov` 只作为投影与观测 mask 相对位置诊断；最后才考虑调 `downscale`、`depth_distance_ratio` 或阈值。
 - NATS 命令无 ack：查 `nats-server` 是否启动、Unity/Python NATS URL 是否指向同一地址、防火墙 4222、Python `network.message_plane.enabled`。
 

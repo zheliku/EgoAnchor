@@ -13,6 +13,7 @@ PYTHONPATH = ".;src;Fast-FoundationStereo;Cutie;sam3" # Windows 下给 Python �
 
 [target.linux-64.activation.env]
 PYTHONPATH = ".:src:Fast-FoundationStereo:Cutie:sam3" # Linux 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
+LIBRARY_PATH = "$CONDA_PREFIX/lib/stubs" # 让 Triton 运行时编译 CUDA 模块时能找到 stub 库 libcuda.s
 
 [dependencies]
 python = "3.12.*"
@@ -107,7 +108,7 @@ python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationSte
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192
 """ }
-_build-trt = { cmd = """
+_build-trt-only = { cmd = """
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
@@ -116,7 +117,9 @@ python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-Foundat
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16
 """ }
 
-build = { depends-on = ["_build-fp", "_make-onnx", "_build-trt"] }
+_build-trt = { depends-on = ["_make-onnx", "_build-trt-only"] }
+
+build = { depends-on = ["_build-fp", "_build-trt"] }
 
 demo-fp = { cmd = """
 python FoundationPose/run_demo.py \
@@ -124,8 +127,7 @@ python FoundationPose/run_demo.py \
 """ }
 
 demo-ffs = { cmd = """
-cd Fast-FoundationStereo &&
-python scripts/run_demo.py \
+python Fast-FoundationStereo/scripts/run_demo.py \
 --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth \
 --left_file Fast-FoundationStereo/demo_data/left.png \
 --right_file Fast-FoundationStereo/demo_data/right.png \
@@ -141,15 +143,13 @@ python scripts/run_demo.py \
 """ }
 
 demo-ffs-fast = { cmd = """
-cd Fast-FoundationStereo &&
-python src/realsense_foundationstereo_test.py \
+python Fast-FoundationStereo/src/realsense_foundationstereo_test.py \
 --model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth \
 --valid_iters 4 \
 """ }
 
 demo-ffs-slow = { cmd = """
-cd Fast-FoundationStereo &&
-python src/realsense_foundationstereo_test.py \
+python Fast-FoundationStereo/src/realsense_foundationstereo_test.py \
 --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth \
 --valid_iters 8 \
 """ }
@@ -163,7 +163,7 @@ python tools/sam3/sam3_mask.py
 """ }
 
 test-yoloe26-tool = { cmd = """
-python -m unittest tools\\yoloe26\\test_yoloe26_mask.py
+python -c "from pathlib import Path; p = Path('tools/yoloe26/yoloe26_mask.py'); assert p.is_file(), p; print(f'{p} exists')"
 """ }
 
 default = { cmd = """

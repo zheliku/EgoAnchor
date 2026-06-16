@@ -13,7 +13,7 @@ from .quest_frame import DecodedQuestStereoFrame, decode_quest_stereo_frame, pre
 from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterOutput, AsyncSegmenterWorker, SegmenterBackend
 from .pipeline_types import FrameDiagnostics, MaskSource, PipelineStepTiming, PipelineTrackingState, QuestPosePipelineOutput
 from .quest_pose_pipeline import QuestPosePipeline
-from .pipeline_factory import build_quest_pose_pipeline, normalize_segmenter_type
+from .pipeline_factory import build_quest_pose_pipeline, normalize_segmenter_type, should_show_mask_snapshot
 
 
 __all__ = [
@@ -34,5 +34,6 @@ __all__ = [
     "QuestPosePipelineOutput",
     "build_quest_pose_pipeline",
     "normalize_segmenter_type",
+    "should_show_mask_snapshot",
 ]
 

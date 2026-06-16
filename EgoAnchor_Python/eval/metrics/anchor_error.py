@@ -85,16 +85,16 @@ def compute_anchor_error(output: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
 
     mask = (
         output["valid"].fillna(False).astype(bool)
-        & output["has_stable"].fillna(False).astype(bool)
+        & output["has_output_pose"].fillna(False).astype(bool)
         & output["gt_pos"].map(is_pose_value)
         & output["gt_rot"].map(is_pose_value)
-        & output["stable_pos"].map(is_pose_value)
-        & output["stable_rot"].map(is_pose_value)
+        & output["output_pos"].map(is_pose_value)
+        & output["output_rot"].map(is_pose_value)
     )
     for _, row in output.loc[mask].iterrows():
-        translation_m, rotation_deg = pose_error(row["gt_pos"], row["gt_rot"], row["stable_pos"], row["stable_rot"])
-        position_offset = np.asarray(row["stable_pos"], dtype=float) - np.asarray(row["gt_pos"], dtype=float)
-        rotation_offset = relative_rotation_quat(row["gt_rot"], row["stable_rot"])
+        translation_m, rotation_deg = pose_error(row["gt_pos"], row["gt_rot"], row["output_pos"], row["output_rot"])
+        position_offset = np.asarray(row["output_pos"], dtype=float) - np.asarray(row["gt_pos"], dtype=float)
+        rotation_offset = relative_rotation_quat(row["gt_rot"], row["output_rot"])
         rotation_euler = quat_to_euler_deg(rotation_offset)
         detail_records.append(
             {

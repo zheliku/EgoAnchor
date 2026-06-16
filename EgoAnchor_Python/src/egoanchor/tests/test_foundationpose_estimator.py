@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -26,6 +27,12 @@ class FoundationPoseObjectEstimatorTest(unittest.TestCase):
         expected = pose.copy()
         expected[:3, 3] = pose[:3, 3] - estimator.to_origin[:3, 3]
         self.assertTrue(np.allclose(render_pose, expected))
+
+    def test_missing_mycpp_reports_build_command(self) -> None:
+        """mycpp 未编译时应尽早提示专用 build task，避免后续空对象异常。"""
+
+        with self.assertRaisesRegex(RuntimeError, "pixi run _build-fp"):
+            FoundationPoseObjectEstimator._ensure_mycpp_available(SimpleNamespace(mycpp=None))
 
 
 if __name__ == "__main__":

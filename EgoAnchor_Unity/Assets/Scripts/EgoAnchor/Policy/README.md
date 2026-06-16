@@ -152,10 +152,11 @@
 ```
 Assets/Scripts/EgoAnchor/Policy/
 ├─ AnchorPolicyHost.cs          # 持两模块 + 生命周期 + 可选 score 门控 + 每帧输出
-├─ Core/                        # AnchorObservation / 状态机 / GateDecision / Pose 输出契约 (保留)
-├─ Math/                        # ConstVelocityKalman / ScalarOneEuro / Spline / (AnchorMath 在 Core)
+├─ Contracts/                   # 模块接缝数据契约：AnchorObservation / AnchorPolicyDecision / AnchorPolicyOutput / GateDecision
+├─ Lifecycle/                   # AnchorStateMachine + AnchorPolicyTypes (状态/运动状态/生命周期事件枚举)
+├─ Math/                        # AnchorMath (四元数/向量基元) + ConstVelocityKalman / ScalarOneEuro / Spline
 ├─ Models/                      # MotionModel 基类 + CV / Kalman / OneEuro
-└─ Smoothing/                   # SmoothingStrategy 基类 + Blend / DelayedInterp
+└─ Smoothing/                   # SmoothingStrategy 基类 + Blend / DelayedInterp / RawPassthrough
 ```
 
 运行时链路（都在 LateUpdate，执行序正确）：

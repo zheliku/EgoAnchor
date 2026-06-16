@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from egoanchor.config import load_config
+from egoanchor.protocol import SubjectRegistry, default_subjects_path
 
 
 class RuntimeConfigPathsTest(unittest.TestCase):
@@ -25,6 +26,20 @@ class RuntimeConfigPathsTest(unittest.TestCase):
 
         self.assertFalse(cfg.module.foundationpose.enable_logging)
         self.assertFalse(hasattr(cfg.module.foundationpose, "suppress_output"))
+
+    def test_subjects_path_is_python_project_local(self) -> None:
+        """默认 subject registry 应随 EgoAnchor_Python 一起迁移，不依赖父级仓库。"""
+
+        cfg = load_config()
+
+        self.assertFalse(hasattr(cfg.paths, "repo_root"))
+        self.assertTrue(cfg.paths.subjects_path.is_file())
+        self.assertTrue(cfg.paths.subjects_path.is_relative_to(cfg.paths.python_root))
+        self.assertEqual(default_subjects_path(), cfg.paths.subjects_path)
+        registry = SubjectRegistry.load(cfg.paths.subjects_path)
+        self.assertIn("egoanchor.v1.pose.result", registry.names())
+        default_registry = SubjectRegistry.load()
+        self.assertIn("egoanchor.v1.pose.result", default_registry.names())
 
 
 if __name__ == "__main__":

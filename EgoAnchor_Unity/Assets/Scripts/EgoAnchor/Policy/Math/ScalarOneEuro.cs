@@ -10,7 +10,7 @@ namespace EgoAnchor.Policy
     ///   2) 自适应截止 fc = minCutoff + beta*|dxHat|；
     ///   3) 用 fc 算的系数低通信号本身 -> 平滑值 xHat。
     ///
-    /// 与旧 OneEuroEstimatorModule 内嵌的 OneEuroFloat 行为一致，但额外把 dxHat (平滑速度)
+    /// 现由 OneEuroModel 使用：额外把 dxHat (平滑速度)
     /// 作为公共属性暴露，供运动模型做高频外推。纯 struct，不依赖 Mono。
     /// </summary>
     internal struct ScalarOneEuro

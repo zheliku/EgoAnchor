@@ -76,16 +76,16 @@ class SubjectRegistry:
             self.require(name)
 
 
-def _repo_root() -> Path:
-    """返回仓库根目录 `EgoAnchor`。"""
+def _protocol_root() -> Path:
+    """返回 Python 运行时随包携带的协议资源目录。"""
 
-    return Path(__file__).resolve().parents[4]
+    return Path(__file__).resolve().parent
 
 
 def default_subjects_path() -> Path:
     """返回共享 subject 契约文件路径。"""
 
-    return _repo_root() / "EgoAnchor_Protocol" / "subjects.v1.json"
+    return _protocol_root() / "subjects.v1.json"
 
 
 @lru_cache(maxsize=4)

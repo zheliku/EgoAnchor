@@ -10,7 +10,7 @@ namespace EgoAnchor.Runtime
 {
     /// <summary>
     /// Anchor 自动 recovery 的正交控制层。
-    /// 它只观察 PoseToAnchorRuntime 诊断并发送 reacquire command，不参与 Gate/Estimator/Output，也不把 CommandAck 解释为恢复完成。
+    /// 它只观察 PoseToAnchorRuntime 诊断并发送 reacquire command，不干涉 policy host 的模块组合或生命周期，也不把 CommandAck 解释为恢复完成。
     /// </summary>
     public sealed class AnchorRecoveryController : MonoBehaviour
     {

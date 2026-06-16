@@ -32,7 +32,7 @@ namespace EgoAnchor.Policy
         public override void Snap(in AnchorObservation observation)
         {
             lastPose = observation.WorldPose;
-            lastTimeSeconds = MeasurementTime(observation);
+            lastTimeSeconds = observation.MeasurementTimeSeconds;
             linVel = Vector3.zero;
             angVel = Vector3.zero;
             hasState = true;
@@ -46,7 +46,7 @@ namespace EgoAnchor.Policy
                 return;
             }
 
-            double t = MeasurementTime(observation);
+            double t = observation.MeasurementTimeSeconds;
             float dt = Mathf.Max((float)(t - lastTimeSeconds), 1e-4f);
             Pose pose = observation.WorldPose;
 
@@ -75,11 +75,6 @@ namespace EgoAnchor.Policy
             lastPose = Pose.identity;
             linVel = Vector3.zero;
             angVel = Vector3.zero;
-        }
-
-        private static double MeasurementTime(in AnchorObservation observation)
-        {
-            return observation.HasCaptureTime ? observation.CaptureTimeSeconds : observation.SampleTimeSeconds;
         }
     }
 }

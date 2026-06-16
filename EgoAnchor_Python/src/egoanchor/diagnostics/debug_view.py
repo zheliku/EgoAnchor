@@ -68,7 +68,7 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
         f"stage={diagnostics.stage} phase={diagnostics.phase} frame={diagnostics.frame_id}",
         f"pose={observation.has_pose if observation else False} source={observation.pose_source if observation else 'NONE'} score={observation.reliability_score if observation else 0.0:.2f}",
         f"det={diagnostics.det_count} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f} depthScore={observation.score_depth if observation else diagnostics.score_depth:.2f}",
-        f"depth med/iqr={diagnostics.depth_median_in_mask:.2f}/{diagnostics.depth_iqr_in_mask:.2f}m fps={diagnostics.fps:.1f}",
+        f"depth med/iqr={diagnostics.depth_median_m:.2f}/{diagnostics.depth_iqr_m:.2f}m fps={diagnostics.fps:.1f}",
         f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
     ]
     if diagnostics.segmenter_async:
@@ -199,9 +199,9 @@ def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservati
 
     lines = [
         f"score={observation.reliability_score if observation else 0.0:.2f} phase={diagnostics.score_phase:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} jump={diagnostics.score_jump:.2f} mask={diagnostics.score_mask:.2f} reject={diagnostics.score_reject:.2f} conf={diagnostics.score_confidence:.2f}",
-        f"track_reproj={diagnostics.track_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
+        f"track_reproj={diagnostics.color_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
         f"depthIn={diagnostics.render_quality_depth_inlier:.2f} depthAlign={diagnostics.render_quality_depth_alignment:.2f} depthRes={diagnostics.render_quality_depth_residual_m:.3f}m status={diagnostics.render_quality_status} {diagnostics.render_quality_ms:.1f}ms",
-        f"expected={diagnostics.render_quality_expected} renderArea={diagnostics.render_quality_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
+        f"expected={diagnostics.render_quality_evaluated} renderArea={diagnostics.render_quality_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
     ]
     if observation and observation.reliability_flags:
         lines.append("flags=" + ",".join(observation.reliability_flags[:8]))

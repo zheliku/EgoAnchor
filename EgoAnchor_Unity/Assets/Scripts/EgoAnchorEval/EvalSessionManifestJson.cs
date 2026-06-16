@@ -62,14 +62,14 @@ namespace EgoAnchorEval
         /// <summary>pipeline strategy label。</summary>
         public readonly string StrategyLabel;
 
-        /// <summary>gate module 名称。</summary>
-        public readonly string GateModule;
+        /// <summary>gate 名称 (score_jump_gate / null_gate)。</summary>
+        public readonly string Gate;
 
-        /// <summary>estimator module 名称。</summary>
-        public readonly string EstimatorModule;
+        /// <summary>运动模型名称 (cv / kalman / oneeuro)。</summary>
+        public readonly string MotionModel;
 
-        /// <summary>output module 名称。</summary>
-        public readonly string OutputModule;
+        /// <summary>平滑策略名称 (blend / interp_hermite / raw_passthrough)。</summary>
+        public readonly string SmoothingStrategy;
 
         /// <summary>参数稳定摘要。</summary>
         public readonly string ConfigHash;
@@ -81,17 +81,17 @@ namespace EgoAnchorEval
         public EvalVariantConfig(
             string label,
             string strategyLabel,
-            string gateModule,
-            string estimatorModule,
-            string outputModule,
+            string gate,
+            string motionModel,
+            string smoothingStrategy,
             string configHash,
             IReadOnlyDictionary<string, string> parameters)
         {
             Label = label ?? string.Empty;
             StrategyLabel = strategyLabel ?? string.Empty;
-            GateModule = gateModule ?? string.Empty;
-            EstimatorModule = estimatorModule ?? string.Empty;
-            OutputModule = outputModule ?? string.Empty;
+            Gate = gate ?? string.Empty;
+            MotionModel = motionModel ?? string.Empty;
+            SmoothingStrategy = smoothingStrategy ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
             Parameters = parameters ?? new Dictionary<string, string>();
         }
@@ -164,9 +164,9 @@ namespace EgoAnchorEval
                     builder.Append('{');
                     AppendStringProperty(builder, ref first, "label", configs[i].Label);
                     AppendStringProperty(builder, ref first, "strategy_label", configs[i].StrategyLabel);
-                    AppendStringProperty(builder, ref first, "gate_module", configs[i].GateModule);
-                    AppendStringProperty(builder, ref first, "estimator_module", configs[i].EstimatorModule);
-                    AppendStringProperty(builder, ref first, "output_module", configs[i].OutputModule);
+                    AppendStringProperty(builder, ref first, "gate", configs[i].Gate);
+                    AppendStringProperty(builder, ref first, "motion_model", configs[i].MotionModel);
+                    AppendStringProperty(builder, ref first, "smoothing_strategy", configs[i].SmoothingStrategy);
                     AppendStringProperty(builder, ref first, "config_hash", configs[i].ConfigHash);
                     AppendStringDictionary(builder, ref first, "parameters", configs[i].Parameters);
                     builder.Append('}');

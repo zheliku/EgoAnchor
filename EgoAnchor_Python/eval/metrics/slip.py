@@ -24,14 +24,14 @@ def compute_slip(output: pd.DataFrame, k: np.ndarray | None = None) -> tuple[pd.
     records: list[dict[str, Any]] = []
     mask = (
         output["valid"].fillna(False).astype(bool)
-        & output["has_stable"].fillna(False).astype(bool)
+        & output["has_output_pose"].fillna(False).astype(bool)
         & output["gt_pos"].map(is_pose_value)
-        & output["stable_pos"].map(is_pose_value)
+        & output["output_pos"].map(is_pose_value)
     )
     for _, row in output.loc[mask].iterrows():
         w_t_head = pos_quat_to_mat(row["head_pos"], row["head_rot"])
         gt_uv = project_point(intrinsic, w_t_head, row["gt_pos"])
-        stable_uv = project_point(intrinsic, w_t_head, row["stable_pos"])
+        stable_uv = project_point(intrinsic, w_t_head, row["output_pos"])
         slip_px = float(np.linalg.norm(stable_uv - gt_uv))
         records.append(
             {
@@ -132,9 +132,9 @@ def _append_raw_mapping_record(
     record.update(
         {
             "label": label,
-            "has_stable": True,
-            "stable_pos": pos,
-            "stable_rot": rot,
+            "has_output_pose": True,
+            "output_pos": pos,
+            "output_rot": rot,
             "anchor_state": "RawMappingDiagnostic",
             "policy_action": "diagnostic",
             "policy_reason": label,

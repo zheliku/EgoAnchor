@@ -21,8 +21,8 @@ namespace EgoAnchorEval
         [SerializeField] private string outputLogPath = "";
 
         /// <summary>要播放的策略 label。</summary>
-        [Tooltip("要播放的 variants.label，例如 raw_zoh、kalman_cv、oneeuro_vanilla 或 egoanchor_full。")]
-        [SerializeField] private string variantLabel = "egoanchor_full";
+        [Tooltip("要播放的 variants.label，例如 kalman_blend、cv_blend、oneeuro_blend 或 kalman_interp_hermite。")]
+        [SerializeField] private string variantLabel = "kalman_blend";
 
         /// <summary>是否在 Start 时自动加载并播放。</summary>
         [Header("Playback")]
@@ -261,9 +261,9 @@ namespace EgoAnchorEval
                 }
 
                 double renderMonoMs = RecordedReplayJson.ReadDouble(row, "render_mono_ms", 0.0);
-                bool hasStable = RecordedReplayJson.ReadBool(variant, "has_stable", false);
+                bool hasOutputPose = RecordedReplayJson.ReadBool(variant, "has_output_pose", false);
                 Pose pose = Pose.identity;
-                bool hasPose = hasStable && RecordedReplayJson.TryReadPose(variant, "stable_pos", "stable_rot", out pose);
+                bool hasPose = hasOutputPose && RecordedReplayJson.TryReadPose(variant, "output_pos", "output_rot", out pose);
                 sample = new TrajectorySample(renderMonoMs, hasPose, pose);
                 return true;
             }
