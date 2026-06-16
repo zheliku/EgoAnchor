@@ -6,11 +6,12 @@ import json
 import math
 import time
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
 
 import numpy as np
+
+from egoanchor.utils.timezone import beijing_now
 
 
 class RuntimeEventLogger:
@@ -41,8 +42,8 @@ class RuntimeEventLogger:
         self.session_id = str(session_id or uuid.uuid4().hex)
         """本次 Python server 会话 ID。"""
 
-        self.timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        """当前日志文件时间戳，使用本地时间。"""
+        self.timestamp = beijing_now().strftime("%Y%m%d-%H%M%S")
+        """当前日志文件时间戳，使用北京时间 (UTC+8)。"""
 
         self.filename = Path(str(filename or f"{self.timestamp}.jsonl")).name
         """JSONL 文件名；默认使用时间戳，且只取文件名避免在日志根目录下再建子目录。"""

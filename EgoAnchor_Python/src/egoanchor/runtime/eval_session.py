@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from egoanchor.utils.timezone import beijing_now
+
 
 @dataclass(frozen=True)
 class EvalSessionPaths:
@@ -46,7 +48,7 @@ def create_eval_session(
 
     root_path = Path(root).expanduser()
     safe_object_id = sanitize_session_token(object_id or "default")
-    session_id = _resolve_unique_session_id(root_path, build_eval_session_id(now or datetime.now(), safe_object_id))
+    session_id = _resolve_unique_session_id(root_path, build_eval_session_id(now or beijing_now(), safe_object_id))
     session_dir = root_path / session_id
     session_dir.mkdir(parents=True, exist_ok=False)
     log_filename = Path(python_log_filename).name if python_log_filename else f"{session_id}_python_runtime.jsonl"

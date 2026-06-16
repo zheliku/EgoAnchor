@@ -336,12 +336,15 @@ namespace EgoAnchorEval
             return FromUnixMs(unixMs).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
         }
 
+        /// <summary>项目统一可读时区：北京时间 (UTC+8)，与运行机器系统时区无关。</summary>
+        private static readonly TimeSpan BeijingOffset = TimeSpan.FromHours(8);
+
         /// <summary>
-        /// 把 Unix 毫秒格式化为本地时区字符串。
+        /// 把 Unix 毫秒格式化为北京时间 (UTC+8) 字符串，与运行机器系统时区无关。
         /// </summary>
         private static string FormatLocal(double unixMs)
         {
-            return FromUnixMs(unixMs).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture);
+            return FromUnixMs(unixMs).ToOffset(BeijingOffset).ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture);
         }
 
         /// <summary>

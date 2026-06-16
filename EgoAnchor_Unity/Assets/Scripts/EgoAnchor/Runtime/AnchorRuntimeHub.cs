@@ -74,8 +74,22 @@ namespace EgoAnchor.Runtime
         /// <summary>上次打印统计时的总输入消息数量。</summary>
         private int lastLoggedTotalMessages;
 
+        /// <summary>最近一条 PoseResult 携带的 Python 端 session_id。</summary>
+        private string latestPythonSessionId = string.Empty;
+
         /// <summary>当前实际可派发的 runtime 数；忽略 Inspector 列表中的空槽位。</summary>
         public int RuntimeCount => CountActiveRuntimes();
+
+        /// <summary>
+        /// 最近一条 PoseResult 头部携带的 Python eval session_id。
+        ///
+        /// Python 启用 eval session 时，会把共享 session 目录名（例如
+        /// <c>20260617_025334_controller_right</c>）写进每条 PoseResult 的
+        /// MessageHeader.session_id。Unity eval 录制据此命名本地目录，实现跨机器
+        /// （Python 在 Linux 服务器、Unity 在本地）的 session 配对，无需共享文件系统。
+        /// 尚未收到任何 pose 时为空字符串。
+        /// </summary>
+        public string LatestPythonSessionId => latestPythonSessionId;
 
         /// <summary>
         /// Inspector 修改时确保列表非空。
@@ -132,6 +146,11 @@ namespace EgoAnchor.Runtime
         {
             EnsureRuntimeList();
             received++;
+
+            if (result != null && result.Header != null && !string.IsNullOrEmpty(result.Header.SessionId))
+            {
+                latestPythonSessionId = result.Header.SessionId;
+            }
 
             int activeRuntimeCount = 0;
             foreach (PoseToAnchorRuntime runtime in runtimes)

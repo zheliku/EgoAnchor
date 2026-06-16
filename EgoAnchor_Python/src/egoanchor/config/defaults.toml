@@ -44,6 +44,9 @@ log_status_events = true # 是否记录 AnchorStatusEvent 状态变化与命令�
 log_heartbeats = true # 是否记录 ServerHeartbeat 摘要；心跳低频，默认记录。
 log_commands = true # 是否记录 runtime 线程实际执行 command 的时间点和动作。
 
+[pipeline]
+min_process_interval_ms = 0 # 处理节流：两次 pose 推理的最小间隔(ms)；0=不节流(默认)。诊断用：高性能机设 200 限到~5fps 以排查高帧率失稳，测完设回 0。
+
 [pipeline.calibration]
 network_calib_update = true # 收到新的 QuestCameraInfo 且标定变化时刷新 K/FoundationPose。
 assume_center_crop = true # K 映射方式：true=中心裁剪+缩放，false=仅线性缩放。
@@ -109,7 +112,7 @@ seed = -1 # 随机种子；<0 表示速度优先，>=0 表示确定性模式。
 cudnn_benchmark = true # 固定输入尺寸时启用 cudnn.benchmark 提速。
 use_trt = true # 是否优先使用 TensorRT engine。
 trt_precision = "fp16" # TensorRT engine 精度标签。
-trt_strict = false # true=TRT 缺失/失败直接报错；false=自动回退 PyTorch。
+trt_strict = true # true=TRT 缺失/失败直接报错；false=自动回退 PyTorch。
 trt_tag = "" # 显式 TRT artifact tag；空值按尺寸/iters/max_disp 自动生成。
 trt_platform_tag = "" # 显式 TRT 平台标签；空值自动识别 win/linux/mac。
 trt_feature_engine_path = "" # 显式 feature runner engine 路径；空值自动查找。

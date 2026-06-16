@@ -58,21 +58,21 @@ namespace EgoAnchor.Policy
         [SerializeField] private bool enableStaticLock = false;
 
         /// <summary>进入静止判定的线速度阈值，单位 m/s。</summary>
-        [Tooltip("进入静止判定的观测线速度阈值 (m/s)。必须设在观测噪声地板之上 (真机旋转噪声地板 ~7-8°/s, 平移小)。默认 0.03。")]
-        [SerializeField] private float staticLockEnterSpeedMps = 0.03f;
+        [Tooltip("进入静止判定的观测线速度阈值 (m/s)。必须设在观测噪声地板之上 (5090@12fps 平移噪声地板 ~14mm/s)。默认 0.05。")]
+        [SerializeField] private float staticLockEnterSpeedMps = 0.05f;
 
         /// <summary>进入静止判定的角速度阈值，单位 deg/s。</summary>
-        [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设太低 (低于旋转噪声地板) 会导致永不锁定。默认 12。")]
-        [SerializeField] private float staticLockEnterAngSpeedDps = 12.0f;
+        [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设太低 (低于旋转噪声地板) 会导致永不锁定 (5090@12fps 旋转噪声地板 ~15°/s)。默认 35。")]
+        [SerializeField] private float staticLockEnterAngSpeedDps = 35.0f;
 
-        /// <summary>进入锁定需连续保持静止的观测帧数。</summary>
-        [Tooltip("进入锁定需连续保持静止 (+高分) 的观测帧数。防静止判定抖动。默认 3。")]
-        [SerializeField] private int staticLockDwellObs = 3;
+        /// <summary>进入锁定需连续保持静止的时间，单位秒 (帧率无关)。</summary>
+        [Tooltip("进入锁定需连续保持静止 (+高分) 的时间 (秒)。防静止判定抖动。帧率无关。默认 0.35。")]
+        [SerializeField] private float staticLockDwellSeconds = 0.35f;
 
         /// <summary>进入锁定所需的最低可靠性分数。</summary>
-        [Tooltip("进入/维持锁定所需的最低可靠性分数 (0..1)。低于此分不信任'静止'判断。默认 0.4。")]
+        [Tooltip("进入/维持锁定所需的最低可靠性分数 (0..1)。设太高 (高于物体常见分) 会永不锁定。默认 0.25。")]
         [Range(0f, 1f)]
-        [SerializeField] private float staticLockMinScore = 0.4f;
+        [SerializeField] private float staticLockMinScore = 0.25f;
 
         /// <summary>锁定时位置死区，单位米。</summary>
         [Tooltip("锁定时位置死区 (米)：观测相对锁点位移小于此值视为噪声、忽略。杀静止抖动的核心。默认 0.008。")]
@@ -83,39 +83,49 @@ namespace EgoAnchor.Policy
         [SerializeField] private float staticLockDeadbandDegrees = 3.0f;
 
         /// <summary>解锁位置证据阈值 (score 加权 CUSUM)，单位米。</summary>
-        [Tooltip("解锁位置证据阈值 (score 加权累计的超死区位移, 米)。越大越粘 (难解锁), 越小越灵敏。默认 0.05。")]
-        [SerializeField] private float staticLockUnlockEvidenceMeters = 0.05f;
+        [Tooltip("解锁位置证据阈值 (score 加权累计的超死区位移, 米)。越大越粘 (难解锁), 越小越灵敏。默认 0.08。")]
+        [SerializeField] private float staticLockUnlockEvidenceMeters = 0.08f;
 
         /// <summary>解锁旋转证据阈值 (score 加权 CUSUM)，单位度。</summary>
-        [Tooltip("解锁旋转证据阈值 (score 加权累计的超死区旋转, 度)。默认 12。")]
-        [SerializeField] private float staticLockUnlockEvidenceDegrees = 12.0f;
+        [Tooltip("解锁旋转证据阈值 (score 加权累计的超死区旋转, 度)。越大越粘。默认 20。")]
+        [SerializeField] private float staticLockUnlockEvidenceDegrees = 20.0f;
 
-        /// <summary>解锁证据每观测衰减比例。</summary>
-        [Tooltip("解锁证据每观测衰减比例 (漏积分)：偶发噪声会漏掉, 只有持续运动才累积越阈。默认 0.6。")]
-        [Range(0f, 1f)]
-        [SerializeField] private float staticLockEvidenceDecay = 0.6f;
+        /// <summary>绝对漂移解锁租绳 (平移)，单位米。</summary>
+        [Tooltip("绝对漂移租绳 (米)：相对锁定原点的总平移超此值直接解锁。修复'极慢平移被 creep 吃掉、永不脱离 static'。越小越早跟随慢移。默认 0.015。")]
+        [SerializeField] private float staticLockUnlockDriftMeters = 0.015f;
 
-        /// <summary>漏锁 creep 增益。</summary>
-        [Tooltip("漏锁 creep 增益：锁定时朝高分小位移观测缓慢靠拢, 精修锁点 + 跟极慢漂移。0=死锁不动。默认 0.05。")]
-        [Range(0f, 0.5f)]
-        [SerializeField] private float staticLockCreepGain = 0.05f;
+        /// <summary>绝对漂移解锁租绳 (旋转)，单位度。</summary>
+        [Tooltip("绝对漂移租绳 (度)：相对锁定原点的总旋转超此值直接解锁。修复极慢旋转永不脱离。默认 5。")]
+        [SerializeField] private float staticLockUnlockDriftDegrees = 5.0f;
 
-        /// <summary>解锁后禁止再锁的观测帧数 (反 chatter)。</summary>
-        [Tooltip("解锁后禁止再锁的观测帧数 (反 chatter)：给真实运动一个逃逸窗口, 防锁定频繁翻转。默认 4。")]
-        [SerializeField] private int staticLockRelockSuppressObs = 4;
+        /// <summary>解锁证据半衰期，单位秒 (帧率无关)。</summary>
+        [Tooltip("解锁证据半衰期 (秒, 帧率无关漏积分)：偶发噪声会漏掉, 只有持续运动才累积越阈。越大越粘。默认 0.27。")]
+        [SerializeField] private float staticLockEvidenceHalfLifeSeconds = 0.27f;
+
+        /// <summary>漏锁 creep 半衰期，单位秒 (帧率无关)。</summary>
+        [Tooltip("漏锁 creep 半衰期 (秒, 帧率无关)：锁定时朝高分小位移观测缓慢靠拢, 精修锁点 + 跟极慢漂移。越小靠拢越快。默认 2.7。")]
+        [SerializeField] private float staticLockCreepHalfLifeSeconds = 2.7f;
+
+        /// <summary>解锁后禁止再锁的时间，单位秒 (反 chatter, 帧率无关)。</summary>
+        [Tooltip("解锁后禁止再锁的时间 (秒, 反 chatter)：给真实运动一个逃逸窗口, 防锁定频繁翻转。帧率无关。默认 1.0。")]
+        [SerializeField] private float staticLockRelockSuppressSeconds = 1.0f;
 
         /// <summary>速度逃逸倍数。</summary>
-        [Tooltip("速度逃逸倍数：锁定时观测速度 > 静止阈值 × 此倍数 连续若干帧 → 立即解锁 (堵 CUSUM 跟不上的慢运动 false-lock 长尾)。默认 2.0。")]
-        [SerializeField] private float staticLockUnlockSpeedFactor = 2.0f;
+        [Tooltip("速度逃逸倍数：锁定时观测速度 > 静止阈值 × 此倍数 连续一段时间 → 立即解锁 (堵 CUSUM 跟不上的慢运动 false-lock 长尾)。越大越粘。默认 2.5。")]
+        [SerializeField] private float staticLockUnlockSpeedFactor = 2.5f;
 
-        /// <summary>速度逃逸需连续运动观测帧数。</summary>
-        [Tooltip("速度逃逸需连续检测到明确运动的观测帧数。防单帧噪声误解锁。默认 2。")]
-        [SerializeField] private int staticLockUnlockMovingObs = 2;
+        /// <summary>速度逃逸需连续运动的时间，单位秒 (帧率无关)。</summary>
+        [Tooltip("速度逃逸需连续检测到明确运动的时间 (秒)。防单帧噪声误解锁。帧率无关。默认 0.4。")]
+        [SerializeField] private float staticLockUnlockMovingSeconds = 0.4f;
 
-        /// <summary>解锁接缝残差衰减 (60fps 基准)。</summary>
-        [Tooltip("解锁接缝残差每帧衰减比例 (60fps 基准)：解锁瞬间从锁点平滑收敛到 smoothing 输出, 防 pop。默认 0.75。")]
+        /// <summary>解锁接缝残差衰减 (60fps 基准, 已帧率无关)。</summary>
+        [Tooltip("解锁接缝残差每帧衰减比例 (60fps 基准, 已按 dt 归一)：解锁瞬间从锁点平滑收敛到 smoothing 输出, 防 pop。越大释放越柔、越不卡。默认 0.85。")]
         [Range(0.5f, 0.99f)]
-        [SerializeField] private float staticLockSeamDecayPerFrame = 0.75f;
+        [SerializeField] private float staticLockSeamDecayPerFrame = 0.85f;
+
+        /// <summary>CUSUM 累积时间归一基准，单位秒。</summary>
+        [Tooltip("CUSUM 证据累积的时间归一基准 (秒)：通常设为标定时的观测周期 (5fps=0.2)。改它等比缩放所有解锁灵敏度。默认 0.2。")]
+        [SerializeField] private float staticLockRefObsIntervalSeconds = 0.2f;
 
         /// <summary>短时无可靠测量的 coasting 时长，单位秒。</summary>
         [Header("Lifecycle")]
@@ -487,18 +497,21 @@ namespace EgoAnchor.Policy
             staticLock.Configure(
                 staticLockEnterSpeedMps,
                 staticLockEnterAngSpeedDps,
-                staticLockDwellObs,
+                staticLockDwellSeconds,
                 staticLockMinScore,
                 staticLockDeadbandMeters,
                 staticLockDeadbandDegrees,
                 staticLockUnlockEvidenceMeters,
                 staticLockUnlockEvidenceDegrees,
-                staticLockEvidenceDecay,
-                staticLockCreepGain,
-                staticLockRelockSuppressObs,
+                staticLockUnlockDriftMeters,
+                staticLockUnlockDriftDegrees,
+                staticLockEvidenceHalfLifeSeconds,
+                staticLockCreepHalfLifeSeconds,
+                staticLockRelockSuppressSeconds,
                 staticLockUnlockSpeedFactor,
-                staticLockUnlockMovingObs,
-                staticLockSeamDecayPerFrame);
+                staticLockUnlockMovingSeconds,
+                staticLockSeamDecayPerFrame,
+                staticLockRefObsIntervalSeconds);
         }
 
         private void EnsureStateMachine()

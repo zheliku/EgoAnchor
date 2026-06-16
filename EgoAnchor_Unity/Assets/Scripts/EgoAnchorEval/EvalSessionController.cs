@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using EgoAnchor.Runtime;
 using UnityEngine;
 
 namespace EgoAnchorEval
@@ -17,6 +18,10 @@ namespace EgoAnchorEval
         [Tooltip("写 capture/output JSONL 的 AnchorEvalRecorder。")]
         [SerializeField] private AnchorEvalRecorder recorder;
 
+        /// <summary>提供 Python 端 session_id 的 anchor runtime 分发中心。</summary>
+        [Tooltip("提供 Python 端 session_id 的 AnchorRuntimeHub。应与 PoseResultReceiver 使用同一个实例；Python 会把共享 eval 目录名写进每条 PoseResult 头部。")]
+        [SerializeField] private AnchorRuntimeHub runtimeHub;
+
         /// <summary>评估数据根目录；为空时自动指向 EgoAnchor_Python/data/eval。</summary>
         [Header("Session Metadata")]
         [Tooltip("评估数据根目录；推荐填写绝对路径 EgoAnchor_Python/data/eval。为空时自动从 Unity 工程推导。")]
@@ -30,21 +35,9 @@ namespace EgoAnchorEval
         [Tooltip("Unity 运行模式，默认 editor_link。真机 build 或其它模式时手动改写。")]
         [SerializeField] private string unityRunMode = "editor_link";
 
-        /// <summary>Python runtime log 文件名；未知时留空，后续 P1 loader 可显式传入。</summary>
-        [Tooltip("手动覆盖 Python runtime log 文件名。默认留空；启用自动复用 Python session 时会从 python_session.json 自动填入 manifest。")]
-        [SerializeField] private string pythonLogFilename = string.Empty;
-
-        /// <summary>开始录制时是否优先复用 Python 已创建的共享 eval session 目录。</summary>
-        [Tooltip("开始录制时是否优先复用 Python 已创建的共享 eval session 目录。通常先运行 Python，再按 F7/Start 录制 Unity。")]
-        [SerializeField] private bool reuseLatestPythonSession = true;
-
-        /// <summary>自动复用 Python session 的最大年龄，单位分钟；小于等于 0 表示不限制。</summary>
-        [Tooltip("自动复用 Python session 的最大年龄，单位分钟；小于等于 0 表示不限制。")]
-        [SerializeField] private double maxPythonSessionAgeMinutes = 180.0;
-
-        /// <summary>Python 写入的 session 元数据文件名。</summary>
-        [Tooltip("Python 写入的 session 元数据文件名。Unity 通过它读取 object_id 和 python_log_filename。")]
-        [SerializeField] private string pythonSessionMetadataFilename = "python_session.json";
+        /// <summary>开始录制时是否复用 Python 经 NATS 广播的 session_id 命名目录。</summary>
+        [Tooltip("开始录制时是否用 Python 经 NATS 广播的 session_id 命名本地目录，实现跨机器配对。通常先启动 Python、等 pose 流起来再按 F7/Start 录制 Unity。")]
+        [SerializeField] private bool reusePythonSessionId = true;
 
         /// <summary>本轮实验备注。</summary>
         [Tooltip("本轮实验备注，例如 lighting、mesh、Python 配置或异常情况。")]
@@ -121,28 +114,30 @@ namespace EgoAnchorEval
 
             string outputRootPath = ResolveOutputRoot();
             activePythonLogFilename = string.Empty;
-            if (reuseLatestPythonSession && TryFindReusablePythonSession(
-                outputRootPath,
-                objectId,
-                maxPythonSessionAgeMinutes,
-                pythonSessionMetadataFilename,
-                out string reusedSessionId,
-                out string reusedSessionDir,
-                out string reusedPythonLogFilename))
+            string pythonSessionId = reusePythonSessionId && runtimeHub != null
+                ? runtimeHub.LatestPythonSessionId
+                : string.Empty;
+            if (!string.IsNullOrEmpty(pythonSessionId))
             {
-                sessionId = reusedSessionId;
-                sessionDir = reusedSessionDir;
-                activePythonLogFilename = reusedPythonLogFilename;
+                sessionId = pythonSessionId;
+                sessionDir = Path.Combine(outputRootPath, sessionId);
                 Directory.CreateDirectory(sessionDir);
-                Debug.Log($"[EgoAnchorEval][U3] Reusing Python eval session: {sessionDir}");
+                // Python eval session 默认把 runtime JSONL 写为 <session_id>_python_runtime.jsonl，
+                // 事后从服务器 scp 到本地同名目录即与 Unity 日志自动合并。
+                activePythonLogFilename = $"{sessionId}_python_runtime.jsonl";
+                Debug.Log($"[EgoAnchorEval][U3] Pairing with Python session via NATS: {sessionDir}");
             }
             else
             {
-                string baseSessionId = BuildReadableSessionId(DateTimeOffset.Now, objectId);
+                if (reusePythonSessionId)
+                {
+                    Debug.LogWarning("[EgoAnchorEval][U3] No Python session_id received over NATS yet; falling back to local clock. 先启动 Python 并等 pose 流起来再开始录制，否则两端目录无法配对。");
+                }
+
+                string baseSessionId = BuildReadableSessionId(DateTimeOffset.UtcNow, objectId);
                 sessionId = ResolveUniqueSessionId(outputRootPath, baseSessionId);
                 sessionDir = Path.Combine(outputRootPath, sessionId);
                 Directory.CreateDirectory(sessionDir);
-                activePythonLogFilename = pythonLogFilename;
             }
             spans.Clear();
             markers.Clear();
@@ -267,13 +262,16 @@ namespace EgoAnchorEval
         /// <summary>记录 recovery 事件。</summary>
         public void MarkRecovery() => Mark("recovery");
 
+        /// <summary>项目统一可读时区：北京时间 (UTC+8)，与运行机器系统时区无关。</summary>
+        private static readonly TimeSpan BeijingOffset = TimeSpan.FromHours(8);
+
         /// <summary>
-        /// 构造人类可读的 session id，格式为 yyyyMMdd_HHmmss_objectId。
+        /// 构造人类可读的 session id，格式为 yyyyMMdd_HHmmss_objectId，时间为北京时间 (UTC+8)。
         /// </summary>
-        public static string BuildReadableSessionId(DateTimeOffset localTime, string sessionObjectId)
+        public static string BuildReadableSessionId(DateTimeOffset time, string sessionObjectId)
         {
             string safeObjectId = SanitizePathToken(string.IsNullOrWhiteSpace(sessionObjectId) ? "object" : sessionObjectId);
-            return $"{localTime.ToLocalTime().ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}_{safeObjectId}";
+            return $"{time.ToOffset(BeijingOffset).ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}_{safeObjectId}";
         }
 
         /// <summary>
@@ -314,7 +312,7 @@ namespace EgoAnchorEval
                 markers,
                 variantLabels,
                 variantConfigs,
-                ResolvePythonLogFilenameForManifest(),
+                activePythonLogFilename,
                 sessionNotes);
             string manifestPath = Path.Combine(sessionDir, "session_manifest.json");
             File.WriteAllText(manifestPath, manifest, new UTF8Encoding(false));
@@ -350,161 +348,6 @@ namespace EgoAnchorEval
             }
 
             return candidate;
-        }
-
-        /// <summary>
-        /// 查找最新且尚未写入 Unity 日志的 Python eval session 目录。
-        /// </summary>
-        /// <param name="outputRootPath">共享 eval 根目录。</param>
-        /// <param name="expectedObjectId">Unity 当前 objectId；必须与 Python metadata object_id 一致。</param>
-        /// <param name="maxAgeMinutes">最大允许年龄，单位分钟；小于等于 0 表示不限制。</param>
-        /// <param name="metadataFilename">Python 写入的 metadata 文件名。</param>
-        /// <param name="resolvedSessionId">找到的 session id。</param>
-        /// <param name="resolvedSessionDir">找到的 session 目录。</param>
-        /// <param name="resolvedPythonLogFilename">metadata 中记录的 Python runtime log 文件名。</param>
-        /// <returns>找到可复用目录时返回 true。</returns>
-        public static bool TryFindReusablePythonSession(
-            string outputRootPath,
-            string expectedObjectId,
-            double maxAgeMinutes,
-            string metadataFilename,
-            out string resolvedSessionId,
-            out string resolvedSessionDir,
-            out string resolvedPythonLogFilename)
-        {
-            resolvedSessionId = string.Empty;
-            resolvedSessionDir = string.Empty;
-            resolvedPythonLogFilename = string.Empty;
-
-            if (string.IsNullOrWhiteSpace(outputRootPath) || !Directory.Exists(outputRootPath))
-            {
-                return false;
-            }
-
-            string safeMetadataFilename = string.IsNullOrWhiteSpace(metadataFilename)
-                ? "python_session.json"
-                : Path.GetFileName(metadataFilename);
-            string expected = SanitizePathToken(string.IsNullOrWhiteSpace(expectedObjectId) ? "object" : expectedObjectId);
-            DateTime nowUtc = DateTime.UtcNow;
-            DateTime bestWriteUtc = DateTime.MinValue;
-
-            foreach (string candidateDir in Directory.GetDirectories(outputRootPath))
-            {
-                string metadataPath = Path.Combine(candidateDir, safeMetadataFilename);
-                if (!File.Exists(metadataPath) || HasUnityEvalLogs(candidateDir))
-                {
-                    continue;
-                }
-
-                DateTime writeUtc = File.GetLastWriteTimeUtc(metadataPath);
-                if (maxAgeMinutes > 0.0 && nowUtc - writeUtc > TimeSpan.FromMinutes(maxAgeMinutes))
-                {
-                    continue;
-                }
-
-                string json = File.ReadAllText(metadataPath);
-                string objectId = ReadJsonStringProperty(json, "object_id");
-                string pythonLog = ReadJsonStringProperty(json, "python_log_filename");
-                if (string.IsNullOrWhiteSpace(objectId) || string.IsNullOrWhiteSpace(pythonLog))
-                {
-                    continue;
-                }
-
-                string safeObjectId = SanitizePathToken(objectId);
-                if (!string.Equals(safeObjectId, expected, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (writeUtc <= bestWriteUtc)
-                {
-                    continue;
-                }
-
-                bestWriteUtc = writeUtc;
-                resolvedSessionId = Path.GetFileName(candidateDir);
-                resolvedSessionDir = candidateDir;
-                resolvedPythonLogFilename = Path.GetFileName(pythonLog);
-            }
-
-            return !string.IsNullOrEmpty(resolvedSessionDir);
-        }
-
-        /// <summary>
-        /// 判断 session 目录中是否已经存在 Unity capture/output，存在则不可自动复用。
-        /// </summary>
-        private static bool HasUnityEvalLogs(string sessionDirectory)
-        {
-            return Directory.GetFiles(sessionDirectory, "*_unity_capture.jsonl").Length > 0
-                || Directory.GetFiles(sessionDirectory, "*_unity_output.jsonl").Length > 0;
-        }
-
-        /// <summary>
-        /// 从简单 JSON object 中读取字符串属性；用于解析 Python session metadata。
-        /// </summary>
-        private static string ReadJsonStringProperty(string json, string propertyName)
-        {
-            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(propertyName))
-            {
-                return string.Empty;
-            }
-
-            string needle = $"\"{propertyName}\"";
-            int nameIndex = json.IndexOf(needle, StringComparison.Ordinal);
-            if (nameIndex < 0)
-            {
-                return string.Empty;
-            }
-
-            int colonIndex = json.IndexOf(':', nameIndex + needle.Length);
-            if (colonIndex < 0)
-            {
-                return string.Empty;
-            }
-
-            int quoteIndex = json.IndexOf('"', colonIndex + 1);
-            if (quoteIndex < 0)
-            {
-                return string.Empty;
-            }
-
-            var builder = new StringBuilder();
-            bool escaping = false;
-            for (int i = quoteIndex + 1; i < json.Length; i++)
-            {
-                char c = json[i];
-                if (escaping)
-                {
-                    builder.Append(c);
-                    escaping = false;
-                    continue;
-                }
-
-                if (c == '\\')
-                {
-                    escaping = true;
-                    continue;
-                }
-
-                if (c == '"')
-                {
-                    return builder.ToString();
-                }
-
-                builder.Append(c);
-            }
-
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// 返回本次 manifest 应写入的 Python runtime log 文件名。
-        /// </summary>
-        private string ResolvePythonLogFilenameForManifest()
-        {
-            return !string.IsNullOrWhiteSpace(activePythonLogFilename)
-                ? activePythonLogFilename
-                : pythonLogFilename;
         }
 
         /// <summary>

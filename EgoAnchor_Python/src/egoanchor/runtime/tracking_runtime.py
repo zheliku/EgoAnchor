@@ -147,6 +147,14 @@ class TrackingRuntime:
         self.last_heartbeat_mono_s = 0.0
         """上一次心跳尝试发布的本地单调时间，单位秒。"""
 
+        pipeline_cfg = getattr(cfg, "pipeline", SimpleNamespace())
+        self.min_process_interval_s = max(0.0, float(getattr(pipeline_cfg, "min_process_interval_ms", 0.0)) / 1000.0)
+        """处理节流：两次 pose pipeline.process 之间的最小间隔，单位秒；0=不节流（默认，行为不变）。
+        用于诊断实验：在高性能机上人为限到 ~5fps（设 200）以排查高帧率失稳，测完设回 0 恢复。"""
+
+        self.last_process_mono_s = 0.0
+        """上一次实际运行 pose pipeline.process 的本地单调时间，单位秒；用于处理节流。"""
+
         self.last_tick_mono_s = 0.0
         """上一次 tick 的本地单调时间，单位秒。"""
 
@@ -225,6 +233,16 @@ class TrackingRuntime:
                 return RuntimeTickResult(pipeline_output=None, new_frame_processed=False)
 
             self._refresh_input_state_before_pipeline()
+
+            # 处理节流（诊断用，默认关闭）：距上次 process 不足 min_process_interval_s 则跳过本帧 pipeline，
+            # 但仍 poll/drain 输入与发心跳，避免积压。设 0 时此分支永不触发，行为与原来完全一致。
+            if self.min_process_interval_s > 0.0:
+                now_mono = time.monotonic()
+                if now_mono - self.last_process_mono_s < self.min_process_interval_s:
+                    self._maybe_publish_heartbeat()
+                    return RuntimeTickResult(pipeline_output=None, new_frame_processed=False)
+                self.last_process_mono_s = now_mono
+
             output = self.pipeline.process(
                 self.receiver.get_latest_stereo(),
                 self.receiver.get_latest_camera_info(),

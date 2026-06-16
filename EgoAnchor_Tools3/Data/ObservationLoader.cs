@@ -32,7 +32,7 @@ namespace EgoAnchor.Tools3.Data
             double scoreDepth = -1.0,
             double scoreReprojection = -1.0,
             double scoreConfidence = -1.0,
-            string[] reliabilityFlags = null)
+            string[]? reliabilityFlags = null)
         {
             SourceFrameId = sourceFrameId;
             TimeSeconds = timeSeconds;
@@ -244,7 +244,11 @@ namespace EgoAnchor.Tools3.Data
             {
                 if (e.ValueKind == JsonValueKind.String)
                 {
-                    list.Add(e.GetString());
+                    string? s = e.GetString();
+                    if (s != null)
+                    {
+                        list.Add(s);
+                    }
                 }
             }
 

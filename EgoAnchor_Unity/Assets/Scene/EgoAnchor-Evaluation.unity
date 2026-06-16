@@ -874,20 +874,21 @@ MonoBehaviour:
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
   enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.03
-  staticLockEnterAngSpeedDps: 12
-  staticLockDwellObs: 3
-  staticLockMinScore: 0.4
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
   staticLockDeadbandMeters: 0.008
   staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.05
-  staticLockUnlockEvidenceDegrees: 12
-  staticLockEvidenceDecay: 0.6
-  staticLockCreepGain: 0.05
-  staticLockRelockSuppressObs: 4
-  staticLockUnlockSpeedFactor: 2
-  staticLockUnlockMovingObs: 2
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 0.8
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
   staticLockSeamDecayPerFrame: 0.75
+  staticLockRefObsIntervalSeconds: 0.2
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -1448,7 +1449,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &302482019
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1837,7 +1838,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &448430449
 Transform:
   m_ObjectHideFlags: 0
@@ -2721,20 +2722,21 @@ MonoBehaviour:
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
   enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.03
-  staticLockEnterAngSpeedDps: 12
-  staticLockDwellObs: 3
-  staticLockMinScore: 0.4
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
   staticLockDeadbandMeters: 0.008
   staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.05
-  staticLockUnlockEvidenceDegrees: 12
-  staticLockEvidenceDecay: 0.6
-  staticLockCreepGain: 0.05
-  staticLockRelockSuppressObs: 4
-  staticLockUnlockSpeedFactor: 2
-  staticLockUnlockMovingObs: 2
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 0.8
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
   staticLockSeamDecayPerFrame: 0.75
+  staticLockRefObsIntervalSeconds: 0.2
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -2895,13 +2897,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionController
   recorder: {fileID: 675627947}
+  runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
   unityRunMode: editor_link
-  pythonLogFilename: 
-  reuseLatestPythonSession: 1
-  maxPythonSessionAgeMinutes: 180
-  pythonSessionMetadataFilename: python_session.json
+  reusePythonSessionId: 1
   sessionNotes: 11
 --- !u!1 &722913589
 GameObject:
@@ -4265,20 +4265,21 @@ MonoBehaviour:
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
   enableStaticLock: 1
-  staticLockEnterSpeedMps: 0.03
-  staticLockEnterAngSpeedDps: 12
-  staticLockDwellObs: 3
-  staticLockMinScore: 0.4
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
   staticLockDeadbandMeters: 0.008
   staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.05
-  staticLockUnlockEvidenceDegrees: 12
-  staticLockEvidenceDecay: 0.6
-  staticLockCreepGain: 0.05
-  staticLockRelockSuppressObs: 4
-  staticLockUnlockSpeedFactor: 2
-  staticLockUnlockMovingObs: 2
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 0.8
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
   staticLockSeamDecayPerFrame: 0.75
+  staticLockRefObsIntervalSeconds: 0.2
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -4439,7 +4440,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1085434120
 Transform:
   m_ObjectHideFlags: 0
@@ -4956,13 +4957,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionController
   recorder: {fileID: 1262713664}
+  runtimeHub: {fileID: 1390846974}
   outputRoot: 
   objectId: controller_right
   unityRunMode: editor_link
-  pythonLogFilename: 
-  reuseLatestPythonSession: 1
-  maxPythonSessionAgeMinutes: 180
-  pythonSessionMetadataFilename: python_session.json
+  reusePythonSessionId: 1
   sessionNotes: 11
 --- !u!114 &1262713668
 MonoBehaviour:
@@ -5811,7 +5810,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1430656898
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5993,20 +5992,21 @@ MonoBehaviour:
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
   enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.03
-  staticLockEnterAngSpeedDps: 12
-  staticLockDwellObs: 3
-  staticLockMinScore: 0.4
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
   staticLockDeadbandMeters: 0.008
   staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.05
-  staticLockUnlockEvidenceDegrees: 12
-  staticLockEvidenceDecay: 0.6
-  staticLockCreepGain: 0.05
-  staticLockRelockSuppressObs: 4
-  staticLockUnlockSpeedFactor: 2
-  staticLockUnlockMovingObs: 2
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 0.8
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
   staticLockSeamDecayPerFrame: 0.75
+  staticLockRefObsIntervalSeconds: 0.2
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -6768,20 +6768,21 @@ MonoBehaviour:
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
   enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.03
-  staticLockEnterAngSpeedDps: 12
-  staticLockDwellObs: 3
-  staticLockMinScore: 0.4
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
   staticLockDeadbandMeters: 0.008
   staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.05
-  staticLockUnlockEvidenceDegrees: 12
-  staticLockEvidenceDecay: 0.6
-  staticLockCreepGain: 0.05
-  staticLockRelockSuppressObs: 4
-  staticLockUnlockSpeedFactor: 2
-  staticLockUnlockMovingObs: 2
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 0.8
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
   staticLockSeamDecayPerFrame: 0.75
+  staticLockRefObsIntervalSeconds: 0.2
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -7516,7 +7517,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1852106714
 MonoBehaviour:
   m_ObjectHideFlags: 0

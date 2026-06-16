@@ -33,29 +33,35 @@ namespace EgoAnchor.Policy
     public sealed class StaticLockController
     {
         // === 参数 (host 注入) ===
-        private float staticEnterSpeedMps = 0.03f;
-        private float staticEnterAngSpeedDps = 12.0f;
-        private int staticDwellObs = 3;
-        private float staticEnterMinScore = 0.4f;
+        // 时间量纲均为帧率无关 (秒 / 半衰期秒)。速度阈值是物理量, 与帧率无关。
+        private float staticEnterSpeedMps = 0.05f;
+        private float staticEnterAngSpeedDps = 35.0f;
+        private float staticDwellSeconds = 0.35f;
+        private float staticEnterMinScore = 0.25f;
         private float deadbandMeters = 0.008f;
         private float deadbandDegrees = 3.0f;
-        private float unlockEvidenceMeters = 0.05f;
-        private float unlockEvidenceDegrees = 12.0f;
-        private float evidenceDecay = 0.6f;
-        private float creepGain = 0.05f;
-        private int relockSuppressObs = 4;
-        private float unlockSpeedFactor = 2.0f;
-        private int unlockMovingObs = 2;
-        private float seamDecayPerFrame = 0.75f;
+        private float unlockEvidenceMeters = 0.08f;
+        private float unlockEvidenceDegrees = 20.0f;
+        private float unlockDriftMeters = 0.015f;     // 绝对漂移租绳: 相对锁定原点平移超此 → 解锁 (修慢速平移不脱离)
+        private float unlockDriftDegrees = 5.0f;
+        private float evidenceHalfLifeSeconds = 0.27f;
+        private float creepHalfLifeSeconds = 2.7f;
+        private float relockSuppressSeconds = 1.0f;
+        private float unlockSpeedFactor = 2.5f;
+        private float unlockMovingSeconds = 0.4f;
+        private float seamDecayPerFrame = 0.85f;
+        private float refObsIntervalSeconds = 0.2f; // CUSUM 累积时间归一基准
 
         // === 运行时状态 ===
         private bool locked;
         private Pose lockedPose;
+        private Pose anchorOrigin;                     // 锁定时固定锚点 (creep 不动), 绝对漂移租绳参考
         private float evidencePos;
         private float evidenceRot;
-        private int staticRun;
-        private int relockSuppressLeft;
-        private int movingRun;
+        private float staticRunSeconds;
+        private float relockSuppressLeftSeconds;
+        private float movingRunSeconds;
+        private bool wantUnlock;                        // UpdateLockedEvidence 累积判定, Stabilize 提交 (拿 candidate 做接缝)
 
         // obs-to-obs 速度跟踪
         private bool hasLastObs;
@@ -80,37 +86,43 @@ namespace EgoAnchor.Policy
         /// <summary>累计解锁次数 (诊断)。</summary>
         public int Unlocks { get; private set; }
 
-        /// <summary>用 host 的参数配置控制器 (Inspector 可能改, 每次激活时调用)。</summary>
+        /// <summary>用 host 的参数配置控制器 (Inspector 可能改, 每次激活时调用)。时间量纲均帧率无关。</summary>
         public void Configure(
             float staticEnterSpeedMps,
             float staticEnterAngSpeedDps,
-            int staticDwellObs,
+            float staticDwellSeconds,
             float staticEnterMinScore,
             float deadbandMeters,
             float deadbandDegrees,
             float unlockEvidenceMeters,
             float unlockEvidenceDegrees,
-            float evidenceDecay,
-            float creepGain,
-            int relockSuppressObs,
+            float unlockDriftMeters,
+            float unlockDriftDegrees,
+            float evidenceHalfLifeSeconds,
+            float creepHalfLifeSeconds,
+            float relockSuppressSeconds,
             float unlockSpeedFactor,
-            int unlockMovingObs,
-            float seamDecayPerFrame)
+            float unlockMovingSeconds,
+            float seamDecayPerFrame,
+            float refObsIntervalSeconds)
         {
             this.staticEnterSpeedMps = Mathf.Max(staticEnterSpeedMps, 0.0f);
             this.staticEnterAngSpeedDps = Mathf.Max(staticEnterAngSpeedDps, 0.0f);
-            this.staticDwellObs = Mathf.Max(staticDwellObs, 1);
+            this.staticDwellSeconds = Mathf.Max(staticDwellSeconds, 0.0f);
             this.staticEnterMinScore = Mathf.Clamp01(staticEnterMinScore);
             this.deadbandMeters = Mathf.Max(deadbandMeters, 0.0f);
             this.deadbandDegrees = Mathf.Max(deadbandDegrees, 0.0f);
             this.unlockEvidenceMeters = Mathf.Max(unlockEvidenceMeters, 0.0f);
             this.unlockEvidenceDegrees = Mathf.Max(unlockEvidenceDegrees, 0.0f);
-            this.evidenceDecay = Mathf.Clamp01(evidenceDecay);
-            this.creepGain = Mathf.Clamp01(creepGain);
-            this.relockSuppressObs = Mathf.Max(relockSuppressObs, 0);
+            this.unlockDriftMeters = Mathf.Max(unlockDriftMeters, 0.0f);
+            this.unlockDriftDegrees = Mathf.Max(unlockDriftDegrees, 0.0f);
+            this.evidenceHalfLifeSeconds = Mathf.Max(evidenceHalfLifeSeconds, 1e-3f);
+            this.creepHalfLifeSeconds = Mathf.Max(creepHalfLifeSeconds, 1e-3f);
+            this.relockSuppressSeconds = Mathf.Max(relockSuppressSeconds, 0.0f);
             this.unlockSpeedFactor = Mathf.Max(unlockSpeedFactor, 1.0f);
-            this.unlockMovingObs = Mathf.Max(unlockMovingObs, 1);
+            this.unlockMovingSeconds = Mathf.Max(unlockMovingSeconds, 0.0f);
             this.seamDecayPerFrame = Mathf.Clamp(seamDecayPerFrame, 0.5f, 0.99f);
+            this.refObsIntervalSeconds = Mathf.Max(refObsIntervalSeconds, 1e-3f);
         }
 
         /// <summary>清空所有状态。</summary>
@@ -118,11 +130,13 @@ namespace EgoAnchor.Policy
         {
             locked = false;
             lockedPose = Pose.identity;
+            anchorOrigin = Pose.identity;
             evidencePos = 0.0f;
             evidenceRot = 0.0f;
-            staticRun = 0;
-            relockSuppressLeft = 0;
-            movingRun = 0;
+            staticRunSeconds = 0.0f;
+            relockSuppressLeftSeconds = 0.0f;
+            movingRunSeconds = 0.0f;
+            wantUnlock = false;
             hasLastObs = false;
             lastObsPos = Vector3.zero;
             lastObsRot = Quaternion.identity;
@@ -149,9 +163,12 @@ namespace EgoAnchor.Policy
             Vector3 pos = worldPose.position;
             Quaternion rot = worldPose.rotation;
 
+            // 本次观测相对上一观测的真实时间间隔 (秒); 首帧为 0。dwell/suppress 累积按它走, 帧率无关。
+            float obsDt = hasLastObs ? Mathf.Max((float)(measurementTimeSeconds - lastObsTime), 0.0f) : 0.0f;
+
             if (hasLastObs)
             {
-                float dt = Mathf.Max((float)(measurementTimeSeconds - lastObsTime), 1e-3f);
+                float dt = Mathf.Max(obsDt, 1e-3f);
                 float speed = Vector3.Distance(pos, lastObsPos) / dt;
                 float angSpeed = AnchorMath.AngleDegrees(lastObsRot, rot) / dt;
                 if (hasSpeedEma)
@@ -173,16 +190,16 @@ namespace EgoAnchor.Policy
 
             if (locked)
             {
-                UpdateLockedEvidence(pos, rot, score);
+                UpdateLockedEvidence(pos, rot, score, obsDt);
             }
-            else if (relockSuppressLeft > 0)
+            else if (relockSuppressLeftSeconds > 0.0f)
             {
-                relockSuppressLeft--;
-                staticRun = 0;
+                relockSuppressLeftSeconds -= obsDt;
+                staticRunSeconds = 0.0f;
             }
             else
             {
-                staticRun = isStatic ? staticRun + 1 : 0;
+                staticRunSeconds = isStatic ? staticRunSeconds + obsDt : 0.0f;
             }
 
             hasLastObs = true;
@@ -212,7 +229,7 @@ namespace EgoAnchor.Policy
                     return lockedPose;
                 }
             }
-            else if (staticRun >= staticDwellObs)
+            else if (staticRunSeconds >= staticDwellSeconds)
             {
                 EnterLock(candidatePose);
                 return lockedPose;
@@ -228,9 +245,7 @@ namespace EgoAnchor.Policy
 
         private bool ShouldUnlock()
         {
-            return evidencePos > unlockEvidenceMeters
-                   || evidenceRot > unlockEvidenceDegrees
-                   || movingRun >= unlockMovingObs;
+            return wantUnlock;
         }
 
         private void EnterLock(in Pose candidatePose)
@@ -238,9 +253,11 @@ namespace EgoAnchor.Policy
             locked = true;
             LockEnters++;
             lockedPose = candidatePose; // 锚到当前 candidate, C⁰ 连续无 pop
+            anchorOrigin = candidatePose; // 固定锚点 (creep 不动), 绝对漂移租绳参考
             evidencePos = 0.0f;
             evidenceRot = 0.0f;
-            movingRun = 0;
+            movingRunSeconds = 0.0f;
+            wantUnlock = false;
             seamActive = false;
             seamPos = Vector3.zero;
             seamRot = Vector3.zero;
@@ -250,9 +267,10 @@ namespace EgoAnchor.Policy
         {
             locked = false;
             Unlocks++;
-            staticRun = 0;
-            relockSuppressLeft = relockSuppressObs;
-            movingRun = 0;
+            wantUnlock = false;
+            staticRunSeconds = 0.0f;
+            relockSuppressLeftSeconds = relockSuppressSeconds;
+            movingRunSeconds = 0.0f;
             // 接缝残差 = lockedPose ⊖ candidate, 让输出从 lockedPose 起、逐帧收敛到 candidate。
             seamPos = lockedPose.position - candidatePose.position;
             seamRot = AnchorMath.RelativeRotationLog(candidatePose.rotation, lockedPose.rotation);
@@ -276,33 +294,51 @@ namespace EgoAnchor.Policy
             return new Pose(pos, rot);
         }
 
-        /// <summary>锁定时: 速度逃逸 + 死区吸收 + score 加权 CUSUM + 漏锁 creep。</summary>
-        private void UpdateLockedEvidence(Vector3 pos, Quaternion rot, float score)
+        /// <summary>锁定时: 速度逃逸 + 死区吸收 + score 加权 CUSUM + 漏锁 creep。全部按真实 dt, 帧率无关。</summary>
+        private void UpdateLockedEvidence(Vector3 pos, Quaternion rot, float score, float obsDt)
         {
-            // 速度逃逸: 速度明确超阈连续若干帧 → 解锁 (速度比位移更早的运动信号, 堵 false-lock 长尾)。
+            // 速度逃逸: 速度明确超阈连续一段 *时间* → 解锁 (速度比位移更早的运动信号, 堵 false-lock 长尾)。
             bool movingNow = obsSpeedEma > staticEnterSpeedMps * unlockSpeedFactor
                              || obsAngSpeedEma > staticEnterAngSpeedDps * unlockSpeedFactor;
-            movingRun = movingNow ? movingRun + 1 : 0;
-            if (movingRun >= unlockMovingObs)
+            movingRunSeconds = movingNow ? movingRunSeconds + obsDt : 0.0f;
+            if (movingRunSeconds >= unlockMovingSeconds)
             {
+                wantUnlock = true;
                 return; // 解锁在 Stabilize 提交 (此刻才有 candidate 做接缝)
+            }
+
+            // 绝对漂移租绳: 相对锁定时固定的 anchorOrigin (creep 不动) 的总漂移超租绳 → 解锁。
+            // 慢速持续平移时 creep 会跟着移 lockedPose、让下面的相对 CUSUM 失效, 但 anchorOrigin 不动,
+            // 慢移累计够远必然触发, 修复"极慢平移永不脱离 static"。
+            float driftPos = Vector3.Distance(pos, anchorOrigin.position);
+            float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, rot);
+            if (driftPos > unlockDriftMeters || driftRot > unlockDriftDegrees)
+            {
+                wantUnlock = true;
+                return; // 解锁在 Stabilize 提交
             }
 
             float dPos = Vector3.Distance(pos, lockedPose.position);
             float dRot = AnchorMath.AngleDegrees(lockedPose.rotation, rot);
 
-            evidencePos = evidenceDecay * evidencePos + score * Mathf.Max(0.0f, dPos - deadbandMeters);
-            evidenceRot = evidenceDecay * evidenceRot + score * Mathf.Max(0.0f, dRot - deadbandDegrees);
+            // CUSUM (帧率无关): 每观测先按真实 dt 做半衰期衰减 (漏积分), 再累积"超死区"部分,
+            // 累积量乘 (obsDt / refObsIntervalSeconds), 使同样的持续运动在任何帧率下单位时间攒到的证据相同。
+            float decay = Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
+            float accScale = obsDt / refObsIntervalSeconds;
+            evidencePos = decay * evidencePos + accScale * score * Mathf.Max(0.0f, dPos - deadbandMeters);
+            evidenceRot = decay * evidenceRot + accScale * score * Mathf.Max(0.0f, dRot - deadbandDegrees);
 
             if (evidencePos > unlockEvidenceMeters || evidenceRot > unlockEvidenceDegrees)
             {
+                wantUnlock = true;
                 return; // 解锁在 Stabilize 提交
             }
 
             // 漏锁 creep: 仅死区内 (纯噪声/极慢漂移) 才朝观测缓慢靠拢, 精修锁点 + 跟极慢漂移而不抖。
+            // creep 增益按真实 dt 的半衰期换算, 与帧率无关。
             if (dPos < deadbandMeters && dRot < deadbandDegrees)
             {
-                float g = creepGain * score;
+                float g = (1.0f - Mathf.Pow(0.5f, obsDt / creepHalfLifeSeconds)) * score;
                 Vector3 newPos = lockedPose.position + (pos - lockedPose.position) * g;
                 Quaternion newRot = Quaternion.Slerp(lockedPose.rotation, rot, g);
                 lockedPose = new Pose(newPos, AnchorMath.Normalize(newRot));
