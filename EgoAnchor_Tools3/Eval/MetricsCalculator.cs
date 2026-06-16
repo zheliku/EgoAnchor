@@ -17,6 +17,9 @@ namespace EgoAnchor.Tools3.Eval
         public double AlignedRotRmsDeg;   // 对齐后旋转误差 RMS
         public double ThroughPosRmsMm;    // 不对齐, 直接在观测时刻 render 离观测点的位置误差 RMS
         public double ThroughRotRmsDeg;   // 不对齐的旋转过点误差
+        public double OnsetLagMs;         // 运动起始响应延迟中位数 (真实运动开始 → render 开始跟随); 静态先验的诚实代价
+        public double OnsetLagP90Ms;      // 运动起始响应延迟 P90
+        public int OnsetEvents;           // 检测到的运动起始事件数
     }
 
     /// <summary>计算平滑度 + 滞后 + 对齐后准确度 + 过点误差。</summary>
@@ -54,7 +57,80 @@ namespace EgoAnchor.Tools3.Eval
             // --- 4) 过点误差: 不平移, 直接在观测时刻比 ---
             (m.ThroughPosRmsMm, m.ThroughRotRmsDeg) = SampleErrorAtObservations(samples, observations, 0.0);
 
+            // --- 5) 运动起始响应延迟: 静态先验的诚实代价 ---
+            (m.OnsetLagMs, m.OnsetLagP90Ms, m.OnsetEvents) = ComputeOnsetLag(samples, observations);
+
             return m;
+        }
+
+        /// <summary>
+        /// 运动起始响应延迟 (motion-onset lag): 静态锁定方法的诚实代价指标。
+        ///
+        /// 先从**观测流**检测"静止→运动"起始事件 (一段低速后突然持续高速)。对每个起始时刻 t0,
+        /// 在 render 输出上找它真正"开始跟随"的时刻 (相对 t0 时的 render pose 位移首次超过 onsetMoveThresh),
+        /// 二者之差即该次 onset-lag。返回中位数 + P90 + 事件数。
+        ///
+        /// 注意: 这天然把 lock-then-release 的释放延迟计入代价。baseline (无锁) 的 onset-lag 主要来自
+        /// 其固有滞后 (interp 延迟); EgoAnchor 会更大一点 (解锁 dwell), 量化这个差就是诚实代价。
+        /// </summary>
+        private static (double medianMs, double p90Ms, int events) ComputeOnsetLag(
+            IReadOnlyList<RenderSample> samples,
+            IReadOnlyList<Observation> observations)
+        {
+            const double staticSpeed = 0.015;   // m/s, 低于=静止
+            const double movingSpeed = 0.08;     // m/s, 高于=明确运动
+            const int staticRunNeeded = 3;       // 起始前需连续静止的观测数
+            const double onsetMoveThresh = 0.01; // m, render 相对 onset 位移超过此值算"开始跟随"
+            const double maxSearchSec = 1.5;     // onset 后最多找多久 (超时记为该上限)
+
+            var lags = new List<double>();
+            int staticRun = 0;
+            for (int i = 1; i < observations.Count; i++)
+            {
+                double dt = Math.Max(observations[i].TimeSeconds - observations[i - 1].TimeSeconds, 1e-3);
+                double speed = Vec3.Distance(observations[i].Pose.Position, observations[i - 1].Pose.Position) / dt;
+
+                bool isOnset = staticRun >= staticRunNeeded && speed >= movingSpeed;
+                if (isOnset)
+                {
+                    double t0 = observations[i - 1].TimeSeconds; // 运动开始于上一观测之后
+                    Pose anchor = SampleRenderAt(samples, t0);
+                    if (!double.IsNaN(anchor.Position.X))
+                    {
+                        double found = maxSearchSec;
+                        for (double tt = t0; tt <= t0 + maxSearchSec; tt += 1.0 / 120.0)
+                        {
+                            Pose r = SampleRenderAt(samples, tt);
+                            if (double.IsNaN(r.Position.X))
+                            {
+                                continue;
+                            }
+
+                            if (Vec3.Distance(r.Position, anchor.Position) >= onsetMoveThresh)
+                            {
+                                found = tt - t0;
+                                break;
+                            }
+                        }
+
+                        lags.Add(found * 1000.0);
+                    }
+
+                    staticRun = 0;
+                }
+
+                staticRun = speed <= staticSpeed ? staticRun + 1 : 0;
+            }
+
+            if (lags.Count == 0)
+            {
+                return (double.NaN, double.NaN, 0);
+            }
+
+            lags.Sort();
+            double median = lags[lags.Count / 2];
+            double p90 = lags[Math.Min(lags.Count - 1, (int)(0.9 * lags.Count))];
+            return (median, p90, lags.Count);
         }
 
         /// <summary>

@@ -52,6 +52,71 @@ namespace EgoAnchor.Policy
         [Tooltip("判定坏跳变的旋转阈值 (度)：新观测相对当前预测的旋转超过此值则拒绝。仅在启用门控时生效。默认 120。")]
         [SerializeField] private float maxJumpDegrees = 120f;
 
+        /// <summary>是否启用静止锁定 (EgoAnchor 核心方法层)。</summary>
+        [Header("Static Lock (EgoAnchor 核心方法, optional)")]
+        [Tooltip("是否启用静止锚定稳定器：物体静止且高分时冻结输出 pose，把小抖动当噪声吸收 → 看上去一动不动；运动时交回 smoothing。baseline 关、EgoAnchor 开。默认关闭。")]
+        [SerializeField] private bool enableStaticLock = false;
+
+        /// <summary>进入静止判定的线速度阈值，单位 m/s。</summary>
+        [Tooltip("进入静止判定的观测线速度阈值 (m/s)。必须设在观测噪声地板之上 (真机旋转噪声地板 ~7-8°/s, 平移小)。默认 0.03。")]
+        [SerializeField] private float staticLockEnterSpeedMps = 0.03f;
+
+        /// <summary>进入静止判定的角速度阈值，单位 deg/s。</summary>
+        [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设太低 (低于旋转噪声地板) 会导致永不锁定。默认 12。")]
+        [SerializeField] private float staticLockEnterAngSpeedDps = 12.0f;
+
+        /// <summary>进入锁定需连续保持静止的观测帧数。</summary>
+        [Tooltip("进入锁定需连续保持静止 (+高分) 的观测帧数。防静止判定抖动。默认 3。")]
+        [SerializeField] private int staticLockDwellObs = 3;
+
+        /// <summary>进入锁定所需的最低可靠性分数。</summary>
+        [Tooltip("进入/维持锁定所需的最低可靠性分数 (0..1)。低于此分不信任'静止'判断。默认 0.4。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float staticLockMinScore = 0.4f;
+
+        /// <summary>锁定时位置死区，单位米。</summary>
+        [Tooltip("锁定时位置死区 (米)：观测相对锁点位移小于此值视为噪声、忽略。杀静止抖动的核心。默认 0.008。")]
+        [SerializeField] private float staticLockDeadbandMeters = 0.008f;
+
+        /// <summary>锁定时旋转死区，单位度。</summary>
+        [Tooltip("锁定时旋转死区 (度)：旋转小于此值视为噪声、忽略。默认 3。")]
+        [SerializeField] private float staticLockDeadbandDegrees = 3.0f;
+
+        /// <summary>解锁位置证据阈值 (score 加权 CUSUM)，单位米。</summary>
+        [Tooltip("解锁位置证据阈值 (score 加权累计的超死区位移, 米)。越大越粘 (难解锁), 越小越灵敏。默认 0.05。")]
+        [SerializeField] private float staticLockUnlockEvidenceMeters = 0.05f;
+
+        /// <summary>解锁旋转证据阈值 (score 加权 CUSUM)，单位度。</summary>
+        [Tooltip("解锁旋转证据阈值 (score 加权累计的超死区旋转, 度)。默认 12。")]
+        [SerializeField] private float staticLockUnlockEvidenceDegrees = 12.0f;
+
+        /// <summary>解锁证据每观测衰减比例。</summary>
+        [Tooltip("解锁证据每观测衰减比例 (漏积分)：偶发噪声会漏掉, 只有持续运动才累积越阈。默认 0.6。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float staticLockEvidenceDecay = 0.6f;
+
+        /// <summary>漏锁 creep 增益。</summary>
+        [Tooltip("漏锁 creep 增益：锁定时朝高分小位移观测缓慢靠拢, 精修锁点 + 跟极慢漂移。0=死锁不动。默认 0.05。")]
+        [Range(0f, 0.5f)]
+        [SerializeField] private float staticLockCreepGain = 0.05f;
+
+        /// <summary>解锁后禁止再锁的观测帧数 (反 chatter)。</summary>
+        [Tooltip("解锁后禁止再锁的观测帧数 (反 chatter)：给真实运动一个逃逸窗口, 防锁定频繁翻转。默认 4。")]
+        [SerializeField] private int staticLockRelockSuppressObs = 4;
+
+        /// <summary>速度逃逸倍数。</summary>
+        [Tooltip("速度逃逸倍数：锁定时观测速度 > 静止阈值 × 此倍数 连续若干帧 → 立即解锁 (堵 CUSUM 跟不上的慢运动 false-lock 长尾)。默认 2.0。")]
+        [SerializeField] private float staticLockUnlockSpeedFactor = 2.0f;
+
+        /// <summary>速度逃逸需连续运动观测帧数。</summary>
+        [Tooltip("速度逃逸需连续检测到明确运动的观测帧数。防单帧噪声误解锁。默认 2。")]
+        [SerializeField] private int staticLockUnlockMovingObs = 2;
+
+        /// <summary>解锁接缝残差衰减 (60fps 基准)。</summary>
+        [Tooltip("解锁接缝残差每帧衰减比例 (60fps 基准)：解锁瞬间从锁点平滑收敛到 smoothing 输出, 防 pop。默认 0.75。")]
+        [Range(0.5f, 0.99f)]
+        [SerializeField] private float staticLockSeamDecayPerFrame = 0.75f;
+
         /// <summary>短时无可靠测量的 coasting 时长，单位秒。</summary>
         [Header("Lifecycle")]
         [Tooltip("短时无可靠测量时保持 Coasting (继续外推/插值) 的时长，单位秒。超过则进入更不确定状态。默认 0.45。")]
@@ -70,8 +135,10 @@ namespace EgoAnchor.Policy
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
         private AnchorStateMachine stateMachine;
+        private readonly StaticLockController staticLock = new StaticLockController();
         private PoseToAnchorRuntime boundOwner;
         private double lastAcceptedTimeSeconds = -1.0;
+        private double lastAdvanceTimeSeconds = -1.0;
         private float latestAcceptedScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
         private GateDecision latestGateDecision = GateDecision.Hold("initialized");
@@ -146,8 +213,8 @@ namespace EgoAnchor.Policy
         /// <summary>output stage 旋转残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
         public float LatestResidualDegrees => float.NaN;
 
-        /// <summary>是否静止锁定 (本轮未实现 static-lock，固定 false)。</summary>
-        public bool LatestStaticLocked => false;
+        /// <summary>是否静止锁定 (EgoAnchor 静态锚定稳定器当前是否冻结输出)。</summary>
+        public bool LatestStaticLocked => enableStaticLock && staticLock.IsLocked;
 
         /// <summary>累计接受测量数。</summary>
         public long AcceptedCount { get; private set; }
@@ -233,6 +300,13 @@ namespace EgoAnchor.Policy
 
             smoothingStrategy.OnObservation(motionModel, observation);
 
+            // EgoAnchor 静态锚定稳定器: 喂同一 world pose + score, 更新静/动证据 (仅启用时)。
+            if (enableStaticLock)
+            {
+                ConfigureStaticLock();
+                staticLock.OnObservation(observation.WorldPose, observation.ReliabilityScore, observation.MeasurementTimeSeconds);
+            }
+
             AcceptedCount++;
             lastAcceptedTimeSeconds = now;
             latestAcceptedScore = observation.ReliabilityScore;
@@ -268,6 +342,16 @@ namespace EgoAnchor.Policy
             }
 
             Pose pose = smoothingStrategy.Output(motionModel, nowSeconds);
+
+            // EgoAnchor 静态锚定稳定器: 锁定时冻结输出, 解锁过渡平滑收敛, 否则透传 (仅启用时)。
+            if (enableStaticLock)
+            {
+                ConfigureStaticLock();
+                float advanceDt = lastAdvanceTimeSeconds >= 0.0 ? (float)(nowSeconds - lastAdvanceTimeSeconds) : 0.0f;
+                pose = staticLock.Stabilize(pose, advanceDt);
+            }
+
+            lastAdvanceTimeSeconds = nowSeconds;
             predictAheadSeconds = (float)gap;
             UpdateMotionState();
             return new AnchorPolicyOutput(true, pose, stateMachine.State, motionState, predictAheadSeconds, stateMachine.LastEvent.Reason);
@@ -378,7 +462,9 @@ namespace EgoAnchor.Policy
         {
             motionModel?.ResetModel();
             smoothingStrategy?.ResetStrategy();
+            staticLock.Reset();
             lastAcceptedTimeSeconds = -1.0;
+            lastAdvanceTimeSeconds = -1.0;
             latestAcceptedScore = 1.0f;
             motionState = AnchorMotionState.Unknown;
             predictAheadSeconds = 0.0f;
@@ -393,6 +479,26 @@ namespace EgoAnchor.Policy
             {
                 throw new System.InvalidOperationException("AnchorPolicyHost 需要绑定 MotionModel 和 SmoothingStrategy。");
             }
+        }
+
+        /// <summary>把 Inspector 上的静止锁参数推给控制器 (Inspector 可能运行时改, 每次喂/输出前同步)。</summary>
+        private void ConfigureStaticLock()
+        {
+            staticLock.Configure(
+                staticLockEnterSpeedMps,
+                staticLockEnterAngSpeedDps,
+                staticLockDwellObs,
+                staticLockMinScore,
+                staticLockDeadbandMeters,
+                staticLockDeadbandDegrees,
+                staticLockUnlockEvidenceMeters,
+                staticLockUnlockEvidenceDegrees,
+                staticLockEvidenceDecay,
+                staticLockCreepGain,
+                staticLockRelockSuppressObs,
+                staticLockUnlockSpeedFactor,
+                staticLockUnlockMovingObs,
+                staticLockSeamDecayPerFrame);
         }
 
         private void EnsureStateMachine()

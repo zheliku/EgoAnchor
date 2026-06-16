@@ -873,6 +873,21 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
+  enableStaticLock: 0
+  staticLockEnterSpeedMps: 0.03
+  staticLockEnterAngSpeedDps: 12
+  staticLockDwellObs: 3
+  staticLockMinScore: 0.4
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.05
+  staticLockUnlockEvidenceDegrees: 12
+  staticLockEvidenceDecay: 0.6
+  staticLockCreepGain: 0.05
+  staticLockRelockSuppressObs: 4
+  staticLockUnlockSpeedFactor: 2
+  staticLockUnlockMovingObs: 2
+  staticLockSeamDecayPerFrame: 0.75
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -1649,27 +1664,27 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -1822,7 +1837,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &448430449
 Transform:
   m_ObjectHideFlags: 0
@@ -2705,6 +2720,21 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
+  enableStaticLock: 0
+  staticLockEnterSpeedMps: 0.03
+  staticLockEnterAngSpeedDps: 12
+  staticLockDwellObs: 3
+  staticLockMinScore: 0.4
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.05
+  staticLockUnlockEvidenceDegrees: 12
+  staticLockEvidenceDecay: 0.6
+  staticLockCreepGain: 0.05
+  staticLockRelockSuppressObs: 4
+  staticLockUnlockSpeedFactor: 2
+  staticLockUnlockMovingObs: 2
+  staticLockSeamDecayPerFrame: 0.75
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -4230,10 +4260,25 @@ MonoBehaviour:
   motionModel: {fileID: 1039886368}
   smoothingStrategy: {fileID: 1039886367}
   strategyLabel: 
-  enableScoreGate: 0
+  enableScoreGate: 1
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
+  enableStaticLock: 1
+  staticLockEnterSpeedMps: 0.03
+  staticLockEnterAngSpeedDps: 12
+  staticLockDwellObs: 3
+  staticLockMinScore: 0.4
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.05
+  staticLockUnlockEvidenceDegrees: 12
+  staticLockEvidenceDecay: 0.6
+  staticLockCreepGain: 0.05
+  staticLockRelockSuppressObs: 4
+  staticLockUnlockSpeedFactor: 2
+  staticLockUnlockMovingObs: 2
+  staticLockSeamDecayPerFrame: 0.75
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -4394,7 +4439,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1085434120
 Transform:
   m_ObjectHideFlags: 0
@@ -5850,27 +5895,27 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -5947,6 +5992,21 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
+  enableStaticLock: 0
+  staticLockEnterSpeedMps: 0.03
+  staticLockEnterAngSpeedDps: 12
+  staticLockDwellObs: 3
+  staticLockMinScore: 0.4
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.05
+  staticLockUnlockEvidenceDegrees: 12
+  staticLockEvidenceDecay: 0.6
+  staticLockCreepGain: 0.05
+  staticLockRelockSuppressObs: 4
+  staticLockUnlockSpeedFactor: 2
+  staticLockUnlockMovingObs: 2
+  staticLockSeamDecayPerFrame: 0.75
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -6707,6 +6767,21 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
+  enableStaticLock: 0
+  staticLockEnterSpeedMps: 0.03
+  staticLockEnterAngSpeedDps: 12
+  staticLockDwellObs: 3
+  staticLockMinScore: 0.4
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.05
+  staticLockUnlockEvidenceDegrees: 12
+  staticLockEvidenceDecay: 0.6
+  staticLockCreepGain: 0.05
+  staticLockRelockSuppressObs: 4
+  staticLockUnlockSpeedFactor: 2
+  staticLockUnlockMovingObs: 2
+  staticLockSeamDecayPerFrame: 0.75
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -6879,27 +6954,27 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -8092,27 +8167,27 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 232e40ba14af06841a1be11277415af6, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z

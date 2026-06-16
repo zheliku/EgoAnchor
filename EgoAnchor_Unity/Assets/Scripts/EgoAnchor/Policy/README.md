@@ -31,6 +31,10 @@
 | **KalmanModel** | **kalman + blend ★推荐** | kalman + interp |
 | **OneEuroModel** | oneeuro + blend | oneeuro + interp |
 
+**正交的第三维：static-lock。** host 的 `enableStaticLock` 与上面 3×2 任意组合**正交叠加**——
+开它 = 在该 baseline 之上加 EgoAnchor 静止锚定层。**EgoAnchor 主方法 = `kalman + interp` + `enableStaticLock`**
+（即上表任一格 + 翻一个 flag）。这一维不是新模块，是 host 内联的锚定控制层，所以矩阵仍是 3×2 而非 3×2×2 个类。
+
 `raw`（什么都不做的参照）= 用任意 model + BlendStrategy 把 decay 设到很小，或单独留一个不平滑 runtime。
 
 模块通过数据契约解耦：MotionModel 提供 `PredictAt(t)`（给 B 路外推）和 `LatestControlPoint`
@@ -76,6 +80,22 @@
 | `lostTimeoutSeconds` | 多久无观测后判 Lost 停输出（须 > coast） | `2.0` |
 | `staticSpeedThresholdMps` | 运动/静止判定线速度阈值（仅诊断） | `0.015` |
 | `staticAngularSpeedThresholdDps` | 运动/静止判定角速度阈值（仅诊断） | `1.5` |
+| **Static Lock（EgoAnchor 核心方法，仅 EgoAnchor 开）** | | |
+| `enableStaticLock` | 是否启用静止锚定稳定器。baseline 关、EgoAnchor 开 | baseline `false` |
+| `staticLockEnterSpeedMps` | 进入静止判定的观测线速度阈值 (m/s) | `0.03` |
+| `staticLockEnterAngSpeedDps` | 进入静止判定的角速度阈值 (deg/s)。**必须设在旋转噪声地板之上 (真机~7-8°/s)，否则永不锁** | `12` |
+| `staticLockDwellObs` | 进入锁定需连续静止+高分的观测帧数 | `3` |
+| `staticLockMinScore` | 进入/维持锁定的最低可靠分 | `0.4` |
+| `staticLockDeadbandMeters` | 锁定时位置死区 (m)，小于此视为噪声忽略 | `0.008` |
+| `staticLockDeadbandDegrees` | 锁定时旋转死区 (度) | `3` |
+| `staticLockUnlockEvidenceMeters` | 解锁位置证据阈值 (score 加权 CUSUM, m)。越大越粘 | `0.05` |
+| `staticLockUnlockEvidenceDegrees` | 解锁旋转证据阈值 (score 加权 CUSUM, 度) | `12` |
+| `staticLockEvidenceDecay` | 解锁证据每观测衰减 (漏积分)，偶发噪声会漏掉 | `0.6` |
+| `staticLockCreepGain` | 漏锁 creep 增益，朝高分小位移精修锁点 + 跟极慢漂移。0=死锁 | `0.05` |
+| `staticLockRelockSuppressObs` | 解锁后禁止再锁的观测帧数 (反 chatter，**关键**) | `4` |
+| `staticLockUnlockSpeedFactor` | 速度逃逸倍数：速度>静止阈值×此倍数连续若干帧→立即解锁 (堵慢运动 false-lock 长尾) | `2.0` |
+| `staticLockUnlockMovingObs` | 速度逃逸需连续运动观测帧数 | `2` |
+| `staticLockSeamDecayPerFrame` | 解锁接缝残差衰减 (60fps 基准)，从锁点平滑收敛到 interp 防 pop | `0.75` |
 
 ### KalmanModel
 
@@ -142,8 +162,15 @@
 **做消融对比**：6 个 GameObject 各一种组合 + 一个 raw 参照，全拖进 `AnchorRuntimeHub`，
 一次录制用 `AnchorEvalRecorder` 拿全部数据，离线 `eval/` 出指标对比图。
 
-**EgoAnchor 方法（带 score）**：`KalmanModel` + `BlendStrategy` + host 里 `enableScoreGate=true`。
-这是唯一会拒绝坏观测的配置，在 jump-rejection / recovery 指标上应碾压不带门控的 baseline。
+**EgoAnchor 方法（带 score + 静止锁定）**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
+host 里 `enableStaticLock=true`（核心）+ 可选 `enableScoreGate=true`。
+
+> **EgoAnchor 不是"又一个滤波器"，而是建立在任意 baseline (model×strategy) 之上的 score-gated 分区静止锚定控制层。**
+> 被锚定的真实物体绝大多数时间静止（动的是头显，噪的是观测）。所有 baseline 都是 motion-agnostic 滤波器，
+> 静止时残留抖动；EgoAnchor 用静止锁定把小抖动当噪声吸收 → 抖动≈0（"看上去一动不动"），运动时交回 interp。
+> 同一 `Kalman+interp` 组合，**翻 `enableStaticLock` 一个 flag = baseline ↔ EgoAnchor**，这是最干净的消融。
+> 离线仿真验证（EgoAnchor_Tools3）：静止段 P50 位置步长 0.115mm→0.000mm、冻结帧 9%→63%，运动跟踪不退化
+> （lag 不变），代价是运动起始响应中位 +~110ms。
 
 ---
 

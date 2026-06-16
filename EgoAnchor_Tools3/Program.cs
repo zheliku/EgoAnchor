@@ -75,10 +75,20 @@ namespace EgoAnchor.Tools3
                     new DelayedInterpolationPredictor(new KalmanControlPoints(), SplineKind.Hermite),            // kalman_hermite
                 };
 
+                // D 行: EgoAnchor 锚定稳定器 (装饰 C 行 interp baseline)。论文方法层:
+                // 在你已满意的 interp 之上加 score-gated 分区静止锁定 —— 静止区抖动≈0, 运动区交回 interp。
+                // 同一 inner (kalman_hermite) 开/关 = baseline vs EgoAnchor 的最干净消融。
+                var rowD = new List<IPredictor>
+                {
+                    new EgoAnchorStabilizerPredictor(
+                        new DelayedInterpolationPredictor(new KalmanControlPoints(), SplineKind.Hermite)), // ego_kalman_hermite
+                };
+
                 var predictors = new List<IPredictor>();
                 predictors.AddRange(references);
                 predictors.AddRange(rowB);
                 predictors.AddRange(rowC);
+                predictors.AddRange(rowD);
 
                 var simulator = new RealtimeSimulator(opt.RenderHz, opt.LatencyMs / 1000.0, opt.LatencyJitterMs / 1000.0);
                 var results = new List<SimResult>();
@@ -86,8 +96,8 @@ namespace EgoAnchor.Tools3
                 var allMetrics = new List<AlgorithmMetrics>();
 
                 Console.WriteLine($"采集-渲染延迟: {opt.LatencyMs:F0}ms (jitter ±{opt.LatencyJitterMs:F0}ms), 渲染: {opt.RenderHz:F0}fps");
-                Console.WriteLine($"{"algorithm",-22} {"render",7} {"stepRMS(mm)",12} {"lag(ms)",9} {"alignRMS(mm)",13} {"throughRMS(mm)",15}");
-                Console.WriteLine(new string('-', 82));
+                Console.WriteLine($"{"algorithm",-22} {"render",7} {"stepRMS(mm)",12} {"lag(ms)",9} {"alignRMS(mm)",13} {"throughRMS(mm)",15} {"onsetLag(ms)",13}");
+                Console.WriteLine(new string('-', 96));
 
                 foreach (IPredictor predictor in predictors)
                 {
@@ -97,9 +107,15 @@ namespace EgoAnchor.Tools3
 
                     AlgorithmMetrics m = MetricsCalculator.Compute(result, observations);
                     allMetrics.Add(m);
-                    Console.WriteLine($"{m.Label,-22} {result.RenderSamples.Count,7} {m.StepPosRmsMm,12:F3} {m.LagMs,9:F0} {m.AlignedPosRmsMm,13:F2} {m.ThroughPosRmsMm,15:F2}");
+                    Console.WriteLine($"{m.Label,-22} {result.RenderSamples.Count,7} {m.StepPosRmsMm,12:F3} {m.LagMs,9:F0} {m.AlignedPosRmsMm,13:F2} {m.ThroughPosRmsMm,15:F2} {OnsetLagText(m),13}");
 
                     WriteRenderJsonl(Path.Combine(opt.OutputDir, $"render_{result.Label}.jsonl"), result, observations, timeZero);
+
+                    if (predictor is EgoAnchorStabilizerPredictor ego)
+                    {
+                        Console.WriteLine($"  └─ [EgoAnchor 诊断] locks={ego.LockEnters} unlocks={ego.Unlocks} | "
+                            + $"frames locked={ego.FramesLocked} seam={ego.FramesSeam} free={ego.FramesFree} | obs gated={ego.FramesGated}");
+                    }
 
                     string singlePng = Path.Combine(opt.OutputDir, $"plot_{result.Label}.png");
                     TrajectoryPlotter.PlotSingle(result, observations, timeZero, singlePng);
@@ -128,6 +144,7 @@ namespace EgoAnchor.Tools3
                     ("pair_dr", "cv_blend", "raw_hermite"),
                     ("pair_oneeuro", "oneeuro_blend", "oneeuro_interp"),
                     ("pair_kalman", "kalman_blend", "kalman_hermite"),
+                    ("pair_ego", "kalman_hermite", "ego_kalman_hermite"),
                 };
 
                 foreach (var (name, bLabel, cLabel) in pairs)
@@ -220,6 +237,17 @@ namespace EgoAnchor.Tools3
         }
 
         private static double Round(double v) => Math.Round(v, 6);
+
+        /// <summary>onset-lag 列文本: 中位数(P90), 无事件显示 "n/a"。</summary>
+        private static string OnsetLagText(AlgorithmMetrics m)
+        {
+            if (m.OnsetEvents == 0 || double.IsNaN(m.OnsetLagMs))
+            {
+                return "n/a";
+            }
+
+            return $"{m.OnsetLagMs:F0}({m.OnsetLagP90Ms:F0})";
+        }
 
         private sealed class Options
         {

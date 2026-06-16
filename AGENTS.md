@@ -264,6 +264,7 @@ Unity 命名/目录规则：
 
 - 模块化 policy 已进入主线并重构为两模块自由组合（3×2）：`AnchorPolicyHost` 持有 `MotionModel`（CV/Kalman/OneEuro）+ `SmoothingStrategy`（Blend/DelayedInterp/RawPassthrough），所有组合共享同一 aligned raw pose 输入、capture/render 时间轴和 `Advance(now)` 输出契约。
 - 方法矩阵：B 路（外推+误差融合，零延迟）= `{cv,kalman,oneeuro}+blend`；C 路（延迟一周期+插值）= `{cv原始点,kalman,oneeuro}+interp`；真 raw 对照 = `cv+RawPassthrough`。baseline 不读 score，EgoAnchor 方法才在 host 内联开 score/jump 门控。
+- **EgoAnchor 主方法 = score-gated 分区静止锚定稳定器**（不是又一个滤波器，是 baseline 之上的锚定控制层）。`AnchorPolicyHost` 内联 `StaticLockController`（纯 C#，`Policy/StaticLockController.cs`），与 model×strategy 矩阵**正交**：开 `enableStaticLock` = 在任意组合上加静止锁定。机制：死区吸收抖动 + score 加权 CUSUM 解锁 + 速度逃逸（堵慢运动 false-lock）+ 漏锁 creep + 反 chatter 禁锁窗 + 解锁接缝残差融合。位置/旋转独立证据通道。`LatestStaticLocked` stub 已填真值，经 `PoseToAnchorRuntime`→`AnchorEvalRecorder` 写入 JSONL `latest_static_locked`。主方法 = `Kalman+interp+enableStaticLock`，翻一个 flag = baseline↔EgoAnchor（最干净消融）。离线 PoC（Tools3 `EgoAnchorStabilizerPredictor`）验证：静止段 P50 步长 0.115→0.000mm、冻结帧 9→63%，运动不退化，代价 onset-lag 中位 +~110ms。**新增 csproj Compile Include 后 EgoAnchor.csproj/EgoAnchorEval.csproj 均编译 0 错。** angular 静止阈值必须设在旋转噪声地板（真机~7-8°/s）之上否则永不锁。
 - `EgoAnchor_Tools3` 是当前默认离线分析入口：对真机 session 重跑所有策略并出曲线 PNG，默认自动从录制实测延迟+渲染帧率以复现真机时序。旧 `EgoAnchor_Tools/anchor_replay` 因 glob 已删目录无法编译。
 - Unity replay 分两类：`RecordedAnchorReplaySource` 用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录 stable 轨迹用于 supplementary video。
 - Recovery 由 `AnchorRecoveryController` 单独负责，RQ2 默认关闭，RQ3 再单独比较。
