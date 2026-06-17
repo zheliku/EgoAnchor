@@ -187,6 +187,10 @@ def score_observation_breakdown(
     has_evidence = reprojection_valid or depth_valid
     if not has_evidence:
         flags.append("quality_pending")
+    # jump_score 仍计算并写入诊断字段, 但不再参与 quality 合成:
+    # 离线分析 (egoanchor-jump-rejection-analysis) 证明逐帧跳变幅度无法区分坏 pose 和真实快动
+    # (坏几何帧的跳变并不比好帧大), 让它调制 quality 只会误伤快速运动。坏 pose 的拒绝交给
+    # 几何核 (reprojection/depth) 和 Unity anchor 层 (几何 flag + CUSUM)。
     jump_score = _jump_score(observation, flags)
     core_score = _geometry_core(
         reprojection_score=reprojection_score,
@@ -195,10 +199,7 @@ def score_observation_breakdown(
         depth_valid=depth_valid,
         config=score_config,
     )
-    modulation_score = _bounded_modulator(mask_score, score_config.mask_floor) * _bounded_modulator(
-        jump_score,
-        score_config.jump_floor,
-    )
+    modulation_score = _bounded_modulator(mask_score, score_config.mask_floor)
     quality_score = clamp01(core_score * modulation_score)
 
     confidence_score = 1.0

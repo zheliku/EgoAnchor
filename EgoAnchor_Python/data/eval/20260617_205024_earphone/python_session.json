@@ -1,0 +1,9 @@
+{
+  "session_id": "20260617_205024_earphone",
+  "object_id": "earphone",
+  "python_log_filename": "20260617_205024_earphone_python_runtime.jsonl",
+  "python_log_relative_path": "20260617_205024_earphone_python_runtime.jsonl",
+  "created_unix_ms": 1781700624455.9553,
+  "created_utc": "2026-06-17T12:50:24.455Z",
+  "state": "python_started"
+}

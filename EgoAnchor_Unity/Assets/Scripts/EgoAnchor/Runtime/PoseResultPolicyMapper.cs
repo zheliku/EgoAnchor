@@ -30,7 +30,9 @@ namespace EgoAnchor.Runtime
             double sampleTime,
             double captureTimeSeconds,
             PoseResult result,
-            string fallbackPhase)
+            string fallbackPhase,
+            bool hasHeadPose = false,
+            Pose headPose = default)
         {
             return AnchorObservation.FromAlignedPose(
                 frameId,
@@ -40,7 +42,9 @@ namespace EgoAnchor.Runtime
                 ReadReliabilityFlags(result),
                 result?.Phase ?? fallbackPhase ?? string.Empty,
                 result?.PoseSource ?? string.Empty,
-                captureTimeSeconds
+                captureTimeSeconds,
+                hasHeadPose,
+                headPose
             );
         }
 

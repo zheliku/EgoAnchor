@@ -799,6 +799,11 @@ MonoBehaviour:
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   policyHost: {fileID: 1039886366}
+  enableLowScoreReacquire: 1
+  reacquireCommandClient: {fileID: 1814303323}
+  lowScoreReacquireThreshold: 0.25
+  lowScoreReacquireSeconds: 0.8
+  reacquireCooldownSeconds: 3
 --- !u!114 &160200732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -873,24 +878,7 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
-  enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 0.8
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.75
-  staticLockRefObsIntervalSeconds: 0.2
+  staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -1477,6 +1465,11 @@ MonoBehaviour:
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   policyHost: {fileID: 206209583}
+  enableLowScoreReacquire: 1
+  reacquireCommandClient: {fileID: 0}
+  lowScoreReacquireThreshold: 0.25
+  lowScoreReacquireSeconds: 0.8
+  reacquireCooldownSeconds: 3
 --- !u!114 &302482020
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2723,24 +2716,7 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
-  enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 0.8
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.75
-  staticLockRefObsIntervalSeconds: 0.2
+  staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -4227,6 +4203,7 @@ GameObject:
   - component: {fileID: 1039886366}
   - component: {fileID: 1039886368}
   - component: {fileID: 1039886367}
+  - component: {fileID: 1039886369}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -4268,24 +4245,7 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
-  enableStaticLock: 1
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 0.8
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.75
-  staticLockRefObsIntervalSeconds: 0.2
+  staticLockModule: {fileID: 1039886369}
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -4321,6 +4281,41 @@ MonoBehaviour:
   positionMeasurementNoise: 0.0004
   rotationProcessNoise: 0.4
   rotationMeasurementNoise: 0.0025
+--- !u!114 &1039886369
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1039886364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
+  enableStaticLock: 1
+  staticLockEnterSpeedMps: 0.05
+  staticLockEnterAngSpeedDps: 35
+  staticLockDwellSeconds: 0.35
+  staticLockMinScore: 0.25
+  staticLockDeadbandMeters: 0.008
+  staticLockDeadbandDegrees: 3
+  staticLockUnlockEvidenceMeters: 0.08
+  staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
+  staticLockEvidenceHalfLifeSeconds: 0.27
+  staticLockCreepHalfLifeSeconds: 2.7
+  staticLockRelockSuppressSeconds: 1
+  staticLockUnlockSpeedFactor: 2.5
+  staticLockUnlockMovingSeconds: 0.4
+  staticLockSeamDecayPerFrame: 0.85
+  staticLockRefObsIntervalSeconds: 0.2
+  staticLockHeadRotForFullToleranceDps: 60
+  staticLockHeadLinForFullToleranceMps: 0.3
+  staticLockHeadMaxToleranceFactor: 4
+  staticLockLowScoreReleaseScore: 0.3
+  staticLockLowScoreReleaseSeconds: 0.6
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4640,6 +4635,11 @@ MonoBehaviour:
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   policyHost: {fileID: 1484131521}
+  enableLowScoreReacquire: 1
+  reacquireCommandClient: {fileID: 0}
+  lowScoreReacquireThreshold: 0.25
+  lowScoreReacquireSeconds: 0.8
+  reacquireCooldownSeconds: 3
 --- !u!114 &1137170459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5842,6 +5842,11 @@ MonoBehaviour:
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   policyHost: {fileID: 1774730465}
+  enableLowScoreReacquire: 1
+  reacquireCommandClient: {fileID: 0}
+  lowScoreReacquireThreshold: 0.25
+  lowScoreReacquireSeconds: 0.8
+  reacquireCooldownSeconds: 3
 --- !u!114 &1430656899
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5997,24 +6002,7 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
-  enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 0.8
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.75
-  staticLockRefObsIntervalSeconds: 0.2
+  staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -6775,24 +6763,7 @@ MonoBehaviour:
   minScore: 0.2
   maxJumpMeters: 0.8
   maxJumpDegrees: 120
-  enableStaticLock: 0
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 0.8
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.75
-  staticLockRefObsIntervalSeconds: 0.2
+  staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
@@ -7553,6 +7524,11 @@ MonoBehaviour:
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
   policyHost: {fileID: 637018049}
+  enableLowScoreReacquire: 1
+  reacquireCommandClient: {fileID: 0}
+  lowScoreReacquireThreshold: 0.25
+  lowScoreReacquireSeconds: 0.8
+  reacquireCooldownSeconds: 3
 --- !u!114 &1852106715
 MonoBehaviour:
   m_ObjectHideFlags: 0

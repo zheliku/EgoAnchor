@@ -1,5 +1,7 @@
 using System;
+using System.Threading.Tasks;
 using EgoAnchor.Alignment;
+using EgoAnchor.Client;
 using EgoAnchor.Diagnostics;
 using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
@@ -51,6 +53,32 @@ namespace EgoAnchor.Runtime
         [Header("Anchor Policy")]
         [Tooltip("Unity 侧 anchor policy 宿主。持有 MotionModel + SmoothingStrategy 两个模块（可选内联 score 门控），每渲染帧输出平滑 anchor pose。")]
         [SerializeField] private AnchorPolicyHost policyHost;
+
+        /// <summary>低分自动重定位 (内嵌, 取代旧的独立 AnchorRecoveryController)。</summary>
+        [Header("Auto Reacquire (low score)")]
+        [Tooltip("是否启用低分自动重定位：reliability score 持续过低时, 本地重置 policy/static-lock 并向 Python 发 reacquire 命令重新 register。关闭则低分时 anchor 只能靠手动 reset。")]
+        [SerializeField] private bool enableLowScoreReacquire = true;
+
+        /// <summary>发送 reacquire 命令的客户端；为空则只做本地重置, 不发 NATS 命令。</summary>
+        [Tooltip("用于发 reacquire 命令的 AnchorCommandClient。留空则低分只本地重置 (回 Searching 重吸附), 不通知 Python 重新 register。")]
+        [SerializeField] private AnchorCommandClient reacquireCommandClient;
+
+        /// <summary>触发低分重定位的分数阈值。</summary>
+        [Tooltip("score 持续低于此值才触发自动重定位。默认 0.25。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float lowScoreReacquireThreshold = 0.25f;
+
+        /// <summary>低分需持续的时间，单位秒。</summary>
+        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.8。")]
+        [SerializeField] private float lowScoreReacquireSeconds = 0.8f;
+
+        /// <summary>两次自动重定位的最短间隔，单位秒。</summary>
+        [Tooltip("两次自动 reacquire 之间的最短间隔 (秒), 防命令风暴。默认 3。")]
+        [SerializeField] private float reacquireCooldownSeconds = 3.0f;
+
+        private double lowScoreStartSeconds = -1.0;
+        private double lastReacquireSeconds = double.NegativeInfinity;
+        private bool reacquireInFlight;
 
         private CameraPoseFrameAligner aligner;
         private Pose rawPose;
@@ -209,6 +237,82 @@ namespace EgoAnchor.Runtime
             {
                 AdvanceAnchorOutput(Time.realtimeSinceStartupAsDouble);
             }
+
+            EvaluateLowScoreReacquire(Time.realtimeSinceStartupAsDouble);
+        }
+
+        /// <summary>
+        /// 低分自动重定位 (内嵌, 取代旧的独立 AnchorRecoveryController)。
+        /// score 持续低于阈值 → 本地重置 policy/static-lock (回 Searching 重吸附) + (若绑定) 向 Python 发 reacquire 命令重新 register。
+        /// 带冷却和 in-flight 保护, 防命令风暴。
+        /// </summary>
+        private void EvaluateLowScoreReacquire(double nowSeconds)
+        {
+            if (!enableLowScoreReacquire || policyHost == null)
+            {
+                lowScoreStartSeconds = -1.0;
+                return;
+            }
+
+            // 还没拿到过有效 pose, 或正处于不可恢复/重定位状态时不触发。
+            bool eligible = latestAlignedFrameId >= 0
+                            && currentAnchorState != AnchorState.Paused
+                            && currentAnchorState != AnchorState.Relocalizing
+                            && currentAnchorState != AnchorState.Searching
+                            && currentAnchorState != AnchorState.Uninitialized;
+            bool lowNow = eligible && latestReliabilityScore <= lowScoreReacquireThreshold;
+
+            if (!lowNow)
+            {
+                lowScoreStartSeconds = -1.0;
+                return;
+            }
+
+            if (lowScoreStartSeconds < 0.0)
+            {
+                lowScoreStartSeconds = nowSeconds;
+            }
+
+            if (reacquireInFlight
+                || nowSeconds - lowScoreStartSeconds < lowScoreReacquireSeconds
+                || nowSeconds - lastReacquireSeconds < reacquireCooldownSeconds)
+            {
+                return;
+            }
+
+            lastReacquireSeconds = nowSeconds;
+            lowScoreStartSeconds = -1.0;
+
+            // 本地重置: 清空 policy + static-lock, 回 Relocalizing/Searching, 不再信任旧 (低分) 锚点。
+            NotifyReacquire(clearPose: true, "auto_reacquire_low_score");
+
+            // 服务端重定位: 若绑定 command client, 通知 Python 重新 register (ack 不代表完成, 结果看后续 pose)。
+            if (reacquireCommandClient != null)
+            {
+                _ = SendLowScoreReacquireAsync();
+            }
+        }
+
+        private async Task SendLowScoreReacquireAsync()
+        {
+            reacquireInFlight = true;
+            try
+            {
+                await reacquireCommandClient.ReacquireAsync(
+                    ReacquireAnchorRequest.Types.ReacquireMode.NextValidFrame,
+                    clearTrackingFirst: true,
+                    string.Empty,
+                    0.0,
+                    "auto_reacquire_low_score");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"低分自动 reacquire 命令发送失败: {ex.Message}", this);
+            }
+            finally
+            {
+                reacquireInFlight = false;
+            }
         }
 
         private void OnValidate()
@@ -318,6 +422,7 @@ namespace EgoAnchor.Runtime
         {
             latestPhase = phase ?? string.Empty;
             latestReliabilityScore = Mathf.Clamp01(reliabilityScore);
+            bool hasHeadPose = TryResolveHeadPose(frameId, out Pose headPose);
             AnchorObservation observation = AnchorObservation.FromAlignedPose(
                 frameId,
                 worldPose,
@@ -326,7 +431,9 @@ namespace EgoAnchor.Runtime
                 reliabilityFlags ?? Array.Empty<string>(),
                 phase ?? string.Empty,
                 poseSource ?? string.Empty,
-                captureTimeSeconds);
+                captureTimeSeconds,
+                hasHeadPose,
+                headPose);
             AcceptWorldPose(frameId, worldPose, observation);
             latestFailure = string.Empty;
         }
@@ -354,15 +461,32 @@ namespace EgoAnchor.Runtime
 
         private void AcceptWorldPose(long frameId, Pose worldPose, PoseResult sourceResult, double sampleTime)
         {
+            bool hasHeadPose = TryResolveHeadPose(frameId, out Pose headPose);
             AnchorObservation observation = PoseResultPolicyMapper.FromAlignedPose(
                 frameId,
                 worldPose,
                 sampleTime,
                 ResolveCaptureTimeSeconds(frameId),
                 sourceResult,
-                latestPhase
+                latestPhase,
+                hasHeadPose,
+                headPose
             );
             AcceptWorldPose(frameId, worldPose, observation);
+        }
+
+        /// <summary>取该 frame_id 采集时刻的 center camera (头部) world pose，用于头动感知 static。
+        /// 复用 FramePoseHistory 的同一份缓存，不重复绑定 CenterEyeAnchor。</summary>
+        private bool TryResolveHeadPose(long frameId, out Pose headPose)
+        {
+            if (framePoseHistory != null && framePoseHistory.TryGet(frameId, out FramePoseRecord record))
+            {
+                headPose = record.CenterCameraPose;
+                return true;
+            }
+
+            headPose = Pose.identity;
+            return false;
         }
 
         private void AcceptWorldPose(long frameId, Pose worldPose, in AnchorObservation observation)

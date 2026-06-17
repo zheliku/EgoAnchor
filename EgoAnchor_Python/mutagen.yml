@@ -1,0 +1,60 @@
+# Mutagen project file — real-time sync of this project to the GPU box.
+# Target: descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python
+# Start:     mutagen project start   (run from this directory)
+# Status:    mutagen sync list / mutagen sync monitor
+# Stop:      mutagen project terminate
+#
+# NOTE: mutagen does NOT read .gitignore — the ignore list below is maintained
+# by hand. Keep it in sync with .gitignore when you add new generated/large dirs.
+sync:
+  defaults:
+    # alpha (local) is authoritative: on conflict, the local copy wins.
+    mode: two-way-resolved
+    ignore:
+      vcs: true # skip the .git directory
+      paths:
+        # --- python / tooling caches ---
+        - "*.pyc"
+        - "*.pyo"
+        - "__pycache__/"
+        - ".venv/"
+        - "/.pixi/" # ~17 GB conda/pixi env — rebuilt on remote via `pixi install`
+        - "/.mypy_cache/" # ~205 MB
+        - "/.pycache_compile/"
+        - "/build/"
+        - "/dist/"
+        - "/wheels/"
+        - "*.egg-info/"
+        - "/logs/"
+        # --- model weights (rebuilt/downloaded on remote) ---
+        - "*.pt"
+        - "*.pth"
+        - "*.onnx"
+        - "*.engine"
+        - "*.plan"
+        - "/weights/"
+        - "/Cutie/weights/"
+        - "/FoundationPose/weights/"
+        - "/FoundationPose/demo_data/"
+        - "/sam3/assets/sam3_ckpt/"
+        # --- generated runtime outputs ---
+        - "/Fast-FoundationStereo/output_docker/"
+        - "/data/debug/"
+        - "/data/runtime_logs/"
+        - "/data/online/*/output/"
+        - "/Calibration/cache/"
+        # --- misc large downloads present only on remote ---
+        - "*.tar.gz"
+        - "/nats-server-*"
+        # --- remote-side build artifacts (platform-specific, never sync) ---
+        - "/FoundationPose/mycpp/build/"
+        - "*.o"
+        - "*.so"
+        - "a.out"
+        # --- the sync config itself stays local-only ---
+        - "/mutagen.yml"
+        - "/mutagen.yml.lock"
+
+  egoanchor:
+    alpha: "." # this directory (resolved relative to mutagen.yml)
+    beta: "descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python"

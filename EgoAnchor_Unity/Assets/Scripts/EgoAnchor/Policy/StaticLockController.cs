@@ -52,6 +52,19 @@ namespace EgoAnchor.Policy
         private float seamDecayPerFrame = 0.85f;
         private float refObsIntervalSeconds = 0.2f; // CUSUM 累积时间归一基准
 
+        // 头动感知 (问题3): 头转/平移时 head-motion-induced slip 抬高观测物体表观运动,
+        // 静止物体被误判 moving → 误解锁 → anchor 跟头抖。头动越大→临时按比例放大 static 容忍度
+        // (死区/漂移租绳/速度逃逸阈值), 吸收 slip; 头静止时回到原阈值 (物体真动才解锁)。
+        private float headRotForFullToleranceDps = 60.0f; // 头角速度达此值 → 容忍因子吃满
+        private float headLinForFullToleranceMps = 0.3f;  // 头线速度达此值 → 容忍因子吃满
+        private float headMaxToleranceFactor = 4.0f;      // 容忍度上限 (1=关闭头动感知)
+
+        // 低分释放 (问题1): 锁定时若 score 持续低于阈值, 锁点已不可信 (物体可能被移走/遮挡/跟丢),
+        // 强制解锁, 不让 anchor 冻在错误 pose 上 (否则用户得手动移出视野再回来)。解锁后交回 coasting,
+        // 配合 PoseToAnchorRuntime 的低分自动 reacquire。0=关闭该机制。
+        private float lowScoreReleaseScore = 0.3f;        // 低于此分视为不可信
+        private float lowScoreReleaseSeconds = 0.6f;      // 持续低分多久后强制解锁
+
         // === 运行时状态 ===
         private bool locked;
         private Pose lockedPose;
@@ -76,6 +89,15 @@ namespace EgoAnchor.Policy
         private bool seamActive;
         private Vector3 seamPos;
         private Vector3 seamRot; // 切空间向量 (rad)
+
+        // 头动跟踪 (从 host 注入的 HMD/CenterEye world pose 差分)
+        private bool hasLastHead;
+        private Vector3 lastHeadPos;
+        private Quaternion lastHeadRot;
+        private float headLinSpeedEma;   // m/s
+        private float headAngSpeedEma;   // deg/s
+        private float headToleranceFactor = 1.0f; // 当前头动放大系数 (1=头静止)
+        private float lowScoreRunSeconds;          // 锁定时连续低分累计时间 (低分释放用)
 
         /// <summary>当前是否锁定 (供 host 写 eval 的 latest_static_locked)。</summary>
         public bool IsLocked => locked;
@@ -104,7 +126,12 @@ namespace EgoAnchor.Policy
             float unlockSpeedFactor,
             float unlockMovingSeconds,
             float seamDecayPerFrame,
-            float refObsIntervalSeconds)
+            float refObsIntervalSeconds,
+            float headRotForFullToleranceDps,
+            float headLinForFullToleranceMps,
+            float headMaxToleranceFactor,
+            float lowScoreReleaseScore,
+            float lowScoreReleaseSeconds)
         {
             this.staticEnterSpeedMps = Mathf.Max(staticEnterSpeedMps, 0.0f);
             this.staticEnterAngSpeedDps = Mathf.Max(staticEnterAngSpeedDps, 0.0f);
@@ -123,6 +150,11 @@ namespace EgoAnchor.Policy
             this.unlockMovingSeconds = Mathf.Max(unlockMovingSeconds, 0.0f);
             this.seamDecayPerFrame = Mathf.Clamp(seamDecayPerFrame, 0.5f, 0.99f);
             this.refObsIntervalSeconds = Mathf.Max(refObsIntervalSeconds, 1e-3f);
+            this.headRotForFullToleranceDps = Mathf.Max(headRotForFullToleranceDps, 1e-3f);
+            this.headLinForFullToleranceMps = Mathf.Max(headLinForFullToleranceMps, 1e-3f);
+            this.headMaxToleranceFactor = Mathf.Max(headMaxToleranceFactor, 1.0f);
+            this.lowScoreReleaseScore = Mathf.Clamp01(lowScoreReleaseScore);
+            this.lowScoreReleaseSeconds = Mathf.Max(lowScoreReleaseSeconds, 0.0f);
         }
 
         /// <summary>清空所有状态。</summary>
@@ -147,18 +179,27 @@ namespace EgoAnchor.Policy
             seamActive = false;
             seamPos = Vector3.zero;
             seamRot = Vector3.zero;
+            hasLastHead = false;
+            lastHeadPos = Vector3.zero;
+            lastHeadRot = Quaternion.identity;
+            headLinSpeedEma = 0.0f;
+            headAngSpeedEma = 0.0f;
+            headToleranceFactor = 1.0f;
+            lowScoreRunSeconds = 0.0f;
             LockEnters = 0;
             Unlocks = 0;
         }
 
         /// <summary>
         /// 收到一帧被接受的观测时调用 (host 在 motionModel 更新后)。
-        /// 更新 obs-to-obs 速度、静/动 dwell 计数; 锁定中则累积解锁证据。
+        /// 更新 obs-to-obs 速度、头动容忍系数、静/动 dwell 计数; 锁定中则累积解锁证据。
         /// </summary>
         /// <param name="worldPose">frame-aligned world pose (= 进 motion model 的同一 pose)。</param>
         /// <param name="score">该观测可靠性分数 0..1。</param>
         /// <param name="measurementTimeSeconds">观测测量时间 (capture 时间)。</param>
-        public void OnObservation(in Pose worldPose, float score, double measurementTimeSeconds)
+        /// <param name="hasHeadPose">是否提供了头部 (HMD/CenterEye) world pose。</param>
+        /// <param name="headPose">头部 world pose; 用于头动感知放宽 static 约束 (问题3)。</param>
+        public void OnObservation(in Pose worldPose, float score, double measurementTimeSeconds, bool hasHeadPose = false, Pose headPose = default)
         {
             Vector3 pos = worldPose.position;
             Quaternion rot = worldPose.rotation;
@@ -184,8 +225,12 @@ namespace EgoAnchor.Policy
                 }
             }
 
-            bool isStatic = obsSpeedEma <= staticEnterSpeedMps
-                            && obsAngSpeedEma <= staticEnterAngSpeedDps
+            // 头动感知 (问题3): 从 head pose 差分头速, 更新容忍放大系数。头动越大→放宽 static 约束吸收 slip。
+            UpdateHeadMotion(hasHeadPose, headPose, obsDt);
+
+            float f = headToleranceFactor;
+            bool isStatic = obsSpeedEma <= staticEnterSpeedMps * f
+                            && obsAngSpeedEma <= staticEnterAngSpeedDps * f
                             && score >= staticEnterMinScore;
 
             if (locked)
@@ -206,6 +251,31 @@ namespace EgoAnchor.Policy
             lastObsPos = pos;
             lastObsRot = rot;
             lastObsTime = measurementTimeSeconds;
+        }
+
+        /// <summary>从 head pose obs-to-obs 差分头部角/线速度, 更新头动容忍放大系数 headToleranceFactor。</summary>
+        private void UpdateHeadMotion(bool hasHeadPose, in Pose headPose, float obsDt)
+        {
+            if (!hasHeadPose || headMaxToleranceFactor <= 1.0f)
+            {
+                headToleranceFactor = 1.0f; // 无头部数据或功能关闭 → 不放大
+                return;
+            }
+
+            if (hasLastHead && obsDt > 1e-4f)
+            {
+                float linSpeed = Vector3.Distance(headPose.position, lastHeadPos) / obsDt;
+                float angSpeed = AnchorMath.AngleDegrees(lastHeadRot, headPose.rotation) / obsDt;
+                headLinSpeedEma += 0.5f * (linSpeed - headLinSpeedEma);
+                headAngSpeedEma += 0.5f * (angSpeed - headAngSpeedEma);
+            }
+            hasLastHead = true;
+            lastHeadPos = headPose.position;
+            lastHeadRot = headPose.rotation;
+
+            float ratio = Mathf.Max(headAngSpeedEma / headRotForFullToleranceDps, headLinSpeedEma / headLinForFullToleranceMps);
+            ratio = Mathf.Clamp01(ratio);
+            headToleranceFactor = 1.0f + ratio * (headMaxToleranceFactor - 1.0f);
         }
 
         /// <summary>
@@ -297,9 +367,29 @@ namespace EgoAnchor.Policy
         /// <summary>锁定时: 速度逃逸 + 死区吸收 + score 加权 CUSUM + 漏锁 creep。全部按真实 dt, 帧率无关。</summary>
         private void UpdateLockedEvidence(Vector3 pos, Quaternion rot, float score, float obsDt)
         {
+            // 头动放大系数 (头静止=1)。头动时所有"判物体在动→解锁"的阈值同比放大, 把 head-slip 当噪声吸收 (问题3)。
+            float f = headToleranceFactor;
+
+            // 低分释放 (问题1): 锁定时持续低分 → 锁点不可信 (物体被移走/遮挡/跟丢), 强制解锁,
+            // 不让 anchor 冻在错 pose 上。解锁后交回 coasting + 由 PoseToAnchorRuntime 低分 reacquire。
+            if (lowScoreReleaseSeconds > 0.0f && score < lowScoreReleaseScore)
+            {
+                lowScoreRunSeconds += obsDt;
+                if (lowScoreRunSeconds >= lowScoreReleaseSeconds)
+                {
+                    wantUnlock = true;
+                    return; // 解锁在 Stabilize 提交
+                }
+            }
+            else
+            {
+                lowScoreRunSeconds = 0.0f;
+            }
+
             // 速度逃逸: 速度明确超阈连续一段 *时间* → 解锁 (速度比位移更早的运动信号, 堵 false-lock 长尾)。
-            bool movingNow = obsSpeedEma > staticEnterSpeedMps * unlockSpeedFactor
-                             || obsAngSpeedEma > staticEnterAngSpeedDps * unlockSpeedFactor;
+            // 头动时阈值放大: 头转带来的 slip 速度不该触发逃逸。
+            bool movingNow = obsSpeedEma > staticEnterSpeedMps * unlockSpeedFactor * f
+                             || obsAngSpeedEma > staticEnterAngSpeedDps * unlockSpeedFactor * f;
             movingRunSeconds = movingNow ? movingRunSeconds + obsDt : 0.0f;
             if (movingRunSeconds >= unlockMovingSeconds)
             {
@@ -310,9 +400,10 @@ namespace EgoAnchor.Policy
             // 绝对漂移租绳: 相对锁定时固定的 anchorOrigin (creep 不动) 的总漂移超租绳 → 解锁。
             // 慢速持续平移时 creep 会跟着移 lockedPose、让下面的相对 CUSUM 失效, 但 anchorOrigin 不动,
             // 慢移累计够远必然触发, 修复"极慢平移永不脱离 static"。
+            // 头动时租绳放大: 头转造成的 world-pose slip 漂移不该触发解锁; 头静止时回原租绳, 真实慢移正常逃逸。
             float driftPos = Vector3.Distance(pos, anchorOrigin.position);
             float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, rot);
-            if (driftPos > unlockDriftMeters || driftRot > unlockDriftDegrees)
+            if (driftPos > unlockDriftMeters * f || driftRot > unlockDriftDegrees * f)
             {
                 wantUnlock = true;
                 return; // 解锁在 Stabilize 提交
@@ -323,10 +414,13 @@ namespace EgoAnchor.Policy
 
             // CUSUM (帧率无关): 每观测先按真实 dt 做半衰期衰减 (漏积分), 再累积"超死区"部分,
             // 累积量乘 (obsDt / refObsIntervalSeconds), 使同样的持续运动在任何帧率下单位时间攒到的证据相同。
+            // 死区随头动放大: 头转时观测抖动大, 死区放宽吸收 slip; 头静止时回到原死区。
+            float dbMeters = deadbandMeters * f;
+            float dbDegrees = deadbandDegrees * f;
             float decay = Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
             float accScale = obsDt / refObsIntervalSeconds;
-            evidencePos = decay * evidencePos + accScale * score * Mathf.Max(0.0f, dPos - deadbandMeters);
-            evidenceRot = decay * evidenceRot + accScale * score * Mathf.Max(0.0f, dRot - deadbandDegrees);
+            evidencePos = decay * evidencePos + accScale * score * Mathf.Max(0.0f, dPos - dbMeters);
+            evidenceRot = decay * evidenceRot + accScale * score * Mathf.Max(0.0f, dRot - dbDegrees);
 
             if (evidencePos > unlockEvidenceMeters || evidenceRot > unlockEvidenceDegrees)
             {
@@ -336,7 +430,7 @@ namespace EgoAnchor.Policy
 
             // 漏锁 creep: 仅死区内 (纯噪声/极慢漂移) 才朝观测缓慢靠拢, 精修锁点 + 跟极慢漂移而不抖。
             // creep 增益按真实 dt 的半衰期换算, 与帧率无关。
-            if (dPos < deadbandMeters && dRot < deadbandDegrees)
+            if (dPos < dbMeters && dRot < dbDegrees)
             {
                 float g = (1.0f - Mathf.Pow(0.5f, obsDt / creepHalfLifeSeconds)) * score;
                 Vector3 newPos = lockedPose.position + (pos - lockedPose.position) * g;

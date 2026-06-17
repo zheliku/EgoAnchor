@@ -41,7 +41,7 @@ def _python_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _python_protocol_root() -> Path:
+def _protocol_root() -> Path:
     """返回 Python 运行时随包携带的协议资源目录。"""
 
     return _python_root() / "src" / "egoanchor" / "protocol"
@@ -112,7 +112,7 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
             data = _merge_dict(data, tomllib.load(f))
 
     cfg = _dict_to_namespace(data)
-    protocol_root = _python_protocol_root()
+    protocol_root = _protocol_root()
     cfg.paths = RuntimePaths(
         python_root=_python_root(),
         protocol_root=protocol_root,

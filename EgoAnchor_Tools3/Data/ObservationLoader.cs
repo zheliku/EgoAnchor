@@ -23,6 +23,11 @@ namespace EgoAnchor.Tools3.Data
         public readonly double ScoreConfidence;
         public readonly string[] ReliabilityFlags; // 永不为 null
 
+        // 头部 (HMD/CenterEye) world pose, 来自 unity_output 根的 head_pos/head_rot。
+        // 用于头动感知 static: 头动诱导的 slip 不应被误判成物体真实运动。
+        public readonly bool HasHeadPose;
+        public readonly Pose HeadPose;
+
         public Observation(
             long sourceFrameId,
             double timeSeconds,
@@ -32,7 +37,9 @@ namespace EgoAnchor.Tools3.Data
             double scoreDepth = -1.0,
             double scoreReprojection = -1.0,
             double scoreConfidence = -1.0,
-            string[]? reliabilityFlags = null)
+            string[]? reliabilityFlags = null,
+            bool hasHeadPose = false,
+            Pose headPose = default)
         {
             SourceFrameId = sourceFrameId;
             TimeSeconds = timeSeconds;
@@ -43,6 +50,8 @@ namespace EgoAnchor.Tools3.Data
             ScoreReprojection = scoreReprojection;
             ScoreConfidence = scoreConfidence;
             ReliabilityFlags = reliabilityFlags ?? System.Array.Empty<string>();
+            HasHeadPose = hasHeadPose;
+            HeadPose = headPose;
         }
 
         /// <summary>是否带某个可靠性 flag (大小写不敏感)。</summary>
@@ -135,6 +144,9 @@ namespace EgoAnchor.Tools3.Data
 
                     scoreByFrame.TryGetValue(sourceFrameId, out PoseScoreDetail detail);
 
+                    // 头部 pose (CenterEyeAnchor) 在 root, 用于头动感知 static (问题3)。无则 hasHead=false。
+                    bool hasHead = TryReadPose(root, "head_pos", "head_rot", out Pose headPose);
+
                     seen.Add(sourceFrameId);
                     observations.Add(new Observation(
                         sourceFrameId,
@@ -145,7 +157,9 @@ namespace EgoAnchor.Tools3.Data
                         detail.ScoreDepth,
                         detail.ScoreReprojection,
                         detail.ScoreConfidence,
-                        detail.Flags));
+                        detail.Flags,
+                        hasHead,
+                        headPose));
                     break;
                 }
             }

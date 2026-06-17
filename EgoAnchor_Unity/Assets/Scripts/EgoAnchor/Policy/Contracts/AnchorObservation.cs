@@ -50,6 +50,13 @@ namespace EgoAnchor.Policy
         /// <summary>缺失、拒绝或对齐失败原因。</summary>
         public readonly string FailureReason;
 
+        /// <summary>是否携带采集时刻头部 (center camera) world pose，用于头动感知 static。</summary>
+        public readonly bool HasHeadPose;
+
+        /// <summary>采集时刻头部 (center camera) world pose；HasHeadPose=false 时为 Pose.identity。
+        /// 复用 FramePoseHistory 按 frame_id 记录的 CenterCameraPose，与帧对齐同一份缓存，不重复绑定 CenterEyeAnchor。</summary>
+        public readonly Pose HeadPose;
+
         /// <summary>是否携带有效的采集时间。</summary>
         public bool HasCaptureTime => CaptureTimeSeconds >= 0.0;
 
@@ -75,7 +82,9 @@ namespace EgoAnchor.Policy
             string phase,
             string poseSource,
             bool isRelocalization,
-            string failureReason)
+            string failureReason,
+            bool hasHeadPose = false,
+            Pose headPose = default)
         {
             FrameId = frameId;
             SampleTimeSeconds = sampleTimeSeconds;
@@ -89,6 +98,8 @@ namespace EgoAnchor.Policy
             PoseSource = poseSource ?? string.Empty;
             IsRelocalization = isRelocalization;
             FailureReason = failureReason ?? string.Empty;
+            HasHeadPose = hasHeadPose;
+            HeadPose = hasHeadPose ? headPose : Pose.identity;
         }
 
         /// <summary>
@@ -111,7 +122,9 @@ namespace EgoAnchor.Policy
             string[] reliabilityFlags = null,
             string phase = "",
             string poseSource = "",
-            double captureTimeSeconds = -1.0)
+            double captureTimeSeconds = -1.0,
+            bool hasHeadPose = false,
+            Pose headPose = default)
         {
             return new AnchorObservation(
                 frameId,
@@ -125,7 +138,9 @@ namespace EgoAnchor.Policy
                 phase,
                 poseSource,
                 IsRegisterLike(phase) || IsRegisterLike(poseSource),
-                failureReason: string.Empty
+                failureReason: string.Empty,
+                hasHeadPose,
+                headPose
             );
         }
 

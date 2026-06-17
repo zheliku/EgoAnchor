@@ -26,7 +26,7 @@ final = gate * quality * confidence
 
 ```text
 core    = weighted_geometric_mean(valid reprojection, valid depth)
-mod     = bounded(mask_score, mask_floor) * bounded(jump_score, jump_floor)
+mod     = bounded(mask_score, mask_floor)
 quality = clamp01(core * mod)
 final   = clamp01(gate * quality * confidence)
 ```
@@ -153,7 +153,7 @@ mask_mod = mask_floor + (1 - mask_floor) * clamp01(score_mask)
 
 默认 `mask_floor=0.5`。即使 mask 分很低，也最多把 quality 温和压低，不会单独把 pose 判死。
 
-## 8. Jump 调制
+## 8. Jump 子分（仅诊断，不参与评分）
 
 `score_jump` 来自相邻接受 pose 的平移和旋转增量：
 
@@ -165,13 +165,7 @@ mask_mod = mask_floor + (1 - mask_floor) * clamp01(score_mask)
 
 当 `score_jump < 0.5` 时写入 `near_jump_limit`。
 
-jump 同样不进入几何核，而是映射为：
-
-```text
-jump_mod = jump_floor + (1 - jump_floor) * clamp01(score_jump)
-```
-
-默认 `jump_floor=0.6`。这能减少快速头动或低帧率下的误杀。
+**`score_jump` 不再参与 quality 合成（2026-06-18 起）。** 离线分析表明：逐帧跳变幅度无法区分坏 pose 和真实快速运动——坏几何帧的跳变幅度并不比正常快动大，让它调制 quality 只会误伤快速运动而几乎抓不到真正的坏 pose。因此 `score_jump` 仅作为 HUD/JSONL 诊断字段保留，坏 pose 的拒绝交给几何核（reprojection/depth）和 Unity anchor 层（几何 flag + CUSUM）。`jump_floor` 配置项保留但当前不生效。
 
 ## 9. Confidence warmup
 

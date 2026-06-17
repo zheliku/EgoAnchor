@@ -81,7 +81,7 @@ namespace EgoAnchor.Tools3
                 var rowD = new List<IPredictor>
                 {
                     new EgoAnchorStabilizerPredictor(
-                        new DelayedInterpolationPredictor(new KalmanControlPoints(), SplineKind.Hermite)), // ego_kalman_hermite
+                        new DelayedInterpolationPredictor(new KalmanControlPoints(), SplineKind.Hermite)), // ego_kalman_hermite (head-aware)
                 };
 
                 var predictors = new List<IPredictor>();
