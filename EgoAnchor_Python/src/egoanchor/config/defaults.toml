@@ -118,6 +118,7 @@ trt_platform_tag = "" # 显式 TRT 平台标签；空值自动识别 win/linux/m
 trt_feature_engine_path = "" # 显式 feature runner engine 路径；空值自动查找。
 trt_post_engine_path = "" # 显式 post runner engine 路径；空值自动查找。
 enable_logging = false # 是否允许 FFS 内部 stdout/stderr/logging 输出到 console；默认关闭，且不调用原工程会重置全局 logging 的格式函数。
+allow_tf32 = false # 是否允许 TF32 matmul/cudnn 加速。默认 true 保持原行为。诊断用：5090(Blackwell) 上若 pose 抖动，设 false 走 fp32 排查是否低精度数值路径所致(会变慢)。
 
 [module.foundationpose]
 mesh_path = "data/model/cube.stl" # FoundationPose 目标物体 mesh 路径，相对 EgoAnchor_Python。

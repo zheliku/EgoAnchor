@@ -219,6 +219,7 @@ class FastFoundationStereoDepth:
         trt_feature_engine_path: str = "",
         trt_post_engine_path: str = "",
         enable_logging: bool = False,
+        allow_tf32: bool = True,
         project_root: str | Path | None = None,
     ) -> None:
         """保存推理参数并初始化 PyTorch/TRT 后端。"""
@@ -264,6 +265,10 @@ class FastFoundationStereoDepth:
 
         self.enable_logging = bool(enable_logging)
         """是否允许 FFS 内部 stdout/stderr/logging 输出到 console。"""
+
+        self.allow_tf32 = bool(allow_tf32)
+        """是否允许 TF32 matmul/cudnn。诊断用：Blackwell(5090) 上 TF32 数值路径可能与 Ampere 差异较大，
+        关掉可排查"低精度数值路径导致深度抖动"。默认 True（保持原行为，不影响已稳定的机器）。"""
 
         self.runtime_backend = "pytorch"
         """当前实际使用的后端名称，仅用于日志和诊断。"""
@@ -355,10 +360,12 @@ class FastFoundationStereoDepth:
             LOGGER.debug("FFS TRT 模式启用，首次推理将按输入尺寸匹配 engine。")
 
         if hasattr(self.torch, "set_float32_matmul_precision"):
-            self.torch.set_float32_matmul_precision("high")
+            self.torch.set_float32_matmul_precision("high" if self.allow_tf32 else "highest")
         if self.device.type == "cuda":
-            self.torch.backends.cuda.matmul.allow_tf32 = True
-            self.torch.backends.cudnn.allow_tf32 = True
+            self.torch.backends.cuda.matmul.allow_tf32 = self.allow_tf32
+            self.torch.backends.cudnn.allow_tf32 = self.allow_tf32
+            if not self.allow_tf32:
+                LOGGER.info("FFS TF32 已关闭 (allow_tf32=false)：matmul/cudnn 走 fp32 路径，用于排查数值抖动。")
 
     @staticmethod
     def _configure_ffs_logging(enabled: bool) -> None:

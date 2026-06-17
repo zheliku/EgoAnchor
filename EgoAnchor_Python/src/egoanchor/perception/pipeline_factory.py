@@ -206,6 +206,7 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         trt_feature_engine_path=str(ffs_cfg.trt_feature_engine_path),
         trt_post_engine_path=str(ffs_cfg.trt_post_engine_path),
         enable_logging=bool(_cfg_get(ffs_cfg, "enable_logging", False)),
+        allow_tf32=bool(_cfg_get(ffs_cfg, "allow_tf32", True)),
         project_root=python_root,
     )
 

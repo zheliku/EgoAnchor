@@ -882,6 +882,8 @@ MonoBehaviour:
   staticLockDeadbandDegrees: 3
   staticLockUnlockEvidenceMeters: 0.08
   staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
   staticLockEvidenceHalfLifeSeconds: 0.27
   staticLockCreepHalfLifeSeconds: 2.7
   staticLockRelockSuppressSeconds: 0.8
@@ -2730,6 +2732,8 @@ MonoBehaviour:
   staticLockDeadbandDegrees: 3
   staticLockUnlockEvidenceMeters: 0.08
   staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
   staticLockEvidenceHalfLifeSeconds: 0.27
   staticLockCreepHalfLifeSeconds: 2.7
   staticLockRelockSuppressSeconds: 0.8
@@ -4273,6 +4277,8 @@ MonoBehaviour:
   staticLockDeadbandDegrees: 3
   staticLockUnlockEvidenceMeters: 0.08
   staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
   staticLockEvidenceHalfLifeSeconds: 0.27
   staticLockCreepHalfLifeSeconds: 2.7
   staticLockRelockSuppressSeconds: 0.8
@@ -6000,6 +6006,8 @@ MonoBehaviour:
   staticLockDeadbandDegrees: 3
   staticLockUnlockEvidenceMeters: 0.08
   staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
   staticLockEvidenceHalfLifeSeconds: 0.27
   staticLockCreepHalfLifeSeconds: 2.7
   staticLockRelockSuppressSeconds: 0.8
@@ -6776,6 +6784,8 @@ MonoBehaviour:
   staticLockDeadbandDegrees: 3
   staticLockUnlockEvidenceMeters: 0.08
   staticLockUnlockEvidenceDegrees: 20
+  staticLockUnlockDriftMeters: 0.015
+  staticLockUnlockDriftDegrees: 5
   staticLockEvidenceHalfLifeSeconds: 0.27
   staticLockCreepHalfLifeSeconds: 2.7
   staticLockRelockSuppressSeconds: 0.8
