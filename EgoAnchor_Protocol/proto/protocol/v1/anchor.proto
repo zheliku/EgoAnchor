@@ -27,7 +27,7 @@ message PoseResult {
   float score_phase = 18;
   float score_reprojection = 19;
   float score_depth = 20;
-  float score_jump = 21;
+  reserved 21; // 旧 score_jump (跳变子分)；已移除——逐帧跳变幅度无法区分坏 pose 与真实快动, 见 egoanchor-jump-rejection-analysis。字段号保留不复用。
   float score_mask = 22;
   float score_reject = 23;
   float color_reprojection = 24;

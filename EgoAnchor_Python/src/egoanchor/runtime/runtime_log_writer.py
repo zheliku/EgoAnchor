@@ -186,7 +186,6 @@ class RuntimeLogWriter:
                 score_phase=float(getattr(diagnostics, "score_phase", 0.0)),
                 score_reprojection=float(getattr(diagnostics, "score_reprojection", 0.0)),
                 score_depth=float(getattr(diagnostics, "score_depth", 0.0)),
-                score_jump=float(getattr(diagnostics, "score_jump", 0.0)),
                 score_mask=float(getattr(diagnostics, "score_mask", 0.0)),
                 score_reject=float(getattr(diagnostics, "score_reject", 0.0)),
                 score_confidence=float(getattr(diagnostics, "score_confidence", 0.0)),

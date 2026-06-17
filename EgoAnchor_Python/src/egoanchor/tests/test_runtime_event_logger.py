@@ -213,7 +213,6 @@ class RuntimeEventLoggerTest(unittest.TestCase):
                     score_phase=1.0,
                     score_reprojection=0.64,
                     score_depth=0.66,
-                    score_jump=0.95,
                     score_mask=1.0,
                     score_reject=1.0,
                     score_confidence=0.8,
@@ -254,7 +253,6 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertAlmostEqual(row["score_phase"], 1.0)
             self.assertAlmostEqual(row["score_reprojection"], 0.64)
             self.assertAlmostEqual(row["score_depth"], 0.66)
-            self.assertAlmostEqual(row["score_jump"], 0.95)
             self.assertAlmostEqual(row["score_mask"], 1.0)
             self.assertAlmostEqual(row["score_reject"], 1.0)
             self.assertAlmostEqual(row["score_confidence"], 0.8)

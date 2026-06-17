@@ -137,20 +137,6 @@ class PoseQualityTest(unittest.TestCase):
 
         self.assertAlmostEqual(breakdown.depth_score, 0.5)
 
-    def test_jump_score_uses_frame_dt_adaptive_soft_threshold(self) -> None:
-        """低帧率下正常位移不应因 30fps 固定软阈值而误报 near_jump_limit。"""
-
-        fast = score_observation_breakdown(
-            self._track_observation(last_translation_delta_m=0.34, frame_dt_s=1.0 / 30.0)
-        )
-        slow = score_observation_breakdown(
-            self._track_observation(last_translation_delta_m=0.34, frame_dt_s=0.18)
-        )
-
-        self.assertLess(fast.jump_score, slow.jump_score)
-        self.assertIn("near_jump_limit", fast.flags)
-        self.assertNotIn("near_jump_limit", slow.flags)
-
     def test_mask_score_is_smooth_gate(self) -> None:
         """没有投影面积信号时，mask 全图面积异常仍应平滑降分。"""
 
@@ -249,7 +235,6 @@ class PoseQualityTest(unittest.TestCase):
         self.assertAlmostEqual(breakdown.phase_score, 1.0)
         self.assertAlmostEqual(breakdown.reprojection_score, 0.4)
         self.assertGreater(breakdown.depth_score, 0.0)
-        self.assertLess(breakdown.jump_score, 1.0)
         self.assertAlmostEqual(breakdown.mask_score, 1.0)
         self.assertAlmostEqual(breakdown.reject_score, 1.0)
         self.assertAlmostEqual(

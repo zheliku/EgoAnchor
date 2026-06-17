@@ -341,7 +341,6 @@ class PoseResultRow:
     score_phase: float
     score_reprojection: float
     score_depth: float
-    score_jump: float
     score_mask: float
     score_reject: float
     score_confidence: float
@@ -387,7 +386,6 @@ class PoseResultRow:
             score_phase=_optional_float(row, "score_phase", np.nan),
             score_reprojection=_optional_float(row, "score_reprojection", np.nan),
             score_depth=_optional_float(row, "score_depth", np.nan),
-            score_jump=_optional_float(row, "score_jump", np.nan),
             score_mask=_optional_float(row, "score_mask", np.nan),
             score_reject=_optional_float(row, "score_reject", np.nan),
             score_confidence=_optional_float(row, "score_confidence", np.nan),
@@ -437,7 +435,6 @@ class PoseResultRow:
             "score_phase": self.score_phase,
             "score_reprojection": self.score_reprojection,
             "score_depth": self.score_depth,
-            "score_jump": self.score_jump,
             "score_mask": self.score_mask,
             "score_reject": self.score_reject,
             "score_confidence": self.score_confidence,

@@ -99,7 +99,6 @@ class PoseResultFactory:
         result.score_phase = _finite_or_default(observation.score_phase)
         result.score_reprojection = _finite_or_default(observation.score_reprojection)
         result.score_depth = _finite_or_default(observation.score_depth)
-        result.score_jump = _finite_or_default(observation.score_jump)
         result.score_mask = _finite_or_default(observation.score_mask)
         result.score_reject = _finite_or_default(observation.score_reject)
         result.score_confidence = _finite_or_default(observation.score_confidence)

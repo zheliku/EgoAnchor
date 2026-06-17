@@ -60,9 +60,6 @@ class PoseObservation:
     score_depth: float = 0.0
     """reliability 最终分中的 depth 子分。"""
 
-    score_jump: float = 0.0
-    """reliability 最终分中的相邻 pose 跳变子分。"""
-
     score_mask: float = 0.0
     """reliability 最终分中的 mask 面积子分。"""
 
@@ -115,7 +112,7 @@ class PoseObservation:
     """上一接受 pose 到当前 pose 的旋转增量，单位度。"""
 
     frame_dt_s: float = 0.0
-    """当前 pose 与上一处理 pose 的帧间隔，单位秒，用于 jump_score 自适应阈值。"""
+    """当前 pose 与上一处理 pose 的帧间隔，单位秒，帧间间隔遥测。"""
 
     track_reject_count: int = 0
     """连续 track reject 计数。"""

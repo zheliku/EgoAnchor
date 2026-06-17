@@ -16,8 +16,7 @@ namespace EgoAnchor.Tools3.Data
         public readonly double Score; // reliability_score (供 egoanchor 用)
 
         // 子分 + flags (来自 python_runtime.jsonl, 按 frame_id join; 无信号时为 -1 / 空)。
-        // 用于区分"真实快动"(几何分仍高, 仅 jump 低) vs "坏 pose"(几何分低)。
-        public readonly double ScoreJump;          // -1 = 无
+        // 用于区分"真实快动"(几何分仍高) vs "坏 pose"(几何分低)。
         public readonly double ScoreDepth;
         public readonly double ScoreReprojection;
         public readonly double ScoreConfidence;
@@ -33,7 +32,6 @@ namespace EgoAnchor.Tools3.Data
             double timeSeconds,
             Pose pose,
             double score,
-            double scoreJump = -1.0,
             double scoreDepth = -1.0,
             double scoreReprojection = -1.0,
             double scoreConfidence = -1.0,
@@ -45,7 +43,6 @@ namespace EgoAnchor.Tools3.Data
             TimeSeconds = timeSeconds;
             Pose = pose;
             Score = score;
-            ScoreJump = scoreJump;
             ScoreDepth = scoreDepth;
             ScoreReprojection = scoreReprojection;
             ScoreConfidence = scoreConfidence;
@@ -153,7 +150,6 @@ namespace EgoAnchor.Tools3.Data
                         captureMs / 1000.0,
                         pose,
                         score,
-                        detail.ScoreJump,
                         detail.ScoreDepth,
                         detail.ScoreReprojection,
                         detail.ScoreConfidence,
@@ -172,15 +168,13 @@ namespace EgoAnchor.Tools3.Data
         /// <summary>子分 + flags 明细 (来自 python_runtime pose_result, 按 frame_id)。无信号子分为 -1。</summary>
         private readonly struct PoseScoreDetail
         {
-            public readonly double ScoreJump;
             public readonly double ScoreDepth;
             public readonly double ScoreReprojection;
             public readonly double ScoreConfidence;
             public readonly string[] Flags;
 
-            public PoseScoreDetail(double jump, double depth, double reproj, double conf, string[] flags)
+            public PoseScoreDetail(double depth, double reproj, double conf, string[] flags)
             {
-                ScoreJump = jump;
                 ScoreDepth = depth;
                 ScoreReprojection = reproj;
                 ScoreConfidence = conf;
@@ -236,7 +230,6 @@ namespace EgoAnchor.Tools3.Data
 
                 string[] flags = ReadStringArray(root, "reliability_flags");
                 map[frameId] = new PoseScoreDetail(
-                    ReadDouble(root, "score_jump", -1.0),
                     ReadDouble(root, "score_depth", -1.0),
                     ReadDouble(root, "score_reprojection", -1.0),
                     ReadDouble(root, "score_confidence", -1.0),

@@ -25,7 +25,7 @@ namespace EgoAnchor.Protocol.Generated {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "Chhwcm90b2NvbC92MS9hbmNob3IucHJvdG8SC3Byb3RvY29sLnYxGhhwcm90",
-            "b2NvbC92MS9jb21tb24ucHJvdG8irwgKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
+            "b2NvbC92MS9jb21tb24ucHJvdG8ioQgKClBvc2VSZXN1bHQSKgoGaGVhZGVy",
             "GAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRlchIQCghoYXNfcG9z",
             "ZRgCIAEoCBI1ChVwb3NlX21hdHJpeF9jdl9jYW1lcmEYAyABKAsyFi5wcm90",
             "b2NvbC52MS5NYXRyaXg0eDQSDQoFcGhhc2UYBCABKAkSDQoFc3RhZ2UYBSAB",
@@ -38,47 +38,47 @@ namespace EgoAnchor.Protocol.Generated {
             "GA8gASgJEh4KFnNlcnZlcl9yZWNlaXZlX21vbm9fbXMYECABKAESHgoWc2Vy",
             "dmVyX3B1Ymxpc2hfbW9ub19tcxgRIAEoARITCgtzY29yZV9waGFzZRgSIAEo",
             "AhIaChJzY29yZV9yZXByb2plY3Rpb24YEyABKAISEwoLc2NvcmVfZGVwdGgY",
-            "FCABKAISEgoKc2NvcmVfanVtcBgVIAEoAhISCgpzY29yZV9tYXNrGBYgASgC",
-            "EhQKDHNjb3JlX3JlamVjdBgXIAEoAhIaChJjb2xvcl9yZXByb2plY3Rpb24Y",
-            "GCABKAISHwoXcmVuZGVyX3F1YWxpdHlfbWFza19pb3UYGSABKAISIwobcmVu",
-            "ZGVyX3F1YWxpdHlfZGVwdGhfaW5saWVyGBogASgCEisKI3JlbmRlcl9xdWFs",
-            "aXR5X3JlbmRlcl92aXNpYmxlX3JhdGlvGBsgASgCEicKH3JlbmRlcl9xdWFs",
-            "aXR5X2RlcHRoX3Jlc2lkdWFsX20YHCABKAISHQoVcmVuZGVyX3F1YWxpdHlf",
-            "c3RhdHVzGB0gASgJEiUKHXJlbmRlcl9xdWFsaXR5X3JlbmRlcl9hcmVhX3B4",
-            "GB4gASgFEiAKGHJlbmRlcl9xdWFsaXR5X2V2YWx1YXRlZBgfIAEoCBItCiVy",
-            "ZW5kZXJfcXVhbGl0eV9vYnNlcnZlZF92aXNpYmxlX3JhdGlvGCAgASgCEiYK",
-            "HnJlbmRlcl9xdWFsaXR5X2RlcHRoX2FsaWdubWVudBghIAEoAhIYChBzY29y",
-            "ZV9jb25maWRlbmNlGCIgASgCEicKH3JlbmRlcl9xdWFsaXR5X2FyZWFfcmF0",
-            "aW9fc2NvcmUYIyABKAIilQEKEUFuY2hvclN0YXR1c0V2ZW50EioKBmhlYWRl",
-            "chgBIAEoCzIaLnByb3RvY29sLnYxLk1lc3NhZ2VIZWFkZXISDQoFc3RhdGUY",
-            "AiABKAkSDQoFZXZlbnQYAyABKAkSDwoHbWVzc2FnZRgEIAEoCRIlCgVlcnJv",
-            "chgFIAEoCzIWLnByb3RvY29sLnYxLkVycm9ySW5mbyKSAgoPU2VydmVySGVh",
-            "cnRiZWF0EioKBmhlYWRlchgBIAEoCzIaLnByb3RvY29sLnYxLk1lc3NhZ2VI",
-            "ZWFkZXISDQoFc3RhdGUYAiABKAkSEwoLaW5wdXRfcmVhZHkYAyABKAgSHgoW",
-            "bGF0ZXN0X3N0ZXJlb19mcmFtZV9pZBgEIAEoAxIbChNjYW1lcmFfaW5mb192",
-            "ZXJzaW9uGAUgASgDEhMKC3J1bnRpbWVfZnBzGAYgASgCEhMKC3B1Ymxpc2hf",
-            "ZnBzGAcgASgCEioKCmxhc3RfZXJyb3IYCCABKAsyFi5wcm90b2NvbC52MS5F",
-            "cnJvckluZm8SHAoUY29tbWFuZF9xdWV1ZV9sZW5ndGgYCSABKAUihAEKFFJl",
-            "c2V0VHJhY2tpbmdSZXF1ZXN0EioKBmhlYWRlchgBIAEoCzIaLnByb3RvY29s",
-            "LnYxLk1lc3NhZ2VIZWFkZXISFQoNY2xlYXJfZmlsdGVycxgCIAEoCBIZChFj",
-            "bGVhcl9hbmNob3JfcG9zZRgDIAEoCBIOCgZyZWFzb24YBCABKAkiqAIKFlJl",
-            "YWNxdWlyZUFuY2hvclJlcXVlc3QSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9j",
-            "b2wudjEuTWVzc2FnZUhlYWRlchI/CgRtb2RlGAIgASgOMjEucHJvdG9jb2wu",
-            "djEuUmVhY3F1aXJlQW5jaG9yUmVxdWVzdC5SZWFjcXVpcmVNb2RlEhwKFGNs",
-            "ZWFyX3RyYWNraW5nX2ZpcnN0GAMgASgIEhcKD3Byb21wdF9vdmVycmlkZRgE",
-            "IAEoCRISCgp0aW1lb3V0X21zGAUgASgBIlYKDVJlYWNxdWlyZU1vZGUSFAoQ",
-            "TkVYVF9WQUxJRF9GUkFNRRAAEh0KGUxBVEVTVF9GUkFNRV9JRl9BVkFJTEFC",
-            "TEUQARIQCgxGT1JDRV9ERVRFQ1QQAiL5AQoUQW5jaG9yQ29udHJvbFJlcXVl",
-            "c3QSKgoGaGVhZGVyGAEgASgLMhoucHJvdG9jb2wudjEuTWVzc2FnZUhlYWRl",
-            "chI/CgZhY3Rpb24YAiABKA4yLy5wcm90b2NvbC52MS5BbmNob3JDb250cm9s",
-            "UmVxdWVzdC5Db250cm9sQWN0aW9uEg0KBXN0YWdlGAMgASgFEg4KBnJlYXNv",
-            "bhgEIAEoCSJVCg1Db250cm9sQWN0aW9uEh4KGkNPTlRST0xfQUNUSU9OX1VO",
-            "U1BFQ0lGSUVEEAASDQoJU0VUX1NUQUdFEAESCQoFUEFVU0UQAhIKCgZSRVNV",
-            "TUUQA0IYqgIVRWdvQW5jaG9yLlByb3RvY29sLlYxYgZwcm90bzM="));
+            "FCABKAISEgoKc2NvcmVfbWFzaxgWIAEoAhIUCgxzY29yZV9yZWplY3QYFyAB",
+            "KAISGgoSY29sb3JfcmVwcm9qZWN0aW9uGBggASgCEh8KF3JlbmRlcl9xdWFs",
+            "aXR5X21hc2tfaW91GBkgASgCEiMKG3JlbmRlcl9xdWFsaXR5X2RlcHRoX2lu",
+            "bGllchgaIAEoAhIrCiNyZW5kZXJfcXVhbGl0eV9yZW5kZXJfdmlzaWJsZV9y",
+            "YXRpbxgbIAEoAhInCh9yZW5kZXJfcXVhbGl0eV9kZXB0aF9yZXNpZHVhbF9t",
+            "GBwgASgCEh0KFXJlbmRlcl9xdWFsaXR5X3N0YXR1cxgdIAEoCRIlCh1yZW5k",
+            "ZXJfcXVhbGl0eV9yZW5kZXJfYXJlYV9weBgeIAEoBRIgChhyZW5kZXJfcXVh",
+            "bGl0eV9ldmFsdWF0ZWQYHyABKAgSLQolcmVuZGVyX3F1YWxpdHlfb2JzZXJ2",
+            "ZWRfdmlzaWJsZV9yYXRpbxggIAEoAhImCh5yZW5kZXJfcXVhbGl0eV9kZXB0",
+            "aF9hbGlnbm1lbnQYISABKAISGAoQc2NvcmVfY29uZmlkZW5jZRgiIAEoAhIn",
+            "Ch9yZW5kZXJfcXVhbGl0eV9hcmVhX3JhdGlvX3Njb3JlGCMgASgCSgQIFRAW",
+            "IpUBChFBbmNob3JTdGF0dXNFdmVudBIqCgZoZWFkZXIYASABKAsyGi5wcm90",
+            "b2NvbC52MS5NZXNzYWdlSGVhZGVyEg0KBXN0YXRlGAIgASgJEg0KBWV2ZW50",
+            "GAMgASgJEg8KB21lc3NhZ2UYBCABKAkSJQoFZXJyb3IYBSABKAsyFi5wcm90",
+            "b2NvbC52MS5FcnJvckluZm8ikgIKD1NlcnZlckhlYXJ0YmVhdBIqCgZoZWFk",
+            "ZXIYASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVhZGVyEg0KBXN0YXRl",
+            "GAIgASgJEhMKC2lucHV0X3JlYWR5GAMgASgIEh4KFmxhdGVzdF9zdGVyZW9f",
+            "ZnJhbWVfaWQYBCABKAMSGwoTY2FtZXJhX2luZm9fdmVyc2lvbhgFIAEoAxIT",
+            "CgtydW50aW1lX2ZwcxgGIAEoAhITCgtwdWJsaXNoX2ZwcxgHIAEoAhIqCgps",
+            "YXN0X2Vycm9yGAggASgLMhYucHJvdG9jb2wudjEuRXJyb3JJbmZvEhwKFGNv",
+            "bW1hbmRfcXVldWVfbGVuZ3RoGAkgASgFIoQBChRSZXNldFRyYWNraW5nUmVx",
+            "dWVzdBIqCgZoZWFkZXIYASABKAsyGi5wcm90b2NvbC52MS5NZXNzYWdlSGVh",
+            "ZGVyEhUKDWNsZWFyX2ZpbHRlcnMYAiABKAgSGQoRY2xlYXJfYW5jaG9yX3Bv",
+            "c2UYAyABKAgSDgoGcmVhc29uGAQgASgJIqgCChZSZWFjcXVpcmVBbmNob3JS",
+            "ZXF1ZXN0EioKBmhlYWRlchgBIAEoCzIaLnByb3RvY29sLnYxLk1lc3NhZ2VI",
+            "ZWFkZXISPwoEbW9kZRgCIAEoDjIxLnByb3RvY29sLnYxLlJlYWNxdWlyZUFu",
+            "Y2hvclJlcXVlc3QuUmVhY3F1aXJlTW9kZRIcChRjbGVhcl90cmFja2luZ19m",
+            "aXJzdBgDIAEoCBIXCg9wcm9tcHRfb3ZlcnJpZGUYBCABKAkSEgoKdGltZW91",
+            "dF9tcxgFIAEoASJWCg1SZWFjcXVpcmVNb2RlEhQKEE5FWFRfVkFMSURfRlJB",
+            "TUUQABIdChlMQVRFU1RfRlJBTUVfSUZfQVZBSUxBQkxFEAESEAoMRk9SQ0Vf",
+            "REVURUNUEAIi+QEKFEFuY2hvckNvbnRyb2xSZXF1ZXN0EioKBmhlYWRlchgB",
+            "IAEoCzIaLnByb3RvY29sLnYxLk1lc3NhZ2VIZWFkZXISPwoGYWN0aW9uGAIg",
+            "ASgOMi8ucHJvdG9jb2wudjEuQW5jaG9yQ29udHJvbFJlcXVlc3QuQ29udHJv",
+            "bEFjdGlvbhINCgVzdGFnZRgDIAEoBRIOCgZyZWFzb24YBCABKAkiVQoNQ29u",
+            "dHJvbEFjdGlvbhIeChpDT05UUk9MX0FDVElPTl9VTlNQRUNJRklFRBAAEg0K",
+            "CVNFVF9TVEFHRRABEgkKBVBBVVNFEAISCgoGUkVTVU1FEANCGKoCFUVnb0Fu",
+            "Y2hvci5Qcm90b2NvbC5WMWIGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::EgoAnchor.Protocol.Generated.CommonReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError", "ReliabilityScore", "ReliabilityFlags", "DepthValidInMask", "MaskAreaRatio", "PoseSource", "ServerReceiveMonoMs", "ServerPublishMonoMs", "ScorePhase", "ScoreReprojection", "ScoreDepth", "ScoreJump", "ScoreMask", "ScoreReject", "ColorReprojection", "RenderQualityMaskIou", "RenderQualityDepthInlier", "RenderQualityRenderVisibleRatio", "RenderQualityDepthResidualM", "RenderQualityStatus", "RenderQualityRenderAreaPx", "RenderQualityEvaluated", "RenderQualityObservedVisibleRatio", "RenderQualityDepthAlignment", "ScoreConfidence", "RenderQualityAreaRatioScore" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.PoseResult), global::EgoAnchor.Protocol.Generated.PoseResult.Parser, new[]{ "Header", "HasPose", "PoseMatrixCvCamera", "Phase", "Stage", "DetCount", "DepthValidRatio", "Fps", "Timing", "LastError", "ReliabilityScore", "ReliabilityFlags", "DepthValidInMask", "MaskAreaRatio", "PoseSource", "ServerReceiveMonoMs", "ServerPublishMonoMs", "ScorePhase", "ScoreReprojection", "ScoreDepth", "ScoreMask", "ScoreReject", "ColorReprojection", "RenderQualityMaskIou", "RenderQualityDepthInlier", "RenderQualityRenderVisibleRatio", "RenderQualityDepthResidualM", "RenderQualityStatus", "RenderQualityRenderAreaPx", "RenderQualityEvaluated", "RenderQualityObservedVisibleRatio", "RenderQualityDepthAlignment", "ScoreConfidence", "RenderQualityAreaRatioScore" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.AnchorStatusEvent), global::EgoAnchor.Protocol.Generated.AnchorStatusEvent.Parser, new[]{ "Header", "State", "Event", "Message", "Error" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ServerHeartbeat), global::EgoAnchor.Protocol.Generated.ServerHeartbeat.Parser, new[]{ "Header", "State", "InputReady", "LatestStereoFrameId", "CameraInfoVersion", "RuntimeFps", "PublishFps", "LastError", "CommandQueueLength" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::EgoAnchor.Protocol.Generated.ResetTrackingRequest), global::EgoAnchor.Protocol.Generated.ResetTrackingRequest.Parser, new[]{ "Header", "ClearFilters", "ClearAnchorPose", "Reason" }, null, null, null, null),
@@ -145,7 +145,6 @@ namespace EgoAnchor.Protocol.Generated {
       scorePhase_ = other.scorePhase_;
       scoreReprojection_ = other.scoreReprojection_;
       scoreDepth_ = other.scoreDepth_;
-      scoreJump_ = other.scoreJump_;
       scoreMask_ = other.scoreMask_;
       scoreReject_ = other.scoreReject_;
       colorReprojection_ = other.colorReprojection_;
@@ -408,18 +407,6 @@ namespace EgoAnchor.Protocol.Generated {
       }
     }
 
-    /// <summary>Field number for the "score_jump" field.</summary>
-    public const int ScoreJumpFieldNumber = 21;
-    private float scoreJump_;
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public float ScoreJump {
-      get { return scoreJump_; }
-      set {
-        scoreJump_ = value;
-      }
-    }
-
     /// <summary>Field number for the "score_mask" field.</summary>
     public const int ScoreMaskFieldNumber = 22;
     private float scoreMask_;
@@ -623,7 +610,6 @@ namespace EgoAnchor.Protocol.Generated {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScorePhase, other.ScorePhase)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreReprojection, other.ScoreReprojection)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreDepth, other.ScoreDepth)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreJump, other.ScoreJump)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreMask, other.ScoreMask)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ScoreReject, other.ScoreReject)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ColorReprojection, other.ColorReprojection)) return false;
@@ -665,7 +651,6 @@ namespace EgoAnchor.Protocol.Generated {
       if (ScorePhase != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScorePhase);
       if (ScoreReprojection != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreReprojection);
       if (ScoreDepth != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreDepth);
-      if (ScoreJump != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreJump);
       if (ScoreMask != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreMask);
       if (ScoreReject != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ScoreReject);
       if (ColorReprojection != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ColorReprojection);
@@ -774,10 +759,6 @@ namespace EgoAnchor.Protocol.Generated {
       if (ScoreDepth != 0F) {
         output.WriteRawTag(165, 1);
         output.WriteFloat(ScoreDepth);
-      }
-      if (ScoreJump != 0F) {
-        output.WriteRawTag(173, 1);
-        output.WriteFloat(ScoreJump);
       }
       if (ScoreMask != 0F) {
         output.WriteRawTag(181, 1);
@@ -922,10 +903,6 @@ namespace EgoAnchor.Protocol.Generated {
         output.WriteRawTag(165, 1);
         output.WriteFloat(ScoreDepth);
       }
-      if (ScoreJump != 0F) {
-        output.WriteRawTag(173, 1);
-        output.WriteFloat(ScoreJump);
-      }
       if (ScoreMask != 0F) {
         output.WriteRawTag(181, 1);
         output.WriteFloat(ScoreMask);
@@ -1048,9 +1025,6 @@ namespace EgoAnchor.Protocol.Generated {
         size += 2 + 4;
       }
       if (ScoreDepth != 0F) {
-        size += 2 + 4;
-      }
-      if (ScoreJump != 0F) {
         size += 2 + 4;
       }
       if (ScoreMask != 0F) {
@@ -1176,9 +1150,6 @@ namespace EgoAnchor.Protocol.Generated {
       }
       if (other.ScoreDepth != 0F) {
         ScoreDepth = other.ScoreDepth;
-      }
-      if (other.ScoreJump != 0F) {
-        ScoreJump = other.ScoreJump;
       }
       if (other.ScoreMask != 0F) {
         ScoreMask = other.ScoreMask;
@@ -1331,10 +1302,6 @@ namespace EgoAnchor.Protocol.Generated {
           }
           case 165: {
             ScoreDepth = input.ReadFloat();
-            break;
-          }
-          case 173: {
-            ScoreJump = input.ReadFloat();
             break;
           }
           case 181: {
@@ -1502,10 +1469,6 @@ namespace EgoAnchor.Protocol.Generated {
           }
           case 165: {
             ScoreDepth = input.ReadFloat();
-            break;
-          }
-          case 173: {
-            ScoreJump = input.ReadFloat();
             break;
           }
           case 181: {

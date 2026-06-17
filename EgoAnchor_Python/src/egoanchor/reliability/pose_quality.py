@@ -11,21 +11,6 @@ from egoanchor.utils import clamp, clamp01
 if TYPE_CHECKING:
     from egoanchor.perception import PoseObservation
 
-BASE_SOFT_TRANSLATION_M = 0.03
-"""30fps 基准下平移超过该值开始轻微降分，单位米。"""
-
-HARD_TRANSLATION_M = 0.6
-"""平移跳变硬上限，单位米；接近该值时 jump_score 逼近 0。"""
-
-BASE_SOFT_ROTATION_DEG = 10.0
-"""30fps 基准下旋转超过该值开始轻微降分，单位度。"""
-
-HARD_ROTATION_DEG = 100.0
-"""旋转跳变硬上限，单位度；接近该值时 jump_score 逼近 0。"""
-
-EXPECTED_FRAME_DT_S = 1.0 / 30.0
-"""jump_score 软阈值缩放的基准帧间隔。"""
-
 MIN_DEPTH_COVERAGE = 0.10
 """进入深度对齐评分前要求的 mask 内有效深度覆盖率。"""
 
@@ -52,9 +37,6 @@ class PoseScoreConfig:
     mask_floor: float = 0.5
     """mask 调制因子的下限；遮挡或可见面积少时只温和降权。"""
 
-    jump_floor: float = 0.6
-    """jump 调制因子的下限；快速运动时只温和降权。"""
-
     def __post_init__(self) -> None:
         """归一化配置值，避免 TOML 临时调参造成非法对数或负权重。"""
 
@@ -67,7 +49,6 @@ class PoseScoreConfig:
         object.__setattr__(self, "reproj_weight", reproj_weight)
         object.__setattr__(self, "depth_weight", depth_weight)
         object.__setattr__(self, "mask_floor", clamp01(float(self.mask_floor)))
-        object.__setattr__(self, "jump_floor", clamp01(float(self.jump_floor)))
 
 
 class ConfidenceAccumulator:
@@ -123,9 +104,6 @@ class PoseQualityBreakdown:
     depth_score: float
     """Quality 层渲染深度与观测深度对齐子分。"""
 
-    jump_score: float
-    """Quality 层相邻 pose 跳变子分。"""
-
     mask_score: float
     """Quality 层 mask 可见面积子分。"""
 
@@ -168,7 +146,6 @@ def score_observation_breakdown(
             phase_score=0.0,
             reprojection_score=0.0,
             depth_score=0.0,
-            jump_score=0.0,
             mask_score=0.0,
             reject_score=0.0,
             confidence_score=0.0,
@@ -187,11 +164,9 @@ def score_observation_breakdown(
     has_evidence = reprojection_valid or depth_valid
     if not has_evidence:
         flags.append("quality_pending")
-    # jump_score 仍计算并写入诊断字段, 但不再参与 quality 合成:
-    # 离线分析 (egoanchor-jump-rejection-analysis) 证明逐帧跳变幅度无法区分坏 pose 和真实快动
-    # (坏几何帧的跳变并不比好帧大), 让它调制 quality 只会误伤快速运动。坏 pose 的拒绝交给
-    # 几何核 (reprojection/depth) 和 Unity anchor 层 (几何 flag + CUSUM)。
-    jump_score = _jump_score(observation, flags)
+    # 注: 已移除 jump 子分。离线分析 (egoanchor-jump-rejection-analysis) 证明逐帧跳变幅度无法区分
+    # 坏 pose 和真实快动 (坏几何帧的跳变并不比好帧大)。坏 pose 的拒绝交给几何核 (reprojection/depth)
+    # 和 Unity anchor 层 (几何 flag + CUSUM)。
     core_score = _geometry_core(
         reprojection_score=reprojection_score,
         reprojection_valid=reprojection_valid,
@@ -212,7 +187,6 @@ def score_observation_breakdown(
         phase_score=clamp01(phase_score),
         reprojection_score=clamp01(reprojection_score),
         depth_score=clamp01(depth_score),
-        jump_score=clamp01(jump_score),
         mask_score=clamp01(mask_score),
         reject_score=clamp01(reject_score),
         confidence_score=clamp01(confidence_score),
@@ -309,21 +283,6 @@ def _has_render_depth_signal(observation: PoseObservation) -> bool:
     return status.startswith("valid") or observation.render_quality_depth_inlier > 0.0 or observation.render_quality_depth_residual_m > 0.0
 
 
-def _jump_score(observation: PoseObservation, flags: list[str]) -> float:
-    """按帧间隔自适应软阈值，把相邻 pose 增量映射为连续 jump 子分。"""
-
-    dt = max(float(observation.frame_dt_s), 1e-3) if observation.frame_dt_s > 0.0 else EXPECTED_FRAME_DT_S
-    dt_scale = clamp(dt / EXPECTED_FRAME_DT_S, 0.5, 8.0)
-    soft_t = BASE_SOFT_TRANSLATION_M * dt_scale
-    soft_r = BASE_SOFT_ROTATION_DEG * dt_scale
-    t_score = _soft_limit_score(abs(float(observation.last_translation_delta_m)), soft_t, HARD_TRANSLATION_M)
-    r_score = _soft_limit_score(abs(float(observation.last_rotation_delta_deg)), soft_r, HARD_ROTATION_DEG)
-    score = clamp01(min(t_score, r_score))
-    if score < 0.5:
-        flags.append("near_jump_limit")
-    return score
-
-
 def _mask_factor(observation: PoseObservation, flags: list[str]) -> float:
     """把 mask 可见面积映射为连续 Quality 层子分。"""
 
@@ -364,13 +323,3 @@ def _track_reject_factor(observation: PoseObservation, flags: list[str]) -> floa
         flags.append("recent_track_reject")
         return max(0.25, 1.0 - min(observation.track_reject_count, 5) * 0.12)
     return 1.0
-
-
-def _soft_limit_score(value: float, soft_limit: float, hard_limit: float) -> float:
-    """软阈值内满分，超过软阈值后线性下降到硬阈值。"""
-
-    soft = max(0.0, float(soft_limit))
-    hard = max(soft + 1e-6, float(hard_limit))
-    if value <= soft:
-        return 1.0
-    return clamp01(1.0 - (float(value) - soft) / (hard - soft))

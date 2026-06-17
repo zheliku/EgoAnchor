@@ -15,7 +15,7 @@ pixi run python -m unittest discover -s eval -p "test_*.py"
 重点测试文件：
 
 - `src/egoanchor/tests/test_render_quality.py`：验证重投影颜色分、深度对齐分和渲染质量字段。
-- `src/egoanchor/tests/test_pose_quality.py`：验证 `reliability_score` 随 reprojection、depth、mask、jump 和 confidence 变化。
+- `src/egoanchor/tests/test_pose_quality.py`：验证 `reliability_score` 随 reprojection、depth、mask 和 confidence 变化。
 - `src/egoanchor/tests/test_runtime_event_logger.py`：验证 JSONL 中写入 pose score 和渲染质量旁路字段。
 - `eval/tests/test_diagnostics.py`：验证离线诊断统计。
 
@@ -43,7 +43,6 @@ geo_floor = 0.05 # 几何核单维最低值；避免有效低分在几何平均�
 reproj_weight = 0.5 # 重投影颜色分在几何核中的相对权重。
 depth_weight = 0.5 # 深度对齐分在几何核中的相对权重。
 mask_floor = 0.5 # mask 调制因子下限；遮挡或可见面积少时只温和降权。
-jump_floor = 0.6 # jump 调制因子下限；快速运动时只温和降权。
 ```
 
 有效渲染质量信号只会在 TRACK 阶段、已有 Cutie mask、register warmup 结束、K 可用、渲染前景面积足够时出现。以下情况会让 `track_reprojection=-1`：
@@ -72,9 +71,8 @@ q 或 ESC 退出
 - `score_reprojection`：颜色重投影子分；`track_reprojection=-1` 时可能仍显示 1.0 或 0.30，具体取决于是否 expected。
 - `score_depth`：深度对齐子分；覆盖不足或缺少渲染深度信号时显示中性 0.5。
 - `score_mask`：优先来自 Cutie mask 面积 / 渲染投影面积；没有投影面积信号时退回全图 mask 面积规则。
-- `score_jump`：相邻 pose 跳变子分，会按帧间隔自适应软阈值。
 - `score_confidence`：连续高质量帧 warmup，从 0.5 逐步到 1.0。
-- `flags`：例如 `reprojection_low`、`depth_alignment_low`、`depth_coverage_insufficient`、`mask_visible_area_low`、`near_jump_limit`。
+- `flags`：例如 `reprojection_low`、`depth_alignment_low`、`depth_coverage_insufficient`、`mask_visible_area_low`。
 
 有一个容易误读的点：HUD/JSONL 中的子分保留诊断值，但几何核只纳入 valid 的 reprojection/depth。比如 `score_depth=0.5` 可能只是"没有可靠 depth 信号"，不一定会把最终分砍半。
 
@@ -98,7 +96,7 @@ Get-Content .\data\eval\<session_id>\<session_id>_python_runtime.jsonl |
 
 - `pose_score`：最终可靠性分，0..1。
 - `reliability_flags`：解释降分或无信号原因。
-- `score_phase`、`score_reprojection`、`score_depth`、`score_jump`、`score_mask`、`score_reject`、`score_confidence`：PoseResult 子分。
+- `score_phase`、`score_reprojection`、`score_depth`、`score_mask`、`score_reject`、`score_confidence`：PoseResult 子分。
 - `track_reprojection`：TRACK 阶段颜色重投影分；`-1` 表示本帧无有效重投影信号。
 - `render_quality_status`：渲染质量状态，如 `valid`、`warmup`、`no_mask`、`render_exception`。
 - `render_quality_area_ratio_score`：观测 mask 面积 / 渲染投影面积的比例分。

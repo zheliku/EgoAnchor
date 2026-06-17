@@ -758,7 +758,7 @@ class QuestPosePipeline:
             diagnostics.depth_iqr_m = float(q75 - q25)
 
     def _estimate_frame_dt_s(self, decoded: DecodedQuestStereoFrame) -> float:
-        """估计当前处理帧与上一处理帧之间的时间间隔，供 jump_score 自适应阈值使用。"""
+        """估计当前处理帧与上一处理帧之间的时间间隔，供 frame_dt_s 遥测使用。"""
 
         state = self.tracking_state
         current_ms = float(decoded.sender_mono_ms) if decoded.sender_mono_ms is not None else time.perf_counter() * 1000.0
@@ -1088,7 +1088,6 @@ class QuestPosePipeline:
             score_phase=diagnostics.score_phase,
             score_reprojection=diagnostics.score_reprojection,
             score_depth=diagnostics.score_depth,
-            score_jump=diagnostics.score_jump,
             score_mask=diagnostics.score_mask,
             score_reject=diagnostics.score_reject,
             score_confidence=diagnostics.score_confidence,
@@ -1123,7 +1122,6 @@ class QuestPosePipeline:
         diagnostics.score_phase = breakdown.phase_score
         diagnostics.score_reprojection = breakdown.reprojection_score
         diagnostics.score_depth = breakdown.depth_score
-        diagnostics.score_jump = breakdown.jump_score
         diagnostics.score_mask = breakdown.mask_score
         diagnostics.score_reject = breakdown.reject_score
         diagnostics.score_confidence = breakdown.confidence_score
@@ -1132,7 +1130,6 @@ class QuestPosePipeline:
             score_phase=breakdown.phase_score,
             score_reprojection=breakdown.reprojection_score,
             score_depth=breakdown.depth_score,
-            score_jump=breakdown.jump_score,
             score_mask=breakdown.mask_score,
             score_reject=breakdown.reject_score,
             score_confidence=breakdown.confidence_score,

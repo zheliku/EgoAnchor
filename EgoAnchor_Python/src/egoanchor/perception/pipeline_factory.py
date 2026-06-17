@@ -261,7 +261,6 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         reproj_weight=float(_cfg_get(pose_score_cfg, "reproj_weight", 0.5)),
         depth_weight=float(_cfg_get(pose_score_cfg, "depth_weight", 0.5)),
         mask_floor=float(_cfg_get(pose_score_cfg, "mask_floor", 0.5)),
-        jump_floor=float(_cfg_get(pose_score_cfg, "jump_floor", 0.6)),
     )
 
     return QuestPosePipeline(

@@ -75,7 +75,6 @@ geo_floor = 0.05 # 几何核单维最低值；避免有效低分在几何平均�
 reproj_weight = 0.2 # 重投影颜色分在几何核中的相对权重；颜色只作为辅助证据。
 depth_weight = 0.8 # 深度对齐分在几何核中的相对权重；手柄等低纹理目标优先相信深度。
 mask_floor = 0.5 # mask 调制因子下限；遮挡或可见面积少时只温和降权。
-jump_floor = 0.6 # jump 调制因子下限；快速运动时只温和降权。
 
 [module.segmenter]
 type = "yoloe26" # 分割后端；默认 yoloe26，可显式改为 sam3。

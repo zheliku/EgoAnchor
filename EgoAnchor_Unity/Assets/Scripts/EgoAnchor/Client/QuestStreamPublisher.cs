@@ -27,16 +27,8 @@ namespace EgoAnchor.Client
 
         /// <summary>Python 接收端 IP。</summary>
         [Header("Network / ZMQ")]
-        [Tooltip("Python 数据接收端 IP。Quest 真机建议通过 UI/PlayerPrefs 注入开发机局域网 IP，避免长期写死。")]
+        [Tooltip("Python 数据接收端 IP。统一由 ServerEndpointConfig 在启动时下发 (SetServerIp)；也可直接在此填固定 IP。")]
         [SerializeField] private string serverIp = "127.0.0.1";
-
-        /// <summary>是否启动时从 PlayerPrefs 读取 Python 接收端 IP。</summary>
-        [Tooltip("是否在启动时从 PlayerPrefs 读取 Python 接收端 IP。用于后续 UI 配置注入，避免长期写死 IP。")]
-        [SerializeField] private bool loadServerIpFromPlayerPrefs = true;
-
-        /// <summary>保存 Python IP 的 PlayerPrefs key。</summary>
-        [Tooltip("保存 Python 接收端 IP 的 PlayerPrefs key。UI 设置面板应写入同一个 key。")]
-        [SerializeField] private string serverIpPlayerPrefsKey = "EgoAnchor.DataPlaneServerIp";
 
         /// <summary>Python 接收端端口。</summary>
         [Tooltip("Python 数据接收端端口。默认 15557；不要回退到旧链路 5557。")]
@@ -111,32 +103,35 @@ namespace EgoAnchor.Client
         private double lastPublisherAttemptTime;
 
         /// <summary>
-        /// 更新 Python 接收端 IP，并可选择写入 PlayerPrefs。
+        /// 更新 Python 接收端 IP (供 ServerEndpointConfig 启动时下发)。已连接则重建 publisher 使新 IP 生效。
         /// </summary>
         /// <param name="ip">新的 Python 接收端 IP。</param>
-        /// <param name="persistToPlayerPrefs">是否持久化到 PlayerPrefs。</param>
-        public void SetServerIp(string ip, bool persistToPlayerPrefs)
+        public void SetServerIp(string ip)
         {
             if (string.IsNullOrWhiteSpace(ip))
             {
                 return;
             }
 
-            serverIp = ip.Trim();
-            if (persistToPlayerPrefs && !string.IsNullOrEmpty(serverIpPlayerPrefsKey))
+            string trimmed = ip.Trim();
+            if (trimmed == serverIp)
             {
-                PlayerPrefs.SetString(serverIpPlayerPrefsKey, serverIp);
-                PlayerPrefs.Save();
+                return;
+            }
+
+            serverIp = trimmed;
+            if (isActiveAndEnabled)
+            {
+                TryStartPublisher(force: true);
             }
         }
 
         /// <summary>
-        /// Unity Awake：提前加载持久化配置，避免首次连接时仍使用旧的序列化值。
+        /// Unity Awake：开启新会话。IP 由 ServerEndpointConfig (执行序更早) 在此之前下发, 或用序列化默认值。
         /// </summary>
         private void Awake()
         {
             QuestStreamSession.BeginNewSession();
-            LoadServerIpFromPlayerPrefs();
         }
 
         /// <summary>
@@ -153,16 +148,14 @@ namespace EgoAnchor.Client
         private void OnEnable()
         {
             QuestStreamSession.BeginNewSession();
-            LoadServerIpFromPlayerPrefs();
             TryStartPublisher(force: true);
         }
 
         /// <summary>
-        /// 重新读取配置并重建 ZMQ publisher。可由 UI 网络设置面板或调试按钮调用。
+        /// 重建 ZMQ publisher。可由 UI 网络设置面板或调试按钮调用。
         /// </summary>
         public void RestartPublisher()
         {
-            LoadServerIpFromPlayerPrefs();
             DisposePublisher();
             TryStartPublisher(force: true);
         }
@@ -261,23 +254,6 @@ namespace EgoAnchor.Client
                     $"stereo={sentStereo}, camera_info={sentCameraInfo}, " +
                     $"dropped={dropped}, captureFailed={captureFailed}, endpoint={publisher?.Endpoint}",
                     this);
-            }
-        }
-
-        /// <summary>
-        /// 从 PlayerPrefs 读取 Python 接收端 IP。
-        /// </summary>
-        private void LoadServerIpFromPlayerPrefs()
-        {
-            if (!loadServerIpFromPlayerPrefs || string.IsNullOrEmpty(serverIpPlayerPrefsKey))
-            {
-                return;
-            }
-
-            string storedIp = PlayerPrefs.GetString(serverIpPlayerPrefsKey, string.Empty);
-            if (!string.IsNullOrWhiteSpace(storedIp))
-            {
-                serverIp = storedIp.Trim();
             }
         }
 

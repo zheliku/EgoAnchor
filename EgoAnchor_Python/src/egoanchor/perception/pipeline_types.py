@@ -110,9 +110,6 @@ class FrameDiagnostics:
     score_depth: float = 0.0
     """reliability 最终分中的 depth 子分。"""
 
-    score_jump: float = 0.0
-    """reliability 最终分中的相邻 pose 跳变子分。"""
-
     score_mask: float = 0.0
     """reliability 最终分中的 mask 面积子分。"""
 

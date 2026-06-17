@@ -46,7 +46,6 @@ class PoseResultFactoryTest(unittest.TestCase):
             score_phase=1.0,
             score_reprojection=0.64,
             score_depth=0.91,
-            score_jump=0.95,
             score_mask=1.0,
             score_reject=1.0,
             score_confidence=0.8,
@@ -77,7 +76,6 @@ class PoseResultFactoryTest(unittest.TestCase):
         self.assertAlmostEqual(result.score_phase, 1.0, places=5)
         self.assertAlmostEqual(result.score_reprojection, 0.64, places=5)
         self.assertAlmostEqual(result.score_depth, 0.91, places=5)
-        self.assertAlmostEqual(result.score_jump, 0.95, places=5)
         self.assertAlmostEqual(result.score_mask, 1.0, places=5)
         self.assertAlmostEqual(result.score_reject, 1.0, places=5)
         self.assertAlmostEqual(result.score_confidence, 0.8, places=5)

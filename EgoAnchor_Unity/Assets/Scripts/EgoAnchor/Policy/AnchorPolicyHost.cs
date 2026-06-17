@@ -74,6 +74,24 @@ namespace EgoAnchor.Policy
         [Tooltip("判定运动/静止的角速度阈值，单位 deg/s；仅用于 motionState 诊断。默认 1.5。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
+        /// <summary>是否启用低分本地重定位。</summary>
+        [Header("Low-Score Reacquire (local-only)")]
+        [Tooltip("是否启用低分本地重定位：reliability score 持续过低时, 本地重置 policy (回 Searching/重吸附下一帧好 pose)。纯本地, 不发任何网络命令——是否通知 Python 重新 register 由上游链路决定, host 不持有 client。")]
+        [SerializeField] private bool enableLowScoreReacquire = true;
+
+        /// <summary>触发低分重定位的分数阈值。</summary>
+        [Tooltip("score 持续低于此值才触发本地重定位。默认 0.25。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float lowScoreReacquireThreshold = 0.25f;
+
+        /// <summary>低分需持续的时间，单位秒。</summary>
+        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.8。")]
+        [SerializeField] private float lowScoreReacquireSeconds = 0.8f;
+
+        /// <summary>两次低分重定位的最短间隔，单位秒。</summary>
+        [Tooltip("两次低分本地重定位之间的最短间隔 (秒), 防抖。默认 3。")]
+        [SerializeField] private float lowScoreReacquireCooldownSeconds = 3.0f;
+
         private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
         private double lastAcceptedTimeSeconds = -1.0;
@@ -82,6 +100,8 @@ namespace EgoAnchor.Policy
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
         private GateDecision latestGateDecision = GateDecision.Hold("initialized");
         private float predictAheadSeconds;
+        private double lowScoreStartSeconds = -1.0;
+        private double lastLowScoreReacquireSeconds = double.NegativeInfinity;
 
         /// <summary>eval 使用的策略 label。</summary>
         public string StrategyLabel
@@ -213,6 +233,14 @@ namespace EgoAnchor.Policy
                 OnMissingObservation(now, observation.FailureReason);
                 latestGateDecision = GateDecision.Hold(string.IsNullOrEmpty(observation.FailureReason) ? "missing_pose" : observation.FailureReason);
                 return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
+            }
+
+            // 低分本地重定位: 已有锚定后若 score 持续过低 → 锚点不可信, 本地重置回 Searching 重吸附。
+            // 纯本地 (无 client 引用)；在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
+            if (TryLowScoreReacquire(observation.ReliabilityScore, now))
+            {
+                latestGateDecision = GateDecision.Hold("low_score_reacquire");
+                return new AnchorPolicyDecision(AnchorPolicyAction.Hold, stateMachine.State, "low_score_reacquire");
             }
 
             // 可选 score/jump 门控 (仅 EgoAnchor 方法开启)
@@ -349,9 +377,44 @@ namespace EgoAnchor.Policy
             latestGateDecision = GateDecision.Hold(reason ?? "clear");
         }
 
-        private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
+        /// <summary>
+        /// 低分本地重定位: 已有锚定 (有状态) 后, reliability score 连续低于阈值持续一段时间 →
+        /// 本地重置 (回 Searching/重吸附), 不再信任旧低分锚点。纯本地, 不发任何网络命令。
+        /// 触发时返回 true (调用方应提前返回)。
+        /// </summary>
+        private bool TryLowScoreReacquire(float score, double now)
         {
-            reason = string.Empty;
+            if (!enableLowScoreReacquire || !motionModel.HasState)
+            {
+                lowScoreStartSeconds = -1.0;
+                return false;
+            }
+
+            if (score > lowScoreReacquireThreshold)
+            {
+                lowScoreStartSeconds = -1.0;
+                return false;
+            }
+
+            if (lowScoreStartSeconds < 0.0)
+            {
+                lowScoreStartSeconds = now;
+            }
+
+            if (now - lowScoreStartSeconds < lowScoreReacquireSeconds
+                || now - lastLowScoreReacquireSeconds < lowScoreReacquireCooldownSeconds)
+            {
+                return false;
+            }
+
+            lastLowScoreReacquireSeconds = now;
+            lowScoreStartSeconds = -1.0;
+            NotifyReacquire(now, "low_score_reacquire");
+            return true;
+        }
+
+        private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
+        {            reason = string.Empty;
             if (!enableScoreGate)
             {
                 return false;
@@ -409,6 +472,7 @@ namespace EgoAnchor.Policy
             lastAcceptedTimeSeconds = -1.0;
             lastAdvanceTimeSeconds = -1.0;
             latestAcceptedScore = 1.0f;
+            lowScoreStartSeconds = -1.0;
             motionState = AnchorMotionState.Unknown;
             predictAheadSeconds = 0.0f;
             AcceptedCount = 0;

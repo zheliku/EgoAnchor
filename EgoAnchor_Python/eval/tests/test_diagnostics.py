@@ -27,7 +27,6 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
                 "score_phase": 1.0,
                 "score_reprojection": 0.42,
                 "score_depth": 0.71,
-                "score_jump": 0.95,
                 "score_mask": 1.0,
                 "score_reject": 1.0,
                 "score_confidence": 0.88,
@@ -52,7 +51,6 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(record["score_phase"], 1.0)
         self.assertAlmostEqual(record["score_reprojection"], 0.42)
         self.assertAlmostEqual(record["score_depth"], 0.71)
-        self.assertAlmostEqual(record["score_jump"], 0.95)
         self.assertAlmostEqual(record["score_mask"], 1.0)
         self.assertAlmostEqual(record["score_reject"], 1.0)
         self.assertAlmostEqual(record["score_confidence"], 0.88)

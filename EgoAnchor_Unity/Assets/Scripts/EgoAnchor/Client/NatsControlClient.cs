@@ -30,16 +30,8 @@ namespace EgoAnchor.Client
 
         /// <summary>NATS server URL。</summary>
         [Header("Network / NATS")]
-        [Tooltip("NATS server URL。开发机默认 nats://127.0.0.1:4222；Quest 真机部署时应通过 UI/PlayerPrefs 注入开发机 IP。")]
+        [Tooltip("NATS server URL。统一由 ServerEndpointConfig 在启动时下发 (SetNatsUrl)；也可直接在此填固定 URL，如 nats://127.0.0.1:4222。")]
         [SerializeField] private string natsUrl = "nats://127.0.0.1:4222";
-
-        /// <summary>是否启动时从 PlayerPrefs 读取 NATS URL。</summary>
-        [Tooltip("是否在启动时从 PlayerPrefs 读取 NATS URL。用于后续 UI 配置注入，避免长期写死 IP。")]
-        [SerializeField] private bool loadUrlFromPlayerPrefs = true;
-
-        /// <summary>保存 NATS URL 的 PlayerPrefs key。</summary>
-        [Tooltip("保存 NATS URL 的 PlayerPrefs key。UI 设置面板应写入同一个 key。")]
-        [SerializeField] private string natsUrlPlayerPrefsKey = "EgoAnchor.NatsUrl";
 
         /// <summary>是否在 Start 时自动连接。</summary>
         [Tooltip("是否在 Start 时自动连接 NATS 并订阅 PoseResult、AnchorStatusEvent 与 ServerHeartbeat。关闭后可由外部脚本显式调用 StartClient。")]
@@ -158,31 +150,35 @@ namespace EgoAnchor.Client
         }
 
         /// <summary>
-        /// 更新 NATS URL，并可选择写入 PlayerPrefs 供下次启动复用。
+        /// 更新 NATS URL (供 ServerEndpointConfig 启动时下发)。已连接则重连使新 URL 生效。
         /// </summary>
         /// <param name="url">新的 NATS URL。</param>
-        /// <param name="persistToPlayerPrefs">是否持久化到 PlayerPrefs。</param>
-        public void SetNatsUrl(string url, bool persistToPlayerPrefs)
+        public void SetNatsUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url))
             {
                 return;
             }
 
-            natsUrl = url.Trim();
-            if (persistToPlayerPrefs && !string.IsNullOrEmpty(natsUrlPlayerPrefsKey))
+            string trimmed = url.Trim();
+            if (trimmed == natsUrl)
             {
-                PlayerPrefs.SetString(natsUrlPlayerPrefsKey, natsUrl);
-                PlayerPrefs.Save();
+                return;
+            }
+
+            natsUrl = trimmed;
+            if (isActiveAndEnabled && bytesClient != null && bytesClient.IsRunning)
+            {
+                StopClient();
+                StartClient();
             }
         }
 
         /// <summary>
-        /// Unity Start：加载持久化配置并按需启动 NATS。
+        /// Unity Start：按需启动 NATS。URL 由 ServerEndpointConfig (执行序更早) 在此之前下发, 或用序列化默认值。
         /// </summary>
         private void Start()
         {
-            LoadConfiguredUrlFromPlayerPrefs();
             if (connectOnStart)
             {
                 StartClient();
@@ -414,23 +410,6 @@ namespace EgoAnchor.Client
             poseResultPayloads.Clear();
             statusPayloads.Clear();
             heartbeatPayloads.Clear();
-        }
-
-        /// <summary>
-        /// 从 PlayerPrefs 读取 NATS URL。
-        /// </summary>
-        private void LoadConfiguredUrlFromPlayerPrefs()
-        {
-            if (!loadUrlFromPlayerPrefs || string.IsNullOrEmpty(natsUrlPlayerPrefsKey))
-            {
-                return;
-            }
-
-            string storedUrl = PlayerPrefs.GetString(natsUrlPlayerPrefsKey, string.Empty);
-            if (!string.IsNullOrWhiteSpace(storedUrl))
-            {
-                natsUrl = storedUrl.Trim();
-            }
         }
 
         /// <summary>
