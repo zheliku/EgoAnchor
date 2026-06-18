@@ -59,6 +59,14 @@ namespace EgoAnchor.Policy
         private float headLinForFullToleranceMps = 0.3f;  // 头线速度达此值 → 容忍因子吃满
         private float headMaxToleranceFactor = 4.0f;      // 容忍度上限 (1=关闭头动感知)
 
+        // 距离自适应位置容忍 (问题2): 物体越远, 立体深度估计噪声越大 (~z², 离线证实 corr(距离, 位置抖动)=+0.23;
+        // 旋转抖动与距离无关 corr≈-0.02, 故只缩放位置通道, 旋转阈值不变)。同样真实静止, 远处观测位置抖得更大 →
+        // 固定米死区/租绳在远处频繁被噪声顶破 → 误解锁。解法: 位置死区与位置租绳乘
+        // posDistanceFactor = clamp(1 + slope·(dist−ref), 1, max), dist=物体到头部距离。ref 以内不放大 (近处不动)。
+        private float posToleranceRefDistanceMeters = 0.4f;   // 此距离以内位置容忍不放大 (factor=1)
+        private float posToleranceDistanceSlope = 1.0f;       // 每超出 ref 1m, 位置容忍增加比例 (1/m)
+        private float posToleranceMaxFactor = 3.0f;           // 位置容忍放大上限 (1=关闭距离自适应)
+
         // 低分释放 (问题1): 锁定时若 score 持续低于阈值, 锁点已不可信 (物体可能被移走/遮挡/跟丢),
         // 强制解锁, 不让 anchor 冻在错误 pose 上 (否则用户得手动移出视野再回来)。解锁后交回 coasting,
         // 配合 PoseToAnchorRuntime 的低分自动 reacquire。0=关闭该机制。
@@ -97,6 +105,7 @@ namespace EgoAnchor.Policy
         private float headLinSpeedEma;   // m/s
         private float headAngSpeedEma;   // deg/s
         private float headToleranceFactor = 1.0f; // 当前头动放大系数 (1=头静止)
+        private float posDistanceFactor = 1.0f;    // 当前距离自适应位置容忍系数 (问题2; 1=近处/关闭)
         private float lowScoreRunSeconds;          // 锁定时连续低分累计时间 (低分释放用)
 
         /// <summary>当前是否锁定 (供 host 写 eval 的 latest_static_locked)。</summary>
@@ -130,6 +139,9 @@ namespace EgoAnchor.Policy
             float headRotForFullToleranceDps,
             float headLinForFullToleranceMps,
             float headMaxToleranceFactor,
+            float posToleranceRefDistanceMeters,
+            float posToleranceDistanceSlope,
+            float posToleranceMaxFactor,
             float lowScoreReleaseScore,
             float lowScoreReleaseSeconds)
         {
@@ -153,6 +165,9 @@ namespace EgoAnchor.Policy
             this.headRotForFullToleranceDps = Mathf.Max(headRotForFullToleranceDps, 1e-3f);
             this.headLinForFullToleranceMps = Mathf.Max(headLinForFullToleranceMps, 1e-3f);
             this.headMaxToleranceFactor = Mathf.Max(headMaxToleranceFactor, 1.0f);
+            this.posToleranceRefDistanceMeters = Mathf.Max(posToleranceRefDistanceMeters, 0.0f);
+            this.posToleranceDistanceSlope = Mathf.Max(posToleranceDistanceSlope, 0.0f);
+            this.posToleranceMaxFactor = Mathf.Max(posToleranceMaxFactor, 1.0f);
             this.lowScoreReleaseScore = Mathf.Clamp01(lowScoreReleaseScore);
             this.lowScoreReleaseSeconds = Mathf.Max(lowScoreReleaseSeconds, 0.0f);
         }
@@ -185,6 +200,7 @@ namespace EgoAnchor.Policy
             headLinSpeedEma = 0.0f;
             headAngSpeedEma = 0.0f;
             headToleranceFactor = 1.0f;
+            posDistanceFactor = 1.0f;
             lowScoreRunSeconds = 0.0f;
             LockEnters = 0;
             Unlocks = 0;
@@ -228,6 +244,9 @@ namespace EgoAnchor.Policy
             // 头动感知 (问题3): 从 head pose 差分头速, 更新容忍放大系数。头动越大→放宽 static 约束吸收 slip。
             UpdateHeadMotion(hasHeadPose, headPose, obsDt);
 
+            // 距离自适应位置容忍 (问题2): 物体越远立体深度噪声越大, 位置容忍按距离放大 (旋转不放大)。
+            posDistanceFactor = ComputePosDistanceFactor(hasHeadPose, headPose, pos);
+
             float f = headToleranceFactor;
             bool isStatic = obsSpeedEma <= staticEnterSpeedMps * f
                             && obsAngSpeedEma <= staticEnterAngSpeedDps * f
@@ -251,6 +270,23 @@ namespace EgoAnchor.Policy
             lastObsPos = pos;
             lastObsRot = rot;
             lastObsTime = measurementTimeSeconds;
+        }
+
+        /// <summary>
+        /// 距离自适应位置容忍系数 (问题2): factor = clamp(1 + slope·(dist − ref), 1, max),
+        /// dist = 观测物体到头部的距离。ref 以内 (近处) factor=1 不放大; 越远越大, max 封顶。
+        /// 无头部 pose 或功能关闭 (max≤1) → 返回 1。只缩放位置通道, 旋转不受影响。
+        /// </summary>
+        private float ComputePosDistanceFactor(bool hasHeadPose, in Pose headPose, Vector3 objectPos)
+        {
+            if (!hasHeadPose || posToleranceMaxFactor <= 1.0f)
+            {
+                return 1.0f;
+            }
+
+            float dist = Vector3.Distance(objectPos, headPose.position);
+            float factor = 1.0f + posToleranceDistanceSlope * (dist - posToleranceRefDistanceMeters);
+            return Mathf.Clamp(factor, 1.0f, posToleranceMaxFactor);
         }
 
         /// <summary>从 head pose obs-to-obs 差分头部角/线速度, 更新头动容忍放大系数 headToleranceFactor。</summary>
@@ -398,12 +434,16 @@ namespace EgoAnchor.Policy
             }
 
             // 绝对漂移租绳: 相对锁定时固定的 anchorOrigin (creep 不动) 的总漂移超租绳 → 解锁。
-            // 慢速持续平移时 creep 会跟着移 lockedPose、让下面的相对 CUSUM 失效, 但 anchorOrigin 不动,
-            // 慢移累计够远必然触发, 修复"极慢平移永不脱离 static"。
+            // 关键: 漂移用 *creep 后的 lockedPose* (去噪共识) 度量, 不用单帧原始观测 pos/rot。
+            //   原始观测噪声大 (本数据集静止物体旋转噪声 p90~13°、平移 p90~30mm, 远超 5°/15mm 租绳),
+            //   若直接拿原始观测度量, 头静止 (f=1) 时单帧噪声尖峰就频繁误触发解锁 → 锚点"漂一小段又被拉回"的抖动
+            //   (用户报告的现象: 物体不动头转时轻微抖动)。lockedPose 只在死区内经 creep 缓慢移动, 对单帧噪声免疫;
+            //   而真实持续漂移会被 creep 如实跟随、累计够远仍顶破租绳, 因此"极慢平移逃逸"能力保持不变。
             // 头动时租绳放大: 头转造成的 world-pose slip 漂移不该触发解锁; 头静止时回原租绳, 真实慢移正常逃逸。
-            float driftPos = Vector3.Distance(pos, anchorOrigin.position);
-            float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, rot);
-            if (driftPos > unlockDriftMeters * f || driftRot > unlockDriftDegrees * f)
+            // 位置租绳再乘 posDistanceFactor (问题2): 远处深度噪声大, 位置租绳同比放宽; 旋转租绳不随距离变 (旋转噪声与距离无关)。
+            float driftPos = Vector3.Distance(lockedPose.position, anchorOrigin.position);
+            float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, lockedPose.rotation);
+            if (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f)
             {
                 wantUnlock = true;
                 return; // 解锁在 Stabilize 提交
@@ -415,7 +455,8 @@ namespace EgoAnchor.Policy
             // CUSUM (帧率无关): 每观测先按真实 dt 做半衰期衰减 (漏积分), 再累积"超死区"部分,
             // 累积量乘 (obsDt / refObsIntervalSeconds), 使同样的持续运动在任何帧率下单位时间攒到的证据相同。
             // 死区随头动放大: 头转时观测抖动大, 死区放宽吸收 slip; 头静止时回到原死区。
-            float dbMeters = deadbandMeters * f;
+            // 位置死区再乘 posDistanceFactor (问题2): 远处位置噪声大, 位置死区同比放宽; 旋转死区不随距离变。
+            float dbMeters = deadbandMeters * f * posDistanceFactor;
             float dbDegrees = deadbandDegrees * f;
             float decay = Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
             float accScale = obsDt / refObsIntervalSeconds;

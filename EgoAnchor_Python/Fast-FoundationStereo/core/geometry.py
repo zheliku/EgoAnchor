@@ -73,7 +73,7 @@ class Combined_Geo_Encoding_Volume:
           fmap1 = fmap1.view(B, D, H, W1)
           fmap2 = fmap2.view(B, D, H, W2)
           if normalize:
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.amp.autocast("cuda", enabled=False):
               corr = torch.einsum('aijk,aijh->ajkh', F.normalize(fmap1.float(), dim=1), F.normalize(fmap2.float(), dim=1))
           else:
             corr = corr.view(B, H, W1, 1, W2).to(fmap1.dtype)

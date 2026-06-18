@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AnchorUpsampleSim3")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+18f0ea7740c2fe4834f57144844dcec73accf658")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7e25bc4c55684b325563a473d58819c9d37a5dcd")]
 [assembly: System.Reflection.AssemblyProductAttribute("AnchorUpsampleSim3")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AnchorUpsampleSim3")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

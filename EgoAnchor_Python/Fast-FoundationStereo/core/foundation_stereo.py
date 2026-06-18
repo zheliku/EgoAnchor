@@ -296,7 +296,7 @@ class TrtFeatureRunner(nn.Module):
   def forward(self, image1, image2):
     image1 = normalize_image(image1)
     image2 = normalize_image(image2)
-    B = len(image1)
+    B = image1.shape[0]
     out = self.feature(torch.cat([image1, image2], dim=0))
     features_left = [o[:B] for o in out]
     features_right = [o[B:] for o in out]

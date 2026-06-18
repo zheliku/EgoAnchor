@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import torch
@@ -37,6 +39,38 @@ def build_onnx_names(tag: str) -> tuple[str, str]:
         f"feature_runner-{tag}.onnx",
         f"post_runner-{tag}.onnx",
     )
+
+
+@contextlib.contextmanager
+def suppress_fixed_shape_onnx_warnings():
+    """屏蔽固定分辨率 ONNX artifact 导出中的已知 PyTorch 噪声。
+
+    本脚本为 TensorRT 生成固定 height/width/iters/max_disp 的 artifact，
+    因此 shape 分支和常量折叠 warning 不代表运行时会接收动态尺寸输入。
+    """
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Using len to get tensor shape might cause the trace to be incorrect.*",
+            category=torch.jit.TracerWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*",
+            category=torch.jit.TracerWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"ONNX export mode is set to TrainingMode\.EVAL, but operator 'instance_norm' is set to train=True.*",
+            category=UserWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Constant folding - Only steps=1 can be constant folded for opset >= 10 onnx::Slice op.*",
+            category=UserWarning,
+        )
+        yield
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,22 +181,23 @@ def main() -> None:
 
     print("[ONNX] exporting feature runner...")
     t_feature = time.perf_counter()
-    torch.onnx.export(
-        feature_runner,
-        (left_img, right_img),
-        str(feature_onnx_path),
-        opset_version=17,
-        input_names=["left", "right"],
-        output_names=[
-            "features_left_04",
-            "features_left_08",
-            "features_left_16",
-            "features_left_32",
-            "features_right_04",
-            "stem_2x",
-        ],
-        do_constant_folding=True,
-    )
+    with suppress_fixed_shape_onnx_warnings():
+        torch.onnx.export(
+            feature_runner,
+            (left_img, right_img),
+            str(feature_onnx_path),
+            opset_version=17,
+            input_names=["left", "right"],
+            output_names=[
+                "features_left_04",
+                "features_left_08",
+                "features_left_16",
+                "features_left_32",
+                "features_right_04",
+                "stem_2x",
+            ],
+            do_constant_folding=True,
+        )
     print(f"[ONNX] saved: {feature_onnx_path} ({time.perf_counter() - t_feature:.2f}s)")
 
     (
@@ -183,31 +218,32 @@ def main() -> None:
 
     print("[ONNX] exporting post runner...")
     t_post = time.perf_counter()
-    torch.onnx.export(
-        post_runner,
-        (
-            features_left_04,
-            features_left_08,
-            features_left_16,
-            features_left_32,
-            features_right_04,
-            stem_2x,
-            gwc_volume,
-        ),
-        str(post_onnx_path),
-        opset_version=17,
-        input_names=[
-            "features_left_04",
-            "features_left_08",
-            "features_left_16",
-            "features_left_32",
-            "features_right_04",
-            "stem_2x",
-            "gwc_volume",
-        ],
-        output_names=["disp"],
-        do_constant_folding=True,
-    )
+    with suppress_fixed_shape_onnx_warnings():
+        torch.onnx.export(
+            post_runner,
+            (
+                features_left_04,
+                features_left_08,
+                features_left_16,
+                features_left_32,
+                features_right_04,
+                stem_2x,
+                gwc_volume,
+            ),
+            str(post_onnx_path),
+            opset_version=17,
+            input_names=[
+                "features_left_04",
+                "features_left_08",
+                "features_left_16",
+                "features_left_32",
+                "features_right_04",
+                "stem_2x",
+                "gwc_volume",
+            ],
+            output_names=["disp"],
+            do_constant_folding=True,
+        )
     print(f"[ONNX] saved: {post_onnx_path} ({time.perf_counter() - t_post:.2f}s)")
 
     print(f"[ONNX] done in {time.perf_counter() - total_t0:.2f}s")

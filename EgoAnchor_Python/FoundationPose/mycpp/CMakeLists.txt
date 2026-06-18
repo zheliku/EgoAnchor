@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-  add_compile_options(/O2)
+  add_compile_options(/O2 /utf-8)
 else()
   add_compile_options(-O3 -g3)
 endif()

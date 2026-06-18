@@ -107,6 +107,20 @@ namespace EgoAnchor.Policy
         [Range(1.0f, 8.0f)]
         [SerializeField] private float staticLockHeadMaxToleranceFactor = 4.0f;
 
+        /// <summary>距离自适应位置容忍参考距离 (m)：此距离以内不放大。</summary>
+        [Header("Distance-Aware Position Tolerance (问题2)")]
+        [Tooltip("距离自适应位置容忍参考距离 (m)：物体到头部距离在此值以内时位置死区/租绳不放大 (factor=1)。越近的常用距离设这里。默认 0.4。")]
+        [SerializeField] private float staticLockPosToleranceRefDistanceMeters = 0.4f;
+
+        /// <summary>距离自适应位置容忍斜率 (1/m)：每超出参考距离 1m 放大的比例。</summary>
+        [Tooltip("距离自适应位置容忍斜率 (1/m)：物体每超出参考距离 1m, 位置死区与位置租绳放大的比例。远处立体深度噪声大 (~z²), 需更宽位置容忍; 旋转不受影响。默认 1.0。")]
+        [SerializeField] private float staticLockPosToleranceDistanceSlope = 1.0f;
+
+        /// <summary>距离自适应位置容忍上限 (1=关闭)。</summary>
+        [Tooltip("距离自适应位置容忍放大上限。1=关闭距离自适应 (位置容忍恒定)；越大远处越宽松。仅缩放位置死区/租绳, 旋转阈值不变。默认 3。")]
+        [Range(1.0f, 6.0f)]
+        [SerializeField] private float staticLockPosToleranceMaxFactor = 3.0f;
+
         /// <summary>低分释放阈值：锁定时分数持续低于此值则强制解锁。</summary>
         [Header("Low-Score Release (问题1)")]
         [Tooltip("低分释放：锁定时 score 持续低于此值 → 锁点不可信, 强制解锁, 不让 anchor 冻在错 pose。配合 PoseToAnchorRuntime 的低分自动 reacquire。默认 0.3。")]
@@ -178,6 +192,9 @@ namespace EgoAnchor.Policy
                 staticLockHeadRotForFullToleranceDps,
                 staticLockHeadLinForFullToleranceMps,
                 staticLockHeadMaxToleranceFactor,
+                staticLockPosToleranceRefDistanceMeters,
+                staticLockPosToleranceDistanceSlope,
+                staticLockPosToleranceMaxFactor,
                 staticLockLowScoreReleaseScore,
                 staticLockLowScoreReleaseSeconds);
         }

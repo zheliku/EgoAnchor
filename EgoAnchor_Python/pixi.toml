@@ -10,9 +10,11 @@ cuda = "12.8" # 只声明需要 CUDA，不指定具体小版本
 
 [target.win-64.activation.env]
 PYTHONPATH = ".;src;Fast-FoundationStereo;Cutie;sam3" # Windows 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
+SSL_CERT_DIR = "%CONDA_PREFIX%/Library/ssl" # Windows 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
 
 [target.linux-64.activation.env]
 PYTHONPATH = ".:src:Fast-FoundationStereo:Cutie:sam3" # Linux 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
+SSL_CERT_DIR = "$CONDA_PREFIX/ssl" # Linux 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
 LIBRARY_PATH = "$CONDA_PREFIX/lib/stubs" # 让 Triton 运行时编译 CUDA 模块时能找到 stub 库 libcuda.s
 
 [dependencies]
