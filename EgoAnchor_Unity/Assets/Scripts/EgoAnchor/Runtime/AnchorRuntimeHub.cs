@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System;
+using System.Threading.Tasks;
+using EgoAnchor.Client;
 using EgoAnchor.Diagnostics;
 using EgoAnchor.Protocol.Generated;
 using UnityEngine;
@@ -37,6 +39,19 @@ namespace EgoAnchor.Runtime
         [Tooltip("每分发多少条 PoseResult 输出一次统计。")]
         [Min(1)]
         [SerializeField] private int statsIntervalMessages = 120;
+
+        /// <summary>唯一的 reacquire 命令客户端 (整条链路只此一个, 绑一次)。</summary>
+        [Header("Server Reacquire (fan-in, 唯一 client)")]
+        [Tooltip("唯一的 AnchorCommandClient。任一 runtime (host 持续低分+几何不可信判定 track 丢) 请求重定位时, hub 在此发一次 NATS reacquire 让 Python 重新 register。留空则只本地重置, 不通知 Python。每个 runtime 都不持 client, 标志经 hub 这条 fan-in 汇聚。")]
+        [SerializeField] private AnchorCommandClient reacquireCommandClient;
+
+        /// <summary>两次 server reacquire 的最短间隔，单位秒；reacquire 是服务器级 (整条 pipeline 一次), 多 runtime 同时请求也只发一次。</summary>
+        [Tooltip("两次 server reacquire 的最短间隔 (秒), 防命令风暴。reacquire 作用于整个 Python pipeline, 多 runtime 同时请求会被合并成一次。默认 3。")]
+        [Min(0f)]
+        [SerializeField] private float serverReacquireCooldownSeconds = 3.0f;
+
+        private double lastServerReacquireSeconds = double.NegativeInfinity;
+        private bool serverReacquireInFlight;
 
         /// <summary>累计接收 PoseResult 数。</summary>
         private int received;
@@ -153,6 +168,7 @@ namespace EgoAnchor.Runtime
             }
 
             int activeRuntimeCount = 0;
+            bool anyWantsServerReacquire = false;
             foreach (PoseToAnchorRuntime runtime in runtimes)
             {
                 if (runtime == null)
@@ -165,6 +181,13 @@ namespace EgoAnchor.Runtime
                 {
                     failed++;
                     continue;
+                }
+
+                // fan-in: 收集"请求 Python 重 register"标志。reacquire 是服务器级的, 多 runtime 请求合并成一次。
+                // 每个 runtime 都 consume (清自己的标志), 但 hub 只发一次命令。
+                if (runtime.ConsumeServerReacquireRequest())
+                {
+                    anyWantsServerReacquire = true;
                 }
 
                 switch (acceptResult)
@@ -182,12 +205,61 @@ namespace EgoAnchor.Runtime
                 }
             }
 
+            if (anyWantsServerReacquire)
+            {
+                MaybeSendServerReacquire();
+            }
+
             if (activeRuntimeCount == 0)
             {
                 failed++;
             }
 
             MaybeLogStats();
+        }
+
+        /// <summary>
+        /// 发一次 server reacquire (通知 Python 重新 register)，带冷却 + in-flight 去抖。
+        /// reacquire 作用于整个 Python pipeline，所以多 runtime 同时请求只发一次。client 未绑定则只记日志。
+        /// </summary>
+        private void MaybeSendServerReacquire()
+        {
+            if (reacquireCommandClient == null)
+            {
+                Log.Info("runtime 请求 server reacquire, 但 hub 未绑定 AnchorCommandClient；仅本地重置 (Python 未收到重 register)。", this);
+                return;
+            }
+
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (serverReacquireInFlight || now - lastServerReacquireSeconds < serverReacquireCooldownSeconds)
+            {
+                return;
+            }
+
+            lastServerReacquireSeconds = now;
+            _ = SendServerReacquireAsync();
+        }
+
+        private async Task SendServerReacquireAsync()
+        {
+            serverReacquireInFlight = true;
+            try
+            {
+                await reacquireCommandClient.ReacquireAsync(
+                    ReacquireAnchorRequest.Types.ReacquireMode.NextValidFrame,
+                    clearTrackingFirst: true,
+                    string.Empty,
+                    0.0,
+                    "hub_low_score_track_lost");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"server reacquire 命令发送失败: {ex.Message}", this);
+            }
+            finally
+            {
+                serverReacquireInFlight = false;
+            }
         }
 
         /// <summary>

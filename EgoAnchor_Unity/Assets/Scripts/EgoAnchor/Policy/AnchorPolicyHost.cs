@@ -74,13 +74,13 @@ namespace EgoAnchor.Policy
         [Tooltip("判定运动/静止的角速度阈值，单位 deg/s；仅用于 motionState 诊断。默认 1.5。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
-        /// <summary>是否启用低分本地重定位。</summary>
-        [Header("Low-Score Reacquire (local-only)")]
-        [Tooltip("是否启用低分本地重定位：reliability score 持续过低时, 本地重置 policy (回 Searching/重吸附下一帧好 pose)。纯本地, 不发任何网络命令——是否通知 Python 重新 register 由上游链路决定, host 不持有 client。")]
+        /// <summary>是否启用低分重定位。</summary>
+        [Header("Low-Score Reacquire")]
+        [Tooltip("是否启用低分重定位：reliability score 持续过低时, 本地重置 policy (回 Searching/重吸附); 若同时几何子分也差 (判定 track 丢失), 还会返回 Reacquire decision 请求上游 (runtime→hub) 通知 Python 重新 register。host 不持有任何 client。")]
         [SerializeField] private bool enableLowScoreReacquire = true;
 
         /// <summary>触发低分重定位的分数阈值。</summary>
-        [Tooltip("score 持续低于此值才触发本地重定位。默认 0.25。")]
+        [Tooltip("score 持续低于此值才触发低分重定位。默认 0.25。")]
         [Range(0f, 1f)]
         [SerializeField] private float lowScoreReacquireThreshold = 0.25f;
 
@@ -89,8 +89,13 @@ namespace EgoAnchor.Policy
         [SerializeField] private float lowScoreReacquireSeconds = 0.8f;
 
         /// <summary>两次低分重定位的最短间隔，单位秒。</summary>
-        [Tooltip("两次低分本地重定位之间的最短间隔 (秒), 防抖。默认 3。")]
+        [Tooltip("两次低分重定位之间的最短间隔 (秒), 防抖。默认 3。")]
         [SerializeField] private float lowScoreReacquireCooldownSeconds = 3.0f;
+
+        /// <summary>几何子分阈值：低于它视为该路几何证据差。</summary>
+        [Tooltip("几何子分 (depth/reprojection) 低于此值视为该路几何差。两路都差 = 判定坏 pose/track 丢 → 请求 Python 重 register; 几何仍好 = 只是快动/遮挡/低 confidence → 仅本地重置。默认 0.5。")]
+        [Range(0f, 1f)]
+        [SerializeField] private float reacquireGeometryFloor = 0.5f;
 
         private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
@@ -102,6 +107,22 @@ namespace EgoAnchor.Policy
         private float predictAheadSeconds;
         private double lowScoreStartSeconds = -1.0;
         private double lastLowScoreReacquireSeconds = double.NegativeInfinity;
+        private bool wantsServerReacquire;
+
+        /// <summary>
+        /// 是否有待上游处理的"通知 Python 重新 register"请求 (持续低分 + 几何不可信判定 track 丢)。
+        /// runtime 每帧 consume 一次, 转给 AnchorRuntimeHub 统一发 NATS reacquire。host 自身不持 client。
+        /// </summary>
+        public bool ConsumeServerReacquireRequest()
+        {
+            if (!wantsServerReacquire)
+            {
+                return false;
+            }
+
+            wantsServerReacquire = false;
+            return true;
+        }
 
         /// <summary>eval 使用的策略 label。</summary>
         public string StrategyLabel
@@ -235,12 +256,13 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
             }
 
-            // 低分本地重定位: 已有锚定后若 score 持续过低 → 锚点不可信, 本地重置回 Searching 重吸附。
-            // 纯本地 (无 client 引用)；在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
-            if (TryLowScoreReacquire(observation.ReliabilityScore, now))
+            // 低分重定位: 已有锚定后若 score 持续过低 → 锚点不可信, 本地重置回 Searching 重吸附。
+            // 几何也差时还会 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
+            // host 不持 client; 在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
+            if (TryLowScoreReacquire(observation, now))
             {
                 latestGateDecision = GateDecision.Hold("low_score_reacquire");
-                return new AnchorPolicyDecision(AnchorPolicyAction.Hold, stateMachine.State, "low_score_reacquire");
+                return new AnchorPolicyDecision(AnchorPolicyAction.Reacquire, stateMachine.State, "low_score_reacquire");
             }
 
             // 可选 score/jump 门控 (仅 EgoAnchor 方法开启)
@@ -382,7 +404,13 @@ namespace EgoAnchor.Policy
         /// 本地重置 (回 Searching/重吸附), 不再信任旧低分锚点。纯本地, 不发任何网络命令。
         /// 触发时返回 true (调用方应提前返回)。
         /// </summary>
-        private bool TryLowScoreReacquire(float score, double now)
+        /// <summary>
+        /// 低分重定位: score 持续低于阈值 → 本地重置 (回 Searching/重吸附)。
+        /// 若同时几何子分也差 (depth+reproj 都低 → 判定 track 丢, 而非快动/遮挡), 额外置 WantsServerReacquire 标志,
+        /// 由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register。host 不持 client, 只置标志。
+        /// 触发时返回 true (调用方提前返回)。
+        /// </summary>
+        private bool TryLowScoreReacquire(in AnchorObservation observation, double now)
         {
             if (!enableLowScoreReacquire || !motionModel.HasState)
             {
@@ -390,7 +418,7 @@ namespace EgoAnchor.Policy
                 return false;
             }
 
-            if (score > lowScoreReacquireThreshold)
+            if (observation.ReliabilityScore > lowScoreReacquireThreshold)
             {
                 lowScoreStartSeconds = -1.0;
                 return false;
@@ -409,7 +437,17 @@ namespace EgoAnchor.Policy
 
             lastLowScoreReacquireSeconds = now;
             lowScoreStartSeconds = -1.0;
-            NotifyReacquire(now, "low_score_reacquire");
+
+            // 几何仲裁: 几何子分也差 = 真坏 pose / track 丢 → 请求 Python 重 register;
+            // 几何仍好 = 只是快动/遮挡/低 confidence → 仅本地重置, 不打扰 Python。
+            // 注意: 标志在 NotifyReacquire (会 ResetModules) 之后置, 避免被重置清掉。
+            bool trackLost = observation.HasGeometryConcern(reacquireGeometryFloor);
+            NotifyReacquire(now, trackLost ? "low_score_track_lost" : "low_score_local_reset");
+            if (trackLost)
+            {
+                wantsServerReacquire = true;
+            }
+
             return true;
         }
 

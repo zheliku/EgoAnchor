@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EgoAnchor.Client
@@ -37,13 +38,12 @@ namespace EgoAnchor.Client
         [Tooltip("消息/命令面 NATS client。启动时 SetNatsUrl(nats://<ip>:<natsPort>)。")]
         [SerializeField] private NatsControlClient natsClient;
 
-        /// <summary>可选服务器预设列表。</summary>
+        /// <summary>服务器预设列表 (目前只保留 3090/5090 两个)。</summary>
         [Header("Presets")]
         [Tooltip("服务器预设列表。每个预设只填一个裸 IP；数据面/NATS 地址由本组件自动分发。")]
         [SerializeField]
-        private ServerPreset[] presets =
+        private List<ServerPreset> presets = new List<ServerPreset>
         {
-            new ServerPreset { label = "LocalHost", ip = "127.0.0.1" },
             new ServerPreset { label = "RTX3090", ip = "127.0.0.1" },
             new ServerPreset { label = "RTX5090", ip = "172.24.247.32" },
         };
@@ -102,12 +102,12 @@ namespace EgoAnchor.Client
 
         private string ResolvePresetIp()
         {
-            if (presets == null || presets.Length == 0)
+            if (presets == null || presets.Count == 0)
             {
                 return string.Empty;
             }
 
-            int index = Mathf.Clamp(selected, 0, presets.Length - 1);
+            int index = Mathf.Clamp(selected, 0, presets.Count - 1);
             return (presets[index].ip ?? string.Empty).Trim();
         }
     }

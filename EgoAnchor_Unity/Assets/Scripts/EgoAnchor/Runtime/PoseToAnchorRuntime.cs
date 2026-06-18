@@ -129,6 +129,12 @@ namespace EgoAnchor.Runtime
         /// <summary>最近一次 policy 输出是否静止锁定。</summary>
         public bool LatestStaticLocked => policyHost != null && policyHost.LatestStaticLocked;
 
+        /// <summary>
+        /// consume 一次"请求通知 Python 重新 register"标志 (host 持续低分+几何不可信时置位)。
+        /// 由 AnchorRuntimeHub 在 fan-in 时统一收集并发一次 NATS reacquire。runtime 自身不持 command client。
+        /// </summary>
+        public bool ConsumeServerReacquireRequest() => policyHost != null && policyHost.ConsumeServerReacquireRequest();
+
         /// <summary>最近一次 arrival-time raw 诊断时间，单位毫秒。</summary>
         public double LatestArrivalTimeRawMonoMs => latestArrivalTimeRawMonoMs;
 

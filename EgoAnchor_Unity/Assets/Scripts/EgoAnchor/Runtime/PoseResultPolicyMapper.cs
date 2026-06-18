@@ -34,6 +34,13 @@ namespace EgoAnchor.Runtime
             bool hasHeadPose = false,
             Pose headPose = default)
         {
+            // 几何子分 (depth/reprojection) + confidence 透传给 anchor 层, 用于区分坏 pose vs 真实快动。
+            // result 为空 (测试注入) 时无子分 → hasSubscores=false, 几何仲裁退化为只看总分。
+            bool hasSubscores = result != null;
+            float scoreDepth = hasSubscores ? result.ScoreDepth : -1f;
+            float scoreReprojection = hasSubscores ? result.ScoreReprojection : -1f;
+            float scoreConfidence = hasSubscores ? result.ScoreConfidence : -1f;
+
             return AnchorObservation.FromAlignedPose(
                 frameId,
                 worldPose,
@@ -44,7 +51,11 @@ namespace EgoAnchor.Runtime
                 result?.PoseSource ?? string.Empty,
                 captureTimeSeconds,
                 hasHeadPose,
-                headPose
+                headPose,
+                scoreDepth,
+                scoreReprojection,
+                scoreConfidence,
+                hasSubscores
             );
         }
 

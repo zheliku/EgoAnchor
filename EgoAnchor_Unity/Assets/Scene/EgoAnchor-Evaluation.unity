@@ -882,6 +882,7 @@ MonoBehaviour:
   lowScoreReacquireThreshold: 0.25
   lowScoreReacquireSeconds: 0.8
   lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.4
 --- !u!4 &206209587
 Transform:
   m_ObjectHideFlags: 0
@@ -1823,7 +1824,7 @@ MonoBehaviour:
     ip: 127.0.0.1
   - label: RTX5090
     ip: 172.24.247.32
-  selected: 0
+  selected: 1
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222
@@ -2691,6 +2692,7 @@ MonoBehaviour:
   lowScoreReacquireThreshold: 0.25
   lowScoreReacquireSeconds: 0.8
   lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.4
 --- !u!4 &637018053
 Transform:
   m_ObjectHideFlags: 0
@@ -4030,6 +4032,7 @@ MonoBehaviour:
   lowScoreReacquireThreshold: 0.25
   lowScoreReacquireSeconds: 0.8
   lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
 --- !u!114 &1039886367
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5523,6 +5526,7 @@ MonoBehaviour:
   lowScoreReacquireThreshold: 0.25
   lowScoreReacquireSeconds: 0.8
   lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.4
 --- !u!114 &1484131523
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6240,6 +6244,7 @@ MonoBehaviour:
   lowScoreReacquireThreshold: 0.25
   lowScoreReacquireSeconds: 0.8
   lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.4
 --- !u!4 &1774730471
 Transform:
   m_ObjectHideFlags: 0
@@ -6323,6 +6328,8 @@ MonoBehaviour:
   - {fileID: 302482019}
   logStats: 1
   statsIntervalMessages: 120
+  reacquireCommandClient: {fileID: 1814303323}
+  serverReacquireCooldownSeconds: 3
 --- !u!4 &1777492728
 Transform:
   m_ObjectHideFlags: 0

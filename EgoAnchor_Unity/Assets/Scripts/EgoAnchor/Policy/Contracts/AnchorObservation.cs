@@ -35,8 +35,38 @@ namespace EgoAnchor.Policy
         /// <summary>Python 感知侧可靠性评分，范围 0..1。</summary>
         public readonly float ReliabilityScore;
 
+        /// <summary>深度对齐子分 0..1 (geometry)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
+        public readonly float ScoreDepth;
+
+        /// <summary>颜色重投影子分 0..1 (geometry)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
+        public readonly float ScoreReprojection;
+
+        /// <summary>连续高质量 pose warmup 置信子分 0..1；刚注册时低。&lt;0 表示无信号。</summary>
+        public readonly float ScoreConfidence;
+
+        /// <summary>是否携带有效几何子分 (depth/reprojection)。false 时几何仲裁退化为只看总分。</summary>
+        public readonly bool HasSubscores;
+
         /// <summary>Python 感知侧可靠性 flags。</summary>
         public readonly string[] ReliabilityFlags;
+
+        /// <summary>
+        /// 几何证据是否不可信：depth 与 reprojection 子分都 valid 且都低于阈值。
+        /// 用于区分"坏 pose / track 丢"(几何差 → 该重 register) vs "真实快动 / 遮挡"(几何仍好 → 别重)。
+        /// 无有效子分时返回 false (不武断判坏)。
+        /// </summary>
+        public bool HasGeometryConcern(float geometryFloor)
+        {
+            if (!HasSubscores)
+            {
+                return false;
+            }
+
+            bool depthBad = ScoreDepth >= 0f && ScoreDepth < geometryFloor;
+            bool reprojBad = ScoreReprojection >= 0f && ScoreReprojection < geometryFloor;
+            // 两路几何证据都在且都低，才判几何不可信 (单路低可能只是该路无信号/退化)。
+            return depthBad && reprojBad;
+        }
 
         /// <summary>Python pipeline phase，例如 TRACK、REGISTER、WAIT_DETECT。</summary>
         public readonly string Phase;
@@ -84,7 +114,11 @@ namespace EgoAnchor.Policy
             bool isRelocalization,
             string failureReason,
             bool hasHeadPose = false,
-            Pose headPose = default)
+            Pose headPose = default,
+            float scoreDepth = -1f,
+            float scoreReprojection = -1f,
+            float scoreConfidence = -1f,
+            bool hasSubscores = false)
         {
             FrameId = frameId;
             SampleTimeSeconds = sampleTimeSeconds;
@@ -93,6 +127,10 @@ namespace EgoAnchor.Policy
             WorldPose = worldPose;
             HasServerPose = hasServerPose;
             ReliabilityScore = Mathf.Clamp01(reliabilityScore);
+            ScoreDepth = scoreDepth;
+            ScoreReprojection = scoreReprojection;
+            ScoreConfidence = scoreConfidence;
+            HasSubscores = hasSubscores;
             ReliabilityFlags = reliabilityFlags ?? Array.Empty<string>();
             Phase = phase ?? string.Empty;
             PoseSource = poseSource ?? string.Empty;
@@ -124,7 +162,11 @@ namespace EgoAnchor.Policy
             string poseSource = "",
             double captureTimeSeconds = -1.0,
             bool hasHeadPose = false,
-            Pose headPose = default)
+            Pose headPose = default,
+            float scoreDepth = -1f,
+            float scoreReprojection = -1f,
+            float scoreConfidence = -1f,
+            bool hasSubscores = false)
         {
             return new AnchorObservation(
                 frameId,
@@ -140,7 +182,11 @@ namespace EgoAnchor.Policy
                 IsRegisterLike(phase) || IsRegisterLike(poseSource),
                 failureReason: string.Empty,
                 hasHeadPose,
-                headPose
+                headPose,
+                scoreDepth,
+                scoreReprojection,
+                scoreConfidence,
+                hasSubscores
             );
         }
 

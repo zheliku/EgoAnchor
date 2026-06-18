@@ -19,6 +19,9 @@ namespace EgoAnchor.Policy
 
         /// <summary>贴合接受：滤波器硬重置到本帧测量（首测量、重定位、瞬移恢复）。</summary>
         Snap,
+
+        /// <summary>持续低分且几何不可信：判定 track 丢失，请求向 Python 重新 register。</summary>
+        Reacquire,
     }
 
     /// <summary>
