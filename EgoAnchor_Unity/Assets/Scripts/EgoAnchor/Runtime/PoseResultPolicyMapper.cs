@@ -14,6 +14,9 @@ namespace EgoAnchor.Runtime
     /// </summary>
     internal static class PoseResultPolicyMapper
     {
+        /// <summary>Python 进入深度对齐评分前要求的 mask 内有效深度覆盖率 (pose_quality.MIN_DEPTH_COVERAGE)。</summary>
+        private const float MinDepthCoverage = 0.10f;
+
         /// <summary>
         /// 从成功对齐的 PoseResult 构造 policy observation。
         /// </summary>
@@ -41,6 +44,13 @@ namespace EgoAnchor.Runtime
             float scoreReprojection = hasSubscores ? result.ScoreReprojection : -1f;
             float scoreConfidence = hasSubscores ? result.ScoreConfidence : -1f;
 
+            // valid 标记复刻 Python 评分的"无信号"判据 (reliability/pose_quality.py)，使 Unity 几何仲裁
+            // 能区分"真低分"和"无信号占位分"，不动 proto：
+            //   reproj valid: color_reprojection>=0 表示有颜色重投影信号 (纯色/无纹理物体为 -1)。
+            //   depth valid : mask 内深度覆盖率>=MIN_DEPTH_COVERAGE 才进入深度对齐评分。
+            bool reprojValid = hasSubscores && result.ColorReprojection >= 0f;
+            bool depthValid = hasSubscores && result.DepthValidInMask >= MinDepthCoverage;
+
             return AnchorObservation.FromAlignedPose(
                 frameId,
                 worldPose,
@@ -55,7 +65,9 @@ namespace EgoAnchor.Runtime
                 scoreDepth,
                 scoreReprojection,
                 scoreConfidence,
-                hasSubscores
+                hasSubscores,
+                depthValid,
+                reprojValid
             );
         }
 

@@ -337,6 +337,8 @@ class QuestPosePipeline:
         if self.calibration is None or self.cam_k is None:
             diagnostics.phase = "WAIT_CALIBRATION"
             timing.finalize(t_total)
+            self._update_fps()
+            diagnostics.fps = self._fps
             obs = self._make_observation(decoded, diagnostics.phase, False, None, "NONE", diagnostics, timing, failure_reason="wait_calibration")
             return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
 
@@ -386,6 +388,9 @@ class QuestPosePipeline:
         current_diagnostics.depth = depth
         self._update_depth_diagnostics(current_diagnostics, depth, None)
         current_timing.finalize(t_total)
+        # 异步分割等待帧也跑了深度预测，计入 fps，否则 register 前 HUD 一直是 fps=0。
+        self._update_fps()
+        current_diagnostics.fps = self._fps
         return QuestPosePipelineOutput(observation=None, diagnostics=current_diagnostics, timing=current_timing, new_frame_processed=True)
 
     def _take_ready_async_segmentation(self, t_total: float) -> QuestPosePipelineOutput | None:
@@ -421,6 +426,8 @@ class QuestPosePipeline:
         if completed.error:
             result_diagnostics.phase = "SEGMENTATION_FAILED"
             result_timing.finalize(t_total)
+            self._update_fps()
+            result_diagnostics.fps = self._fps
             obs = self._make_observation(
                 result_job.decoded,
                 result_diagnostics.phase,
@@ -585,7 +592,7 @@ class QuestPosePipeline:
                 t_total,
                 "" if pose is not None else phase.lower(),
                 rgb=rgb,
-                update_fps=True,
+                log_stats=True,
             )
 
         if not self.tracking_state.has_registered and not _mask_has_pixels(mask):
@@ -619,7 +626,7 @@ class QuestPosePipeline:
             t_total,
             "" if has_pose else phase.lower(),
             rgb=rgb,
-            update_fps=True,
+            log_stats=True,
         )
 
     def _finish_frame(
@@ -635,7 +642,7 @@ class QuestPosePipeline:
         failure_reason: str,
         *,
         rgb: np.ndarray | None = None,
-        update_fps: bool = False,
+        log_stats: bool = False,
     ) -> QuestPosePipelineOutput:
         """收尾单帧输出，统一写 total_ms、fps、pose 可视化与 observation。"""
 
@@ -651,12 +658,12 @@ class QuestPosePipeline:
                 LOGGER.warning("FoundationPose pose 可视化失败，跳过本帧 debug 图: %s", exc)
 
         timing.finalize(t_total)
-        if update_fps:
-            self._update_fps()
+        # fps 反映真实帧率：每个处理过的帧都更新节拍，不论是否已建立 track。
+        self._update_fps()
         diagnostics.fps = self._fps
         diagnostics.timing = timing
         obs = self._make_observation(decoded, phase, has_pose, pose, pose_source, diagnostics, timing, failure_reason=failure_reason)
-        if update_fps:
+        if log_stats:
             self._log_stats(diagnostics, obs)
         return QuestPosePipelineOutput(observation=obs, diagnostics=diagnostics, timing=timing, new_frame_processed=True)
 
@@ -1159,7 +1166,11 @@ class QuestPosePipeline:
         cv2.imshow(self.mask_snapshot_window, mask_vis)
 
     def _update_fps(self) -> None:
-        """更新 pipeline FPS EMA。"""
+        """更新 pipeline FPS EMA。
+
+        每个真实处理过的帧都应调用（含 register 前的 mask/depth-only 帧），否则
+        启动阶段 fps 恒为 0，且首次 track 时 dt 会包含整个启动间隔而算出荒谬低值。
+        """
 
         now = time.perf_counter()
         if self._last_process_time is not None:

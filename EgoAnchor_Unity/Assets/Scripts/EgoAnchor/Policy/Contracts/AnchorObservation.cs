@@ -44,6 +44,14 @@ namespace EgoAnchor.Policy
         /// <summary>连续高质量 pose warmup 置信子分 0..1；刚注册时低。&lt;0 表示无信号。</summary>
         public readonly float ScoreConfidence;
 
+        /// <summary>depth 子分是否携带有效几何证据 (Python 侧 mask 内深度覆盖足够且有渲染深度信号)。
+        /// false 时该路被排除出几何仲裁，而不是当作低分惩罚。</summary>
+        public readonly bool DepthValid;
+
+        /// <summary>reprojection 子分是否携带有效几何证据 (Python 侧有颜色重投影信号)。
+        /// false 时该路被排除出几何仲裁 (例如纯色/无纹理物体)。</summary>
+        public readonly bool ReprojValid;
+
         /// <summary>是否携带有效几何子分 (depth/reprojection)。false 时几何仲裁退化为只看总分。</summary>
         public readonly bool HasSubscores;
 
@@ -51,21 +59,66 @@ namespace EgoAnchor.Policy
         public readonly string[] ReliabilityFlags;
 
         /// <summary>
-        /// 几何证据是否不可信：depth 与 reprojection 子分都 valid 且都低于阈值。
-        /// 用于区分"坏 pose / track 丢"(几何差 → 该重 register) vs "真实快动 / 遮挡"(几何仍好 → 别重)。
-        /// 无有效子分时返回 false (不武断判坏)。
+        /// 几何证据是否不可信，用于区分"坏 pose / track 丢"(几何差 → 该重 register)
+        /// vs "真实快动 / 遮挡 / 低 confidence"(几何仍好 → 别重 register)。
+        ///
+        /// 沿用 Python <c>_geometry_core</c> 的加权对数几何平均 (reliability/pose_quality.py)：
+        /// 只对 valid 的子分计权 (无信号的一路被排除而非当 0 分)，几何平均分低于 floor 即判不可信。
+        /// 这修正了旧的 "depth 与 reproj 都低于 floor 才判" 的缺陷——单路几何彻底失效
+        /// (如 depth≈0 而 reproj 尚可) 时，几何平均会被显著拉低，从而正确判定 track 丢。
+        /// 两路都无 valid 信号时返回 false (不武断判坏)。
         /// </summary>
-        public bool HasGeometryConcern(float geometryFloor)
+        /// <param name="geometryFloor">几何平均分阈值：低于它判几何不可信。</param>
+        /// <param name="reprojWeight">reprojection 子分在几何核里的权重，默认 0.2 (同 Python defaults.toml)。</param>
+        /// <param name="depthWeight">depth 子分在几何核里的权重，默认 0.8 (同 Python defaults.toml)。</param>
+        /// <returns>几何证据是否不可信。</returns>
+        public bool HasGeometryConcern(float geometryFloor, float reprojWeight = 0.2f, float depthWeight = 0.8f)
         {
             if (!HasSubscores)
             {
                 return false;
             }
 
-            bool depthBad = ScoreDepth >= 0f && ScoreDepth < geometryFloor;
-            bool reprojBad = ScoreReprojection >= 0f && ScoreReprojection < geometryFloor;
-            // 两路几何证据都在且都低，才判几何不可信 (单路低可能只是该路无信号/退化)。
-            return depthBad && reprojBad;
+            return GeometryScore(reprojWeight, depthWeight, out bool hasEvidence) < geometryFloor && hasEvidence;
+        }
+
+        /// <summary>
+        /// 按 Python <c>_geometry_core</c> 的加权对数几何平均合成几何质量分 0..1。
+        /// 只对 valid 的子分计权；无任何有效几何证据时 hasEvidence=false 且返回 1 (保持当前信任)。
+        /// </summary>
+        /// <param name="reprojWeight">reprojection 权重。</param>
+        /// <param name="depthWeight">depth 权重。</param>
+        /// <param name="hasEvidence">是否至少有一路有效几何证据。</param>
+        /// <returns>几何质量分 0..1。</returns>
+        public float GeometryScore(float reprojWeight, float depthWeight, out bool hasEvidence)
+        {
+            // 与 Python PoseScoreConfig.geo_floor 一致：避免有效低分在对数几何平均里塌成硬零。
+            const float GeoFloor = 0.05f;
+            double weightedLogSum = 0.0;
+            double weightSum = 0.0;
+
+            if (ReprojValid && ScoreReprojection >= 0f && reprojWeight > 0f)
+            {
+                float value = Mathf.Max(Mathf.Clamp01(ScoreReprojection), GeoFloor);
+                weightedLogSum += reprojWeight * Mathf.Log(value);
+                weightSum += reprojWeight;
+            }
+
+            if (DepthValid && ScoreDepth >= 0f && depthWeight > 0f)
+            {
+                float value = Mathf.Max(Mathf.Clamp01(ScoreDepth), GeoFloor);
+                weightedLogSum += depthWeight * Mathf.Log(value);
+                weightSum += depthWeight;
+            }
+
+            if (weightSum <= 0.0)
+            {
+                hasEvidence = false;
+                return 1.0f;
+            }
+
+            hasEvidence = true;
+            return Mathf.Clamp01((float)System.Math.Exp(weightedLogSum / weightSum));
         }
 
         /// <summary>Python pipeline phase，例如 TRACK、REGISTER、WAIT_DETECT。</summary>
@@ -118,7 +171,9 @@ namespace EgoAnchor.Policy
             float scoreDepth = -1f,
             float scoreReprojection = -1f,
             float scoreConfidence = -1f,
-            bool hasSubscores = false)
+            bool hasSubscores = false,
+            bool depthValid = false,
+            bool reprojValid = false)
         {
             FrameId = frameId;
             SampleTimeSeconds = sampleTimeSeconds;
@@ -131,6 +186,8 @@ namespace EgoAnchor.Policy
             ScoreReprojection = scoreReprojection;
             ScoreConfidence = scoreConfidence;
             HasSubscores = hasSubscores;
+            DepthValid = depthValid;
+            ReprojValid = reprojValid;
             ReliabilityFlags = reliabilityFlags ?? Array.Empty<string>();
             Phase = phase ?? string.Empty;
             PoseSource = poseSource ?? string.Empty;
@@ -166,7 +223,9 @@ namespace EgoAnchor.Policy
             float scoreDepth = -1f,
             float scoreReprojection = -1f,
             float scoreConfidence = -1f,
-            bool hasSubscores = false)
+            bool hasSubscores = false,
+            bool depthValid = false,
+            bool reprojValid = false)
         {
             return new AnchorObservation(
                 frameId,
@@ -186,7 +245,9 @@ namespace EgoAnchor.Policy
                 scoreDepth,
                 scoreReprojection,
                 scoreConfidence,
-                hasSubscores
+                hasSubscores,
+                depthValid,
+                reprojValid
             );
         }
 

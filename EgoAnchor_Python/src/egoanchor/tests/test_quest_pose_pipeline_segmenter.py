@@ -295,7 +295,32 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertIsNotNone(output.diagnostics.depth)
         self.assertGreater(float(np.mean(output.diagnostics.depth)), 0.0)
 
-    def test_invalid_camera_info_waits_for_next_valid_calibration(self) -> None:
+    def test_fps_is_reported_before_tracking_is_established(self) -> None:
+        """register 前的帧（NO_MASK 等）也应统计 fps，否则启动阶段 HUD 一直 fps=0。"""
+
+        pipeline = QuestPosePipeline(
+            segmenter=_EmptySegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+        )
+        camera_info = _make_camera_info()
+
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), camera_info, server_receive_mono_ms=10.0)
+        # 第一帧建立计时基线，第二帧才有 dt 可算 fps（此时仍未建立 track）。
+        second = pipeline.process(_make_stereo_frame(2, (12, 22, 32)), camera_info, server_receive_mono_ms=20.0)
+
+        self.assertEqual(first.observation.phase, "NO_MASK")
+        self.assertEqual(second.observation.phase, "NO_MASK")
+        self.assertFalse(second.observation.has_pose)
+        # 关键断言：追踪建立前 fps 已经在更新，diagnostics 与 observation 一致。
+        self.assertGreater(second.diagnostics.fps, 0.0)
+        self.assertEqual(second.observation.fps, second.diagnostics.fps)
+
+
         """无效 camera_info 不应把 pipeline 变成 runtime 异常。"""
 
         depth_estimator = _FakeDepthEstimator()
