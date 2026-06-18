@@ -2037,7 +2037,7 @@ Transform:
   m_GameObject: {fileID: 466547747}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.05, z: 0}
+  m_LocalPosition: {x: 0, y: 0.06, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2063,6 +2063,7 @@ MonoBehaviour:
   flip: 0
   simplified: 1
   trackingColor: {r: 0.3, g: 0.85, b: 0.35, a: 1}
+  staticColor: {r: 0.2, g: 0.7, b: 0.9, a: 1}
   uncertainColor: {r: 1, g: 0.6, b: 0.1, a: 1}
   lostColor: {r: 0.95, g: 0.25, b: 0.25, a: 1}
   searchingColor: {r: 0.3, g: 0.75, b: 0.95, a: 1}
@@ -2859,11 +2860,11 @@ MonoBehaviour:
   stereoSource: {fileID: 634882299}
   framePoseHistory: {fileID: 1764014454}
   recordedRuntimes:
-  - label: kalman+interp
+  - label: egoanchor
     runtime: {fileID: 160200731}
     anchorTransform: {fileID: 160200733}
     isPrimary: 1
-  - label: kalman+blend
+  - label: kalman+interp
     runtime: {fileID: 1430656898}
     anchorTransform: {fileID: 1430656900}
     isPrimary: 0
@@ -3633,8 +3634,8 @@ MonoBehaviour:
   m_fontSizeMin: 18
   m_fontSizeMax: 72
   m_fontStyle: 0
-  m_HorizontalAlignment: 1
-  m_VerticalAlignment: 256
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_characterHorizontalScale: 1
@@ -4275,7 +4276,7 @@ MonoBehaviour:
   maxJumpDegrees: 120
   staticLockModule: {fileID: 1039886369}
   coastTimeoutSeconds: 0.45
-  trackingScoreFloor: 0.4
+  trackingScoreFloor: 0.25
   lostTimeoutSeconds: 2
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
@@ -6467,7 +6468,7 @@ GameObject:
   - component: {fileID: 1774730471}
   - component: {fileID: 1774730465}
   - component: {fileID: 1774730473}
-  - component: {fileID: 1774730472}
+  - component: {fileID: 1774730474}
   m_Layer: 0
   m_Name: AnchorPolicyHost
   m_TagString: Untagged
@@ -6488,7 +6489,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 1774730473}
-  smoothingStrategy: {fileID: 1774730472}
+  smoothingStrategy: {fileID: 1774730474}
   strategyLabel: 
   enableScoreGate: 0
   minScore: 0.2
@@ -6522,21 +6523,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1430656900}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1774730472
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1774730464}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.BlendStrategy
-  decayPerFrame: 0.9
-  extrapolationLatencyMultiplier: 1
-  maxExtrapolationSecondsHardCap: 0.3
 --- !u!114 &1774730473
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6553,6 +6539,21 @@ MonoBehaviour:
   positionMeasurementNoise: 0.0004
   rotationProcessNoise: 0.4
   rotationMeasurementNoise: 0.0025
+--- !u!114 &1774730474
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1774730464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
 --- !u!1 &1777492726
 GameObject:
   m_ObjectHideFlags: 0

@@ -18,9 +18,12 @@ namespace EgoAnchor.Policy
     ///   2. score 加权 CUSUM: E += score·max(0,|Δ|−deadband), 每观测衰减。高分持续位移 → 解锁;
     ///      低分远跳 → 权重小被压住 (软 score 门, 不是硬阈值);
     ///   3. 速度逃逸: 观测速度明确超阈连续若干帧 → 立即解锁 (堵 CUSUM 跟不上的 false-lock 长尾);
-    ///   4. 漏锁 creep: 锁定时极小增益朝高分小位移 creep (精修锁点 + 跟极慢漂移);
-    ///   5. 反 chatter: 解锁后若干观测内禁止再锁 (否则锁定 churn, 接缝污染抵消收益);
-    ///   6. 接缝过渡: 解锁瞬间记录 lockedPose ⊖ candidate 的残差, 之后逐帧融合收敛到 candidate, 防 pop。
+    ///   4. 绝对漂移租绳: 观测共识 (obsConsensus, denoised EMA) 相对锁定时刻共识 (anchorOrigin) 的总漂移
+    ///      超租绳 → 解锁 (堵慢速持续平移这种死区内/速度阈下、CUSUM 又跟不上的长尾; 量去噪共识而非
+    ///      creep 后的 lockedPose, 否则慢移时 creep 停摆会把 driftPos 钉死在 0 → 慢移永不解锁);
+    ///   5. 漏锁 creep: 锁定时极小增益朝高分小位移 creep (精修锁点 + 跟极慢漂移);
+    ///   6. 反 chatter: 解锁后若干观测内禁止再锁 (否则锁定 churn, 接缝污染抵消收益);
+    ///   7. 接缝过渡: 解锁瞬间记录 lockedPose ⊖ candidate 的残差, 之后逐帧融合收敛到 candidate, 防 pop。
     ///
     /// 位置/旋转独立证据通道 (静止物体的角度摇摆视觉上最刺眼)。所有阈值由 host 注入, 速度阈值
     /// 是物理量、与帧率无关 (符合项目"不硬编码帧率"惯例)。
@@ -76,7 +79,8 @@ namespace EgoAnchor.Policy
         // === 运行时状态 ===
         private bool locked;
         private Pose lockedPose;
-        private Pose anchorOrigin;                     // 锁定时固定锚点 (creep 不动), 绝对漂移租绳参考
+        private Pose anchorOrigin;                     // 锁定时刻的*观测共识* (denoised, 不动), 绝对漂移租绳参考。
+                                                       // 注意: 不是 candidate/lockedPose —— 见 obsConsensus 说明与 UpdateLockedEvidence 租绳计算。
         private float evidencePos;
         private float evidenceRot;
         private float staticRunSeconds;
@@ -93,6 +97,14 @@ namespace EgoAnchor.Policy
         private float obsSpeedEma;
         private float obsAngSpeedEma;
 
+        // 观测共识 (denoised, 死区无关): 对被接受观测做低增益 EMA, 平滑掉单帧噪声/head-slip 尖峰,
+        // 但*如实跟随*真实持续位移 (与 creep 不同, 不受死区门控)。绝对漂移租绳用它相对 anchorOrigin
+        // (= 锁定时刻的共识) 度量真实漂移, 修复"慢移时观测超死区→creep 停摆→lockedPose 钉死→租绳恒为 0
+        // →慢移永不解锁"的结构性失效。EMA 平滑 + headToleranceFactor 放大保留对头转抖动 (问题3) 的免疫。
+        private bool hasObsConsensus;
+        private Vector3 obsConsensusPos;
+        private Quaternion obsConsensusRot;
+
         // 解锁接缝残差
         private bool seamActive;
         private Vector3 seamPos;
@@ -105,6 +117,7 @@ namespace EgoAnchor.Policy
         private float headLinSpeedEma;   // m/s
         private float headAngSpeedEma;   // deg/s
         private float headToleranceFactor = 1.0f; // 当前头动放大系数 (1=头静止)
+        private float headMotionRatio;             // 头动强度 0..1 (0=头静止, 1=头速达满容忍阈值)。门控 creep: 头动时减弱/冻结 creep, 防 head-slip 偏置被 creep 单向累积成锁点漂移。
         private float posDistanceFactor = 1.0f;    // 当前距离自适应位置容忍系数 (问题2; 1=近处/关闭)
         private float lowScoreRunSeconds;          // 锁定时连续低分累计时间 (低分释放用)
 
@@ -191,6 +204,9 @@ namespace EgoAnchor.Policy
             hasSpeedEma = false;
             obsSpeedEma = 0.0f;
             obsAngSpeedEma = 0.0f;
+            hasObsConsensus = false;
+            obsConsensusPos = Vector3.zero;
+            obsConsensusRot = Quaternion.identity;
             seamActive = false;
             seamPos = Vector3.zero;
             seamRot = Vector3.zero;
@@ -200,6 +216,7 @@ namespace EgoAnchor.Policy
             headLinSpeedEma = 0.0f;
             headAngSpeedEma = 0.0f;
             headToleranceFactor = 1.0f;
+            headMotionRatio = 0.0f;
             posDistanceFactor = 1.0f;
             lowScoreRunSeconds = 0.0f;
             LockEnters = 0;
@@ -247,6 +264,11 @@ namespace EgoAnchor.Policy
             // 距离自适应位置容忍 (问题2): 物体越远立体深度噪声越大, 位置容忍按距离放大 (旋转不放大)。
             posDistanceFactor = ComputePosDistanceFactor(hasHeadPose, headPose, pos);
 
+            // 观测共识 (denoised, 死区无关): 低增益 EMA 跟踪真实观测。绝对漂移租绳用它 (而非 creep 后的
+            // lockedPose) 度量真实漂移, 故必须在 UpdateLockedEvidence 之前更新。增益按真实 dt 的半衰期换算,
+            // 与帧率无关; 复用 evidenceHalfLifeSeconds 作时间常数 (同一"什么算真实运动 vs 噪声"的尺度)。
+            UpdateObsConsensus(pos, rot, obsDt);
+
             float f = headToleranceFactor;
             bool isStatic = obsSpeedEma <= staticEnterSpeedMps * f
                             && obsAngSpeedEma <= staticEnterAngSpeedDps * f
@@ -273,6 +295,28 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
+        /// 更新观测共识 (denoised, 死区无关): 对被接受观测做半衰期 EMA。
+        /// 与 creep 的关键区别: creep 只在死区内动 (物体一动就停), 共识则*始终*跟随真实观测,
+        /// 只是被 EMA 平滑掉单帧噪声/head-slip 尖峰。绝对漂移租绳用它 (相对 anchorOrigin) 度量真实漂移,
+        /// 使"慢速持续平移"能如实累积、顶破租绳解锁, 同时单帧噪声被平滑而不误触发。增益帧率无关。
+        /// </summary>
+        private void UpdateObsConsensus(Vector3 pos, Quaternion rot, float obsDt)
+        {
+            if (!hasObsConsensus)
+            {
+                obsConsensusPos = pos;
+                obsConsensusRot = AnchorMath.Normalize(rot);
+                hasObsConsensus = true;
+                return;
+            }
+
+            // g = 1 - 0.5^(dt/halfLife): 每过一个半衰期, 共识朝观测靠拢一半。dt=0 (首帧/同刻) → g=0 不动。
+            float g = 1.0f - Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
+            obsConsensusPos += (pos - obsConsensusPos) * g;
+            obsConsensusRot = AnchorMath.Normalize(Quaternion.Slerp(obsConsensusRot, rot, g));
+        }
+
+        /// <summary>
         /// 距离自适应位置容忍系数 (问题2): factor = clamp(1 + slope·(dist − ref), 1, max),
         /// dist = 观测物体到头部的距离。ref 以内 (近处) factor=1 不放大; 越远越大, max 封顶。
         /// 无头部 pose 或功能关闭 (max≤1) → 返回 1。只缩放位置通道, 旋转不受影响。
@@ -295,6 +339,7 @@ namespace EgoAnchor.Policy
             if (!hasHeadPose || headMaxToleranceFactor <= 1.0f)
             {
                 headToleranceFactor = 1.0f; // 无头部数据或功能关闭 → 不放大
+                headMotionRatio = 0.0f;     // 头动门控关闭 → creep 不被头动抑制 (原行为)
                 return;
             }
 
@@ -311,6 +356,7 @@ namespace EgoAnchor.Policy
 
             float ratio = Mathf.Max(headAngSpeedEma / headRotForFullToleranceDps, headLinSpeedEma / headLinForFullToleranceMps);
             ratio = Mathf.Clamp01(ratio);
+            headMotionRatio = ratio;        // 供 creep 门控用: 头动越快 → creep 增益越小 (见 UpdateLockedEvidence)
             headToleranceFactor = 1.0f + ratio * (headMaxToleranceFactor - 1.0f);
         }
 
@@ -359,7 +405,13 @@ namespace EgoAnchor.Policy
             locked = true;
             LockEnters++;
             lockedPose = candidatePose; // 锚到当前 candidate, C⁰ 连续无 pop
-            anchorOrigin = candidatePose; // 固定锚点 (creep 不动), 绝对漂移租绳参考
+            // 绝对漂移租绳参考 = 锁定时刻的*观测共识* (denoised), 不是 candidate。
+            // candidate 含 smoothing/predict-ahead 的偏置 (录制中 predict_ahead ~260ms), 与 obs 不同源;
+            // 用 obs 共识做 origin 才能让"漂移 = 真实观测相对锁定位的位移", 使 unlockDriftMeters 量纲正确。
+            // 共识尚未建立 (理论上不会, OnObservation 必先于 EnterLock) 时退化用 candidate。
+            anchorOrigin = hasObsConsensus
+                ? new Pose(obsConsensusPos, obsConsensusRot)
+                : candidatePose;
             evidencePos = 0.0f;
             evidenceRot = 0.0f;
             movingRunSeconds = 0.0f;
@@ -433,16 +485,18 @@ namespace EgoAnchor.Policy
                 return; // 解锁在 Stabilize 提交 (此刻才有 candidate 做接缝)
             }
 
-            // 绝对漂移租绳: 相对锁定时固定的 anchorOrigin (creep 不动) 的总漂移超租绳 → 解锁。
-            // 关键: 漂移用 *creep 后的 lockedPose* (去噪共识) 度量, 不用单帧原始观测 pos/rot。
-            //   原始观测噪声大 (本数据集静止物体旋转噪声 p90~13°、平移 p90~30mm, 远超 5°/15mm 租绳),
-            //   若直接拿原始观测度量, 头静止 (f=1) 时单帧噪声尖峰就频繁误触发解锁 → 锚点"漂一小段又被拉回"的抖动
-            //   (用户报告的现象: 物体不动头转时轻微抖动)。lockedPose 只在死区内经 creep 缓慢移动, 对单帧噪声免疫;
-            //   而真实持续漂移会被 creep 如实跟随、累计够远仍顶破租绳, 因此"极慢平移逃逸"能力保持不变。
+            // 绝对漂移租绳: 相对锁定时刻的*观测共识* anchorOrigin 的总漂移超租绳 → 解锁。
+            // 关键: 漂移用 *观测共识 obsConsensus* (denoised, 死区无关) 度量, 既不用单帧原始观测、也不用 creep 后的 lockedPose:
+            //   - 不用原始观测: 噪声大 (本数据集静止物体旋转 p90~13°、平移 p90~30mm, 远超 5°/15mm 租绳),
+            //     头静止 (f=1) 时单帧尖峰就频繁误触发解锁 → 锚点"漂一小段又被拉回"的抖动 (问题3, 见 obsConsensus 注释)。
+            //   - 不用 lockedPose: 它靠 creep 移动, 而 creep 只在死区内触发; 慢移时观测超死区→creep 停摆→lockedPose
+            //     被钉死在 anchorOrigin 上→driftPos 恒≈0→慢移*永不解锁* (即使 unlockDriftMeters=0 也无效, 实测租绳被钉在亚毫米)。
+            //   obsConsensus 是死区无关的低增益 EMA: 平滑掉单帧噪声/head-slip (保留问题3 免疫), 又如实跟随真实持续位移,
+            //   因此慢移会被如实累积、顶破租绳正常解锁。这恢复了 unlockDriftMeters 作为"慢移逃逸灵敏度"旋钮的作用。
             // 头动时租绳放大: 头转造成的 world-pose slip 漂移不该触发解锁; 头静止时回原租绳, 真实慢移正常逃逸。
             // 位置租绳再乘 posDistanceFactor (问题2): 远处深度噪声大, 位置租绳同比放宽; 旋转租绳不随距离变 (旋转噪声与距离无关)。
-            float driftPos = Vector3.Distance(lockedPose.position, anchorOrigin.position);
-            float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, lockedPose.rotation);
+            float driftPos = Vector3.Distance(obsConsensusPos, anchorOrigin.position);
+            float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, obsConsensusRot);
             if (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f)
             {
                 wantUnlock = true;
@@ -471,9 +525,15 @@ namespace EgoAnchor.Policy
 
             // 漏锁 creep: 仅死区内 (纯噪声/极慢漂移) 才朝观测缓慢靠拢, 精修锁点 + 跟极慢漂移而不抖。
             // creep 增益按真实 dt 的半衰期换算, 与帧率无关。
+            // 头动门控: 增益乘 (1 - headMotionRatio)。头动时 head-motion slip 让"静止物体"的观测 world pose 出现
+            // *系统性偏置* (非零均值噪声), 且死区被 headToleranceFactor 放大 → 偏置观测更易落进死区触发 creep →
+            // creep 单向朝偏置靠拢, 多帧累积成净漂移, 头停后还要按 creepHalfLife 慢慢爬回 (用户报告: 头动观察后
+            // 锚点偏移且不立即复位)。漂移租绳用 obsConsensus (EMA 可回中) 不受此影响, 但 creep 改的是输出本身,
+            // 漂移会实打实留下。故头动越快 creep 越弱、头动达满容忍 (ratio=1) 时完全冻结锁点; 头静止 (ratio=0)
+            // 时满增益照常精修。平滑过渡, 无硬阈值突变。
             if (dPos < dbMeters && dRot < dbDegrees)
             {
-                float g = (1.0f - Mathf.Pow(0.5f, obsDt / creepHalfLifeSeconds)) * score;
+                float g = (1.0f - Mathf.Pow(0.5f, obsDt / creepHalfLifeSeconds)) * score * (1.0f - headMotionRatio);
                 Vector3 newPos = lockedPose.position + (pos - lockedPose.position) * g;
                 Quaternion newRot = Quaternion.Slerp(lockedPose.rotation, rot, g);
                 lockedPose = new Pose(newPos, AnchorMath.Normalize(newRot));
