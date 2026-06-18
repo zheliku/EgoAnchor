@@ -1,7 +1,0 @@
-condition,label,n,slip_rms_px,slip_peak_px,insufficient_data
-unlabeled,egoanchor_full,3207,25.104122621187358,102.97195042277896,False
-unlabeled,egoanchor_no_static,3207,24.240095401144327,102.97195042277896,False
-unlabeled,kalman_cv,3207,24.01523723756253,102.35248448291438,False
-unlabeled,lowpass_predict,3207,20.355588302442545,95.79534884687455,False
-unlabeled,oneeuro_vanilla,3207,27.554647626151773,112.60037397729505,False
-unlabeled,raw_zoh,3207,25.93584551858621,106.62347332066675,False

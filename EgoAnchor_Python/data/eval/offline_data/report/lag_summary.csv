@@ -1,3 +1,0 @@
-condition,label,n,lag_ms,correlation,insufficient_data
-unlabeled,kalman,3207,400.0,0.802530022701598,False
-unlabeled,raw,3207,400.0,0.6149577794224662,False

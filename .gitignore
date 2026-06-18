@@ -3,6 +3,7 @@
 
 # Large local dependency/environment caches
 /EgoAnchor_Python/.pixi/
+/EgoAnchor_Python/data/eval/
 /EgoAnchor_Tools/.pixi/
 /EgoAnchor_Tools/**/bin/
 /EgoAnchor_Tools/**/obj/
@@ -16,4 +17,4 @@ EgoAnchor_Blender/plugin/
 *.blend
 *.blend1
 
-EgoAnchor_Invention_Patent/
+/EgoAnchor_Invention_Patent/

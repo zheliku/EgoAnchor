@@ -1,7 +1,0 @@
-condition,label,n,spike_count,spike_threshold_m,max_translation_error_m,policy_reject_count,top_policy_reasons
-unlabeled,egoanchor_full,3207,549,0.05,0.15489055810752292,0,
-unlabeled,egoanchor_no_static,3207,526,0.05,0.15489055810752292,0,
-unlabeled,kalman_cv,3207,523,0.05,0.15519337686658569,0,
-unlabeled,lowpass_predict,3207,413,0.05,0.13835444233557093,0,
-unlabeled,oneeuro_vanilla,3207,613,0.05,0.1558530599124145,0,
-unlabeled,raw_zoh,3207,577,0.05,0.15262090187868593,0,
