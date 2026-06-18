@@ -1822,9 +1822,11 @@ MonoBehaviour:
   presets:
   - label: RTX3090
     ip: 127.0.0.1
+  - label: RTX4090
+    ip: 172.24.244.55
   - label: RTX5090
     ip: 172.24.247.32
-  selected: 1
+  selected: 2
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222

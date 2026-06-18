@@ -45,6 +45,7 @@ namespace EgoAnchor.Client
         private List<ServerPreset> presets = new List<ServerPreset>
         {
             new ServerPreset { label = "RTX3090", ip = "127.0.0.1" },
+            new ServerPreset { label = "RTX4090", ip = "172.24.244.55" },
             new ServerPreset { label = "RTX5090", ip = "172.24.247.32" },
         };
 
