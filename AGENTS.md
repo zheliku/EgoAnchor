@@ -141,6 +141,7 @@ Unity policy 当前结构：
 - `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
+  - `DelayedInterpStrategy` 的 Hermite 用控制点 Kalman 速度当切线，运动急停时速度估计滞后（`positionProcessNoise` 衰减不够快）会让两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃（用户报告“运动停下后 anchor 来回轻微震荡”）。修复：`hermiteTangentChordRatio`（默认3）把切线模长限到 K×弦长/span（位置、旋转通道各按自己弦长独立限幅）。停下时弦长≈0→切线≈0→不鼓包；真实运动时弦长≈v·span≈切线 ≪ K×弦长→不裁剪、行为不变。`BlendStrategy` 是残差单调衰减，无此问题。
 - `Policy/Contracts`：`AnchorObservation`、`AnchorPolicyDecision`、`AnchorPolicyOutput`、`GateDecision`。
 - `Policy/Lifecycle`：`AnchorStateMachine`、`AnchorPolicyTypes`。
 - `Policy/Math`：`AnchorMath`、`ConstVelocityKalman`、`ScalarOneEuro`、`Spline`。

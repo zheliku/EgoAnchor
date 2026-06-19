@@ -43,6 +43,17 @@ namespace EgoAnchor.Policy
         [Tooltip("样条类型。Hermite 用控制点速度当切线 (配 Kalman/OneEuro 更稳)；向心 Catmull-Rom 用相邻点自动定切线 (配原始点更直观)。默认 Hermite。")]
         [SerializeField] private SplineKind spline = SplineKind.Hermite;
 
+        /// <summary>
+        /// Hermite 切线模长上限 = 此倍数 × 两控制点弦长 (Fritsch-Carlson 单调三次插值标准, 默认 3)。
+        /// 物体急停时两控制点位置几乎重合 (弦长≈0) 但 Kalman 速度估计滞后仍非零 → Hermite 切线挂在重合点上
+        /// 鼓出再弹回 = 过冲振铃 (用户报告"运动停下后 anchor 来回轻微震荡")。把切线限到弦长的 K 倍:
+        /// 停下时弦长≈0 → 切线≈0 → 不鼓包; 真实运动时弦长≈v·span≈切线 << K·弦长 → 不裁剪、行为不变。
+        /// 越小越不易过冲但运动中越"直" (插值偏向折线); K≥1 才保证过点处不反向。
+        /// </summary>
+        [Tooltip("Hermite 切线模长上限 = 此倍数 × 控制点弦长。防运动急停时速度切线滞后导致的过冲振铃 (停下时弦长≈0→切线被压到≈0)；真实运动时切线≈弦长远低于上限故不受影响。越小越不易过冲但运动中插值越直。默认 3。")]
+        [Range(1.0f, 8.0f)]
+        [SerializeField] private float hermiteTangentChordRatio = 3.0f;
+
         private readonly List<ControlPoint> points = new List<ControlPoint>(64);
         private float delaySeconds = 0.25f;
         private float latencyEstimateSeconds; // 实测 now - 最新控制点时间 的 EMA
@@ -134,13 +145,36 @@ namespace EgoAnchor.Policy
 
         private Pose InterpHermite(ControlPoint p1, ControlPoint p2, float u, float span)
         {
-            Vector3 pos = Spline.Hermite(p1.Pose.position, p1.LinearVelocity, p2.Pose.position, p2.LinearVelocity, u, span);
+            // 切线限幅 (防急停过冲): 把端点速度切线的模长限到 K × 弦长/span。弦长≈0 (停下) → 切线≈0 → 不鼓包;
+            // 真实运动时弦长≈v·span → 切线≈弦长 << K·弦长 → 不裁剪。位置与旋转通道各按自己的弦长独立限幅。
+            float k = Mathf.Max(hermiteTangentChordRatio, 1.0f);
 
-            // 旋转：在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite，切线用角速度
+            Vector3 posChord = p2.Pose.position - p1.Pose.position;
+            float posCap = k * posChord.magnitude / span; // 速度上限 (m/s); span>0 由调用方保证
+            Vector3 v1 = ClampMagnitude(p1.LinearVelocity, posCap);
+            Vector3 v2 = ClampMagnitude(p2.LinearVelocity, posCap);
+            Vector3 pos = Spline.Hermite(p1.Pose.position, v1, p2.Pose.position, v2, u, span);
+
+            // 旋转：在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite，切线用角速度 (同样按旋转弦长限幅)
             Vector3 logEnd = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p2.Pose.rotation);
-            Vector3 rotVec = Spline.Hermite(Vector3.zero, p1.AngularVelocityRad, logEnd, p2.AngularVelocityRad, u, span);
+            float rotCap = k * logEnd.magnitude / span; // 角速度上限 (rad/s)
+            Vector3 w1 = ClampMagnitude(p1.AngularVelocityRad, rotCap);
+            Vector3 w2 = ClampMagnitude(p2.AngularVelocityRad, rotCap);
+            Vector3 rotVec = Spline.Hermite(Vector3.zero, w1, logEnd, w2, u, span);
             Quaternion rot = AnchorMath.Multiply(p1.Pose.rotation, AnchorMath.Exp(rotVec));
             return new Pose(pos, rot);
+        }
+
+        /// <summary>把向量模长限到 maxMagnitude (≥0)；maxMagnitude≈0 时归零 (急停弦长≈0 → 切线≈0, 杀过冲)。</summary>
+        private static Vector3 ClampMagnitude(Vector3 v, float maxMagnitude)
+        {
+            float m = v.magnitude;
+            if (m <= maxMagnitude || m < 1e-9f)
+            {
+                return v;
+            }
+
+            return v * (maxMagnitude / m);
         }
 
         private Pose InterpCatmull(int i, float u)

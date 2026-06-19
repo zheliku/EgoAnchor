@@ -4304,6 +4304,7 @@ MonoBehaviour:
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
+  hermiteTangentChordRatio: 3
 --- !u!114 &1039886368
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6557,6 +6558,7 @@ MonoBehaviour:
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
+  hermiteTangentChordRatio: 3
 --- !u!1 &1777492726
 GameObject:
   m_ObjectHideFlags: 0

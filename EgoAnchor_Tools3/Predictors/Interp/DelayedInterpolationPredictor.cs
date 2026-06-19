@@ -36,6 +36,10 @@ namespace EgoAnchor.Tools3.Predictors.Interp
         private double latencyEstimate;            // 实测 now - 最新控制点时间 的 EMA
         private const double LatencySafetyMargin = 1.15;
         private const double MinDelaySeconds = 0.25;
+        // Hermite 切线模长上限 = 此倍数 × 控制点弦长 (Fritsch-Carlson 单调三次插值标准)。防运动急停时速度切线
+        // 滞后 (Kalman 速度衰减不够快) 导致两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃。
+        // 停下时弦长≈0→切线≈0→不鼓包; 真实运动时弦长≈v·span≈切线 ≪ K·弦长→不裁剪、行为不变。与 Unity DelayedInterpStrategy 同步。
+        private const double TangentChordRatio = 3.0;
 
         public DelayedInterpolationPredictor(IControlPointSource source, SplineKind spline)
         {
@@ -141,14 +145,35 @@ namespace EgoAnchor.Tools3.Predictors.Interp
                 (v2, a2) = DiffVelocityAt(IndexOf(p2.Time));
             }
 
+            // 切线限幅 (防急停过冲): 把速度切线模长限到 K × 弦长/span。弦长≈0 (停下) → 切线≈0 → 不鼓包;
+            // 真实运动时弦长≈v·span → 切线≈弦长 ≪ K·弦长 → 不裁剪。位置/旋转通道各按自己的弦长独立限幅。
+            double posCap = TangentChordRatio * (p2.Position - p1.Position).Magnitude / span;
+            v1 = ClampMagnitude(v1, posCap);
+            v2 = ClampMagnitude(v2, posCap);
+
             Vec3 pos = Spline.Hermite(p1.Position, v1, p2.Position, v2, u, span);
 
-            // 旋转: 在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite, 切线用角速度
+            // 旋转: 在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite, 切线用角速度 (同样按旋转弦长限幅)
             Quat r2Aligned = Quat.AlignHemisphere(p1.Rotation, p2.Rotation);
             Vec3 logEnd = Quat.Log(p1.Rotation.Inverse() * r2Aligned);
+            double rotCap = TangentChordRatio * logEnd.Magnitude / span;
+            a1 = ClampMagnitude(a1, rotCap);
+            a2 = ClampMagnitude(a2, rotCap);
             Vec3 rotVec = Spline.Hermite(Vec3.Zero, a1, logEnd, a2, u, span);
             Quat rot = p1.Rotation * Quat.Exp(rotVec);
             return new Pose(pos, rot.Normalized());
+        }
+
+        /// <summary>把向量模长限到 maxMagnitude (≥0); maxMagnitude≈0 时归零 (急停弦长≈0 → 切线≈0, 杀过冲)。</summary>
+        private static Vec3 ClampMagnitude(Vec3 v, double maxMagnitude)
+        {
+            double m = v.Magnitude;
+            if (m <= maxMagnitude || m < 1e-9)
+            {
+                return v;
+            }
+
+            return v * (maxMagnitude / m);
         }
 
         private Pose InterpCatmull(int i, double u)
