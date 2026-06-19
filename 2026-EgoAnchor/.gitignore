@@ -1,9 +1,17 @@
-pdf/
-experiment/
-egoanchor_cn_v1.aux
-egoanchor_cn_v1.bbl
-egoanchor_cn_v1.blg
-egoanchor_cn_v1.brf
-egoanchor_cn_v1.log
-egoanchor_cn_v1.out
-egoanchor_cn_v1.pdf
+# Local/private experiment materials
+/experiment/
+
+# Generated PDF output directory
+/pdf/
+
+# Root-level LaTeX build outputs
+/*.aux
+/*.bbl
+/*.blg
+/*.brf
+/*.fdb_latexmk
+/*.fls
+/*.log
+/*.out
+/*.pdf
+/*.synctex.gz

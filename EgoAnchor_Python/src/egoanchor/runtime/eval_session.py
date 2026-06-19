@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from egoanchor.utils.timezone import beijing_now
+from egoanchor.utils import beijing_now
 
 
 @dataclass(frozen=True)

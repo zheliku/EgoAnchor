@@ -1,21 +1,20 @@
-run_*.sh
-log/
-saves
-saves/
-weights/
-weights
-output/
-output
-pretrained/
-workspace
-workspace/
+# Cutie local scripts, logs, checkpoints, and demo outputs
+/run_*.sh
+/log/
+/saves/
+/weights/
+/output/
+/pretrained/
+/workspace/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
 
-# Byte-compiled / optimized / DLL files
+# Python bytecode and native extensions
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
 # Distribution / packaging
@@ -49,7 +48,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Test and coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -67,53 +66,28 @@ coverage.xml
 *.mo
 *.pot
 
-# Django stuff:
+# Framework-local state
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-
-# Flask stuff:
 instance/
 .webassets-cache
-
-# Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
+# Documentation and notebooks
 docs/_build/
-
-# PyBuilder
 target/
-
-# Jupyter Notebook
 .ipynb_checkpoints
-
-# IPython
 profile_default/
 ipython_config.py
 
-# pyenv
+# Local environments and editor settings
 .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
-
-# Celery stuff
 celerybeat-schedule
 celerybeat.pid
-
-# SageMath parsed files
 *.sage.py
-
-# Environments
 .env
 .venv
 env/
@@ -122,20 +96,13 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
 .spyderproject
 .spyproject
-
-# Rope project settings
 .ropeproject
 
-# mkdocs documentation
+# Static docs and type-checker caches
 /site
-
-# mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
 .pyre/

@@ -162,7 +162,7 @@ EOF
 启动服务器：
 
 ```bash
-pixi run python src/tracking_server.py --object controller_right --config local_linux_headless.toml
+pixi run python src/run_server.py --object controller_right --config local_linux_headless.toml
 ```
 
 如果你用仓库里的 `run.sh`：
@@ -333,7 +333,7 @@ url = "nats://127.0.0.1:4222" # NATS 地址；如果 nats-server 不在 Ubuntu �
 EOF
 
 # 6. 启动
-pixi run python src/tracking_server.py --object controller_right --config local_linux_headless.toml
+pixi run python src/run_server.py --object controller_right --config local_linux_headless.toml
 ```
 
 如果这条链路跑通，再接 Unity/Quest，并把 Unity 侧 Python IP/NATS URL 都改到 Ubuntu 机器。

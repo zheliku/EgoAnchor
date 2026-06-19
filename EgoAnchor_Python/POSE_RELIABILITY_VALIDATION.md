@@ -24,7 +24,7 @@ pixi run python -m unittest discover -s eval -p "test_*.py"
 当前默认配置会开启 `[reliability.render_quality]`，但模式仍是 `score_only`：
 
 ```powershell
-pixi run python .\src\tracking_server.py --object controller_right
+pixi run python .\src\run_server.py --object controller_right
 ```
 
 `score_only` 只计算分数、写 HUD/JSONL，不会因为低重投影分直接触发 re-register。重注册仍要等真机数据确认误报率后，再显式切到 `mode = "re_register"`。

@@ -176,27 +176,27 @@ python -c "from pathlib import Path; p = Path('tools/yoloe26/yoloe26_mask.py'); 
 """ }
 
 default = { cmd = """
-python src/tracking_server.py
+python src/run_server.py
 """ }
 
 blue_mouse ={ cmd = """
-python src/tracking_server.py --object blue_mouse
+python src/run_server.py --object blue_mouse
 """ }
 
 pink_mouse ={ cmd = """
-python src/tracking_server.py --object pink_mouse
+python src/run_server.py --object pink_mouse
 """ }
 
 earphone ={ cmd = """
-python src/tracking_server.py --object earphone
+python src/run_server.py --object earphone
 """ }
 
 controller_right ={ cmd = """
-python src/tracking_server.py --object controller_right
+python src/run_server.py --object controller_right
 """ }
 
 controller_left ={ cmd = """
-python src/tracking_server.py --object controller_left
+python src/run_server.py --object controller_left
 """ }
 
 eval = { cmd = "python eval/run_eval.py" } # 运行完整离线评估；使用 pixi run eval --session-dir data/eval/<session_id>

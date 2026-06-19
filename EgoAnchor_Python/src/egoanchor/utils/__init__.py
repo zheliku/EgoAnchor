@@ -7,9 +7,12 @@ from .latest_value_store import LatestValueStore
 from .logger import configure_logging, get_logger, resolve_log_level, set_logger_output_enabled, should_use_color
 from .math import clamp, clamp01, rotation_matrix_to_quaternion
 from .thirdparty_logging import configure_thirdparty_logging, get_thirdparty_logger, is_thirdparty_logging_enabled
+from .timezone import BEIJING_TZ, beijing_now
 
 __all__ = [
+    "BEIJING_TZ",
     "LatestValueStore",
+    "beijing_now",
     "clamp",
     "clamp01",
     "configure_logging",

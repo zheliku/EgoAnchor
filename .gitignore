@@ -1,20 +1,15 @@
-# Root-local editor and agent state
+# Root-local editor state
 /.vscode/
 
-# Large local dependency/environment caches
-/EgoAnchor_Python/.pixi/
-/EgoAnchor_Python/data/eval/
-/EgoAnchor_Tools/.pixi/
-/EgoAnchor_Tools/**/bin/
-/EgoAnchor_Tools/**/obj/
-__pycache__/
-*.py[cod]
+# Root-local Python scratch, if quick scripts are run from the repo root
+/__pycache__/
+/*.py[cod]
 
-# Generated paper build outputs
-/2026-EgoAnchor/pdf/
-EgoAnchor_Blender/ai_model/
-EgoAnchor_Blender/plugin/
-*.blend
-*.blend1
+# Blender local assets and generated working files
+/EgoAnchor_Blender/ai_model/
+/EgoAnchor_Blender/plugin/
+/EgoAnchor_Blender/*.blend
+/EgoAnchor_Blender/*.blend1
 
+# Local/private patent workspace
 /EgoAnchor_Invention_Patent/

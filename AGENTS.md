@@ -242,6 +242,22 @@ Unity 场景/序列化注意事项：
 - Unity 依赖由 `EgoAnchor_Unity/Packages/manifest.json` 管理，主线依赖 Google.Protobuf、NATS.Net、NetMQ 等。
 - 日志门面：Python 使用 `egoanchor.utils.get_logger(...)` 与入口 `configure_logging(...)`；Unity 使用 `EgoAnchorLog.For<T>()`。日志消息本身不要手写 `[ClassName]` 前缀。
 
+## Git 忽略规则
+
+- `.gitignore` 按目录分层维护：父级只管理本层和没有下级 `.gitignore` 接管的直属目录；一旦子目录有自己的 `.gitignore`，权重、缓存、构建输出和运行日志都交给该子目录管理。
+- 仓库根 `.gitignore` 只管根层编辑器状态、根层临时 Python 缓存、`EgoAnchor_Blender` 本地模型/插件/Blender 工作文件和本地专利工作区；不要在根层写 Python、Unity、论文目录内部产物。
+- `EgoAnchor_Python/.gitignore` 只管一方 Python 环境、根权重、runtime/eval 日志、Mutagen lock 和一方代码缓存；`Cutie`、`Fast-FoundationStereo`、`FoundationPose`、`sam3` 的 checkpoint、权重、ONNX/TensorRT engine、debug/output/build 产物由各自子目录 `.gitignore` 接管。
+- `2026-EgoAnchor/.gitignore` 管论文目录内 LaTeX 编译产物和本地实验材料；`EgoAnchor_Unity/.gitignore` 管 Unity 生成目录、IDE 文件和 Unity build/package 产物。
+
+## Python 远端同步
+
+- `EgoAnchor_Python/mutagen.yml` 统一管理 RTX4090、RTX5090 和 RTX5080 Laptop 的 Python 服务器同步。本机是唯一源码源头，三个 `source-*` 会话使用 `one-way-safe` 从本机推到远端；远端源码改动会变成冲突，不会自动回流。Mutagen session 名只能使用合法 name 字符，使用连字符，不要用下划线。
+- 远端日志通过独立 `eval-logs-*` 和 `runtime-logs-*` 会话拉回本机，统一落在 `EgoAnchor_Python/data/eval`。三台机器若生成同名日志会产生冲突；保持 `one-way-safe`，不要改成会镜像删除本地文件的模式。
+- 源码同步忽略 `.pixi`、权重、ONNX/TRT engine、runtime 日志、eval 日志、debug 输出和平台相关 build 产物。权重和 TensorRT engine 按机器本地维护；RTX5080 Laptop 是 Windows 原生路径 `D:/Projects/EgoAnchor_Python`。
+- 当前本机 SSH 默认公钥是 `C:\Users\zheliku\.ssh\id_ed25519.pub`，指纹 `SHA256:/pWd7s01iijezRD+YVju7yJdrKNMQIMPKwdo64HZLz8`；RTX4090、RTX5090 和 RTX5080 Laptop 已验证可免密登录。若 Codex 沙箱里 `ssh` 被 `.sbx-denybin` 覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。
+- RTX5080 Laptop 的 `gjw` 属于 Windows 管理员组，Windows OpenSSH 会读取 `C:\ProgramData\ssh\administrators_authorized_keys`，不是普通用户的 `C:\Users\gjw\.ssh\authorized_keys`。必须在 RTX5080 本机用管理员 PowerShell 写入公钥、设置 ACL，并重启 `sshd`；不要在 SSH 会话里启动 `notepad`。RTX5080 的 Windows SSH 默认 `cmd.exe` 代码页已通过 `HKCU\Software\Microsoft\Command Processor\AutoRun = chcp 65001 >NUL` 切到 UTF-8，否则 Mutagen 可能报 `remote did not return UTF-8 output`。
+- 首次 `mutagen project start` 前，先确保远端项目目录、`data/eval` 和 `data/runtime_logs` 已存在。缺少日志源目录会让对应拉回会话启动失败。
+
 ## 不要回退
 
 - 不恢复旧 v1/v2 目录、MessagePack 链路、旧计划目录或早期 NATS 图像流实验。

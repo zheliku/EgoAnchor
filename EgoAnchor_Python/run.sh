@@ -35,4 +35,4 @@ if [[ -z "${DISPLAY:-}" ]]; then
 fi
 
 cd "$SCRIPT_DIR"
-exec pixi run python -u src/tracking_server.py "$@"
+exec pixi run python -u src/run_server.py "$@"

@@ -127,8 +127,12 @@ dmypy.json
 *.bin
 *.ckpt
 *.safetensors
+*.onnx
+*.engine
+*.plan
 weights/
 checkpoints/
+assets/sam3_ckpt/
 sam3_logs/
 
 # Data files

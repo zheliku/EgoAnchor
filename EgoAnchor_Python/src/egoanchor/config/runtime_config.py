@@ -27,12 +27,8 @@ class RuntimePaths:
     subjects_path: Path
     """共享 subject registry JSON 文件路径。"""
 
-    objects_path: Path
-    """对象覆盖配置 TOML 文件路径。"""
-
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().with_name("defaults.toml")
-OBJECT_CONFIG_PATH = Path(__file__).resolve().with_name("objects.toml")
 
 
 def _python_root() -> Path:
@@ -69,9 +65,10 @@ def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
-def load_object_override(name: str, objects_path: str | Path | None = None) -> dict[str, Any]:
+def load_object_override(name: str, config_path: str | Path | None = None) -> dict[str, Any]:
     """按对象名读取统一对象覆盖配置。
 
+    对象覆盖以 `[objects.<name>.*]` 表的形式与默认配置同住 defaults.toml，
     返回值可直接叠加到 defaults.toml 上。未知对象名会立即报错，避免
     tracking server 悄悄退回默认 cube 配置。
     """
@@ -79,7 +76,7 @@ def load_object_override(name: str, objects_path: str | Path | None = None) -> d
     object_name = str(name or "").strip()
     if not object_name:
         raise KeyError("未知对象配置: <empty>")
-    path = Path(objects_path) if objects_path is not None else OBJECT_CONFIG_PATH
+    path = Path(config_path) if config_path is not None else DEFAULT_CONFIG_PATH
     with path.open("rb") as f:
         data = tomllib.load(f)
     objects = data.get("objects", {})
@@ -95,8 +92,10 @@ def load_object_override(name: str, objects_path: str | Path | None = None) -> d
 def load_config(config_path: str | Path | None = None, object_name: str | None = None) -> SimpleNamespace:
     """加载运行配置并附加仓库路径信息。
 
-    合并顺序为 defaults.toml -> objects.toml 对象覆盖 -> 显式 config_path，
-    便于先选择目标物体，再用本地 TOML 做临时调参。
+    合并顺序为 defaults.toml -> defaults.toml 内对象覆盖 -> 显式 config_path，
+    便于先选择目标物体，再用本地 TOML 做临时调参。对象覆盖以
+    `[objects.<name>.*]` 表的形式与默认配置同住 defaults.toml，合并后该
+    objects 子树会被剔除，不进入运行时 namespace。
     """
 
     normalized_object_name = str(object_name).strip() if object_name is not None else ""
@@ -111,13 +110,13 @@ def load_config(config_path: str | Path | None = None, object_name: str | None =
         with path.open("rb") as f:
             data = _merge_dict(data, tomllib.load(f))
 
+    data.pop("objects", None)
     cfg = _dict_to_namespace(data)
     protocol_root = _protocol_root()
     cfg.paths = RuntimePaths(
         python_root=_python_root(),
         protocol_root=protocol_root,
         subjects_path=protocol_root / "subjects.v1.json",
-        objects_path=OBJECT_CONFIG_PATH,
     )
     cfg.runtime.object_id = normalized_object_name or str(getattr(cfg.runtime, "object_id", "default") or "default")
     return cfg

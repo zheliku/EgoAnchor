@@ -152,7 +152,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="EgoAnchor Python-only pose estimation debug server")
     parser.add_argument("--config", default=None, help="可选 TOML 配置路径；默认使用包内 defaults.toml")
-    parser.add_argument("--object", dest="object_name", default=None, help="目标物体名；来自 src/egoanchor/config/objects.toml")
+    parser.add_argument("--object", dest="object_name", default=None, help="目标物体名；来自 src/egoanchor/config/defaults.toml 的 [objects.*] 表")
     parser.add_argument("--log", default="INFO", help="日志级别，例如 DEBUG/INFO/WARNING")
     parser.add_argument("--log-color", choices=("auto", "always", "never"), default="auto", help="console 日志颜色：auto/always/never")
     args = parser.parse_args()

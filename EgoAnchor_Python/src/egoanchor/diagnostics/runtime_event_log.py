@@ -11,7 +11,7 @@ from typing import Any, TextIO
 
 import numpy as np
 
-from egoanchor.utils.timezone import beijing_now
+from egoanchor.utils import beijing_now
 
 
 class RuntimeEventLogger:

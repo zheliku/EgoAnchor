@@ -1,31 +1,59 @@
-# Mutagen project file — real-time sync of this project to the GPU box.
-# Target: descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python
-# Start:     mutagen project start   (run from this directory)
-# Status:    mutagen sync list / mutagen sync monitor
-# Stop:      mutagen project terminate
+# Mutagen project file — syncs this machine (the authoritative source) with the
+# three GPU test boxes. Manage all six sessions together as one project.
 #
-# NOTE: mutagen does NOT read .gitignore — the ignore list below is maintained
-# by hand. Keep it in sync with .gitignore when you add new generated/large dirs.
+#   push-*  : mirror local source -> each machine        (one-way-replica)
+#             Local is the SINGLE source of truth. Remote-side edits to tracked
+#             source files are OVERWRITTEN on the next sync. Ignored dirs
+#             (.pixi / weights / data/eval / runtime logs / nats) are untouched.
+#   logs-*  : pull each machine's data/eval back          (one-way-safe)
+#             -> local data/eval/ (shared; remote authoritative). All three
+#             machines pull into the SAME local dir — safe because each run's
+#             session dir is uniquely timestamped, so they never collide, and
+#             one-way-safe never deletes local-only content.
+#
+#   Start:   mutagen project start        (run from this directory)
+#   Status:  mutagen project list  |  mutagen sync list  |  mutagen sync monitor
+#   Stop:    mutagen project terminate
+#   Reset:   mutagen project reset        (flush + re-sync from scratch)
+#
+# Targets:
+#   4090  johnren@172.24.244.55  /home/johnren/tmp/EgoAnchor_Python      (Linux)
+#   5090  descfly@172.24.247.32  /home/descfly/projects/EgoAnchor_Python (Linux)
+#   5080  gjw@192.168.3.9        C:/Users/gjw/projects/EgoAnchor_Python  (Windows)
+#
+# NOTE: mutagen does NOT read .gitignore — the ignore list below is maintained by
+# hand. Keep it in sync with .gitignore when you add generated/large dirs.
+
 sync:
   defaults:
-    # alpha (local) is authoritative: on conflict, the local copy wins.
-    mode: two-way-resolved
     ignore:
-      vcs: true # skip the .git directory
-      paths:
+      vcs: true # skip the .git directory on every session
+
+  # ============================ SOURCE PUSH ============================
+  # Local -> remote, one direction only. Remote is a replica of local.
+
+  push-4090:
+    alpha: "."
+    beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+      paths: &source_ignore
         # --- python / tooling caches ---
         - "*.pyc"
         - "*.pyo"
         - "__pycache__/"
         - ".venv/"
         - "/.pixi/" # ~17 GB conda/pixi env — rebuilt on remote via `pixi install`
-        - "/.mypy_cache/" # ~205 MB
+        - "/.mypy_cache/"
         - "/.pycache_compile/"
         - "/build/"
         - "/dist/"
         - "/wheels/"
         - "*.egg-info/"
-        - "/logs/"
+        - "/logs/" # SLURM stdout/stderr — stays per-machine
+        # --- pulled-back eval logs are remote-authoritative; never push them out
+        #     (replica would delete each box's own fresh eval runs) ---
+        - "/data/eval/"
         # --- model weights (rebuilt/downloaded on remote) ---
         - "*.pt"
         - "*.pth"
@@ -40,7 +68,7 @@ sync:
         # --- generated runtime outputs ---
         - "/Fast-FoundationStereo/output_docker/"
         - "/data/debug/"
-        - "/data/runtime_logs/"
+        - "/data/runtime_logs/" # per-machine debug logs; not collected
         - "/data/online/*/output/"
         - "/Calibration/cache/"
         # --- misc large downloads present only on remote ---
@@ -55,6 +83,45 @@ sync:
         - "/mutagen.yml"
         - "/mutagen.yml.lock"
 
-  egoanchor:
-    alpha: "." # this directory (resolved relative to mutagen.yml)
+  push-5090:
+    alpha: "."
     beta: "descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+      paths: *source_ignore
+
+  # --- 5080 DISABLED until its SSH DefaultShell is switched to PowerShell ---
+  # The laptop's default SSH shell is cmd.exe on a Chinese (GBK/936) console, so
+  # mutagen's agent handshake fails with "remote did not return UTF-8 output".
+  # Fix (run ONCE in an *elevated* shell ON the 5080 itself):
+  #   reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
+  #     /d "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" /f
+  # Then un-comment the two 5080 blocks below and re-run `mutagen project start`.
+  #
+  push-5080:
+    alpha: "."
+    beta: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+      paths: *source_ignore
+
+  # ============================ EVAL-LOG PULL ============================
+  # Remote data/eval -> local data/eval (shared dir for all machines).
+  # one-way-safe: remote is authoritative; we never write back to the machines,
+  # and local-only content is never deleted. Run session dirs are uniquely
+  # timestamped, so the three machines' pulls never collide.
+
+  logs-4090:
+    alpha: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
+
+  logs-5090:
+    alpha: "descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
+
+  logs-5080:
+    alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
