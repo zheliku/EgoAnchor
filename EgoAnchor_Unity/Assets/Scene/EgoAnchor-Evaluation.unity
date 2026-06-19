@@ -4330,33 +4330,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
-  enableStaticLock: 1
-  staticLockEnterSpeedMps: 0.05
-  staticLockEnterAngSpeedDps: 35
-  staticLockDwellSeconds: 0.35
-  staticLockMinScore: 0.25
-  staticLockDeadbandMeters: 0.008
-  staticLockDeadbandDegrees: 3
-  staticLockUnlockEvidenceMeters: 0.08
-  staticLockUnlockEvidenceDegrees: 20
-  staticLockUnlockDriftMeters: 0.015
-  staticLockUnlockDriftDegrees: 5
-  staticLockEvidenceHalfLifeSeconds: 0.27
-  staticLockCreepHalfLifeSeconds: 2.7
-  staticLockRelockSuppressSeconds: 1
-  staticLockUnlockSpeedFactor: 2.5
-  staticLockUnlockMovingSeconds: 0.4
-  staticLockSeamDecayPerFrame: 0.85
-  staticLockRefObsIntervalSeconds: 0.2
-  staticLockHeadRotForFullToleranceDps: 60
-  staticLockHeadLinForFullToleranceMps: 0.3
-  staticLockHeadMaxToleranceFactor: 4
-  staticLockHeadSettleSeconds: 0.6
-  staticLockPosToleranceRefDistanceMeters: 0.4
-  staticLockPosToleranceDistanceSlope: 1
-  staticLockPosToleranceMaxFactor: 3
-  staticLockLowScoreReleaseScore: 0.3
-  staticLockLowScoreReleaseSeconds: 0.6
+  lockEnabled: 1
+  enterSpeedMps: 0.05
+  enterAngSpeedDps: 35
+  dwellSeconds: 0.35
+  minScore: 0.25
+  deadbandMeters: 0.008
+  deadbandDegrees: 3
+  unlockEvidenceMeters: 0.08
+  unlockEvidenceDegrees: 20
+  unlockDriftMeters: 0.015
+  unlockDriftDegrees: 5
+  evidenceHalfLifeSeconds: 0.27
+  creepHalfLifeSeconds: 2.7
+  relockSuppressSeconds: 1
+  unlockSpeedFactor: 2.5
+  unlockMovingSeconds: 0.4
+  seamDecayPerFrame: 0.85
+  refObsIntervalSeconds: 0.2
+  headRotForFullToleranceDps: 60
+  headLinForFullToleranceMps: 0.3
+  headMaxToleranceFactor: 4
+  headSettleSeconds: 0.6
+  posToleranceRefDistanceMeters: 0.4
+  posToleranceDistanceSlope: 1
+  posToleranceMaxFactor: 3
+  lowScoreReleaseScore: 0.3
+  lowScoreReleaseSeconds: 0.6
 --- !u!114 &1080230273
 MonoBehaviour:
   m_ObjectHideFlags: 0

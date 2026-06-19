@@ -118,17 +118,5 @@ namespace EgoAnchor.Policy
             P11 = nextP11;
         }
 
-        /// <summary>
-        /// 将内部速度向观测速度融合，用于高延迟下更快获得可用的渲染外推速度。
-        /// </summary>
-        public void BlendVelocity(float observedVelocity, float blend)
-        {
-            if (!HasState)
-            {
-                return;
-            }
-
-            Velocity = Mathf.Lerp(Velocity, observedVelocity, Mathf.Clamp01(blend));
-        }
     }
 }

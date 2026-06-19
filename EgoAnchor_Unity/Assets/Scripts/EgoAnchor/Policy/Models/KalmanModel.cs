@@ -112,7 +112,7 @@ namespace EgoAnchor.Policy
 
             float ahead = (float)(timeSeconds - lastTimeSeconds); // 不限幅
             Vector3 position = CurrentPosition() + LinearVelocity * ahead;
-            Vector3 rotVec = new Vector3(rx.Position, ry.Position, rz.Position) + AngularVelocityRad * ahead;
+            Vector3 rotVec = CurrentRotationVector() + AngularVelocityRad * ahead;
             Quaternion rotation = AnchorMath.Multiply(rotationReference, AnchorMath.Exp(rotVec));
             return new Pose(position, rotation);
         }
@@ -132,9 +132,11 @@ namespace EgoAnchor.Policy
 
         private Vector3 CurrentPosition() => new Vector3(x.Position, y.Position, z.Position);
 
+        private Vector3 CurrentRotationVector() => new Vector3(rx.Position, ry.Position, rz.Position);
+
         private Quaternion CurrentRotation()
         {
-            return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(new Vector3(rx.Position, ry.Position, rz.Position)));
+            return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(CurrentRotationVector()));
         }
     }
 }

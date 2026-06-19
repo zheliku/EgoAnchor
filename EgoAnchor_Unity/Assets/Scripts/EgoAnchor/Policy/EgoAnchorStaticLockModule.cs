@@ -21,132 +21,132 @@ namespace EgoAnchor.Policy
         /// <summary>是否启用静止锚定 (EgoAnchor 核心方法层)。</summary>
         [Header("Static Lock (EgoAnchor 核心方法)")]
         [Tooltip("是否启用静止锚定稳定器：物体静止且高分时冻结输出 pose，把小抖动当噪声吸收 → 看上去一动不动；运动时交回 smoothing。关闭=纯 baseline。")]
-        [SerializeField] private bool enableStaticLock = true;
+        [SerializeField] private bool lockEnabled = true;
 
         /// <summary>进入静止判定的线速度阈值，单位 m/s。</summary>
         [Tooltip("进入静止判定的观测线速度阈值 (m/s)。必须设在观测噪声地板之上 (5090@12fps 平移噪声地板 ~14mm/s)。默认 0.05。")]
-        [SerializeField] private float staticLockEnterSpeedMps = 0.05f;
+        [SerializeField] private float enterSpeedMps = 0.05f;
 
         /// <summary>进入静止判定的角速度阈值，单位 deg/s。</summary>
         [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设太低 (低于旋转噪声地板) 会导致永不锁定 (5090@12fps 旋转噪声地板 ~15°/s)。默认 35。")]
-        [SerializeField] private float staticLockEnterAngSpeedDps = 35.0f;
+        [SerializeField] private float enterAngSpeedDps = 35.0f;
 
         /// <summary>进入锁定需连续保持静止的时间，单位秒 (帧率无关)。</summary>
         [Tooltip("进入锁定需连续保持静止 (+高分) 的时间 (秒)。防静止判定抖动。帧率无关。默认 0.35。")]
-        [SerializeField] private float staticLockDwellSeconds = 0.35f;
+        [SerializeField] private float dwellSeconds = 0.35f;
 
         /// <summary>进入锁定所需的最低可靠性分数。</summary>
         [Tooltip("进入/维持锁定所需的最低可靠性分数 (0..1)。设太高 (高于物体常见分) 会永不锁定。默认 0.25。")]
         [Range(0f, 1f)]
-        [SerializeField] private float staticLockMinScore = 0.25f;
+        [SerializeField] private float minScore = 0.25f;
 
         /// <summary>锁定时位置死区，单位米。</summary>
         [Tooltip("锁定时位置死区 (米)：观测相对锁点位移小于此值视为噪声、忽略。杀静止抖动的核心。默认 0.008。")]
-        [SerializeField] private float staticLockDeadbandMeters = 0.008f;
+        [SerializeField] private float deadbandMeters = 0.008f;
 
         /// <summary>锁定时旋转死区，单位度。</summary>
         [Tooltip("锁定时旋转死区 (度)：旋转小于此值视为噪声、忽略。默认 3。")]
-        [SerializeField] private float staticLockDeadbandDegrees = 3.0f;
+        [SerializeField] private float deadbandDegrees = 3.0f;
 
         /// <summary>解锁位置证据阈值 (score 加权 CUSUM)，单位米。</summary>
         [Tooltip("解锁位置证据阈值 (score 加权累计的超死区位移, 米)。越大越粘 (难解锁), 越小越灵敏。默认 0.08。")]
-        [SerializeField] private float staticLockUnlockEvidenceMeters = 0.08f;
+        [SerializeField] private float unlockEvidenceMeters = 0.08f;
 
         /// <summary>解锁旋转证据阈值 (score 加权 CUSUM)，单位度。</summary>
         [Tooltip("解锁旋转证据阈值 (score 加权累计的超死区旋转, 度)。越大越粘。默认 20。")]
-        [SerializeField] private float staticLockUnlockEvidenceDegrees = 20.0f;
+        [SerializeField] private float unlockEvidenceDegrees = 20.0f;
 
         /// <summary>绝对漂移租绳：相对锁定原点平移超此值则解锁，单位米。</summary>
         [Tooltip("绝对漂移租绳 (米)：相对锁定原点 (creep 不动) 的总平移超此值 → 解锁。修复慢速持续平移被 creep 跟住而永不解锁。默认 0.015。")]
-        [SerializeField] private float staticLockUnlockDriftMeters = 0.015f;
+        [SerializeField] private float unlockDriftMeters = 0.015f;
 
         /// <summary>绝对漂移租绳：相对锁定原点旋转超此值则解锁，单位度。</summary>
         [Tooltip("绝对漂移租绳 (度)：相对锁定原点的总旋转超此值 → 解锁。默认 5。")]
-        [SerializeField] private float staticLockUnlockDriftDegrees = 5.0f;
+        [SerializeField] private float unlockDriftDegrees = 5.0f;
 
         /// <summary>解锁证据半衰期，单位秒 (帧率无关)。</summary>
         [Tooltip("解锁证据半衰期 (秒, 帧率无关漏积分)：偶发噪声会漏掉, 只有持续运动才累积越阈。越大越粘。默认 0.27。")]
-        [SerializeField] private float staticLockEvidenceHalfLifeSeconds = 0.27f;
+        [SerializeField] private float evidenceHalfLifeSeconds = 0.27f;
 
         /// <summary>漏锁 creep 半衰期，单位秒 (帧率无关)。</summary>
         [Tooltip("漏锁 creep 半衰期 (秒, 帧率无关)：锁定时朝高分小位移观测缓慢靠拢, 精修锁点 + 跟极慢漂移。越小靠拢越快。默认 2.7。")]
-        [SerializeField] private float staticLockCreepHalfLifeSeconds = 2.7f;
+        [SerializeField] private float creepHalfLifeSeconds = 2.7f;
 
         /// <summary>解锁后禁止再锁的时间，单位秒 (反 chatter, 帧率无关)。</summary>
         [Tooltip("解锁后禁止再锁的时间 (秒, 反 chatter)：给真实运动一个逃逸窗口, 防锁定频繁翻转。帧率无关。默认 1.0。")]
-        [SerializeField] private float staticLockRelockSuppressSeconds = 1.0f;
+        [SerializeField] private float relockSuppressSeconds = 1.0f;
 
         /// <summary>速度逃逸倍数。</summary>
         [Tooltip("速度逃逸倍数：锁定时观测速度 > 静止阈值 × 此倍数 连续一段时间 → 立即解锁 (堵 CUSUM 跟不上的慢运动 false-lock 长尾)。越大越粘。默认 2.5。")]
-        [SerializeField] private float staticLockUnlockSpeedFactor = 2.5f;
+        [SerializeField] private float unlockSpeedFactor = 2.5f;
 
         /// <summary>速度逃逸需连续运动的时间，单位秒 (帧率无关)。</summary>
         [Tooltip("速度逃逸需连续检测到明确运动的时间 (秒)。防单帧噪声误解锁。帧率无关。默认 0.4。")]
-        [SerializeField] private float staticLockUnlockMovingSeconds = 0.4f;
+        [SerializeField] private float unlockMovingSeconds = 0.4f;
 
         /// <summary>解锁接缝残差衰减 (60fps 基准, 已帧率无关)。</summary>
         [Tooltip("解锁接缝残差每帧衰减比例 (60fps 基准, 已按 dt 归一)：解锁瞬间从锁点平滑收敛到 smoothing 输出, 防 pop。越大释放越柔、越不卡。默认 0.85。")]
         [Range(0.5f, 0.99f)]
-        [SerializeField] private float staticLockSeamDecayPerFrame = 0.85f;
+        [SerializeField] private float seamDecayPerFrame = 0.85f;
 
         /// <summary>CUSUM 累积时间归一基准，单位秒。</summary>
         [Tooltip("CUSUM 证据累积的时间归一基准 (秒)：通常设为标定时的观测周期 (5fps=0.2)。改它等比缩放所有解锁灵敏度。默认 0.2。")]
-        [SerializeField] private float staticLockRefObsIntervalSeconds = 0.2f;
+        [SerializeField] private float refObsIntervalSeconds = 0.2f;
 
         /// <summary>头角速度达此值 (deg/s) 时头动容忍度吃满。</summary>
         [Header("Head-Motion Awareness (问题3)")]
         [Tooltip("头角速度 (deg/s) 达此值 → 头动容忍因子放大到上限。越小越早进入宽松。默认 60。")]
-        [SerializeField] private float staticLockHeadRotForFullToleranceDps = 60.0f;
+        [SerializeField] private float headRotForFullToleranceDps = 60.0f;
 
         /// <summary>头线速度达此值 (m/s) 时头动容忍度吃满。</summary>
         [Tooltip("头线速度 (m/s) 达此值 → 头动容忍因子放大到上限。默认 0.3。")]
-        [SerializeField] private float staticLockHeadLinForFullToleranceMps = 0.3f;
+        [SerializeField] private float headLinForFullToleranceMps = 0.3f;
 
         /// <summary>头动容忍最大放大倍数 (1=关闭头动感知)。</summary>
         [Tooltip("头动时 static 容忍度 (死区/漂移租绳/速度逃逸阈值) 最大放大倍数。1=关闭头动感知；越大头动时越粘 (越不容易因头动解锁), 但头动中物体真动的响应也越慢。默认 4。")]
         [Range(1.0f, 8.0f)]
-        [SerializeField] private float staticLockHeadMaxToleranceFactor = 4.0f;
+        [SerializeField] private float headMaxToleranceFactor = 4.0f;
 
         /// <summary>头停后冻结解锁判定的沉降时长，单位秒 (帧率无关)。</summary>
         [Tooltip("头停沉降冻结时长 (秒)：头动期间 + 头停后此时长内, 冻结所有\"判物体在动→解锁\"的证据 (速度逃逸/漂移租绳/CUSUM)。修\"头扫静止物体后头一停 static 就脱开\": 头停时容忍系数瞬间收紧, 但 head-slip 还残留在观测共识里, 不冻结就会误解锁。取 ~2~3× 证据半衰期 (evidenceHalfLife=0.27) 让 slip 充分褪去。越大头停后越稳但物体真动响应越慢。0=关闭。默认 0.6。")]
-        [SerializeField] private float staticLockHeadSettleSeconds = 0.6f;
+        [SerializeField] private float headSettleSeconds = 0.6f;
 
         /// <summary>距离自适应位置容忍参考距离 (m)：此距离以内不放大。</summary>
         [Header("Distance-Aware Position Tolerance (问题2)")]
         [Tooltip("距离自适应位置容忍参考距离 (m)：物体到头部距离在此值以内时位置死区/租绳不放大 (factor=1)。越近的常用距离设这里。默认 0.4。")]
-        [SerializeField] private float staticLockPosToleranceRefDistanceMeters = 0.4f;
+        [SerializeField] private float posToleranceRefDistanceMeters = 0.4f;
 
         /// <summary>距离自适应位置容忍斜率 (1/m)：每超出参考距离 1m 放大的比例。</summary>
         [Tooltip("距离自适应位置容忍斜率 (1/m)：物体每超出参考距离 1m, 位置死区与位置租绳放大的比例。远处立体深度噪声大 (~z²), 需更宽位置容忍; 旋转不受影响。默认 1.0。")]
-        [SerializeField] private float staticLockPosToleranceDistanceSlope = 1.0f;
+        [SerializeField] private float posToleranceDistanceSlope = 1.0f;
 
         /// <summary>距离自适应位置容忍上限 (1=关闭)。</summary>
         [Tooltip("距离自适应位置容忍放大上限。1=关闭距离自适应 (位置容忍恒定)；越大远处越宽松。仅缩放位置死区/租绳, 旋转阈值不变。默认 3。")]
         [Range(1.0f, 6.0f)]
-        [SerializeField] private float staticLockPosToleranceMaxFactor = 3.0f;
+        [SerializeField] private float posToleranceMaxFactor = 3.0f;
 
         /// <summary>低分释放阈值：锁定时分数持续低于此值则强制解锁。</summary>
         [Header("Low-Score Release (问题1)")]
         [Tooltip("低分释放：锁定时 score 持续低于此值 → 锁点不可信, 强制解锁, 不让 anchor 冻在错 pose。配合 PoseToAnchorRuntime 的低分自动 reacquire。默认 0.3。")]
         [Range(0f, 1f)]
-        [SerializeField] private float staticLockLowScoreReleaseScore = 0.3f;
+        [SerializeField] private float lowScoreReleaseScore = 0.3f;
 
         /// <summary>低分释放持续时间，单位秒。</summary>
         [Tooltip("低分释放需持续的时间 (秒)。锁定时分数连续低于阈值超过此时长才强制解锁, 防单帧低分误释放。0=关闭低分释放。默认 0.6。")]
-        [SerializeField] private float staticLockLowScoreReleaseSeconds = 0.6f;
+        [SerializeField] private float lowScoreReleaseSeconds = 0.6f;
 
         private readonly StaticLockController staticLock = new StaticLockController();
 
         /// <summary>是否启用静止锚定。</summary>
-        public bool Enabled => enableStaticLock;
+        public bool Enabled => lockEnabled;
 
         /// <summary>当前是否锁定 (供 eval 的 latest_static_locked)。</summary>
-        public bool IsLocked => enableStaticLock && staticLock.IsLocked;
+        public bool IsLocked => lockEnabled && staticLock.IsLocked;
 
         /// <summary>收到一帧被接受的观测时调用 (host 在 motion model 更新后)。未启用则忽略。</summary>
         public void OnObservation(in Pose worldPose, float score, double measurementTimeSeconds, bool hasHeadPose, in Pose headPose)
         {
-            if (!enableStaticLock)
+            if (!lockEnabled)
             {
                 return;
             }
@@ -158,7 +158,7 @@ namespace EgoAnchor.Policy
         /// <summary>每渲染帧调用。未启用则原样返回 candidate；启用则返回锁定/接缝/自由 pose。</summary>
         public Pose Stabilize(in Pose candidatePose, float dtSeconds)
         {
-            if (!enableStaticLock)
+            if (!lockEnabled)
             {
                 return candidatePose;
             }
@@ -175,33 +175,35 @@ namespace EgoAnchor.Policy
 
         private void ConfigureStaticLock()
         {
-            staticLock.Configure(
-                staticLockEnterSpeedMps,
-                staticLockEnterAngSpeedDps,
-                staticLockDwellSeconds,
-                staticLockMinScore,
-                staticLockDeadbandMeters,
-                staticLockDeadbandDegrees,
-                staticLockUnlockEvidenceMeters,
-                staticLockUnlockEvidenceDegrees,
-                staticLockUnlockDriftMeters,
-                staticLockUnlockDriftDegrees,
-                staticLockEvidenceHalfLifeSeconds,
-                staticLockCreepHalfLifeSeconds,
-                staticLockRelockSuppressSeconds,
-                staticLockUnlockSpeedFactor,
-                staticLockUnlockMovingSeconds,
-                staticLockSeamDecayPerFrame,
-                staticLockRefObsIntervalSeconds,
-                staticLockHeadRotForFullToleranceDps,
-                staticLockHeadLinForFullToleranceMps,
-                staticLockHeadMaxToleranceFactor,
-                staticLockHeadSettleSeconds,
-                staticLockPosToleranceRefDistanceMeters,
-                staticLockPosToleranceDistanceSlope,
-                staticLockPosToleranceMaxFactor,
-                staticLockLowScoreReleaseScore,
-                staticLockLowScoreReleaseSeconds);
+            staticLock.Configure(new StaticLockSettings
+            {
+                EnterSpeedMps = enterSpeedMps,
+                EnterAngSpeedDps = enterAngSpeedDps,
+                DwellSeconds = dwellSeconds,
+                MinScore = minScore,
+                DeadbandMeters = deadbandMeters,
+                DeadbandDegrees = deadbandDegrees,
+                UnlockEvidenceMeters = unlockEvidenceMeters,
+                UnlockEvidenceDegrees = unlockEvidenceDegrees,
+                UnlockDriftMeters = unlockDriftMeters,
+                UnlockDriftDegrees = unlockDriftDegrees,
+                EvidenceHalfLifeSeconds = evidenceHalfLifeSeconds,
+                CreepHalfLifeSeconds = creepHalfLifeSeconds,
+                RelockSuppressSeconds = relockSuppressSeconds,
+                UnlockSpeedFactor = unlockSpeedFactor,
+                UnlockMovingSeconds = unlockMovingSeconds,
+                SeamDecayPerFrame = seamDecayPerFrame,
+                RefObsIntervalSeconds = refObsIntervalSeconds,
+                HeadRotForFullToleranceDps = headRotForFullToleranceDps,
+                HeadLinForFullToleranceMps = headLinForFullToleranceMps,
+                HeadMaxToleranceFactor = headMaxToleranceFactor,
+                HeadSettleSeconds = headSettleSeconds,
+                PosToleranceRefDistanceMeters = posToleranceRefDistanceMeters,
+                PosToleranceDistanceSlope = posToleranceDistanceSlope,
+                PosToleranceMaxFactor = posToleranceMaxFactor,
+                LowScoreReleaseScore = lowScoreReleaseScore,
+                LowScoreReleaseSeconds = lowScoreReleaseSeconds,
+            });
         }
     }
 }

@@ -3,6 +3,90 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
+    /// 静止锁控制器的一帧配置快照。字段名省略 StaticLock 前缀，语义由类型名提供。
+    /// </summary>
+    internal struct StaticLockSettings
+    {
+        /// <summary>进入静止判定的线速度阈值，单位 m/s。</summary>
+        public float EnterSpeedMps;
+
+        /// <summary>进入静止判定的角速度阈值，单位 deg/s。</summary>
+        public float EnterAngSpeedDps;
+
+        /// <summary>进入锁定需连续静止的时间，单位秒。</summary>
+        public float DwellSeconds;
+
+        /// <summary>进入锁定所需的最低可靠性分数。</summary>
+        public float MinScore;
+
+        /// <summary>锁定时位置死区，单位米。</summary>
+        public float DeadbandMeters;
+
+        /// <summary>锁定时旋转死区，单位度。</summary>
+        public float DeadbandDegrees;
+
+        /// <summary>解锁位置证据阈值，单位米。</summary>
+        public float UnlockEvidenceMeters;
+
+        /// <summary>解锁旋转证据阈值，单位度。</summary>
+        public float UnlockEvidenceDegrees;
+
+        /// <summary>绝对漂移租绳平移阈值，单位米。</summary>
+        public float UnlockDriftMeters;
+
+        /// <summary>绝对漂移租绳旋转阈值，单位度。</summary>
+        public float UnlockDriftDegrees;
+
+        /// <summary>解锁证据半衰期，单位秒。</summary>
+        public float EvidenceHalfLifeSeconds;
+
+        /// <summary>漏锁 creep 半衰期，单位秒。</summary>
+        public float CreepHalfLifeSeconds;
+
+        /// <summary>解锁后禁止再锁的时间，单位秒。</summary>
+        public float RelockSuppressSeconds;
+
+        /// <summary>速度逃逸倍数。</summary>
+        public float UnlockSpeedFactor;
+
+        /// <summary>速度逃逸需连续运动的时间，单位秒。</summary>
+        public float UnlockMovingSeconds;
+
+        /// <summary>解锁接缝残差衰减，60fps 基准。</summary>
+        public float SeamDecayPerFrame;
+
+        /// <summary>CUSUM 累积时间归一基准，单位秒。</summary>
+        public float RefObsIntervalSeconds;
+
+        /// <summary>头角速度达此值时头动容忍度吃满，单位 deg/s。</summary>
+        public float HeadRotForFullToleranceDps;
+
+        /// <summary>头线速度达此值时头动容忍度吃满，单位 m/s。</summary>
+        public float HeadLinForFullToleranceMps;
+
+        /// <summary>头动容忍最大放大倍数。</summary>
+        public float HeadMaxToleranceFactor;
+
+        /// <summary>头停后冻结解锁判定的沉降时长，单位秒。</summary>
+        public float HeadSettleSeconds;
+
+        /// <summary>距离自适应位置容忍参考距离，单位米。</summary>
+        public float PosToleranceRefDistanceMeters;
+
+        /// <summary>距离自适应位置容忍斜率，单位 1/m。</summary>
+        public float PosToleranceDistanceSlope;
+
+        /// <summary>距离自适应位置容忍上限。</summary>
+        public float PosToleranceMaxFactor;
+
+        /// <summary>低分释放阈值。</summary>
+        public float LowScoreReleaseScore;
+
+        /// <summary>低分释放持续时间，单位秒。</summary>
+        public float LowScoreReleaseSeconds;
+    }
+
+    /// <summary>
     /// EgoAnchor 静态锚定稳定器 (纯 C# 控制器, 无 MonoBehaviour)。
     ///
     /// 这是 EgoAnchor 方法的核心 —— 不是又一个滤波器, 而是建立在 baseline (MotionModel ×
@@ -141,60 +225,34 @@ namespace EgoAnchor.Policy
         public int Unlocks { get; private set; }
 
         /// <summary>用 host 的参数配置控制器 (Inspector 可能改, 每次激活时调用)。时间量纲均帧率无关。</summary>
-        public void Configure(
-            float staticEnterSpeedMps,
-            float staticEnterAngSpeedDps,
-            float staticDwellSeconds,
-            float staticEnterMinScore,
-            float deadbandMeters,
-            float deadbandDegrees,
-            float unlockEvidenceMeters,
-            float unlockEvidenceDegrees,
-            float unlockDriftMeters,
-            float unlockDriftDegrees,
-            float evidenceHalfLifeSeconds,
-            float creepHalfLifeSeconds,
-            float relockSuppressSeconds,
-            float unlockSpeedFactor,
-            float unlockMovingSeconds,
-            float seamDecayPerFrame,
-            float refObsIntervalSeconds,
-            float headRotForFullToleranceDps,
-            float headLinForFullToleranceMps,
-            float headMaxToleranceFactor,
-            float headSettleSeconds,
-            float posToleranceRefDistanceMeters,
-            float posToleranceDistanceSlope,
-            float posToleranceMaxFactor,
-            float lowScoreReleaseScore,
-            float lowScoreReleaseSeconds)
+        internal void Configure(in StaticLockSettings settings)
         {
-            this.staticEnterSpeedMps = Mathf.Max(staticEnterSpeedMps, 0.0f);
-            this.staticEnterAngSpeedDps = Mathf.Max(staticEnterAngSpeedDps, 0.0f);
-            this.staticDwellSeconds = Mathf.Max(staticDwellSeconds, 0.0f);
-            this.staticEnterMinScore = Mathf.Clamp01(staticEnterMinScore);
-            this.deadbandMeters = Mathf.Max(deadbandMeters, 0.0f);
-            this.deadbandDegrees = Mathf.Max(deadbandDegrees, 0.0f);
-            this.unlockEvidenceMeters = Mathf.Max(unlockEvidenceMeters, 0.0f);
-            this.unlockEvidenceDegrees = Mathf.Max(unlockEvidenceDegrees, 0.0f);
-            this.unlockDriftMeters = Mathf.Max(unlockDriftMeters, 0.0f);
-            this.unlockDriftDegrees = Mathf.Max(unlockDriftDegrees, 0.0f);
-            this.evidenceHalfLifeSeconds = Mathf.Max(evidenceHalfLifeSeconds, 1e-3f);
-            this.creepHalfLifeSeconds = Mathf.Max(creepHalfLifeSeconds, 1e-3f);
-            this.relockSuppressSeconds = Mathf.Max(relockSuppressSeconds, 0.0f);
-            this.unlockSpeedFactor = Mathf.Max(unlockSpeedFactor, 1.0f);
-            this.unlockMovingSeconds = Mathf.Max(unlockMovingSeconds, 0.0f);
-            this.seamDecayPerFrame = Mathf.Clamp(seamDecayPerFrame, 0.5f, 0.99f);
-            this.refObsIntervalSeconds = Mathf.Max(refObsIntervalSeconds, 1e-3f);
-            this.headRotForFullToleranceDps = Mathf.Max(headRotForFullToleranceDps, 1e-3f);
-            this.headLinForFullToleranceMps = Mathf.Max(headLinForFullToleranceMps, 1e-3f);
-            this.headMaxToleranceFactor = Mathf.Max(headMaxToleranceFactor, 1.0f);
-            this.headSettleSeconds = Mathf.Max(headSettleSeconds, 0.0f);
-            this.posToleranceRefDistanceMeters = Mathf.Max(posToleranceRefDistanceMeters, 0.0f);
-            this.posToleranceDistanceSlope = Mathf.Max(posToleranceDistanceSlope, 0.0f);
-            this.posToleranceMaxFactor = Mathf.Max(posToleranceMaxFactor, 1.0f);
-            this.lowScoreReleaseScore = Mathf.Clamp01(lowScoreReleaseScore);
-            this.lowScoreReleaseSeconds = Mathf.Max(lowScoreReleaseSeconds, 0.0f);
+            staticEnterSpeedMps = Mathf.Max(settings.EnterSpeedMps, 0.0f);
+            staticEnterAngSpeedDps = Mathf.Max(settings.EnterAngSpeedDps, 0.0f);
+            staticDwellSeconds = Mathf.Max(settings.DwellSeconds, 0.0f);
+            staticEnterMinScore = Mathf.Clamp01(settings.MinScore);
+            deadbandMeters = Mathf.Max(settings.DeadbandMeters, 0.0f);
+            deadbandDegrees = Mathf.Max(settings.DeadbandDegrees, 0.0f);
+            unlockEvidenceMeters = Mathf.Max(settings.UnlockEvidenceMeters, 0.0f);
+            unlockEvidenceDegrees = Mathf.Max(settings.UnlockEvidenceDegrees, 0.0f);
+            unlockDriftMeters = Mathf.Max(settings.UnlockDriftMeters, 0.0f);
+            unlockDriftDegrees = Mathf.Max(settings.UnlockDriftDegrees, 0.0f);
+            evidenceHalfLifeSeconds = Mathf.Max(settings.EvidenceHalfLifeSeconds, 1e-3f);
+            creepHalfLifeSeconds = Mathf.Max(settings.CreepHalfLifeSeconds, 1e-3f);
+            relockSuppressSeconds = Mathf.Max(settings.RelockSuppressSeconds, 0.0f);
+            unlockSpeedFactor = Mathf.Max(settings.UnlockSpeedFactor, 1.0f);
+            unlockMovingSeconds = Mathf.Max(settings.UnlockMovingSeconds, 0.0f);
+            seamDecayPerFrame = Mathf.Clamp(settings.SeamDecayPerFrame, 0.5f, 0.99f);
+            refObsIntervalSeconds = Mathf.Max(settings.RefObsIntervalSeconds, 1e-3f);
+            headRotForFullToleranceDps = Mathf.Max(settings.HeadRotForFullToleranceDps, 1e-3f);
+            headLinForFullToleranceMps = Mathf.Max(settings.HeadLinForFullToleranceMps, 1e-3f);
+            headMaxToleranceFactor = Mathf.Max(settings.HeadMaxToleranceFactor, 1.0f);
+            headSettleSeconds = Mathf.Max(settings.HeadSettleSeconds, 0.0f);
+            posToleranceRefDistanceMeters = Mathf.Max(settings.PosToleranceRefDistanceMeters, 0.0f);
+            posToleranceDistanceSlope = Mathf.Max(settings.PosToleranceDistanceSlope, 0.0f);
+            posToleranceMaxFactor = Mathf.Max(settings.PosToleranceMaxFactor, 1.0f);
+            lowScoreReleaseScore = Mathf.Clamp01(settings.LowScoreReleaseScore);
+            lowScoreReleaseSeconds = Mathf.Max(settings.LowScoreReleaseSeconds, 0.0f);
         }
 
         /// <summary>清空所有状态。</summary>

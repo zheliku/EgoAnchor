@@ -52,7 +52,7 @@ namespace EgoAnchor.Policy
         [Tooltip("判定坏跳变的旋转阈值 (度)：新观测相对当前预测的旋转超过此值则拒绝。仅在启用门控时生效。默认 120。")]
         [SerializeField] private float maxJumpDegrees = 120f;
 
-        /// <summary>EgoAnchor 静止锚定方法模块 (可选)。剥离自本 host, 持有全部 staticLock* 参数 + 控制器。</summary>
+        /// <summary>EgoAnchor 静止锚定方法模块 (可选)。剥离自本 host, 持有静止锁参数和控制器。</summary>
         [Header("Static Lock (EgoAnchor 方法, optional)")]
         [Tooltip("EgoAnchor 静止锚定方法模块 (EgoAnchorStaticLockModule)。拖入并 enabled = EgoAnchor 方法 (静止冻结/头动感知/低分释放); 留空或不启用 = 纯 baseline (motion × smoothing)。挂在同一 GameObject 上。")]
         [SerializeField] private EgoAnchorStaticLockModule staticLockModule;
@@ -473,7 +473,8 @@ namespace EgoAnchor.Policy
         }
 
         private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
-        {            reason = string.Empty;
+        {
+            reason = string.Empty;
             if (!enableScoreGate)
             {
                 return false;

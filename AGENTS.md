@@ -17,351 +17,244 @@
 7. 使用 Code Simplifier 优化项目代码；处理文档和语言表述时使用 humanizer-zh。
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
+10. 每次操作完后记得更新AGENTS.md
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
+本文件是 EgoAnchor 的项目级接手指南。只记录长期有效的事实、约定、路线和历史坑；不要追加流水账。顶部 `USER-MAINTAINED-REQUIREMENTS` 区块由用户维护，除非用户明确要求，后续 AI 不得改动其中任何文字。
 
-本文件是 EgoAnchor 的项目级 AI 接手指南。后续 Agent 进入本仓库时优先阅读并维护本文件；不要再新增分散 handoff 文档。这里只记录长期有效的事实、约定、路线和历史坑，避免流水账、临时调参和已废弃方案。
+## 当前定位
 
-## 当前状态一句话
+EgoAnchor 面向 passthrough mixed reality，把异步 6DoF object pose stream 转成稳定、世界一致、可恢复的 real-object anchor。论文目标是 IEEE VR 2027，叙事核心是 pose-to-anchor / frame-aligned anchoring，不是普通 pose tracking 工程。
 
-EgoAnchor 是面向 passthrough mixed reality 的 **frame-aligned、world-consistent real-object anchoring** 系统。当前仓库已清理为单主线结构：Python 主线位于 `EgoAnchor_Python/src`，Unity 主线位于 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor`，采用 **ZMQ Protobuf 数据面 + NATS Protobuf 消息/命令面 + Unity frame-aligned anchor runtime**。旧 v1/v2、旧计划和早期 NATS 实验目录已移除。
+主线结构：
 
-论文目标是 IEEE VR 2027，核心主张必须围绕 **把异步 6DoF object pose stream 转化为稳定、世界一致、可恢复的 MR real-object anchor**，而不是包装成普通 pose tracking 工程。
+- Python：`EgoAnchor_Python/src`，负责 Quest stereo/camera_info 接收、目标分割、FFS/FoundationPose/Cutie、可靠性评分、NATS pose/status/heartbeat/command。
+- Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor`，负责 Quest 采集、frame pose history、camera-space pose 到 Unity world anchor、policy 输出和可视化运行时。
+- Protocol：`EgoAnchor_Protocol`，唯一 proto 和 subject 源；生成脚本同步 Python/Unity 输出。
+- Evaluation：`EgoAnchor_Tools3` 是当前主用离线升采样仿真工具；旧 `EgoAnchor_Tools` / `EgoAnchor_Tools2` 的同类项目不再作为主线验证依据。
+- Paper：`2026-EgoAnchor` 放论文材料，写法必须保守，不能把未实现或未验证的机制写成已完成贡献。
 
-## 仓库组成
-
-- `EgoAnchor_Python/`：Python 端位姿估计服务和当前主线实现。
-- `EgoAnchor_Unity/`：Unity/Quest 工程；采集 Passthrough Camera，发送图像/标定，接收 pose 并转换为 Unity world anchor。
-- `EgoAnchor_Protocol/`：共享协议源，包含 `subjects.v1.json`、`proto/protocol/v1/*.proto`、`tools/generate_proto.ps1`；Python 运行时会读取同步到 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json` 的副本，便于只拷贝 `EgoAnchor_Python` 到 Ubuntu 运行。
-- `2026-EgoAnchor/`：论文材料；当前源文件包括 `egoanchor_cn_outline.tex`、`egoanchor_cn_v1.tex` 与 `egoanchor_cn_refs.bib`。
-- `EgoAnchor_Tools/`：与主系统分离的辅助工具脚本（部分旧工具 csproj 因 Policy 重构已无法编译）。
-- `EgoAnchor_Tools3/`：自包含的离线升采样仿真（不依赖 Unity DLL，自带 Vec3/Quat 数学）。用真机录制的观测离线对比所有平滑策略并出曲线，默认自动复现真机的采集-渲染延迟和渲染帧率，是当前主用离线分析工具。`EgoAnchor_Tools2`、`EgoAnchor_Tools` 内的同类项目由其他 AI 维护。
-
-## 项目级实现要求
-
-本节只保留 EgoAnchor 专属补充约定，不重复文件顶部的用户手动维护要求，也不覆盖顶部要求。
-
-- 生成的 `*_pb2.py` 内部 import 是协议生成结果，不要手改生成代码。
-- Unity 端新增 Inspector 字段、网络参数、坐标语义和时间语义时，说明应落在 XML summary 或 `[Tooltip]` 中。
-- 日志输出统一走项目门面：Python 使用 `egoanchor.utils.get_logger(...)` 与入口 `configure_logging(...)`，Unity 使用 `EgoAnchorLog.For<T>()`。日志消息本身不要手写 `[ClassName]` 前缀；component、等级、时间和彩色结构前缀由 logger/formatter 统一生成。
-- 新增行为应先补测试或 smoke 验证。配置、文档、生成代码除外，但仍要给出可复现的验证命令。
-- 论文和文档写法必须保守。不要把尚未实现或尚未实验验证的机制写成已完成贡献。
-
-## 当前主线架构
+## 核心架构
 
 EgoAnchor 固定采用双平面/三语义通道：
 
-| 平面          | 传输               | 方向            | 数据                                                                           | 策略                                                                    |
-| ------------- | ------------------ | --------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Data Plane    | ZMQ PUB/SUB        | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo`                                      | Protobuf bytes，multipart `[topic_utf8, payload]`，topic latest-drain |
-| Message Plane | NATS Core pub/sub  | Python -> Unity | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`                     | 小 payload，pose/heartbeat latest-only，status event stream             |
-| Command Plane | NATS request/reply | Unity -> Python | `ResetTrackingRequest`、`ReacquireAnchorRequest`、`AnchorControlRequest` | `request_id` 幂等，快速 ack，runtime 串行执行                         |
+| 平面 | 传输 | 方向 | 数据 | 策略 |
+| --- | --- | --- | --- | --- |
+| Data Plane | ZMQ PUB/SUB | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo` | Protobuf bytes，multipart `[topic_utf8, payload]`，topic latest-drain |
+| Message Plane | NATS Core pub/sub | Python -> Unity | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` | pose/heartbeat latest-only，status event stream |
+| Command Plane | NATS request/reply | Unity -> Python | reset / reacquire / control | `request_id` 幂等，快速 ack，runtime 串行执行 |
 
-当前主线能力：
+关键约束：
 
-- Python `tools/sam3/sam3_mask.py`：RealSense + SAM3 文本 prompt 实时 mask 调试工具，用于不接 Quest 时快速比较耳机盒等目标描述。
-- Python `src/tracking_server.py`：接收 ZMQ Quest stereo/camera_info，运行可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie，显示 OpenCV debug，并可通过 NATS 发布 `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`；默认仍是 YOLOE-26，显式配置 `module.segmenter.type="sam3"` 才加载 SAM3。SAM3 在初始 detect/register 前可通过 `module.sam3.async_segmentation=true` 后台异步分割，完成后用同一帧的 left/right RGB 与 mask 继续交给 FFS/FoundationPose，避免 RGB/mask 错帧。
-- Python reliability：TRACK 阶段默认启用 `defaults.toml` 的 `[reliability.render_quality]` 渲染质量检测，当前保持 `mode="score_only"` shadow mode；通过 FoundationPose 适配器 facade 一次渲染 color/depth/mask，再由 `ReprojectionChecker` 只在 Cutie mask 与投影 mask 交集区域计算 LAB 颜色重投影分，由 `DepthAlignmentChecker` 只在同一交集区域计算渲染深度与 FFS 深度对齐分；Cutie mask 面积 / 渲染投影面积作为独立 `score_mask` 连续信号，写入 `render_quality_area_ratio_score`、`color_reprojection`、IoU、depth inlier、depth alignment、render/observed coverage、`render_quality_ms` 等 JSONL 字段；pose 可靠性分采用 `Gate(phase/reject) × Quality × Confidence`，其中 `Quality = geometry_core(reprojection, depth) × bounded_mod(mask, jump)`，只有有效几何信号进入几何合取核，mask/jump 只做有下限的温和调制；`PoseResult` 追加携带 `phase/reprojection/depth/jump/mask/reject/confidence` 评分子分和渲染质量细项，Unity 可用于 Inspector/HUD/policy 调参。
-- Python command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime` 具备 reset/reacquire/control ack/enqueue/execution 骨架；runtime command 类型、幂等、队列、执行器和 pump 统一在 `egoanchor.runtime.commands`。
-- Unity `QuestStreamPublisher`：发送 stereo/camera_info Protobuf；服务器 IP 由 `ServerEndpointConfig` 单点下发（`SetServerIp`，无 PlayerPrefs）。
-- Unity `FramePoseHistory`：记录 `frame_id -> capture-time left/right/center camera world pose`。
-- Unity `NatsControlClient`：订阅 PoseResult latest queue、ServerHeartbeat latest queue 和 AnchorStatusEvent event queue，并提供 bytes request/reply。
-- Unity `PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime`：主线程解码 PoseResult，广播给多个 runtime，支持多个 pipeline label 使用同一 frame-aligned raw pose 输入。
-- Unity `CameraPoseFrameAligner`：将 Python OpenCV camera-space pose 按 `frame_id` 回查到 Unity world pose。
-- Unity `Policy/` 模块化 anchor policy（已重构为两模块自由组合 3×2）：`AnchorPolicyHost` 持有一个 `MotionModel`（运动模型）+ 一个 `SmoothingStrategy`（平滑策略），二者正交、可任意组合。`MotionModel` 子类在 `Policy/Models`：`ConstantVelocityModel`（CV 差分）/`KalmanModel`/`OneEuroModel`，对外提供 `PredictAt(t)`（**不限幅外推**，给 B 路）和 `LatestControlPoint`（给 C 路插值）。`SmoothingStrategy` 子类在 `Policy/Smoothing`：`BlendStrategy`（B 路：高频外推+误差融合，零延迟）/`DelayedInterpStrategy`（C 路：延迟一周期+Hermite/向心 Catmull-Rom 插值）/`RawPassthroughStrategy`（纯零阶保持，真 raw 对照）。数据契约 DTO（`AnchorObservation`/`AnchorPolicyDecision`/`AnchorPolicyOutput`/`GateDecision`）在 `Policy/Contracts`，生命周期状态机与枚举（`AnchorStateMachine`/`AnchorPolicyTypes`）在 `Policy/Lifecycle`，纯数学（`AnchorMath`/`ConstVelocityKalman`/`ScalarOneEuro`/`Spline`）在 `Policy/Math`。消息入口 `AcceptPose` 只提交测量（可选内联 score 门控，只 EgoAnchor 方法开），渲染帧入口 `Advance(now)` 调 `strategy.Output(model, now)` 输出每帧 anchor pose。eval 字段名：C# 属性 `MotionModelName`/`SmoothingStrategyName`/`GateName`，对应 JSONL wire key `motion_model`/`smoothing_strategy`/`gate`（旧名 `estimator_module`/`output_module`/`gate_module` 已废弃，历史录制已迁移到新键，读写两端都不留兼容层）；变体每帧输出 pose 的 wire key 是 `has_output_pose`/`output_pos`/`output_rot`（旧名 `has_stable`/`stable_pos`/`stable_rot`，对应 `AnchorEvalJson.RecordedVariantSnapshot.HasOutputPose`/`OutputPose`、runtime API `PoseToAnchorRuntime.TryGetOutputPose`）；`PoseResult` proto 字段 `color_reprojection`（旧名 `track_reprojection`）和 `render_quality_evaluated`（旧名 `render_quality_expected`）也已改名（proto 字段号不变、二进制 wire 兼容，重新生成 `anchor_pb2.py`+`Anchor.cs`）。`score_phase` 等 `score_*` 子分保持原名（与 6 个兄弟字段一致，不是错名）。模块不读 Unity `Time`，时间由 runtime 显式传入。**旧的 Gate/Estimator/Output 三模块拆分（含 `raw_zoh`/`lowpass_predict`/`kalman_cv`/`oneeuro_vanilla`/`egoanchor_*` estimator/gate/output 类）已全部删除，不再兼容。**
-  关键修复（真机延迟自适应）：真机采集-渲染延迟实测中位 ~300ms（Python 推理 159ms + 传输 + 陈旧）>> 观测周期 ~208ms。C 路延迟必须 = **实测采集-渲染延迟**（`DelayedInterpStrategy` 每帧测 `now-最新控制点时间` 的 EMA × 1.15），不是观测周期，否则插值目标比最新点还新 → 退化外推 → 锯齿跳变。B 路外推上限 = **实测延迟 × 倍数**（`BlendStrategy` 自适应），防急停冲过头。两者都不绑 fps，换更快显卡延迟自动变小、上限自动跟着减小。
-- Unity `AnchorCommandClient`：公开 reset/reacquire/pause/resume/set stage API；`CommandAck.accepted=true` 只表示 Python 接受命令，不表示重定位完成。
-- 低分/track-loss 自动 reacquire（上行 fan-in，无 leaf 持 client）：`AnchorPolicyHost` 持续低分(0.25/0.8s)→本地 `NotifyReacquire`；若几何子分也差(`HasGeometryConcern`，depth+reproj 都低=判定 track 丢)→置 `wantsServerReacquire` 标志（host **不持** client）。`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传，`AnchorRuntimeHub` 在 Publish 循环 fan-in 收集所有 runtime 的标志，用它持有的**唯一** `reacquireCommandClient` 发一次 NATS reacquire（冷却 3s + in-flight，server 级合并）。旧的独立 `AnchorRecoveryController` 已删除。`ServerEndpointConfig`（`Client/`，`[DefaultExecutionOrder(-1000)]`）单点配 IP：一个 `List<ServerPreset>`(RTX3090/RTX5090) 下拉，Awake 下发 `QuestStreamPublisher.SetServerIp` + `NatsControlClient.SetNatsUrl`，无 PlayerPrefs。
+- Python 不输出 Unity world pose；Unity 必须用 `frame_id` 回查 capture-time camera pose 做 world anchor。
+- 不使用 pose 到达时 HMD pose 代替发送帧 pose，这是项目核心历史坑。
+- 高频日志保持精简；详细收发、编码、mask/depth 统计必须通过显式 debug 开关启用。
+- 业务代码不手写 subject 字符串；Python 从 `egoanchor.protocol` 包级入口导入，Unity 用 `SubjectNames`。
+- 共享 proto 字段号不得重排。删除字段必须在 proto 中 `reserved` 字段号和字段名。
 
-## 常用入口与验证
+## 项目级实现要求
 
-在 `EgoAnchor_Python` 目录运行：
+- 生成代码不要手改。Python `*_pb2.py` 内部 import 是协议生成结果，不受“包外只走包级入口”的约束影响。
+- Unity 新增 Inspector 字段、网络参数、坐标语义和时间语义时，说明写在 XML summary 或 `[Tooltip]`。参数能少则少，但不要靠 `[HideInInspector]` 隐藏仍在生效、仍需调参的字段来解决 Inspector 过载；需要收纳时应先考虑拆组件、分组、profile 或自定义 Inspector。
+- 日志统一走门面：Python 用 `egoanchor.utils.get_logger(...)` 和入口 `configure_logging(...)`；Unity 用 `EgoAnchorLog.For<T>()`。日志消息不要手写 `[ClassName]` 前缀。
+- 新增行为先补测试或 smoke 验证。配置、文档、生成代码可以不补测试，但最终必须给出可复现验证命令。
+- 重构不做旧接口、旧字段、旧路径兼容。若字段重命名，直接迁移当前场景 YAML 和文档，不加 `FormerlySerializedAs`。
+- 修改前先查引用关系和场景序列化影响。Unity 私有 `[SerializeField]` 改名会影响 `.unity` / `.prefab` YAML；Python 配置项改名会影响 `.toml`、加载器、使用点和测试。
+
+## 常用验证
+
+Python 侧在 `EgoAnchor_Python` 目录运行：
 
 ```powershell
-# 当前主线
 pixi run python .\src\tracking_server.py
 pixi run tool-yoloe26-mask
 pixi run tool-sam3-mask
-
-# Python 验证
 pixi run python -m compileall src
 pixi run python -m unittest discover -s src -p "test_*.py"
 pixi run python -m unittest discover -s eval -p "test_*.py"
 ```
 
-在仓库根目录运行 Unity 编译验证：
+Unity 主线编译在仓库根目录运行：
 
 ```powershell
 dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
 ```
 
-Unity anchor 离线升采样仿真（`EgoAnchor_Tools3`，自包含、不依赖 Unity DLL，是当前主用离线工具）：
-
-```powershell
-# 用真机录制 session 离线对比所有升采样策略，并出曲线 PNG。
-# 默认自动从录制实测"采集-渲染延迟"和"渲染帧率"，复现真机时序（关键：零延迟会"离线平滑、真机抖"）。
-dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --session EgoAnchor_Python\data\eval\<session> --zoom-start 8 --zoom-end 13
-# --no-latency 还原旧的零延迟行为；--latency-ms / --render-hz 手动覆盖
-```
-
-注意：`EgoAnchor_Tools/anchor_policy_smoke`、`anchor_replay` 等旧工具的 csproj 仍 glob 已删除的 `Policy/Gate|Estimator|Output` 目录，重构后无法编译；它们属于早期辅助工具，未随新两模块架构更新。Unity 主线编译验证仍用上面的 `Assembly-CSharp.csproj`。
-
-协议生成在 `EgoAnchor_Python` 目录运行，确保使用 pixi 环境中的 `protoc`：
+协议生成在 `EgoAnchor_Python` 目录运行，使用 pixi 环境中的 `protoc`：
 
 ```powershell
 pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 ```
 
-`pixi run build` 会构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT 环境；不要把它当轻量验证命令。
+离线升采样仿真：
 
-论文目录基于 VGTC 模板，但 `2026-EgoAnchor/makefile` 默认仍指向 `template.tex` / `template.bib`。构建 EgoAnchor 论文时必须显式指定主文件和 bib，或先更新 makefile，避免误编译模板。
+```powershell
+dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --session EgoAnchor_Python\data\eval\<session> --zoom-start 8 --zoom-end 13
+```
 
-## 配置与协议契约
+`pixi run build` 会构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT；不要当作轻量验证命令。
 
-### Python 配置
+## Python 主线
 
-- 默认配置：`EgoAnchor_Python/src/egoanchor/config/defaults.toml`。
-- 目标物体覆盖配置：`EgoAnchor_Python/src/egoanchor/config/objects.toml`，入口通过 `--object blue_mouse` / `pink_mouse` / `earphone` / `controller_right` / `controller_left` 选择；显式 `--config` 仍可在对象配置之后做临时覆盖。
-- 加载器：`EgoAnchor_Python/src/egoanchor/config/runtime_config.py`。
-- 每个 `.toml` 参数必须在同一行末尾写中文注释；新增参数时同步默认值、加载点、使用点和测试。
-- 主要分组：`server`、`network.data_plane`、`network.message_plane`、`runtime.commands`、`pipeline.calibration/depth`、`reliability.render_quality`、`reliability.pose_score`、`module.segmenter/yoloe/sam3/ffs/foundationpose/cutie`、`debug`、`demo.video`、`demo.pose`。
-- `module.segmenter.type` 支持 `yoloe26` 和 `sam3`；默认必须保持 `yoloe26`，耳机盒等覆盖配置可显式切到 `sam3`。`module.segmenter.confidence_threshold` 和 `module.segmenter.mask_threshold` 是 YOLOE/SAM3 共用阈值；后端专属配置只保留权重、输入尺寸、设备、异步等参数。SAM3 本地仓库和 checkpoint 默认位于 `EgoAnchor_Python/sam3` 与 `sam3/assets/sam3_ckpt/sam3.pt`；`module.sam3.async_segmentation=true` 只异步初始分割，不把 FoundationPose/Cutie 移出 `TrackingRuntime` owner 线程。
-- `reliability.render_quality.enabled=true` 是默认值；真机联调已验证可默认采集渲染质量信号，但仍保持 `mode="score_only"`，只有确认误报率后再切 `mode="re_register"`。无效重投影信号（warmup、无 Cutie mask、渲染面积太小或 K 缺失）只写 `no_reprojection_signal` 或对应 status，不得触发重注册；depth 覆盖不足只让 `score_depth=0.5` 中性显示，并且不进入几何合取核。
-- `reliability.pose_score` 控制 pose 可靠性合成：`geo_floor`、`reproj_weight`、`depth_weight` 用于 reprojection/depth 几何核，`mask_floor` 用于 mask 有界调制。HUD/JSONL 中的子分仍保持原始诊断语义，valid 标志只影响 `quality_score` 合成。（jump 子分已删除：逐帧跳变幅度无法区分坏 pose 和真实快动，坏 pose 拒绝交给几何核 + Unity anchor 层。）
-- `runtime.logging.eval_session_enabled=true` 时，Python 启动会创建 `data/eval/<yyyyMMdd_HHmmss_object_id>/`，runtime JSONL 默认写入同目录 `<session_id>_python_runtime.jsonl`，并把该 `session_id` 写进每条 PoseResult 的 `header.session_id` 经 NATS 广播。Unity eval 录制按收到的 session_id 在本地建同名目录（不依赖共享文件系统），实现 Python 在远程服务器、Unity 在本地的跨机器配对；录完把服务器侧 `<session_id>_python_runtime.jsonl` 拷到本地同名目录即自动合并。
-- 时区约定：所有人类可读时间和 session_id 统一用北京时间 (UTC+8)，与运行机器系统时区无关。Python 经 `src/egoanchor/utils/timezone.py` 的 `beijing_now()`（session_id、event log 文件名），Unity 经 `EvalSessionManifestJson.FormatLocal` / `EvalSessionController.BuildReadableSessionId` 的固定 +8 偏移。**机器对齐基准不碰**：单调钟 `mono_ms`（pose 时序/平滑插值基准）和 `created_unix_ms` / `*_utc`（UTC epoch，跨端对齐基准）与时区无关，保持原样。
+- 入口：`EgoAnchor_Python/src/tracking_server.py` 调 `egoanchor.app.tracking_server`。
+- 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
+- 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
+- reliability：`render_quality.enabled=true` 默认采集信号，但 `mode="score_only"` 保持 shadow mode；无有效 reprojection/depth 信号不得触发重注册。
+- logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
+- 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
+- command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime`。NATS handler 只能 parse/validate/dedup/enqueue/ack，pipeline/GPU 状态由单一 `TrackingRuntime` 顺序拥有。
+
+Python 代码地图：
+
+- `src/egoanchor/config/`：只读 TOML，不导入 ZMQ/OpenCV/模型。新增配置要同步 defaults、objects 覆盖、加载点、使用点和测试。
+- `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口；运行时 `subjects.v1.json` 副本由协议脚本同步。
+- `src/egoanchor/transport/zmq_topic_subscriber.py`：通用 ZMQ SUB，只管 socket、multipart topic bytes、latest-drain。
+- `src/egoanchor/transport/nats_client.py`：唯一 NATS transport，负责 asyncio NATS 连接、bytes publish/subscribe/request-reply callback 和限流。
+- `src/egoanchor/routing/`：subject -> protobuf parse -> handler -> reply serialize。
+- `src/egoanchor/handlers/command_handlers.py`：reset/reacquire/control 只 validate/dedup/enqueue/ack，不碰 pipeline/GPU。
+- `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store，含 per-topic latest cache、frame_id/session 去重、camera_info version 和输入统计。
+- `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception、发布 PoseResult/status/heartbeat，并顺序 pump command。
+- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、runtime state/command/error -> `AnchorStatusEvent`、input/runtime stats -> `ServerHeartbeat`。
+- `src/egoanchor/runtime/runtime_log_writer.py`：集中写 PoseResult/status/heartbeat/command JSONL。
+- `src/egoanchor/perception/quest_pose_pipeline.py`：组合 YOLOE-26/SAM3、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 和 debug 图，不依赖 ZMQ/NATS/Unity transform。
+- `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 和线性缩放。
+- `src/egoanchor/algorithms/`：单模型适配层。`yoloe26_segmenter.py`、`sam3_segmenter.py` 都输出统一 `SegmenterResult`；pipeline 不理解模型内部细节。
+- `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose facade，可靠性层只能通过 `render_color_depth_mask(...)`，不要直接访问第三方 estimator 内部对象。
+- `src/egoanchor/reliability/`：`reprojection.py` 只做交集区域 LAB 颜色重投影；`depth_alignment.py` 只做渲染 depth 与 FFS depth 对齐；`render_quality.py` 负责一次渲染后协调两者；`pose_quality.py` 合成总可靠性分。
+
+Python 细节坑：
+
+- SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。
+- `render_quality.mode="score_only"` 时只能采集和写分数；不要在没有足够证据前切到 `re_register`。
+- `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
+- depth 覆盖不足时 `score_depth=0.5` 是中性显示，不进入几何合取核。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
-### 共享协议
+## Unity 主线
 
-- 唯一 channel 源契约：`EgoAnchor_Protocol/subjects.v1.json`；Python 运行时副本位于 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json`，由协议生成脚本同步。
-- Proto 源：`EgoAnchor_Protocol/proto/protocol/v1/common.proto`、`quest.proto`、`anchor.proto`。
-- 默认生成输出：
-  - Python：`EgoAnchor_Python/src/egoanchor/protocol/v1/*_pb2.py` 与 `EgoAnchor_Python/src/egoanchor/protocol/subjects.v1.json`
-  - Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/Generated/*.cs`
-  - Unity subject 常量：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/SubjectNames.cs`
-- 字段号进入共享 proto 后不得重排。删除字段必须在 proto 中 `reserved` 字段号和字段名。
-- 业务代码不手写 subject 字符串；Python 从 `egoanchor.protocol` 包级入口导入常量，Unity 从 `SubjectNames` 使用常量。
+主要链路：
 
-主线逻辑 channels：
+`QuestStreamPublisher / StereoFrameSource / CameraInfoSource` 采集并发 ZMQ；`FramePoseHistory` 记录 capture-time camera pose；`PoseResultReceiver -> AnchorRuntimeHub -> PoseToAnchorRuntime` 解码并广播 pose；`CameraPoseFrameAligner` 做 OpenCV camera pose 到 Unity world pose；`AnchorPolicyHost` 输出每帧 anchor pose；`DynamicObjectAnchor` 只应用输出 Transform。
 
-| Channel                               | 方向            | 传输               | Protobuf                                 | 说明                                                                     |
-| ------------------------------------- | --------------- | ------------------ | ---------------------------------------- | ------------------------------------------------------------------------ |
-| `egoanchor.v1.quest.stereo`         | Unity -> Python | ZMQ                | `QuestStereoFrame`                     | 高频双目 JPEG，latest-only                                               |
-| `egoanchor.v1.quest.camera_info`    | Unity -> Python | ZMQ                | `QuestCameraInfo`                      | 低频标定，独立 latest cache                                              |
-| `egoanchor.v1.pose.result`          | Python -> Unity | NATS               | `PoseResult`                           | 小型 pose 结果，latest-only；携带总分、flags、七个评分子分和渲染质量细项 |
-| `egoanchor.v1.anchor.status`        | Python -> Unity | NATS               | `AnchorStatusEvent`                    | 状态事件流，reset/reacquire/pause/resume/state/error 闭环                |
-| `egoanchor.v1.server.heartbeat`     | Python -> Unity | NATS               | `ServerHeartbeat`                      | 低频服务与输入健康状态，latest-only                                      |
-| `egoanchor.v1.cmd.anchor.reset`     | Unity -> Python | NATS request/reply | `ResetTrackingRequest -> CommandAck`   | ack 只表示接受/拒绝                                                      |
-| `egoanchor.v1.cmd.anchor.reacquire` | Unity -> Python | NATS request/reply | `ReacquireAnchorRequest -> CommandAck` | 重定位结果靠后续事件/pose                                                |
-| `egoanchor.v1.cmd.anchor.control`   | Unity -> Python | NATS request/reply | `AnchorControlRequest -> CommandAck`   | stage/pause/resume 等控制                                                |
+Unity policy 当前结构：
 
-## 代码地图
+- `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。
+- `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
+- `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
+- `Policy/Contracts`：`AnchorObservation`、`AnchorPolicyDecision`、`AnchorPolicyOutput`、`GateDecision`。
+- `Policy/Lifecycle`：`AnchorStateMachine`、`AnchorPolicyTypes`。
+- `Policy/Math`：`AnchorMath`、`ConstVelocityKalman`、`ScalarOneEuro`、`Spline`。
+- `EgoAnchorStaticLockModule` 是静止锁 MonoBehaviour 参数宿主；`StaticLockController` 是纯 C# 控制器。静止锁与 model × strategy 正交：挂模块并 `lockEnabled=true` 是 EgoAnchor 方法，不挂或关闭是 baseline。
 
-### Python
+Unity 代码地图：
 
-- `src/tracking_server.py`：当前主入口 wrapper，调用 `egoanchor.app.tracking_server`。
-- `tools/sam3/sam3_mask.py`：RealSense + SAM3 prompt mask 调参入口；顶部常量配置 prompt、置信度、分辨率和相机参数。
-- `src/egoanchor/config/`：轻量配置。配置层只读 TOML，不导入 ZMQ/OpenCV/模型。
-- `src/egoanchor/protocol/`：subject registry、protobuf registry、包级 Protobuf 入口；内含运行时 `subjects.v1.json` 副本，协议生成脚本会从 `EgoAnchor_Protocol/subjects.v1.json` 同步更新。
-- `src/egoanchor/transport/zmq_topic_subscriber.py`：通用 ZMQ SUB；只负责 socket、multipart topic bytes、topic latest-drain，不导入 Protobuf/OpenCV/模型。
-- `src/egoanchor/transport/nats_client.py`：唯一 NATS transport 文件；负责后台 asyncio NATS 连接、bytes publish/subscribe/request-reply callback 和 publish 限流，不理解 perception 或 Unity anchor。
-- `src/egoanchor/routing/`：`HandlerRegistry`、`NatsRouter`、`iter_nats_request_specs`；负责 subject -> protobuf parse -> handler -> reply serialize。
-- `src/egoanchor/handlers/command_handlers.py`：reset/reacquire/control request handler；只 validate/dedup/enqueue/ack，不直接碰 pipeline/GPU。
-- `src/egoanchor/runtime/quest_stream_receiver.py`：ZMQ bytes -> Quest Protobuf -> latest store；内部包含 topic independent latest cache、frame_id/session 去重、camera_info version 和输入统计。
-- `src/egoanchor/runtime/commands.py`：命令模型、命令队列、request_id TTL 幂等、runtime 内解释命令，以及在 `TrackingRuntime` owner 线程顺序解释并应用已 ack/enqueue command 的 pump。
-- `src/egoanchor/runtime/tracking_runtime.py`：唯一 pipeline/GPU 状态 owner；poll Quest stream latest、运行 perception pipeline、发布 PoseResult/status/heartbeat，并把 command/logging 细节委托给 runtime helper。
-- `src/egoanchor/runtime/message_factories.py`：`PoseObservation -> PoseResult`、Python runtime state/command/error -> `AnchorStatusEvent`、input stats/runtime stats -> `ServerHeartbeat` 映射；PoseResult 必须透传 `score_phase/score_reprojection/score_depth/score_mask/score_reject/score_confidence` 与渲染质量细项，其中 `score_reprojection` 当前语义是交集区域颜色重投影分。
-- `src/egoanchor/runtime/eval_session.py`：Python 启动时创建评估 session 目录，并把 `session_id` 经 PoseResult `header.session_id` 经 NATS 广播给 Unity；Unity 据此在本地建同名目录配对（见上文 `runtime.logging.eval_session_enabled`）。仍会写 `python_session.json` 留作服务器侧自查，但 Unity 不再读它。
-- `src/egoanchor/runtime/runtime_log_writer.py`：集中写入 PoseResult/status/heartbeat/command JSONL 结构化事件；eval session 启用时写入 `data/eval/<session_id>/<session_id>_python_runtime.jsonl`，否则回退到 `runtime_logs`。
-- `src/egoanchor/perception/quest_pose_pipeline.py`：Quest pose pipeline；组合可切换 YOLOE-26/SAM3 mask backend、FFS、FoundationPose/Cutie，输出 camera-space `PoseObservation` 与 debug 图像，不依赖 ZMQ/NATS/Unity transform。SAM3 异步模式只把分割模型放入 latest-only worker；worker 输出携带原始 decoded frame/left/right 图，主 pipeline 线程消费后再做 depth/register。
-- `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 与线性缩放。
-- `src/egoanchor/algorithms/`：单模型适配层；`yoloe26_segmenter.py` 和 `sam3_segmenter.py` 都输出统一 `SegmenterResult`，pipeline 不理解模型内部细节。
-- `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose 适配器；公开 `render_color_depth_mask(...)` facade 给 reliability 层使用，reliability 代码不得直接访问第三方 estimator 内部 `glctx/mesh_tensors`。
-- `src/egoanchor/reliability/reprojection.py`：重投影评分器；只消费渲染 color/mask 与观测 RGB/mask，重投影分只来自交集区域 LAB 颜色相似度，IoU、覆盖率和面积比仅作为诊断与 `score_mask` 来源。
-- `src/egoanchor/reliability/depth_alignment.py`：深度对齐评分器；只消费渲染 depth、观测 depth 和交集 mask，按物体距离自适应 depth inlier 阈值，覆盖不足时给中性分。
-- `src/egoanchor/reliability/render_quality.py`：一次渲染后协调 `ReprojectionChecker` 与 `DepthAlignmentChecker`，保持性能不变但拆清重投影和 depth 职责。
-- `src/egoanchor/reliability/pose_quality.py`：感知可靠性评分，采用 `Gate(phase/reject) × Quality × Confidence`；`Quality` 由 reprojection/depth 有效几何信号的加权几何平均乘以 mask/jump 有界调制得到，输出 `reliability_score`、flags 和 `phase/reprojection/depth/jump/mask/reject/confidence` 子分。
-- `src/egoanchor/diagnostics/`：OpenCV HUD、depth/mask/pose dashboard 等诊断工具；窗口创建辅助由 app 层就近维护。
-- `eval/metrics/diagnostics.py`：离线轻量诊断，输出 score/color_reprojection 直方图、policy action/reason 分布、spike 漏检和 render_quality 开销统计；不导入 runtime 或模型。
-- `src/egoanchor/tests/test_command_flow.py`：当前 command request/reply、dedup、executor 轻量测试。
+- `Protocol/Generated/` 和 `SubjectNames.cs`：协议生成输出，不要手改。
+- `Transport/ZmqTopicPublisher.cs`：只管理 NetMQ PUB socket，发送 `[topic_utf8, protobuf_payload_bytes]`。
+- `Client/NatsControlClient.cs`：NATS 消息面客户端，订阅 PoseResult latest queue、AnchorStatusEvent event queue、ServerHeartbeat latest queue，并提供 bytes request/reply；后台回调不改 Transform。
+- `Quest/StereoFrameSource.cs`：读取左右 Passthrough texture，记录 left/right/center camera pose，JPEG 编码，构造 `QuestStereoFrame`。
+- `Quest/CameraInfoSource.cs`：读取 Quest intrinsics/lens pose 并构造 `QuestCameraInfo`。
+- `Alignment/FramePoseHistory.cs`：`frame_id -> capture-time left/right/center camera world pose` 环形缓存，是 frame-aligned anchor 的关键。
+- `Alignment/CameraReference.cs`：Python 当前 pose 语义默认左目 OpenCV camera；Right/Center/None 只用于本地诊断、对照或补偿实验。
+- `Alignment/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose，包含轴翻转和 offset 配置。
+- `Client/PoseResultReceiver.cs`：主线程 latest-drain，解析 PoseResult，交给 `AnchorRuntimeHub`。
+- `Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多个 runtime；低分 reacquire fan-in 也在这里合并发出。
+- `Runtime/PoseToAnchorRuntime.cs`：把 camera-space pose 对齐为 Unity world pose，提交给 policy，每帧 `LateUpdate(-50)` 推进输出。
+- `Runtime/DynamicObjectAnchor.cs`：只读 `TryGetOutputPose` 并应用 Transform，不承载滤波、状态机、网络或 recovery。
+- `EgoAnchorEval/AnchorEvalRecorder.cs`：按 capture/render 两条日志写 JSONL；配置摘要通过反射收集 `[SerializeField]` 字段，隐藏字段也会进入 config hash。
 
-### Unity
+静止锁命名约定：
 
-- `Assets/Scripts/EgoAnchor/Protocol/Generated/`：C# Protobuf 生成代码。
-- `Assets/Scripts/EgoAnchor/Protocol/SubjectNames.cs`：由协议脚本生成的 subject 常量，不要手改。
-- `Assets/Scripts/EgoAnchor/EgoAnchor.asmdef`：唯一手写 EgoAnchor 程序集；`Assets/Scripts/EgoAnchor` 下所有非生成手写脚本都归入该程序集。
-- `Assets/Scripts/EgoAnchor/Transport/ZmqTopicPublisher.cs`：只管理 NetMQ PUB socket，发送 `[topic_utf8, protobuf_payload_bytes]`。
-- `Assets/Scripts/EgoAnchor/Client/NatsControlClient.cs`：NATS 消息面客户端；订阅 PoseResult latest queue、AnchorStatusEvent event queue、ServerHeartbeat latest queue，提供 bytes request/reply；后台回调不改 Transform。
-- `Assets/Scripts/EgoAnchor/Quest/StereoFrameSource.cs`：读取左右 Passthrough texture、记录 left/right/center camera pose、JPEG 编码、构造 `QuestStereoFrame`。
-- `Assets/Scripts/EgoAnchor/Quest/CameraInfoSource.cs`：读取 Quest intrinsics/lens pose 并构造 `QuestCameraInfo`。
-- `Assets/Scripts/EgoAnchor/Alignment/FramePoseHistory.cs`：`frame_id -> capture-time left/right/center camera world pose` 环形缓存，是 frame-aligned anchor 的关键。
-- `Assets/Scripts/EgoAnchor/Alignment/CameraReference.cs`：Unity 本地对齐参考枚举。Python 当前语义仍是左目 OpenCV camera pose；Right/Center/None 只用于本地诊断、对照或小量补偿实验。
-- `Assets/Scripts/EgoAnchor/Alignment/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose；包含 `AnchorPoseTransform` 轴翻转和固定 offset 配置。
-- `Assets/Scripts/EgoAnchor/Client/QuestStreamPublisher.cs`：场景级 ZMQ 数据面发送组件；Python IP 由 `ServerEndpointConfig` 单点下发（无 PlayerPrefs）。
-- `Assets/Scripts/EgoAnchor/Client/NatsTypedReceiver.cs`：PoseResult、AnchorStatusEvent、ServerHeartbeat 三类 Protobuf receiver 的主线程解码基类。
-- `Assets/Scripts/EgoAnchor/Client/PoseResultReceiver.cs`：主线程 latest-drain、解析 PoseResult、交给 `AnchorRuntimeHub`。
-- `Assets/Scripts/EgoAnchor/Client/AnchorStatusReceiver.cs`：主线程按事件顺序解析 `AnchorStatusEvent`，转交 `PoseToAnchorRuntime` 更新本地 lifecycle，不修改 Transform。
-- `Assets/Scripts/EgoAnchor/Client/ServerHeartbeatReceiver.cs`：主线程 latest-drain、解析 `ServerHeartbeat`，转交 `PoseToAnchorRuntime` 更新链路健康诊断。
-- `Assets/Scripts/EgoAnchor/Client/AnchorCommandClient.cs`：Unity command API，发送 reset/reacquire/control request 并解析 `CommandAck`。
-- `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：将同一条 PoseResult/status/heartbeat 广播给多个 `PoseToAnchorRuntime`，用于多 pipeline label 公平对照；同时记录最近一条 PoseResult 的 `header.session_id`（`LatestPythonSessionId`），供 `EvalSessionController` 跨机器命名 eval 目录。
-- `Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`：pose-to-anchor 组合点；默认用 capture-time frame alignment 生成 aligned raw world pose，再提交给 `policyHost`（新 `AnchorPolicyHost`）。每帧 `LateUpdate` 调 `AdvanceAnchorOutput` 输出预测位姿（`[DefaultExecutionOrder(-50)]` 保证先于 DynamicObjectAnchor/recorder）。该文件还生成 `arrival_time_raw` 诊断，只用于 RQ1 对照，不改变默认 anchor 输出。
-- `Assets/Scripts/EgoAnchor/Policy/`：anchor policy 实现。主线是 `AnchorPolicyHost` + 两个可自由组合的模块基类：`Policy/Models/MotionModel`（CV/Kalman/OneEuro）和 `Policy/Smoothing/SmoothingStrategy`（Blend/DelayedInterp/RawPassthrough）。数据契约 DTO 在 `Policy/Contracts`，生命周期状态机/枚举在 `Policy/Lifecycle`，纯数学在 `Policy/Math`。运动模型的 `PredictAt(renderTime)` 同时处理平移和旋转，且**不限幅外推**（平滑交给策略）。`AnchorMotionState` 在 `Policy/Lifecycle/AnchorPolicyTypes.cs`。旧 Gate/Estimator/Output 三模块目录、旧 controller/filter/gate/smoother/config/processor 目录已删除。参数说明与场景挂载见 `Policy/README.md`。
-- `Assets/Scripts/EgoAnchor/Runtime/DynamicObjectAnchor.cs`：只读取 runtime 每帧 anchor 输出 pose（`TryGetOutputPose`）并应用 Transform，不承载滤波、状态机、网络、recovery，也不再提供 Raw/Smoothed 输出模式。
-- `Assets/Scripts/EgoAnchor/Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多 runtime；同时 fan-in 收集各 runtime 的 `ConsumeServerReacquireRequest()`，用其持有的唯一 `reacquireCommandClient` 发一次 server reacquire（冷却+in-flight）。低分/track-loss 自动 reacquire 的命令出口（leaf 不持 client）。
-- `Assets/Scripts/EgoAnchor/Client/ServerEndpointConfig.cs`：单点服务器端点配置，一个 `List<ServerPreset>` 下拉（RTX3090/RTX5090），Awake 顺链路下发 IP 给 publisher/nats client，无 PlayerPrefs 持久化。
-- `Assets/Scripts/EgoAnchorEval/RecordedAnchorReplaySource.cs`、`RecordedAnchorReplayController.cs`、`AnchorTrajectoryPlayer.cs`：Unity 内 replay 组件。前两者用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录的 anchor 输出轨迹（`output_pos`/`output_rot`），用于视频复现。
-- `Assets/Scripts/AnchorViz/AnchorStatusLabel.cs`：anchor 状态可视化标签（**不在 EgoAnchor 库内**，落默认 `Assembly-CSharp`，只通过 `PoseToAnchorRuntime` 公开只读接口读状态，与库解耦）。挂在 anchor 子物体（带 `TextMeshPro`）上，按 `CurrentAnchorState` 更新 TMP 文字+颜色，并 LookAt 相机（朝相机位置而非对齐相机 forward，故纯转头文字不动）。默认 `simplified=true` 把 9 个内部状态归并成 Tracking(绿,含 Tracking+Coasting)/Static(青,= Tracking 且 `LatestStaticLocked`,显示静止锚定已冻结)/Uncertain(橙,=FrozenUncertain)/Lost(红)/Searching(蓝,含 Uninitialized+Searching+Relocalizing)/Paused/Error，避免帧间 Coasting↔Uncertain 高频闪烁；关掉则显示全部原始状态。字体参数全在 TMP 组件里配。
-- `Assets/Scene/`：当前主线测试场景工作区。
+- 在 `EgoAnchorStaticLockModule` 内字段名不再重复 `staticLock` 前缀，例如 `unlockDriftMeters`、`headSettleSeconds`、`lowScoreReleaseScore`。
+- 不使用 `FormerlySerializedAs` 兼容旧字段名；场景 YAML 直接迁移到新 key。
+- 静止锁所有仍参与控制逻辑的参数应保持可见，便于真机调参和复现实验。不要用 `[HideInInspector]` 把正在生效的调参字段藏起来；若后续要减少 Inspector 压力，应做自定义 Inspector foldout、profile 或进一步拆分参数宿主。
+- `LatestStaticLocked`、`motion_model`、`smoothing_strategy`、`gate`、`has_output_pose`、`output_pos`、`output_rot` 是当前 eval/runtime 契约，不要改回旧名。
 
-Unity 命名/目录规则：
+静止锁核心机制：
 
-- `Quest/` 放 Quest 数据提供者/source。
-- `Alignment/` 放 frame pose history、camera reference 与 frame-aligned world pose 转换。
-- `Transport/` 放纯网络 socket/bytes client，不理解 Quest 或 anchor 语义。
-- `Client/` 放把 source、transport、runtime 组合成场景组件的客户端脚本。
-- `Runtime/` 放 pose hub、PoseToAnchorRuntime、Transform 输出和 server notification 映射。
-- `Policy/` 放 anchor policy 实现、observation/decision DTO、state machine 和两类可组合模块。数据契约 DTO 放 `Policy/Contracts`，生命周期状态机/枚举放 `Policy/Lifecycle`，纯数学放 `Policy/Math`，运动模型放 `Policy/Models`（继承 `MotionModel`），平滑策略放 `Policy/Smoothing`（继承 `SmoothingStrategy`）；不要再建 `Pipeline`、`Pipeline/Modules`、旧 `Gate`/`Estimator`/`Output`/`processor` 目录，也不要再用已删除的 `Policy/Core` 杂物目录。
-- 新增脚本应写清中文 `<summary>` 和 Inspector 参数 `[Tooltip]`，尤其是端口、帧率、HWM、缓存容量、坐标/时间语义。
+- `OnObservation` 只在 host 接受观测后调用；它更新 obs-to-obs 速度、头动容忍、观测共识、锁定/解锁证据。
+- `Stabilize(candidate, dt)` 每渲染帧调用。锁定时返回 `lockedPose`；解锁后用 seam residual 从锁点平滑回到 smoothing 输出；未锁定时透传 candidate。
+- 进入锁定看 `enterSpeedMps`、`enterAngSpeedDps`、`dwellSeconds`、`minScore`。这些阈值必须高于真实观测噪声地板，尤其角速度阈值太低会永不锁定。
+- 解锁证据有三路：速度逃逸、漂移租绳、CUSUM。三路都按真实 dt 处理，不绑定帧率。
+- 漂移租绳量的是 `distance(obsConsensus, anchorOrigin)`，不是单帧观测，也不是 creep 后的 `lockedPose`。改回 `lockedPose` 会导致慢速持续移动时永不解锁。
+- `obsConsensus` 是死区无关的低增益 EMA，用来平滑单帧噪声/head-slip，同时跟随真实持续位移。
+- 头动容忍系数 `headToleranceFactor=1+ratio*(headMaxToleranceFactor-1)`，同比放大死区、租绳和速度逃逸阈值。
+- creep 增益乘 `(1 - headMotionRatio)`。头动时不能让系统性 head-slip 偏置被 creep 写进锁点。
+- `headSettleSeconds` 在头动期间和头停后冻结“判物体在动”的证据，并清零速度逃逸/CUSUM/租绳累积。它修的是“头扫静止物体，头一停就脱离 static”的时序竞速。
+- 距离自适应只放大位置通道，不放大旋转通道。远距离立体深度噪声更大，但旋转噪声不按距离同样变化。
+- 低分释放不受 head settle 冻结影响。它表示锁点可靠性差，应该强制释放并交给低分 reacquire 链路。
 
-## 标定、深度与坐标约定
+低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。不要让 leaf runtime 或 policy 自持 command client。
 
-- Python FoundationPose 输出 OpenCV camera 坐标：x 右、y 下、z 前。
-- Unity camera-local 坐标约定：x 右、y 上、z 前；Unity 由 `CameraPoseFrameAligner` / `AnchorPoseTransform` 转换。
-- Python 感知 pipeline 当前使用左目图像、左目 K、左目 mask/depth，因此 `PoseResult.pose_matrix_cv_camera` 语义仍是左目 OpenCV camera pose。
-- Unity 必须使用“采集该 `frame_id` 时”的参考 camera world pose，而不是 pose 到达时的 HMD pose。
-- `FramePoseHistory` 同时缓存 left/right/center pose；Left 是默认语义，Right/Center/None 只用于本地诊断、对照或小量补偿实验。
-- `pipeline.calibration.assume_center_crop=true` 表示 K 映射使用中心裁剪 + 缩放；`false` 为线性缩放。若边缘 pose/depth 偏差明显，优先对比该开关。
+Unity/eval 字段契约：
 
-## 调试与排查
+- C# 属性 `MotionModelName` / `SmoothingStrategyName` / `GateName` 对应 JSONL `motion_model` / `smoothing_strategy` / `gate`。
+- 每帧输出字段是 `has_output_pose` / `output_pos` / `output_rot`。不要恢复旧 `has_stable` / `stable_pos` / `stable_rot`。
+- `PoseResult` proto 当前字段名是 `color_reprojection` 和 `render_quality_evaluated`。不要恢复旧 `track_reprojection` / `render_quality_expected`。
+- `score_phase`、`score_reprojection`、`score_depth`、`score_mask`、`score_reject`、`score_confidence` 保持原名；这是和一组 score 子分一致的命名，不是错名。
+- `AnchorTrajectoryPlayer` 和离线分析依赖当前 JSONL key；改 schema 必须同步 Unity writer、reader、Python eval 工具和 AGENTS。
 
-- Python OpenCV 热键：`1/2/3/4` 切 stage；`r` reset；`q`/`ESC` 退出。
-- 调试顺序：stage 1 看输入 -> stage 2 看 mask -> stage 3 看 depth/mask 对齐 -> stage 4 看 register/track。
-- 关键 HUD/日志：`stage`、`phase`、`mask_src`、`pose_source`、`det_count`、`depth_valid_ratio`、`depth_in_mask`、HUD `depthScore`、HUD `depthAlign`、`score_phase/score_reprojection/score_depth/score_mask/score_reject/score_confidence`、`median/iqr`、`track_reject`、`reliability_score`、`reliability_flags`、`color_reprojection`、`render_quality_area_ratio_score`、`render_quality_mask_iou`、`render_quality_depth_inlier`、`render_quality_depth_alignment`、`render_quality_render_visible_ratio`、`render_quality_observed_visible_ratio`、`render_quality_depth_residual_m`、`render_quality_ms`、`yolo/depth/cutie/pose/total_ms`、`seg_async done/submitted/drop`、`sender_est`。`score_reprojection` 和 `color_reprojection` 当前语义是交集区域颜色重投影分（`color_reprojection` 旧名 `track_reprojection`），`score_depth` 是 pose 评分里的 depth 子分，`score_mask` 当前优先来自 Cutie mask 面积 / 渲染投影面积。`sender_raw` 是跨进程/设备单调时钟差，不可直接当真实延迟。
-- stereo 收不到但 camera_info 能收到：查 Unity stereo source、左右 camera `IsPlaying`、ZMQ publisher、Python 接收 HWM。
-- camera_info 收不到：查 topic、`CameraInfoSource` 引用、Python 订阅。
-- Unity 物体位姿错：查 OpenCV->Unity 坐标转换、frame pose cache 命中、`frame_id` 透传、K 映射策略、`AnchorPoseTransform` 轴翻转和 offset。
-- Unity `PoseResultReceiver` decoded 增加但 aligned 为 0：查 `AnchorRuntimeHub` runtime 列表、`PoseToAnchorRuntime.framePoseHistory` 是否与 `StereoFrameSource` 共用、`alignmentReference` 是否正确、Python 是否原样透传 frame_id。
-- runtime 收到 pose 但物体不动：先查 `PoseToAnchorRuntime.policyHost`、`AnchorPolicyHost` 的 `motionModel` 和 `smoothingStrategy` 两个 module 是否显式绑定；再看 `latestPolicyAction/Reason`、`currentMotionState`、`LatestAlignedFrameId`。`DynamicObjectAnchor` 已无 Raw/Smoothed 输出模式，真 raw 用 `ConstantVelocityModel + RawPassthroughStrategy` 组合。
-- anchor 状态显示不准 / 遮挡后从不 Lost：根因是 FoundationPose `track()` 是纯几何跟踪器，遮挡时仍持续返回（漂移/低分）pose，Python 几乎不发 `has_pose=false`，于是 Unity 每帧都有"新鲜"pose、gap≈0、永远到不了 Lost 的 `lostTimeoutSeconds`(2s)，且 `OnReliablePose` 不看分数 → 低分也显示 Tracking。修复：`AnchorPolicyHost.trackingScoreFloor`（默认 **0=关闭**，保 baseline"照单全收永不因低分 Lost"原语义不污染对照实验）。设 >0（如 0.4）启用后，只有 `reliabilityScore >= floor` 的 pose 才刷新可靠时间戳并进 Tracking；低分 pose 仍喂模型维持平滑但不刷时间戳，gap 累积由每帧 `Advance` 统一按 coast/lost 超时推进 Coasting→Uncertain→Lost（单一数据源，低分分支不在 AcceptPose 里直接改状态以免与 Advance 同帧打架）。要给用户看真实状态的变体（如 EgoAnchor）才调高 floor。注意 floor 应高于 `lowScoreReacquireThreshold`(0.25)。
-- 锚点抖动/卡顿排查：先看真机采集-渲染延迟（`render_mono_ms - source_capture_mono_ms` 中位 ~300ms）。C 路 interp 锯齿跳变=延迟设成观测周期而非实测延迟（已修为自适应）；B 路 blend 急停冲过头=外推上限太大（已改自适应）。离线复现要用 `EgoAnchor_Tools3` 带 `--latency-ms`（默认自动从录制实测），否则零延迟会"离线平滑、真机抖"。
-- 静止锁定后慢移物体不脱离 / `unlockDriftMeters` 调到 0 也无效：根因是绝对漂移租绳原先量 `distance(lockedPose, anchorOrigin)`，而 `lockedPose` 只靠 creep 移动、creep 只在死区内触发；慢移时观测一超死区→creep 停摆→`lockedPose` 被钉死在 `anchorOrigin`→`driftPos` 恒≈0，任何租绳阈值（含 0）都跨不过。两组真机录制坐实：`041332` 锁定段观测漂 42mm 但 `lockedPose` 只动 0.58mm（`040554` 是另一回事：FoundationPose 没跟上，GT 动 157mm 观测只动 30mm，是上游 track 失败，static 收不到移动信号）。修复（**仅 Unity 侧 `StaticLockController`**，Tools3 `EgoAnchorStabilizerPredictor` 尚未同步）：引入死区无关的观测共识 `obsConsensus`（低增益 EMA，半衰期复用 `evidenceHalfLifeSeconds`），`EnterLock` 把 `anchorOrigin` 设为锁定时刻的 `obsConsensus`，租绳改量 `distance(obsConsensus, anchorOrigin)`；EMA 平滑掉单帧噪声/head-slip（保留头转免疫）又如实跟随真实持续位移，`unlockDriftMeters` 恢复为"慢移逃逸灵敏度"活旋钮。离线重放确认：bug 版 29.3s 全程不解锁（租绳测到 0.6mm），fix 版 0.81s 解锁（测到 17.5mm）。
-- 静止锁定后头动观察静止物体、头停后锚点偏移且不立即复位：根因是 creep——head-motion slip 让静止物体观测 world pose 出现*系统性偏置*（非零均值噪声），且头动时死区被 `headToleranceFactor` 放大→偏置观测更易落进死区触发 creep→creep 单向朝偏置累积成 `lockedPose` 净漂移，头停后还按 `creepHalfLifeSeconds`(2.7s) 慢慢爬回。修复（Unity + Tools3 已同步）：creep 增益乘 `(1 - headMotionRatio)`（`headMotionRatio` 即头动容忍 ratio，0=头静止/1=头速达满容忍阈值 `staticLockHeadRotForFullToleranceDps`/`...LinForFullToleranceMps`）→头动越快 creep 越弱、满容忍时完全冻结锁点，头停立即恢复精修。若短促快晃头仍有微小残留，是头速 EMA（0.5 增益、按观测更新）爬不够快、ratio 没吃满，可调小满容忍阈值让 creep 更早冻结。
-- 静止锁定后头扫静止物体、**头一停物体就脱离 static 变 tracking**：根因是头停时序竞速——头动期间 head-slip 累进 `obsConsensus`、抬高观测速度；头一停 `headToleranceFactor` 由头速驱动几乎瞬间塌回 1（解锁阈值收紧），但 slip 要按 `evidenceHalfLifeSeconds`(0.27s) 才从 consensus 褪去→出现"阈值已收紧、slip 未褪净"窗口→漂移租绳/CUSUM/速度逃逸三路误解锁。真机 `20260619_041332` 重放证实：误解锁发生在头角速度仍 16°/s 时。**光放慢 `f` 下降不够**（slip 已在 consensus 里）。修复（`staticLockHeadSettleSeconds`，默认0.6s，Unity+Tools3 同步）：头动期间 + 头停后此时长内冻结全部"判物体在动→解锁"证据并清零三者累积，给 consensus 时间褪 slip 再恢复监测；低分释放与 creep 不受冻结影响。越大头停后越稳、物体真动响应越慢；0=关闭。
-- HUD `fps` 显示：fps 节拍（`_update_fps`）在 `quest_pose_pipeline` 每个处理过新帧的收尾都更新，不只 track 帧——追踪建立前的 MASK_ONLY/DEPTH_ONLY/NO_MASK/WAIT_SEGMENTATION/WAIT_CALIBRATION 帧也计入，否则 register 前 HUD 恒显 `fps=0`，且首次 track 帧的 dt 会包含整个启动间隔算出荒谬低值。`_finish_frame` 的标志已从 `update_fps` 改名 `log_stats`（只控制周期日志，不再门控 fps）。
-- mask 不稳：调 `module.segmenter.prompt`、`module.segmenter.confidence_threshold`、`module.segmenter.mask_threshold`、`module.segmenter.max_det`，并用 `debug.show_mask_snapshot=true`、`pixi run tool-yoloe26-mask` 或 `pixi run tool-sam3-mask` 看真实下游 mask；若 YOLOE 语义误检仍高，可显式切 `module.segmenter.type="sam3"`。
-- `depth_in_mask` 低：优先查 K 映射、左右图同步/基线、FFS 权重或 TRT engine。
-- register 失败：先确认 mask/depth 对齐，再查 mesh 路径、尺度、对称设置、refine iter。
-- track 丢失：依赖 `module.foundationpose.re_register_on_track_lost=true`；若 2D 辅助引入抖动，可设 `module.cutie.adjust_pose=false`。
-- `color_reprojection=-1`：表示本帧无有效重投影信号，不是坏 pose；查是否启用 `reliability.render_quality.enabled`、是否在 TRACK 且 Cutie mask 非空、渲染面积是否过小、warmup 是否结束、K 是否已更新。
-- `reprojection_low` 误报多：先保持 `mode="score_only"`，检查 mesh 尺度、K 映射、渲染 mask 与观测 mask 方向是否一致，再看 LAB 颜色是否因纹理/光照差异过大；`depth_alignment_low` 则看 `depthAlign/depthRes` 判断是否是深度不对；遮挡或可见面积过小优先看 `render_quality_area_ratio_score`/`score_mask`，`renderCov/obsCov` 只作为投影与观测 mask 相对位置诊断；最后才考虑调 `downscale`、`depth_distance_ratio` 或阈值。
-- NATS 命令无 ack：查 `nats-server` 是否启动、Unity/Python NATS URL 是否指向同一地址、防火墙 4222、Python `network.message_plane.enabled`。
+Unity 场景/序列化注意事项：
 
-## 后续实现规划
+- `AnchorRuntimeHub.runtimes`、`PoseResultReceiver.runtimeHub`、`PoseToAnchorRuntime.framePoseHistory/policyHost`、`AnchorEvalRecorder.recordedRuntimes` 都是场景关键绑定。改字段名必须同步 `.unity`，否则运行时会“收到消息但无人消费”或 eval 为空。
+- `AnchorEvalRecorder.RecordedRuntime.anchorTransform` 是 `output_pos/output_rot` 的采样来源，不是直接读 runtime output pose。删它会让评估轨迹为空。
+- `LatestResidualMeters/Degrees` 目前返回 NaN 是为了保留 eval schema；不要因为“恒为 NaN”就删 public API。
+- `SmoothingStrategy.NominalLatencySeconds`、`AnchorMath.ClampPoseDelta`、`AnchorPolicyAction.Coast` 这类 public API 即使当前少用，也不要随手删，除非同步确认所有程序集和工具。
 
-近期目标不是继续重写目录，而是把主线推进到论文级系统。建议按以下顺序推进，每阶段都保留可验证 smoke。
+## 协议与生成输出
 
-### Phase A：Quest 真机 smoke 与日志回放
+协议源：
 
-- Quest 真机 + Python real pipeline + Unity raw/stable anchor 连续运行。
-- 记录每帧：frame_id、capture/send/receive/publish/apply 时间、phase、score、flags、raw pose、stable pose、anchor state、align result。
-- 导出 CSV/JSONL，按 session 分目录保存，不写进高频日志。
-- 做 fake replay 或 recorded session 入口，用同一输入离线比较多种 anchor policy。
+- `EgoAnchor_Protocol/subjects.v1.json`
+- `EgoAnchor_Protocol/proto/protocol/v1/common.proto`
+- `EgoAnchor_Protocol/proto/protocol/v1/quest.proto`
+- `EgoAnchor_Protocol/proto/protocol/v1/anchor.proto`
 
-### Phase B：Unity modular anchor policy
+生成输出：
 
-- 模块化 policy 已进入主线并重构为两模块自由组合（3×2）：`AnchorPolicyHost` 持有 `MotionModel`（CV/Kalman/OneEuro）+ `SmoothingStrategy`（Blend/DelayedInterp/RawPassthrough），所有组合共享同一 aligned raw pose 输入、capture/render 时间轴和 `Advance(now)` 输出契约。
-- 方法矩阵：B 路（外推+误差融合，零延迟）= `{cv,kalman,oneeuro}+blend`；C 路（延迟一周期+插值）= `{cv原始点,kalman,oneeuro}+interp`；真 raw 对照 = `cv+RawPassthrough`。baseline 不读 score，EgoAnchor 方法才在 host 内联开 score 门控。
-- **EgoAnchor 主方法 = score-gated 分区静止锚定稳定器**（不是又一个滤波器，是 baseline 之上的锚定控制层）。已从 host 剥离为独立 `EgoAnchorStaticLockModule`（MonoBehaviour，`Policy/EgoAnchorStaticLockModule.cs`，内含纯 C# `StaticLockController`），与 model×strategy 矩阵**正交**：挂模块并 enabled = 在任意组合上加静止锁定；留空/不启用 = 纯 baseline。机制：死区吸收抖动 + score 加权 CUSUM 解锁 + 速度逃逸（堵慢运动 false-lock）+ 漏锁 creep + 反 chatter 禁锁窗 + 解锁接缝残差融合 + **绝对漂移租绳**（`unlockDriftMeters/Degrees`，堵慢速持续平移这种死区内/速度阈下、CUSUM 又跟不上的解锁长尾）+ **头动感知**（用采集时刻 head pose 差分头速，头动时按比例放宽 static 容忍阈值，吸收 head-motion-induced slip；头部 pose 复用 `FramePoseHistory.CenterCameraPose` 不重复绑定）+ **距离自适应位置容忍**（物体越远立体深度噪声越大 ~z²，离线证实 corr(距离,位置抖动)=+0.23、corr(距离,旋转抖动)≈0，故按 `posDistanceFactor=clamp(1+slope·(dist−refDist),1,maxFactor)` 只放大**位置**死区/租绳、旋转不变；`staticLockPosTolerance*` 三参，refDist 以内 factor=1）+ **低分释放**（持续低分强制解锁）。
+- Python：`EgoAnchor_Python/src/egoanchor/protocol/v1/*_pb2.py` 和 `subjects.v1.json` 副本。
+- Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/Generated/*.cs`。
+- Unity subject 常量：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Protocol/SubjectNames.cs`。
 
-  **头动 vs 静止锁的四个耦合行为（2026-06-19 真机数据驱动修复，Unity `StaticLockController` 与 Tools3 `EgoAnchorStabilizerPredictor` 已同步）**——四者共用同一头速信号 `headMotionRatio`(0=头静止,1=头速达 `headRotForFullToleranceDps`/`headLinForFullToleranceMps`)，改一个会回退另一个：
-  1. **解锁租绳 measure 什么**：量 `distance(obsConsensus, anchorOrigin)`。`obsConsensus` 是死区无关的低增益 EMA（半衰期复用 `evidenceHalfLifeSeconds`，每观测都更新），`anchorOrigin`=进锁时刻的 obsConsensus（不是 candidate——candidate 含 predict-ahead ~260ms 偏置）。**不用原始单帧观测**（太噪，头静止时尖峰误解锁→漂一下又弹回的抖动）；**不用 creep 后的 lockedPose**（曾经这么干、是个 bug：lockedPose 只靠 creep 动而 creep 只在死区内触发，慢移时观测超死区→creep 停摆→lockedPose 钉死→driftPos 恒≈0→**慢移永不解锁，`unlockDriftMeters` 调到 0 都没用**；dataset `20260619_041332` 实测 10s 锁定段 lockedPose 只动 0.58mm 而观测漂 42mm，离线重放旧逻辑 NEVER 解锁、新逻辑 0.81s 解锁）。obsConsensus 兼得：平滑噪声(保留抗头转抖动) + 如实跟随真实慢移(恢复 `unlockDriftMeters` 作为"慢移逃逸灵敏度"旋钮)。
-  2. **头动放大容忍** `headToleranceFactor=1+ratio·(headMaxToleranceFactor-1)`(默认上限4×)：头转时把死区/租绳/速度逃逸阈值同比放大吸收 slip。
-  3. **头动门控 creep**：creep 增益乘 `(1 - headMotionRatio)`。头转时 slip 是**系统性偏置**(非零均值噪声) + 死区被放大→偏置观测更易落进死区触发 creep→creep 单向累积成 lockedPose 净漂移，头停后按 `creepHalfLifeSeconds`(2.7s)慢慢爬回（用户报告"头动观察静止物体后锚点偏移且不立即复位"）。故头动越快 creep 越弱、`ratio=1` 时完全冻结锁点，头静止满增益照常精修锁点。
-  4. **头停沉降冻结**（`headSettleSeconds`，默认0.6s≈2~3×evidenceHalfLife）：头动期间 + 头停后 `headSettleSeconds` 内，冻结全部"判物体在动→解锁"证据（速度逃逸/漂移租绳/CUSUM，冻结期清零三者累积），并清 `movingRunSeconds`。修"头扫静止物体→头一停 static 就脱开"：头停时 `headToleranceFactor` 由头速驱动几乎瞬间塌回1（阈值收紧），但 head-slip 已累进 `obsConsensus`、抬高观测速度，要按 `evidenceHalfLifeSeconds` 才褪去→出现"阈值已收紧、slip 未褪净"窗口→三路误解锁。**注意光放慢 `f` 下降不够**（slip 已在 consensus 里），必须冻结判定让 consensus 先褪 slip。低分释放不冻结（独立可靠性信号）；creep 不冻结（已被 `(1-ratio)` 门控）。合成测试三场景验证：头扫静止物体→头停=0误解锁、头静止+物体真转=正常解锁、头动中物体真转=头停后干净解锁。
+生成代码不要手改。Python `*_pb2.py` 内部 import 是协议生成结果，不受包级导入约束影响。
 
-  所有时间量纲为帧率无关（dwell/decay/escape/suppress → 秒/半衰期，CUSUM 按 dt 归一），可在 5090@12fps 标定后自动适配 3090@5fps。位置/旋转独立证据通道。`LatestStaticLocked` 经 `PoseToAnchorRuntime`→`AnchorEvalRecorder` 写入 JSONL `latest_static_locked`。主方法 = `Kalman+interp+静止锁模块`，启停模块 = baseline↔EgoAnchor（最干净消融）。离线 PoC（Tools3 `EgoAnchorStabilizerPredictor`）验证有效。angular 静止阈值必须设在旋转噪声地板之上否则永不锁（5090@12fps ~15°/s）。距离自适应斜率/上限暂用保守默认（仅 >0.4m 起作用），需录制近↔远距离扫描 session 才能标定。pose score 子分（depth/reprojection/confidence）已经 `PoseResultPolicyMapper` 透传进 `AnchorObservation`，用于区分坏 pose（几何差→该重 register）vs 真实快动（几何好→别重）。obsConsensus 租绳 + creep 头动门控 + 头停沉降冻结三处头动修复两侧同步，Tools3 跑 `20260619_041332` 验证：慢移段能脱离 (locks/unlocks 平衡)，且头动 slip 误解锁被沉降冻结消除 (unlocks 9→7，头静止时的真实慢移解锁全部保留)。
-- `EgoAnchor_Tools3` 是当前默认离线分析入口：对真机 session 重跑所有策略并出曲线 PNG，默认自动从录制实测延迟+渲染帧率以复现真机时序。旧 `EgoAnchor_Tools/anchor_replay` 因 glob 已删目录无法编译。
-- Unity replay 分两类：`RecordedAnchorReplaySource` 用 `aligned_raw` 注入 runtime 做定性验证；`AnchorTrajectoryPlayer` 播放已录 stable 轨迹用于 supplementary video。
-- Recovery（低分/track-loss 自动 reacquire）走上行 fan-in：host 置标志 → runtime 透传 → `AnchorRuntimeHub` 用唯一 command client 发一次 NATS reacquire（详见组件清单）。旧独立 `AnchorRecoveryController` 已删。RQ2 可关（hub 不绑 client = 只本地重置），RQ3 再单独比较 recovery 策略。低分触发后，是否进一步请求 Python 重 register 由 `AnchorObservation.HasGeometryConcern` 仲裁：**沿用 Python `_geometry_core` 的加权对数几何平均**（reproj/depth 权重默认 0.2/0.8，对齐 Python `defaults.toml [reliability.pose_score]`——颜色对低纹理手柄不可靠、深度为主证据；可在 host 上配 `reacquireReprojWeight/reacquireDepthWeight`，`geo_floor=0.05` 托底），几何平均分 < `reacquireGeometryFloor`（默认 0.5）即判 track 丢。旧逻辑是 `depthBad && reprojBad`（两路都低于 floor 才判），会漏判单路彻底失效的坏 pose（如 depth≈0 而 reproj 0.5–0.6 永远触发不了）；几何平均下单路塌陷会把均值显著拉低，正确判丢。**valid 标记**复刻 Python 无信号判据并经 `PoseResultPolicyMapper` 透传进 observation（不动 proto）：reproj valid = `color_reprojection>=0`（纯色/无纹理物体为 -1），depth valid = `depth_valid_in_mask>=0.10`（=MIN_DEPTH_COVERAGE）；只对 valid 的子分计权，无信号一路被排除而非当 0 分惩罚，两路都无 valid 信号则 `HasGeometryConcern` 返回 false（不武断判坏）。
-- 下一步：迁移 Unity scene 到多 runtime pipeline 绑定（每个变体一个 GameObject 挂 1 model + 1 strategy + runtime + anchor，全注册到 `AnchorRuntimeHub`），真机按 condition 录制多策略变体，再用 `EgoAnchor_Tools3` 和 `eval/run_eval.py` 出 jitter/lag/slip/recovery 证据。
+## 论文与评估
 
-### Phase C：端到端与论文实验
-
-最低论文闭环：
-
-1. Quest 真机 + Python real pipeline + Unity raw/stable anchor 连续运行。
-2. 对比 arrival-time anchoring vs frame-aligned anchoring。
-3. 对比 always update / raw、low-pass、Kalman、reliability-aware policy。
-4. 覆盖静态观察、快速头动、部分遮挡、出视野后重获。
-5. 至少 3 个代表性刚体物体，避免只用 cube/pink mouse 导致泛化叙事太弱。
-6. 输出端到端延迟、world-space anchor error/jitter、recovery success/time、failure taxonomy。
-
-## 论文维护与目标
-
-IEEE VR 2027 论文定位：
+论文问题表述：
 
 > How can asynchronous 6DoF object pose tracking be transformed into stable, world-consistent, recoverable real-object anchoring in passthrough MR?
 
-中文表述：
+最低实验闭环：
 
-> 如何在外部异步感知、头显持续运动、pose 低频/延迟/间歇失效的条件下，把 6DoF object pose stream 转化为稳定、世界一致、可恢复、可交互的真实物体 MR anchor？
+1. Quest 真机 + Python real pipeline + Unity anchor runtime 连续运行。
+2. 对比 arrival-time anchoring vs frame-aligned anchoring。
+3. 对比 raw / low-pass 或 OneEuro / Kalman / reliability-aware static lock。
+4. 覆盖静态观察、快速头动、部分遮挡、出视野后重获。
+5. 至少 3 个代表性刚体物体。
+6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-推荐标题方向：
+论文源文件：`2026-EgoAnchor/egoanchor_cn_outline.tex`、`egoanchor_cn_v1.tex`、`egoanchor_cn_refs.bib`。`2026-EgoAnchor/pdf/` 是生成产物。
 
-- `EgoAnchor: Frame-Aligned 6DoF Object Pose Tracking for World-Consistent Object Anchoring in Passthrough Mixed Reality`
-- 如果 reliability-aware controller 完成并有实验证据，再使用 `... and Reliability-Aware Anchor Control ...` 或 `... Adaptive Anchor Control ...`。
+## 环境与依赖
 
-贡献写法必须保守、可由代码和实验支撑：
+- Python 环境由 `EgoAnchor_Python/pixi.toml` 管理：Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT cu12、pyrealsense2、ultralytics/YOLOE、nats-py、Cutie、SAM3 等。
+- Windows 重建 `.pixi/envs/default` 失败时，先关闭 VS Code Python LSP、Black Formatter 和残留 Python 进程，避免文件占用。
+- Unity 依赖由 `EgoAnchor_Unity/Packages/manifest.json` 管理，主线依赖 Google.Protobuf、NATS.Net、NetMQ 等。
+- 日志门面：Python 使用 `egoanchor.utils.get_logger(...)` 与入口 `configure_logging(...)`；Unity 使用 `EgoAnchorLog.For<T>()`。日志消息本身不要手写 `[ClassName]` 前缀。
 
-1. 一个面向 passthrough MR 的 pose-to-anchor 问题表述与 frame-aligned anchoring 方法。
-2. 一个开放、端到端的 EgoAnchor 系统，从头戴双目透视采集到外部对象级感知，再到 Unity world anchor。
-3. 一套面向 MR real-object anchoring 的评估协议，重点评估 world-space anchor error、jitter/slip、latency、recovery，而不是只报相机坐标 pose accuracy。
+## 不要回退
 
-若 reliability-aware controller 完成并验证，可作为第 2 或第 3 条贡献的一部分；未完成前只能写为 planned/future work 或 current baseline limitation。
-
-论文源文件：
-
-- 当前主要中文大纲：`2026-EgoAnchor/egoanchor_cn_outline.tex`。
-- 另一个较完整草稿：`2026-EgoAnchor/egoanchor_cn_v1.tex`。
-- 参考文献：`2026-EgoAnchor/egoanchor_cn_refs.bib`。
-- `2026-EgoAnchor/pdf/` 是生成产物，不当作源文件维护。
-
-写作注意：
-
-- 不要写成“VR pose tracking 工程堆模块”。核心是 pose-to-anchor 和 world-consistent anchoring。
-- 不要夸大“first”除非限定清楚：open、end-to-end、head-worn stereo input、external asynchronous 6DoF pose stream、Unity deployment、world-consistent real-object anchoring。
-- 可强调机制：`frame_id` 对齐、capture-time camera pose 回查、per-topic latest-drain、Quest K remapping、可切换 YOLOE-26/SAM3 mask backend + FFS + FoundationPose/Cutie re-register、NATS command ack/enqueue、状态/时延/mask-depth 诊断。
-- 实验主指标优先用 anchor 指标：world-space anchor error、head-motion-induced slip、world-space jitter/drift、recovery success/time、P50/P90 latency。ADD/ADD-S、translation/rotation pose error 只能作为支持性底层感知指标。
-- 如果做用户/任务实验，需提前确认伦理/IRB 要求。
-
-## 环境
-
-- Python 环境由 `EgoAnchor_Python/pixi.toml` 管理：Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT cu12、pyrealsense2、ultralytics/YOLOE、onnx、pillow、protobuf、nats-py、Cutie editable path；SAM3 代码当前作为项目内 `EgoAnchor_Python/sam3` 仓库使用，默认从本地 checkpoint 加载。
-- Windows 重建 `.pixi/envs/default` 失败时，先关闭 VS Code Python LSP、Black Formatter、残留 Python 进程，避免文件占用。
-- FoundationPose C++ 扩展由 `pixi run build` 中 `_build-fp` 构建；FFS ONNX/TRT artifact 也由 build task 生成。
-- Unity 依赖由 `EgoAnchor_Unity/Packages/manifest.json` 管理；主线依赖 Google.Protobuf、NATS.Net、NetMQ 等。
-- Pixi activation 与 VSCode `python.analysis.extraPaths` 负责暴露 `EgoAnchor_Python`、`src`、`Fast-FoundationStereo`、`Cutie`、`sam3` 等本地算法包根；`src/egoanchor/algorithms` 适配器不得再手动修改 `sys.path`。第三方库 console 输出由 `egoanchor.utils` 包级入口下的第三方日志工具统一接管，适配器只从 `module.foundationpose/cutie/ffs/sam3.enable_logging` 传入开关，默认关闭。
-
-## 关键历史约束：不要回退
-
-- 不恢复旧 v1/v2 目录、MessagePack 链路、旧计划目录或早期 NATS 实验目录。
+- 不恢复旧 v1/v2 目录、MessagePack 链路、旧计划目录或早期 NATS 图像流实验。
 - 不恢复旧默认端口 `5556/5557`；保持 Unity -> Python `15557`。
-- 不恢复 ZMQ PUSH/PULL、业务分片、JSON pose、单图 `packed_image_jpeg_legacy`。
-- 不恢复旧入口/文件：`src/pose_tracker_api.py`、`src/vpt_cli.py`、`src/VOT.py`、`src/quest_stereo_pose_pipeline.py`、`src/modules/quest_stereo.py`、`src/modules/quest_receiver.py`、`src/zmq_utils/timing.py`、`src/zmq_utils/latency.py`、Unity 旧 `StaticStereoEncoder.cs`。
-- 不恢复 Python `PayloadSender` default topic、TRT legacy alias/fallback 文件名、运行时 `onnx.yaml` 依赖。
-- 不添加 Unity legacy port 自动迁移逻辑。
-- 不把 SAM3 设为默认分割后端；默认主线保持 YOLOE-26。SAM3 异步分割可以作为显式配置路径，但 FoundationPose/Cutie 状态仍必须由单一 `TrackingRuntime` 顺序拥有，不能放进分割 worker。
-- 不恢复 WebRTC 图像传输方案、NATS 图像流 smoke server。
-- 高频路径日志保持精简；详细收发/编码统计只通过显式 debug 开关启用。
-- Unity 事件链优先显式 Inspector 绑定，避免组件内部自动 Find/AddListener 造成重复订阅或隐藏依赖。
-- NATS handler 只能 parse/validate/dedup/enqueue/ack；pipeline/GPU 状态必须由单一 `TrackingRuntime` 顺序拥有。
-- Python 不输出 Unity world pose；Unity 用 capture-time frame pose 做 world anchor。
-- 不使用 pose 到达时 HMD pose 代替发送帧 pose。这个是项目核心历史坑。
+- 不恢复 ZMQ PUSH/PULL、JSON pose、业务分片、单图 legacy payload。
+- 不恢复旧 Python 入口和旧 Unity `StaticStereoEncoder.cs`。
+- 不恢复 Unity legacy port 自动迁移逻辑。
+- 不把 SAM3 设为默认分割后端。
+- 不恢复旧 Gate/Estimator/Output 三模块拆分或旧 `has_stable/stable_pos/stable_rot`、`estimator_module/output_module/gate_module` 字段。
+- 不添加旧字段/旧路径兼容层；重构时直接迁移当前主线代码和场景。
 
 ## AGENTS.md 维护规则
 
-- 本文件保持“当前事实 + 核心约定 + 后续路线 + 历史坑”，不要追加日期日志。
-- 不要修改 `USER-MAINTAINED-REQUIREMENTS` 区块。除非用户明确要求修改该区块，否则后续 AI 不得因润色、去重、同步文档或整理结构而改动其中任何文字。
-- 大改后同步入口、模块职责、协议字段、标定策略、坐标、调试统计、论文定位、实验目标和排查结论。
-- 若事实被代码或协议更新推翻，直接改旧条目，不要在后面追加相互矛盾的新条目。
+- 保持本文件短，只写当前事实、核心约定、后续路线和历史坑。
+- 不要修改 `USER-MAINTAINED-REQUIREMENTS` 区块。
+- 大改后同步入口、模块职责、协议字段、配置名、验证命令和关键坑。
+- 若代码事实推翻旧描述，直接改旧条目，不要追加相互矛盾的新条目。

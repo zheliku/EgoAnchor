@@ -30,9 +30,6 @@ namespace EgoAnchor.Policy
         /// <summary>平滑后的速度，单位/秒。</summary>
         public float Velocity => dxHat;
 
-        /// <summary>是否已初始化。</summary>
-        public bool HasValue => initialized;
-
         /// <summary>配置滤波参数（构造后或复用前调用）。</summary>
         public void Configure(float minCutoff, float beta, float dCutoff)
         {
