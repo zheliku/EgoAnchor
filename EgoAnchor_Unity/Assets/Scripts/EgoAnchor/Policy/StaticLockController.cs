@@ -62,6 +62,15 @@ namespace EgoAnchor.Policy
         private float headLinForFullToleranceMps = 0.3f;  // 头线速度达此值 → 容忍因子吃满
         private float headMaxToleranceFactor = 4.0f;      // 容忍度上限 (1=关闭头动感知)
 
+        // 头停沉降冻结 (问题3 续): 头动时 slip 累进 obsConsensus / 抬高观测速度; 头一停, headToleranceFactor
+        // 由头速驱动会几乎瞬间塌回 1 (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去
+        // → 出现"阈值已收紧、slip 未褪净"的窗口 → 漂移租绳/CUSUM/速度逃逸误触发 (用户报告: 头一停物体就脱离 static)。
+        // 解法: 头动期间 + 头停后 headSettleSeconds 内, 冻结所有"判物体在动→解锁"的证据 (漂移租绳/CUSUM/速度逃逸),
+        // 给 obsConsensus 时间把 slip 褪干净再恢复监测。settleSeconds 取 ~2~3× evidenceHalfLifeSeconds。
+        // 0=关闭沉降冻结。低分释放不冻结 (它是独立可靠性信号, 与 head-slip 无关)。
+        private float headSettleSeconds = 0.6f;            // 头停后冻结解锁判定的时长 (秒, 帧率无关; 0=关闭)
+        private const float HeadMovingRatioEps = 0.06f;    // headMotionRatio 超此值视为"头在动" (重置沉降计时)
+
         // 距离自适应位置容忍 (问题2): 物体越远, 立体深度估计噪声越大 (~z², 离线证实 corr(距离, 位置抖动)=+0.23;
         // 旋转抖动与距离无关 corr≈-0.02, 故只缩放位置通道, 旋转阈值不变)。同样真实静止, 远处观测位置抖得更大 →
         // 固定米死区/租绳在远处频繁被噪声顶破 → 误解锁。解法: 位置死区与位置租绳乘
@@ -118,6 +127,7 @@ namespace EgoAnchor.Policy
         private float headAngSpeedEma;   // deg/s
         private float headToleranceFactor = 1.0f; // 当前头动放大系数 (1=头静止)
         private float headMotionRatio;             // 头动强度 0..1 (0=头静止, 1=头速达满容忍阈值)。门控 creep: 头动时减弱/冻结 creep, 防 head-slip 偏置被 creep 单向累积成锁点漂移。
+        private float headSettleLeftSeconds;       // 头停沉降冻结剩余时间 (秒)。头在动时重置满, 头静止时递减; >0 期间冻结解锁判定 (漂移租绳/CUSUM/速度逃逸)。
         private float posDistanceFactor = 1.0f;    // 当前距离自适应位置容忍系数 (问题2; 1=近处/关闭)
         private float lowScoreRunSeconds;          // 锁定时连续低分累计时间 (低分释放用)
 
@@ -152,6 +162,7 @@ namespace EgoAnchor.Policy
             float headRotForFullToleranceDps,
             float headLinForFullToleranceMps,
             float headMaxToleranceFactor,
+            float headSettleSeconds,
             float posToleranceRefDistanceMeters,
             float posToleranceDistanceSlope,
             float posToleranceMaxFactor,
@@ -178,6 +189,7 @@ namespace EgoAnchor.Policy
             this.headRotForFullToleranceDps = Mathf.Max(headRotForFullToleranceDps, 1e-3f);
             this.headLinForFullToleranceMps = Mathf.Max(headLinForFullToleranceMps, 1e-3f);
             this.headMaxToleranceFactor = Mathf.Max(headMaxToleranceFactor, 1.0f);
+            this.headSettleSeconds = Mathf.Max(headSettleSeconds, 0.0f);
             this.posToleranceRefDistanceMeters = Mathf.Max(posToleranceRefDistanceMeters, 0.0f);
             this.posToleranceDistanceSlope = Mathf.Max(posToleranceDistanceSlope, 0.0f);
             this.posToleranceMaxFactor = Mathf.Max(posToleranceMaxFactor, 1.0f);
@@ -217,6 +229,7 @@ namespace EgoAnchor.Policy
             headAngSpeedEma = 0.0f;
             headToleranceFactor = 1.0f;
             headMotionRatio = 0.0f;
+            headSettleLeftSeconds = 0.0f;
             posDistanceFactor = 1.0f;
             lowScoreRunSeconds = 0.0f;
             LockEnters = 0;
@@ -260,6 +273,17 @@ namespace EgoAnchor.Policy
 
             // 头动感知 (问题3): 从 head pose 差分头速, 更新容忍放大系数。头动越大→放宽 static 约束吸收 slip。
             UpdateHeadMotion(hasHeadPose, headPose, obsDt);
+
+            // 头停沉降计时: 头在动 (ratio>eps) → 重置满; 头静止 → 按真实 dt 递减。>0 期间冻结解锁判定,
+            // 给 obsConsensus 把 head-slip 褪干净的时间, 避免"头一停阈值收紧快于 slip 褪去"的误解锁。
+            if (headMotionRatio > HeadMovingRatioEps)
+            {
+                headSettleLeftSeconds = headSettleSeconds;
+            }
+            else
+            {
+                headSettleLeftSeconds = Mathf.Max(0.0f, headSettleLeftSeconds - obsDt);
+            }
 
             // 距离自适应位置容忍 (问题2): 物体越远立体深度噪声越大, 位置容忍按距离放大 (旋转不放大)。
             posDistanceFactor = ComputePosDistanceFactor(hasHeadPose, headPose, pos);
@@ -474,10 +498,20 @@ namespace EgoAnchor.Policy
                 lowScoreRunSeconds = 0.0f;
             }
 
+            // 头停沉降冻结 (问题3 续, 用户报告"头扫静止物体后头一停 static 就脱开"): 头动期间 + 头停后
+            // headSettleSeconds 内, 冻结所有"判物体在动→解锁"的证据 (速度逃逸/漂移租绳/CUSUM)。原因: 头动时
+            // head-slip 累进 obsConsensus、抬高观测速度; 头一停 headToleranceFactor 由头速驱动几乎瞬间塌回 1
+            // (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去 → 出现"阈值已收紧、
+            // slip 未褪净"的窗口 → 这三路误触发解锁。冻结期清零三路证据 (头停后从零重判), 给 obsConsensus 时间
+            // 褪 slip 再恢复监测。低分释放不冻结 (上面, 独立可靠性信号); creep 也不冻结 (它已被 (1-headMotionRatio)
+            // 门控, 头动时≈0, 且 creep 只精修不解锁)。settleSeconds 取 ~2~3× evidenceHalfLifeSeconds 保证 slip 充分衰减。
+            bool settleFrozen = headSettleLeftSeconds > 0.0f;
+
             // 速度逃逸: 速度明确超阈连续一段 *时间* → 解锁 (速度比位移更早的运动信号, 堵 false-lock 长尾)。
-            // 头动时阈值放大: 头转带来的 slip 速度不该触发逃逸。
-            bool movingNow = obsSpeedEma > staticEnterSpeedMps * unlockSpeedFactor * f
-                             || obsAngSpeedEma > staticEnterAngSpeedDps * unlockSpeedFactor * f;
+            // 头动时阈值放大: 头转带来的 slip 速度不该触发逃逸。冻结期 movingNow 强制 false → movingRunSeconds 清零。
+            bool movingNow = !settleFrozen
+                             && (obsSpeedEma > staticEnterSpeedMps * unlockSpeedFactor * f
+                                 || obsAngSpeedEma > staticEnterAngSpeedDps * unlockSpeedFactor * f);
             movingRunSeconds = movingNow ? movingRunSeconds + obsDt : 0.0f;
             if (movingRunSeconds >= unlockMovingSeconds)
             {
@@ -497,7 +531,7 @@ namespace EgoAnchor.Policy
             // 位置租绳再乘 posDistanceFactor (问题2): 远处深度噪声大, 位置租绳同比放宽; 旋转租绳不随距离变 (旋转噪声与距离无关)。
             float driftPos = Vector3.Distance(obsConsensusPos, anchorOrigin.position);
             float driftRot = AnchorMath.AngleDegrees(anchorOrigin.rotation, obsConsensusRot);
-            if (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f)
+            if (!settleFrozen && (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f))
             {
                 wantUnlock = true;
                 return; // 解锁在 Stabilize 提交
@@ -512,15 +546,24 @@ namespace EgoAnchor.Policy
             // 位置死区再乘 posDistanceFactor (问题2): 远处位置噪声大, 位置死区同比放宽; 旋转死区不随距离变。
             float dbMeters = deadbandMeters * f * posDistanceFactor;
             float dbDegrees = deadbandDegrees * f;
-            float decay = Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
-            float accScale = obsDt / refObsIntervalSeconds;
-            evidencePos = decay * evidencePos + accScale * score * Mathf.Max(0.0f, dPos - dbMeters);
-            evidenceRot = decay * evidenceRot + accScale * score * Mathf.Max(0.0f, dRot - dbDegrees);
-
-            if (evidencePos > unlockEvidenceMeters || evidenceRot > unlockEvidenceDegrees)
+            if (!settleFrozen)
             {
-                wantUnlock = true;
-                return; // 解锁在 Stabilize 提交
+                float decay = Mathf.Pow(0.5f, obsDt / evidenceHalfLifeSeconds);
+                float accScale = obsDt / refObsIntervalSeconds;
+                evidencePos = decay * evidencePos + accScale * score * Mathf.Max(0.0f, dPos - dbMeters);
+                evidenceRot = decay * evidenceRot + accScale * score * Mathf.Max(0.0f, dRot - dbDegrees);
+
+                if (evidencePos > unlockEvidenceMeters || evidenceRot > unlockEvidenceDegrees)
+                {
+                    wantUnlock = true;
+                    return; // 解锁在 Stabilize 提交
+                }
+            }
+            else
+            {
+                // 沉降冻结期: CUSUM 证据清零, 头停后从干净状态重新累积 (slip 期间攒的假证据不该带过窗口)。
+                evidencePos = 0.0f;
+                evidenceRot = 0.0f;
             }
 
             // 漏锁 creep: 仅死区内 (纯噪声/极慢漂移) 才朝观测缓慢靠拢, 精修锁点 + 跟极慢漂移而不抖。

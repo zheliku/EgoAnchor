@@ -107,6 +107,10 @@ namespace EgoAnchor.Policy
         [Range(1.0f, 8.0f)]
         [SerializeField] private float staticLockHeadMaxToleranceFactor = 4.0f;
 
+        /// <summary>头停后冻结解锁判定的沉降时长，单位秒 (帧率无关)。</summary>
+        [Tooltip("头停沉降冻结时长 (秒)：头动期间 + 头停后此时长内, 冻结所有\"判物体在动→解锁\"的证据 (速度逃逸/漂移租绳/CUSUM)。修\"头扫静止物体后头一停 static 就脱开\": 头停时容忍系数瞬间收紧, 但 head-slip 还残留在观测共识里, 不冻结就会误解锁。取 ~2~3× 证据半衰期 (evidenceHalfLife=0.27) 让 slip 充分褪去。越大头停后越稳但物体真动响应越慢。0=关闭。默认 0.6。")]
+        [SerializeField] private float staticLockHeadSettleSeconds = 0.6f;
+
         /// <summary>距离自适应位置容忍参考距离 (m)：此距离以内不放大。</summary>
         [Header("Distance-Aware Position Tolerance (问题2)")]
         [Tooltip("距离自适应位置容忍参考距离 (m)：物体到头部距离在此值以内时位置死区/租绳不放大 (factor=1)。越近的常用距离设这里。默认 0.4。")]
@@ -192,6 +196,7 @@ namespace EgoAnchor.Policy
                 staticLockHeadRotForFullToleranceDps,
                 staticLockHeadLinForFullToleranceMps,
                 staticLockHeadMaxToleranceFactor,
+                staticLockHeadSettleSeconds,
                 staticLockPosToleranceRefDistanceMeters,
                 staticLockPosToleranceDistanceSlope,
                 staticLockPosToleranceMaxFactor,

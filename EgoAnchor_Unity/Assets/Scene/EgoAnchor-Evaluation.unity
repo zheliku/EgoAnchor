@@ -1830,7 +1830,7 @@ MonoBehaviour:
     ip: 172.24.244.55
   - label: RTX5090
     ip: 172.24.247.32
-  selected: 0
+  selected: 2
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222
@@ -3065,9 +3065,9 @@ MonoBehaviour:
     m_NumColorKeys: 2
     m_NumAlphaKeys: 2
   outlineGradientInLocalSpace: 0
-  outlineWidth: 1
+  outlineWidth: 0.6
   outlineBlurPasses: 2
-  outlineQuality: 3
+  outlineQuality: 2
   outlineEdgeMode: 0
   outlineEdgeThreshold: 0.995
   outlineDistanceScaleBias: 25
@@ -4351,6 +4351,7 @@ MonoBehaviour:
   staticLockHeadRotForFullToleranceDps: 60
   staticLockHeadLinForFullToleranceMps: 0.3
   staticLockHeadMaxToleranceFactor: 4
+  staticLockHeadSettleSeconds: 0.6
   staticLockPosToleranceRefDistanceMeters: 0.4
   staticLockPosToleranceDistanceSlope: 1
   staticLockPosToleranceMaxFactor: 3

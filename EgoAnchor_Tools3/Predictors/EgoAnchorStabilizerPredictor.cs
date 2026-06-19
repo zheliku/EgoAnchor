@@ -32,7 +32,10 @@ namespace EgoAnchor.Tools3.Predictors
     ///      用残差融合在若干帧内从 lockedPose 平滑收敛到 inner, 防解锁 pop;
     ///   5. **绝对漂移租绳 (leash)**: 量死区无关的去噪观测共识 obsConsensus (EMA) 相对锁定原点的漂移,
     ///      超租绳即解锁。修"慢移时观测超死区→creep 停摆→lockedPose 钉死→量 lockedPose 的旧租绳恒≈0→
-    ///      慢移永不解锁"的结构性失效 (旧实现量 creep 后的 lockedPose, 是 bug)。
+    ///      慢移永不解锁"的结构性失效 (旧实现量 creep 后的 lockedPose, 是 bug);
+    ///   6. **头停沉降冻结 (settle-freeze)**: 头动期间 + 头停后 headSettleSeconds 内冻结上述 2/5 与速度逃逸
+    ///      三路解锁判定 (冻结期清零 CUSUM)。修"头扫静止物体后头一停 static 就脱开": 头停时容忍系数瞬间收紧,
+    ///      但 head-slip 还残留在 obsConsensus/速度里, 不冻结就会误解锁。给 obsConsensus 时间褪 slip 再恢复监测。
     ///
     /// 位置和旋转用 **独立证据通道** (静态物体的角度摇摆视觉上最刺眼, 必须单独锁/单独解)。
     /// 这是 Unity 侧 host 内联 static-lock 的离线对照实现 (装饰器, 不改 inner)。
@@ -78,6 +81,15 @@ namespace EgoAnchor.Tools3.Predictors
         private readonly double headRotForFullTolerance;  // 头角速度 (deg/s) 达此值 → 容忍因子吃满
         private readonly double headLinForFullTolerance;  // 头线速度 (m/s) 达此值 → 容忍因子吃满
         private readonly double headMaxToleranceFactor;   // 容忍度最大放大倍数 (1=关闭头动感知)
+
+        // --- 头停沉降冻结 (问题3 续: 头扫静止物体后头一停 static 就脱开) ---
+        // 头动期间 head-slip 累进 obsConsensus / 抬高观测速度; 头一停, headToleranceFactor 由头速驱动几乎瞬间
+        // 塌回 1 (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去 → "阈值已收紧、
+        // slip 未褪净"的窗口 → 漂移租绳/CUSUM/速度逃逸误触发解锁。解法: 头动期间 + 头停后 headSettleSeconds 内
+        // 冻结这三路解锁判定 (冻结期清零 CUSUM 证据), 给 obsConsensus 时间褪 slip 再恢复监测。settleSeconds 取
+        // ~2~3× evidenceHalfLifeSeconds。低分释放不冻结 (独立可靠性信号); creep 也不冻 (已被 (1-headMotionRatio) 门控)。
+        private readonly double headSettleSeconds;         // 头停后冻结解锁判定的时长 (秒, 帧率无关; 0=关闭)
+        private const double HeadMovingRatioEps = 0.06;    // headMotionRatio 超此值视为"头在动" (重置沉降计时)
 
         // --- 绝对漂移租绳 (leash): 防 creep 把慢速持续运动"吃掉"导致永不解锁 ---
         // CUSUM 用的 dPos 是相对(会被 creep 跟随的) lockedPose 的, 慢速平移时 creep 让 dPos 始终在死区内,
@@ -144,6 +156,7 @@ namespace EgoAnchor.Tools3.Predictors
         private double headLinSpeedEma;               // m/s
         private double headToleranceFactor = 1.0;     // 当前头动放大系数 (1=头静止)
         private double headMotionRatio;               // 头动强度 0..1 (0=头静止, 1=头速达满容忍阈值)。门控 creep: 头动时减弱/冻结 creep, 防 head-slip 偏置被 creep 单向累积成锁点漂移。
+        private double headSettleLeftSeconds;         // 头停沉降冻结剩余时间 (秒)。头在动时重置满, 头静止时递减; >0 期间冻结解锁判定 (漂移租绳/CUSUM/速度逃逸)。
         private double posDistanceFactor = 1.0;       // 当前距离自适应位置容忍系数 (问题2; 1=近处/关闭)
 
         // === 诊断计数 (PoC 调参用, 不影响算法) ===
@@ -180,6 +193,7 @@ namespace EgoAnchor.Tools3.Predictors
             double headRotForFullTolerance = 60.0,   // 头角速度达此值 (deg/s) → 容忍度放大到上限
             double headLinForFullTolerance = 0.3,    // 头线速度达此值 (m/s) → 容忍度放大到上限
             double headMaxToleranceFactor = 4.0,     // 容忍度最大放大倍数 (1=不放大)
+            double headSettleSeconds = 0.6,          // 头停沉降冻结时长 (秒): 头动期间+头停后此时长内冻结解锁判定 (0=关闭)
             double posToleranceRefDistance = 0.4,    // 距离自适应 (问题2): 此距离 (m) 以内位置容忍不放大
             double posToleranceDistanceSlope = 1.0,  // 每超出 ref 1m, 位置死区/租绳增加的比例 (1/m)
             double posToleranceMaxFactor = 3.0,      // 位置容忍放大上限 (1=关闭距离自适应)
@@ -208,6 +222,7 @@ namespace EgoAnchor.Tools3.Predictors
             this.headRotForFullTolerance = Math.Max(headRotForFullTolerance, 1e-3);
             this.headLinForFullTolerance = Math.Max(headLinForFullTolerance, 1e-3);
             this.headMaxToleranceFactor = Math.Max(headMaxToleranceFactor, 1.0);
+            this.headSettleSeconds = Math.Max(headSettleSeconds, 0.0);
             this.posToleranceRefDistance = Math.Max(posToleranceRefDistance, 0.0);
             this.posToleranceDistanceSlope = Math.Max(posToleranceDistanceSlope, 0.0);
             this.posToleranceMaxFactor = Math.Max(posToleranceMaxFactor, 1.0);
@@ -253,6 +268,7 @@ namespace EgoAnchor.Tools3.Predictors
             headLinSpeedEma = 0.0;
             headToleranceFactor = 1.0;
             headMotionRatio = 0.0;
+            headSettleLeftSeconds = 0.0;
             posDistanceFactor = 1.0;
         }
 
@@ -299,6 +315,17 @@ namespace EgoAnchor.Tools3.Predictors
             // 头动越大 → head-motion-induced slip 越强 → 观测物体表观运动里"假运动"成分越多,
             // 所以临时放大静止判定/解锁的容忍度, 把 slip 当噪声吸收, 而不是误判成物体真动。
             UpdateHeadMotion(observation, obsDt);
+
+            // --- 头停沉降计时: 头在动 (ratio>eps) → 重置满; 头静止 → 按真实 dt 递减。>0 期间冻结解锁判定 ---
+            // 给 obsConsensus 把 head-slip 褪干净的时间, 避免"头一停阈值收紧快于 slip 褪去"的误解锁 (见 UpdateLockedEvidence)。
+            if (headMotionRatio > HeadMovingRatioEps)
+            {
+                headSettleLeftSeconds = headSettleSeconds;
+            }
+            else
+            {
+                headSettleLeftSeconds = Math.Max(0.0, headSettleLeftSeconds - obsDt);
+            }
 
             // --- 距离自适应位置容忍 (问题2): 物体越远立体深度噪声越大, 位置容忍按距离放大 (旋转不放大) ---
             posDistanceFactor = ComputePosDistanceFactor(observation, pos);
@@ -431,12 +458,22 @@ namespace EgoAnchor.Tools3.Predictors
                 lowScoreRunSeconds = 0.0;
             }
 
+            // 头停沉降冻结 (问题3 续, 真机报告"头扫静止物体后头一停 static 就脱开"): 头动期间 + 头停后
+            // headSettleSeconds 内, 冻结所有"判物体在动→解锁"的证据 (速度逃逸/漂移租绳/CUSUM)。原因: 头动时
+            // head-slip 累进 obsConsensus、抬高观测速度; 头一停 headToleranceFactor 由头速驱动几乎瞬间塌回 1
+            // (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去 → 出现"阈值已收紧、
+            // slip 未褪净"的窗口 → 这三路误触发解锁。冻结期清零三路证据 (头停后从零重判), 给 obsConsensus 时间
+            // 褪 slip 再恢复监测。低分释放不冻结 (上面, 独立可靠性信号); creep 也不冻结 (它已被 (1-headMotionRatio)
+            // 门控, 头动时≈0, 且 creep 只精修不解锁)。settleSeconds 取 ~2~3× evidenceHalfLifeSeconds 保证 slip 充分衰减。
+            bool settleFrozen = headSettleLeftSeconds > 0.0;
+
             // 速度逃逸: 观测速度明确超过静止阈值 × 倍数, 连续一段 *时间* → 立即解锁。
             // 这堵住了"慢速真实运动被 creep 跟住、CUSUM 永不越阈"的 false-lock 长尾
             // (PoC 里 onset-lag P90=1500ms 的卡死 case)。速度是比位移更早的运动信号。
-            // 头动时阈值放大: 头转带来的 slip 速度不该触发逃逸。
-            bool movingNow = obsSpeed > staticEnterSpeed * unlockSpeedFactor * f
-                             || obsAngSpeed > staticEnterAngSpeed * unlockSpeedFactor * f;
+            // 头动时阈值放大: 头转带来的 slip 速度不该触发逃逸。冻结期 movingNow 强制 false → movingRunSeconds 清零。
+            bool movingNow = !settleFrozen
+                             && (obsSpeed > staticEnterSpeed * unlockSpeedFactor * f
+                                 || obsAngSpeed > staticEnterAngSpeed * unlockSpeedFactor * f);
             movingRunSeconds = movingNow ? movingRunSeconds + obsDt : 0.0;
             if (movingRunSeconds >= unlockMovingSeconds)
             {
@@ -457,7 +494,7 @@ namespace EgoAnchor.Tools3.Predictors
             // 位置租绳再乘 posDistanceFactor (问题2): 远处深度噪声大, 位置租绳同比放宽; 旋转租绳不随距离变 (旋转噪声与距离无关)。
             double driftPos = Vec3.Distance(obsConsensusPos, anchorOrigin.Position);
             double driftRot = Quat.AngleDegrees(obsConsensusRot, anchorOrigin.Rotation);
-            if (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f)
+            if (!settleFrozen && (driftPos > unlockDriftMeters * f * posDistanceFactor || driftRot > unlockDriftDegrees * f))
             {
                 wantUnlock = true;
                 return;
@@ -472,15 +509,24 @@ namespace EgoAnchor.Tools3.Predictors
             // 位置死区再乘 posDistanceFactor (问题2): 远处位置噪声大, 位置死区同比放宽; 旋转死区不随距离变。
             double dbPos = deadbandPos * f * posDistanceFactor;
             double dbRot = deadbandRot * f;
-            double decay = Math.Pow(0.5, obsDt / evidenceHalfLifeSeconds);
-            double accScale = obsDt / refObsIntervalSeconds;
-            evidencePos = decay * evidencePos + accScale * score * Math.Max(0.0, dPos - dbPos);
-            evidenceRot = decay * evidenceRot + accScale * score * Math.Max(0.0, dRot - dbRot);
-
-            if (evidencePos > unlockEvidencePos || evidenceRot > unlockEvidenceRot)
+            if (!settleFrozen)
             {
-                wantUnlock = true; // 在下一帧 PredictAt 提交 (拿 inner(now) 做接缝)
-                return;
+                double decay = Math.Pow(0.5, obsDt / evidenceHalfLifeSeconds);
+                double accScale = obsDt / refObsIntervalSeconds;
+                evidencePos = decay * evidencePos + accScale * score * Math.Max(0.0, dPos - dbPos);
+                evidenceRot = decay * evidenceRot + accScale * score * Math.Max(0.0, dRot - dbRot);
+
+                if (evidencePos > unlockEvidencePos || evidenceRot > unlockEvidenceRot)
+                {
+                    wantUnlock = true; // 在下一帧 PredictAt 提交 (拿 inner(now) 做接缝)
+                    return;
+                }
+            }
+            else
+            {
+                // 沉降冻结期: CUSUM 证据清零, 头停后从干净状态重新累积 (slip 期间攒的假证据不该带过窗口)。
+                evidencePos = 0.0;
+                evidenceRot = 0.0;
             }
 
             // 漏锁 creep: 仅当位移在死区内 (纯噪声/极慢漂移) 才朝观测缓慢靠拢,
