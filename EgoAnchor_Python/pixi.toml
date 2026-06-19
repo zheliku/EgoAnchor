@@ -88,12 +88,19 @@ protobuf = ">=7.34.1, <8"
 triton-windows = ">=3.6.0.post26, <4"
 
 [target.win-64.dependencies]
-c-compiler = ">=1.11,<2"
-cxx-compiler = ">=1.11,<2"
+gcc_win-64 = ">=15.2.0,<16"
+gxx_win-64 = ">=15.2.0,<16"
 
 [target.linux-64.dependencies]
 gcc_linux-64 = "11.*"
 gxx_linux-64 = "11.*"
+
+[target.win-64.tasks]
+_build-fp = { cmd = """
+cmake -E rm -rf FoundationPose/mycpp/build &&
+cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build --fresh -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc.exe -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++.exe &&
+cmake --build FoundationPose/mycpp/build --parallel
+""" }
 
 [tasks]
 # 编译 FoundationPose 的 C++ 扩展

@@ -19,7 +19,7 @@ sys.path.append(str(CODE_DIR.parent))
 from core.foundation_stereo import (
     TrtFeatureRunner,
     TrtPostRunner,
-    build_gwc_volume_triton,
+    build_gwc_volume_optimized_pytorch1,
 )
 
 
@@ -209,7 +209,7 @@ def main() -> None:
         stem_2x,
     ) = feature_runner(left_img, right_img)
 
-    gwc_volume = build_gwc_volume_triton(
+    gwc_volume = build_gwc_volume_optimized_pytorch1(
         features_left_04.half(),
         features_right_04.half(),
         int(args.max_disp) // 4,

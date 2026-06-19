@@ -179,7 +179,7 @@ Unity 代码地图：
 - `obsConsensus` 是死区无关的低增益 EMA，用来平滑单帧噪声/head-slip，同时跟随真实持续位移。
 - 头动容忍系数 `headToleranceFactor=1+ratio*(headMaxToleranceFactor-1)`，同比放大死区、租绳和速度逃逸阈值。
 - creep 增益乘 `(1 - headMotionRatio)`。头动时不能让系统性 head-slip 偏置被 creep 写进锁点。
-- `headSettleSeconds` 在头动期间和头停后冻结“判物体在动”的证据，并清零速度逃逸/CUSUM/租绳累积。它修的是“头扫静止物体，头一停就脱离 static”的时序竞速。
+- `headSettleSeconds` **只在头已停下、但沉降计时未走完的窗口内**冻结“判物体在动”的证据（速度逃逸/CUSUM/租绳，并清零三者累积）。它修的是“头扫静止物体、头一停就脱离 static”的时序竞速（头停瞬间 `headToleranceFactor` 塌回但 slip 还残留在 `obsConsensus`/速度里）。**头动期间绝不冻结**——那会把头动中物体的大幅真动也锁死；头动时只靠 `headToleranceFactor` 抬高阈值吸收 slip（slip 小幅、真动大幅，靠阈值区分）。计时在 `OnObservation` 维护：`headMotionRatio>0.06` 重置满、否则按 obsDt 递减；冻结判据是 `headMotionRatio<=0.06 && 计时>0`。
 - 距离自适应只放大位置通道，不放大旋转通道。远距离立体深度噪声更大，但旋转噪声不按距离同样变化。
 - 低分释放不受 head settle 冻结影响。它表示锁点可靠性差，应该强制释放并交给低分 reacquire 链路。
 

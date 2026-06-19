@@ -458,14 +458,17 @@ namespace EgoAnchor.Tools3.Predictors
                 lowScoreRunSeconds = 0.0;
             }
 
-            // 头停沉降冻结 (问题3 续, 真机报告"头扫静止物体后头一停 static 就脱开"): 头动期间 + 头停后
-            // headSettleSeconds 内, 冻结所有"判物体在动→解锁"的证据 (速度逃逸/漂移租绳/CUSUM)。原因: 头动时
-            // head-slip 累进 obsConsensus、抬高观测速度; 头一停 headToleranceFactor 由头速驱动几乎瞬间塌回 1
-            // (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去 → 出现"阈值已收紧、
-            // slip 未褪净"的窗口 → 这三路误触发解锁。冻结期清零三路证据 (头停后从零重判), 给 obsConsensus 时间
-            // 褪 slip 再恢复监测。低分释放不冻结 (上面, 独立可靠性信号); creep 也不冻结 (它已被 (1-headMotionRatio)
-            // 门控, 头动时≈0, 且 creep 只精修不解锁)。settleSeconds 取 ~2~3× evidenceHalfLifeSeconds 保证 slip 充分衰减。
-            bool settleFrozen = headSettleLeftSeconds > 0.0;
+            // 头停沉降冻结 (问题3 续, 真机报告"头扫静止物体后头一停 static 就脱开"): 仅在头*已停下*但沉降计时
+            // 未走完的窗口内, 冻结"判物体在动→解锁"的证据 (速度逃逸/漂移租绳/CUSUM)。原因: 头停瞬间 headToleranceFactor
+            // 由头速驱动几乎瞬间塌回 1 (阈值收紧), 但 head-slip 还残留在 obsConsensus / 观测速度里 (要按
+            // evidenceHalfLifeSeconds 才褪去) → "阈值已收紧、slip 未褪净"的窗口 → 三路误解锁。冻结期清零三路证据,
+            // 给 obsConsensus 时间褪 slip 再恢复监测。
+            // 关键: *只冻头停窗口, 不冻头动期间*。头动期间物体可能大幅真动 (要它能解锁), 此时靠 headToleranceFactor
+            // 抬高阈值吸收 slip 即可——slip 小幅 (~阈值量级)、真动大幅, 抬高的阈值能区分。若头动期间也冻结, 物体大幅真动
+            // 会被锁死 (彻底不响应), 与"只增大释放阈值"的设计意图相悖。故 headMotionRatio>eps (头在动) 时不冻。
+            // 低分释放不冻结 (独立可靠性信号); creep 也不冻结 (已被 (1-headMotionRatio) 门控)。
+            bool headStill = headMotionRatio <= HeadMovingRatioEps;
+            bool settleFrozen = headStill && headSettleLeftSeconds > 0.0;
 
             // 速度逃逸: 观测速度明确超过静止阈值 × 倍数, 连续一段 *时间* → 立即解锁。
             // 这堵住了"慢速真实运动被 creep 跟住、CUSUM 永不越阈"的 false-lock 长尾

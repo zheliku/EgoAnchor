@@ -29,7 +29,9 @@
 #include <string>
 #include <limits.h>
 #ifdef _WIN32
-    #define NOMINMAX // 添加这一行
+#ifndef NOMINMAX
+    #define NOMINMAX
+#endif
     #include <windows.h> // 包含 Windows 特定的头文件
 #else
     #include <unistd.h>  // 包含 POSIX 特定的头文件
