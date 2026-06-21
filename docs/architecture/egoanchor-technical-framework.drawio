@@ -1,0 +1,296 @@
+<mxfile host="app.diagrams.net" modified="2026-06-22T00:00:00.000Z" agent="Claude" version="24.7.17" type="device">
+  <diagram id="egoanchor-technical-framework" name="EgoAnchor Technical Framework">
+    <mxGraphModel dx="1720" dy="1290" grid="1" gridSize="8" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1720" pageHeight="1290" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="EgoAnchor: Frame-Aligned Real-Object Anchoring in Passthrough Mixed Reality" style="text;html=1;strokeColor=none;fillColor=none;fontFamily=Times New Roman;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="18" width="1640" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="callout" value="Key idea &#8212; the external compute node emits camera-space object pose only (vision-only object chain). The headset reconstructs the world anchor by an exact frame_id lookup of the capture-time reference camera pose." style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=13;fillColor=#FFF8DB;strokeColor=#8A6D1D;strokeWidth=1.5;align=center;" vertex="1" parent="1">
+          <mxGeometry x="360" y="62" width="1000" height="44" as="geometry" />
+        </mxCell>
+
+        <mxCell id="band_capture" value="Quest 3 HMD  /  Unity Capture" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=15;fontStyle=1;verticalAlign=top;align=center;spacingTop=8;fillColor=#EAF1F8;strokeColor=#2F5D80;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="300" height="780" as="geometry" />
+        </mxCell>
+        <mxCell id="band_python" value="External Visual Compute  /  Python   (vision-only object pose)" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=15;fontStyle=1;verticalAlign=top;align=center;spacingTop=8;fillColor=#EAF3EC;strokeColor=#3F6B4D;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="360" y="150" width="560" height="780" as="geometry" />
+        </mxCell>
+        <mxCell id="band_unity" value="Unity Anchor Runtime" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=15;fontStyle=1;verticalAlign=top;align=center;spacingTop=8;fillColor=#FBF1E2;strokeColor=#936B2D;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="950" y="150" width="730" height="780" as="geometry" />
+        </mxCell>
+        <mxCell id="band_support" value="Protocol  &amp;  Evaluation" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=15;fontStyle=1;verticalAlign=top;align=center;spacingTop=8;fillColor=#F2F2F2;strokeColor=#666666;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="960" width="1640" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="grp_pipeline" value="QuestPosePipeline   (camera-space 6DoF, vision-only)" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=12;fontStyle=1;verticalAlign=top;align=center;spacingTop=4;fillColor=#F3F8F4;strokeColor=#3F6B4D;strokeWidth=1;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="334" width="520" height="252" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_reliab" value="RenderQuality + PoseScore   (reliability)" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=12;fontStyle=1;verticalAlign=top;align=center;spacingTop=4;fillColor=#F3F8F4;strokeColor=#3F6B4D;strokeWidth=1;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="602" width="520" height="214" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_policy" value="AnchorPolicyHost    (MotionModel  &#215;  SmoothingStrategy)" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=12;fontStyle=1;verticalAlign=top;align=center;spacingTop=4;fillColor=#FDF6EA;strokeColor=#936B2D;strokeWidth=1;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="960" y="418" width="710" height="244" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_static" value="StaticLockController &#8212; EgoAnchor stabilizer   (score-gated regime switch)" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=12;fontStyle=1;verticalAlign=top;align=center;spacingTop=4;fillColor=#FBEFD9;strokeColor=#936B2D;strokeWidth=1.5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="960" y="678" width="710" height="184" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cap_stereo" value="&lt;b&gt;StereoFrameSource&lt;/b&gt;&lt;br&gt;L / R passthrough textures&lt;br&gt;capture-time L/R/C camera pose" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#2F5D80;" vertex="1" parent="1">
+          <mxGeometry x="60" y="200" width="260" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="cap_info" value="&lt;b&gt;CameraInfoSource&lt;/b&gt;&lt;br&gt;intrinsics + lens pose" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#2F5D80;" vertex="1" parent="1">
+          <mxGeometry x="60" y="294" width="260" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cap_hist" value="&lt;b&gt;FramePoseHistory&lt;/b&gt;&lt;br&gt;frame_id &#8594; capture-time&lt;br&gt;L/R/C camera world pose (ring)" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=14;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#2F5D80;" vertex="1" parent="1">
+          <mxGeometry x="60" y="372" width="260" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="cap_pub" value="&lt;b&gt;QuestStreamPublisher&lt;/b&gt;&lt;br&gt;ZMQ PUB &#183; latest-only" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;size=16;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#2F5D80;" vertex="1" parent="1">
+          <mxGeometry x="60" y="476" width="260" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cap_note" value="Reference camera world pose comes from HMD tracking; only the object-pose chain is vision-only." style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=10;fontStyle=2;fillColor=#F7F7F2;strokeColor=#B0B0A0;" vertex="1" parent="1">
+          <mxGeometry x="60" y="552" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="py_recv" value="&lt;b&gt;QuestStreamReceiver&lt;/b&gt;&lt;br&gt;ZMQ latest-drain &#183; protobuf decode &#183; frame_id / session dedup" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;size=14;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="380" y="200" width="520" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="py_calib" value="&lt;b&gt;QuestCalibration&lt;/b&gt;&#160;&#160;camera_info &#8594; processing-resolution K (center-crop / scale)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="380" y="272" width="520" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="py_seg" value="&#9312;  Segmentation &#8212; YOLOE-26 (default)  |  SAM3 (async init, text prompt)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="372" width="488" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_depth" value="&#9313;  Stereo Depth &#8212; Fast-FoundationStereo (FFS)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="416" width="488" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_reg" value="&#9314;  Pose Register &#8212; FoundationPose (CAD model &#8594; 6DoF)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="462" width="488" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_track" value="&#9315;  Pose Track + Cutie mask propagation" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="508" width="488" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_obs" value="&#8594; PoseObservation : camera-space 4&#215;4 pose &#183; phase &#183; frame_id" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=10;fontStyle=2;fillColor=#F7F7F2;strokeColor=#B0B0A0;" vertex="1" parent="1">
+          <mxGeometry x="396" y="552" width="488" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="py_reproj" value="Color reprojection&lt;br&gt;(LAB, intersection region)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="640" width="244" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="py_depthal" value="Depth alignment&lt;br&gt;(render depth vs FFS)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="648" y="640" width="236" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="py_maskmod" value="Mask-area modulation" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="396" y="690" width="244" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_conf" value="Confidence ramp&lt;br&gt;(warmup &#8776; 10 frames)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="648" y="690" width="236" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="py_formula" value="&lt;b&gt;Reliability = Gate &#215; Quality &#215; Confidence&lt;/b&gt;&lt;br&gt;Gate = phase &#183; reject&lt;br&gt;Quality = geomean(reproj, depth ; w 0.5 / 0.5) &#183; mask&lt;br&gt;color = &#8722;1 no-signal &#183; depth = 0.5 neutral &#183; depth-valid &#8805; 0.10" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FBF6E3;strokeColor=#8A6D1D;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="396" y="736" width="488" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="py_runtime" value="&lt;b&gt;TrackingRuntime&lt;/b&gt;&lt;br&gt;owns pipeline / GPU &#183; publishes PoseResult / status / heartbeat &#183; serial command pump" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#3F6B4D;" vertex="1" parent="1">
+          <mxGeometry x="380" y="828" width="520" height="64" as="geometry" />
+        </mxCell>
+
+        <mxCell id="u_nats" value="&lt;b&gt;NatsControlClient + PoseResultReceiver&lt;/b&gt;&lt;br&gt;latest pose queue &#183; status event stream &#183; heartbeat (main-thread drain)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;size=14;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="970" y="200" width="690" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="u_hub" value="&lt;b&gt;AnchorRuntimeHub&lt;/b&gt;&lt;br&gt;multi-runtime fan-out &#183; low-score reacquire fan-in" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="970" y="270" width="690" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="u_align" value="&lt;b&gt;CameraPoseFrameAligner&lt;/b&gt;&lt;br&gt;OpenCV camera pose  &#8853;  FramePoseHistory(frame_id)  &#8594;  Unity world pose" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="970" y="338" width="690" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u_models" value="&lt;b&gt;Motion Models&lt;/b&gt;&lt;br&gt;ConstantVelocity&lt;br&gt;Kalman&lt;br&gt;OneEuro" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="972" y="456" width="212" height="134" as="geometry" />
+        </mxCell>
+        <mxCell id="u_strat" value="&lt;b&gt;Smoothing Strategies&lt;/b&gt;&lt;br&gt;RawPassthrough&lt;br&gt;Blend (residual decay)&lt;br&gt;DelayedInterp&lt;br&gt;(Hermite, tangent-chord clamp)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="1196" y="456" width="232" height="134" as="geometry" />
+        </mxCell>
+        <mxCell id="u_gate" value="&lt;b&gt;Score gate&lt;/b&gt; (optional)&lt;br&gt;min score &#183; jump reject" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="1440" y="456" width="218" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_fsm" value="&lt;b&gt;Lifecycle FSM&lt;/b&gt;&lt;br&gt;Searching &#8594; Tracking &#8594;&lt;br&gt;Coasting &#8594; FrozenUncertain &#8594;&lt;br&gt;Lost &#8594; Relocalizing" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="1440" y="524" width="218" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="u_enter" value="&lt;b&gt;Enter lock&lt;/b&gt; &#8212; low speed / ang-speed, dwell time, score &#8805; min" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="972" y="716" width="330" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="u_locked" value="&lt;b&gt;Locked output&lt;/b&gt; &#8212; lockedPose (+ head-gated creep)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="1328" y="716" width="330" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="u_unlock" value="&lt;b&gt;Unlock evidence&lt;/b&gt; &#8212; speed escape &#8741; drift leash &#8741; CUSUM" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="972" y="766" width="330" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="u_head" value="&lt;b&gt;Head-aware&lt;/b&gt; &#8212; tolerance factor &#183; settle freeze" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="1328" y="766" width="330" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="u_seam" value="Low-score release  &#183;  seam-residual decay back to candidate on unlock" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fontStyle=2;fillColor=#FCF7EE;strokeColor=#B79B6B;" vertex="1" parent="1">
+          <mxGeometry x="972" y="816" width="686" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="u_pose2anchor" value="&lt;b&gt;PoseToAnchorRuntime&lt;/b&gt;&lt;br&gt;LateUpdate(&#8722;50)" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#936B2D;" vertex="1" parent="1">
+          <mxGeometry x="970" y="878" width="338" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="u_output" value="&lt;b&gt;DynamicObjectAnchor&lt;/b&gt; &#8212; applies world Transform" style="rounded=1;whiteSpace=wrap;html=1;arcSize=40;fontFamily=Times New Roman;fontSize=11;fillColor=#F3E6CC;strokeColor=#936B2D;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="1322" y="878" width="338" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sp_protocol" value="&lt;b&gt;EgoAnchor_Protocol&lt;/b&gt;&lt;br&gt;proto + subjects.v1.json&lt;br&gt;single source &#8594; Python *_pb2.py&lt;br&gt;+ Unity *.cs + SubjectNames" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="70" y="1006" width="360" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="sp_evalrec" value="&lt;b&gt;AnchorEvalRecorder&lt;/b&gt;&lt;br&gt;capture JSONL (frame poses, aligned_raw)&lt;br&gt;render JSONL (output_pos/rot, model, strategy, gate)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1006" width="330" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="sp_tools3" value="&lt;b&gt;EgoAnchor_Tools3&lt;/b&gt; &#8212; offline latency-aware 60 fps simulator&lt;br&gt;Predictors: RawZoh &#183; Kalman &#183; OneEuro &#183; DeadReckoningSpline &#183;&lt;br&gt;DelayedInterp &#183; ResidualBlending &#183; EgoAnchorStabilizer" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Times New Roman;fontSize=11;fillColor=#FFFFFF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="840" y="1006" width="430" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="sp_metrics" value="&lt;b&gt;eval/ metrics&lt;/b&gt;&lt;br&gt;world-space anchor error &#183; jitter / slip&lt;br&gt;lag &#183; latency &#183; recovery success / time" style="rounded=1;whiteSpace=wrap;html=1;arcSize=30;fontFamily=Times New Roman;fontSize=11;fillColor=#E9E9E9;strokeColor=#666666;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="1006" width="340" height="132" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt;&#160;&#160;&#8212;&#160;&#160;solid (dark): runtime data / control flow&#160;&#160;&#183;&#160;&#160;dashed (blue): ZMQ data plane&#160;&#160;&#183;&#160;&#160;dashed (green): NATS message plane&#160;&#160;&#183;&#160;&#160;dash-dot (amber): NATS command plane&#160;&#160;&#183;&#160;&#160;dotted (gray): protocol / evaluation dependency&#160;&#160;&#183;&#160;&#160;thick (orange): frame_id &#8594; world-anchor lookup (core idea)" style="text;html=1;strokeColor=#999999;fillColor=#FBFBFB;fontFamily=Times New Roman;fontSize=11;align=center;verticalAlign=middle;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1200" width="1640" height="44" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_stereo_hist" value="record" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="cap_stereo" target="cap_hist">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_stereo_pub" value="QuestStereoFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.2;endArrow=block;endFill=1;" edge="1" parent="1" source="cap_stereo" target="cap_pub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="332" y="237" />
+              <mxPoint x="332" y="504" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_info_pub" value="QuestCameraInfo" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.2;endArrow=block;endFill=1;" edge="1" parent="1" source="cap_info" target="cap_pub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="50" y="322" />
+              <mxPoint x="50" y="504" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_data_plane" value="ZMQ data plane  &#183;  QuestStereoFrame / QuestCameraInfo  &#183;  latest-only" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=11;strokeColor=#2F5D80;strokeWidth=2.5;dashed=1;endArrow=block;endFill=1;" edge="1" parent="1" source="cap_pub" target="py_recv">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="346" y="504" />
+              <mxPoint x="346" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_recv_calib" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="py_recv" target="py_calib">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_calib_pipe" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="py_calib" target="grp_pipeline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pipe_reliab" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="grp_pipeline" target="grp_reliab">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_reliab_runtime" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="grp_reliab" target="py_runtime">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_message_plane" value="NATS message plane  &#183;  PoseResult / AnchorStatusEvent / ServerHeartbeat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=11;strokeColor=#3F6B4D;strokeWidth=2.5;dashed=1;endArrow=block;endFill=1;" edge="1" parent="1" source="py_runtime" target="u_nats">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="935" y="860" />
+              <mxPoint x="935" y="229" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_command_plane" value="NATS command plane  &#183;  reset / reacquire / control  &#183;  request_id idempotent ack" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=11;strokeColor=#936B2D;strokeWidth=2;dashed=1;dashPattern=6 4;endArrow=block;endFill=1;" edge="1" parent="1" source="u_hub" target="py_runtime">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="944" y="298" />
+              <mxPoint x="944" y="868" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_nats_hub" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="u_nats" target="u_hub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_hub_align" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="u_hub" target="u_align">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_align_policy" value="world pose observation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="u_align" target="grp_policy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_policy_static" value="EgoAnchor layer (optional)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#936B2D;strokeWidth=1.5;dashed=1;endArrow=block;endFill=1;" edge="1" parent="1" source="grp_policy" target="grp_static">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_static_pose" value="per-render output" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="grp_static" target="u_pose2anchor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pose_output" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="u_pose2anchor" target="u_output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_hero" value="exact frame_id lookup  &#8594;  world anchor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=12;fontStyle=1;fontColor=#C0561F;strokeColor=#C0561F;strokeWidth=2.5;endArrow=block;endFill=1;" edge="1" parent="1" source="cap_hist" target="u_align">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="354" y="414" />
+              <mxPoint x="354" y="128" />
+              <mxPoint x="926" y="128" />
+              <mxPoint x="926" y="371" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_proto_pub" value="subjects + stubs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#888888;strokeWidth=1;dashed=1;dashPattern=1 4;endArrow=open;endFill=0;" edge="1" parent="1" source="sp_protocol" target="cap_pub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="24" y="1072" />
+              <mxPoint x="24" y="504" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_proto_runtime" value="proto" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#888888;strokeWidth=1;dashed=1;dashPattern=1 4;endArrow=open;endFill=0;" edge="1" parent="1" source="sp_protocol" target="py_runtime">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="440" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_proto_nats" value="generated C#" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#888888;strokeWidth=1;dashed=1;dashPattern=1 4;endArrow=open;endFill=0;" edge="1" parent="1" source="sp_protocol" target="u_nats">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="1170" />
+              <mxPoint x="1700" y="1170" />
+              <mxPoint x="1700" y="229" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_runtime_evalrec" value="capture + render JSONL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#888888;strokeWidth=1;dashed=1;dashPattern=1 4;endArrow=open;endFill=0;" edge="1" parent="1" source="u_pose2anchor" target="sp_evalrec">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1139" y="945" />
+              <mxPoint x="635" y="945" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_evalrec_tools3" value="primary aligned_raw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="sp_evalrec" target="sp_tools3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_runtime_tools3" value="python_runtime scores" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontFamily=Times New Roman;fontSize=10;strokeColor=#888888;strokeWidth=1;dashed=1;dashPattern=1 4;endArrow=open;endFill=0;" edge="1" parent="1" source="py_runtime" target="sp_tools3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="975" />
+              <mxPoint x="1010" y="975" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tools3_metrics" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F2937;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="sp_tools3" target="sp_metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

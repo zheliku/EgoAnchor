@@ -1,0 +1,213 @@
+\documentclass[review]{vgtc}
+
+\graphicspath{{figures/}{pictures/}{images/}{./}}
+
+\usepackage[UTF8]{ctex}
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{mathptmx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\onlineid{0}
+\vgtccategory{Research}
+\vgtcinsertpkg
+
+\title{EgoAnchor：面向透视混合现实的帧对齐真实物体锚定与可靠性门控时序控制}
+
+\author{作者待定}
+
+\teaser{
+  \centering
+  \fbox{\rule{0pt}{2.0in}\rule{0.95\linewidth}{0pt}}
+  \caption{EgoAnchor 系统运行总览。Quest 3 头显捕获双目透视图像流并记录图像采集时刻相机位姿（携带 \texttt{frame\_id}）；外部追踪服务器异步解算 6DoF 物体位姿并计算可靠性评分；Unity 接收端通过 \texttt{frame\_id} 回查采集时刻相机位姿以完成空间几何配准（帧对齐），最后由可靠性门控时序运行时输出稳定、世界一致、无打滑的虚拟物体重叠锚定效果。}
+  \label{fig:teaser}
+}
+
+\abstract{
+我们提出 EgoAnchor，一套面向透视混合现实（Passthrough Mixed Reality）的开放、硬件通用的真实物体锚定系统。在混合现实应用中，虚拟信息与物理实体的对齐精度和交互稳定性是保证沉浸感与可用性 Ox 的核心。然而，计算机视觉领域传统的 6DoF 相机空间位姿估计并不等同于应用层可直接使用的世界空间稳定锚点。在实际场景中，头显的持续运动、外部感知模型的异步计算延迟、通信时延以及间歇性追踪失效，极易导致锚点在世界坐标系中产生抖动、跳变和头动打滑。EgoAnchor 围绕上述挑战构建了一条“采集-异步追踪-时序平滑-状态恢复”的闭环运行时系统。系统的核心机制为帧对齐锚定（Frame-Aligned Anchoring），通过将每个异步解算出的相机坐标系位姿与对应观测帧采集时刻的 HMD 历史位姿进行空间几何配准，彻底解耦感知延迟与头部运动。在时序控制层，我们引入了可靠性门控时序运行时，结合颜色重投影误差与渲染深度一致性等多维可靠性门控，限制异常观测，并利用速度自适应的 One Euro 滤波器进行时序平滑；在物体静止状态下，通过静止锁定机制（Static Lock）完全吸收微小抖动，并在追踪丢失时进行有界前推预测与快速重获取。我们在 Quest 3 混合现实头显上实现并验证了该系统。实验表明，EgoAnchor 能有效消除由头动和延迟引起的锚点打滑现象，并在遮挡、出视野以及感知噪声环境下表现出优异的稳定性和恢复能力。}
+
+\keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 帧对齐, 异步感知, 锚定运行时}
+
+\begin{document}
+
+\maketitle
+
+\section{引言}
+
+在透视式混合现实（Passthrough Mixed Reality, PMR）中，诸如虚拟标签附着、物理对象高亮指导、近物交互辅助等核心交互，都依赖于虚拟图层对真实物理世界的精确贴合与稳定锚定。对于混合现实应用而言，它们真正消费的并不是计算机视觉（CV）算法输出的、仅针对单帧图像解算的相机坐标系 6DoF 位姿矩阵，而是一个能够在用户头部持续运动、追踪模型异步计算时延、通信抖动以及物理遮挡发生时，依然维持世界一致性（World Consistency）与视觉稳定性（Visual Stability）的真实物体锚点（Real-Object Anchor）。
+
+现有 XR 平台（如 Meta Horizon OS、Apple visionOS）已经提供了一系列平台级的空间锚定或有限类别的对象追踪能力，但它们大多依赖于场景中布满特征点的静态环境、预制图像标记或高度定制化的专有硬件，难以灵活、通用地覆盖日常生活中任意无标记的刚体实体。相反，计算机视觉领域在 model-based/markerless 6DoF 物体姿态估计和跟踪技术上取得了长足进步，其能够在仅输入三维几何模型和双目视频流的条件下输出高精度的相机空间位姿观测。然而，现有 CV 位姿估计框架的评价体系仍局限于相机坐标系下的逐帧度量（如 ADD-S 精度），忽视了将这些低频、含噪、带延迟的观测结果应用到头戴端世界坐标系时的关键系统性鸿沟。
+
+我们深入剖析这一鸿沟，将其归纳为 \textbf{pose-to-anchor（位姿至锚点）} 的系统变换问题。在 Passthrough MR 系统中，感知（图像采集）、计算（神经网络 6DoF 估计）和应用（Unity 渲染）分布在不同的物理与软件节点中。由于复杂的神经网络计算往往需要几十至上百毫秒的推理时间，这使得位姿追踪在时间上是异步且低频的（如 5--12 fps），而头显的渲染和显示更新必须维持在极高的帧率（如 90--120 fps）以避免眩晕。如果在收到外部追踪包时，直接将相机坐标系的物体位姿与**到达时刻**的最新头显位姿相乘来进行世界空间映射，头部的任何微小运动都将与推理延迟相耦合，在视觉上表现为虚拟物体在真实实体上严重“打滑”（Head-Motion-Induced Slip）。这种空间不一致性不仅破坏了混合现实的融合感，也使得任何精细的交互变得不可行。
+
+为了解决这一问题，我们设计并实现了 **EgoAnchor**，一套面向透视混合现实的帧对齐真实物体锚定系统。EgoAnchor 在 Quest/Unity 头显前端与外部追踪计算后端之间建立了低延迟、高抗噪的异步协作机制。系统的首要核心贡献在于 \textbf{帧对齐锚定（Frame-Aligned Anchoring）} 空间映射机制。我们在发送透视双目帧时，为图像和采集时刻的相机世界位姿绑定唯一的 \texttt{frame\_id}。当外部追踪服务返回 6DoF 位姿观测时，Unity 端并不使用当前最新的 HMD 坐标，而是回查历史环形缓存，检索对应 \texttt{frame\_id} 采集时刻的 HMD 历史位姿进行刚体坐标合成。这一朴素而严谨的时间对齐设计，从根本上解耦了视觉感知算力限制与用户的头部运动，保证了空间的世界一致性。
+
+在帧对齐之上，EgoAnchor 进一步构建了 \textbf{可靠性门控时序控制运行时（Reliability-Gated Temporal Anchor Runtime）}。由于外部视觉追踪流在遭遇运动模糊、光照变化或局部遮挡时，难以避免地会输出噪声、甚至发生位姿跃变（Pose Jump），直接将未经处理的位姿应用 to 虚拟内容上会产生极不稳定的视觉抖动。EgoAnchor 运行时不依赖复杂的不可预测的时序滤波器，而是通过协同设计多维度的可靠性评分（结合重投影颜色误差、掩膜内深度有效比例及残差等）来充当门控，过滤和拦截低质量观测。可信观测将进入速度自适应的 One Euro 滤波器进行时序平滑；而在判定目标物体处于静止状态的窗口内，系统启动静止锁定（Static Lock）控制器，通过死区 CUSUM 残差监测和绝对漂移租绳限制锁定输出，完全消除视觉抖动。当遭遇强遮挡导致位姿中断时，系统借助有界前推预测算法外推位姿，并根据可靠性缺失状态自动触发低分 reacquire（重新获取）生命周期指令，向后端发出重注册请求，实现快速复位与自愈。
+
+本文的贡献总结如下：
+\begin{enumerate}
+  \item 我们阐明了混合现实中 \textbf{pose-to-anchor 问题的系统本质}，论证了为什么纯单帧 camera-space pose 精度无法等同于世界一致的 MR real-object anchor。
+  \item 提出并实现了 \textbf{Frame-Aligned 空间映射机制}，以 \texttt{frame\_id} 为桥梁回查采集时刻 HMD 位姿，彻底解耦了感知计算延迟与头显运动，消除了头动导致的锚点打滑。
+  \item 设计了 \textbf{可靠性门控时序锚定运行时}，包含多维质量门控、One Euro 速度自适应滤波、静止锁定控制器（Static Lock）与故障重定位指令，在低延迟的前提下大幅降低了抖动和跳变。
+  \item 建立了一套 \textbf{以锚点为中心（Anchor-Centric）的评估协议}。我们不以传统的 CV 位姿误差为主线，而是从世界锚定误差、头动打滑、静态抖动、时延以及遮挡恢复时间等维度对系统进行定量消融实验，并在 Quest 3 上设计了用户可用性任务实验。
+\end{enumerate}
+
+\section{相关工作}
+
+\subsection{平台级对象锚定与真实物体注册}
+\begin{itemize}
+  \item 回顾现有的 spatial/world anchors（空间/世界锚点）以及 image tracking（图像跟踪）等工业界平台能力。
+  \item 梳理现有的 Meta Dynamic Object Tracker、Apple visionOS Object Tracking、Vuforia Model Targets 和 Azure Object Anchors，指出其闭源特性、特定设备依赖，以及在处理外部异步大模型追踪流时缺乏通用且鲁棒的时序平滑运行时支持。
+\end{itemize}
+
+\subsection{6DoF 物体姿态估计与跟踪}
+\begin{itemize}
+  \item 综述计算机视觉领域基于 RGB/RGB-D、CAD 模型的 6DoF 姿态估计与追踪方法（重点提及 FoundationPose、Cutie 等先进的 markerless 追踪网络）。
+  \item 强调该领域主流评价以单帧相机坐标系精度为中心，不解决位姿流直接接入 MR 时遭遇的头动延迟解耦、抖动吸收及生命周期维持问题。
+\nobreak
+\end{itemize}
+
+\subsection{XR 中的时延、配准与稳定性}
+\begin{itemize}
+  \item 回顾 AR/MR 交互领域中关于 Motion-to-Photon 时延补偿、异步时间扭曲（ATW）、Late Latching 等硬件/底层优化技术。
+  \item 指出当前学术界对于“外部低频异步 6DoF 感知流”接入 MR 渲染系统时发生的时空错位，缺乏系统性的“Late Latching”层级应用层解决方案。
+\end{itemize}
+
+\section{问题定义与系统概览}
+
+\subsection{Pose-to-Anchor 问题定义}
+定义在异步感知框架下，输入输出的时空转换语义：
+\begin{itemize}
+  \item 设图像采集时刻为 $t_i$，外部追踪包返回时刻为 $t_r$，当前渲染时刻为 $t_{\text{render}}$。
+  \item 外部感知计算提供的相机空间观测表示为 ${}^{C}\mathbf{T}_{O}(t_i)$。
+  \item 采集时刻 $t_i$ 通过头显定位获得的相机相对于世界坐标系的位姿为 ${}^{W}\mathbf{T}_{C}(t_i)$。
+  \item 帧对齐（Frame-Aligned）世界映射计算公式为：
+  \[
+  {}^{W}\mathbf{T}_{O}(t_i) = {}^{W}\mathbf{T}_{C}(t_i) \cdot {}^{C}\mathbf{T}_{O}(t_i)
+  \]
+  而传统的到达时刻映射（Arrival-time mapping）产生的错位公式可表达为：
+  \[
+  {}^{W}\hat{\mathbf{T}}_{O} = {}^{W}\mathbf{T}_{C}(t_r) \cdot {}^{C}\mathbf{T}_{O}(t_i)
+  \]
+  其中 ${}^{W}\mathbf{T}_{C}(t_r)$ 与 ${}^{W}\mathbf{T}_{C}(t_i)$ 的差异即为头动滑移（Slip）的根源。
+\end{itemize}
+
+\subsection{系统架构}
+详细描述 EgoAnchor 的端到端协同架构（Quest/Unity 采集端 - ZMQ 数据传输面 - Python 追踪服务器 - NATS 消息/命令传输面 - Unity 滤波控制与应用层）。
+
+\subsection{设计目标}
+阐述系统所追求的四个核心目标：世界一致性（World Consistency）、输出稳定性（Stability）、快速恢复力（Recoverability）以及可诊断性（Diagnosability）。
+
+\section{EgoAnchor 方法}
+
+\subsection{对象级异步感知管线}
+\begin{itemize}
+  \item 介绍 Quest 前端的双目 Passthrough 图流与内参映射。
+  \item 描述 Python 追踪端的 YOLOE-26/SAM3 目标级分割、FFS 深度解算以及 FoundationPose 6DoF 姿态解算，最终生成 ${}^{C}\mathbf{T}_{O}(t_i)$ 与质量评分。
+\end{itemize}
+
+\subsection{帧对齐世界空间配准}
+\begin{itemize}
+  \item 详细推导基于 \texttt{frame\_id} 的 HMD 历史相机位姿回查机制。
+  \item 讨论不同相机参考坐标系（左目、右目、中心）的空间对齐与翻转补偿数学表示。
+\nobreak
+\end{itemize}
+
+\subsection{可靠性门控时序锚定运行时}
+\begin{itemize}
+  \item \textbf{多维质量门控：} 结合颜色重投影评分（LAB 空间）与渲染深度重投影有效性判定观测质量，几何对数平均：
+  \[
+  S_t = \exp \left( w_c \ln(score_{reproj}) + w_d \ln(score_{depth}) \right)
+  \]
+  \item \textbf{One Euro 速度自适应滤波：} 说明对平移向量和四元数对数空间旋转进行 One Euro 滤波的过程。
+  \item \textbf{静止锁定控制器（Static Lock）：}
+    \begin{itemize}
+      \item 进入条件：观测相对运动速度低于阈值且持续时间达到 $headSettleSeconds$；
+      \item 锁定状态：锁定绝对世界位置 $lockedPose$；
+      \item 解锁逻辑：利用 dead-zone 偏差、累计 CUSUM 残差与漂移绳索绝对距离综合判定物体运动状态；
+      \item 接缝消除：解锁后利用 seam residual 随时间平滑衰减，平滑过渡回滤波位姿。
+    \end{itemize}
+\end{itemize}
+
+\subsection{命令与恢复生命周期}
+描述 Searching、Tracking、Coasting、Lost 之间的状态机转移关系，当连续多帧可靠性判定低于门槛时置 WantsServerReacquire，并在 Unity 侧触发 NATS 命令面发送重定位指令。
+
+\section{实现}
+
+\subsection{硬件与软件环境}
+给出系统复现的具体设备细节（Quest 3、消费级显卡 RT 5080 Laptop/5090 Desktop、Unity 2022.3 LTS、NATS-server 等）。
+
+\subsection{网络与通信层实现}
+说明基于 Protobuf 序列化的双通道机制：ZMQ PUB/SUB 数据平面（双目帧与相机内参发布）以及 NATS Core 消息平面（位姿/状态事件订阅、重定位 request-reply 控制）。
+
+\subsection{离线仿真与诊断支持}
+介绍 EgoAnchor 仿真工具（Tools3）支持 of 离线 JSONL 回放与参数敏度分析。
+
+\section{评估设计}
+
+\subsection{研究问题 (RQ)}
+\begin{itemize}
+  \item \textbf{RQ1：} 帧对齐映射相对于到达时刻映射是否显著降低了 HMD 快速头动下的世界锚定 slip 误差？
+  \item \textbf{RQ2：} 门控时序运行时在过滤大跳变、抑制微小抖动（Jitter）和降低滞后延迟（Lag）方面的消融效果如何？
+  \item \textbf{RQ3：} 系统在面对物理遮挡、出视野以及低频噪声输入时的自愈与恢复行为（Recovery Time）表现如何？
+  \item \textbf{RQ4：} 稳定的真实物体锚定能否显著提升用户在进行三维 Overlay 对齐与标注操作时的可用性与主观信任度？
+\nobreak
+\end{itemize}
+
+\subsection{评估 Baselines 矩阵}
+详细说明对比基线组合：
+\begin{enumerate}
+  \item Arrival-time mapping
+  \item Frame-aligned raw
+  \item Frame-aligned + low-pass
+  \item Frame-aligned + Kalman
+  \item Frame-aligned + vanilla One Euro
+  \item EgoAnchor Full (Reliability-gated One Euro + Static Lock)
+\end{enumerate}
+
+\subsection{实验条件与指标定义}
+描述静态、头动、遮挡测试条件，以及 world-space anchor error, jitter, slip, latency, recovery time 的精确数学定义。
+
+\subsection{用户实验设计 (Human Study)}
+描述 within-subject design（双条件、两任务：虚拟菜单交互/精细贴合），以及 Likert scale 主观量表设计。
+
+\section{实验结果}
+
+\subsection{空间配准与打滑消除 (RQ1)}
+汇报 Frame-aligned 机制消除 HMD 动态头动滑移（slip 误差显著下降）的数据和图表。
+
+\subsection{时序平滑与抖动抑制 (RQ2)}
+通过抖动/滞后折衷图（Jitter-Lag Tradeoff Curves）对比 Kalman、One Euro 和本方法的过滤效率与响应时间。
+
+\subsection{断连恢复与断点鲁棒性 (RQ3)}
+定量给出遮挡实验中，Coasting 和 Reacquire 生命周期在恢复成功率和恢复时延上的核心数据。
+
+\subsection{用户操作表现与可用性 (RQ4)}
+展示用户实验中完成时间、成功率，以及在 Jitter, Lag, Attachment, Trust 维度的主观 Likert 评分显著差异分析（ANOVA / Wilcoxon 检验）。
+
+\section{讨论}
+
+\subsection{Pose Accuracy 与 Anchor Quality 的本质差异}
+分析为什么仅仅关注感知端的相机空间位姿估计并不足够，论证系统级的帧对齐和鲁棒控制是通往真正可用 MR 锚点的必经之路。
+
+\subsection{适用边界与失败模式分类}
+客观讨论系统在反光表面、微小无纹理刚体、视野外物体移动、以及极端快速运动导致 GPU 计算队列积压时的失效表现。
+
+\subsection{局限性与未来工作}
+指出当前单目标刚体假设、外部算力依赖的局限，展望未来多目标共享锚定与设备端轻量化模型追踪。
+
+\section{结论}
+总结 EgoAnchor 系统的核心逻辑：将外部异步 6DoF 姿态估计流通过帧对齐和门控平滑运行时，成功转换为世界一致且高鲁棒的真实物体锚点。这为未来跨平台、开放式的 MR 物理交互系统设计提供了重要的参考规范。
+
+\nocite{*}
+\bibliographystyle{abbrv-doi-hyperref-narrow}
+\bibliography{egoanchor_cn_refs}
+
+\end{document}

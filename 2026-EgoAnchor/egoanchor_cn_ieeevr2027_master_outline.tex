@@ -1,0 +1,168 @@
+\documentclass[review]{vgtc}
+
+\graphicspath{{figures/}{pictures/}{images/}{./}}
+
+\usepackage[UTF8]{ctex}
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{mathptmx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\onlineid{0}
+\vgtccategory{Research}
+\vgtcinsertpkg
+
+\title{EgoAnchor：面向透视混合现实的帧对齐真实物体锚定}
+
+\author{作者待定}
+
+\teaser{
+  \centering
+  \fbox{\rule{0pt}{2.0in}\rule{0.95\linewidth}{0pt}}
+  \caption{teaser 占位。正式稿建议展示 Quest 侧透视双目采集、Python 外部感知链路、基于 \texttt{frame\_id} 的采集时刻相机位姿回查，以及 Unity 世界坐标中的真实物体锚定效果。}
+  \label{fig:teaser}
+}
+
+\abstract{
+我们提出 EgoAnchor，一套面向 passthrough mixed reality 的真实物体锚定系统。本文研究的问题不是如何单独提高某一帧图像中的 6DoF 位姿精度，而是如何在头显持续运动、外部感知异步返回、位姿低频且间歇失效的条件下，将 camera-space 6DoF object pose stream 转化为世界坐标中稳定、可恢复、可驱动交互的 real-object anchor。EgoAnchor 由 Quest/Unity 前端与 Python 后端组成：前端采集透视双目图像、相机信息与观测帧位姿，后端执行目标级分割、双目度量深度估计以及基于已知三维模型的 6DoF register/track/re-register。在当前实现中，对象位姿估计链路的主要输入是头戴端双目视觉、目标三维模型和初始目标提示；系统的关键机制则是 frame-aligned anchoring：每个返回位姿都依据 \texttt{frame\_id} 回查观测帧采集时刻的相机世界位姿，而不是使用结果回包时刻的头显位姿，从而解耦外部推理时延与头动带来的世界坐标错位。在此基础上，Unity 侧 anchor runtime 进一步负责观测门控、时序平滑、静止观察稳定化以及失效后的恢复行为。本文将从 world-space anchor error、head-motion-induced slip、jitter、lag、端到端 latency 与 recovery success/time 等维度评估 EgoAnchor，并系统比较 arrival-time mapping、frame-aligned raw、low-pass、Kalman、vanilla One Euro 与 EgoAnchor full runtime。本文的核心目标，是说明在 passthrough MR 中，可用的真实物体锚点不会从单帧位姿精度自然产生；它依赖严格的时间对齐、明确的坐标语义、克制的更新控制与可恢复的运行时机制。}
+
+\keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 帧对齐, 异步感知, 锚定运行时}
+
+\begin{document}
+
+\maketitle
+
+\section{引言}
+
+透视式混合现实中的对象高亮、操作提示、维修指导和近物交互，都依赖虚拟内容能够稳定附着在真实物体上。对应用而言，真正需要的并不是某一帧图像中的 6DoF pose matrix，而是一个在头显持续运动、外部推理存在时延、目标会被遮挡乃至短时离开视野的情况下，仍然能够维持世界一致性的真实物体锚点。换句话说，MR 应用真正消费的是可用的 anchor，而不是裸的 pose。
+
+现有 XR 平台已经提供 world anchors、spatial anchors、image tracking、reference objects、fiducial markers 以及若干平台级 object tracking 能力。这些机制适合静态空间附着、受控目标注册或有限类别对象的持续跟踪，但它们并不直接回答另一类越来越现实的问题：当系统从外部视觉链路异步收到一个低频、带噪、会失效的 camera-space 物体位姿时，头戴端应该如何把它变成稳定可用的 world-space anchor。尤其在 passthrough MR 场景里，视觉感知、网络传输、外部推理和应用渲染常常分布在不同计算环节；一旦时间语义和坐标语义处理不当，用户感受到的就不是“物体被正确跟踪”，而是“锚点在头动时打滑、跳变或者突然失真”。
+
+另一方面，计算机视觉领域已经在 6DoF object pose estimation and tracking 上积累了大量方法。从 RGB、RGB-D 到 stereo，从基于已知三维模型的 register/track/re-register，到更强的目标级分割与几何估计链路，上游感知能力已经逐渐具备部署潜力。对于具有可用三维模型的已知刚体日常物体，系统已经可以在目标级分割、深度估计和对象位姿跟踪的协同下输出稳定得多的相机坐标位姿结果。然而，这类方法的主流评价仍以 camera-space pose accuracy 为中心，而不是以 world-space anchor quality 为中心。对于 MR 而言，这两者并不等价：一个在采集帧上足够准确的位姿，如果被错误地与结果回包时刻的头显位姿组合，仍然会在世界坐标中造成显著错位；一个短时间内高噪声或低可靠性的位姿，如果被直接应用到虚拟内容上，也会立刻削弱用户对锚点的信任。
+
+本文将这一问题概括为 \textbf{pose-to-anchor}：如何把异步返回、低频、带噪、可能缺失的 6DoF object pose observations，转化为 passthrough MR 中稳定、世界一致、可恢复的真实物体锚点。围绕这个问题，我们提出 EgoAnchor，一套面向真实物体锚定的端到端框架。EgoAnchor 并不把位姿跟踪器的输出视为最终结果，而是将其视作需要进一步解释、筛选和应用的中间观测。Quest/Unity 前端负责双目透视采集、相机信息记录和采集帧位姿缓存；Python 后端负责目标级分割、双目深度估计和基于三维模型的 6DoF 位姿跟踪；Unity 侧 anchor runtime 则负责把这些异步观测转换为应用层真正消费的 world-space anchor。就当前实现而言，系统已经形成一条从双目视觉、目标三维模型和初始目标提示出发，最终输出真实物体锚点的完整闭环，但本文的写作重心不在于枚举模块，而在于说明这条闭环为何能在 MR 中产生可用的对象锚定结果。
+
+EgoAnchor 的核心机制是 \textbf{frame-aligned anchoring}。系统在发送每个双目帧时，以 \texttt{frame\_id} 记录对应采集时刻的参考相机世界位姿。Python 返回 \texttt{PoseResult} 后，Unity 并不使用结果到达时刻的头显位姿直接做世界坐标映射，而是按同一 \texttt{frame\_id} 回查采集时刻的相机位姿，再将相机坐标系中的物体位姿组合到 Unity 世界坐标中。这一点看似朴素，却是本文区分于普通“外部 pose 直接回传显示”方案的关键。它把世界一致性问题明确地表述为一个时间对齐问题，而不是模糊地归因于“视觉算法不够稳”。
+
+在 frame alignment 之上，EgoAnchor 还引入一个面向锚点输出的 temporal runtime。该 runtime 不追求复杂而封闭的控制策略，而是围绕 MR 锚定的实际需求，显式处理四类行为：何时接受新观测、何时暂时保持当前输出、何时对静止观察阶段做稳定化处理，以及何时进入恢复链路。本文将 raw、low-pass、Kalman、vanilla One Euro 和 EgoAnchor full runtime 都纳入实验比较。这样做的目的不是先验地宣称某个特定滤波器构成主创新，而是把系统主张落在更稳健的位置：MR 中的真实物体锚定首先是 pose-to-anchor 的系统问题，其次才是某一具体时序策略的优劣问题。换句话说，本文真正要证明的不是“某个滤波器最好”，而是异步外部感知能否在正确的时间坐标映射和恰当的更新控制下，被组织成可用的真实物体锚定。
+
+因此，本文的目标不是证明“我们拥有最强的 6DoF 跟踪器”，而是回答一个更贴近 IEEE VR 关切的问题：在透视混合现实中，异步外部 6DoF 位姿流在什么条件下能够真正成为可用的真实物体锚点。为此，本文将从 world-space anchor error、head-motion-induced slip、jitter、lag、端到端 latency、遮挡与出视野后的恢复能力，以及可选任务可用性等维度，系统比较 arrival-time mapping、frame-aligned raw 和多种 temporal runtime baseline，并据此分析世界一致性、更新稳定性与恢复能力之间的关键关系。
+
+本文的贡献概括如下：
+\begin{enumerate}
+  \item 提出 passthrough MR 中的 \textbf{pose-to-anchor 问题表述}，说明 camera-space 6DoF pose accuracy 本身不足以保证真实物体在 MR 中稳定、世界一致、可恢复地锚定。
+  \item 提出 \textbf{frame-aligned real-object anchoring} 这一核心机制，用 \texttt{frame\_id} 回查采集时刻相机位姿，将异步返回的 object pose 正确映射到世界坐标，而不是使用结果到达时刻的头显位姿。
+  \item 实现 \textbf{EgoAnchor} 端到端系统，并建立一套 \textbf{anchor-centric evaluation}，从世界一致性、稳定性、时延和恢复能力等角度分析异步 6DoF pose stream 何时能够真正成为 MR 应用中的可用锚点。
+\end{enumerate}
+
+\section{相关工作}
+
+\subsection{平台级对象锚定与真实物体注册}
+本节将回顾 spatial/world anchors、image anchors、reference object tracking、ObjectAnchor、Vuforia Model Targets、Azure Object Anchors 与 Meta Dynamic Object Tracker 等平台或工业界方案。正式写作时应强调：这些能力主要解决静态空间附着、受限对象类别或预定义参考对象，而本文关注的是由外部异步 6DoF pose stream 持续驱动的真实物体锚定 runtime。
+
+\subsection{6DoF 物体姿态估计与跟踪}
+本节将回顾 RGB、RGB-D 和 stereo 下的 6DoF object pose estimation/tracking，重点讨论 register/track/re-register、已知物体假设、恢复机制和代表性评测。正式稿需要明确区分：这类方法提供的是 \textit{camera-space observation}，而不是本文最终讨论的 world-space anchor output。
+
+\subsection{XR 中的时延、配准与稳定性}
+本节将回顾 XR/AR 中与时间对齐、显示时延、registration stability、prediction/filtering 和 object-centric interaction 相关的工作。该小节的收束目标，是指出已有研究已经认识到 XR 中的时延与配准问题，但尚未把“异步外部 6DoF pose stream 到真实物体锚点”的完整链条作为主要研究对象。
+
+\section{问题定义与设计目标}
+
+\subsection{Pose-to-Anchor 问题定义}
+本节将正式定义输入、输出与时间语义。建议保留如下基本变换作为全文主线：
+\[
+{}^{W}\mathbf{T}_{O}(t_i) =
+{}^{W}\mathbf{T}_{C}(t_i)\cdot{}^{C}\mathbf{T}_{O}(t_i),
+\]
+并明确给出错误但常见的替代方案：
+\[
+{}^{W}\hat{\mathbf{T}}_{O} =
+{}^{W}\mathbf{T}_{C}(t_r)\cdot{}^{C}\mathbf{T}_{O}(t_i).
+\]
+正式稿需在此解释 \(t_i\)、\(t_r\) 和 \(t_{\text{render}}\) 的差异，并用它们连接后续 frame-aligned 与 arrival-time 的实验比较。
+
+\subsection{设计目标}
+本节后续需要明确 world consistency、stability、recoverability 与 diagnosability 四个目标。当前只保留结构占位，不提前展开细节。
+
+\subsection{系统概览}
+本节将用系统图说明 Quest/Unity 前端、Python 后端、ZMQ data plane、NATS message/command plane 与 Unity anchor runtime 的关系。正式稿中应明确写清：Python 不输出 world anchor，world anchor 的最终解释权在 Unity 侧。
+
+\section{EgoAnchor 方法}
+
+\subsection{对象中心感知链路}
+本节后续补充 Quest 双目输入、camera info 到算法分辨率的内参映射、目标级分割、双目度量深度估计和基于已知三维模型的 register/track/re-register 细节。这里的写法应强调这些模块的作用是提供可恢复的 camera-space pose observation，而不是本文的主创新点。
+
+\subsection{Frame-Aligned 世界坐标映射}
+本节后续详细说明 \texttt{FramePoseHistory}、\texttt{CameraPoseFrameAligner} 和 \texttt{frame\_id} 回查逻辑。正式稿中，这将是方法章节最重要的小节。
+
+\subsection{Anchor Runtime 与更新控制}
+本节后续从统一视角说明 raw、low-pass、Kalman、vanilla One Euro 与 EgoAnchor full runtime。当前建议围绕三件事组织：何时接受新观测、何时保持当前输出、何时进入恢复链路。若后续实验表明某一具体时序策略优势有限，正文应保持其为系统实现选择，而非强行升格为独立贡献。
+
+\subsection{命令、状态与恢复生命周期}
+本节后续说明 reset、reacquire、status、heartbeat 以及遮挡、低分释放和出视野后的生命周期。正式稿应把这一节写成系统行为说明，而不是泛泛的网络实现记录。
+
+\section{实现}
+
+\subsection{Quest/Unity 前端}
+占位说明：记录 stereo capture、camera info、frame pose history 和前端 publish 逻辑。正式版应简洁，不写成工程手册。
+
+\subsection{Python 感知运行时}
+占位说明：记录 TrackingRuntime、perception pipeline、runtime logging 和 command queue 的组织方式。正式版要突出 single-owner runtime 的系统意义。
+
+\subsection{协议、传输与诊断日志}
+占位说明：写清 v3 主线采用 ZMQ Protobuf data plane 与 NATS Protobuf message/command plane，并说明实验日志如何支撑后续分析。
+
+\section{评估设计}
+
+\subsection{研究问题}
+建议保留三个主研究问题和一个可选研究问题：
+\begin{itemize}
+  \item RQ1：frame-aligned mapping 是否显著改善 world-space anchoring？
+  \item RQ2：不同 temporal runtime 如何影响 jitter、lag 和错误更新？
+  \item RQ3：恢复链路在遮挡、出视野和低分条件下是否提高 recoverability？
+  \item RQ4：可选，较稳定的 anchor 是否改善任务可用性和主观信任感？
+\end{itemize}
+
+\subsection{Baselines 与实验条件}
+占位说明：主 baseline 梯队建议固定为 arrival-time mapping、frame-aligned raw、low-pass、Kalman、vanilla One Euro、EgoAnchor full、no recovery / always update。条件至少覆盖静态观察、自然头动、快速头动、部分遮挡与出视野后返回。
+
+\subsection{评价指标与 Ground Truth}
+占位说明：主指标应是 world-space anchor error、head-motion-induced slip、jitter、lag、latency、recovery success/time；Quest 控制器 GT 作为当前最稳的 quantitative 闭环，其他日常物体优先做 qualitative demo 或用户实验。
+
+\section{实验结果}
+
+\subsection{Frame Alignment 的收益}
+占位说明：本节优先报告 frame-aligned 与 arrival-time 的世界一致性差异，并明确展示头动条件下的 slip 现象。
+
+\subsection{稳定性与延迟权衡}
+占位说明：本节比较 raw、low-pass、Kalman、vanilla One Euro 与 EgoAnchor full 的 jitter-lag tradeoff。
+
+\subsection{恢复能力与失败模式}
+占位说明：本节报告遮挡、出视野和重获取下的 recovery success/time，并补充 failure taxonomy。
+
+\section{讨论}
+
+\subsection{为什么 Pose Accuracy 不等于 Anchor Quality}
+占位说明：该小节将把全文核心观点收束为一句话：MR 中的真实物体锚定是时间、坐标、更新策略和恢复能力共同决定的系统问题。
+
+\subsection{局限性}
+占位说明：正式稿需要诚实交代已知刚体对象假设、三维模型依赖、外部 GPU inference、反光和小物体场景难点，以及多物体与长期持久化尚未覆盖。
+
+\subsection{对后续 XR 系统设计的启示}
+占位说明：这里后续可总结 frame-aligned contract、latest-only transport、anchor runtime state 和 anchor-centric metrics 的普适价值。
+
+\section{结论}
+
+本节正式版应回到全文的核心问题：如何在异步外部感知、头显持续运动和目标可能失效的条件下，把 6DoF pose stream 变成 MR 中真正可用的真实物体锚点。当前占位建议保持简短，等待实验结果稳定后再收束成最终结论。
+
+\bibliographystyle{abbrv-doi-hyperref-narrow}
+\bibliography{egoanchor_cn_refs}
+
+\end{document}
