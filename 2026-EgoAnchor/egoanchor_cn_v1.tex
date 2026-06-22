@@ -31,7 +31,7 @@
 }
 
 \abstract{
-我们提出 EgoAnchor，一套面向透视混合现实（Passthrough Mixed Reality）的开放、硬件通用的真实物体锚定系统。在混合现实应用中，虚拟信息与物理实体的对齐精度和交互稳定性是保证沉浸感与可用性 Ox 的核心。然而，计算机视觉领域传统的 6DoF 相机空间位姿估计并不等同于应用层可直接使用的世界空间稳定锚点。在实际场景中，头显的持续运动、外部感知模型的异步计算延迟、通信时延以及间歇性追踪失效，极易导致锚点在世界坐标系中产生抖动、跳变和头动打滑。EgoAnchor 围绕上述挑战构建了一条“采集-异步追踪-时序平滑-状态恢复”的闭环运行时系统。系统的核心机制为帧对齐锚定（Frame-Aligned Anchoring），通过将每个异步解算出的相机坐标系位姿与对应观测帧采集时刻的 HMD 历史位姿进行空间几何配准，彻底解耦感知延迟与头部运动。在时序控制层，我们引入了可靠性门控时序运行时，结合颜色重投影误差与渲染深度一致性等多维可靠性门控，限制异常观测，并利用速度自适应的 One Euro 滤波器进行时序平滑；在物体静止状态下，通过静止锁定机制（Static Lock）完全吸收微小抖动，并在追踪丢失时进行有界前推预测与快速重获取。我们在 Quest 3 混合现实头显上实现并验证了该系统。实验表明，EgoAnchor 能有效消除由头动和延迟引起的锚点打滑现象，并在遮挡、出视野以及感知噪声环境下表现出优异的稳定性和恢复能力。}
+在混合现实应用中，虚拟信息与物理实体的对齐精度和交互稳定性是保证沉浸感与可用性的核心。然而，计算机视觉领域传统的 6DoF 相机空间位姿估计并不等同于应用层可直接使用的世界空间稳定锚点。为此，我们提出 EgoAnchor，一套面向透视混合现实（Passthrough Mixed Reality）的开放、通用的真实物体锚定系统。EgoAnchor 构建了一条“采集-异步追踪-时序平滑-状态恢复”的闭环运行时系统。系统的核心机制为帧对齐锚定（Frame-Aligned Anchoring），通过将每个异步解算出的相机坐标系位姿与对应观测帧采集时刻 of HMD 历史位姿进行空间几何配准，彻底解耦感知延迟与头部运动。在时序控制层，我们设计了可靠性门控时序运行时，结合颜色重投影误差与渲染深度一致性等多维可靠性门控限制异常观测，在恒速卡尔曼状态估计器自适应平滑的基础上，引入静止锁定机制（Static Lock）以吸收微小抖动，并在追踪丢失时进行有界前推预测与快速重获取。我们在 Quest 3 混合现实头显上实现并验证了该系统。实验表明，EgoAnchor 在采用卡尔曼状态估计作为默认时序模块的条件下，能有效消除由头动和延迟引起的锚点打滑现象，并在遮挡、出视野以及感知噪声环境下表现出优异的稳定性和恢复能力。}
 
 \keywords{混合现实, 真实物体锚定, 6DoF 姿态跟踪, 帧对齐, 异步感知, 锚定运行时}
 
@@ -49,13 +49,13 @@
 
 为了解决这一问题，我们设计并实现了 **EgoAnchor**，一套面向透视混合现实的帧对齐真实物体锚定系统。EgoAnchor 在 Quest/Unity 头显前端与外部追踪计算后端之间建立了低延迟、高抗噪的异步协作机制。系统的首要核心贡献在于 \textbf{帧对齐锚定（Frame-Aligned Anchoring）} 空间映射机制。我们在发送透视双目帧时，为图像和采集时刻的相机世界位姿绑定唯一的 \texttt{frame\_id}。当外部追踪服务返回 6DoF 位姿观测时，Unity 端并不使用当前最新的 HMD 坐标，而是回查历史环形缓存，检索对应 \texttt{frame\_id} 采集时刻的 HMD 历史位姿进行刚体坐标合成。这一朴素而严谨的时间对齐设计，从根本上解耦了视觉感知算力限制与用户的头部运动，保证了空间的世界一致性。
 
-在帧对齐之上，EgoAnchor 进一步构建了 \textbf{可靠性门控时序控制运行时（Reliability-Gated Temporal Anchor Runtime）}。由于外部视觉追踪流在遭遇运动模糊、光照变化或局部遮挡时，难以避免地会输出噪声、甚至发生位姿跃变（Pose Jump），直接将未经处理的位姿应用 to 虚拟内容上会产生极不稳定的视觉抖动。EgoAnchor 运行时不依赖复杂的不可预测的时序滤波器，而是通过协同设计多维度的可靠性评分（结合重投影颜色误差、掩膜内深度有效比例及残差等）来充当门控，过滤和拦截低质量观测。可信观测将进入速度自适应的 One Euro 滤波器进行时序平滑；而在判定目标物体处于静止状态的窗口内，系统启动静止锁定（Static Lock）控制器，通过死区 CUSUM 残差监测和绝对漂移租绳限制锁定输出，完全消除视觉抖动。当遭遇强遮挡导致位姿中断时，系统借助有界前推预测算法外推位姿，并根据可靠性缺失状态自动触发低分 reacquire（重新获取）生命周期指令，向后端发出重注册请求，实现快速复位与自愈。
+在帧对齐之上，EgoAnchor 进一步构建了 \textbf{可靠性门控时序控制运行时（Reliability-Gated Temporal Anchor Runtime）}。由于外部视觉追踪流在遭遇运动模糊、光照变化或局部遮挡时，难以避免地会输出噪声、甚至发生位姿跃变（Pose Jump），直接将未经处理的位姿应用到虚拟内容上会产生极不稳定的视觉抖动。EgoAnchor 运行时通过协同设计多维度的可靠性评分（结合重投影颜色误差、掩膜内深度有效比例及残差等）来充当门控，过滤和拦截低质量观测。过滤后的可信观测将进入时序状态估计模块，系统默认采用恒速卡尔曼滤波器（Kalman Filter）对物体位置与速度进行自适应估计与平滑；而在判定目标物体处于静止状态的窗口内，系统启动静止锁定（Static Lock）控制器，通过死区 CUSUM 残差监测和绝对漂移租绳限制锁定输出，完全消除视觉抖动。当遭遇强遮挡导致位姿中断时，系统借助有界前推预测算法外推位姿，并根据可靠性缺失状态自动触发低分 reacquire（重新获取）生命周期指令，向后端发出重注册请求，实现快速复位与自愈。
 
 本文的贡献总结如下：
 \begin{enumerate}
   \item 我们阐明了混合现实中 \textbf{pose-to-anchor 问题的系统本质}，论证了为什么纯单帧 camera-space pose 精度无法等同于世界一致的 MR real-object anchor。
   \item 提出并实现了 \textbf{Frame-Aligned 空间映射机制}，以 \texttt{frame\_id} 为桥梁回查采集时刻 HMD 位姿，彻底解耦了感知计算延迟与头显运动，消除了头动导致的锚点打滑。
-  \item 设计了 \textbf{可靠性门控时序锚定运行时}，包含多维质量门控、One Euro 速度自适应滤波、静止锁定控制器（Static Lock）与故障重定位指令，在低延迟的前提下大幅降低了抖动和跳变。
+  \item 设计了 \textbf{可靠性门控时序锚定运行时}，包含多维质量门控、卡尔曼自适应状态估计、静止锁定控制器（Static Lock）与故障重定位指令，在低延迟的前提下大幅降低了抖动和跳变。
   \item 建立了一套 \textbf{以锚点为中心（Anchor-Centric）的评估协议}。我们不以传统的 CV 位姿误差为主线，而是从世界锚定误差、头动打滑、静态抖动、时延以及遮挡恢复时间等维度对系统进行定量消融实验，并在 Quest 3 上设计了用户可用性任务实验。
 \end{enumerate}
 
@@ -126,7 +126,7 @@
   \[
   S_t = \exp \left( w_c \ln(score_{reproj}) + w_d \ln(score_{depth}) \right)
   \]
-  \item \textbf{One Euro 速度自适应滤波：} 说明对平移向量和四元数对数空间旋转进行 One Euro 滤波的过程。
+  \item \textbf{恒速卡尔曼状态估计：} 介绍基于恒速模型（Constant Velocity Model）的卡尔曼状态估计器，对世界坐标系下物体的平移位置、速度以及四元数旋转进行跟踪与滤波的数学公式。
   \item \textbf{静止锁定控制器（Static Lock）：}
     \begin{itemize}
       \item 进入条件：观测相对运动速度低于阈值且持续时间达到 $headSettleSeconds$；
@@ -161,15 +161,18 @@
 \nobreak
 \end{itemize}
 
-\subsection{评估 Baselines 矩阵}
-详细说明对比基线组合：
+\subsection{系统级对齐基线与模块化消融对比}
+为验证 EgoAnchor 系统机制与模块设计的有效性，我们设计了两层次的对比评估：
 \begin{enumerate}
-  \item Arrival-time mapping
-  \item Frame-aligned raw
-  \item Frame-aligned + low-pass
-  \item Frame-aligned + Kalman
-  \item Frame-aligned + vanilla One Euro
-  \item EgoAnchor Full (Reliability-gated One Euro + Static Lock)
+  \item \textbf{系统级对齐对比：}
+    \begin{itemize}
+      \item \textbf{Arrival-Time Mapping：} 传统的包到达时刻空间映射，无帧对齐，用于证明时间对齐的必要性。
+      \item \textbf{Frame-Aligned Raw：} 仅使用帧对齐，但不加任何时序处理与门控，用于展现视觉追踪的原始空间精度。
+      \item \textbf{EgoAnchor (Default)：} 帧对齐 + 默认卡尔曼滤波 + 可靠性门控 + 静止锁定，即本文推荐的完整运行时。
+    \end{itemize}
+  \item \textbf{时序滤波模块消融 (Filter Module Comparison)：} 比较卡尔曼状态估计（Kalman）、One Euro 滤波以及简单低通滤波（Low-Pass）在抖动-延迟权衡（Jitter-Lag Tradeoff）上的表现。
+  \item \textbf{静止锁定模块消融 (Static Lock Ablation)：} 对比 EgoAnchor 在启用与禁用静止锁定（Static Lock）控制器下的静态抖动与滑动误差。
+  \item \textbf{可靠性门控模块消融 (Reliability Gating Ablation)：} 对比在遭遇位姿突变（Pose Jump）和追踪网络失效时，有无多维质量门控对系统的稳定保护作用。
 \end{enumerate}
 
 \subsection{实验条件与指标定义}
@@ -184,7 +187,7 @@
 汇报 Frame-aligned 机制消除 HMD 动态头动滑移（slip 误差显著下降）的数据和图表。
 
 \subsection{时序平滑与抖动抑制 (RQ2)}
-通过抖动/滞后折衷图（Jitter-Lag Tradeoff Curves）对比 Kalman、One Euro 和本方法的过滤效率与响应时间。
+通过抖动/滞后折衷图（Jitter-Lag Tradeoff Curves）对比卡尔曼状态估计、One Euro 滤波以及简单低通滤波器对抖动的平滑效率与响应滞后。
 
 \subsection{断连恢复与断点鲁棒性 (RQ3)}
 定量给出遮挡实验中，Coasting 和 Reacquire 生命周期在恢复成功率和恢复时延上的核心数据。

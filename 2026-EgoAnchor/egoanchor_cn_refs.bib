@@ -71,6 +71,14 @@
   note = {Accessed: 2026-06-22}
 }
 
+@misc{appleVisionOS27ObjectTracking,
+  author = {{Apple}},
+  title = {Explore Enhancements to {visionOS} Object Tracking (WWDC 2026, Session 283)},
+  year = {2026},
+  url = {https://developer.apple.com/videos/play/wwdc2026/283/},
+  note = {Accessed: 2026-06-22. Extends pre-trained object tracking to moving / handheld objects; high-rate path reported at approximately 30 Hz, still requires multi-hour Create ML training on the depth-equipped Vision Pro}
+}
+
 @misc{appleARReferenceObject,
   author = {{Apple Developer Documentation}},
   title = {ARReferenceObject},
@@ -320,4 +328,88 @@
   year = {2024},
   url = {https://arxiv.org/abs/2412.01506},
   note = {arXiv:2412.01506; verify full author list before submission}
+}
+
+% --- Added 2026-06-22 (second pass): verified XR late-latching / predictive
+% --- tracking lineage and CV pose-metric provenance, to support the
+% --- "frame-aligned anchoring = application-layer late latching" framing
+% --- and the "per-frame camera-space accuracy != world anchor quality" claim. ---
+
+@inproceedings{azuma1994improving,
+  author = {Azuma, Ronald and Bishop, Gary},
+  title = {Improving Static and Dynamic Registration in an Optical See-Through {HMD}},
+  booktitle = {Proceedings of the 21st Annual Conference on Computer Graphics and Interactive Techniques (SIGGRAPH '94)},
+  pages = {197--204},
+  year = {1994},
+  publisher = {ACM},
+  doi = {10.1145/192161.192199}
+}
+
+@inproceedings{vanwaveren2016atw,
+  author = {van Waveren, J. M. P.},
+  title = {The Asynchronous Time Warp for Virtual Reality on Consumer Hardware},
+  booktitle = {Proceedings of the 22nd ACM Conference on Virtual Reality Software and Technology (VRST '16)},
+  pages = {37--46},
+  year = {2016},
+  publisher = {ACM},
+  doi = {10.1145/2993369.2993375}
+}
+
+@inproceedings{hinterstoisser2012add,
+  author = {Hinterstoisser, Stefan and Lepetit, Vincent and Ilic, Slobodan and Holzer, Stefan and Bradski, Gary and Konolige, Kurt and Navab, Nassir},
+  title = {Model Based Training, Detection and Pose Estimation of Texture-Less {3D} Objects in Heavily Cluttered Scenes},
+  booktitle = {Asian Conference on Computer Vision (ACCV 2012)},
+  series = {LNCS},
+  volume = {7724},
+  pages = {548--562},
+  year = {2013},
+  publisher = {Springer},
+  doi = {10.1007/978-3-642-37331-2_42}
+}
+
+@inproceedings{cutie2024,
+  author = {Cheng, Ho Kei and Oh, Seoung Wug and Price, Brian and Lee, Joon-Young and Schwing, Alexander},
+  title = {Putting the Object Back into Video Object Segmentation},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year = {2024},
+  url = {https://arxiv.org/abs/2310.12982}
+}
+
+@inproceedings{kirillov2023sam,
+  author = {Kirillov, Alexander and Mintun, Eric and Ravi, Nikhila and Mao, Hanzi and Rolland, Chloe and Gustafson, Laura and Xiao, Tete and Whitehead, Spencer and Berg, Alexander C. and Lo, Wan-Yen and Doll{\'a}r, Piotr and Girshick, Ross},
+  title = {Segment Anything},
+  booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year = {2023},
+  url = {https://arxiv.org/abs/2304.02643}
+}
+
+@article{diluca2010latency,
+  author = {Di Luca, Massimiliano},
+  title = {New Method to Measure End-to-End Delay of Virtual Reality},
+  journal = {Presence: Teleoperators and Virtual Environments},
+  volume = {19},
+  number = {6},
+  pages = {569--584},
+  year = {2010},
+  doi = {10.1162/pres_a_00023}
+}
+
+@article{gonzalezfranco2018embodiment,
+  author = {Gonzalez-Franco, Mar and Peck, Tabitha C.},
+  title = {Avatar Embodiment. Towards a Standardized Questionnaire},
+  journal = {Frontiers in Robotics and AI},
+  volume = {5},
+  pages = {74},
+  year = {2018},
+  doi = {10.3389/frobt.2018.00074}
+}
+
+@article{hart1988nasatlx,
+  author = {Hart, Sandra G. and Staveland, Lowell E.},
+  title = {Development of {NASA-TLX} (Task Load Index): Results of Empirical and Theoretical Research},
+  journal = {Advances in Psychology},
+  volume = {52},
+  pages = {139--183},
+  year = {1988},
+  doi = {10.1016/S0166-4115(08)62386-9}
 }
