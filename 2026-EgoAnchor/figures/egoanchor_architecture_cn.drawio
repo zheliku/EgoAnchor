@@ -1,0 +1,127 @@
+<mxfile host="app.diagrams.net" modified="2026-06-24T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="egoanchor-architecture-cn" name="EgoAnchor 中文系统架构">
+    <mxGraphModel dx="1800" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="EgoAnchor: 帧对齐真实物体锚定系统" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=34;fontStyle=1;fontColor=#22313F;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="70" y="24" width="700" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="低频异步相机坐标系 6DoF 位姿流 → 高频、世界一致、稳定可恢复的 MR 锚点" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=17;fontColor=#52616F;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="70" y="62" width="850" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_capture" value="Quest 3 / Unity 采集端&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;采集图像，同时缓存采集时刻相机世界位姿&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCFDFE;strokeColor=#B8CEDF;strokeWidth=1.5;fontSize=20;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;verticalAlign=top;align=left;spacingLeft=24;spacingTop=16;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="70" y="115" width="500" height="665" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_python" value="外部视觉计算 / Python&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;仅估计物体相机坐标系位姿，不输出世界锚点&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCFDFE;strokeColor=#B8D8C9;strokeWidth=1.5;fontSize=20;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;verticalAlign=top;align=left;spacingLeft=24;spacingTop=16;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="650" y="115" width="500" height="665" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_runtime" value="Unity 锚定运行时&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;frame_id 对齐、策略升采样、应用 Transform&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCFDFE;strokeColor=#DEC79A;strokeWidth=1.5;fontSize=20;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;verticalAlign=top;align=left;spacingLeft=24;spacingTop=16;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="115" width="500" height="665" as="geometry"/>
+        </mxCell>
+        <mxCell id="stereo_frame" value="双目透视帧&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;left / right RGB&lt;br&gt;frame_id, capture time&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7BA7C7;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="105" y="195" width="195" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="camera_info" value="相机信息&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;内参 K&lt;br&gt;lens pose&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7BA7C7;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="335" y="195" width="190" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="frame_pose_history" value="帧姿态历史&lt;br&gt;&lt;font style=&quot;font-size:16px&quot;&gt;frame_id → T^W_C(t_i)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;采集时刻 left / right / center camera pose&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDF8;strokeColor=#C9933F;strokeWidth=2.4;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="155" y="315" width="330" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="quest_stream_publisher" value="QuestStreamPublisher&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;Protobuf bytes&lt;br&gt;ZMQ PUB, latest-only&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7BA7C7;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="185" y="452" width="285" height="84" as="geometry"/>
+        </mxCell>
+        <mxCell id="hmd_tracking_note" value="参考相机世界位姿&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;来自头显自身跟踪&lt;br&gt;“纯视觉”只修饰物体位姿估计链路&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#AEB7C2;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="125" y="585" width="390" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="quest_stream_receiver" value="最新帧接收&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;decode / dedup&lt;br&gt;QuestStreamReceiver&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#75B89D;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="690" y="195" width="205" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="quest_calibration" value="标定映射&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;camera_info → K&lt;br&gt;crop / scale&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#75B89D;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="930" y="195" width="180" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="pose_pipeline" value="视觉位姿流水线&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;QuestPosePipeline: camera-space object pose&lt;br&gt;分割 YOLOE/SAM3 · 双目深度 FFS&lt;br&gt;FoundationPose 注册/跟踪 · Cutie mask&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#75B89D;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="690" y="322" width="420" height="182" as="geometry"/>
+        </mxCell>
+        <mxCell id="pose_score" value="渲染质量与可靠性评分&lt;br&gt;&lt;font style=&quot;font-size:16px&quot;&gt;R = Gate × Quality × Confidence&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;颜色重投影 / 深度对齐 / mask 调制 / warmup&lt;br&gt;无有效颜色或深度信号时不硬惩罚&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#75B89D;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="690" y="540" width="420" height="112" as="geometry"/>
+        </mxCell>
+        <mxCell id="tracking_runtime" value="TrackingRuntime&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;持有 pipeline / GPU 状态，发布 PoseResult&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#75B89D;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="740" y="690" width="320" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="pose_receiver" value="Pose 接收&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;latest drain&lt;br&gt;NatsControlClient&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CFA04F;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="195" width="205" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="anchor_runtime_hub" value="运行时 Hub&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;fan-out / fan-in&lt;br&gt;低分重获取汇总&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CFA04F;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1510" y="195" width="175" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="frame_aligner" value="帧对齐世界锚定&lt;br&gt;&lt;font style=&quot;font-size:16px&quot;&gt;T^W_O(t_i) = T^W_C(t_i) · T^C_O(t_i)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;CameraPoseFrameAligner + FramePoseHistory&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDF8;strokeColor=#C9933F;strokeWidth=2.4;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1315" y="318" width="350" height="112" as="geometry"/>
+        </mxCell>
+        <mxCell id="anchor_policy_host" value="AnchorPolicyHost&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;低频观测 → 每渲染帧输出&lt;br&gt;运动模型 3 类 · 平滑策略 3 类 · Gate&lt;br&gt;FSM: Searching / Tracking / Coasting / Lost&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CFA04F;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="474" width="420" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="static_lock" value="静止锁与生命周期&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;score-gated regime switch，不是低通滤波&lt;br&gt;lockedPose / CUSUM / drift leash / head settle&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CFA04F;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="630" width="420" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="dynamic_anchor" value="DynamicObjectAnchor 输出 Transform" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CFA04F;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1345" y="742" width="270" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="support_band" value="协议与离线评估支撑&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;支撑在线系统，但不把离线评估画入实时闭环&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D7DDE4;strokeWidth=1.5;fontSize=20;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;verticalAlign=top;align=left;spacingLeft=24;spacingTop=16;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="70" y="835" width="1660" height="185" as="geometry"/>
+        </mxCell>
+        <mxCell id="protocol" value="EgoAnchor_Protocol&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;proto + subjects.v1.json → Python / Unity 生成代码&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#AEB7C2;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="115" y="920" width="360" height="74" as="geometry"/>
+        </mxCell>
+        <mxCell id="eval_tools" value="AnchorEvalRecorder + Tools3&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;capture/render JSONL，latency-aware 60 fps 离线仿真&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#AEB7C2;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="555" y="920" width="400" height="74" as="geometry"/>
+        </mxCell>
+        <mxCell id="metrics" value="锚点质量指标&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;world error / jitter / slip / latency / recovery&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#AEB7C2;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1035" y="920" width="330" height="74" as="geometry"/>
+        </mxCell>
+        <mxCell id="comparison" value="论文对比主线&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;Arrival-time vs Frame-aligned vs EgoAnchor&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#AEB7C2;strokeWidth=1.6;fontSize=17;fontStyle=1;fontColor=#263238;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+          <mxGeometry x="1445" y="920" width="240" height="74" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_zmq" value="ZMQ 数据面&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;Frame / CameraInfo&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#5B8DB8;strokeWidth=2.6;dashed=1;dashPattern=10 7;fontSize=13;fontColor=#45525F;fontFamily=Microsoft YaHei;" edge="1" parent="1" source="quest_stream_publisher" target="quest_stream_receiver">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="585" y="494"/><mxPoint x="585" y="234"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_message" value="NATS 消息面&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;Pose / Status / Heartbeat&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6DAF91;strokeWidth=2.6;dashed=1;dashPattern=10 7;fontSize=13;fontColor=#45525F;fontFamily=Microsoft YaHei;" edge="1" parent="1" source="tracking_runtime" target="pose_receiver">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1185" y="722"/><mxPoint x="1185" y="234"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_command" value="NATS 命令面&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;reset / reacquire / control&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#C9933F;strokeWidth=2.4;dashed=1;dashPattern=10 5 2 5;fontSize=13;fontColor=#45525F;fontFamily=Microsoft YaHei;" edge="1" parent="1" source="anchor_runtime_hub" target="tracking_runtime">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1510" y="754"/><mxPoint x="1190" y="754"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_core" value="核心路径: 按 frame_id 精确回查采集时刻相机世界位姿" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#C9933F;strokeWidth=4.2;fontSize=13;fontColor=#45525F;fontFamily=Microsoft YaHei;" edge="1" parent="1" source="frame_pose_history" target="frame_aligner">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="320" y="126"/><mxPoint x="1490" y="126"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sf_pub" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="stereo_frame" target="quest_stream_publisher"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_ci_pub" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="camera_info" target="quest_stream_publisher"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_recv_calib" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="quest_stream_receiver" target="quest_calibration"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_recv_pipeline" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="quest_stream_receiver" target="pose_pipeline"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_calib_pipeline" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="quest_calibration" target="pose_pipeline"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_pipeline_score" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="pose_pipeline" target="pose_score"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_score_runtime" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="pose_score" target="tracking_runtime"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_pose_hub" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="pose_receiver" target="anchor_runtime_hub"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_hub_aligner" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="anchor_runtime_hub" target="frame_aligner"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_aligner_policy" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="frame_aligner" target="anchor_policy_host"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_policy_lock" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="anchor_policy_host" target="static_lock"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_lock_anchor" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="static_lock" target="dynamic_anchor"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_eval_metrics" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="eval_tools" target="metrics"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_metrics_comp" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7B8794;strokeWidth=1.7;" edge="1" parent="1" source="metrics" target="comparison"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_proto_pub" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#8A96A3;strokeWidth=1.7;dashed=1;dashPattern=3 5;" edge="1" parent="1" source="protocol" target="quest_stream_publisher"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_proto_runtime" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#8A96A3;strokeWidth=1.7;dashed=1;dashPattern=3 5;" edge="1" parent="1" source="protocol" target="tracking_runtime"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_proto_pose" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#8A96A3;strokeWidth=1.7;dashed=1;dashPattern=3 5;" edge="1" parent="1" source="protocol" target="pose_receiver"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_runtime_eval" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#8A96A3;strokeWidth=1.7;dashed=1;dashPattern=3 5;" edge="1" parent="1" source="tracking_runtime" target="eval_tools"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_anchor_eval" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#8A96A3;strokeWidth=1.7;dashed=1;dashPattern=3 5;" edge="1" parent="1" source="dynamic_anchor" target="eval_tools"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

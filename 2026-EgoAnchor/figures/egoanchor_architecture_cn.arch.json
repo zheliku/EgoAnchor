@@ -1,0 +1,30 @@
+{
+  "profile": "academic-paper",
+  "figureType": "architecture",
+  "title": "EgoAnchor 中文系统架构图",
+  "canvas": {
+    "width": 1800,
+    "height": 1080
+  },
+  "nodeCount": 22,
+  "edgeCount": 24,
+  "modules": [
+    "Quest 3 / Unity 采集端",
+    "外部视觉计算 / Python",
+    "Unity 锚定运行时",
+    "协议与离线评估支撑"
+  ],
+  "keyClaimsRepresented": [
+    "Python only emits camera-space object pose and reliability, not Unity world anchors.",
+    "Unity reconstructs the world anchor through exact frame_id lookup of the capture-time camera world pose.",
+    "ZMQ data plane, NATS message plane, and NATS command plane are visually separated.",
+    "StaticLockController is represented as a score-gated regime switch, not a low-pass filter.",
+    "EgoAnchor_Tools3 is placed in the offline evaluation support band, not in the online runtime path."
+  ],
+  "deliverables": [
+    "egoanchor_architecture_cn.svg",
+    "egoanchor_architecture_cn.drawio",
+    "egoanchor_architecture_cn.spec.yaml",
+    "egoanchor_architecture_cn.arch.json"
+  ]
+}
