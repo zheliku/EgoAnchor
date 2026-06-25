@@ -11,31 +11,31 @@
 
 ---
 
-## 架构：两个可自由组合的模块（3×2）
+## 架构：两个可自由组合的模块（3×3）
 
 一个 anchor runtime = **1 个运动模型 (MotionModel) + 1 个平滑策略 (SmoothingStrategy)**，
 挂在同一个 GameObject 上，由 `AnchorPolicyHost` 引用。两个维度正交，自由组合：
 
 ```
 运动模型 MotionModel (模块 A，去噪+估速+外推)      平滑策略 SmoothingStrategy (模块 B，低频→高频)
-├─ ConstantVelocityModel   (CV，差分速度，不去噪)   ├─ BlendStrategy          (B路：零延迟，外推+误差融合)
-├─ KalmanModel             (Kalman 去噪+最优速度)    └─ DelayedInterpStrategy  (C路：延迟一周期+样条插值)
-└─ OneEuroModel            (One Euro 自适应去噪)
+├─ ConstantVelocityModel   (CV，差分速度，不去噪)   ├─ RawPassthroughStrategy (raw：零阶保持)
+├─ KalmanModel             (Kalman 去噪+速度估计)   ├─ BlendStrategy          (B路：零延迟，外推+误差融合)
+└─ OneEuroModel            (One Euro 自适应去噪)     └─ DelayedInterpStrategy  (C路：延迟插值)
 ```
 
-**3×2 = 6 种组合**，对应论文实验矩阵：
+**3×3 = 9 种组合**。论文实验通常不需要全跑，优先选 raw、Kalman/OneEuro baseline 和 EgoAnchor 方法组合：
 
-| | BlendStrategy (B路·零延迟) | DelayedInterpStrategy (C路·延迟插值) |
-|---|---|---|
-| **ConstantVelocityModel** | cv + blend | cv(原始点) + interp |
-| **KalmanModel** | **kalman + blend ★推荐** | kalman + interp |
-| **OneEuroModel** | oneeuro + blend | oneeuro + interp |
+| | RawPassthroughStrategy | BlendStrategy | DelayedInterpStrategy |
+|---|---|---|---|
+| **ConstantVelocityModel** | raw / zoh | cv + blend | cv + interp |
+| **KalmanModel** | kalman zoh | kalman + blend | kalman + interp |
+| **OneEuroModel** | oneeuro zoh | oneeuro + blend | oneeuro + interp |
 
-**正交的第三维：static-lock。** `EgoAnchorStaticLockModule` 与上面 3×2 任意组合正交叠加：
+**正交的第三维：static-lock。** `EgoAnchorStaticLockModule` 与上面组合正交叠加：
 挂上模块并启用 `lockEnabled` = 在该 baseline 之上加 EgoAnchor 静止锚定层；不挂或关闭 = 纯 baseline。
-**EgoAnchor 主方法 = `kalman + interp` + `EgoAnchorStaticLockModule`**。
+**EgoAnchor 主方法 = 选定 baseline + `EgoAnchorStaticLockModule`**。当前常用起点是 `kalman + blend` 或 `kalman + interp`。
 
-`raw`（什么都不做的参照）= 用任意 model + BlendStrategy 把 decay 设到很小，或单独留一个不平滑 runtime。
+`raw`（什么都不做的参照）= `ConstantVelocityModel + RawPassthroughStrategy`。不要用 BlendStrategy 调 decay 来假装 raw。
 
 模块通过数据契约解耦：MotionModel 提供 `PredictAt(t)`（给 B 路外推）和 `LatestControlPoint`
 （给 C 路缓冲插值）。host 每帧调 `strategy.Output(model, now)`。
@@ -58,7 +58,7 @@
 然后把所有变体的 `PoseToAnchorRuntime` 拖进场景里 `AnchorRuntimeHub.runtimes` 列表。
 `AnchorEvalRecorder` 也拖入这些 runtime → 一次录制拿到所有方法的对比数据。
 
-> 提示：6 种组合各建一个 GameObject，分别显示不同颜色的同款 mesh，真机里一眼对比谁最平滑。
+> 提示：正式实验先建 raw、Kalman/OneEuro baseline 和 EgoAnchor 方法，不必把 9 种组合全部塞进同一场景。
 
 ---
 
@@ -77,10 +77,19 @@
 | `maxJumpMeters` | 相对预测平移超过此值判为坏跳变拒绝 | `0.8` |
 | `maxJumpDegrees` | 相对预测旋转超过此值判为坏跳变拒绝 | `120` |
 | **Lifecycle** | | |
+| `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，方法变体可设为约 `0.4` | `0.0` |
 | `coastTimeoutSeconds` | 短时无观测仍继续外推/插值的时长 | `0.45` |
 | `lostTimeoutSeconds` | 多久无观测后判 Lost 停输出（须 > coast） | `2.0` |
 | `staticSpeedThresholdMps` | 运动/静止判定线速度阈值（仅诊断） | `0.015` |
 | `staticAngularSpeedThresholdDps` | 运动/静止判定角速度阈值（仅诊断） | `1.5` |
+| **Low-Score Reacquire** | | |
+| `enableLowScoreReacquire` | 持续低分且几何证据差时请求 Python 重获取 | `true` |
+| `lowScoreReacquireThreshold` | 低于该总分开始累计重获取证据 | `0.25` |
+| `lowScoreReacquireSeconds` | 低分需连续持续的时间 | `0.8` |
+| `lowScoreReacquireCooldownSeconds` | 两次自动重获取之间的冷却时间 | `3.0` |
+| `reacquireGeometryFloor` | 判断几何证据差的子分阈值 | `0.5` |
+| `reacquireReprojWeight` | 重获取几何判定中的颜色重投影权重 | `0.2` |
+| `reacquireDepthWeight` | 重获取几何判定中的深度对齐权重 | `0.8` |
 ### EgoAnchorStaticLockModule（EgoAnchor 核心方法，仅 EgoAnchor 变体挂载）
 
 | 参数 | 含义 | 默认 |
@@ -139,7 +148,7 @@
 ### ConstantVelocityModel
 无参数（差分估速）。
 
-### BlendStrategy（B路·零延迟，★主推）
+### BlendStrategy（B路·零延迟）
 
 | 参数 | 含义 | 推荐 |
 |---|---|---|
@@ -159,7 +168,7 @@
 | `minDelaySeconds` | 手动延迟下限(秒)，实测未稳定前兜底 | `0.25` |
 | `spline` | `Hermite`(用速度切线，配 Kalman/OneEuro 更稳) / `CentripetalCatmullRom`(用相邻点，配原始点直观) | `Hermite` |
 
-> **⚠️ 关键修复（2026-06-16）**：延迟必须 = **实测采集-渲染延迟**（推理+传输+陈旧，真机 ~300ms），
+> 关键修复（2026-06-16）：延迟必须 = **实测采集-渲染延迟**（推理+传输+陈旧，真机 ~300ms），
 > 不是观测周期(~200ms)。否则插值目标 `now-Δ` 比最新控制点还新 → 退化成外推 → **锯齿抖动**（旧版 bug）。
 > 现已改为每帧实测延迟自适应。C 路严格过点、无 overshoot，但有 ~一个延迟周期的滞后。
 > VR 实时场景慎用（延迟敏感），适合回放/录制。**换快显卡后延迟自动变小，不用调参。**
@@ -177,7 +186,7 @@
 **先验证平滑（主推）**：`KalmanModel`(默认参数) + `BlendStrategy`(decay=0.9)，门控关。
 这是离线仿真里效果最好的组合，零延迟、零跳变、跟手。
 
-**做消融对比**：6 个 GameObject 各一种组合 + 一个 raw 参照，全拖进 `AnchorRuntimeHub`，
+**做消融对比**：raw、Kalman/OneEuro baseline、EgoAnchor 方法各建一个 GameObject，全拖进 `AnchorRuntimeHub`，
 一次录制用 `AnchorEvalRecorder` 拿全部数据，离线 `eval/` 出指标对比图。
 
 **EgoAnchor 方法（带 score + 静止锁定）**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
@@ -208,8 +217,8 @@ Assets/Scripts/EgoAnchor/Policy/
 
 运行时链路（都在 LateUpdate，执行序正确）：
 `Hub.Publish → PoseToAnchorRuntime.AcceptPoseResult`(帧对齐)`→ host.AcceptPose`(喂模型) ；
-`PoseToAnchorRuntime.LateUpdate(-50) → host.Advance(now) → strategy.Output → stablePose`；
-`DynamicObjectAnchor.LateUpdate(0) → 读 stablePose → 应用 Transform`。
+`PoseToAnchorRuntime.LateUpdate(-50) → host.Advance(now) → strategy.Output → output pose`；
+`DynamicObjectAnchor.LateUpdate(0) → runtime.TryGetOutputPose → 应用 Transform`。
 
 时间戳：观测的 `CaptureTimeSeconds` 和渲染 `now` 都用 `Time.realtimeSinceStartupAsDouble`
 （同一单调时钟，见 StereoFrameSource），所以外推/插值的时间差是真实物理时间，平滑正确。

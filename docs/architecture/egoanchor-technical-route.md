@@ -54,7 +54,7 @@ EgoAnchor 面向 passthrough 混合现实，把外部视觉计算设备产生的
 ```
 Reliability = Gate × Quality × Confidence
   Gate    = phase × reject                         （门控层：phase 子分 × 近期 track-reject 子分）
-  Quality = geomean(reproj, depth ; w=0.5/0.5) × mask_modulation   （质量层：几何核 × mask 调制）
+  Quality = geomean(reproj, depth ; w=0.2/0.8) × mask_modulation   （质量层：几何核 × mask 调制）
   Confidence = 0.5..1.0 连续高质量帧 warmup ramp（约 10 帧到满）
 ```
 
@@ -79,7 +79,7 @@ Reliability = Gate × Quality × Confidence
 
 ## 评估链路（离线，不要画成线上模块）
 
-- `AnchorEvalRecorder` 按采集 / 渲染两条 JSONL 记录：capture 行（帧位姿、`aligned_raw`），render 行（`output_pos/rot`、`motion_model`、`smoothing_strategy`、`gate`、`has_output_pose`）。
+- `AnchorEvalRecorder` 按采集 / 渲染两条 JSONL 记录：capture 行（帧位姿、`aligned_raw`），render 行（`output_pos/rot`、`motion_model`、`smoothing_strategy`、`gate`、`has_output_pose`、`latest_static_locked`）。
 - `EgoAnchor_Tools3` 是离线 latency-aware 60fps 实时仿真器：从 Unity primary 变体的 `aligned_raw` 提取低频观测，按真实采集→渲染延迟重放，对比 RawZoh / Kalman / OneEuro / DeadReckoningSpline / DelayedInterp / ResidualBlending / **EgoAnchorStabilizer** 等预测器。
 - `eval/metrics`：世界坐标系锚点误差、jitter / slip、lag、latency、recovery success / time。
 
@@ -133,7 +133,7 @@ BAND 3 (right) "Unity Anchor Runtime":
 
 BOTTOM BAND "Protocol & Evaluation":
 - EgoAnchor_Protocol (document shape): proto + subjects.v1.json -> single source generating Python *_pb2.py and Unity *.cs + SubjectNames
-- AnchorEvalRecorder (document shape): capture JSONL (frame poses, aligned_raw) + render JSONL (output_pos/rot, model, strategy, gate)
+- AnchorEvalRecorder (document shape): capture JSONL (frame poses, aligned_raw) + render JSONL (output_pos/rot, model, strategy, gate, has_output_pose, latest_static_locked)
 - EgoAnchor_Tools3: offline latency-aware 60 fps simulator; predictors RawZoh, Kalman, OneEuro, DeadReckoningSpline, DelayedInterp, ResidualBlending, EgoAnchorStabilizer
 - Metrics: world-space anchor error, jitter/slip, lag, latency, recovery success/time
 

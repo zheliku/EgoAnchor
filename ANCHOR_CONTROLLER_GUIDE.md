@@ -1,204 +1,144 @@
 # EgoAnchor Unity anchor policy 使用指南
 
-本文档记录当前 Unity 侧 anchor policy 的挂载方式、baseline 组合、离线回放和排查方法。正式路径是每个对比物体一套 `PoseToAnchorRuntime + AnchorPolicyHost + Gate/Estimator/Output module + DynamicObjectAnchor`。
+本文档只记录当前 Unity 侧 anchor runtime 的挂载、对比组合和验证命令。更完整的端到端技术流程见
+[`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md`](2026-EgoAnchor/egoanchor_code_derived_technical_flow.md)。
 
 ## 当前流程
 
-Python、协议、ZMQ/NATS 和 frame alignment 不变。Unity 收到 `PoseResult` 后仍然先用 `frame_id` 回查采集时刻的 camera pose，再把 Python OpenCV camera-space pose 转成 Unity world pose。
+Unity 收到 Python 的 `PoseResult` 后，先按 `frame_id` 在 `FramePoseHistory` 中精确回查采集时刻的相机世界位姿，再把 Python 的 OpenCV camera-space object pose 转成 Unity world pose。anchor policy 只处理已经对齐好的 world pose，不接触网络、Protobuf 或相机坐标变换。
 
-anchor 侧改成两级时钟：
+运行时有两个时钟：
 
 ```text
 pose 到达时钟:
-  PoseToAnchorRuntime -> AnchorPolicyHost.AcceptPose
-  -> GateModule.Evaluate
-  -> EstimatorModule.Snap / UpdateEstimate
+  PoseToAnchorRuntime -> CameraPoseFrameAligner -> AnchorPolicyHost.AcceptPose
 
 渲染帧时钟:
-  PoseToAnchorRuntime.LateUpdate -> AnchorPolicyHost.Advance(now)
-  -> EstimatorModule.PredictAt(now)
-  -> OutputStageModule.Condition
-  -> DynamicObjectAnchor.TryGetStablePose
+  PoseToAnchorRuntime.LateUpdate -> AnchorPolicyHost.Advance
+  -> MotionModel + SmoothingStrategy + optional StaticLock
+  -> DynamicObjectAnchor 应用 Transform
 ```
 
-`DynamicObjectAnchor` 现在只读 runtime 的 stable/final pose 并应用 Transform。它没有 Raw/Smoothed 输出模式，也不做滤波、门控、网络或 recovery。
+`DynamicObjectAnchor` 是薄应用层：只读取 runtime 的最终输出 pose 并写入 Transform；它不做滤波、门控、网络收发或 recovery。
 
-## 模块目录
+## 当前 policy 结构
 
-模块按职责放在四个目录，Unity 侧不再保留 `Policy/Pipeline` 中间层，避免和 Python 感知 pipeline 混名：
+每个对比变体由一个 `PoseToAnchorRuntime` 和一个 `AnchorPolicyHost` 驱动。`AnchorPolicyHost` 组合：
 
-```text
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Core
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Gate
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Estimator
-EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Output
-```
+- 一个 `MotionModel`：`ConstantVelocityModel`、`KalmanModel` 或 `OneEuroModel`。
+- 一个 `SmoothingStrategy`：`RawPassthroughStrategy`、`BlendStrategy` 或 `DelayedInterpStrategy`。
+- 可选 score gate：用于拒绝低可靠分或过大跳变的坏观测。
+- 可选 `EgoAnchorStaticLockModule`：EgoAnchor 静止锚定层，挂载并启用才算完整方法。
 
-共享 DTO 和数学工具在：
-
-```text
-Policy/Core
-Policy/Estimator/ConstVelocityKalman.cs
-```
-
-Inspector 不用 enum 选择策略。`AnchorPolicyHost` 直接引用三个抽象 `MonoBehaviour` 基类字段：
-
-```text
-AnchorGateModule
-AnchorEstimatorModule
-AnchorOutputStageModule
-```
-
-具体参数写在模块组件自己的 `[SerializeField]` 字段里。模块内部不得读取 `UnityEngine.Time`；时间只能由 `PoseToAnchorRuntime` / `AnchorPolicyHost` 显式传入。
+baseline 与 EgoAnchor 的区别不是旧式模块三分法，而是同一组 `MotionModel × SmoothingStrategy` 上是否叠加 score gate 和 static lock。
 
 ## 推荐挂载
 
-每个 baseline 或 method 用独立 GameObject，避免共享滤波状态。
+每个方法或 baseline 用独立 GameObject，避免共享滤波状态。
 
 ```text
-AnchorObject_raw_zoh
+AnchorObject_raw
   PoseToAnchorRuntime
   AnchorPolicyHost
-  NullGateModule
-  RawEstimatorModule
-  PassThroughOutputModule
+  ConstantVelocityModel
+  RawPassthroughStrategy
   DynamicObjectAnchor
 
-AnchorObject_egoanchor_full
+AnchorObject_kalman_blend
   PoseToAnchorRuntime
   AnchorPolicyHost
-  ScoreJumpGateModule
-  EgoAnchorEstimatorModule
-  StaticLockRateLimitOutputModule
+  KalmanModel
+  BlendStrategy
+  DynamicObjectAnchor
+
+AnchorObject_egoanchor
+  PoseToAnchorRuntime
+  AnchorPolicyHost
+  KalmanModel 或 OneEuroModel
+  BlendStrategy 或 DelayedInterpStrategy
+  EgoAnchorStaticLockModule
   DynamicObjectAnchor
 ```
 
 场景绑定要点：
 
-1. `AnchorRuntimeHub.runtimes` 绑定全部 runtime，让同一条 `PoseResult` 同时驱动所有策略。
-2. 每个 `PoseToAnchorRuntime` 的 `Policy Host` 指向自己的 `AnchorPolicyHost`。
-3. 每个 `AnchorPolicyHost` 的 gate、estimator、output 字段拖入同一物体上的对应 module。
-4. `DynamicObjectAnchor.runtime` 指向同一个 `PoseToAnchorRuntime`。
-5. `AnchorEvalRecorder.recordedRuntimes` 用正式 label 记录每个 runtime 和 Transform。
+1. `AnchorRuntimeHub.runtimes` 绑定所有需要同时比较的 `PoseToAnchorRuntime`。
+2. 每个 `PoseToAnchorRuntime.policyHost` 指向自己的 `AnchorPolicyHost`。
+3. 每个 `AnchorPolicyHost.motionModel` 和 `smoothingStrategy` 指向同一物体上的对应组件。
+4. 若使用 EgoAnchor 静止锁，将 `EgoAnchorStaticLockModule` 拖入 `staticLockModule`，并保持 `lockEnabled=true`。
+5. `DynamicObjectAnchor.runtime` 指向同一个 `PoseToAnchorRuntime`。
+6. `AnchorEvalRecorder.recordedRuntimes` 同时绑定 runtime 和实际显示输出的 `anchorTransform`。
 
-## 正式策略 label
+## 对比组合
 
-| label | Gate | Estimator | Output | score |
+建议论文实验至少保留这些标签：
+
+| label | MotionModel | SmoothingStrategy | static lock | 目的 |
 | --- | --- | --- | --- | --- |
-| `raw_zoh` | `NullGateModule` | `RawEstimatorModule` | `PassThroughOutputModule` | 忽略 |
-| `lowpass_predict` | `NullGateModule` | `LowPassEstimatorModule` | `PassThroughOutputModule` | 忽略 |
-| `kalman_cv` | `NullGateModule` | `KalmanEstimatorModule` | `PassThroughOutputModule` | 忽略 |
-| `oneeuro_vanilla` | `NullGateModule` | `OneEuroEstimatorModule` | `PassThroughOutputModule` | 忽略 |
-| `egoanchor_no_static` | `ScoreJumpGateModule` | `EgoAnchorEstimatorModule` | `PassThroughOutputModule` | 使用 |
-| `egoanchor_full` | `ScoreJumpGateModule` | `EgoAnchorEstimatorModule` | `StaticLockRateLimitOutputModule` | 使用 |
+| `raw` | `ConstantVelocityModel` | `RawPassthroughStrategy` | 关 | 原始低频观测零阶保持 |
+| `kalman_blend` | `KalmanModel` | `BlendStrategy` | 关 | 零延迟平滑 baseline |
+| `oneeuro_blend` | `OneEuroModel` | `BlendStrategy` | 关 | 常用交互滤波 baseline |
+| `kalman_interp` | `KalmanModel` | `DelayedInterpStrategy` | 关 | 延迟插值 baseline |
+| `egoanchor` | 与选定 baseline 相同 | 与选定 baseline 相同 | 开 | EgoAnchor 静止锚定方法 |
 
-baseline 不读取 reliability score。若以后要做 score-aware Kalman，必须另起 label，例如 `kalman_score_adaptive`，不要覆盖 `kalman_cv`。
+RQ1 的 arrival-time 对照应只比较 `frame_aligned_raw` 和 `arrival_time_raw`，不要混入滤波、score gate 或 recovery。
 
-## 旋转实现约定
+## 关键语义
 
-所有 estimator 都必须同时处理 position 和 rotation。
+- `MeasurementTimeSeconds` 优先使用采集时刻时间。policy 不能把消息到达时间当观测时间。
+- baseline 默认不使用 reliability score；需要 score-aware 版本时应另起 label。
+- `RawPassthroughStrategy` 是真正 raw：不外推、不插值，只输出最近一帧观测。
+- `BlendStrategy` 做零延迟外推和残差融合。
+- `DelayedInterpStrategy` 使用延迟目标时刻和控制点插值；Hermite 切线有弦长限幅，避免急停过冲。
+- static lock 是 regime-switching 稳定器，不是低通滤波器。锁定时输出 `lockedPose`，解锁后用接缝残差平滑回到 smoothing 输出。
 
-- `KalmanEstimatorModule`：平移是常速度 Kalman；旋转在四元数参考姿态的 Log/Exp 切空间中过滤，状态包含角速度。
-- `OneEuroEstimatorModule`：平移按 One Euro 的速度自适应截止频率过滤；旋转同样在四元数切空间中过滤，不使用 Euler 角。
-- `LowPassEstimatorModule`、`EgoAnchorEstimatorModule`：预测和输出都同时更新平移与旋转。
+## Eval 字段
 
-实现时核对的公开算法来源：Kalman 原始线性滤波/预测论文，以及 Casiez、Roussel、Vogel 的 One Euro Filter 论文与官方页面。工程里做了 Unity 输入输出适配：world pose 输入、capture/render 时间显式传入、rotation 用 quaternion tangent-space 表达。
-
-## 离线分析回放
-
-主力分析回放是 headless dotnet，不启动 Unity Editor。它读取 `offline_data` 的 `aligned_raw`，用同一份 world pose 输入重跑全部策略。
-
-```powershell
-dotnet run --project EgoAnchor_Tools\anchor_replay\AnchorReplay.csproj -- --session EgoAnchor_Python\data\eval\offline_data --out EgoAnchor_Python\data\eval\offline_data\anchor_replay
-```
-
-输出：
+Unity render 日志当前字段是：
 
 ```text
-anchor_replay_output.jsonl
-anchor_replay_summary.csv
-anchor_replay_config.json
+has_output_pose
+output_pos
+output_rot
+motion_model
+smoothing_strategy
+gate
+anchor_pose_source
 ```
 
-再接 Python eval：
-
-```powershell
-cd EgoAnchor_Python
-pixi run python -m eval.run_eval --session-dir .\data\eval\offline_data --output-log .\data\eval\offline_data\anchor_replay\anchor_replay_output.jsonl --report-dir .\data\eval\offline_data\anchor_replay\report --only tables
-```
-
-当前 `offline_data` 没有 condition spans，所以第一轮只用于检查字段、时序、公平 baseline 和明显 bug。不要从这一个 fixture 得出论文级结论。
-
-## Unity 回放和视频
-
-Unity 内有两类回放组件，目的不同。
-
-`RecordedAnchorReplaySource` / `RecordedAnchorReplayController`：读取录制日志中的 `aligned_raw`，向指定 `PoseToAnchorRuntime` 注入 replay observation，用于在 Unity 里看 pipeline 行为。定量指标仍以 headless `anchor_replay` 为准。
-
-`AnchorTrajectoryPlayer`：只播放日志里已经录出的 `stable_pos/stable_rot`。这是 supplementary video 的主路径，用来复现已有轨迹，不参与算法评估。
+不要恢复旧的 `has_stable / stable_pos / stable_rot` 字段。Python eval report 中的 `stable_rows` 只是汇总表里“有可评估输出 pose 的行数”这一统计名，不是 JSONL 输入字段。
 
 ## Recovery
 
-`AnchorRecoveryController` 是正交层，放在 `Runtime/`。它只观察 runtime 诊断并通过 `AnchorCommandClient` / `IAnchorCommandSender` 发送 reacquire command，不参与 Gate/Estimator/Output，也不把 `CommandAck.accepted=true` 当作恢复完成。`IAnchorCommandSender` 是 `AnchorCommandClient.cs` 内的窄测试契约，不单独占文件。
+低分或 track-loss 自动 reacquire 由 `AnchorRuntimeHub` 统一 fan-in。leaf runtime 或 policy 只暴露请求意图，不自持 command client。`CommandAck.accepted=true` 只表示 Python 接受命令，不表示已经完成 reset/reacquire。
 
-固定触发 reason：
-
-```text
-auto_reacquire_low_score
-auto_reacquire_lost
-auto_reacquire_no_pose
-input_not_ready_wait
-```
-
-RQ2 比较滤波/同步策略时应关闭 recovery。RQ3 再单独比较 recovery disabled、timeout-only 和 score-aware reacquire。
-
-## RQ1 arrival-time 诊断
-
-默认 anchor 仍使用 capture-time frame alignment。新增的 `arrival_time_raw` 只是诊断字段，用 pose 到达/渲染时刻的 latest camera pose 做对照。
-
-RQ1 只比较：
-
-```text
-frame_aligned_raw
-arrival_time_raw
-```
-
-不要把 filter、score gate 或 recovery 混入 RQ1。
+RQ2 比较滤波和静止锁时应关闭 recovery；RQ3 再单独比较 recovery disabled、timeout-only 和 score-aware reacquire。
 
 ## 常见排查
 
-- runtime 收到 pose 但物体不动：先看 `PoseToAnchorRuntime.policyHost` 是否绑定，再看 host 的 gate/estimator/output 三个 module 字段是否为空。
-- `raw_zoh` 不输出：确认它也走 `AnchorPolicyHost + RawEstimatorModule + PassThroughOutputModule`，不要找 Transform 应用层输出模式。
-- 多个物体输出完全一样或状态互相影响：检查是否多个 runtime 共用同一个 `AnchorPolicyHost` 或 estimator module。每个 runtime 需要独立模块实例。
-- baseline 看起来用到了 score：检查 gate 是否是 `NullGateModule`，estimator 是否是 vanilla baseline module。
-- policy 每帧不更新：确认 `PoseToAnchorRuntime.policyHost` 已绑定，且 `AnchorPolicyHost.Advance(now)` 没有因为缺模块抛错。
-- arrival-time 诊断为空：检查 `FramePoseHistory.TryGetLatest(...)` 是否有缓存，以及 `AnchorEvalRecorder` 是否记录 primary runtime。
+- runtime 收到 pose 但物体不动：先查 `PoseToAnchorRuntime.policyHost`，再查 host 的 `motionModel`、`smoothingStrategy` 和 `DynamicObjectAnchor.runtime`。
+- 评估输出为空：检查 `AnchorEvalRecorder.recordedRuntimes[*].anchorTransform` 是否绑定实际显示物体。
+- 多个变体状态互相影响：确认每个 runtime 使用独立的 `AnchorPolicyHost` 和模型/策略组件实例。
+- baseline 看起来用了 score：确认 `enableScoreGate=false`，且没有挂启用状态的 `EgoAnchorStaticLockModule`。
+- arrival-time 对照为空：检查 `FramePoseHistory` 是否有 latest camera pose，以及 recorder 是否记录 primary runtime。
 
 ## 验证命令
 
-```powershell
-dotnet run --project EgoAnchor_Tools\anchor_policy_smoke\AnchorPolicySmoke.csproj
-dotnet run --project EgoAnchor_Tools\eval_writer_smoke\EvalWriterSmoke.csproj
-dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
+Unity 主线编译：
 
+```powershell
+dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
+```
+
+离线升采样仿真：
+
+```powershell
+dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --session EgoAnchor_Python\data\eval\<session> --zoom-start 8 --zoom-end 13
+```
+
+Python eval 单测：
+
+```powershell
 cd EgoAnchor_Python
 pixi run python -m unittest discover -s eval -p "test_*.py"
 ```
-
-离线 fixture 验证：
-
-```powershell
-dotnet run --project EgoAnchor_Tools\anchor_replay\AnchorReplay.csproj -- --session EgoAnchor_Python\data\eval\offline_data --out EgoAnchor_Python\data\eval\offline_data\anchor_replay
-
-cd EgoAnchor_Python
-pixi run python -m eval.run_eval --session-dir .\data\eval\offline_data --output-log .\data\eval\offline_data\anchor_replay\anchor_replay_output.jsonl --report-dir .\data\eval\offline_data\anchor_replay\report --only tables
-```
-
-清理检查：
-
-```powershell
-rg -n "PoseOutputMode|AnchorPoseSource|RawAnchorPoseSource|StableAnchorPoseSource|Pipeline\\Modules|Pipeline/Modules" EgoAnchor_Unity\Assets\Scripts\EgoAnchor
-rg -n "Time\\." EgoAnchor_Unity\Assets\Scripts\EgoAnchor\Policy
-```
-
-第一条不应命中已废弃的输出模式和 PoseSource 包装层；第二条不应命中 policy 模块读取 Unity 时间。

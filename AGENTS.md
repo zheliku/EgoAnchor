@@ -240,7 +240,7 @@ Unity 场景/序列化注意事项：
 5. 至少 3 个代表性刚体物体。
 6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor/egoanchor_final.tex` 是当前最终版中文主稿入口（摘要+引言完整，相关工作→结论为带写作指引的占位骨架，编译产物 `pdf/egoanchor_final.pdf`）。历史草稿包括 `egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex`，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 记录 2026-06-22 定稿规划与 baseline / GT / 用户实验决策，其中 §5 是经三专家团联网核实的文献与定位决策（关键：visionOS 27 已支持动态物体追踪，新颖性改用"五维空白"定位；帧对齐=应用层 late latching 对偶；评估方法学审稿风险清单）。`2026-EgoAnchor/pdf/` 是生成产物。
+论文源文件：`2026-EgoAnchor/egoanchor_final.tex` 是当前最终版中文主稿入口（摘要+引言完整，相关工作→结论为带写作指引的占位骨架，编译产物 `pdf/egoanchor_final.pdf`）。历史草稿包括 `egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex`，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
 当前部分 LaTeX 草稿文件在早期写作阶段可能先保留 `\bibliography{...}` 而尚未加入正文 `\cite{...}`；若需要临时消除 BibTeX 的 `I found no \citation commands` 提示，可显式加入 `\nocite{*}`，待正文引用补齐后再按需要移除。
 系统架构图文档当前放在 `docs/architecture/`，用于维护主线 Python / Unity / Protocol / Evaluation 与三平面通信关系。其中 `egoanchor-system-architecture.drawio`（+ `.spec.yaml` / `.svg`）是系统级总览；`egoanchor-technical-framework.drawio` 是更详细的科研风格技术框架图（感知四步链、三层可靠性评分公式、静止锁机制、生命周期 FSM、评估链路），配套 `egoanchor-technical-route.md` 给出端到端技术路线说明与 gpt-image-2 绘图提示词。论文用中文架构图初稿在 `2026-EgoAnchor/figures/egoanchor_architecture_cn.svg`，可编辑源为同名 `.drawio`，后续英文投稿版可在此基础上翻译标签。
 

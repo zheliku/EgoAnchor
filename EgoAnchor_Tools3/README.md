@@ -92,7 +92,7 @@ Python 推理（~159ms）+ 网络传输 + 排队，实测**采集-渲染延迟�
 测量噪声 R 设得很小（0.0004）→ 高度信任观测，近似过点，同时滤抖。
 **效果**：能跟、能滤噪，但 `ahead` 用完后会保持，仍有可见的「平段+跳变」。
 文件：`Predictors/KalmanPredictor.cs`, `Predictors/ScalarCvKalman.cs`
-（与 Unity 侧 `KalmanEstimatorModule` 结构一一对应。）
+（与 Unity 侧 `KalmanModel` 的常速度状态估计结构对应。）
 
 ### 3. `deadreckoning_spline` —— 航位推测 + 样条修正
 **逻辑**（网络游戏经典方案，专为「零延迟 + 平滑无跳」设计）：
@@ -113,7 +113,7 @@ Python 推理（~159ms）+ 网络传输 + 排队，实测**采集-渲染延迟�
 位置 x/y/z 各一路标量 One Euro，旋转在切空间三路。
 **效果**：平滑、抗抖好，但快速运动时**滞后明显**（峰值被削、转角变圆）。
 文件：`Predictors/OneEuroPredictor.cs`
-（与 Unity 侧 `OneEuroEstimatorModule` 对应。）
+（与 Unity 侧 `OneEuroModel` 对应。）
 
 ---
 
