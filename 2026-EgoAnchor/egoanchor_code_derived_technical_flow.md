@@ -4,7 +4,24 @@
 
 ## 1. 目标
 
-EgoAnchor 的主线不是普通 pose tracking，而是把异步 6DoF object pose 流变成稳定、世界一致、可恢复的 real-object anchor。
+EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体锚定能力。不同于现有平台依赖物理标记、专用深度硬件或预定义对象库，本系统仅依赖头戴显示器双目 RGB 图像与目标物体三维模型，即可实现日常刚性物体的连续 6DoF 动态锚定。
+
+实现这一目标面临两个关键挑战。首先，开放场景中的真实物体感知并非由单一算法完成，而需要目标发现、目标分割、立体几何恢复以及零样本 6DoF 位姿估计等多个视觉模块协同工作。其次，视觉模块输出的是异步的相机坐标系位姿观测，其生成时刻通常早于结果到达混合现实运行时的时刻。若直接使用到达时刻的设备位姿完成坐标变换，将产生系统性的动态配准误差，使虚拟内容在物体运动过程中出现漂移、抖动和跳变。
+
+针对上述问题，EgoAnchor采用对象感知（Object Perception）与对象锚定（Object Anchoring）解耦的分层架构，如图 X 所示。整个系统由视觉感知后端（Visual Perception Backend）和对象锚定运行时（Object Anchoring Runtime）两部分组成。
+
+视觉感知后端负责组织开放视觉能力完成对象感知。系统首先从 Quest 双目透视图像获取同步图像流，并结合目标发现、目标分割、立体重建和零样本 6DoF 位姿估计等模块，持续输出相机坐标系下的异步物体位姿观测（Asynchronous Pose Observation）。该模块的职责是最大程度恢复物体当前位姿，而不涉及世界坐标维护、时延补偿或锚定状态管理。
+
+对象锚定运行时负责将异步位姿观测持续维护为世界坐标系中的动态对象锚点。运行时首先依据采集帧标识恢复观测对应时刻的设备位姿，实现采集时刻（capture-time）的时空对齐；随后结合观测质量评估、时间一致性维护以及对象生命周期管理，对连续观测进行融合更新，最终输出稳定、连续且可恢复的世界坐标对象锚点（World-space Object Anchor），供混合现实应用直接使用。
+
+这种对象感知与对象锚定解耦的设计具有两方面优势。一方面，视觉感知后端能够随着开放视觉基础模型的发展持续升级，而无需修改运行时逻辑；另一方面，对象锚定运行时不依赖具体感知算法，仅消费统一的异步位姿观测接口，因此能够适配不同的视觉感知后端，实现开放、易部署且稳定的动态真实物体锚定能力。
+
+整个数据流可以概括为：
+
+**Stereo Images → Visual Perception Backend → Asynchronous Pose Observation → Object Anchoring Runtime → World-space Object Anchor → Mixed Reality Applications**
+
+需要强调的是，EgoAnchor 的核心目标并非进一步提高单帧位姿估计精度，而是在开放消费级混合现实环境中，将异步视觉感知持续转换为可直接服务于真实交互的动态对象锚定能力。
+
 核心链路是：
 
 `Unity 采集 -> Python 感知 -> Python 结果回传 -> Unity 帧对齐 -> Unity policy 与渲染`
@@ -19,11 +36,11 @@ EgoAnchor 的主线不是普通 pose tracking，而是把异步 6DoF object pose
 
 ### 2.1 三平面
 
-| 平面 | 方向 | 载体 | 语义 |
-| --- | --- | --- | --- |
-| Data Plane | Unity -> Python | ZMQ PUB/SUB | `QuestStereoFrame`、`QuestCameraInfo` |
-| Message Plane | Python -> Unity | NATS pub/sub | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` |
-| Command Plane | Unity -> Python | NATS request/reply | reset / reacquire / control |
+| 平面          | 方向            | 载体               | 语义                                                       |
+| ------------- | --------------- | ------------------ | ---------------------------------------------------------- |
+| Data Plane    | Unity -> Python | ZMQ PUB/SUB        | `QuestStereoFrame`、`QuestCameraInfo`                  |
+| Message Plane | Python -> Unity | NATS pub/sub       | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` |
+| Command Plane | Unity -> Python | NATS request/reply | reset / reacquire / control                                |
 
 ### 2.2 头部字段
 
@@ -540,4 +557,3 @@ handler 层只做：
 10. `DynamicObjectAnchor` 将最终 pose 应用到场景物体。
 
 这条链路的关键不是“更快地发 pose”，而是“在正确的时间轴上把 pose 锚到正确的世界参考上”。
-

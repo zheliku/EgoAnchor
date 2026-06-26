@@ -1832,7 +1832,7 @@ MonoBehaviour:
     ip: 172.24.247.32
   - label: RTX5080 - Laptop
     ip: 192.168.3.9
-  selected: 2
+  selected: 0
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222
@@ -2064,6 +2064,7 @@ MonoBehaviour:
   faceCamera: 1
   flip: 0
   simplified: 1
+  uncertainDelaySeconds: 0.75
   trackingColor: {r: 0.3, g: 0.85, b: 0.35, a: 1}
   staticColor: {r: 0.2, g: 0.7, b: 0.9, a: 1}
   uncertainColor: {r: 1, g: 0.6, b: 0.1, a: 1}

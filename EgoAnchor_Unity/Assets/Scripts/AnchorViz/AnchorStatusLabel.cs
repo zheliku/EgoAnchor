@@ -51,8 +51,12 @@ namespace AnchorViz
 
         /// <summary>是否简化状态显示。</summary>
         [Header("Display")]
-        [Tooltip("简化显示：只显示 Tracking / Lost / Searching / Paused / Error，避免 Coasting、Uncertain 等内部状态高频交替闪烁。关闭则显示全部 9 个原始状态，便于调试。")]
+        [Tooltip("简化显示：显示 Tracking / Static / Uncertain / Lost / Searching / Paused / Error，并隐藏 Coasting、Relocalizing 等内部状态。关闭则显示原始状态，便于调试。")]
         [SerializeField] private bool simplified = true;
+
+        /// <summary>简化模式下，Uncertain 候选状态需持续多久才显示，单位秒。</summary>
+        [Tooltip("简化模式下，Static/Tracking 切到 Uncertain 前的显示防抖时间。用于吸收低帧率 GPU 或偶发低分帧导致的短暂 FrozenUncertain；不改变实际 anchor policy。0=关闭防抖。")]
+        [SerializeField] private float uncertainDelaySeconds = 0.75f;
 
         /// <summary>状态颜色（简化模式与详细模式共用）。</summary>
         [Header("Colors")]
@@ -73,6 +77,10 @@ namespace AnchorViz
         private AnchorState lastState = (AnchorState)(-1);
         private bool lastStaticLocked;
         private bool lastSimplified;
+        private bool hasDisplayedStatus;
+        private DisplayStatus displayedStatus;
+        private DisplayStatus pendingStatus;
+        private double pendingSinceSeconds;
 
         private void Awake()
         {
@@ -91,6 +99,7 @@ namespace AnchorViz
         private void OnValidate()
         {
             lastState = (AnchorState)(-1);
+            hasDisplayedStatus = false;
         }
 
         // LateUpdate：在 anchor pose 应用（DynamicObjectAnchor 也在 LateUpdate）与相机移动之后再对齐朝向。
@@ -101,7 +110,7 @@ namespace AnchorViz
                 return;
             }
 
-            RefreshStatus();
+            RefreshStatus(Time.realtimeSinceStartupAsDouble);
 
             if (faceCamera)
             {
@@ -109,30 +118,89 @@ namespace AnchorViz
             }
         }
 
-        private void RefreshStatus()
+        /// <summary>读取 runtime 状态并刷新标签文本与颜色。</summary>
+        private void RefreshStatus(double nowSeconds)
         {
             AnchorState state = runtime.CurrentAnchorState;
             bool staticLocked = runtime.LatestStaticLocked;
-            if (state == lastState && staticLocked == lastStaticLocked && simplified == lastSimplified)
-            {
-                return;
-            }
-
-            lastState = state;
-            lastStaticLocked = staticLocked;
-            lastSimplified = simplified;
 
             if (simplified)
             {
-                DisplayStatus status = Simplify(state, staticLocked);
+                DisplayStatus rawStatus = Simplify(state, staticLocked);
+                DisplayStatus status = StabilizeSimplifiedStatus(rawStatus, nowSeconds);
+                if (hasDisplayedStatus && status == displayedStatus && state == lastState && staticLocked == lastStaticLocked && simplified == lastSimplified)
+                {
+                    return;
+                }
+
+                displayedStatus = status;
+                hasDisplayedStatus = true;
+                lastState = state;
+                lastStaticLocked = staticLocked;
+                lastSimplified = simplified;
                 label.text = SimplifiedText(status);
                 label.color = SimplifiedColor(status);
             }
             else
             {
+                hasDisplayedStatus = false;
+                if (state == lastState && staticLocked == lastStaticLocked && simplified == lastSimplified)
+                {
+                    return;
+                }
+
+                lastState = state;
+                lastStaticLocked = staticLocked;
+                lastSimplified = simplified;
                 label.text = DetailedText(state, staticLocked);
                 label.color = DetailedColor(state);
             }
+        }
+
+        /// <summary>对简化显示状态做轻量滞回，避免短暂 Uncertain 抖动画面标签。</summary>
+        private DisplayStatus StabilizeSimplifiedStatus(DisplayStatus rawStatus, double nowSeconds)
+        {
+            if (!hasDisplayedStatus)
+            {
+                pendingStatus = rawStatus;
+                pendingSinceSeconds = nowSeconds;
+                return rawStatus;
+            }
+
+            if (rawStatus == displayedStatus)
+            {
+                pendingStatus = rawStatus;
+                pendingSinceSeconds = nowSeconds;
+                return rawStatus;
+            }
+
+            float delaySeconds = DisplayTransitionDelay(displayedStatus, rawStatus);
+            if (delaySeconds <= 0.0f)
+            {
+                pendingStatus = rawStatus;
+                pendingSinceSeconds = nowSeconds;
+                return rawStatus;
+            }
+
+            if (pendingStatus != rawStatus)
+            {
+                pendingStatus = rawStatus;
+                pendingSinceSeconds = nowSeconds;
+                return displayedStatus;
+            }
+
+            return nowSeconds - pendingSinceSeconds >= delaySeconds ? rawStatus : displayedStatus;
+        }
+
+        /// <summary>返回指定显示状态转移需要等待的时间，单位秒。</summary>
+        private float DisplayTransitionDelay(DisplayStatus from, DisplayStatus to)
+        {
+            if (to == DisplayStatus.Uncertain && (from == DisplayStatus.Static || from == DisplayStatus.Tracking))
+            {
+                return Mathf.Max(0.0f, uncertainDelaySeconds);
+            }
+
+            return 0.0f;
         }
 
         private void FaceCamera()

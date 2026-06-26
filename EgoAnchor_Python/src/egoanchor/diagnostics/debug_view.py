@@ -64,6 +64,14 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
     """在 debug 图像左上角绘制关键诊断 HUD。"""
 
     output = image.copy()
+    lines = _hud_lines(observation, diagnostics)
+    _draw_text_lines(output, lines, x=14, y=26)
+    return output
+
+
+def _hud_lines(observation: PoseObservation | None, diagnostics: FrameDiagnostics) -> list[str]:
+    """生成 pose debug 主窗口顶部诊断文本，集中维护字段顺序。"""
+
     lines = [
         f"stage={diagnostics.stage} phase={diagnostics.phase} frame={diagnostics.frame_id}",
         f"pose={observation.has_pose if observation else False} source={observation.pose_source if observation else 'NONE'} score={observation.reliability_score if observation else 0.0:.2f}",
@@ -82,13 +90,60 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
         lines.append(f"failure={diagnostics.failure_reason}")
     if diagnostics.segmenter_error:
         lines.append(f"seg_error={diagnostics.segmenter_error[:96]}")
+    return lines
 
-    y = 26
+
+def _hud_banner_height(line_count: int) -> int:
+    """按 HUD 文本行数计算主窗口顶部信息区高度。"""
+
+    return max(int(line_count), 1) * 24 + 22
+
+
+def _draw_text_lines(
+    image: np.ndarray,
+    lines: list[str],
+    x: int,
+    y: int,
+    color: tuple[int, int, int] = (0, 255, 120),
+    line_h: int = 24,
+) -> None:
+    """用黑色描边绘制多行调试文本，保证浅色图像上仍可读。"""
+
+    row_y = int(y)
     for text in lines:
-        cv2.putText(output, text, (14, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(output, text, (14, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
-        y += 24
-    return output
+        cv2.putText(image, text, (x, row_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(image, text, (x, row_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1, cv2.LINE_AA)
+        row_y += line_h
+
+
+def _paste_labeled_panel(
+    canvas: np.ndarray,
+    panel: np.ndarray,
+    label: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    label_h: int = 30,
+) -> None:
+    """把面板图像贴到画布，并在图像下方绘制独立标签条。"""
+
+    panel_w = max(int(width), 1)
+    panel_h = max(int(height), 1)
+    caption_h = min(max(int(label_h), 0), max(panel_h - 1, 0))
+    image_h = max(panel_h - caption_h, 1)
+    fitted = fit_to_size(panel, panel_w, image_h)
+    canvas[y : y + image_h, x : x + panel_w] = fitted
+    if caption_h <= 0:
+        return
+    caption_y = y + image_h
+    cv2.rectangle(canvas, (x, caption_y), (x + panel_w, y + panel_h), (10, 10, 10), -1)
+    cv2.line(canvas, (x, caption_y), (x + panel_w, caption_y), (45, 45, 45), 1)
+    if caption_h < 18:
+        return
+    text_y = caption_y + min(caption_h - 8, 21)
+    cv2.putText(canvas, label, (x + 14, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(canvas, label, (x + 14, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (235, 235, 235), 1, cv2.LINE_AA)
 
 
 def make_score_debug_view(
@@ -402,6 +457,10 @@ def tile_pose_depth_dashboard(
 ) -> np.ndarray:
     """构建四宫格 pose debug dashboard。"""
 
+    canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
+    lines = _hud_lines(observation, diagnostics)
+    banner_h = min(_hud_banner_height(len(lines)), max(canvas.shape[0] - 2, 1))
+    panel_area_h = max(canvas.shape[0] - banner_h, 2)
     left = diagnostics.left_bgr if diagnostics.left_bgr is not None else np.zeros((240, 320, 3), dtype=np.uint8)
     right = diagnostics.right_bgr if diagnostics.right_bgr is not None else np.zeros_like(left)
     stereo = stack_stereo(left, right)
@@ -418,16 +477,18 @@ def tile_pose_depth_dashboard(
     if w > 0 and h > 0:
         cv2.rectangle(pose_view, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 255), 2)
 
-    cell_w = max(int(width) // 2, 1)
-    cell_h = max(int(height) // 2, 1)
-    top_left = fit_to_size(stereo, cell_w, cell_h)
-    top_right = fit_to_size(mask_view, cell_w, cell_h)
-    bottom_left = fit_to_size(depth_view, cell_w, cell_h)
-    bottom_right = fit_to_size(pose_view, cell_w, cell_h)
-    dashboard = np.vstack([np.hstack([top_left, top_right]), np.hstack([bottom_left, bottom_right])])
-    dashboard = draw_hud(dashboard, observation, diagnostics)
+    cell_w = max(canvas.shape[1] // 2, 1)
+    right_w = max(canvas.shape[1] - cell_w, 1)
+    row_h = max(panel_area_h // 2, 1)
+    bottom_h = max(panel_area_h - row_h, 1)
+    panels = [
+        (stereo, "stereo", 0, banner_h, cell_w, row_h),
+        (mask_view, "mask", cell_w, banner_h, right_w, row_h),
+        (depth_view, "depth", 0, banner_h + row_h, cell_w, bottom_h),
+        (pose_view, "pose", cell_w, banner_h + row_h, right_w, bottom_h),
+    ]
+    for panel, label, panel_x, panel_y, panel_w, panel_h in panels:
+        _paste_labeled_panel(canvas, panel, label, panel_x, panel_y, panel_w, panel_h)
 
-    labels = [("stereo", 14, cell_h - 14), ("mask", cell_w + 14, cell_h - 14), ("depth", 14, height - 14), ("pose", cell_w + 14, height - 14)]
-    for text, x, y in labels:
-        cv2.putText(dashboard, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
-    return dashboard
+    _draw_text_lines(canvas, lines, x=14, y=26)
+    return canvas

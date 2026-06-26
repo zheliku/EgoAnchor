@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from egoanchor.diagnostics import draw_pose_hud as draw_hud, make_score_debug_view
+from egoanchor.diagnostics import draw_pose_hud as draw_hud, make_score_debug_view, tile_pose_depth_dashboard
 from egoanchor.perception import FrameDiagnostics, PoseObservation
 
 
@@ -97,6 +97,24 @@ class DebugViewTest(unittest.TestCase):
         self.assertLess(float(np.mean(view[5])), 20.0)
         self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
         self.assertGreater(float(np.mean(view[expected_banner_h + 8])), 20.0)
+
+    def test_pose_dashboard_reserves_top_banner(self) -> None:
+        """主调试窗口顶部应保留 HUD 横幅，四宫格画面从横幅下方开始。"""
+
+        left = np.full((109, 160, 3), 255, dtype=np.uint8)
+        right = np.full((109, 160, 3), 255, dtype=np.uint8)
+        diagnostics = FrameDiagnostics(left_bgr=left, right_bgr=right)
+
+        view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
+        expected_banner_h = 5 * 24 + 22
+        row_h = (360 - expected_banner_h) // 2
+        label_y = expected_banner_h + row_h - 30
+
+        self.assertEqual(view.shape[:2], (360, 640))
+        self.assertLess(float(np.mean(view[5])), 20.0)
+        self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
+        self.assertGreater(float(np.mean(view[expected_banner_h + 8, 160])), 200.0)
+        self.assertLess(float(np.mean(view[label_y + 2, :320])), 50.0)
 
     def test_score_debug_view_has_diff_triptych(self) -> None:
         """评分窗口应包含原图、零均值投影和 LAB 残差三联图。"""

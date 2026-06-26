@@ -24,7 +24,17 @@
 
 ## 当前定位
 
-EgoAnchor 面向 passthrough mixed reality，把异步 6DoF object pose stream 转成稳定、世界一致、可恢复的 real-object anchor。论文目标是 IEEE VR 2027，叙事核心是 pose-to-anchor / frame-aligned anchoring，不是普通 pose tracking 工程。
+EgoAnchor 面向开放消费级（passthrough）混合现实，把开放视觉感知能力转换成可直接使用的动态真实物体锚定能力。论文目标 IEEE VR 2027。
+
+核心信息（Core Message）：*EgoAnchor enables open, deployable, and stable dynamic object anchoring for everyday rigid objects in consumer MR.* 全文围绕三个维度叙事，**不再罗列"五个特点"或"五维能力空白矩阵"**：
+
+- **Open & Deployable**：仅依赖头显双目 RGB + 物体三维模型，无需物理标签、专用深度硬件或逐物体离线训练。
+- **General-purpose**：面向任意日常刚性物体，而非预定义类别（由"免逐物体训练"直接带来，是因果关系，不是并列）。
+- **Stable Dynamic Anchoring**：把异步视觉位姿持续维护为世界一致、可恢复的 6DoF 对象锚点，而不仅是输出位姿。
+
+架构上对象感知（Object Perception）与对象锚定（Object Anchoring）解耦：Visual Perception Backend 持续产出 camera-space 异步位姿观测；Object Anchoring Runtime 做帧对齐、质量门控、时序稳定与生命周期管理，输出 world-space object anchor。技术 novelty（frame-aligned anchoring 的 capture-time 对齐、reliability-aware static lock、anchor-centric evaluation）全部落在 Stable Dynamic Anchoring 维度里，是技术主体，不是普通 pose tracking 工程；维度 1、2 是可达性/通用性故事。旧"四层协同架构"降级为 Runtime 内部结构，不再当顶层骨架。
+
+诚实边界（写文必须守）：「纯视觉」只修饰物体位姿估计链路，参考相机世界位姿来自头显自身跟踪；「open / deployable」指无需专用深度/标签/逐物体训练，**不等于头显端独立运行**——当前仍依赖外部消费级 GPU 推理与异步通信，不要把三维叙事滑成"Quest 上即插即用"。
 
 主线结构：
 
@@ -107,6 +117,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 - 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
 - reliability：`render_quality.enabled=true` 默认采集信号，但 `mode="score_only"` 保持 shadow mode；无有效 reprojection/depth 信号不得触发重注册。
+- diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；主窗口图像面板必须从横幅下方开始排布，且 `stereo/mask/depth/pose` 标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。
 - logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
 - 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
 - command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime`。NATS handler 只能 parse/validate/dedup/enqueue/ack，pipeline/GPU 状态由单一 `TrackingRuntime` 顺序拥有。
@@ -168,6 +179,7 @@ Unity 代码地图：
 - `Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多个 runtime；低分 reacquire fan-in 也在这里合并发出。
 - `Runtime/PoseToAnchorRuntime.cs`：把 camera-space pose 对齐为 Unity world pose，提交给 policy，每帧 `LateUpdate(-50)` 推进输出。
 - `Runtime/DynamicObjectAnchor.cs`：只读 `TryGetOutputPose` 并应用 Transform，不承载滤波、状态机、网络或 recovery。
+- `AnchorViz/AnchorStatusLabel.cs`：只做用户可见状态标签；简化模式对 Static/Tracking -> Uncertain 做短时间显示防抖，吸收低帧率或偶发低分帧造成的标签闪烁，不改变 `AnchorPolicyHost`、静止锁输出或 eval schema。
 - `EgoAnchorEval/AnchorEvalRecorder.cs`：按 capture/render 两条日志写 JSONL；配置摘要通过反射收集 `[SerializeField]` 字段，隐藏字段也会进入 config hash。
 
 静止锁命名约定：
@@ -240,11 +252,12 @@ Unity 场景/序列化注意事项：
 5. 至少 3 个代表性刚体物体。
 6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor/egoanchor_final.tex` 是当前最终版中文主稿入口（摘要+引言完整，相关工作→结论为带写作指引的占位骨架，编译产物 `pdf/egoanchor_final.pdf`）。历史草稿包括 `egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex`，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
+论文源文件：`2026-EgoAnchor/egoanchor_cn_v3.tex` 是当前最新中文主稿（摘要+引言已按三维 Core Message 重写，系统设计→结论尚为旧"四层协同/五维空白"骨架，待按三维主线收口，见 `paper-plan` 投稿前清单）。历史草稿 `egoanchor_cn_v2.tex`、`egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex` 保留备查，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
 当前部分 LaTeX 草稿文件在早期写作阶段可能先保留 `\bibliography{...}` 而尚未加入正文 `\cite{...}`；若需要临时消除 BibTeX 的 `I found no \citation commands` 提示，可显式加入 `\nocite{*}`，待正文引用补齐后再按需要移除。
 系统架构图文档当前放在 `docs/architecture/`，用于维护主线 Python / Unity / Protocol / Evaluation 与三平面通信关系。其中 `egoanchor-system-architecture.drawio`（+ `.spec.yaml` / `.svg`）是系统级总览；`egoanchor-technical-framework.drawio` 是更详细的科研风格技术框架图（感知四步链、三层可靠性评分公式、静止锁机制、生命周期 FSM、评估链路），配套 `egoanchor-technical-route.md` 给出端到端技术路线说明与 gpt-image-2 绘图提示词。论文用中文架构图初稿在 `2026-EgoAnchor/figures/egoanchor_architecture_cn.svg`，可编辑源为同名 `.drawio`，后续英文投稿版可在此基础上翻译标签。
 
 专利工作区：`EgoAnchor_Invention_Patent/`。专利文稿中的技术描述必须严格贴合当前主线实现：帧姿态历史正式路径只允许按 `frame_id` 精确命中，不得杜撰 latest-match、最近有效缓存回退、候选评分回查或“降级对齐”机制；静止锁相关公式要覆盖 `headToleranceFactor`、`posDistanceFactor`、`headSettleSeconds`、`lowScoreReleaseScore/Seconds` 等当前真实机制，不得退回成只写 deadband + CUSUM 的简化版本；同时要突出纯视觉链路、AI 模型链、异步通信、帧对齐、可靠性评分与整套 anchor 策略。这里“纯视觉”只适用于目标物体位姿估计链路，不得把参考相机世界位姿的来源写成“完全不依赖惯性传感器或外部空间定位传感器”的绝对方案。
+在进行专利初稿 `.docx` 的检查与确认时，需重点防范由格式转换引起的数学公式损坏：Word (OMML) 转换过程中指示函数 \(\mathbf 1[\cdot]\) 极易退化为普通数字 `1` 导致逻辑关系彻底失效；递推公式中的接缝残差等变量容易发生同名混淆（如将 \(\tilde{r}_t\) 误写为 \(r_t\)）；大括号分段函数易丢失且易残留 LaTeX 格式代码（如 `[6pt]`、`[4pt]`）。此外，Word 草稿在同步主稿时容易缺失较多控制公式及系统细化从属权利要求，且极易因模板残留引入无关技术文本（如“专家网络”等多模态无关内容），后续检查需以最新 `vNN` 主稿 `md` 文件为唯一绝对真理源进行全文核对与重构。
 
 ## 环境与依赖
 

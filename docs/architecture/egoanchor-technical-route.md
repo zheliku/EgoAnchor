@@ -8,9 +8,15 @@
 
 ## 一句话定位
 
-EgoAnchor 面向 passthrough 混合现实，把外部视觉计算设备产生的**异步、低帧率、带噪声的相机坐标系 6DoF 物体位姿流**，转换成头戴端**稳定、世界一致、可恢复**的真实物体锚点。重点不是普通目标跟踪，而是 **pose-to-anchor** 与 **frame-aligned anchoring**（按帧对齐的锚定）。
+**Core Message**：EgoAnchor enables **open, deployable, and stable dynamic object anchoring** for everyday rigid objects in consumer MR——把开放视觉感知能力转换为消费级混合现实中可直接使用的动态真实物体锚定能力。
 
-核心主张：物体位姿估计链路**仅依赖双目视觉 + 物体 3D 模型**（不依赖物体侧的惯性或外部空间定位传感器）；参考相机的世界位姿来自头戴端自身跟踪。仅消费级显卡即可部署（5080 laptop 约 5fps，5090 桌面端约 12fps），框架把低帧率观测平滑升采样到 60fps。
+围绕三个维度叙事（不再罗列"五个特点"）：
+
+- **Open & Deployable**：仅依赖头显双目图像 + 物体三维模型，无需物理标签、专用深度硬件或逐物体离线训练。
+- **General-purpose**：支持任意日常刚性物体，而非预定义类别（"免逐物体训练"的直接结果）。
+- **Stable Dynamic Anchoring**：把**异步、低帧率、带噪声的相机坐标系 6DoF 物体位姿流**持续维护为头戴端**稳定、世界一致、可恢复**的真实物体锚点，而不仅是输出位姿。技术内核在此维度：**frame-aligned anchoring**（按帧对齐的锚定）与 reliability-aware static lock。
+
+诚实边界：物体位姿估计链路**仅依赖双目视觉 + 物体 3D 模型**（不依赖物体侧的惯性或外部空间定位传感器）；参考相机的世界位姿来自头戴端自身跟踪。"deployable" 指无需专用深度/标签/逐物体训练，**不等于头显端独立运行**——感知当前跑在外部消费级 GPU（5080 laptop 约 5fps，5090 桌面端约 12fps）并经异步通信回传，框架把低帧率观测平滑升采样到 60fps。
 
 ---
 
