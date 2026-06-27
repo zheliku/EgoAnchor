@@ -125,6 +125,7 @@ def _paste_labeled_panel(
     width: int,
     height: int,
     label_h: int = 30,
+    background_color: tuple[int, int, int] = (0, 0, 0),
 ) -> None:
     """把面板图像贴到画布，并在图像下方绘制独立标签条。"""
 
@@ -132,7 +133,7 @@ def _paste_labeled_panel(
     panel_h = max(int(height), 1)
     caption_h = min(max(int(label_h), 0), max(panel_h - 1, 0))
     image_h = max(panel_h - caption_h, 1)
-    fitted = fit_to_size(panel, panel_w, image_h)
+    fitted = _fit_to_size(panel, panel_w, image_h, background_color)
     canvas[y : y + image_h, x : x + panel_w] = fitted
     if caption_h <= 0:
         return
@@ -142,8 +143,44 @@ def _paste_labeled_panel(
     if caption_h < 18:
         return
     text_y = caption_y + min(caption_h - 8, 21)
-    cv2.putText(canvas, label, (x + 14, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3, cv2.LINE_AA)
-    cv2.putText(canvas, label, (x + 14, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (235, 235, 235), 1, cv2.LINE_AA)
+    _put_caption_label(canvas, label, x + 14, text_y, max(panel_w - 24, 1))
+
+
+def _put_caption_label(canvas: np.ndarray, label: str, x: int, y: int, max_width: int) -> None:
+    """在标签条内绘制自适应字号文本，避免长标签越界到相邻 panel。"""
+
+    text = str(label)
+    scale = 0.65
+    thickness = 1
+    while scale > 0.42:
+        text_w, _text_h = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0]
+        if text_w <= max_width:
+            break
+        scale -= 0.05
+    if cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0][0] > max_width:
+        while len(text) > 4 and cv2.getTextSize(text + "...", cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0][0] > max_width:
+            text = text[:-1]
+        text = text.rstrip() + "..."
+    cv2.putText(canvas, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(canvas, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (235, 235, 235), thickness, cv2.LINE_AA)
+
+
+def _fit_to_size(image: np.ndarray, width: int, height: int, background_color: tuple[int, int, int]) -> np.ndarray:
+    """缩放 panel 并用指定背景填充 letterbox 区域。"""
+
+    if tuple(background_color) == (0, 0, 0):
+        return fit_to_size(image, width, height)
+    target_width = max(int(width), 1)
+    target_height = max(int(height), 1)
+    scale = min(target_width / max(image.shape[1], 1), target_height / max(image.shape[0], 1))
+    new_w = max(1, int(image.shape[1] * scale))
+    new_h = max(1, int(image.shape[0] * scale))
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+    canvas = np.full((target_height, target_width, 3), background_color, dtype=np.uint8)
+    x0 = (target_width - new_w) // 2
+    y0 = (target_height - new_h) // 2
+    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = resized
+    return canvas
 
 
 def make_score_debug_view(
@@ -167,78 +204,81 @@ def make_score_debug_view(
     diff_maps = _reprojection_diff_maps(diagnostics)
     panels = [
         (
-            _overlap_rgb_panel(
+            _observed_rgb_contour_panel(
                 diagnostics.render_quality_observed_rgb,
                 diagnostics.render_quality_render_mask,
                 diagnostics.render_quality_observed_mask,
             ),
+            "RGB: green render / cyan Cutie",
             0,
             banner_h,
             col_w,
             row_h,
         ),
         (
-            _aligned_projection_panel(
-                diff_maps,
+            _render_projection_panel(
                 diagnostics.render_quality_render_rgb,
                 diagnostics.render_quality_render_mask,
             ),
+            "render RGB on checkerboard",
             col_w,
             banner_h,
             col_w,
             row_h,
         ),
         (
-            _lab_residual_panel(diff_maps),
+            _lab_residual_panel(diff_maps, diagnostics.render_quality_observed_rgb),
+            _lab_residual_label(diff_maps),
             col_w * 2,
             banner_h,
             right_w,
             row_h,
         ),
         (
-            _rgb_mask_panel(
-                diagnostics.render_quality_render_rgb,
-                diagnostics.render_quality_render_mask,
-                "render RGB / projection",
-                (0, 255, 120),
+            _depth_map_panel(
+                diagnostics.render_quality_observed_depth,
+                diagnostics.render_quality_observed_mask,
+                min_depth,
+                max_depth,
+                (255, 255, 0),
             ),
+            "FFS observed depth",
             0,
             banner_h + row_h,
             col_w,
             bottom_h,
         ),
         (
-            _depth_region_panel(
+            _depth_map_panel(
                 diagnostics.render_quality_render_depth,
                 diagnostics.render_quality_render_mask,
-                "render surface depth",
                 min_depth,
                 max_depth,
                 (0, 255, 120),
             ),
+            "render projected depth",
             col_w,
             banner_h + row_h,
             col_w,
             bottom_h,
         ),
         (
-            _depth_region_panel(
+            _depth_residual_panel(
+                diagnostics.render_quality_render_depth,
                 diagnostics.render_quality_observed_depth,
+                diagnostics.render_quality_render_mask,
                 diagnostics.render_quality_observed_mask,
-                "FFS depth / Cutie mask",
-                min_depth,
-                max_depth,
-                (255, 255, 0),
+                diagnostics.render_quality_observed_rgb,
             ),
+            "depth diff: blue aligned / red large",
             col_w * 2,
             banner_h + row_h,
             right_w,
             bottom_h,
         ),
     ]
-    for panel, x, y, panel_w, panel_h in panels:
-        fitted = fit_to_size(panel, panel_w, panel_h)
-        canvas[y : y + panel_h, x : x + panel_w] = fitted
+    for panel, label, x, y, panel_w, panel_h in panels:
+        _paste_labeled_panel(canvas, panel, label, x, y, panel_w, panel_h, background_color=(42, 42, 42))
 
     y = 24
     for text in lines:
@@ -271,23 +311,16 @@ def _score_banner_height(line_count: int) -> int:
     return text_h + score_bar_h + 36
 
 
-def _overlap_rgb_panel(observed_rgb: np.ndarray | None, render_mask: np.ndarray | None, observed_mask: np.ndarray | None) -> np.ndarray:
-    """在真实 RGB 上显示投影 mask、Cutie mask 和二者交集。"""
+def _observed_rgb_contour_panel(observed_rgb: np.ndarray | None, render_mask: np.ndarray | None, observed_mask: np.ndarray | None) -> np.ndarray:
+    """在真实 RGB 上只画轮廓，保留物体原始颜色供截图比较。"""
 
     image = _ensure_bgr(observed_rgb, "no observed RGB")
     render = _resize_mask_like(render_mask, image)
     observed = _resize_mask_like(observed_mask, image)
-    overlay = np.zeros_like(image)
-    if render is not None:
-        overlay[render] = (0, 255, 120)
-    if observed is not None:
-        overlay[observed] = (255, 255, 0)
     if render is not None and observed is not None:
-        overlay[render & observed] = (0, 220, 255)
-    image = cv2.addWeighted(image, 1.0, overlay, 0.42, 0)
+        _draw_mask_contour(image, render & observed, (255, 255, 255), thickness=1)
     _draw_mask_contour(image, render, (0, 255, 120))
     _draw_mask_contour(image, observed, (255, 255, 0))
-    _put_panel_title(image, "observed RGB / overlap")
     return image
 
 
@@ -312,74 +345,162 @@ def _reprojection_diff_maps(diagnostics: FrameDiagnostics) -> ReprojectionDiffMa
         return None
 
 
-def _aligned_projection_panel(
-    diff_maps: ReprojectionDiffMaps | None,
-    render_rgb: np.ndarray | None,
-    render_mask: np.ndarray | None,
-) -> np.ndarray:
-    """显示按 LAB 零均值统计量对齐后的渲染投影。"""
+def _render_projection_panel(render_rgb: np.ndarray | None, render_mask: np.ndarray | None) -> np.ndarray:
+    """把渲染 RGB 按投影 mask 放在棋盘背景上，避免黑底误导轮廓判断。"""
 
-    if diff_maps is None:
-        return _rgb_mask_panel(render_rgb, render_mask, "zero-mean render unavailable", (0, 255, 120))
-    image = _ensure_bgr(diff_maps.aligned_render_rgb, "no aligned render")
+    image = _ensure_bgr(render_rgb, "no render RGB")
     mask_bool = _resize_mask_like(render_mask, image)
     if mask_bool is not None:
-        image[~mask_bool] = (0, 0, 0)
-        image = overlay_mask_contour(image, mask_bool, color=(0, 255, 120))
-    _put_panel_title(image, "zero-mean render / projection")
+        background = _checkerboard_background(image.shape[0], image.shape[1])
+        image = _composite_mask_region(image, mask_bool, background)
+        _draw_mask_contour(image, mask_bool, (0, 255, 120))
     return image
 
 
-def _lab_residual_panel(diff_maps: ReprojectionDiffMaps | None) -> np.ndarray:
-    """显示 LAB z-score 残差热力图，标题中标出 ZNCC 分。"""
+def _lab_residual_panel(diff_maps: ReprojectionDiffMaps | None, observed_rgb: np.ndarray | None) -> np.ndarray:
+    """把 LAB z-score 残差叠在观测图灰度上下文中，显示颜色差异位置。"""
 
     if diff_maps is None:
-        image = np.zeros((240, 320, 3), dtype=np.uint8)
-        cv2.putText(image, "no LAB residual", (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 160, 255), 1, cv2.LINE_AA)
-        return image
-    image = diff_maps.residual_heatmap_bgr.copy()
-    _put_panel_title(image, f"LAB residual ZNCC={diff_maps.score:.2f}")
-    return image
+        return _empty_panel("no LAB residual")
+    image = _context_panel(observed_rgb, diff_maps.residual_heatmap_bgr.shape[:2])
+    heatmap = diff_maps.residual_heatmap_bgr.copy()
+    core_mask = _resize_mask_like(diff_maps.core_mask, image)
+    if core_mask is not None:
+        blended = cv2.addWeighted(image, 0.35, heatmap, 0.65, 0)
+        image[core_mask] = blended[core_mask]
+        _draw_mask_contour(image, core_mask, (255, 255, 255), thickness=1)
+    return _append_heatmap_legend(image, cv2.COLORMAP_JET, low_label="low", high_label="high")
 
 
-def _rgb_mask_panel(rgb: np.ndarray | None, mask: np.ndarray | None, title: str, color: tuple[int, int, int]) -> np.ndarray:
-    """显示渲染 RGB，并用 mask 标出本帧投影区域。"""
+def _lab_residual_label(diff_maps: ReprojectionDiffMaps | None) -> str:
+    """生成 LAB 残差面板标签，把分数放到独立标签条而不是图像内。"""
 
-    image = _ensure_bgr(rgb, "no render RGB")
-    mask_bool = _resize_mask_like(mask, image)
-    if mask_bool is not None:
-        image[~mask_bool] = (0, 0, 0)
-        image = overlay_mask_contour(image, mask_bool, color=color)
-    _put_panel_title(image, title)
-    return image
+    if diff_maps is None:
+        return "LAB residual unavailable"
+    return f"LAB residual on RGB ZNCC={diff_maps.score:.2f}"
 
 
-def _depth_region_panel(
+def _depth_map_panel(
     depth: np.ndarray | None,
     mask: np.ndarray | None,
-    title: str,
     min_depth: float,
     max_depth: float,
     color: tuple[int, int, int],
 ) -> np.ndarray:
-    """显示指定 mask 区域内的深度图，便于肉眼比较渲染深度和 FFS 深度。"""
+    """显示原始深度伪彩色图，并只用轮廓标出对应 mask。"""
 
-    image = colorize_depth(depth, min_depth=min_depth, max_depth=max_depth)
+    image = _colorize_depth_neutral(depth, min_depth=min_depth, max_depth=max_depth)
     mask_bool = _resize_mask_like(mask, image)
     if mask_bool is not None:
-        image[~mask_bool] = (0, 0, 0)
-        image = overlay_mask_contour(image, mask_bool, color=color)
-    _put_panel_title(image, title)
+        _draw_mask_contour(image, mask_bool, color)
+    return image
+
+
+def _depth_residual_panel(
+    render_depth: np.ndarray | None,
+    observed_depth: np.ndarray | None,
+    render_mask: np.ndarray | None,
+    observed_mask: np.ndarray | None,
+    observed_rgb: np.ndarray | None,
+) -> np.ndarray:
+    """显示渲染深度与 FFS 深度在交集内的残差热力图。"""
+
+    if render_depth is None or observed_depth is None:
+        return _empty_panel("no depth residual")
+    render = np.asarray(render_depth, dtype=np.float32)
+    observed = np.asarray(observed_depth, dtype=np.float32)
+    if render.shape != observed.shape:
+        return _empty_panel("depth shape mismatch")
+    image = _context_panel(observed_rgb, render.shape[:2])
+    render_bool = _resize_mask_like(render_mask, image)
+    observed_bool = _resize_mask_like(observed_mask, image)
+    if render_bool is None:
+        render_bool = np.isfinite(render) & (render > 0.0)
+    if observed_bool is None:
+        observed_bool = np.isfinite(observed) & (observed > 0.0)
+    valid = render_bool & observed_bool & np.isfinite(render) & np.isfinite(observed) & (render > 0.0) & (observed > 0.0)
+    if not np.any(valid):
+        _draw_mask_contour(image, render_bool, (0, 255, 120))
+        _draw_mask_contour(image, observed_bool, (255, 255, 0))
+        return image
+
+    residual = np.zeros(render.shape, dtype=np.float32)
+    residual[valid] = np.abs(render[valid] - observed[valid])
+    scale = max(float(np.percentile(residual[valid], 95)), 1e-3)
+    normalized = np.clip(residual / scale * 255.0, 0.0, 255.0).astype(np.uint8)
+    heatmap = cv2.applyColorMap(normalized, cv2.COLORMAP_TURBO)
+    blended = cv2.addWeighted(image, 0.35, heatmap, 0.65, 0)
+    image[valid] = blended[valid]
+    _draw_mask_contour(image, render_bool, (0, 255, 120))
+    _draw_mask_contour(image, observed_bool, (255, 255, 0))
+    _draw_mask_contour(image, valid, (255, 255, 255), thickness=1)
+    return _append_heatmap_legend(image, cv2.COLORMAP_TURBO, low_label="0", high_label=f"p95={_format_distance(scale)}")
+
+
+def _append_heatmap_legend(
+    image_bgr: np.ndarray,
+    colormap: int,
+    *,
+    low_label: str,
+    high_label: str,
+) -> np.ndarray:
+    """在热力图右侧追加竖向色标，说明冷色到热色的数值含义。"""
+
+    image = np.asarray(image_bgr, dtype=np.uint8)
+    height = max(int(image.shape[0]), 1)
+    legend_w = 88
+    bar_w = 14
+    pad = 8
+    legend = np.full((height, legend_w, 3), 34, dtype=np.uint8)
+    bar_h = max(height - 36, 12)
+    y0 = max((height - bar_h) // 2, 4)
+    x0 = pad
+    gradient = np.linspace(255, 0, bar_h, dtype=np.uint8).reshape(bar_h, 1)
+    bar = cv2.applyColorMap(np.repeat(gradient, bar_w, axis=1), colormap)
+    legend[y0 : y0 + bar_h, x0 : x0 + bar_w] = bar
+    cv2.rectangle(legend, (x0, y0), (x0 + bar_w - 1, y0 + bar_h - 1), (225, 225, 225), 1)
+    _put_tiny_text(legend, high_label, x0 + bar_w + 6, max(y0 + 10, 12))
+    _put_tiny_text(legend, low_label, x0 + bar_w + 6, min(y0 + bar_h, height - 6))
+    return np.hstack([image, legend])
+
+
+def _put_tiny_text(image_bgr: np.ndarray, text: str, x: int, y: int) -> None:
+    """绘制热力图色标小字，保留黑色描边以适应亮色背景。"""
+
+    cv2.putText(image_bgr, text, (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (0, 0, 0), 2, cv2.LINE_AA)
+    cv2.putText(image_bgr, text, (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (235, 235, 235), 1, cv2.LINE_AA)
+
+
+def _format_distance(distance_m: float) -> str:
+    """把米制残差格式化成适合色标显示的短文本。"""
+
+    value = max(float(distance_m), 0.0)
+    if value < 0.01:
+        return f"{value * 1000.0:.1f}mm"
+    if value < 1.0:
+        return f"{value * 100.0:.1f}cm"
+    return f"{value:.2f}m"
+
+
+def _colorize_depth_neutral(depth: np.ndarray | None, min_depth: float, max_depth: float) -> np.ndarray:
+    """把深度图转成伪彩色，并用中性灰背景显示无效区域。"""
+
+    if depth is None:
+        return _empty_panel("no depth")
+    depth_arr = np.asarray(depth, dtype=np.float32)
+    if depth_arr.ndim != 2:
+        return _empty_panel("depth shape invalid")
+    image = colorize_depth(depth_arr, min_depth=min_depth, max_depth=max_depth)
+    valid = np.isfinite(depth_arr) & (depth_arr > 0.0)
+    image[~valid] = (48, 48, 48)
     return image
 
 
 def _ensure_bgr(rgb: np.ndarray | None, empty_text: str) -> np.ndarray:
-    """把 RGB debug 图转为 BGR；无信号时返回黑底提示图。"""
+    """把 RGB debug 图转为 BGR；无信号时返回中性占位图。"""
 
     if rgb is None:
-        image = np.zeros((240, 320, 3), dtype=np.uint8)
-        cv2.putText(image, empty_text, (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 160, 255), 1, cv2.LINE_AA)
-        return image
+        return _empty_panel(empty_text)
     arr = np.asarray(rgb)
     if arr.ndim == 2:
         arr = np.repeat(arr[..., None], 3, axis=2)
@@ -402,22 +523,59 @@ def _resize_mask_like(mask: np.ndarray | None, image_bgr: np.ndarray) -> np.ndar
     return mask_u8 > 0
 
 
-def _draw_mask_contour(image_bgr: np.ndarray, mask: np.ndarray | None, color: tuple[int, int, int]) -> None:
+def _draw_mask_contour(image_bgr: np.ndarray, mask: np.ndarray | None, color: tuple[int, int, int], thickness: int = 2) -> None:
     """只绘制 mask 轮廓，用于在 RGB 面板上区分两个来源。"""
 
     if mask is None:
         return
     mask_u8 = (np.asarray(mask) > 0).astype(np.uint8)
     contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(image_bgr, contours, -1, color, 2)
+    cv2.drawContours(image_bgr, contours, -1, color, max(1, int(thickness)))
 
 
-def _put_panel_title(image_bgr: np.ndarray, title: str) -> None:
-    """在 panel 左下角绘制标题，避免遮挡中心比较区域。"""
+def _context_panel(rgb: np.ndarray | None, shape_hw: tuple[int, int]) -> np.ndarray:
+    """生成残差图背景；优先用观测 RGB 的灰度上下文，否则用中性棋盘。"""
 
-    y = max(image_bgr.shape[0] - 14, 18)
-    cv2.putText(image_bgr, title, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
-    cv2.putText(image_bgr, title, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    height, width = max(int(shape_hw[0]), 1), max(int(shape_hw[1]), 1)
+    if rgb is None:
+        return _checkerboard_background(height, width)
+    image = _ensure_bgr(rgb, "no observed RGB")
+    if image.shape[:2] != (height, width):
+        image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray_bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    return cv2.addWeighted(gray_bgr, 0.72, np.full_like(gray_bgr, 42), 0.28, 0)
+
+
+def _checkerboard_background(height: int, width: int, tile: int = 12) -> np.ndarray:
+    """生成中性棋盘背景，区分无数据区域但不抢物体颜色信息。"""
+
+    target_h = max(int(height), 1)
+    target_w = max(int(width), 1)
+    tile_size = max(int(tile), 1)
+    yy, xx = np.indices((target_h, target_w))
+    pattern = ((xx // tile_size + yy // tile_size) % 2).astype(np.uint8)
+    background = np.empty((target_h, target_w, 3), dtype=np.uint8)
+    background[pattern == 0] = (46, 46, 46)
+    background[pattern == 1] = (72, 72, 72)
+    return background
+
+
+def _composite_mask_region(image_bgr: np.ndarray, mask: np.ndarray, background_bgr: np.ndarray) -> np.ndarray:
+    """只把 mask 内图像贴到背景上，避免 renderer 黑底参与视觉判断。"""
+
+    mask_bool = np.asarray(mask) > 0
+    output = background_bgr.copy()
+    output[mask_bool] = image_bgr[mask_bool]
+    return output
+
+
+def _empty_panel(text: str, width: int = 320, height: int = 240) -> np.ndarray:
+    """生成无信号占位 panel；只用于解释缺失数据，不承担普通标题。"""
+
+    image = np.full((max(int(height), 1), max(int(width), 1), 3), 32, dtype=np.uint8)
+    cv2.putText(image, text, (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 160, 255), 1, cv2.LINE_AA)
+    return image
 
 
 def _draw_score_bars(canvas: np.ndarray, diagnostics: FrameDiagnostics, x: int, y: int, width: int, row_h: int) -> None:
@@ -471,7 +629,8 @@ def tile_pose_depth_dashboard(
             seg = cv2.resize(seg, (left.shape[1], left.shape[0]), interpolation=cv2.INTER_LINEAR)
         mask_view = cv2.addWeighted(mask_view, 0.55, seg, 0.45, 0)
     depth_view = colorize_depth(diagnostics.depth, min_depth=min_depth, max_depth=max_depth)
-    depth_view = overlay_mask_contour(depth_view, diagnostics.mask, color=(255, 255, 255))
+    depth_mask = _resize_mask_like(diagnostics.mask, depth_view)
+    _draw_mask_contour(depth_view, depth_mask, color=(255, 255, 255), thickness=1)
     pose_view = diagnostics.pose_vis_bgr if diagnostics.pose_vis_bgr is not None else overlay_mask_contour(left, diagnostics.mask, color=(0, 255, 255))
     x, y, w, h = diagnostics.cutie_bbox_xywh
     if w > 0 and h > 0:

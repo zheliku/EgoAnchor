@@ -117,7 +117,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 - 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
 - reliability：`render_quality.enabled=true` 默认采集信号，但 `mode="score_only"` 保持 shadow mode；无有效 reprojection/depth 信号不得触发重注册。
-- diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；主窗口图像面板必须从横幅下方开始排布，且 `stereo/mask/depth/pose` 标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。
+- diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；图像面板必须从横幅下方开始排布，面板标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。主窗口 depth 面板保留原始深度伪彩色，只画 1px mask 轮廓，不做 mask 内部填充。score debug 窗口保持颜色重投影/深度对齐 2x3 诊断矩阵，上下两行都按观测、渲染、残差从左到右排列；RGB 面板只画 render/Cutie 轮廓，render/depth/残差面板使用中性背景或观测灰度上下文，避免黑底和半透明高亮掩盖原始颜色。残差面板右侧带热力图色标；深度残差图显示 `abs(render_depth - observed_depth)`，蓝色表示残差小、对齐好，红色表示残差大、差异明显，色标高端显示当前帧 p95 残差。
 - logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
 - 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
 - command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime`。NATS handler 只能 parse/validate/dedup/enqueue/ack，pipeline/GPU 状态由单一 `TrackingRuntime` 顺序拥有。
@@ -299,3 +299,4 @@ Unity 场景/序列化注意事项：
 - 不要修改 `USER-MAINTAINED-REQUIREMENTS` 区块。
 - 大改后同步入口、模块职责、协议字段、配置名、验证命令和关键坑。
 - 若代码事实推翻旧描述，直接改旧条目，不要追加相互矛盾的新条目。
+- 本机 Codex 已在用户配置中启用 `superpowers@openai-curated`；后续 AI 若会话暴露该插件技能，应先读/调用 `using-superpowers` 再处理任务。

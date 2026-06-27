@@ -12,10 +12,10 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 实现这一目标面临两个关键挑战。首先，开放场景中的真实物体感知并非由单一算法完成，而需要 **目标发现、目标分割、立体几何恢复、零样本 6DoF 位姿估计** 等多个视觉模块协同工作。其次，视觉模块输出的是 **异步的相机坐标系位姿观测**，其生成时刻通常早于结果到达混合现实运行时的时刻；若直接使用到达时刻（arrival-time）的设备位姿完成坐标变换，将产生系统性的动态配准误差，使虚拟内容在物体运动过程中出现漂移、抖动和跳变。
 
-针对上述问题，EgoAnchor 采用 **对象感知（Object Perception）与对象锚定（Object Anchoring）解耦** 的分层架构。系统由 **视觉感知后端（Visual Perception Backend，Python）** 与 **对象锚定运行时（Object Anchoring Runtime，Unity）** 两部分组成：
+针对上述问题，EgoAnchor 采用 **对象感知（Object Perception）与对象锚定（Object Anchoring）解耦** 的分层架构。系统由 **视觉感知后端（Visual Perception Backend，Python）** 与 **对象锚定运行时（Object Anchoring Runtime，Unity）** 两部分组成。论文与本文档统一以如下流程术语描述两端：
 
-- **视觉感知后端** 从 Quest 双目透视图像获取同步图像流，组织目标发现、分割、立体重建与零样本 6DoF 位姿估计模块，持续输出相机坐标系下的异步物体位姿观测。其职责是最大程度恢复物体当前位姿，**不涉及** 世界坐标维护、时延补偿或锚定状态管理。
-- **对象锚定运行时** 依据采集帧标识恢复观测对应时刻的设备位姿，实现 **采集时刻（capture-time）的时空对齐**；随后结合观测质量评估、时间一致性维护与对象生命周期管理，对连续观测做融合更新，输出稳定、连续、可恢复的世界坐标对象锚点。
+- **对象感知（视觉感知后端）** 的流程阶段为：**输入 → 目标发现 → 目标分割 → 立体几何恢复 → 零样本 6DoF 位姿估计 → 可靠性评分**。其职责是从 Quest 双目透视图像最大程度恢复物体当前位姿，持续输出相机坐标系下的异步物体位姿观测，**不涉及** 世界坐标维护、时延补偿或锚定状态管理。其中 **可靠性评分** 是论文重点，其余阶段以「模型 + 引用」凝练介绍。
+- **对象锚定（对象锚定运行时）** 的流程阶段为：**时间对齐 → 质量评估 → 锚定策略 → 静止优先先验**。它依据采集帧标识恢复观测对应时刻的设备位姿，实现 **采集时刻（capture-time）的时间对齐**；随后经质量评估门控、锚定策略（运动模型 × 平滑策略）与静止优先先验，对连续观测做融合更新，输出稳定、连续、可恢复的世界坐标对象锚点。其中 **时间对齐** 与 **静止优先先验** 是论文重点。
 
 整体数据流：
 
@@ -33,18 +33,32 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 > 需要强调：EgoAnchor 的核心贡献并非提高单帧位姿估计精度，而是在开放消费级混合现实环境中，把异步视觉感知 **稳定地** 转换为可直接服务真实交互的动态对象锚定能力。
 
+> **论文「系统流程」章对应关系（egoanchor_cn_v4.tex 第 3 章，统一术语锚点）：**
+>
+> | 论文小节 | 对应本文档章节 | 详略 |
+> | --- | --- | --- |
+> | 3.1 概述（分层架构 + 三条语义边界） | §1 | 凝练 |
+> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4 | 模型 + 引用，凝练 |
+> | 3.2 对象感知：零样本 6DoF 位姿估计 | §6.5 / §6.6 | 凝练 |
+> | 3.2 对象感知：**可靠性评分** | §7（$R=G\cdot Q\cdot C$） | **重点** |
+> | 3.3 对象锚定：**时间对齐** | §9 | **重点** |
+> | 3.3 对象锚定：质量评估与锚定策略 | §10.1–10.4 | 适中 |
+> | 3.3 对象锚定：**静止优先先验** | §10.5 | **重点** |
+>
+> 命令与生命周期（§12）、双平面传输（§3）、多策略扇出（§11）在论文中归入「系统实现」章；离线仿真（§13）与定量评估流水线（§14）归入「评估」章或补充材料。
+
 ---
 
 ## 2. 仓库组成与组件职责
 
-| 组件目录 | 语言/平台 | 职责 |
-| --- | --- | --- |
-| `EgoAnchor_Python/src/egoanchor/` | Python | 视觉感知后端（采集接收、分割/深度/位姿、可靠性评分、协议与传输、命令、日志） |
-| `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/` | C# / Unity | 对象锚定运行时（采集发布、帧对齐、锚定策略、渲染、命令客户端） |
-| `EgoAnchor_Protocol/` | Protobuf / JSON | 跨端协议契约（`.proto` 消息定义、`subjects.v1.json` 主题清单） |
-| `EgoAnchor_Tools3/` | C# / .NET 8 | 离线预测器仿真基准（回放观测、对比多种预测/平滑策略、产出指标与图） |
-| `EgoAnchor_Python/eval/` | Python | 定量评估流水线（加载 Python+Unity 日志，计算锚定质量指标，产出表与图） |
-| 第三方模型（`Cutie/ FoundationPose/ Fast-FoundationStereo/ sam3`） | Python | 上游开源模型；EgoAnchor 通过 `algorithms/` 下的 wrapper 集成，不改其内部 |
+| 组件目录                                                             | 语言/平台       | 职责                                                                         |
+| -------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------- |
+| `EgoAnchor_Python/src/egoanchor/`                                  | Python          | 视觉感知后端（采集接收、分割/深度/位姿、可靠性评分、协议与传输、命令、日志） |
+| `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/`                        | C# / Unity      | 对象锚定运行时（采集发布、帧对齐、锚定策略、渲染、命令客户端）               |
+| `EgoAnchor_Protocol/`                                              | Protobuf / JSON | 跨端协议契约（`.proto` 消息定义、`subjects.v1.json` 主题清单）           |
+| `EgoAnchor_Tools3/`                                                | C# / .NET 8     | 离线预测器仿真基准（回放观测、对比多种预测/平滑策略、产出指标与图）          |
+| `EgoAnchor_Python/eval/`                                           | Python          | 定量评估流水线（加载 Python+Unity 日志，计算锚定质量指标，产出表与图）       |
+| 第三方模型（`Cutie/ FoundationPose/ Fast-FoundationStereo/ sam3`） | Python          | 上游开源模型；EgoAnchor 通过`algorithms/` 下的 wrapper 集成，不改其内部    |
 
 感知后端的实际整合逻辑集中在 `src/egoanchor/`，第三方模型仅作为被 wrapper 调用的能力单元。
 
@@ -56,11 +70,11 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 系统刻意拆成两条物理传输，按带宽与时延需求分工：
 
-| 平面 | 方向 | 载体 | 语义 | 端口/地址 |
-| --- | --- | --- | --- | --- |
-| **Data Plane** | Unity → Python | **ZMQ** PUB/SUB | `QuestStereoFrame`、`QuestCameraInfo` | `tcp://*:15557` |
-| **Message Plane** | Python → Unity | **NATS** pub/sub | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` | `nats://127.0.0.1:4222` |
-| **Command Plane** | Unity → Python | **NATS** request/reply | `reset` / `reacquire` / `control`（回复 `CommandAck`） | 同上 |
+| 平面                    | 方向            | 载体                         | 语义                                                           | 端口/地址                 |
+| ----------------------- | --------------- | ---------------------------- | -------------------------------------------------------------- | ------------------------- |
+| **Data Plane**    | Unity → Python | **ZMQ** PUB/SUB        | `QuestStereoFrame`、`QuestCameraInfo`                      | `tcp://*:15557`         |
+| **Message Plane** | Python → Unity | **NATS** pub/sub       | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`     | `nats://127.0.0.1:4222` |
+| **Command Plane** | Unity → Python | **NATS** request/reply | `reset` / `reacquire` / `control`（回复 `CommandAck`） | 同上                      |
 
 **为何两套传输：** ZMQ 适合高带宽多帧 PUB/SUB，配合激进的高水位丢弃（HWM）+ latest-only，专门承载 30+ Hz 的双目 JPEG 视频流——只有最新帧有价值，旧帧丢弃即可。NATS 提供可靠订阅、请求-应答与幂等支持，承载对时延敏感、需要正确排序的位姿结果、状态事件与控制命令。
 
@@ -70,12 +84,12 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 `message_id, request_id, session_id, client_id, anchor_id, frame_id, unity_frame, sender_mono_ms, created_unix_ms, schema_version`
 
-| 字段 | 作用 |
-| --- | --- |
-| `frame_id` | **正式帧对齐主键**（单调递增，由 Unity 采集端分配） |
-| `session_id` | 标识 Unity 一次采集会话，用于检测重启 |
-| `request_id` | 命令幂等去重键 |
-| `sender_mono_ms` / `created_unix_ms` | **仅用于时序诊断**，不参与位姿计算 |
+| 字段                                     | 作用                                                      |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `frame_id`                             | **正式帧对齐主键**（单调递增，由 Unity 采集端分配） |
+| `session_id`                           | 标识 Unity 一次采集会话，用于检测重启                     |
+| `request_id`                           | 命令幂等去重键                                            |
+| `sender_mono_ms` / `created_unix_ms` | **仅用于时序诊断**，不参与位姿计算                  |
 
 ### 3.3 关键消息字段
 
@@ -181,7 +195,9 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 把 Quest 原始标定坐标系映射到算法处理分辨率。中心裁剪模式（`assume_center_crop=true`）：
 
-$$f_x' = f_x\,s_x,\quad f_y' = f_y\,s_y,\quad c_x' = (c_x - \text{crop}_x)\,s_x,\quad c_y' = (c_y - \text{crop}_y)\,s_y$$
+$$
+f_x' = f_x\,s_x,\quad f_y' = f_y\,s_y,\quad c_x' = (c_x - \text{crop}_x)\,s_x,\quad c_y' = (c_y - \text{crop}_y)\,s_y
+$$
 
 纯缩放模式（`assume_center_crop=false`）则直接 $s_x=W'/W,\ s_y=H'/H$ 对内参线性缩放。仅当 `network_calib_update=true` 且标定变化时刷新 $K'$ 并触发 FoundationPose 重置。
 
@@ -191,14 +207,19 @@ $$f_x' = f_x\,s_x,\quad f_y' = f_y\,s_y,\quad c_x' = (c_x - \text{crop}_x)\,s_x,
   - 选最优 mask：二值化后按 score 排序、剔除空 mask（面积 0 标记为无效），取面积非空的最高分；YOLOE 无逐 mask 分时以 `missing_score=1.0` 兜底。
 - **异步分割**（`async_segmentation=true`）：仅用于 **首次 register**。主线提交 `AsyncSegmenterJob` 后立即返回 `WAIT_SEGMENTATION`（深度照常算），后台单线程跑 SAM3；结果按 `generation`+`session` 校验后再融合，避免分割慢路径阻塞主链路。**关键不变量：第 N 帧的左右图始终与第 N 帧的分割 mask 配对。**
 - **Cutie 时序传播**（`module.cutie.enabled=true`）：register 成功后用 `Cutie.initialize(rgb, init_mask)` 建立记忆；其后每帧 `Cutie.track(rgb)` 传播 2D mask 并提取 bbox（腐蚀核 `erosion_size=5`）。可选用 bbox 中心轻量修正 FoundationPose `pose_last` 的像平面平移（`adjust_pose=true`）：
-  $$t_x' = (x-c_x)\,t_z/f_x,\qquad t_y' = (y-c_y)\,t_z/f_y$$
+  $$
+  t_x' = (x-c_x)\,t_z/f_x,\qquad t_y' = (y-c_y)\,t_z/f_y
+  $$
+
   - **丢失恢复**：连续 `tracked_mask_lost_frames=3` 帧无有效 Cutie mask，则回到前台重新检测并尝试 RE_REGISTER。
 
 ### 6.4 深度估计（Fast-FoundationStereo）
 
 输入左右 RGB + `fx` + `baseline`，可选 `scale` 下采样。米制深度：
 
-$$Z = \frac{f_x \cdot s \cdot b}{d},\qquad d = \mathrm{clip}(d,\,10^{-6},\,\infty)$$
+$$
+Z = \frac{f_x \cdot s \cdot b}{d},\qquad d = \mathrm{clip}(d,\,10^{-6},\,\infty)
+$$
 
 其中 $d$ 为视差，$s$ 为内部缩放（下采样时乘 $s$ 修正像素尺度），$b$ 为双目基线。后端优先 TensorRT（`use_trt=true, trt_precision=fp16`），否则 PyTorch（`valid_iters=4, max_disp=192`，自动 padding 到 32 整除 + AMP）。输出后按有效范围清零：$Z<0.1$ 或 $Z>5.0$（米）或非有限值置 0。
 
@@ -214,18 +235,20 @@ mesh 加载时计算 AABB 归一化 `to_origin`、extents、顶点法线；坐�
 
 TRACK 后计算与上一帧位姿的增量：
 
-$$\Delta t = \lVert t_k - t_{k-1}\rVert_2,\qquad \Delta r = \arccos\!\Big(\frac{\mathrm{tr}(R_{k-1}^\top R_k)-1}{2}\Big)\ (\text{deg})$$
+$$
+\Delta t = \lVert t_k - t_{k-1}\rVert_2,\qquad \Delta r = \arccos\!\Big(\frac{\mathrm{tr}(R_{k-1}^\top R_k)-1}{2}\Big)\ (\text{deg})
+$$
 
 判异常：$\Delta t > 0.6\,\text{m}$ 或 $\Delta r > 100^\circ$（`pose_jump_translation_m / pose_jump_rotation_deg`）。重注册由多条路径触发：
 
-| 触发 | 条件 |
-| --- | --- |
-| 显式 reset 命令 | 用户/系统 reset |
-| 标定变化 | 新 `camera_info` 改变 $K$ |
-| 位姿跳变 | $\Delta t/\Delta r$ 超限，且有可用 mask（`re_register_on_track_lost=true`） |
-| Cutie mask 丢失 | 连续 3 帧无 mask |
-| 渲染质量持续过低 | 颜色重投影 < 阈值且持续（仅 `re_register` 模式） |
-| 连续 reject 上限 | `max_consecutive_track_rejects=3` 后强制回 detect |
+| 触发             | 条件                                                                            |
+| ---------------- | ------------------------------------------------------------------------------- |
+| 显式 reset 命令  | 用户/系统 reset                                                                 |
+| 标定变化         | 新`camera_info` 改变 $K$                                                    |
+| 位姿跳变         | $\Delta t/\Delta r$ 超限，且有可用 mask（`re_register_on_track_lost=true`） |
+| Cutie mask 丢失  | 连续 3 帧无 mask                                                                |
+| 渲染质量持续过低 | 颜色重投影 < 阈值且持续（仅`re_register` 模式）                               |
+| 连续 reject 上限 | `max_consecutive_track_rejects=3` 后强制回 detect                             |
 
 当跳变发生但无可用 mask 时，`accept_track_jump_without_mask=true` 允许临时接受该 pose，避免直接输出 no_pose 导致 anchor 卡死。
 
@@ -235,31 +258,43 @@ $$\Delta t = \lVert t_k - t_{k-1}\rVert_2,\qquad \Delta r = \arccos\!\Big(\frac{
 
 Python 为每个 `PoseObservation` 计算 $[0,1]$ 的综合可靠性，采用 **三层乘性结构**：
 
-$$\boxed{R = G \cdot Q \cdot C}\qquad(\text{Gate} \times \text{Quality} \times \text{Confidence})$$
+$$
+\boxed{R = G \cdot Q \cdot C}\qquad(\text{Gate} \times \text{Quality} \times \text{Confidence})
+$$
 
 > 重要：原"逐帧跳变幅度"子分已被移除——离线分析证明坏 pose 的逐帧跳变并不比真实快动更大，无法区分；坏 pose 的拒绝改由几何核（重投影/深度）与 Unity 锚定层（几何 flag + CUSUM）负责。
 
 ### 7.1 Gate 层（硬约束，压上限）
 
-$$G = S_\text{phase}\cdot S_\text{reject}$$
+$$
+G = S_\text{phase}\cdot S_\text{reject}
+$$
 
 - 相位分：$S_\text{phase}=1.0$（TRACK / REGISTER / RE_REGISTER），其它阶段 $0.7$。
 - reject 惩罚：
-  $$S_\text{reject} = \begin{cases}\max\big(0.25,\ 1 - 0.12\cdot\min(n_\text{reject},5)\big) & n_\text{reject}>0\\ 1.0 & \text{否则}\end{cases}$$
+  $$
+  S_\text{reject} = \begin{cases}\max\big(0.25,\ 1 - 0.12\cdot\min(n_\text{reject},5)\big) & n_\text{reject}>0\\ 1.0 & \text{否则}\end{cases}
+  $$
 
 ### 7.2 Quality 层（几何证据 + 有界调制）
 
-$$Q = G_\text{geo}\cdot M_\text{mask}$$
+$$
+Q = G_\text{geo}\cdot M_\text{mask}
+$$
 
 **几何核心** $G_\text{geo}$ 是有效几何子分的 **加权对数几何平均**（软合取）：
 
-$$G_\text{geo} = \exp\!\left(\frac{\sum_i w_i \log\max(s_i,\,\varepsilon)}{\sum_i w_i}\right),\qquad \varepsilon = \text{geo\_floor} = 0.05$$
+$$
+G_\text{geo} = \exp\!\left(\frac{\sum_i w_i \log\max(s_i,\,\varepsilon)}{\sum_i w_i}\right),\qquad \varepsilon = \text{geo\_floor} = 0.05
+$$
 
 权重：`reproj_weight` 与 `depth_weight`。⚠️ 代码 dataclass 默认 $0.5/0.5$，但 **运行时由 `defaults.toml` 覆盖为 $w_\text{rep}=0.2,\ w_\text{dep}=0.8$**（颜色作辅助证据、深度为主，利于手柄等低纹理目标）。**两路都无有效信号时 $G_\text{geo}=1$，不武断降分。**
 
 **mask 有界调制**（仅温和降权，不硬否决）：
 
-$$M_\text{mask} = m_f + (1-m_f)\,S_\text{mask},\qquad m_f = \text{mask\_floor} = 0.5$$
+$$
+M_\text{mask} = m_f + (1-m_f)\,S_\text{mask},\qquad m_f = \text{mask\_floor} = 0.5
+$$
 
 $S_\text{mask}$ 由可见面积比分段映射（过小、过大都降分，中段满分）。
 
@@ -267,7 +302,9 @@ $S_\text{mask}$ 由可见面积比分段映射（过小、过大都降分，中�
 
 不做全图比较，而是：① 取渲染 mask 与观测 mask 交集的核心区域（椭圆腐蚀，核约 `0.15·min(W,H)`，可 `downscale=2` 下采样）；② 转 LAB，亮度通道按 `color_l_weight=0.3` 降权（抑制真实光照变化敏感度）；③ 做零均值归一化互相关 ZNCC；④ 映射到 $[0,1]$：
 
-$$S_\text{rep} = \mathrm{clamp}_{[0,1]}\!\Big(\tfrac{\text{ZNCC}+1}{2}\Big)$$
+$$
+S_\text{rep} = \mathrm{clamp}_{[0,1]}\!\Big(\tfrac{\text{ZNCC}+1}{2}\Big)
+$$
 
 若核心区无颜色方差（纯色/无纹理）→ 该项标记 **无效并排除几何核**（返回 0.5、valid=False），避免冤枉正确 pose。交集为空 → 0（真实坏 pose 信号）。`min_render_area_px=50` 以下判无效。
 
@@ -275,19 +312,27 @@ $$S_\text{rep} = \mathrm{clamp}_{[0,1]}\!\Big(\tfrac{\text{ZNCC}+1}{2}\Big)$$
 
 mask 内有效深度覆盖率 $< 0.10$（`depth_min_coverage`）→ 返回中性 0.5 且无效。否则自适应阈值：
 
-$$\tau_z = \max(\tau_\text{min},\ \rho\cdot\lVert t\rVert),\qquad \rho=0.02,\ \tau_\text{min}=0.005\,\text{m}$$
+$$
+\tau_z = \max(\tau_\text{min},\ \rho\cdot\lVert t\rVert),\qquad \rho=0.02,\ \tau_\text{min}=0.005\,\text{m}
+$$
 
 在渲染深度 $Z_r$ 与观测深度 $Z_o$ 的交集上：
 
-$$S_\text{inlier} = \mathrm{mean}\big(|Z_r-Z_o|<\tau_z\big),\qquad S_\text{med} = \mathrm{clamp}_{[0,1]}\!\Big(1 - \tfrac{\mathrm{median}(|Z_r-Z_o|)}{3\tau_z}\Big)$$
+$$
+S_\text{inlier} = \mathrm{mean}\big(|Z_r-Z_o|<\tau_z\big),\qquad S_\text{med} = \mathrm{clamp}_{[0,1]}\!\Big(1 - \tfrac{\mathrm{median}(|Z_r-Z_o|)}{3\tau_z}\Big)
+$$
 
-$$S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}$$
+$$
+S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}
+$$
 
 ### 7.5 Confidence 层（连续高质量帧 warmup）
 
 离散计数器 $n$：质量分 $\ge 0.6$（`GOOD_SCORE_THRESH`）时 $n{+}{=}1$（封顶 $N$），否则 $n{-}{=}2$（快衰减）；无几何证据时 $n$ 原地保持。映射：
 
-$$C = 0.5 + 0.5\cdot\frac{n}{N},\qquad N = \text{WARMUP\_FRAMES} = 10$$
+$$
+C = 0.5 + 0.5\cdot\frac{n}{N},\qquad N = \text{WARMUP\_FRAMES} = 10
+$$
 
 即 $C\in[0.5,1.0]$，提供迟滞（需持续好帧），抑制单帧噪声。
 
@@ -332,15 +377,21 @@ NATS PoseResult 到达 (latest-only)
 
 设 frame $f$ 采集时刻参考相机的世界位姿为 $T^{w}_{c,f}$（从历史回查得到），Python 输出经轴翻转后的 Unity 相机本地 object pose 为 $T^{c}_{o}(f)$，则当前世界锚点：
 
-$$\boxed{\,T^{w}_{o}(f) = T^{w}_{c,f}\cdot T^{c}_{o}(f)\,}$$
+$$
+\boxed{\,T^{w}_{o}(f) = T^{w}_{c,f}\cdot T^{c}_{o}(f)\,}
+$$
 
 具体到位置与旋转（Unity `Pose` 语义）：
 
-$$p^{w}_{o} = p^{w}_{c,f} + R^{w}_{c,f}\,p^{c}_{o},\qquad R^{w}_{o} = R^{w}_{c,f}\,R^{c}_{o}$$
+$$
+p^{w}_{o} = p^{w}_{c,f} + R^{w}_{c,f}\,p^{c}_{o},\qquad R^{w}_{o} = R^{w}_{c,f}\,R^{c}_{o}
+$$
 
 **OpenCV→Unity 相机本地轴翻转**（OpenCV：x 右、y 下、z 前；Unity 相机本地：x 右、y 上、z 前）：
 
-$$R_u = S\,R_\text{cv}\,S,\qquad S = \mathrm{diag}(1,-1,1)$$
+$$
+R_u = S\,R_\text{cv}\,S,\qquad S = \mathrm{diag}(1,-1,1)
+$$
 
 位置做对应的 y 取反。实现上用 forward/up 重建四元数（`flipY=true` 默认）而非直接写矩阵，规避 handedness 陷阱。对齐后再叠加 camera-local / anchor-local / world 三路可配置补偿偏移。
 
@@ -377,17 +428,23 @@ $$R_u = S\,R_\text{cv}\,S,\qquad S = \mathrm{diag}(1,-1,1)$$
 
 **ConstantVelocity（基线，差分速度、不去噪）：**
 
-$$p(t)=p_n+v(t-t_n),\quad q(t)=q_n\otimes\exp\!\big(\omega(t-t_n)\big),\quad v=\tfrac{p_n-p_{n-1}}{\Delta t},\ \omega=\tfrac{\log(q_{n-1}^{-1}q_n)}{\Delta t}$$
+$$
+p(t)=p_n+v(t-t_n),\quad q(t)=q_n\otimes\exp\!\big(\omega(t-t_n)\big),\quad v=\tfrac{p_n-p_{n-1}}{\Delta t},\ \omega=\tfrac{\log(q_{n-1}^{-1}q_n)}{\Delta t}
+$$
 
 **Kalman（常速度 CV，去噪 + 最优速度）：** 位置 x/y/z 三路 1D CV Kalman，旋转在切空间三路 CV Kalman。单轴状态 $\mathbf{x}=[p,v]^\top$：
 
-$$\mathbf{F}=\begin{bmatrix}1&\Delta t\\0&1\end{bmatrix},\quad \mathbf{H}=[1\ 0],\quad \mathbf{P}\leftarrow\mathbf{FPF}^\top+\mathbf{Q},\quad K=\tfrac{\mathbf{PH}^\top}{\mathbf{HPH}^\top+r},\quad \mathbf{x}\leftarrow\mathbf{x}+K(z-p)$$
+$$
+\mathbf{F}=\begin{bmatrix}1&\Delta t\\0&1\end{bmatrix},\quad \mathbf{H}=[1\ 0],\quad \mathbf{P}\leftarrow\mathbf{FPF}^\top+\mathbf{Q},\quad K=\tfrac{\mathbf{PH}^\top}{\mathbf{HPH}^\top+r},\quad \mathbf{x}\leftarrow\mathbf{x}+K(z-p)
+$$
 
 默认：位置过程噪声 $0.20$、位置测量噪声 $0.0004$、旋转过程噪声 $0.40$、旋转测量噪声 $0.0025$。**Unity 版无 maxPredictAhead 限幅**——外推不截断，平滑交给 SmoothingStrategy（限幅正是旧版"平段+跳变"的根源）。
 
 **One Euro（自适应低通）：** 每轴两级：先以固定 `dCutoff` 低通原始速度得 $\hat{\dot x}$，再用速度自适应截止低通信号本身：
 
-$$f_c = f_\text{min} + \beta\,|\hat{\dot x}|,\qquad \alpha(\Delta t,f_c)=\frac{1}{1+\tau/\Delta t},\quad \tau=\frac{1}{2\pi f_c},\qquad \hat x\leftarrow\hat x+\alpha(z-\hat x)$$
+$$
+f_c = f_\text{min} + \beta\,|\hat{\dot x}|,\qquad \alpha(\Delta t,f_c)=\frac{1}{1+\tau/\Delta t},\quad \tau=\frac{1}{2\pi f_c},\qquad \hat x\leftarrow\hat x+\alpha(z-\hat x)
+$$
 
 默认：`minCutoff=1.0 Hz, beta=0.25, derivativeCutoff=1.0 Hz`。
 
@@ -397,13 +454,17 @@ $$f_c = f_\text{min} + \beta\,|\hat{\dot x}|,\qquad \alpha(\Delta t,f_c)=\frac{1
 
 **Blend（零延迟外推 + 残差融合）：** 预测到当前时间，再把"上一帧输出与当前预测之差"作为残差逐帧指数还掉：
 
-$$y_t = \text{predict}(t)\oplus \text{residual}_t,\qquad \text{residual}\leftarrow \text{residual}\cdot d^{\,\Delta t_\text{render}\cdot 60}$$
+$$
+y_t = \text{predict}(t)\oplus \text{residual}_t,\qquad \text{residual}\leftarrow \text{residual}\cdot d^{\,\Delta t_\text{render}\cdot 60}
+$$
 
 默认 `decayPerFrame=0.9`（按 60 fps 归一，半衰期≈158 ms）。外推时域自适应：$L=\min(\hat\tau\cdot m,\ L_\text{max})$，`extrapolationLatencyMultiplier=1.0`、硬上限 `maxExtrapolationSecondsHardCap=0.3`；时延估计用非对称 EMA（上行快 0.5、下行慢）。
 
 **DelayedInterp（主动延迟 + 真插值）：** 渲染目标取 $t-\Delta$，落在两个已到控制点之间做插值（非外推），保证精确过点：
 
-$$\Delta = \max(\hat\tau\cdot s,\ \Delta_\text{min}),\qquad s=\text{latencySafetyMargin}=1.15,\ \Delta_\text{min}=0.25\text{s}$$
+$$
+\Delta = \max(\hat\tau\cdot s,\ \Delta_\text{min}),\qquad s=\text{latencySafetyMargin}=1.15,\ \Delta_\text{min}=0.25\text{s}
+$$
 
 可选 Cubic Hermite（速度切线，按 `hermiteTangentChordRatio=3.0` 限幅防急停过冲）或 Centripetal Catmull-Rom（$\alpha=0.5$，邻点自动切线）。控制点来源可为 raw / OneEuro / Kalman。
 
@@ -415,12 +476,12 @@ $$\Delta = \max(\hat\tau\cdot s,\ \Delta_\text{min}),\qquad s=\text{latencySafet
 
 **多路解锁证据（任一触发）：**
 
-| 机制 | 含义 | 关键默认 |
-| --- | --- | --- |
-| Score 加权 CUSUM | 超死区位移按 score 加权累积、半衰期衰减 | 阈值 `0.08 m / 20°`，半衰期 `0.27 s` |
-| 绝对漂移租绳 | 观测共识相对锚原点的绝对位移（解决慢漂移 CUSUM 卡死） | `0.015 m / 5°` |
-| 速度逃逸 | 观测速度 $>$ 进入阈值×`unlockSpeedFactor=2.5` 持续 `0.4 s` | — |
-| 低分释放 | score $<$ `0.3` 持续 `0.6 s`（避免锚到错误旧 pose） | — |
+| 机制             | 含义                                                             | 关键默认                                 |
+| ---------------- | ---------------------------------------------------------------- | ---------------------------------------- |
+| Score 加权 CUSUM | 超死区位移按 score 加权累积、半衰期衰减                          | 阈值`0.08 m / 20°`，半衰期 `0.27 s` |
+| 绝对漂移租绳     | 观测共识相对锚原点的绝对位移（解决慢漂移 CUSUM 卡死）            | `0.015 m / 5°`                        |
+| 速度逃逸         | 观测速度$>$ 进入阈值×`unlockSpeedFactor=2.5` 持续 `0.4 s` | —                                       |
+| 低分释放         | score$<$ `0.3` 持续 `0.6 s`（避免锚到错误旧 pose）         | —                                       |
 
 **死区**（位置 `0.008 m`、旋转 `3°`）内视为噪声不累积；**漏积分蠕变**（半衰期 `2.7 s`、score 加权、头动门控）把锁点缓慢精修到共识中心；**解锁接缝** 用残差衰减（`seamDecayPerFrame=0.85`）平滑过渡到内层轨迹；**重锁抑制** `1.0 s` 防抖振。
 
@@ -466,15 +527,15 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ### 13.2 预测器与 Unity 对应
 
-| Tools3 预测器 | 数学要点 | Unity 对应 |
-| --- | --- | --- |
-| `RawZohPredictor` | 零阶保持 | RawPassthrough |
-| `DeadReckoningSplinePredictor` | 死推 + C¹ Hermite 修正窗（零延迟，工业游戏引擎做法） | —（基线对照） |
-| `KalmanPredictor`(+`ScalarCvKalman`) | 同 §10.3 CV Kalman，**有** `maxPredictAhead=0.18` 限幅 | KalmanModel |
-| `OneEuroPredictor`(+`ScalarOneEuro`) | 同 §10.3 1€，限幅 `0.12` | OneEuroModel |
-| `ResidualBlendingPredictor` | 外推+残差指数衰减（`decayPerFrame=0.9`），可插 CV/Kalman/1€ 运动模型 | BlendStrategy |
-| `DelayedInterpolationPredictor`(+`Spline`) | 延迟插值，Hermite / Centripetal Catmull-Rom | DelayedInterpStrategy |
-| `EgoAnchorStabilizerPredictor` | 装饰器：静态锁 + 多路解锁 + 头动/距离自适应（同 §10.5，~25 参数） | StaticLockController |
+| Tools3 预测器                                  | 数学要点                                                                | Unity 对应            |
+| ---------------------------------------------- | ----------------------------------------------------------------------- | --------------------- |
+| `RawZohPredictor`                            | 零阶保持                                                                | RawPassthrough        |
+| `DeadReckoningSplinePredictor`               | 死推 + C¹ Hermite 修正窗（零延迟，工业游戏引擎做法）                   | —（基线对照）        |
+| `KalmanPredictor`(+`ScalarCvKalman`)       | 同 §10.3 CV Kalman，**有** `maxPredictAhead=0.18` 限幅         | KalmanModel           |
+| `OneEuroPredictor`(+`ScalarOneEuro`)       | 同 §10.3 1€，限幅`0.12`                                             | OneEuroModel          |
+| `ResidualBlendingPredictor`                  | 外推+残差指数衰减（`decayPerFrame=0.9`），可插 CV/Kalman/1€ 运动模型 | BlendStrategy         |
+| `DelayedInterpolationPredictor`(+`Spline`) | 延迟插值，Hermite / Centripetal Catmull-Rom                             | DelayedInterpStrategy |
+| `EgoAnchorStabilizerPredictor`               | 装饰器：静态锁 + 多路解锁 + 头动/距离自适应（同 §10.5，~25 参数）      | StaticLockController  |
 
 > 注意区别：Tools3 独立预测器保留 `maxPredictAhead` 限幅；Unity 运动模型 **取消限幅**，把外推边界交给 smoothing。两者参数（Q/R、minCutoff/beta、decay、静态锁阈值）保持一致以保证离线结论可迁移到真机。
 
@@ -495,17 +556,17 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ### 14.2 指标定义（要点）
 
-| 指标 | 度量 | 关键公式/方法 | 单位 |
-| --- | --- | --- | --- |
-| Anchor Error | 锚点 vs GT 的 SE(3) 误差 | $E=(T^w_\text{GT})^{-1}T^w_\text{anchor}$，平移 $\lVert E_{:3,3}\rVert$，旋转 $2\arccos|q_w|$ | m / deg（RMSE/中位/p95） |
-| Pose Offset | 有符号位姿偏置（标定诊断） | $\text{offset}=p_\text{out}-p_\text{gt}$，相对四元数转欧拉 | m / deg |
-| Jitter | 静止窗内高频抖动 | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）内 1 Hz 高通后位置 RMS | m / deg |
-| Lag | 锚点滞后真实运动 | 沿最大方差轴速度互相关峰（±500 ms 内，30 Hz 重采样） | ms |
-| Latency | 端到端/分阶段时延 | `render_mono_ms − source_capture_mono_ms`，及 yolo/depth/cutie/pose 分项 | ms（p50/p90/p95） |
-| Jump Suppression | 异常抑制有效性 | 误差 $>0.05$ m 的尖刺计数 vs policy reject 计数 | 计数 |
-| Slip | 屏幕空间漂移 | 锚点与 GT 原点投影到像平面的像素距离 | px（RMS/peak） |
-| Recovery | 遮挡/丢失后恢复时间 | 事件后首个误差 $\le0.05$ m 且维持 `hold_ms=200` ms 的时刻 | ms |
-| Diagnostics | 分数健康 + 渲染开销 | score 众数占比、尖刺漏检率、render_quality 耗时分位 | — |
+| 指标             | 度量                       | 关键公式/方法                                                                                   | 单位              |
+| ---------------- | -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------- |
+| Anchor Error     | 锚点 vs GT 的 SE(3) 误差   | $E=(T^w_\text{GT})^{-1}T^w_\text{anchor}$，平移 $\lVert E_{:3,3}\rVert$，旋转 $2\arccos|q_w | $                 |
+| Pose Offset      | 有符号位姿偏置（标定诊断） | $\text{offset}=p_\text{out}-p_\text{gt}$，相对四元数转欧拉                                    | m / deg           |
+| Jitter           | 静止窗内高频抖动           | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）内 1 Hz 高通后位置 RMS                                | m / deg           |
+| Lag              | 锚点滞后真实运动           | 沿最大方差轴速度互相关峰（±500 ms 内，30 Hz 重采样）                                           | ms                |
+| Latency          | 端到端/分阶段时延          | `render_mono_ms − source_capture_mono_ms`，及 yolo/depth/cutie/pose 分项                     | ms（p50/p90/p95） |
+| Jump Suppression | 异常抑制有效性             | 误差$>0.05$ m 的尖刺计数 vs policy reject 计数                                                | 计数              |
+| Slip             | 屏幕空间漂移               | 锚点与 GT 原点投影到像平面的像素距离                                                            | px（RMS/peak）    |
+| Recovery         | 遮挡/丢失后恢复时间        | 事件后首个误差$\le0.05$ m 且维持 `hold_ms=200` ms 的时刻                                    | ms                |
+| Diagnostics      | 分数健康 + 渲染开销        | score 众数占比、尖刺漏检率、render_quality 耗时分位                                             | —                |
 
 产出：各指标 CSV + `summary.md` + 一组 PNG/PDF 图（误差时间线、时延堆叠、jitter-lag 散点、slip 时间线、recovery 柱状）。`plot_recorded_strategies.py` 还能把同一会话下不同平滑/预测策略的 6 通道（XYZ + RotVec XYZ）轨迹叠加对比。
 
@@ -515,38 +576,38 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ## 15. 关键参数总表（按子系统）
 
-| 子系统 | 参数 | 默认值 | 含义 |
-| --- | --- | --- | --- |
-| 传输 | ZMQ 端口 / receive_hwm / poll | 15557 / 20 / 10 ms | 数据面 |
-| 传输 | NATS url / max_pending_futures | 127.0.0.1:4222 / 32 | 消息面背压 |
-| 命令 | max_queue_size / dedup_ttl_ms / execute_per_tick | 128 / 60000 ms / 8 | 命令队列 |
-| 采集 | FramePoseHistory capacity / cameraPoseDelayFrames | 512 / 1 | 帧位姿历史 |
-| 标定 | process_width × height / assume_center_crop | 640×480 / true | 处理分辨率 |
-| 深度 | min_depth / max_depth / valid_iters / max_disp | 0.1 / 5.0 m / 4 / 192 | FFS |
-| 分割 | confidence_threshold / max_det / mask_threshold | 0.2 / 1 / 0.5 | YOLOE/SAM3 共用 |
-| Cutie | seg_threshold / erosion_size / tracked_mask_lost_frames | 0.1 / 5 / 3 | mask 传播 |
-| FoundationPose | est_refine_iter / track_refine_iter | 5 / 2 | register/track 迭代 |
-| FoundationPose | register_min_depth_valid_in_mask | 0.15 | 注册深度门限 |
-| FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg | 0.6 m / 100° | 跳变阈值 |
-| FoundationPose | max_consecutive_track_rejects | 3 | 强制回 detect |
-| 可靠性 | geo_floor / reproj_weight / depth_weight / mask_floor | 0.05 / **0.2** / **0.8** / 0.5 | 几何核（toml 覆盖） |
-| 可靠性 | depth_distance_ratio / depth_min_inlier_thresh_m | 0.02 / 0.005 m | 深度对齐阈值 |
-| 可靠性 | color_l_weight / downscale / min_render_area_px | 0.3 / 2 / 50 | 颜色重投影 |
-| 可靠性 | re_register_threshold / min_track_frames / warmup_frames | 0.35 / 2 / 3 | 软重注册 |
-| 可靠性 | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH | 10 / 0.6 | confidence |
-| 状态机 | coastTimeoutSeconds / lostTimeoutSeconds | 0.45 / 2.0 s | gap 升级 |
-| Kalman | pos proc/meas noise | 0.20 / 0.0004 | 位置 |
-| Kalman | rot proc/meas noise | 0.40 / 0.0025 | 旋转切空间 |
-| OneEuro | minCutoff / beta / dCutoff | 1.0 / 0.25 / 1.0 | 自适应低通 |
-| Blend | decayPerFrame / latencyMult / maxExtrap | 0.9 / 1.0 / 0.3 s | 残差融合 |
-| DelayedInterp | safetyMargin / minDelay / tangentChordRatio | 1.15 / 0.25 s / 3.0 | 延迟插值 |
-| StaticLock | enterSpeed / enterAngSpeed / dwell / minScore | 0.05 m·s⁻¹ / 35°·s⁻¹ / 0.35 s / 0.25 | 进入锁定 |
-| StaticLock | deadband pos/rot | 0.008 m / 3° | 噪声死区 |
-| StaticLock | CUSUM 阈值 pos/rot / 半衰期 | 0.08 m / 20° / 0.27 s | 解锁证据 |
-| StaticLock | drift leash pos/rot | 0.015 m / 5° | 漂移租绳 |
-| StaticLock | headMaxToleranceFactor / headSettle / posMaxFactor | 4.0 / 0.6 s / 3.0 | 头动/距离自适应 |
-| Tools3 | renderHz / latency / jitter | 60 / 300 / 60 ms | 仿真投递 |
-| Eval | jitter 静止阈 / lag 窗 / 尖刺阈 / recovery hold | 0.03 m·s⁻¹ / ±500 ms / 0.05 m / 200 ms | 指标参数 |
+| 子系统         | 参数                                                     | 默认值                                      | 含义                |
+| -------------- | -------------------------------------------------------- | ------------------------------------------- | ------------------- |
+| 传输           | ZMQ 端口 / receive_hwm / poll                            | 15557 / 20 / 10 ms                          | 数据面              |
+| 传输           | NATS url / max_pending_futures                           | 127.0.0.1:4222 / 32                         | 消息面背压          |
+| 命令           | max_queue_size / dedup_ttl_ms / execute_per_tick         | 128 / 60000 ms / 8                          | 命令队列            |
+| 采集           | FramePoseHistory capacity / cameraPoseDelayFrames        | 512 / 1                                     | 帧位姿历史          |
+| 标定           | process_width × height / assume_center_crop             | 640×480 / true                             | 处理分辨率          |
+| 深度           | min_depth / max_depth / valid_iters / max_disp           | 0.1 / 5.0 m / 4 / 192                       | FFS                 |
+| 分割           | confidence_threshold / max_det / mask_threshold          | 0.2 / 1 / 0.5                               | YOLOE/SAM3 共用     |
+| Cutie          | seg_threshold / erosion_size / tracked_mask_lost_frames  | 0.1 / 5 / 3                                 | mask 传播           |
+| FoundationPose | est_refine_iter / track_refine_iter                      | 5 / 2                                       | register/track 迭代 |
+| FoundationPose | register_min_depth_valid_in_mask                         | 0.15                                        | 注册深度门限        |
+| FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg         | 0.6 m / 100°                               | 跳变阈值            |
+| FoundationPose | max_consecutive_track_rejects                            | 3                                           | 强制回 detect       |
+| 可靠性         | geo_floor / reproj_weight / depth_weight / mask_floor    | 0.05 /**0.2** / **0.8** / 0.5   | 几何核（toml 覆盖） |
+| 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m         | 0.02 / 0.005 m                              | 深度对齐阈值        |
+| 可靠性         | color_l_weight / downscale / min_render_area_px          | 0.3 / 2 / 50                                | 颜色重投影          |
+| 可靠性         | re_register_threshold / min_track_frames / warmup_frames | 0.35 / 2 / 3                                | 软重注册            |
+| 可靠性         | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH                     | 10 / 0.6                                    | confidence          |
+| 状态机         | coastTimeoutSeconds / lostTimeoutSeconds                 | 0.45 / 2.0 s                                | gap 升级            |
+| Kalman         | pos proc/meas noise                                      | 0.20 / 0.0004                               | 位置                |
+| Kalman         | rot proc/meas noise                                      | 0.40 / 0.0025                               | 旋转切空间          |
+| OneEuro        | minCutoff / beta / dCutoff                               | 1.0 / 0.25 / 1.0                            | 自适应低通          |
+| Blend          | decayPerFrame / latencyMult / maxExtrap                  | 0.9 / 1.0 / 0.3 s                           | 残差融合            |
+| DelayedInterp  | safetyMargin / minDelay / tangentChordRatio              | 1.15 / 0.25 s / 3.0                         | 延迟插值            |
+| StaticLock     | enterSpeed / enterAngSpeed / dwell / minScore            | 0.05 m·s⁻¹ / 35°·s⁻¹ / 0.35 s / 0.25 | 进入锁定            |
+| StaticLock     | deadband pos/rot                                         | 0.008 m / 3°                               | 噪声死区            |
+| StaticLock     | CUSUM 阈值 pos/rot / 半衰期                              | 0.08 m / 20° / 0.27 s                      | 解锁证据            |
+| StaticLock     | drift leash pos/rot                                      | 0.015 m / 5°                               | 漂移租绳            |
+| StaticLock     | headMaxToleranceFactor / headSettle / posMaxFactor       | 4.0 / 0.6 s / 3.0                           | 头动/距离自适应     |
+| Tools3         | renderHz / latency / jitter                              | 60 / 300 / 60 ms                            | 仿真投递            |
+| Eval           | jitter 静止阈 / lag 窗 / 尖刺阈 / recovery hold          | 0.03 m·s⁻¹ / ±500 ms / 0.05 m / 200 ms  | 指标参数            |
 
 ---
 

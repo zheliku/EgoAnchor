@@ -168,7 +168,7 @@ score_window_name = "EgoAnchor Score Debug" # Python 本地评分与渲染质量
 debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
 debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
 score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
-score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡四宫格图像。
+score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡颜色/深度 2x3 诊断矩阵。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。
 
 # ============================================================================
