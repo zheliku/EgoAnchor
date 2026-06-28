@@ -35,15 +35,15 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 > **论文「系统流程」章对应关系（egoanchor_cn_v4.tex 第 3 章，统一术语锚点）：**
 >
-> | 论文小节 | 对应本文档章节 | 详略 |
-> | --- | --- | --- |
-> | 3.1 概述（分层架构 + 三条语义边界） | §1 | 凝练 |
-> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4 | 模型 + 引用，凝练 |
-> | 3.2 对象感知：零样本 6DoF 位姿估计 | §6.5 / §6.6 | 凝练 |
-> | 3.2 对象感知：**可靠性评分** | §7（$R=G\cdot Q\cdot C$） | **重点** |
-> | 3.3 对象锚定：**时间对齐** | §9 | **重点** |
-> | 3.3 对象锚定：质量评估与锚定策略 | §10.1–10.4 | 适中 |
-> | 3.3 对象锚定：**静止优先先验** | §10.5 | **重点** |
+> | 论文小节                             | 对应本文档章节               | 详略              |
+> | ------------------------------------ | ---------------------------- | ----------------- |
+> | 3.1 概述（分层架构 + 三条语义边界）  | §1                          | 凝练              |
+> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4                | 模型 + 引用，凝练 |
+> | 3.2 对象感知：零样本 6DoF 位姿估计   | §6.5 / §6.6                | 凝练              |
+> | 3.2 对象感知：**可靠性评分**   | §7（$R=G\cdot Q\cdot C$） | **重点**    |
+> | 3.3 对象锚定：**时间对齐**     | §9                          | **重点**    |
+> | 3.3 对象锚定：质量评估与锚定策略     | §10.1–10.4                 | 适中              |
+> | 3.3 对象锚定：**静止优先先验** | §10.5                       | **重点**    |
 >
 > 命令与生命周期（§12）、双平面传输（§3）、多策略扇出（§11）在论文中归入「系统实现」章；离线仿真（§13）与定量评估流水线（§14）归入「评估」章或补充材料。
 
@@ -204,9 +204,11 @@ $$
 ### 6.3 分割（mask 生成与传播）
 
 - **初始分割后端**：默认 `yoloe26`（YOLOE-26 开放词表文本分割），可显式切 `sam3`。两者共用文本 `prompt`、`confidence_threshold=0.2`、`max_det=1`、`mask_threshold=0.5`。
+
   - 选最优 mask：二值化后按 score 排序、剔除空 mask（面积 0 标记为无效），取面积非空的最高分；YOLOE 无逐 mask 分时以 `missing_score=1.0` 兜底。
 - **异步分割**（`async_segmentation=true`）：仅用于 **首次 register**。主线提交 `AsyncSegmenterJob` 后立即返回 `WAIT_SEGMENTATION`（深度照常算），后台单线程跑 SAM3；结果按 `generation`+`session` 校验后再融合，避免分割慢路径阻塞主链路。**关键不变量：第 N 帧的左右图始终与第 N 帧的分割 mask 配对。**
 - **Cutie 时序传播**（`module.cutie.enabled=true`）：register 成功后用 `Cutie.initialize(rgb, init_mask)` 建立记忆；其后每帧 `Cutie.track(rgb)` 传播 2D mask 并提取 bbox（腐蚀核 `erosion_size=5`）。可选用 bbox 中心轻量修正 FoundationPose `pose_last` 的像平面平移（`adjust_pose=true`）：
+
   $$
   t_x' = (x-c_x)\,t_z/f_x,\qquad t_y' = (y-c_y)\,t_z/f_y
   $$
@@ -556,17 +558,17 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ### 14.2 指标定义（要点）
 
-| 指标             | 度量                       | 关键公式/方法                                                                                   | 单位              |
-| ---------------- | -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------- |
-| Anchor Error     | 锚点 vs GT 的 SE(3) 误差   | $E=(T^w_\text{GT})^{-1}T^w_\text{anchor}$，平移 $\lVert E_{:3,3}\rVert$，旋转 $2\arccos|q_w | $                 |
-| Pose Offset      | 有符号位姿偏置（标定诊断） | $\text{offset}=p_\text{out}-p_\text{gt}$，相对四元数转欧拉                                    | m / deg           |
-| Jitter           | 静止窗内高频抖动           | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）内 1 Hz 高通后位置 RMS                                | m / deg           |
-| Lag              | 锚点滞后真实运动           | 沿最大方差轴速度互相关峰（±500 ms 内，30 Hz 重采样）                                           | ms                |
-| Latency          | 端到端/分阶段时延          | `render_mono_ms − source_capture_mono_ms`，及 yolo/depth/cutie/pose 分项                     | ms（p50/p90/p95） |
-| Jump Suppression | 异常抑制有效性             | 误差$>0.05$ m 的尖刺计数 vs policy reject 计数                                                | 计数              |
-| Slip             | 屏幕空间漂移               | 锚点与 GT 原点投影到像平面的像素距离                                                            | px（RMS/peak）    |
-| Recovery         | 遮挡/丢失后恢复时间        | 事件后首个误差$\le0.05$ m 且维持 `hold_ms=200` ms 的时刻                                    | ms                |
-| Diagnostics      | 分数健康 + 渲染开销        | score 众数占比、尖刺漏检率、render_quality 耗时分位                                             | —                |
+| 指标             | 度量                       | 关键公式/方法                                                                                       | 单位              |
+| ---------------- | -------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- |
+| Anchor Error     | 锚点 vs GT 的 SE(3) 误差   | $E=(T^w_\text{GT})^{-1}T^w_\text{anchor}$，平移 $\lVert E_{:3,3}\rVert$，旋转 $2\arccos|q_w | $ |                   |
+| Pose Offset      | 有符号位姿偏置（标定诊断） | $\text{offset}=p_\text{out}-p_\text{gt}$，相对四元数转欧拉                                        | m / deg           |
+| Jitter           | 静止窗内高频抖动           | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）内 1 Hz 高通后位置 RMS                                    | m / deg           |
+| Lag              | 锚点滞后真实运动           | 沿最大方差轴速度互相关峰（±500 ms 内，30 Hz 重采样）                                               | ms                |
+| Latency          | 端到端/分阶段时延          | `render_mono_ms − source_capture_mono_ms`，及 yolo/depth/cutie/pose 分项                         | ms（p50/p90/p95） |
+| Jump Suppression | 异常抑制有效性             | 误差$>0.05$ m 的尖刺计数 vs policy reject 计数                                                    | 计数              |
+| Slip             | 屏幕空间漂移               | 锚点与 GT 原点投影到像平面的像素距离                                                                | px（RMS/peak）    |
+| Recovery         | 遮挡/丢失后恢复时间        | 事件后首个误差$\le0.05$ m 且维持 `hold_ms=200` ms 的时刻                                        | ms                |
+| Diagnostics      | 分数健康 + 渲染开销        | score 众数占比、尖刺漏检率、render_quality 耗时分位                                                 | —                |
 
 产出：各指标 CSV + `summary.md` + 一组 PNG/PDF 图（误差时间线、时延堆叠、jitter-lag 散点、slip 时间线、recovery 柱状）。`plot_recorded_strategies.py` 还能把同一会话下不同平滑/预测策略的 6 通道（XYZ + RotVec XYZ）轨迹叠加对比。
 
