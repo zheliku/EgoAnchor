@@ -58,14 +58,14 @@
 最终分采用三层乘积结构：
 
 ```
-Reliability = Gate × Quality × Confidence
-  Gate    = phase × reject                         （门控层：phase 子分 × 近期 track-reject 子分）
-  Quality = geomean(reproj, depth ; w=0.2/0.8) × mask_modulation   （质量层：几何核 × mask 调制）
-  Confidence = 0.5..1.0 连续高质量帧 warmup ramp（约 10 帧到满）
+Reliability = V × C^α × D^β  （VCD 纯即时评分）
+  V = mask 可见面积占比                            （可视层：直接乘因子，遮挡时线性压分）
+  C = 颜色投影分（Color projection，α=0.2）        （C 无效时自动排除，退化为 V×D）
+  D = 深度对齐分（Depth alignment，β=0.8）
 ```
 
-关键约定（图里可作注脚，体现“评分由多信号组合而来”）：
-- 颜色重投影 `color_reprojection = -1` 表示本帧无有效颜色信号（纯色/无纹理物体、渲染退化、warmup），此时把颜色项**排除出几何核**而不是惩罚；
+关键约定（图里可作注脚，体现”评分由多信号组合而来”）：
+- 颜色投影 `color_reprojection = -1` 表示本帧无有效颜色信号（纯色/无纹理物体、渲染退化、warmup），此时把 C 项**排除出几何核**而不是惩罚；
 - 深度项 `score_depth = 0.5` 为中性值，mask 内有效深度覆盖率需 ≥ `0.10` 才进入深度对齐评分；
 - 几何核是对**有效**证据取加权对数几何平均，两路都无信号时保持对当前 pose 的信任（=1）；
 - 逐帧跳变子分（旧 `score_jump`）已删除——离线分析证明跳变幅度无法区分坏 pose 与真实快动，坏 pose 的拒绝交给几何核（Python）与 anchor 层 CUSUM（Unity）。

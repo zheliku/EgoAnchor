@@ -63,13 +63,13 @@ namespace EgoAnchor.Policy
         [SerializeField] private float coastTimeoutSeconds = 0.45f;
 
         /// <summary>判定 pose 是否"可靠"的总分下限：决定 Tracking vs 低分降级，并决定是否刷新可靠时间戳。0 = 关闭。</summary>
-        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Coasting→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。要给用户看真实状态的变体 (如 EgoAnchor) 设 ~0.4。注意应高于 lowScoreReacquireThreshold(0.25=该重连了)。")]
+        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Coasting→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。要给用户看真实状态的变体 (如 EgoAnchor) 设 ~0.4。注意应高于 lowScoreReacquireThreshold(0.5=该重连了)。")]
         [Range(0f, 1f)]
         [SerializeField] private float trackingScoreFloor = 0.0f;
 
         /// <summary>长时间无可靠测量后进入 Lost 的时长，单位秒。</summary>
-        [Tooltip("长时间无可靠测量后进入 Lost (停止输出) 的时长，单位秒。必须大于 coast。默认 2.0。")]
-        [SerializeField] private float lostTimeoutSeconds = 2.0f;
+        [Tooltip("长时间无可靠测量后进入 Lost (停止输出) 的时长，单位秒。必须大于 coast。默认 1.0。")]
+        [SerializeField] private float lostTimeoutSeconds = 1.0f;
 
         /// <summary>判定静止的线速度阈值，单位 m/s。</summary>
         [Tooltip("判定运动/静止的线速度阈值，单位 m/s；仅用于 motionState 诊断。默认 0.015。")]
@@ -79,19 +79,24 @@ namespace EgoAnchor.Policy
         [Tooltip("判定运动/静止的角速度阈值，单位 deg/s；仅用于 motionState 诊断。默认 1.5。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
+        /// <summary>是否在进入 Lost 状态时请求 Python 重 register。</summary>
+        [Header("Lost Reacquire")]
+        [Tooltip("进入 Lost 状态时是否请求 Python 重新 register。baseline 和 EgoAnchor 均建议开启：Lost = 跟踪已彻底丢失，必须让 Python 重新定位。")]
+        [SerializeField] private bool enableLostReacquire = true;
+
         /// <summary>是否启用低分重定位。</summary>
         [Header("Low-Score Reacquire")]
         [Tooltip("是否启用低分重定位：reliability 总分持续过低时, 本地重置 policy (清空模型/平滑/静止锁状态并进入 Relocalizing, 下一帧重新建立锚定); 若同时几何加权平均分也差 (判定 track 丢失), 还会返回 Reacquire decision 请求上游 (runtime→hub) 通知 Python 重新 register。host 不持有任何 client。")]
         [SerializeField] private bool enableLowScoreReacquire = true;
 
         /// <summary>触发低分重定位的分数阈值。</summary>
-        [Tooltip("score 持续低于此值才触发低分重定位。默认 0.25。")]
+        [Tooltip("score 持续低于此值才触发低分重定位。默认 0.5。")]
         [Range(0f, 1f)]
-        [SerializeField] private float lowScoreReacquireThreshold = 0.25f;
+        [SerializeField] private float lowScoreReacquireThreshold = 0.5f;
 
         /// <summary>低分需持续的时间，单位秒。</summary>
-        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.8。")]
-        [SerializeField] private float lowScoreReacquireSeconds = 0.8f;
+        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.4。")]
+        [SerializeField] private float lowScoreReacquireSeconds = 0.4f;
 
         /// <summary>两次低分重定位的最短间隔，单位秒。</summary>
         [Tooltip("两次低分重定位之间的最短间隔 (秒), 防抖。默认 3。")]
@@ -342,6 +347,7 @@ namespace EgoAnchor.Policy
             }
 
             double gap = lastAcceptedTimeSeconds >= 0.0 ? Mathf.Max((float)(nowSeconds - lastAcceptedTimeSeconds), 0.0f) : 0.0;
+            AnchorState stateBeforeAdvance = stateMachine.State;
             if (lastAcceptedTimeSeconds < 0.0)
             {
                 stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_reliable_pose");
@@ -353,6 +359,10 @@ namespace EgoAnchor.Policy
 
             if (stateMachine.State == AnchorState.Lost || stateMachine.State == AnchorState.Error || stateMachine.State == AnchorState.Searching)
             {
+                if (enableLostReacquire && stateMachine.State == AnchorState.Lost && stateBeforeAdvance != AnchorState.Lost)
+                {
+                    wantsServerReacquire = true;
+                }
                 return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason);
             }
 

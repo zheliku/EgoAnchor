@@ -43,12 +43,9 @@ class PoseResultFactoryTest(unittest.TestCase):
             depth_valid_ratio=0.55,
             depth_valid_in_mask=0.37,
             mask_area_ratio=0.08,
-            score_phase=1.0,
             score_reprojection=0.64,
             score_depth=0.91,
             score_mask=1.0,
-            score_reject=1.0,
-            score_confidence=0.8,
             color_reprojection=0.64,
             render_quality_mask_iou=0.72,
             render_quality_depth_inlier=0.58,
@@ -73,12 +70,9 @@ class PoseResultFactoryTest(unittest.TestCase):
         self.assertEqual(list(result.reliability_flags), ["track_pose", "depth_medium"])
         self.assertAlmostEqual(result.depth_valid_in_mask, 0.37, places=5)
         self.assertAlmostEqual(result.mask_area_ratio, 0.08, places=5)
-        self.assertAlmostEqual(result.score_phase, 1.0, places=5)
         self.assertAlmostEqual(result.score_reprojection, 0.64, places=5)
         self.assertAlmostEqual(result.score_depth, 0.91, places=5)
         self.assertAlmostEqual(result.score_mask, 1.0, places=5)
-        self.assertAlmostEqual(result.score_reject, 1.0, places=5)
-        self.assertAlmostEqual(result.score_confidence, 0.8, places=5)
         self.assertAlmostEqual(result.color_reprojection, 0.64, places=5)
         self.assertAlmostEqual(result.render_quality_mask_iou, 0.72, places=5)
         self.assertAlmostEqual(result.render_quality_depth_inlier, 0.58, places=5)

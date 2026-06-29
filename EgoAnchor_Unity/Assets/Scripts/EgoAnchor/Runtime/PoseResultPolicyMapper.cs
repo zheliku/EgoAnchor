@@ -37,16 +37,15 @@ namespace EgoAnchor.Runtime
             bool hasHeadPose = false,
             Pose headPose = default)
         {
-            // 几何子分 (depth/reprojection) + confidence 透传给 anchor 层, 用于区分坏 pose vs 真实快动。
+            // 几何子分 (depth/reprojection) 透传给 anchor 层, 用于区分坏 pose vs 真实快动。
             // result 为空 (测试注入) 时无子分 → hasSubscores=false, 几何仲裁退化为只看总分。
             bool hasSubscores = result != null;
             float scoreDepth = hasSubscores ? result.ScoreDepth : -1f;
             float scoreReprojection = hasSubscores ? result.ScoreReprojection : -1f;
-            float scoreConfidence = hasSubscores ? result.ScoreConfidence : -1f;
 
             // valid 标记复刻 Python 评分的"无信号"判据 (reliability/pose_quality.py)，使 Unity 几何仲裁
             // 能区分"真低分"和"无信号占位分"，不动 proto：
-            //   reproj valid: color_reprojection>=0 表示有颜色重投影信号 (纯色/无纹理物体为 -1)。
+            //   reproj valid: color_reprojection>=0 表示有颜色投影信号 (纯色/无纹理物体为 -1)。
             //   depth valid : mask 内深度覆盖率>=MIN_DEPTH_COVERAGE 才进入深度对齐评分。
             bool reprojValid = hasSubscores && result.ColorReprojection >= 0f;
             bool depthValid = hasSubscores && result.DepthValidInMask >= MinDepthCoverage;
@@ -64,7 +63,6 @@ namespace EgoAnchor.Runtime
                 headPose,
                 scoreDepth,
                 scoreReprojection,
-                scoreConfidence,
                 hasSubscores,
                 depthValid,
                 reprojValid

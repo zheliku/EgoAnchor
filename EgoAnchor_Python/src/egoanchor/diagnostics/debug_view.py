@@ -293,7 +293,7 @@ def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservati
     """生成 score debug 顶部横幅文本，集中维护字段顺序。"""
 
     lines = [
-        f"score={observation.reliability_score if observation else 0.0:.2f} phase={diagnostics.score_phase:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} mask={diagnostics.score_mask:.2f} reject={diagnostics.score_reject:.2f} conf={diagnostics.score_confidence:.2f}",
+        f"score={observation.reliability_score if observation else 0.0:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} mask={diagnostics.score_mask:.2f}",
         f"track_reproj={diagnostics.color_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
         f"depthIn={diagnostics.render_quality_depth_inlier:.2f} depthAlign={diagnostics.render_quality_depth_alignment:.2f} depthRes={diagnostics.render_quality_depth_residual_m:.3f}m status={diagnostics.render_quality_status} {diagnostics.render_quality_ms:.1f}ms",
         f"expected={diagnostics.render_quality_evaluated} renderArea={diagnostics.render_quality_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
@@ -579,15 +579,12 @@ def _empty_panel(text: str, width: int = 320, height: int = 240) -> np.ndarray:
 
 
 def _draw_score_bars(canvas: np.ndarray, diagnostics: FrameDiagnostics, x: int, y: int, width: int, row_h: int) -> None:
-    """在 score debug 画面绘制 Gate/Quality/Confidence 子分条，便于现场观察是哪一项降分。"""
+    """在 score debug 画面绘制 VCD 子分条（V/C/D），便于现场观察是哪一项降分。"""
 
     items = [
-        ("phase", diagnostics.score_phase),
-        ("reproj", diagnostics.score_reprojection),
-        ("depth", diagnostics.score_depth),
-        ("mask", diagnostics.score_mask),
-        ("reject", diagnostics.score_reject),
-        ("conf", diagnostics.score_confidence),
+        ("reproj(C)", diagnostics.score_reprojection),
+        ("depth(D)", diagnostics.score_depth),
+        ("mask(V)", diagnostics.score_mask),
     ]
     label_w = 70
     bar_w = max(int(width) - label_w - 54, 1)

@@ -52,7 +52,7 @@ class RenderQualityResult:
     """渲染前景像素数量。"""
 
     reprojection_valid: bool
-    """颜色重投影信号是否有效；无效时评分层应排除颜色项。"""
+    """颜色投影信号是否有效（Color projection valid）；无效时评分层应排除颜色项。"""
 
     color_valid: bool = True
     """颜色 ZNCC 是否有可用方差；纯色/无纹理时为 False，评分层应排除颜色项而非降分。"""
@@ -225,7 +225,7 @@ class RenderQualityChecker:
 
     @staticmethod
     def _resize_rgb(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-        """缩放 RGB 图像，供颜色重投影评分使用。"""
+        """缩放 RGB 图像，供颜色投影评分使用。"""
 
         out_h, out_w = output_size
         return cv2.resize(np.asarray(image)[..., :3], (out_w, out_h), interpolation=cv2.INTER_AREA)

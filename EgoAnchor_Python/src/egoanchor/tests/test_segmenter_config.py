@@ -52,7 +52,6 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertAlmostEqual(cfg.reliability.pose_score.geo_floor, 0.05)
         self.assertAlmostEqual(cfg.reliability.pose_score.reproj_weight, 0.2)
         self.assertAlmostEqual(cfg.reliability.pose_score.depth_weight, 0.8)
-        self.assertAlmostEqual(cfg.reliability.pose_score.mask_floor, 0.5)
 
     def test_pose_debug_uses_score_window_without_stereo_window(self) -> None:
         """pose debug 应使用独立评分窗口，不再配置旧 stereo 辅助窗口。"""

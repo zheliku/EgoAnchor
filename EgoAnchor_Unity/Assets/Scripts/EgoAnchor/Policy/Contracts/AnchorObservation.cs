@@ -35,14 +35,11 @@ namespace EgoAnchor.Policy
         /// <summary>Python 感知侧可靠性评分，范围 0..1。</summary>
         public readonly float ReliabilityScore;
 
-        /// <summary>深度对齐子分 0..1 (geometry)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
+        /// <summary>深度对齐子分 0..1 (D)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
         public readonly float ScoreDepth;
 
-        /// <summary>颜色重投影子分 0..1 (geometry)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
+        /// <summary>颜色投影子分 0..1 (C)；用于区分坏 pose vs 真实快动。&lt;0 表示无信号。</summary>
         public readonly float ScoreReprojection;
-
-        /// <summary>连续高质量 pose warmup 置信子分 0..1；刚注册时低。&lt;0 表示无信号。</summary>
-        public readonly float ScoreConfidence;
 
         /// <summary>depth 子分是否携带有效几何证据 (Python 侧 mask 内深度覆盖足够且有渲染深度信号)。
         /// false 时该路被排除出几何仲裁，而不是当作低分惩罚。</summary>
@@ -170,7 +167,6 @@ namespace EgoAnchor.Policy
             Pose headPose = default,
             float scoreDepth = -1f,
             float scoreReprojection = -1f,
-            float scoreConfidence = -1f,
             bool hasSubscores = false,
             bool depthValid = false,
             bool reprojValid = false)
@@ -184,7 +180,6 @@ namespace EgoAnchor.Policy
             ReliabilityScore = Mathf.Clamp01(reliabilityScore);
             ScoreDepth = scoreDepth;
             ScoreReprojection = scoreReprojection;
-            ScoreConfidence = scoreConfidence;
             HasSubscores = hasSubscores;
             DepthValid = depthValid;
             ReprojValid = reprojValid;
@@ -222,7 +217,6 @@ namespace EgoAnchor.Policy
             Pose headPose = default,
             float scoreDepth = -1f,
             float scoreReprojection = -1f,
-            float scoreConfidence = -1f,
             bool hasSubscores = false,
             bool depthValid = false,
             bool reprojValid = false)
@@ -244,7 +238,6 @@ namespace EgoAnchor.Policy
                 headPose,
                 scoreDepth,
                 scoreReprojection,
-                scoreConfidence,
                 hasSubscores,
                 depthValid,
                 reprojValid

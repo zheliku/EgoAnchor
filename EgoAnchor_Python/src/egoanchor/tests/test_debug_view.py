@@ -38,12 +38,9 @@ class DebugViewTest(unittest.TestCase):
         """独立评分窗口应显示所有评分子分和渲染质量分解。"""
 
         diagnostics = FrameDiagnostics(
-            score_phase=1.0,
             score_reprojection=0.42,
             score_depth=0.65,
             score_mask=0.9,
-            score_reject=1.0,
-            score_confidence=0.75,
             color_reprojection=0.42,
             render_quality_mask_iou=0.3,
             render_quality_area_ratio_score=0.25,
@@ -133,7 +130,7 @@ class DebugViewTest(unittest.TestCase):
         np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[40, sample_x], atol=1)
 
     def test_score_debug_view_has_color_and_depth_matrix(self) -> None:
-        """评分窗口应包含颜色重投影与深度对比的 2x3 矩阵。"""
+        """评分窗口应包含颜色投影（Color projection）与深度对比的 2x3 矩阵。"""
 
         mask = np.ones((24, 24), dtype=bool)
         yy, xx = np.indices((24, 24), dtype=np.uint8)

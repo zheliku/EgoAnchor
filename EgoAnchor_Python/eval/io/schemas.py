@@ -338,12 +338,9 @@ class PoseResultRow:
     pose_ms: float
     server_receive_mono_ms: float
     server_publish_mono_ms: float
-    score_phase: float
     score_reprojection: float
     score_depth: float
     score_mask: float
-    score_reject: float
-    score_confidence: float
     color_reprojection: float
     render_quality_evaluated: bool
     render_quality_status: str
@@ -383,12 +380,9 @@ class PoseResultRow:
             pose_ms=_optional_float(row, "pose_ms", np.nan),
             server_receive_mono_ms=_optional_float(row, "server_receive_mono_ms", np.nan),
             server_publish_mono_ms=_optional_float(row, "server_publish_mono_ms", np.nan),
-            score_phase=_optional_float(row, "score_phase", np.nan),
             score_reprojection=_optional_float(row, "score_reprojection", np.nan),
             score_depth=_optional_float(row, "score_depth", np.nan),
             score_mask=_optional_float(row, "score_mask", np.nan),
-            score_reject=_optional_float(row, "score_reject", np.nan),
-            score_confidence=_optional_float(row, "score_confidence", np.nan),
             color_reprojection=_optional_float(row, "color_reprojection", -1.0),
             render_quality_evaluated=_optional_bool(row, "render_quality_evaluated", False),
             render_quality_status=str(row.get("render_quality_status", "")),
@@ -432,12 +426,9 @@ class PoseResultRow:
             "pose_ms": self.pose_ms,
             "server_receive_mono_ms": self.server_receive_mono_ms,
             "server_publish_mono_ms": self.server_publish_mono_ms,
-            "score_phase": self.score_phase,
             "score_reprojection": self.score_reprojection,
             "score_depth": self.score_depth,
             "score_mask": self.score_mask,
-            "score_reject": self.score_reject,
-            "score_confidence": self.score_confidence,
             "color_reprojection": self.color_reprojection,
             "render_quality_evaluated": self.render_quality_evaluated,
             "render_quality_status": self.render_quality_status,

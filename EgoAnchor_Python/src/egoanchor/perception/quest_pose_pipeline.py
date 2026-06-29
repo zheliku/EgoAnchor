@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from egoanchor.protocol import extract_frame_id, extract_session_id, quest_pb2
-from egoanchor.reliability import ConfidenceAccumulator, PoseScoreConfig, RenderQualityChecker, score_observation_breakdown
+from egoanchor.reliability import PoseScoreConfig, RenderQualityChecker, score_observation_breakdown
 from egoanchor.utils import clamp, get_logger
 
 from .async_segmenter import AsyncSegmenterJob, AsyncSegmenterWorker, SegmenterBackend
@@ -59,6 +59,7 @@ class QuestPosePipeline:
         pose_jump_rotation_deg: float = 35.0,
         cutie_enabled: bool = False,
         cutie_adjust_pose: bool = False,
+        cutie_lost_reset_frames: int = 5,
         log_stats_interval: int = 60,
         show_mask_snapshot: bool = False,
         mask_snapshot_window: str = "EgoAnchor mask",
@@ -123,6 +124,9 @@ class QuestPosePipeline:
         self.cutie_adjust_pose = bool(cutie_adjust_pose)
         """是否用 Cutie bbox 中心轻量修正 pose x/y。"""
 
+        self.cutie_lost_reset_frames = max(1, int(cutie_lost_reset_frames))
+        """Cutie 连续返回空 mask 多少帧后触发本地重置注册；防单帧抖动误触发。"""
+
         self.log_stats_interval = int(log_stats_interval)
         """每隔多少帧打印一次 pipeline 诊断。"""
 
@@ -179,9 +183,6 @@ class QuestPosePipeline:
         self.tracking_state = PipelineTrackingState()
         """FoundationPose/Cutie 时序跟踪状态。"""
 
-        self.confidence_accumulator = ConfidenceAccumulator()
-        """连续高质量 pose 的可靠性 warmup 计数器。"""
-
         self._last_frame_id: int | None = None
         """上一帧处理过的 frame_id，避免重复处理。"""
 
@@ -213,7 +214,6 @@ class QuestPosePipeline:
         """重置时序跟踪状态，下一帧重新分割/register。"""
 
         self.tracking_state.bump_generation()
-        self.confidence_accumulator.reset()
         self._last_frame_id = None
         self._last_session_id = ""
         if self._segmenter_worker is not None:
@@ -552,7 +552,16 @@ class QuestPosePipeline:
         if not self.tracking_state.has_registered and diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             return self._finish_frame(decoded, "REJECT_DEPTH", False, None, "NONE", diagnostics, timing, t_total, "depth_in_mask_low")
         if self._tracked_mask_is_lost(mask):
+            self.tracking_state.cutie_lost_frames += 1
+            if self.tracking_state.cutie_lost_frames >= self.cutie_lost_reset_frames:
+                self.tracking_state.clear_registration()
+                if self.estimator is not None:
+                    self.estimator.reset()
+                if self.cutie is not None:
+                    self.cutie.reset()
+                LOGGER.info("Cutie mask 连续丢失 %d 帧，重置注册状态等待重新 register。", self.tracking_state.cutie_lost_frames)
             return self._finish_frame(decoded, "TRACK_MASK_LOST", False, None, "NONE", diagnostics, timing, t_total, "track_mask_lost")
+        self.tracking_state.cutie_lost_frames = 0
         return None
 
     def _run_track_stage(
@@ -794,7 +803,6 @@ class QuestPosePipeline:
         self.tracking_state.last_pose = pose
         self.tracking_state.track_reject_count = 0
         self.tracking_state.frames_since_register = 0
-        self.confidence_accumulator.reset()
         self._show_register_mask_snapshot(mask)
         self._initialize_cutie(rgb, mask, timing)
         return pose, "REGISTER", "REGISTER"
@@ -952,12 +960,9 @@ class QuestPosePipeline:
             depth_valid_in_mask=diagnostics.depth_valid_in_mask,
             depth_median_m=diagnostics.depth_median_m,
             depth_iqr_m=diagnostics.depth_iqr_m,
-            score_phase=diagnostics.score_phase,
             score_reprojection=diagnostics.score_reprojection,
             score_depth=diagnostics.score_depth,
             score_mask=diagnostics.score_mask,
-            score_reject=diagnostics.score_reject,
-            score_confidence=diagnostics.score_confidence,
             mask_area_ratio=diagnostics.mask_area_ratio,
             render_quality_evaluated=diagnostics.render_quality_evaluated,
             render_quality_status=diagnostics.render_quality_status,
@@ -983,23 +988,16 @@ class QuestPosePipeline:
         )
         breakdown = score_observation_breakdown(
             observation,
-            confidence_accumulator=self.confidence_accumulator,
             config=self.pose_score_config,
         )
-        diagnostics.score_phase = breakdown.phase_score
         diagnostics.score_reprojection = breakdown.reprojection_score
         diagnostics.score_depth = breakdown.depth_score
         diagnostics.score_mask = breakdown.mask_score
-        diagnostics.score_reject = breakdown.reject_score
-        diagnostics.score_confidence = breakdown.confidence_score
         return replace(
             observation,
-            score_phase=breakdown.phase_score,
             score_reprojection=breakdown.reprojection_score,
             score_depth=breakdown.depth_score,
             score_mask=breakdown.mask_score,
-            score_reject=breakdown.reject_score,
-            score_confidence=breakdown.confidence_score,
             reliability_score=breakdown.final_score,
             reliability_flags=breakdown.flags,
         )

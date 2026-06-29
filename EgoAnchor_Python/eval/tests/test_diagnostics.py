@@ -24,12 +24,9 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
                 "pose_matrix_cv_camera": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0],
                 "pose_score": 0.73,
                 "reliability_flags": ["reprojection_low"],
-                "score_phase": 1.0,
                 "score_reprojection": 0.42,
                 "score_depth": 0.71,
                 "score_mask": 1.0,
-                "score_reject": 1.0,
-                "score_confidence": 0.88,
                 "color_reprojection": 0.42,
                 "render_quality_evaluated": True,
                 "render_quality_status": "valid",
@@ -48,12 +45,9 @@ class ReliabilityDiagnosticsTest(unittest.TestCase):
 
         record = row.to_record()
 
-        self.assertAlmostEqual(record["score_phase"], 1.0)
         self.assertAlmostEqual(record["score_reprojection"], 0.42)
         self.assertAlmostEqual(record["score_depth"], 0.71)
         self.assertAlmostEqual(record["score_mask"], 1.0)
-        self.assertAlmostEqual(record["score_reject"], 1.0)
-        self.assertAlmostEqual(record["score_confidence"], 0.88)
         self.assertAlmostEqual(record["color_reprojection"], 0.42)
         self.assertTrue(record["render_quality_evaluated"])
         self.assertEqual(record["render_quality_status"], "valid")

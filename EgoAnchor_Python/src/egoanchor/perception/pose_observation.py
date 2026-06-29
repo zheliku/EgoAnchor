@@ -51,23 +51,14 @@ class PoseObservation:
     depth_iqr_m: float = 0.0
     """mask 内有效深度四分位距，单位米。"""
 
-    score_phase: float = 0.0
-    """reliability 最终分中的 phase 子分。"""
-
     score_reprojection: float = 0.0
-    """reliability 最终分中的颜色重投影子分；协议字段名为 score_reprojection。"""
+    """reliability 最终分中的颜色投影子分（C，Color projection）；协议字段名为 score_reprojection。"""
 
     score_depth: float = 0.0
-    """reliability 最终分中的 depth 子分。"""
+    """reliability 最终分中的深度对齐子分（D，Depth alignment）。"""
 
     score_mask: float = 0.0
-    """reliability 最终分中的 mask 面积子分。"""
-
-    score_reject: float = 0.0
-    """reliability 最终分中的 track reject 子分。"""
-
-    score_confidence: float = 0.0
-    """reliability 最终分中的连续高质量跟踪置信子分。"""
+    """reliability 最终分中的可见面积子分（V，Visibility）。"""
 
     mask_area_ratio: float = 0.0
     """mask 前景面积占整图比例。"""
@@ -79,7 +70,7 @@ class PoseObservation:
     """渲染质量检测状态，用于区分 disabled、warmup、render_exception、valid 等情况。"""
 
     color_reprojection: float = -1.0
-    """颜色重投影分，范围 0..1；-1 表示本帧无有效重投影信号。"""
+    """颜色投影分（Color projection），范围 0..1；-1 表示本帧无有效颜色信号。"""
 
     render_quality_mask_iou: float = 0.0
     """渲染 mask 与观测 mask 的 IoU。"""

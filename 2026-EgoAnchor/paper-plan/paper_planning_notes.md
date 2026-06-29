@@ -15,7 +15,7 @@
 | 目标分割 | object segmentation | YOLOE / SAM3 / Cutie | — |
 | 立体几何恢复 | stereo geometry recovery | Fast-FoundationStereo | 双目重建 |
 | 零样本 6DoF 位姿估计 | zero-shot 6DoF pose estimation | FoundationPose | — |
-| 可靠性评分 | reliability score | `reliability_score`、`R=Q·C` | — |
+| 可靠性评分 | reliability score | `reliability_score`、VCD：$R=\text{Gate}\times V\times C^{\alpha}\times D^{\beta}$ | — |
 | 时间对齐 | frame-aligned / capture-time alignment | `frame_id` 回查、`CameraPoseFrameAligner` | 帧对齐（可用）、frame-aligned anchoring（作概念时用"时间对齐"） |
 | 质量评估门控 | quality / score gate | `GateDecision`、`enableScoreGate` | 可靠性门控、观测门控 |
 | 锚定策略 | anchoring policy | `MotionModel × SmoothingStrategy` | 高频时序稳定、时序稳定 |

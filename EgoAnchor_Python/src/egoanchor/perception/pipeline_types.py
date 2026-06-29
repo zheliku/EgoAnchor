@@ -101,26 +101,17 @@ class FrameDiagnostics:
     depth_iqr_m: float = 0.0
     """mask 内深度 IQR，单位米。"""
 
-    score_phase: float = 0.0
-    """reliability 最终分中的 phase 子分。"""
-
     score_reprojection: float = 0.0
-    """reliability 最终分中的颜色重投影子分；协议字段名为 score_reprojection。"""
+    """reliability 最终分中的颜色投影子分（C，Color projection）；协议字段名为 score_reprojection。"""
 
     score_depth: float = 0.0
-    """reliability 最终分中的 depth 子分。"""
+    """reliability 最终分中的深度对齐子分（D，Depth alignment）。"""
 
     score_mask: float = 0.0
-    """reliability 最终分中的 mask 面积子分。"""
-
-    score_reject: float = 0.0
-    """reliability 最终分中的 track reject 子分。"""
-
-    score_confidence: float = 0.0
-    """reliability 最终分中的连续高质量跟踪置信子分。"""
+    """reliability 最终分中的可见面积子分（V，Visibility）。"""
 
     color_reprojection: float = -1.0
-    """颜色重投影分，0..1；-1 表示本帧无有效重投影信号。"""
+    """颜色投影分（Color projection），0..1；-1 表示本帧无有效颜色信号。"""
 
     render_quality_evaluated: bool = False
     """本帧是否已经满足渲染质量检测前置条件；为 true 但无信号时应降低可靠性。"""
@@ -252,6 +243,9 @@ class PipelineTrackingState:
     last_sender_mono_ms: float | None = None
     """上一条进入 pose 评分的 Unity 发送端时间戳，单位毫秒。"""
 
+    cutie_lost_frames: int = 0
+    """Cutie 连续返回空 mask 的帧数；达到阈值才触发本地 clear_registration。"""
+
     def clear_registration(self, *, reset_reject_count: bool = True) -> None:
         """清空依赖当前 register/track 的状态，保留代数和帧时间历史。"""
 
@@ -261,6 +255,7 @@ class PipelineTrackingState:
         if reset_reject_count:
             self.track_reject_count = 0
         self.frames_since_register = 0
+        self.cutie_lost_frames = 0
 
     def bump_generation(self) -> None:
         """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""

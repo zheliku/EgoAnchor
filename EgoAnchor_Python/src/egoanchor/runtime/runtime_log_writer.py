@@ -183,12 +183,9 @@ class RuntimeLogWriter:
         )
         if diagnostics is not None:
             fields.update(
-                score_phase=float(getattr(diagnostics, "score_phase", 0.0)),
                 score_reprojection=float(getattr(diagnostics, "score_reprojection", 0.0)),
                 score_depth=float(getattr(diagnostics, "score_depth", 0.0)),
                 score_mask=float(getattr(diagnostics, "score_mask", 0.0)),
-                score_reject=float(getattr(diagnostics, "score_reject", 0.0)),
-                score_confidence=float(getattr(diagnostics, "score_confidence", 0.0)),
                 color_reprojection=float(getattr(diagnostics, "color_reprojection", -1.0)),
                 render_quality_evaluated=bool(getattr(diagnostics, "render_quality_evaluated", False)),
                 render_quality_status=str(getattr(diagnostics, "render_quality_status", "")),

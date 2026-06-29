@@ -24,12 +24,10 @@ message PoseResult {
   string pose_source = 15;
   double server_receive_mono_ms = 16;
   double server_publish_mono_ms = 17;
-  float score_phase = 18;
   float score_reprojection = 19;
   float score_depth = 20;
-  reserved 21; // 旧 score_jump (跳变子分)；已移除——逐帧跳变幅度无法区分坏 pose 与真实快动, 见 egoanchor-jump-rejection-analysis。字段号保留不复用。
+  reserved 18, 21, 23, 34; // 已删除：18=score_phase, 21=score_jump, 23=score_reject, 34=score_confidence。字段号不复用。
   float score_mask = 22;
-  float score_reject = 23;
   float color_reprojection = 24;
   float render_quality_mask_iou = 25;
   float render_quality_depth_inlier = 26;
@@ -40,7 +38,6 @@ message PoseResult {
   bool render_quality_evaluated = 31;
   float render_quality_observed_visible_ratio = 32;
   float render_quality_depth_alignment = 33;
-  float score_confidence = 34;
   float render_quality_area_ratio_score = 35;
 }
 

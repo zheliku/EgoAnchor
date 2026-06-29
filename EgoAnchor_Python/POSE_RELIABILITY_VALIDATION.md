@@ -16,7 +16,7 @@ pixi run python -m unittest discover -s eval -p "test_*.py"
 
 重点测试：
 
-- `src/egoanchor/tests/test_render_quality.py`：颜色重投影、深度对齐和渲染质量字段。
+- `src/egoanchor/tests/test_render_quality.py`：颜色投影（Color projection）、深度对齐和渲染质量字段。
 - `src/egoanchor/tests/test_pose_quality.py`：`reliability_score` 与子分合成。
 - `src/egoanchor/tests/test_runtime_event_logger.py`：runtime JSONL 字段。
 - `eval/tests/test_diagnostics.py`：离线可靠性分布统计。
@@ -53,7 +53,7 @@ depth_weight = 0.8 # 深度对齐分在几何核中的相对权重；手柄等�
 mask_floor = 0.5 # mask 调制因子下限；遮挡或可见面积少时只温和降权。
 ```
 
-有效颜色重投影信号只会在 TRACK 阶段、已有 Cutie mask、register warmup 结束、K 可用、渲染前景面积足够时出现。以下情况会让 `color_reprojection=-1`：
+有效颜色投影（Color projection）信号只会在 TRACK 阶段、已有 Cutie mask、register warmup 结束、K 可用、渲染前景面积足够时出现。以下情况会让 `color_reprojection=-1`：
 
 - 刚 register/re-register 后的 warmup 帧。
 - Cutie mask 为空或 Cutie 关闭。
@@ -64,30 +64,31 @@ mask_floor = 0.5 # mask 调制因子下限；遮挡或可见面积少时只温�
 
 `color_reprojection=-1` 表示无有效颜色信号，不是坏 pose。无信号时颜色项不进入几何核。
 
-## 4. 可靠性合成
+## 4. 可靠性合成（VCD 评分）
 
-总分结构：
+总分采用 **Gate × V × C^α × D^β** 三层乘积结构（论文称为 VCD 评分）：
 
 ```text
-R = G * Q * C
-G = score_phase * score_reject
-Q = G_geo * score_mask
+R = V × C^α × D^β  （VCD 纯即时评分）
+
+V = mask 可见面积占比                    （可视层：render_quality_area_ratio_score；
+                                         降级用 mask_area_ratio；直接乘因子）
+C = 颜色投影分（Color projection，α=0.2）
+D = 深度对齐分（Depth alignment，β=0.8）
 ```
 
-几何核只纳入有效证据：
+C 和 D 通过加权对数几何均值合并：
 
 ```text
-G_geo = exp(sum_i w_i * log(max(score_i, eps)) / sum_i w_i)
+C^α × D^β = exp(α×log(max(C, ε)) + β×log(max(D, ε)))
 ```
 
 有效证据包括：
 
-- `score_reprojection`：颜色重投影子分。只有 `color_reprojection >= 0` 且逻辑上有效时进入几何核。
-- `score_depth`：深度对齐子分。只有渲染深度与 FFS 深度有足够交集和覆盖率时进入几何核。
+- `score_reprojection`（C）：颜色投影子分（Color projection）。只有 `color_reprojection >= 0` 且逻辑上有效时进入几何核。无纹理物体时 C 自动排除，公式退化为 `Gate × V × D`。
+- `score_depth`（D）：深度对齐子分（Depth alignment）。只有渲染深度与 FFS 深度有足够交集和覆盖率时进入几何核。
 
-没有任何有效几何证据时，`G_geo=1`，系统不武断降分。`score_depth=0.5` 常表示深度覆盖不足的中性诊断值，不等于最终分被砍半。
-
-`score_confidence` 是连续高质量帧 warmup，约 10 帧从 0.5 提升到 1.0。
+没有任何有效几何证据时，`C^α × D^β = 1`，系统不武断降分。`score_depth=0.5` 常表示深度覆盖不足的中性诊断值。
 
 ## 5. OpenCV HUD
 
@@ -102,11 +103,10 @@ q 或 ESC 退出
 重点看：
 
 - `score` / `reliability_score`：最终可靠性分。
-- `score_reprojection`：颜色重投影子分。
-- `score_depth`：深度对齐子分。
-- `score_mask`：mask 面积/可见性调制。
-- `score_reject`：近期 track reject 惩罚。
-- `score_confidence`：连续高质量帧置信。
+- `score_reprojection`：颜色投影子分（Color projection）。
+- `score_depth`：深度对齐子分（Depth alignment）。
+- `score_mask`（V）：mask 可见面积/可视层。
+- `score_reject`：保留协议字段，始终为 1.0（Gate 层已删除）。
 - `flags`：例如 `reprojection_low`、`depth_alignment_low`、`depth_coverage_insufficient`、`mask_visible_area_low`。
 
 HUD 显示的是诊断值；最终几何核是否纳入某个子分，要看该证据是否 valid。
@@ -132,7 +132,7 @@ Get-Content .\data\eval\<session_id>\<session_id>_python_runtime.jsonl |
 - `pose_score`：最终可靠性分，0..1。
 - `reliability_flags`：降分或无信号原因。
 - `score_phase`、`score_reprojection`、`score_depth`、`score_mask`、`score_reject`、`score_confidence`：PoseResult 子分。
-- `color_reprojection`：TRACK 阶段颜色重投影分；`-1` 表示本帧无有效颜色信号。
+- `color_reprojection`：TRACK 阶段颜色投影分（Color projection）；`-1` 表示本帧无有效颜色信号。
 - `render_quality_evaluated`：本帧是否实际运行渲染质量检测。
 - `render_quality_status`：如 `valid`、`warmup`、`no_mask`、`render_exception`。
 - `render_quality_area_ratio_score`：观测 mask 面积 / 渲染投影面积的比例分。
@@ -162,8 +162,8 @@ report\policy_distribution.csv
 
 - `score_unique_count` 和 `score_mode_share`：判断分数是否坍缩到单一值。
 - `score_min/p50/p95`：观察可靠性分布。
-- `color_reprojection_valid_count`：有效颜色重投影帧数量。
-- `color_reprojection_p50/p95`：有效颜色重投影分布。
+- `color_reprojection_valid_count`：有效颜色投影帧数量。
+- `color_reprojection_p50/p95`：有效颜色投影分布。
 - `render_quality_ms_p50/p95`：渲染质量开销。
 - `policy_distribution.csv`：Unity policy action/reason 分布。
 
@@ -176,7 +176,7 @@ report\policy_distribution.csv
 mode = "re_register" # score_only=只降分写 flag 不重注册；re_register=确认误报率后再启用连续低重投影分重注册。
 ```
 
-此模式下，连续低质量颜色重投影会触发软 track-loss 并尝试 re-register。若颜色信号无效，仍只记录无信号状态，不触发重注册。
+此模式下，连续低质量颜色投影（Color projection）会触发软 track-loss 并尝试 re-register。若颜色信号无效，仍只记录无信号状态，不触发重注册。
 
 ## 9. 常见排查
 

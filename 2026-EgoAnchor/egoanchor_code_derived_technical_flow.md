@@ -40,7 +40,7 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 > | 3.1 概述（分层架构 + 三条语义边界）  | §1                   | 凝练              |
 > | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4         | 模型 + 引用，凝练 |
 > | 3.2 对象感知：零样本 6DoF 位姿估计   | §6.5 / §6.6         | 凝练              |
-> | 3.2 对象感知：**可靠性评分**   | §7（$R=Q\cdot C$） | **重点**    |
+> | 3.2 对象感知：**可靠性评分**   | §7（VCD: $R=\text{Gate}\times V\times C^{\alpha}\times D^{\beta}$） | **重点**    |
 > | 3.3 对象锚定：**时间对齐**     | §9                   | **重点**    |
 > | 3.3 对象锚定：质量评估与锚定策略     | §10.1–10.4          | 适中              |
 > | 3.3 对象锚定：**静止优先先验** | §10.5                | **重点**    |
@@ -255,37 +255,31 @@ $$
 
 ## 7. 可靠性评估模型（科学核心之一）
 
-Python 为每个有效 `PoseObservation` 计算 $[0,1]$ 的综合可靠性。当前可用位姿只来自 `REGISTER` 与 `TRACK`；其它阶段已经是 no-pose，最终分直接为 0。因此代码不再保留感知阶段门控层，综合分采用 **质量 × 置信**：
+Python 为每个有效 `PoseObservation` 计算 $[0,1]$ 的综合可靠性。当前可用位姿只来自 `REGISTER` 与 `TRACK`；其它阶段已经是 no-pose，最终分直接为 0。综合分采用 **VCD 纯即时评分**（Visibility × Color × Depth，无任何历史信号）：
 
 $$
-\boxed{R = Q \cdot C}\qquad(\text{Quality} \times \text{Confidence})
+\boxed{R = V \times C^{\alpha} \times D^{\beta}}
 $$
 
-> 重要：原"逐帧跳变幅度"子分已被移除——离线分析证明坏 pose 的逐帧跳变并不比真实快动更大，无法区分；坏 pose 的拒绝改由几何核（重投影/深度）与 Unity 锚定层（几何 flag + CUSUM）负责。
+$V$ 为 mask 可见面积占比（可视层），$C$（颜色投影 Color projection，$\alpha=0.2$）与 $D$（深度对齐 Depth alignment，$\beta=0.8$）通过加权对数几何均值合并；$C$ 无效（无纹理）时自动排除，公式退化为 $V\times D$。phase/reject/confidence 子分均已移除，协议字段保留但始终为 1.0。
 
-### 7.1 Quality 层（几何证据 + 有界调制）
+> 重要：原"逐帧跳变幅度"子分已被移除——离线分析证明坏 pose 的逐帧跳变并不比真实快动更大，无法区分；坏 pose 的拒绝改由几何核（颜色投影/深度对齐）与 Unity 锚定层（几何 flag + CUSUM）负责。
 
-$$
-Q = G_\text{geo}\cdot M_\text{mask}
-$$
-
-**几何核心** $G_\text{geo}$ 是有效几何子分的 **加权对数几何平均**（软合取）：
+### 7.1 VCD 可视层 V、颜色层 C 与深度层 D
 
 $$
-G_\text{geo} = \exp\!\left(\frac{\sum_i w_i \log\max(s_i,\,\varepsilon)}{\sum_i w_i}\right),\qquad \varepsilon = \text{geo\_floor} = 0.05
+Q = G_\text{cd}\cdot V
 $$
 
-权重：`reproj_weight` 与 `depth_weight`。⚠️ 代码 dataclass 默认 $0.5/0.5$，但 **运行时由 `defaults.toml` 覆盖为 $w_\text{rep}=0.2,\ w_\text{dep}=0.8$**（颜色作辅助证据、深度为主，利于手柄等低纹理目标）。**两路都无有效信号时 $G_\text{geo}=1$，不武断降分。**
-
-**mask 有界调制**（仅温和降权，不硬否决）：
+$V$ 为 mask 可见面积占比，直接作为乘因子（不软化）。**几何核** $G_\text{cd}$ 是 C（颜色投影 Color projection）与 D（深度对齐 Depth alignment）的 **加权对数几何平均**：
 
 $$
-M_\text{mask} = m_f + (1-m_f)\,S_\text{mask},\qquad m_f = \text{mask\_floor} = 0.5
+G_\text{cd} = C^{\alpha}\cdot D^{\beta} = \exp\!\left(\alpha\log\max(C,\,\varepsilon) + \beta\log\max(D,\,\varepsilon)\right),\qquad \varepsilon = \text{geo\_floor} = 0.05
 $$
 
-$S_\text{mask}$ 由可见面积比分段映射（过小、过大都降分，中段满分）。
+权重：`reproj_weight`（$\alpha$）与 `depth_weight`（$\beta$）。**运行时由 `defaults.toml` 覆盖为 $\alpha=0.2,\ \beta=0.8$**（颜色作辅助证据、深度为主，利于手柄等低纹理目标）。$C$ 无效（无纹理/warmup）时自动排除，公式退化为 $\text{Gate}\times V\times D$。**两路都无有效信号时 $G_\text{cd}=1$，不武断降分。**
 
-### 7.2 颜色重投影子分（LAB ZNCC）
+### 7.2 颜色投影子分（Color projection，LAB ZNCC）
 
 不做全图比较，而是：① 取渲染 mask 与观测 mask 交集的核心区域（椭圆腐蚀，核约 `0.15·min(W,H)`，可 `downscale=2` 下采样）；② 转 LAB，亮度通道按 `color_l_weight=0.3` 降权（抑制真实光照变化敏感度）；③ 做零均值归一化互相关 ZNCC；④ 映射到 $[0,1]$：
 
@@ -313,19 +307,9 @@ $$
 S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}
 $$
 
-### 7.4 Confidence 层（连续高质量帧 warmup）
+### 7.4 渲染质量信号（`reliability.render_quality`）
 
-离散计数器 $n$：质量分 $\ge 0.6$（`GOOD_SCORE_THRESH`）时 $n{+}{=}1$（封顶 $N$），否则 $n{-}{=}2$（快衰减）；无几何证据时 $n$ 原地保持。映射：
-
-$$
-C = 0.5 + 0.5\cdot\frac{n}{N},\qquad N = \text{WARMUP\_FRAMES} = 10
-$$
-
-即 $C\in[0.5,1.0]$，提供迟滞（需持续好帧），抑制单帧噪声。
-
-### 7.5 渲染质量信号（`reliability.render_quality`）
-
-- 当前实现只采集颜色重投影、mask 可见比例和深度对齐信号，并写入 PoseResult 子分与 flags。
+- 当前实现只采集颜色投影（Color projection）、mask 可见比例和深度对齐（Depth alignment）信号，并写入 PoseResult 子分与 flags。
 - 颜色项无效时从几何核中排除，深度覆盖不足时返回中性 depth score，避免把无信号误当成坏 pose。
 - 渲染质量本身不触发 Python 内部重新 register；持续低分由 Unity 运行时通过 score gate、static lock 低分释放和 `reacquire` 命令处理。
 
@@ -576,11 +560,10 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 | FoundationPose | est_refine_iter / track_refine_iter                   | 5 / 2                                       | register/track 迭代 |
 | FoundationPose | register_min_depth_valid_in_mask                      | 0.15                                        | 注册深度门限        |
 | FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg      | 0.6 m / 100°                               | 跳变阈值            |
-| 可靠性         | geo_floor / reproj_weight / depth_weight / mask_floor | 0.05 /**0.2** / **0.8** / 0.5   | 几何核（toml 覆盖） |
+| 可靠性         | geo_floor / reproj_weight / depth_weight              | 0.05 / **0.2** / **0.8**        | 几何核（toml 覆盖） |
 | 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m      | 0.02 / 0.005 m                              | 深度对齐阈值        |
-| 可靠性         | color_l_weight / downscale / min_render_area_px       | 0.3 / 2 / 50                                | 颜色重投影          |
+| 可靠性         | color_l_weight / downscale / min_render_area_px       | 0.3 / 2 / 50                                | 颜色投影            |
 | 可靠性         | warmup_frames                                         | 3                                           | register 后评分预热 |
-| 可靠性         | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH                  | 10 / 0.6                                    | confidence          |
 | 状态机         | coastTimeoutSeconds / lostTimeoutSeconds              | 0.45 / 2.0 s                                | gap 升级            |
 | Kalman         | pos proc/meas noise                                   | 0.20 / 0.0004                               | 位置                |
 | Kalman         | rot proc/meas noise                                   | 0.40 / 0.0025                               | 旋转切空间          |
@@ -642,10 +625,9 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ### 16.5 可靠性评估
 
-- 综合评分 $R=Q\cdot C$：[reliability/pose_quality.py:126](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L126)
+- VCD 综合评分 $R=\text{Gate}\times V\times C^{\alpha}\times D^{\beta}$：[reliability/pose_quality.py:122](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L122)
 - 几何核（加权对数几何平均）：[reliability/pose_quality.py:247](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L247)
-- confidence warmup：[reliability/pose_quality.py:69](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L69)
-- 颜色重投影（LAB ZNCC）：[reliability/reprojection.py:245](EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L245)
+- 颜色投影（Color projection，LAB ZNCC）：[reliability/reprojection.py:245](EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L245)
 - 深度对齐：[reliability/depth_alignment.py:101](EgoAnchor_Python/src/egoanchor/reliability/depth_alignment.py#L101)
 - 渲染质量编排：[reliability/render_quality.py](EgoAnchor_Python/src/egoanchor/reliability/render_quality.py)
 

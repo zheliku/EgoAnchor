@@ -877,12 +877,13 @@ MonoBehaviour:
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
-  lostTimeoutSeconds: 2
+  lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.8
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
+  lowScoreReacquireThreshold: 0.5
+  lowScoreReacquireSeconds: 0.4
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -2756,12 +2757,13 @@ MonoBehaviour:
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
-  lostTimeoutSeconds: 2
+  lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.8
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
+  lowScoreReacquireThreshold: 0.5
+  lowScoreReacquireSeconds: 0.4
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -4279,13 +4281,14 @@ MonoBehaviour:
   maxJumpDegrees: 120
   staticLockModule: {fileID: 1039886369}
   coastTimeoutSeconds: 0.45
-  trackingScoreFloor: 0.25
-  lostTimeoutSeconds: 2
+  trackingScoreFloor: 0.5
+  lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
   enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.8
+  lowScoreReacquireThreshold: 0.5
+  lowScoreReacquireSeconds: 0.4
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -5782,12 +5785,13 @@ MonoBehaviour:
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
-  lostTimeoutSeconds: 2
+  lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.8
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
+  lowScoreReacquireThreshold: 0.5
+  lowScoreReacquireSeconds: 0.4
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -6503,12 +6507,13 @@ MonoBehaviour:
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
-  lostTimeoutSeconds: 2
+  lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableLowScoreReacquire: 1
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
   lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.8
+  lowScoreReacquireSeconds: 0.4
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2

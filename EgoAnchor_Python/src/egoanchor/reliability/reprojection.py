@@ -154,7 +154,7 @@ class ReprojectionChecker:
         else:
             status = "observed_empty"
 
-        # 几何无效时颜色重投影分会被上层丢弃，跳过 LAB 转换与 ZNCC，省掉热路径上的无用计算。
+        # 几何无效时颜色投影分会被上层丢弃，跳过 LAB 转换与 ZNCC，省掉热路径上的无用计算。
         if valid:
             color_similarity, color_valid = ReprojectionChecker._color_similarity_lab(
                 render_rgb,
