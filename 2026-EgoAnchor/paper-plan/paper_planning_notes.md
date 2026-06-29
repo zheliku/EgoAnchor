@@ -15,7 +15,7 @@
 | 目标分割 | object segmentation | YOLOE / SAM3 / Cutie | — |
 | 立体几何恢复 | stereo geometry recovery | Fast-FoundationStereo | 双目重建 |
 | 零样本 6DoF 位姿估计 | zero-shot 6DoF pose estimation | FoundationPose | — |
-| 可靠性评分 | reliability score | `reliability_score`、`R=G·Q·C` | — |
+| 可靠性评分 | reliability score | `reliability_score`、`R=Q·C` | — |
 | 时间对齐 | frame-aligned / capture-time alignment | `frame_id` 回查、`CameraPoseFrameAligner` | 帧对齐（可用）、frame-aligned anchoring（作概念时用"时间对齐"） |
 | 质量评估门控 | quality / score gate | `GateDecision`、`enableScoreGate` | 可靠性门控、观测门控 |
 | 锚定策略 | anchoring policy | `MotionModel × SmoothingStrategy` | 高频时序稳定、时序稳定 |
@@ -161,7 +161,7 @@ GT 方案定调：**只用 Quest 手柄经官方 SDK 取 6DoF 作为 GT**，不�
 
 - **静止 jitter / 屏幕空间抖动**：让被试"拿稳别动"几秒，直接测输出方差，无需 GT 位姿。
 - **可靠性分分布**（`reliability_score`）：纯系统输出。
-- **跟踪连续性**：失锁帧占比、重注册（`re_register`）触发率。
+- **跟踪连续性**：失锁帧占比、Unity `reacquire/reset` 命令触发率。
 - **静止优先先验有效性**：静止段输出位移，静止优先先验应将其压到近零。
 
 这样"手柄上的硬精度 GT + 日常物体上的免 GT 稳定性代理"两轨合起来，泛化故事才闭环：既证明运行时质量，又证明感知对开放物体可用。
@@ -172,7 +172,7 @@ GT 方案定调：**只用 Quest 手柄经官方 SDK 取 6DoF 作为 GT**，不�
 - Python 不输出 world pose；world anchor 只在 Unity 端通过 `frame_id` 回查得到。
 - arrival-time mapping 是诊断对照，不是正式路径。
 - 静止优先先验（static lock）是 regime-switching 稳定器，不是普通低通滤波。
-- 当前代码没有 `score_jump` 子分，也没有旧 Gate/Estimator/Output 三模块结构。
+- 当前代码没有逐帧跳变、阶段或近期拒绝子分，也没有旧 Gate/Estimator/Output 三模块结构。
 - 当前 JSONL 输出字段是 `has_output_pose/output_pos/output_rot`，静止锁状态字段是 `latest_static_locked`；report 里的 `stable_rows` 只是统计名。
 
 ## 审稿风险

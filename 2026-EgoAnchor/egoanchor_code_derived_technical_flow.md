@@ -35,15 +35,15 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 > **论文「系统流程」章对应关系（egoanchor_cn_v4.tex 第 3 章，统一术语锚点）：**
 >
-> | 论文小节                             | 对应本文档章节               | 详略              |
-> | ------------------------------------ | ---------------------------- | ----------------- |
-> | 3.1 概述（分层架构 + 三条语义边界）  | §1                          | 凝练              |
-> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4                | 模型 + 引用，凝练 |
-> | 3.2 对象感知：零样本 6DoF 位姿估计   | §6.5 / §6.6                | 凝练              |
-> | 3.2 对象感知：**可靠性评分**   | §7（$R=G\cdot Q\cdot C$） | **重点**    |
-> | 3.3 对象锚定：**时间对齐**     | §9                          | **重点**    |
-> | 3.3 对象锚定：质量评估与锚定策略     | §10.1–10.4                 | 适中              |
-> | 3.3 对象锚定：**静止优先先验** | §10.5                       | **重点**    |
+> | 论文小节                             | 对应本文档章节        | 详略              |
+> | ------------------------------------ | --------------------- | ----------------- |
+> | 3.1 概述（分层架构 + 三条语义边界）  | §1                   | 凝练              |
+> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4         | 模型 + 引用，凝练 |
+> | 3.2 对象感知：零样本 6DoF 位姿估计   | §6.5 / §6.6         | 凝练              |
+> | 3.2 对象感知：**可靠性评分**   | §7（$R=Q\cdot C$） | **重点**    |
+> | 3.3 对象锚定：**时间对齐**     | §9                   | **重点**    |
+> | 3.3 对象锚定：质量评估与锚定策略     | §10.1–10.4          | 适中              |
+> | 3.3 对象锚定：**静止优先先验** | §10.5                | **重点**    |
 >
 > 命令与生命周期（§12）、双平面传输（§3）、多策略扇出（§11）在论文中归入「系统实现」章；离线仿真（§13）与定量评估流水线（§14）归入「评估」章或补充材料。
 
@@ -95,7 +95,7 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 - **`QuestStereoFrame`**：`left_image_jpeg / right_image_jpeg`（JPEG 字节）、左右宽高、`jpeg_quality`。
 - **`QuestCameraInfo`**：左右内参 `(fx, fy, cx, cy)`、左右畸变系数、`baseline_m`、传感器/active/requested/current 分辨率、`max_framerate`、左右 `LensPose`（position+quat）。
-- **`PoseResult`**：`has_pose`、`pose_matrix_cv_camera`（row-major 4×4，16 个 double）、`phase`、`stage`、`det_count`、`depth_valid_ratio`、`fps`、`timing`（yolo/depth/cutie/pose/total ms）、`reliability_score` 与各子分 `score_phase/score_reprojection/score_depth/score_mask/score_reject/score_confidence/color_reprojection`、整组 `render_quality_*` 诊断、`server_receive_mono_ms`、`server_publish_mono_ms`。
+- **`PoseResult`**：`has_pose`、`pose_matrix_cv_camera`（row-major 4×4，16 个 double）、`phase`、`stage`、`det_count`、`depth_valid_ratio`、`fps`、`timing`（yolo/depth/cutie/pose/total ms）、`reliability_score` 与各子分 `score_reprojection/score_depth/score_mask/score_confidence/color_reprojection`、整组 `render_quality_*` 诊断、`server_receive_mono_ms`、`server_publish_mono_ms`。
 - **`AnchorStatusEvent`**：`state`、`event`、`message`、`error`（状态迁移/命令/恢复事件流，**不做 latest-only**）。
 - **`ServerHeartbeat`**：`state`、`input_ready`、`latest_stereo_frame_id`、`camera_info_version`、`runtime_fps`、`publish_fps`、`command_queue_length`、`last_error`。
 - **命令消息**：`ResetTrackingRequest`（clear_filters / clear_anchor_pose / reason）、`ReacquireAnchorRequest`（mode∈{NEXT_VALID_FRAME, LATEST_FRAME_IF_AVAILABLE, FORCE_DETECT}）、`AnchorControlRequest`（action∈{SET_STAGE, PAUSE, RESUME}）。
@@ -243,11 +243,11 @@ $$
 
 判异常：$\Delta t > 0.6\,\text{m}$ 或 $\Delta r > 100^\circ$（`pose_jump_translation_m / pose_jump_rotation_deg`）。异常帧不被接受为 TRACK，也不会在 Python 内部立即重新 register；pipeline 输出 no-pose 和 reject 计数，后续恢复由 Unity 命令驱动：
 
-| 触发                   | 执行语义 |
-| ---------------------- | -------- |
-| 显式 `reset` 命令      | 清空 Python tracking state，下一有效帧重新检测/register |
-| 显式 `reacquire` 命令  | 根据命令模式清空或重获目标，默认下一有效帧重新检测/register |
-| 标定变化               | 新 `camera_info` 改变 $K$，pipeline bump generation 并重新 register |
+| 触发                   | 执行语义                                                               |
+| ---------------------- | ---------------------------------------------------------------------- |
+| 显式`reset` 命令     | 清空 Python tracking state，下一有效帧重新检测/register                |
+| 显式`reacquire` 命令 | 根据命令模式清空或重获目标，默认下一有效帧重新检测/register            |
+| 标定变化               | 新`camera_info` 改变 $K$，pipeline bump generation 并重新 register |
 
 因此 Python 感知链路只输出 `REGISTER`、`TRACK` 或 no-pose 观测；是否重获取目标由对象锚定运行时根据低分、失锁或用户命令统一决定。
 
@@ -255,27 +255,15 @@ $$
 
 ## 7. 可靠性评估模型（科学核心之一）
 
-Python 为每个 `PoseObservation` 计算 $[0,1]$ 的综合可靠性，采用 **三层乘性结构**：
+Python 为每个有效 `PoseObservation` 计算 $[0,1]$ 的综合可靠性。当前可用位姿只来自 `REGISTER` 与 `TRACK`；其它阶段已经是 no-pose，最终分直接为 0。因此代码不再保留感知阶段门控层，综合分采用 **质量 × 置信**：
 
 $$
-\boxed{R = G \cdot Q \cdot C}\qquad(\text{Gate} \times \text{Quality} \times \text{Confidence})
+\boxed{R = Q \cdot C}\qquad(\text{Quality} \times \text{Confidence})
 $$
 
 > 重要：原"逐帧跳变幅度"子分已被移除——离线分析证明坏 pose 的逐帧跳变并不比真实快动更大，无法区分；坏 pose 的拒绝改由几何核（重投影/深度）与 Unity 锚定层（几何 flag + CUSUM）负责。
 
-### 7.1 Gate 层（硬约束，压上限）
-
-$$
-G = S_\text{phase}\cdot S_\text{reject}
-$$
-
-- 相位分：$S_\text{phase}=1.0$（TRACK / REGISTER），其它阶段 $0.7$。
-- reject 惩罚：
-  $$
-  S_\text{reject} = \begin{cases}\max\big(0.25,\ 1 - 0.12\cdot\min(n_\text{reject},5)\big) & n_\text{reject}>0\\ 1.0 & \text{否则}\end{cases}
-  $$
-
-### 7.2 Quality 层（几何证据 + 有界调制）
+### 7.1 Quality 层（几何证据 + 有界调制）
 
 $$
 Q = G_\text{geo}\cdot M_\text{mask}
@@ -297,7 +285,7 @@ $$
 
 $S_\text{mask}$ 由可见面积比分段映射（过小、过大都降分，中段满分）。
 
-### 7.3 颜色重投影子分（LAB ZNCC）
+### 7.2 颜色重投影子分（LAB ZNCC）
 
 不做全图比较，而是：① 取渲染 mask 与观测 mask 交集的核心区域（椭圆腐蚀，核约 `0.15·min(W,H)`，可 `downscale=2` 下采样）；② 转 LAB，亮度通道按 `color_l_weight=0.3` 降权（抑制真实光照变化敏感度）；③ 做零均值归一化互相关 ZNCC；④ 映射到 $[0,1]$：
 
@@ -307,7 +295,7 @@ $$
 
 若核心区无颜色方差（纯色/无纹理）→ 该项标记 **无效并排除几何核**（返回 0.5、valid=False），避免冤枉正确 pose。交集为空 → 0（真实坏 pose 信号）。`min_render_area_px=50` 以下判无效。
 
-### 7.4 深度对齐子分
+### 7.3 深度对齐子分
 
 mask 内有效深度覆盖率 $< 0.10$（`depth_min_coverage`）→ 返回中性 0.5 且无效。否则自适应阈值：
 
@@ -325,7 +313,7 @@ $$
 S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}
 $$
 
-### 7.5 Confidence 层（连续高质量帧 warmup）
+### 7.4 Confidence 层（连续高质量帧 warmup）
 
 离散计数器 $n$：质量分 $\ge 0.6$（`GOOD_SCORE_THRESH`）时 $n{+}{=}1$（封顶 $N$），否则 $n{-}{=}2$（快衰减）；无几何证据时 $n$ 原地保持。映射：
 
@@ -335,7 +323,7 @@ $$
 
 即 $C\in[0.5,1.0]$，提供迟滞（需持续好帧），抑制单帧噪声。
 
-### 7.6 渲染质量信号（`reliability.render_quality`）
+### 7.5 渲染质量信号（`reliability.render_quality`）
 
 - 当前实现只采集颜色重投影、mask 可见比例和深度对齐信号，并写入 PoseResult 子分与 flags。
 - 颜色项无效时从几何核中排除，深度覆盖不足时返回中性 depth score，避免把无信号误当成坏 pose。
@@ -575,37 +563,37 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ## 15. 关键参数总表（按子系统）
 
-| 子系统         | 参数                                                     | 默认值                                      | 含义                |
-| -------------- | -------------------------------------------------------- | ------------------------------------------- | ------------------- |
-| 传输           | ZMQ 端口 / receive_hwm / poll                            | 15557 / 20 / 10 ms                          | 数据面              |
-| 传输           | NATS url / max_pending_futures                           | 127.0.0.1:4222 / 32                         | 消息面背压          |
-| 命令           | max_queue_size / dedup_ttl_ms / execute_per_tick         | 128 / 60000 ms / 8                          | 命令队列            |
-| 采集           | FramePoseHistory capacity / cameraPoseDelayFrames        | 512 / 1                                     | 帧位姿历史          |
-| 标定           | process_width × height / assume_center_crop             | 640×480 / true                             | 处理分辨率          |
-| 深度           | min_depth / max_depth / valid_iters / max_disp           | 0.1 / 5.0 m / 4 / 192                       | FFS                 |
-| 分割           | confidence_threshold / max_det / mask_threshold          | 0.2 / 1 / 0.5                               | YOLOE/SAM3 共用     |
-| Cutie          | seg_threshold / erosion_size                              | 0.1 / 5                                     | mask 传播           |
-| FoundationPose | est_refine_iter / track_refine_iter                      | 5 / 2                                       | register/track 迭代 |
-| FoundationPose | register_min_depth_valid_in_mask                         | 0.15                                        | 注册深度门限        |
-| FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg         | 0.6 m / 100°                               | 跳变阈值            |
-| 可靠性         | geo_floor / reproj_weight / depth_weight / mask_floor    | 0.05 /**0.2** / **0.8** / 0.5   | 几何核（toml 覆盖） |
-| 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m         | 0.02 / 0.005 m                              | 深度对齐阈值        |
-| 可靠性         | color_l_weight / downscale / min_render_area_px          | 0.3 / 2 / 50                                | 颜色重投影          |
-| 可靠性         | warmup_frames                                             | 3                                           | register 后评分预热 |
-| 可靠性         | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH                     | 10 / 0.6                                    | confidence          |
-| 状态机         | coastTimeoutSeconds / lostTimeoutSeconds                 | 0.45 / 2.0 s                                | gap 升级            |
-| Kalman         | pos proc/meas noise                                      | 0.20 / 0.0004                               | 位置                |
-| Kalman         | rot proc/meas noise                                      | 0.40 / 0.0025                               | 旋转切空间          |
-| OneEuro        | minCutoff / beta / dCutoff                               | 1.0 / 0.25 / 1.0                            | 自适应低通          |
-| Blend          | decayPerFrame / latencyMult / maxExtrap                  | 0.9 / 1.0 / 0.3 s                           | 残差融合            |
-| DelayedInterp  | safetyMargin / minDelay / tangentChordRatio              | 1.15 / 0.25 s / 3.0                         | 延迟插值            |
-| StaticLock     | enterSpeed / enterAngSpeed / dwell / minScore            | 0.05 m·s⁻¹ / 35°·s⁻¹ / 0.35 s / 0.25 | 进入锁定            |
-| StaticLock     | deadband pos/rot                                         | 0.008 m / 3°                               | 噪声死区            |
-| StaticLock     | CUSUM 阈值 pos/rot / 半衰期                              | 0.08 m / 20° / 0.27 s                      | 解锁证据            |
-| StaticLock     | drift leash pos/rot                                      | 0.015 m / 5°                               | 漂移租绳            |
-| StaticLock     | headMaxToleranceFactor / headSettle / posMaxFactor       | 4.0 / 0.6 s / 3.0                           | 头动/距离自适应     |
-| Tools3         | renderHz / latency / jitter                              | 60 / 300 / 60 ms                            | 仿真投递            |
-| Eval           | jitter 静止阈 / lag 窗 / 尖刺阈 / recovery hold          | 0.03 m·s⁻¹ / ±500 ms / 0.05 m / 200 ms  | 指标参数            |
+| 子系统         | 参数                                                  | 默认值                                      | 含义                |
+| -------------- | ----------------------------------------------------- | ------------------------------------------- | ------------------- |
+| 传输           | ZMQ 端口 / receive_hwm / poll                         | 15557 / 20 / 10 ms                          | 数据面              |
+| 传输           | NATS url / max_pending_futures                        | 127.0.0.1:4222 / 32                         | 消息面背压          |
+| 命令           | max_queue_size / dedup_ttl_ms / execute_per_tick      | 128 / 60000 ms / 8                          | 命令队列            |
+| 采集           | FramePoseHistory capacity / cameraPoseDelayFrames     | 512 / 1                                     | 帧位姿历史          |
+| 标定           | process_width × height / assume_center_crop          | 640×480 / true                             | 处理分辨率          |
+| 深度           | min_depth / max_depth / valid_iters / max_disp        | 0.1 / 5.0 m / 4 / 192                       | FFS                 |
+| 分割           | confidence_threshold / max_det / mask_threshold       | 0.2 / 1 / 0.5                               | YOLOE/SAM3 共用     |
+| Cutie          | seg_threshold / erosion_size                          | 0.1 / 5                                     | mask 传播           |
+| FoundationPose | est_refine_iter / track_refine_iter                   | 5 / 2                                       | register/track 迭代 |
+| FoundationPose | register_min_depth_valid_in_mask                      | 0.15                                        | 注册深度门限        |
+| FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg      | 0.6 m / 100°                               | 跳变阈值            |
+| 可靠性         | geo_floor / reproj_weight / depth_weight / mask_floor | 0.05 /**0.2** / **0.8** / 0.5   | 几何核（toml 覆盖） |
+| 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m      | 0.02 / 0.005 m                              | 深度对齐阈值        |
+| 可靠性         | color_l_weight / downscale / min_render_area_px       | 0.3 / 2 / 50                                | 颜色重投影          |
+| 可靠性         | warmup_frames                                         | 3                                           | register 后评分预热 |
+| 可靠性         | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH                  | 10 / 0.6                                    | confidence          |
+| 状态机         | coastTimeoutSeconds / lostTimeoutSeconds              | 0.45 / 2.0 s                                | gap 升级            |
+| Kalman         | pos proc/meas noise                                   | 0.20 / 0.0004                               | 位置                |
+| Kalman         | rot proc/meas noise                                   | 0.40 / 0.0025                               | 旋转切空间          |
+| OneEuro        | minCutoff / beta / dCutoff                            | 1.0 / 0.25 / 1.0                            | 自适应低通          |
+| Blend          | decayPerFrame / latencyMult / maxExtrap               | 0.9 / 1.0 / 0.3 s                           | 残差融合            |
+| DelayedInterp  | safetyMargin / minDelay / tangentChordRatio           | 1.15 / 0.25 s / 3.0                         | 延迟插值            |
+| StaticLock     | enterSpeed / enterAngSpeed / dwell / minScore         | 0.05 m·s⁻¹ / 35°·s⁻¹ / 0.35 s / 0.25 | 进入锁定            |
+| StaticLock     | deadband pos/rot                                      | 0.008 m / 3°                               | 噪声死区            |
+| StaticLock     | CUSUM 阈值 pos/rot / 半衰期                           | 0.08 m / 20° / 0.27 s                      | 解锁证据            |
+| StaticLock     | drift leash pos/rot                                   | 0.015 m / 5°                               | 漂移租绳            |
+| StaticLock     | headMaxToleranceFactor / headSettle / posMaxFactor    | 4.0 / 0.6 s / 3.0                           | 头动/距离自适应     |
+| Tools3         | renderHz / latency / jitter                           | 60 / 300 / 60 ms                            | 仿真投递            |
+| Eval           | jitter 静止阈 / lag 窗 / 尖刺阈 / recovery hold       | 0.03 m·s⁻¹ / ±500 ms / 0.05 m / 200 ms  | 指标参数            |
 
 ---
 
@@ -654,7 +642,7 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 
 ### 16.5 可靠性评估
 
-- 综合评分 $R=G\cdot Q\cdot C$：[reliability/pose_quality.py:126](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L126)
+- 综合评分 $R=Q\cdot C$：[reliability/pose_quality.py:126](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L126)
 - 几何核（加权对数几何平均）：[reliability/pose_quality.py:247](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L247)
 - confidence warmup：[reliability/pose_quality.py:69](EgoAnchor_Python/src/egoanchor/reliability/pose_quality.py#L69)
 - 颜色重投影（LAB ZNCC）：[reliability/reprojection.py:245](EgoAnchor_Python/src/egoanchor/reliability/reprojection.py#L245)
@@ -714,7 +702,7 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 3. **发送**：`QuestStereoFrame`（JPEG）与 `QuestCameraInfo` 经 ZMQ 发往 Python。
 4. **Python 接收**：latest-drain 取最新输入，session/frame 去重。
 5. **感知**：解码 → 统一分辨率 → 刷新 $K'$ → 分割（YOLOE/SAM3 + Cutie 传播）→ 深度（$Z=f_x s b/d$）→ FoundationPose register/track → 跳变检测 → 渲染质量回查。
-6. **可靠性**：$R=G\cdot Q\cdot C$，打包 `PoseResult`（camera-space 4×4 + 各子分）经 NATS 发布。
+6. **可靠性**：$R=Q\cdot C$，打包 `PoseResult`（camera-space 4×4 + 质量/置信子分）经 NATS 发布。
 7. **Unity 对齐**：按 `frame_id` 回查采集时刻相机位姿，$T^w_o=T^w_{c,f}\,T^c_o$，合成 world anchor。
 8. **锚定策略**：MotionModel（CV/Kalman/1€）+ Smoothing（Raw/Blend/DelayedInterp）+ 可选 score gate + 可选 Static Lock，统一以 capture-time 为时间轴。
 9. **渲染**：`DynamicObjectAnchor` 把最终 pose 写到目标 Transform。

@@ -155,22 +155,14 @@ Z = \frac{f_x\, s\, b}{d},
 \subsubsection{可靠性评分}
 \label{sec:reliability}
 
-孤立的位姿估计无法告知下游运行时该估计是否可信。为此，视觉感知后端为每个位姿观测计算取值于 $[0,1]$ 的综合可靠性评分，供对象锚定运行时的质量评估与状态迁移使用。该评分采用三层乘性结构
+孤立的位姿估计无法告知下游运行时该估计是否可信。为此，视觉感知后端为每个有效位姿观测计算取值于 $[0,1]$ 的综合可靠性评分，供对象锚定运行时的质量评估与状态迁移使用。当前实现中，可用位姿只来自 REGISTER 与 TRACK 两类输出；等待、失败或异常阶段直接输出 no-pose。因此可靠性评分不再单独设置阶段门控，而采用质量与置信的乘性结构
 
 \begin{equation}
-R = G \cdot Q \cdot C,
+R = Q \cdot C,
 \label{eq:reliability}
 \end{equation}
 
-其中门控层 $G$、质量层 $Q$ 与置信层 $C$ 分别建模硬约束、几何证据与时间一致性。门控层依据感知阶段与连续拒绝次数压低可信度上限，
-
-\begin{equation}
-G = S_{\text{phase}}\cdot S_{\text{reject}},\qquad
-S_{\text{reject}} = \max\bigl(\gamma,\ 1 - \kappa\,\min(n_{\text{reject}}, n_{0})\bigr),
-\label{eq:gate}
-\end{equation}
-
-使非正常阶段或反复被拒的估计不会获得高分。质量层综合两类互补的几何证据。其一是颜色重投影一致性 $s_{\text{rep}}$，在渲染掩膜与观测掩膜的交集区域上转换到 LAB 色彩空间并对亮度通道降权后，计算零均值归一化互相关 $\text{ZNCC}$ 并映射到单位区间，
+其中质量项 $Q$ 建模几何一致性与可见面积，置信项 $C$ 建模连续高质量观测带来的时间一致性。质量项综合两类互补的几何证据。其一是颜色重投影一致性 $s_{\text{rep}}$，在渲染掩膜与观测掩膜的交集区域上转换到 LAB 色彩空间并对亮度通道降权后，计算零均值归一化互相关 $\text{ZNCC}$ 并映射到单位区间，
 
 \begin{equation}
 s_{\text{rep}} = \mathrm{clamp}_{[0,1]}\Bigl(\tfrac{1}{2}(\text{ZNCC} + 1)\Bigr);
