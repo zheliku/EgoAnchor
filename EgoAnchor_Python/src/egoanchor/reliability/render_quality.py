@@ -52,7 +52,7 @@ class RenderQualityResult:
     """渲染前景像素数量。"""
 
     reprojection_valid: bool
-    """颜色重投影信号是否有效；无效时 caller 不应触发重注册。"""
+    """颜色重投影信号是否有效；无效时评分层应排除颜色项。"""
 
     color_valid: bool = True
     """颜色 ZNCC 是否有可用方差；纯色/无纹理时为 False，评分层应排除颜色项而非降分。"""

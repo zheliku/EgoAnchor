@@ -28,7 +28,7 @@ class RuntimeState(str, Enum):
     """正在尝试 6DoF register。"""
 
     TRACKING = "TRACKING"
-    """持续 tracking 或 re-register 已产生有效 pose。"""
+    """持续 tracking 或 register 已产生有效 pose。"""
 
     LOST = "LOST"
     """可恢复的跟踪丢失状态。"""

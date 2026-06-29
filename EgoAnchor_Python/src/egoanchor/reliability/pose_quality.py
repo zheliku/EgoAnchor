@@ -199,7 +199,7 @@ def score_observation_breakdown(
 def _phase_score(observation: PoseObservation, flags: list[str]) -> float:
     """把 pipeline phase 映射为 Gate 层子分。"""
 
-    if observation.phase in {"TRACK", "REGISTER", "RE_REGISTER"}:
+    if observation.phase in {"TRACK", "REGISTER"}:
         return 1.0
     flags.append(f"phase_{observation.phase.lower()}")
     return 0.7

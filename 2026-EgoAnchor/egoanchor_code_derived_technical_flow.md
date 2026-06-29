@@ -184,8 +184,8 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
   → [DEPTH]    双目深度估计 + 有效范围截断
   → [REGISTER 前置校验] mask 像素 + mask 内有效深度比例
   → [POSE]     FoundationPose register 或 track
-  → [跳变检测] 平移/旋转增量门限 → 必要时 RE_REGISTER
-  → [渲染质量回查] 颜色重投影 + 深度对齐（软重注册判定）
+  → [跳变检测] 平移/旋转增量门限 → 异常帧输出 no-pose
+  → [渲染质量回查] 颜色重投影 + 深度对齐（只写可靠性信号）
   → 汇总 PoseObservation（含可靠性评分）
 ```
 
@@ -213,7 +213,7 @@ $$
   t_x' = (x-c_x)\,t_z/f_x,\qquad t_y' = (y-c_y)\,t_z/f_y
   $$
 
-  - **丢失恢复**：连续 `tracked_mask_lost_frames=3` 帧无有效 Cutie mask，则回到前台重新检测并尝试 RE_REGISTER。
+  - **丢失处理**：已注册阶段若 Cutie 明确返回空 mask，Python 输出 `TRACK_MASK_LOST` / no-pose；不会在内部触发重新检测或 register，由 Unity 运行时决定是否下发 `reacquire/reset`。
 
 ### 6.4 深度估计（Fast-FoundationStereo）
 
@@ -233,7 +233,7 @@ mesh 加载时计算 AABB 归一化 `to_origin`、extents、顶点法线；坐�
 - **TRACK**（已注册）：调用 `track_one(rgb, depth, K, iteration=track_refine_iter=2)`，以上一帧位姿为先验，迭代更少更快。
 - **对称约束**：`symmetry_mode`（默认 `cube`，可 `none/axis`），消除对称物体的位姿歧义。
 
-### 6.6 跳变检测与重注册触发
+### 6.6 跳变检测与显式重获取
 
 TRACK 后计算与上一帧位姿的增量：
 
@@ -241,18 +241,15 @@ $$
 \Delta t = \lVert t_k - t_{k-1}\rVert_2,\qquad \Delta r = \arccos\!\Big(\frac{\mathrm{tr}(R_{k-1}^\top R_k)-1}{2}\Big)\ (\text{deg})
 $$
 
-判异常：$\Delta t > 0.6\,\text{m}$ 或 $\Delta r > 100^\circ$（`pose_jump_translation_m / pose_jump_rotation_deg`）。重注册由多条路径触发：
+判异常：$\Delta t > 0.6\,\text{m}$ 或 $\Delta r > 100^\circ$（`pose_jump_translation_m / pose_jump_rotation_deg`）。异常帧不被接受为 TRACK，也不会在 Python 内部立即重新 register；pipeline 输出 no-pose 和 reject 计数，后续恢复由 Unity 命令驱动：
 
-| 触发             | 条件                                                                            |
-| ---------------- | ------------------------------------------------------------------------------- |
-| 显式 reset 命令  | 用户/系统 reset                                                                 |
-| 标定变化         | 新`camera_info` 改变 $K$                                                    |
-| 位姿跳变         | $\Delta t/\Delta r$ 超限，且有可用 mask（`re_register_on_track_lost=true`） |
-| Cutie mask 丢失  | 连续 3 帧无 mask                                                                |
-| 渲染质量持续过低 | 颜色重投影 < 阈值且持续（仅`re_register` 模式）                               |
-| 连续 reject 上限 | `max_consecutive_track_rejects=3` 后强制回 detect                             |
+| 触发                   | 执行语义 |
+| ---------------------- | -------- |
+| 显式 `reset` 命令      | 清空 Python tracking state，下一有效帧重新检测/register |
+| 显式 `reacquire` 命令  | 根据命令模式清空或重获目标，默认下一有效帧重新检测/register |
+| 标定变化               | 新 `camera_info` 改变 $K$，pipeline bump generation 并重新 register |
 
-当跳变发生但无可用 mask 时，`accept_track_jump_without_mask=true` 允许临时接受该 pose，避免直接输出 no_pose 导致 anchor 卡死。
+因此 Python 感知链路只输出 `REGISTER`、`TRACK` 或 no-pose 观测；是否重获取目标由对象锚定运行时根据低分、失锁或用户命令统一决定。
 
 ---
 
@@ -272,7 +269,7 @@ $$
 G = S_\text{phase}\cdot S_\text{reject}
 $$
 
-- 相位分：$S_\text{phase}=1.0$（TRACK / REGISTER / RE_REGISTER），其它阶段 $0.7$。
+- 相位分：$S_\text{phase}=1.0$（TRACK / REGISTER），其它阶段 $0.7$。
 - reject 惩罚：
   $$
   S_\text{reject} = \begin{cases}\max\big(0.25,\ 1 - 0.12\cdot\min(n_\text{reject},5)\big) & n_\text{reject}>0\\ 1.0 & \text{否则}\end{cases}
@@ -338,11 +335,11 @@ $$
 
 即 $C\in[0.5,1.0]$，提供迟滞（需持续好帧），抑制单帧噪声。
 
-### 7.6 软重注册判定（`reliability.render_quality`）
+### 7.6 渲染质量信号（`reliability.render_quality`）
 
-- `mode=score_only`（默认）：只降分写 flag，不重注册。
-- `mode=re_register`：颜色重投影 $< 0.35$（`re_register_threshold`）且连续 `min_track_frames=2` 帧，才触发 RE_REGISTER；register 后 `warmup_frames=3` 帧内跳过判定，避免自激循环。
-- **深度对齐不直接触发重注册**（深度噪声大时避免抖动），只进入质量分。
+- 当前实现只采集颜色重投影、mask 可见比例和深度对齐信号，并写入 PoseResult 子分与 flags。
+- 颜色项无效时从几何核中排除，深度覆盖不足时返回中性 depth score，避免把无信号误当成坏 pose。
+- 渲染质量本身不触发 Python 内部重新 register；持续低分由 Unity 运行时通过 score gate、static lock 低分释放和 `reacquire` 命令处理。
 
 ---
 
@@ -587,15 +584,14 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 | 标定           | process_width × height / assume_center_crop             | 640×480 / true                             | 处理分辨率          |
 | 深度           | min_depth / max_depth / valid_iters / max_disp           | 0.1 / 5.0 m / 4 / 192                       | FFS                 |
 | 分割           | confidence_threshold / max_det / mask_threshold          | 0.2 / 1 / 0.5                               | YOLOE/SAM3 共用     |
-| Cutie          | seg_threshold / erosion_size / tracked_mask_lost_frames  | 0.1 / 5 / 3                                 | mask 传播           |
+| Cutie          | seg_threshold / erosion_size                              | 0.1 / 5                                     | mask 传播           |
 | FoundationPose | est_refine_iter / track_refine_iter                      | 5 / 2                                       | register/track 迭代 |
 | FoundationPose | register_min_depth_valid_in_mask                         | 0.15                                        | 注册深度门限        |
 | FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg         | 0.6 m / 100°                               | 跳变阈值            |
-| FoundationPose | max_consecutive_track_rejects                            | 3                                           | 强制回 detect       |
 | 可靠性         | geo_floor / reproj_weight / depth_weight / mask_floor    | 0.05 /**0.2** / **0.8** / 0.5   | 几何核（toml 覆盖） |
 | 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m         | 0.02 / 0.005 m                              | 深度对齐阈值        |
 | 可靠性         | color_l_weight / downscale / min_render_area_px          | 0.3 / 2 / 50                                | 颜色重投影          |
-| 可靠性         | re_register_threshold / min_track_frames / warmup_frames | 0.35 / 2 / 3                                | 软重注册            |
+| 可靠性         | warmup_frames                                             | 3                                           | register 后评分预热 |
 | 可靠性         | WARMUP_FRAMES(N) / GOOD_SCORE_THRESH                     | 10 / 0.6                                    | confidence          |
 | 状态机         | coastTimeoutSeconds / lostTimeoutSeconds                 | 0.45 / 2.0 s                                | gap 升级            |
 | Kalman         | pos proc/meas noise                                      | 0.20 / 0.0004                               | 位置                |

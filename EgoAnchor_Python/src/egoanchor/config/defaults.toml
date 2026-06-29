@@ -59,15 +59,12 @@ max_depth = 5.0 # 有效深度上限，单位米；相机离物体较远时可�
 
 [reliability.render_quality]
 enabled = true # 是否启用渲染质量检测；默认采集重投影、mask 可见比例和深度对齐信号。
-mode = "score_only" # score_only=只降分写 flag 不重注册；re_register=确认误报率后再启用连续低重投影分重注册。
-re_register_threshold = 0.35 # 颜色重投影分低于该值且持续若干帧后触发 RE_REGISTER，仅 re_register 模式生效。
-min_track_frames = 2 # 连续多少帧低重投影分才判定锁错或漂移，避免单帧误触发。
-warmup_frames = 3 # 重注册后跳过渲染质量判定的帧数，避免重注册自激循环。
+warmup_frames = 3 # register 后跳过渲染质量判定的帧数，避免初始渲染信号不稳定。
 depth_distance_ratio = 0.02 # 深度 inlier 阈值随物体到相机距离放大的比例，例如 1m 时约 2cm。
 depth_min_inlier_thresh_m = 0.005 # 深度 inlier 阈值下限，单位米，避免近距离时过严。
 depth_min_coverage = 0.10 # mask 内有效深度覆盖率低于该值时 depth_score 返回中性 0.5。
 downscale = 2 # 渲染质量检测下采样倍数，越大越快但越粗。
-min_render_area_px = 50 # 渲染前景过少时判为无效信号，不触发重注册。
+min_render_area_px = 50 # 渲染前景过少时判为无效信号，避免可靠性评分误用退化投影。
 color_l_weight = 0.3 # LAB ZNCC 中亮度 L 通道的相对权重；降低亮度对真实光照变化的敏感度。
 
 [reliability.pose_score]
@@ -129,13 +126,9 @@ apply_color = [0, 159, 237] # 强制纹理颜色，RGB 顺序。
 symmetry_mode = "cube" # 对称约束模式：none、cube 或 axis。
 symmetry_axis = "z" # symmetry_mode=axis 时的旋转轴。
 symmetry_count = 36 # symmetry_mode=axis 时离散旋转数量。
-register_min_depth_valid_in_mask = 0.15 # register/re-register 前 mask 内有效深度比例下限。
-re_register_on_track_lost = true # track 失败或跳变时是否用当前 2D mask 重新 register。
+register_min_depth_valid_in_mask = 0.15 # register 前 mask 内有效深度比例下限。
 pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位米；快速移动/近距离视角变化时可继续调大。
 pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
-accept_track_jump_without_mask = true # track 跳变但当前没有可用 re-register mask 时是否暂时接受该 pose，避免直接输出 no_pose 导致 anchor 卡住。
-max_consecutive_track_rejects = 3 # 连续 track reject 达到该值后强制回到 detect/register，避免长时间漂移。
-tracked_mask_lost_frames = 3 # 已注册且启用 Cutie 时，连续多少帧没有有效 Cutie mask 后主动回到检测/重注册。
 debug = 0 # FoundationPose 内部 debug 等级；0=关闭内部 debug 可视化/文件输出，>0 只在专项排查时开启。
 debug_dir = "FoundationPose/debug/api" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
 enable_logging = false # 是否允许 FoundationPose 内部 stdout/stderr/logging 输出到 console；默认关闭，避免第三方库刷屏遮住系统日志。
@@ -150,8 +143,8 @@ enable_logging = false # 是否允许 Cutie 内部 stdout/stderr/logging 输出�
 [debug]
 enable_tracking_window = true # tracking_server 是否默认显示 OpenCV debug 窗口；当前 Python debug 阶段保持开启。
 pipeline_stats_interval = 30 # 每处理多少帧打印一次 pose pipeline 性能统计。
-show_mask_snapshot = true # register/re-register 成功时是否刷新显示真实用于注册的目标 mask。
-mask_snapshot_window = "EgoAnchor Register Mask" # register/re-register mask snapshot 的 OpenCV 窗口名。
+show_mask_snapshot = true # register 成功时是否刷新显示真实用于注册的目标 mask。
+mask_snapshot_window = "EgoAnchor Register Mask" # register mask snapshot 的 OpenCV 窗口名。
 mask_snapshot_width = 1440 # mask snapshot 固定窗口宽度，单位像素；当前预留给后续扩展。
 mask_snapshot_height = 420 # mask snapshot 固定窗口高度，单位像素；当前预留给后续扩展。
 

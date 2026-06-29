@@ -116,7 +116,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 - 入口：`EgoAnchor_Python/src/tracking_server.py` 调 `egoanchor.app.tracking_server`。
 - 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
-- reliability：`render_quality.enabled=true` 默认采集信号，但 `mode="score_only"` 保持 shadow mode；无有效 reprojection/depth 信号不得触发重注册。
+- reliability：`render_quality.enabled=true` 默认只采集颜色重投影、mask 可见比例和深度对齐信号，并写入评分；Python 感知链路不根据低分、mask 丢失或位姿跳变自行重新 register，目标重获取由 Unity 通过 NATS `reacquire/reset` 命令驱动。
 - diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；图像面板必须从横幅下方开始排布，面板标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。主窗口 depth 面板保留原始深度伪彩色，只画 1px mask 轮廓，不做 mask 内部填充。score debug 窗口保持颜色重投影/深度对齐 2x3 诊断矩阵，上下两行都按观测、渲染、残差从左到右排列；RGB 面板只画 render/Cutie 轮廓，render/depth/残差面板使用中性背景或观测灰度上下文，避免黑底和半透明高亮掩盖原始颜色。残差面板右侧带热力图色标；深度残差图显示 `abs(render_depth - observed_depth)`，蓝色表示残差小、对齐好，红色表示残差大、差异明显，色标高端显示当前帧 p95 残差。
 - logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
 - 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
@@ -143,7 +143,7 @@ Python 代码地图：
 Python 细节坑：
 
 - SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。
-- `render_quality.mode="score_only"` 时只能采集和写分数；不要在没有足够证据前切到 `re_register`。
+- 渲染质量检测只能采集和写分数；不要恢复 Python 内部低分自动重新 register 逻辑。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
 - depth 覆盖不足时 `score_depth=0.5` 是中性显示，不进入几何合取核。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
@@ -252,7 +252,7 @@ Unity 场景/序列化注意事项：
 5. 至少 3 个代表性刚体物体。
 6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor/egoanchor_cn_v3.tex` 是当前最新中文主稿（摘要+引言已按三维 Core Message 重写，系统设计→结论尚为旧"四层协同/五维空白"骨架，待按三维主线收口，见 `paper-plan` 投稿前清单）。历史草稿 `egoanchor_cn_v2.tex`、`egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex` 保留备查，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
+论文源文件：`2026-EgoAnchor/egoanchor_cn_v5.tex` 是当前最新中文主稿。历史草稿 `egoanchor_cn_v2.tex`、`egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex` 保留备查，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
 当前部分 LaTeX 草稿文件在早期写作阶段可能先保留 `\bibliography{...}` 而尚未加入正文 `\cite{...}`；若需要临时消除 BibTeX 的 `I found no \citation commands` 提示，可显式加入 `\nocite{*}`，待正文引用补齐后再按需要移除。
 系统架构图文档当前放在 `docs/architecture/`，用于维护主线 Python / Unity / Protocol / Evaluation 与三平面通信关系。其中 `egoanchor-system-architecture.drawio`（+ `.spec.yaml` / `.svg`）是系统级总览；`egoanchor-technical-framework.drawio` 是更详细的科研风格技术框架图（感知四步链、三层可靠性评分公式、静止锁机制、生命周期 FSM、评估链路），配套 `egoanchor-technical-route.md` 给出端到端技术路线说明与 gpt-image-2 绘图提示词。论文用中文架构图初稿在 `2026-EgoAnchor/figures/egoanchor_architecture_cn.svg`，可编辑源为同名 `.drawio`，后续英文投稿版可在此基础上翻译标签。
 

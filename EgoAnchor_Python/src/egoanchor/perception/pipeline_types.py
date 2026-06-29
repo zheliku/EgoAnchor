@@ -246,14 +246,8 @@ class PipelineTrackingState:
     track_reject_count: int = 0
     """连续 track reject 次数。"""
 
-    tracked_mask_lost_count: int = 0
-    """已注册阶段连续缺失有效 Cutie mask 的帧数。"""
-
-    low_reprojection_count: int = 0
-    """连续低颜色重投影分帧数；仅 re_register 模式用于触发软 track-loss。"""
-
     frames_since_register: int = 0
-    """最近一次 register/re-register 后已经处理的 track 帧数，用于 warmup。"""
+    """最近一次 register 后已经处理的 track 帧数，用于 warmup。"""
 
     last_sender_mono_ms: float | None = None
     """上一条进入 pose 评分的 Unity 发送端时间戳，单位毫秒。"""
@@ -266,8 +260,6 @@ class PipelineTrackingState:
         self.last_pose = None
         if reset_reject_count:
             self.track_reject_count = 0
-        self.tracked_mask_lost_count = 0
-        self.low_reprojection_count = 0
         self.frames_since_register = 0
 
     def bump_generation(self) -> None:

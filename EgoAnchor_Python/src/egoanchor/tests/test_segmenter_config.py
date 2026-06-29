@@ -26,15 +26,15 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.module.sam3.checkpoint_path, "sam3/assets/sam3_ckpt/sam3.pt")
         self.assertTrue(cfg.module.sam3.async_segmentation)
 
-    def test_render_quality_defaults_to_score_only(self) -> None:
-        """渲染质量检测默认开启，但仍保持 score_only，不直接触发重注册。"""
+    def test_render_quality_defaults_do_not_include_auto_re_register_knobs(self) -> None:
+        """渲染质量检测只输出评分信号，不保留 Python 内部重注册开关。"""
 
         cfg = load_config()
 
         self.assertTrue(cfg.reliability.render_quality.enabled)
-        self.assertEqual(cfg.reliability.render_quality.mode, "score_only")
-        self.assertAlmostEqual(cfg.reliability.render_quality.re_register_threshold, 0.35)
-        self.assertEqual(cfg.reliability.render_quality.min_track_frames, 2)
+        self.assertFalse(hasattr(cfg.reliability.render_quality, "mode"))
+        self.assertFalse(hasattr(cfg.reliability.render_quality, "re_register_threshold"))
+        self.assertFalse(hasattr(cfg.reliability.render_quality, "min_track_frames"))
         self.assertEqual(cfg.reliability.render_quality.warmup_frames, 3)
         self.assertFalse(hasattr(cfg.reliability.render_quality, "geometry_weight"))
         self.assertFalse(hasattr(cfg.reliability.render_quality, "color_weight"))

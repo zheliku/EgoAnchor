@@ -21,8 +21,6 @@ class PipelineTrackingStateTest(unittest.TestCase):
             cutie_ready=True,
             last_pose=np.eye(4),
             track_reject_count=2,
-            tracked_mask_lost_count=3,
-            low_reprojection_count=2,
             frames_since_register=5,
             last_sender_mono_ms=123.0,
         )
@@ -34,8 +32,8 @@ class PipelineTrackingStateTest(unittest.TestCase):
         self.assertFalse(state.cutie_ready)
         self.assertIsNone(state.last_pose)
         self.assertEqual(state.track_reject_count, 0)
-        self.assertEqual(state.tracked_mask_lost_count, 0)
-        self.assertEqual(state.low_reprojection_count, 0)
+        self.assertFalse(hasattr(state, "tracked_mask_lost_count"))
+        self.assertFalse(hasattr(state, "low_reprojection_count"))
         self.assertEqual(state.frames_since_register, 0)
         self.assertIsNone(state.last_sender_mono_ms)
 
@@ -48,8 +46,6 @@ class PipelineTrackingStateTest(unittest.TestCase):
             cutie_ready=True,
             last_pose=np.eye(4),
             track_reject_count=2,
-            tracked_mask_lost_count=3,
-            low_reprojection_count=2,
             frames_since_register=5,
             last_sender_mono_ms=123.0,
         )
@@ -61,8 +57,8 @@ class PipelineTrackingStateTest(unittest.TestCase):
         self.assertFalse(state.cutie_ready)
         self.assertIsNone(state.last_pose)
         self.assertEqual(state.track_reject_count, 2)
-        self.assertEqual(state.tracked_mask_lost_count, 0)
-        self.assertEqual(state.low_reprojection_count, 0)
+        self.assertFalse(hasattr(state, "tracked_mask_lost_count"))
+        self.assertFalse(hasattr(state, "low_reprojection_count"))
         self.assertEqual(state.frames_since_register, 0)
         self.assertEqual(state.last_sender_mono_ms, 123.0)
 

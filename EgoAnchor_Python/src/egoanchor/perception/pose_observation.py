@@ -25,7 +25,7 @@ class PoseObservation:
     """OpenCV camera 坐标系 4x4 object pose，row-major 展平；无 pose 时为 None。"""
 
     pose_source: str = "NONE"
-    """pose 来源：REGISTER、TRACK、RE_REGISTER 或 NONE。"""
+    """pose 来源：REGISTER、TRACK 或 NONE。"""
 
     tracking_state_hint: str = "DETECTING"
     """perception 侧状态提示，用于 debug HUD 和未来状态事件。"""

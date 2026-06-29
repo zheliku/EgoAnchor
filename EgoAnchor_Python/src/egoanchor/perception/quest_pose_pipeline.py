@@ -55,12 +55,8 @@ class QuestPosePipeline:
         min_depth_m: float = 0.1,
         max_depth_m: float = 5.0,
         register_min_depth_valid_in_mask: float = 0.05,
-        re_register_on_track_lost: bool = True,
         pose_jump_translation_m: float = 0.25,
         pose_jump_rotation_deg: float = 35.0,
-        accept_track_jump_without_mask: bool = False,
-        max_consecutive_track_rejects: int = 3,
-        tracked_mask_lost_frames: int = 3,
         cutie_enabled: bool = False,
         cutie_adjust_pose: bool = False,
         log_stats_interval: int = 60,
@@ -68,9 +64,6 @@ class QuestPosePipeline:
         mask_snapshot_window: str = "EgoAnchor mask",
         async_segmentation: bool = False,
         enable_render_quality: bool = False,
-        render_quality_mode: str = "score_only",
-        render_quality_re_register_threshold: float = 0.35,
-        render_quality_min_track_frames: int = 2,
         render_quality_warmup_frames: int = 3,
         render_quality_depth_distance_ratio: float = 0.02,
         render_quality_depth_min_inlier_thresh_m: float = 0.005,
@@ -118,23 +111,11 @@ class QuestPosePipeline:
         self.register_min_depth_valid_in_mask = float(register_min_depth_valid_in_mask)
         """允许 register 的 mask 内有效深度最低比例。"""
 
-        self.re_register_on_track_lost = bool(re_register_on_track_lost)
-        """track 丢失或跳变时是否尝试 re-register。"""
-
         self.pose_jump_translation_m = float(pose_jump_translation_m)
         """track pose 平移跳变 reject 阈值，单位米。"""
 
         self.pose_jump_rotation_deg = float(pose_jump_rotation_deg)
         """track pose 旋转跳变 reject 阈值，单位度。"""
-
-        self.accept_track_jump_without_mask = bool(accept_track_jump_without_mask)
-        """track 跳变但没有 re-register mask 时是否暂时接受该 pose。"""
-
-        self.max_consecutive_track_rejects = max(1, int(max_consecutive_track_rejects))
-        """连续 track reject 达到该值后强制回到 detect/register。"""
-
-        self.tracked_mask_lost_frames = max(0, int(tracked_mask_lost_frames))
-        """已注册后连续多少帧没有有效 Cutie mask 时主动回到 detect/register；0 表示关闭。"""
 
         self.cutie_enabled = bool(cutie_enabled)
         """是否启用 Cutie mask 传播。"""
@@ -157,17 +138,8 @@ class QuestPosePipeline:
         self.enable_render_quality = bool(enable_render_quality)
         """是否启用渲染质量检测。"""
 
-        self.render_quality_mode = str(render_quality_mode or "score_only").strip().lower()
-        """渲染质量低分处理模式：score_only 只降分，re_register 可触发软重注册。"""
-
-        self.render_quality_re_register_threshold = float(render_quality_re_register_threshold)
-        """连续低于该重投影分数时可触发 re-register。"""
-
-        self.render_quality_min_track_frames = max(1, int(render_quality_min_track_frames))
-        """连续多少帧低重投影分才触发重注册，避免单帧误报。"""
-
         self.render_quality_warmup_frames = max(0, int(render_quality_warmup_frames))
-        """register/re-register 后跳过渲染质量判定的帧数。"""
+        """register 后跳过渲染质量判定的帧数。"""
 
         self.render_quality_checker = (
             RenderQualityChecker(
@@ -482,7 +454,7 @@ class QuestPosePipeline:
         if early_output is not None:
             return early_output
 
-        early_output = self._run_register_stage(decoded, left_bgr, rgb, depth, mask, diagnostics, timing, t_total)
+        early_output = self._run_register_stage(decoded, mask, diagnostics, timing, t_total)
         if early_output is not None:
             return early_output
 
@@ -568,37 +540,19 @@ class QuestPosePipeline:
     def _run_register_stage(
         self,
         decoded: DecodedQuestStereoFrame,
-        left_bgr: np.ndarray,
-        rgb: np.ndarray,
-        depth: np.ndarray,
         mask: np.ndarray | None,
         diagnostics: FrameDiagnostics,
         timing: PipelineStepTiming,
         t_total: float,
     ) -> QuestPosePipelineOutput | None:
-        """执行丢失恢复和 register 前置检查；无早退时返回 None。"""
-
-        recovery = self._try_recover_from_tracked_mask_loss(left_bgr, rgb, depth, mask, diagnostics, timing)
-        if recovery is not None:
-            pose, pose_source, phase = recovery
-            return self._finish_frame(
-                decoded,
-                phase,
-                pose is not None,
-                pose,
-                pose_source,
-                diagnostics,
-                timing,
-                t_total,
-                "" if pose is not None else phase.lower(),
-                rgb=rgb,
-                log_stats=True,
-            )
+        """执行首次 register 前置检查；无早退时返回 None。"""
 
         if not self.tracking_state.has_registered and not _mask_has_pixels(mask):
             return self._finish_frame(decoded, "NO_MASK", False, None, "NONE", diagnostics, timing, t_total, "no_mask")
         if not self.tracking_state.has_registered and diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
             return self._finish_frame(decoded, "REJECT_DEPTH", False, None, "NONE", diagnostics, timing, t_total, "depth_in_mask_low")
+        if self._tracked_mask_is_lost(mask):
+            return self._finish_frame(decoded, "TRACK_MASK_LOST", False, None, "NONE", diagnostics, timing, t_total, "track_mask_lost")
         return None
 
     def _run_track_stage(
@@ -712,15 +666,6 @@ class QuestPosePipeline:
         timing.yolo_ms = result.infer_ms if result.infer_ms > 0 else (time.perf_counter() - t0) * 1000.0
         return result
 
-    def _clear_registered_state(self, *, reset_reject_count: bool) -> None:
-        """丢弃当前 register/track 状态，并重置依赖该状态的算法组件。"""
-
-        self.tracking_state.clear_registration(reset_reject_count=reset_reject_count)
-        self.confidence_accumulator.reset()
-        self.estimator.reset()
-        if self.cutie is not None:
-            self.cutie.reset()
-
     def _predict_depth(self, left_rgb: np.ndarray, right_rgb: np.ndarray, timing: PipelineStepTiming) -> np.ndarray:
         """执行 FFS 深度估计并记录耗时。"""
 
@@ -776,48 +721,10 @@ class QuestPosePipeline:
         state.last_sender_mono_ms = current_ms
         return dt_s
 
-    def _try_recover_from_tracked_mask_loss(
-        self,
-        left_bgr: np.ndarray,
-        rgb: np.ndarray,
-        depth: np.ndarray,
-        mask: np.ndarray | None,
-        diagnostics: FrameDiagnostics,
-        timing: PipelineStepTiming,
-    ) -> tuple[np.ndarray | None, str, str] | None:
-        """Cutie mask 连续丢失时，主动运行检测 mask 并尝试 re-register。"""
+    def _tracked_mask_is_lost(self, mask: np.ndarray | None) -> bool:
+        """判断已注册阶段的 Cutie 传播是否明确返回空 mask。"""
 
-        state = self.tracking_state
-        if not state.has_registered or not self.cutie_enabled or self.tracked_mask_lost_frames <= 0:
-            return None
-
-        mask_pixels = int(np.count_nonzero(mask)) if mask is not None else 0
-        if mask_pixels > 0:
-            state.tracked_mask_lost_count = 0
-            return None
-
-        state.tracked_mask_lost_count += 1
-        if state.tracked_mask_lost_count < self.tracked_mask_lost_frames:
-            return None
-
-        self._clear_registered_state(reset_reject_count=True)
-
-        seg_result = self._run_segmenter(left_bgr, timing)
-        diagnostics.det_count = int(seg_result.det_count)
-        diagnostics.segmentation_overlay_bgr = seg_result.overlay_bgr
-        diagnostics.mask_area_ratio = float(seg_result.mask_area_ratio)
-        if seg_result.mask_bw is None or seg_result.mask_area_ratio <= 0.0:
-            diagnostics.mask = None
-            diagnostics.mask_source = MaskSource.NONE.value
-            return None, "NONE", "REDETECT_NO_MASK"
-
-        redetect_mask = (seg_result.mask_bw > 0).astype(np.uint8)
-        diagnostics.mask = redetect_mask
-        diagnostics.mask_source = self.segmenter_name
-        self._update_depth_diagnostics(diagnostics, depth, redetect_mask)
-        if diagnostics.depth_valid_in_mask < self.register_min_depth_valid_in_mask:
-            return None, "NONE", "REDETECT_REJECT_DEPTH"
-        return self._try_register(rgb, depth, redetect_mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
+        return bool(self.cutie_enabled and self.tracking_state.cutie_ready and mask is not None and not _mask_has_pixels(mask))
 
     def _estimate_pose(
         self,
@@ -827,14 +734,13 @@ class QuestPosePipeline:
         diagnostics: FrameDiagnostics,
         timing: PipelineStepTiming,
     ) -> tuple[np.ndarray | None, str, str]:
-        """根据当前状态选择 register、track 或 re-register。"""
+        """根据当前状态选择首次 register 或连续 track。"""
 
         state = self.tracking_state
         if not state.has_registered:
             if not _mask_has_pixels(mask):
                 return None, "NONE", "NO_MASK"
-            state.tracked_mask_lost_count = 0
-            return self._try_register(rgb, depth, mask, timing, pose_source="REGISTER", phase="REGISTER")
+            return self._try_register(rgb, depth, mask, timing)
 
         t_pose = time.perf_counter()
         try:
@@ -843,12 +749,12 @@ class QuestPosePipeline:
         except Exception as exc:
             LOGGER.warning("FoundationPose track 失败: %s", exc)
             state.track_reject_count += 1
-            return self._re_register_or_fail(rgb, depth, mask, timing, "TRACK_FAILED")
+            return None, "NONE", "TRACK_FAILED"
         pose = self._normalize_pose_matrix(pose)
         if pose is None:
-            LOGGER.warning("FoundationPose track 返回无效 pose，尝试 re-register。")
+            LOGGER.warning("FoundationPose track 返回无效 pose，等待 Unity 侧重获取命令。")
             state.track_reject_count += 1
-            return self._re_register_or_fail(rgb, depth, mask, timing, "TRACK_FAILED")
+            return None, "NONE", "TRACK_FAILED"
 
         t_delta, r_delta = self._track_deltas(pose, state.last_pose)
         diagnostics.last_translation_delta_m = t_delta
@@ -856,58 +762,17 @@ class QuestPosePipeline:
 
         if t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg:
             state.track_reject_count += 1
-            LOGGER.warning("FoundationPose track pose 跳变，尝试 re-register。reject_count=%d", state.track_reject_count)
-            self._clear_registered_state(reset_reject_count=False)
-            if self.re_register_on_track_lost and _mask_has_pixels(mask):
-                return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-            if self.accept_track_jump_without_mask and state.track_reject_count < self.max_consecutive_track_rejects:
-                state.has_registered = True
-                state.last_pose = pose
-                LOGGER.warning("FoundationPose track pose 跳变但无 re-register mask，暂时接受该 pose。")
-                return pose, "TRACK_ACCEPTED_JUMP", "TRACK_ACCEPTED_JUMP"
+            LOGGER.warning("FoundationPose track pose 跳变，输出 no-pose 并等待 Unity 侧重获取命令。reject_count=%d", state.track_reject_count)
             return None, "NONE", "TRACK_REJECT"
 
-        reprojection = self._check_render_quality(pose, rgb, depth, mask, diagnostics)
-        if reprojection is not None and reprojection < self.render_quality_re_register_threshold:
-            state.low_reprojection_count += 1
-            if self.render_quality_mode == "re_register" and state.low_reprojection_count >= self.render_quality_min_track_frames:
-                state.track_reject_count += 1
-                LOGGER.warning(
-                    "FoundationPose track 重投影分过低，尝试 re-register。reprojection=%.3f low_count=%d reject_count=%d",
-                    reprojection,
-                    state.low_reprojection_count,
-                    state.track_reject_count,
-                )
-                self._clear_registered_state(reset_reject_count=False)
-                if state.track_reject_count < self.max_consecutive_track_rejects and self.re_register_on_track_lost and _mask_has_pixels(mask):
-                    return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-                return None, "NONE", "LOW_REPROJECTION"
-        else:
-            state.low_reprojection_count = 0
+        self._check_render_quality(pose, rgb, depth, mask, diagnostics)
 
         state.track_reject_count = 0
-        if _mask_has_pixels(mask):
-            state.tracked_mask_lost_count = 0
         state.last_pose = pose
         state.frames_since_register += 1
         return pose, "TRACK", "TRACK"
 
-    def _re_register_or_fail(
-        self,
-        rgb: np.ndarray,
-        depth: np.ndarray,
-        mask: np.ndarray | None,
-        timing: PipelineStepTiming,
-        fail_phase: str,
-    ) -> tuple[np.ndarray | None, str, str]:
-        """track 失效后的统一处理：清空注册态，有 mask 时立即 re-register，否则回报失败。"""
-
-        self._clear_registered_state(reset_reject_count=False)
-        if self.re_register_on_track_lost and _mask_has_pixels(mask):
-            return self._try_register(rgb, depth, mask, timing, pose_source="RE_REGISTER", phase="RE_REGISTER")
-        return None, "NONE", fail_phase
-
-    def _try_register(self, rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray, timing: PipelineStepTiming, pose_source: str, phase: str) -> tuple[np.ndarray | None, str, str]:
+    def _try_register(self, rgb: np.ndarray, depth: np.ndarray, mask: np.ndarray, timing: PipelineStepTiming) -> tuple[np.ndarray | None, str, str]:
         """执行 FoundationPose register，并初始化可选 Cutie。"""
 
         t_pose = time.perf_counter()
@@ -928,13 +793,11 @@ class QuestPosePipeline:
         self.tracking_state.has_registered = True
         self.tracking_state.last_pose = pose
         self.tracking_state.track_reject_count = 0
-        self.tracking_state.tracked_mask_lost_count = 0
-        self.tracking_state.low_reprojection_count = 0
         self.tracking_state.frames_since_register = 0
         self.confidence_accumulator.reset()
-        self._show_register_mask_snapshot(mask, phase)
+        self._show_register_mask_snapshot(mask)
         self._initialize_cutie(rgb, mask, timing)
-        return pose, pose_source, phase
+        return pose, "REGISTER", "REGISTER"
 
     def _track_cutie_mask(self, rgb: np.ndarray, timing: PipelineStepTiming) -> tuple[np.ndarray | None, list[int]]:
         """已 register 后用 Cutie 传播 2D mask，并可用 bbox 中心辅助 FoundationPose。"""
@@ -981,8 +844,8 @@ class QuestPosePipeline:
         depth: np.ndarray,
         mask: np.ndarray | None,
         diagnostics: FrameDiagnostics,
-    ) -> float | None:
-        """对 TRACK pose 做渲染质量检测；仅返回颜色重投影分用于软重注册阈值。"""
+    ) -> None:
+        """对 TRACK pose 做渲染质量检测，并仅写入可靠性评分所需诊断。"""
 
         checker = self.render_quality_checker
         state = self.tracking_state
@@ -1030,9 +893,6 @@ class QuestPosePipeline:
         diagnostics.render_quality_observed_depth = result.observed_depth_m
         diagnostics.render_quality_render_rgb = result.render_rgb
         diagnostics.render_quality_observed_rgb = result.observed_rgb
-        if not color_usable:
-            return None
-        return result.reprojection_score
 
     @staticmethod
     def _track_deltas(pose: np.ndarray, previous_pose: np.ndarray | None) -> tuple[float, float]:
@@ -1156,13 +1016,13 @@ class QuestPosePipeline:
             return None
         return matrix if np.all(np.isfinite(matrix)) else None
 
-    def _show_register_mask_snapshot(self, mask: np.ndarray, phase: str) -> None:
-        """每次 register/re-register 成功时刷新显示实际用于注册的 mask。"""
+    def _show_register_mask_snapshot(self, mask: np.ndarray) -> None:
+        """每次 register 成功时刷新显示实际用于注册的 mask。"""
 
         if not self.show_mask_snapshot:
             return
         mask_vis = cv2.cvtColor((mask > 0).astype(np.uint8) * 255, cv2.COLOR_GRAY2BGR)
-        cv2.putText(mask_vis, f"{phase} mask", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 120), 2, cv2.LINE_AA)
+        cv2.putText(mask_vis, "REGISTER mask", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 120), 2, cv2.LINE_AA)
         cv2.imshow(self.mask_snapshot_window, mask_vis)
 
     def _update_fps(self) -> None:
