@@ -41,6 +41,15 @@ def should_show_waiting_frame(has_debug_frame: bool) -> bool:
     return not bool(has_debug_frame)
 
 
+def _should_render_debug_frame(now_s: float, last_render_s: float | None, max_fps: float) -> bool:
+    """判断某个 OpenCV debug 窗口本轮是否需要重绘。"""
+
+    fps = float(max_fps)
+    if fps <= 0.0 or last_render_s is None:
+        return True
+    return float(now_s) - float(last_render_s) >= 1.0 / fps
+
+
 def _create_fixed_window(name: str, width: int, height: int) -> None:
     """创建可调整大小的 OpenCV 窗口，并设置初始尺寸。"""
 
@@ -76,6 +85,10 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     has_debug_frame = False
     debug_window_created = False
     score_window_created = False
+    last_debug_render_time: float | None = None
+    last_score_render_time: float | None = None
+    debug_window_max_fps = float(getattr(pose_cfg, "debug_window_max_fps", 0.0))
+    score_window_max_fps = float(getattr(pose_cfg, "score_window_max_fps", 0.0))
 
     try:
         LOGGER.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
@@ -122,25 +135,30 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
             if not show_tracking_window:
                 continue
 
-            dashboard = tile_pose_depth_dashboard(
-                output.diagnostics,
-                output.observation,
-                width=int(pose_cfg.debug_window_width),
-                height=int(pose_cfg.debug_window_height),
-                min_depth=float(depth_cfg.min_depth),
-                max_depth=float(depth_cfg.max_depth),
-            )
-            cv2.imshow(debug_window, dashboard)
-            score_debug = make_score_debug_view(
-                output.diagnostics,
-                output.observation,
-                width=int(getattr(pose_cfg, "score_window_width", 960)),
-                height=int(getattr(pose_cfg, "score_window_height", 800)),
-                min_depth=float(depth_cfg.min_depth),
-                max_depth=float(depth_cfg.max_depth),
-            )
-            cv2.imshow(score_window, score_debug)
-            has_debug_frame = True
+            now = time.perf_counter()
+            if _should_render_debug_frame(now, last_debug_render_time, debug_window_max_fps):
+                dashboard = tile_pose_depth_dashboard(
+                    output.diagnostics,
+                    output.observation,
+                    width=int(pose_cfg.debug_window_width),
+                    height=int(pose_cfg.debug_window_height),
+                    min_depth=float(depth_cfg.min_depth),
+                    max_depth=float(depth_cfg.max_depth),
+                )
+                cv2.imshow(debug_window, dashboard)
+                last_debug_render_time = now
+                has_debug_frame = True
+            if _should_render_debug_frame(now, last_score_render_time, score_window_max_fps):
+                score_debug = make_score_debug_view(
+                    output.diagnostics,
+                    output.observation,
+                    width=int(getattr(pose_cfg, "score_window_width", 960)),
+                    height=int(getattr(pose_cfg, "score_window_height", 800)),
+                    min_depth=float(depth_cfg.min_depth),
+                    max_depth=float(depth_cfg.max_depth),
+                )
+                cv2.imshow(score_window, score_debug)
+                last_score_render_time = now
     finally:
         runtime.close()
         _destroy_window_if_created(debug_window, debug_window_created)

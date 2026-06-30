@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from egoanchor.perception import FrameDiagnostics
 
 
+POSE_HUD_LINE_COUNT = 9
+"""主 pose debug 横幅固定行数；面板布局不能随诊断行出现/消失而跳动。"""
+
+SCORE_HUD_LINE_COUNT = 5
+"""评分 debug 横幅固定文本行数；缺失 flags 时保留空槽位。"""
+
+SCORE_BAR_COUNT = 3
+"""评分 debug 横幅中的 V/C/D 子分条数量。"""
+
+
 def colorize_depth(depth: np.ndarray | None, min_depth: float = 0.1, max_depth: float = 5.0) -> np.ndarray:
     """把米制深度图转换为伪彩色 BGR 图。"""
 
@@ -64,7 +74,7 @@ def draw_hud(image: np.ndarray, observation: PoseObservation | None, diagnostics
     """在 debug 图像左上角绘制关键诊断 HUD。"""
 
     output = image.copy()
-    lines = _hud_lines(observation, diagnostics)
+    lines = _fit_banner_lines(_hud_lines(observation, diagnostics), POSE_HUD_LINE_COUNT, max(output.shape[1] - 28, 1))
     _draw_text_lines(output, lines, x=14, y=26)
     return output
 
@@ -75,7 +85,7 @@ def _hud_lines(observation: PoseObservation | None, diagnostics: FrameDiagnostic
     lines = [
         f"stage={diagnostics.stage} phase={diagnostics.phase} frame={diagnostics.frame_id}",
         f"pose={observation.has_pose if observation else False} source={observation.pose_source if observation else 'NONE'} score={observation.reliability_score if observation else 0.0:.2f}",
-        f"det={diagnostics.det_count} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f} depthScore={observation.score_depth if observation else diagnostics.score_depth:.2f}",
+        f"det={diagnostics.det_count} depthScore={observation.score_depth if observation else diagnostics.score_depth:.2f} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f}",
         f"depth med/iqr={diagnostics.depth_median_m:.2f}/{diagnostics.depth_iqr_m:.2f}m fps={diagnostics.fps:.1f}",
         f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
     ]
@@ -93,10 +103,50 @@ def _hud_lines(observation: PoseObservation | None, diagnostics: FrameDiagnostic
     return lines
 
 
-def _hud_banner_height(line_count: int) -> int:
-    """按 HUD 文本行数计算主窗口顶部信息区高度。"""
+def _pose_banner_height() -> int:
+    """返回主窗口顶部信息区固定高度。"""
 
-    return max(int(line_count), 1) * 24 + 22
+    return POSE_HUD_LINE_COUNT * 24 + 22
+
+
+def _fit_banner_lines(lines: list[str], line_count: int, max_width: int) -> list[str]:
+    """把横幅文本整理到固定槽位，并按窗口宽度截断长行。"""
+
+    target_count = max(int(line_count), 0)
+    visible = list(lines[:target_count])
+    if len(lines) > target_count and target_count > 0:
+        visible[-1] = f"{visible[-1]} ..."
+    while len(visible) < target_count:
+        visible.append("")
+    return [_clip_text_to_width(text, max_width, scale=0.55, thickness=1) for text in visible]
+
+
+def _clip_text_to_width(text: str, max_width: int, *, scale: float, thickness: int) -> str:
+    """按 OpenCV 实际像素宽度截断调试文本，避免长状态串横向溢出。"""
+
+    value = str(text)
+    target_width = max(int(max_width), 1)
+    if _text_width(value, scale, thickness) <= target_width:
+        return value
+    suffix = "..."
+    if _text_width(suffix, scale, thickness) > target_width:
+        return ""
+    low = 0
+    high = len(value)
+    while low < high:
+        mid = (low + high + 1) // 2
+        candidate = value[:mid].rstrip() + suffix
+        if _text_width(candidate, scale, thickness) <= target_width:
+            low = mid
+        else:
+            high = mid - 1
+    return value[:low].rstrip() + suffix
+
+
+def _text_width(text: str, scale: float, thickness: int) -> int:
+    """返回 OpenCV Hershey 字体文本宽度。"""
+
+    return int(cv2.getTextSize(str(text), cv2.FONT_HERSHEY_SIMPLEX, float(scale), int(thickness))[0][0])
 
 
 def _draw_text_lines(
@@ -194,8 +244,8 @@ def make_score_debug_view(
     """构建独立 reliability / render quality 调试窗口。"""
 
     canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
-    lines = _score_debug_lines(diagnostics, observation)
-    banner_h = min(_score_banner_height(len(lines)), max(canvas.shape[0] - 2, 1))
+    lines = _fit_banner_lines(_score_debug_lines(diagnostics, observation), SCORE_HUD_LINE_COUNT, max(canvas.shape[1] - 24, 1))
+    banner_h = min(_score_banner_height(), max(canvas.shape[0] - 2, 1))
     panel_area_h = max(canvas.shape[0] - banner_h, 2)
     col_w = max(canvas.shape[1] // 3, 1)
     row_h = max(panel_area_h // 2, 1)
@@ -280,12 +330,8 @@ def make_score_debug_view(
     for panel, label, x, y, panel_w, panel_h in panels:
         _paste_labeled_panel(canvas, panel, label, x, y, panel_w, panel_h, background_color=(42, 42, 42))
 
-    y = 24
-    for text in lines:
-        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 1, cv2.LINE_AA)
-        y += 24
-    _draw_score_bars(canvas, diagnostics, x=12, y=y + 4, width=min(420, canvas.shape[1] - 24), row_h=20)
+    _draw_text_lines(canvas, lines, x=12, y=24)
+    _draw_score_bars(canvas, diagnostics, x=12, y=24 + len(lines) * 24 + 4, width=min(420, canvas.shape[1] - 24), row_h=20)
     return canvas
 
 
@@ -295,7 +341,7 @@ def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservati
     lines = [
         f"score={observation.reliability_score if observation else 0.0:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} mask={diagnostics.score_mask:.2f}",
         f"track_reproj={diagnostics.color_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
-        f"depthIn={diagnostics.render_quality_depth_inlier:.2f} depthAlign={diagnostics.render_quality_depth_alignment:.2f} depthRes={diagnostics.render_quality_depth_residual_m:.3f}m status={diagnostics.render_quality_status} {diagnostics.render_quality_ms:.1f}ms",
+        f"status={diagnostics.render_quality_status} depthIn={diagnostics.render_quality_depth_inlier:.2f} depthAlign={diagnostics.render_quality_depth_alignment:.2f} depthRes={diagnostics.render_quality_depth_residual_m:.3f}m {diagnostics.render_quality_ms:.1f}ms",
         f"expected={diagnostics.render_quality_evaluated} renderArea={diagnostics.render_quality_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
     ]
     if observation and observation.reliability_flags:
@@ -303,11 +349,11 @@ def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservati
     return lines
 
 
-def _score_banner_height(line_count: int) -> int:
-    """按文本行和七条 score bar 动态计算顶部横幅高度。"""
+def _score_banner_height() -> int:
+    """返回评分窗口固定横幅高度。"""
 
-    text_h = max(int(line_count), 1) * 24
-    score_bar_h = 7 * 20
+    text_h = SCORE_HUD_LINE_COUNT * 24
+    score_bar_h = SCORE_BAR_COUNT * 20
     return text_h + score_bar_h + 36
 
 
@@ -613,8 +659,8 @@ def tile_pose_depth_dashboard(
     """构建四宫格 pose debug dashboard。"""
 
     canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
-    lines = _hud_lines(observation, diagnostics)
-    banner_h = min(_hud_banner_height(len(lines)), max(canvas.shape[0] - 2, 1))
+    lines = _fit_banner_lines(_hud_lines(observation, diagnostics), POSE_HUD_LINE_COUNT, max(canvas.shape[1] - 28, 1))
+    banner_h = min(_pose_banner_height(), max(canvas.shape[0] - 2, 1))
     panel_area_h = max(canvas.shape[0] - banner_h, 2)
     left = diagnostics.left_bgr if diagnostics.left_bgr is not None else np.zeros((240, 320, 3), dtype=np.uint8)
     right = diagnostics.right_bgr if diagnostics.right_bgr is not None else np.zeros_like(left)

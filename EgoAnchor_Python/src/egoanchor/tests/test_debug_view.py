@@ -5,10 +5,17 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+import cv2
 import numpy as np
 
 from egoanchor.diagnostics import colorize_depth, draw_pose_hud as draw_hud, make_score_debug_view, tile_pose_depth_dashboard
 from egoanchor.perception import FrameDiagnostics, PoseObservation
+
+
+def _cv2_text_width(text: str, scale: float, thickness: int) -> int:
+    """返回 OpenCV 文本宽度，供横幅裁剪测试复用。"""
+
+    return int(cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0][0])
 
 
 class DebugViewTest(unittest.TestCase):
@@ -92,11 +99,43 @@ class DebugViewTest(unittest.TestCase):
         )
 
         view = make_score_debug_view(diagnostics, None, width=640, height=360)
-        expected_banner_h = 4 * 24 + 7 * 20 + 36
+        expected_banner_h = 5 * 24 + 3 * 20 + 36
 
         self.assertLess(float(np.mean(view[5])), 20.0)
         self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
         self.assertGreater(float(np.mean(view[expected_banner_h + 8])), 20.0)
+
+    def test_score_debug_panel_area_stays_stable_when_flags_appear(self) -> None:
+        """评分窗口 flags 行出现/消失时，下方面板起点不能跟着跳动。"""
+
+        mask = np.ones((16, 16), dtype=bool)
+        diagnostics = FrameDiagnostics(
+            render_quality_observed_rgb=np.full((16, 16, 3), 255, dtype=np.uint8),
+            render_quality_render_rgb=np.full((16, 16, 3), 180, dtype=np.uint8),
+            render_quality_render_mask=mask,
+            render_quality_observed_mask=mask,
+            render_quality_render_depth=np.ones((16, 16), dtype=np.float32),
+            render_quality_observed_depth=np.ones((16, 16), dtype=np.float32),
+        )
+        no_flags = make_score_debug_view(diagnostics, None, width=640, height=360)
+        with_flags = make_score_debug_view(
+            diagnostics,
+            PoseObservation(
+                has_pose=True,
+                phase="TRACK",
+                pose_source="TRACK",
+                reliability_score=0.8,
+                reliability_flags=("quality_pending", "depth_alignment_missing_expected"),
+            ),
+            width=640,
+            height=360,
+        )
+        expected_banner_h = 5 * 24 + 3 * 20 + 36
+
+        self.assertLess(float(np.mean(no_flags[expected_banner_h - 6])), 20.0)
+        self.assertLess(float(np.mean(with_flags[expected_banner_h - 6])), 20.0)
+        self.assertGreater(float(np.mean(no_flags[expected_banner_h + 8])), 20.0)
+        self.assertGreater(float(np.mean(with_flags[expected_banner_h + 8])), 20.0)
 
     def test_pose_dashboard_reserves_top_banner(self) -> None:
         """主调试窗口顶部应保留 HUD 横幅，四宫格画面从横幅下方开始。"""
@@ -106,7 +145,7 @@ class DebugViewTest(unittest.TestCase):
         diagnostics = FrameDiagnostics(left_bgr=left, right_bgr=right)
 
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
-        expected_banner_h = 5 * 24 + 22
+        expected_banner_h = 9 * 24 + 22
         row_h = (360 - expected_banner_h) // 2
         label_y = expected_banner_h + row_h - 30
 
@@ -115,6 +154,39 @@ class DebugViewTest(unittest.TestCase):
         self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
         self.assertGreater(float(np.mean(view[expected_banner_h + 8, 160])), 200.0)
         self.assertLess(float(np.mean(view[label_y + 2, :320])), 50.0)
+
+    def test_pose_dashboard_panel_area_stays_stable_when_hud_lines_change(self) -> None:
+        """主窗口 HUD 行数变化时，图像区域起点和尺寸不能跳动。"""
+
+        left = np.full((109, 160, 3), 255, dtype=np.uint8)
+        right = np.full((109, 160, 3), 255, dtype=np.uint8)
+        diagnostics = FrameDiagnostics(left_bgr=left, right_bgr=right)
+        verbose_diagnostics = FrameDiagnostics(
+            left_bgr=left,
+            right_bgr=right,
+            segmenter_async=True,
+            segmenter_busy=True,
+            segmenter_completed=2,
+            segmenter_submitted=4,
+            segmenter_dropped=1,
+            failure_reason="diagnostic_failure",
+            segmenter_error="segmenter produced a long diagnostic error",
+        )
+        observation = PoseObservation(
+            has_pose=True,
+            phase="TRACK",
+            pose_source="TRACK",
+            reliability_score=0.5,
+            reliability_flags=("quality_pending", "depth_alignment_missing_expected"),
+        )
+        normal = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
+        verbose = tile_pose_depth_dashboard(verbose_diagnostics, observation, width=640, height=360)
+        expected_banner_h = 9 * 24 + 22
+
+        self.assertLess(float(np.mean(normal[expected_banner_h - 6])), 20.0)
+        self.assertLess(float(np.mean(verbose[expected_banner_h - 6])), 20.0)
+        self.assertGreater(float(np.mean(normal[expected_banner_h + 8, 160])), 200.0)
+        self.assertGreater(float(np.mean(verbose[expected_banner_h + 8, 160])), 200.0)
 
     def test_pose_dashboard_depth_panel_preserves_depth_color_inside_mask(self) -> None:
         """主窗口 depth 面板只画细轮廓，不用半透明填充覆盖物体内部深度颜色。"""
@@ -125,12 +197,12 @@ class DebugViewTest(unittest.TestCase):
 
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360, min_depth=0.1, max_depth=5.0)
         expected_depth = colorize_depth(depth, min_depth=0.1, max_depth=5.0)
-        expected_banner_h = 5 * 24 + 22
+        expected_banner_h = 9 * 24 + 22
         row_h = (360 - expected_banner_h) // 2
-        sample_y = expected_banner_h + row_h + 40
+        sample_y = expected_banner_h + row_h + 20
         sample_x = 160
 
-        np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[40, sample_x], atol=1)
+        np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[20, sample_x], atol=1)
 
     def test_score_debug_view_has_color_and_depth_matrix(self) -> None:
         """评分窗口应包含颜色投影（Color projection）与深度对比的 2x3 矩阵。"""
@@ -207,7 +279,7 @@ class DebugViewTest(unittest.TestCase):
         )
 
         view = make_score_debug_view(diagnostics, None, width=720, height=480)
-        banner_h = 4 * 24 + 7 * 20 + 36
+        banner_h = 5 * 24 + 3 * 20 + 36
         row_h = (480 - banner_h) // 2
         label_y = banner_h + row_h - 30
 
@@ -230,10 +302,40 @@ class DebugViewTest(unittest.TestCase):
         )
 
         view = make_score_debug_view(diagnostics, None, width=720, height=480)
-        banner_h = 4 * 24 + 7 * 20 + 36
+        banner_h = 5 * 24 + 3 * 20 + 36
         sample_bgr = view[banner_h + 36, 120]
 
         np.testing.assert_allclose(sample_bgr, np.array([220, 96, 32], dtype=np.uint8), atol=3)
+
+    def test_top_banner_long_text_is_clipped_to_window_width(self) -> None:
+        """顶部横幅长文本应被截短，避免横向溢出覆盖窗口右侧内容。"""
+
+        long_error = "x" * 260
+        diagnostics = FrameDiagnostics(
+            failure_reason="failure-" + long_error,
+            segmenter_error="segmenter-" + long_error,
+        )
+        observation = PoseObservation(
+            has_pose=True,
+            phase="TRACK",
+            pose_source="TRACK",
+            reliability_score=0.5,
+            reliability_flags=("flag_" + long_error,),
+        )
+        texts: list[str] = []
+
+        with patch("egoanchor.diagnostics.debug_view.cv2.putText") as put_text:
+            put_text.side_effect = lambda img, text, *args, **kwargs: texts.append(str(text)) or img
+            tile_pose_depth_dashboard(diagnostics, observation, width=640, height=360)
+            make_score_debug_view(diagnostics, observation, width=640, height=360)
+
+        clipped = [text for text in texts if text.endswith("...")]
+
+        self.assertTrue(clipped)
+        self.assertTrue(
+            all(_cv2_text_width(text, 0.55, 1) <= 640 - 24 for text in clipped),
+            clipped,
+        )
 
     def test_score_debug_view_default_size_matches_config(self) -> None:
         """评分窗口工具默认尺寸应与 defaults.toml 中的 960x800 保持一致。"""

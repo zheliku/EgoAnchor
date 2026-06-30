@@ -6,6 +6,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import numpy as np
+
 from egoanchor.app import run_tracking_server, should_show_waiting_frame
 
 
@@ -32,6 +34,37 @@ class _FakeRuntime:
 
         self.tick_return_debug_values.append(bool(return_debug))
         raise _StopLoop("stop test loop")
+
+    def close(self) -> None:
+        """记录 runtime 已经被关闭。"""
+
+        self.closed = True
+
+
+class _SequenceRuntime:
+    """测试用 runtime，按顺序返回多帧输出后中止主循环。"""
+
+    endpoint = "unit://endpoint"
+
+    def __init__(self, frame_count: int) -> None:
+        """构造固定数量的新帧输出。"""
+
+        self._remaining = int(frame_count)
+        self.tick_return_debug_values: list[bool] = []
+        self.closed = False
+
+    def start(self) -> None:
+        """测试中不需要真实启动网络和模型。"""
+
+    def tick(self, return_debug: bool = False) -> SimpleNamespace:
+        """返回一帧最小 pipeline 输出，耗尽后退出测试循环。"""
+
+        self.tick_return_debug_values.append(bool(return_debug))
+        if self._remaining <= 0:
+            raise _StopLoop("stop test loop")
+        self._remaining -= 1
+        output = SimpleNamespace(diagnostics=object(), observation=object())
+        return SimpleNamespace(pipeline_output=output, new_frame_processed=True)
 
     def close(self) -> None:
         """记录 runtime 已经被关闭。"""
@@ -85,6 +118,58 @@ class TrackingServerAppTest(unittest.TestCase):
         imshow.assert_not_called()
         wait_key.assert_not_called()
         self.assertEqual(fake_runtime.tick_return_debug_values, [False])
+        self.assertTrue(fake_runtime.closed)
+
+    def test_score_debug_rendering_is_rate_limited_independently(self) -> None:
+        """评分窗口应按独立帧率上限重绘，避免每帧重复构建重型诊断矩阵。"""
+
+        fake_runtime = _SequenceRuntime(frame_count=3)
+        cfg = SimpleNamespace(
+            paths=SimpleNamespace(subjects_path="subjects.v1.json"),
+            demo=SimpleNamespace(
+                pose=SimpleNamespace(
+                    debug_window_name="debug",
+                    score_window_name="score",
+                    debug_window_width=320,
+                    debug_window_height=240,
+                    debug_window_max_fps=0.0,
+                    score_window_width=320,
+                    score_window_height=240,
+                    score_window_max_fps=5.0,
+                    wait_log_interval_s=999.0,
+                )
+            ),
+            pipeline=SimpleNamespace(depth=SimpleNamespace(min_depth=0.1, max_depth=5.0)),
+            debug=SimpleNamespace(enable_tracking_window=True),
+        )
+        app_globals = run_tracking_server.__globals__
+        dashboard = Mock(return_value=np.zeros((240, 320, 3), dtype=np.uint8))
+        score_view = Mock(return_value=np.zeros((240, 320, 3), dtype=np.uint8))
+
+        with (
+            patch.dict(
+                app_globals,
+                {
+                    "load_config": lambda _path, object_name=None: cfg,
+                    "TrackingRuntime": lambda _cfg, _subjects: fake_runtime,
+                    "tile_pose_depth_dashboard": dashboard,
+                    "make_score_debug_view": score_view,
+                    "make_pose_waiting_image": lambda _width, _height, _title: np.zeros((240, 320, 3), dtype=np.uint8),
+                    "_create_fixed_window": Mock(),
+                    "_destroy_window_if_created": Mock(),
+                },
+            ),
+            patch.object(app_globals["SubjectRegistry"], "load", return_value=object()),
+            patch.object(app_globals["cv2"], "imshow"),
+            patch.object(app_globals["cv2"], "waitKey", return_value=255),
+            patch.object(app_globals["time"], "perf_counter", side_effect=[100.0, 100.05, 100.10]),
+        ):
+            with self.assertRaises(_StopLoop):
+                run_tracking_server()
+
+        self.assertEqual(dashboard.call_count, 3)
+        self.assertEqual(score_view.call_count, 1)
+        self.assertEqual(fake_runtime.tick_return_debug_values, [True, True, True, True])
         self.assertTrue(fake_runtime.closed)
 
 

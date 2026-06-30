@@ -61,6 +61,8 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.demo.pose.score_window_name, "EgoAnchor Score Debug")
         self.assertEqual(cfg.demo.pose.score_window_width, 960)
         self.assertEqual(cfg.demo.pose.score_window_height, 800)
+        self.assertAlmostEqual(cfg.demo.pose.debug_window_max_fps, 20.0)
+        self.assertAlmostEqual(cfg.demo.pose.score_window_max_fps, 6.0)
         self.assertFalse(hasattr(cfg.demo.pose, "stereo_window_name"))
 
     def test_headless_tracking_disables_mask_snapshot_window(self) -> None:

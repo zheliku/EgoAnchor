@@ -159,8 +159,10 @@ debug_window_name = "EgoAnchor Pose Debug" # Python 本地 pose debug 主窗口�
 score_window_name = "EgoAnchor Score Debug" # Python 本地评分与渲染质量调试窗口名。
 debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
 debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
+debug_window_max_fps = 20.0 # pose debug 主窗口最高重绘帧率；只限制 OpenCV 合成显示，不限制 pipeline 推理。
 score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
 score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡颜色/深度 2x3 诊断矩阵。
+score_window_max_fps = 6.0 # 评分调试窗口最高重绘帧率；LAB/深度残差矩阵较重，默认降频避免窗口卡顿。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。
 
 # ============================================================================
@@ -187,7 +189,7 @@ mesh_path = "data/model/pink_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh
 symmetry_mode = "none" # 鼠标不是 cube 对称体，不能沿用 cube 对称约束。
 
 [objects.earphone.module.segmenter]
-type = "sam3" # 耳机盒目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
+# type = "sam3" # 耳机盒目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
 prompt = "small pink rounded rectangular earphone charging case" # 文本提示词；若检测不到，可用 SAM3 工具脚本做 prompt 对照。
 confidence_threshold = 0.2 # 检测候选置信度阈值；SAM3 误检多时调高，漏检多时调低。
 
