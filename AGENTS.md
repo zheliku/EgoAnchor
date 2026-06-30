@@ -18,8 +18,10 @@
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 10. 每次操作完后记得更新AGENTS.md
+11. 注意我们论文路径目前是2026-EgoAnchor-Typst/，写的是typst语言，而不是latex，请你注意语法。写完后使用本机的typst进行编译检查通过。
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
+
 本文件是 EgoAnchor 的项目级接手指南。只记录长期有效的事实、约定、路线和历史坑；不要追加流水账。顶部 `USER-MAINTAINED-REQUIREMENTS` 区块由用户维护，除非用户明确要求，后续 AI 不得改动其中任何文字。
 
 ## 当前定位
@@ -42,7 +44,7 @@ EgoAnchor 面向开放消费级（passthrough）混合现实，把开放视觉�
 - Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor`，负责 Quest 采集、frame pose history、camera-space pose 到 Unity world anchor、policy 输出和可视化运行时。
 - Protocol：`EgoAnchor_Protocol`，唯一 proto 和 subject 源；生成脚本同步 Python/Unity 输出。
 - Evaluation：`EgoAnchor_Tools3` 是当前主用离线升采样仿真工具；旧 `EgoAnchor_Tools` / `EgoAnchor_Tools2` 的同类项目不再作为主线验证依据。
-- Paper：`2026-EgoAnchor` 放论文材料，写法必须保守，不能把未实现或未验证的机制写成已完成贡献。
+- Paper：`2026-EgoAnchor-Typst` 放当前 Typst 论文主稿、图像资产和代码事实技术流程文档，写法必须保守，不能把未实现或未验证的机制写成已完成贡献。
 - Patent：`EgoAnchor_Invention_Patent/13148-权利要求书-检索结果/01_版本稿/` 采用 `vNN` 版本化工作流；`active/` 只保留当前主稿和对应生成脚本，不覆写代理原稿或历史版本；当前主稿为 `active/v55_透视混合现实视觉帧锚定_申请主稿.md`；当前阶段仅维护版本化 `md` 主稿，`.docx` 由用户自行维护（已于 2026-06-22 批量完成 13148 权利要求书原件与副本的 149 个 LaTeX 公式到 native Word (OMML) 转换，并统一修复了 `clamp01` 与 `resize` 算子的直体样式，实现 0 LaTeX 残留及修订状态的完美保留）。
 - Patent：在 v55 版本中，简化并提取了权利要求 11、14、15 的核心公式（删除了不必要的过程状态定义公式，仅保留最终输出、触发条件与核心状态更新方程），大幅提升了专利范围的保护力度。为适配 MS Word 公式编辑器的单字符下标渲染要求，将全部多字符下标简化为单字符（如在数学公式中引入 $s_{s,t}$ 与 $s_{u,t}$ 来替代多字符状态变量）；同时将时钟步长 $\Delta t$ 细分为渲染帧步长 $\Delta t_r$ 与控制点更新周期 $\Delta t_u$ 以消除符号二义性；深度有效信号的布尔逻辑公式修改为乘积求补的容斥表达形式 $\chi_t^{(d)} = \sigma_t^{(d)} [ 1 - (1-\mathbf 1[\upsilon_t^{(d)}>0])(1-\mathbf 1[\varrho_t^{(d)}>0])]$。修复了之前因 Python 字符串转义导致的 LaTeX 符号（如 \theta, \tau, \alpha, \frac 等）变控制字符的格式损坏问题，全稿公式无错。
 - Patent：专利主稿中的数学符号不得在命令闭环、状态机、输出策略、静止锚定等不同模块间复用为不同语义；尤其命令平面的请求内容与静止锚定中的时间累计量必须使用不同符号，并在权利要求与具体实施方式两处保持一致。
@@ -55,11 +57,11 @@ EgoAnchor 面向开放消费级（passthrough）混合现实，把开放视觉�
 
 EgoAnchor 固定采用双平面/三语义通道：
 
-| 平面 | 传输 | 方向 | 数据 | 策略 |
-| --- | --- | --- | --- | --- |
-| Data Plane | ZMQ PUB/SUB | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo` | Protobuf bytes，multipart `[topic_utf8, payload]`，topic latest-drain |
-| Message Plane | NATS Core pub/sub | Python -> Unity | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` | pose/heartbeat latest-only，status event stream |
-| Command Plane | NATS request/reply | Unity -> Python | reset / reacquire / control | `request_id` 幂等，快速 ack，runtime 串行执行 |
+| 平面          | 传输               | 方向            | 数据                                                       | 策略                                                                   |
+| ------------- | ------------------ | --------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Data Plane    | ZMQ PUB/SUB        | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo`                  | Protobuf bytes，multipart`[topic_utf8, payload]`，topic latest-drain |
+| Message Plane | NATS Core pub/sub  | Python -> Unity | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat` | pose/heartbeat latest-only，status event stream                        |
+| Command Plane | NATS request/reply | Unity -> Python | reset / reacquire / control                                | `request_id` 幂等，快速 ack，runtime 串行执行                        |
 
 关键约束：
 
@@ -116,7 +118,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 - 入口：`EgoAnchor_Python/src/tracking_server.py` 调 `egoanchor.app.tracking_server`。
 - 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
-- reliability：`render_quality.enabled=true` 默认只采集颜色重投影、mask 可见比例和深度对齐信号，并写入评分；Python 感知链路不根据低分、mask 丢失或位姿跳变自行重新 register，目标重获取由 Unity 通过 NATS `reacquire/reset` 命令驱动。
+- reliability：`render_quality.enabled=true` 默认只采集颜色重投影、mask 可见比例和深度对齐信号，并写入评分；Python 感知链路不根据低分或位姿跳变自行重新 register。单帧 Cutie mask 丢失输出 no-pose；连续空 mask 达到阈值会清空本地注册状态并等待后续有效输入重新 register。显式目标重获取由 Unity 通过 NATS `reacquire/reset` 命令驱动。
 - diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；图像面板必须从横幅下方开始排布，面板标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。主窗口横幅固定 9 行，评分窗口横幅固定 5 行加 3 条 V/C/D 子分条；不要按实际诊断行数动态改变 banner 高度，长文本按窗口宽度截断。主窗口 depth 面板保留原始深度伪彩色，只画 1px mask 轮廓，不做 mask 内部填充。score debug 窗口保持颜色重投影/深度对齐 2x3 诊断矩阵，上下两行都按观测、渲染、残差从左到右排列；RGB 面板只画 render/Cutie 轮廓，render/depth/残差面板使用中性背景或观测灰度上下文，避免黑底和半透明高亮掩盖原始颜色。残差面板右侧带热力图色标；深度残差图显示 `abs(render_depth - observed_depth)`，蓝色表示残差小、对齐好，红色表示残差大、差异明显，色标高端显示当前帧 p95 残差。`tracking_server` 的 OpenCV 合成显示用 `debug_window_max_fps` 和 `score_window_max_fps` 独立节流，默认主窗口 20Hz、score 窗口 6Hz；score 窗口的 LAB/深度残差矩阵较重，不要恢复成每个 pipeline 帧强制重建。
 - logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
 - 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
@@ -144,8 +146,9 @@ Python 细节坑：
 
 - SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。等待 SAM3 分割期间的调试输出只更新 Quest RGB 预览，不同步跑 FFS depth；SAM3 完成但无 mask 时直接输出 `NO_MASK`，也不跑 FFS，避免未注册阶段的输入画面被深度推理卡住。
 - 渲染质量检测只能采集和写分数；不要恢复 Python 内部低分自动重新 register 逻辑。
+- `pose_jump_translation_m/pose_jump_rotation_deg` 仍是 TRACK 后的硬异常位姿拒绝阈值，触发时输出 `TRACK_REJECT` no-pose，但不生成可靠性子分，也不自动重新 register；已删除的是 proto/评分里的 `score_jump` 子分。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
-- VCD 可靠性评分为 `R = V * exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效几何证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。
+- VCD 可靠性评分统一解释为 Visibility-gated Color-Depth consistency：`R = V * G_CD`，其中 `G_CD = exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效 C/D 一致性证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。论文中不要把 `G_CD` 写成独立于 VCD 的第四个方法名。
 - depth 覆盖不足或渲染深度对齐无信号时 `score_depth=0.5` 是中性显示，不进入几何合取核；`render_quality_status=valid_no_valid_depth_overlap` 这类 `valid_*` 只表示颜色路径有效，不能当作深度有效信号。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
@@ -157,7 +160,7 @@ Python 细节坑：
 
 Unity policy 当前结构：
 
-- `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。
+- `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。`enableScoreGate=false` 是源码默认；开启时只按总可靠性分和测量-预测跳变拒绝观测，`GateName=score_jump_gate` 只是 eval 标签，不代表恢复 proto `score_jump` 字段。
 - `AnchorObservation.MeasurementTimeSeconds` 是采集时间轴，用于运动模型、平滑和静止锁；`LifecycleTimeSeconds` 是 Unity 到达时间轴，用于 stale/lost、低分持续时间和生命周期状态。不要用 capture time 刷新生命周期新鲜度，否则 register 推理耗时较长时，高分 pose 到达后会被误判为陈旧并触发 reacquire。
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
@@ -205,7 +208,7 @@ Unity 代码地图：
 - 距离自适应只放大位置通道，不放大旋转通道。远距离立体深度噪声更大，但旋转噪声不按距离同样变化。
 - 低分释放不受 head settle 冻结影响。它表示锁点可靠性差，应该强制释放并交给低分 reacquire 链路。
 
-低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。持续低总分超过 `lowScoreReacquireThreshold/Seconds` 后应请求 Python 重新 register；当前默认用 `trackingScoreFloor=0.5` 做用户可见低质/状态降级提示，用 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 作为真正 server reacquire 触发，避免轻微遮挡刚低于 0.5 就反复 register。深度/颜色几何加权平均只用于区分 `low_score_track_lost`、`low_score_no_geometry` 或普通 `low_score` 诊断原因，不再阻止 server reacquire。不要让 leaf runtime 或 policy 自持 command client。
+低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。源码默认 `enableLostReacquire=true`、`enableLowScoreReacquire=true`，部分 baseline 场景会关闭低分重获取；持续低总分超过 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 后请求 Python 重新 register。`trackingScoreFloor` 源码默认 0.0，EgoAnchor 真机/评估场景可覆盖到 0.5 作为用户可见低质/状态降级提示。颜色/深度一致性加权平均只用于区分 `low_score_track_lost`、`low_score_no_geometry` 或普通 `low_score` 诊断原因，不再阻止 server reacquire。不要让 leaf runtime 或 policy 自持 command client。
 
 Unity/eval 字段契约：
 
@@ -254,9 +257,9 @@ Unity 场景/序列化注意事项：
 5. 至少 3 个代表性刚体物体。
 6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor/egoanchor_cn_v5.tex` 是当前最新中文主稿。历史草稿 `egoanchor_cn_v2.tex`、`egoanchor_cn_v1.tex`、`egoanchor_cn_outline.tex` 保留备查，参考文献入口为 `egoanchor_cn_refs.bib`。`2026-EgoAnchor/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，论文实现细节、公式和系统边界优先以该文档和代码为准；`2026-EgoAnchor/paper-plan/paper_planning_notes.md` 只记录投稿叙事、实验设计和风险规划，不作为实现事实源。`2026-EgoAnchor/pdf/` 是生成产物。
-当前部分 LaTeX 草稿文件在早期写作阶段可能先保留 `\bibliography{...}` 而尚未加入正文 `\cite{...}`；若需要临时消除 BibTeX 的 `I found no \citation commands` 提示，可显式加入 `\nocite{*}`，待正文引用补齐后再按需要移除。
-系统架构图文档当前放在 `docs/architecture/`，用于维护主线 Python / Unity / Protocol / Evaluation 与三平面通信关系。其中 `egoanchor-system-architecture.drawio`（+ `.spec.yaml` / `.svg`）是系统级总览；`egoanchor-technical-framework.drawio` 是更详细的科研风格技术框架图（感知四步链、三层可靠性评分公式、静止锁机制、生命周期 FSM、评估链路），配套 `egoanchor-technical-route.md` 给出端到端技术路线说明与 gpt-image-2 绘图提示词。论文用中文架构图初稿在 `2026-EgoAnchor/figures/egoanchor_architecture_cn.svg`，可编辑源为同名 `.drawio`，后续英文投稿版可在此基础上翻译标签。
+论文源文件：`2026-EgoAnchor-Typst/egoanchor_cn_v2.typ` 是当前中文主稿；`egoanchor_cn_v1.typ` 为上一版 Typst 草稿；参考文献入口为 `2026-EgoAnchor-Typst/egoanchor_cn.bib`。`2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，并已合并旧 `docs/architecture/` 技术路线内容；论文实现细节、统一术语、公式和系统边界优先以该文档和代码为准。`2026-EgoAnchor-Typst/figs/` 放当前 Typst 图像资产，`2026-EgoAnchor-Typst/pdf/` 是生成产物。
+论文写作使用 Typst 语法，不使用 LaTeX/BibTeX 编译链。写完主稿后在仓库根目录运行：`typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v2.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v2.pdf`。
+旧 `docs/architecture/` 已被完全删除，系统架构、技术路线与绘图提示词后续统一维护在 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 内。第三章（方法）已于 2026-07-01 完成重写，实现与底层代码细节（VCD 模型、卡尔曼状态模型、One Euro、可靠性静止锁 CUSUM/租绳/自适应机制）的 100% 对齐，并顺利通过本地 Typst 编译验证。
 
 专利工作区：`EgoAnchor_Invention_Patent/`。专利文稿中的技术描述必须严格贴合当前主线实现：帧姿态历史正式路径只允许按 `frame_id` 精确命中，不得杜撰 latest-match、最近有效缓存回退、候选评分回查或“降级对齐”机制；静止锁相关公式要覆盖 `headToleranceFactor`、`posDistanceFactor`、`headSettleSeconds`、`lowScoreReleaseScore/Seconds` 等当前真实机制，不得退回成只写 deadband + CUSUM 的简化版本；同时要突出纯视觉链路、AI 模型链、异步通信、帧对齐、可靠性评分与整套 anchor 策略。这里“纯视觉”只适用于目标物体位姿估计链路，不得把参考相机世界位姿的来源写成“完全不依赖惯性传感器或外部空间定位传感器”的绝对方案。
 在进行专利初稿 `.docx` 的检查与确认时，需重点防范由格式转换引起的数学公式损坏：Word (OMML) 转换过程中指示函数 \(\mathbf 1[\cdot]\) 极易退化为普通数字 `1` 导致逻辑关系彻底失效；递推公式中的接缝残差等变量容易发生同名混淆（如将 \(\tilde{r}_t\) 误写为 \(r_t\)）；大括号分段函数易丢失且易残留 LaTeX 格式代码（如 `[6pt]`、`[4pt]`）。此外，Word 草稿在同步主稿时容易缺失较多控制公式及系统细化从属权利要求，且极易因模板残留引入无关技术文本（如“专家网络”等多模态无关内容），后续检查需以最新 `vNN` 主稿 `md` 文件为唯一绝对真理源进行全文核对与重构。
@@ -273,7 +276,7 @@ Unity 场景/序列化注意事项：
 - `.gitignore` 按目录分层维护：父级只管理本层和没有下级 `.gitignore` 接管的直属目录；一旦子目录有自己的 `.gitignore`，权重、缓存、构建输出和运行日志都交给该子目录管理。
 - 仓库根 `.gitignore` 只管根层编辑器状态、根层临时 Python 缓存、`EgoAnchor_Blender` 本地模型/插件/Blender 工作文件和本地专利工作区；不要在根层写 Python、Unity、论文目录内部产物。
 - `EgoAnchor_Python/.gitignore` 只管一方 Python 环境、根权重、runtime/eval 日志、Mutagen lock 和一方代码缓存；`Cutie`、`Fast-FoundationStereo`、`FoundationPose`、`sam3` 的 checkpoint、权重、ONNX/TensorRT engine、debug/output/build 产物由各自子目录 `.gitignore` 接管。
-- `2026-EgoAnchor/.gitignore` 管论文目录内 LaTeX 编译产物和本地实验材料；`EgoAnchor_Unity/.gitignore` 管 Unity 生成目录、IDE 文件和 Unity build/package 产物。
+- `2026-EgoAnchor-Typst/.gitignore` 管当前论文目录内 Typst 编译产物和本地实验材料；`EgoAnchor_Unity/.gitignore` 管 Unity 生成目录、IDE 文件和 Unity build/package 产物。
 
 ## Python 远端同步
 
