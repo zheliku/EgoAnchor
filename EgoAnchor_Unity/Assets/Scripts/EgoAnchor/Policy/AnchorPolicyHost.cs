@@ -63,7 +63,7 @@ namespace EgoAnchor.Policy
         [SerializeField] private float coastTimeoutSeconds = 0.45f;
 
         /// <summary>判定 pose 是否"可靠"的总分下限：决定 Tracking vs 低分降级，并决定是否刷新可靠时间戳。0 = 关闭。</summary>
-        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Coasting→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。要给用户看真实状态的变体 (如 EgoAnchor) 设 ~0.4。注意应高于 lowScoreReacquireThreshold(0.5=该重连了)。")]
+        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Coasting→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。EgoAnchor 可设 0.5 作为用户可见低质提示；server reacquire 阈值默认 0.45，更低且需要持续时间确认。")]
         [Range(0f, 1f)]
         [SerializeField] private float trackingScoreFloor = 0.0f;
 
@@ -86,24 +86,24 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用低分重定位。</summary>
         [Header("Low-Score Reacquire")]
-        [Tooltip("是否启用低分重定位：reliability 总分持续过低时, 本地重置 policy (清空模型/平滑/静止锁状态并进入 Relocalizing, 下一帧重新建立锚定); 若同时几何加权平均分也差 (判定 track 丢失), 还会返回 Reacquire decision 请求上游 (runtime→hub) 通知 Python 重新 register。host 不持有任何 client。")]
+        [Tooltip("是否启用低分重定位：reliability 总分持续过低时, 本地重置 policy (清空模型/平滑/静止锁状态并进入 Relocalizing, 下一帧重新建立锚定), 并返回 Reacquire decision 请求上游 (runtime→hub) 通知 Python 重新 register。host 不持有任何 client。")]
         [SerializeField] private bool enableLowScoreReacquire = true;
 
         /// <summary>触发低分重定位的分数阈值。</summary>
-        [Tooltip("score 持续低于此值才触发低分重定位。默认 0.5。")]
+        [Tooltip("score 持续低于此值才触发低分重定位。默认 0.45；低于状态提示阈值 0.5，避免轻微遮挡刚降级显示就反复 register。")]
         [Range(0f, 1f)]
-        [SerializeField] private float lowScoreReacquireThreshold = 0.5f;
+        [SerializeField] private float lowScoreReacquireThreshold = 0.45f;
 
         /// <summary>低分需持续的时间，单位秒。</summary>
-        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.4。")]
-        [SerializeField] private float lowScoreReacquireSeconds = 0.4f;
+        [Tooltip("score 连续低于阈值需持续的时间 (秒) 才触发, 防瞬时低分误触发。默认 0.6。")]
+        [SerializeField] private float lowScoreReacquireSeconds = 0.6f;
 
         /// <summary>两次低分重定位的最短间隔，单位秒。</summary>
         [Tooltip("两次低分重定位之间的最短间隔 (秒), 防抖。默认 3。")]
         [SerializeField] private float lowScoreReacquireCooldownSeconds = 3.0f;
 
         /// <summary>几何子分阈值：几何加权平均分低于它视为 track 丢失。</summary>
-        [Tooltip("几何加权平均分 (depth/reprojection, 沿用 Python 加权几何平均) 低于此值 = 判定坏 pose/track 丢 → 请求 Python 重 register; 几何仍好 = 只是快动/遮挡/低 confidence → 仅本地重置。默认 0.5。")]
+        [Tooltip("几何加权平均分 (depth/reprojection, 沿用 Python 加权几何平均) 低于此值时, 低分重获取原因标记为 track_lost；几何仍好时仍会请求 Python 重 register, 但原因标记为 low_score。默认 0.5。")]
         [Range(0f, 1f)]
         [SerializeField] private float reacquireGeometryFloor = 0.5f;
 
@@ -276,8 +276,8 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
             }
 
-            // 低分重定位: 已有锚定后若总分持续过低 → 锚点不可信, 本地重置进入 Relocalizing 重新建立锚定。
-            // 几何也差时还会 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
+            // 低分重定位: 已有锚定后若总分持续过低 → 锚点不可信, 本地重置进入 Relocalizing 重新建立锚定，
+            // 并 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
             // host 不持 client; 在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
             if (TryLowScoreReacquire(observation, lifecycleTime))
             {
@@ -438,9 +438,8 @@ namespace EgoAnchor.Policy
         /// <summary>
         /// 低分重定位: 已有锚定后 reliability 总分连续低于阈值持续一段时间 → 本地重置
         /// (清空运动模型/平滑/静止锁的内部状态并进入 Relocalizing, 不再信任旧低分锚点, 下一帧 pose 重新建立锚定)。
-        /// 在此基础上再看几何: 几何加权平均分 (depth/reproj) 低于 floor → 判定真 track 丢 (而非快动/遮挡),
-        /// 额外置 wantsServerReacquire 标志, 由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register;
-        /// 几何仍好 → 只本地重置, 不打扰 Python。host 不持 client, 只置标志。
+        /// 由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register。几何子分只决定诊断 reason：
+        /// 几何差/缺失记为 track_lost/no_geometry，几何仍好记为 low_score。host 不持 client, 只置标志。
         /// 触发时返回 true (调用方应提前返回)。
         /// </summary>
         private bool TryLowScoreReacquire(in AnchorObservation observation, double now)
@@ -471,15 +470,14 @@ namespace EgoAnchor.Policy
             lastLowScoreReacquireSeconds = now;
             lowScoreStartSeconds = -1.0;
 
-            // 几何仲裁: 几何子分也差 = 真坏 pose / track 丢 → 请求 Python 重 register;
-            // 几何仍好 = 只是快动/遮挡/低 confidence → 仅本地重置, 不打扰 Python。
+            // 几何仲裁只决定诊断原因；持续低总分本身已经说明当前 tracker 不可信，必须通知 Python 重 register。
             // 注意: 标志在 NotifyReacquire (会 ResetModules) 之后置, 避免被重置清掉。
-            bool trackLost = observation.HasGeometryConcern(reacquireGeometryFloor, reacquireReprojWeight, reacquireDepthWeight);
-            NotifyReacquire(now, trackLost ? "low_score_track_lost" : "low_score_local_reset");
-            if (trackLost)
-            {
-                wantsServerReacquire = true;
-            }
+            float geometryScore = observation.GeometryScore(reacquireReprojWeight, reacquireDepthWeight, out bool hasGeometryEvidence);
+            string reason = !hasGeometryEvidence
+                ? "low_score_no_geometry"
+                : (geometryScore < reacquireGeometryFloor ? "low_score_track_lost" : "low_score");
+            NotifyReacquire(now, reason);
+            wantsServerReacquire = true;
 
             return true;
         }

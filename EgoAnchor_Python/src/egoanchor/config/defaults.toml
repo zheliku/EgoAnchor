@@ -189,7 +189,7 @@ mesh_path = "data/model/pink_mouse.glb" # 相对 EgoAnchor_Python 的目标 mesh
 symmetry_mode = "none" # 鼠标不是 cube 对称体，不能沿用 cube 对称约束。
 
 [objects.earphone.module.segmenter]
-# type = "sam3" # 耳机盒目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
+type = "sam3" # 耳机盒目标默认使用 SAM3 文本分割；主默认配置仍保持 yoloe26。
 prompt = "small pink rounded rectangular earphone charging case" # 文本提示词；若检测不到，可用 SAM3 工具脚本做 prompt 对照。
 confidence_threshold = 0.2 # 检测候选置信度阈值；SAM3 误检多时调高，漏检多时调低。
 

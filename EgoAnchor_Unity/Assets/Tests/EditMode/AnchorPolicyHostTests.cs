@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
+using EgoAnchor.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -41,6 +43,160 @@ namespace EgoAnchor.Tests
                 AnchorPolicyOutput output = host.Advance(10.1);
 
                 Assert.That(output.State, Is.Not.EqualTo(AnchorState.Lost));
+                Assert.That(host.ConsumeServerReacquireRequest(), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 位于状态提示 floor 和重注册阈值之间的分数只应降级显示，不应触发 Python 重新 register。
+        /// </summary>
+        [Test]
+        public void ScoreBetweenDisplayFloorAndReacquireThresholdDoesNotRequestServerReacquire()
+        {
+            GameObject go = new GameObject("AnchorPolicyHostTests");
+            try
+            {
+                AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
+                ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
+                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                SetPrivateField(host, "motionModel", model);
+                SetPrivateField(host, "smoothingStrategy", smoothing);
+
+                host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 1,
+                    worldPose: new Pose(Vector3.zero, Quaternion.identity),
+                    sampleTimeSeconds: 10.0,
+                    reliabilityScore: 1.0f,
+                    captureTimeSeconds: 10.0));
+
+                host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 2,
+                    worldPose: new Pose(new Vector3(0.01f, 0.0f, 0.0f), Quaternion.identity),
+                    sampleTimeSeconds: 10.1,
+                    reliabilityScore: 0.48f,
+                    captureTimeSeconds: 10.1,
+                    scoreDepth: 0.9f,
+                    scoreReprojection: 0.9f,
+                    hasSubscores: true,
+                    depthValid: true,
+                    reprojValid: true));
+
+                AnchorPolicyDecision decision = host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 3,
+                    worldPose: new Pose(new Vector3(0.02f, 0.0f, 0.0f), Quaternion.identity),
+                    sampleTimeSeconds: 10.8,
+                    reliabilityScore: 0.48f,
+                    captureTimeSeconds: 10.8,
+                    scoreDepth: 0.9f,
+                    scoreReprojection: 0.9f,
+                    hasSubscores: true,
+                    depthValid: true,
+                    reprojValid: true));
+
+                Assert.That(decision.Action, Is.Not.EqualTo(AnchorPolicyAction.Reacquire));
+                Assert.That(host.ConsumeServerReacquireRequest(), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 低总分持续超过阈值和时间窗口时，即便几何子分本身仍高，也要请求 Python 重新 register。
+        /// </summary>
+        [Test]
+        public void SustainedLowScoreWithGoodGeometryStillRequestsServerReacquire()
+        {
+            GameObject go = new GameObject("AnchorPolicyHostTests");
+            try
+            {
+                AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
+                ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
+                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                SetPrivateField(host, "motionModel", model);
+                SetPrivateField(host, "smoothingStrategy", smoothing);
+
+                host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 1,
+                    worldPose: new Pose(Vector3.zero, Quaternion.identity),
+                    sampleTimeSeconds: 10.0,
+                    reliabilityScore: 1.0f,
+                    captureTimeSeconds: 10.0));
+
+                AnchorObservation lowScoreWithGoodGeometry = AnchorObservation.FromAlignedPose(
+                    frameId: 2,
+                    worldPose: new Pose(new Vector3(0.01f, 0.0f, 0.0f), Quaternion.identity),
+                    sampleTimeSeconds: 10.1,
+                    reliabilityScore: 0.44f,
+                    captureTimeSeconds: 10.1,
+                    scoreDepth: 0.9f,
+                    scoreReprojection: 0.9f,
+                    hasSubscores: true,
+                    depthValid: true,
+                    reprojValid: true);
+
+                host.AcceptPose(lowScoreWithGoodGeometry);
+                AnchorPolicyDecision decision = host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 3,
+                    worldPose: new Pose(new Vector3(0.02f, 0.0f, 0.0f), Quaternion.identity),
+                    sampleTimeSeconds: 10.6,
+                    reliabilityScore: 0.44f,
+                    captureTimeSeconds: 10.6,
+                    scoreDepth: 0.9f,
+                    scoreReprojection: 0.9f,
+                    hasSubscores: true,
+                    depthValid: true,
+                    reprojValid: true));
+
+                Assert.That(decision.Action, Is.Not.EqualTo(AnchorPolicyAction.Reacquire));
+                Assert.That(host.ConsumeServerReacquireRequest(), Is.False);
+
+                decision = host.AcceptPose(AnchorObservation.FromAlignedPose(
+                    frameId: 4,
+                    worldPose: new Pose(new Vector3(0.03f, 0.0f, 0.0f), Quaternion.identity),
+                    sampleTimeSeconds: 10.75,
+                    reliabilityScore: 0.44f,
+                    captureTimeSeconds: 10.75,
+                    scoreDepth: 0.9f,
+                    scoreReprojection: 0.9f,
+                    hasSubscores: true,
+                    depthValid: true,
+                    reprojValid: true));
+
+                Assert.That(decision.Action, Is.EqualTo(AnchorPolicyAction.Reacquire));
+                Assert.That(host.ConsumeServerReacquireRequest(), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// Lost/低分请求可能在 LateUpdate 中产生；hub 必须不依赖下一条 PoseResult 也能消费该请求。
+        /// </summary>
+        [Test]
+        public void HubLateUpdateConsumesPendingServerReacquireRequests()
+        {
+            GameObject go = new GameObject("AnchorRuntimeHubTests");
+            try
+            {
+                AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                SetPrivateField(runtime, "policyHost", host);
+                SetPrivateField(hub, "runtimes", new List<PoseToAnchorRuntime> { runtime });
+                SetPrivateField(host, "wantsServerReacquire", true);
+
+                MethodInfo lateUpdate = typeof(AnchorRuntimeHub).GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(lateUpdate, Is.Not.Null, "AnchorRuntimeHub 应在 LateUpdate 中消费 runtime reacquire 请求。");
+                lateUpdate.Invoke(hub, Array.Empty<object>());
+
                 Assert.That(host.ConsumeServerReacquireRequest(), Is.False);
             }
             finally

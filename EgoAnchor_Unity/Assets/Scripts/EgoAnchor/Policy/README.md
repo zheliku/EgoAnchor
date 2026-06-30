@@ -77,19 +77,19 @@
 | `maxJumpMeters` | 相对预测平移超过此值判为坏跳变拒绝 | `0.8` |
 | `maxJumpDegrees` | 相对预测旋转超过此值判为坏跳变拒绝 | `120` |
 | **Lifecycle** | | |
-| `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，方法变体可设为约 `0.4` | `0.0` |
+| `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，EgoAnchor 真机显示可设 `0.5` 作为低质提示 | `0.0` |
 | `coastTimeoutSeconds` | 短时无观测仍继续外推/插值的时长 | `0.45` |
 | `lostTimeoutSeconds` | 多久无观测后判 Lost 停输出（须 > coast） | `2.0` |
 | `staticSpeedThresholdMps` | 运动/静止判定线速度阈值（仅诊断） | `0.015` |
 | `staticAngularSpeedThresholdDps` | 运动/静止判定角速度阈值（仅诊断） | `1.5` |
 | **Low-Score Reacquire** | | |
-| `enableLowScoreReacquire` | 持续低分且几何证据差时请求 Python 重获取 | `true` |
-| `lowScoreReacquireThreshold` | 低于该总分开始累计重获取证据 | `0.25` |
-| `lowScoreReacquireSeconds` | 低分需连续持续的时间 | `0.8` |
+| `enableLowScoreReacquire` | 持续低总分时本地进入 Relocalizing，并请求 Python 重 register | `true` |
+| `lowScoreReacquireThreshold` | 不高于该总分开始累计重获取证据；应低于 `trackingScoreFloor`，避免一低于 0.5 就频繁 register | `0.45` |
+| `lowScoreReacquireSeconds` | 低分需连续持续的时间 | `0.6` |
 | `lowScoreReacquireCooldownSeconds` | 两次自动重获取之间的冷却时间 | `3.0` |
-| `reacquireGeometryFloor` | 判断几何证据差的子分阈值 | `0.5` |
-| `reacquireReprojWeight` | 重获取几何判定中的颜色重投影权重 | `0.2` |
-| `reacquireDepthWeight` | 重获取几何判定中的深度对齐权重 | `0.8` |
+| `reacquireGeometryFloor` | 低分重获取原因诊断阈值：低于它标记为 track_lost，几何仍好则标记为 low_score | `0.5` |
+| `reacquireReprojWeight` | 低分重获取原因诊断中的颜色重投影权重 | `0.2` |
+| `reacquireDepthWeight` | 低分重获取原因诊断中的深度对齐权重 | `0.8` |
 ### EgoAnchorStaticLockModule（EgoAnchor 核心方法，仅 EgoAnchor 变体挂载）
 
 | 参数 | 含义 | 默认 |

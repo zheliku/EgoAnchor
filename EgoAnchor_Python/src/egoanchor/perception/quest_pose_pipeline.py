@@ -354,13 +354,9 @@ class QuestPosePipeline:
         worker.submit(current_job)
         current_diagnostics.phase = "WAIT_SEGMENTATION"
         self._apply_segmenter_snapshot(current_diagnostics)
-        rgb = cv2.cvtColor(current_job.left_bgr, cv2.COLOR_BGR2RGB)
-        right_rgb = cv2.cvtColor(current_job.right_bgr, cv2.COLOR_BGR2RGB)
-        depth = self._filter_depth(self._predict_depth(rgb, right_rgb, current_timing))
-        current_diagnostics.depth = depth
-        self._update_depth_diagnostics(current_diagnostics, depth, None)
         current_timing.finalize(t_total)
-        # 异步分割等待帧也跑了深度预测，计入 fps，否则 register 前 HUD 一直是 fps=0。
+        # SAM3 等待阶段只做输入预览，不跑 FFS。这样调试窗口能跟随 Quest 数据流刷新，
+        # register 所需深度等 mask 完成后再在同一帧上计算。
         self._update_fps()
         current_diagnostics.fps = self._fps
         return QuestPosePipelineOutput(observation=None, diagnostics=current_diagnostics, timing=current_timing, new_frame_processed=True)
@@ -449,6 +445,10 @@ class QuestPosePipeline:
         mask, early_output = self._run_detect_stage(decoded, left_bgr, rgb, diagnostics, timing, t_total, async_seg_result)
         if early_output is not None:
             return early_output
+        if self.async_segmentation and async_seg_result is not None and not self.tracking_state.has_registered and not _mask_has_pixels(mask):
+            # SAM3 已完成但没给出目标 mask 时，直接返回 RGB 预览；不要再同步跑 FFS，
+            # 否则未检测到目标的阶段仍会把窗口刷新节奏绑到 GPU 深度推理上。
+            return self._finish_frame(decoded, "NO_MASK", False, None, "NONE", diagnostics, timing, t_total, "no_mask")
 
         depth, early_output = self._run_depth_stage(decoded, rgb, right_rgb, mask, diagnostics, timing, t_total)
         if early_output is not None:

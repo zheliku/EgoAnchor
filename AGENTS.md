@@ -142,7 +142,7 @@ Python 代码地图：
 
 Python 细节坑：
 
-- SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。
+- SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。等待 SAM3 分割期间的调试输出只更新 Quest RGB 预览，不同步跑 FFS depth；SAM3 完成但无 mask 时直接输出 `NO_MASK`，也不跑 FFS，避免未注册阶段的输入画面被深度推理卡住。
 - 渲染质量检测只能采集和写分数；不要恢复 Python 内部低分自动重新 register 逻辑。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
 - VCD 可靠性评分为 `R = V * exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效几何证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。
@@ -178,7 +178,7 @@ Unity 代码地图：
 - `Alignment/CameraReference.cs`：Python 当前 pose 语义默认左目 OpenCV camera；Right/Center/None 只用于本地诊断、对照或补偿实验。
 - `Alignment/CameraPoseFrameAligner.cs`：OpenCV camera pose + frame history -> Unity world pose，包含轴翻转和 offset 配置。
 - `Client/PoseResultReceiver.cs`：主线程 latest-drain，解析 PoseResult，交给 `AnchorRuntimeHub`。
-- `Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多个 runtime；低分 reacquire fan-in 也在这里合并发出。
+- `Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多个 runtime；低分 reacquire fan-in 也在这里合并发出。hub 在 PoseResult 分发后和 `LateUpdate` 都会消费 runtime 的 server reacquire 标志，避免 Lost/断流时因为没有下一条 PoseResult 而卡住不发命令。
 - `Runtime/PoseToAnchorRuntime.cs`：把 camera-space pose 对齐为 Unity world pose，提交给 policy，每帧 `LateUpdate(-50)` 推进输出。
 - `Runtime/DynamicObjectAnchor.cs`：只读 `TryGetOutputPose` 并应用 Transform，不承载滤波、状态机、网络或 recovery。
 - `AnchorViz/AnchorStatusLabel.cs`：只做用户可见状态标签；简化模式对 Static/Tracking -> Uncertain 做短时间显示防抖，吸收低帧率或偶发低分帧造成的标签闪烁，不改变 `AnchorPolicyHost`、静止锁输出或 eval schema。
@@ -205,7 +205,7 @@ Unity 代码地图：
 - 距离自适应只放大位置通道，不放大旋转通道。远距离立体深度噪声更大，但旋转噪声不按距离同样变化。
 - 低分释放不受 head settle 冻结影响。它表示锁点可靠性差，应该强制释放并交给低分 reacquire 链路。
 
-低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。不要让 leaf runtime 或 policy 自持 command client。
+低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。持续低总分超过 `lowScoreReacquireThreshold/Seconds` 后应请求 Python 重新 register；当前默认用 `trackingScoreFloor=0.5` 做用户可见低质/状态降级提示，用 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 作为真正 server reacquire 触发，避免轻微遮挡刚低于 0.5 就反复 register。深度/颜色几何加权平均只用于区分 `low_score_track_lost`、`low_score_no_geometry` 或普通 `low_score` 诊断原因，不再阻止 server reacquire。不要让 leaf runtime 或 policy 自持 command client。
 
 Unity/eval 字段契约：
 

@@ -69,15 +69,18 @@ class _EmptySegmenter:
 class _FakeDepthEstimator:
     """单测用深度估计器，返回稳定小深度图。"""
 
-    def __init__(self) -> None:
-        """初始化调用计数。"""
+    def __init__(self, delay_s: float = 0.0) -> None:
+        """初始化调用计数和可选延迟。"""
 
         self.calls = 0
+        self.delay_s = float(delay_s)
 
     def predict_depth(self, left_rgb: np.ndarray, right_rgb: np.ndarray, fx: float, baseline: float) -> np.ndarray:
         """返回全图有效深度，避免真实 FFS 依赖。"""
 
         self.calls += 1
+        if self.delay_s > 0.0:
+            time.sleep(self.delay_s)
         return np.full(left_rgb.shape[:2], 1.0, dtype=np.float32)
 
 
@@ -370,13 +373,13 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertEqual(output.observation.failure_reason, "invalid_calibration")
         self.assertEqual(depth_estimator.calls, 0)
 
-    def test_async_sam3_first_frame_returns_without_waiting_for_segmentation(self) -> None:
-        """SAM3 异步模式下，第一帧只提交后台分割，不应阻塞 pipeline 主循环。"""
+    def test_async_sam3_waiting_frame_skips_depth_for_smooth_preview(self) -> None:
+        """SAM3 等待分割时只更新图像预览，不应同步跑 FFS 阻塞数据流显示。"""
 
         pipeline = QuestPosePipeline(
             segmenter=_FakeSegmenter(delay_s=0.2),
             segmenter_name="sam3",
-            depth_estimator=(depth_estimator := _FakeDepthEstimator()),
+            depth_estimator=(depth_estimator := _FakeDepthEstimator(delay_s=0.2)),
             foundationpose_estimator=_FakeFoundationPoseEstimator(),
             cutie_tracker=None,
             process_width=8,
@@ -392,8 +395,43 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertLess(elapsed_s, 0.1)
         self.assertEqual(output.diagnostics.phase, "WAIT_SEGMENTATION")
         self.assertIsNone(output.observation)
-        self.assertEqual(depth_estimator.calls, 1)
-        self.assertIsNotNone(output.diagnostics.depth)
+        self.assertEqual(depth_estimator.calls, 0)
+        self.assertIsNone(output.diagnostics.depth)
+        self.assertIsNotNone(output.diagnostics.left_bgr)
+        self.assertIsNotNone(output.diagnostics.right_bgr)
+
+    def test_async_sam3_completed_empty_mask_skips_depth(self) -> None:
+        """SAM3 结果无 mask 时不能再同步跑 FFS；直接报告 NO_MASK 让窗口继续流畅。"""
+
+        depth_estimator = _FakeDepthEstimator(delay_s=0.2)
+        pipeline = QuestPosePipeline(
+            segmenter=_EmptySegmenter(),
+            segmenter_name="sam3",
+            depth_estimator=depth_estimator,
+            foundationpose_estimator=_FakeFoundationPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
+            async_segmentation=True,
+        )
+        try:
+            pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+            deadline = time.perf_counter() + 1.0
+            output = None
+            while time.perf_counter() < deadline:
+                output = pipeline.process(_make_stereo_frame(2, (40, 50, 60)), _make_camera_info())
+                if output.observation is not None:
+                    break
+                time.sleep(0.01)
+
+            self.assertIsNotNone(output)
+            self.assertIsNotNone(output.observation)
+            self.assertFalse(output.observation.has_pose)
+            self.assertEqual(output.observation.phase, "NO_MASK")
+            self.assertEqual(depth_estimator.calls, 0)
+            self.assertIsNone(output.diagnostics.depth)
+        finally:
+            pipeline.close()
 
     def test_pose_visualization_failure_does_not_drop_pose(self) -> None:
         """debug 可视化失败时仍应保留本帧有效 pose 输出。"""

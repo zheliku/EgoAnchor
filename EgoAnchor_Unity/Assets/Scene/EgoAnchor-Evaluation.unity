@@ -882,8 +882,8 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 0
-  lowScoreReacquireThreshold: 0.5
-  lowScoreReacquireSeconds: 0.4
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -2762,8 +2762,8 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 0
-  lowScoreReacquireThreshold: 0.5
-  lowScoreReacquireSeconds: 0.4
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -4287,8 +4287,8 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.5
-  lowScoreReacquireSeconds: 0.4
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -5790,8 +5790,8 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 0
-  lowScoreReacquireThreshold: 0.5
-  lowScoreReacquireSeconds: 0.4
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2
@@ -6513,7 +6513,7 @@ MonoBehaviour:
   enableLostReacquire: 1
   enableLowScoreReacquire: 0
   lowScoreReacquireThreshold: 0.25
-  lowScoreReacquireSeconds: 0.4
+  lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
   reacquireGeometryFloor: 0.5
   reacquireReprojWeight: 0.2

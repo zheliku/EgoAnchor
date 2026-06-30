@@ -118,6 +118,18 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
+        /// 每帧兜底收集 runtime 在 LateUpdate/Advance 中产生的 server reacquire 请求。
+        /// PoseResult 到达时仍会同步 fan-in；这里负责处理断流、Lost 超时等没有下一条 PoseResult 的情况。
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (ConsumeServerReacquireRequests())
+            {
+                MaybeSendServerReacquire();
+            }
+        }
+
+        /// <summary>
         /// 注册一个 runtime。可由动态创建的 anchor 调用。
         /// </summary>
         /// <param name="runtime">待接收 PoseResult 的 runtime。</param>
@@ -168,7 +180,6 @@ namespace EgoAnchor.Runtime
             }
 
             int activeRuntimeCount = 0;
-            bool anyWantsServerReacquire = false;
             foreach (PoseToAnchorRuntime runtime in runtimes)
             {
                 if (runtime == null)
@@ -181,13 +192,6 @@ namespace EgoAnchor.Runtime
                 {
                     failed++;
                     continue;
-                }
-
-                // fan-in: 收集"请求 Python 重 register"标志。reacquire 是服务器级的, 多 runtime 请求合并成一次。
-                // 每个 runtime 都 consume (清自己的标志), 但 hub 只发一次命令。
-                if (runtime.ConsumeServerReacquireRequest())
-                {
-                    anyWantsServerReacquire = true;
                 }
 
                 switch (acceptResult)
@@ -205,7 +209,7 @@ namespace EgoAnchor.Runtime
                 }
             }
 
-            if (anyWantsServerReacquire)
+            if (ConsumeServerReacquireRequests())
             {
                 MaybeSendServerReacquire();
             }
@@ -356,6 +360,25 @@ namespace EgoAnchor.Runtime
         }
 
         /// <summary>
+        /// fan-in: 收集所有 runtime 的"请求 Python 重 register"标志。
+        /// reacquire 是服务器级的，多 runtime 请求合并成一次；每个 runtime 都 consume 自己的标志。
+        /// </summary>
+        private bool ConsumeServerReacquireRequests()
+        {
+            EnsureRuntimeList();
+            bool anyWantsServerReacquire = false;
+            foreach (PoseToAnchorRuntime runtime in runtimes)
+            {
+                if (runtime != null && runtime.ConsumeServerReacquireRequest())
+                {
+                    anyWantsServerReacquire = true;
+                }
+            }
+
+            return anyWantsServerReacquire;
+        }
+
+        /// <summary>
         /// 统计实际可派发的 runtime，避免把 Inspector 中遗留的空槽位算作有效目标。
         /// </summary>
         private int CountActiveRuntimes()
@@ -469,5 +492,4 @@ namespace EgoAnchor.Runtime
         }
     }
 }
-
 
