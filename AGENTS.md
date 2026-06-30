@@ -145,7 +145,8 @@ Python 细节坑：
 - SAM3 异步只异步初始分割。worker 输出必须携带同一帧 left/right RGB 和 mask，主 pipeline 再做 FFS/FoundationPose，避免 RGB/mask 错帧。
 - 渲染质量检测只能采集和写分数；不要恢复 Python 内部低分自动重新 register 逻辑。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
-- depth 覆盖不足时 `score_depth=0.5` 是中性显示，不进入几何合取核。
+- VCD 可靠性评分为 `R = V * exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效几何证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。
+- depth 覆盖不足或渲染深度对齐无信号时 `score_depth=0.5` 是中性显示，不进入几何合取核；`render_quality_status=valid_no_valid_depth_overlap` 这类 `valid_*` 只表示颜色路径有效，不能当作深度有效信号。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
 ## Unity 主线
@@ -157,6 +158,7 @@ Python 细节坑：
 Unity policy 当前结构：
 
 - `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。
+- `AnchorObservation.MeasurementTimeSeconds` 是采集时间轴，用于运动模型、平滑和静止锁；`LifecycleTimeSeconds` 是 Unity 到达时间轴，用于 stale/lost、低分持续时间和生命周期状态。不要用 capture time 刷新生命周期新鲜度，否则 register 推理耗时较长时，高分 pose 到达后会被误判为陈旧并触发 reacquire。
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
   - `DelayedInterpStrategy` 的 Hermite 用控制点 Kalman 速度当切线，运动急停时速度估计滞后（`positionProcessNoise` 衰减不够快）会让两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃（用户报告“运动停下后 anchor 来回轻微震荡”）。修复：`hermiteTangentChordRatio`（默认3）把切线模长限到 K×弦长/span（位置、旋转通道各按自己弦长独立限幅）。停下时弦长≈0→切线≈0→不鼓包；真实运动时弦长≈v·span≈切线 ≪ K×弦长→不裁剪、行为不变。`BlendStrategy` 是残差单调衰减，无此问题。
@@ -210,7 +212,7 @@ Unity/eval 字段契约：
 - C# 属性 `MotionModelName` / `SmoothingStrategyName` / `GateName` 对应 JSONL `motion_model` / `smoothing_strategy` / `gate`。
 - 每帧输出字段是 `has_output_pose` / `output_pos` / `output_rot`。不要恢复旧 `has_stable` / `stable_pos` / `stable_rot`。
 - `PoseResult` proto 当前字段名是 `color_reprojection` 和 `render_quality_evaluated`。不要恢复旧 `track_reprojection` / `render_quality_expected`。
-- `score_phase`、`score_reprojection`、`score_depth`、`score_mask`、`score_reject`、`score_confidence` 保持原名；这是和一组 score 子分一致的命名，不是错名。
+- `score_reprojection`、`score_depth`、`score_mask` 保持当前字段名；`score_phase`、`score_jump`、`score_reject`、`score_confidence` 已在 proto 中 reserved，不要恢复。
 - `AnchorTrajectoryPlayer` 和离线分析依赖当前 JSONL key；改 schema 必须同步 Unity writer、reader、Python eval 工具和 AGENTS。
 
 Unity 场景/序列化注意事项：

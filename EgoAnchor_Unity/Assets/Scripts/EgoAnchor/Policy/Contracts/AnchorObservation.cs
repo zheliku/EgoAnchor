@@ -141,11 +141,18 @@ namespace EgoAnchor.Policy
         public bool HasCaptureTime => CaptureTimeSeconds >= 0.0;
 
         /// <summary>
-        /// 该观测在时间轴上的归属时刻，单位秒：优先用 capture 时间 (使测量对齐到采集时刻而非到达时刻)，
-        /// 无 capture 时间时退化为到达时间。所有运动模型/平滑策略/host 都应以它作为测量时间戳，
-        /// 避免各处重复实现同一段 capture-or-sample 选择逻辑。
+        /// 该观测在运动估计时间轴上的归属时刻，单位秒：优先用 capture 时间
+        /// (使测量对齐到采集时刻而非到达时刻)，无 capture 时间时退化为到达时间。
+        /// 运动模型、平滑策略和静止锁应使用它计算速度、插值和头动证据。
         /// </summary>
         public double MeasurementTimeSeconds => HasCaptureTime ? CaptureTimeSeconds : SampleTimeSeconds;
+
+        /// <summary>
+        /// 该观测在 Unity 本地生命周期时间轴上的到达时刻，单位秒。
+        /// 生命周期 stale/lost 与低分持续时间必须使用它，不能用 capture 时间；
+        /// 否则 register 推理耗时较长时，高分 pose 一到达就会被误判为陈旧。
+        /// </summary>
+        public double LifecycleTimeSeconds => SampleTimeSeconds;
 
         /// <summary>
         /// 构造 anchor policy 观测。

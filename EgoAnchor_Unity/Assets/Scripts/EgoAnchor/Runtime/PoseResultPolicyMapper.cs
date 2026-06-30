@@ -46,9 +46,11 @@ namespace EgoAnchor.Runtime
             // valid 标记复刻 Python 评分的"无信号"判据 (reliability/pose_quality.py)，使 Unity 几何仲裁
             // 能区分"真低分"和"无信号占位分"，不动 proto：
             //   reproj valid: color_reprojection>=0 表示有颜色投影信号 (纯色/无纹理物体为 -1)。
-            //   depth valid : mask 内深度覆盖率>=MIN_DEPTH_COVERAGE 才进入深度对齐评分。
+            //   depth valid : 覆盖率足够且渲染深度对齐确有信号；valid_* 里的深度无效后缀不能算有效 D 项。
             bool reprojValid = hasSubscores && result.ColorReprojection >= 0f;
-            bool depthValid = hasSubscores && result.DepthValidInMask >= MinDepthCoverage;
+            bool depthValid = hasSubscores
+                && result.DepthValidInMask >= MinDepthCoverage
+                && HasRenderDepthSignal(result);
 
             return AnchorObservation.FromAlignedPose(
                 frameId,
@@ -97,6 +99,24 @@ namespace EgoAnchor.Runtime
             }
 
             return result.ReliabilityFlags.ToArray();
+        }
+
+        /// <summary>
+        /// 判断 PoseResult 是否携带可进入几何核的深度对齐信号。
+        /// 与 Python _has_render_depth_signal 保持一致：只有综合状态正好为 valid，或深度 inlier/residual
+        /// 表明深度 checker 实际算过残差时才有效；valid_no_valid_depth_overlap 等合并状态只是颜色有效。
+        /// </summary>
+        private static bool HasRenderDepthSignal(PoseResult result)
+        {
+            if (result == null)
+            {
+                return false;
+            }
+
+            string status = result.RenderQualityStatus ?? string.Empty;
+            return status == "valid"
+                || result.RenderQualityDepthInlier > 0f
+                || result.RenderQualityDepthResidualM > 0f;
         }
     }
 }

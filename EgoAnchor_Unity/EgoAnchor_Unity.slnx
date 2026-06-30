@@ -5,6 +5,7 @@
   <Project Path="HighlightPlus.Runtime.csproj" />
   <Project Path="EgoAnchorEval.csproj" />
   <Project Path="VFolders.csproj" />
+  <Project Path="EgoAnchor.Tests.csproj" />
   <Project Path="Proxima.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
   <Project Path="VInspector.csproj" />

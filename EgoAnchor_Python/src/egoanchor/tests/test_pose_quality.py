@@ -98,6 +98,26 @@ class PoseQualityTest(unittest.TestCase):
         self.assertIn("depth_coverage_insufficient", breakdown.flags)
         self.assertIn("quality_pending", latest.flags)
 
+    def test_merged_invalid_depth_status_is_excluded_from_geometry_core(self) -> None:
+        """颜色有效但深度无有效交集时，valid_* 综合状态不能把深度误当有效低分。"""
+
+        breakdown = score_observation_breakdown(
+            self._track_observation(
+                color_reprojection=0.9,
+                render_quality_evaluated=True,
+                render_quality_status="valid_no_valid_depth_overlap",
+                render_quality_depth_alignment=0.0,
+                render_quality_depth_inlier=0.0,
+                render_quality_depth_residual_m=0.0,
+                depth_valid_in_mask=1.0,
+            )
+        )
+
+        self.assertAlmostEqual(breakdown.depth_score, 0.5)
+        self.assertGreater(breakdown.final_score, 0.85)
+        self.assertIn("depth_alignment_missing_expected", breakdown.flags)
+        self.assertNotIn("depth_alignment_low", breakdown.flags)
+
     def test_depth_alignment_is_quality_signal(self) -> None:
         """depth_score 应来自渲染深度对齐，而不是 mask 内有效深度覆盖率满分。"""
 
@@ -171,6 +191,14 @@ class PoseQualityTest(unittest.TestCase):
 
         self.assertAlmostEqual(config.reproj_weight, 0.5)
         self.assertAlmostEqual(config.depth_weight, 0.5)
+
+    def test_default_weights_prioritize_depth(self) -> None:
+        """PoseScoreConfig 裸构造也应与项目默认一致：深度高权重、颜色低权重。"""
+
+        config = PoseScoreConfig()
+
+        self.assertAlmostEqual(config.reproj_weight, 0.2)
+        self.assertAlmostEqual(config.depth_weight, 0.8)
 
     def test_score_breakdown_exposes_vcd_formula(self) -> None:
         """评分分解应暴露 VCD 各子分，最终分 = gate × quality（V×C^α×D^β）。"""

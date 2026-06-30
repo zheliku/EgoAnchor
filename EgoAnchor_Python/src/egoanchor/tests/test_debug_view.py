@@ -66,12 +66,15 @@ class DebugViewTest(unittest.TestCase):
             view = make_score_debug_view(diagnostics, observation, width=640, height=360)
 
         self.assertEqual(view.shape[:2], (360, 640))
-        self.assertTrue(any("phase=1.00" in text for text in texts))
+        self.assertTrue(any("score=0.20" in text for text in texts))
         self.assertTrue(any("reproj=0.42" in text for text in texts))
-        self.assertTrue(any("conf=0.75" in text for text in texts))
+        self.assertTrue(any("depth=0.65" in text for text in texts))
+        self.assertTrue(any("mask=0.90" in text for text in texts))
+        self.assertTrue(any("track_reproj=0.42" in text for text in texts))
         self.assertTrue(any("area=0.25" in text for text in texts))
         self.assertTrue(any("renderCov=0.50" in text for text in texts))
         self.assertTrue(any("obsCov=0.60" in text for text in texts))
+        self.assertTrue(any("depthIn=0.70" in text for text in texts))
         self.assertTrue(any("depthAlign=0.65" in text for text in texts))
         self.assertTrue(any("status=render_invalid" in text for text in texts))
 

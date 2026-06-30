@@ -119,7 +119,7 @@ namespace EgoAnchor.Policy
 
         private AnchorStateMachine stateMachine;
         private PoseToAnchorRuntime boundOwner;
-        private double lastAcceptedTimeSeconds = -1.0;
+        private double lastReliableLifecycleTimeSeconds = -1.0;
         private double lastAdvanceTimeSeconds = -1.0;
         private float latestAcceptedScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
@@ -267,11 +267,11 @@ namespace EgoAnchor.Policy
         public AnchorPolicyDecision AcceptPose(in AnchorObservation observation)
         {
             EnsureReady();
-            double now = observation.MeasurementTimeSeconds;
+            double lifecycleTime = observation.LifecycleTimeSeconds;
 
             if (!observation.HasAlignedPose)
             {
-                OnMissingObservation(now, observation.FailureReason);
+                OnMissingObservation(lifecycleTime, observation.FailureReason);
                 latestGateDecision = GateDecision.Hold(string.IsNullOrEmpty(observation.FailureReason) ? "missing_pose" : observation.FailureReason);
                 return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
             }
@@ -279,18 +279,18 @@ namespace EgoAnchor.Policy
             // 低分重定位: 已有锚定后若总分持续过低 → 锚点不可信, 本地重置进入 Relocalizing 重新建立锚定。
             // 几何也差时还会 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
             // host 不持 client; 在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
-            if (TryLowScoreReacquire(observation, now))
+            if (TryLowScoreReacquire(observation, lifecycleTime))
             {
                 latestGateDecision = GateDecision.Hold("low_score_reacquire");
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reacquire, stateMachine.State, "low_score_reacquire");
             }
 
             // 可选 score/jump 门控 (仅 EgoAnchor 方法开启)
-            if (ShouldRejectObservation(observation, now, out string rejectReason))
+            if (ShouldRejectObservation(observation, observation.MeasurementTimeSeconds, out string rejectReason))
             {
                 RejectedCount++;
                 latestGateDecision = GateDecision.Reject(rejectReason);
-                stateMachine.OnUncertainPose(now, rejectReason);
+                stateMachine.OnUncertainPose(lifecycleTime, rejectReason);
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reject, stateMachine.State, rejectReason);
             }
 
@@ -329,8 +329,8 @@ namespace EgoAnchor.Policy
             // FoundationPose 仍发漂移 pose, 但 gap 持续累积会按 coast/lost 超时如实推进到 Lost。
             if (observation.ReliabilityScore >= trackingScoreFloor)
             {
-                lastAcceptedTimeSeconds = now;
-                stateMachine.OnReliablePose(now, latestGateDecision.Reason);
+                lastReliableLifecycleTimeSeconds = lifecycleTime;
+                stateMachine.OnReliablePose(lifecycleTime, latestGateDecision.Reason);
             }
 
             return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
@@ -346,15 +346,15 @@ namespace EgoAnchor.Policy
                 return AnchorPolicyOutput.None(stateMachine.State, "no_estimate");
             }
 
-            double gap = lastAcceptedTimeSeconds >= 0.0 ? Mathf.Max((float)(nowSeconds - lastAcceptedTimeSeconds), 0.0f) : 0.0;
+            double lifecycleGap = lastReliableLifecycleTimeSeconds >= 0.0 ? Mathf.Max((float)(nowSeconds - lastReliableLifecycleTimeSeconds), 0.0f) : 0.0;
             AnchorState stateBeforeAdvance = stateMachine.State;
-            if (lastAcceptedTimeSeconds < 0.0)
+            if (lastReliableLifecycleTimeSeconds < 0.0)
             {
                 stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_reliable_pose");
             }
-            else if (gap > 0.0 && stateMachine.State != AnchorState.Paused)
+            else if (lifecycleGap > 0.0 && stateMachine.State != AnchorState.Paused)
             {
-                stateMachine.OnMissingPose(nowSeconds, gap, true, "stale_measurement");
+                stateMachine.OnMissingPose(nowSeconds, lifecycleGap, true, "stale_measurement");
             }
 
             if (stateMachine.State == AnchorState.Lost || stateMachine.State == AnchorState.Error || stateMachine.State == AnchorState.Searching)
@@ -376,7 +376,9 @@ namespace EgoAnchor.Policy
             }
 
             lastAdvanceTimeSeconds = nowSeconds;
-            predictAheadSeconds = (float)gap;
+            predictAheadSeconds = motionModel.HasState
+                ? Mathf.Max((float)(nowSeconds - motionModel.LastObservationTimeSeconds), 0.0f)
+                : 0.0f;
             UpdateMotionState();
             return new AnchorPolicyOutput(true, pose, stateMachine.State, motionState, predictAheadSeconds, stateMachine.LastEvent.Reason);
         }
@@ -514,7 +516,7 @@ namespace EgoAnchor.Policy
 
         private void OnMissingObservation(double nowSeconds, string reason)
         {
-            double gap = lastAcceptedTimeSeconds >= 0.0 ? nowSeconds - lastAcceptedTimeSeconds : double.PositiveInfinity;
+            double gap = lastReliableLifecycleTimeSeconds >= 0.0 ? nowSeconds - lastReliableLifecycleTimeSeconds : double.PositiveInfinity;
             stateMachine.OnMissingPose(nowSeconds, gap, motionModel != null && motionModel.HasState, string.IsNullOrEmpty(reason) ? "missing_pose" : reason);
         }
 
@@ -539,7 +541,7 @@ namespace EgoAnchor.Policy
             {
                 staticLockModule.ResetModule();
             }
-            lastAcceptedTimeSeconds = -1.0;
+            lastReliableLifecycleTimeSeconds = -1.0;
             lastAdvanceTimeSeconds = -1.0;
             latestAcceptedScore = 1.0f;
             lowScoreStartSeconds = -1.0;

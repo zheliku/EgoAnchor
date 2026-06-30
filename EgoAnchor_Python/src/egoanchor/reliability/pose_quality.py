@@ -22,10 +22,10 @@ class PoseScoreConfig:
     geo_floor: float = 0.05
     """几何核单维最低值；避免有效低分在几何平均里变成硬零。"""
 
-    reproj_weight: float = 0.5
+    reproj_weight: float = 0.2
     """颜色投影分（C）在几何核里的相对权重。"""
 
-    depth_weight: float = 0.5
+    depth_weight: float = 0.8
     """深度对齐分（D）在几何核里的相对权重。"""
 
     def __post_init__(self) -> None:
@@ -181,7 +181,7 @@ def _has_render_depth_signal(observation: PoseObservation) -> bool:
     """判断本帧是否已经拿到渲染深度对齐结果，包括明确的低分结果。"""
 
     status = str(observation.render_quality_status or "")
-    return status.startswith("valid") or observation.render_quality_depth_inlier > 0.0 or observation.render_quality_depth_residual_m > 0.0
+    return status == "valid" or observation.render_quality_depth_inlier > 0.0 or observation.render_quality_depth_residual_m > 0.0
 
 
 def _mask_factor(observation: PoseObservation, flags: list[str]) -> float:
