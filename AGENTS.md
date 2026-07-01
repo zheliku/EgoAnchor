@@ -149,6 +149,7 @@ Python 细节坑：
 - `pose_jump_translation_m/pose_jump_rotation_deg` 仍是 TRACK 后的硬异常位姿拒绝阈值，触发时输出 `TRACK_REJECT` no-pose，但不生成可靠性子分，也不自动重新 register；已删除的是 proto/评分里的 `score_jump` 子分。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
 - VCD 可靠性评分统一解释为 Visibility-gated Color-Depth consistency：`R = V * G_CD`，其中 `G_CD = exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效 C/D 一致性证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。论文中不要把 `G_CD` 写成独立于 VCD 的第四个方法名。
+- 文献定位上不要把 VCD 单独表述为“首次提出 pose confidence / pose quality scoring”。已有 6D pose 文献包含 render-and-compare、hypothesis scoring、confidence、VSD/visible depth discrepancy 等相近思想；EgoAnchor 的创新边界应写成“面向 passthrough MR object anchoring 的在线、可解释、无 GT runtime reliability signal”，并强调它驱动 frame-aligned anchoring runtime 中的观测接收、静止锁、状态降级、reacquire 和 anchor 生命周期管理。
 - depth 覆盖不足或渲染深度对齐无信号时 `score_depth=0.5` 是中性显示，不进入几何合取核；`render_quality_status=valid_no_valid_depth_overlap` 这类 `valid_*` 只表示颜色路径有效，不能当作深度有效信号。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 
