@@ -95,26 +95,38 @@ class DepthAlignmentChecker:
         min_inlier_thresh_m: float,
         min_depth_coverage: float,
     ) -> DepthAlignmentResult:
-        """纯数组版本，便于无 GPU 单测。"""
+        """纯数组版本，便于无 GPU 单测。
+
+        实现论文公式：
+        D = λ·ρ_inlier + (1-λ)·S_med
+        其中：
+        ρ_inlier = (1/|Ω|) Σ 𝟙[e(p) < τ(p)]
+        S_med = 1 - median(min(e(p)/τ(p), 1))
+        τ(p) = max(τ_min, ρ_z·D_rnd(p))
+        λ = 0.6 (覆盖率权重更高)
+        """
 
         coverage = clamp01(float(depth_coverage))
-        thresh = max(float(min_inlier_thresh_m), max(0.0, float(pose_distance_m)) * max(0.0, float(distance_ratio)))
+        # 全局参考阈值（用于fallback和报告）
+        global_thresh = max(float(min_inlier_thresh_m), max(0.0, float(pose_distance_m)) * max(0.0, float(distance_ratio)))
+
         render_depth = np.asarray(render_depth_m, dtype=np.float32)
         observed_depth = np.asarray(observed_depth_m, dtype=np.float32)
         intersection = np.asarray(intersection_mask) > 0
+
         if render_depth.shape != observed_depth.shape or render_depth.shape != intersection.shape:
             return DepthAlignmentChecker._invalid_result(
                 status="map_shape_invalid",
                 score=0.5,
                 depth_coverage=coverage,
-                inlier_thresh_m=thresh,
+                inlier_thresh_m=global_thresh,
             )
         if coverage < float(min_depth_coverage):
             return DepthAlignmentChecker._invalid_result(
                 status="depth_coverage_insufficient",
                 score=0.5,
                 depth_coverage=coverage,
-                inlier_thresh_m=thresh,
+                inlier_thresh_m=global_thresh,
                 render_depth_m=render_depth,
                 observed_depth_m=observed_depth,
             )
@@ -126,27 +138,50 @@ class DepthAlignmentChecker:
             & (render_depth > 0.0)
             & (observed_depth > 0.0)
         )
-        residual = np.abs(render_depth[valid_depth] - observed_depth[valid_depth])
-        if residual.size <= 0:
+
+        if valid_depth.sum() <= 0:
             return DepthAlignmentChecker._invalid_result(
                 status="no_valid_depth_overlap",
                 score=0.0,
                 depth_coverage=coverage,
-                inlier_thresh_m=thresh,
+                inlier_thresh_m=global_thresh,
                 render_depth_m=render_depth,
                 observed_depth_m=observed_depth,
             )
 
-        inlier_ratio = float(np.mean(residual < thresh))
+        # 提取有效区域的深度值
+        render_valid = render_depth[valid_depth]
+        observed_valid = observed_depth[valid_depth]
+
+        # 计算逐像素深度残差 e(p)
+        residual = np.abs(render_valid - observed_valid)
+
+        # 计算逐像素自适应阈值 τ(p) = max(τ_min, ρ_z·D_rnd(p))
+        pixel_thresh = np.maximum(float(min_inlier_thresh_m), render_valid * float(distance_ratio))
+
+        # 1. 内点比例 ρ_inlier
+        inlier_mask = residual < pixel_thresh
+        inlier_ratio = float(np.mean(inlier_mask))
+
+        # 2. 归一化残差中位数 S_med = 1 - median(min(e(p)/τ(p), 1))
+        normalized_residual = residual / pixel_thresh
+        normalized_residual_clamped = np.minimum(normalized_residual, 1.0)
+        median_normalized_residual = float(np.median(normalized_residual_clamped))
+        S_med = clamp01(1.0 - median_normalized_residual)
+
+        # 3. 最终深度对齐分 D = λ·ρ_inlier + (1-λ)·S_med
+        # λ = 0.6 (更重视覆盖率)
+        lambda_weight = 0.6
+        score = clamp01(lambda_weight * inlier_ratio + (1.0 - lambda_weight) * S_med)
+
+        # 原始中位数残差（用于诊断）
         median_residual = float(np.median(residual))
-        # 残差达 inlier 阈值 3 倍时 median_score 归零。
-        median_score = clamp01(1.0 - median_residual / (thresh * 3.0))
-        score = clamp01(0.5 * inlier_ratio + 0.5 * median_score)
+
         return DepthAlignmentResult(
             score=score,
             inlier_ratio=clamp01(inlier_ratio),
             median_residual_m=max(0.0, median_residual),
-            inlier_thresh_m=thresh,
+            inlier_thresh_m=global_thresh,  # 报告平均阈值
             depth_coverage=coverage,
             valid=True,
             status="valid",

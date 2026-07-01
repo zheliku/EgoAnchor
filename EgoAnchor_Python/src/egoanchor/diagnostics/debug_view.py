@@ -338,11 +338,19 @@ def make_score_debug_view(
 def _score_debug_lines(diagnostics: FrameDiagnostics, observation: PoseObservation | None) -> list[str]:
     """生成 score debug 顶部横幅文本，集中维护字段顺序。"""
 
+    # 计算 S_med (从 D 和 rho_inlier 反推)
+    # D = 0.6*rho_inlier + 0.4*S_med
+    # => S_med = (D - 0.6*rho_inlier) / 0.4
+    rho_inlier = diagnostics.render_quality_depth_inlier
+    depth_score = diagnostics.score_depth
+    s_med = (depth_score - 0.6 * rho_inlier) / 0.4 if rho_inlier >= 0 else 0.0
+    s_med = max(0.0, min(1.0, s_med))  # clamp to [0,1]
+
     lines = [
-        f"score={observation.reliability_score if observation else 0.0:.2f} reproj={diagnostics.score_reprojection:.2f} depth={diagnostics.score_depth:.2f} mask={diagnostics.score_mask:.2f}",
-        f"track_reproj={diagnostics.color_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
-        f"status={diagnostics.render_quality_status} depthIn={diagnostics.render_quality_depth_inlier:.2f} depthAlign={diagnostics.render_quality_depth_alignment:.2f} depthRes={diagnostics.render_quality_depth_residual_m:.3f}m {diagnostics.render_quality_ms:.1f}ms",
-        f"expected={diagnostics.render_quality_evaluated} renderArea={diagnostics.render_quality_render_area_px} maskArea={diagnostics.mask_area_ratio:.3f} depthMask={diagnostics.depth_valid_in_mask:.3f} depthAll={diagnostics.depth_valid_ratio:.3f}",
+        f"R={observation.reliability_score if observation else 0.0:.3f} = V({diagnostics.score_mask:.3f}) x G(C={diagnostics.score_reprojection:.3f}, D={diagnostics.score_depth:.3f})",
+        f"D = 0.6*rho_in({rho_inlier:.3f}) + 0.4*S_med({s_med:.3f})  |  med_res={diagnostics.render_quality_depth_residual_m*1000:.1f}mm",
+        f"reproj={diagnostics.color_reprojection:.2f} area={diagnostics.render_quality_area_ratio_score:.2f} iou={diagnostics.render_quality_mask_iou:.2f} renderCov={diagnostics.render_quality_render_visible_ratio:.2f} obsCov={diagnostics.render_quality_observed_visible_ratio:.2f}",
+        f"status={diagnostics.render_quality_status} depthAlign={diagnostics.render_quality_depth_alignment:.3f} renderArea={diagnostics.render_quality_render_area_px}px {diagnostics.render_quality_ms:.1f}ms",
     ]
     if observation and observation.reliability_flags:
         lines.append("flags=" + ",".join(observation.reliability_flags[:8]))
