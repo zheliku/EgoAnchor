@@ -126,8 +126,6 @@ symmetry_mode = "cube" # 对称约束模式：none、cube 或 axis。
 symmetry_axis = "z" # symmetry_mode=axis 时的旋转轴。
 symmetry_count = 36 # symmetry_mode=axis 时离散旋转数量。
 register_min_depth_valid_in_mask = 0.15 # register 前 mask 内有效深度比例下限。
-pose_jump_translation_m = 0.6 # 单帧 track 平移跳变拒绝阈值，单位米；快速移动/近距离视角变化时可继续调大。
-pose_jump_rotation_deg = 100.0 # 单帧 track 旋转跳变拒绝阈值，单位度；快速绕物体移动时可继续调大。
 debug = 0 # FoundationPose 内部 debug 等级；0=关闭内部 debug 可视化/文件输出，>0 只在专项排查时开启。
 debug_dir = "FoundationPose/debug/api" # FoundationPose debug 输出目录，相对 EgoAnchor_Python。
 enable_logging = false # 是否允许 FoundationPose 内部 stdout/stderr/logging 输出到 console；默认关闭，避免第三方库刷屏遮住系统日志。

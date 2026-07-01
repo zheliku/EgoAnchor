@@ -20,7 +20,6 @@ class PipelineTrackingStateTest(unittest.TestCase):
             has_registered=True,
             cutie_ready=True,
             last_pose=np.eye(4),
-            track_reject_count=2,
             frames_since_register=5,
             last_sender_mono_ms=123.0,
         )
@@ -31,32 +30,29 @@ class PipelineTrackingStateTest(unittest.TestCase):
         self.assertFalse(state.has_registered)
         self.assertFalse(state.cutie_ready)
         self.assertIsNone(state.last_pose)
-        self.assertEqual(state.track_reject_count, 0)
         self.assertFalse(hasattr(state, "tracked_mask_lost_count"))
         self.assertFalse(hasattr(state, "low_reprojection_count"))
         self.assertEqual(state.frames_since_register, 0)
         self.assertIsNone(state.last_sender_mono_ms)
 
-    def test_clear_registration_can_preserve_reject_count_and_frame_time(self) -> None:
-        """普通 track loss 应能清空注册状态，同时保留 reject 计数和帧时间历史。"""
+    def test_clear_registration_preserves_frame_time(self) -> None:
+        """普通 track loss 应能清空注册状态，同时保留帧时间历史。"""
 
         state = PipelineTrackingState(
             generation=4,
             has_registered=True,
             cutie_ready=True,
             last_pose=np.eye(4),
-            track_reject_count=2,
             frames_since_register=5,
             last_sender_mono_ms=123.0,
         )
 
-        state.clear_registration(reset_reject_count=False)
+        state.clear_registration()
 
         self.assertEqual(state.generation, 4)
         self.assertFalse(state.has_registered)
         self.assertFalse(state.cutie_ready)
         self.assertIsNone(state.last_pose)
-        self.assertEqual(state.track_reject_count, 2)
         self.assertFalse(hasattr(state, "tracked_mask_lost_count"))
         self.assertFalse(hasattr(state, "low_reprojection_count"))
         self.assertEqual(state.frames_since_register, 0)

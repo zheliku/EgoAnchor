@@ -141,17 +141,6 @@ class _InvalidTrackPoseEstimator(_FakeFoundationPoseEstimator):
         return pose
 
 
-class _JumpTrackPoseEstimator(_FakeFoundationPoseEstimator):
-    """单测用 FoundationPose 估计器，track 返回明显跳变 pose。"""
-
-    def track(self, rgb: np.ndarray, depth: np.ndarray) -> np.ndarray:
-        """返回超过跳变阈值的 4x4 pose。"""
-
-        pose = np.eye(4, dtype=np.float64)
-        pose[0, 3] = 1.0
-        return pose
-
-
 class _EmptyCutieTracker:
     """单测用 Cutie；初始化成功，但 track 时连续返回空 mask。"""
 
@@ -496,33 +485,6 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
         self.assertIsNotNone(second.observation)
         self.assertFalse(second.observation.has_pose)
         self.assertEqual(second.observation.phase, "TRACK_FAILED")
-        self.assertTrue(pipeline.tracking_state.has_registered)
-        self.assertEqual(len(estimator.register_calls), 1)
-
-    def test_track_jump_reports_no_pose_without_auto_re_register(self) -> None:
-        """明显 pose 跳变只作为坏观测输出，不在 Python 内部立即重注册。"""
-
-        estimator = _JumpTrackPoseEstimator()
-        pipeline = QuestPosePipeline(
-            segmenter=_FakeSegmenter(),
-            segmenter_name="yoloe26",
-            depth_estimator=_FakeDepthEstimator(),
-            foundationpose_estimator=estimator,
-            cutie_tracker=_StableCutieTracker(),
-            process_width=8,
-            process_height=8,
-            pose_jump_translation_m=0.1,
-            cutie_enabled=True,
-        )
-
-        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
-        second = pipeline.process(_make_stereo_frame(2, (10, 20, 30)), _make_camera_info())
-
-        self.assertTrue(first.observation.has_pose)
-        self.assertIsNotNone(second.observation)
-        self.assertFalse(second.observation.has_pose)
-        self.assertEqual(second.observation.phase, "TRACK_REJECT")
-        self.assertEqual(second.observation.pose_source, "NONE")
         self.assertTrue(pipeline.tracking_state.has_registered)
         self.assertEqual(len(estimator.register_calls), 1)
 

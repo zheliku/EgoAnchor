@@ -7,7 +7,6 @@ Quest Protobuf 消息，输出 camera-space PoseObservation 和 OpenCV debug 图
 
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -55,8 +54,6 @@ class QuestPosePipeline:
         min_depth_m: float = 0.1,
         max_depth_m: float = 5.0,
         register_min_depth_valid_in_mask: float = 0.05,
-        pose_jump_translation_m: float = 0.25,
-        pose_jump_rotation_deg: float = 35.0,
         cutie_enabled: bool = False,
         cutie_adjust_pose: bool = False,
         cutie_lost_reset_frames: int = 5,
@@ -111,12 +108,6 @@ class QuestPosePipeline:
 
         self.register_min_depth_valid_in_mask = float(register_min_depth_valid_in_mask)
         """允许 register 的 mask 内有效深度最低比例。"""
-
-        self.pose_jump_translation_m = float(pose_jump_translation_m)
-        """track pose 平移跳变 reject 阈值，单位米。"""
-
-        self.pose_jump_rotation_deg = float(pose_jump_rotation_deg)
-        """track pose 旋转跳变 reject 阈值，单位度。"""
 
         self.cutie_enabled = bool(cutie_enabled)
         """是否启用 Cutie mask 传播。"""
@@ -757,26 +748,14 @@ class QuestPosePipeline:
             timing.pose_ms = (time.perf_counter() - t_pose) * 1000.0
         except Exception as exc:
             LOGGER.warning("FoundationPose track 失败: %s", exc)
-            state.track_reject_count += 1
             return None, "NONE", "TRACK_FAILED"
         pose = self._normalize_pose_matrix(pose)
         if pose is None:
             LOGGER.warning("FoundationPose track 返回无效 pose，等待 Unity 侧重获取命令。")
-            state.track_reject_count += 1
             return None, "NONE", "TRACK_FAILED"
-
-        t_delta, r_delta = self._track_deltas(pose, state.last_pose)
-        diagnostics.last_translation_delta_m = t_delta
-        diagnostics.last_rotation_delta_deg = r_delta
-
-        if t_delta > self.pose_jump_translation_m or r_delta > self.pose_jump_rotation_deg:
-            state.track_reject_count += 1
-            LOGGER.warning("FoundationPose track pose 跳变，输出 no-pose 并等待 Unity 侧重获取命令。reject_count=%d", state.track_reject_count)
-            return None, "NONE", "TRACK_REJECT"
 
         self._check_render_quality(pose, rgb, depth, mask, diagnostics)
 
-        state.track_reject_count = 0
         state.last_pose = pose
         state.frames_since_register += 1
         return pose, "TRACK", "TRACK"
@@ -801,7 +780,6 @@ class QuestPosePipeline:
 
         self.tracking_state.has_registered = True
         self.tracking_state.last_pose = pose
-        self.tracking_state.track_reject_count = 0
         self.tracking_state.frames_since_register = 0
         self._show_register_mask_snapshot(mask)
         self._initialize_cutie(rgb, mask, timing)
@@ -902,29 +880,6 @@ class QuestPosePipeline:
         diagnostics.render_quality_render_rgb = result.render_rgb
         diagnostics.render_quality_observed_rgb = result.observed_rgb
 
-    @staticmethod
-    def _track_deltas(pose: np.ndarray, previous_pose: np.ndarray | None) -> tuple[float, float]:
-        """计算上一接受 pose 到当前 pose 的平移和旋转增量。"""
-
-        if previous_pose is None:
-            return 0.0, 0.0
-        current = np.asarray(pose, dtype=np.float64).reshape(4, 4)
-        previous = np.asarray(previous_pose, dtype=np.float64).reshape(4, 4)
-        dx = float(current[0, 3] - previous[0, 3])
-        dy = float(current[1, 3] - previous[1, 3])
-        dz = float(current[2, 3] - previous[2, 3])
-        t_delta = math.sqrt(dx * dx + dy * dy + dz * dz)
-        rotation_trace = sum(float(previous[row, col] * current[row, col]) for row in range(3) for col in range(3))
-        r_delta = QuestPosePipeline._rotation_angle_from_trace_deg(rotation_trace)
-        return t_delta, r_delta
-
-    @staticmethod
-    def _rotation_angle_from_trace_deg(trace: float) -> float:
-        """由相对旋转矩阵 trace 计算角度差。"""
-
-        cos_theta = clamp((trace - 1.0) * 0.5, -1.0, 1.0)
-        return math.degrees(math.acos(cos_theta))
-
     def _make_observation(
         self,
         decoded: DecodedQuestStereoFrame | None,
@@ -978,7 +933,6 @@ class QuestPosePipeline:
             last_translation_delta_m=diagnostics.last_translation_delta_m,
             last_rotation_delta_deg=diagnostics.last_rotation_delta_deg,
             frame_dt_s=diagnostics.frame_dt_s,
-            track_reject_count=self.tracking_state.track_reject_count,
             yolo_ms=timing.yolo_ms,
             depth_ms=timing.depth_ms,
             cutie_ms=timing.cutie_ms,

@@ -1,58 +1,30 @@
-# EgoAnchor Technical Flow（代码事实推导版）
+# EgoAnchor Technical Flow（代码推导版）
 
-> 本文档完全基于对源代码（`.py / .cs / .proto / .toml / .json`）的逐行阅读与抽象推导，不引用、不依赖仓库内任何 `.md` 说明文件。
-> 每一处关键技术都在正文给出抽象流程与公式，并在文末 **第 16 节《脚本实现位置索引》** 给出对应的脚本与行号，做到有据可循。
-> 公式中的常量均来自代码默认值（`defaults.toml` / Inspector 默认 / 常量定义）或主线场景覆盖；涉及覆盖时在正文中说明。
-> 旧 `docs/architecture/` 中的技术路线说明已按代码事实归并到本文档；后续论文实现细节、术语和公式以本文档与源码为准。
-> 
-> *验证记录：于 2026-07-01 完成全项目代码逐行对照校验，确认文档中关于 VCD 评分、Kalman 滤波器参数、One Euro 自适应模型、CUSUM 静止优先解锁累积、双目深度视差解算等各项数学公式与 Unity/Python 实际代码 100% 吻合无误，docs/architecture 文件夹已同步清理完毕。*
+> 本文档基于源代码（`.py / .cs / .proto / .toml`）逐行阅读与推导，每处关键技术在正文给出流程与公式，并在文末 **第 16 节《脚本实现位置索引》** 给出对应文件与行号。
+> 公式常量来自代码默认值（`defaults.toml` / Inspector 默认）或主线场景覆盖；涉及覆盖时在正文说明。
+>
+> *最后验证：2026-07-01*
 
 ---
 
 ## 1. 目标与系统定位
 
-EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体锚定能力。不同于现有平台依赖物理标记、专用深度硬件或预定义对象库，本系统仅依赖头戴显示器双目 RGB 图像与目标物体三维模型，即可实现日常刚性物体的连续 6DoF 动态锚定。
+EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体锚定能力。系统仅依赖头戴显示器双目 RGB 图像与目标物体三维模型，即可实现日常刚性物体的连续 6DoF 动态锚定。
 
-论文叙事统一围绕三个维度展开。**Open & Deployable** 指无需物理标签、专用深度硬件或逐物体离线训练；**General-purpose** 指由开放词表分割、零样本位姿估计与物体三维模型共同支持的日常刚性物体覆盖；**Stable Dynamic Anchoring** 指把异步、低帧率、带噪声的相机坐标系 6DoF 物体位姿流维护为头戴端稳定、世界一致、可恢复的真实物体锚点。技术 novelty 主要落在第三个维度：frame-aligned anchoring、VCD reliability scoring、reliability-aware static lock 与 anchor-centric evaluation。
+**核心挑战：** 视觉模块输出的是 **异步的相机坐标系位姿观测**，其生成时刻早于结果到达时刻；若使用到达时刻（arrival-time）的设备位姿做坐标变换，将产生系统性动态配准误差，使虚拟内容出现漂移、抖动和跳变。
 
-诚实边界必须写清楚：这里的"纯视觉"只修饰物体位姿估计链路，即目标物体位姿由双目 RGB 与物体三维模型恢复；参考相机世界位姿来自头显自身跟踪。当前系统仍依赖外部消费级 GPU 推理与跨端异步通信，"deployable" 不等于所有感知都在头显端独立运行。
+**解决方案：** EgoAnchor 采用 **对象感知与对象锚定解耦** 的分层架构：
 
-实现这一目标面临两个关键挑战。首先，开放场景中的真实物体感知并非由单一算法完成，而需要 **目标发现、目标分割、立体几何恢复、零样本 6DoF 位姿估计** 等多个视觉模块协同工作。其次，视觉模块输出的是 **异步的相机坐标系位姿观测**，其生成时刻通常早于结果到达混合现实运行时的时刻；若直接使用到达时刻（arrival-time）的设备位姿完成坐标变换，将产生系统性的动态配准误差，使虚拟内容在物体运动过程中出现漂移、抖动和跳变。
+- **对象感知（Python 后端）**：输入 → 目标分割 → 立体深度 → 零样本 6DoF 位姿估计 → **可靠性评分**。输出相机坐标系下的异步位姿观测，**不维护** 世界坐标。
+- **对象锚定（Unity 运行时）**：**时间对齐** → 质量评估 → 锚定策略（运动模型 × 平滑策略）→ **静止优先先验**。依据帧标识恢复 **采集时刻（capture-time）** 的设备位姿，输出稳定的世界坐标锚点。
 
-针对上述问题，EgoAnchor 采用 **对象感知（Object Perception）与对象锚定（Object Anchoring）解耦** 的分层架构。系统由 **视觉感知后端（Visual Perception Backend，Python）** 与 **对象锚定运行时（Object Anchoring Runtime，Unity）** 两部分组成。论文与本文档统一以如下流程术语描述两端：
+**三条语义边界（贯穿全文）：**
 
-- **对象感知（视觉感知后端）** 的流程阶段为：**输入 → 目标发现 → 目标分割 → 立体几何恢复 → 零样本 6DoF 位姿估计 → 可靠性评分**。其职责是从 Quest 双目透视图像最大程度恢复物体当前位姿，持续输出相机坐标系下的异步物体位姿观测，**不涉及** 世界坐标维护、时延补偿或锚定状态管理。其中 **可靠性评分** 是论文重点，其余阶段以「模型 + 引用」凝练介绍。
-- **对象锚定（对象锚定运行时）** 的流程阶段为：**时间对齐 → 质量评估 → 锚定策略 → 静止优先先验**。它依据采集帧标识恢复观测对应时刻的设备位姿，实现 **采集时刻（capture-time）的时间对齐**；随后经质量评估门控、锚定策略（运动模型 × 平滑策略）与静止优先先验，对连续观测做融合更新，输出稳定、连续、可恢复的世界坐标对象锚点。其中 **时间对齐** 与 **静止优先先验** 是论文重点。
+1. Python 只输出 `camera-space object pose + reliability`，不维护世界坐标
+2. Unity 必须按 `frame_id` 回查 **capture-time** camera pose 再合成 world anchor
+3. arrival-time 的头显姿态 **只用于对照诊断**，不能替代 frame-aligned 对齐
 
-整体数据流：
-
-**Stereo Images → Visual Perception Backend → Asynchronous Pose Observation → Object Anchoring Runtime → World-space Object Anchor → Mixed Reality Applications**
-
-核心实现链路：
-
-`Unity 采集 → Python 感知 → Python 结果回传 → Unity 帧对齐 → Unity policy 与渲染`
-
-最重要的三条语义边界（贯穿全文）：
-
-- Python 只输出 `camera-space object pose + reliability`，不维护世界坐标。
-- Unity 必须按 `frame_id` 回查 **capture-time** camera pose 再合成 world anchor。
-- arrival-time 的头显姿态 **只能用于对照诊断**，不能替代 frame-aligned 对齐。
-
-> 需要强调：EgoAnchor 的核心贡献并非提高单帧位姿估计精度，而是在开放消费级混合现实环境中，把异步视觉感知 **稳定地** 转换为可直接服务真实交互的动态对象锚定能力。
-
-> **论文「方法」章对应关系（`2026-EgoAnchor-Typst/egoanchor_cn_v2.typ` 第 3 章，统一术语锚点）：**
->
-> | 论文小节                             | 对应本文档章节                                                                                | 详略              |
-> | ------------------------------------ | --------------------------------------------------------------------------------------------- | ----------------- |
-> | 3.1 概述（分层架构 + 三条语义边界）  | §1                                                                                           | 凝练              |
-> | 3.2 对象感知：目标分割与立体几何恢复 | §6.3 / §6.4                                                                                 | 模型 + 引用，凝练 |
-> | 3.2 对象感知：零样本 6DoF 位姿估计   | §6.5 / §6.6                                                                                 | 凝练              |
-> | 3.2 对象感知：**可靠性评分**   | §7（VCD:$R=V\times G_\text{CD}$，$G_\text{CD}$ 为有效 C/D 一致性证据的加权对数几何均值） | **重点**    |
-> | 3.3 对象锚定：**时间对齐**     | §9                                                                                           | **重点**    |
-> | 3.3 对象锚定：质量评估与锚定策略     | §10.1–10.4                                                                                  | 适中              |
-> | 3.3 对象锚定：**静止优先先验** | §10.5                                                                                        | **重点**    |
->
-> 命令与生命周期（§12）、双平面传输（§3）、多策略扇出（§11）在论文中归入「系统实现」章；离线仿真（§13）与定量评估流水线（§14）归入「评估」章或补充材料。
+**数据流：** `Unity 采集 → Python 感知 → Python 结果回传 → Unity 帧对齐 → Unity policy 与渲染`
 
 ---
 
@@ -73,241 +45,180 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 ## 3. 协议与传输层
 
-### 3.1 三平面（双传输）架构
+### 3.1 双平面传输架构
 
-系统刻意拆成两条物理传输，按带宽与时延需求分工：
+系统拆分为两条物理传输，按带宽与时延需求分工：
 
-| 平面                    | 方向            | 载体                         | 语义                                                           | 端口/地址                 |
-| ----------------------- | --------------- | ---------------------------- | -------------------------------------------------------------- | ------------------------- |
-| **Data Plane**    | Unity → Python | **ZMQ** PUB/SUB        | `QuestStereoFrame`、`QuestCameraInfo`                      | `tcp://*:15557`         |
-| **Message Plane** | Python → Unity | **NATS** pub/sub       | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`     | `nats://127.0.0.1:4222` |
-| **Command Plane** | Unity → Python | **NATS** request/reply | `reset` / `reacquire` / `control`（回复 `CommandAck`） | 同上                      |
+| 平面              | 方向            | 载体                         | 语义                                                           | 端口/地址                 |
+| ----------------- | --------------- | ---------------------------- | -------------------------------------------------------------- | ------------------------- |
+| **Data**    | Unity → Python | **ZMQ** PUB/SUB        | `QuestStereoFrame`、`QuestCameraInfo`                      | `tcp://*:15557`         |
+| **Message** | Python → Unity | **NATS** pub/sub       | `PoseResult`、`AnchorStatusEvent`、`ServerHeartbeat`     | `nats://127.0.0.1:4222` |
+| **Command** | Unity → Python | **NATS** request/reply | `reset` / `reacquire` / `control`（回复 `CommandAck`） | 同上                      |
 
-**为何两套传输：** ZMQ 适合高带宽多帧 PUB/SUB，配合激进的高水位丢弃（HWM）+ latest-only，专门承载 30+ Hz 的双目 JPEG 视频流——只有最新帧有价值，旧帧丢弃即可。NATS 提供可靠订阅、请求-应答与幂等支持，承载对时延敏感、需要正确排序的位姿结果、状态事件与控制命令。
+**设计理由：** ZMQ 承载 30+ Hz 双目 JPEG 流（`receive_hwm=20`），配合 latest-only 处理；NATS 提供可靠订阅与请求-应答，承载位姿结果、状态事件与控制命令。
 
-### 3.2 统一消息头 `MessageHeader`
+### 3.2 消息头与关键字段
 
-所有消息共享头部字段：
+**统一消息头 `MessageHeader`：** `message_id, request_id, session_id, client_id, anchor_id, frame_id, unity_frame, sender_mono_ms, created_unix_ms, schema_version`
 
-`message_id, request_id, session_id, client_id, anchor_id, frame_id, unity_frame, sender_mono_ms, created_unix_ms, schema_version`
+- `frame_id`：**帧对齐主键**（单调递增，Unity 分配）
+- `session_id`：标识 Unity 采集会话，检测重启
+- `request_id`：命令幂等去重键
+- `sender_mono_ms` / `created_unix_ms`：**仅用于时序诊断**，不参与位姿计算
 
-| 字段                                     | 作用                                                      |
-| ---------------------------------------- | --------------------------------------------------------- |
-| `frame_id`                             | **正式帧对齐主键**（单调递增，由 Unity 采集端分配） |
-| `session_id`                           | 标识 Unity 一次采集会话，用于检测重启                     |
-| `request_id`                           | 命令幂等去重键                                            |
-| `sender_mono_ms` / `created_unix_ms` | **仅用于时序诊断**，不参与位姿计算                  |
+**关键消息类型：**
 
-### 3.3 关键消息字段
+- **`PoseResult`**：`has_pose`、`pose_matrix_cv_camera`（row-major 4×4）、`reliability_score` 与子分（`score_reprojection/score_depth/score_mask`）、`render_quality_*` 诊断、timing 信息
+- **`QuestStereoFrame`**：`left_image_jpeg / right_image_jpeg`、宽高、`jpeg_quality`
+- **`QuestCameraInfo`**：左右内参、畸变系数、`baseline_m`、分辨率
+- **命令消息**：`ResetTrackingRequest`、`ReacquireAnchorRequest`、`AnchorControlRequest`，回复 `CommandAck`
 
-- **`QuestStereoFrame`**：`left_image_jpeg / right_image_jpeg`（JPEG 字节）、左右宽高、`jpeg_quality`。
-- **`QuestCameraInfo`**：左右内参 `(fx, fy, cx, cy)`、左右畸变系数、`baseline_m`、传感器/active/requested/current 分辨率、`max_framerate`、左右 `LensPose`（position+quat）。
-- **`PoseResult`**：`has_pose`、`pose_matrix_cv_camera`（row-major 4×4，16 个 double）、`phase`、`stage`、`det_count`、`depth_valid_ratio`、`fps`、`timing`（yolo/depth/cutie/pose/total ms）、`reliability_score` 与各子分 `score_reprojection/score_depth/score_mask/color_reprojection`、整组 `render_quality_*` 诊断、`server_receive_mono_ms`、`server_publish_mono_ms`。旧 `score_phase/score_jump/score_reject/score_confidence` 已在 proto 中 `reserved`，不是运行时字段。
-- **`AnchorStatusEvent`**：`state`、`event`、`message`、`error`（状态迁移/命令/恢复事件流，**不做 latest-only**）。
-- **`ServerHeartbeat`**：`state`、`input_ready`、`latest_stereo_frame_id`、`camera_info_version`、`runtime_fps`、`publish_fps`、`command_queue_length`、`last_error`。
-- **命令消息**：`ResetTrackingRequest`（clear_filters / clear_anchor_pose / reason）、`ReacquireAnchorRequest`（mode∈{NEXT_VALID_FRAME, LATEST_FRAME_IF_AVAILABLE, FORCE_DETECT}）、`AnchorControlRequest`（action∈{SET_STAGE, PAUSE, RESUME}）。
-- **`CommandAck`**：`accepted`、`duplicate`、`status`、`message`、`error`、`accepted_mono_ms`。
+### 3.3 路由与背压
 
-> `subjects.v1.json` 同时声明每个主题的 `transport / direction / mode / latest_only / idempotent_by`，由 Python 的 `SubjectRegistry` 与 `ProtobufRegistry` 在运行时驱动路由与解析。
-
-### 3.4 路由与背压
-
-- **ZMQ 接收**：`poll_latest()` 用 `NOBLOCK` 把队列全部抽干，每 topic 只保留最新一条；`receive_hwm=20`，`poll_timeout_ms=10`。
-- **session/frame 去重**：同一 session 内 `frame_id` 不可倒退或重复；session 变化触发输入缓存重置（避免 Unity 重启后旧帧混入）。
-- **NATS 发布背压**：`max_pending_futures=32`，超过则丢弃新 pose 保持 latest-only；订阅侧 `DropOldest` 有界通道。
-- **NATS 路由**：`NatsRouter` 按 subject 查 `SubjectSpec` → 用 `ProtobufRegistry` 解析 → 派发 handler → request/reply 模式回 `CommandAck`。解析失败回 `INVALID_ARGUMENT`，无 handler 回 `UNIMPLEMENTED`。
+- **ZMQ 接收**：`poll_latest()` 抽干队列，每 topic 保留最新；`receive_hwm=20`，`poll_timeout_ms=10`
+- **session/frame 去重**：同一 session 内 `frame_id` 不可倒退或重复；session 变化触发输入重置
+- **NATS 背压**：`max_pending_futures=32`，超过则丢弃保持 latest-only
+- **NATS 路由**：按 subject 查询 → Protobuf 解析 → 派发 handler → 回 `CommandAck`
 
 ---
 
-## 4. Unity 采集端（Data Plane 发送）
+## 4. Unity 采集端
 
 ### 4.1 会话与帧标识
 
-- 每次发布会话生成新 `session_id`；同会话内 stereo 与 camera_info 共享 session。
-- `frame_id` 在采集端 **预自增**（`++frameId`）单调分配；这是后续帧对齐的唯一主键。
-- `QuestCameraInfo` 是低频标定流（主线场景 `cameraInfoFps=1`，其 header.frame_id 固定为 0，不承担图像帧对齐职责），Python 按 latest 缓存并用于后续帧，直到收到下一条标定。
+- 每次发布生成新 `session_id`
+- `frame_id` 在采集端预自增（`++frameId`）单调分配，是帧对齐唯一主键
+- `QuestCameraInfo` 低频（默认 1 Hz），`frame_id` 固定为 0
 
-### 4.2 采集流程（每帧）
+### 4.2 采集流程
 
-1. 读取左右 Passthrough texture。
-2. 读取左右相机世界位姿（Quest Passthrough Camera API），中心参考相机位姿取左右的 `Lerp/Slerp` 中点。
-3. **通过短延迟缓冲把图像帧绑定到略早的 camera pose**（默认 `cameraPoseDelayFrames=1`），补偿 Passthrough 纹理相对头显位姿的固有滞后；写入历史的是这份"延迟后"的 pose。
-4. 记录采集时刻：`sender_mono_ms = Time.realtimeSinceStartupAsDouble × 1000`，以及 `Time.frameCount`。
-5. 把左右图压成 JPEG，封装 `QuestStereoFrame`。
-6. 以 multipart `[topic_utf8, protobuf_payload_bytes]` 经 ZMQ 发往 Python。
+1. 读取左右 Passthrough texture 与相机世界位姿
+2. **通过延迟缓冲绑定图像到略早的 camera pose**（默认 `cameraPoseDelayFrames=1`），补偿 Passthrough 纹理滞后
+3. 记录采集时刻：`sender_mono_ms = Time.realtimeSinceStartupAsDouble × 1000`
+4. 压缩左右图为 JPEG，封装 `QuestStereoFrame`
+5. 经 ZMQ 多部分消息 `[topic_utf8, protobuf_bytes]` 发往 Python
 
-### 4.3 帧位姿历史（FramePoseHistory）—— 帧对齐的数据基础
+### 4.3 帧位姿历史（FramePoseHistory）
 
-采集端在发送每帧的同时，把该 `frame_id` 对应的 **采集时刻左/右/中心相机世界位姿** 写入环形缓存：
+采集端同时把 `frame_id → 采集时刻 left/right/center 相机世界位姿` 写入环形缓存：
 
-- 数据结构：`Dictionary<frame_id, FramePoseRecord>` + FIFO 队列；`FramePoseRecord` 含三路相机位姿、`sender_mono_ms`、`unity_frame`。
-- 容量：`capacity = 512`（下限 8）；超出按最旧淘汰。
-- 查询：`TryGet(frame_id)` 为 O(1) 精确匹配；**不做时间插值、不做外推、不做最近邻回退**——必须取得"采集那一刻"的精确相机位姿，命中失败即判对齐失败。
-- 容量含义：512 帧按主线 30 Hz stereo 采集约 17 s 缓冲窗，远大于典型 100–200 ms 端到端时延。
+- 数据结构：`Dictionary<frame_id, FramePoseRecord>` + FIFO 队列
+- 容量：`capacity=512`（约 17 s @ 30 Hz），超出按最旧淘汰
+- 查询：`TryGet(frame_id)` O(1) 精确匹配，**不做时间插值、不做外推、不做最近邻回退**
 
-> 这一"按 frame_id 精确锁定采集时刻相机位姿"的设计，是后续 capture-time 对齐（第 9 节）能够成立的前提。
+> 这一"按 frame_id 精确锁定采集时刻相机位姿"的设计，是后续 capture-time 对齐能够成立的前提。
 
 ---
 
-## 5. Python 接收与运行时主循环
+## 5. Python 接收与运行时
 
 ### 5.1 线程模型
 
-整体是 **单线程 runtime owner 事件循环 + 少量后台线程**：
+- **ZMQ 接收线程**：后台抽干 socket，经无锁 latest-value store 解耦
+- **Runtime owner 主线程**：顺序执行 `TrackingRuntime.tick()`，独占感知 pipeline 与 GPU
+- **异步分割线程**（可选）：后台跑 SAM3 初始分割
+- **NATS 线程**：后台处理发布 future
 
-- **ZMQ 接收线程**：后台抽干 socket，经无锁 latest-value store 解耦。
-- **Runtime owner 主线程**：顺序执行 `TrackingRuntime.tick()`，独占感知 pipeline 与 GPU 状态。
-- **异步分割线程**（可选）：单后台线程跑 SAM3 初始分割。
-- **NATS 事件循环线程**：后台处理发布 future。
-- 线程安全：latest-value store 无锁（覆盖式），命令队列用 `Lock`。
+### 5.2 主循环（每 tick）
 
-### 5.2 主循环顺序（每 tick）
+1. 执行命令队列（至多 `execute_per_tick=8` 条）
+2. 轮询最新 stereo / camera_info（`poll_timeout_ms=10`）
+3. 若 PAUSE，只发心跳
+4. 更新输入就绪状态
+5. 按节流条件（`min_process_interval_ms=0`，默认不节流）决定是否运行感知
+6. 生成 `PoseResult` 并经 NATS 发布（latest-only）
+7. 发布 `AnchorStatusEvent` 与 `ServerHeartbeat`（`interval_s=1.0`）
 
-1. 执行已入队命令（每 tick 至多 `execute_per_tick=8` 条）。
-2. 轮询最新 stereo / camera_info（`poll_timeout_ms=10`）。
-3. 若处于 PAUSE，只发心跳。
-4. 更新输入就绪状态（WAITING_INPUT / WAITING_CALIBRATION / DETECTING）。
-5. 按节流条件（`min_process_interval_ms=0`，默认不节流）决定是否运行感知 pipeline。
-6. 生成 `PoseResult` 并经 NATS 发布（latest-only）。
-7. 发布 `AnchorStatusEvent` 与 `ServerHeartbeat`（`interval_s=1.0`）。
-
-运行时 FPS 用 EMA 平滑：`fps ← 0.9·fps + 0.1·fps_inst`。
-
-### 5.3 运行时状态机
-
-`BOOTING → WAITING_INPUT → WAITING_CALIBRATION → DETECTING → REGISTERING → TRACKING`，以及 `LOST / REACQUIRING / PAUSED / ERROR / STOPPED`。状态由 **输入就绪情况** 与 **每帧观测结果**（has_pose / phase / hint）共同驱动。
+运行时 FPS 用 EMA 平滑：`fps ← 0.9·fps + 0.1·fps_inst`
 
 ---
 
-## 6. Python 感知 pipeline（单帧处理）
+## 6. Python 感知 Pipeline
 
-### 6.1 总流程（按顺序的阶段）
+### 6.1 总流程
 
 ```
-解码 stereo JPEG
-  → 统一到处理分辨率 (process_width=640, process_height=480)
-  → 刷新相机内参映射 K'
-  → [DETECT]   生成/传播目标 mask
-  → [DEPTH]    双目深度估计 + 有效范围截断
-  → [REGISTER 前置校验] mask 像素 + mask 内有效深度比例
-  → [POSE]     FoundationPose register 或 track
-  → [Track 级异常位姿拒绝] 平移/旋转增量门限 → 异常帧输出 no-pose
-  → [渲染质量回查] 颜色重投影 + 深度对齐（只写可靠性信号）
-  → 汇总 PoseObservation（含可靠性评分）
+解码 JPEG → 统一到处理分辨率 (640×480) → 刷新相机内参 K'
+  → 生成/传播目标 mask (YOLOE/SAM3 + Cutie)
+  → 双目深度估计 (FFS) + 有效范围截断
+  → mask 像素 + mask 内有效深度比例校验
+  → FoundationPose register 或 track
+  → 渲染质量回查 (颜色重投影 + 深度对齐)
+  → 汇总 PoseObservation (含可靠性评分)
 ```
 
-`run_stage`（默认 4）控制运行到哪个阶段（1=输入、2=分割、3=深度、4=完整 pose），便于分级调试。
+`run_stage` 控制运行阶段（1=输入、2=分割、3=深度、4=完整 pose）
 
-### 6.2 标定映射（内参缩放到处理分辨率）
+### 6.2 标定映射
 
-把 Quest 原始标定坐标系映射到算法处理分辨率。中心裁剪模式（`assume_center_crop=true`）：
+把 Quest 原始标定映射到算法处理分辨率。中心裁剪模式（`assume_center_crop=true`）：
 
 $$
 f_x' = f_x\,s_x,\quad f_y' = f_y\,s_y,\quad c_x' = (c_x - \text{crop}_x)\,s_x,\quad c_y' = (c_y - \text{crop}_y)\,s_y
 $$
 
-纯缩放模式（`assume_center_crop=false`）则直接 $s_x=W'/W,\ s_y=H'/H$ 对内参线性缩放。仅当 `network_calib_update=true` 且标定变化时刷新 $K'$ 并触发 FoundationPose 重置。
+`network_calib_update=true` 时标定变化触发 FoundationPose 重置。
 
-### 6.3 分割（mask 生成与传播）
+### 6.3 分割
 
-- **初始分割后端**：默认 `yoloe26`（YOLOE-26 开放词表文本分割），可显式切 `sam3`。两者共用文本 `prompt`、`confidence_threshold=0.2`、`max_det=1`、`mask_threshold=0.5`。
+- **初始分割**：默认 `yoloe26`（开放词表文本分割），可切 `sam3`。参数：`prompt`、`confidence_threshold=0.2`、`max_det=1`、`mask_threshold=0.5`
+- **异步分割**（`async_segmentation=true`）：仅用于首次 register。主线提交后立即返回 `WAIT_SEGMENTATION`，后台跑完后在同一帧左右图上继续深度与 register。**关键不变量：第 N 帧的左右图始终与第 N 帧的分割 mask 配对**
+- **Cutie 传播**（`module.cutie.enabled=true`）：register 成功后初始化记忆，其后每帧传播 2D mask。连续空 mask 达 `cutie_lost_reset_frames=5` 后清空注册状态
 
-  - 选最优 mask：二值化后按 score 排序、剔除空 mask（面积 0 标记为无效），取面积非空的最高分；YOLOE 无逐 mask 分时以 `missing_score=1.0` 兜底。
-- **异步分割**（`async_segmentation=true`）：仅用于 **首次 register**。主线提交 `AsyncSegmenterJob` 后立即返回 `WAIT_SEGMENTATION`，后台单线程跑 SAM3；等待期间只刷新输入预览，不同步运行 FFS 深度。结果按 `generation`+`session` 校验后，再在该结果所属的同一帧左右图上继续深度与 register，避免分割慢路径阻塞主链路。**关键不变量：第 N 帧的左右图始终与第 N 帧的分割 mask 配对。**
-- **Cutie 时序传播**（`module.cutie.enabled=true`）：register 成功后用 `Cutie.initialize(rgb, init_mask)` 建立记忆；其后每帧 `Cutie.track(rgb)` 传播 2D mask 并提取 bbox（腐蚀核 `erosion_size=5`）。可选用 bbox 中心轻量修正 FoundationPose `pose_last` 的像平面平移（`adjust_pose=true`）：
+### 6.4 深度估计
 
-  $$
-  t_x' = (x-c_x)\,t_z/f_x,\qquad t_y' = (y-c_y)\,t_z/f_y
-  $$
-
-  - **丢失处理**：已注册阶段若 Cutie 明确返回空 mask，Python 输出 `TRACK_MASK_LOST` / no-pose；连续空 mask 达到 `cutie_lost_reset_frames=5` 后清空本地注册状态，等待后续有效输入重新 register。该路径不是低分自动重注册；持续低可靠性仍由 Unity 运行时决定是否下发 `reacquire/reset`。
-
-### 6.4 深度估计（Fast-FoundationStereo）
-
-输入左右 RGB + `fx` + `baseline`，可选 `scale` 下采样。米制深度：
+Fast-FoundationStereo 输入左右 RGB + `fx` + `baseline`，输出米制深度：
 
 $$
 Z = \frac{f_x \cdot s \cdot b}{d},\qquad d = \mathrm{clip}(d,\,10^{-6},\,\infty)
 $$
 
-其中 $d$ 为视差，$s$ 为内部缩放（下采样时乘 $s$ 修正像素尺度），$b$ 为双目基线。后端优先 TensorRT（`use_trt=true, trt_precision=fp16`），否则 PyTorch（`valid_iters=4, max_disp=192`，自动 padding 到 32 整除 + AMP）。输出后按有效范围清零：$Z<0.1$ 或 $Z>5.0$（米）或非有限值置 0。
+$d$ 为视差，$s$ 为内部缩放，$b$ 为基线。后端优先 TensorRT（`use_trt=true, trt_precision=fp16`），否则 PyTorch（`valid_iters=4, max_disp=192`）。输出后按有效范围清零：$Z<0.1$ 或 $Z>5.0$ m 或非有限值置 0。
 
-### 6.5 位姿估计（FoundationPose register / track）
+### 6.5 位姿估计
 
-mesh 加载时计算 AABB 归一化 `to_origin`、extents、顶点法线；坐标输出为 **OpenCV 相机系（x 右、y 下、z 前）的 4×4 齐次位姿 $T^{c}_{o}$**。
-
-- **REGISTER**（未注册时）：要求 mask 有像素，且 **mask 内有效深度比例** `≥ register_min_depth_valid_in_mask=0.15`。调用 `register(K, rgb, depth, ob_mask, iteration=est_refine_iter=5)`，成功后置 `has_registered=true`，并初始化 Cutie 记忆。
-- **TRACK**（已注册）：调用 `track_one(rgb, depth, K, iteration=track_refine_iter=2)`，以上一帧位姿为先验，迭代更少更快。
-- **对称约束**：`symmetry_mode`（默认 `cube`，可 `none/axis`），消除对称物体的位姿歧义。
-
-### 6.6 Track 级异常位姿拒绝与显式重获取
-
-这里需要把两个容易混淆的"跳变"概念分开：已删除的是可靠性评分与协议字段中的 `score_jump` 子分；代码中仍保留 TRACK 输出后的硬异常保护，即 track-level jump rejection。它不是一个评分项，也不会进入 VCD 可靠性模型。
-
-TRACK 后计算与上一帧位姿的增量：
-
-$$
-\Delta t = \lVert t_k - t_{k-1}\rVert_2,\qquad \Delta r = \arccos\!\Big(\frac{\mathrm{tr}(R_{k-1}^\top R_k)-1}{2}\Big)\ (\text{deg})
-$$
-
-判异常：$\Delta t > 0.6\,\text{m}$ 或 $\Delta r > 100^\circ$（`pose_jump_translation_m / pose_jump_rotation_deg`）。异常帧不被接受为 TRACK，也不会在 Python 内部立即重新 register；pipeline 输出 `TRACK_REJECT` no-pose，并记录 reject 计数与诊断日志字段 `pose_jump_translation_m / pose_jump_rotation_deg`。后续恢复由 Unity 命令驱动：
-
-| 触发                   | 执行语义                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| 显式`reset` 命令     | 清空 Python tracking state，下一有效帧重新检测/register                                                |
-| 显式`reacquire` 命令 | 当前实现校验命令模式，但执行语义与 reset 相同：清空 Python tracking state，下一有效帧重新检测/register |
-| 标定变化               | 新`camera_info` 改变 $K$，pipeline bump generation 并重新 register                                 |
-
-因此 Python 感知链路只输出 `REGISTER`、`TRACK` 或 no-pose 观测；是否重获取目标由对象锚定运行时根据低分、失锁或用户命令统一决定。
+- **REGISTER**（未注册）：要求 mask 有像素且 mask 内有效深度比例 `≥ register_min_depth_valid_in_mask=0.15`。调用 `register(K, rgb, depth, ob_mask, iteration=5)`
+- **TRACK**（已注册）：调用 `track_one(rgb, depth, K, iteration=2)`，以上一帧为先验
+- **对称约束**：`symmetry_mode`（默认 `cube`，可 `none/axis`）
 
 ---
 
-## 7. 可靠性评估模型（科学核心之一）
+## 7. 可靠性评估模型（VCD）
 
-Python 为每个有效 `PoseObservation` 计算 $[0,1]$ 的综合可靠性。当前可用位姿只来自 `REGISTER` 与 `TRACK`；其它阶段已经是 no-pose，最终分直接为 0。综合分采用 **VCD 纯即时评分**（Visibility-gated Color-Depth consistency，无任何历史信号）：
+Python 为每个有效 `PoseObservation` 计算 $[0,1]$ 的综合可靠性。采用 **VCD 纯即时评分**（Visibility-gated Color-Depth consistency）：
 
 $$
 \boxed{R = V \times G_\text{CD},\qquad
 G_\text{CD}=\exp\!\left(\frac{\sum_{i\in E} w_i\log\max(s_i,\varepsilon)}{\sum_{i\in E}w_i}\right)}
 $$
 
-$V$ 为 mask 可见面积占比（可视层），$G_\text{CD}$ 为有效 C/D 一致性证据集合 $E\subseteq\{C,D\}$ 的加权对数几何均值；$C$ 是颜色投影（Color projection，默认权重 0.2），$D$ 是深度对齐（Depth alignment，默认权重 0.8）。某一路证据无效时从 $E$ 中排除，而不是按低分惩罚；两路都无有效 C/D 信号时 $G_\text{CD}=1$，总分退化为只看可见度 $V$。phase/jump/reject/confidence 子分均已移除，相关字段号在 proto 中保留为 `reserved`，不得恢复为运行时字段。
+- $V$：mask 可见面积占比（Visibility 可视层）
+- $G_\text{CD}$：有效 C/D 一致性证据集合 $E\subseteq\{C,D\}$ 的加权对数几何均值
+- $C$：颜色投影（Color projection，默认权重 0.2）
+- $D$：深度对齐（Depth alignment，默认权重 0.8）
+- $\varepsilon$：`geo_floor=0.05`
 
-> 重要：原 `score_jump` 子分已被移除，不应再写成 VCD 的一部分。当前坏 pose 处理分三层：Python 在 TRACK 后用平移/旋转阈值拒绝极端异常位姿；VCD 用颜色投影与深度对齐评价几何一致性；Unity 可选 score gate 与 Static Lock/lifecycle 负责运行时观测拒绝、释放和重获取。只有第一层使用 pose delta 阈值，而且它只输出 no-pose，不输出可靠性子分。
+**关键设计：** 某证据无效时从 $E$ 中排除，而非按低分惩罚；两路都无效时 $G_\text{CD}=1$，总分退化为只看可见度 $V$。
 
-### 7.1 VCD 可视层 V、颜色层 C 与深度层 D
+### 7.1 颜色投影（C）
 
-$$
-R = V\cdot G_\text{CD}
-$$
-
-$V$ 为 mask 可见面积占比，直接作为乘因子（不软化）。**颜色-深度一致性核** $G_\text{CD}$ 是 C（颜色投影 Color projection）与 D（深度对齐 Depth alignment）的 **加权对数几何平均**，并且只对有效证据计权。这里的核只是 VCD 内部的记号分组，避免把 C/D 聚合误写成第四个方法名称：
-
-$$
-G_\text{CD} = \exp\!\left(\frac{\sum_{i\in E}w_i\log\max(s_i,\,\varepsilon)}{\sum_{i\in E}w_i}\right),\qquad E\subseteq\{C,D\},\quad \varepsilon = \text{geo\_floor} = 0.05
-$$
-
-权重：`reproj_weight=0.2` 与 `depth_weight=0.8`（颜色作辅助证据、深度为主，利于手柄等低纹理目标）。$C$ 无效（无纹理/warmup）时自动排除，若只剩深度证据则退化为 $R=V\times D$；若只剩颜色证据则退化为 $R=V\times C$。**两路都无有效信号时 $G_\text{CD}=1$，不武断降分。**
-
-### 7.2 颜色投影子分（Color projection，LAB ZNCC）
-
-不做全图比较，而是：① 取渲染 mask 与观测 mask 交集的核心区域（椭圆腐蚀，核约 `0.15·min(W,H)`，可 `downscale=2` 下采样）；② 转 LAB，亮度通道按 `color_l_weight=0.3` 降权（抑制真实光照变化敏感度）；③ 做零均值归一化互相关 ZNCC；④ 映射到 $[0,1]$：
+取渲染 mask 与观测 mask 交集核心区域（椭圆腐蚀），转 LAB，亮度通道按 `color_l_weight=0.3` 降权，做零均值归一化互相关 ZNCC：
 
 $$
 S_\text{rep} = \mathrm{clamp}_{[0,1]}\!\Big(\tfrac{\text{ZNCC}+1}{2}\Big)
 $$
 
-若核心区无颜色方差（纯色/无纹理）→ 该项标记 **无效并排除 C/D 一致性核**（返回 0.5、valid=False），避免冤枉正确 pose。交集为空 → 0（真实坏 pose 信号）。`min_render_area_px=50` 以下判无效。
+无纹理/纯色 → 标记无效并排除 C 证据（返回 0.5，valid=False），避免冤枉正确 pose。
 
-### 7.3 深度对齐子分
+### 7.2 深度对齐（D）
 
-mask 内有效深度覆盖率 $< 0.10$（`depth_min_coverage`）→ 返回中性 0.5 且无效。否则自适应阈值：
+mask 内有效深度覆盖率 $< 0.10$ → 返回 0.5 且无效。否则自适应阈值：
 
 $$
 \tau_z = \max(\tau_\text{min},\ \rho\cdot\lVert t\rVert),\qquad \rho=0.02,\ \tau_\text{min}=0.005\,\text{m}
 $$
 
-在渲染深度 $Z_r$ 与观测深度 $Z_o$ 的交集上：
+在渲染深度 $Z_r$ 与观测深度 $Z_o$ 交集上：
 
 $$
 S_\text{inlier} = \mathrm{mean}\big(|Z_r-Z_o|<\tau_z\big),\qquad S_\text{med} = \mathrm{clamp}_{[0,1]}\!\Big(1 - \tfrac{\mathrm{median}(|Z_r-Z_o|)}{3\tau_z}\Big)
@@ -317,37 +228,27 @@ $$
 S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}
 $$
 
-### 7.4 渲染质量信号（`reliability.render_quality`）
-
-- 当前实现只采集颜色投影（Color projection）、mask 可见比例和深度对齐（Depth alignment）信号，并写入 PoseResult 子分与 flags。
-- 颜色项无效时从 C/D 一致性核中排除，深度覆盖不足时返回中性 depth score，避免把无信号误当成坏 pose。
-- 渲染质量本身不触发 Python 内部重新 register；持续低分由 Unity 运行时通过 score gate、static lock 低分释放和 `reacquire` 命令处理。
-
 ---
 
 ## 8. Python → Unity（结果回传）
 
-### 8.1 PoseResult 矩阵约定
+`pose_matrix_cv_camera` 是 row-major 展平 4×4：平移在索引 `[3,7,11]`，forward 列在 `[2,6,10]`，up 列在 `[1,5,9]`。Unity 用 `Quaternion.LookRotation(forward, up)` 重建为 OpenCV 相机系下的 object pose。
 
-`pose_matrix_cv_camera` 是 row-major 展平 4×4：平移在索引 `[3,7,11]`，forward 列在 `[2,6,10]`，up 列在 `[1,5,9]`。Unity 用 `Quaternion.LookRotation(forward, up)` 重建为 OpenCV 相机系下的 object pose（避免手写矩阵乘导致 handedness 错误）。
-
-### 8.2 时间戳穿透
-
-`frame_id` 原样穿透回传（对齐主键）；`server_receive_mono_ms`、`server_publish_mono_ms`、`timing.*` 仅作诊断与端到端时延分析，不参与 Unity 位姿计算。
+`frame_id` 原样穿透回传（对齐主键）；`server_receive_mono_ms`、`server_publish_mono_ms`、`timing.*` 仅作诊断，不参与位姿计算。
 
 ---
 
-## 9. Unity 帧对齐（核心贡献：异步 capture-time 对齐）
+## 9. Unity 帧对齐（核心贡献）
 
 ### 9.1 问题
 
-Python 返回的位姿是 **基于一帧旧图像（frame N，约 100 ms 前采集）** 算出的、相机坐标系下的 object pose；而结果到达 Unity 时，头显已移动到 frame N+k。若用 **到达时刻** 的相机位姿做坐标变换，会引入系统性动态配准误差。
+Python 返回的位姿基于约 100 ms 前采集的图像（frame N），相机坐标系下的 object pose；结果到达 Unity 时头显已移动到 frame N+k。若用 **到达时刻** 的相机位姿做坐标变换，会引入系统性动态配准误差。
 
 ### 9.2 接收→对齐→输出流程
 
 ```
 NATS PoseResult 到达 (latest-only)
-  → 主线程解析 (后台线程只收包排队)
+  → 主线程解析
   → 读 pose_matrix_cv_camera → OpenCV camera-local pose
   → 按 header.frame_id 回查 FramePoseHistory（采集时刻相机世界位姿）
   → 命中: 合成 world anchor；未命中: 判 AlignFailed
@@ -356,143 +257,140 @@ NATS PoseResult 到达 (latest-only)
 
 ### 9.3 核心对齐数学
 
-设 frame $f$ 采集时刻参考相机的世界位姿为 $T^{w}_{c,f}$（从历史回查得到），Python 输出经轴翻转后的 Unity 相机本地 object pose 为 $T^{c}_{o}(f)$，则当前世界锚点：
+设 frame $f$ 采集时刻参考相机的世界位姿为 $T^{w}_{c,f}$（从历史回查得到），Python 输出经轴翻转后的 Unity 相机本地 object pose 为 $T^{c}_{o}(f)$，则世界锚点：
 
 $$
 \boxed{\,T^{w}_{o}(f) = T^{w}_{c,f}\cdot T^{c}_{o}(f)\,}
 $$
 
-具体到位置与旋转（Unity `Pose` 语义）：
+具体到位置与旋转：
 
 $$
 p^{w}_{o} = p^{w}_{c,f} + R^{w}_{c,f}\,p^{c}_{o},\qquad R^{w}_{o} = R^{w}_{c,f}\,R^{c}_{o}
 $$
 
-**OpenCV→Unity 相机本地轴翻转**（OpenCV：x 右、y 下、z 前；Unity 相机本地：x 右、y 上、z 前）：
+**OpenCV→Unity 相机本地轴翻转**（OpenCV：x 右、y 下、z 前；Unity：x 右、y 上、z 前）：
 
 $$
 R_u = S\,R_\text{cv}\,S,\qquad S = \mathrm{diag}(1,-1,1)
 $$
 
-位置做对应的 y 取反。实现上用 forward/up 重建四元数（`flipY=true` 默认）而非直接写矩阵，规避 handedness 陷阱。对齐后再叠加 camera-local / anchor-local / world 三路可配置补偿偏移。
+实现用 forward/up 重建四元数（`flipY=true`），规避 handedness 陷阱。
 
-### 9.4 命中失败与诊断对照
+### 9.4 对齐失败与诊断
 
-- **未命中**（frame_id 已被环形缓存淘汰、或位姿矩阵非法、或 has_pose=false）→ 返回 `AlignFailed`，由锚定策略进入保持/失锁逻辑。**不外推、不近邻回退。**
-- **arrival-time raw 对照**：另有一条用"最新相机位姿"对齐的诊断路径（`TryAlignWithLatestCameraPose`），**仅用于评估"如果直接用到达时刻头显位姿会怎样"**，绝不作为正式 anchor 输出。
-
-> 这正是本系统区别于"直接到达时刻变换"基线的关键：把 object pose 始终锚回 **采集那一刻** 的相机参考，再链接到当前世界，从而消化掉所有中间头动。
+- **未命中**（frame_id 已淘汰、或位姿矩阵非法、或 has_pose=false）→ 返回 `AlignFailed`，由锚定策略进入保持/失锁逻辑。**不外推、不近邻回退**
+- **arrival-time raw 对照**：另有用"最新相机位姿"对齐的诊断路径（`TryAlignWithLatestCameraPose`），**仅用于评估**，绝不作为正式 anchor
 
 ---
 
-## 10. Unity 锚定策略（科学核心之二）
+## 10. Unity 锚定策略
 
-锚定策略把已对齐的、低频且含噪的 world pose 流，转成每帧稳定输出。组成：
+锚定策略把已对齐的、低频且含噪的 world pose 流转成每帧稳定输出。组成：
 
 `AnchorPolicy = MotionModel + SmoothingStrategy + 可选 score gate + 可选 static lock`
 
-三种 MotionModel × 三种 SmoothingStrategy 可任意组合（9 变体），叠加可选 static lock 作为方法型增强。时间语义分为两条轴：`MeasurementTimeSeconds`（优先 capture time）用于运动模型、平滑策略和静止锁，避免"消息到达但观测时间不在那一刻"的系统偏差；`LifecycleTimeSeconds` 使用 Unity 到达时间，用于 stale/lost 判断和低分持续时间，避免 register 推理耗时较长时高分 pose 刚到达便被误判为陈旧。旋转一律在四元数切空间（Log/Exp 映射）处理。
+三种 MotionModel × 三种 SmoothingStrategy 可任意组合（9 变体）。时间语义分为两条轴：`MeasurementTimeSeconds`（优先 capture time）用于运动模型、平滑策略和静止锁；`LifecycleTimeSeconds`（Unity 到达时间）用于 stale/lost 判断和低分持续时间。
 
 ### 10.1 锚定状态机
 
-状态：`Uninitialized / Searching / Tracking / Coasting / FrozenUncertain / Lost / Relocalizing / Paused / Error`。按可靠位姿到达、观测间隔 gap 升级与命令驱动迁移：
+`Uninitialized / Searching / Tracking / Coasting / FrozenUncertain / Lost / Relocalizing / Paused / Error`
 
-- 短 gap（$\le$ `coastTimeoutSeconds=0.45`）→ Coasting（输出预测）。
-- 中 gap → FrozenUncertain（保持最后有效）。
-- 长 gap（source 默认 `lostTimeoutSeconds=1.0`，主线场景可覆盖为 2.0 s）→ Lost（不输出，黏滞至 reset/reacquire）。
-- `trackingScoreFloor` 的源码默认值为 0，EgoAnchor 真机/评估场景可覆盖为 0.5，用作用户可见低质/状态降级提示；真正请求 Python 重 register 使用更低的 `lowScoreReacquireThreshold=0.45`，且低分需持续 `0.6 s`。此外，进入 Lost 时若 `enableLostReacquire=true`（源码默认开），运行时也会请求 server reacquire。
+- 短 gap（$\le$ `coastTimeoutSeconds=0.45`）→ Coasting（输出预测）
+- 长 gap（源码默认 `lostTimeoutSeconds=1.0`，主线场景可覆盖 2.0 s）→ Lost（不输出）
+- `trackingScoreFloor` 源码默认 0，场景可覆盖 0.5 作状态提示；重 register 使用更低的 `lowScoreReacquireThreshold=0.45`，且需持续 `0.6 s`
 
-### 10.2 门控（GateDecision）
+### 10.2 门控
 
-每观测产出 `Accept / Snap / Hold / Reject`。可选 score gate（`enableScoreGate`，源码默认关，EgoAnchor 场景可开启）开启时：可靠性总分 $<$ 阈值，或 $|$测量−预测$|$ 超跳变阈值（位置/旋转）→ Reject；首帧 → Snap。定位是"拒绝坏观测"，不负责平滑。VCD 风格的 C/D 一致性加权（`reproj_weight=0.2, depth_weight=0.8, GeoFloor=0.05`）只用于低分重获取的诊断原因分类，不是 score gate 的额外接受/拒绝条件。
+可选 score gate（`enableScoreGate`，源码默认关，场景可开启）：可靠性总分 $<$ 阈值或 $|$测量−预测$|$ 超跳变阈值 → Reject。定位是"拒绝坏观测"，不负责平滑。
 
-### 10.3 运动模型数学
+### 10.3 运动模型
 
-**ConstantVelocity（基线，差分速度、不去噪）：**
+**ConstantVelocity（基线）：**
 
 $$
 p(t)=p_n+v(t-t_n),\quad q(t)=q_n\otimes\exp\!\big(\omega(t-t_n)\big),\quad v=\tfrac{p_n-p_{n-1}}{\Delta t},\ \omega=\tfrac{\log(q_{n-1}^{-1}q_n)}{\Delta t}
 $$
 
-**Kalman（常速度 CV，去噪 + 最优速度）：** 位置 x/y/z 三路 1D CV Kalman，旋转在切空间三路 CV Kalman。单轴状态 $\mathbf{x}=[p,v]^\top$：
+**Kalman（CV，去噪 + 最优速度）：** 位置 x/y/z 三路 1D CV Kalman，旋转在切空间三路 CV。单轴状态 $\mathbf{x}=[p,v]^\top$：
 
 $$
 \mathbf{F}=\begin{bmatrix}1&\Delta t\\0&1\end{bmatrix},\quad \mathbf{H}=[1\ 0],\quad \mathbf{P}\leftarrow\mathbf{FPF}^\top+\mathbf{Q},\quad K=\tfrac{\mathbf{PH}^\top}{\mathbf{HPH}^\top+r},\quad \mathbf{x}\leftarrow\mathbf{x}+K(z-p)
 $$
 
-默认：位置过程噪声 $0.20$、位置测量噪声 $0.0004$、旋转过程噪声 $0.40$、旋转测量噪声 $0.0025$。**Unity 版无 maxPredictAhead 限幅**——外推不截断，平滑交给 SmoothingStrategy（限幅正是旧版"平段+跳变"的根源）。
+默认：位置过程噪声 $0.20$、位置测量噪声 $0.0004$、旋转过程噪声 $0.40$、旋转测量噪声 $0.0025$。**Unity 版无 maxPredictAhead 限幅**。
 
-**One Euro（自适应低通）：** 每轴两级：先以固定 `dCutoff` 低通原始速度得 $\hat{\dot x}$，再用速度自适应截止低通信号本身：
+**One Euro（自适应低通）：** 每轴两级低通：
 
 $$
 f_c = f_\text{min} + \beta\,|\hat{\dot x}|,\qquad \alpha(\Delta t,f_c)=\frac{1}{1+\tau/\Delta t},\quad \tau=\frac{1}{2\pi f_c},\qquad \hat x\leftarrow\hat x+\alpha(z-\hat x)
 $$
 
-默认：`minCutoff=1.0 Hz, beta=0.25, derivativeCutoff=1.0 Hz`。
+默认：`minCutoff=1.0 Hz, beta=0.25, derivativeCutoff=1.0 Hz`
 
 ### 10.4 平滑策略
 
-**RawPassthrough**：零阶保持，不外推不插值（raw baseline）。
+**RawPassthrough**：零阶保持，不外推不插值。
 
-**Blend（零延迟外推 + 残差融合）：** 预测到当前时间，再把"上一帧输出与当前预测之差"作为残差逐帧指数还掉：
+**Blend（零延迟外推 + 残差融合）：** 预测到当前时间，再把残差逐帧指数还掉：
 
 $$
 y_t = \text{predict}(t)\oplus \text{residual}_t,\qquad \text{residual}\leftarrow \text{residual}\cdot d^{\,\Delta t_\text{render}\cdot 60}
 $$
 
-默认 `decayPerFrame=0.9`（按 60 fps 归一，半衰期≈158 ms）。外推时域自适应：$L=\min(\hat\tau\cdot m,\ L_\text{max})$，`extrapolationLatencyMultiplier=1.0`、硬上限 `maxExtrapolationSecondsHardCap=0.3`；时延估计用非对称 EMA（上行快 0.5、下行慢）。
+默认 `decayPerFrame=0.9`（半衰期≈158 ms）。外推时域自适应：$L=\min(\hat\tau\cdot m,\ L_\text{max})$，`extrapolationLatencyMultiplier=1.0`、硬上限 `maxExtrapolationSecondsHardCap=0.3`。
 
-**DelayedInterp（主动延迟 + 真插值）：** 渲染目标取 $t-\Delta$，落在两个已到控制点之间做插值（非外推），保证精确过点：
+**DelayedInterp（主动延迟 + 真插值）：** 渲染目标取 $t-\Delta$，落在两个已到控制点间做插值（非外推），保证精确过点：
 
 $$
 \Delta = \max(\hat\tau\cdot s,\ \Delta_\text{min}),\qquad s=\text{latencySafetyMargin}=1.15,\ \Delta_\text{min}=0.25\text{s}
 $$
 
-可选 Cubic Hermite（速度切线，按 `hermiteTangentChordRatio=3.0` 限幅防急停过冲）或 Centripetal Catmull-Rom（$\alpha=0.5$，邻点自动切线）。控制点来源可为 raw / OneEuro / Kalman。
+可选 Cubic Hermite（速度切线，按 `hermiteTangentChordRatio=3.0` 限幅）或 Centripetal Catmull-Rom（$\alpha=0.5$）。
 
-### 10.5 Static Lock（EgoAnchor 方法核心增强）
+### 10.5 Static Lock（EgoAnchor 核心增强）
 
-不是又一个滤波器，而是 **"静止即锚、默认锁定、证据解锁"** 的先验层，叠加在 `MotionModel×Smoothing` 之上。多数 MR 物体（家具、面板、桌面工具）长期静止，头动与观测噪声主导其表观抖动。
+**"静止即锚、默认锁定、证据解锁"** 的先验层，叠加在 `MotionModel×Smoothing` 之上。多数 MR 物体长期静止，头动与观测噪声主导其表观抖动。
 
-**进入锁定：** 观测线速度 $\le$ `enterSpeedMps=0.05`、角速度 $\le$ `enterAngSpeedDps=35`、score $\ge$ `minScore=0.25`，持续 `dwellSeconds=0.35` s；锚原点取观测共识 EMA（非锁定 pose）。
+**进入锁定：** 观测线速度 $\le$ `enterSpeedMps=0.05`、角速度 $\le$ `enterAngSpeedDps=35`、score $\ge$ `minScore=0.25`，持续 `dwellSeconds=0.35` s
 
 **多路解锁证据（任一触发）：**
 
 | 机制             | 含义                                                             | 关键默认                                 |
 | ---------------- | ---------------------------------------------------------------- | ---------------------------------------- |
 | Score 加权 CUSUM | 超死区位移按 score 加权累积、半衰期衰减                          | 阈值`0.08 m / 20°`，半衰期 `0.27 s` |
-| 绝对漂移租绳     | 观测共识相对锚原点的绝对位移（解决慢漂移 CUSUM 卡死）            | `0.015 m / 5°`                        |
+| 绝对漂移租绳     | 观测共识相对锚原点的绝对位移                                     | `0.015 m / 5°`                        |
 | 速度逃逸         | 观测速度$>$ 进入阈值×`unlockSpeedFactor=2.5` 持续 `0.4 s` | —                                       |
-| 低分释放         | score$<$ `0.3` 持续 `0.6 s`（避免锚到错误旧 pose）         | —                                       |
+| 低分释放         | score$<$ `0.3` 持续 `0.6 s`                                | —                                       |
 
-**死区**（位置 `0.008 m`、旋转 `3°`）内视为噪声不累积；**漏积分蠕变**（半衰期 `2.7 s`、score 加权、头动门控）把锁点缓慢精修到共识中心；**解锁接缝** 用残差衰减（`seamDecayPerFrame=0.85`）平滑过渡到内层轨迹；**重锁抑制** `1.0 s` 防抖振。
+**死区**（位置 `0.008 m`、旋转 `3°`）内视为噪声不累积；**漏积分蠕变**（半衰期 `2.7 s`、score 加权、头动门控）把锁点缓慢精修到共识中心；**解锁接缝** 用残差衰减（`seamDecayPerFrame=0.85`）平滑过渡；**重锁抑制** `1.0 s` 防抖振。
 
-**头动感知与距离自适应（关键鲁棒性）：**
+**头动感知与距离自适应：**
 
-- 头动只 **放宽** 位置/旋转阈值（`headMaxToleranceFactor` 至 4×）并抑制蠕变；头停后 `headSettleSeconds=0.6` s 内冻结解锁证据，待共识消化头动残差——抑制"头扫过物体再停下"造成的误解锁。
-- 距离自适应：位置容差随物体距离放大（补偿立体深度噪声 $\propto z$），`refDist=0.4 m, slope=1.0, maxFactor=3.0`；**仅放大位置通道，不改旋转**。
+- 头动 **放宽** 位置/旋转阈值（`headMaxToleranceFactor` 至 4×）并抑制蠕变；头停后 `headSettleSeconds=0.6` s 内冻结解锁证据，待共识消化头动残差
+- 距离自适应：位置容差随物体距离放大（补偿立体深度噪声 $\propto z$），`refDist=0.4 m, slope=1.0, maxFactor=3.0`；**仅放大位置，不改旋转**
 
 ---
 
 ## 11. Unity 渲染应用层
 
-`DynamicObjectAnchor` 是最薄一层：只读 `PoseToAnchorRuntime` 的最终输出并写到目标 Transform；无网络、无滤波、无状态机。无有效 pose 时可选保持上一帧或隐藏渲染器。`AnchorRuntimeHub` 负责把同一 `PoseResult` 扇出给多个并行 runtime（用于策略对比研究），保证各 runtime 见到完全一致的输入。
+`DynamicObjectAnchor` 是最薄一层：只读 `PoseToAnchorRuntime` 的最终输出并写到目标 Transform；无网络、无滤波、无状态机。`AnchorRuntimeHub` 负责把同一 `PoseResult` 扇出给多个并行 runtime（用于策略对比研究）。
 
 ---
 
-## 12. 命令与生命周期管理
+## 12. 命令与生命周期
 
-### 12.1 命令类型与语义
+### 12.1 命令类型
 
-Unity → Python：`reset`、`reacquire`（NEXT_VALID_FRAME / LATEST_FRAME_IF_AVAILABLE / FORCE_DETECT）、`control`（SET_STAGE / PAUSE / RESUME）。在 Python 当前实现中，`reset` 与 `reacquire` 都会清空 pipeline tracking state；`ResetTrackingRequest` 的 `clear_filters / clear_anchor_pose` 与 `ReacquireAnchorRequest` 的 `clear_tracking_first / prompt_override / timeout_ms` 是协议字段或调用侧语义，Python 执行层尚未把它们拆成不同运行时行为。
+Unity → Python：`reset`、`reacquire`（NEXT_VALID_FRAME / LATEST_FRAME_IF_AVAILABLE / FORCE_DETECT）、`control`（SET_STAGE / PAUSE / RESUME）。在 Python 当前实现中，`reset` 与 `reacquire` 都会清空 pipeline tracking state。
 
-handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL `dedup_ttl_ms=60000`）→ 入队（`max_queue_size=128`）→ 立即回 `CommandAck`。**真正执行在 runtime owner 线程的 tick 边界**（每 tick 至多 8 条），保证 pipeline 状态单线程顺序变更。
+handler 层：类型校验 → 参数校验 → `request_id` 去重（TTL `60000 ms`）→ 入队（`max_queue_size=128`）→ 立即回 `CommandAck`。**真正执行在 runtime owner 线程的 tick 边界**（每 tick 至多 8 条）。
 
-因此 `CommandAck.accepted=true` 只表示"已接受"，不表示"已执行完成"；实际完成通过 `AnchorStatusEvent` 与 `ServerHeartbeat` 回馈。
+`CommandAck.accepted=true` 只表示"已接受"，不表示"已执行完成"；实际完成通过 `AnchorStatusEvent` 与 `ServerHeartbeat` 回馈。
 
 ### 12.2 评估会话协同
 
-`runtime.logging.eval_session_enabled=true` 时，Python 在 `data/eval/<session_id>/` 创建共享目录并写 `python_session.json` 元数据（含 runtime log 文件名）；Unity 据此自动配对 Python 与 Unity 两侧 JSONL 日志，供离线评估（第 14 节）使用。session_id 形如 `YYYYMMDD_HHMMSS_<object_id>`。
+`runtime.logging.eval_session_enabled=true` 时，Python 在 `data/eval/<session_id>/` 创建共享目录并写 `python_session.json` 元数据；Unity 据此自动配对两侧 JSONL 日志，供离线评估使用。
 
 ---
 
@@ -570,7 +468,6 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 | Cutie          | seg_threshold / erosion_size                       | 0.1 / 5                                         | mask 传播                 |
 | FoundationPose | est_refine_iter / track_refine_iter                | 5 / 2                                           | register/track 迭代       |
 | FoundationPose | register_min_depth_valid_in_mask                   | 0.15                                            | 注册深度门限              |
-| FoundationPose | pose_jump_translation_m / pose_jump_rotation_deg   | 0.6 m / 100°                                   | 跳变阈值                  |
 | 可靠性         | geo_floor / reproj_weight / depth_weight           | 0.05 /**0.2** / **0.8**             | C/D 一致性核（toml 覆盖） |
 | 可靠性         | depth_distance_ratio / depth_min_inlier_thresh_m   | 0.02 / 0.005 m                                  | 深度对齐阈值              |
 | 可靠性         | color_l_weight / downscale / min_render_area_px    | 0.3 / 2 / 50                                    | 颜色投影                  |
@@ -695,7 +592,7 @@ handler 层只做：类型校验 → 参数校验 → `request_id` 去重（TTL 
 2. **记录历史**：把 `frame_id → 采集时刻相机位姿` 写入 FramePoseHistory（容量 512）。
 3. **发送**：`QuestStereoFrame`（JPEG）与 `QuestCameraInfo` 经 ZMQ 发往 Python。
 4. **Python 接收**：latest-drain 取最新输入，session/frame 去重。
-5. **感知**：解码 → 统一分辨率 → 刷新 $K'$ → 分割（YOLOE/SAM3 + Cutie 传播）→ 深度（$Z=f_x s b/d$）→ FoundationPose register/track → Track 级异常位姿拒绝 → 渲染质量回查。
+5. **感知**：解码 → 统一分辨率 → 刷新 $K'$ → 分割（YOLOE/SAM3 + Cutie 传播）→ 深度（$Z=f_x s b/d$）→ FoundationPose register/track → 渲染质量回查。
 6. **可靠性**：$R=V\cdot G_\text{CD}$，打包 `PoseResult`（camera-space 4×4 + V/C/D 质量子分与诊断 flags）经 NATS 发布。
 7. **Unity 对齐**：按 `frame_id` 回查采集时刻相机位姿，$T^w_o=T^w_{c,f}\,T^c_o$，合成 world anchor。
 8. **锚定策略**：MotionModel（CV/Kalman/1€）+ Smoothing（Raw/Blend/DelayedInterp）+ 可选 score gate + 可选 Static Lock。运动模型、平滑和静止锁使用 capture-time measurement axis；生命周期 stale/lost 与低分持续时间使用 Unity arrival/sample time。

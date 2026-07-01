@@ -232,10 +232,7 @@ class PipelineTrackingState:
     """Cutie 是否已用当前目标 mask 初始化。"""
 
     last_pose: np.ndarray | None = None
-    """上一帧接受的 4x4 pose，用于跳变检测。"""
-
-    track_reject_count: int = 0
-    """连续 track reject 次数。"""
+    """上一帧接受的 4x4 pose，用于后续处理参考。"""
 
     frames_since_register: int = 0
     """最近一次 register 后已经处理的 track 帧数，用于 warmup。"""
@@ -246,14 +243,12 @@ class PipelineTrackingState:
     cutie_lost_frames: int = 0
     """Cutie 连续返回空 mask 的帧数；达到阈值才触发本地 clear_registration。"""
 
-    def clear_registration(self, *, reset_reject_count: bool = True) -> None:
+    def clear_registration(self) -> None:
         """清空依赖当前 register/track 的状态，保留代数和帧时间历史。"""
 
         self.has_registered = False
         self.cutie_ready = False
         self.last_pose = None
-        if reset_reject_count:
-            self.track_reject_count = 0
         self.frames_since_register = 0
         self.cutie_lost_frames = 0
 
@@ -261,5 +256,5 @@ class PipelineTrackingState:
         """进入新跟踪代，并清空依赖历史 pose/mask 的状态。"""
 
         self.generation += 1
-        self.clear_registration(reset_reject_count=True)
+        self.clear_registration()
         self.last_sender_mono_ms = None

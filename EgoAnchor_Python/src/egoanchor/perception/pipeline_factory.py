@@ -275,8 +275,6 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         min_depth_m=float(depth_cfg.min_depth),
         max_depth_m=float(depth_cfg.max_depth),
         register_min_depth_valid_in_mask=float(fp_cfg.register_min_depth_valid_in_mask),
-        pose_jump_translation_m=float(fp_cfg.pose_jump_translation_m),
-        pose_jump_rotation_deg=float(fp_cfg.pose_jump_rotation_deg),
         cutie_enabled=bool(cutie_cfg.enabled),
         cutie_adjust_pose=bool(cutie_cfg.adjust_pose),
         log_stats_interval=int(debug_cfg.pipeline_stats_interval),

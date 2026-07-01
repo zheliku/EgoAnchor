@@ -105,9 +105,6 @@ class PoseObservation:
     frame_dt_s: float = 0.0
     """当前 pose 与上一处理 pose 的帧间隔，单位秒，帧间间隔遥测。"""
 
-    track_reject_count: int = 0
-    """连续 track reject 计数。"""
-
     yolo_ms: float = 0.0
     """YOLOE 分割耗时，单位毫秒。"""
 
