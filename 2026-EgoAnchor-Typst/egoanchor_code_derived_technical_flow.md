@@ -212,21 +212,44 @@ $$
 
 ### 7.2 深度对齐（D）
 
-mask 内有效深度覆盖率 $< 0.10$ → 返回 0.5 且无效。否则自适应阈值：
+mask 内有效深度覆盖率 $< 0.10$ → 返回 0.5 且无效。否则采用 **绝对-结构联合评估**：
 
 $$
-\tau_z = \max(\tau_\text{min},\ \rho\cdot\lVert t\rVert),\qquad \rho=0.02,\ \tau_\text{min}=0.005\,\text{m}
+\boxed{D = (1-\alpha)\,D_\text{abs} + \alpha\,D_\text{struct}}
 $$
 
-在渲染深度 $Z_r$ 与观测深度 $Z_o$ 交集上：
+**绝对残差分量** $D_\text{abs}$：在核心区域（3×3 腐蚀 mask 排除边缘噪声）内，采用距离自适应阈值：
 
 $$
-S_\text{inlier} = \mathrm{mean}\big(|Z_r-Z_o|<\tau_z\big),\qquad S_\text{med} = \mathrm{clamp}_{[0,1]}\!\Big(1 - \tfrac{\mathrm{median}(|Z_r-Z_o|)}{3\tau_z}\Big)
+\tau(p) = \max(\tau_\text{min},\ \rho_z\,D_\text{rnd}(p)),\qquad \rho_z=0.02,\ \tau_\text{min}=5\,\text{mm}
+$$
+
+联合评估内点比例与归一化残差中位数：
+
+$$
+D_\text{abs} = \lambda\,\rho_\text{inlier} + (1-\lambda)\,S_\text{med},\qquad \lambda=0.6
 $$
 
 $$
-S_\text{dep} = 0.5\,S_\text{inlier} + 0.5\,S_\text{med}
+\rho_\text{inlier} = \tfrac{1}{|\Omega|}\sum_{p\in\Omega}\mathbb{1}[e(p)<\tau(p)],\qquad S_\text{med} = 1 - \mathrm{median}\Big(\min\big(\tfrac{e(p)}{s\cdot\tau(p)},1\big)\Big),\qquad s=2.5
 $$
+
+其中 $s=2.5$ 为残差容忍倍数，鲁棒应对双目立体深度的系统性偏差。
+
+**相对结构分量** $D_\text{struct}$：对渲染深度和观测深度分别减去各自中位数并除以四分位距（IQR）归一化后，计算零均值互相关（ZNCC）并映射到 $[0,1]$。该机制识别深度形状完全对齐的正确位姿，即使存在全局偏移或局部系统噪声。
+
+**自适应融合权重**：
+
+$$
+\alpha = \begin{cases}
+0, & \text{IQR} < 20\,\text{mm} \quad\text{(平坦表面，回退绝对残差)}\\
+\alpha_\text{max}\cdot\min(\text{IQR}/20\,\text{mm},\ 1), & \text{IQR} \ge 20\,\text{mm} \quad\text{(高频几何，引入结构验证)}
+\end{cases}
+$$
+
+其中 $\alpha_\text{max}=0.35$。该机制解决手柄等高频几何物体在特殊角度下"形状正确但有系统性深度噪声"导致的深度分过低问题（实测从 0.306/0.406 提升到 0.9+）。
+
+**配置参数**：`[reliability.render_quality]` 新增 `depth_residual_scale`、`depth_enable_structural`、`depth_structural_max_weight`、`depth_structural_iqr_thresh`、`depth_core_erode_kernel`。
 
 ---
 

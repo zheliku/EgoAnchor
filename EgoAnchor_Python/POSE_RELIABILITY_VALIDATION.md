@@ -182,6 +182,6 @@ mode = "re_register" # score_only=只降分写 flag 不重注册；re_register=�
 
 - `color_reprojection` 一直是 `-1`：确认已进入 TRACK、Cutie mask 非空、warmup 结束、K 已更新，且渲染面积没有太小。
 - `reprojection_low` 很多但肉眼 pose 正常：先保持 `score_only`，检查 mesh 尺度、K 映射、渲染 mask 与观测 mask 方向，以及 LAB 颜色受光照影响的程度。
-- `depth_alignment_low` 很多：看 `render_quality_depth_residual_m` 和 `render_quality_depth_inlier`，优先排查 FFS 深度、双目同步、K 映射和 mesh 尺度。
+- `depth_alignment_low` 很多：看 `render_quality_depth_residual_m` 和 `render_quality_depth_inlier`，优先排查 FFS 深度、双目同步、K 映射和 mesh 尺度。自 2026-07-03 起，深度对齐采用绝对-结构联合评估（见 `../2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 第 7.2 节），针对高频几何物体在特殊角度下的系统性深度噪声进行了优化。相关测试：`tests/test_structural_depth_alignment.py`。
 - `depth_coverage_insufficient` 很多：这类帧的 `score_depth=0.5` 多半是中性诊断，先查 mask 内有效深度覆盖率。
 - score 分布整体变低：这是几何合取核的预期表现。重投影高但深度有效低分时，最终分会明显下降；Unity 阈值要用新日志分布重新复核。

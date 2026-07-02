@@ -140,7 +140,7 @@ Python 代码地图：
 - `src/egoanchor/perception/quest_calibration.py`：Quest camera_info 到算法处理分辨率 K 的映射，支持 center-crop 和线性缩放。
 - `src/egoanchor/algorithms/`：单模型适配层。`yoloe26_segmenter.py`、`sam3_segmenter.py` 都输出统一 `SegmenterResult`；pipeline 不理解模型内部细节。
 - `src/egoanchor/algorithms/foundationpose_estimator.py`：FoundationPose facade，可靠性层只能通过 `render_color_depth_mask(...)`，不要直接访问第三方 estimator 内部对象。
-- `src/egoanchor/reliability/`：`reprojection.py` 只做交集区域 LAB 颜色重投影；`depth_alignment.py` 只做渲染 depth 与 FFS depth 对齐；`render_quality.py` 负责一次渲染后协调两者；`pose_quality.py` 合成总可靠性分。
+- `src/egoanchor/reliability/`：`reprojection.py` 只做交集区域 LAB 颜色重投影；`depth_alignment.py` 只做渲染 depth 与 FFS depth 对齐，采用距离和几何复杂度自适应阈值；`render_quality.py` 负责一次渲染后协调两者；`pose_quality.py` 合成总可靠性分。
 
 Python 细节坑：
 
@@ -149,7 +149,8 @@ Python 细节坑：
 - `pose_jump_translation_m/pose_jump_rotation_deg` 仍是 TRACK 后的硬异常位姿拒绝阈值，触发时输出 `TRACK_REJECT` no-pose，但不生成可靠性子分，也不自动重新 register；已删除的是 proto/评分里的 `score_jump` 子分。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
 - VCD 可靠性评分统一解释为 Visibility-gated Color-Depth consistency：`R = V * G_CD`，其中 `G_CD = exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效 C/D 一致性证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。论文中不要把 `G_CD` 写成独立于 VCD 的第四个方法名。
-- 文献定位上不要把 VCD 单独表述为“首次提出 pose confidence / pose quality scoring”。已有 6D pose 文献包含 render-and-compare、hypothesis scoring、confidence、VSD/visible depth discrepancy 等相近思想；EgoAnchor 的创新边界应写成“面向 passthrough MR object anchoring 的在线、可解释、无 GT runtime reliability signal”，并强调它驱动 frame-aligned anchoring runtime 中的观测接收、静止锁、状态降级、reacquire 和 anchor 生命周期管理。
+- 文献定位上不要把 VCD 单独表述为”首次提出 pose confidence / pose quality scoring”。已有 6D pose 文献包含 render-and-compare、hypothesis scoring、confidence、VSD/visible depth discrepancy 等相近思想；EgoAnchor 的创新边界应写成”面向 passthrough MR object anchoring 的在线、可解释、无 GT runtime reliability signal”，并强调它驱动 frame-aligned anchoring runtime 中的观测接收、静止锁、状态降级、reacquire 和 anchor 生命周期管理。
+- 深度对齐采用绝对-结构联合评估：`D = (1-α)·D_abs + α·D_struct`，其中 `D_abs` 基于逐像素残差统计（核心区域、距离自适应阈值、更宽容的残差容忍度 2.5×），`D_struct` 通过归一化深度图的 ZNCC 评估深度结构的空间对应关系。权重 `α ∈ [0, 0.35]` 根据深度 IQR 自适应调整：平坦表面（IQR < 20mm）回退到纯绝对残差，高频几何（IQR ≥ 20mm）引入结构验证。该机制解决手柄等高频几何物体在特殊角度下”形状正确但有系统性深度噪声”导致的深度分过低问题，实测从 0.406/0.306 提升到 0.9+，避免频繁误触发重定位。
 - depth 覆盖不足或渲染深度对齐无信号时 `score_depth=0.5` 是中性显示，不进入几何合取核；`render_quality_status=valid_no_valid_depth_overlap` 这类 `valid_*` 只表示颜色路径有效，不能当作深度有效信号。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
 

@@ -87,6 +87,11 @@ class RenderQualityChecker:
         depth_distance_ratio: float = 0.02,
         depth_min_inlier_thresh_m: float = 0.005,
         depth_min_coverage: float = 0.10,
+        depth_residual_scale: float = 2.5,
+        depth_enable_structural: bool = True,
+        depth_structural_max_weight: float = 0.35,
+        depth_structural_iqr_thresh: float = 0.02,
+        depth_core_erode_kernel: int = 3,
         min_render_area_px: int = 50,
         color_l_weight: float = 0.3,
         downscale: int = 2,
@@ -103,8 +108,13 @@ class RenderQualityChecker:
             distance_ratio=depth_distance_ratio,
             min_inlier_thresh_m=depth_min_inlier_thresh_m,
             min_depth_coverage=depth_min_coverage,
+            residual_scale=depth_residual_scale,
+            enable_structural=depth_enable_structural,
+            structural_max_weight=depth_structural_max_weight,
+            structural_iqr_thresh=depth_structural_iqr_thresh,
+            core_erode_kernel=depth_core_erode_kernel,
         )
-        """深度 checker，只管渲染深度和观测深度残差。"""
+        """深度 checker，执行绝对-结构联合深度对齐评估。"""
 
         self.min_render_area_px = max(1, int(min_render_area_px))
         """渲染前景过小时判为无效信号的像素阈值。"""
