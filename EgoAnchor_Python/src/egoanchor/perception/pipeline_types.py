@@ -27,6 +27,9 @@ class PipelineStepTiming:
     pose_ms: float = 0.0
     """FoundationPose register/track 耗时，单位毫秒。"""
 
+    render_quality_ms: float = 0.0
+    """渲染质量检测耗时，单位毫秒。"""
+
     total_ms: float = 0.0
     """整帧处理耗时，单位毫秒。"""
 
@@ -199,6 +202,12 @@ class FrameDiagnostics:
 
     timing: PipelineStepTiming = field(default_factory=PipelineStepTiming)
     """当前帧耗时。"""
+
+    debug_render_ms: float = 0.0
+    """主调试窗口渲染耗时，单位毫秒。"""
+
+    score_render_ms: float = 0.0
+    """评分调试窗口渲染耗时，单位毫秒。"""
 
 
 @dataclass(slots=True)

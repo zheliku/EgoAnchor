@@ -258,9 +258,9 @@ Unity 场景/序列化注意事项：
 5. 至少 3 个代表性刚体物体。
 6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor-Typst/egoanchor_cn_v2.typ` 是当前中文主稿；`egoanchor_cn_v1.typ` 为上一版 Typst 草稿；参考文献入口为 `2026-EgoAnchor-Typst/egoanchor_cn.bib`。`2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，并已合并旧 `docs/architecture/` 技术路线内容；论文实现细节、统一术语、公式和系统边界优先以该文档和代码为准。`2026-EgoAnchor-Typst/figs/` 放当前 Typst 图像资产，`2026-EgoAnchor-Typst/pdf/` 是生成产物。
-论文写作使用 Typst 语法，不使用 LaTeX/BibTeX 编译链。写完主稿后在仓库根目录运行：`typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v2.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v2.pdf`。
-旧 `docs/architecture/` 已被完全删除，系统架构、技术路线与绘图提示词后续统一维护在 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 内。第三章（方法）已于 2026-07-01 完成重写，实现与底层代码细节（VCD 模型、卡尔曼状态模型、One Euro、可靠性静止锁 CUSUM/租绳/自适应机制）的 100% 对齐，并顺利通过本地 Typst 编译验证。
+论文源文件：`2026-EgoAnchor-Typst/egoanchor_cn_v3.typ` 是当前中文主稿；`egoanchor_cn_v2.typ` 为上一版；`egoanchor_cn_v1.typ` 为初版 Typst 草稿；参考文献入口为 `2026-EgoAnchor-Typst/egoanchor_cn.bib`。`2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，并已合并旧 `docs/architecture/` 技术路线内容；论文实现细节、统一术语、公式和系统边界优先以该文档和代码为准。`2026-EgoAnchor-Typst/figs/` 放当前 Typst 图像资产，`2026-EgoAnchor-Typst/pdf/` 是生成产物。
+论文写作使用 Typst 语法，不使用 LaTeX/BibTeX 编译链。写完主稿后在仓库根目录运行：`typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v3.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v3.pdf`。
+旧 `docs/architecture/` 已被完全删除，系统架构、技术路线与绘图提示词后续统一维护在 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 内。第三章（方法）已于 2026-07-01 完成重写，实现与底层代码细节（VCD 模型、卡尔曼状态模型、One Euro、可靠性静止锁 CUSUM/租绳/自适应机制）的 100% 对齐，并顺利通过本地 Typst 编译验证。第四章（系统实现）已于 2026-07-03 完成润色，补充了完整的硬件配置信息（Windows 11、i9-14900K、RTX 3090、32GB 内存）与多平台性能评估数据（RTX 3090/4090/5090 的推理时间对比），提升了学术表达质量。
 
 专利工作区：`EgoAnchor_Invention_Patent/`。专利文稿中的技术描述必须严格贴合当前主线实现：帧姿态历史正式路径只允许按 `frame_id` 精确命中，不得杜撰 latest-match、最近有效缓存回退、候选评分回查或“降级对齐”机制；静止锁相关公式要覆盖 `headToleranceFactor`、`posDistanceFactor`、`headSettleSeconds`、`lowScoreReleaseScore/Seconds` 等当前真实机制，不得退回成只写 deadband + CUSUM 的简化版本；同时要突出纯视觉链路、AI 模型链、异步通信、帧对齐、可靠性评分与整套 anchor 策略。这里“纯视觉”只适用于目标物体位姿估计链路，不得把参考相机世界位姿的来源写成“完全不依赖惯性传感器或外部空间定位传感器”的绝对方案。
 在进行专利初稿 `.docx` 的检查与确认时，需重点防范由格式转换引起的数学公式损坏：Word (OMML) 转换过程中指示函数 \(\mathbf 1[\cdot]\) 极易退化为普通数字 `1` 导致逻辑关系彻底失效；递推公式中的接缝残差等变量容易发生同名混淆（如将 \(\tilde{r}_t\) 误写为 \(r_t\)）；大括号分段函数易丢失且易残留 LaTeX 格式代码（如 `[6pt]`、`[4pt]`）。此外，Word 草稿在同步主稿时容易缺失较多控制公式及系统细化从属权利要求，且极易因模板残留引入无关技术文本（如“专家网络”等多模态无关内容），后续检查需以最新 `vNN` 主稿 `md` 文件为唯一绝对真理源进行全文核对与重构。
@@ -306,3 +306,11 @@ Unity 场景/序列化注意事项：
 - 大改后同步入口、模块职责、协议字段、配置名、验证命令和关键坑。
 - 若代码事实推翻旧描述，直接改旧条目，不要追加相互矛盾的新条目。
 - 本机 Codex 已在用户配置中启用 `superpowers@openai-curated`；后续 AI 若会话暴露该插件技能，应先读/调用 `using-superpowers` 再处理任务。
+
+## 性能统计
+
+- Python pose pipeline 主调试窗口 HUD 显示 6 行固定高度横幅（`POSE_HUD_LINE_COUNT=10`），第 5 行显示后端各阶段耗时（yolo/depth/cutie/pose/rq/total），第 6 行显示调试窗口渲染耗时（ui_render debug/score）。
+- `PipelineStepTiming` 包含 `render_quality_ms`；`FrameDiagnostics` 包含 `debug_render_ms` 和 `score_render_ms`。
+- `_check_render_quality` 方法签名包含 `timing` 参数，将渲染质量耗时同时写入 `diagnostics.render_quality_ms` 和 `timing.render_quality_ms`。
+- `tracking_server.py` 在渲染新帧前先将上一帧渲染耗时写入当前帧 diagnostics（避免时序悖论），渲染完成后测量新帧耗时。
+- 真实帧时间 = `total_ms` + `debug_render_ms` + `score_render_ms`；调试窗口跳帧时渲染耗时不会每帧更新。

@@ -90,6 +90,10 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     debug_window_max_fps = float(getattr(pose_cfg, "debug_window_max_fps", 0.0))
     score_window_max_fps = float(getattr(pose_cfg, "score_window_max_fps", 0.0))
 
+    # 调试窗口渲染性能统计
+    debug_render_ms = 0.0
+    score_render_ms = 0.0
+
     try:
         LOGGER.info("正在启动 pose debug runtime；首次加载模型可能需要较长时间。")
         runtime.start()
@@ -135,8 +139,13 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
             if not show_tracking_window:
                 continue
 
+            # 在渲染新帧前，先把上一帧的渲染耗时写入当前帧的 diagnostics
+            output.diagnostics.debug_render_ms = debug_render_ms
+            output.diagnostics.score_render_ms = score_render_ms
+
             now = time.perf_counter()
             if _should_render_debug_frame(now, last_debug_render_time, debug_window_max_fps):
+                t_render_start = time.perf_counter()
                 dashboard = tile_pose_depth_dashboard(
                     output.diagnostics,
                     output.observation,
@@ -146,9 +155,11 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                     max_depth=float(depth_cfg.max_depth),
                 )
                 cv2.imshow(debug_window, dashboard)
+                debug_render_ms = (time.perf_counter() - t_render_start) * 1000.0
                 last_debug_render_time = now
                 has_debug_frame = True
             if _should_render_debug_frame(now, last_score_render_time, score_window_max_fps):
+                t_score_start = time.perf_counter()
                 score_debug = make_score_debug_view(
                     output.diagnostics,
                     output.observation,
@@ -158,6 +169,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
                     max_depth=float(depth_cfg.max_depth),
                 )
                 cv2.imshow(score_window, score_debug)
+                score_render_ms = (time.perf_counter() - t_score_start) * 1000.0
                 last_score_render_time = now
     finally:
         runtime.close()

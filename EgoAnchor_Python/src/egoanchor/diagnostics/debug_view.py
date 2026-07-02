@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from egoanchor.perception import FrameDiagnostics
 
 
-POSE_HUD_LINE_COUNT = 9
+POSE_HUD_LINE_COUNT = 10
 """主 pose debug 横幅固定行数；面板布局不能随诊断行出现/消失而跳动。"""
 
 SCORE_HUD_LINE_COUNT = 5
@@ -87,7 +87,8 @@ def _hud_lines(observation: PoseObservation | None, diagnostics: FrameDiagnostic
         f"pose={observation.has_pose if observation else False} source={observation.pose_source if observation else 'NONE'} score={observation.reliability_score if observation else 0.0:.2f}",
         f"det={diagnostics.det_count} depthScore={observation.score_depth if observation else diagnostics.score_depth:.2f} mask={diagnostics.mask_area_ratio:.3f} mask_src={diagnostics.mask_source} depth(mask)={diagnostics.depth_valid_in_mask:.3f} depth(all)={diagnostics.depth_valid_ratio:.3f}",
         f"depth med/iqr={diagnostics.depth_median_m:.2f}/{diagnostics.depth_iqr_m:.2f}m fps={diagnostics.fps:.1f}",
-        f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
+        f"ms yolo={diagnostics.timing.yolo_ms:.1f} depth={diagnostics.timing.depth_ms:.1f} cutie={diagnostics.timing.cutie_ms:.1f} pose={diagnostics.timing.pose_ms:.1f} rq={diagnostics.timing.render_quality_ms:.1f} total={diagnostics.timing.total_ms:.1f}",
+        f"ui_render debug={diagnostics.debug_render_ms:.1f}ms score={diagnostics.score_render_ms:.1f}ms",
     ]
     if diagnostics.segmenter_async:
         busy = "busy" if diagnostics.segmenter_busy else "idle"

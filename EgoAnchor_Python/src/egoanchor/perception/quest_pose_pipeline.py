@@ -754,7 +754,7 @@ class QuestPosePipeline:
             LOGGER.warning("FoundationPose track 返回无效 pose，等待 Unity 侧重获取命令。")
             return None, "NONE", "TRACK_FAILED"
 
-        self._check_render_quality(pose, rgb, depth, mask, diagnostics)
+        self._check_render_quality(pose, rgb, depth, mask, diagnostics, timing)
 
         state.last_pose = pose
         state.frames_since_register += 1
@@ -830,6 +830,7 @@ class QuestPosePipeline:
         depth: np.ndarray,
         mask: np.ndarray | None,
         diagnostics: FrameDiagnostics,
+        timing: PipelineStepTiming,
     ) -> None:
         """对 TRACK pose 做渲染质量检测，并仅写入可靠性评分所需诊断。"""
 
@@ -860,7 +861,9 @@ class QuestPosePipeline:
             depth,
             depth_coverage=diagnostics.depth_valid_in_mask,
         )
-        diagnostics.render_quality_ms = (time.perf_counter() - t0) * 1000.0
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        diagnostics.render_quality_ms = elapsed_ms
+        timing.render_quality_ms += elapsed_ms
         # 纯色/无纹理物体 color_valid=False：颜色 ZNCC 无方差，置 -1.0 让评分层排除颜色项而非按中性 0.5 降分。
         color_usable = result.reprojection_valid and result.color_valid
         diagnostics.color_reprojection = result.reprojection_score if color_usable else -1.0
