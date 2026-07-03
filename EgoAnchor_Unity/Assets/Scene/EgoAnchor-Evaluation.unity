@@ -870,10 +870,10 @@ MonoBehaviour:
   motionModel: {fileID: 206209589}
   smoothingStrategy: {fileID: 206209588}
   strategyLabel: 
-  enableScoreGate: 0
-  minScore: 0.2
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
@@ -2750,10 +2750,10 @@ MonoBehaviour:
   motionModel: {fileID: 637018055}
   smoothingStrategy: {fileID: 637018054}
   strategyLabel: 
-  enableScoreGate: 0
-  minScore: 0.2
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
@@ -4275,10 +4275,10 @@ MonoBehaviour:
   motionModel: {fileID: 1039886368}
   smoothingStrategy: {fileID: 1039886367}
   strategyLabel: 
-  enableScoreGate: 1
-  minScore: 0.2
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
+  enableQualityGate: 1
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
   staticLockModule: {fileID: 1039886369}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0.5
@@ -5778,10 +5778,10 @@ MonoBehaviour:
   motionModel: {fileID: 1484131523}
   smoothingStrategy: {fileID: 1484131524}
   strategyLabel: 
-  enableScoreGate: 0
-  minScore: 0.2
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0
@@ -6500,10 +6500,10 @@ MonoBehaviour:
   motionModel: {fileID: 1774730473}
   smoothingStrategy: {fileID: 1774730474}
   strategyLabel: 
-  enableScoreGate: 0
-  minScore: 0.2
-  maxJumpMeters: 0.8
-  maxJumpDegrees: 120
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0

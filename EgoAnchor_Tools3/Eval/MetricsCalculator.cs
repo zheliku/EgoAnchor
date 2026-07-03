@@ -17,7 +17,7 @@ namespace EgoAnchor.Tools3.Eval
         public double AlignedRotRmsDeg;   // 对齐后旋转误差 RMS
         public double ThroughPosRmsMm;    // 不对齐, 直接在观测时刻 render 离观测点的位置误差 RMS
         public double ThroughRotRmsDeg;   // 不对齐的旋转过点误差
-        public double OnsetLagMs;         // 运动起始响应延迟中位数 (真实运动开始 → render 开始跟随); 静态先验的诚实代价
+        public double OnsetLagMs;         // 运动起始响应延迟中位数 (真实运动开始 → render 开始跟随); 静止锚定的诚实代价
         public double OnsetLagP90Ms;      // 运动起始响应延迟 P90
         public int OnsetEvents;           // 检测到的运动起始事件数
     }
@@ -57,14 +57,14 @@ namespace EgoAnchor.Tools3.Eval
             // --- 4) 过点误差: 不平移, 直接在观测时刻比 ---
             (m.ThroughPosRmsMm, m.ThroughRotRmsDeg) = SampleErrorAtObservations(samples, observations, 0.0);
 
-            // --- 5) 运动起始响应延迟: 静态先验的诚实代价 ---
+            // --- 5) 运动起始响应延迟: 静止锚定的诚实代价 ---
             (m.OnsetLagMs, m.OnsetLagP90Ms, m.OnsetEvents) = ComputeOnsetLag(samples, observations);
 
             return m;
         }
 
         /// <summary>
-        /// 运动起始响应延迟 (motion-onset lag): 静态锁定方法的诚实代价指标。
+        /// 运动起始响应延迟 (motion-onset lag): 静止锚定方法的诚实代价指标。
         ///
         /// 先从**观测流**检测"静止→运动"起始事件 (一段低速后突然持续高速)。对每个起始时刻 t0,
         /// 在 render 输出上找它真正"开始跟随"的时刻 (相对 t0 时的 render pose 位移首次超过 onsetMoveThresh),

@@ -3,7 +3,7 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// EgoAnchor 静态锚定方法的 Inspector 宿主组件 (从 AnchorPolicyHost 剥离)。
+    /// EgoAnchor 静止锚定方法的 Inspector 宿主组件 (从 AnchorPolicyHost 剥离)。
     ///
     /// 它把 EgoAnchor "方法层"的全部可调参数 + <see cref="StaticLockController"/> 实例收拢到一个独立
     /// MonoBehaviour, 让 AnchorPolicyHost 回归"motion model × smoothing strategy + 生命周期"的本职,
@@ -19,7 +19,7 @@ namespace EgoAnchor.Policy
     public sealed class EgoAnchorStaticLockModule : MonoBehaviour
     {
         /// <summary>是否启用静止锚定 (EgoAnchor 核心方法层)。</summary>
-        [Header("Static Lock (EgoAnchor 核心方法)")]
+        [Header("Static Anchoring (EgoAnchor 核心方法)")]
         [Tooltip("是否启用静止锚定稳定器：物体静止且高分时冻结输出 pose，把小抖动当噪声吸收 → 看上去一动不动；运动时交回 smoothing。关闭=纯 baseline。")]
         [SerializeField] private bool lockEnabled = true;
 

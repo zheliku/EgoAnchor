@@ -62,8 +62,8 @@ namespace EgoAnchorEval
         /// <summary>pipeline strategy label。</summary>
         public readonly string StrategyLabel;
 
-        /// <summary>gate 名称 (score_jump_gate / null_gate)。</summary>
-        public readonly string Gate;
+        /// <summary>质量评估门控模式 (enabled / disabled)。</summary>
+        public readonly string QualityGate;
 
         /// <summary>运动模型名称 (cv / kalman / oneeuro)。</summary>
         public readonly string MotionModel;
@@ -81,7 +81,7 @@ namespace EgoAnchorEval
         public EvalVariantConfig(
             string label,
             string strategyLabel,
-            string gate,
+            string qualityGate,
             string motionModel,
             string smoothingStrategy,
             string configHash,
@@ -89,7 +89,7 @@ namespace EgoAnchorEval
         {
             Label = label ?? string.Empty;
             StrategyLabel = strategyLabel ?? string.Empty;
-            Gate = gate ?? string.Empty;
+            QualityGate = qualityGate ?? string.Empty;
             MotionModel = motionModel ?? string.Empty;
             SmoothingStrategy = smoothingStrategy ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
@@ -164,7 +164,7 @@ namespace EgoAnchorEval
                     builder.Append('{');
                     AppendStringProperty(builder, ref first, "label", configs[i].Label);
                     AppendStringProperty(builder, ref first, "strategy_label", configs[i].StrategyLabel);
-                    AppendStringProperty(builder, ref first, "gate", configs[i].Gate);
+                    AppendStringProperty(builder, ref first, "quality_gate", configs[i].QualityGate);
                     AppendStringProperty(builder, ref first, "motion_model", configs[i].MotionModel);
                     AppendStringProperty(builder, ref first, "smoothing_strategy", configs[i].SmoothingStrategy);
                     AppendStringProperty(builder, ref first, "config_hash", configs[i].ConfigHash);

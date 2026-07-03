@@ -69,10 +69,10 @@ class RunEvalTest(unittest.TestCase):
             self.assertIn("reliability_score_histogram", metrics.tables)
             self.assertIn("color_reprojection_histogram", metrics.tables)
             self.assertIn("policy_distribution", metrics.tables)
-            rq1 = metrics.tables["rq1_raw_mapping_error_summary"]
-            self.assertEqual(set(rq1["label"]), {"arrival_time_raw", "frame_aligned_raw"})
-            frame_aligned = rq1[(rq1["condition"] == "static") & (rq1["label"] == "frame_aligned_raw")].iloc[0]
-            arrival_time = rq1[(rq1["condition"] == "static") & (rq1["label"] == "arrival_time_raw")].iloc[0]
+            alignment = metrics.tables["rq2_alignment_ablation_error_summary"]
+            self.assertEqual(set(alignment["label"]), {"arrival_time_raw", "frame_aligned_raw"})
+            frame_aligned = alignment[(alignment["condition"] == "static") & (alignment["label"] == "frame_aligned_raw")].iloc[0]
+            arrival_time = alignment[(alignment["condition"] == "static") & (alignment["label"] == "arrival_time_raw")].iloc[0]
             self.assertAlmostEqual(float(frame_aligned["translation_median_m"]), 0.02, places=9)
             self.assertAlmostEqual(float(arrival_time["translation_median_m"]), 0.07, places=9)
 
@@ -91,8 +91,8 @@ class RunEvalTest(unittest.TestCase):
 
             self.assertTrue((report_dir / "gt_anchor_sanity.json").is_file())
             self.assertTrue((report_dir / "anchor_error_summary.csv").is_file())
-            self.assertTrue((report_dir / "rq1_raw_mapping_error_summary.csv").is_file())
-            self.assertTrue((report_dir / "rq1_raw_mapping_slip_summary.csv").is_file())
+            self.assertTrue((report_dir / "rq2_alignment_ablation_error_summary.csv").is_file())
+            self.assertTrue((report_dir / "rq2_alignment_ablation_slip_summary.csv").is_file())
             self.assertTrue((report_dir / "pose_offset_summary.csv").is_file())
             self.assertFalse((report_dir / "aligned_raw_offset_summary.csv").is_file())
             self.assertTrue((report_dir / "latency_summary.csv").is_file())
@@ -303,6 +303,7 @@ def _variant(
         "policy_reason": "score_accept",
         "latest_phase": "TRACK",
         "latest_failure": "",
+        "quality_gate": "disabled",
     }
     if is_primary:
         row.update(

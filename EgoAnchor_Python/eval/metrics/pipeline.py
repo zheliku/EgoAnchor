@@ -18,7 +18,7 @@ from .jump_suppression import compute_jump_suppression
 from .lag import compute_lag
 from .latency import compute_latency
 from .recovery import compute_recovery
-from .slip import build_raw_mapping_output, compute_slip
+from .slip import build_alignment_ablation_output, compute_slip
 from .stats import finite_percentile
 
 
@@ -38,20 +38,20 @@ def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
 
     output = label_conditions(logs.output, logs.manifest, "render_mono_ms")
     anchor_detail, anchor_summary = compute_anchor_error(output)
-    raw_mapping_output = build_raw_mapping_output(output)
-    rq1_anchor_detail, rq1_anchor_summary = compute_anchor_error(raw_mapping_output)
+    alignment_ablation_output = build_alignment_ablation_output(output)
+    alignment_anchor_detail, alignment_anchor_summary = compute_anchor_error(alignment_ablation_output)
     latency_detail, latency_summary = compute_latency(output, logs.pose)
     slip_detail, slip_summary = compute_slip(output)
-    rq1_slip_detail, rq1_slip_summary = compute_slip(raw_mapping_output)
+    alignment_slip_detail, alignment_slip_summary = compute_slip(alignment_ablation_output)
     reliability = compute_reliability_diagnostics(logs.pose, output, anchor_detail)
     tables = {
         "anchor_error_detail": anchor_detail,
         "anchor_error_summary": anchor_summary,
         "pose_offset_summary": summarize_pose_offset(anchor_detail),
-        "rq1_raw_mapping_error_detail": rq1_anchor_detail,
-        "rq1_raw_mapping_error_summary": rq1_anchor_summary,
-        "rq1_raw_mapping_slip_detail": rq1_slip_detail,
-        "rq1_raw_mapping_slip_summary": rq1_slip_summary,
+        "rq2_alignment_ablation_error_detail": alignment_anchor_detail,
+        "rq2_alignment_ablation_error_summary": alignment_anchor_summary,
+        "rq2_alignment_ablation_slip_detail": alignment_slip_detail,
+        "rq2_alignment_ablation_slip_summary": alignment_slip_summary,
         "latency_detail": latency_detail,
         "latency_summary": latency_summary,
         "jitter_summary": compute_jitter(output),

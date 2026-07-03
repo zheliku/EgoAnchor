@@ -5,16 +5,15 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// Unity 侧 anchor policy 宿主 (重构后)。
+    /// Unity 侧 anchor policy 宿主。
     ///
     /// 职责收敛为三件事：
     ///   1. 持有两个可自由组合的模块：MotionModel (运动模型) + SmoothingStrategy (平滑策略)；
     ///   2. 维护 anchor 生命周期状态机 (Tracking / Coasting / Lost / Reacquire ...)；
     ///   3. 把观测喂给模块，并每渲染帧产出平滑 pose。
     ///
-    /// 旧的 Gate / Estimator / Output 三模块拆分已移除。score-gating (拒绝低分/跳变坏观测)
-    /// 作为本 host 的可选内联功能 (默认关闭)，只有 EgoAnchor 方法需要时才在 Inspector 打开，
-    /// 不再是独立模块。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
+    /// 质量评估门控 (拒绝低分/跳变坏观测) 作为本 host 的可选内联功能 (默认关闭)，
+    /// 论文 RQ2 完整方法变体需要时才在 Inspector 打开。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
     /// 不再靠运动模型内部限幅 predict-ahead，因此低频 pose 也能逐帧连续输出。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
@@ -34,26 +33,26 @@ namespace EgoAnchor.Policy
         [Tooltip("策略 label，写入 eval；为空时自动用 \"<model>_<strategy>\"。")]
         [SerializeField] private string strategyLabel = "";
 
-        /// <summary>是否启用 score/jump 门控 (拒绝坏观测)。只建议 EgoAnchor 方法开启。</summary>
-        [Header("Score Gate (EgoAnchor only, optional)")]
-        [Tooltip("是否启用 score/jump 门控：拒绝低可靠分或大跳变的坏观测。baseline 应关闭 (照单全收)；EgoAnchor 方法开启以证明鲁棒性。默认关闭。")]
-        [SerializeField] private bool enableScoreGate = false;
+        /// <summary>是否启用质量评估门控 (拒绝低分/跳变坏观测)。</summary>
+        [Header("Quality Gate (optional)")]
+        [Tooltip("是否启用质量评估门控：拒绝低可靠分或大跳变的坏观测。baseline 应关闭 (照单全收)；论文 RQ2 完整方法变体可开启。默认关闭。")]
+        [SerializeField] private bool enableQualityGate = false;
 
         /// <summary>接受观测所需的最低可靠性分数。</summary>
         [Tooltip("接受观测所需的最低可靠性分数 (0..1)。低于此值的观测被拒绝、不更新模型。仅在启用门控时生效。默认 0.2。")]
         [Range(0f, 1f)]
-        [SerializeField] private float minScore = 0.2f;
+        [SerializeField] private float minQualityScore = 0.2f;
 
         /// <summary>判定坏跳变的平移阈值，单位米。</summary>
         [Tooltip("判定坏跳变的平移阈值 (米)：新观测相对当前预测的平移超过此值则拒绝。仅在启用门控时生效。默认 0.8。")]
-        [SerializeField] private float maxJumpMeters = 0.8f;
+        [SerializeField] private float maxQualityJumpMeters = 0.8f;
 
         /// <summary>判定坏跳变的旋转阈值，单位度。</summary>
         [Tooltip("判定坏跳变的旋转阈值 (度)：新观测相对当前预测的旋转超过此值则拒绝。仅在启用门控时生效。默认 120。")]
-        [SerializeField] private float maxJumpDegrees = 120f;
+        [SerializeField] private float maxQualityJumpDegrees = 120f;
 
         /// <summary>EgoAnchor 静止锚定方法模块 (可选)。剥离自本 host, 持有静止锁参数和控制器。</summary>
-        [Header("Static Lock (EgoAnchor 方法, optional)")]
+        [Header("Static Anchoring (EgoAnchor 方法, optional)")]
         [Tooltip("EgoAnchor 静止锚定方法模块 (EgoAnchorStaticLockModule)。拖入并 enabled = EgoAnchor 方法 (静止冻结/头动感知/低分释放); 留空或不启用 = 纯 baseline (motion × smoothing)。挂在同一 GameObject 上。")]
         [SerializeField] private EgoAnchorStaticLockModule staticLockModule;
 
@@ -123,7 +122,7 @@ namespace EgoAnchor.Policy
         private double lastAdvanceTimeSeconds = -1.0;
         private float latestAcceptedScore = 1.0f;
         private AnchorMotionState motionState = AnchorMotionState.Unknown;
-        private GateDecision latestGateDecision = GateDecision.Hold("initialized");
+        private QualityGateDecision latestQualityGateDecision = QualityGateDecision.Hold("initialized");
         private float predictAheadSeconds;
         private double lowScoreStartSeconds = -1.0;
         private double lastLowScoreReacquireSeconds = double.NegativeInfinity;
@@ -164,8 +163,8 @@ namespace EgoAnchor.Policy
         /// <summary>平滑策略名 (Blend / DelayedInterp / RawPassthrough)。写入 eval 的 smoothing_strategy 字段。</summary>
         public string SmoothingStrategyName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
 
-        /// <summary>门控名 (启用时 score_jump_gate，否则 null_gate)。写入 eval 的 gate 字段。</summary>
-        public string GateName => enableScoreGate ? "score_jump_gate" : "null_gate";
+        /// <summary>质量评估门控模式，写入 eval 的 quality_gate 字段。</summary>
+        public string QualityGateMode => enableQualityGate ? "enabled" : "disabled";
 
         /// <summary>运动模型组件引用，仅用于 eval 配置摘要。</summary>
         public MotionModel MotionModel => motionModel;
@@ -201,11 +200,11 @@ namespace EgoAnchor.Policy
         /// <summary>最近一次被接受测量的可靠性分数。</summary>
         public float LatestAcceptedScore => latestAcceptedScore;
 
-        /// <summary>最近一次 gate/policy 动作。</summary>
-        public AnchorPolicyAction LatestAction => latestGateDecision.ToPolicyAction();
+        /// <summary>最近一次质量评估门控或 policy 动作。</summary>
+        public AnchorPolicyAction LatestAction => latestQualityGateDecision.ToPolicyAction();
 
-        /// <summary>最近一次 gate/policy 原因。</summary>
-        public string LatestReason => latestGateDecision.Reason;
+        /// <summary>最近一次质量评估门控或 policy 原因。</summary>
+        public string LatestReason => latestQualityGateDecision.Reason;
 
         /// <summary>output stage 平移残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
         public float LatestResidualMeters => float.NaN;
@@ -213,7 +212,7 @@ namespace EgoAnchor.Policy
         /// <summary>output stage 旋转残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
         public float LatestResidualDegrees => float.NaN;
 
-        /// <summary>是否静止锁定 (EgoAnchor 静态锚定稳定器当前是否冻结输出)。</summary>
+        /// <summary>是否静止锁定 (EgoAnchor 静止锚定稳定器当前是否冻结输出)。</summary>
         public bool LatestStaticLocked => staticLockModule != null && staticLockModule.IsLocked;
 
         /// <summary>累计接受测量数。</summary>
@@ -272,24 +271,24 @@ namespace EgoAnchor.Policy
             if (!observation.HasAlignedPose)
             {
                 OnMissingObservation(lifecycleTime, observation.FailureReason);
-                latestGateDecision = GateDecision.Hold(string.IsNullOrEmpty(observation.FailureReason) ? "missing_pose" : observation.FailureReason);
-                return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
+                latestQualityGateDecision = QualityGateDecision.Hold(string.IsNullOrEmpty(observation.FailureReason) ? "missing_pose" : observation.FailureReason);
+                return new AnchorPolicyDecision(latestQualityGateDecision.ToPolicyAction(), stateMachine.State, latestQualityGateDecision.Reason);
             }
 
             // 低分重定位: 已有锚定后若总分持续过低 → 锚点不可信, 本地重置进入 Relocalizing 重新建立锚定，
             // 并 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
-            // host 不持 client; 在 raw observation 上判定, 不受下面 score gate 是否拒绝影响。
+            // host 不持 client; 在 raw observation 上判定, 不受下面质量评估门控是否拒绝影响。
             if (TryLowScoreReacquire(observation, lifecycleTime))
             {
-                latestGateDecision = GateDecision.Hold("low_score_reacquire");
+                latestQualityGateDecision = QualityGateDecision.Hold("low_score_reacquire");
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reacquire, stateMachine.State, "low_score_reacquire");
             }
 
-            // 可选 score/jump 门控 (仅 EgoAnchor 方法开启)
+            // 可选质量评估门控 (论文 RQ2 完整方法变体可开启)
             if (ShouldRejectObservation(observation, observation.MeasurementTimeSeconds, out string rejectReason))
             {
                 RejectedCount++;
-                latestGateDecision = GateDecision.Reject(rejectReason);
+                latestQualityGateDecision = QualityGateDecision.Reject(rejectReason);
                 stateMachine.OnUncertainPose(lifecycleTime, rejectReason);
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reject, stateMachine.State, rejectReason);
             }
@@ -299,17 +298,17 @@ namespace EgoAnchor.Policy
             if (snap)
             {
                 motionModel.Snap(observation);
-                latestGateDecision = GateDecision.Snap("snap");
+                latestQualityGateDecision = QualityGateDecision.Snap("snap");
             }
             else
             {
                 motionModel.UpdateState(observation);
-                latestGateDecision = GateDecision.Accept("accept");
+                latestQualityGateDecision = QualityGateDecision.Accept("accept");
             }
 
             smoothingStrategy.OnObservation(motionModel, observation);
 
-            // EgoAnchor 静态锚定稳定器: 喂同一 world pose + score, 更新静/动证据 (仅启用时)。
+            // EgoAnchor 静止锚定稳定器: 喂同一 world pose + score, 更新静/动证据 (仅启用时)。
             // 头部 pose 来自 observation (= FramePoseHistory 按 frame_id 记录的采集时刻 center camera pose,
             // 与帧对齐复用同一份缓存, 不重复绑定 CenterEyeAnchor)。头动时放宽 static 约束吸收 slip。
             // EgoAnchor 方法层 (静止锚定) 已剥离为可选的 EgoAnchorStaticLockModule, 未挂则纯 baseline。
@@ -330,10 +329,10 @@ namespace EgoAnchor.Policy
             if (observation.ReliabilityScore >= trackingScoreFloor)
             {
                 lastReliableLifecycleTimeSeconds = lifecycleTime;
-                stateMachine.OnReliablePose(lifecycleTime, latestGateDecision.Reason);
+                stateMachine.OnReliablePose(lifecycleTime, latestQualityGateDecision.Reason);
             }
 
-            return new AnchorPolicyDecision(latestGateDecision.ToPolicyAction(), stateMachine.State, latestGateDecision.Reason);
+            return new AnchorPolicyDecision(latestQualityGateDecision.ToPolicyAction(), stateMachine.State, latestQualityGateDecision.Reason);
         }
 
         /// <summary>每渲染帧输出当前 stable pose。</summary>
@@ -368,7 +367,7 @@ namespace EgoAnchor.Policy
 
             Pose pose = smoothingStrategy.Output(motionModel, nowSeconds);
 
-            // EgoAnchor 静态锚定稳定器: 锁定时冻结输出, 解锁过渡平滑收敛, 否则透传 (未挂模块则纯 baseline)。
+            // EgoAnchor 静止锚定稳定器: 锁定时冻结输出, 解锁过渡平滑收敛, 否则透传 (未挂模块则纯 baseline)。
             if (staticLockModule != null)
             {
                 float advanceDt = lastAdvanceTimeSeconds >= 0.0 ? (float)(nowSeconds - lastAdvanceTimeSeconds) : 0.0f;
@@ -388,7 +387,7 @@ namespace EgoAnchor.Policy
         {
             ResetModules();
             stateMachine.OnReset(sampleTimeSeconds, reason ?? "reset");
-            latestGateDecision = GateDecision.Hold(reason ?? "reset");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "reset");
         }
 
         /// <summary>reacquire command/status 到达时进入 Relocalizing 并清空估计。</summary>
@@ -396,35 +395,35 @@ namespace EgoAnchor.Policy
         {
             ResetModules();
             stateMachine.OnReacquire(sampleTimeSeconds, reason ?? "reacquire");
-            latestGateDecision = GateDecision.Hold(reason ?? "reacquire");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "reacquire");
         }
 
         /// <summary>暂停本地 policy。</summary>
         public void NotifyPause(double sampleTimeSeconds, string reason)
         {
             stateMachine.OnPause(sampleTimeSeconds, reason ?? "pause");
-            latestGateDecision = GateDecision.Hold(reason ?? "pause");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "pause");
         }
 
         /// <summary>恢复本地 policy。</summary>
         public void NotifyResume(double sampleTimeSeconds, string reason)
         {
             stateMachine.OnResume(sampleTimeSeconds, reason ?? "resume");
-            latestGateDecision = GateDecision.Hold(reason ?? "resume");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "resume");
         }
 
         /// <summary>通知本地目标丢失。</summary>
         public void NotifyLost(double sampleTimeSeconds, string reason)
         {
             stateMachine.OnMissingPose(sampleTimeSeconds, stateMachine.LostTimeoutSeconds, motionModel != null && motionModel.HasState, reason ?? "lost");
-            latestGateDecision = GateDecision.Hold(reason ?? "lost");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "lost");
         }
 
         /// <summary>通知本地错误。</summary>
         public void NotifyError(double sampleTimeSeconds, string reason)
         {
             stateMachine.OnError(sampleTimeSeconds, reason ?? "error");
-            latestGateDecision = GateDecision.Reject(reason ?? "error");
+            latestQualityGateDecision = QualityGateDecision.Reject(reason ?? "error");
         }
 
         /// <summary>清空状态机和所有模块。</summary>
@@ -432,7 +431,7 @@ namespace EgoAnchor.Policy
         {
             ResetModules();
             stateMachine.Clear(sampleTimeSeconds, reason ?? "clear");
-            latestGateDecision = GateDecision.Hold(reason ?? "clear");
+            latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "clear");
         }
 
         /// <summary>
@@ -485,12 +484,12 @@ namespace EgoAnchor.Policy
         private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
         {
             reason = string.Empty;
-            if (!enableScoreGate)
+            if (!enableQualityGate)
             {
                 return false;
             }
 
-            if (observation.ReliabilityScore < minScore)
+            if (observation.ReliabilityScore < minQualityScore)
             {
                 reason = "low_score";
                 return true;
@@ -502,7 +501,7 @@ namespace EgoAnchor.Policy
                 Pose predicted = motionModel.PredictAt(now);
                 float dPos = Vector3.Distance(predicted.position, observation.WorldPose.position);
                 float dDeg = AnchorMath.AngleDegrees(predicted.rotation, observation.WorldPose.rotation);
-                if (dPos > maxJumpMeters || dDeg > maxJumpDegrees)
+                if (dPos > maxQualityJumpMeters || dDeg > maxQualityJumpDegrees)
                 {
                     reason = "jump";
                     return true;

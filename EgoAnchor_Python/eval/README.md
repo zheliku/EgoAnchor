@@ -26,7 +26,7 @@ output_rot
 anchor_pose_source
 motion_model
 smoothing_strategy
-gate
+quality_gate
 latest_static_locked
 ```
 
@@ -102,12 +102,6 @@ pixi run eval-metrics --session-dir data/eval/<session_id>
 pixi run eval-figures --session-dir data/eval/<session_id>
 ```
 
-如果旧 session 的 manifest 没有 `python_log_filename`，可以显式指定：
-
-```powershell
-pixi run eval --session-dir data/eval/<session_id> --python-log data/eval/<session_id>/<python_runtime>.jsonl
-```
-
 ## 4. Report 产物
 
 报告写入：
@@ -123,8 +117,8 @@ gt_anchor_sanity.json
 summary.md
 anchor_error_summary.csv
 pose_offset_summary.csv
-rq1_raw_mapping_error_summary.csv
-rq1_raw_mapping_slip_summary.csv
+rq2_alignment_ablation_error_summary.csv
+rq2_alignment_ablation_slip_summary.csv
 latency_summary.csv
 jitter_summary.csv
 slip_summary.csv
@@ -147,7 +141,7 @@ color_reprojection_histogram.csv
 
 - `anchor_error_summary.csv`：世界系 anchor 平移/旋转误差，主表。
 - `pose_offset_summary.csv`：`output - gt` 的固定偏移诊断。
-- `rq1_raw_mapping_*`：frame-aligned raw 与 arrival-time raw 的 RQ1 对照。
+- `rq2_alignment_ablation_*`：论文 RQ2 时空对齐消融，比较 frame-aligned raw 与 arrival-time raw。
 - `jitter_summary.csv`：静止窗口抖动。
 - `slip_summary.csv`：头动时屏幕空间/投影滑移。
 - `lag_summary.csv`：物体运动条件下的滞后。

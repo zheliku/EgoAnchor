@@ -10,7 +10,7 @@
 gt_pos/gt_rot  <->  output_pos/output_rot
 ```
 
-这里的 `output_pos/output_rot` 来自 Unity render 日志中的每个 variant。旧字段 `stable_pos/stable_rot/has_stable` 已废弃；如果看到旧字段，应先更新日志或转换脚本，不要让新评估继续依赖旧 schema。
+这里的 `output_pos/output_rot` 来自 Unity render 日志中的每个 variant。当前评估只接受 `has_output_pose / output_pos / output_rot` 这组 schema。
 
 `gt_anchor_sanity.json` 里的 `stable_rows` 是汇总统计名，含义是该 variant 中 `has_output_pose=true` 的行数。
 
@@ -37,9 +37,9 @@ GT 是答案，anchor 是被评估对象。不要把 `groundTruthTransform` 绑�
 | `kalman_blend` | `KalmanModel + BlendStrategy`，零延迟平滑 baseline |
 | `oneeuro_blend` | `OneEuroModel + BlendStrategy`，常用交互滤波 baseline |
 | `kalman_interp` | `KalmanModel + DelayedInterpStrategy`，延迟插值 baseline |
-| `egoanchor` | 与选定 baseline 相同，再启用 score gate / static lock |
+| `egoanchor` | 与选定 baseline 相同，启用静止锚定；论文 RQ2 完整方法变体可额外开启 `enableQualityGate` |
 
-RQ1 的 frame alignment 对照由 eval 自动构造 `rq1_raw_mapping_*` 表，比较 frame-aligned raw 与 arrival-time raw。不要把滤波器混进 RQ1。
+`rq2_alignment_ablation_*` 用于 RQ2 的时空对齐消融，比较 frame-aligned raw 与 arrival-time raw。不要把滤波器混进这组对照。
 
 ## 4. 条件与热键
 
@@ -136,7 +136,7 @@ detail 表可定位到具体 `source_frame_id`、condition、policy action 和�
 
 ## 7. 其它指标
 
-- `jitter_summary.csv`：静止条件下的微抖，适合证明 static lock。
+- `jitter_summary.csv`：静止条件下的微抖，适合证明静止锚定。
 - `slip_summary.csv`：头动时的屏幕空间滑移，适合证明 frame-aligned anchoring。
 - `lag_summary.csv`：物体运动时的滞后，适合比较滤波器。
 - `jump_suppression_summary.csv`：raw 与方法输出都有有效 pose 时才有意义。

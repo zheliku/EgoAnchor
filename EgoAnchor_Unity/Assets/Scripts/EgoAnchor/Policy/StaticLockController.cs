@@ -3,7 +3,7 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// 静止锁控制器的一帧配置快照。字段名省略 StaticLock 前缀，语义由类型名提供。
+    /// 静止锚定控制器的一帧配置快照。字段名省略 StaticLock 前缀，语义由类型名提供。
     /// </summary>
     internal struct StaticLockSettings
     {
@@ -87,10 +87,10 @@ namespace EgoAnchor.Policy
     }
 
     /// <summary>
-    /// EgoAnchor 静态锚定稳定器 (纯 C# 控制器, 无 MonoBehaviour)。
+    /// EgoAnchor 静止锚定稳定器 (纯 C# 控制器, 无 MonoBehaviour)。
     ///
     /// 这是 EgoAnchor 方法的核心 —— 不是又一个滤波器, 而是建立在 baseline (MotionModel ×
-    /// SmoothingStrategy) 之上的 **score-gated 分区静止锁定控制层**。被锚定的真实物体绝大多数
+    /// SmoothingStrategy) 之上的 **可靠性约束静止锚定控制器**。被锚定的真实物体绝大多数
     /// 时间是静止的 (动的是头显, 噪的是观测: 帧对齐残差 + 深度噪声 + head-motion slip)。
     /// baseline 都是 motion-agnostic 滤波器, 静止时残留抖动; 本控制器显式锁定静止 pose, 把
     /// 小幅抖动当噪声吸收 → 抖动 ≈ 0 ("看上去一动不动"), 运动时交回 smoothing 输出。

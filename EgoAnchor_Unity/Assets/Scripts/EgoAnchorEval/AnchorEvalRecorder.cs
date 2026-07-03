@@ -350,7 +350,7 @@ namespace EgoAnchorEval
                 string motionState = runtime != null ? runtime.CurrentMotionStateName : string.Empty;
                 double predictAheadMs = runtime != null ? runtime.LatestPredictAheadMs : double.NaN;
                 string strategyLabel = runtime != null ? runtime.StrategyLabel : string.Empty;
-                string gateName = runtime != null ? runtime.GateName : string.Empty;
+                string qualityGateMode = runtime != null ? runtime.QualityGateMode : string.Empty;
                 string motionModelName = runtime != null ? runtime.MotionModelName : string.Empty;
                 string smoothingStrategyName = runtime != null ? runtime.SmoothingStrategyName : string.Empty;
                 string configHash = ResolveCachedConfigHash(recorded, label);
@@ -391,7 +391,7 @@ namespace EgoAnchorEval
                     motionState,
                     predictAheadMs,
                     strategyLabel,
-                    gateName,
+                    qualityGateMode,
                     motionModelName,
                     smoothingStrategyName,
                     configHash,
@@ -475,21 +475,21 @@ namespace EgoAnchorEval
             PoseToAnchorRuntime runtime = recorded.runtime;
             AnchorPolicyHost policy = runtime != null ? runtime.PolicyHost : null;
             string strategyLabel = FirstNonEmpty(runtime != null ? runtime.StrategyLabel : string.Empty, label);
-            string gateName = FirstNonEmpty(policy != null ? policy.GateName : string.Empty, runtime != null ? runtime.GateName : string.Empty);
+            string qualityGateMode = FirstNonEmpty(policy != null ? policy.QualityGateMode : string.Empty, runtime != null ? runtime.QualityGateMode : string.Empty);
             string motionModelName = FirstNonEmpty(policy != null ? policy.MotionModelName : string.Empty, runtime != null ? runtime.MotionModelName : string.Empty);
             string smoothingStrategyName = FirstNonEmpty(policy != null ? policy.SmoothingStrategyName : string.Empty, runtime != null ? runtime.SmoothingStrategyName : string.Empty);
             SortedDictionary<string, string> parameters = new SortedDictionary<string, string>(StringComparer.Ordinal);
 
             if (policy != null)
             {
-                // 新架构：运动模型 (motion_model 维度) + 平滑策略 (smoothing_strategy 维度)。gate 已收敛为 host 内联参数。
+                // 新架构：运动模型 (motion_model 维度) + 平滑策略 (smoothing_strategy 维度)。质量评估门控是 host 内联参数。
                 CollectModuleParameters(parameters, "motion_model", policy.MotionModel);
                 CollectModuleParameters(parameters, "smoothing_strategy", policy.SmoothingStrategy);
                 CollectModuleParameters(parameters, "host", policy);
             }
 
-            string configHash = ComputeConfigHash(label, strategyLabel, gateName, motionModelName, smoothingStrategyName, parameters);
-            return new EvalVariantConfig(label, strategyLabel, gateName, motionModelName, smoothingStrategyName, configHash, parameters);
+            string configHash = ComputeConfigHash(label, strategyLabel, qualityGateMode, motionModelName, smoothingStrategyName, parameters);
+            return new EvalVariantConfig(label, strategyLabel, qualityGateMode, motionModelName, smoothingStrategyName, configHash, parameters);
         }
 
         /// <summary>
@@ -583,7 +583,7 @@ namespace EgoAnchorEval
         private static string ComputeConfigHash(
             string label,
             string strategyLabel,
-            string gate,
+            string qualityGate,
             string motionModel,
             string smoothingStrategy,
             SortedDictionary<string, string> parameters)
@@ -591,7 +591,7 @@ namespace EgoAnchorEval
             StringBuilder builder = new StringBuilder();
             builder.Append(label).Append('|')
                 .Append(strategyLabel).Append('|')
-                .Append(gate).Append('|')
+                .Append(qualityGate).Append('|')
                 .Append(motionModel).Append('|')
                 .Append(smoothingStrategy);
             foreach (KeyValuePair<string, string> item in parameters)

@@ -49,7 +49,7 @@ namespace EgoAnchor.Runtime
 
         /// <summary>Unity 侧 anchor policy 宿主。</summary>
         [Header("Anchor Policy")]
-        [Tooltip("Unity 侧 anchor policy 宿主。持有 MotionModel + SmoothingStrategy 两个模块（可选内联 score 门控），每渲染帧输出平滑 anchor pose。")]
+        [Tooltip("Unity 侧 anchor policy 宿主。持有 MotionModel + SmoothingStrategy 两个模块（可选内联质量评估门控），每渲染帧输出平滑 anchor pose。")]
         [SerializeField] private AnchorPolicyHost policyHost;
 
         private CameraPoseFrameAligner aligner;
@@ -108,8 +108,8 @@ namespace EgoAnchor.Runtime
         /// <summary>当前绑定的 Unity policy host，只用于 eval 配置摘要。</summary>
         public AnchorPolicyHost PolicyHost => policyHost;
 
-        /// <summary>当前 gate 名称。</summary>
-        public string GateName => policyHost != null ? policyHost.GateName : "";
+        /// <summary>当前质量评估门控模式。</summary>
+        public string QualityGateMode => policyHost != null ? policyHost.QualityGateMode : "";
 
         /// <summary>当前运动模型名称。</summary>
         public string MotionModelName => policyHost != null ? policyHost.MotionModelName : "";

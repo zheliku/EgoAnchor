@@ -20,7 +20,7 @@ namespace EgoAnchorEval
         private int sinceFlush;
 
         /// <summary>保护 writer 与计数器的同步锁。</summary>
-        private readonly object gate = new object();
+        private readonly object syncRoot = new object();
 
         /// <summary>是否已经释放底层 writer。</summary>
         private bool disposed;
@@ -48,7 +48,7 @@ namespace EgoAnchorEval
         /// <param name="jsonLine">不包含换行符的一行 JSON 文本。</param>
         public void WriteLine(string jsonLine)
         {
-            lock (gate)
+            lock (syncRoot)
             {
                 ThrowIfDisposed();
                 writer.Write(jsonLine);
@@ -66,7 +66,7 @@ namespace EgoAnchorEval
         /// </summary>
         public void Flush()
         {
-            lock (gate)
+            lock (syncRoot)
             {
                 ThrowIfDisposed();
                 writer.Flush();
@@ -79,7 +79,7 @@ namespace EgoAnchorEval
         /// </summary>
         public void Dispose()
         {
-            lock (gate)
+            lock (syncRoot)
             {
                 if (disposed)
                 {

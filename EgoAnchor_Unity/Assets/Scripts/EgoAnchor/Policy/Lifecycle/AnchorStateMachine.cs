@@ -67,7 +67,7 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
-        /// pose 可疑或被 gate 拒绝时进入 FrozenUncertain。
+        /// pose 可疑或被质量评估门控拒绝时进入 FrozenUncertain。
         /// </summary>
         /// <param name="sampleTimeSeconds">当前 Unity 单调时间，单位秒。</param>
         /// <param name="reason">拒绝或冻结原因。</param>

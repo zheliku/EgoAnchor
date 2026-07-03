@@ -77,7 +77,7 @@ namespace EgoAnchor.Alignment
 
         /// <summary>
         /// 从 PoseResult 读取 camera-space pose，并使用当前最新 camera pose 做 arrival-time 对照映射。
-        /// 该方法只用于 RQ1 诊断；正式 anchor 仍应使用 TryAlign(frame_id, ...) 的 capture-time 对齐。
+        /// 该方法只用于 RQ2 时空对齐消融诊断；正式 anchor 仍应使用 TryAlign(frame_id, ...) 的 capture-time 对齐。
         /// </summary>
         /// <param name="poseResult">Python 发布的 camera-space PoseResult。</param>
         /// <param name="worldPose">成功时输出 arrival-time raw world pose。</param>

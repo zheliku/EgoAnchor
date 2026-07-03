@@ -201,7 +201,7 @@ class PoseQualityTest(unittest.TestCase):
         self.assertAlmostEqual(config.depth_weight, 0.8)
 
     def test_score_breakdown_exposes_vcd_formula(self) -> None:
-        """评分分解应暴露 VCD 各子分，最终分 = gate × quality（V×C^α×D^β）。"""
+        """评分分解应暴露 VCD 各子分，最终分 = 可见性因子 × 颜色/深度一致性。"""
 
         observation = self._track_observation(
             color_reprojection=0.4,

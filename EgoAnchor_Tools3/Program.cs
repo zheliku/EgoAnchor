@@ -75,8 +75,8 @@ namespace EgoAnchor.Tools3
                     new DelayedInterpolationPredictor(new KalmanControlPoints(), SplineKind.Hermite),            // kalman_hermite
                 };
 
-                // D 行: EgoAnchor 锚定稳定器 (装饰 C 行 interp baseline)。论文方法层:
-                // 在你已满意的 interp 之上加 score-gated 分区静止锁定 —— 静止区抖动≈0, 运动区交回 interp。
+                // D 行: EgoAnchor 静止锚定稳定器 (装饰 C 行 interp baseline)。论文方法层:
+                // 在你已满意的 interp 之上加可靠性约束静止锚定 —— 静止区抖动≈0, 运动区交回 interp。
                 // 同一 inner (kalman_hermite) 开/关 = baseline vs EgoAnchor 的最干净消融。
                 var rowD = new List<IPredictor>
                 {
@@ -114,7 +114,7 @@ namespace EgoAnchor.Tools3
                     if (predictor is EgoAnchorStabilizerPredictor ego)
                     {
                         Console.WriteLine($"  └─ [EgoAnchor 诊断] locks={ego.LockEnters} unlocks={ego.Unlocks} | "
-                            + $"frames locked={ego.FramesLocked} seam={ego.FramesSeam} free={ego.FramesFree} | obs gated={ego.FramesGated}");
+                            + $"frames locked={ego.FramesLocked} seam={ego.FramesSeam} free={ego.FramesFree} | quality rejected={ego.FramesQualityRejected}");
                     }
 
                     string singlePng = Path.Combine(opt.OutputDir, $"plot_{result.Label}.png");

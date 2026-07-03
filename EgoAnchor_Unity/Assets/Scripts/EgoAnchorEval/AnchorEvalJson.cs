@@ -86,8 +86,8 @@ namespace EgoAnchorEval
         /// <summary>策略 label，通常等于 pipeline strategy label。</summary>
         public readonly string StrategyLabel;
 
-        /// <summary>gate 名称 (score_jump_gate / null_gate)。</summary>
-        public readonly string GateName;
+        /// <summary>质量评估门控模式 (enabled / disabled)。</summary>
+        public readonly string QualityGateMode;
 
         /// <summary>运动模型名称 (cv / kalman / oneeuro)。</summary>
         public readonly string MotionModelName;
@@ -139,7 +139,7 @@ namespace EgoAnchorEval
             string motionState,
             double predictAheadMs,
             string strategyLabel,
-            string gateName,
+            string qualityGateMode,
             string motionModelName,
             string smoothingStrategyName,
             string configHash,
@@ -173,7 +173,7 @@ namespace EgoAnchorEval
             MotionState = motionState ?? string.Empty;
             PredictAheadMs = predictAheadMs;
             StrategyLabel = strategyLabel ?? string.Empty;
-            GateName = gateName ?? string.Empty;
+            QualityGateMode = qualityGateMode ?? string.Empty;
             MotionModelName = motionModelName ?? string.Empty;
             SmoothingStrategyName = smoothingStrategyName ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
@@ -311,7 +311,7 @@ namespace EgoAnchorEval
             AppendStringProperty(builder, ref first, "motion_state", variant.MotionState);
             AppendDoubleProperty(builder, ref first, "predict_ahead_ms", variant.PredictAheadMs);
             AppendStringProperty(builder, ref first, "strategy_label", variant.StrategyLabel);
-            AppendStringProperty(builder, ref first, "gate", variant.GateName);
+            AppendStringProperty(builder, ref first, "quality_gate", variant.QualityGateMode);
             AppendStringProperty(builder, ref first, "motion_model", variant.MotionModelName);
             AppendStringProperty(builder, ref first, "smoothing_strategy", variant.SmoothingStrategyName);
             AppendStringProperty(builder, ref first, "config_hash", variant.ConfigHash);

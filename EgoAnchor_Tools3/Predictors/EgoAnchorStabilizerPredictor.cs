@@ -18,7 +18,7 @@ namespace EgoAnchor.Tools3.Predictors
     ///   - MOVING 区: 交回被装饰的 inner 预测器 (你已满意的 interp/blend) 跟踪;
     ///   - 两区切换由 **pose score 加权的运动证据 (CUSUM)** 仲裁。
     ///
-    /// 关键机制 (规避静态锁的经典毛病 —— 慢速真实运动被锁住 → 滞后 → 猛跳):
+    /// 关键机制 (规避静止锚定的经典毛病 —— 慢速真实运动被锁住 → 滞后 → 猛跳):
     ///   1. **死区 (deadband)**: 锁定时, 观测相对 lockedPose 的位移在死区内 → 完全忽略
     ///      (这是噪声地板, 杀掉静止抖动的核心);
     ///   2. **score 加权 CUSUM**: E += score·max(0, |Δ| − deadband), 每帧/每观测衰减。
@@ -38,14 +38,14 @@ namespace EgoAnchor.Tools3.Predictors
     ///      但 head-slip 还残留在 obsConsensus/速度里, 不冻结就会误解锁。给 obsConsensus 时间褪 slip 再恢复监测。
     ///
     /// 位置和旋转用 **独立证据通道** (静态物体的角度摇摆视觉上最刺眼, 必须单独锁/单独解)。
-    /// 这是 Unity 侧 host 内联 static-lock 的离线对照实现 (装饰器, 不改 inner)。
+    /// 这是 Unity 侧静止锚定的离线对照实现 (装饰器, 不改 inner)。
     /// </summary>
     public sealed class EgoAnchorStabilizerPredictor : IPredictor
     {
         private readonly IPredictor inner;
 
-        // --- 硬 score 门控 (拒坏 pose) ---
-        private readonly double scoreGateMinScore;   // 低于此分: 硬拒, 不喂 inner (Hold, 继续外推)
+        // --- 可选质量评估门控 (拒坏 pose) ---
+        private readonly double qualityGateMinScore; // 低于此分: 硬拒, 不喂 inner (Hold, 继续外推)
 
         // --- 进入锁: 静止判定 ---
         private readonly double staticEnterSpeed;     // m/s, 观测速度低于此 → 静止候选
@@ -165,11 +165,11 @@ namespace EgoAnchor.Tools3.Predictors
         public long FramesLocked { get; private set; }
         public long FramesSeam { get; private set; }
         public long FramesFree { get; private set; }
-        public long FramesGated { get; private set; }
+        public long FramesQualityRejected { get; private set; }
 
         public EgoAnchorStabilizerPredictor(
             IPredictor inner,
-            double scoreGateMinScore = 0.15,
+            double qualityGateMinScore = 0.15,
             double staticEnterSpeed = 0.05,
             double staticEnterAngSpeed = 35.0,
             double staticDwellSeconds = 0.35,
@@ -201,7 +201,7 @@ namespace EgoAnchor.Tools3.Predictors
             double lowScoreReleaseSeconds = 0.6)     // 持续低分此时长 → 强制解锁 (0=关闭)
         {
             this.inner = inner;
-            this.scoreGateMinScore = scoreGateMinScore;
+            this.qualityGateMinScore = qualityGateMinScore;
             this.staticEnterSpeed = staticEnterSpeed;
             this.staticEnterAngSpeed = staticEnterAngSpeed;
             this.staticDwellSeconds = Math.Max(staticDwellSeconds, 0.0);
@@ -274,11 +274,11 @@ namespace EgoAnchor.Tools3.Predictors
 
         public void OnObservation(in Observation observation)
         {
-            // 硬 score 门控: 太低分 = 坏 pose, 不喂 inner (Hold 语义: inner 用旧状态继续外推),
+            // 可选质量评估门控: 太低分 = 坏 pose, 不喂 inner (Hold 语义: inner 用旧状态继续外推),
             // 也不更新运动证据 (坏帧不该影响静/动判定)。
-            if (observation.Score < scoreGateMinScore)
+            if (observation.Score < qualityGateMinScore)
             {
-                FramesGated++;
+                FramesQualityRejected++;
                 return;
             }
 

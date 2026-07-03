@@ -41,7 +41,7 @@ class LogLoaderTest(unittest.TestCase):
             self.assertTrue(bool(primary["is_primary"]))
             self.assertAlmostEqual(float(primary["reliability_score"]), 0.8)
             self.assertEqual(primary["strategy_label"], "kalman_blend")
-            self.assertEqual(primary["gate"], "null_gate")
+            self.assertEqual(primary["quality_gate"], "disabled")
             self.assertEqual(primary["motion_model"], "kalman")
             self.assertEqual(primary["smoothing_strategy"], "blend")
             self.assertEqual(primary["config_hash"], "abc123")
@@ -102,7 +102,7 @@ class LogLoaderTest(unittest.TestCase):
                 load_session(session_dir)
 
     def test_variant_reads_module_keys(self) -> None:
-        """motion_model/smoothing_strategy/gate 应按新键名解析。"""
+        """motion_model/smoothing_strategy/quality_gate 应按当前键名解析。"""
 
         row = {
             "label": "kalman",
@@ -120,12 +120,12 @@ class LogLoaderTest(unittest.TestCase):
             "has_source_capture_timing": False,
             "source_capture_mono_ms": None,
             "source_capture_unity_frame": -1,
-            "gate": "null_gate",
+            "quality_gate": "disabled",
             "motion_model": "kalman",
             "smoothing_strategy": "blend",
         }
         variant = VariantRow.from_dict(row)
-        self.assertEqual(variant.gate, "null_gate")
+        self.assertEqual(variant.quality_gate, "disabled")
         self.assertEqual(variant.motion_model, "kalman")
         self.assertEqual(variant.smoothing_strategy, "blend")
 
@@ -148,7 +148,7 @@ class LogLoaderTest(unittest.TestCase):
                 {
                     "label": "kalman",
                     "strategy_label": "kalman_blend",
-                    "gate": "null_gate",
+                    "quality_gate": "disabled",
                     "motion_model": "kalman",
                     "smoothing_strategy": "blend",
                     "config_hash": "abc123",
@@ -269,7 +269,7 @@ class LogLoaderTest(unittest.TestCase):
                     "latest_phase": "TRACK",
                     "latest_failure": "",
                     "strategy_label": "kalman_blend",
-                    "gate": "null_gate",
+                    "quality_gate": "disabled",
                     "motion_model": "kalman",
                     "smoothing_strategy": "blend",
                     "config_hash": "abc123",
@@ -304,6 +304,7 @@ class LogLoaderTest(unittest.TestCase):
                     "policy_reason": "policy_disabled",
                     "latest_phase": "TRACK",
                     "latest_failure": "",
+                    "quality_gate": "disabled",
                 },
             ],
         }

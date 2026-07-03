@@ -123,7 +123,7 @@ class VariantRow:
     arrival_time_camera_reference: str
     reliability_score: float
     strategy_label: str
-    gate: str
+    quality_gate: str
     motion_model: str
     smoothing_strategy: str
     config_hash: str
@@ -189,7 +189,7 @@ class VariantRow:
             arrival_time_camera_reference=str(row.get("arrival_time_camera_reference", "")),
             reliability_score=_optional_float(row, "reliability_score", np.nan),
             strategy_label=str(row.get("strategy_label", "")),
-            gate=str(row.get("gate", "")),
+            quality_gate=_str(row, "quality_gate", context),
             motion_model=str(row.get("motion_model", "")),
             smoothing_strategy=str(row.get("smoothing_strategy", "")),
             config_hash=str(row.get("config_hash", "")),
@@ -230,7 +230,7 @@ class VariantRow:
             "arrival_time_camera_reference": self.arrival_time_camera_reference,
             "reliability_score": self.reliability_score,
             "strategy_label": self.strategy_label,
-            "gate": self.gate,
+            "quality_gate": self.quality_gate,
             "motion_model": self.motion_model,
             "smoothing_strategy": self.smoothing_strategy,
             "config_hash": self.config_hash,

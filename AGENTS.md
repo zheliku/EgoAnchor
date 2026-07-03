@@ -28,19 +28,19 @@
 
 EgoAnchor 面向开放消费级（passthrough）混合现实，把开放视觉感知能力转换成可直接使用的动态真实物体锚定能力。论文目标 IEEE VR 2027。
 
-核心信息（Core Message）：*EgoAnchor enables open, deployable, and stable dynamic object anchoring for everyday rigid objects in consumer MR.* 全文围绕三个维度叙事，**不再罗列"五个特点"或"五维能力空白矩阵"**：
+核心信息（Core Message）：*EgoAnchor enables open, deployable, and stable dynamic object anchoring for everyday rigid objects in consumer MR.* 全文围绕三个维度叙事：
 
 - **Open & Deployable**：仅依赖头显双目 RGB + 物体三维模型，无需物理标签、专用深度硬件或逐物体离线训练。
 - **General-purpose**：面向任意日常刚性物体，而非预定义类别（由"免逐物体训练"直接带来，是因果关系，不是并列）。
 - **Stable Dynamic Anchoring**：把异步视觉位姿持续维护为世界一致、可恢复的 6DoF 对象锚点，而不仅是输出位姿。
 
-架构上对象感知（Object Perception）与对象锚定（Object Anchoring）解耦：Visual Perception Backend 持续产出 camera-space 异步位姿观测；Object Anchoring Runtime 做帧对齐、质量门控、时序稳定与生命周期管理，输出 world-space object anchor。技术 novelty（frame-aligned anchoring 的 capture-time 对齐、reliability-aware static lock、anchor-centric evaluation）全部落在 Stable Dynamic Anchoring 维度里，是技术主体，不是普通 pose tracking 工程；维度 1、2 是可达性/通用性故事。旧"四层协同架构"降级为 Runtime 内部结构，不再当顶层骨架。
+架构上对象感知（Object Perception）与对象锚定（Object Anchoring）解耦：Visual Perception Backend 持续产出 camera-space 异步位姿观测；Object Anchoring Runtime 做时空对齐（基于采集时刻的 `frame_id` 精确帧对齐）、锚定策略、静止锚定和生命周期管理，输出 world-space object anchor。技术 novelty（frame-aligned anchoring 的 capture-time 对齐、静止锚定、anchor-centric evaluation）全部落在 Stable Dynamic Anchoring 维度里，是技术主体，不是普通 pose tracking 工程；维度 1、2 是可达性/通用性故事。质量评估门控不是独立模块；代码中保留为 `AnchorPolicyHost.enableQualityGate` 控制的内联可选观测拒绝逻辑，论文 RQ2 完整方法变体可打开。
 
 诚实边界（写文必须守）：「纯视觉」只修饰物体位姿估计链路，参考相机世界位姿来自头显自身跟踪；「open / deployable」指无需专用深度/标签/逐物体训练，**不等于头显端独立运行**——当前仍依赖外部消费级 GPU 推理与异步通信，不要把三维叙事滑成"Quest 上即插即用"。
 
 主线结构：
 
-- Python：`EgoAnchor_Python/src`，负责 Quest stereo/camera_info 接收、目标分割、FFS/FoundationPose/Cutie、可靠性评分、NATS pose/status/heartbeat/command。
+- Python：`EgoAnchor_Python/src`，负责 Quest stereo/camera_info 接收、目标语义分割、双目立体几何重建（FFS）、FoundationPose/Cutie、可靠性评分、NATS pose/status/heartbeat/command。
 - Unity：`EgoAnchor_Unity/Assets/Scripts/EgoAnchor`，负责 Quest 采集、frame pose history、camera-space pose 到 Unity world anchor、policy 输出和可视化运行时。
 - Protocol：`EgoAnchor_Protocol`，唯一 proto 和 subject 源；生成脚本同步 Python/Unity 输出。
 - Evaluation：`EgoAnchor_Tools3` 是当前主用离线升采样仿真工具；旧 `EgoAnchor_Tools` / `EgoAnchor_Tools2` 的同类项目不再作为主线验证依据。
@@ -85,7 +85,7 @@ EgoAnchor 固定采用双平面/三语义通道：
 Python 侧在 `EgoAnchor_Python` 目录运行：
 
 ```powershell
-pixi run python .\src\tracking_server.py
+pixi run python .\src\run_server.py
 pixi run tool-yoloe26-mask
 pixi run tool-sam3-mask
 pixi run python -m compileall src
@@ -115,7 +115,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 
 ## Python 主线
 
-- 入口：`EgoAnchor_Python/src/tracking_server.py` 调 `egoanchor.app.tracking_server`。
+- 入口：`EgoAnchor_Python/src/run_server.py` 调 `egoanchor.app.tracking_server`。
 - 配置：`src/egoanchor/config/defaults.toml` 和 `objects.toml`；每个 `.toml` 参数必须同行中文注释。
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
 - reliability：`render_quality.enabled=true` 默认只采集颜色重投影、mask 可见比例和深度对齐信号，并写入评分；Python 感知链路不根据低分或位姿跳变自行重新 register。单帧 Cutie mask 丢失输出 no-pose；连续空 mask 达到阈值会清空本地注册状态并等待后续有效输入重新 register。显式目标重获取由 Unity 通过 NATS `reacquire/reset` 命令驱动。
@@ -148,8 +148,8 @@ Python 细节坑：
 - 渲染质量检测只能采集和写分数；不要恢复 Python 内部低分自动重新 register 逻辑。
 - `pose_jump_translation_m/pose_jump_rotation_deg` 仍是 TRACK 后的硬异常位姿拒绝阈值，触发时输出 `TRACK_REJECT` no-pose，但不生成可靠性子分，也不自动重新 register；已删除的是 proto/评分里的 `score_jump` 子分。
 - `color_reprojection=-1` 表示本帧无有效颜色重投影信号，不是坏 pose。无效原因可能是 warmup、无 Cutie mask、渲染面积太小或 K 缺失。
-- VCD 可靠性评分统一解释为 Visibility-gated Color-Depth consistency：`R = V * G_CD`，其中 `G_CD = exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效 C/D 一致性证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。论文中不要把 `G_CD` 写成独立于 VCD 的第四个方法名。
-- 文献定位上不要把 VCD 单独表述为”首次提出 pose confidence / pose quality scoring”。已有 6D pose 文献包含 render-and-compare、hypothesis scoring、confidence、VSD/visible depth discrepancy 等相近思想；EgoAnchor 的创新边界应写成”面向 passthrough MR object anchoring 的在线、可解释、无 GT runtime reliability signal”，并强调它驱动 frame-aligned anchoring runtime 中的观测接收、静止锁、状态降级、reacquire 和 anchor 生命周期管理。
+- VCD 可靠性评分统一解释为 VCD（Visibility-gated Color-Depth）可靠性评分模型：`R = V * G_CD`，其中 `G_CD = exp((w_c ln C + w_d ln D) / (w_c + w_d))`，只对有效 C/D 一致性证据计权；默认 `reproj_weight=0.2`、`depth_weight=0.8`，深度权重高于颜色。论文中不要把 `G_CD` 写成独立于 VCD 的第四个方法名。
+- 文献定位上不要把 VCD 单独表述为”首次提出 pose confidence / pose quality scoring”。已有 6D pose 文献包含 render-and-compare、hypothesis scoring、confidence、VSD/visible depth discrepancy 等相近思想；EgoAnchor 的创新边界应写成”面向 passthrough MR object anchoring 的在线、可解释、无 GT runtime reliability signal”，并强调它驱动 frame-aligned anchoring runtime 中的观测接收、静止锚定、状态降级、reacquire 和 anchor 生命周期管理。
 - 深度对齐采用绝对-结构联合评估：`D = (1-α)·D_abs + α·D_struct`，其中 `D_abs` 基于逐像素残差统计（核心区域、距离自适应阈值、更宽容的残差容忍度 2.5×），`D_struct` 通过归一化深度图的 ZNCC 评估深度结构的空间对应关系。权重 `α ∈ [0, 0.35]` 根据深度 IQR 自适应调整：平坦表面（IQR < 20mm）回退到纯绝对残差，高频几何（IQR ≥ 20mm）引入结构验证。该机制解决手柄等高频几何物体在特殊角度下”形状正确但有系统性深度噪声”导致的深度分过低问题，实测从 0.406/0.306 提升到 0.9+，避免频繁误触发重定位。
 - depth 覆盖不足或渲染深度对齐无信号时 `score_depth=0.5` 是中性显示，不进入几何合取核；`render_quality_status=valid_no_valid_depth_overlap` 这类 `valid_*` 只表示颜色路径有效，不能当作深度有效信号。
 - `network.message_plane.enabled=false` 可用于 Python-only debug，避免没有 NATS server 时阻塞模型调试。
@@ -162,15 +162,15 @@ Python 细节坑：
 
 Unity policy 当前结构：
 
-- `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期和可选 score gate。`enableScoreGate=false` 是源码默认；开启时只按总可靠性分和测量-预测跳变拒绝观测，`GateName=score_jump_gate` 只是 eval 标签，不代表恢复 proto `score_jump` 字段。
-- `AnchorObservation.MeasurementTimeSeconds` 是采集时间轴，用于运动模型、平滑和静止锁；`LifecycleTimeSeconds` 是 Unity 到达时间轴，用于 stale/lost、低分持续时间和生命周期状态。不要用 capture time 刷新生命周期新鲜度，否则 register 推理耗时较长时，高分 pose 到达后会被误判为陈旧并触发 reacquire。
+- `AnchorPolicyHost` 持有 `MotionModel` + `SmoothingStrategy`，维护生命周期，并保留内联质量评估门控（`enableQualityGate`）。独立门控模块已删除；`enableQualityGate=false` 是源码默认，论文 RQ2 完整方法变体可在场景中开启。开启时只按总可靠性分和测量-预测跳变拒绝观测，eval 字段为 `quality_gate=enabled/disabled`。
+- `AnchorObservation.MeasurementTimeSeconds` 是采集时间轴，用于运动模型、平滑和静止锚定；`LifecycleTimeSeconds` 是 Unity 到达时间轴，用于 stale/lost、低分持续时间和生命周期状态。不要用 capture time 刷新生命周期新鲜度，否则 register 推理耗时较长时，高分 pose 到达后会被误判为陈旧并触发 reacquire。
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
   - `DelayedInterpStrategy` 的 Hermite 用控制点 Kalman 速度当切线，运动急停时速度估计滞后（`positionProcessNoise` 衰减不够快）会让两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃（用户报告“运动停下后 anchor 来回轻微震荡”）。修复：`hermiteTangentChordRatio`（默认3）把切线模长限到 K×弦长/span（位置、旋转通道各按自己弦长独立限幅）。停下时弦长≈0→切线≈0→不鼓包；真实运动时弦长≈v·span≈切线 ≪ K×弦长→不裁剪、行为不变。`BlendStrategy` 是残差单调衰减，无此问题。
-- `Policy/Contracts`：`AnchorObservation`、`AnchorPolicyDecision`、`AnchorPolicyOutput`、`GateDecision`。
+- `Policy/Contracts`：`AnchorObservation`、`AnchorPolicyDecision`、`AnchorPolicyOutput`、`QualityGateDecision`。
 - `Policy/Lifecycle`：`AnchorStateMachine`、`AnchorPolicyTypes`。
 - `Policy/Math`：`AnchorMath`、`ConstVelocityKalman`、`ScalarOneEuro`、`Spline`。
-- `EgoAnchorStaticLockModule` 是静止锁 MonoBehaviour 参数宿主；`StaticLockController` 是纯 C# 控制器。静止锁与 model × strategy 正交：挂模块并 `lockEnabled=true` 是 EgoAnchor 方法，不挂或关闭是 baseline。
+- `EgoAnchorStaticLockModule` 是静止锚定（StaticLock）MonoBehaviour 参数宿主；`StaticLockController` 是纯 C# 控制器。静止锚定与 model × strategy 正交：挂模块并 `lockEnabled=true` 是 EgoAnchor 方法，不挂或关闭是 baseline。
 
 Unity 代码地图：
 
@@ -186,17 +186,17 @@ Unity 代码地图：
 - `Runtime/AnchorRuntimeHub.cs`：pose/status/heartbeat fan-out 给多个 runtime；低分 reacquire fan-in 也在这里合并发出。hub 在 PoseResult 分发后和 `LateUpdate` 都会消费 runtime 的 server reacquire 标志，避免 Lost/断流时因为没有下一条 PoseResult 而卡住不发命令。
 - `Runtime/PoseToAnchorRuntime.cs`：把 camera-space pose 对齐为 Unity world pose，提交给 policy，每帧 `LateUpdate(-50)` 推进输出。
 - `Runtime/DynamicObjectAnchor.cs`：只读 `TryGetOutputPose` 并应用 Transform，不承载滤波、状态机、网络或 recovery。
-- `AnchorViz/AnchorStatusLabel.cs`：只做用户可见状态标签；简化模式对 Static/Tracking -> Uncertain 做短时间显示防抖，吸收低帧率或偶发低分帧造成的标签闪烁，不改变 `AnchorPolicyHost`、静止锁输出或 eval schema。
+- `AnchorViz/AnchorStatusLabel.cs`：只做用户可见状态标签；简化模式对 Static/Tracking -> Uncertain 做短时间显示防抖，吸收低帧率或偶发低分帧造成的标签闪烁，不改变 `AnchorPolicyHost`、静止锚定输出或 eval schema。
 - `EgoAnchorEval/AnchorEvalRecorder.cs`：按 capture/render 两条日志写 JSONL；配置摘要通过反射收集 `[SerializeField]` 字段，隐藏字段也会进入 config hash。
 
-静止锁命名约定：
+静止锚定（StaticLock）命名约定：
 
 - 在 `EgoAnchorStaticLockModule` 内字段名不再重复 `staticLock` 前缀，例如 `unlockDriftMeters`、`headSettleSeconds`、`lowScoreReleaseScore`。
 - 不使用 `FormerlySerializedAs` 兼容旧字段名；场景 YAML 直接迁移到新 key。
-- 静止锁所有仍参与控制逻辑的参数应保持可见，便于真机调参和复现实验。不要用 `[HideInInspector]` 把正在生效的调参字段藏起来；若后续要减少 Inspector 压力，应做自定义 Inspector foldout、profile 或进一步拆分参数宿主。
-- `LatestStaticLocked`、`motion_model`、`smoothing_strategy`、`gate`、`has_output_pose`、`output_pos`、`output_rot` 是当前 eval/runtime 契约，不要改回旧名。
+- 静止锚定所有仍参与控制逻辑的参数应保持可见，便于真机调参和复现实验。不要用 `[HideInInspector]` 把正在生效的调参字段藏起来；若后续要减少 Inspector 压力，应做自定义 Inspector foldout、profile 或进一步拆分参数宿主。
+- `LatestStaticLocked`、`motion_model`、`smoothing_strategy`、`quality_gate`、`has_output_pose`、`output_pos`、`output_rot` 是当前 eval/runtime 契约，不要改回旧名。
 
-静止锁核心机制：
+静止锚定核心机制：
 
 - `OnObservation` 只在 host 接受观测后调用；它更新 obs-to-obs 速度、头动容忍、观测共识、锁定/解锁证据。
 - `Stabilize(candidate, dt)` 每渲染帧调用。锁定时返回 `lockedPose`；解锁后用 seam residual 从锁点平滑回到 smoothing 输出；未锁定时透传 candidate。
@@ -207,14 +207,14 @@ Unity 代码地图：
 - 头动容忍系数 `headToleranceFactor=1+ratio*(headMaxToleranceFactor-1)`，同比放大死区、租绳和速度逃逸阈值。
 - creep 增益乘 `(1 - headMotionRatio)`。头动时不能让系统性 head-slip 偏置被 creep 写进锁点。
 - `headSettleSeconds` **只在头已停下、但沉降计时未走完的窗口内**冻结“判物体在动”的证据（速度逃逸/CUSUM/租绳，并清零三者累积）。它修的是“头扫静止物体、头一停就脱离 static”的时序竞速（头停瞬间 `headToleranceFactor` 塌回但 slip 还残留在 `obsConsensus`/速度里）。**头动期间绝不冻结**——那会把头动中物体的大幅真动也锁死；头动时只靠 `headToleranceFactor` 抬高阈值吸收 slip（slip 小幅、真动大幅，靠阈值区分）。计时在 `OnObservation` 维护：`headMotionRatio>0.06` 重置满、否则按 obsDt 递减；冻结判据是 `headMotionRatio<=0.06 && 计时>0`。
-- 距离自适应只放大位置通道，不放大旋转通道。远距离立体深度噪声更大，但旋转噪声不按距离同样变化。
+- 距离自适应只放大位置通道，不放大旋转通道。远距离双目立体几何重建的深度噪声更大，但旋转噪声不按距离同样变化。
 - 低分释放不受 head settle 冻结影响。它表示锁点可靠性差，应该强制释放并交给低分 reacquire 链路。
 
 低分/track-loss 自动 reacquire：`AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime.ConsumeServerReacquireRequest()` 透传；`AnchorRuntimeHub` 统一 fan-in，并用唯一 `reacquireCommandClient` 发 NATS reacquire。源码默认 `enableLostReacquire=true`、`enableLowScoreReacquire=true`，部分 baseline 场景会关闭低分重获取；持续低总分超过 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 后请求 Python 重新 register。`trackingScoreFloor` 源码默认 0.0，EgoAnchor 真机/评估场景可覆盖到 0.5 作为用户可见低质/状态降级提示。颜色/深度一致性加权平均只用于区分 `low_score_track_lost`、`low_score_no_geometry` 或普通 `low_score` 诊断原因，不再阻止 server reacquire。不要让 leaf runtime 或 policy 自持 command client。
 
 Unity/eval 字段契约：
 
-- C# 属性 `MotionModelName` / `SmoothingStrategyName` / `GateName` 对应 JSONL `motion_model` / `smoothing_strategy` / `gate`。
+- C# 属性 `MotionModelName` / `SmoothingStrategyName` / `QualityGateMode` 对应 JSONL `motion_model` / `smoothing_strategy` / `quality_gate`。
 - 每帧输出字段是 `has_output_pose` / `output_pos` / `output_rot`。不要恢复旧 `has_stable` / `stable_pos` / `stable_rot`。
 - `PoseResult` proto 当前字段名是 `color_reprojection` 和 `render_quality_evaluated`。不要恢复旧 `track_reprojection` / `render_quality_expected`。
 - `score_reprojection`、`score_depth`、`score_mask` 保持当前字段名；`score_phase`、`score_jump`、`score_reject`、`score_confidence` 已在 proto 中 reserved，不要恢复。
@@ -253,15 +253,16 @@ Unity 场景/序列化注意事项：
 最低实验闭环：
 
 1. Quest 真机 + Python real pipeline + Unity anchor runtime 连续运行。
-2. 对比 arrival-time anchoring vs frame-aligned anchoring。
-3. 对比 raw / low-pass 或 OneEuro / Kalman / reliability-aware static lock。
-4. 覆盖静态观察、快速头动、部分遮挡、出视野后重获。
-5. 至少 3 个代表性刚体物体。
-6. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
+2. RQ1 报告完整系统的锚定质量：精度、稳定性、响应性和鲁棒性。
+3. RQ2 做设计权衡消融：简化基线、时空对齐、完整方法（时空对齐 + 质量评估门控 + 静止锚定），并比较静止锚定与运动无关平滑。
+4. RQ3 覆盖多类日常刚性物体与典型应用场景。
+5. 覆盖静态观察、快速头动、部分遮挡、出视野后重获。
+6. 至少 3 个代表性刚体物体。
+7. 指标优先 world-space anchor error、jitter/slip、latency、recovery success/time。
 
-论文源文件：`2026-EgoAnchor-Typst/egoanchor_cn_v3.typ` 是当前中文主稿；`egoanchor_cn_v2.typ` 为上一版；`egoanchor_cn_v1.typ` 为初版 Typst 草稿；参考文献入口为 `2026-EgoAnchor-Typst/egoanchor_cn.bib`。`2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 是当前按代码事实梳理的技术流程文档，并已合并旧 `docs/architecture/` 技术路线内容；论文实现细节、统一术语、公式和系统边界优先以该文档和代码为准。`2026-EgoAnchor-Typst/figs/` 放当前 Typst 图像资产，`2026-EgoAnchor-Typst/pdf/` 是生成产物。
-论文写作使用 Typst 语法，不使用 LaTeX/BibTeX 编译链。写完主稿后在仓库根目录运行：`typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v3.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v3.pdf`。
-旧 `docs/architecture/` 已被完全删除，系统架构、技术路线与绘图提示词后续统一维护在 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 内。第三章（方法）已于 2026-07-01 完成重写，实现与底层代码细节（VCD 模型、卡尔曼状态模型、One Euro、可靠性静止锁 CUSUM/租绳/自适应机制）的 100% 对齐，并顺利通过本地 Typst 编译验证。第四章（系统实现）已于 2026-07-03 完成润色，补充了完整的硬件配置信息（Windows 11、i9-14900K、RTX 3090、32GB 内存）与多平台性能评估数据（RTX 3090/4090/5090 的推理时间对比），提升了学术表达质量。
+论文源文件：`2026-EgoAnchor-Typst/egoanchor_cn_v4.typ` 是当前中文主稿；`egoanchor_cn_v3.typ` 为上一版；`egoanchor_cn_v2.typ` 和 `egoanchor_cn_v1.typ` 为早期 Typst 草稿；参考文献入口为 `2026-EgoAnchor-Typst/egoanchor_cn.bib`。`egoanchor_cn_v4.typ` 是论文相关项目文档的术语基准；`2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 按 v4 论文术语记录代码事实、字段名、公式和系统边界。`2026-EgoAnchor-Typst/figs/` 放当前 Typst 图像资产，`2026-EgoAnchor-Typst/pdf/` 是生成产物。
+论文写作使用 Typst 语法，不使用 LaTeX/BibTeX 编译链。写完主稿后在仓库根目录运行：`typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v4.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v4.pdf`。
+`docs/architecture/` 已被完全删除，系统架构、技术路线与绘图提示词后续统一维护在 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md` 内。`egoanchor_cn_v4.typ` 是当前已确定论文文本；后续 AI 不要擅自改论文术语。2026-07-03 已将 `paper_planning_notes.md` 和 `egoanchor_code_derived_technical_flow.md` 的论文口径同步到 v4 术语：动态真实物体锚定、目标语义分割、双目立体几何重建、可靠性评分、时空对齐、运动估计与平滑、静止锚定和生命周期管理。RQ 以 v4 为准：RQ1=锚定质量，RQ2=设计权衡，RQ3=泛化能力；时空对齐和静止锚定的消融属于 RQ2。
 
 专利工作区：`EgoAnchor_Invention_Patent/`。专利文稿中的技术描述必须严格贴合当前主线实现：帧姿态历史正式路径只允许按 `frame_id` 精确命中，不得杜撰 latest-match、最近有效缓存回退、候选评分回查或“降级对齐”机制；静止锁相关公式要覆盖 `headToleranceFactor`、`posDistanceFactor`、`headSettleSeconds`、`lowScoreReleaseScore/Seconds` 等当前真实机制，不得退回成只写 deadband + CUSUM 的简化版本；同时要突出纯视觉链路、AI 模型链、异步通信、帧对齐、可靠性评分与整套 anchor 策略。这里“纯视觉”只适用于目标物体位姿估计链路，不得把参考相机世界位姿的来源写成“完全不依赖惯性传感器或外部空间定位传感器”的绝对方案。
 在进行专利初稿 `.docx` 的检查与确认时，需重点防范由格式转换引起的数学公式损坏：Word (OMML) 转换过程中指示函数 \(\mathbf 1[\cdot]\) 极易退化为普通数字 `1` 导致逻辑关系彻底失效；递推公式中的接缝残差等变量容易发生同名混淆（如将 \(\tilde{r}_t\) 误写为 \(r_t\)）；大括号分段函数易丢失且易残留 LaTeX 格式代码（如 `[6pt]`、`[4pt]`）。此外，Word 草稿在同步主稿时容易缺失较多控制公式及系统细化从属权利要求，且极易因模板残留引入无关技术文本（如“专家网络”等多模态无关内容），后续检查需以最新 `vNN` 主稿 `md` 文件为唯一绝对真理源进行全文核对与重构。

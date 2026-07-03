@@ -46,12 +46,12 @@ def compute_slip(output: pd.DataFrame, k: np.ndarray | None = None) -> tuple[pd.
     return detail, summarize_slip(detail)
 
 
-def build_raw_mapping_output(output: pd.DataFrame) -> pd.DataFrame:
-    """从 primary variant 构造 RQ1 raw mapping 对照表。
+def build_alignment_ablation_output(output: pd.DataFrame) -> pd.DataFrame:
+    """从 primary variant 构造 RQ2 时空对齐消融对照表。
 
     返回的 DataFrame 只包含两个 synthetic label：
     `frame_aligned_raw` 使用默认 capture-time frame alignment 的 aligned_raw；
-    `arrival_time_raw` 使用到达时参考相机 pose 的诊断 raw。该表不包含滤波、gate 或 recovery 输出。
+    `arrival_time_raw` 使用到达时参考相机 pose 的诊断 raw。该表不包含滤波、质量评估门控或 recovery 输出。
     """
 
     if output.empty:
@@ -60,7 +60,7 @@ def build_raw_mapping_output(output: pd.DataFrame) -> pd.DataFrame:
     records: list[dict[str, Any]] = []
     primary = output[output["is_primary"].fillna(False).astype(bool)]
     for _, row in primary.iterrows():
-        _append_raw_mapping_record(
+        _append_alignment_ablation_record(
             records,
             row,
             "frame_aligned_raw",
@@ -68,7 +68,7 @@ def build_raw_mapping_output(output: pd.DataFrame) -> pd.DataFrame:
             row.get("aligned_raw_pos"),
             row.get("aligned_raw_rot"),
         )
-        _append_raw_mapping_record(
+        _append_alignment_ablation_record(
             records,
             row,
             "arrival_time_raw",
@@ -116,7 +116,7 @@ def default_intrinsics(width: float = 640.0, height: float = 480.0, fov_deg: flo
     return np.array([[fx, 0.0, width * 0.5], [0.0, fy, height * 0.5], [0.0, 0.0, 1.0]], dtype=float)
 
 
-def _append_raw_mapping_record(
+def _append_alignment_ablation_record(
     records: list[dict[str, Any]],
     row: pd.Series,
     label: str,
@@ -124,7 +124,7 @@ def _append_raw_mapping_record(
     pos: Any,
     rot: Any,
 ) -> None:
-    """追加一行 synthetic raw mapping 输出。"""
+    """追加一行 synthetic 时空对齐消融输出。"""
 
     if not has_pose or not is_pose_value(pos) or not is_pose_value(rot):
         return
@@ -135,10 +135,10 @@ def _append_raw_mapping_record(
             "has_output_pose": True,
             "output_pos": pos,
             "output_rot": rot,
-            "anchor_state": "RawMappingDiagnostic",
+            "anchor_state": "AlignmentAblationDiagnostic",
             "policy_action": "diagnostic",
             "policy_reason": label,
-            "anchor_pose_source": "raw_mapping_diagnostic",
+            "anchor_pose_source": "alignment_ablation_diagnostic",
         }
     )
     records.append(record)
@@ -169,4 +169,4 @@ def _empty_summary() -> pd.DataFrame:
     return pd.DataFrame(columns=SUMMARY_COLUMNS)
 
 
-__all__ = ["build_raw_mapping_output", "compute_slip", "default_intrinsics", "summarize_slip"]
+__all__ = ["build_alignment_ablation_output", "compute_slip", "default_intrinsics", "summarize_slip"]

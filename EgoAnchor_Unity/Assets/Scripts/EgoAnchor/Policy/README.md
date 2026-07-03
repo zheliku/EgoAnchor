@@ -31,7 +31,7 @@
 | **KalmanModel** | kalman zoh | kalman + blend | kalman + interp |
 | **OneEuroModel** | oneeuro zoh | oneeuro + blend | oneeuro + interp |
 
-**正交的第三维：static-lock。** `EgoAnchorStaticLockModule` 与上面组合正交叠加：
+**正交的第三维：静止锚定。** `EgoAnchorStaticLockModule` 与上面组合正交叠加：
 挂上模块并启用 `lockEnabled` = 在该 baseline 之上加 EgoAnchor 静止锚定层；不挂或关闭 = 纯 baseline。
 **EgoAnchor 主方法 = 选定 baseline + `EgoAnchorStaticLockModule`**。当前常用起点是 `kalman + blend` 或 `kalman + interp`。
 
@@ -71,11 +71,11 @@
 | `motionModel` | 拖入运动模型子类 | 见上矩阵 |
 | `smoothingStrategy` | 拖入平滑策略子类 | 见上矩阵 |
 | `strategyLabel` | eval 用的名字，空则自动 `<model>_<strategy>` | 留空 |
-| **Score Gate（仅 EgoAnchor 方法开）** | | |
-| `enableScoreGate` | 是否拒绝低分/跳变坏观测。baseline 关、EgoAnchor 开 | baseline `false` |
-| `minScore` | 接受观测的最低可靠分 (0..1)，低于则拒绝 | `0.2` |
-| `maxJumpMeters` | 相对预测平移超过此值判为坏跳变拒绝 | `0.8` |
-| `maxJumpDegrees` | 相对预测旋转超过此值判为坏跳变拒绝 | `120` |
+| **质量评估门控（可选）** | | |
+| `enableQualityGate` | 是否拒绝低分/跳变坏观测。baseline 关；论文 RQ2 完整方法变体可开 | baseline `false` |
+| `minQualityScore` | 接受观测的最低可靠分 (0..1)，低于则拒绝 | `0.2` |
+| `maxQualityJumpMeters` | 相对预测平移超过此值判为坏跳变拒绝 | `0.8` |
+| `maxQualityJumpDegrees` | 相对预测旋转超过此值判为坏跳变拒绝 | `120` |
 | **Lifecycle** | | |
 | `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，EgoAnchor 真机显示可设 `0.5` 作为低质提示 | `0.0` |
 | `coastTimeoutSeconds` | 短时无观测仍继续外推/插值的时长 | `0.45` |
@@ -189,10 +189,10 @@
 **做消融对比**：raw、Kalman/OneEuro baseline、EgoAnchor 方法各建一个 GameObject，全拖进 `AnchorRuntimeHub`，
 一次录制用 `AnchorEvalRecorder` 拿全部数据，离线 `eval/` 出指标对比图。
 
-**EgoAnchor 方法（带 score + 静止锁定）**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
-挂 `EgoAnchorStaticLockModule` 且 `lockEnabled=true`（核心）+ 可选 `enableScoreGate=true`。
+**EgoAnchor 方法**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
+挂 `EgoAnchorStaticLockModule` 且 `lockEnabled=true`（核心）；论文 RQ2 完整方法变体可额外开启 `enableQualityGate=true`。
 
-> **EgoAnchor 不是"又一个滤波器"，而是建立在任意 baseline (model×strategy) 之上的 score-gated 分区静止锚定控制层。**
+> **EgoAnchor 不是"又一个滤波器"，而是建立在任意 baseline (model×strategy) 之上的可靠性约束静止锚定控制层。**
 > 被锚定的真实物体绝大多数时间静止（动的是头显，噪的是观测）。所有 baseline 都是 motion-agnostic 滤波器，
 > 静止时残留抖动；EgoAnchor 用静止锁定把小抖动当噪声吸收 → 抖动≈0（"看上去一动不动"），运动时交回 interp。
 > 同一 `Kalman+interp` 组合，挂/关 `EgoAnchorStaticLockModule` = baseline ↔ EgoAnchor，这是最干净的消融。
@@ -205,10 +205,10 @@
 
 ```
 Assets/Scripts/EgoAnchor/Policy/
-├─ AnchorPolicyHost.cs          # 持两模块 + 生命周期 + 可选 score 门控 + 每帧输出
-├─ EgoAnchorStaticLockModule.cs # 静止锁 MonoBehaviour 参数宿主
-├─ StaticLockController.cs      # 静止锁纯 C# 控制器
-├─ Contracts/                   # 模块接缝数据契约：AnchorObservation / AnchorPolicyDecision / AnchorPolicyOutput / GateDecision
+├─ AnchorPolicyHost.cs          # 持两模块 + 生命周期 + 可选质量评估门控 + 每帧输出
+├─ EgoAnchorStaticLockModule.cs # 静止锚定 MonoBehaviour 参数宿主
+├─ StaticLockController.cs      # 静止锚定纯 C# 控制器
+├─ Contracts/                   # 模块接缝数据契约：AnchorObservation / AnchorPolicyDecision / AnchorPolicyOutput / QualityGateDecision
 ├─ Lifecycle/                   # AnchorStateMachine + AnchorPolicyTypes (状态/运动状态/生命周期事件枚举)
 ├─ Math/                        # AnchorMath (四元数/向量基元) + ConstVelocityKalman / ScalarOneEuro / Spline
 ├─ Models/                      # MotionModel 基类 + CV / Kalman / OneEuro
