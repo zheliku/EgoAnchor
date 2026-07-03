@@ -1,9 +1,8 @@
-﻿<Solution>
+<Solution>
   <Project Path="EgoAnchor.csproj" />
   <Project Path="VHierarchy.csproj" />
   <Project Path="HighlightPlus.Demo.csproj" />
   <Project Path="HighlightPlus.Runtime.csproj" />
-  <Project Path="EgoAnchorEval.csproj" />
   <Project Path="VFolders.csproj" />
   <Project Path="EgoAnchor.Tests.csproj" />
   <Project Path="Proxima.csproj" />

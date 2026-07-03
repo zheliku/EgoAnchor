@@ -28,8 +28,8 @@ namespace EgoAnchor.Policy
         [SerializeField] private float enterSpeedMps = 0.05f;
 
         /// <summary>进入静止判定的角速度阈值，单位 deg/s。</summary>
-        [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设太低 (低于旋转噪声地板) 会导致永不锁定 (5090@12fps 旋转噪声地板 ~15°/s)。默认 35。")]
-        [SerializeField] private float enterAngSpeedDps = 35.0f;
+        [Tooltip("进入静止判定的观测角速度阈值 (deg/s)。设为噪声地板的 1.5-2 倍，在抑制噪声与快速锁定间平衡 (5090@12fps 旋转噪声地板 ~15°/s)。默认 22。")]
+        [SerializeField] private float enterAngSpeedDps = 22.0f;
 
         /// <summary>进入锁定需连续保持静止的时间，单位秒 (帧率无关)。</summary>
         [Tooltip("进入锁定需连续保持静止 (+高分) 的时间 (秒)。防静止判定抖动。帧率无关。默认 0.35。")]

@@ -96,7 +96,7 @@
 |---|---|---|
 | `lockEnabled` | 是否启用静止锚定稳定器。关闭后透传 baseline 输出 | `true` |
 | `enterSpeedMps` | 进入静止判定的观测线速度阈值 (m/s) | `0.05` |
-| `enterAngSpeedDps` | 进入静止判定的角速度阈值 (deg/s)，必须高于旋转噪声地板 | `35` |
+| `enterAngSpeedDps` | 进入静止判定的角速度阈值 (deg/s)，设为噪声地板的 1.5 倍以平衡抑制噪声与快速锁定 | `22` |
 | `dwellSeconds` | 进入锁定需连续静止+高分的时间 | `0.35` |
 | `minScore` | 进入/维持锁定的最低可靠分 | `0.25` |
 | `deadbandMeters` | 锁定时位置死区，小于此视为噪声 | `0.008` |

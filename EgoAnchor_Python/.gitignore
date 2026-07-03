@@ -43,6 +43,7 @@
 /data/eval/
 /data/online/*/output/
 /data/runtime_logs/
+/data/research/
 
 # Logs pulled back from remote GPU boxes; keep a possible placeholder trackable.
 /data/runtime_logs_remote/*

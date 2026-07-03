@@ -122,7 +122,7 @@ namespace EgoAnchor.Policy
         // === 参数 (host 注入) ===
         // 时间量纲均为帧率无关 (秒 / 半衰期秒)。速度阈值是物理量, 与帧率无关。
         private float staticEnterSpeedMps = 0.05f;
-        private float staticEnterAngSpeedDps = 35.0f;
+        private float staticEnterAngSpeedDps = 22.0f;
         private float staticDwellSeconds = 0.35f;
         private float staticEnterMinScore = 0.25f;
         private float deadbandMeters = 0.008f;

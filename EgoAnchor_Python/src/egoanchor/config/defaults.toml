@@ -33,10 +33,10 @@ interval_s = 1.0 # ServerHeartbeat 发布间隔，单位秒；保持低频，避
 
 [runtime.logging]
 enabled = true # 是否保存 Python server 结构化 JSONL 日志；用于论文实验复盘和状态机调试。
-output_dir = "data/runtime_logs" # 日志根目录，相对 EgoAnchor_Python；每次启动直接写入一个时间戳 JSONL 文件。
+output_dir = "data/runtime_logs" # 普通运行时日志目录（eval_session_enabled=false 时使用），相对 EgoAnchor_Python；每次启动直接写入一个时间戳 JSONL 文件。
 filename = "" # JSONL 文件名；空值表示使用启动时间戳，例如 20260527-031500.jsonl。
-eval_session_enabled = true # 是否将 Python runtime 日志写入 data/eval/<session_id> 共享评估目录，便于 Unity 自动复用。
-eval_output_dir = "data/eval" # 共享评估 session 根目录，相对 EgoAnchor_Python；Python 先启动时会在此创建时间戳对象目录。
+eval_session_enabled = true # 是否启用评估session模式：在共享目录写入日志并生成元数据，便于 Unity 自动配对复用。
+eval_output_dir = "data/eval" # 评估session日志根目录（eval_session_enabled=true 时使用），相对 EgoAnchor_Python；每次启动在该目录下创建 <session_id>/ 子目录。
 eval_metadata_filename = "python_session.json" # Python 写入的 session 元数据文件名；Unity 通过它自动找到对应 runtime log。
 flush_every = 1 # 每写入多少条事件 flush 一次；1 最安全，调大可减少磁盘 flush 频率。
 log_pose_results = true # 是否记录每帧 PoseResult 摘要，包括 pose score、phase、flags 和 frame_id。

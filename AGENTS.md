@@ -120,7 +120,9 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 - 分割：默认 `module.segmenter.type="yoloe26"`；SAM3 只能显式配置启用，不能改成默认。
 - reliability：`render_quality.enabled=true` 默认只采集颜色重投影、mask 可见比例和深度对齐信号，并写入评分；Python 感知链路不根据低分或位姿跳变自行重新 register。单帧 Cutie mask 丢失输出 no-pose；连续空 mask 达到阈值会清空本地注册状态并等待后续有效输入重新 register。显式目标重获取由 Unity 通过 NATS `reacquire/reset` 命令驱动。
 - diagnostics：`debug_view.py` 的主 pose dashboard 和独立 score debug 窗口都使用顶部信息横幅；图像面板必须从横幅下方开始排布，面板标签放在各自图像下方的独立标签条内，避免文字覆盖调试画面。主窗口横幅固定 9 行，评分窗口横幅固定 5 行加 3 条 V/C/D 子分条；不要按实际诊断行数动态改变 banner 高度，长文本按窗口宽度截断。主窗口 depth 面板保留原始深度伪彩色，只画 1px mask 轮廓，不做 mask 内部填充。score debug 窗口保持颜色重投影/深度对齐 2x3 诊断矩阵，上下两行都按观测、渲染、残差从左到右排列；RGB 面板只画 render/Cutie 轮廓，render/depth/残差面板使用中性背景或观测灰度上下文，避免黑底和半透明高亮掩盖原始颜色。残差面板右侧带热力图色标；深度残差图显示 `abs(render_depth - observed_depth)`，蓝色表示残差小、对齐好，红色表示残差大、差异明显，色标高端显示当前帧 p95 残差。`tracking_server` 的 OpenCV 合成显示用 `debug_window_max_fps` 和 `score_window_max_fps` 独立节流，默认主窗口 20Hz、score 窗口 6Hz；score 窗口的 LAB/深度残差矩阵较重，不要恢复成每个 pipeline 帧强制重建。
-- logging：`runtime.logging.eval_session_enabled=true` 时创建 `data/eval/<session_id>/`，PoseResult 的 `header.session_id` 供 Unity 本地建同名目录配对。
+- logging：两种模式
+  - **评估session模式**（`eval_session_enabled=true`，默认）：在 `data/eval/<session_id>/` 创建共享目录，写入Python runtime日志和元数据，供Unity自动配对。`header.session_id` 通过NATS广播给Unity。
+  - **普通运行时模式**（`eval_session_enabled=false`）：在 `data/runtime_logs/` 写入独立时间戳日志，用于日常调试，不与Unity配对。
 - 时间：人类可读 session_id 用北京时间 UTC+8；单调钟和 UTC epoch 不受时区影响。
 - command path：`NatsMessageClient -> NatsRouter -> HandlerRegistry -> CommandDedupStore/CommandQueue -> TrackingRuntime`。NATS handler 只能 parse/validate/dedup/enqueue/ack，pipeline/GPU 状态由单一 `TrackingRuntime` 顺序拥有。
 
@@ -166,7 +168,8 @@ Unity policy 当前结构：
 - `AnchorObservation.MeasurementTimeSeconds` 是采集时间轴，用于运动模型、平滑和静止锚定；`LifecycleTimeSeconds` 是 Unity 到达时间轴，用于 stale/lost、低分持续时间和生命周期状态。不要用 capture time 刷新生命周期新鲜度，否则 register 推理耗时较长时，高分 pose 到达后会被误判为陈旧并触发 reacquire。
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
-  - `DelayedInterpStrategy` 的 Hermite 用控制点 Kalman 速度当切线，运动急停时速度估计滞后（`positionProcessNoise` 衰减不够快）会让两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃（用户报告“运动停下后 anchor 来回轻微震荡”）。修复：`hermiteTangentChordRatio`（默认3）把切线模长限到 K×弦长/span（位置、旋转通道各按自己弦长独立限幅）。停下时弦长≈0→切线≈0→不鼓包；真实运动时弦长≈v·span≈切线 ≪ K×弦长→不裁剪、行为不变。`BlendStrategy` 是残差单调衰减，无此问题。
+  - `DelayedInterpStrategy` 的 Hermite 用控制点 Kalman 速度当切线，运动急停时速度估计滞后（`positionProcessNoise` 衰减不够快）会让两个位置几乎重合的控制点之间挂着非零切线 → 样条鼓出再弹回 = 过冲振铃（用户报告”运动停下后 anchor 来回轻微震荡”）。修复：`hermiteTangentChordRatio`（默认3）把切线模长限到 K×弦长/span（位置、旋转通道各按自己弦长独立限幅）。停下时弦长≈0→切线≈0→不鼓包；真实运动时弦长≈v·span≈切线 ≪ K×弦长→不裁剪、行为不变。`BlendStrategy` 是残差单调衰减，无此问题。
+  - `DelayedInterpStrategy` 的延迟自适应增加变化率限制（`MaxDelayChangePerSecond=0.05`），防止Python推理时间波动导致延迟突变影响用户体验。延迟目标按实测采集-渲染延迟×安全系数计算，但通过 `Mathf.MoveTowards` 平滑过渡，最多每秒变化50ms。
 - `Policy/Contracts`：`AnchorObservation`、`AnchorPolicyDecision`、`AnchorPolicyOutput`、`QualityGateDecision`。
 - `Policy/Lifecycle`：`AnchorStateMachine`、`AnchorPolicyTypes`。
 - `Policy/Math`：`AnchorMath`、`ConstVelocityKalman`、`ScalarOneEuro`、`Spline`。
@@ -200,7 +203,7 @@ Unity 代码地图：
 
 - `OnObservation` 只在 host 接受观测后调用；它更新 obs-to-obs 速度、头动容忍、观测共识、锁定/解锁证据。
 - `Stabilize(candidate, dt)` 每渲染帧调用。锁定时返回 `lockedPose`；解锁后用 seam residual 从锁点平滑回到 smoothing 输出；未锁定时透传 candidate。
-- 进入锁定看 `enterSpeedMps`、`enterAngSpeedDps`、`dwellSeconds`、`minScore`。这些阈值必须高于真实观测噪声地板，尤其角速度阈值太低会永不锁定。
+- 进入锁定看 `enterSpeedMps`、`enterAngSpeedDps`、`dwellSeconds`、`minScore`。角速度阈值 `enterAngSpeedDps=22°/s` 设为观测噪声地板（~15°/s）的约 1.5 倍，在抑制噪声与快速锁定间平衡。线速度和角速度阈值必须高于真实观测噪声地板，尤其角速度阈值太低会永不锁定。
 - 解锁证据有三路：速度逃逸、漂移租绳、CUSUM。三路都按真实 dt 处理，不绑定帧率。
 - 漂移租绳量的是 `distance(obsConsensus, anchorOrigin)`，不是单帧观测，也不是 creep 后的 `lockedPose`。改回 `lockedPose` 会导致慢速持续移动时永不解锁。
 - `obsConsensus` 是死区无关的低增益 EMA，用来平滑单帧噪声/head-slip，同时跟随真实持续位移。
@@ -284,7 +287,7 @@ Unity 场景/序列化注意事项：
 ## Python 远端同步
 
 - `EgoAnchor_Python/mutagen.yml` 统一管理 RTX4090、RTX5090 和 RTX5080 Laptop 的 Python 服务器同步。本机是唯一源码源头，三个 `source-*` 会话使用 `one-way-safe` 从本机推到远端；远端源码改动会变成冲突，不会自动回流。Mutagen session 名只能使用合法 name 字符，使用连字符，不要用下划线。
-- 远端日志通过独立 `eval-logs-*` 和 `runtime-logs-*` 会话拉回本机，统一落在 `EgoAnchor_Python/data/eval`。三台机器若生成同名日志会产生冲突；保持 `one-way-safe`，不要改成会镜像删除本地文件的模式。
+- 远端日志通过独立 `logs-*` 会话拉回本机，统一落在 `EgoAnchor_Python/data/eval`。三台机器若生成同名日志会产生冲突；保持 `one-way-safe`，不要改成会镜像删除本地文件的模式。
 - 源码同步忽略 `.pixi`、权重、ONNX/TRT engine、runtime 日志、eval 日志、debug 输出和平台相关 build 产物。权重和 TensorRT engine 按机器本地维护；RTX5080 Laptop 是 Windows 原生路径 `D:/Projects/EgoAnchor_Python`。
 - 当前本机 SSH 默认公钥是 `C:\Users\zheliku\.ssh\id_ed25519.pub`，指纹 `SHA256:/pWd7s01iijezRD+YVju7yJdrKNMQIMPKwdo64HZLz8`；RTX4090、RTX5090 和 RTX5080 Laptop 已验证可免密登录。若 Codex 沙箱里 `ssh` 被 `.sbx-denybin` 覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。
 - RTX5080 Laptop 的 `gjw` 属于 Windows 管理员组，Windows OpenSSH 会读取 `C:\ProgramData\ssh\administrators_authorized_keys`，不是普通用户的 `C:\Users\gjw\.ssh\authorized_keys`。必须在 RTX5080 本机用管理员 PowerShell 写入公钥、设置 ACL，并重启 `sshd`；不要在 SSH 会话里启动 `notepad`。RTX5080 的 Windows SSH 默认 `cmd.exe` 代码页已通过 `HKCU\Software\Microsoft\Command Processor\AutoRun = chcp 65001 >NUL` 切到 UTF-8，否则 Mutagen 可能报 `remote did not return UTF-8 output`。
@@ -308,6 +311,207 @@ Unity 场景/序列化注意事项：
 - 大改后同步入口、模块职责、协议字段、配置名、验证命令和关键坑。
 - 若代码事实推翻旧描述，直接改旧条目，不要追加相互矛盾的新条目。
 - 本机 Codex 已在用户配置中启用 `superpowers@openai-curated`；后续 AI 若会话暴露该插件技能，应先读/调用 `using-superpowers` 再处理任务。
+
+## 近期优化记录
+
+### 2026-07-04 RQ1 评估系统全面重建（2026-07-04 更新）
+
+**Unity 侧（EgoAnchorEval → EgoAnchor.Eval）**：
+- 旧 `EgoAnchorEval/` 目录（命名空间混乱、9 个文件）全部删除重建。
+- 新目录：`Assets/Scripts/EgoAnchor/Eval/`，属于 `EgoAnchor` 程序集，命名空间 `EgoAnchor.Eval`。
+- 4 个核心脚本：
+  - `EvalLog.cs`：JSONL 写入器（轻量文件操作）
+  - `EvalJson.cs`：capture/output/manifest JSON 行构建，含 `EvalVariantSnapshot`、`EvalVariantConfig` 数据结构
+  - `EvalRecorder.cs`：订阅 `StereoFrameSource.FrameCaptured` 写 capture 行；`LateUpdate` 写 output 行（含 GT 线速度/角速度）
+  - `EvalSession.cs`：session 开始/停止，`autoStart=true` 时收到第一个 PoseResult 自动开始，写 `session_manifest.json`
+  - `EvalHotkeys.cs`：F7/F8 热键（可选，使用内置 Input 系统）
+- 日志 schema 不变（Python 侧已有 schema 继续兼容）。
+
+**Python 侧**：
+- `eval/io/schemas.py`：`OutputRow` 补充 `gt_linear_speed_m_s`、`gt_angular_speed_deg_s` 字段（Unity 侧已写入）。
+- `eval/research/rq1/analyze.py`（新建）：单 session RQ1 分析，自动场景检测 → 指标计算 → CSV + Markdown 输出。
+- `eval/research/rq1/run_rq1.py`（重写）：批量分析 CLI，数据完整性检查 → 逐 session 分析 → 跨 session 聚合。
+- 删除空目录 `eval/rq1_new/`。
+
+**使用方式**：
+```bash
+# 单 session 分析
+pixi run python -m egoanchor.eval.research.rq1.analyze \
+    --session data/eval/20260704_143000_controller_right
+
+# 批量 RQ1 分析（自动场景检测 + 聚合）
+pixi run python -m egoanchor.eval.research.rq1.run_rq1
+pixi run python -m egoanchor.eval.research.rq1.run_rq1 --pattern "*controller_right*"
+```
+
+**输出结构**：
+```
+data/research/rq1/
+├── <session_id>/
+│   ├── segments.csv          # 自动场景片段
+│   ├── anchor_error_*.csv    # 锚定误差
+│   ├── jitter_*.csv          # 抖动指标
+│   └── summary.md            # 人类可读摘要
+├── rq1_summary.csv           # 跨 session 汇总
+└── rq1_aggregate.csv         # 跨 session 按场景均值
+```
+
+---
+
+### 2026-07-04 Unity评估录制自动启动
+
+**核心改进**：
+1. **自动启动录制功能**：Unity收到第一个PoseResult时自动开始录制
+   - 新增配置项：`EvalSessionController.autoStartOnFirstPose`（默认true）
+   - 无需手动按F7，Python启动后Unity自动配对并开始录制
+   - 适合长时间连续数据采集
+   
+2. **恢复RQ1自动化流程**：
+   - 采集：Python启动 → Unity自动录制 → 停止保存
+   - 分析：一键运行 `rq1.run_rq1` 从 `data/eval` 读取并输出到 `data/research/rq1`
+   
+3. **实现细节**：
+   - `Start()` 初始化并输出自动启动提示
+   - `LateUpdate()` 每帧检查 `runtimeHub.LatestPythonSessionId`
+   - 检测到非空session_id时触发 `StartSession()`
+   - 使用 `hasReceivedPose` 标志确保只触发一次
+
+**使用方式**：
+- 自动模式（推荐）：勾选 `Auto Start On First Pose`，启动Python后Unity自动录制
+- 手动模式：取消勾选，使用F7/F8热键控制录制时机
+
+**文档**：`UNITY_AUTO_START_RECORDING.md`
+
+---
+
+### 2026-07-04 Mutagen配置简化
+
+**核心改进**：
+1. **只保留RTX5090配置**：注释了RTX4090和RTX5080的同步会话
+2. **简化配置文件**：减少不必要的配置，提高可维护性
+
+**修改内容**：
+- 保留：`push-5090`（源码同步）和 `logs-5090`（日志拉取）
+- 注释：`push-4090`、`logs-4090`、`push-5080`、`logs-5080`
+
+---
+
+### 2026-07-04 数据目录结构优化
+
+**核心改进**：
+1. **统一数据管理**：所有数据统一在 `data/` 目录下组织
+   - `data/eval/` - 原始session日志（Python和Unity运行时输出）
+   - `data/research/` - 研究问题分析结果（RQ1/RQ2/RQ3的分析产物）
+   - `data/runtime_logs/` - 普通运行时调试日志
+   
+2. **目录职责明确**：
+   - `data/eval/<session_id>/` - 存储采集的原始日志（Python和Unity配对）
+   - `data/research/rq1/`, `rq2/`, `rq3/` - 存储分析结果（CSV表格、PNG图表、汇总报告）
+   - 一份eval日志可用于多个RQ分析，避免数据重复
+   
+3. **修改文件清单**：
+   - `EgoAnchor_Python/mutagen.yml` - 同步路径使用 `data/eval`
+   - `EgoAnchor_Python/src/egoanchor/runtime/tracking_runtime.py` - 默认回退路径
+   - `EgoAnchor_Python/src/egoanchor/config/defaults.toml` - 配置路径和注释优化
+   - `EgoAnchor_Unity/.../EvalSessionController.cs` - Unity默认输出路径
+   - `EgoAnchor_Unity/.../RecordedAnchorReplaySource.cs` - 注释中的示例路径
+   - 文档更新：AGENTS.md, eval/README.md, egoanchor_code_derived_technical_flow.md 等
+
+**验证状态**：
+- ✅ Unity编译通过（0错误）
+- ✅ 配置文件已更新
+- ✅ 文档已同步更新
+
+**工作流程**：
+```bash
+# 采集：写入 data/eval/
+pixi run python src/run_server.py
+
+# 分析：从 data/eval/ 读取，结果写入 data/research/
+pixi run python -m egoanchor.eval.research.rq1.run_rq1 \
+    --source data/eval \
+    --output data/research/rq1
+```
+
+### 2026-07-04 输出路径统一到debug目录（已回退）
+
+**核心改进**：
+1. **输出路径统一**：Python和Unity的原始日志输出统一到 `debug/` 目录
+   - Python：`runtime.logging.eval_output_dir = "debug"`（已在defaults.toml配置）
+   - Unity：默认输出路径改为 `EgoAnchor_Python/debug`
+   - Mutagen：远端日志同步路径从 `data/eval` 改为 `debug`
+   
+2. **目录职责明确**：
+   - `debug/` - 原始日志存储目录（Python和Unity运行时输出，包含session数据）
+   - `eval/rq1/`, `eval/rq2/`, `eval/rq3/` - 分析结果目录（只存储分析产物，不存原始日志）
+   - 避免数据重复，一份debug日志可用于多个RQ分析
+   
+3. **修改文件清单**：
+   - `EgoAnchor_Python/mutagen.yml` - 同步路径从 `data/eval` 改为 `debug`
+   - `EgoAnchor_Python/src/egoanchor/runtime/tracking_runtime.py` - 默认回退路径
+   - `EgoAnchor_Unity/.../EvalSessionController.cs` - Unity默认输出路径
+   - `EgoAnchor_Unity/.../RecordedAnchorReplaySource.cs` - 注释中的示例路径
+   - 文档更新：AGENTS.md, README.md, egoanchor_code_derived_technical_flow.md 等
+
+**验证状态**：
+- ✅ Unity编译通过（0错误，2个无关警告）
+- ✅ 配置文件已更新
+- ✅ 文档已同步更新
+
+### 2026-07-04 项目重组与RQ自动化评估系统
+
+**核心改进**：
+1. **项目结构重组**：数据与分析分离
+   - `debug/` 存储所有原始日志（采集时写入，Python和Unity都输出到这里）
+   - `eval/rq1/`, `eval/rq2/`, `eval/rq3/` 存储分析结果（分析时生成，只保存分析产物）
+   - 避免数据重复，一份日志可用于多个RQ分析
+   
+2. **全自动评估流程**：
+   - 采集时无需按键标记，全程自动录制
+   - 事后通过GT速度和anchor状态自动识别场景
+   - 一键命令完成场景检测、批量评估、跨场景汇总、报告生成
+   
+3. **评估工具链**：
+   - `eval/batch_eval.py` - 批量评估多个sessions
+   - `eval/auto_scenario_detection.py` - 自动场景检测
+   - `eval/cross_scenario_analysis.py` - 跨场景汇总分析
+   - `eval/rq1/run_rq1.py` - RQ1一键自动化脚本
+   
+4. **项目清理**：
+   - 删除旧评估工具 `EgoAnchor_Tools` 和 `EgoAnchor_Tools2`
+   - 删除空目录 `eval/calib`
+   - 简化文档结构
+
+**工作流程**：
+```bash
+# 采集：写入 data/eval/
+pixi run python src/run_server.py
+
+# 分析：从 data/eval/ 读取，结果写入 data/research/
+pixi run python -m egoanchor.eval.research.rq1.run_rq1 \
+    --source data/eval \
+    --output data/research/rq1
+```
+
+**核心文档**：
+- `data/DATA_ORGANIZATION.md` - 数据组织规范（简化版）
+- `eval/rq1/README.md` - RQ1分析说明
+
+### 2025-01-XX Unity 实现优化
+
+**关键修改**：
+1. 静止锚定角速度阈值从 35°/s 优化到 22°/s（噪声地板的 1.5 倍），平衡抑制噪声与快速锁定
+2. 论文延迟描述从"固定 100-150ms"改为"自适应 100-350ms"，与代码实现一致
+3. DelayedInterpStrategy 增加延迟变化率限制（50ms/s），防止 GPU 波动导致的突变
+
+**详细文档**：
+- `OPTIMIZATION_SUMMARY.md` - 完整优化总结和后续行动建议
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/OPTIMIZATION_LOG.md` - 技术细节
+
+**验证状态**：
+- ✅ Unity 编译通过（0 错误）
+- ✅ 论文编译通过（无语法错误）
+- ⏳ 待真机测试验证效果
 
 ## 性能统计
 

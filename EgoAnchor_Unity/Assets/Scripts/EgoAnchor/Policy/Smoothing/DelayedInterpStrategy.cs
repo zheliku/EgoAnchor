@@ -57,6 +57,8 @@ namespace EgoAnchor.Policy
         private readonly List<ControlPoint> points = new List<ControlPoint>(64);
         private float delaySeconds = 0.25f;
         private float latencyEstimateSeconds; // 实测 now - 最新控制点时间 的 EMA
+        private double lastOutputTimeSeconds; // 上次输出时间，用于计算帧间隔
+        private const float MaxDelayChangePerSecond = 0.05f; // 延迟变化率限制: 最多每秒变化50ms，防突变
 
         public override string StrategyName => spline == SplineKind.CentripetalCatmullRom ? "interp_catmull" : "interp_hermite";
 
@@ -67,6 +69,7 @@ namespace EgoAnchor.Policy
             points.Clear();
             delaySeconds = Mathf.Max(minDelaySeconds, 0.05f);
             latencyEstimateSeconds = 0.0f;
+            lastOutputTimeSeconds = 0.0;
         }
 
         public override void OnObservation(MotionModel model, in AnchorObservation observation)
@@ -101,7 +104,11 @@ namespace EgoAnchor.Policy
             float observedLatency = Mathf.Max((float)(nowSeconds - points[points.Count - 1].TimeSeconds), 0.0f);
             // 偏向跟随较大值 (快升慢降)，避免延迟不足导致外推
             latencyEstimateSeconds = AnchorMath.UpdateAsymmetricEma(latencyEstimateSeconds, observedLatency);
-            delaySeconds = Mathf.Max(latencyEstimateSeconds * Mathf.Clamp(latencySafetyMargin, 1.0f, 2.0f), minDelaySeconds);
+
+            // 计算目标延迟，但限制变化速率防止突变影响用户体验
+            float targetDelay = Mathf.Max(latencyEstimateSeconds * Mathf.Clamp(latencySafetyMargin, 1.0f, 2.0f), minDelaySeconds);
+            float maxDelta = MaxDelayChangePerSecond * Mathf.Max((float)(nowSeconds - lastOutputTimeSeconds), 0.0f);
+            delaySeconds = Mathf.MoveTowards(delaySeconds, targetDelay, maxDelta);
 
             double target = nowSeconds - delaySeconds;
 
@@ -125,6 +132,7 @@ namespace EgoAnchor.Policy
             float span = Mathf.Max((float)(p2.TimeSeconds - p1.TimeSeconds), 1e-6f);
             float u = Mathf.Clamp01((float)(target - p1.TimeSeconds) / span);
 
+            lastOutputTimeSeconds = nowSeconds;
             return spline == SplineKind.CentripetalCatmullRom
                 ? InterpCatmull(i, u)
                 : InterpHermite(p1, p2, u, span);

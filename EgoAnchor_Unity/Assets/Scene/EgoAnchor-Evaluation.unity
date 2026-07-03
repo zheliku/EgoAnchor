@@ -1807,7 +1807,6 @@ Transform:
   - {fileID: 1012424101}
   - {fileID: 1797798962}
   - {fileID: 1764014455}
-  - {fileID: 675627946}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &448430450
@@ -2813,7 +2812,7 @@ MonoBehaviour:
   minCutoff: 1
   beta: 0.25
   derivativeCutoff: 1
---- !u!1 &675627945
+--- !u!1 &667335321
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2821,115 +2820,73 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 675627946}
-  - component: {fileID: 675627949}
-  - component: {fileID: 675627948}
-  - component: {fileID: 675627947}
+  - component: {fileID: 667335323}
+  - component: {fileID: 667335322}
+  - component: {fileID: 667335324}
   m_Layer: 0
-  m_Name: EvalRig
+  m_Name: EvalRecorder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &675627946
+--- !u!114 &667335322
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667335321}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2353b8d5430e36b4e9b252a745cf8d89, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder
+  groundTruth: {fileID: 728089507}
+  headAnchor: {fileID: 1846668452}
+  alignmentRef: 1
+  stereoSource: {fileID: 634882299}
+  framePoseHistory: {fileID: 1764014454}
+  gtController: 2
+  variants:
+  - label: egoanchor
+    runtime: {fileID: 160200731}
+    anchorTransform: {fileID: 160200733}
+    isPrimary: 0
+--- !u!4 &667335323
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 675627945}
+  m_GameObject: {fileID: 667335321}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.05468, y: -0, z: 0.03607}
+  m_LocalPosition: {x: -0.43032, y: 0, z: -0.02534}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 448430449}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &675627947
+--- !u!114 &667335324
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 675627945}
+  m_GameObject: {fileID: 667335321}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4383186c4fd3ee9003bdd891bfe52bbe, type: 3}
+  m_Script: {fileID: 11500000, guid: 5ede288ff7460744eb350cb8f9be1782, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.AnchorEvalRecorder
-  groundTruthTransform: {fileID: 728089507}
-  headAnchor: {fileID: 1846668452}
-  alignmentReference: 1
-  stereoSource: {fileID: 634882299}
-  framePoseHistory: {fileID: 1764014454}
-  recordedRuntimes:
-  - label: egoanchor
-    runtime: {fileID: 160200731}
-    anchorTransform: {fileID: 160200733}
-    isPrimary: 1
-  - label: kalman+interp
-    runtime: {fileID: 1430656898}
-    anchorTransform: {fileID: 1430656900}
-    isPrimary: 0
-  - label: oneeuro+blend
-    runtime: {fileID: 1852106714}
-    anchorTransform: {fileID: 1852106716}
-    isPrimary: 0
-  - label: cv+blend
-    runtime: {fileID: 302482019}
-    anchorTransform: {fileID: 302482021}
-    isPrimary: 0
-  - label: raw
-    runtime: {fileID: 1137170458}
-    anchorTransform: {fileID: 1137170460}
-    isPrimary: 0
---- !u!114 &675627948
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 675627945}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7e19b0e5d02b4ff4b5a2a179c923ac71, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionHotkeyDriver
-  controller: {fileID: 675627949}
-  startSessionKey: 100
-  stopSessionKey: 101
-  endConditionKey: 50
-  staticKey: 41
-  slowHeadKey: 42
-  fastHeadKey: 43
-  objectMotionKey: 44
-  occlusionKey: 45
-  outOfViewKey: 46
-  lightingKey: 47
-  markOcclusionKey: 29
-  markOutOfViewKey: 36
-  markRecoveryKey: 32
---- !u!114 &675627949
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 675627945}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ec5e8d9fb81f4e2c9a7157a3bb5dfc43, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchorEval::EgoAnchorEval.EvalSessionController
-  recorder: {fileID: 675627947}
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalSession
+  recorder: {fileID: 667335322}
   runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
-  unityRunMode: editor_link
-  reusePythonSessionId: 1
-  sessionNotes: 11
+  runMode: editor_link
+  autoStart: 1
+  notes: 
 --- !u!1 &722913589
 GameObject:
   m_ObjectHideFlags: 0
@@ -6613,7 +6570,7 @@ Transform:
   m_GameObject: {fileID: 1777492726}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.05382, y: 0, z: 0.10197}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -8134,3 +8091,4 @@ SceneRoots:
   - {fileID: 80447225}
   - {fileID: 448430449}
   - {fileID: 1777492728}
+  - {fileID: 667335323}
