@@ -59,7 +59,9 @@ namespace EgoAnchor.Eval
             Pose gtPose,
             float gtLinearSpeedMs,
             float gtAngularSpeedDegS,
-            IReadOnlyList<EvalVariantSnapshot> variants)
+            IReadOnlyList<EvalVariantSnapshot> variants,
+            string rq1Metric = null,
+            double rq1MetricDuration = 0.0)
         {
             var b = new Builder(1024);
             b.Str("event", "unity_output");
@@ -74,6 +76,9 @@ namespace EgoAnchor.Eval
             b.Str("gt_pose_source", gtValid ? "transform" : "none");
             b.Flt("gt_linear_speed_m_s", gtLinearSpeedMs);
             b.Flt("gt_angular_speed_deg_s", gtAngularSpeedDegS);
+            // RQ1 手动标记字段（可选）
+            b.Str("rq1_metric", rq1Metric ?? "none");
+            b.Dbl("rq1_metric_duration", rq1MetricDuration);
             b.Variants(variants);
             return b.Finish();
         }

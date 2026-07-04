@@ -260,6 +260,10 @@ class OutputRow:
     """Unity 侧按帧差分计算的 GT 线速度，单位 m/s；首帧为 0。"""
     gt_angular_speed_deg_s: float
     """Unity 侧按帧差分计算的 GT 角速度，单位 deg/s；首帧为 0。"""
+    rq1_metric: str
+    """RQ1 手动标记的指标类型（对齐论文 RQ1 实验条件）；无标记时为 'none'。"""
+    rq1_metric_duration: float
+    """当前 RQ1 指标持续时间（秒）。"""
     variants: list[VariantRow]
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -292,6 +296,8 @@ class OutputRow:
             gt_pose_source=_str(row, "gt_pose_source", context),
             gt_linear_speed_m_s=_optional_float(row, "gt_linear_speed_m_s", 0.0),
             gt_angular_speed_deg_s=_optional_float(row, "gt_angular_speed_deg_s", 0.0),
+            rq1_metric=_optional_str(row, "rq1_metric", "none"),
+            rq1_metric_duration=_optional_float(row, "rq1_metric_duration", 0.0),
             variants=[
                 VariantRow.from_dict(item, source=f"{source}:variants[{index}]")
                 for index, item in enumerate(raw_variants)
@@ -318,6 +324,8 @@ class OutputRow:
                 "gt_pose_source": self.gt_pose_source,
                 "gt_linear_speed_m_s": self.gt_linear_speed_m_s,
                 "gt_angular_speed_deg_s": self.gt_angular_speed_deg_s,
+                "rq1_metric": self.rq1_metric,
+                "rq1_metric_duration": self.rq1_metric_duration,
                 "valid": self.valid,
             }
             record.update(variant.to_record())
@@ -577,6 +585,13 @@ def _str(row: JsonRow, field_name: str, context: str) -> str:
     """读取 string 字段。"""
 
     return str(_required(row, field_name, context))
+
+
+def _optional_str(row: JsonRow, field_name: str, default: str) -> str:
+    """读取可选 string 字段。"""
+
+    value = row.get(field_name, default)
+    return str(value) if value is not None else default
 
 
 def _array(row: JsonRow, field_name: str, length: int, context: str, *, allow_none: bool = False) -> np.ndarray | None:

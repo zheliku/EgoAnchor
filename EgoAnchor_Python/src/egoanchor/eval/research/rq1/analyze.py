@@ -3,7 +3,7 @@
 从 `data/eval/<session_id>/` 读取日志，输出到 `data/research/rq1/<session_id>/`。
 分析步骤：
 1. 加载 session 日志（capture + output + pose_result + manifest）
-2. 自动检测场景片段（静止 / 慢速 / 快速 / 旋转 / 遮挡）
+2. 提取手动标注场景片段（Unity 侧按键 1-5 标注的 rq1_metric 字段）
 3. 计算 RQ1 核心指标：anchor_error、jitter、lag、latency、recovery
 4. 写 CSV 和 Markdown 摘要
 """
@@ -36,7 +36,11 @@ def _df_to_md(df: pd.DataFrame) -> str:
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join([header, sep] + rows)
 
-from egoanchor.eval.core.auto_scenario_detection import detect_scenarios, summarize_segments
+from egoanchor.eval.core.manual_scenario_extraction import (
+    extract_manual_segments,
+    summarize_manual_segments,
+    print_segment_summary,
+)
 from egoanchor.eval.core.gt_filter import filter_valid_gt, suggest_startup_cutoff
 from egoanchor.eval.io import load_session, SessionLogs
 from egoanchor.eval.metrics import compute_all_metrics
@@ -97,12 +101,12 @@ def analyze_session(
     # ── 写过滤统计 ──
     _write_filter_report(out_path, n_total, n_valid, n_drop, drop_pct, grace, frozen_window_s)
 
-    # ── 自动场景检测（仅用有效帧） ──
+    # ── 手动标注场景提取（仅用有效帧） ──
     if not valid_primary.empty:
-        segments = detect_scenarios(valid_primary)
-        seg_df = summarize_segments(segments)
+        segments = extract_manual_segments(valid_primary)
+        seg_df = summarize_manual_segments(segments)
         seg_df.to_csv(out_path / "segments.csv", index=False)
-        seg_df.pipe(_df_to_md)
+        print_segment_summary(segments)
     else:
         segments = []
 
@@ -202,15 +206,16 @@ def _write_summary(result: Any, logs: Any, segments: list, out_path: Path,
     else:
         lines.append("")
 
-    # 场景片段概览
+    # 场景片段概览（手动标注）
     if segments:
-        lines.append("## 场景片段\n")
-        from egoanchor.eval.core.auto_scenario_detection import ScenarioType
+        lines.append("## 场景片段（手动标注）\n")
         from collections import Counter
-        cnt = Counter(s.scenario_type.value for s in segments)
+        from egoanchor.eval.core.manual_scenario_extraction import METRIC_DISPLAY
+        cnt = Counter(s.metric for s in segments)
         for stype, n in sorted(cnt.items()):
-            dur = sum(s.duration for s in segments if s.scenario_type.value == stype)
-            lines.append(f"- **{stype}**: {n} 段，共 {dur:.1f} s")
+            dur = sum(s.duration for s in segments if s.metric == stype)
+            name = METRIC_DISPLAY.get(stype, stype)
+            lines.append(f"- **{stype}** ({name}): {n} 段，共 {dur:.1f} s")
         lines.append("")
 
     # anchor_error 表

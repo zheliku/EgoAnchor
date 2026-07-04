@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using EgoAnchor.Alignment;
+using EgoAnchor.Eval.RQ1;
 using EgoAnchor.Policy;
 using EgoAnchor.Quest;
 using EgoAnchor.Runtime;
@@ -80,6 +81,11 @@ namespace EgoAnchor.Eval
         [Header("Variants")]
         [Tooltip("要录制的 runtime 变体列表。")]
         [SerializeField] private List<EvalVariant> variants = new List<EvalVariant>();
+
+        /// <summary>可选：RQ1 指标记录器，用于记录手动标记的指标类型。</summary>
+        [Header("RQ1 Metrics (Optional)")]
+        [Tooltip("可选：RQ1 指标记录器；若绑定，则在 output 行中记录当前指标。")]
+        [SerializeField] private RQ1MetricRecorder rq1Recorder;
 
         // ── State ──
 
@@ -216,11 +222,21 @@ namespace EgoAnchor.Eval
             }
             if (gtValid) { _lastGtPose = gtPose; _lastGtMonoMs = monoMs; _hasLastGt = true; }
 
+            // 获取 RQ1 指标标记（如果有）
+            string rq1Metric = "none";
+            double rq1MetricDuration = 0.0;
+            if (rq1Recorder != null && rq1Recorder.IsRecording)
+            {
+                rq1Metric = rq1Recorder.CurrentMetric.ToLogString();
+                rq1MetricDuration = rq1Recorder.CurrentMetricDuration;
+            }
+
             long sourceFrameId = BuildSnapshots();
             _outputLog.Write(EvalJson.BuildOutputLine(
                 monoMs, unixMs, UnityEngine.Time.frameCount, sourceFrameId,
                 headPose, gtValid, gtPose,
-                gtLinear, gtAngular, _snapshots));
+                gtLinear, gtAngular, _snapshots,
+                rq1Metric, rq1MetricDuration));
         }
 
         // ── 内部辅助 ──

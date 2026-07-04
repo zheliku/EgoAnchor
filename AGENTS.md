@@ -314,6 +314,60 @@ Unity 场景/序列化注意事项：
 
 ## 近期优化记录
 
+### 2026-07-04 RQ1 手动标记评估系统实施（进行中）
+
+**背景**：改变 RQ1 数据采集方式，从 Python 自动场景检测改为 Unity 按键手动标记，原因是自动分析总是出错，分不清具体的物体运动状态。
+
+**核心改动**：
+
+1. **Python 侧场景类型对齐论文**（已完成）
+   - 更新 `auto_scenario_detection.py` 的 `ScenarioType` 枚举
+   - 旧：`STATIC/SLOW_MOTION/FAST_MOTION/ROTATION/OCCLUSION`
+   - 新：`STATIC_OBSERVATION/SLOW_TRANSLATION/FAST_MOTION/ROTATION/OCCLUSION_RECOVERY`
+   - 严格对齐论文 `egoanchor_cn_v4.typ` 第304行 RQ1 实验条件
+   - 更新检测阈值：慢速平移 5-10 cm/s，快速挥动 50+ cm/s
+
+2. **Python Schema 扩展**（已完成）
+   - `schemas.py` 添加 `rq1_metric: str` 和 `rq1_metric_duration: float` 字段
+   - 添加 `_optional_str()` 辅助函数
+   - `OutputRow.to_records()` 包含 RQ1 字段
+
+3. **Unity RQ1 评估组件**（已完成代码，待 Unity Editor 同步）
+   - 新增 `Eval/RQ1/` 命名空间和目录
+   - `RQ1MetricType.cs`：5种指标枚举 + 扩展方法（对齐论文）
+   - `RQ1MetricRecorder.cs`：记录指标类型和持续时间
+   - `RQ1InputHandler.cs`：使用新 Input System 处理按键（1-5设置指标，0清除）
+   - `RQ1StatusUI.cs`：实时显示面板（录制状态、当前指标、建议时长）
+
+4. **集成到现有评估系统**（已完成）
+   - `EvalRecorder.cs`：添加可选 `rq1Recorder` 字段，在 output 行写入 RQ1 字段
+   - `EvalJson.cs`：`BuildOutputLine()` 添加 `rq1_metric` 和 `rq1_metric_duration` 参数
+   - `EvalSession.cs`：添加 `using EgoAnchor.Eval.RQ1`
+
+**RQ1 实验条件（论文对齐）**：
+1. 长时静止（60s）：物体静置桌面，用户头部正常活动
+2. 慢速平移（20s）：5-10 cm/s 水平移动
+3. 快速挥动（20s）：50+ cm/s 快速运动
+4. 旋转运动（20s）：绕多个轴旋转
+5. 遮挡恢复（重复10次）：短暂遮挡后恢复
+
+**待完成**：
+- Unity Editor 中打开项目，让其检测新文件并重新生成 csproj
+- 创建 `EgoAnchor-RQ1.unity` 测试场景（复制 EgoAnchor-Develop）
+- 配置 Canvas UI 面板和组件绑定
+- 修改 Python 分析脚本优先使用手动标记
+- 真机测试完整流程
+
+**技术细节**：
+- 按键映射：1=长时静止，2=慢速平移，3=快速挥动，4=旋转运动，5=遮挡恢复，0=清除
+- 输出格式：`unity_output.jsonl` 每行添加 `rq1_metric` 和 `rq1_metric_duration`
+- 自动检测作为回退：无手动标记时使用自动场景检测
+- 使用新 Input System（`UnityEngine.InputSystem`），不使用旧 `Input`
+
+**详细文档**：`RQ1_IMPLEMENTATION_SUMMARY.md`
+
+---
+
 ### 2026-07-04 RQ1 评估系统全面重建（2026-07-04 更新）
 
 **Unity 侧（EgoAnchorEval → EgoAnchor.Eval）**：
