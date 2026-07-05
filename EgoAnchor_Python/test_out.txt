@@ -1,0 +1,85 @@
+........................request rejected subject=egoanchor.v1.cmd.anchor.reset has_reply=True error=Error parsing message with type 'protocol.v1.ResetTrackingRequest'
+.request rejected subject=egoanchor.v1.cmd.anchor.reset has_reply=True error="no handler registered for subject='egoanchor.v1.cmd.anchor.reset'"
+..........FF......F........................���� NATS ʧ�� url=nats://127.0.0.1:4222��nats down
+���� NATS ʧ�� url=nats://127.0.0.1:4222��nats down
+..NATS request callback ʧ�� subject=egoanchor.test reply=True��handler failed
+.NATS request reply ����ʧ�� subject=egoanchor.test reply=_INBOX.2��publish down
+..............................Quest camera_info ��Ч�������ȴ���Ч�궨: QuestCameraInfo ȱ����Ч�ı궨ͼ��ߴ硣
+.FoundationPose register ������Ч pose��������֡��
+.FoundationPose track ������Ч pose���ȴ� Unity ���ػ�ȡ���
+.FoundationPose pose ���ӻ�ʧ�ܣ�������֡ debug ͼ: visualize failed
+......E...EE..............runtime JSONL д��ʧ�ܣ������� event=pose_result failures=1��disk unavailable
+.....................E..
+======================================================================
+ERROR: test_track_deltas_reports_translation_and_rotation (egoanchor.tests.test_quest_pose_pipeline_segmenter.QuestPosePipelineSegmenterTest.test_track_deltas_reports_translation_and_rotation)
+���� pose ��ƽ�ƺ���ת����Ӧ�ȶ����ɿ�������ʹ�á�
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_quest_pose_pipeline_segmenter.py", line 268, in test_track_deltas_reports_translation_and_rotation
+    translation_m, rotation_deg = QuestPosePipeline._track_deltas(current, previous)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'QuestPosePipeline' has no attribute '_track_deltas'
+
+======================================================================
+ERROR: test_depth_alignment_uses_adaptive_threshold (egoanchor.tests.test_render_quality.DepthAlignmentCheckerTest.test_depth_alignment_uses_adaptive_threshold)
+����ԽԶ����� inlier ��ֵӦ�������ſ���
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_render_quality.py", line 145, in test_depth_alignment_uses_adaptive_threshold
+    close = DepthAlignmentChecker._score_from_maps(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DepthAlignmentChecker._score_from_maps() missing 5 required keyword-only arguments: 'residual_scale', 'enable_structural', 'structural_max_weight', 'structural_iqr_thresh', and 'core_erode_kernel'
+
+======================================================================
+ERROR: test_depth_coverage_insufficient_returns_neutral_score (egoanchor.tests.test_render_quality.DepthAlignmentCheckerTest.test_depth_coverage_insufficient_returns_neutral_score)
+��ȸ��ǲ����������źŲ��㣬��Ӧαװ�����ֻ�ǿ���ϡ�
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_render_quality.py", line 177, in test_depth_coverage_insufficient_returns_neutral_score
+    result = DepthAlignmentChecker._score_from_maps(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DepthAlignmentChecker._score_from_maps() missing 5 required keyword-only arguments: 'residual_scale', 'enable_structural', 'structural_max_weight', 'structural_iqr_thresh', and 'core_erode_kernel'
+
+======================================================================
+ERROR: test_score_debug_rendering_is_rate_limited_independently (egoanchor.tests.test_tracking_server_app.TrackingServerAppTest.test_score_debug_rendering_is_rate_limited_independently)
+���ִ���Ӧ������֡�������ػ棬����ÿ֡�ظ�����������Ͼ���
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_tracking_server_app.py", line 168, in test_score_debug_rendering_is_rate_limited_independently
+    run_tracking_server()
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\app\tracking_server.py", line 143, in run_tracking_server
+    output.diagnostics.debug_render_ms = debug_render_ms
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'object' object has no attribute 'debug_render_ms'
+
+======================================================================
+FAIL: test_pose_dashboard_panel_area_stays_stable_when_hud_lines_change (egoanchor.tests.test_debug_view.DebugViewTest.test_pose_dashboard_panel_area_stays_stable_when_hud_lines_change)
+������ HUD �����仯ʱ��ͼ���������ͳߴ粻��������
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_debug_view.py", line 188, in test_pose_dashboard_panel_area_stays_stable_when_hud_lines_change
+    self.assertGreater(float(np.mean(normal[expected_banner_h + 8, 160])), 200.0)
+AssertionError: 0.0 not greater than 200.0
+
+======================================================================
+FAIL: test_pose_dashboard_reserves_top_banner (egoanchor.tests.test_debug_view.DebugViewTest.test_pose_dashboard_reserves_top_banner)
+�����Դ��ڶ���Ӧ���� HUD ������Ĺ�����Ӻ���·���ʼ��
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_debug_view.py", line 155, in test_pose_dashboard_reserves_top_banner
+    self.assertGreater(float(np.mean(view[expected_banner_h + 8, 160])), 200.0)
+AssertionError: 0.0 not greater than 200.0
+
+======================================================================
+FAIL: test_score_debug_view_prints_score_breakdown (egoanchor.tests.test_debug_view.DebugViewTest.test_score_debug_view_prints_score_breakdown)
+�������ִ���Ӧ��ʾ���������ӷֺ���Ⱦ�����ֽ⡣
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "P:\VSCode-Project\EgoAnchor\EgoAnchor_Python\src\egoanchor\tests\test_debug_view.py", line 76, in test_score_debug_view_prints_score_breakdown
+    self.assertTrue(any("score=0.20" in text for text in texts))
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 154 tests in 4.472s
+
+FAILED (failures=3, errors=4)

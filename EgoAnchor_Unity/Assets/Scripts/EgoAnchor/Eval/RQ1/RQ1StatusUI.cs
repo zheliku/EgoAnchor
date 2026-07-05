@@ -16,7 +16,7 @@ namespace EgoAnchor.Eval.RQ1
 
         [Header("References")]
         [Tooltip("RQ1 指标记录器。")]
-        [SerializeField] private RQ1MetricRecorder recorder;
+        [SerializeField] private RQ1MetricSelector selector;
 
         [Tooltip("评估 session 控制器。")]
         [SerializeField] private EvalSession evalSession;
@@ -113,9 +113,9 @@ namespace EgoAnchor.Eval.RQ1
             }
 
             // 当前指标
-            if (currentMetricText != null && recorder != null)
+            if (currentMetricText != null && selector != null)
             {
-                RQ1MetricType metric = recorder.CurrentMetric;
+                RQ1MetricType metric = selector.CurrentMetric;
                 if (metric == RQ1MetricType.None)
                 {
                     currentMetricText.text = "Current Metric: None";
@@ -129,9 +129,9 @@ namespace EgoAnchor.Eval.RQ1
             }
 
             // 建议时长
-            if (suggestedDurationText != null && recorder != null)
+            if (suggestedDurationText != null && selector != null)
             {
-                RQ1MetricType metric = recorder.CurrentMetric;
+                RQ1MetricType metric = selector.CurrentMetric;
                 int suggestedDuration = metric.GetSuggestedDuration();
                 if (suggestedDuration > 0)
                 {
@@ -148,11 +148,11 @@ namespace EgoAnchor.Eval.RQ1
             }
 
             // 已标记时长
-            if (markedDurationText != null && recorder != null)
+            if (markedDurationText != null && selector != null)
             {
-                if (recorder.CurrentMetric != RQ1MetricType.None)
+                if (selector.CurrentMetric != RQ1MetricType.None)
                 {
-                    double markedDuration = recorder.CurrentMetricDuration;
+                    double markedDuration = selector.CurrentMetricDuration;
                     int minutes = (int)(markedDuration / 60);
                     int seconds = (int)(markedDuration % 60);
                     markedDurationText.text = $"Marked: {minutes:00}:{seconds:00}";
@@ -171,7 +171,7 @@ namespace EgoAnchor.Eval.RQ1
         {
             if (keyBindingsText == null) return;
 
-            RQ1MetricType active = recorder != null ? recorder.CurrentMetric : RQ1MetricType.None;
+            RQ1MetricType active = selector != null ? selector.CurrentMetric : RQ1MetricType.None;
 
             // 每行格式：[键] 名称  时长提示  ← 当前
             var sb = new System.Text.StringBuilder();

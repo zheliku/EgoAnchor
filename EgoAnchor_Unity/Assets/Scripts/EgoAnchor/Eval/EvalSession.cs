@@ -4,9 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using EgoAnchor.Diagnostics;
-using EgoAnchor.Eval.RQ1;
 using EgoAnchor.Runtime;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace EgoAnchor.Eval
 {
@@ -54,6 +54,17 @@ namespace EgoAnchor.Eval
         [TextArea]
         [SerializeField] private string notes = string.Empty;
 
+        // ── Events ──
+
+        /// <summary>录制开始时触发；在 Inspector 挂会话边界回调（如 RQ1MetricSelector.ClearMetric 清空标记）。</summary>
+        [Header("Session Events")]
+        [Tooltip("录制开始时触发（自动启动和 F7 手动启动都会触发）。可在 Inspector 挂 RQ1/RQ2/RQ3 的会话边界回调。")]
+        [SerializeField] private UnityEvent sessionStarted = new UnityEvent();
+
+        /// <summary>录制停止时触发；在 Inspector 挂会话边界回调（如 RQ1MetricSelector.ClearMetric 清空标记）。</summary>
+        [Tooltip("录制停止时触发（F8 手动停止和 OnDestroy 都会触发）。可在 Inspector 挂 RQ1/RQ2/RQ3 的会话边界回调。")]
+        [SerializeField] private UnityEvent sessionStopped = new UnityEvent();
+
         // ── State ──
 
         private string _sessionId;
@@ -76,6 +87,12 @@ namespace EgoAnchor.Eval
         /// <summary>当前是否正在录制。</summary>
         public bool IsRecording => _recording;
 
+        /// <summary>录制开始事件；自动启动和 F7 手动启动都会触发，供会话边界回调订阅。</summary>
+        public UnityEvent SessionStarted => sessionStarted;
+
+        /// <summary>录制停止事件；F8 手动停止和 OnDestroy 都会触发，供会话边界回调订阅。</summary>
+        public UnityEvent SessionStopped => sessionStopped;
+
         /// <summary>
         /// 启动一个新的评估 session。
         /// 若 Python session_id 已通过 NATS 到达，则复用其命名；否则回退到本地时钟命名。
@@ -88,7 +105,11 @@ namespace EgoAnchor.Eval
                 return;
             }
 
-            if (_recording) StopSession();
+            if (_recording)
+            {
+                EgoAnchorLog.For<EvalSession>().Warning("StartSession 忽略：已有进行中的 session，请先调用 StopSession。数据不会被截断。");
+                return;
+            }
 
             string root = ResolveOutputRoot();
             _pythonLogFilename = string.Empty;
@@ -116,6 +137,7 @@ namespace EgoAnchor.Eval
             string outputPath  = Path.Combine(_sessionDir, $"{_sessionId}_unity_output.jsonl");
             recorder.BeginRecording(capturePath, outputPath);
             _recording = true;
+            sessionStarted.Invoke();
 
             EgoAnchorLog.For<EvalSession>().Info($"Session 开始：{_sessionDir}  object_id={objectId}  gt={recorder.GtTransformName}");
             if (string.IsNullOrEmpty(recorder.GtTransformName))
@@ -133,6 +155,7 @@ namespace EgoAnchor.Eval
 
             recorder?.StopRecording();
             _recording = false;
+            sessionStopped.Invoke();
             WriteManifest();
             EgoAnchorLog.For<EvalSession>().Info($"Session 结束：{_sessionDir}");
         }

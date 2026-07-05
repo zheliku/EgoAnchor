@@ -14,14 +14,14 @@ namespace EgoAnchor.Eval.RQ1
     /// - F8: Stop recording
     /// </para>
     /// </summary>
-    [RequireComponent(typeof(RQ1MetricRecorder))]
+    [RequireComponent(typeof(RQ1MetricSelector))]
     public sealed class RQ1InputHandler : MonoBehaviour
     {
         // ── References ──
 
         [Header("References")]
-        [Tooltip("RQ1 metric recorder.")]
-        [SerializeField] private RQ1MetricRecorder recorder;
+        [Tooltip("RQ1 metric selector (holds the currently marked metric).")]
+        [SerializeField] private RQ1MetricSelector selector;
 
         [Tooltip("Eval session controller (for F7/F8 control).")]
         [SerializeField] private EvalSession evalSession;
@@ -58,28 +58,20 @@ namespace EgoAnchor.Eval.RQ1
 
         private void Awake()
         {
-            if (recorder == null) recorder = GetComponent<RQ1MetricRecorder>();
+            if (selector == null) selector = GetComponent<RQ1MetricSelector>();
         }
 
         private void OnEnable()
         {
             // Register callbacks
-            metric1Action.performed += _ => recorder?.SetMetric(RQ1MetricType.StaticObservation);
-            metric2Action.performed += _ => recorder?.SetMetric(RQ1MetricType.SlowTranslation);
-            metric3Action.performed += _ => recorder?.SetMetric(RQ1MetricType.FastMotion);
-            metric4Action.performed += _ => recorder?.SetMetric(RQ1MetricType.Rotation);
-            metric5Action.performed += _ => recorder?.SetMetric(RQ1MetricType.OcclusionRecovery);
-            clearMetricAction.performed += _ => recorder?.ClearMetric();
-            startRecordingAction.performed += _ =>
-            {
-                evalSession?.StartSession();
-                recorder?.StartRecording();
-            };
-            stopRecordingAction.performed += _ =>
-            {
-                evalSession?.StopSession();
-                recorder?.StopRecording();
-            };
+            metric1Action.performed += _ => selector?.SetMetric(RQ1MetricType.StaticObservation);
+            metric2Action.performed += _ => selector?.SetMetric(RQ1MetricType.SlowTranslation);
+            metric3Action.performed += _ => selector?.SetMetric(RQ1MetricType.FastMotion);
+            metric4Action.performed += _ => selector?.SetMetric(RQ1MetricType.Rotation);
+            metric5Action.performed += _ => selector?.SetMetric(RQ1MetricType.OcclusionRecovery);
+            clearMetricAction.performed += _ => selector?.ClearMetric();
+            startRecordingAction.performed += _ => evalSession?.StartSession();
+            stopRecordingAction.performed += _ => evalSession?.StopSession();
 
             // Enable all actions
             metric1Action.Enable();

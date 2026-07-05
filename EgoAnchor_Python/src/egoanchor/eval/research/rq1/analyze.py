@@ -41,7 +41,7 @@ from egoanchor.eval.core.manual_scenario_extraction import (
     summarize_manual_segments,
     print_segment_summary,
 )
-from egoanchor.eval.core.gt_filter import filter_valid_gt, suggest_startup_cutoff
+from egoanchor.eval.core.gt_filter import filter_valid_gt
 from egoanchor.eval.io import load_session, SessionLogs
 from egoanchor.eval.metrics import compute_all_metrics
 from egoanchor.eval.report import write_tables
@@ -53,7 +53,6 @@ def analyze_session(
     *,
     label_filter: str | None = None,
     startup_grace_s: float = 0.0,
-    frozen_window_s: float = 2.0,
 ) -> Path:
     """分析一个 session 并写结果到 output_dir。
 
@@ -61,8 +60,8 @@ def analyze_session(
         session_dir: `data/eval/<session_id>` 目录路径。
         output_dir: 分析结果输出目录；默认在 `data/research/rq1/<session_id>`。
         label_filter: 只分析指定 variant label；为空则分析所有变体。
-        startup_grace_s: 去掉开头这么多秒（控制器激活热身期）；0 表示自动推断。
-        frozen_window_s: 连续零速度超过此秒数则判定为控制器休眠并剔除。
+        startup_grace_s: 显式去掉开头这么多秒的收敛热身期；0 表示完全信任 Unity 的
+            gt_pose_valid（keep-alive 已处理手柄 sleep，不再做速度启发式过滤）。
     """
     session_path = Path(session_dir)
     if output_dir is None:
@@ -75,18 +74,12 @@ def analyze_session(
     # ── 加载日志 ──
     logs = load_session(session_path)
 
-    # ── GT 有效性过滤 ──
+    # ── GT 有效性过滤（只信任 Unity gt_pose_valid） ──
     primary_raw = _extract_primary(logs.output)
     if not primary_raw.empty:
-        # 若未指定热身时长，自动估算控制器首次真正激活的时间
-        grace = startup_grace_s
-        if grace == 0.0:
-            grace = suggest_startup_cutoff(primary_raw)
-
         valid_primary, dropped_primary = filter_valid_gt(
             primary_raw,
-            startup_grace_s=grace,
-            frozen_window_s=frozen_window_s,
+            startup_grace_s=startup_grace_s,
         )
         n_total  = len(primary_raw)
         n_valid  = len(valid_primary)
@@ -96,10 +89,9 @@ def analyze_session(
         valid_primary = primary_raw
         n_total = n_valid = n_drop = 0
         drop_pct = 0.0
-        grace = 0.0
 
     # ── 写过滤统计 ──
-    _write_filter_report(out_path, n_total, n_valid, n_drop, drop_pct, grace, frozen_window_s)
+    _write_filter_report(out_path, n_total, n_valid, n_drop, drop_pct, startup_grace_s)
 
     # ── 手动标注场景提取（仅用有效帧） ──
     if not valid_primary.empty:
@@ -146,7 +138,6 @@ def _write_filter_report(
     n_drop: int,
     drop_pct: float,
     grace_s: float,
-    frozen_window_s: float,
 ) -> None:
     """写 gt_filter_report.txt，记录过滤统计。"""
     lines = [
@@ -155,8 +146,8 @@ def _write_filter_report(
         f"total frames : {n_total}",
         f"valid frames : {n_valid}",
         f"dropped      : {n_drop} ({drop_pct:.1f}%)",
-        f"startup grace: {grace_s:.2f} s (auto-estimated or user-set)",
-        f"frozen window: {frozen_window_s:.1f} s",
+        f"startup grace: {grace_s:.2f} s (0=完全信任 Unity gt_pose_valid)",
+        "filter policy: 只按 gt_pose_valid 过滤，不做速度启发式（keep-alive 已处理 sleep）",
     ]
     (out_path / "gt_filter_report.txt").write_text("\n".join(lines), encoding="utf-8")
 

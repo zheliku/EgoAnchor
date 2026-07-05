@@ -102,7 +102,11 @@ def label_conditions(df: pd.DataFrame, manifest: Mapping[str, Any] | Manifest, m
     """根据 manifest condition_spans 给 DataFrame 增加 `condition` 列。
 
     `mono_col` 必须是 Unity 单调毫秒列，例如 capture_mono_ms 或 render_mono_ms。
-    不落入任何 span 的行标为 `unlabeled`。
+    优先级：
+    1. manifest.condition_spans 非空 → 按时间区间标注，未落入任何 span 标 `unlabeled`。
+    2. condition_spans 为空但存在 `rq1_metric` 列 → 直接用 Unity 手动标注的场景标签
+       作为 condition（RQ1 每个场景一行），`none`/空标为 `unlabeled`。
+    3. 两者都没有 → 全部 `unlabeled`。
     """
 
     if mono_col not in df.columns:
@@ -112,7 +116,13 @@ def label_conditions(df: pd.DataFrame, manifest: Mapping[str, Any] | Manifest, m
     spans = list(_iter_condition_spans(manifest_dict.get("condition_spans", [])))
     out = df.copy()
     out["condition"] = "unlabeled"
+
     if not spans:
+        # 回退到 Unity 手动标注的 rq1_metric 场景标签
+        if "rq1_metric" in out.columns:
+            metric = out["rq1_metric"].fillna("none").astype(str)
+            labeled = ~metric.isin(("none", "None", "", "nan"))
+            out.loc[labeled, "condition"] = metric[labeled]
         return out
 
     mono = out[mono_col].astype(float)

@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
-    package_root = Path(__file__).resolve().parents[1]
+    # 直接执行本脚本时，把 src/ 加入 sys.path 以解析 egoanchor 包。
+    # 本文件位于 src/egoanchor/eval/core/run_eval.py，src = parents[3]。
+    package_root = Path(__file__).resolve().parents[3]
     if str(package_root) not in sys.path:
         sys.path.insert(0, str(package_root))
 

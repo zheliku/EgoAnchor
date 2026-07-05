@@ -124,7 +124,7 @@ class RunEvalTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             session_dir = _write_metric_session(Path(tmp))
-            script = Path(__file__).resolve().parents[1] / "run_eval.py"
+            script = Path(__file__).resolve().parents[1] / "core" / "run_eval.py"
 
             completed = subprocess.run(
                 [sys.executable, str(script), "--session-dir", str(session_dir), "--only", "sanity"],

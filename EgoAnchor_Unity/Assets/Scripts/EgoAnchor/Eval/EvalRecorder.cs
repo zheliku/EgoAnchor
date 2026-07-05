@@ -82,10 +82,10 @@ namespace EgoAnchor.Eval
         [Tooltip("要录制的 runtime 变体列表。")]
         [SerializeField] private List<EvalVariant> variants = new List<EvalVariant>();
 
-        /// <summary>可选：RQ1 指标记录器，用于记录手动标记的指标类型。</summary>
+        /// <summary>可选：RQ1 指标选择器，持有用户当前标记的指标类型。</summary>
         [Header("RQ1 Metrics (Optional)")]
-        [Tooltip("可选：RQ1 指标记录器；若绑定，则在 output 行中记录当前指标。")]
-        [SerializeField] private RQ1MetricRecorder rq1Recorder;
+        [Tooltip("可选：RQ1 指标选择器；若绑定，则在 output 行中记录当前指标。")]
+        [SerializeField] private RQ1MetricSelector rq1Selector;
 
         // ── State ──
 
@@ -97,6 +97,17 @@ namespace EgoAnchor.Eval
         private Pose _lastGtPose;
         private double _lastGtMonoMs;
         private bool _hasLastGt;
+
+        /// <summary>
+        /// OVR 手柄 sleep 后的 GT keep-alive 窗口（毫秒）。
+        /// 静止放置时手柄会进入 sleep，OVR 报 tracked=false，
+        /// 但位姿本身仍然有效，keep-alive 内继续复用上次有效 pose。
+        /// </summary>
+        private const double GtKeepAliveMs = 30_000.0;
+
+        /// <summary>上次 OVR 明确跟踪到的 GT pose（用于 keep-alive）。</summary>
+        private Pose _lastTrackedGtPose;
+        private double _lastTrackedGtMonoMs = -1.0;
 
         private readonly List<EvalVariantSnapshot> _snapshots = new List<EvalVariantSnapshot>();
         private readonly Dictionary<string, string> _configHashCache = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -139,6 +150,7 @@ namespace EgoAnchor.Eval
             _outputLog  = new EvalLog(outputPath);
             RefreshConfigHashCache();
             _hasLastGt = false;
+            _lastTrackedGtMonoMs = -1.0;
             _recording = true;
         }
 
@@ -151,6 +163,7 @@ namespace EgoAnchor.Eval
             _snapshots.Clear();
             _configHashCache.Clear();
             _hasLastGt = false;
+            _lastTrackedGtMonoMs = -1.0;
         }
 
         // ── Unity 生命周期 ──
@@ -183,10 +196,9 @@ namespace EgoAnchor.Eval
             Pose cameraPose = Pose.identity;
             bool cameraValid = hasFrameRecord && fr.TryGetCameraPose(alignmentRef, out cameraPose);
 
-            bool gtValid = groundTruth != null && IsGtTracked();
-            Pose gtPose  = gtValid ? new Pose(groundTruth.position, groundTruth.rotation) : Pose.identity;
-            Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            (bool gtValid, Pose gtPose) = ResolveGtPose(captureMonoMs);
+            Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
             _captureLog.Write(EvalJson.BuildCaptureLine(
                 frameId, captureMonoMs, unixMs,
@@ -204,8 +216,7 @@ namespace EgoAnchor.Eval
 
             double monoMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            bool gtValid  = groundTruth != null && IsGtTracked();
-            Pose gtPose   = gtValid ? new Pose(groundTruth.position, groundTruth.rotation) : Pose.identity;
+            (bool gtValid, Pose gtPose) = ResolveGtPose(monoMs);
             Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
             // 计算 GT 速度（线速度 m/s，角速度 deg/s）
@@ -222,13 +233,13 @@ namespace EgoAnchor.Eval
             }
             if (gtValid) { _lastGtPose = gtPose; _lastGtMonoMs = monoMs; _hasLastGt = true; }
 
-            // 获取 RQ1 指标标记（如果有）
+            // 获取 RQ1 指标标记（如果有）；未绑定或未按键时为 none。
             string rq1Metric = "none";
             double rq1MetricDuration = 0.0;
-            if (rq1Recorder != null && rq1Recorder.IsRecording)
+            if (rq1Selector != null)
             {
-                rq1Metric = rq1Recorder.CurrentMetric.ToLogString();
-                rq1MetricDuration = rq1Recorder.CurrentMetricDuration;
+                rq1Metric = rq1Selector.CurrentMetric.ToLogString();
+                rq1MetricDuration = rq1Selector.CurrentMetricDuration;
             }
 
             long sourceFrameId = BuildSnapshots();
@@ -351,15 +362,34 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>
-        /// 检查 GT 手柄当前是否被 OVR 有效跟踪。
-        /// gtController == None 时恒返回 true（不过滤）。
-        /// 手柄休眠、未配对或跟踪丢失时返回 false，评估端自动跳过这些帧。
+        /// 解析当前 GT pose，支持手柄 sleep keep-alive。
+        /// <para>
+        /// OVR 明确跟踪时：更新缓存，返回最新 pose（valid=true）。<br/>
+        /// OVR 跟踪丢失但距上次跟踪 &lt; GtKeepAliveMs：复用缓存 pose（valid=true）——
+        /// 适用于静止放置手柄进入休眠但位姿不变的情况。<br/>
+        /// 超过 keep-alive 窗口 or 未绑定 GT：返回 identity（valid=false）。
+        /// </para>
         /// </summary>
-        private bool IsGtTracked()
+        private (bool valid, Pose pose) ResolveGtPose(double nowMonoMs)
         {
-            if (gtController == OVRInput.Controller.None) return true;
-            return OVRInput.GetControllerPositionTracked(gtController)
-                && OVRInput.GetControllerOrientationTracked(gtController);
+            if (groundTruth == null) return (false, Pose.identity);
+
+            bool ovrTracked = gtController == OVRInput.Controller.None
+                || (OVRInput.GetControllerPositionTracked(gtController)
+                    && OVRInput.GetControllerOrientationTracked(gtController));
+
+            if (ovrTracked)
+            {
+                _lastTrackedGtPose   = new Pose(groundTruth.position, groundTruth.rotation);
+                _lastTrackedGtMonoMs = nowMonoMs;
+                return (true, _lastTrackedGtPose);
+            }
+
+            // OVR 已报丢失——用 keep-alive 缓存
+            if (_lastTrackedGtMonoMs >= 0.0 && (nowMonoMs - _lastTrackedGtMonoMs) < GtKeepAliveMs)
+                return (true, _lastTrackedGtPose);
+
+            return (false, Pose.identity);
         }
     }
 }
