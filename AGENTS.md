@@ -214,11 +214,72 @@ Unity 代码地图（关键模块）：
 
 ## 论文与评估
 
-论文源：`2026-EgoAnchor-Typst/egoanchor_cn_v4.typ`（当前中文主稿）；参考文献：`egoanchor_cn.bib`；代码事实文档：`egoanchor_code_derived_technical_flow.md`。`docs/architecture/` 已完全删除，系统架构统一维护在 `egoanchor_code_derived_technical_flow.md`。
+论文源：`2026-EgoAnchor-Typst/egoanchor_cn_v5.typ`（当前中文主稿 v5）；参考文献：`egoanchor_cn.bib`；代码事实文档：`egoanchor_code_derived_technical_flow.md`。`docs/architecture/` 已完全删除，系统架构统一维护在 `egoanchor_code_derived_technical_flow.md`。
 
-论文术语基准（后续 AI 不要擅自改）：动态真实物体锚定、目标语义分割、双目立体几何重建、可靠性评分、时空对齐、运动估计与平滑、静止锚定、生命周期管理。RQ 最低实验闭环：RQ1 报告完整系统锚定质量（精度/稳定性/响应性/鲁棒性）；RQ2 做设计权衡消融（简化基线、时空对齐、完整方法）；RQ3 覆盖多类日常刚性物体与典型场景（至少 3 个代表性刚体）。
+论文术语基准（后续 AI 不要擅自改）：动态真实物体锚定、目标语义分割、双目立体几何重建、可靠性评分、时空对齐、运动估计与平滑、静止锚定、生命周期管理。
 
-评估数据目录：`data/eval/<session_id>/`（原始日志，Python/Unity 配对）；`data/research/rq1|rq2|rq3/`（分析产物）。
+**论文 RQ 结构**（2026-07-07 定稿）：
+- RQ1：静态锚定质量——评估静止场景（长时静止观察、遮挡恢复）下的精度、稳定性、鲁棒性；消融静止锚定机制（Full vs. No-StaticLock，仅在静止观察场景下对比）
+- RQ2：动态追踪能力——评估动态场景（慢速平移、快速挥动、旋转）下的追踪精度、时延影响量化（验证 Δe = v·τ 线性模型）、响应延迟分解
+- RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行
+
+**实验表述规范**（2026-07-07）：
+- 消融实验配置用斜体标签：*Full*、*No-StaticLock*、*Frame-aligned*、*Arrival-aligned*
+- 不使用"条件"描述实验配置，用"系统配置"或"变体"
+- 不用"+"罗列组件（如"运动估计+时序平滑+静止锚定"），改为"包含运动估计、时序平滑与静止锚定"
+- RQ2 不验证"时空对齐是否有效"（太显然），而是验证时延-误差线性关系模型（Δe = v·τ）
+- 避免冗余表述："进行"、"通过"、"该实验旨在"等啰嗦句式应简化或删除
+- RQ1的消融实验只在静止场景下进行，不涉及动态场景
+
+评估数据目录：`data/eval/<session_id>/`（原始日志，Python/Unity 配对）；`data/research/rq1|rq2|rq3/`（分析产物，已废弃）。
+
+### RQ1 分析框架（2026-07-07 重构完成）
+
+**核心创新**：时延补偿对齐——根据端到端时延将 anchor 输出回溯到对应的历史 GT 位姿，公平评估视觉追踪算法真实精度，消除时延导致的虚假配准误差。
+
+**实验数据**：`data/eval/20260706_163825_controller_right/`（Quest 3 控制器，13,316 有效帧）
+- 静止观察：4,669 帧（78s）
+- 慢速平移：2,144 帧（36s，平均速度 12.8 cm/s）
+- 快速挥动：2,643 帧（44s，平均速度 22.8 cm/s）
+- 旋转：2,650 帧（44s，平均角速度 121.6 deg/s）
+- 遮挡恢复：1,210 帧（20s）
+
+**核心发现**：
+- 精度：静止/恢复毫米级（6.8/4.2 mm），运动厘米级（29.8-35.9 mm）
+- 稳定性：静止抖动 0.43 mm，屏幕漂移 8.1 px（< 人眼阈值）
+- 响应性：端到端时延 142-154 ms（高度一致）
+- 时延补偿效果：动态配准误差降低 12-20%，验证线性关系（误差增量 = 速度 × 时延）
+
+**分析代码**：`src/egoanchor/eval/research/rq1/`（完全重构，旧代码已删除）
+- `data_loader.py` - 加载 Unity 输出日志，清洗数据（接受 Coasting/FrozenUncertain 状态）
+- `gt_alignment.py` - GT 时延补偿对齐（三次样条插值位置，Slerp 插值旋转）
+- `metrics.py` - 计算精度、稳定性、响应性、鲁棒性指标
+- `plot_comprehensive.py` - 生成 2×2 综合图表
+- `run_analysis.py` - 一键运行完整分析
+
+**生成输出**：
+- 图表：`2026-EgoAnchor-Typst/figs/rq1/fig_rq1_comprehensive.pdf/png`
+- 报告：`data/eval/20260706_163825_controller_right/rq1_analysis/*.csv`（6 个汇总表 + 详细数据）
+- LaTeX 表格：`rq1_results_table.tex`
+
+**运行命令**：
+```bash
+cd EgoAnchor_Python
+pixi run python src/egoanchor/eval/research/rq1/run_analysis.py
+```
+
+**论文更新要求**：
+- §5.1 实验设置（第 299-302 行）：更新时长和速度参数
+- §6.1 RQ1 结果（第 330-350 行）：完全重写，使用实测数据
+- 图表标题（第 337-341 行）：更新描述
+- 详细指南见：`EgoAnchor_Python/RQ1_PAPER_UPDATE.md`
+
+**关键约定和历史坑**：
+- **状态过滤**：接受 Coasting（96%）/FrozenUncertain 状态，过滤 Lost/Searching。Coasting 表示正在追踪但感知输入暂时中断，是系统设计的连续性保障，不是错误状态。
+- **时延对齐策略**：主结果使用时延补偿后误差（`error_aligned`），同时报告未补偿误差（`error_naive`）用于分析时延影响。不要只报告 naive 误差——那会惩罚系统已经补偿的时延。
+- **场景分组保持独立**：5 个场景不合并，因为误差特征不同（慢速受视觉精度限制，快速受时延影响，旋转揭示姿态估计局限）。
+- **Python runtime 日志为空**：当前实验数据无 Python runtime 日志，无法关联可靠性评分到每一帧，不影响核心分析。
+- **旋转误差高是特性不是 bug**：旋转场景姿态误差 25.9°（P95: 119.7°）源于绕心旋转时特征点像平面位移小，深度约束不足，是基于深度匹配方法的固有局限，论文中需诚实讨论。
 
 RQ1 分析链路：`eval/research/rq1/run_rq1.py`（批量）→ `analyze.py`（单 session）→ `eval/core` + `eval/metrics` + `eval/report`。关键约定和历史坑：
 

@@ -120,6 +120,79 @@ namespace EgoAnchor.Eval
         /// <summary>GT 来源标识，写入 manifest。</summary>
         public string GtSource => groundTruth != null ? "transform" : "transform_missing";
 
+        // ── 实时遥测访问器（供 RQ1LiveStats 读取，不写文件、不改状态） ──
+
+        /// <summary>
+        /// 主变体 runtime：isPrimary=true 的第一个；都没有则取列表首个。
+        /// 供实时遥测读取时延/分数/锚定状态，与录制的主变体保持一致。
+        /// </summary>
+        public PoseToAnchorRuntime PrimaryRuntime
+        {
+            get
+            {
+                EvalVariant primary = ResolvePrimaryVariant();
+                return primary.runtime;
+            }
+        }
+
+        /// <summary>
+        /// 主变体实际显示用 anchor Transform。实时误差按它与 GT 比较，
+        /// 与录制的 output_pos 完全同源（录制也是读这个 Transform）。
+        /// </summary>
+        public Transform PrimaryAnchorTransform
+        {
+            get
+            {
+                EvalVariant primary = ResolvePrimaryVariant();
+                return primary.anchorTransform;
+            }
+        }
+
+        /// <summary>frame_id → 采集时刻 pose/时间缓存，用于反查 SenderMonoMs 算端到端时延。</summary>
+        public FramePoseHistory FrameHistory => framePoseHistory;
+
+        /// <summary>
+        /// GT Transform 原始 pose，不经 OVR tracked 门控和 keep-alive。
+        /// 实时面板用它算误差：只要手柄 Transform 在动就更新，不被 OVR 把 tracked 报成
+        /// false 卡住（Link/editor 下常见）。录制路径仍走 <see cref="TryGetCurrentGtPose"/>
+        /// 的门控逻辑标 gt_pose_valid，两者互不影响。
+        /// </summary>
+        /// <param name="pose">GT Transform 绑定时输出其当前 world pose。</param>
+        /// <returns>是否绑定了 GT Transform。</returns>
+        public bool TryGetLiveGtPose(out Pose pose)
+        {
+            if (groundTruth == null)
+            {
+                pose = Pose.identity;
+                return false;
+            }
+            pose = new Pose(groundTruth.position, groundTruth.rotation);
+            return true;
+        }
+
+        /// <summary>
+        /// 解析当前 GT pose（含手柄 sleep keep-alive），与录制逻辑同一入口。
+        /// </summary>
+        /// <param name="pose">有效时输出当前 GT world pose。</param>
+        /// <returns>GT 当前是否有效。</returns>
+        public bool TryGetCurrentGtPose(out Pose pose)
+        {
+            double nowMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
+            (bool valid, Pose resolved) = ResolveGtPose(nowMs);
+            pose = resolved;
+            return valid;
+        }
+
+        /// <summary>取主变体：优先 isPrimary，回退列表首个；空列表返回 default。</summary>
+        private EvalVariant ResolvePrimaryVariant()
+        {
+            for (int i = 0; i < variants.Count; i++)
+            {
+                if (variants[i].isPrimary) return variants[i];
+            }
+            return variants.Count > 0 ? variants[0] : default;
+        }
+
         /// <summary>收集当前变体标签列表，写入 manifest。</summary>
         public void CollectVariantLabels(List<string> labels)
         {
