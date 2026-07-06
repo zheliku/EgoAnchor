@@ -235,61 +235,39 @@ Unity 代码地图（关键模块）：
 
 ### RQ1 分析框架（2026-07-07 重构完成）
 
-**核心创新**：时延补偿对齐——根据端到端时延将 anchor 输出回溯到对应的历史 GT 位姿，公平评估视觉追踪算法真实精度，消除时延导致的虚假配准误差。
+**RQ1 只评估两个静止场景**：`static_observation`（长时静止观察）、`occlusion_recovery`（遮挡恢复）。slow_translation / fast_motion / rotation 已移交 RQ2，不在 RQ1 采集或分析。消融为 *Full* vs *No-StaticLock* 双变体同帧录制。
 
-**实验数据**：`data/eval/20260706_163825_controller_right/`（Quest 3 控制器，13,316 有效帧）
-- 静止观察：4,669 帧（78s）
-- 慢速平移：2,144 帧（36s，平均速度 12.8 cm/s）
-- 快速挥动：2,643 帧（44s，平均速度 22.8 cm/s）
-- 旋转：2,650 帧（44s，平均角速度 121.6 deg/s）
-- 遮挡恢复：1,210 帧（20s）
+**架构原则**：保留已验证的契约层（Unity `EvalRecorder`/`EvalJson`/`EvalSession` ↔ Python `eval/io`）与共享分析引擎（`eval/core`/`eval/metrics`/`eval/report`）。RQ1 只做「场景语义收窄 + 论文视图组织」，不重算任何指标。
 
-**核心发现**：
-- 精度：静止/恢复毫米级（6.8/4.2 mm），运动厘米级（29.8-35.9 mm）
-- 稳定性：静止抖动 0.43 mm，屏幕漂移 8.1 px（< 人眼阈值）
-- 响应性：端到端时延 142-154 ms（高度一致）
-- 时延补偿效果：动态配准误差降低 12-20%，验证线性关系（误差增量 = 速度 × 时延）
+**双变体录制**：`EvalRecorder.variants` 两项——`variants[0]` label=`Full` isPrimary=true（Kalman + DelayedInterp + StaticLock 开），`variants[1]` label=`No-StaticLock` isPrimary=false（与 Full 逐项相同，仅 `EgoAnchorStaticLockModule.lockEnabled=false`）。两变体订阅同一 pose 流（同 `AnchorRuntimeHub.runtimes`）、同一渲染 tick，写进同一 `unity_output` 行的 `variants` 数组——完美同步，无需时间对齐。场景 `EgoAnchor-RQ1.unity` 的 No-StaticLock 分支（GameObject `AnchorObject - NoStaticLock`，fileID 段 700000001–010）是直接编辑场景 YAML 添加的（Unity MCP 不能持久化保存、也不能写 `List<EvalVariant>`/`List<runtime>` 引用字段）。
 
-**分析代码**：`src/egoanchor/eval/research/rq1/`（完全重构，旧代码已删除）
-- `data_loader.py` - 加载 Unity 输出日志，清洗数据（接受 Coasting/FrozenUncertain 状态）
-- `gt_alignment.py` - GT 时延补偿对齐（三次样条插值位置，Slerp 插值旋转）
-- `metrics.py` - 计算精度、稳定性、响应性、鲁棒性指标
-- `plot_comprehensive.py` - 生成 2×2 综合图表
-- `run_analysis.py` - 一键运行完整分析
-
-**生成输出**：
-- 图表：`2026-EgoAnchor-Typst/figs/rq1/fig_rq1_comprehensive.pdf/png`
-- 报告：`data/eval/20260706_163825_controller_right/rq1_analysis/*.csv`（6 个汇总表 + 详细数据）
-- LaTeX 表格：`rq1_results_table.tex`
+**分析代码**：`src/egoanchor/eval/research/rq1/analyze.py`（薄封装，复用共享引擎；旧 `data_loader/gt_alignment/metrics/plot_compact/plot_comprehensive/run_analysis/run_rq1` 已全部删除）。核心 API：
+- `RQ1_CONDITIONS = ("static_observation", "occlusion_recovery")`
+- `synthesize_occlusion_markers(output)` - 从 `rq1_metric=="occlusion_recovery"` 连续段起点在内存合成 `event_markers`（Unity 契约层恒写空数组，此处不改契约层地补齐恢复时间输入）
+- `filter_rq1_tables(tables)` - 每张含 `condition` 列的 summary 表过滤到 RQ1 两场景
+- `run_rq1_analysis(session_dir, *, report_dir=None, figs_dir=None)` - 全链路：load → 注入合成 marker → `compute_all_metrics` → 写表/图 → 返回过滤后的 tables
+- `main(argv)` - CLI
 
 **运行命令**：
 ```bash
 cd EgoAnchor_Python
-pixi run python src/egoanchor/eval/research/rq1/run_analysis.py
+pixi run python -m egoanchor.eval.research.rq1.analyze --session-dir data/eval/<session_id>
 ```
+默认 `report_dir=<session_dir>/report`、`figs_dir=2026-EgoAnchor-Typst/figs/rq1`。
 
-**论文更新要求**：
-- §5.1 实验设置（第 299-302 行）：更新时长和速度参数
-- §6.1 RQ1 结果（第 330-350 行）：完全重写，使用实测数据
-- 图表标题（第 337-341 行）：更新描述
-- 详细指南见：`EgoAnchor_Python/RQ1_PAPER_UPDATE.md`
+**测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py`（marker 合成 + 场景过滤）；`analyze.py` 直跑时 bootstrap 用 `Path(__file__).resolve().parents[4]`（=`src`）加入 `sys.path`。
 
-**关键约定和历史坑**：
-- **状态过滤**：接受 Coasting（96%）/FrozenUncertain 状态，过滤 Lost/Searching。Coasting 表示正在追踪但感知输入暂时中断，是系统设计的连续性保障，不是错误状态。
-- **时延对齐策略**：主结果使用时延补偿后误差（`error_aligned`），同时报告未补偿误差（`error_naive`）用于分析时延影响。不要只报告 naive 误差——那会惩罚系统已经补偿的时延。
-- **场景分组保持独立**：5 个场景不合并，因为误差特征不同（慢速受视觉精度限制，快速受时延影响，旋转揭示姿态估计局限）。
-- **Python runtime 日志为空**：当前实验数据无 Python runtime 日志，无法关联可靠性评分到每一帧，不影响核心分析。
-- **旋转误差高是特性不是 bug**：旋转场景姿态误差 25.9°（P95: 119.7°）源于绕心旋转时特征点像平面位移小，深度约束不足，是基于深度匹配方法的固有局限，论文中需诚实讨论。
+**论文更新**：§6.1 RQ1 结果用实测值替换占位符，图 `<fig:rq1-static>` 换成 `figs/rq1/*.pdf`；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」。
 
-RQ1 分析链路：`eval/research/rq1/run_rq1.py`（批量）→ `analyze.py`（单 session）→ `eval/core` + `eval/metrics` + `eval/report`。关键约定和历史坑：
+RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metrics` + `eval/report`。关键约定和历史坑：
 
 - **GT 有效性只信任 Unity 写的 `gt_pose_valid`**。Unity `EvalRecorder` 已用 keep-alive 处理手柄 sleep（静止休眠时复用上次有效 pose 并保持 `gt_pose_valid=true`）；`eval/core/gt_filter.py` 因此不再做「速度≈0 判休眠剔除」或「首次运动前自动砍开头」这类速度启发式——那会和 keep-alive 正面打架，把合法长时静止帧误删。不要恢复旧的 `_detect_frozen`/`suggest_startup_cutoff`/`frozen_window_s`。
-- **RQ1 场景分组走 `rq1_metric` 手动标注**。`io/log_loader.py::label_conditions` 优先用 manifest `condition_spans`；当 `condition_spans` 为空（RQ1 当前采集就是空）则回退到 Unity 按键标注的 `rq1_metric` 作为 `condition`，使 5 个场景（static_observation/slow_translation/fast_motion/rotation/occlusion_recovery）各成一行。所有 metric 模块统一按 `condition × label` 聚合。
+- **RQ1 场景分组走 `rq1_metric` 手动标注**。`io/log_loader.py::label_conditions` 优先用 manifest `condition_spans`；当 `condition_spans` 为空（RQ1 当前采集就是空）则回退到 Unity 按键标注的 `rq1_metric` 作为 `condition`，使各场景各成一行。RQ1 只标注 static_observation / occlusion_recovery 两种；`analyze.filter_rq1_tables` 再把 summary 表过滤到这两种。所有 metric 模块统一按 `condition × label` 聚合（`label` 即变体 Full / No-StaticLock）。
 - **occlusion_recovery 段不需要 GT**（遮挡期本就无 GT 语义），恢复时间靠 manifest `event_markers` 驱动 `metrics/recovery.py`，不靠 GT 误差。
 - `eval/core/run_eval.py` 已从包根迁到 `core/`，脚本直跑时 bootstrap 把 `parents[3]`（=`src`）加入 `sys.path` 才能解析 `egoanchor` 包。
 - **录制状态单一真理是 `EvalSession`**。`EvalSession._recording` 是唯一录制开关；UI（`RQ1StatusUI`）和 `EvalRecorder` 都读它。`EvalSession` 有序列化的 `sessionStarted`/`sessionStopped`（`UnityEvent`，Inspector 可视化挂接），在 `StartSession`/`StopSession` 触发，供 RQ1/RQ2/RQ3 在会话边界做副作用（如清空指标标记）。
-- **`RQ1MetricSelector`（原 `RQ1MetricRecorder`，已更名去混淆）只持有「当前指标」，不拥有录制状态、不写文件**。它只暴露 `CurrentMetric`/`CurrentMetricDuration`/`SetMetric`/`ClearMetric`；`SetMetric` 无任何门槛，按 1-5 永远直接生效。`EvalRecorder`（唯一真正写 JSONL 的）每帧直接读 `CurrentMetric`（未按键即 `none`），字段名 `rq1Selector`。历史坑：该组件曾叫 `RQ1MetricRecorder` 且自持独立 `_recording`，只在 F7 回调里 `StartRecording`，而 `autoStart`（收到首个 PoseResult 自动录制）只翻转 `EvalSession._recording`，导致 UI 显示 Recording 但按键 1-5 报「未录制状态下无法设置指标」，必须手按 F7 才生效。已彻底删除该重复状态——不要恢复 `IsRecording`/`StartRecording`/`StopRecording`，也不要因为「两个都叫 Recorder」把 `RQ1MetricSelector` 当成 `EvalRecorder` 的重复而删除（它是 Python 端按场景分组的唯一标签来源）。
-- `RQ1InputHandler` 只做 1-5/0/F7/F8 输入映射：1-5 调 `SetMetric`、0 调 `ClearMetric`、F7/F8 调 `EvalSession.StartSession`/`StopSession`。旧的一键搭场景编辑器脚本 `RQ1/Editor/RQ1SceneBuilder.cs` 已删除（构建的中文面板与运行时英文文本漂移），场景直接用 Unity MCP 搭建。
+- **`RQ1MetricSelector`（原 `RQ1MetricRecorder`，已更名去混淆）只持有「当前指标」，不拥有录制状态、不写文件**。它只暴露 `CurrentMetric`/`CurrentMetricDuration`/`SetMetric`/`ClearMetric`；`SetMetric` 无任何门槛，按 1/2 永远直接生效。`EvalRecorder`（唯一真正写 JSONL 的）每帧直接读 `CurrentMetric`（未按键即 `none`），字段名 `rq1Selector`。历史坑：该组件曾叫 `RQ1MetricRecorder` 且自持独立 `_recording`，只在 F7 回调里 `StartRecording`，而 `autoStart`（收到首个 PoseResult 自动录制）只翻转 `EvalSession._recording`，导致 UI 显示 Recording 但按键 1/2 报「未录制状态下无法设置指标」，必须手按 F7 才生效。已彻底删除该重复状态——不要恢复 `IsRecording`/`StartRecording`/`StopRecording`，也不要因为「两个都叫 Recorder」把 `RQ1MetricSelector` 当成 `EvalRecorder` 的重复而删除（它是 Python 端按场景分组的唯一标签来源）。
+- `RQ1InputHandler` 只做 1/2/0/F7/F8 输入映射：1 调 `SetMetric(StaticObservation)`、2 调 `SetMetric(OcclusionRecovery)`、0 调 `ClearMetric`、F7/F8 调 `EvalSession.StartSession`/`StopSession`。旧的 3/4/5 键（slow/fast/rotation，已移交 RQ2）已删除。旧的一键搭场景编辑器脚本 `RQ1/Editor/RQ1SceneBuilder.cs` 已删除（构建的中文面板与运行时英文文本漂移），场景直接编辑 `.unity` YAML / Unity MCP 搭建。
 - 验证：`pixi run python -m unittest discover -s src -p "test_*.py" -t src`（eval 测试需 `-t src` 才能解析包）。
 
 ## 环境与依赖
