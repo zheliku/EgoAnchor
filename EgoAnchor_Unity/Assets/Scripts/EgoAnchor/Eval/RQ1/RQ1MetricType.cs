@@ -1,14 +1,12 @@
 namespace EgoAnchor.Eval.RQ1
 {
     /// <summary>
-    /// RQ1 评估指标类型枚举（对齐论文 egoanchor_cn_v4.typ RQ1 实验条件）。
+    /// RQ1 评估场景类型枚举（对齐论文 egoanchor_cn_v5.typ 2026-07-07 定稿的 RQ1 结构）。
     /// <para>
-    /// RQ1 评估五种运动模式：<br/>
-    /// 1. 长时静止（60s）：物体静置桌面，用户头部正常活动<br/>
-    /// 2. 慢速平移（20s）：5-10 cm/s 水平移动<br/>
-    /// 3. 快速挥动（20s）：50+ cm/s 快速运动<br/>
-    /// 4. 旋转运动（20s）：绕多个轴旋转<br/>
-    /// 5. 遮挡恢复（重复10次）：短暂遮挡后恢复
+    /// RQ1 只评估静止场景，共两种：<br/>
+    /// 1. 长时静止观察：控制器静置桌面，用户正常头部运动<br/>
+    /// 2. 遮挡恢复：用户手部遮挡目标后移开<br/>
+    /// 慢速平移 / 快速挥动 / 旋转已移交 RQ2，不在 RQ1 采集。
     /// </para>
     /// </summary>
     public enum RQ1MetricType
@@ -16,20 +14,11 @@ namespace EgoAnchor.Eval.RQ1
         /// <summary>无标记。</summary>
         None = 0,
 
-        /// <summary>长时静止（60s）：物体静置桌面，用户头部正常活动。</summary>
+        /// <summary>长时静止观察：控制器静置桌面，用户正常头部运动。</summary>
         StaticObservation = 1,
 
-        /// <summary>慢速平移（20s）：5-10 cm/s 水平移动。</summary>
-        SlowTranslation = 2,
-
-        /// <summary>快速挥动（20s）：50+ cm/s 快速运动。</summary>
-        FastMotion = 3,
-
-        /// <summary>旋转运动（20s）：绕多个轴旋转。</summary>
-        Rotation = 4,
-
-        /// <summary>遮挡恢复（重复10次）：短暂遮挡后恢复。</summary>
-        OcclusionRecovery = 5
+        /// <summary>遮挡恢复：用户手部遮挡目标后移开，重复若干次。</summary>
+        OcclusionRecovery = 2
     }
 
     /// <summary>
@@ -37,30 +26,24 @@ namespace EgoAnchor.Eval.RQ1
     /// </summary>
     public static class RQ1MetricTypeExtensions
     {
-        /// <summary>转换为日志字段字符串（snake_case）。</summary>
+        /// <summary>转换为日志字段字符串（snake_case），与 Python 侧场景标签一致。</summary>
         public static string ToLogString(this RQ1MetricType type)
         {
             return type switch
             {
                 RQ1MetricType.StaticObservation => "static_observation",
-                RQ1MetricType.SlowTranslation => "slow_translation",
-                RQ1MetricType.FastMotion => "fast_motion",
-                RQ1MetricType.Rotation => "rotation",
                 RQ1MetricType.OcclusionRecovery => "occlusion_recovery",
                 _ => "none"
             };
         }
 
-        /// <summary>获取建议时长（秒）。</summary>
+        /// <summary>获取建议时长（秒）；遮挡恢复为单次事件返回 0。</summary>
         public static int GetSuggestedDuration(this RQ1MetricType type)
         {
             return type switch
             {
-                RQ1MetricType.StaticObservation => 60,
-                RQ1MetricType.SlowTranslation => 20,
-                RQ1MetricType.FastMotion => 20,
-                RQ1MetricType.Rotation => 20,
-                RQ1MetricType.OcclusionRecovery => 0,  // 单次事件
+                RQ1MetricType.StaticObservation => 80,
+                RQ1MetricType.OcclusionRecovery => 0,
                 _ => 0
             };
         }
@@ -71,9 +54,6 @@ namespace EgoAnchor.Eval.RQ1
             return type switch
             {
                 RQ1MetricType.StaticObservation => "Static",
-                RQ1MetricType.SlowTranslation => "Slow Trans",
-                RQ1MetricType.FastMotion => "Fast Move",
-                RQ1MetricType.Rotation => "Rotation",
                 RQ1MetricType.OcclusionRecovery => "Occlusion",
                 _ => "None"
             };
@@ -85,10 +65,7 @@ namespace EgoAnchor.Eval.RQ1
             return type switch
             {
                 RQ1MetricType.StaticObservation => "Static on table, normal head movement",
-                RQ1MetricType.SlowTranslation => "5-10 cm/s horizontal movement",
-                RQ1MetricType.FastMotion => "50+ cm/s fast motion",
-                RQ1MetricType.Rotation => "Rotation around multiple axes",
-                RQ1MetricType.OcclusionRecovery => "Brief occlusion then recovery",
+                RQ1MetricType.OcclusionRecovery => "Occlude target then reveal, repeat",
                 _ => ""
             };
         }
