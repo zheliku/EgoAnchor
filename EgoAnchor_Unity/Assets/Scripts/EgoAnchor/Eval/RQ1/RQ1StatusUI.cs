@@ -176,11 +176,8 @@ namespace EgoAnchor.Eval.RQ1
             // 每行格式：[键] 名称  时长提示  ← 当前
             var sb = new System.Text.StringBuilder();
 
-            AppendMetricRow(sb, "[1]", RQ1MetricType.StaticObservation, "60s",   active);
-            AppendMetricRow(sb, "[2]", RQ1MetricType.SlowTranslation,   "20s",   active);
-            AppendMetricRow(sb, "[3]", RQ1MetricType.FastMotion,        "20s",   active);
-            AppendMetricRow(sb, "[4]", RQ1MetricType.Rotation,          "20s",   active);
-            AppendMetricRow(sb, "[5]", RQ1MetricType.OcclusionRecovery, "Single",  active);
+            AppendMetricRow(sb, "[1]", RQ1MetricType.StaticObservation, "80s",    active);
+            AppendMetricRow(sb, "[2]", RQ1MetricType.OcclusionRecovery, "Single", active);
             sb.AppendLine();
             sb.AppendLine("[0]  Clear Marking");
             sb.Append("[F7] Start Recording   [F8] Stop Recording");

@@ -32,17 +32,8 @@ namespace EgoAnchor.Eval.RQ1
         [Tooltip("Set metric: Static Observation")]
         [SerializeField] private InputAction metric1Action = new InputAction(type: InputActionType.Button);
 
-        [Tooltip("Set metric: Slow Translation")]
-        [SerializeField] private InputAction metric2Action = new InputAction(type: InputActionType.Button);
-
-        [Tooltip("Set metric: Fast Motion")]
-        [SerializeField] private InputAction metric3Action = new InputAction(type: InputActionType.Button);
-
-        [Tooltip("Set metric: Rotation")]
-        [SerializeField] private InputAction metric4Action = new InputAction(type: InputActionType.Button);
-
         [Tooltip("Set metric: Occlusion Recovery")]
-        [SerializeField] private InputAction metric5Action = new InputAction(type: InputActionType.Button);
+        [SerializeField] private InputAction metric2Action = new InputAction(type: InputActionType.Button);
 
         [Tooltip("Clear current metric")]
         [SerializeField] private InputAction clearMetricAction = new InputAction(type: InputActionType.Button);
@@ -65,10 +56,7 @@ namespace EgoAnchor.Eval.RQ1
         {
             // Register callbacks
             metric1Action.performed += _ => selector?.SetMetric(RQ1MetricType.StaticObservation);
-            metric2Action.performed += _ => selector?.SetMetric(RQ1MetricType.SlowTranslation);
-            metric3Action.performed += _ => selector?.SetMetric(RQ1MetricType.FastMotion);
-            metric4Action.performed += _ => selector?.SetMetric(RQ1MetricType.Rotation);
-            metric5Action.performed += _ => selector?.SetMetric(RQ1MetricType.OcclusionRecovery);
+            metric2Action.performed += _ => selector?.SetMetric(RQ1MetricType.OcclusionRecovery);
             clearMetricAction.performed += _ => selector?.ClearMetric();
             startRecordingAction.performed += _ => evalSession?.StartSession();
             stopRecordingAction.performed += _ => evalSession?.StopSession();
@@ -76,9 +64,6 @@ namespace EgoAnchor.Eval.RQ1
             // Enable all actions
             metric1Action.Enable();
             metric2Action.Enable();
-            metric3Action.Enable();
-            metric4Action.Enable();
-            metric5Action.Enable();
             clearMetricAction.Enable();
             startRecordingAction.Enable();
             stopRecordingAction.Enable();
@@ -89,9 +74,6 @@ namespace EgoAnchor.Eval.RQ1
             // Disable all actions
             metric1Action.Disable();
             metric2Action.Disable();
-            metric3Action.Disable();
-            metric4Action.Disable();
-            metric5Action.Disable();
             clearMetricAction.Disable();
             startRecordingAction.Disable();
             stopRecordingAction.Disable();
