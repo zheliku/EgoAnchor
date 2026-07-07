@@ -256,9 +256,13 @@ pixi run python -m egoanchor.eval.research.rq1.analyze --session-dir data/eval/<
 ```
 默认 `report_dir=<session_dir>/report`、`figs_dir=2026-EgoAnchor-Typst/figs/rq1`。
 
-**测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py`（marker 合成 + 场景过滤）；`analyze.py` 直跑时 bootstrap 用 `Path(__file__).resolve().parents[4]`（=`src`）加入 `sys.path`。
+**测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py`（marker 合成 + 场景过滤，依赖 metrics 引擎）；`src/egoanchor/eval/tests/test_rq1_plot.py`（纯绘图层，无 cv2，含"默认完整序列不裁剪"用例）。`analyze.py` 直跑时 bootstrap 用 `Path(__file__).resolve().parents[4]`（=`src`）加入 `sys.path`。
 
-**论文更新**：§6.1 RQ1 结果用实测值替换占位符，图 `<fig:rq1-static>` 换成 `figs/rq1/*.pdf`；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」。
+**误差口径：实时逐帧对比，不做回溯时延对齐**。误差取渲染时刻锚点输出（`unity_output` 的 `variants[].output_pos/rot`）与同一 tick 采样的控制器真值（`ResolveGtPose(monoMs)` 在 `LateUpdate` 里取）逐帧比较——Unity 侧就是实时同刻采样，Python `eval/metrics/anchor_error.py` 也不做任何时间平移。这样误差如实包含端到端时延影响，与 RQ2 的时延分析口径一致。不要在 RQ1 引入「按 frame_id 回溯到采集时刻真值」的补偿对齐（那会抹掉时延效应，也与代码事实不符）。
+
+**static 图与正文取稳态窗口**。整段 static_observation 含启动沉降（前 ~10s 偏高）与偶发的一次性头动尖峰（~38s 冲到 17mm）。`analyze.write_rq1_figure` 用 `STATIC_STEADY_WINDOW_S`（当前 `(50.0, 75.0)`，相对该场景起点）只裁 static 列（遮挡列完整保留，其尖峰正是 No-StaticLock 缺陷的展示）；论文正文 static 数字与图口径一致，也取该窗口统计。改窗口须图文同步。图重生成绕开 cv2：直接读 `report/anchor_error_detail.csv` 复刻绘图逻辑即可（`egoanchor` 包导入链带 cv2）。
+
+**论文更新**：§6.1 RQ1 结果用实测值替换占位符，图 `<fig:rq1-static>` 换成 `figs/rq1/*.pdf`；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」；正文措辞为「实时逐帧对比」，不用「时延补偿对齐」。当前实测 session：`20260707_141751_controller_right`（静止约 70s、遮挡约 64s，全程不裁窗）。static_observation（全程）：*Full* 平移中位 5.8 mm / P95 6.6 mm、旋转中位 2.1° / P95 2.9°；抖动 *Full* 0.04 mm vs *No-StaticLock* 0.71 mm 约 18×、旋转抖动 1.71° vs 2.80°。occlusion_recovery（全段）：*Full* 平移中位 5.6 mm / P95 6.7 mm、旋转 P95 4.6°；*No-StaticLock* 平移 P95 19.3 mm 约 2.9×、旋转 P95 17.2°、屏幕漂移 1.6 vs 7.2 px 约 4.5×；生命周期 Coasting 48% / Searching 32% / Frozen 15% / Lost 5%。历史 session `20260707_122900`（曾取 50–75s 稳态窗）已弃用。
 
 RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metrics` + `eval/report`。关键约定和历史坑：
 
@@ -273,7 +277,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ## 环境与依赖
 
-- Python：`EgoAnchor_Python/pixi.toml`，Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
+- Python：`EgoAnchor_Python/pixi.toml`，Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 12.8 通过 `workspace.platforms` 的虚拟包字段声明，不恢复已废弃的 `[system-requirements]` 表。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
 - Unity：`EgoAnchor_Unity/Packages/manifest.json`，主线依赖 Google.Protobuf、NATS.Net、NetMQ。
 
 ## Git 忽略规则

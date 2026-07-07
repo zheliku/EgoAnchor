@@ -1,19 +1,9 @@
 fileFormatVersion: 2
-guid: ad4faa5d7d0a9be4e86b6d21d7044c23
+guid: 92e5fa3bbc390eb4f8e2455664488ea2
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects:
-  - first:
-      type: UnityEngine:Texture2D
-      assembly: UnityEngine.CoreModule
-      name: Plant
-    second: {fileID: 2800000, guid: 40568d9f8ceb8de4aaed2478cb59119d, type: 3}
-  - first:
-      type: UnityEngine:Texture2D
-      assembly: UnityEngine.CoreModule
-      name: plant
-    second: {fileID: 2800000, guid: 7c0b5a488741bb24d8a9e2d1f3967774, type: 3}
+  externalObjects: {}
   materials:
     materialImportMode: 2
     materialName: 0

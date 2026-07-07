@@ -2,11 +2,8 @@
 authors = ["zheliku <302734905@qq.com>"]
 channels = ["https://prefix.dev/conda-forge", "conda-forge"]
 name = "EgoAnchor_Python"
-platforms = ["win-64", "linux-64"]
+platforms = [{ platform = "win-64", cuda = "12.8" }, { platform = "linux-64", cuda = "12.8" }] # Windows/Linux 均声明 CUDA 12.8 虚拟包，替代 Pixi 0.72 起警告的旧 system-requirements 表。
 version = "0.1.0"
-
-[system-requirements]
-cuda = "12.8" # 只声明需要 CUDA，不指定具体小版本
 
 [target.win-64.activation.env]
 PYTHONPATH = ".;src;Fast-FoundationStereo;Cutie;sam3" # Windows 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
@@ -30,8 +27,6 @@ mypy = ">=1.18.2,<2"
 pyrender = ">=0.1.45,<0.2"
 scipy = ">=1.17.0,<2"
 netifaces = ">=0.11.0,<0.12"
-libopencv = ">=4.12.0,<5"
-opencv = ">=4.12.0,<5"
 imageio = ">=2.37.0,<3"
 pandas = ">=3.0.0,<4"
 h5py = ">=3.15.1,<4"
@@ -72,7 +67,7 @@ omegaconf = "*"
 scipy = "*"
 numpy = "*"
 scikit-image = "*"
-opencv-contrib-python = ">=4.11.0.86, <5"
+opencv-python = ">=4.11.0.86, <5" # 统一使用 PyPI OpenCV，满足 Cutie/ultralytics 的 cv2 依赖，避免与 conda OpenCV 覆盖。
 imageio = "*"
 pyyaml = "*"
 ultralytics = ">=8.4.26, <9"
@@ -201,6 +196,14 @@ python src/run_server.py --object controller_left
 
 plant ={ cmd = """
 python src/run_server.py --object plant
+""" }
+
+stapler ={ cmd = """
+python src/run_server.py --object stapler
+""" }
+
+gamepad ={ cmd = """
+python src/run_server.py --object gamepad
 """ }
 
 eval = { cmd = "python eval/run_eval.py" } # 运行完整离线评估；使用 pixi run eval --session-dir data/eval/<session_id>
