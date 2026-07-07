@@ -3,7 +3,12 @@ guid: 92e5fa3bbc390eb4f8e2455664488ea2
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: gamepad
+    second: {fileID: 2800000, guid: 9797109d85ef2c641b51e2d5adb6cba4, type: 3}
   materials:
     materialImportMode: 2
     materialName: 0

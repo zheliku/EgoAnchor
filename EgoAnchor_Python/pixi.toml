@@ -46,6 +46,8 @@ open3d = ">=0.19.0,<0.20"
 setuptools = ">=69.0.0,<75"
 einops = ">=0.8.2,<0.9"
 pycocotools = ">=2.0.11,<3"
+opencv = ">=4.12.0,<5"
+libopencv = ">=4.12.0,<5"
 
 [pypi-dependencies]
 # PyTorch 全家桶从 PyPI 安装
@@ -67,7 +69,6 @@ omegaconf = "*"
 scipy = "*"
 numpy = "*"
 scikit-image = "*"
-opencv-python = ">=4.11.0.86, <5" # 统一使用 PyPI OpenCV，满足 Cutie/ultralytics 的 cv2 依赖，避免与 conda OpenCV 覆盖。
 imageio = "*"
 pyyaml = "*"
 ultralytics = ">=8.4.26, <9"
@@ -77,6 +78,7 @@ nats-py = ">=2.12.0, <3"
 clip = { git = "https://github.com/ultralytics/CLIP.git" }
 tensorrt-cu12 = ">=10.16.1.11, <11"
 protobuf = ">=7.34.1, <8"
+opencv-contrib-python = ">=4.11.0.86, <5"
 
 
 [target.win-64.pypi-dependencies]
@@ -91,7 +93,7 @@ gcc_linux-64 = "11.*"
 gxx_linux-64 = "11.*"
 
 [target.win-64.tasks]
-_build-fp = { cmd = """
+build-fp = { cmd = """
 cmake -E rm -rf FoundationPose/mycpp/build &&
 cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build --fresh -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc.exe -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++.exe &&
 cmake --build FoundationPose/mycpp/build --parallel
@@ -99,31 +101,37 @@ cmake --build FoundationPose/mycpp/build --parallel
 
 [tasks]
 # 编译 FoundationPose 的 C++ 扩展
-_build-fp = { cmd = """
+build-fp = { cmd = """
 cmake -E rm -rf FoundationPose/mycpp/build &&
 cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build --fresh -G Ninja -DCMAKE_BUILD_TYPE=Release &&
 cmake --build FoundationPose/mycpp/build --parallel
 """ }
 _make-onnx = { cmd = """
+python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192
+""" }
+_build-trt = { cmd = """
+python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16
+""" }
+build-trt = { depends-on = ["_make-onnx", "_build-trt"] }
+
+# 可选扩展：用于切换 Fast-FoundationStereo 的速度/精度档位，复刻旧全量构建中的非默认组合。
+_make-onnx-extra = { cmd = """
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-26-39/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-26-39/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 8 --max_disp 192 &&
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/20-30-48/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 8 --max_disp 192 &&
-python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 &&
 python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationStereo/weights/23-36-37/model_best_bp2_serialize.pth --save_path Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192
 """ }
-_build-trt-only = { cmd = """
+_build-trt-extra = { cmd = """
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-26-39 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/20-30-48 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16 &&
-python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16 &&
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16
 """ }
+build-trt-extra = { depends-on = ["_make-onnx-extra", "_build-trt-extra"] } # 生成 20-26-39、20-30-48 和 23-36-37/it8 的可选 TRT artifacts。
 
-_build-trt = { depends-on = ["_make-onnx", "_build-trt-only"] }
-
-build = { depends-on = ["_build-fp", "_build-trt"] }
+build = { depends-on = ["build-fp", "build-trt"] }
 
 demo-fp = { cmd = """
 python FoundationPose/run_demo.py \

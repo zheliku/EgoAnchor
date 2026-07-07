@@ -13,7 +13,7 @@ ModelImporter:
       type: UnityEngine:Texture2D
       assembly: UnityEngine.CoreModule
       name: plant
-    second: {fileID: 2800000, guid: 7c0b5a488741bb24d8a9e2d1f3967774, type: 3}
+    second: {fileID: 2800000, guid: 31b957533d49f8a4a87508625c62b893, type: 3}
   materials:
     materialImportMode: 2
     materialName: 0
