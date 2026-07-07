@@ -61,8 +61,8 @@ namespace EgoAnchor.Policy
         [SerializeField] private float unlockDriftMeters = 0.015f;
 
         /// <summary>绝对漂移租绳：相对锁定原点旋转超此值则解锁，单位度。</summary>
-        [Tooltip("绝对漂移租绳 (度)：相对锁定原点的总旋转超此值 → 解锁。默认 5。")]
-        [SerializeField] private float unlockDriftDegrees = 5.0f;
+        [Tooltip("绝对漂移租绳 (度)：相对锁定原点的总旋转超此值 → 解锁。必须高于物体旋转估计噪声地板 (本数据集静止摆幅 p90~10°)，设太低 (曾为 5°) 会被静止噪声顶破误解锁。默认 12。")]
+        [SerializeField] private float unlockDriftDegrees = 12.0f;
 
         /// <summary>解锁证据半衰期，单位秒 (帧率无关)。</summary>
         [Tooltip("解锁证据半衰期 (秒, 帧率无关漏积分)：偶发噪声会漏掉, 只有持续运动才累积越阈。越大越粘。默认 0.27。")]

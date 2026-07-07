@@ -168,6 +168,7 @@ Policy 结构：
 - `EgoAnchorStaticLockModule` 是参数宿主；`StaticLockController` 是纯 C# 控制器，与 model × strategy 正交。挂模块并 `lockEnabled=true` 是 EgoAnchor 方法，不挂或关闭是 baseline。
 - 进入锁定看 `enterSpeedMps`、`enterAngSpeedDps`（设为噪声地板约 1.5 倍，当前 22°/s）、`dwellSeconds`、`minScore`。线/角速度阈值必须高于真实噪声地板，太低会永不锁定。
 - 漂移租绳量的是 `distance(obsConsensus, anchorOrigin)`，不是单帧观测也不是 `lockedPose`——改成 `lockedPose` 会导致慢速持续移动时永不解锁。
+- **旋转解锁租绳 `unlockDriftDegrees` 必须高于物体旋转估计噪声地板，否则静止时噪声顶破租绳 → 反复误解锁（锁不稳）**。实测 controller 静止+头静止时，一个锁生命周期内 obsConsensus 旋转摆幅 p50 5.3°/p90 9.8°，故租绳从 5° 抬到 12°（贴合代码注释里已知 ~13° 旋转噪声，仍低于 CUSUM 天花板 `unlockEvidenceDegrees=20°`，真慢转仍能解锁）。位置租绳 `unlockDriftMeters=0.015` 实测正常，不动。定位手法：把 `StaticLockController` 逻辑离线重放在采集的观测流上，统计每次解锁走哪条分支（drift_rot/drift_pos/cusum/speed/lowscore）。
 - `headSettleSeconds` 只在头已停下但沉降计时未完成的窗口内冻结"判物体在动"的证据；头动期间绝不冻结——那会把真动也锁死。
 - 距离自适应只放大位置通道，不放大旋转通道。
 - `LatestStaticLocked`、`motion_model`、`smoothing_strategy`、`quality_gate`、`has_output_pose`、`output_pos`、`output_rot` 是当前 eval/runtime 契约，不要改回旧名。

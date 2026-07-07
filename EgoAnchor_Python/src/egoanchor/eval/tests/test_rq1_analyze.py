@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -10,6 +12,7 @@ from egoanchor.eval.research.rq1.analyze import (
     RQ1_CONDITIONS,
     filter_rq1_tables,
     synthesize_occlusion_markers,
+    write_rq1_figure,
 )
 
 
@@ -86,6 +89,59 @@ class FilterRq1TablesTest(unittest.TestCase):
         tables = {"misc": pd.DataFrame({"x": [1, 2]})}
         filtered = filter_rq1_tables(tables)
         self.assertEqual(len(filtered["misc"]), 2)
+
+
+class WriteRq1FigureTest(unittest.TestCase):
+    """RQ1 三联图导出：写 PDF/PNG，空数据不抛异常。"""
+
+    def _detail(self) -> pd.DataFrame:
+        """构造最小 anchor_error_detail（含 static 与 occlusion 两场景两变体）。"""
+
+        rows = []
+        for condition in ("static_observation", "occlusion_recovery"):
+            for label in ("Full", "No-StaticLock"):
+                for i in range(5):
+                    rows.append(
+                        {
+                            "render_mono_ms": float(i * 10),
+                            "condition": condition,
+                            "label": label,
+                            "translation_error_m": 0.005,
+                        }
+                    )
+        return pd.DataFrame(rows)
+
+    def test_writes_pdf_and_png(self) -> None:
+        """有数据时写出 .pdf 与 .png，返回 PDF 路径。"""
+
+        tables = {
+            "anchor_error_detail": self._detail(),
+            "jitter_summary": pd.DataFrame(
+                {
+                    "condition": ["static_observation", "static_observation"],
+                    "label": ["Full", "No-StaticLock"],
+                    "position_jitter_rms_m": [0.0003, 0.0013],
+                }
+            ),
+            "slip_summary": pd.DataFrame(
+                {
+                    "condition": ["static_observation", "static_observation"],
+                    "label": ["Full", "No-StaticLock"],
+                    "slip_rms_px": [1.6, 1.8],
+                }
+            ),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            out = write_rq1_figure(tables, Path(tmp) / "fig_rq1_static")
+            self.assertTrue(out.with_suffix(".pdf").exists())
+            self.assertTrue(out.with_suffix(".png").exists())
+
+    def test_empty_tables_still_write_placeholders(self) -> None:
+        """全空表也写出文件（占位面板），不抛异常。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = write_rq1_figure({}, Path(tmp) / "fig_rq1_static")
+            self.assertTrue(out.with_suffix(".pdf").exists())
 
 
 if __name__ == "__main__":

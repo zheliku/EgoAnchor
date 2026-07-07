@@ -130,7 +130,7 @@ namespace EgoAnchor.Policy
         private float unlockEvidenceMeters = 0.08f;
         private float unlockEvidenceDegrees = 20.0f;
         private float unlockDriftMeters = 0.015f;     // 绝对漂移租绳: 相对锁定原点平移超此 → 解锁 (修慢速平移不脱离)
-        private float unlockDriftDegrees = 5.0f;
+        private float unlockDriftDegrees = 12.0f;      // 旋转租绳必须高于物体旋转估计噪声地板 (本数据集 obsConsensus 摆幅 p90~10°、代码注释~13°), 设太低 (曾为 5°) 会被静止噪声顶破 → 误解锁
         private float evidenceHalfLifeSeconds = 0.27f;
         private float creepHalfLifeSeconds = 2.7f;
         private float relockSuppressSeconds = 1.0f;

@@ -217,3 +217,12 @@ confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高�
 [objects.controller_left.module.foundationpose]
 mesh_path = "data/model/MetaQuestTouchPlus_Left.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
 symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.plant.module.segmenter]
+# type = "sam3" # 如需让控制器目标改用 SAM3，可取消注释；主默认配置仍保持 yoloe26。
+prompt = "small potted plant" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.plant.module.foundationpose]
+mesh_path = "data/model/plant.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。

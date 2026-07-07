@@ -1694,7 +1694,7 @@ MonoBehaviour:
   transErrGoodMm: 10
   transErrBadMm: 20
   rotErrGoodDeg: 5
-  rotErrBadDeg: 20
+  rotErrBadDeg: 10
 --- !u!114 &479615753
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2326,6 +2326,222 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!1 &700000001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 700000002}
+  - component: {fileID: 700000003}
+  - component: {fileID: 700000004}
+  m_Layer: 0
+  m_Name: AnchorObject - NoStaticLock
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &700000002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000001}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.45532, y: 0, z: -0.10197}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 700000005}
+  m_Father: {fileID: 1777492728}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &700000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 700000004}
+  targetTransform: {fileID: 700000002}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!114 &700000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  policyHost: {fileID: 700000006}
+--- !u!4 &700000005
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.05382, y: 0, z: 0.10197}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 700000002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &700000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 700000007}
+  smoothingStrategy: {fileID: 700000008}
+  strategyLabel: 
+  enableQualityGate: 1
+  minQualityScore: 0.2
+  maxQualityJumpMeters: 0.8
+  maxQualityJumpDegrees: 120
+  staticLockModule: {fileID: 700000009}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0.5
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 1
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &700000007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
+--- !u!114 &700000008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
+  hermiteTangentChordRatio: 3
+--- !u!114 &700000009
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
+  lockEnabled: 0
+  enterSpeedMps: 0.05
+  enterAngSpeedDps: 35
+  dwellSeconds: 0.35
+  minScore: 0.25
+  deadbandMeters: 0.008
+  deadbandDegrees: 3
+  unlockEvidenceMeters: 0.08
+  unlockEvidenceDegrees: 20
+  unlockDriftMeters: 0.015
+  unlockDriftDegrees: 12
+  evidenceHalfLifeSeconds: 0.27
+  creepHalfLifeSeconds: 2.7
+  relockSuppressSeconds: 1
+  unlockSpeedFactor: 2.5
+  unlockMovingSeconds: 0.4
+  seamDecayPerFrame: 0.85
+  refObsIntervalSeconds: 0.2
+  headRotForFullToleranceDps: 60
+  headLinForFullToleranceMps: 0.3
+  headMaxToleranceFactor: 4
+  headSettleSeconds: 0.6
+  posToleranceRefDistanceMeters: 0.4
+  posToleranceDistanceSlope: 1
+  posToleranceMaxFactor: 3
+  lowScoreReleaseScore: 0.3
+  lowScoreReleaseSeconds: 0.6
+--- !u!1 &700000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 700000005}
+  - component: {fileID: 700000006}
+  - component: {fileID: 700000007}
+  - component: {fileID: 700000008}
+  - component: {fileID: 700000009}
+  m_Layer: 0
+  m_Name: AnchorPolicyHost
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
 --- !u!1 &722913589
 GameObject:
   m_ObjectHideFlags: 0
@@ -2834,57 +3050,6 @@ MonoBehaviour:
       m_Processors: 
       m_Groups: 
       m_Action: Metric 2
-      m_Flags: 0
-    m_Flags: 0
-  metric3Action:
-    m_Name: Metric 3
-    m_Type: 0
-    m_ExpectedControlType: 
-    m_Id: f9a19c0d-d18f-4bca-ae8f-ca2202cc1a79
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 592fe3f1-43a8-4f5b-99b3-ad82078fc908
-      m_Path: <Keyboard>/3
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Metric 3
-      m_Flags: 0
-    m_Flags: 0
-  metric4Action:
-    m_Name: Metric 4
-    m_Type: 0
-    m_ExpectedControlType: 
-    m_Id: aceaab73-6d35-4670-9340-d89bd1988ed9
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 40f7c6a0-1903-4826-96cd-9064ed2b6484
-      m_Path: <Keyboard>/4
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Metric 4
-      m_Flags: 0
-    m_Flags: 0
-  metric5Action:
-    m_Name: Metric 5
-    m_Type: 0
-    m_ExpectedControlType: 
-    m_Id: 98a30ea8-e5f2-4270-8315-69d9e5334607
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: b9aeceb7-1b04-4600-b646-025c22fb8796
-      m_Path: <Keyboard>/5
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Metric 5
       m_Flags: 0
     m_Flags: 0
   clearMetricAction:
@@ -3879,7 +4044,7 @@ MonoBehaviour:
   unlockEvidenceMeters: 0.08
   unlockEvidenceDegrees: 20
   unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
+  unlockDriftDegrees: 12
   evidenceHalfLifeSeconds: 0.27
   creepHalfLifeSeconds: 2.7
   relockSuppressSeconds: 1
@@ -6397,219 +6562,3 @@ SceneRoots:
   - {fileID: 448430449}
   - {fileID: 1777492728}
   - {fileID: 212916037}
---- !u!1 &700000001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 700000002}
-  - component: {fileID: 700000003}
-  - component: {fileID: 700000004}
-  m_Layer: 0
-  m_Name: AnchorObject - NoStaticLock
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &700000002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000001}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.45532, y: 0, z: -0.10197}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 700000005}
-  m_Father: {fileID: 1777492728}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &700000003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
-  runtime: {fileID: 700000004}
-  targetTransform: {fileID: 700000002}
-  applyPosition: 1
-  applyRotation: 1
-  holdLastPoseWhenMissing: 1
-  lastAppliedFrameId: -1
---- !u!114 &700000004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
-  framePoseHistory: {fileID: 1764014454}
-  alignmentReference: 1
-  poseTransform:
-    flipX: 0
-    flipY: 1
-    flipZ: 0
-    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
-    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
-    worldPositionOffset: {x: 0, y: 0, z: 0}
-    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
-    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
-    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
-  policyHost: {fileID: 700000006}
---- !u!1 &700000010
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 700000005}
-  - component: {fileID: 700000006}
-  - component: {fileID: 700000007}
-  - component: {fileID: 700000008}
-  - component: {fileID: 700000009}
-  m_Layer: 0
-  m_Name: AnchorPolicyHost
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &700000005
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000010}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.05382, y: 0, z: 0.10197}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 700000002}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &700000006
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
-  motionModel: {fileID: 700000007}
-  smoothingStrategy: {fileID: 700000008}
-  strategyLabel:
-  enableQualityGate: 1
-  minQualityScore: 0.2
-  maxQualityJumpMeters: 0.8
-  maxQualityJumpDegrees: 120
-  staticLockModule: {fileID: 700000009}
-  coastTimeoutSeconds: 0.45
-  trackingScoreFloor: 0.5
-  lostTimeoutSeconds: 1
-  staticSpeedThresholdMps: 0.015
-  staticAngularSpeedThresholdDps: 1.5
-  enableLostReacquire: 1
-  enableLowScoreReacquire: 1
-  lowScoreReacquireThreshold: 0.45
-  lowScoreReacquireSeconds: 0.6
-  lowScoreReacquireCooldownSeconds: 3
-  reacquireGeometryFloor: 0.5
-  reacquireReprojWeight: 0.2
-  reacquireDepthWeight: 0.8
---- !u!114 &700000007
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
-  positionProcessNoise: 0.2
-  positionMeasurementNoise: 0.0004
-  rotationProcessNoise: 0.4
-  rotationMeasurementNoise: 0.0025
---- !u!114 &700000008
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
-  latencySafetyMargin: 1.15
-  minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
---- !u!114 &700000009
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 700000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
-  lockEnabled: 0
-  enterSpeedMps: 0.05
-  enterAngSpeedDps: 35
-  dwellSeconds: 0.35
-  minScore: 0.25
-  deadbandMeters: 0.008
-  deadbandDegrees: 3
-  unlockEvidenceMeters: 0.08
-  unlockEvidenceDegrees: 20
-  unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
-  evidenceHalfLifeSeconds: 0.27
-  creepHalfLifeSeconds: 2.7
-  relockSuppressSeconds: 1
-  unlockSpeedFactor: 2.5
-  unlockMovingSeconds: 0.4
-  seamDecayPerFrame: 0.85
-  refObsIntervalSeconds: 0.2
-  headRotForFullToleranceDps: 60
-  headLinForFullToleranceMps: 0.3
-  headMaxToleranceFactor: 4
-  headSettleSeconds: 0.6
-  posToleranceRefDistanceMeters: 0.4
-  posToleranceDistanceSlope: 1
-  posToleranceMaxFactor: 3
-  lowScoreReleaseScore: 0.3
-  lowScoreReleaseSeconds: 0.6

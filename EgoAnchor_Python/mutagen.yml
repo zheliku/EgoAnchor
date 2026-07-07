@@ -83,12 +83,12 @@ sync:
         - "/mutagen.yml"
         - "/mutagen.yml.lock"
 
-  # push-4090:
-  #   alpha: "."
-  #   beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
-  #   mode: one-way-replica
-  #   ignore:
-  #     paths: *source_ignore
+  push-4090:
+    alpha: "."
+    beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+      paths: *source_ignore
 
   # --- 5080 DISABLED until its SSH DefaultShell is switched to PowerShell ---
   # The laptop's default SSH shell is cmd.exe on a Chinese (GBK/936) console, so
@@ -111,10 +111,10 @@ sync:
   # and local-only content is never deleted. Run session dirs are uniquely
   # timestamped, so the three machines' pulls never collide.
 
-  # logs-4090:
-  #   alpha: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python/data/eval"
-  #   beta: "./data/eval"
-  #   mode: one-way-safe
+  logs-4090:
+    alpha: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
 
   logs-5090:
     alpha: "descfly@172.24.247.32:/home/descfly/projects/EgoAnchor_Python/data/eval"
