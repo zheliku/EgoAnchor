@@ -37,6 +37,20 @@ def _mask_has_pixels(mask: np.ndarray | None) -> bool:
     return mask is not None and np.count_nonzero(mask) > 0
 
 
+def _pose_delta_metrics(current_pose: np.ndarray, previous_pose: np.ndarray | None) -> tuple[float, float]:
+    """计算相邻已接受 pose 的平移和旋转增量。"""
+
+    if previous_pose is None:
+        return 0.0, 0.0
+    current = np.asarray(current_pose, dtype=np.float64).reshape(4, 4)
+    previous = np.asarray(previous_pose, dtype=np.float64).reshape(4, 4)
+    translation_m = float(np.linalg.norm(current[:3, 3] - previous[:3, 3]))
+    relative_rotation = current[:3, :3] @ previous[:3, :3].T
+    cos_angle = (float(np.trace(relative_rotation)) - 1.0) * 0.5
+    rotation_deg = float(np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0))))
+    return translation_m, rotation_deg
+
+
 class QuestPosePipeline:
     """Quest object pose estimation pipeline。"""
 
@@ -764,6 +778,7 @@ class QuestPosePipeline:
             LOGGER.warning("FoundationPose track 返回无效 pose，等待 Unity 侧重获取命令。")
             return None, "NONE", "TRACK_FAILED"
 
+        diagnostics.last_translation_delta_m, diagnostics.last_rotation_delta_deg = _pose_delta_metrics(pose, state.last_pose)
         self._check_render_quality(pose, rgb, depth, mask, diagnostics, timing)
 
         state.last_pose = pose

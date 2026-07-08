@@ -567,7 +567,7 @@ class PositionalEmbedding(nn.Module):
     pe[:, 1::2] = torch.cos(position * div_term)
 
     pe = pe.unsqueeze(0)
-    self.pe = pe
+    self.register_buffer("pe", pe, persistent=False)
 
 
   def forward(self, x, resize_embed=False):
@@ -575,8 +575,7 @@ class PositionalEmbedding(nn.Module):
     @x: (B,N,D)
     '''
     dtype = x.dtype
-    self.pe = self.pe.to(x.device).to(x.dtype)
-    pe = self.pe
+    pe = self.pe.to(device=x.device, dtype=x.dtype)
     if pe.shape[1]<x.shape[1]:
       if resize_embed:
         pe = F.interpolate(pe.permute(0,2,1), size=x.shape[1], mode='linear', align_corners=True).permute(0,2,1)
@@ -617,17 +616,14 @@ class ChannelAttentionEnhancement(nn.Module):
         """From selective-IGEV
         """
         super(ChannelAttentionEnhancement, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-
         self.fc = nn.Sequential(nn.Conv2d(in_planes, in_planes // 16, 1, bias=False),
                                nn.ReLU(),
                                nn.Conv2d(in_planes // 16, in_planes, 1, bias=False))
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        avg_out = self.fc(self.avg_pool(x))
-        max_out = self.fc(self.max_pool(x))
+        avg_out = self.fc(torch.mean(x, dim=(2, 3), keepdim=True))
+        max_out = self.fc(torch.amax(x, dim=(2, 3), keepdim=True))
         out = avg_out + max_out
         return self.sigmoid(out)
 
@@ -680,4 +676,3 @@ class EdgeNextConvEncoder(nn.Module):
 
         x = input + x
         return x
-

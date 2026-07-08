@@ -138,29 +138,42 @@ class DepthAlignmentCheckerTest(unittest.TestCase):
     def test_depth_alignment_uses_adaptive_threshold(self) -> None:
         """距离越远，深度 inlier 阈值应按比例放宽。"""
 
-        render_depth = np.ones((2, 2), dtype=np.float32)
-        observed_depth = np.array([[1.004, 1.012], [1.018, 1.03]], dtype=np.float32)
+        close_render_depth = np.full((2, 2), 0.24, dtype=np.float32)
+        far_render_depth = np.ones((2, 2), dtype=np.float32)
+        residual = np.array([[0.004, 0.012], [0.018, 0.03]], dtype=np.float32)
+        close_observed_depth = close_render_depth + residual
+        far_observed_depth = far_render_depth + residual
         intersection = np.ones((2, 2), dtype=bool)
 
         close = DepthAlignmentChecker._score_from_maps(
-            render_depth,
-            observed_depth,
+            close_render_depth,
+            close_observed_depth,
             intersection,
             pose_distance_m=0.24,
             depth_coverage=0.8,
             distance_ratio=0.02,
             min_inlier_thresh_m=0.005,
             min_depth_coverage=0.10,
+            residual_scale=2.5,
+            enable_structural=True,
+            structural_max_weight=0.35,
+            structural_iqr_thresh=0.02,
+            core_erode_kernel=0,
         )
         far = DepthAlignmentChecker._score_from_maps(
-            render_depth,
-            observed_depth,
+            far_render_depth,
+            far_observed_depth,
             intersection,
             pose_distance_m=1.0,
             depth_coverage=0.8,
             distance_ratio=0.02,
             min_inlier_thresh_m=0.005,
             min_depth_coverage=0.10,
+            residual_scale=2.5,
+            enable_structural=True,
+            structural_max_weight=0.35,
+            structural_iqr_thresh=0.02,
+            core_erode_kernel=0,
         )
 
         self.assertTrue(close.valid)
@@ -183,6 +196,11 @@ class DepthAlignmentCheckerTest(unittest.TestCase):
             distance_ratio=0.02,
             min_inlier_thresh_m=0.005,
             min_depth_coverage=0.10,
+            residual_scale=2.5,
+            enable_structural=True,
+            structural_max_weight=0.35,
+            structural_iqr_thresh=0.02,
+            core_erode_kernel=0,
         )
 
         self.assertFalse(result.valid)

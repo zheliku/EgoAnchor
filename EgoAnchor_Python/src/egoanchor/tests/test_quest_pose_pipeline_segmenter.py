@@ -119,6 +119,25 @@ class _FakeFoundationPoseEstimator:
         return rgb.copy()
 
 
+class _MovingTrackPoseEstimator(_FakeFoundationPoseEstimator):
+    """单测用 FoundationPose 估计器，track 阶段返回带位移和旋转的 pose。"""
+
+    def track(self, rgb: np.ndarray, depth: np.ndarray) -> np.ndarray:
+        """返回固定运动 pose，用于验证相邻 pose 增量遥测。"""
+
+        pose = np.eye(4, dtype=np.float64)
+        pose[0, 3] = 0.3
+        pose[:3, :3] = np.array(
+            [
+                [0.0, -1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+        return pose
+
+
 class _InvalidRegisterPoseEstimator(_FakeFoundationPoseEstimator):
     """单测用 FoundationPose 估计器，register 返回非有限 pose。"""
 
@@ -253,22 +272,22 @@ class QuestPosePipelineSegmenterTest(unittest.TestCase):
     def test_track_deltas_reports_translation_and_rotation(self) -> None:
         """相邻 pose 的平移和旋转增量应稳定供可靠性评分使用。"""
 
-        previous = np.eye(4, dtype=np.float64)
-        current = np.eye(4, dtype=np.float64)
-        current[0, 3] = 0.3
-        current[:3, :3] = np.array(
-            [
-                [0.0, -1.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=np.float64,
+        pipeline = QuestPosePipeline(
+            segmenter=_FakeSegmenter(),
+            segmenter_name="yoloe26",
+            depth_estimator=_FakeDepthEstimator(),
+            foundationpose_estimator=_MovingTrackPoseEstimator(),
+            cutie_tracker=None,
+            process_width=8,
+            process_height=8,
         )
+        first = pipeline.process(_make_stereo_frame(1, (10, 20, 30)), _make_camera_info())
+        second = pipeline.process(_make_stereo_frame(2, (12, 22, 32)), _make_camera_info())
 
-        translation_m, rotation_deg = QuestPosePipeline._track_deltas(current, previous)
-
-        self.assertAlmostEqual(translation_m, 0.3)
-        self.assertAlmostEqual(rotation_deg, 90.0)
+        self.assertTrue(first.observation.has_pose)
+        self.assertTrue(second.observation.has_pose)
+        self.assertAlmostEqual(second.observation.last_translation_delta_m, 0.3)
+        self.assertAlmostEqual(second.observation.last_rotation_delta_deg, 90.0)
 
     def test_segmenter_name_is_used_as_mask_source(self) -> None:
         """SAM3 后端进入 pipeline 时 diagnostics.mask_source 应显示 sam3。"""

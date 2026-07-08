@@ -110,7 +110,21 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v4.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v4.pdf
 ```
 
-> `pixi run build` 会构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
+> `pixi run build` 会安装 nvdiffrast（现场编译 CUDA 扩展）、构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
+
+Fast-FoundationStereo ONNX/TRT 构建坑：
+
+- PyTorch 2.12 + onnxscript 导出 external data 时，Windows 下直接覆盖已有 `*.onnx.data` 可能报 `PermissionError: [Errno 13] Permission denied`。`Fast-FoundationStereo/scripts/make_onnx.py` 在每次导出前会删除目标 `.onnx` 和同名 `.onnx.data` sidecar，不要移除这一步。
+
+Windows 上 nvdiffrast 的安装坑（`pixi install` / `pixi clean cache` 后一次过不了）：
+
+- nvdiffrast **不放 `[pypi-dependencies]`**：`pixi install` 的 PyPI 源码构建上下文不能可靠安装或刷新系统 MSVC，清缓存后容易在 CUDA 扩展编译阶段找不到可用 `cl.exe`。改由 `pixi run` 下的 `_build-nvdiffrast` 任务安装，已挂进 `build`。缓存里有 wheel 时不重编，所以问题只在 `pixi clean cache` 后暴露。
+- Pixi 0.72.1 实测 `depends-on` task 之间**不会重新执行 workspace activation**：activation 在 task 图启动前捕获一次，前置 task 安装 VS Build Tools 后，后续 task 不会自动刷新 `cl.exe` / `INCLUDE` / `LIB`。因此 Windows `_build-nvdiffrast` 必须在自身命令里手动 `call "%CONDA_PREFIX%\etc\conda\activate.d\vs2022_compiler_vars.bat"`。
+- Windows `[target.win-64.activation.env]` 只放静态环境值；不要在里面写 `$CONDA_PREFIX` 并期待 Pixi 展开。需要真实环境前缀的构建命令在 `cmd` 内用 `%CONDA_PREFIX%` 重新设置 `CUDA_HOME` / `CUDA_PATH` / `CL`。
+- Windows task 内联 `cmd /c` 时不要写会把空格带进变量值的 `set ""CUDA_HOME=..."" && ...` 形式；nvdiffrast 会把尾随空格拼进 `Library \bin\nvcc.exe` 并报 `nvcc not found`。当前 `_build-nvdiffrast` 用无空格分隔的 `set CUDA_HOME=...&& set CUDA_PATH=...&& ...`。
+- `_ensure-msvc-buildtools` 现在内联在 `pixi.toml`：通过 `vswhere` 检查 VS2022 C++ Build Tools，缺失时调用 `winget install Microsoft.VisualStudio.2022.BuildTools`，由系统弹出管理员确认。仓库不再保留单独的 `activate-win-msvc-cuda.bat` 或 `ensure-win-msvc-buildtools.ps1`。
+- `_build-nvdiffrast` 不注入 `NVCC_PREPEND_FLAGS=--compiler-bindir`：`vs2022_win-64` 激活后 `cl.exe` 已在 PATH，torch 构建自带 `--use-local-env` 会让 nvcc 用 PATH 的 `cl.exe`。nvcc 13.3 会校验 `-ccbin` 与 PATH cl.exe 是否同一路径，8.3 短路径 vs 长路径字符串不一致会触发 `nvcc fatal: cl.exe in PATH is different than -ccbin`。
+- 单独重装：`pixi run _build-nvdiffrast`（等价在刷新后的 MSVC/CUDA 环境里执行 `python -m pip install --no-build-isolation --no-deps git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0`）。
 
 ## Python 主线
 
@@ -278,7 +292,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ## 环境与依赖
 
-- Python：`EgoAnchor_Python/pixi.toml`，Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 12.8 通过 `workspace.platforms` 的虚拟包字段声明，不恢复已废弃的 `[system-requirements]` 表。Pixi 0.72+ 下 `nvdiffrast` 必须关闭构建隔离，并通过 Pixi 激活环境提供 CUDA 12.8 路径、CCCL include 路径和 Windows `vs2022_win-64` MSVC 工具链；不要写本机绝对路径或临时构建脚本。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
+- Python：`EgoAnchor_Python/pixi.toml`，Python 3.13、CUDA 13.3、PyTorch 2.12 cu130、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 13.3 不在 `workspace.platforms` 内联，Windows 用精确 conda 组件声明，Linux 用 `cuda-toolkit`。Pixi 0.72+ 下 `nvdiffrast` 不放进 `[pypi-dependencies]`，必须由 `pixi run _build-nvdiffrast` 在激活环境内以 `--no-build-isolation --no-deps` 编译安装，从而复用当前环境的 torch/CUDA/MSVC。Windows 使用 `vs2022_win-64` 提供 `vswhere` 和 MSVC activate.d 脚本；`_ensure-msvc-buildtools` 的 winget 检查/安装逻辑直接内联在 `pixi.toml`，`_build-nvdiffrast` 再在同一 `cmd` 内手动刷新 `vs2022_compiler_vars.bat`。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
 - Unity：`EgoAnchor_Unity/Packages/manifest.json`，主线依赖 Google.Protobuf、NATS.Net、NetMQ。
 
 ## Git 忽略规则

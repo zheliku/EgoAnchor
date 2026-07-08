@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from egoanchor.app import run_tracking_server, should_show_waiting_frame
+from egoanchor.perception import FrameDiagnostics
 
 
 class _StopLoop(RuntimeError):
@@ -63,7 +64,7 @@ class _SequenceRuntime:
         if self._remaining <= 0:
             raise _StopLoop("stop test loop")
         self._remaining -= 1
-        output = SimpleNamespace(diagnostics=object(), observation=object())
+        output = SimpleNamespace(diagnostics=FrameDiagnostics(), observation=object())
         return SimpleNamespace(pipeline_output=output, new_frame_processed=True)
 
     def close(self) -> None:
@@ -162,7 +163,7 @@ class TrackingServerAppTest(unittest.TestCase):
             patch.object(app_globals["SubjectRegistry"], "load", return_value=object()),
             patch.object(app_globals["cv2"], "imshow"),
             patch.object(app_globals["cv2"], "waitKey", return_value=255),
-            patch.object(app_globals["time"], "perf_counter", side_effect=[100.0, 100.05, 100.10]),
+            patch.object(app_globals["time"], "perf_counter", side_effect=[100.0 + index * 0.01 for index in range(20)]),
         ):
             with self.assertRaises(_StopLoop):
                 run_tracking_server()

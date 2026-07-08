@@ -73,15 +73,15 @@ class DebugViewTest(unittest.TestCase):
             view = make_score_debug_view(diagnostics, observation, width=640, height=360)
 
         self.assertEqual(view.shape[:2], (360, 640))
-        self.assertTrue(any("score=0.20" in text for text in texts))
+        self.assertTrue(any("R=0.200" in text for text in texts))
+        self.assertTrue(any("V(0.900)" in text for text in texts))
+        self.assertTrue(any("C=0.420" in text for text in texts))
+        self.assertTrue(any("D=0.650" in text for text in texts))
         self.assertTrue(any("reproj=0.42" in text for text in texts))
-        self.assertTrue(any("depth=0.65" in text for text in texts))
-        self.assertTrue(any("mask=0.90" in text for text in texts))
-        self.assertTrue(any("track_reproj=0.42" in text for text in texts))
         self.assertTrue(any("area=0.25" in text for text in texts))
         self.assertTrue(any("renderCov=0.50" in text for text in texts))
         self.assertTrue(any("obsCov=0.60" in text for text in texts))
-        self.assertTrue(any("depthIn=0.70" in text for text in texts))
+        self.assertTrue(any("rho_in(0.700)" in text for text in texts))
         self.assertTrue(any("depthAlign=0.65" in text for text in texts))
         self.assertTrue(any("status=render_invalid" in text for text in texts))
 
@@ -145,7 +145,7 @@ class DebugViewTest(unittest.TestCase):
         diagnostics = FrameDiagnostics(left_bgr=left, right_bgr=right)
 
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
-        expected_banner_h = 9 * 24 + 22
+        expected_banner_h = 10 * 24 + 22
         row_h = (360 - expected_banner_h) // 2
         label_y = expected_banner_h + row_h - 30
 
@@ -181,7 +181,7 @@ class DebugViewTest(unittest.TestCase):
         )
         normal = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
         verbose = tile_pose_depth_dashboard(verbose_diagnostics, observation, width=640, height=360)
-        expected_banner_h = 9 * 24 + 22
+        expected_banner_h = 10 * 24 + 22
 
         self.assertLess(float(np.mean(normal[expected_banner_h - 6])), 20.0)
         self.assertLess(float(np.mean(verbose[expected_banner_h - 6])), 20.0)
@@ -197,12 +197,12 @@ class DebugViewTest(unittest.TestCase):
 
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360, min_depth=0.1, max_depth=5.0)
         expected_depth = colorize_depth(depth, min_depth=0.1, max_depth=5.0)
-        expected_banner_h = 9 * 24 + 22
+        expected_banner_h = 10 * 24 + 22
         row_h = (360 - expected_banner_h) // 2
-        sample_y = expected_banner_h + row_h + 20
+        sample_y = expected_banner_h + row_h + 8
         sample_x = 160
 
-        np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[20, sample_x], atol=1)
+        np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[0, 0], atol=1)
 
     def test_score_debug_view_has_color_and_depth_matrix(self) -> None:
         """评分窗口应包含颜色投影（Color projection）与深度对比的 2x3 矩阵。"""

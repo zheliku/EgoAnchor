@@ -99,20 +99,45 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _build_one_engine(trt, logger, onnx_path, engine_path, workspace_gb, enable_fp16):
+def _parser_errors(parser) -> str:
+    """汇总 TensorRT ONNX parser 的错误信息，便于定位导出兼容问题。"""
+
+    return "\n".join(str(parser.get_error(i)) for i in range(parser.num_errors))
+
+
+def _parse_onnx(parser, onnx_path: Path) -> None:
+    """解析 ONNX；优先用 parse_from_file 以支持外置 .onnx.data 权重文件。"""
+
+    if hasattr(parser, "parse_from_file"):
+        ok = parser.parse_from_file(str(onnx_path))
+    else:
+        ok = parser.parse(onnx_path.read_bytes())
+    if not ok:
+        raise RuntimeError(f"Failed to parse ONNX file: {onnx_path}\n{_parser_errors(parser)}")
+
+
+def _validate_engine(trt, logger, engine_path: Path) -> None:
+    """反序列化刚写出的 engine，提前发现 TensorRT 强类型构建异常。"""
+
+    runtime = trt.Runtime(logger)
+    engine = runtime.deserialize_cuda_engine(engine_path.read_bytes())
+    if engine is None:
+        raise RuntimeError(f"TensorRT wrote an engine but cannot deserialize it: {engine_path}")
+    context = engine.create_execution_context()
+    if context is None:
+        raise RuntimeError(f"TensorRT engine deserialized but cannot create context: {engine_path}")
+
+
+def _build_one_engine(trt, logger, onnx_path: Path, engine_path: Path, workspace_gb: float, enable_fp16: bool) -> None:
     t0 = time.perf_counter()
     print(f"[TRT] parsing: {onnx_path}")
     builder = trt.Builder(logger)
-    network_flags = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    explicit_batch = getattr(trt.NetworkDefinitionCreationFlag, "EXPLICIT_BATCH", None)
+    network_flags = 0 if explicit_batch is None else 1 << int(explicit_batch)
     network = builder.create_network(network_flags)
     parser = trt.OnnxParser(network, logger)
 
-    with open(onnx_path, "rb") as f:
-        model_bytes = f.read()
-    if not parser.parse(model_bytes):
-        errors = [parser.get_error(i) for i in range(parser.num_errors)]
-        details = "\n".join([str(e) for e in errors])
-        raise RuntimeError(f"Failed to parse ONNX file: {onnx_path}\n{details}")
+    _parse_onnx(parser, onnx_path)
     print(f"[TRT] layers: {network.num_layers}")
 
     config = builder.create_builder_config()
@@ -120,25 +145,29 @@ def _build_one_engine(trt, logger, onnx_path, engine_path, workspace_gb, enable_
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_size)
 
     if enable_fp16:
-        if builder.platform_has_fast_fp16:
-            config.set_flag(trt.BuilderFlag.FP16)
+        has_fast_fp16 = getattr(builder, "platform_has_fast_fp16", True)
+        fp16_flag = getattr(trt.BuilderFlag, "FP16", None)
+        if has_fast_fp16 and fp16_flag is not None:
+            config.set_flag(fp16_flag)
             print("[TRT] fp16 enabled")
+        elif fp16_flag is None:
+            print("[TRT] BuilderFlag.FP16 不可用，将使用 TensorRT 默认强类型构建。")
         else:
-            print(
-                "[WARN] FP16 requested but platform_has_fast_fp16 is False. Building with FP32."
-            )
+            print("[WARN] FP16 requested but platform_has_fast_fp16 is False. Building with FP32.")
 
     print("[TRT] building engine...")
     serialized_engine = builder.build_serialized_network(network, config)
     if serialized_engine is None:
         raise RuntimeError(f"TensorRT build failed for {onnx_path}")
 
-    with open(engine_path, "wb") as f:
-        f.write(serialized_engine)
-    print(f"[TRT] saved: {engine_path} ({time.perf_counter() - t0:.2f}s)")
+    engine_path.write_bytes(serialized_engine)
+    _validate_engine(trt, logger, engine_path)
+    print(f"[TRT] saved and validated: {engine_path} ({time.perf_counter() - t0:.2f}s)")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """从 ONNX 文件构建并校验 TensorRT engine。"""
+
     t_total = time.perf_counter()
     args = parse_args()
 
@@ -146,7 +175,7 @@ if __name__ == "__main__":
         import tensorrt as trt
     except ImportError as exc:
         raise SystemExit(
-            "Cannot import tensorrt. Please install TensorRT Python package first (via pixi)."
+            "Cannot import tensorrt. Please install TensorRT Python package first."
         ) from exc
 
     onnx_dir = Path(args.onnx_dir).resolve()
@@ -182,6 +211,7 @@ if __name__ == "__main__":
     post_engine_path = onnx_dir / post_engine_name
 
     print("[TRT] === Build Start ===")
+    print(f"[TRT] TensorRT: {trt.__version__}")
     print(f"[TRT] tag: {tag}")
     print(f"[TRT] platform_tag: {platform_tag}")
     print(f"[TRT] onnx_dir: {onnx_dir}")
@@ -198,8 +228,8 @@ if __name__ == "__main__":
     _build_one_engine(
         trt,
         logger,
-        str(feature_onnx_path),
-        str(feature_engine_path),
+        feature_onnx_path,
+        feature_engine_path,
         args.workspace_gb,
         args.precision == "fp16",
     )
@@ -208,10 +238,14 @@ if __name__ == "__main__":
     _build_one_engine(
         trt,
         logger,
-        str(post_onnx_path),
-        str(post_engine_path),
+        post_onnx_path,
+        post_engine_path,
         args.workspace_gb,
         args.precision == "fp16",
     )
 
     print(f"[TRT] done in {time.perf_counter() - t_total:.2f}s")
+
+
+if __name__ == "__main__":
+    main()

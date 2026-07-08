@@ -105,16 +105,18 @@ class Yoloe26Segmenter:
         frame = ensure_bgr_u8(image_bgr, subject="image ")
 
         t0 = time.perf_counter()
-        result = self.model.predict(
-            source=frame,
-            conf=self.conf,
-            imgsz=self.imgsz,
-            max_det=self.max_det,
-            device=self.device,
-            half=self.use_half,
-            save=False,
-            verbose=False,
-        )[0]
+        predict_kwargs = {
+            "source": frame,
+            "conf": self.conf,
+            "imgsz": self.imgsz,
+            "max_det": self.max_det,
+            "device": self.device,
+            "save": False,
+            "verbose": False,
+        }
+        if self.use_half:
+            predict_kwargs["quantize"] = 16
+        result = self.model.predict(**predict_kwargs)[0]
         infer_ms = (time.perf_counter() - t0) * 1000.0
 
         overlay = result.plot()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 import warnings
 from pathlib import Path
@@ -39,6 +40,20 @@ class FfsOnnxExportTest(unittest.TestCase):
 
         self.assertEqual(feature_name, "feature_runner-h480-w640-it4-md192.onnx")
         self.assertEqual(post_name, "post_runner-h480-w640-it4-md192.onnx")
+
+    def test_prepare_export_path_removes_existing_onnx_sidecar(self) -> None:
+        module = _load_make_onnx_module()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            onnx_path = Path(tmp_dir) / "feature_runner-h480-w640-it4-md192.onnx"
+            data_path = onnx_path.with_suffix(onnx_path.suffix + ".data")
+            onnx_path.write_text("old onnx", encoding="utf-8")
+            data_path.write_text("old data", encoding="utf-8")
+
+            module.prepare_onnx_export_path(onnx_path)
+
+            self.assertFalse(onnx_path.exists())
+            self.assertFalse(data_path.exists())
 
     def test_fixed_shape_onnx_warning_filter_keeps_unrelated_warnings(self) -> None:
         module = _load_make_onnx_module()

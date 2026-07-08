@@ -41,6 +41,15 @@ def build_onnx_names(tag: str) -> tuple[str, str]:
     )
 
 
+def prepare_onnx_export_path(onnx_path: Path) -> None:
+    """删除同名 ONNX artifact，确保 Windows 下 external data 可重新写入。"""
+
+    sidecar_path = onnx_path.with_suffix(onnx_path.suffix + ".data")
+    for artifact_path in (onnx_path, sidecar_path):
+        if artifact_path.exists():
+            artifact_path.unlink()
+
+
 @contextlib.contextmanager
 def suppress_fixed_shape_onnx_warnings():
     """屏蔽固定分辨率 ONNX artifact 导出中的已知 PyTorch 噪声。
@@ -69,6 +78,11 @@ def suppress_fixed_shape_onnx_warnings():
             "ignore",
             message=r"Constant folding - Only steps=1 can be constant folded for opset >= 10 onnx::Slice op.*",
             category=UserWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"`isinstance\(treespec, LeafSpec\)` is deprecated, use `isinstance\(treespec, TreeSpec\) and treespec\.is_leaf\(\)` instead\.",
+            category=FutureWarning,
         )
         yield
 
@@ -181,12 +195,13 @@ def main() -> None:
 
     print("[ONNX] exporting feature runner...")
     t_feature = time.perf_counter()
+    prepare_onnx_export_path(feature_onnx_path)
     with suppress_fixed_shape_onnx_warnings():
         torch.onnx.export(
             feature_runner,
             (left_img, right_img),
             str(feature_onnx_path),
-            opset_version=17,
+            opset_version=18,
             input_names=["left", "right"],
             output_names=[
                 "features_left_04",
@@ -197,6 +212,7 @@ def main() -> None:
                 "stem_2x",
             ],
             do_constant_folding=True,
+            dynamo=True,
         )
     print(f"[ONNX] saved: {feature_onnx_path} ({time.perf_counter() - t_feature:.2f}s)")
 
@@ -218,6 +234,7 @@ def main() -> None:
 
     print("[ONNX] exporting post runner...")
     t_post = time.perf_counter()
+    prepare_onnx_export_path(post_onnx_path)
     with suppress_fixed_shape_onnx_warnings():
         torch.onnx.export(
             post_runner,
@@ -231,7 +248,7 @@ def main() -> None:
                 gwc_volume,
             ),
             str(post_onnx_path),
-            opset_version=17,
+            opset_version=18,
             input_names=[
                 "features_left_04",
                 "features_left_08",
@@ -243,6 +260,7 @@ def main() -> None:
             ],
             output_names=["disp"],
             do_constant_folding=True,
+            dynamo=True,
         )
     print(f"[ONNX] saved: {post_onnx_path} ({time.perf_counter() - t_post:.2f}s)")
 
