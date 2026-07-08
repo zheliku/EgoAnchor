@@ -8,11 +8,24 @@ version = "0.1.0"
 [target.win-64.activation.env]
 PYTHONPATH = ".;src;Fast-FoundationStereo;Cutie;sam3" # Windows 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
 SSL_CERT_DIR = "%CONDA_PREFIX%/Library/ssl" # Windows 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
+CUDA_HOME = "%CONDA_PREFIX%/Library" # Windows 下固定 CUDA 扩展构建根目录到 Pixi 环境，避免误用系统 CUDA。
+CUDA_PATH = "%CONDA_PREFIX%/Library" # Windows 下给 PyTorch/nvcc 查找逻辑提供 CUDA 12.8 根目录，必须与 cu128 PyTorch 对齐。
+PATH = "%CONDA_PREFIX%/Library/bin;%PATH%" # Windows 下优先使用 Pixi 环境中的 nvcc 和 CUDA DLL，再回退系统 PATH。
+INCLUDE = "%CONDA_PREFIX%/Library/include/targets/x64;%CONDA_PREFIX%/Library/include;%INCLUDE%" # Windows 下补齐 conda CUDA CCCL 头文件路径，让 cuda_fp16.h 能找到 nv/target。
+TORCH_CUDA_ARCH_LIST = "8.6;8.9+PTX" # Windows 下限制 PyTorch/CUDA 扩展编译目标到 RTX 30/40，并用 8.9 PTX 给 RTX 50 前向 JIT，避免 nvdiffrast 编译 sm_120 失败。
+MAX_JOBS = "1" # Windows 下串行编译 PyTorch CUDA 扩展，降低 nvdiffrast 构建时的内存峰值和日志交错风险。
 
 [target.linux-64.activation.env]
 PYTHONPATH = ".:src:Fast-FoundationStereo:Cutie:sam3" # Linux 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
 SSL_CERT_DIR = "$CONDA_PREFIX/ssl" # Linux 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
 LIBRARY_PATH = "$CONDA_PREFIX/lib/stubs" # 让 Triton 运行时编译 CUDA 模块时能找到 stub 库 libcuda.s
+CUDA_HOME = "$CONDA_PREFIX" # Linux 下固定 CUDA 扩展构建根目录到 Pixi 环境，避免误用系统 CUDA。
+CUDA_PATH = "$CONDA_PREFIX" # Linux 下给 PyTorch/nvcc 查找逻辑提供 CUDA 12.8 根目录，必须与 cu128 PyTorch 对齐。
+PATH = "$CONDA_PREFIX/bin:$PATH" # Linux 下优先使用 Pixi 环境中的 nvcc 和 CUDA 工具，再回退系统 PATH。
+CPATH = "$CONDA_PREFIX/include:$CONDA_PREFIX/targets/x86_64-linux/include:$CPATH" # Linux 下补齐 CUDA/CCCL 头文件搜索路径，让扩展构建能找到 nv/target。
+CPLUS_INCLUDE_PATH = "$CONDA_PREFIX/include:$CONDA_PREFIX/targets/x86_64-linux/include:$CPLUS_INCLUDE_PATH" # Linux 下给 C++ 编译器同步 CUDA/CCCL 头文件路径。
+TORCH_CUDA_ARCH_LIST = "8.6;8.9+PTX" # Linux 下限制 PyTorch/CUDA 扩展编译目标到 RTX 30/40，并用 8.9 PTX 给 RTX 50 前向 JIT，避免 nvdiffrast 编译 sm_120 失败。
+MAX_JOBS = "1" # Linux 下串行编译 PyTorch CUDA 扩展，降低 nvdiffrast 构建时的内存峰值和日志交错风险。
 
 [dependencies]
 python = "3.12.*"
@@ -46,8 +59,9 @@ open3d = ">=0.19.0,<0.20"
 setuptools = ">=69.0.0,<75"
 einops = ">=0.8.2,<0.9"
 pycocotools = ">=2.0.11,<3"
-opencv = ">=4.12.0,<5"
-libopencv = ">=4.12.0,<5"
+
+[pypi-options]
+no-build-isolation = ["nvdiffrast"] # nvdiffrast 构建期需要访问已安装的 PyTorch/CUDA 环境，Pixi 0.72+ 必须显式关闭该包的 PEP 517 构建隔离。
 
 [pypi-dependencies]
 # PyTorch 全家桶从 PyPI 安装
@@ -60,7 +74,7 @@ pytorch3d = { version = "==0.7.9+pt2.7.1cu128", index = "https://miropsota.githu
 warp-lang = ">=1.11.1, <2"
 kaolin = ">=0.1, <0.2"
 zmq = ">=0.0.0, <0.0.1"
-nvdiffrast = { git = "https://gitcode.com/gh_mirrors/nv/nvdiffrast.git" }
+nvdiffrast = { git = "https://github.com/NVlabs/nvdiffrast.git" } # 使用官方 GitHub 源构建 nvdiffrast，并配合 no-build-isolation 访问当前 PyTorch/CUDA 环境。
 cutie = { path = "./Cutie", editable = true }
 pyrealsense2 = ">=2.56.5,<3"
 xatlas = ">=0.0.11, <0.0.12"
@@ -71,20 +85,22 @@ numpy = "*"
 scikit-image = "*"
 imageio = "*"
 pyyaml = "*"
-ultralytics = ">=8.4.26, <9"
+ultralytics = ">=8.4.90, <9" # 使用 PyPI 当前 YOLO26/YOLOE 系列版本，并限制在 ultralytics 8.x 兼容主线内。
 onnx = ">=1.21.0, <2"
 pillow = ">=12, <13"
 nats-py = ">=2.12.0, <3"
 clip = { git = "https://github.com/ultralytics/CLIP.git" }
+pythran = ">=0.18, <0.19" # 给 Cython 构建链提供完整 Pythran 包，避免残缺 namespace 影响 nvdiffrast 扩展构建。
 tensorrt-cu12 = ">=10.16.1.11, <11"
 protobuf = ">=7.34.1, <8"
-opencv-contrib-python = ">=4.11.0.86, <5"
+opencv-python = ">=4.11.0.86, <4.12.0.88" # 统一使用 PyPI OpenCV 绑定，并停在兼容 conda 侧 numpy 1.26.4 的版本窗口。
 
 
 [target.win-64.pypi-dependencies]
 triton-windows = ">=3.6.0.post26, <4"
 
 [target.win-64.dependencies]
+vs2022_win-64 = ">=19.44.35207,<20" # Windows 下通过 conda-forge 激活 MSVC 2022 工具链，避免硬编码本机 Visual Studio 路径。
 gcc_win-64 = ">=15.2.0,<16"
 gxx_win-64 = ">=15.2.0,<16"
 

@@ -124,6 +124,7 @@ typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v4.typ .\2026-EgoAnch
 - `pose_jump_translation_m/pose_jump_rotation_deg` 是 TRACK 后硬异常拒绝阈值，触发输出 `TRACK_REJECT` no-pose，不生成可靠性子分，不自动 register。
 - command path：`NatsMessageClient → NatsRouter → HandlerRegistry → CommandDedupStore/CommandQueue → TrackingRuntime`；NATS handler 只 parse/validate/dedup/enqueue/ack，pipeline/GPU 状态由单一 `TrackingRuntime` 顺序拥有。
 - `network.message_plane.enabled=false` 可用于无 NATS server 的 Python-only debug。
+- `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`；Windows 下 PyPI `torchvision` 自带的图像 DLL 会与 conda Pillow 的同名 DLL 冲突，先导入 `torchvision` 再导入 `PIL.Image` 可能触发 `_imaging` 加载失败。项目内用本地 numpy→torch 张量转换即可。
 
 logging 两种模式：
 - **评估 session 模式**（`eval_session_enabled=true`，默认）：在 `data/eval/<session_id>/` 创建共享目录，`header.session_id` 通过 NATS 广播给 Unity 自动配对。
@@ -277,7 +278,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ## 环境与依赖
 
-- Python：`EgoAnchor_Python/pixi.toml`，Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 12.8 通过 `workspace.platforms` 的虚拟包字段声明，不恢复已废弃的 `[system-requirements]` 表。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
+- Python：`EgoAnchor_Python/pixi.toml`，Python 3.12、CUDA 12.8、PyTorch 2.7 cu128、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 12.8 通过 `workspace.platforms` 的虚拟包字段声明，不恢复已废弃的 `[system-requirements]` 表。Pixi 0.72+ 下 `nvdiffrast` 必须关闭构建隔离，并通过 Pixi 激活环境提供 CUDA 12.8 路径、CCCL include 路径和 Windows `vs2022_win-64` MSVC 工具链；不要写本机绝对路径或临时构建脚本。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
 - Unity：`EgoAnchor_Unity/Packages/manifest.json`，主线依赖 Google.Protobuf、NATS.Net、NetMQ。
 
 ## Git 忽略规则
@@ -286,10 +287,10 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ## Python 远端同步
 
-- `EgoAnchor_Python/mutagen.yml` 管理远端同步，当前只保留 RTX5090（`push-5090`/`logs-5090`），RTX4090 和 RTX5080 已注释。本机是唯一源码源头，`one-way-safe` 单向推送，远端改动不回流。
+- `EgoAnchor_Python/mutagen.yml` 管理远端同步；RTX5090 当前是 Windows 11 远端，账号 `BNU@172.24.247.32`，项目目录 `D:/Project/EgoAnchor_Python (2)`。本机是唯一源码源头，source push 使用 `one-way-replica`，远端日志拉回使用 `one-way-safe`，远端改动不回流。
 - 远端日志通过 `logs-5090` 拉回 `data/eval/`；三台机器同名日志会冲突，保持 `one-way-safe`。
 - 首次 `mutagen project start` 前确保远端 `data/eval/` 和 `data/runtime_logs/` 已存在，否则日志拉回会话启动失败。
-- 本机 SSH 默认公钥 `C:\Users\zheliku\.ssh\id_ed25519.pub`；若沙箱里 `ssh` 被覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。
+- 本机 SSH 默认公钥 `C:\Users\zheliku\.ssh\id_ed25519.pub`；若沙箱里 `ssh` 被覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。Windows 远端必须启用 OpenSSH Server，并把 `HKLM\SOFTWARE\OpenSSH\DefaultShell` 设为 PowerShell；若默认 shell 是 `cmd.exe` 或登录脚本输出 GBK/非 UTF-8 文本，Mutagen 可能报 `remote did not return UTF-8 output`。
 
 ## 不要回退
 

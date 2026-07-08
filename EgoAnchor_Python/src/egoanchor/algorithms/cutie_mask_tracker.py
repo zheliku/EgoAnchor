@@ -12,7 +12,6 @@ from typing import Any
 import cv2
 import numpy as np
 import torch
-from torchvision.transforms.functional import to_tensor
 
 from egoanchor.algorithms import MaskTrackResult
 from egoanchor.utils import configure_thirdparty_logging
@@ -85,6 +84,17 @@ class CutieMaskTracker:
             mask[y0:y1, x0:x1] = 1
         return mask
 
+    @staticmethod
+    def _frame_to_tensor(frame: np.ndarray) -> torch.Tensor:
+        """将 RGB numpy 图像转为 Cutie 需要的 CHW 浮点张量。"""
+
+        if not frame.flags.c_contiguous:
+            frame = np.ascontiguousarray(frame)
+        frame_t = torch.from_numpy(frame).permute(2, 0, 1)
+        if frame_t.dtype == torch.uint8:
+            return frame_t.float().div(255.0)
+        return frame_t.float()
+
     def _bbox_from_mask(self, mask: np.ndarray) -> list[int]:
         """从 mask 提取 [x,y,w,h]，先腐蚀以减少边缘噪声。"""
 
@@ -111,7 +121,7 @@ class CutieMaskTracker:
             init_mask = (init_mask > 0).astype(np.uint8)
 
         with torch.no_grad():
-            frame_t = to_tensor(frame).to(self.device).float()
+            frame_t = self._frame_to_tensor(frame).to(self.device)
             mask_t = torch.from_numpy(init_mask).to(self.device)
             objects = np.unique(init_mask)
             objects = objects[objects != 0].tolist()
@@ -129,7 +139,7 @@ class CutieMaskTracker:
 
         frame = self._ensure_rgb(frame)
         with torch.no_grad():
-            frame_t = to_tensor(frame).to(self.device).float()
+            frame_t = self._frame_to_tensor(frame).to(self.device)
             prob = self.processor.step(frame_t)
             out_mask_t = self.processor.output_prob_to_mask(prob)
             out_mask = out_mask_t.detach().cpu().numpy().astype(np.uint8)

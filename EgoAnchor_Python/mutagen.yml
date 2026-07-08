@@ -18,11 +18,10 @@
 #
 # Targets:
 #   4090  johnren@172.24.244.55  /home/johnren/tmp/EgoAnchor_Python      (Linux)
-#   5090  BNU@172.24.247.32      D:/Project/EgoAnchor_Python             (Windows)
+#   5090  BNU@172.24.247.32      D:/Project/EgoAnchor_Python (2)         (Windows)
 #   5080  gjw@192.168.3.9        C:/Users/gjw/projects/EgoAnchor_Python  (Windows)
 #
-# !! VERIFY the 5090 IP (172.24.247.32) — it was the Linux box's address.
-#    After the OS swap the Windows box may have a different DHCP-assigned IP.
+# !! VERIFY the 5090 IP (172.24.247.32) after Windows reinstall.
 #    Run `ipconfig` on the 5090 and check the "IPv4 Address" line.
 #
 # NOTE: mutagen does NOT read .gitignore — the ignore list below is maintained by
@@ -38,7 +37,7 @@ sync:
 
   push-5090:
     alpha: "."
-    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
+    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python (2)"
     mode: one-way-replica
     ignore:
       paths: &source_ignore
@@ -121,7 +120,7 @@ sync:
     mode: one-way-safe
 
   logs-5090:
-    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
+    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python (2)/data/eval"
     beta: "./data/eval"
     mode: one-way-safe
 
