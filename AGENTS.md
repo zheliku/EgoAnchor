@@ -82,8 +82,7 @@ Python 侧（在 `EgoAnchor_Python` 目录运行）：
 ```powershell
 pixi run python .\src\run_server.py
 pixi run python -m compileall src
-pixi run python -m unittest discover -s src -p "test_*.py"
-pixi run python -m unittest discover -s eval -p "test_*.py"
+pixi run python -m unittest discover -s src -p "test_*.py" -t src
 ```
 
 Unity 主线编译（仓库根目录）：
@@ -110,21 +109,24 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v4.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v4.pdf
 ```
 
-> `pixi run build` 会安装 nvdiffrast（现场编译 CUDA 扩展）、构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
+> `pixi run build` 会安装或检查 nvdiffrast、构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
 
 Fast-FoundationStereo ONNX/TRT 构建坑：
 
 - PyTorch 2.12 + onnxscript 导出 external data 时，Windows 下直接覆盖已有 `*.onnx.data` 可能报 `PermissionError: [Errno 13] Permission denied`。`Fast-FoundationStereo/scripts/make_onnx.py` 在每次导出前会删除目标 `.onnx` 和同名 `.onnx.data` sidecar，不要移除这一步。
 
-Windows 上 nvdiffrast 的安装坑（`pixi install` / `pixi clean cache` 后一次过不了）：
+Windows 上 nvdiffrast / FoundationPose C++ 扩展构建坑（`pixi install` / `pixi clean cache` 后一次过不了）：
 
 - nvdiffrast **不放 `[pypi-dependencies]`**：`pixi install` 的 PyPI 源码构建上下文不能可靠安装或刷新系统 MSVC，清缓存后容易在 CUDA 扩展编译阶段找不到可用 `cl.exe`。改由 `pixi run` 下的 `_build-nvdiffrast` 任务安装，已挂进 `build`。缓存里有 wheel 时不重编，所以问题只在 `pixi clean cache` 后暴露。
-- Pixi 0.72.1 实测 `depends-on` task 之间**不会重新执行 workspace activation**：activation 在 task 图启动前捕获一次，前置 task 安装 VS Build Tools 后，后续 task 不会自动刷新 `cl.exe` / `INCLUDE` / `LIB`。因此 Windows `_build-nvdiffrast` 必须在自身命令里手动 `call "%CONDA_PREFIX%\etc\conda\activate.d\vs2022_compiler_vars.bat"`。
-- Windows `[target.win-64.activation.env]` 只放静态环境值；不要在里面写 `$CONDA_PREFIX` 并期待 Pixi 展开。需要真实环境前缀的构建命令在 `cmd` 内用 `%CONDA_PREFIX%` 重新设置 `CUDA_HOME` / `CUDA_PATH` / `CL`。
-- Windows task 内联 `cmd /c` 时不要写会把空格带进变量值的 `set ""CUDA_HOME=..."" && ...` 形式；nvdiffrast 会把尾随空格拼进 `Library \bin\nvcc.exe` 并报 `nvcc not found`。当前 `_build-nvdiffrast` 用无空格分隔的 `set CUDA_HOME=...&& set CUDA_PATH=...&& ...`。
-- `_ensure-msvc-buildtools` 现在内联在 `pixi.toml`：通过 `vswhere` 检查 VS2022 C++ Build Tools，缺失时调用 `winget install Microsoft.VisualStudio.2022.BuildTools`，由系统弹出管理员确认。仓库不再保留单独的 `activate-win-msvc-cuda.bat` 或 `ensure-win-msvc-buildtools.ps1`。
-- `_build-nvdiffrast` 不注入 `NVCC_PREPEND_FLAGS=--compiler-bindir`：`vs2022_win-64` 激活后 `cl.exe` 已在 PATH，torch 构建自带 `--use-local-env` 会让 nvcc 用 PATH 的 `cl.exe`。nvcc 13.3 会校验 `-ccbin` 与 PATH cl.exe 是否同一路径，8.3 短路径 vs 长路径字符串不一致会触发 `nvcc fatal: cl.exe in PATH is different than -ccbin`。
-- 单独重装：`pixi run _build-nvdiffrast`（等价在刷新后的 MSVC/CUDA 环境里执行 `python -m pip install --no-build-isolation --no-deps git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0`）。
+- Pixi 0.72.1 实测 `depends-on` task 之间**不会重新执行 workspace activation**：activation 在 task 图启动前捕获一次，前置 task 安装 VS Build Tools 后，后续 task 不会自动刷新 `cl.exe` / `INCLUDE` / `LIB`。因此 Windows `_build-nvdiffrast` 在 `pixi.toml` task 内联 PowerShell 中重新初始化 VS2026/MSVC/CUDA 环境；FoundationPose C++ 扩展的 Windows 构建逻辑放在 `FoundationPose/mycpp/build_msvc.py`。
+- Windows `[target.win-64.activation.env]` 只放运行时变量，不放 `CL` / `INCLUDE` / `PATH` / `CC` / `CXX` 这类构建变量。Pixi 0.72.1 的 PowerShell `pixi shell` 会把 `CL=/I"%CONDA_PREFIX%\..."` 展开成非法字符串，直接触发 `ParserError`；构建关键变量必须在对应 Windows task 或 `FoundationPose/mycpp/build_msvc.py` 内重新设置。
+- Windows task 不要再内联复杂 `cmd /c "call ""%CONDA_PREFIX%\..."" ..."`：远端路径如 `D:\Project\EgoAnchor_Python (2)` 含空格和括号时会被 `cmd.exe` 拆坏，报 `'D:\Project\EgoAnchor_Python' is not recognized`。当前做法是运行时生成临时 `.cmd` 捕获 `vcvars64.bat` 产生的环境，再执行实际构建命令；仓库不要恢复 `scripts/run_msvc2026.cmd` 这类持久外置环境脚本。
+- `vs2026_compiler_vars.bat` 不要作为唯一 MSVC 激活入口：当前 conda-forge 脚本不会静态查 `Microsoft Visual Studio\18\BuildTools`，且可能继承错误的 `VSINSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\2026\Enterprise\`。Windows `_build-nvdiffrast` 和 `FoundationPose/mycpp/build_msvc.py` 都必须先清理 `VSINSTALLDIR/VCINSTALLDIR/VCToolsInstallDir/VCToolsVersion/VSCMD_*` 等变量，再直接调用已定位的 `vcvars64.bat`。
+- CUDA 13 的 `cuda_fp16.h` 会包含 `nv/target`；Windows 下必须把 `%CONDA_PREFIX%\Library\include\targets\x64` 和 `...\cccl` 同时加入构建进程的 `CL` 与 `INCLUDE`。这些变量只在 `_build-nvdiffrast` 和 `FoundationPose/mycpp/build_msvc.py` 内设置；`CL` 里的 `/I` 路径必须写成 `/I"%CONDA_PREFIX%\..."`，否则远端 `D:\Project\EgoAnchor_Python (2)` 这类含空格路径会被 MSVC 拆断，表现为 `fatal error C1083: 无法打开包括文件: "nv/target"`。
+- `_ensure-msvc-buildtools` 现在内联在 `pixi.toml`：通过 `vswhere` 和常见安装路径检查 VS2026/18 C++ Build Tools，缺失时调用 `winget install Microsoft.VisualStudio.BuildTools`，由系统弹出管理员确认。VS2026 BuildTools 当前落点可能是 `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`，不要误改回只查 `2026` 目录。
+- `_build-nvdiffrast` 不注入 `NVCC_PREPEND_FLAGS=--compiler-bindir`：VS2026/MSVC 激活后 `cl.exe` 已在 PATH，torch 构建自带 `--use-local-env` 会让 nvcc 用 PATH 的 `cl.exe`。nvcc 会校验 `-ccbin` 与 PATH cl.exe 是否同一路径，8.3 短路径 vs 长路径字符串不一致会触发 `nvcc fatal: cl.exe in PATH is different than -ccbin`。
+- 单独重装：设置 `EGOANCHOR_NVDIFRAST_FORCE=1` 后运行 `pixi run _build-nvdiffrast`；未设置时已安装 `nvdiffrast==0.4.0` 会直接跳过。
+- Windows 数值栈固定 `libblas=*openblas`，`scipy` 和 `scikit-learn` 走 PyPI wheel，避免 conda MKL/LLVM OpenMP 与 PyTorch wheel 的 `libiomp5md.dll` 混用触发 `OMP: Error #15`。
 
 ## Python 主线
 
@@ -292,7 +294,8 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ## 环境与依赖
 
-- Python：`EgoAnchor_Python/pixi.toml`，Python 3.13、CUDA 13.3、PyTorch 2.12 cu130、TensorRT、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 13.3 不在 `workspace.platforms` 内联，Windows 用精确 conda 组件声明，Linux 用 `cuda-toolkit`。Pixi 0.72+ 下 `nvdiffrast` 不放进 `[pypi-dependencies]`，必须由 `pixi run _build-nvdiffrast` 在激活环境内以 `--no-build-isolation --no-deps` 编译安装，从而复用当前环境的 torch/CUDA/MSVC。Windows 使用 `vs2022_win-64` 提供 `vswhere` 和 MSVC activate.d 脚本；`_ensure-msvc-buildtools` 的 winget 检查/安装逻辑直接内联在 `pixi.toml`，`_build-nvdiffrast` 再在同一 `cmd` 内手动刷新 `vs2022_compiler_vars.bat`。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
+- Python：`EgoAnchor_Python/pixi.toml`，Python 3.14、CUDA 13.2 conda 组件、PyTorch 2.12.1 cu130、TensorRT 11、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 13.2 不在 `workspace.platforms` 内联，Windows 用精确 conda 组件声明，Linux 用 `cuda-toolkit`。Pixi 0.72+ 下 `nvdiffrast` 不放进 `[pypi-dependencies]`，必须由 `pixi run _build-nvdiffrast` 在激活环境内以 `--no-build-isolation --no-deps` 编译安装，从而复用当前环境的 torch/CUDA/MSVC。Windows 使用 `vs2026_win-64` 提供 `vswhere` 和 MSVC activate.d 脚本；`_ensure-msvc-buildtools` 的 winget 检查/安装逻辑直接内联在 `pixi.toml`，`_build-nvdiffrast` 在 `pixi.toml` 内联 PowerShell 中刷新 VS2026/MSVC/CUDA，`_build-fp` 调用 `FoundationPose/mycpp/build_msvc.py`；不要把这些构建变量放进 activation，否则会破坏 `pixi shell`。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
+- 环境配置和跨平台安装步骤统一写在 `EgoAnchor_Python/docs/windows-prerequisites.md`；后续若再改 Python / CUDA / Torch / TensorRT / MSVC / build task，同步更新这份文档。
 - Unity：`EgoAnchor_Unity/Packages/manifest.json`，主线依赖 Google.Protobuf、NATS.Net、NetMQ。
 
 ## Git 忽略规则
@@ -304,7 +307,12 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 - `EgoAnchor_Python/mutagen.yml` 管理远端同步；RTX5090 当前是 Windows 11 远端，账号 `BNU@172.24.247.32`，项目目录 `D:/Project/EgoAnchor_Python (2)`。本机是唯一源码源头，source push 使用 `one-way-replica`，远端日志拉回使用 `one-way-safe`，远端改动不回流。
 - 远端日志通过 `logs-5090` 拉回 `data/eval/`；三台机器同名日志会冲突，保持 `one-way-safe`。
 - 首次 `mutagen project start` 前确保远端 `data/eval/` 和 `data/runtime_logs/` 已存在，否则日志拉回会话启动失败。
-- 本机 SSH 默认公钥 `C:\Users\zheliku\.ssh\id_ed25519.pub`；若沙箱里 `ssh` 被覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。Windows 远端必须启用 OpenSSH Server，并把 `HKLM\SOFTWARE\OpenSSH\DefaultShell` 设为 PowerShell；若默认 shell 是 `cmd.exe` 或登录脚本输出 GBK/非 UTF-8 文本，Mutagen 可能报 `remote did not return UTF-8 output`。
+- 本机 SSH 默认公钥 `C:\Users\zheliku\.ssh\id_ed25519.pub`；若沙箱里 `ssh` 被覆盖，直接调用 `C:\Windows\System32\OpenSSH\ssh.exe`。Windows 远端必须启用 OpenSSH Server。
+- **Windows 中文（GBK/936）远端 Mutagen 握手坑（2026-07-09 实测定位，5090 迁 Win11）**：`remote did not return UTF-8 output` 是**二次错误**——真正的失败是 agent 引导失败，Mutagen 去读远端 stderr 解释原因，发现 stderr 是 GBK 非 UTF-8 才抛这句（源码 `pkg/agent/dial.go` 用 `utf8.Valid` 校验首行）。两个独立病根，必须同时修：
+  1. **`HKLM\SOFTWARE\OpenSSH\DefaultShell` 必须设为 `cmd.exe`，不能是 PowerShell**。Mutagen 的 Windows agent 引导用相对路径命令 `.mutagen/agents/<ver>/mutagen-agent synchronizer`，cmd.exe 直接当相对路径可执行文件跑，PowerShell 不认相对路径命令（会报 `is not recognized as ... cmdlet`）→ agent 永远起不来。对应 GitHub issue #251/#252，社区收敛结论就是换回 cmd.exe。改完 `Restart-Service sshd` 即可（无需重启机器）。
+  2. **系统级开启 UTF-8**（设置→语言→管理语言设置→勾 "Beta: 使用 Unicode UTF-8"，需重启），把系统代码页从 936 变 65001。否则任何 GBK 输出仍会污染 Mutagen 读取的首行。
+  - 反例（已作废的旧结论）：早期给 5080 记的"cmd.exe 不行、要改 PowerShell"是错的，正好写反，曾把 5090 迁移排查带偏。PowerShell 作为 DefaultShell 才是 agent 引导失败的直接原因。
+  - PowerShell profile 强制 `[Console]::OutputEncoding=UTF8` 这条路不可靠：BNU 执行策略 `Restricted`/`Undefined` 会拒绝加载 profile，且拒绝时抛的 GBK 报错本身就是首行污染源。
 
 ## 不要回退
 

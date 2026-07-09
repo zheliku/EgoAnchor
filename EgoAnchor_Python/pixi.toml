@@ -2,46 +2,44 @@
 authors = ["zheliku <302734905@qq.com>"]
 channels = ["https://prefix.dev/conda-forge", "conda-forge"]
 name = "EgoAnchor_Python"
-# 不在 platforms 内联 cuda，避免 pixi 生成 win-64-cuda-* 平台名并影响 PyPI 构建隔离。
-# Windows CUDA 拆成精确组件声明；Linux 使用 cuda-toolkit。
-platforms = ["win-64", "linux-64"]
+# 注意：不要在 platforms 内联 cuda="13.2"。pixi 0.72.1 下该写法会生成 win-64-cuda-13-2
+# 这种带后缀的 platform 名，导致需要源码构建的 pypi 依赖（nvdiffrast/clip/cutie 等）
+# 在 build isolation 阶段找不到 "win-64" 解释器而报 build_dispatch 失败。
+# Windows 下不要使用 cuda-toolkit 总包：它会经 cuda-compiler/cuda-nvcc 拉入
+# vs2019/vs2022 激活包，和 vs2026_win-64 混用后会导致 nvcc 找错 cl.exe。
+# Windows CUDA 组件在 [target.win-64.dependencies] 中精确声明；Linux 仍使用 cuda-toolkit。
+platforms = ["win-64", { platform = "linux-64", glibc = "2.35" }]
 version = "0.1.0"
 
 [target.win-64.activation.env]
-# Windows 只放静态项目环境；MSVC 动态激活在 _build-nvdiffrast 内手动刷新。
-PYTHONPATH = ".;src;Fast-FoundationStereo;Cutie;sam3" # Windows 静态 import 路径；Pixi task 默认在项目根目录执行。
-SSL_CERT_DIR = ".pixi/envs/default/Library/ssl" # 覆盖 conda OpenSSL 可能注入的空 certs 子目录。
-CUDA_HOME = ".pixi/envs/default/Library" # Windows conda CUDA 组件位于 Library 子目录；构建 task 会再用 %CONDA_PREFIX% 刷成绝对路径。
-CUDA_PATH = ".pixi/envs/default/Library" # 兼容依赖 CUDA_PATH 的 CUDA/PyTorch 构建探测；构建 task 会再用 %CONDA_PREFIX% 刷成绝对路径。
-CL = "/I.pixi/envs/default/Library/include/targets/x64 /I.pixi/envs/default/Library/include/targets/x64/cccl" # 给普通 Windows 任务兜底补充 CUDA 13 CCCL include 路径。
-TORCH_DONT_CHECK_COMPILER_ABI = "1" # Windows 上跳过 PyTorch 对 MSVC ABI 版本的保守检查。
-PYTHONIOENCODING = "utf-8" # 固定 Python 标准流编码，避免中文路径/日志乱码。
-PYTHONUTF8 = "1" # 强制 Python UTF-8 模式。
-DISTUTILS_USE_SDK = "1" # 告诉 distutils 复用已激活的 MSVC SDK 环境。
+PYTHONPATH = "%PIXI_PROJECT_ROOT%;%PIXI_PROJECT_ROOT%/src;%PIXI_PROJECT_ROOT%/Fast-FoundationStereo;%PIXI_PROJECT_ROOT%/Cutie;%PIXI_PROJECT_ROOT%/sam3" # Windows 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
+SSL_CERT_DIR = "%CONDA_PREFIX%/Library/ssl" # Windows 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
+CUDA_HOME = "%CONDA_PREFIX%/Library" # torch.utils.cpp_extension 在构建 nvdiffrast 等 CUDA 扩展时只认 CUDA_HOME/CUDA_PATH；conda/pixi 的 CUDA Toolkit 位于 Library。
+CUDA_PATH = "%CONDA_PREFIX%/Library" # 兼容依赖 CUDA_PATH 的 CUDA/PyTorch 构建探测。
+TORCH_DONT_CHECK_COMPILER_ABI = "1" # PyTorch 2.12 Windows ABI 检查会用 OEM 编码解码中文 cl.exe 输出；跳过该检查，实际编译仍由 MSVC/Ninja 执行。
+PYTHONIOENCODING = "utf-8" # PyTorch 2.12 ONNX exporter 会输出 Unicode 状态符号；中文 Windows 默认 GBK 会触发 UnicodeEncodeError。
 
 [target.linux-64.activation.env]
-# 与 Windows 保持同一 import 布局；路径分隔符换为 Linux 的冒号。
-PYTHONPATH = "$PIXI_PROJECT_ROOT:$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/Fast-FoundationStereo:$PIXI_PROJECT_ROOT/Cutie:$PIXI_PROJECT_ROOT/sam3"
-# 覆盖 conda OpenSSL 可能注入的空 certs 子目录。
-SSL_CERT_DIR = "$CONDA_PREFIX/ssl"
-# Linux 的 conda CUDA Toolkit 根目录就是环境根目录。
-CUDA_HOME = "$CONDA_PREFIX"
-CUDA_PATH = "$CONDA_PREFIX"
-# Triton/torch 运行时编译 CUDA 模块时需要能链接到 libcuda stub。
-LIBRARY_PATH = "$CONDA_PREFIX/lib/stubs"
+PYTHONPATH = "$PIXI_PROJECT_ROOT:$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/Fast-FoundationStereo:$PIXI_PROJECT_ROOT/Cutie:$PIXI_PROJECT_ROOT/sam3" # Linux 下给 Python 入口暴露项目包、主线 src、FFS core/Utils、Cutie 和 SAM3 package，避免适配器手动改 sys.path。
+SSL_CERT_DIR = "$CONDA_PREFIX/ssl" # Linux 下覆盖 conda OpenSSL 注入的空 certs 子目录，指向包含 cacert.pem 的非空证书目录，避免嵌套 pixi run 时 warning。
+CUDA_HOME = "$CONDA_PREFIX" # Linux conda CUDA Toolkit 根目录；供 torch.utils.cpp_extension/nvdiffrast 构建 CUDA 扩展。
+CUDA_PATH = "$CONDA_PREFIX" # 兼容依赖 CUDA_PATH 的 CUDA/PyTorch 构建探测。
+LIBRARY_PATH = "$CONDA_PREFIX/lib/stubs" # 让 Triton 运行时编译 CUDA 模块时能找到 stub 库 libcuda.so。
 
 [dependencies]
-python = "3.13.*"
-pip = ">=25.3,<26" # 在 pixi run 激活环境内安装 nvdiffrast 源码扩展。
+python = "3.14.*"
+pip = ">=25.3,<26" # nvdiffrast 不走 pixi install；在 pixi run 激活环境内用 pip 编译安装。
 cmake = ">=4.1.2,<5"
-boost = ">=1.82.0,<2"
+# FoundationPose 只需要 Boost headers；不要使用 boost 元包，
+# 它会拉入 libboost-python-devel 并把 Python ABI 卡在已有 Boost.Python 构建上。
+libboost-devel = ">=1.82.0,<2"
+libblas = { version = "*", build = "*openblas" } # Windows 下强制 conda 数值栈使用 OpenBLAS，避免 MKL/LLVM OpenMP 与 PyTorch wheel 的 libiomp5md 冲突。
 eigen = ">=3.4.0,<4"
 ninja = ">=1.13.1,<2"
 psutil = ">=7.1.0,<8"
 pybind11 = ">=3.0.1,<4"
 pythran = ">=0.18.1,<0.19" # Cython 构建 nvdiffrast 时会探测 pythran；只存在残缺 namespace 会触发 AttributeError: pythran.__version__。
-numpy = ">=2,<3"
-scipy = ">=1.17.0,<2"
+mypy = ">=1.18.2,<2"
 netifaces = ">=0.11.0,<0.12"
 pandas = ">=3.0.0,<4"
 h5py = ">=3.15.1,<4"
@@ -49,34 +47,51 @@ omegaconf = ">=2.3.0,<3"
 transformations = ">=2022.9.26,<2023"
 hydra-core = ">=1.3.2,<2"
 joblib = ">=1.5.3,<2"
-scikit-learn = ">=1.8.0,<2"
+pyglet = ">=2.1.13,<3"
 ftfy = ">=6.3.1,<7"
 regex = ">=2026.1.15,<2027"
 iopath = ">=0.1.10,<0.2"
 ruamel = ">=1.0,<2"
 "ruamel.yaml" = ">=0.19.1,<0.20"
+# open3d: conda-forge 0.19.0 只有 py312 构建，无 py314；已移至各平台 pypi-dependencies。
 setuptools = ">=69.0.0,<75"
 einops = ">=0.8.2,<0.9"
+pillow = ">=12, <13" # PyPI Pillow 12.3.0 当前会在 win-64/py314 下留下 cp313 扩展；使用 conda-forge 的 py314 构建。
 
 [pypi-dependencies]
-# PyTorch 使用 cu130 wheel；pytorch3d wheel 绑定 torch 2.12.0/cu130。
-torch = { version = "==2.12.0", index = "https://download.pytorch.org/whl/cu130" }
-torchvision = { version = "==0.27.0", index = "https://download.pytorch.org/whl/cu130" }
+# PyTorch 全家桶从 PyPI 安装。
+# PyTorch 2.12 起弃用 cu128；cu130 为 PyPI 默认稳定变体（x86_64 + aarch64）。
+# 先升级到 2.12.1：官方 cu130 wheel 提供 cp314；pytorch3d wheel 仍标 pt2.12.0，
+# 因此必须通过 import/runtime 验证，若 PyTorch3D ABI 报错再回退 2.12.0。
+torch = { version = "==2.12.1", index = "https://download.pytorch.org/whl/cu130" }
+torchvision = { version = "==0.27.1", index = "https://download.pytorch.org/whl/cu130" }
+# torchaudio 已移除：项目代码未使用，且 cu130 wheel 最高只到 2.11（无 2.12）。
 timm = ">=1.0.25, <2"
 kornia = ">=0.8.2"
+# pytorch3d: miropsota 预编译 index；版本号含构建 hash，格式 <ver>+<hash>pt<torch>cu<cuda>。
+# 0.7.9+d9839a9pt2.12.0cu130 提供 cp314 win_amd64 与 linux_x86_64 wheel。
 pytorch3d = { version = "==0.7.9+d9839a9pt2.12.0cu130", index = "https://miropsota.github.io/torch_packages_builder" }
 warp-lang = ">=1.14.0, <2"
 kaolin = ">=0.1, <0.2"
 zmq = ">=0.0.0, <0.0.1"
-# nvdiffrast 不放这里：pixi install 的 PyPI 源码构建上下文不能可靠安装/刷新系统 MSVC。
-# 改由 pixi run 下的 _build-nvdiffrast 任务手动刷新 vs2022_win-64 activation 后安装，见下方 [tasks]。
+# nvdiffrast 不放在 [pypi-dependencies]：pixi install 阶段不应编译 CUDA 扩展。
+# 它由 _build-nvdiffrast 在 pixi run 激活后的环境里安装，确保 Windows MSVC/CUDA
+# 和 Linux CUDA_HOME/LIBRARY_PATH 都已生效。
 cutie = { path = "./Cutie", editable = true }
 pyrealsense2 = ">=2.56.5,<3"
-pillow = ">=12, <13"
+einops = "*" # 供 PyPI 依赖解析复用的张量重排工具；conda 侧也直接声明，Pixi 会按可解组合复用。
+omegaconf = "*" # 供 PyPI 依赖解析复用的配置库；conda 侧也直接声明，避免局部 wheel 拉旧版本。
+scipy = ">=1.17.0, <2" # 使用 PyPI wheel，避免 conda scipy 的 libomp 与 PyTorch wheel 的 libiomp5md 冲突。
+numpy = ">=2, <3" # 供 PyPI scipy/scikit-learn 依赖解析；运行时可复用 conda numpy。
+scikit-learn = ">=1.8.0, <2" # 使用 PyPI wheel，避免 conda OpenMP runtime 与 PyTorch wheel 混用。
+# Windows 下 torch/torchvision 使用 PyTorch 官方 PyPI cu130 wheel。Pillow 走 conda
+# py314 构建，sitecustomize.py 会在 torchvision 之前预加载 PIL.Image 以规避 DLL 顺序问题。
 matplotlib = ">=3.11, <4"
 imageio = ">=2.37.0, <3"
 scikit-image = "*"
-# 项目需要 cv2.imshow，固定在 OpenCV 4.x GUI wheel。
+# 项目和 ultralytics 都需要 cv2.imshow 等 GUI API；当前 opencv-python 5.0.0.93
+# 不提供 imshow，因此固定在最新可用的 4.x wheel。不要同时安装 opencv-contrib-python，
+# 否则两个 wheel 会争用同一个 cv2 包目录。
 opencv-python = ">=4.13.0.92, <5"
 pyyaml = "*"
 pycocotools = ">=2.0.11, <3"
@@ -86,56 +101,147 @@ onnx = ">=1.21.0, <2"
 onnxscript = ">=0.5.0, <1"
 nats-py = ">=2.12.0, <3"
 clip = { git = "https://github.com/ultralytics/CLIP.git" }
+# tensorrt: cu128 已弃用，切换至 cu13 变体以匹配 CUDA 13.x 环境。
+# tensorrt-cu13 为 py3-none-any 元包，会拉取平台相关的 -libs/-bindings。
 tensorrt-cu13 = ">=10.16.1.11, <12"
 protobuf = ">=7.34.1, <8"
+# triton 按平台拆分：官方 triton 仍无 Windows wheel（2026-07 确认），
+# Windows 继续用 triton-windows 分叉；Linux 用官方 triton。见各平台 pypi-dependencies。
 
-# nvdiffrast 不再走 pixi install 的 PyPI 构建；改由 pixi run 下的 _build-nvdiffrast 任务用
-# `python -m pip install --no-build-isolation --no-deps` 在激活环境里安装。
-
-# open3d 稳定版暂无 Python 3.13 wheel；暂用官方 main-devel 预发布 wheel。
+# open3d: 官方稳定版 PyPI/conda 仅到 Python 3.12（conda-forge 0.19.0 只有 py312 构建）。
+# Python 3.14 使用官方 CI 的 main-devel 预发布 wheel（见 isl-org/Open3D#7427、#7284）。
+# 注意：main-devel 是滚动标签，构建 hash（fe3af4b）会随上游 CI 更新，
+# 届时需从 https://github.com/isl-org/Open3D/releases/tag/main-devel 获取新 URL。
 [target.win-64.pypi-dependencies]
-open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0%2Bfe3af4b-cp313-cp313-win_amd64.whl" }
-# 官方 triton 仍无 Windows wheel；这里用支持 cp313 的 triton-windows 分叉。
+open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0%2Bfe3af4b-cp314-cp314-win_amd64.whl" }
+# 官方 triton 无 Windows wheel，继续用 woct0rdho 的 triton-windows 分叉（有 cp314）。
 triton-windows = ">=3.7.1.post27, <4"
 
 [target.linux-64.pypi-dependencies]
-open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0-cp313-cp313-manylinux_2_35_x86_64.whl" }
+# GitHub release asset 名不带 build hash；它仍来自同一个 main-devel 预发布集合。
+open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0-cp314-cp314-manylinux_2_35_x86_64.whl" }
+cuda-bindings = ">=13.2,<13.3" # torch cu130 仅给出 >=13.0.3,<14 宽约束；显式压到 13.2，避免 Linux lock 漂到 13.3。
+# Linux 不显式声明 triton：torch 2.12.x+cu130 会硬固定官方 triton wheel，
+# 显式写 >=3.7.1 会与 torch 的 pin 冲突导致求解失败。
 
 [target.win-64.dependencies]
 gcc_win-64 = ">=15.2.0,<16"
 gxx_win-64 = ">=15.2.0,<16"
-vs2022_win-64 = ">=19.44,<20" # 提供 vswhere 和 MSVC activate.d 脚本；Build Tools 本体仍由 _ensure-msvc-buildtools 检查/安装。
-# Windows 避免 cuda-toolkit 总包拉入冲突的 VS 激活包，只声明 nvcc、运行库和开发头/库。
-cuda-nvcc_win-64 = "13.3.*"
-cuda-libraries = "13.3.*"
-cuda-libraries-dev = "13.3.*"
+cuda-nvcc_win-64 = "13.2.*" # 只安装 Windows nvcc 与必要 CUDA 头/库；避开 cuda-nvcc 总包对 vs2019_win-64 的依赖。
+cuda-libraries = "13.2.*" # 提供 CUDA 13 运行库，供构建/运行期从 pixi 环境内解析 DLL。
+cuda-libraries-dev = "13.2.*" # 提供 CUDA 13 开发库和头文件，供 nvdiffrast 等 CUDA 扩展编译。
+vs2026_win-64 = ">=19.51,<20" # torch/nvdiffrast 的 Windows CUDAExtension 走 cl.exe；conda-forge 包只负责定位/激活系统 VS 2026 Build Tools，不重新分发 MSVC 本体。
 
 [target.linux-64.dependencies]
-# conda CUDA 组件使用 13.3；PyTorch wheel 使用 cu130 标签，两者不是同一个版本字段。
-cuda-toolkit = "13.3.*"
+cuda-toolkit = "13.2.*"
 gcc_linux-64 = "11.*"
 gxx_linux-64 = "11.*"
 
 [target.win-64.tasks]
-_ensure-msvc-buildtools = { cmd = """
-pwsh -NoProfile -ExecutionPolicy Bypass -Command '$ErrorActionPreference = "Stop"; $findVs = { $paths = @(); $vswhere = Get-Command vswhere -ErrorAction SilentlyContinue; if ($vswhere) { $paths += & $vswhere.Source -nologo -products * -version "[17.0,18.0)" -property installationPath; $paths += & $vswhere.Source -nologo -latest -property installationPath }; $paths += Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/2022/BuildTools"; $paths += Join-Path $env:ProgramFiles "Microsoft Visual Studio/2022/BuildTools"; foreach ($path in $paths) { if ($path -and (Test-Path -LiteralPath (Join-Path $path "VC/Auxiliary/Build/vcvars64.bat"))) { return $path } }; return $null }; $installPath = & $findVs; if ($installPath) { Write-Host "[egoanchor] VS 2022 C++ Build Tools ready:" $installPath; exit 0 }; $winget = Get-Command winget -ErrorAction SilentlyContinue; if (-not $winget) { throw "[egoanchor] winget 不可用，无法自动安装 VS 2022 Build Tools。请先安装 App Installer 或手动安装 VS2022 C++ Build Tools。" }; Write-Host "[egoanchor] VS 2022 C++ Build Tools missing; installing with winget. Windows may ask for administrator approval."; & winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --source winget --accept-package-agreements --accept-source-agreements --override "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; $wingetExit = $LASTEXITCODE; $installPath = & $findVs; if ($installPath) { Write-Host "[egoanchor] VS 2022 C++ Build Tools installed:" $installPath; exit 0 }; if ($wingetExit -ne 0) { exit $wingetExit }; throw "[egoanchor] VS 2022 Build Tools 安装后仍找不到 vcvars64.bat，请重新打开终端或检查 Visual Studio Installer。"'
-""" } # Windows 下内联检查 VS2022 C++ Build Tools；缺失时通过 winget 安装，系统可能弹出管理员确认。
+_ensure-msvc-buildtools = { cmd = '''
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+$findVs = {
+  $roots = foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+    foreach ($ver in @("18", "2026")) {
+      foreach ($edition in @("BuildTools", "Community", "Enterprise", "Professional")) {
+        if ($base) { Join-Path $base "Microsoft Visual Studio\$ver\$edition" }
+      }
+    }
+  }
+  $vswhere = Get-Command vswhere.exe -ErrorAction SilentlyContinue
+  if ($vswhere) {
+    foreach ($req in @("Microsoft.VisualStudio.ComponentGroup.VC.Tools.145.x86.x64", "Microsoft.VisualStudio.Workload.VCTools")) {
+      $roots += & $vswhere.Source -nologo -products * -version "[18.0,19.0)" -requires $req -property installationPath
+    }
+  }
+  $roots | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ "VC\Auxiliary\Build\vcvars64.bat")) } | Select-Object -First 1
+}
+$found = & $findVs
+if ($found) { Write-Host "[egoanchor] VS 2026 C++ Build Tools ready:" $found; exit 0 }
+$winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+if (-not $winget) { throw "[egoanchor] winget 不可用，请手动安装 Visual Studio Build Tools 2026 和 C++ workload。" }
+Write-Host "[egoanchor] installing VS 2026 C++ Build Tools through winget."
+& $winget.Source install --id Microsoft.VisualStudio.BuildTools --exact --source winget --accept-package-agreements --accept-source-agreements --override "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$found = & $findVs
+if ($found) { Write-Host "[egoanchor] VS 2026 C++ Build Tools installed:" $found; exit 0 }
+throw "[egoanchor] VS 2026 Build Tools 安装后仍找不到 vcvars64.bat，请检查 Visual Studio Installer。"
+'
+''' } # Windows 下检查 VS2026 C++ Build Tools；缺失时通过 winget 安装 C++ workload。
 
-doctor-win-env = { cmd = """
-cmd /v:on /d /c "call ""%CONDA_PREFIX%\\etc\\conda\\activate.d\\vs2022_compiler_vars.bat"" >nul&& set CUDA_HOME=%CONDA_PREFIX%\\Library&& set CUDA_PATH=%CONDA_PREFIX%\\Library&& set CL=/I%CONDA_PREFIX%\\Library\\include\\targets\\x64 /I%CONDA_PREFIX%\\Library\\include\\targets\\x64\\cccl&& set CUDAHOSTCXX=cl.exe&& where cl.exe&& where nvcc.exe&& where ninja.exe&& echo CL=!CL!&& echo CC=!CC!&& echo CUDA_HOME=!CUDA_HOME!&& echo CUDA_PATH=!CUDA_PATH!&& echo CUDAHOSTCXX=!CUDAHOSTCXX!&& echo NVCC_PREPEND_FLAGS=!NVCC_PREPEND_FLAGS!"
-""" }
+_build-nvdiffrast = { depends-on = ["_ensure-msvc-buildtools"], cmd = '''
+pwsh -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+$findVcvars = {
+  $roots = foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+    foreach ($ver in @("18", "2026")) {
+      foreach ($edition in @("BuildTools", "Community", "Enterprise", "Professional")) {
+        if ($base) { Join-Path $base "Microsoft Visual Studio\$ver\$edition" }
+      }
+    }
+  }
+  $vswhere = Get-Command vswhere.exe -ErrorAction SilentlyContinue
+  if ($vswhere) {
+    $roots += & $vswhere.Source -nologo -products * -version "[18.0,19.0)" -requires Microsoft.VisualStudio.Workload.VCTools -property installationPath
+  }
+  $roots | ForEach-Object { Join-Path $_ "VC\Auxiliary\Build\vcvars64.bat" } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
+$vcvars = & $findVcvars
+if (-not $vcvars) { throw "[egoanchor] 找不到 VS2026/18 vcvars64.bat，请先安装 Visual Studio Build Tools 2026。" }
+$tmp = New-TemporaryFile
+$cmdPath = [System.IO.Path]::ChangeExtension($tmp.FullName, ".cmd")
+Move-Item -LiteralPath $tmp.FullName -Destination $cmdPath
+$clear = @("VSINSTALLDIR", "VCINSTALLDIR", "VCToolsInstallDir", "VCToolsVersion", "VSCMD_ARG_TGT_ARCH", "VSCMD_ARG_HOST_ARCH", "VSCMD_VER", "VisualStudioVersion")
+$lines = @("@echo off")
+foreach ($name in $clear) { $lines += "set `"$name=`"" }
+$lines += @("call `"$vcvars`" >nul", "if errorlevel 1 exit /b %errorlevel%", "set")
+$lines | Set-Content -LiteralPath $cmdPath -Encoding ASCII
+$envLines = & cmd.exe /d /c $cmdPath
+$cmdExit = $LASTEXITCODE
+Remove-Item -LiteralPath $cmdPath -ErrorAction SilentlyContinue
+if ($cmdExit -ne 0) { exit $cmdExit }
+$envLines | ForEach-Object {
+  $pair = $_ -split "=", 2
+  if ($pair.Length -eq 2) { [Environment]::SetEnvironmentVariable($pair[0], $pair[1], "Process") }
+}
+$cuda = Join-Path $env:CONDA_PREFIX "Library"
+$target = Join-Path $cuda "include\targets\x64"
+$cccl = Join-Path $target "cccl"
+$env:CUDA_HOME = $cuda
+$env:CUDA_PATH = $cuda
+$env:CL = "/I`"$target`" /I`"$cccl`""
+$env:INCLUDE = "$target;$cccl;$env:INCLUDE"
+$env:CC = "cl.exe"
+$env:CXX = "cl.exe"
+$installed = $null
+$pipShow = & python -m pip show nvdiffrast 2>$null
+foreach ($line in $pipShow) {
+  if ($line -like "Version:*") { $installed = $line.Substring(8).Trim() }
+}
+$force = $env:EGOANCHOR_NVDIFRAST_FORCE -eq "1"
+if ($installed -eq "0.4.0" -and -not $force) {
+  Write-Host "[nvdiffrast] nvdiffrast $installed already installed; skipping"
+  exit 0
+}
+Write-Host "[nvdiffrast] installing nvdiffrast 0.4.0"
+$pipArgs = @("-m", "pip", "install", "--no-build-isolation", "--no-deps")
+if ($force) { $pipArgs += "--force-reinstall" }
+$pipArgs += "git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0"
+python @pipArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+'
+''' } # Windows 下刷新 pixi 的 VS2026/MSVC/CUDA 环境后安装 nvdiffrast；EGOANCHOR_NVDIFRAST_FORCE=1 可强制重装。
 
-_build-nvdiffrast = { depends-on = ["_ensure-msvc-buildtools"], cmd = """
-cmd /v:on /d /c "call ""%CONDA_PREFIX%\\etc\\conda\\activate.d\\vs2022_compiler_vars.bat"" >nul&& set CUDA_HOME=%CONDA_PREFIX%\\Library&& set CUDA_PATH=%CONDA_PREFIX%\\Library&& set CL=/I%CONDA_PREFIX%\\Library\\include\\targets\\x64 /I%CONDA_PREFIX%\\Library\\include\\targets\\x64\\cccl&& set CUDAHOSTCXX=cl.exe&& python -m pip install --no-build-isolation --no-deps git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0"
-""" } # Windows 下先确保 MSVC Build Tools 可用，再手动刷新 vs2022_win-64 激活环境并编译安装 nvdiffrast。
-
-_build-fp = { cmd = """
-cmake -E rm -rf FoundationPose/mycpp/build &&
-cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc.exe" "-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++.exe" &&
-cmake --build FoundationPose/mycpp/build --parallel
-""" } # Windows 下编译 FoundationPose C++ 扩展；使用 MinGW 编译器绕开 MSVC 与该 CMake 工程的兼容坑。
+_build-fp = { depends-on = ["_ensure-msvc-buildtools"], cmd = '''
+python FoundationPose/mycpp/build_msvc.py
+''' } # Windows 下由 FoundationPose/mycpp/build_msvc.py 刷新 VS2026/MSVC/CUDA 环境并编译 C++ 扩展。
 
 [tasks]
+_build-nvdiffrast = { cmd = """
+python -c "import importlib.metadata as md, os, subprocess, sys; pkg='nvdiffrast'; req='0.4.0'; url='git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0'; installed=next((dist.version for dist in md.distributions() if (dist.metadata.get('Name') or '').lower()==pkg), None); force=os.environ.get('EGOANCHOR_NVDIFRAST_FORCE')=='1'; print(f'[nvdiffrast] {pkg} {installed} already installed; skipping') if installed==req and not force else print(f'[nvdiffrast] installing {pkg} {req}'); args=[sys.executable, '-m', 'pip', 'install', '--no-build-isolation', '--no-deps'] + (['--force-reinstall'] if force else []) + [url]; sys.exit(0 if installed==req and not force else subprocess.run(args, check=False).returncode)"
+""" } # 在 pixi run 激活环境内安装 nvdiffrast；已安装 0.4.0 时跳过，设置 EGOANCHOR_NVDIFRAST_FORCE=1 可强制重装。
+
 _build-fp = { cmd = """
 cmake -E rm -rf FoundationPose/mycpp/build &&
 cmake -S FoundationPose/mycpp -B FoundationPose/mycpp/build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
@@ -149,7 +255,7 @@ python Fast-FoundationStereo/scripts/make_onnx.py --model_dir Fast-FoundationSte
 """ }
 _build-trt = { cmd = """
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 4 --max_disp 192 --workspace_gb 4 --precision fp16
-""" }
+""" } # TensorRT 11 总是强类型网络；build_trt_engine.py 会把 ONNX 图转换为 FP16 后构建默认 engine。
 build-trt = { depends-on = ["_make-onnx", "_build-trt"] }
 
 # 可选扩展：用于切换 Fast-FoundationStereo 的速度/精度档位，复刻旧全量构建中的非默认组合。
@@ -168,12 +274,6 @@ python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-Foundat
 python Fast-FoundationStereo/scripts/build_trt_engine.py --onnx_dir Fast-FoundationStereo/weights/23-36-37 --height 480 --width 640 --valid_iters 8 --max_disp 192 --workspace_gb 4 --precision fp16
 """ }
 build-trt-extra = { depends-on = ["_make-onnx-extra", "_build-trt-extra"] } # 生成 20-26-39、20-30-48 和 23-36-37/it8 的可选 TRT artifacts。
-
-# nvdiffrast 走 pixi run（激活脚本已就位），用 pip 以 --no-build-isolation
-# 复用当前 pixi 环境的 torch/CUDA/MSVC 现场编译 CUDA 扩展。
-_build-nvdiffrast = { cmd = """
-python -m pip install --no-build-isolation --no-deps git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0
-""" } # Linux 下直接在 pixi run 激活环境内编译安装 nvdiffrast。
 
 build = { depends-on = ["_build-nvdiffrast", "_build-fp", "build-trt"] }
 
@@ -259,5 +359,5 @@ python src/run_server.py --object gamepad
 """ }
 
 eval = { cmd = "python eval/run_eval.py" } # 运行完整离线评估；使用 pixi run eval --session-dir data/eval/<session_id>
-eval-metrics = { cmd = "python eval/run_eval.py --only metrics" } # 只导出指标表格与 GT/anchor sanity；仍需传 --session-dir。
-eval-figures = { cmd = "python eval/run_eval.py --only figures" } # 只导出图表与 sanity；仍需传 --session-dir。
+eval-metrics = { cmd = "python eval/run_eval.py --only metrics" } # 只导出指标表格与 GT/anchor sanity；仍需传 --session-dir
+eval-figures = { cmd = "python eval/run_eval.py --only figures" } # 只导出图表与 sanity；仍需传 --session-dir

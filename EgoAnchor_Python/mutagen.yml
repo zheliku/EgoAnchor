@@ -93,12 +93,23 @@ sync:
     ignore:
       paths: *source_ignore
 
-  # --- 5080 DISABLED until its SSH DefaultShell is switched to PowerShell ---
-  # The laptop's default SSH shell is cmd.exe on a Chinese (GBK/936) console, so
-  # mutagen's agent handshake fails with "remote did not return UTF-8 output".
-  # Fix (run ONCE in an *elevated* shell ON the 5080 itself):
-  #   reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
-  #     /d "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" /f
+  # --- 5080 DISABLED until its Chinese-locale UTF-8 handshake is fixed ---
+  # On a Chinese (GBK/936) Windows box, "remote did not return UTF-8 output" is a
+  # SECONDARY error: the agent bootstrap already failed, and mutagen's attempt to
+  # read the remote stderr trips utf8.Valid() on the GBK bytes. TWO root causes,
+  # both must be fixed (verified 2026-07-09 on the 5090 Win11 migration):
+  #   1. HKLM\SOFTWARE\OpenSSH\DefaultShell MUST be cmd.exe, NOT PowerShell.
+  #      Mutagen bootstraps the agent via a RELATIVE-PATH command
+  #      (.mutagen/agents/<ver>/mutagen-agent synchronizer); cmd.exe runs it,
+  #      PowerShell rejects it ("is not recognized as ... cmdlet"). See GitHub
+  #      issues #251/#252 — the community fix is cmd.exe. Then Restart-Service sshd.
+  #        reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
+  #          /d "C:\Windows\System32\cmd.exe" /f
+  #   2. Enable system-wide UTF-8 (Settings > Language > Administrative language
+  #      settings > "Beta: Use Unicode UTF-8"; needs a reboot) so codepage 936 no
+  #      longer mangles any output into the handshake's first line.
+  # WRONG OLD NOTE (retracted): the earlier "switch cmd.exe -> PowerShell" advice
+  # was backwards — PowerShell as DefaultShell is what BREAKS the agent bootstrap.
   # Then un-comment the two 5080 blocks below and re-run `mutagen project start`.
   #
   # push-5080:
