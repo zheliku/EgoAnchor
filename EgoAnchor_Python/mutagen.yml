@@ -37,7 +37,7 @@ sync:
 
   push-5090:
     alpha: "."
-    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python (2)"
+    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
     mode: one-way-replica
     ignore:
       paths: &source_ignore
@@ -131,7 +131,7 @@ sync:
     mode: one-way-safe
 
   logs-5090:
-    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python (2)/data/eval"
+    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
     beta: "./data/eval"
     mode: one-way-safe
 
