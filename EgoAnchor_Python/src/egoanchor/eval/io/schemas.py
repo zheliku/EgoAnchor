@@ -28,6 +28,20 @@ class CaptureRow:
     capture_mono_ms: float
     capture_unix_ms: float
     capture_unity_frame: int
+    sender_mono_ms: float
+    """JPEG 编码完成并构造协议 header 的 payload-ready 时间；历史日志缺失时为 NaN。"""
+    sender_unity_frame: int
+    """payload-ready 时的 Unity frameCount；历史日志缺失时为 -1。"""
+    gt_sample_mono_ms: float
+    """capture 回调实际采样参考位姿的时间；历史日志缺失时为 NaN。"""
+    image_time_basis: str
+    """图像时刻的来源；当前 Quest 链路为 camera pose 历史代理。"""
+    image_time_offset_frames: int
+    """图像时间代理相对 payload-ready 帧回退的成功采集样本数。"""
+    publish_attempt_mono_ms: float
+    """紧邻 ZMQ TrySend 前的 Unity 单调时钟；历史日志缺失时为 NaN。"""
+    publish_succeeded: bool
+    """NetMQ 是否立即接受该 multipart 消息。"""
     head_pos: np.ndarray
     head_rot: np.ndarray
     cam_valid: bool
@@ -58,6 +72,15 @@ class CaptureRow:
             capture_mono_ms=_float(row, "capture_mono_ms", context),
             capture_unix_ms=_float(row, "capture_unix_ms", context),
             capture_unity_frame=_int(row, "capture_unity_frame", context),
+            sender_mono_ms=_optional_float(row, "sender_mono_ms", np.nan),
+            sender_unity_frame=int(_optional_float(row, "sender_unity_frame", -1.0)),
+            gt_sample_mono_ms=_optional_float(row, "gt_sample_mono_ms", np.nan),
+            image_time_basis=_optional_str(row, "image_time_basis", "legacy_unspecified"),
+            image_time_offset_frames=int(
+                _optional_float(row, "image_time_offset_frames", -1.0)
+            ),
+            publish_attempt_mono_ms=_optional_float(row, "publish_attempt_mono_ms", np.nan),
+            publish_succeeded=_optional_bool(row, "publish_succeeded", False),
             head_pos=_array(row, "head_pos", 3, context),
             head_rot=_array(row, "head_rot", 4, context),
             cam_valid=cam_valid,
@@ -79,6 +102,13 @@ class CaptureRow:
             "capture_mono_ms": self.capture_mono_ms,
             "capture_unix_ms": self.capture_unix_ms,
             "capture_unity_frame": self.capture_unity_frame,
+            "sender_mono_ms": self.sender_mono_ms,
+            "sender_unity_frame": self.sender_unity_frame,
+            "gt_sample_mono_ms": self.gt_sample_mono_ms,
+            "image_time_basis": self.image_time_basis,
+            "image_time_offset_frames": self.image_time_offset_frames,
+            "publish_attempt_mono_ms": self.publish_attempt_mono_ms,
+            "publish_succeeded": self.publish_succeeded,
             "head_pos": self.head_pos,
             "head_rot": self.head_rot,
             "cam_valid": self.cam_valid,
@@ -101,8 +131,12 @@ class VariantRow:
     is_primary: bool
     source_frame_id: int
     has_output_pose: bool
+    has_display_pose: bool
+    """当前渲染 tick 是否实际显示了 anchor pose，包括 hold-last。"""
     output_pos: np.ndarray | None
     output_rot: np.ndarray | None
+    display_pos: np.ndarray | None
+    display_rot: np.ndarray | None
     anchor_state: str
     policy_action: str
     policy_reason: str
@@ -131,6 +165,14 @@ class VariantRow:
     latest_residual_degrees: float
     latest_accepted_score: float
     latest_static_locked: bool
+    observation_age_ms: float
+    """渲染时刻相对当前观测图像时刻的年龄；历史日志缺失时为 NaN。"""
+    policy_output_target_mono_ms: float
+    """平滑策略当前输出对应的目标时间；历史日志缺失时为 NaN。"""
+    smoothing_delay_ms: float
+    """渲染时刻相对策略目标时间的有效平滑延迟；历史日志缺失时为 NaN。"""
+    unity_pose_handle_mono_ms: float
+    """Unity 主线程成功处理 source pose 的时间；历史日志缺失时为 NaN。"""
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -139,6 +181,7 @@ class VariantRow:
 
         context = _context(source, row)
         has_output_pose = _bool(row, "has_output_pose", context)
+        has_display_pose = _optional_bool(row, "has_display_pose", has_output_pose)
         is_primary = _bool(row, "is_primary", context)
         has_source_capture_timing = _bool(row, "has_source_capture_timing", context)
         has_aligned_raw = _optional_bool(row, "has_aligned_raw", False)
@@ -148,8 +191,23 @@ class VariantRow:
             is_primary=is_primary,
             source_frame_id=_int(row, "source_frame_id", context),
             has_output_pose=has_output_pose,
+            has_display_pose=has_display_pose,
             output_pos=_array(row, "output_pos", 3, context, allow_none=not has_output_pose),
             output_rot=_array(row, "output_rot", 4, context, allow_none=not has_output_pose),
+            display_pos=_array(
+                {"display_pos": row.get("display_pos", row.get("output_pos"))},
+                "display_pos",
+                3,
+                context,
+                allow_none=not has_display_pose,
+            ),
+            display_rot=_array(
+                {"display_rot": row.get("display_rot", row.get("output_rot"))},
+                "display_rot",
+                4,
+                context,
+                allow_none=not has_display_pose,
+            ),
             anchor_state=_str(row, "anchor_state", context),
             policy_action=_str(row, "policy_action", context),
             policy_reason=_str(row, "policy_reason", context),
@@ -197,6 +255,10 @@ class VariantRow:
             latest_residual_degrees=_optional_float(row, "latest_residual_degrees", np.nan),
             latest_accepted_score=_optional_float(row, "latest_accepted_score", np.nan),
             latest_static_locked=_optional_bool(row, "latest_static_locked", False),
+            observation_age_ms=_optional_float(row, "observation_age_ms", np.nan),
+            policy_output_target_mono_ms=_optional_float(row, "policy_output_target_mono_ms", np.nan),
+            smoothing_delay_ms=_optional_float(row, "smoothing_delay_ms", np.nan),
+            unity_pose_handle_mono_ms=_optional_float(row, "unity_pose_handle_mono_ms", np.nan),
             raw=dict(row),
         )
 
@@ -208,8 +270,11 @@ class VariantRow:
             "is_primary": self.is_primary,
             "source_frame_id": self.source_frame_id,
             "has_output_pose": self.has_output_pose,
+            "has_display_pose": self.has_display_pose,
             "output_pos": self.output_pos,
             "output_rot": self.output_rot,
+            "display_pos": self.display_pos,
+            "display_rot": self.display_rot,
             "anchor_state": self.anchor_state,
             "policy_action": self.policy_action,
             "policy_reason": self.policy_reason,
@@ -238,6 +303,10 @@ class VariantRow:
             "latest_residual_degrees": self.latest_residual_degrees,
             "latest_accepted_score": self.latest_accepted_score,
             "latest_static_locked": self.latest_static_locked,
+            "observation_age_ms": self.observation_age_ms,
+            "policy_output_target_mono_ms": self.policy_output_target_mono_ms,
+            "smoothing_delay_ms": self.smoothing_delay_ms,
+            "unity_pose_handle_mono_ms": self.unity_pose_handle_mono_ms,
         }
 
 
@@ -264,6 +333,14 @@ class OutputRow:
     """RQ1 手动标记的指标类型（对齐论文 RQ1 实验条件）；无标记时为 'none'。"""
     rq1_metric_duration: float
     """当前 RQ1 指标持续时间（秒）。"""
+    rq2_condition: str
+    """RQ2 运动场景；未开始试次时为 ``none``。"""
+    rq2_trial_id: int
+    """session 内递增试次编号；未开始试次时为 -1。"""
+    rq2_target_linear_speed_m_s: float
+    """试次目标线速度；不适用时为 NaN。"""
+    rq2_target_angular_speed_deg_s: float
+    """试次目标角速度；不适用时为 NaN。"""
     variants: list[VariantRow]
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -278,6 +355,8 @@ class OutputRow:
         """从 unity_output JSON object 解析一行。"""
 
         context = _context(source, row)
+        if "rq2_phase" in row:
+            raise SchemaError(f"{context}: rq2_phase 已删除；请使用当前版本重新采集数据。")
         gt_pose_valid = _bool(row, "gt_pose_valid", context)
         raw_variants = _required(row, "variants", context)
         if not isinstance(raw_variants, list):
@@ -298,6 +377,18 @@ class OutputRow:
             gt_angular_speed_deg_s=_optional_float(row, "gt_angular_speed_deg_s", 0.0),
             rq1_metric=_optional_str(row, "rq1_metric", "none"),
             rq1_metric_duration=_optional_float(row, "rq1_metric_duration", 0.0),
+            rq2_condition=_str(row, "rq2_condition", context),
+            rq2_trial_id=_int(row, "rq2_trial_id", context),
+            rq2_target_linear_speed_m_s=_required_float_or_nan(
+                row,
+                "rq2_target_linear_speed_m_s",
+                context,
+            ),
+            rq2_target_angular_speed_deg_s=_required_float_or_nan(
+                row,
+                "rq2_target_angular_speed_deg_s",
+                context,
+            ),
             variants=[
                 VariantRow.from_dict(item, source=f"{source}:variants[{index}]")
                 for index, item in enumerate(raw_variants)
@@ -326,6 +417,10 @@ class OutputRow:
                 "gt_angular_speed_deg_s": self.gt_angular_speed_deg_s,
                 "rq1_metric": self.rq1_metric,
                 "rq1_metric_duration": self.rq1_metric_duration,
+                "rq2_condition": self.rq2_condition,
+                "rq2_trial_id": self.rq2_trial_id,
+                "rq2_target_linear_speed_m_s": self.rq2_target_linear_speed_m_s,
+                "rq2_target_angular_speed_deg_s": self.rq2_target_angular_speed_deg_s,
                 "valid": self.valid,
             }
             record.update(variant.to_record())
@@ -561,6 +656,18 @@ def _optional_float(row: JsonRow, field_name: str, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _required_float_or_nan(row: JsonRow, field_name: str, context: str) -> float:
+    """读取必需的可空 float 字段，并把 JSON null 转换为 NaN。"""
+
+    value = _required(row, field_name, context)
+    if value is None:
+        return np.nan
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise SchemaError(f"{context}: 字段 {field_name} 不能转换为 float：{value!r}。") from exc
 
 
 def _bool(row: JsonRow, field_name: str, context: str) -> bool:

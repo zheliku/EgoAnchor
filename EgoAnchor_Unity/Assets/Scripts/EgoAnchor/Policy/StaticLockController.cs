@@ -149,8 +149,9 @@ namespace EgoAnchor.Policy
         // 头停沉降冻结 (问题3 续): 头动时 slip 累进 obsConsensus / 抬高观测速度; 头一停, headToleranceFactor
         // 由头速驱动会几乎瞬间塌回 1 (阈值收紧), 但 obsConsensus 携带的 slip 要按 evidenceHalfLifeSeconds 才褪去
         // → 出现"阈值已收紧、slip 未褪净"的窗口 → 漂移租绳/CUSUM/速度逃逸误触发 (用户报告: 头一停物体就脱离 static)。
-        // 解法: 头动期间 + 头停后 headSettleSeconds 内, 冻结所有"判物体在动→解锁"的证据 (漂移租绳/CUSUM/速度逃逸),
-        // 给 obsConsensus 时间把 slip 褪干净再恢复监测。settleSeconds 取 ~2~3× evidenceHalfLifeSeconds。
+        // 解法: 只在头停后的 headSettleSeconds 内冻结"判物体在动→解锁"的证据 (漂移租绳/CUSUM/速度逃逸),
+        // 给 obsConsensus 时间把 slip 褪干净再恢复监测。头动期间仅放宽阈值，保留对物体真运动的响应。
+        // settleSeconds 取 ~2~3× evidenceHalfLifeSeconds。
         // 0=关闭沉降冻结。低分释放不冻结 (它是独立可靠性信号, 与 head-slip 无关)。
         private float headSettleSeconds = 0.6f;            // 头停后冻结解锁判定的时长 (秒, 帧率无关; 0=关闭)
         private const float HeadMovingRatioEps = 0.06f;    // headMotionRatio 超此值视为"头在动" (重置沉降计时)
@@ -217,6 +218,12 @@ namespace EgoAnchor.Policy
 
         /// <summary>当前是否锁定 (供 host 写 eval 的 latest_static_locked)。</summary>
         public bool IsLocked => locked;
+
+        /// <summary>
+        /// 当前是否正在执行解锁接缝过渡。
+        /// 接缝激活时最终输出包含相对 smoothing candidate 的衰减残差，不能沿用 candidate 的语义时刻。
+        /// </summary>
+        public bool IsSeamActive => seamActive;
 
         /// <summary>累计锁定进入次数 (诊断)。</summary>
         public int LockEnters { get; private set; }

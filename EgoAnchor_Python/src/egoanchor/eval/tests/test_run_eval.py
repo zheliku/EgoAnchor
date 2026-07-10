@@ -269,6 +269,10 @@ def _output_row(
         "gt_rot": [0.0, 0.0, 0.0, 1.0],
         "gt_pose_valid": True,
         "gt_pose_source": "transform",
+        "rq2_condition": "none",
+        "rq2_trial_id": -1,
+        "rq2_target_linear_speed_m_s": None,
+        "rq2_target_angular_speed_deg_s": None,
         "variants": [
             _variant("kalman", True, source_frame_id, gt_pos, kalman_offset),
             _variant("raw", False, source_frame_id, gt_pos, raw_offset),

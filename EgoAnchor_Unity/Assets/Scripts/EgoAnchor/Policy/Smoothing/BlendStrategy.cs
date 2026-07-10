@@ -51,6 +51,7 @@ namespace EgoAnchor.Policy
             lastRender = Pose.identity;
             lastRenderTimeSeconds = 0.0;
             latencyEstimateSeconds = 0.0f;
+            OutputTargetTimeSeconds = double.NaN;
         }
 
         public override void OnObservation(MotionModel model, in AnchorObservation observation)
@@ -71,6 +72,8 @@ namespace EgoAnchor.Policy
 
         public override Pose Output(MotionModel model, double nowSeconds)
         {
+            // 残差融合把旧渲染 pose 与当前预测混合，结果通常没有唯一的语义时刻。
+            OutputTargetTimeSeconds = double.NaN;
             // 更新实测采集-渲染延迟 (now - 最近观测时间)，自适应跟踪当前帧率/推理速度 (快升慢降)
             if (model.HasState)
             {

@@ -78,15 +78,19 @@ namespace EgoAnchor.Policy
         [Tooltip("判定运动/静止的角速度阈值，单位 deg/s；仅用于 motionState 诊断。默认 1.5。")]
         [SerializeField] private float staticAngularSpeedThresholdDps = 1.5f;
 
-        /// <summary>是否在进入 Lost 状态时请求 Python 重 register。</summary>
+        /// <summary>是否在进入 Lost 状态时产生服务器重获取事件。</summary>
         [Header("Lost Reacquire")]
-        [Tooltip("进入 Lost 状态时是否请求 Python 重新 register。baseline 和 EgoAnchor 均建议开启：Lost = 跟踪已彻底丢失，必须让 Python 重新定位。")]
+        [Tooltip("进入 Lost 状态时是否产生服务器重获取事件；最终是否上报由 emitServerReacquire 控制。")]
         [SerializeField] private bool enableLostReacquire = true;
 
         /// <summary>是否启用低分重定位。</summary>
         [Header("Low-Score Reacquire")]
-        [Tooltip("是否启用低分重定位：reliability 总分持续过低时, 本地重置 policy (清空模型/平滑/静止锁状态并进入 Relocalizing, 下一帧重新建立锚定), 并返回 Reacquire decision 请求上游 (runtime→hub) 通知 Python 重新 register。host 不持有任何 client。")]
+        [Tooltip("是否启用低分重定位：reliability 总分持续过低时，本地重置 policy 并进入 Relocalizing。是否同时请求 Python 重新 register 由 emitServerReacquire 控制。")]
         [SerializeField] private bool enableLowScoreReacquire = true;
+
+        /// <summary>本地重获取发生时，是否向 AnchorRuntimeHub 发出服务器重获取请求。</summary>
+        [Tooltip("是否把 Lost/低分重获取上报给 AnchorRuntimeHub，再由共享 client 请求 Python 重新 register。被动 shadow baseline 应关闭，本地生命周期与低分重置仍照常执行。")]
+        [SerializeField] private bool emitServerReacquire = true;
 
         /// <summary>触发低分重定位的分数阈值。</summary>
         [Tooltip("score 持续低于此值才触发低分重定位。默认 0.45；低于状态提示阈值 0.5，避免轻微遮挡刚降级显示就反复 register。")]
@@ -102,7 +106,7 @@ namespace EgoAnchor.Policy
         [SerializeField] private float lowScoreReacquireCooldownSeconds = 3.0f;
 
         /// <summary>几何子分阈值：几何加权平均分低于它视为 track 丢失。</summary>
-        [Tooltip("几何加权平均分 (depth/reprojection, 沿用 Python 加权几何平均) 低于此值时, 低分重获取原因标记为 track_lost；几何仍好时仍会请求 Python 重 register, 但原因标记为 low_score。默认 0.5。")]
+        [Tooltip("几何加权平均分低于此值时，低分重获取原因标记为 track_lost；几何仍好时标记为 low_score。该值只影响诊断原因。")]
         [Range(0f, 1f)]
         [SerializeField] private float reacquireGeometryFloor = 0.5f;
 
@@ -128,8 +132,17 @@ namespace EgoAnchor.Policy
         private double lastLowScoreReacquireSeconds = double.NegativeInfinity;
         private bool wantsServerReacquire;
 
+        /// <summary>最近一次 Advance 时当前渲染时刻距最近图像观测语义时刻的年龄，单位秒。</summary>
+        private double observationAgeSeconds = double.NaN;
+
+        /// <summary>最近一次 policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位秒。</summary>
+        private double outputTargetTimeSeconds = double.NaN;
+
+        /// <summary>最近一次 policy 输出相对当前渲染时刻的实际平滑延迟，单位秒。</summary>
+        private double smoothingDelaySeconds = double.NaN;
+
         /// <summary>
-        /// 是否有待上游处理的"通知 Python 重新 register"请求 (持续低分 + 几何不可信判定 track 丢)。
+        /// 是否有待上游处理的“通知 Python 重新 register”请求。
         /// runtime 每帧 consume 一次, 转给 AnchorRuntimeHub 统一发 NATS reacquire。host 自身不持 client。
         /// </summary>
         public bool ConsumeServerReacquireRequest()
@@ -196,6 +209,15 @@ namespace EgoAnchor.Policy
 
         /// <summary>最近一次 Advance 使用的前推时长，单位秒。</summary>
         public float PredictAheadSeconds => predictAheadSeconds;
+
+        /// <summary>最近一次 Advance 时当前渲染时刻距最近观测语义时刻的年龄，单位秒。</summary>
+        public double ObservationAgeSeconds => observationAgeSeconds;
+
+        /// <summary>最近一次 policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位秒。</summary>
+        public double OutputTargetTimeSeconds => outputTargetTimeSeconds;
+
+        /// <summary>最近一次 policy 输出相对当前渲染时刻的实际平滑延迟，单位秒。</summary>
+        public double SmoothingDelaySeconds => smoothingDelaySeconds;
 
         /// <summary>最近一次被接受测量的可靠性分数。</summary>
         public float LatestAcceptedScore => latestAcceptedScore;
@@ -275,8 +297,8 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(latestQualityGateDecision.ToPolicyAction(), stateMachine.State, latestQualityGateDecision.Reason);
             }
 
-            // 低分重定位: 已有锚定后若总分持续过低 → 锚点不可信, 本地重置进入 Relocalizing 重新建立锚定，
-            // 并 (经 ConsumeServerReacquireRequest) 请求上游通知 Python 重 register。
+            // 低分重定位：已有锚定后若总分持续过低，本地重置进入 Relocalizing；
+            // emitServerReacquire 决定是否同时请求上游通知 Python 重 register。
             // host 不持 client; 在 raw observation 上判定, 不受下面质量评估门控是否拒绝影响。
             if (TryLowScoreReacquire(observation, lifecycleTime))
             {
@@ -341,9 +363,16 @@ namespace EgoAnchor.Policy
             EnsureReady();
             if (!motionModel.HasState)
             {
+                observationAgeSeconds = double.NaN;
+                outputTargetTimeSeconds = double.NaN;
+                smoothingDelaySeconds = double.NaN;
                 stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_estimate");
                 return AnchorPolicyOutput.None(stateMachine.State, "no_estimate");
             }
+
+            observationAgeSeconds = nowSeconds > motionModel.LastObservationTimeSeconds
+                ? nowSeconds - motionModel.LastObservationTimeSeconds
+                : 0.0;
 
             double lifecycleGap = lastReliableLifecycleTimeSeconds >= 0.0 ? Mathf.Max((float)(nowSeconds - lastReliableLifecycleTimeSeconds), 0.0f) : 0.0;
             AnchorState stateBeforeAdvance = stateMachine.State;
@@ -358,20 +387,34 @@ namespace EgoAnchor.Policy
 
             if (stateMachine.State == AnchorState.Lost || stateMachine.State == AnchorState.Error || stateMachine.State == AnchorState.Searching)
             {
-                if (enableLostReacquire && stateMachine.State == AnchorState.Lost && stateBeforeAdvance != AnchorState.Lost)
+                if (enableLostReacquire && emitServerReacquire &&
+                    stateMachine.State == AnchorState.Lost && stateBeforeAdvance != AnchorState.Lost)
                 {
                     wantsServerReacquire = true;
                 }
-                return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason);
+                outputTargetTimeSeconds = double.NaN;
+                smoothingDelaySeconds = double.NaN;
+                return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason, observationAgeSeconds);
             }
 
             Pose pose = smoothingStrategy.Output(motionModel, nowSeconds);
+            outputTargetTimeSeconds = smoothingStrategy.OutputTargetTimeSeconds;
+            smoothingDelaySeconds = double.IsNaN(outputTargetTimeSeconds)
+                ? double.NaN
+                : (nowSeconds > outputTargetTimeSeconds ? nowSeconds - outputTargetTimeSeconds : 0.0);
 
             // EgoAnchor 静止锚定稳定器: 锁定时冻结输出, 解锁过渡平滑收敛, 否则透传 (未挂模块则纯 baseline)。
             if (staticLockModule != null)
             {
+                bool overrodeSmoothingPose = staticLockModule.OverridesSmoothingPose;
                 float advanceDt = lastAdvanceTimeSeconds >= 0.0 ? (float)(nowSeconds - lastAdvanceTimeSeconds) : 0.0f;
                 pose = staticLockModule.Stabilize(pose, advanceDt);
+                overrodeSmoothingPose |= staticLockModule.OverridesSmoothingPose;
+                if (overrodeSmoothingPose)
+                {
+                    outputTargetTimeSeconds = double.NaN;
+                    smoothingDelaySeconds = double.NaN;
+                }
             }
 
             lastAdvanceTimeSeconds = nowSeconds;
@@ -379,7 +422,16 @@ namespace EgoAnchor.Policy
                 ? Mathf.Max((float)(nowSeconds - motionModel.LastObservationTimeSeconds), 0.0f)
                 : 0.0f;
             UpdateMotionState();
-            return new AnchorPolicyOutput(true, pose, stateMachine.State, motionState, predictAheadSeconds, stateMachine.LastEvent.Reason);
+            return new AnchorPolicyOutput(
+                true,
+                pose,
+                stateMachine.State,
+                motionState,
+                predictAheadSeconds,
+                observationAgeSeconds,
+                outputTargetTimeSeconds,
+                smoothingDelaySeconds,
+                stateMachine.LastEvent.Reason);
         }
 
         /// <summary>reset command/status 到达时清空 policy。</summary>
@@ -437,8 +489,8 @@ namespace EgoAnchor.Policy
         /// <summary>
         /// 低分重定位: 已有锚定后 reliability 总分连续低于阈值持续一段时间 → 本地重置
         /// (清空运动模型/平滑/静止锁的内部状态并进入 Relocalizing, 不再信任旧低分锚点, 下一帧 pose 重新建立锚定)。
-        /// 由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register。几何子分只决定诊断 reason：
-        /// 几何差/缺失记为 track_lost/no_geometry，几何仍好记为 low_score。host 不持 client, 只置标志。
+        /// emitServerReacquire 开启时，由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register。
+        /// 几何子分只决定诊断 reason：几何差/缺失记为 track_lost/no_geometry，几何仍好记为 low_score。
         /// 触发时返回 true (调用方应提前返回)。
         /// </summary>
         private bool TryLowScoreReacquire(in AnchorObservation observation, double now)
@@ -469,14 +521,14 @@ namespace EgoAnchor.Policy
             lastLowScoreReacquireSeconds = now;
             lowScoreStartSeconds = -1.0;
 
-            // 几何仲裁只决定诊断原因；持续低总分本身已经说明当前 tracker 不可信，必须通知 Python 重 register。
-            // 注意: 标志在 NotifyReacquire (会 ResetModules) 之后置, 避免被重置清掉。
+            // 几何仲裁只决定诊断原因；本地重置始终执行，服务器请求由 emitServerReacquire 决定。
+            // 标志在 NotifyReacquire（会 ResetModules）之后设置，避免被重置清除。
             float geometryScore = observation.GeometryScore(reacquireReprojWeight, reacquireDepthWeight, out bool hasGeometryEvidence);
             string reason = !hasGeometryEvidence
                 ? "low_score_no_geometry"
                 : (geometryScore < reacquireGeometryFloor ? "low_score_track_lost" : "low_score");
             NotifyReacquire(now, reason);
-            wantsServerReacquire = true;
+            wantsServerReacquire = emitServerReacquire;
 
             return true;
         }
@@ -544,6 +596,9 @@ namespace EgoAnchor.Policy
             lowScoreStartSeconds = -1.0;
             motionState = AnchorMotionState.Unknown;
             predictAheadSeconds = 0.0f;
+            observationAgeSeconds = double.NaN;
+            outputTargetTimeSeconds = double.NaN;
+            smoothingDelaySeconds = double.NaN;
             AcceptedCount = 0;
             RejectedCount = 0;
         }

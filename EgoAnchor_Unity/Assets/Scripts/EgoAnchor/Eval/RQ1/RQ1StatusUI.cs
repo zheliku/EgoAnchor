@@ -1,204 +1,179 @@
+using System.Text;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace EgoAnchor.Eval.RQ1
 {
     /// <summary>
-    /// RQ1 状态 UI 面板。
-    /// <para>
-    /// 显示当前录制状态、指标标记、建议时长等信息。
-    /// </para>
+    /// RQ1 状态面板，显示录制 session、当前指标及其操作快捷键。
     /// </summary>
     public sealed class RQ1StatusUI : MonoBehaviour
     {
-        // ── References ──
-
+        /// <summary>当前 RQ1 指标标记来源。</summary>
         [Header("References")]
-        [Tooltip("RQ1 指标记录器。")]
+        [Tooltip("当前 RQ1 指标标记来源。")]
         [SerializeField] private RQ1MetricSelector selector;
 
-        [Tooltip("评估 session 控制器。")]
+        /// <summary>评估 session 录制状态来源。</summary>
+        [Tooltip("评估 session 录制状态来源。")]
         [SerializeField] private EvalSession evalSession;
 
+        /// <summary>录制状态文本。</summary>
         [Header("UI Elements")]
-        [Tooltip("录制状态文本（例如：● 录制中）。")]
+        [Tooltip("显示 Recording 或 Not Recording。")]
         [SerializeField] private TextMeshProUGUI recordingStatusText;
 
-        [Tooltip("Session ID 文本。")]
+        /// <summary>session id 文本。</summary>
+        [Tooltip("显示当前 session id。")]
         [SerializeField] private TextMeshProUGUI sessionIdText;
 
-        [Tooltip("录制时长文本。")]
+        /// <summary>session 录制时长文本。</summary>
+        [Tooltip("显示本次 session 的录制时长。")]
         [SerializeField] private TextMeshProUGUI durationText;
 
-        [Tooltip("当前指标文本（例如：快速挥动 (按键 3)）。")]
+        /// <summary>当前指标与对应数字键文本。</summary>
+        [Tooltip("显示当前 RQ1 指标及对应数字键。")]
         [SerializeField] private TextMeshProUGUI currentMetricText;
 
-        [Tooltip("建议时长文本（例如：建议时长: 20秒）。")]
+        /// <summary>当前指标建议时长文本。</summary>
+        [Tooltip("显示当前指标的建议时长或单次事件提示。")]
         [SerializeField] private TextMeshProUGUI suggestedDurationText;
 
-        [Tooltip("已标记时长文本（例如：已标记: 00:08）。")]
+        /// <summary>当前指标已标记时长文本。</summary>
+        [Tooltip("显示当前指标已连续标记的时长。")]
         [SerializeField] private TextMeshProUGUI markedDurationText;
 
-        [Tooltip("按键对照表文本（列出所有指标和对应按键）。")]
+        /// <summary>RQ1 操作快捷键文本。</summary>
+        [Tooltip("显示指标标记和 session 控制快捷键。")]
         [SerializeField] private TextMeshProUGUI keyBindingsText;
 
+        /// <summary>状态面板每秒刷新次数。</summary>
         [Header("Settings")]
-        [Tooltip("UI 更新频率（Hz）。")]
+        [Tooltip("状态面板每秒刷新次数。")]
+        [Min(1f)]
         [SerializeField] private float updateRate = 10f;
 
-        // ── State ──
-
-        private double _sessionStartMonoMs;
+        /// <summary>当前面板刷新周期内累计的时间。</summary>
         private float _updateTimer;
 
-        // ── Unity 生命周期 ──
+        /// <summary>面板首次观察到当前 session 正在录制的单调时刻。</summary>
+        private double _sessionStartMonoMs;
 
+        /// <summary>初始化时立即绘制完整状态面板。</summary>
         private void Start()
         {
-            if (evalSession != null)
-            {
-                // 可以订阅 session 开始/停止事件（如果 EvalSession 有提供）
-            }
-
             UpdateUI();
         }
 
+        /// <summary>按配置频率刷新状态，避免每帧重建文本。</summary>
         private void Update()
         {
             _updateTimer += Time.deltaTime;
-            if (_updateTimer >= 1f / updateRate)
-            {
-                _updateTimer = 0f;
-                UpdateUI();
-            }
+            float interval = 1f / Mathf.Max(1f, updateRate);
+            if (_updateTimer < interval) return;
+
+            _updateTimer = 0f;
+            UpdateUI();
         }
 
-        // ── UI 更新 ──
-
+        /// <summary>根据 EvalSession 与 selector 的当前状态更新所有文本。</summary>
         private void UpdateUI()
         {
-            // 录制状态
+            bool recording = evalSession != null && evalSession.IsRecording;
             if (recordingStatusText != null)
             {
-                bool isRecording = evalSession != null && evalSession.IsRecording;
-                recordingStatusText.text = isRecording ? "● Recording" : "○ Not Recording";
-                recordingStatusText.color = isRecording ? Color.red : Color.gray;
+                recordingStatusText.text = EvalStatusText.Recording(recording);
+                recordingStatusText.color = recording ? Color.red : Color.gray;
             }
 
-            // Session ID
             if (sessionIdText != null)
             {
-                string sessionId = evalSession != null ? evalSession.SessionId : "";
-                sessionIdText.text = string.IsNullOrEmpty(sessionId) ? "Session: Not Started" : $"Session: {sessionId}";
+                string sessionId = evalSession != null ? evalSession.SessionId : string.Empty;
+                sessionIdText.text = EvalStatusText.Session(sessionId);
             }
 
-            // 录制时长
-            if (durationText != null)
+            UpdateSessionDuration(recording);
+
+            RQ1MetricType metric = selector != null
+                ? selector.CurrentMetric
+                : RQ1MetricType.None;
+            if (currentMetricText != null)
             {
-                if (evalSession != null && evalSession.IsRecording)
-                {
-                    double nowMs = Time.realtimeSinceStartupAsDouble * 1000.0;
-                    if (_sessionStartMonoMs == 0.0) _sessionStartMonoMs = nowMs;
-                    double elapsedS = (nowMs - _sessionStartMonoMs) / 1000.0;
-                    int minutes = (int)(elapsedS / 60);
-                    int seconds = (int)(elapsedS % 60);
-                    durationText.text = $"Duration: {minutes:00}:{seconds:00}";
-                }
-                else
-                {
-                    _sessionStartMonoMs = 0.0;
-                    durationText.text = "Duration: 00:00";
-                }
+                currentMetricText.text = metric == RQ1MetricType.None
+                    ? "Current Metric: None"
+                    : $"Current Metric: {metric.GetDisplayName()} (Key {(int)metric})";
             }
 
-            // 当前指标
-            if (currentMetricText != null && selector != null)
+            if (suggestedDurationText != null)
             {
-                RQ1MetricType metric = selector.CurrentMetric;
-                if (metric == RQ1MetricType.None)
-                {
-                    currentMetricText.text = "Current Metric: None";
-                }
-                else
-                {
-                    int keyNumber = (int)metric;
-                    string displayName = metric.GetDisplayName();
-                    currentMetricText.text = $"Current Metric: {displayName} (Key {keyNumber})";
-                }
-            }
-
-            // 建议时长
-            if (suggestedDurationText != null && selector != null)
-            {
-                RQ1MetricType metric = selector.CurrentMetric;
                 int suggestedDuration = metric.GetSuggestedDuration();
-                if (suggestedDuration > 0)
-                {
-                    suggestedDurationText.text = $"Suggested: {suggestedDuration}s";
-                }
-                else if (metric == RQ1MetricType.OcclusionRecovery)
-                {
-                    suggestedDurationText.text = "Suggested: Single event";
-                }
-                else
-                {
-                    suggestedDurationText.text = "Suggested: -";
-                }
+                suggestedDurationText.text = suggestedDuration > 0
+                    ? $"Suggested: {suggestedDuration}s"
+                    : metric == RQ1MetricType.OcclusionRecovery
+                        ? "Suggested: Single event"
+                        : "Suggested: -";
             }
 
-            // 已标记时长
-            if (markedDurationText != null && selector != null)
+            if (markedDurationText != null)
             {
-                if (selector.CurrentMetric != RQ1MetricType.None)
-                {
-                    double markedDuration = selector.CurrentMetricDuration;
-                    int minutes = (int)(markedDuration / 60);
-                    int seconds = (int)(markedDuration % 60);
-                    markedDurationText.text = $"Marked: {minutes:00}:{seconds:00}";
-                }
-                else
-                {
-                    markedDurationText.text = "Marked: 00:00";
-                }
+                double markedDuration = selector != null
+                    ? selector.CurrentMetricDuration
+                    : 0.0;
+                markedDurationText.text = $"Marked: {EvalStatusText.Duration(markedDuration)}";
             }
 
-            // 按键对照表
-            UpdateKeyBindings();
+            if (keyBindingsText != null)
+            {
+                keyBindingsText.text = BuildKeyBindingsText(metric);
+            }
         }
 
-        private void UpdateKeyBindings()
+        /// <summary>更新 session 计时；停止录制后重置本地起点。</summary>
+        private void UpdateSessionDuration(bool recording)
         {
-            if (keyBindingsText == null) return;
+            if (durationText == null) return;
 
-            RQ1MetricType active = selector != null ? selector.CurrentMetric : RQ1MetricType.None;
+            if (!recording)
+            {
+                _sessionStartMonoMs = 0.0;
+                durationText.text = "Duration: 00:00";
+                return;
+            }
 
-            // 每行格式：[键] 名称  时长提示  ← 当前
-            var sb = new System.Text.StringBuilder();
+            double nowMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+            if (_sessionStartMonoMs <= 0.0)
+            {
+                _sessionStartMonoMs = nowMs;
+            }
 
-            AppendMetricRow(sb, "[1]", RQ1MetricType.StaticObservation, "80s",    active);
-            AppendMetricRow(sb, "[2]", RQ1MetricType.OcclusionRecovery, "Single", active);
-            sb.AppendLine();
-            sb.AppendLine("[0]  Clear Marking");
-            sb.Append("[F7] Start Recording   [F8] Stop Recording");
-
-            keyBindingsText.text = sb.ToString();
+            double elapsedSeconds = (nowMs - _sessionStartMonoMs) / 1000.0;
+            durationText.text = $"Duration: {EvalStatusText.Duration(elapsedSeconds)}";
         }
 
+        /// <summary>生成完整 RQ1 快捷键表，活动指标只高亮一行。</summary>
+        private static string BuildKeyBindingsText(RQ1MetricType active)
+        {
+            var builder = new StringBuilder(256);
+            AppendMetricRow(
+                builder, "[1]", RQ1MetricType.StaticObservation, "80s", active);
+            AppendMetricRow(
+                builder, "[2]", RQ1MetricType.OcclusionRecovery, "Single", active);
+            builder.AppendLine();
+            builder.AppendLine("[0]  Clear Marking");
+            builder.Append("[F7] Start Recording   [F8] Stop Recording");
+            return builder.ToString();
+        }
+
+        /// <summary>追加一行 RQ1 指标快捷键，并应用公共活动行样式。</summary>
         private static void AppendMetricRow(
-            System.Text.StringBuilder sb,
+            StringBuilder builder,
             string key,
             RQ1MetricType type,
             string duration,
             RQ1MetricType active)
         {
-            bool isActive = type == active;
-            string name = type.GetDisplayName();
-
-            if (isActive)
-                sb.AppendLine($"<color=#FFD700><b>{key}  {name,-8}  {duration}  ◀</b></color>");
-            else
-                sb.AppendLine($"{key}  {name,-8}  {duration}");
+            string content = $"{key}  {type.GetDisplayName()}  {duration}";
+            EvalStatusText.AppendSelectionRow(builder, content, type == active);
         }
     }
 }

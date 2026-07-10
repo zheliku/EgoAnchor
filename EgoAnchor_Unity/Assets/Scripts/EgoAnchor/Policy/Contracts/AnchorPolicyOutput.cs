@@ -26,6 +26,15 @@ namespace EgoAnchor.Policy
         /// <summary>本帧实际使用的前推时长，单位秒。跟踪态为延迟隐藏量，续航态为已外推时长。</summary>
         public readonly float PredictAheadSeconds;
 
+        /// <summary>当前渲染时刻距最近观测语义时刻的年龄，单位秒。</summary>
+        public readonly double ObservationAgeSeconds;
+
+        /// <summary>本帧 policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位秒。</summary>
+        public readonly double OutputTargetTimeSeconds;
+
+        /// <summary>当前渲染时刻相对输出语义时刻的实际平滑延迟，单位秒。</summary>
+        public readonly double SmoothingDelaySeconds;
+
         /// <summary>本帧输出的解释原因。</summary>
         public readonly string Reason;
 
@@ -37,6 +46,9 @@ namespace EgoAnchor.Policy
         /// <param name="state">当前 anchor 生命周期状态。</param>
         /// <param name="motionState">当前运动状态。</param>
         /// <param name="predictAheadSeconds">本帧实际使用的前推时长，单位秒。</param>
+        /// <param name="observationAgeSeconds">当前渲染时刻距最近观测语义时刻的年龄，单位秒。</param>
+        /// <param name="outputTargetTimeSeconds">本帧输出 pose 对应的 Unity 单调时钟语义时刻，单位秒。</param>
+        /// <param name="smoothingDelaySeconds">当前渲染时刻相对输出语义时刻的实际平滑延迟，单位秒。</param>
         /// <param name="reason">本帧输出的解释原因。</param>
         public AnchorPolicyOutput(
             bool hasPose,
@@ -44,6 +56,9 @@ namespace EgoAnchor.Policy
             AnchorState state,
             AnchorMotionState motionState,
             float predictAheadSeconds,
+            double observationAgeSeconds,
+            double outputTargetTimeSeconds,
+            double smoothingDelaySeconds,
             string reason)
         {
             HasPose = hasPose;
@@ -51,6 +66,9 @@ namespace EgoAnchor.Policy
             State = state;
             MotionState = motionState;
             PredictAheadSeconds = predictAheadSeconds;
+            ObservationAgeSeconds = observationAgeSeconds;
+            OutputTargetTimeSeconds = outputTargetTimeSeconds;
+            SmoothingDelaySeconds = smoothingDelaySeconds;
             Reason = reason ?? string.Empty;
         }
 
@@ -59,10 +77,20 @@ namespace EgoAnchor.Policy
         /// </summary>
         /// <param name="state">当前 anchor 生命周期状态。</param>
         /// <param name="reason">解释原因。</param>
+        /// <param name="observationAgeSeconds">当前渲染时刻距最近观测语义时刻的年龄，单位秒；未知时为 NaN。</param>
         /// <returns>HasPose=false 的输出。</returns>
-        public static AnchorPolicyOutput None(AnchorState state, string reason)
+        public static AnchorPolicyOutput None(AnchorState state, string reason, double observationAgeSeconds = double.NaN)
         {
-            return new AnchorPolicyOutput(false, Pose.identity, state, AnchorMotionState.Unknown, 0f, reason);
+            return new AnchorPolicyOutput(
+                false,
+                Pose.identity,
+                state,
+                AnchorMotionState.Unknown,
+                0f,
+                observationAgeSeconds,
+                double.NaN,
+                double.NaN,
+                reason);
         }
     }
 }

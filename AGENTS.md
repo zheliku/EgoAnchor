@@ -88,6 +88,7 @@ pixi run python -m unittest discover -s src -p "test_*.py" -t src
 Unity 主线编译（仓库根目录）：
 
 ```powershell
+dotnet build "EgoAnchor_Unity\EgoAnchor.Tests.csproj" --no-restore
 dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
 ```
 
@@ -106,7 +107,7 @@ dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --
 论文编译（仓库根目录）：
 
 ```powershell
-typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v4.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v4.pdf
+typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v6.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v6.pdf
 ```
 
 > `pixi run build` 会安装或检查 nvdiffrast、构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
@@ -170,7 +171,7 @@ Python 代码地图（关键模块）：
 
 主要链路：
 
-`QuestStreamPublisher / StereoFrameSource / CameraInfoSource` 采集并发 ZMQ → `FramePoseHistory` 记录 capture-time camera pose → `PoseResultReceiver → AnchorRuntimeHub → PoseToAnchorRuntime` 解码并广播 pose → `CameraPoseFrameAligner` 做 OpenCV camera pose 到 Unity world pose → `AnchorPolicyHost` 输出每帧 anchor pose → `DynamicObjectAnchor` 只应用输出 Transform。
+`QuestStreamPublisher / StereoFrameSource / CameraInfoSource` 采集并发 ZMQ → `FramePoseHistory` 同时记录 image-time proxy camera pose 与 payload-ready 时刻，publisher 另记 ZMQ 发布尝试 → `PoseResultReceiver → AnchorRuntimeHub → PoseToAnchorRuntime` 解码并广播 pose → `CameraPoseFrameAligner` 做 OpenCV camera pose 到 Unity world pose → `AnchorPolicyHost` 输出每帧 anchor pose → `DynamicObjectAnchor` 应用或 hold-last 输出 Transform。
 
 Policy 结构：
 
@@ -179,6 +180,7 @@ Policy 结构：
 - `Policy/Models`：`ConstantVelocityModel`、`KalmanModel`、`OneEuroModel`。
 - `Policy/Smoothing`：`BlendStrategy`、`DelayedInterpStrategy`、`RawPassthroughStrategy`。
 - `DelayedInterpStrategy` Hermite 切线用 `hermiteTangentChordRatio`（默认 3）限幅，防止急停后样条过冲振铃。延迟目标通过 `Mathf.MoveTowards` 平滑过渡（`MaxDelayChangePerSecond=0.05`），防止 GPU 波动导致延迟突变。
+- `AnchorPolicyOutput.OutputTargetTimeSeconds` 是 smoothing 输出的语义目标时刻；`ObservationAgeSeconds` 是渲染时刻距最近图像时间代理的年龄；`SmoothingDelaySeconds=now-outputTarget`。StaticLock 锁定、解锁接缝或 Blend 残差融合使最终 pose 不再具有唯一目标时刻时，output target / smoothing delay 必须为 NaN。
 
 静止锚定（StaticLock）关键坑：
 
@@ -194,11 +196,15 @@ Policy 结构：
 
 - `AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime` 透传；`AnchorRuntimeHub` 统一 fan-in，用唯一 `reacquireCommandClient` 发 NATS reacquire。
 - 源码默认 `enableLostReacquire=true`、`enableLowScoreReacquire=true`；持续低总分超过 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 后请求 Python 重新 register。
+- `emitServerReacquire` 只控制是否把本地 Lost/低分重获取上报给 hub，不关闭本地生命周期或低分重置。Develop、RQ1、RQ2 场景中的每个 `AnchorPolicyHost` 都必须显式序列化该字段；仅 RQ2 的被动 *Raw-ZOH* 设为 false，避免 baseline 改变共享 Python 感知状态，其余 host 保持 true。
 - 不要让 leaf runtime 或 policy 自持 command client。
 
 eval 字段契约（改 schema 必须同步 Unity writer、reader、Python eval 工具和 AGENTS）：
 
-- JSONL 字段：`motion_model` / `smoothing_strategy` / `quality_gate` / `has_output_pose` / `output_pos` / `output_rot`。
+- JSONL 基础字段：`motion_model` / `smoothing_strategy` / `quality_gate` / `has_output_pose` / `output_pos` / `output_rot`。
+- capture 时间字段：`capture_mono_ms` / `capture_unity_frame` 是 camera pose 历史给出的 image-time proxy；`image_time_basis=camera_pose_history_proxy`，`image_time_offset_frames` 是成功采集样本回退数；`sender_mono_ms` / `sender_unity_frame` 是 JPEG 完成后的 payload-ready/header 时刻，不是 ZMQ 发包时刻；`publish_attempt_mono_ms` / `publish_succeeded` 来自紧邻 `TrySend` 的发布诊断；`gt_sample_mono_ms` 是 recorder 回调实际采样平台参考 pose 的时刻。不得把这些字段解释为同刻快照。
+- output 时间字段：`observation_age_ms` / `policy_output_target_mono_ms` / `smoothing_delay_ms` / `unity_pose_handle_mono_ms`。历史日志缺失时 Python 解析为 NaN，不得用旧 `predict_ahead_ms` 补写新语义。
+- `has_output_pose` 只信任 `PoseToAnchorRuntime.TryGetOutputPose`，决定 runtime availability；`has_display_pose` / `display_pos` / `display_rot` 记录用户实际看到的 Transform，包括 Lost 后 hold-last。RQ2 各系统配置的实时误差与 lag 使用 display pose，可用率仍使用 `has_output_pose`。执行顺序固定为 `PoseToAnchorRuntime(-50) → DynamicObjectAnchor(0) → EvalRecorder(50)`。
 - proto 当前字段名：`color_reprojection`、`render_quality_evaluated`。
 - `score_reprojection`、`score_depth`、`score_mask` 保持当前名；`score_phase`、`score_jump`、`score_reject`、`score_confidence` 已 reserved，不要恢复。
 - `LatestResidualMeters/Degrees` 当前返回 NaN 是为保留 eval schema，不要因此删除 public API。
@@ -210,13 +216,13 @@ Unity 代码地图（关键模块）：
 | `Transport/ZmqTopicPublisher.cs` | NetMQ PUB socket，发 `[topic_utf8, payload]` |
 | `Client/NatsControlClient.cs` | NATS 客户端，sub PoseResult/StatusEvent/Heartbeat |
 | `Quest/StereoFrameSource.cs` | 左右 Passthrough 采集、JPEG 编码、构造 QuestStereoFrame |
-| `Alignment/FramePoseHistory.cs` | `frame_id → capture-time camera pose` 环形缓存（frame-aligned anchor 关键） |
+| `Alignment/FramePoseHistory.cs` | `frame_id → image-time proxy camera pose + payload-ready timing` 环形缓存（frame-aligned anchor 关键） |
 | `Alignment/CameraPoseFrameAligner.cs` | OpenCV camera pose + frame history → Unity world pose |
 | `Client/PoseResultReceiver.cs` | 主线程 latest-drain，解析 PoseResult |
 | `Runtime/AnchorRuntimeHub.cs` | pose/status/heartbeat fan-out；low-score reacquire fan-in |
 | `Runtime/PoseToAnchorRuntime.cs` | camera-space pose → world pose，提交 policy，LateUpdate(-50) 推进 |
 | `Runtime/DynamicObjectAnchor.cs` | 只读 `TryGetOutputPose` 并应用 Transform |
-| `EgoAnchorEval/AnchorEvalRecorder.cs` | capture/render 两条 JSONL；config 摘要通过反射收集 |
+| `Eval/EvalRecorder.cs` | capture/render 两条 JSONL；config 摘要在录制开始时固化，停止后供 manifest 使用 |
 
 ## 协议与生成输出
 
@@ -232,20 +238,21 @@ Unity 代码地图（关键模块）：
 
 ## 论文与评估
 
-论文源：`2026-EgoAnchor-Typst/egoanchor_cn_v5.typ`（当前中文主稿 v5）；参考文献：`egoanchor_cn.bib`；代码事实文档：`egoanchor_code_derived_technical_flow.md`。`docs/architecture/` 已完全删除，系统架构统一维护在 `egoanchor_code_derived_technical_flow.md`。
+论文源：`2026-EgoAnchor-Typst/egoanchor_cn_v6.typ`（当前中文主稿 v6）；参考文献：`egoanchor_cn.bib`；代码事实文档：`egoanchor_code_derived_technical_flow.md`。`docs/architecture/` 已完全删除，系统架构统一维护在 `egoanchor_code_derived_technical_flow.md`。
 
 论文术语基准（后续 AI 不要擅自改）：动态真实物体锚定、目标语义分割、双目立体几何重建、可靠性评分、时空对齐、运动估计与平滑、静止锚定、生命周期管理。
 
 **论文 RQ 结构**（2026-07-07 定稿）：
 - RQ1：静态锚定质量——评估静止场景（长时静止观察、遮挡恢复）下的精度、稳定性、鲁棒性；消融静止锚定机制（Full vs. No-StaticLock，仅在静止观察场景下对比）
-- RQ2：动态追踪能力——评估动态场景（慢速平移、快速挥动、旋转）下的追踪精度、时延影响量化（验证 Δe = v·τ 线性模型）、响应延迟分解
+- RQ2：动态追踪能力——评估动态场景（慢速平移、快速挥动、旋转）下的追踪精度、追踪连续性、有符号 raw 滞后残差与 pre-image `v·τ / ω·τ` 的关系，并同帧比较 *Full* 与 *Raw-ZOH* 的显示误差和响应滞后
 - RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行
 
 **实验表述规范**（2026-07-07）：
-- 消融实验配置用斜体标签：*Full*、*No-StaticLock*、*Frame-aligned*、*Arrival-aligned*
+- 实验配置用斜体标签：*Full*、*No-StaticLock*、*Raw-ZOH*、*Frame-aligned*、*Arrival-aligned*
 - 不使用"条件"描述实验配置，用"系统配置"或"变体"
 - 不用"+"罗列组件（如"运动估计+时序平滑+静止锚定"），改为"包含运动估计、时序平滑与静止锚定"
-- RQ2 不验证"时空对齐是否有效"（太显然），而是验证时延-误差线性关系模型（Δe = v·τ）
+- RQ2 不验证"时空对齐是否有效"。*Frame-aligned* / *Arrival-aligned* 只诊断相机位姿取样时刻错配，不进入物体运动时延主模型。
+- 不用同一 raw pose 在 image/handle 两时刻的误差向量作差验证 `v·τ`：raw pose 会被代数消去，只剩参考运动量。主模型使用 handle-time 有符号 raw 滞后残差，速度与运动轴只从 image 时刻之前的参考轨迹估计；capture-time 有符号残差作为偏置诊断单独报告。
 - 避免冗余表述："进行"、"通过"、"该实验旨在"等啰嗦句式应简化或删除
 - RQ1的消融实验只在静止场景下进行，不涉及动态场景
 
@@ -275,9 +282,9 @@ pixi run python -m egoanchor.eval.research.rq1.analyze --session-dir data/eval/<
 
 **测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py`（marker 合成 + 场景过滤，依赖 metrics 引擎）；`src/egoanchor/eval/tests/test_rq1_plot.py`（纯绘图层，无 cv2，含"默认完整序列不裁剪"用例）。`analyze.py` 直跑时 bootstrap 用 `Path(__file__).resolve().parents[4]`（=`src`）加入 `sys.path`。
 
-**误差口径：实时逐帧对比，不做回溯时延对齐**。误差取渲染时刻锚点输出（`unity_output` 的 `variants[].output_pos/rot`）与同一 tick 采样的控制器真值（`ResolveGtPose(monoMs)` 在 `LateUpdate` 里取）逐帧比较——Unity 侧就是实时同刻采样，Python `eval/metrics/anchor_error.py` 也不做任何时间平移。这样误差如实包含端到端时延影响，与 RQ2 的时延分析口径一致。不要在 RQ1 引入「按 frame_id 回溯到采集时刻真值」的补偿对齐（那会抹掉时延效应，也与代码事实不符）。
+**误差口径：实时逐帧对比，不做回溯时延对齐**。误差取渲染时刻锚点输出（`unity_output` 的 `variants[].output_pos/rot`）与同一 tick 采样的控制器平台参考位姿（`ResolveGtPose(monoMs)` 在 `LateUpdate` 里取）逐帧比较——Unity 侧就是实时同刻采样，Python `eval/metrics/anchor_error.py` 也不做任何时间平移。这样误差如实包含端到端时延影响，与 RQ2 的 display 实时误差口径一致。不要在 RQ1 引入「按 frame_id 回溯到图像时刻参考位姿」的补偿对齐（那会抹掉时延效应，也与代码事实不符）。
 
-**static 图与正文取稳态窗口**。整段 static_observation 含启动沉降（前 ~10s 偏高）与偶发的一次性头动尖峰（~38s 冲到 17mm）。`analyze.write_rq1_figure` 用 `STATIC_STEADY_WINDOW_S`（当前 `(50.0, 75.0)`，相对该场景起点）只裁 static 列（遮挡列完整保留，其尖峰正是 No-StaticLock 缺陷的展示）；论文正文 static 数字与图口径一致，也取该窗口统计。改窗口须图文同步。图重生成绕开 cv2：直接读 `report/anchor_error_detail.csv` 复刻绘图逻辑即可（`egoanchor` 包导入链带 cv2）。
+**static 图与正文默认使用完整序列**。`plot.py::STATIC_STEADY_WINDOW_S` 当前为 `None`，不自动裁剪启动段或头动尖峰；论文正文的“全程”统计与该口径一致。若需要单独报告稳态敏感性分析，显式传入窗口并在图注和正文中说明，不能把最优窗口替换为默认结果。
 
 **论文更新**：§6.1 RQ1 结果用实测值替换占位符，图 `<fig:rq1-static>` 换成 `figs/rq1/*.pdf`；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」；正文措辞为「实时逐帧对比」，不用「时延补偿对齐」。当前实测 session：`20260707_141751_controller_right`（静止约 70s、遮挡约 64s，全程不裁窗）。static_observation（全程）：*Full* 平移中位 5.8 mm / P95 6.6 mm、旋转中位 2.1° / P95 2.9°；抖动 *Full* 0.04 mm vs *No-StaticLock* 0.71 mm 约 18×、旋转抖动 1.71° vs 2.80°。occlusion_recovery（全段）：*Full* 平移中位 5.6 mm / P95 6.7 mm、旋转 P95 4.6°；*No-StaticLock* 平移 P95 19.3 mm 约 2.9×、旋转 P95 17.2°、屏幕漂移 1.6 vs 7.2 px 约 4.5×；生命周期 Coasting 48% / Searching 32% / Frozen 15% / Lost 5%。历史 session `20260707_122900`（曾取 50–75s 稳态窗）已弃用。
 
@@ -289,14 +296,49 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 - `eval/core/run_eval.py` 已从包根迁到 `core/`，脚本直跑时 bootstrap 把 `parents[3]`（=`src`）加入 `sys.path` 才能解析 `egoanchor` 包。
 - **录制状态单一真理是 `EvalSession`**。`EvalSession._recording` 是唯一录制开关；UI（`RQ1StatusUI`）和 `EvalRecorder` 都读它。`EvalSession` 有序列化的 `sessionStarted`/`sessionStopped`（`UnityEvent`，Inspector 可视化挂接），在 `StartSession`/`StopSession` 触发，供 RQ1/RQ2/RQ3 在会话边界做副作用（如清空指标标记）。
 - **`RQ1MetricSelector`（原 `RQ1MetricRecorder`，已更名去混淆）只持有「当前指标」，不拥有录制状态、不写文件**。它只暴露 `CurrentMetric`/`CurrentMetricDuration`/`SetMetric`/`ClearMetric`；`SetMetric` 无任何门槛，按 1/2 永远直接生效。`EvalRecorder`（唯一真正写 JSONL 的）每帧直接读 `CurrentMetric`（未按键即 `none`），字段名 `rq1Selector`。历史坑：该组件曾叫 `RQ1MetricRecorder` 且自持独立 `_recording`，只在 F7 回调里 `StartRecording`，而 `autoStart`（收到首个 PoseResult 自动录制）只翻转 `EvalSession._recording`，导致 UI 显示 Recording 但按键 1/2 报「未录制状态下无法设置指标」，必须手按 F7 才生效。已彻底删除该重复状态——不要恢复 `IsRecording`/`StartRecording`/`StopRecording`，也不要因为「两个都叫 Recorder」把 `RQ1MetricSelector` 当成 `EvalRecorder` 的重复而删除（它是 Python 端按场景分组的唯一标签来源）。
-- `RQ1InputHandler` 只做 1/2/0/F7/F8 输入映射：1 调 `SetMetric(StaticObservation)`、2 调 `SetMetric(OcclusionRecovery)`、0 调 `ClearMetric`、F7/F8 调 `EvalSession.StartSession`/`StopSession`。旧的 3/4/5 键（slow/fast/rotation，已移交 RQ2）已删除。旧的一键搭场景编辑器脚本 `RQ1/Editor/RQ1SceneBuilder.cs` 已删除（构建的中文面板与运行时英文文本漂移），场景直接编辑 `.unity` YAML / Unity MCP 搭建。
+- `RQ1InputHandler` 只做 1/2/0/F7/F8 输入映射：1 调 `SetMetric(StaticObservation)`、2 调 `SetMetric(OcclusionRecovery)`、0 调 `ClearMetric`、F7/F8 调 `EvalSession.StartSession`/`StopSession`。所有动作固定为 `InputActionType.Button`，`OnEnable`/`OnDisable` 必须使用命名回调成对订阅与退订，避免组件反复启用后一次按键触发多次。旧的 3/4/5 键（slow/fast/rotation，已移交 RQ2）已删除。
 - 验证：`pixi run python -m unittest discover -s src -p "test_*.py" -t src`（eval 测试需 `-t src` 才能解析包）。
+
+### RQ2 分析框架
+
+**RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *Raw-ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT；除 motion model、smoothing strategy 和 static lock 外，坐标变换、质量门控、生命周期阈值与 hold-last 语义保持一致。*Raw-ZOH* 不发起 lost/low-score server reacquire，避免参照变体改变共享 Python 感知状态。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *Raw-ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件；`EvalSession` 仍是录制状态唯一真理。
+
+**评估状态与实时监控 UI**：`EvalStatusText` 只统一录制、session、时长和活动行的纯文本格式；`RQ1StatusUI` 与 `RQ2StatusUI` 保留各自业务逻辑，不抽通用 MonoBehaviour 基类。`EvalLiveStats` 位于 `Eval/` 根目录，RQ1/RQ2 场景各保留一个实例，必须挂在右侧 `LiveStatus` 对象并绑定 `recorder` 与 `statsText`。它读取主变体的观测年龄、pose 更新率、实时误差、帧间变化、可靠性分数和锚定状态；RQ2 的帧间变化包含真实运动，不能解释为纯噪声。完整采集流程和按键语义统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
+
+output 顶层试次字段：
+- `rq2_condition`：`none | slow_translation | fast_motion | rotation`
+- `rq2_trial_id`：session 内递增正整数；空闲时为 `-1`
+- `rq2_target_linear_speed_m_s` / `rq2_target_angular_speed_deg_s`：协议目标速度元数据；不适用时写 JSON `null`，实际模型始终使用平台参考轨迹拟合速度
+
+RQ2 不设 warmup/motion/cooldown phase。按 `1/2/3` 后 trial 立即生效，按 `0` 结束；Python 仅以合法 `rq2_condition` 和正 `rq2_trial_id` 识别有效试次。上述四个 RQ2 顶层字段均为当前必需契约；缺字段或仍含 `rq2_phase` 的旧日志直接报错，不做兼容。
+
+**图像时间边界**：Quest Passthrough Camera API 当前无可直接使用的硬件曝光时间戳。`StereoFrameSource.cameraPoseDelayFrames=1` 以前一成功采集样本估计图像时刻；论文和分析都必须称其为 image-time proxy，不得称硬件曝光真值或假定固定 33 ms。纹理复用、采集失败与调度会改变一次样本回退的物理时长；正式 RQ2 需做 0/1/2 个成功采集样本回退的敏感性分析。
+
+**分析代码**：`src/egoanchor/eval/research/rq2/core.py` 实现指标，`rq2/__init__.py` 显式 re-export 包级 API，`rq2/analyze.py` 只承担 CLI，避免 `python -m` 重复导入 warning。核心 API：
+- `build_source_observations(logs)`：只从 `is_primary=true` 的主变体按 `trial × source_frame_id` 保留首次出现的 aligned raw pose，并插值 image-time 参考 pose；各显示变体共享这份感知诊断
+- `compute_motion_delay(source, output)`：生成 reference motion 暴露量、capture/handle/render 有符号 raw 滞后残差及 pre-image `v·τ / ω·τ` 预测量
+- `compute_trial_summary(output, source)`：按 `trial × label` 汇总 display/raw 误差、有效样本数、availability、显示更新率、保持比例、可识别时延与 display/raw lag；显示指标统一使用 `display_*` 字段，不保留旧 `full_*` 列。`display_update_rate_hz` 统计有效相邻渲染帧中的 pose 变化事件率，`display_hold_fraction` 统计同一 pose 样本对比例；相邻变化不超过 `1e-6 m / 1e-4 deg` 时判为保持
+- `compute_model_summary(motion)`：trial 级 bias/MAE 与场景级 slope/intercept；固定种子 1000 次 trial-cluster bootstrap，少于 3 个 trial 时 CI 为 NaN
+- `run_rq2_analysis(session_dir, report_dir=None)`：写五张 RQ2 CSV 并返回表映射
+
+输出表：`rq2_source_error.csv`、`rq2_motion_delay.csv`、`rq2_trial_summary.csv`、`rq2_latency_summary.csv`、`rq2_model_summary.csv`。
+
+pre-image 运动拟合只使用图像时间代理之前固定 400 ms：位置采用 Theil-Sen 稳健斜率，旋转采用相邻四元数的世界系 SO(3) log / dt 中位。GT 轨迹保留显式有效 segment，GT 插值、pre-image 拟合与 lag 均不得跨参考位姿无效空窗；lag 还不得跨 tracking/reacquire 缺口。输出连续段阈值为 `max(100 ms, 2.5 × median interval)`，绝对上限 500 ms。lag 至少需要 16 个速度样本且观察长度覆盖候选搜索范围；峰值归一化相关低于 0.5、Bonferroni 校正后 `p > 0.05`、落在搜索边界或信号近似匀速/低激励时返回 NaN。
+
+**运行命令**：
+```bash
+cd EgoAnchor_Python
+pixi run python -m egoanchor.eval.research.rq2.analyze --session-dir data/eval/<session_id>
+```
+
+**参考系统边界**：RQ1/RQ2 的控制器 pose 是平台参考位姿，不是独立外部高精度真值。正式报告需给出模型到控制器追踪原点的固定外参标定残差、重复标定一致性、平台参考更新率，并承认控制器与头显共享追踪系统会隐藏共同世界系漂移。
 
 ## 环境与依赖
 
 - Python：`EgoAnchor_Python/pixi.toml`，Python 3.14、CUDA 13.2 conda 组件、PyTorch 2.12.1 cu130、TensorRT 11、ultralytics/YOLOE、nats-py、Cutie、SAM3 等；CUDA 13.2 不在 `workspace.platforms` 内联，Windows 用精确 conda 组件声明，Linux 用 `cuda-toolkit`。4090 Linux 当前 Pixi 仍不接受 `platforms = [{ platform = "linux-64", glibc = "2.35" }]` 这种 inline table，新 Pixi 0.72+ 又会对 `[system-requirements]` 报弃用 warning；为兼容两台当前机器，`pixi.toml` 暂时保留 `platforms = ["win-64", "linux-64"]` 和 `[system-requirements] libc = { family = "glibc", version = "2.35" }`。只有确认 4090/5090 都升级到支持 rich platform entry 的 Pixi 后，才把 glibc 迁回 `platforms`。Pixi 0.72+ 下 `nvdiffrast` 不放进 `[pypi-dependencies]`，必须由 `pixi run _build-nvdiffrast` 在激活环境内以 `--no-build-isolation --no-deps` 编译安装，从而复用当前环境的 torch/CUDA/MSVC。Windows 使用 `vs2026_win-64` 提供 `vswhere` 和 MSVC activate.d 脚本；`_ensure-msvc-buildtools` 的 winget 检查/安装逻辑直接内联在 `pixi.toml`，`_build-nvdiffrast` 在 `pixi.toml` 内联 PowerShell 中刷新 VS2026/MSVC/CUDA，`_build-fp` 调用 `FoundationPose/mycpp/build_msvc.py`；不要把这些构建变量放进 activation，否则会破坏 `pixi shell`。OpenCV Python 绑定统一使用 PyPI `opencv-python`，不要同时加入 conda `opencv/libopencv` 或 PyPI `opencv-contrib-python`，避免 Pixi 0.72+ 的覆盖警告。Windows 重建 `.pixi/envs/default` 失败时先关闭 VS Code Python LSP 和残留 Python 进程，避免文件占用。
 - 环境配置和跨平台安装步骤统一写在 `EgoAnchor_Python/docs/windows-prerequisites.md`；后续若再改 Python / CUDA / Torch / TensorRT / MSVC / build task，同步更新这份文档。
 - Unity：`EgoAnchor_Unity/Packages/manifest.json`，主线依赖 Google.Protobuf、NATS.Net、NetMQ。
+- Unity MCP：Codex VS Code 插件与 CLI 使用仓库级 `.codex/config.toml`，不读取根目录 `.mcp.json`。不要只用 `codex mcp add` 写 `~/.codex/config.toml`，当前插件的 provider-sync 会覆盖该文件。本机使用 HTTP Local，项目配置启用 `rmcp_client` 并把 `unityMCP` 指向 `http://127.0.0.1:8080/mcp`。Unity 侧 `Window > MCP for Unity` 的 transport 也必须选择 HTTP 并启动本地服务；若误选 Stdio，即使 8080 MCP 端点可访问，`mcpforunity://instances` 仍会返回 `instance_count: 0`。修改配置后需重启 Codex 或重新加载 VS Code 窗口。用 `codex mcp get unityMCP` 检查客户端配置，服务正常时该端点会响应 MCP 握手。
 
 ## Git 忽略规则
 

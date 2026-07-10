@@ -4,7 +4,9 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using EgoAnchor.Alignment;
+using EgoAnchor.Client;
 using EgoAnchor.Eval.RQ1;
+using EgoAnchor.Eval.RQ2;
 using EgoAnchor.Policy;
 using EgoAnchor.Quest;
 using EgoAnchor.Runtime;
@@ -30,6 +32,10 @@ namespace EgoAnchor.Eval
         [Tooltip("实际用于显示/评估的 Anchor Transform；日志直接记录其 world pose。")]
         public Transform anchorTransform;
 
+        /// <summary>控制实际显示与 hold-last 行为的组件，用于区分 runtime 输出和用户可见 pose。</summary>
+        [Tooltip("控制该 Transform 显示行为的 DynamicObjectAnchor；用于记录 hold-last 或隐藏状态。")]
+        public DynamicObjectAnchor anchorPresenter;
+
         /// <summary>是否为主变体；主变体额外记录 aligned raw / arrival-time raw / reliability。</summary>
         [Tooltip("是否为主变体；主变体额外记录 aligned raw 和 reliability score。")]
         public bool isPrimary;
@@ -38,10 +44,11 @@ namespace EgoAnchor.Eval
     /// <summary>
     /// EgoAnchor 评估数据记录器。
     /// <para>
-    /// - 订阅 <see cref="StereoFrameSource.FrameCaptured"/> 事件，在采集帧时写 unity_capture 行；<br/>
+    /// - 接收发布器的发送尝试通知，在采集帧时写 unity_capture 行；<br/>
     /// - 在 <c>LateUpdate</c> 每渲染 tick 写 unity_output 行（含各变体输出和 GT 速度）。
     /// </para>
     /// </summary>
+    [DefaultExecutionOrder(50)]
     public sealed class EvalRecorder : MonoBehaviour
     {
         // ── References ──
@@ -64,8 +71,12 @@ namespace EgoAnchor.Eval
         [Tooltip("Quest stereo 采集源；必须与运行时发送图像的 StereoFrameSource 是同一个实例。")]
         [SerializeField] private StereoFrameSource stereoSource;
 
-        /// <summary>frame_id → capture-time pose/timing 缓存，用于 source_capture_mono_ms。</summary>
-        [Tooltip("frame_id → capture-time pose 缓存；必须与 StereoFrameSource / PoseToAnchorRuntime 共用同一实例。")]
+        /// <summary>Quest stereo 发布入口；提供紧邻 ZMQ TrySend 的发布尝试时刻。</summary>
+        [Tooltip("Quest stereo 发布入口；用于记录 ZMQ 发布尝试时刻和成功标志。")]
+        [SerializeField] private QuestStreamPublisher streamPublisher;
+
+        /// <summary>frame_id → 图像时刻 pose/timing 缓存，用于 source_capture_mono_ms。</summary>
+        [Tooltip("frame_id → image-time proxy pose 缓存；必须与 StereoFrameSource / PoseToAnchorRuntime 共用同一实例。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>
@@ -86,6 +97,11 @@ namespace EgoAnchor.Eval
         [Header("RQ1 Metrics (Optional)")]
         [Tooltip("可选：RQ1 指标选择器；若绑定，则在 output 行中记录当前指标。")]
         [SerializeField] private RQ1MetricSelector rq1Selector;
+
+        /// <summary>可选：RQ2 试次选择器，提供当前场景、编号和目标速度。</summary>
+        [Header("RQ2 Trial (Optional)")]
+        [Tooltip("可选：RQ2 试次选择器；若绑定，则在 output 行中记录当前试次上下文。")]
+        [SerializeField] private RQ2TrialSelector rq2Selector;
 
         // ── State ──
 
@@ -109,8 +125,20 @@ namespace EgoAnchor.Eval
         private Pose _lastTrackedGtPose;
         private double _lastTrackedGtMonoMs = -1.0;
 
+        /// <summary>当前渲染 tick 复用的系统变体快照缓冲。</summary>
         private readonly List<EvalVariantSnapshot> _snapshots = new List<EvalVariantSnapshot>();
+
+        /// <summary>录制期间按标签缓存的配置 hash，避免逐帧反射读取组件参数。</summary>
         private readonly Dictionary<string, string> _configHashCache = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>会话开始时固定的变体标签，供停止后写 manifest。</summary>
+        private readonly List<string> _manifestVariantLabels = new List<string>();
+
+        /// <summary>会话开始时固定的变体配置，避免 runtime 销毁后摘要退化为空值。</summary>
+        private readonly List<EvalVariantConfig> _manifestVariantConfigs = new List<EvalVariantConfig>();
+
+        /// <summary>当前是否已经保存可供 manifest 使用的会话配置快照。</summary>
+        private bool _hasManifestMetadataSnapshot;
 
         // ── Public API ──
 
@@ -120,7 +148,7 @@ namespace EgoAnchor.Eval
         /// <summary>GT 来源标识，写入 manifest。</summary>
         public string GtSource => groundTruth != null ? "transform" : "transform_missing";
 
-        // ── 实时遥测访问器（供 RQ1LiveStats 读取，不写文件、不改状态） ──
+        // ── 实时遥测访问器（供 EvalLiveStats 读取，不写文件、不改状态） ──
 
         /// <summary>
         /// 主变体 runtime：isPrimary=true 的第一个；都没有则取列表首个。
@@ -148,7 +176,7 @@ namespace EgoAnchor.Eval
             }
         }
 
-        /// <summary>frame_id → 采集时刻 pose/时间缓存，用于反查 SenderMonoMs 算端到端时延。</summary>
+        /// <summary>frame_id → 图像时间代理 pose/时间缓存，用于反查 ImageMonoMs 算观测年龄。</summary>
         public FramePoseHistory FrameHistory => framePoseHistory;
 
         /// <summary>
@@ -198,6 +226,12 @@ namespace EgoAnchor.Eval
         {
             if (labels == null) return;
             labels.Clear();
+            if (_hasManifestMetadataSnapshot)
+            {
+                labels.AddRange(_manifestVariantLabels);
+                return;
+            }
+
             for (int i = 0; i < variants.Count; i++)
                 labels.Add(ResolveLabel(variants[i], i));
         }
@@ -207,6 +241,12 @@ namespace EgoAnchor.Eval
         {
             if (configs == null) return;
             configs.Clear();
+            if (_hasManifestMetadataSnapshot)
+            {
+                configs.AddRange(_manifestVariantConfigs);
+                return;
+            }
+
             for (int i = 0; i < variants.Count; i++)
             {
                 EvalVariant v = variants[i];
@@ -222,6 +262,7 @@ namespace EgoAnchor.Eval
             _captureLog = new EvalLog(capturePath);
             _outputLog  = new EvalLog(outputPath);
             RefreshConfigHashCache();
+            CaptureManifestMetadata();
             _hasLastGt = false;
             _lastTrackedGtMonoMs = -1.0;
             _recording = true;
@@ -243,12 +284,14 @@ namespace EgoAnchor.Eval
 
         private void OnEnable()
         {
-            if (stereoSource != null) stereoSource.FrameCaptured += OnFrameCaptured;
+            if (streamPublisher != null)
+                streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
         }
 
         private void OnDisable()
         {
-            if (stereoSource != null) stereoSource.FrameCaptured -= OnFrameCaptured;
+            if (streamPublisher != null)
+                streamPublisher.StereoPublishAttempted -= RecordCapturePublishAttempt;
         }
 
         private void OnDestroy() => StopRecording();
@@ -260,22 +303,35 @@ namespace EgoAnchor.Eval
 
         // ── 采集事件：写 capture 行 ──
 
-        private void OnFrameCaptured(long frameId, double captureMonoMs)
+        /// <param name="timing">本帧图像时间代理与 payload-ready 时间。</param>
+        public void RecordCapturePublishAttempt(
+            FrameCaptureTiming timing,
+            double publishAttemptMonoMs,
+            bool publishSucceeded)
         {
             if (!_recording || _captureLog == null) return;
 
             FramePoseRecord fr = default;
-            bool hasFrameRecord = framePoseHistory != null && framePoseHistory.TryGet(frameId, out fr);
+            bool hasFrameRecord = framePoseHistory != null && framePoseHistory.TryGet(timing.FrameId, out fr);
             Pose cameraPose = Pose.identity;
             bool cameraValid = hasFrameRecord && fr.TryGetCameraPose(alignmentRef, out cameraPose);
 
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            (bool gtValid, Pose gtPose) = ResolveGtPose(captureMonoMs);
+            double gtSampleMonoMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
+            (bool gtValid, Pose gtPose) = ResolveGtPose(gtSampleMonoMs);
             Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
             _captureLog.Write(EvalJson.BuildCaptureLine(
-                frameId, captureMonoMs, unixMs,
-                hasFrameRecord ? fr.UnityFrame : UnityEngine.Time.frameCount,
+                timing.FrameId,
+                hasFrameRecord ? fr.ImageMonoMs : timing.ImageMonoMs,
+                unixMs,
+                hasFrameRecord ? fr.ImageUnityFrame : timing.ImageUnityFrame,
+                hasFrameRecord ? fr.SenderMonoMs : timing.SenderMonoMs,
+                hasFrameRecord ? fr.SenderUnityFrame : timing.SenderUnityFrame,
+                gtSampleMonoMs,
+                timing.ImageTimeOffsetFrames,
+                publishAttemptMonoMs,
+                publishSucceeded,
                 headPose, cameraValid, cameraPose,
                 gtValid, gtPose,
                 alignmentRef.ToString()));
@@ -315,12 +371,27 @@ namespace EgoAnchor.Eval
                 rq1MetricDuration = rq1Selector.CurrentMetricDuration;
             }
 
+            // 获取 RQ2 试次上下文（如果有）；未绑定或未开始试次时使用显式空闲值。
+            string rq2Condition = "none";
+            int rq2TrialId = -1;
+            float rq2TargetLinearSpeed = float.NaN;
+            float rq2TargetAngularSpeed = float.NaN;
+            if (rq2Selector != null)
+            {
+                rq2Condition = rq2Selector.CurrentCondition.ToLogString();
+                rq2TrialId = rq2Selector.CurrentTrialId;
+                rq2TargetLinearSpeed = rq2Selector.TargetLinearSpeedMs;
+                rq2TargetAngularSpeed = rq2Selector.TargetAngularSpeedDegS;
+            }
+
             long sourceFrameId = BuildSnapshots();
             _outputLog.Write(EvalJson.BuildOutputLine(
                 monoMs, unixMs, UnityEngine.Time.frameCount, sourceFrameId,
                 headPose, gtValid, gtPose,
                 gtLinear, gtAngular, _snapshots,
-                rq1Metric, rq1MetricDuration));
+                rq1Metric, rq1MetricDuration,
+                rq2Condition, rq2TrialId,
+                rq2TargetLinearSpeed, rq2TargetAngularSpeed));
         }
 
         // ── 内部辅助 ──
@@ -337,9 +408,23 @@ namespace EgoAnchor.Eval
                 PoseToAnchorRuntime rt = ev.runtime;
                 string label = ResolveLabel(ev, i);
 
-                bool hasOut = ev.anchorTransform != null;
-                Pose outPose = hasOut ? new Pose(ev.anchorTransform.position, ev.anchorTransform.rotation) : Pose.identity;
-                string poseSource = hasOut ? "transform" : "none";
+                bool hasRuntimeOutput = rt != null && rt.TryGetOutputPose(out _);
+                DynamicObjectAnchor presenter = ev.anchorPresenter != null
+                    ? ev.anchorPresenter
+                    : rt != null ? rt.GetComponent<DynamicObjectAnchor>() : null;
+                Pose displayPose = Pose.identity;
+                bool hasDisplayPose = presenter != null
+                    ? presenter.TryGetDisplayPose(out displayPose)
+                    : hasRuntimeOutput && ev.anchorTransform != null;
+                if (presenter == null)
+                {
+                    displayPose = hasDisplayPose
+                        ? new Pose(ev.anchorTransform.position, ev.anchorTransform.rotation)
+                        : Pose.identity;
+                }
+                string poseSource = hasDisplayPose
+                    ? (hasRuntimeOutput ? "transform" : "hold_last")
+                    : "none";
 
                 bool hasRaw = false;
                 Pose rawPose = Pose.identity;
@@ -356,9 +441,13 @@ namespace EgoAnchor.Eval
 
                 _snapshots.Add(new EvalVariantSnapshot(
                     label, ev.isPrimary, srcFrame,
-                    hasOut, outPose, poseSource,
-                    hasTiming, hasTiming ? fr.SenderMonoMs : double.NaN,
-                    hasTiming ? fr.UnityFrame : -1,
+                    hasRuntimeOutput, hasDisplayPose, displayPose, poseSource,
+                    hasTiming, hasTiming ? fr.ImageMonoMs : double.NaN,
+                    hasTiming ? fr.ImageUnityFrame : -1,
+                    rt != null ? rt.LatestObservationAgeMs             : double.NaN,
+                    rt != null ? rt.LatestPolicyOutputTargetMonoMs     : double.NaN,
+                    rt != null ? rt.LatestSmoothingDelayMs             : double.NaN,
+                    rt != null ? rt.LatestUnityPoseHandleMonoMs        : double.NaN,
                     rt != null ? rt.CurrentAnchorState.ToString()   : "MissingRuntime",
                     rt != null ? rt.LatestPolicyAction               : string.Empty,
                     rt != null ? rt.LatestPolicyReason               : string.Empty,
@@ -399,6 +488,24 @@ namespace EgoAnchor.Eval
                 string label = ResolveLabel(variants[i], i);
                 _configHashCache[label] = BuildVariantConfig(variants[i], label).ConfigHash;
             }
+        }
+
+        /// <summary>
+        /// 在录制开始时固定 manifest 所需的变体标签与配置。
+        /// 停止录制后保留该快照，直至下一次录制开始并用新配置覆盖。
+        /// </summary>
+        private void CaptureManifestMetadata()
+        {
+            _manifestVariantLabels.Clear();
+            _manifestVariantConfigs.Clear();
+            for (int i = 0; i < variants.Count; i++)
+            {
+                EvalVariant variant = variants[i];
+                string label = ResolveLabel(variant, i);
+                _manifestVariantLabels.Add(label);
+                _manifestVariantConfigs.Add(BuildVariantConfig(variant, label));
+            }
+            _hasManifestMetadataSnapshot = true;
         }
 
         private string ResolveCachedConfigHash(EvalVariant v, string label)

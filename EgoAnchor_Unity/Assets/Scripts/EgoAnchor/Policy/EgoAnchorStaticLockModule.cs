@@ -108,7 +108,7 @@ namespace EgoAnchor.Policy
         [SerializeField] private float headMaxToleranceFactor = 4.0f;
 
         /// <summary>头停后冻结解锁判定的沉降时长，单位秒 (帧率无关)。</summary>
-        [Tooltip("头停沉降冻结时长 (秒)：头动期间 + 头停后此时长内, 冻结所有\"判物体在动→解锁\"的证据 (速度逃逸/漂移租绳/CUSUM)。修\"头扫静止物体后头一停 static 就脱开\": 头停时容忍系数瞬间收紧, 但 head-slip 还残留在观测共识里, 不冻结就会误解锁。取 ~2~3× 证据半衰期 (evidenceHalfLife=0.27) 让 slip 充分褪去。越大头停后越稳但物体真动响应越慢。0=关闭。默认 0.6。")]
+        [Tooltip("头停沉降冻结时长 (秒)：仅在头已停下但沉降计时尚未结束时，冻结速度逃逸、漂移租绳和 CUSUM 解锁证据。头动期间只放宽阈值，不冻结真运动证据。取约 2~3 倍证据半衰期，让残余 head-slip 衰减。越大头停后越稳，但此窗口内物体真动响应越慢。0=关闭。默认 0.6。")]
         [SerializeField] private float headSettleSeconds = 0.6f;
 
         /// <summary>距离自适应位置容忍参考距离 (m)：此距离以内不放大。</summary>
@@ -142,6 +142,12 @@ namespace EgoAnchor.Policy
 
         /// <summary>当前是否锁定 (供 eval 的 latest_static_locked)。</summary>
         public bool IsLocked => lockEnabled && staticLock.IsLocked;
+
+        /// <summary>
+        /// 当前最终输出是否会覆盖 smoothing candidate pose。
+        /// 锁定冻结或解锁接缝期间都返回 true；未启用模块时始终返回 false。
+        /// </summary>
+        public bool OverridesSmoothingPose => lockEnabled && (staticLock.IsLocked || staticLock.IsSeamActive);
 
         /// <summary>收到一帧被接受的观测时调用 (host 在 motion model 更新后)。未启用则忽略。</summary>
         public void OnObservation(in Pose worldPose, float score, double measurementTimeSeconds, bool hasHeadPose, in Pose headPose)

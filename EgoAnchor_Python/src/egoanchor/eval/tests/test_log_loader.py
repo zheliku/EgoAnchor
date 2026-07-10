@@ -9,8 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
-from egoanchor.eval.io.log_loader import join_by_frame, label_conditions, load_session
-from egoanchor.eval.io.schemas import SchemaError, VariantRow
+from egoanchor.eval.io import SchemaError, VariantRow, join_by_frame, label_conditions, load_session
+from egoanchor.eval.metrics import compute_latency
 
 
 class LogLoaderTest(unittest.TestCase):
@@ -30,6 +30,13 @@ class LogLoaderTest(unittest.TestCase):
             self.assertTrue(bool(logs.capture.loc[1, "valid"]))
             self.assertFalse(bool(logs.capture.loc[2, "valid"]))
             self.assertEqual(int(logs.capture.loc[1, "capture_unity_frame"]), 10)
+            self.assertAlmostEqual(float(logs.capture.loc[1, "sender_mono_ms"]), 104.0)
+            self.assertEqual(int(logs.capture.loc[1, "sender_unity_frame"]), 11)
+            self.assertEqual(logs.capture.loc[1, "image_time_basis"], "camera_pose_history_proxy")
+            self.assertEqual(int(logs.capture.loc[1, "image_time_offset_frames"]), 1)
+            self.assertAlmostEqual(float(logs.capture.loc[1, "publish_attempt_mono_ms"]), 106.0)
+            self.assertTrue(bool(logs.capture.loc[1, "publish_succeeded"]))
+            self.assertAlmostEqual(float(logs.capture.loc[1, "gt_sample_mono_ms"]), 105.0)
             self.assertEqual(logs.capture.loc[1, "camera_reference"], "Left")
             np.testing.assert_allclose(logs.capture.loc[1, "gt_pos"], np.array([0.1, 0.2, 0.3]))
 
@@ -53,6 +60,17 @@ class LogLoaderTest(unittest.TestCase):
             np.testing.assert_allclose(primary["arrival_time_raw_pos"], np.array([1.2, 2.2, 3.2]))
             self.assertAlmostEqual(float(primary["arrival_time_raw_mono_ms"]), 125.0)
             self.assertEqual(primary["arrival_time_camera_reference"], "Left")
+            self.assertAlmostEqual(float(primary["observation_age_ms"]), 30.0)
+            self.assertAlmostEqual(float(primary["policy_output_target_mono_ms"]), 80.0)
+            self.assertAlmostEqual(float(primary["smoothing_delay_ms"]), 20.0)
+            self.assertAlmostEqual(float(primary["unity_pose_handle_mono_ms"]), 100.0)
+            self.assertTrue(bool(primary["has_display_pose"]))
+            np.testing.assert_allclose(primary["display_pos"], [1.0, 2.0, 3.0])
+            self.assertEqual(primary["rq2_condition"], "none")
+            self.assertEqual(int(primary["rq2_trial_id"]), -1)
+            self.assertNotIn("rq2_phase", logs.output.columns)
+            self.assertTrue(np.isnan(float(primary["rq2_target_linear_speed_m_s"])))
+            self.assertTrue(np.isnan(float(primary["rq2_target_angular_speed_deg_s"])))
 
             self.assertEqual(list(logs.pose.index), [1, 2])
             self.assertEqual(logs.pose.loc[1, "pose_matrix_cv_camera"].shape, (4, 4))
@@ -74,6 +92,36 @@ class LogLoaderTest(unittest.TestCase):
             self.assertFalse(bool(joined.loc[2, "valid"]))
             self.assertAlmostEqual(float(joined.loc[1, "pose_yolo_ms"]), 2.0)
 
+    def test_latency_preserves_new_time_decomposition(self) -> None:
+        """共享 latency 表应保留观测、策略目标与平滑延迟语义。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = load_session(self._write_session(Path(tmp)))
+
+            detail, summary = compute_latency(logs.output, logs.pose)
+
+            row = detail[(detail["label"] == "kalman") & (detail["frame_id"] == 1)].iloc[0]
+            self.assertAlmostEqual(float(row["image_to_handle_ms"]), 0.0)
+            self.assertAlmostEqual(float(row["effective_policy_delay_ms"]), 20.0)
+            self.assertAlmostEqual(float(row["observation_age_ms"]), 30.0)
+            self.assertAlmostEqual(float(row["smoothing_delay_ms"]), 20.0)
+            self.assertIn("image_to_handle_p50_ms", summary.columns)
+            self.assertIn("effective_policy_delay_p50_ms", summary.columns)
+
+    def test_latency_first_apply_requires_real_output_pose(self) -> None:
+        """只有 runtime 声明有输出 pose 的 source 首现行才可称为 apply。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = load_session(self._write_session(Path(tmp)))
+            output = logs.output.copy()
+            rejected = (output["label"] == "kalman") & (output["source_frame_id"] == 1)
+            output.loc[rejected, "has_output_pose"] = False
+
+            detail, _ = compute_latency(output, logs.pose)
+
+            kept = (detail["label"] == "kalman") & (detail["frame_id"] == 1)
+            self.assertFalse(kept.any())
+
     def test_label_conditions_assigns_manifest_spans(self) -> None:
         """label_conditions 应根据 manifest condition_spans 给行打标签。"""
 
@@ -88,6 +136,20 @@ class LogLoaderTest(unittest.TestCase):
             self.assertEqual(output.iloc[0]["condition"], "static")
             self.assertEqual(output.iloc[-1]["condition"], "object_motion")
 
+    def test_label_conditions_prefers_active_rq2_trial(self) -> None:
+        """有效 RQ2 试次标签应覆盖 manifest 的通用时间段标签。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = load_session(self._write_session(Path(tmp)))
+            output = logs.output.copy()
+            output.loc[output["tick_index"] == 0, "rq2_condition"] = "rotation"
+            output.loc[output["tick_index"] == 0, "rq2_trial_id"] = 8
+
+            labeled = label_conditions(output, logs.manifest, "render_mono_ms")
+
+            self.assertTrue((labeled.loc[labeled["tick_index"] == 0, "condition"] == "rotation").all())
+            self.assertTrue((labeled.loc[labeled["tick_index"] == 1, "condition"] == "object_motion").all())
+
     def test_missing_required_field_raises_clear_schema_error(self) -> None:
         """缺少必需字段时应抛 SchemaError，并指出具体字段。"""
 
@@ -99,6 +161,44 @@ class LogLoaderTest(unittest.TestCase):
             capture_path.write_text(json.dumps(bad_row, ensure_ascii=False) + "\n", encoding="utf-8")
 
             with self.assertRaisesRegex(SchemaError, "gt_pos"):
+                load_session(session_dir)
+
+    def test_output_requires_current_rq2_trial_contract(self) -> None:
+        """unity_output 缺少任一当前 RQ2 试次字段时应拒绝旧日志。"""
+
+        for field in (
+            "rq2_condition",
+            "rq2_trial_id",
+            "rq2_target_linear_speed_m_s",
+            "rq2_target_angular_speed_deg_s",
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                session_dir = self._write_session(Path(tmp))
+                output_path = session_dir / "session-a_unity_output.jsonl"
+                rows = [
+                    json.loads(line)
+                    for line in output_path.read_text(encoding="utf-8").splitlines()
+                ]
+                rows[0].pop(field)
+                self._write_jsonl(output_path, rows)
+
+                with self.assertRaisesRegex(SchemaError, field):
+                    load_session(session_dir)
+
+    def test_output_rejects_removed_rq2_phase(self) -> None:
+        """带 rq2_phase 的旧 unity_output 应明确报错，不应静默忽略。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = self._write_session(Path(tmp))
+            output_path = session_dir / "session-a_unity_output.jsonl"
+            rows = [
+                json.loads(line)
+                for line in output_path.read_text(encoding="utf-8").splitlines()
+            ]
+            rows[0]["rq2_phase"] = "motion"
+            self._write_jsonl(output_path, rows)
+
+            with self.assertRaisesRegex(SchemaError, "rq2_phase.*已删除"):
                 load_session(session_dir)
 
     def test_variant_reads_module_keys(self) -> None:
@@ -123,11 +223,16 @@ class LogLoaderTest(unittest.TestCase):
             "quality_gate": "disabled",
             "motion_model": "kalman",
             "smoothing_strategy": "blend",
+            "predict_ahead_ms": 120.0,
         }
         variant = VariantRow.from_dict(row)
         self.assertEqual(variant.quality_gate, "disabled")
         self.assertEqual(variant.motion_model, "kalman")
         self.assertEqual(variant.smoothing_strategy, "blend")
+        self.assertTrue(np.isnan(variant.observation_age_ms))
+        self.assertTrue(np.isnan(variant.policy_output_target_mono_ms))
+        self.assertTrue(np.isnan(variant.smoothing_delay_ms))
+        self.assertTrue(np.isnan(variant.unity_pose_handle_mono_ms))
 
     def _write_session(self, root: Path) -> Path:
         """写入一个最小可 join 的评估 session。"""
@@ -165,6 +270,13 @@ class LogLoaderTest(unittest.TestCase):
                 "capture_mono_ms": 100.0,
                 "capture_unix_ms": 1000.0,
                 "capture_unity_frame": 10,
+                "sender_mono_ms": 104.0,
+                "sender_unity_frame": 11,
+                "gt_sample_mono_ms": 105.0,
+                "image_time_basis": "camera_pose_history_proxy",
+                "image_time_offset_frames": 1,
+                "publish_attempt_mono_ms": 106.0,
+                "publish_succeeded": True,
                 "head_pos": [0.0, 0.0, 0.0],
                 "head_rot": [0.0, 0.0, 0.0, 1.0],
                 "cam_valid": True,
@@ -182,6 +294,13 @@ class LogLoaderTest(unittest.TestCase):
                 "capture_mono_ms": 130.0,
                 "capture_unix_ms": 1030.0,
                 "capture_unity_frame": 11,
+                "sender_mono_ms": 134.0,
+                "sender_unity_frame": 12,
+                "gt_sample_mono_ms": 135.0,
+                "image_time_basis": "camera_pose_history_proxy",
+                "image_time_offset_frames": 1,
+                "publish_attempt_mono_ms": 136.0,
+                "publish_succeeded": False,
                 "head_pos": [0.0, 0.1, 0.0],
                 "head_rot": [0.0, 0.0, 0.0, 1.0],
                 "cam_valid": True,
@@ -251,6 +370,10 @@ class LogLoaderTest(unittest.TestCase):
             "gt_rot": [0.0, 0.0, 0.0, 1.0],
             "gt_pose_valid": True,
             "gt_pose_source": "transform",
+            "rq2_condition": "none",
+            "rq2_trial_id": -1,
+            "rq2_target_linear_speed_m_s": None,
+            "rq2_target_angular_speed_deg_s": None,
             "variants": [
                 {
                     "label": "kalman",
@@ -259,6 +382,9 @@ class LogLoaderTest(unittest.TestCase):
                     "has_output_pose": True,
                     "output_pos": [1.0, 2.0, 3.0],
                     "output_rot": [0.0, 0.0, 0.0, 1.0],
+                    "has_display_pose": True,
+                    "display_pos": [1.0, 2.0, 3.0],
+                    "display_rot": [0.0, 0.0, 0.0, 1.0],
                     "anchor_pose_source": "transform",
                     "has_source_capture_timing": True,
                     "source_capture_mono_ms": 100.0,
@@ -277,6 +403,10 @@ class LogLoaderTest(unittest.TestCase):
                     "latest_residual_degrees": 0.0,
                     "latest_accepted_score": 0.8,
                     "latest_static_locked": False,
+                    "observation_age_ms": 30.0,
+                    "policy_output_target_mono_ms": 80.0,
+                    "smoothing_delay_ms": 20.0,
+                    "unity_pose_handle_mono_ms": 100.0,
                     "has_aligned_raw": True,
                     "aligned_raw_pos": [1.1, 2.1, 3.1],
                     "aligned_raw_rot": [0.0, 0.0, 0.0, 1.0],
@@ -295,6 +425,9 @@ class LogLoaderTest(unittest.TestCase):
                     "has_output_pose": True,
                     "output_pos": [1.1, 2.1, 3.1],
                     "output_rot": [0.0, 0.0, 0.0, 1.0],
+                    "has_display_pose": True,
+                    "display_pos": [1.1, 2.1, 3.1],
+                    "display_rot": [0.0, 0.0, 0.0, 1.0],
                     "anchor_pose_source": "transform",
                     "has_source_capture_timing": True,
                     "source_capture_mono_ms": 100.0,

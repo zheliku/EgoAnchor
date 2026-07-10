@@ -42,7 +42,7 @@ namespace EgoAnchor.Eval.RQ1
             }
         }
 
-        /// <summary>设置当前指标（按键 1-5 调用）；与上次相同则忽略。</summary>
+        /// <summary>设置当前指标（按键 1/2 调用）；与上次相同则忽略。</summary>
         public void SetMetric(RQ1MetricType type)
         {
             if (type == _currentMetric) return;

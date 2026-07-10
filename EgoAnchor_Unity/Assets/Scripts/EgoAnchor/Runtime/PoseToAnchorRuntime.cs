@@ -34,9 +34,9 @@ namespace EgoAnchor.Runtime
             AlignFailed,
         }
 
-        /// <summary>frame_id -> capture-time 多参考 camera world pose 缓存。</summary>
+        /// <summary>frame_id -> image-time proxy 多参考 camera world pose 缓存。</summary>
         [Header("Frame Alignment")]
-        [Tooltip("frame_id -> capture-time left/right/center camera world pose 缓存。必须与 StereoFrameSource/QuestStreamPublisher 使用同一个实例。")]
+        [Tooltip("frame_id -> image-time proxy left/right/center camera world pose 缓存。必须与 StereoFrameSource/QuestStreamPublisher 使用同一个实例。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>Unity 本地覆盖的对齐参考相机。</summary>
@@ -75,6 +75,21 @@ namespace EgoAnchor.Runtime
         private int latestArrivalTimeRawUnityFrame = -1;
         private CameraReference latestArrivalTimeCameraReference = CameraReference.Left;
 
+        /// <summary>最近一次 policy 推进时图像观测的年龄，单位毫秒。</summary>
+        private double latestObservationAgeMs = double.NaN;
+
+        /// <summary>最近一次 policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位毫秒。</summary>
+        private double latestPolicyOutputTargetMonoMs = double.NaN;
+
+        /// <summary>最近一次 policy 输出相对渲染时刻的实际平滑延迟，单位毫秒。</summary>
+        private double latestSmoothingDelayMs = double.NaN;
+
+        /// <summary>最近成功 aligned pose 在 Unity 中处理完成的单调时钟毫秒。</summary>
+        private double latestUnityPoseHandleMonoMs = double.NaN;
+
+        /// <summary>与 latestUnityPoseHandleMonoMs 原子对应的 source frame_id。</summary>
+        private long latestUnityPoseHandleFrameId = -1;
+
         /// <summary>最近成功对齐的 frame_id。</summary>
         public long LatestAlignedFrameId => latestAlignedFrameId;
 
@@ -101,6 +116,23 @@ namespace EgoAnchor.Runtime
 
         /// <summary>最近一次渲染输出的前推时长，单位毫秒。</summary>
         public double LatestPredictAheadMs => latestPredictAheadMs;
+
+        /// <summary>最近一次 policy 推进时当前渲染时刻距最近图像观测语义时刻的年龄，单位毫秒。</summary>
+        public double LatestObservationAgeMs => latestObservationAgeMs;
+
+        /// <summary>最近一次 policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位毫秒。</summary>
+        public double LatestPolicyOutputTargetMonoMs => latestPolicyOutputTargetMonoMs;
+
+        /// <summary>最近一次 policy 输出相对当前渲染时刻的实际平滑延迟，单位毫秒。</summary>
+        public double LatestSmoothingDelayMs => latestSmoothingDelayMs;
+
+        /// <summary>
+        /// 最近成功 aligned pose 的 Unity 处理完成时刻，单位单调时钟毫秒。
+        /// 仅当该时刻仍与 <see cref="LatestAlignedFrameId"/> 对应时返回有效值。
+        /// </summary>
+        public double LatestUnityPoseHandleMonoMs => latestUnityPoseHandleFrameId == latestAlignedFrameId
+            ? latestUnityPoseHandleMonoMs
+            : double.NaN;
 
         /// <summary>当前 eval 策略 label。</summary>
         public string StrategyLabel => policyHost != null ? policyHost.StrategyLabel : "";
@@ -336,7 +368,7 @@ namespace EgoAnchor.Runtime
                 captureTimeSeconds,
                 hasHeadPose,
                 headPose);
-            AcceptWorldPose(frameId, worldPose, observation);
+            AcceptWorldPose(frameId, worldPose, observation, sampleTimeSeconds);
             latestFailure = string.Empty;
         }
 
@@ -374,10 +406,10 @@ namespace EgoAnchor.Runtime
                 hasHeadPose,
                 headPose
             );
-            AcceptWorldPose(frameId, worldPose, observation);
+            AcceptWorldPose(frameId, worldPose, observation, Time.realtimeSinceStartupAsDouble);
         }
 
-        /// <summary>取该 frame_id 采集时刻的 center camera (头部) world pose，用于头动感知 static。
+        /// <summary>取该 frame_id 图像时间代理对应的 center camera world pose，用于头动感知 static。
         /// 复用 FramePoseHistory 的同一份缓存，不重复绑定 CenterEyeAnchor。</summary>
         private bool TryResolveHeadPose(long frameId, out Pose headPose)
         {
@@ -391,7 +423,11 @@ namespace EgoAnchor.Runtime
             return false;
         }
 
-        private void AcceptWorldPose(long frameId, Pose worldPose, in AnchorObservation observation)
+        private void AcceptWorldPose(
+            long frameId,
+            Pose worldPose,
+            in AnchorObservation observation,
+            double handleTimeSeconds)
         {
             if (IsPausedLocally())
             {
@@ -404,6 +440,8 @@ namespace EgoAnchor.Runtime
             rawPose = worldPose;
             hasRawPose = true;
             latestAlignedFrameId = frameId;
+            latestUnityPoseHandleFrameId = frameId;
+            latestUnityPoseHandleMonoMs = handleTimeSeconds * 1000.0;
 
             if (policyHost == null)
             {
@@ -423,7 +461,7 @@ namespace EgoAnchor.Runtime
         {
             if (framePoseHistory != null && framePoseHistory.TryGet(frameId, out FramePoseRecord record))
             {
-                return record.SenderMonoMs / 1000.0;
+                return record.ImageMonoMs / 1000.0;
             }
 
             return -1.0;
@@ -505,6 +543,9 @@ namespace EgoAnchor.Runtime
             currentAnchorState = output.State;
             currentMotionState = output.MotionState;
             latestPredictAheadMs = output.PredictAheadSeconds * 1000f;
+            latestObservationAgeMs = output.ObservationAgeSeconds * 1000.0;
+            latestPolicyOutputTargetMonoMs = output.OutputTargetTimeSeconds * 1000.0;
+            latestSmoothingDelayMs = output.SmoothingDelaySeconds * 1000.0;
             if (output.HasPose)
             {
                 outputPose = output.Pose;
@@ -738,6 +779,11 @@ namespace EgoAnchor.Runtime
             hasOutputPose = false;
             hasArrivalTimeRawPose = false;
             latestAlignedFrameId = -1;
+            latestUnityPoseHandleFrameId = -1;
+            latestUnityPoseHandleMonoMs = double.NaN;
+            latestObservationAgeMs = double.NaN;
+            latestPolicyOutputTargetMonoMs = double.NaN;
+            latestSmoothingDelayMs = double.NaN;
         }
     }
 }

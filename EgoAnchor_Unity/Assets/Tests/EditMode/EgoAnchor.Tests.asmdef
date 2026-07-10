@@ -2,7 +2,9 @@
     "name": "EgoAnchor.Tests",
     "rootNamespace": "EgoAnchor.Tests",
     "references": [
-        "EgoAnchor"
+        "EgoAnchor",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
     ],
     "includePlatforms": [
         "Editor"

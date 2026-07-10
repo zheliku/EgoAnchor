@@ -99,6 +99,9 @@ namespace EgoAnchor.Client
         /// <summary>上次打印统计时的总计数。</summary>
         private int lastLoggedTotal;
 
+        /// <summary>stereo 完成一次 ZMQ 发布尝试后触发；订阅者异常不会中断数据面。</summary>
+        public event Action<FrameCaptureTiming, double, bool> StereoPublishAttempted;
+
         /// <summary>上次尝试重建 publisher 的 Unity 单调时间。</summary>
         private double lastPublisherAttemptTime;
 
@@ -196,7 +199,13 @@ namespace EgoAnchor.Client
                 return;
             }
 
-            bool sent = publisher != null && publisher.TrySend(SubjectNames.QuestStereo, frame.ToByteArray());
+            byte[] payload = frame.ToByteArray();
+            double publishAttemptMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+            bool sent = publisher != null && publisher.TrySend(SubjectNames.QuestStereo, payload);
+            if (stereoSource.TryGetCaptureTiming(frame.Header.FrameId, out FrameCaptureTiming timing))
+            {
+                NotifyStereoPublishAttempted(timing, publishAttemptMonoMs, sent);
+            }
             if (sent)
             {
                 sentStereo++;
@@ -204,6 +213,34 @@ namespace EgoAnchor.Client
             else
             {
                 dropped++;
+            }
+        }
+
+        /// <summary>隔离诊断订阅者异常，避免评估代码打断实时发布。</summary>
+        private void NotifyStereoPublishAttempted(
+            FrameCaptureTiming timing,
+            double publishAttemptMonoMs,
+            bool publishSucceeded)
+        {
+            Action<FrameCaptureTiming, double, bool> handlers = StereoPublishAttempted;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<FrameCaptureTiming, double, bool>)handler).Invoke(
+                        timing,
+                        publishAttemptMonoMs,
+                        publishSucceeded);
+                }
+                catch (Exception exc)
+                {
+                    Log.Warning($"stereo publish diagnostic callback ignored: {exc.Message}", this);
+                }
             }
         }
 
@@ -328,4 +365,3 @@ namespace EgoAnchor.Client
         }
     }
 }
-

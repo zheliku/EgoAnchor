@@ -4,10 +4,10 @@ using UnityEngine;
 namespace EgoAnchor.Alignment
 {
     /// <summary>
-    /// frame_id -> 采集时刻多参考相机 world pose 的环形缓存。
+    /// frame_id -> 图像时间代理对应的多参考相机 world pose 环形缓存。
     ///
     /// 当前通信 demo 主要验证图像链路，但仍在采集事务中记录 pose，
-    /// 因为后续 frame-aligned anchor runtime 必须用发送帧时的参考 camera pose，
+    /// 因为后续 frame-aligned anchor runtime 必须使用经标定回退得到的参考 camera pose，
     /// 不能使用 pose 结果到达时的 HMD pose。
     /// </summary>
     public sealed class FramePoseHistory : MonoBehaviour
@@ -33,23 +33,38 @@ namespace EgoAnchor.Alignment
         public int Count => records.Count;
 
         /// <summary>
-        /// 记录一帧采集时刻的多参考相机 world pose。
+        /// 记录一帧图像时间代理的多参考相机 world pose，并保存 payload-ready 时刻。
         /// </summary>
         /// <param name="frameId">与 QuestStereoFrame.header.frame_id 完全一致的帧号。</param>
-        /// <param name="leftCameraPose">采集时刻左目 camera world pose。</param>
-        /// <param name="rightCameraPose">采集时刻右目 camera world pose。</param>
-        /// <param name="centerCameraPose">采集时刻中心参考 camera world pose。</param>
-        /// <param name="senderMonoMs">Unity 发送侧单调时钟毫秒。</param>
-        /// <param name="unityFrame">Unity Time.frameCount。</param>
+        /// <param name="leftCameraPose">图像时间代理对应的左目 camera world pose。</param>
+        /// <param name="rightCameraPose">图像时间代理对应的右目 camera world pose。</param>
+        /// <param name="centerCameraPose">图像时间代理对应的中心参考 camera world pose。</param>
+        /// <param name="imageMonoMs">图像对应的 Unity 单调时钟毫秒。</param>
+        /// <param name="imageUnityFrame">图像对应的 Unity 帧号。</param>
+        /// <param name="imageTimeOffsetFrames">图像时间代理相对当前样本回退的成功采集样本数。</param>
+        /// <param name="senderMonoMs">JPEG 编码完成后的 payload-ready 单调时钟毫秒。</param>
+        /// <param name="senderUnityFrame">payload-ready 时的 Unity 帧号。</param>
         public void Record(
             long frameId,
             Pose leftCameraPose,
             Pose rightCameraPose,
             Pose centerCameraPose,
+            double imageMonoMs,
+            int imageUnityFrame,
+            int imageTimeOffsetFrames,
             double senderMonoMs,
-            int unityFrame)
+            int senderUnityFrame)
         {
-            FramePoseRecord record = new FramePoseRecord(frameId, leftCameraPose, rightCameraPose, centerCameraPose, senderMonoMs, unityFrame);
+            FramePoseRecord record = new FramePoseRecord(
+                frameId,
+                leftCameraPose,
+                rightCameraPose,
+                centerCameraPose,
+                imageMonoMs,
+                imageUnityFrame,
+                imageTimeOffsetFrames,
+                senderMonoMs,
+                senderUnityFrame);
             latestFrameId = frameId;
             if (records.ContainsKey(frameId))
             {
@@ -81,7 +96,7 @@ namespace EgoAnchor.Alignment
 
         /// <summary>
         /// 尝试读取最近一次记录的 camera pose。
-        /// 仅用于 arrival-time raw 对照诊断；正式 anchor 仍必须按 source frame_id 回查 capture-time pose。
+        /// 仅用于 arrival-time raw 对照诊断；正式 anchor 仍必须按 source frame_id 回查 image-time proxy pose。
         /// </summary>
         /// <param name="record">命中时输出最近记录。</param>
         /// <returns>是否存在可用记录。</returns>
@@ -103,27 +118,36 @@ namespace EgoAnchor.Alignment
     }
 
     /// <summary>
-    /// 单帧采集时刻 camera pose 记录。
+    /// 单帧图像时间代理 camera pose 与 payload-ready 时刻记录。
     /// </summary>
     public readonly struct FramePoseRecord
     {
         /// <summary>帧号。</summary>
         public readonly long FrameId;
 
-        /// <summary>采集时刻左目 camera world pose。</summary>
+        /// <summary>图像时间代理对应的左目 camera world pose。</summary>
         public readonly Pose LeftCameraPose;
 
-        /// <summary>采集时刻右目 camera world pose。</summary>
+        /// <summary>图像时间代理对应的右目 camera world pose。</summary>
         public readonly Pose RightCameraPose;
 
-        /// <summary>采集时刻中心参考 camera world pose。</summary>
+        /// <summary>图像时间代理对应的中心参考 camera world pose。</summary>
         public readonly Pose CenterCameraPose;
 
-        /// <summary>Unity 发送侧单调时钟毫秒。</summary>
+        /// <summary>图像时间代理对应的 Unity 单调时钟毫秒。</summary>
+        public readonly double ImageMonoMs;
+
+        /// <summary>图像时间代理对应的 Unity 帧号。</summary>
+        public readonly int ImageUnityFrame;
+
+        /// <summary>图像时间代理相对当前样本回退的成功采集样本数。</summary>
+        public readonly int ImageTimeOffsetFrames;
+
+        /// <summary>JPEG 编码完成后的 payload-ready 单调时钟毫秒。</summary>
         public readonly double SenderMonoMs;
 
-        /// <summary>Unity 帧号。</summary>
-        public readonly int UnityFrame;
+        /// <summary>payload-ready 时的 Unity 帧号。</summary>
+        public readonly int SenderUnityFrame;
 
         /// <summary>构造一条多参考 frame pose 记录。</summary>
         public FramePoseRecord(
@@ -131,22 +155,28 @@ namespace EgoAnchor.Alignment
             Pose leftCameraPose,
             Pose rightCameraPose,
             Pose centerCameraPose,
+            double imageMonoMs,
+            int imageUnityFrame,
+            int imageTimeOffsetFrames,
             double senderMonoMs,
-            int unityFrame)
+            int senderUnityFrame)
         {
             FrameId = frameId;
             LeftCameraPose = leftCameraPose;
             RightCameraPose = rightCameraPose;
             CenterCameraPose = centerCameraPose;
+            ImageMonoMs = imageMonoMs;
+            ImageUnityFrame = imageUnityFrame;
+            ImageTimeOffsetFrames = imageTimeOffsetFrames;
             SenderMonoMs = senderMonoMs;
-            UnityFrame = unityFrame;
+            SenderUnityFrame = senderUnityFrame;
         }
 
         /// <summary>
         /// 按参考相机读取本帧缓存的 world pose。
         /// </summary>
         /// <param name="reference">目标参考相机。</param>
-        /// <param name="cameraPose">成功时输出对应参考相机的采集时刻 world pose。</param>
+        /// <param name="cameraPose">成功时输出对应参考相机在图像时间代理处的 world pose。</param>
         /// <returns>参考相机是否需要且能够返回 world pose。</returns>
         public bool TryGetCameraPose(CameraReference reference, out Pose cameraPose)
         {
@@ -184,7 +214,7 @@ namespace EgoAnchor.Alignment
         public readonly Pose CenterCameraPose;
 
         /// <summary>采样时刻 Unity 单调时钟毫秒。</summary>
-        public readonly double SenderMonoMs;
+        public readonly double MonoMs;
 
         /// <summary>采样时刻 Unity 帧号。</summary>
         public readonly int UnityFrame;
@@ -196,13 +226,13 @@ namespace EgoAnchor.Alignment
             Pose leftCameraPose,
             Pose rightCameraPose,
             Pose centerCameraPose,
-            double senderMonoMs,
+            double monoMs,
             int unityFrame)
         {
             LeftCameraPose = leftCameraPose;
             RightCameraPose = rightCameraPose;
             CenterCameraPose = centerCameraPose;
-            SenderMonoMs = senderMonoMs;
+            MonoMs = monoMs;
             UnityFrame = unityFrame;
         }
     }
@@ -210,9 +240,10 @@ namespace EgoAnchor.Alignment
     /// <summary>
     /// 采集端相机 pose 延迟缓冲。
     ///
-    /// Quest Passthrough texture 可能相对当前 Unity camera pose 晚一帧左右；本缓冲让
+    /// Quest Passthrough texture 与当前 Unity camera pose 可能存在时间偏移；本缓冲让
     /// StereoFrameSource 可以把当前图像 frame_id 绑定到更早的 camera pose，减少快速头动时
-    /// 静止物体跟随头显漂移。该类不依赖 MonoBehaviour，便于 smoke 直接验证。
+    /// 静止物体跟随头显漂移。偏移量以成功采集样本数表达，不假定固定物理时长。
+    /// 该类不依赖 MonoBehaviour，便于 smoke 直接验证。
     /// </summary>
     public sealed class FramePoseDelayBuffer
     {

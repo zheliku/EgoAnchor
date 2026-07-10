@@ -1,7 +1,7 @@
 namespace EgoAnchor.Eval.RQ1
 {
     /// <summary>
-    /// RQ1 评估场景类型枚举（对齐论文 egoanchor_cn_v5.typ 2026-07-07 定稿的 RQ1 结构）。
+    /// RQ1 评估场景类型枚举，对齐论文当前的静态锚定质量实验结构。
     /// <para>
     /// RQ1 只评估静止场景，共两种：<br/>
     /// 1. 长时静止观察：控制器静置桌面，用户正常头部运动<br/>
@@ -17,7 +17,7 @@ namespace EgoAnchor.Eval.RQ1
         /// <summary>长时静止观察：控制器静置桌面，用户正常头部运动。</summary>
         StaticObservation = 1,
 
-        /// <summary>遮挡恢复：用户手部遮挡目标后移开，重复若干次。</summary>
+        /// <summary>遮挡恢复：揭示目标时开始单次标记，恢复稳定后结束标记。</summary>
         OcclusionRecovery = 2
     }
 
@@ -65,7 +65,7 @@ namespace EgoAnchor.Eval.RQ1
             return type switch
             {
                 RQ1MetricType.StaticObservation => "Static on table, normal head movement",
-                RQ1MetricType.OcclusionRecovery => "Occlude target then reveal, repeat",
+                RQ1MetricType.OcclusionRecovery => "Reveal target, then mark one recovery event",
                 _ => ""
             };
         }

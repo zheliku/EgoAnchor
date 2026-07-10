@@ -20,6 +20,12 @@ namespace EgoAnchor.Policy
         /// <summary>本策略引入的固有延迟，单位秒 (B 路=0，C 路≈一个观测周期)，仅供诊断。</summary>
         public virtual float NominalLatencySeconds => 0.0f;
 
+        /// <summary>
+        /// 最近一次 <see cref="Output"/> 结果对应的观测语义时刻，单位为 Unity 单调时钟秒。
+        /// 它描述输出 pose 位于哪一个时间点，不等同于当前渲染时刻或消息到达时刻。
+        /// </summary>
+        public double OutputTargetTimeSeconds { get; protected set; } = double.NaN;
+
         /// <summary>清空策略内部状态。</summary>
         public abstract void ResetStrategy();
 

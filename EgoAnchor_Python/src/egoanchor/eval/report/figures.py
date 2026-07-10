@@ -57,14 +57,17 @@ def _write_latency_breakdown(summary: pd.DataFrame, output_dir: Path) -> None:
         _placeholder(ax, "latency breakdown: insufficient data")
     else:
         labels = [f"{row.condition}/{row.label}" for row in summary.itertuples()]
+        observation = summary["image_to_handle_p50_ms"].fillna(0.0).to_numpy(dtype=float)
+        policy = summary["effective_policy_delay_p50_ms"].fillna(0.0).to_numpy(dtype=float)
         perception = summary["perception_total_p50_ms"].fillna(0.0).to_numpy(dtype=float)
-        residual = summary["publish_to_apply_est_p50_ms"].fillna(0.0).to_numpy(dtype=float)
         x = np.arange(len(summary))
-        ax.bar(x, perception, label="perception p50")
-        ax.bar(x, residual, bottom=perception, label="publish/apply estimate p50")
+        width = 0.26
+        ax.bar(x - width, observation, width=width, label="image/handle p50")
+        ax.bar(x, perception, width=width, label="perception p50")
+        ax.bar(x + width, policy, width=width, label="policy delay p50")
         ax.set_xticks(x, labels, rotation=35, ha="right")
         ax.set_ylabel("milliseconds")
-        ax.set_title("Latency Breakdown")
+        ax.set_title("Latency Summary")
         ax.grid(True, axis="y", alpha=0.25)
         ax.legend(loc="best")
     _save(fig, output_dir / "latency_breakdown")

@@ -13,6 +13,7 @@ namespace EgoAnchor.Runtime
     /// 论文/实验对照由多个 PoseToAnchorRuntime + AnchorPolicyHost module 组合表达；
     /// RawPassthroughStrategy（ZOH 零阶保持）也是 policy 输出的一种，不在 Transform 应用层选择双路模式。
     /// </summary>
+    [DefaultExecutionOrder(0)]
     public sealed class DynamicObjectAnchor : MonoBehaviour
     {
         /// <summary>Pose-to-Anchor runtime。</summary>
@@ -36,6 +37,9 @@ namespace EgoAnchor.Runtime
         /// <summary>没有有效 pose 时是否保持上一帧 Transform。</summary>
         [Tooltip("没有有效 pose 时是否保持上一帧 Transform。开启时物体停在最后一帧位置；关闭时隐藏物体渲染，避免停留在已失效的旧 pose。")]
         [SerializeField] private bool holdLastPoseWhenMissing = true;
+
+        /// <summary>目标 Transform 当前是否实际显示一个已经应用或保留的 anchor pose。</summary>
+        public bool HasDisplayPose => lastAppliedFrameId >= 0 && !renderersHidden;
 
         [Header("Debug")]
         /// <summary>最近一次成功应用的 frame_id。</summary>
@@ -110,6 +114,17 @@ namespace EgoAnchor.Runtime
             }
 
             lastAppliedFrameId = runtime.LatestAlignedFrameId;
+        }
+
+        /// <summary>读取当前实际显示的 world pose；隐藏或从未应用过 pose 时返回 false。</summary>
+        /// <param name="pose">当前目标 Transform 的 world pose。</param>
+        /// <returns>用户当前是否能看到一个已应用或 hold-last 的 anchor pose。</returns>
+        public bool TryGetDisplayPose(out Pose pose)
+        {
+            pose = targetTransform != null
+                ? new Pose(targetTransform.position, targetTransform.rotation)
+                : Pose.identity;
+            return targetTransform != null && HasDisplayPose;
         }
 
         /// <summary>

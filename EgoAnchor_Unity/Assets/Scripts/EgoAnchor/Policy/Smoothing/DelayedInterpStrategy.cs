@@ -44,7 +44,8 @@ namespace EgoAnchor.Policy
         [SerializeField] private SplineKind spline = SplineKind.Hermite;
 
         /// <summary>
-        /// Hermite 切线模长上限 = 此倍数 × 两控制点弦长 (Fritsch-Carlson 单调三次插值标准, 默认 3)。
+        /// Hermite 切线模长上限 = 此倍数 × 两控制点弦长，默认 3。
+        /// 这是项目使用的弦长归一化限幅，并非完整的分量单调三次插值约束。
         /// 物体急停时两控制点位置几乎重合 (弦长≈0) 但 Kalman 速度估计滞后仍非零 → Hermite 切线挂在重合点上
         /// 鼓出再弹回 = 过冲振铃 (用户报告"运动停下后 anchor 来回轻微震荡")。把切线限到弦长的 K 倍:
         /// 停下时弦长≈0 → 切线≈0 → 不鼓包; 真实运动时弦长≈v·span≈切线 << K·弦长 → 不裁剪、行为不变。
@@ -70,6 +71,7 @@ namespace EgoAnchor.Policy
             delaySeconds = Mathf.Max(minDelaySeconds, 0.05f);
             latencyEstimateSeconds = 0.0f;
             lastOutputTimeSeconds = 0.0;
+            OutputTargetTimeSeconds = double.NaN;
         }
 
         public override void OnObservation(MotionModel model, in AnchorObservation observation)
@@ -89,13 +91,17 @@ namespace EgoAnchor.Policy
 
         public override Pose Output(MotionModel model, double nowSeconds)
         {
+            double previousOutputTime = lastOutputTimeSeconds;
+            lastOutputTimeSeconds = nowSeconds;
             if (points.Count == 0)
             {
+                OutputTargetTimeSeconds = nowSeconds;
                 return model.PredictAt(nowSeconds);
             }
 
             if (points.Count == 1)
             {
+                OutputTargetTimeSeconds = points[0].TimeSeconds;
                 return points[0].Pose;
             }
 
@@ -107,7 +113,7 @@ namespace EgoAnchor.Policy
 
             // 计算目标延迟，但限制变化速率防止突变影响用户体验
             float targetDelay = Mathf.Max(latencyEstimateSeconds * Mathf.Clamp(latencySafetyMargin, 1.0f, 2.0f), minDelaySeconds);
-            float maxDelta = MaxDelayChangePerSecond * Mathf.Max((float)(nowSeconds - lastOutputTimeSeconds), 0.0f);
+            float maxDelta = MaxDelayChangePerSecond * Mathf.Max((float)(nowSeconds - previousOutputTime), 0.0f);
             delaySeconds = Mathf.MoveTowards(delaySeconds, targetDelay, maxDelta);
 
             double target = nowSeconds - delaySeconds;
@@ -115,12 +121,14 @@ namespace EgoAnchor.Policy
             // 启动阶段：target 早于最早控制点 -> 输出最早点
             if (target <= points[0].TimeSeconds)
             {
+                OutputTargetTimeSeconds = points[0].TimeSeconds;
                 return points[0].Pose;
             }
 
             // target 仍晚于最新控制点 (延迟余量不够极端情况)：退化为最后一段外推，仍连续
             if (target >= points[points.Count - 1].TimeSeconds)
             {
+                OutputTargetTimeSeconds = target;
                 ControlPoint last = points[points.Count - 1];
                 float ahead = (float)(target - last.TimeSeconds);
                 return AnchorMath.Integrate(last.Pose, last.LinearVelocity, last.AngularVelocityRad, ahead);
@@ -132,7 +140,7 @@ namespace EgoAnchor.Policy
             float span = Mathf.Max((float)(p2.TimeSeconds - p1.TimeSeconds), 1e-6f);
             float u = Mathf.Clamp01((float)(target - p1.TimeSeconds) / span);
 
-            lastOutputTimeSeconds = nowSeconds;
+            OutputTargetTimeSeconds = target;
             return spline == SplineKind.CentripetalCatmullRom
                 ? InterpCatmull(i, u)
                 : InterpHermite(p1, p2, u, span);

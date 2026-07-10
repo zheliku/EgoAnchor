@@ -17,11 +17,34 @@ namespace EgoAnchor.Eval
         /// <summary>
         /// 构建每个 frame_id 采集瞬间的 unity_capture 行。
         /// </summary>
+        /// <param name="frameId">协议帧号。</param>
+        /// <param name="captureMonoMs">图像时间代理对应的 Unity 单调时钟毫秒。</param>
+        /// <param name="captureUnixMs">写入采集行时的 Unix 时钟毫秒。</param>
+        /// <param name="captureUnityFrame">图像时间代理对应的 Unity 帧号。</param>
+        /// <param name="senderMonoMs">JPEG 编码完成后的 payload-ready 单调时钟毫秒；不代表 ZMQ 实际发包时刻。</param>
+        /// <param name="senderUnityFrame">payload-ready 时的 Unity 帧号。</param>
+        /// <param name="gtSampleMonoMs">回调中实际读取 GT 的 Unity 单调时钟毫秒。</param>
+        /// <param name="imageTimeOffsetFrames">图像时间代理回退的成功采集样本数。</param>
+        /// <param name="publishAttemptMonoMs">紧邻 ZMQ TrySend 前的 Unity 单调时钟毫秒。</param>
+        /// <param name="publishSucceeded">NetMQ 是否立即接受该 multipart 消息。</param>
+        /// <param name="headPose">回调时刻头部 world pose。</param>
+        /// <param name="cameraValid">图像时刻参考相机 pose 是否有效。</param>
+        /// <param name="cameraPose">图像时刻参考相机 world pose。</param>
+        /// <param name="gtValid">GT pose 是否有效。</param>
+        /// <param name="gtPose">回调实际采样的 GT world pose。</param>
+        /// <param name="cameraReference">参考相机名称。</param>
+        /// <returns>可写入 JSONL 的单行 JSON。</returns>
         public static string BuildCaptureLine(
             long frameId,
             double captureMonoMs,
             double captureUnixMs,
             int captureUnityFrame,
+            double senderMonoMs,
+            int senderUnityFrame,
+            double gtSampleMonoMs,
+            int imageTimeOffsetFrames,
+            double publishAttemptMonoMs,
+            bool publishSucceeded,
             Pose headPose,
             bool cameraValid,
             Pose cameraPose,
@@ -36,6 +59,13 @@ namespace EgoAnchor.Eval
             b.Dbl("capture_unix_ms", captureUnixMs);
             b.TimeStr("capture", captureUnixMs);
             b.Long("capture_unity_frame", captureUnityFrame);
+            b.Dbl("sender_mono_ms", senderMonoMs);
+            b.Long("sender_unity_frame", senderUnityFrame);
+            b.Dbl("gt_sample_mono_ms", gtSampleMonoMs);
+            b.Str("image_time_basis", "camera_pose_history_proxy");
+            b.Long("image_time_offset_frames", imageTimeOffsetFrames);
+            b.Dbl("publish_attempt_mono_ms", publishAttemptMonoMs);
+            b.Bool("publish_succeeded", publishSucceeded);
             b.Pose("head_pos", "head_rot", headPose, true);
             b.Bool("cam_valid", cameraValid);
             b.Str("camera_reference", cameraReference ?? string.Empty);
@@ -49,6 +79,23 @@ namespace EgoAnchor.Eval
         /// <summary>
         /// 构建每个渲染 tick 的 unity_output 行。
         /// </summary>
+        /// <param name="renderMonoMs">渲染 tick 的 Unity 单调时钟毫秒。</param>
+        /// <param name="renderUnixMs">渲染 tick 的 Unix 时钟毫秒。</param>
+        /// <param name="renderUnityFrame">渲染 tick 的 Unity 帧号。</param>
+        /// <param name="sourceFrameId">主变体当前输出对应的源帧号。</param>
+        /// <param name="headPose">渲染时刻的头部 world pose。</param>
+        /// <param name="gtValid">渲染时刻参考 pose 是否有效。</param>
+        /// <param name="gtPose">渲染时刻的平台参考 world pose。</param>
+        /// <param name="gtLinearSpeedMs">平台参考 pose 的线速度，单位 m/s。</param>
+        /// <param name="gtAngularSpeedDegS">平台参考 pose 的角速度，单位 deg/s。</param>
+        /// <param name="variants">同一渲染 tick 的系统变体快照。</param>
+        /// <param name="rq1Metric">可选的 RQ1 场景标签。</param>
+        /// <param name="rq1MetricDuration">RQ1 场景标签持续时间，单位秒。</param>
+        /// <param name="rq2Condition">可选的 RQ2 运动场景标签。</param>
+        /// <param name="rq2TrialId">RQ2 session 内试次编号；空闲时为 -1。</param>
+        /// <param name="rq2TargetLinearSpeedMs">RQ2 目标线速度，单位 m/s；不适用时为 NaN。</param>
+        /// <param name="rq2TargetAngularSpeedDegS">RQ2 目标角速度，单位 deg/s；不适用时为 NaN。</param>
+        /// <returns>可写入 JSONL 的单行 JSON。</returns>
         public static string BuildOutputLine(
             double renderMonoMs,
             double renderUnixMs,
@@ -61,7 +108,11 @@ namespace EgoAnchor.Eval
             float gtAngularSpeedDegS,
             IReadOnlyList<EvalVariantSnapshot> variants,
             string rq1Metric = null,
-            double rq1MetricDuration = 0.0)
+            double rq1MetricDuration = 0.0,
+            string rq2Condition = null,
+            long rq2TrialId = -1,
+            float rq2TargetLinearSpeedMs = float.NaN,
+            float rq2TargetAngularSpeedDegS = float.NaN)
         {
             var b = new Builder(1024);
             b.Str("event", "unity_output");
@@ -79,6 +130,11 @@ namespace EgoAnchor.Eval
             // RQ1 手动标记字段（可选）
             b.Str("rq1_metric", rq1Metric ?? "none");
             b.Dbl("rq1_metric_duration", rq1MetricDuration);
+            // RQ2 试次上下文字段（可选）
+            b.Str("rq2_condition", rq2Condition ?? "none");
+            b.Long("rq2_trial_id", rq2TrialId);
+            b.Flt("rq2_target_linear_speed_m_s", rq2TargetLinearSpeedMs);
+            b.Flt("rq2_target_angular_speed_deg_s", rq2TargetAngularSpeedDegS);
             b.Variants(variants);
             return b.Finish();
         }
@@ -282,12 +338,18 @@ namespace EgoAnchor.Eval
                 vb.Str("label", v.Label);
                 vb.Bool("is_primary", v.IsPrimary);
                 vb.Long("source_frame_id", v.SourceFrameId);
-                vb.Bool("has_output_pose", v.HasOutputPose);
-                vb.Pose("output_pos", "output_rot", v.OutputPose, v.HasOutputPose);
+                vb.Bool("has_output_pose", v.HasRuntimeOutput);
+                vb.Pose("output_pos", "output_rot", v.DisplayPose, v.HasRuntimeOutput);
+                vb.Bool("has_display_pose", v.HasDisplayPose);
+                vb.Pose("display_pos", "display_rot", v.DisplayPose, v.HasDisplayPose);
                 vb.Str("anchor_pose_source", v.AnchorPoseSource);
                 vb.Bool("has_source_capture_timing", v.HasSourceCaptureTiming);
                 vb.Dbl("source_capture_mono_ms", v.HasSourceCaptureTiming ? v.SourceCaptureMonoMs : double.NaN);
                 vb.Long("source_capture_unity_frame", v.HasSourceCaptureTiming ? v.SourceCaptureUnityFrame : -1);
+                vb.Dbl("observation_age_ms", v.ObservationAgeMs);
+                vb.Dbl("policy_output_target_mono_ms", v.PolicyOutputTargetMonoMs);
+                vb.Dbl("smoothing_delay_ms", v.SmoothingDelayMs);
+                vb.Dbl("unity_pose_handle_mono_ms", v.UnityPoseHandleMonoMs);
                 vb.Str("anchor_state", v.AnchorState);
                 vb.Str("policy_action", v.PolicyAction);
                 vb.Str("policy_reason", v.PolicyReason);
@@ -374,12 +436,28 @@ namespace EgoAnchor.Eval
         public readonly string Label;
         public readonly bool IsPrimary;
         public readonly long SourceFrameId;
-        public readonly bool HasOutputPose;
-        public readonly Pose OutputPose;
+        /// <summary>policy runtime 本帧是否给出有效输出。</summary>
+        public readonly bool HasRuntimeOutput;
+        /// <summary>用户当前是否看到已应用或 hold-last 的 anchor pose。</summary>
+        public readonly bool HasDisplayPose;
+        /// <summary>实际显示 Transform 的 world pose。</summary>
+        public readonly Pose DisplayPose;
+        /// <summary>兼容现有 C# 调用的 runtime 输出有效性别名。</summary>
+        public bool HasOutputPose => HasRuntimeOutput;
+        /// <summary>兼容现有 C# 调用的显示 pose 别名。</summary>
+        public Pose OutputPose => DisplayPose;
         public readonly string AnchorPoseSource;
         public readonly bool HasSourceCaptureTiming;
         public readonly double SourceCaptureMonoMs;
         public readonly int SourceCaptureUnityFrame;
+        /// <summary>当前渲染时刻距最近图像观测语义时刻的年龄，单位毫秒。</summary>
+        public readonly double ObservationAgeMs;
+        /// <summary>policy 输出 pose 对应的 Unity 单调时钟语义时刻，单位毫秒。</summary>
+        public readonly double PolicyOutputTargetMonoMs;
+        /// <summary>当前渲染时刻相对 policy 输出语义时刻的实际平滑延迟，单位毫秒。</summary>
+        public readonly double SmoothingDelayMs;
+        /// <summary>与 SourceFrameId 对应的 aligned pose 在 Unity 中处理完成的单调时钟毫秒。</summary>
+        public readonly double UnityPoseHandleMonoMs;
         public readonly string AnchorState;
         public readonly string PolicyAction;
         public readonly string PolicyReason;
@@ -408,8 +486,10 @@ namespace EgoAnchor.Eval
 
         public EvalVariantSnapshot(
             string label, bool isPrimary, long sourceFrameId,
-            bool hasOutputPose, Pose outputPose, string anchorPoseSource,
+            bool hasRuntimeOutput, bool hasDisplayPose, Pose displayPose, string anchorPoseSource,
             bool hasSourceCaptureTiming, double sourceCaptureMonoMs, int sourceCaptureUnityFrame,
+            double observationAgeMs, double policyOutputTargetMonoMs, double smoothingDelayMs,
+            double unityPoseHandleMonoMs,
             string anchorState, string policyAction, string policyReason,
             string latestPhase, string latestFailure, string motionState, double predictAheadMs,
             string strategyLabel, string qualityGate, string motionModel, string smoothingStrategy,
@@ -422,12 +502,17 @@ namespace EgoAnchor.Eval
             Label = label ?? string.Empty;
             IsPrimary = isPrimary;
             SourceFrameId = sourceFrameId;
-            HasOutputPose = hasOutputPose;
-            OutputPose = outputPose;
+            HasRuntimeOutput = hasRuntimeOutput;
+            HasDisplayPose = hasDisplayPose;
+            DisplayPose = displayPose;
             AnchorPoseSource = anchorPoseSource ?? string.Empty;
             HasSourceCaptureTiming = hasSourceCaptureTiming;
             SourceCaptureMonoMs = sourceCaptureMonoMs;
             SourceCaptureUnityFrame = sourceCaptureUnityFrame;
+            ObservationAgeMs = observationAgeMs;
+            PolicyOutputTargetMonoMs = policyOutputTargetMonoMs;
+            SmoothingDelayMs = smoothingDelayMs;
+            UnityPoseHandleMonoMs = unityPoseHandleMonoMs;
             AnchorState = anchorState ?? string.Empty;
             PolicyAction = policyAction ?? string.Empty;
             PolicyReason = policyReason ?? string.Empty;

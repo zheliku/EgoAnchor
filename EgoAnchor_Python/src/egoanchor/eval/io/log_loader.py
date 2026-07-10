@@ -103,10 +103,11 @@ def label_conditions(df: pd.DataFrame, manifest: Mapping[str, Any] | Manifest, m
 
     `mono_col` 必须是 Unity 单调毫秒列，例如 capture_mono_ms 或 render_mono_ms。
     优先级：
-    1. manifest.condition_spans 非空 → 按时间区间标注，未落入任何 span 标 `unlabeled`。
-    2. condition_spans 为空但存在 `rq1_metric` 列 → 直接用 Unity 手动标注的场景标签
+    1. 有效 RQ2 试次行使用 ``rq2_condition``，避免通用时间段覆盖试次语义。
+    2. manifest.condition_spans 非空 → 按时间区间标注，未落入任何 span 标 `unlabeled`。
+    3. condition_spans 为空但存在 `rq1_metric` 列 → 直接用 Unity 手动标注的场景标签
        作为 condition（RQ1 每个场景一行），`none`/空标为 `unlabeled`。
-    3. 两者都没有 → 全部 `unlabeled`。
+    4. 以上标签都没有 → 标为 `unlabeled`。
     """
 
     if mono_col not in df.columns:
@@ -123,12 +124,18 @@ def label_conditions(df: pd.DataFrame, manifest: Mapping[str, Any] | Manifest, m
             metric = out["rq1_metric"].fillna("none").astype(str)
             labeled = ~metric.isin(("none", "None", "", "nan"))
             out.loc[labeled, "condition"] = metric[labeled]
-        return out
+    else:
+        mono = out[mono_col].astype(float)
+        for label, start, end in spans:
+            mask = (mono >= start) & (mono < end)
+            out.loc[mask, "condition"] = label
 
-    mono = out[mono_col].astype(float)
-    for label, start, end in spans:
-        mask = (mono >= start) & (mono < end)
-        out.loc[mask, "condition"] = label
+    if "rq2_condition" in out.columns:
+        rq2 = out["rq2_condition"].fillna("none").astype(str)
+        trial_source = out.get("rq2_trial_id", pd.Series(-1, index=out.index))
+        trial = pd.to_numeric(trial_source, errors="coerce").fillna(-1)
+        active = rq2.isin(("slow_translation", "fast_motion", "rotation")) & (trial > 0)
+        out.loc[active, "condition"] = rq2[active]
     return out
 
 

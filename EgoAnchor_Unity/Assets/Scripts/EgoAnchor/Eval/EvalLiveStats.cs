@@ -4,69 +4,77 @@ using EgoAnchor.Runtime;
 using TMPro;
 using UnityEngine;
 
-namespace EgoAnchor.Eval.RQ1
+namespace EgoAnchor.Eval
 {
     /// <summary>
-    /// RQ1 实时性遥测面板。
+    /// 评估场景共享的实时遥测面板。
     /// <para>
-    /// 与 <see cref="RQ1StatusUI"/>（录制/标注状态）解耦，本组件只关心「数据实时性好坏」：
-    /// 每渲染帧显示端到端时延、pose 更新率、锚定误差、抖动、可靠性分数与锚定状态。
+    /// 本组件与 RQ1/RQ2 的实验状态面板解耦，只读取主变体并显示观测年龄、pose 更新率、
+    /// 实时误差、帧间输出变化、可靠性分数与锚定状态。
     /// </para>
     /// <para>
-    /// 唯一引用是 <see cref="EvalRecorder"/>：主变体 runtime、显示用 anchor Transform、
-    /// frame 缓存和 GT pose 都从 recorder 取，保证实时数字与录进 JSONL 的数据完全同源
-    /// （同一主变体、同一 GT keep-alive 逻辑、同一时延时钟）。本组件不改状态、不写文件。
+    /// 主变体 runtime、显示 Transform、frame 缓存和参考位姿都从 <see cref="EvalRecorder"/> 读取。
+    /// 面板不修改运行状态，也不写文件；实时参考位姿不受离线日志的跟踪有效性门控。
     /// </para>
     /// <para>
-    /// 所有指标都直接显示每帧采样的瞬时值，不做平滑，保证屏幕上的数字与同一时刻录进
-    /// JSONL 的数据一致；渲染按 <see cref="updateRate"/> 节流，避免刷字太快看不清。
+    /// 指标按帧采样且不做平滑，文本绘制按 <see cref="updateRate"/> 节流。帧间输出变化在
+    /// RQ2 动态试次中包含物体真实运动，不能解释为纯追踪噪声。
     /// </para>
     /// <para>
-    /// 时延语义与离线指标一致：<c>now - 该 frame_id 采集时刻的 SenderMonoMs</c>，两端都是
-    /// Unity 单调时钟（<see cref="Time.realtimeSinceStartupAsDouble"/>），无跨机时钟偏差。
-    /// 锚定误差公式与 Python 离线 pose_error 一致（平移欧氏距离 + 四元数夹角）。
+    /// Latency 的语义是 <c>now - 最新对齐 frame_id 的 ImageMonoMs</c>，属于基于图像时间代理的
+    /// 观测年龄，不是纯网络时延。
     /// </para>
     /// </summary>
-    public sealed class RQ1LiveStats : MonoBehaviour
+    public sealed class EvalLiveStats : MonoBehaviour
     {
         // ── References ──
 
+        /// <summary>提供主变体 runtime、显示 Transform、frame 缓存与实时参考位姿。</summary>
         [Header("References")]
         [Tooltip("评估记录器；主变体 runtime / anchor Transform / frame 缓存 / GT pose 都从它取，与录制同源。")]
         [SerializeField] private EvalRecorder recorder;
 
+        /// <summary>实时遥测输出文本。</summary>
         [Tooltip("实时性遥测文本。")]
         [SerializeField] private TextMeshProUGUI statsText;
 
         // ── Settings ──
 
+        /// <summary>文本每秒刷新次数；信号仍按帧采样。</summary>
         [Header("Settings")]
         [Tooltip("UI 刷新频率（Hz）。数值仍是每帧采样的瞬时值，此项只控制文本重绘节流。")]
         [Min(1f)]
         [SerializeField] private float updateRate = 10f;
 
+        /// <summary>观测年龄低于该阈值时显示绿色，单位毫秒。</summary>
         [Header("Latency Thresholds (ms)")]
         [Tooltip("时延低于此值显示绿色（良好）。")]
         [SerializeField] private float latencyGoodMs = 120f;
 
+        /// <summary>观测年龄高于该阈值时显示红色，单位毫秒。</summary>
         [Tooltip("时延高于此值显示红色（差）；介于两者之间显示黄色。")]
         [SerializeField] private float latencyBadMs = 200f;
 
+        /// <summary>平移误差低于该阈值时显示绿色，单位毫米。</summary>
         [Header("Error Thresholds (vs GT)")]
         [Tooltip("平移误差低于此值显示绿色（良好），单位毫米。")]
         [SerializeField] private float transErrGoodMm = 10f;
 
+        /// <summary>平移误差高于该阈值时显示红色，单位毫米。</summary>
         [Tooltip("平移误差高于此值显示红色（差），单位毫米；介于两者之间显示黄色。")]
         [SerializeField] private float transErrBadMm = 20f;
 
+        /// <summary>旋转误差低于该阈值时显示绿色，单位度。</summary>
         [Tooltip("旋转误差低于此值显示绿色（良好），单位度。")]
         [SerializeField] private float rotErrGoodDeg = 5f;
 
+        /// <summary>旋转误差高于该阈值时显示红色，单位度。</summary>
         [Tooltip("旋转误差高于此值显示红色（差），单位度；介于两者之间显示黄色。")]
         [SerializeField] private float rotErrBadDeg = 20f;
 
         // ── State ──
 
+        /// <summary>当前文本刷新周期内累计的时间。</summary>
         private float _updateTimer;
 
         /// <summary>上次观测到 LatestAlignedFrameId 变化的时刻（毫秒），用于估 pose 更新率。</summary>
@@ -118,6 +126,7 @@ namespace EgoAnchor.Eval.RQ1
 
         // ── Unity 生命周期 ──
 
+        /// <summary>每帧采样实时信号，并按配置频率重绘文本。</summary>
         private void Update()
         {
             SampleLiveSignals();
@@ -166,27 +175,36 @@ namespace EgoAnchor.Eval.RQ1
                 _lastSeenFrameId = frameId;
             }
 
-            // 端到端时延：now - 该 frame_id 采集时刻 SenderMonoMs（同一 Unity 单调时钟）
+            // 观测年龄代理：now - 该 frame_id 图像时间代理 ImageMonoMs（同一 Unity 单调时钟）
             FramePoseHistory history = recorder.FrameHistory;
             if (frameId >= 0 && history != null
                 && history.TryGet(frameId, out FramePoseRecord record))
             {
-                double latencyMs = nowMs - record.SenderMonoMs;
+                double latencyMs = nowMs - record.ImageMonoMs;
                 if (latencyMs >= 0.0)
                 {
                     _latestLatencyMs = latencyMs;
                 }
             }
 
-            // 锚定误差与抖动都基于主变体显示用 anchor Transform（与录制 output_pos 同源）。
-            Transform anchor = recorder.PrimaryAnchorTransform;
-            if (anchor == null)
+            // 只有 runtime 当前有效输出时才报告误差，避免把 hold-last 误报为有效追踪。
+            if (!runtime.TryGetOutputPose(out _))
             {
+                ClearPoseSignals();
                 return;
             }
 
-            // 锚定误差 vs GT：面板用 live GT（直读 Transform，不受 OVR tracked 门控），
-            // 只要手柄在动就更新；公式与 Python pose_error 一致（平移欧氏距离 + 四元数夹角）。
+            // 锚定误差与抖动基于主变体显示用 anchor Transform。
+            Transform anchor = recorder.PrimaryAnchorTransform;
+            if (anchor == null)
+            {
+                ClearPoseSignals();
+                return;
+            }
+
+            // 面板用 live GT（直读 Transform，不受 OVR tracked 门控）；无参考位姿时清空旧误差。
+            _latestTransErrM = double.NaN;
+            _latestRotErrDeg = double.NaN;
             if (recorder.TryGetLiveGtPose(out Pose gtPose))
             {
                 _latestTransErrM = (anchor.position - gtPose.position).magnitude;
@@ -204,8 +222,19 @@ namespace EgoAnchor.Eval.RQ1
             _hasLastAnchorPos = true;
         }
 
+        /// <summary>清空依赖有效输出的误差和帧间变化，终止上一段连续序列。</summary>
+        private void ClearPoseSignals()
+        {
+            _latestTransErrM = double.NaN;
+            _latestRotErrDeg = double.NaN;
+            _latestJitterM = double.NaN;
+            _latestJitterDeg = double.NaN;
+            _hasLastAnchorPos = false;
+        }
+
         // ── 渲染 ──
 
+        /// <summary>把最新采样值写入 TextMesh Pro 文本。</summary>
         private void RenderText()
         {
             if (statsText == null)

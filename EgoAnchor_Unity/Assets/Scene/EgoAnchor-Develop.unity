@@ -1641,6 +1641,7 @@ MonoBehaviour:
   headAnchor: {fileID: 1846668452}
   alignmentRef: 1
   stereoSource: {fileID: 634882299}
+  streamPublisher: {fileID: 634882301}
   framePoseHistory: {fileID: 1764014454}
   gtController: 2
   variants:
@@ -2984,6 +2985,7 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 1
+  emitServerReacquire: 1
   lowScoreReacquireThreshold: 0.45
   lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
@@ -3826,6 +3828,7 @@ MonoBehaviour:
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
   enableLowScoreReacquire: 0
+  emitServerReacquire: 1
   lowScoreReacquireThreshold: 0.45
   lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3

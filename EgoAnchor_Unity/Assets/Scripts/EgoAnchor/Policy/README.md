@@ -83,7 +83,8 @@
 | `staticSpeedThresholdMps` | 运动/静止判定线速度阈值（仅诊断） | `0.015` |
 | `staticAngularSpeedThresholdDps` | 运动/静止判定角速度阈值（仅诊断） | `1.5` |
 | **Low-Score Reacquire** | | |
-| `enableLowScoreReacquire` | 持续低总分时本地进入 Relocalizing，并请求 Python 重 register | `true` |
+| `enableLowScoreReacquire` | 持续低总分时本地进入 Relocalizing；服务器请求由 `emitServerReacquire` 控制 | `true` |
+| `emitServerReacquire` | 是否把本地 Lost/低分重获取上报给 hub；被动 shadow baseline 设为 `false` | `true` |
 | `lowScoreReacquireThreshold` | 不高于该总分开始累计重获取证据；应低于 `trackingScoreFloor`，避免一低于 0.5 就频繁 register | `0.45` |
 | `lowScoreReacquireSeconds` | 低分需连续持续的时间 | `0.6` |
 | `lowScoreReacquireCooldownSeconds` | 两次自动重获取之间的冷却时间 | `3.0` |

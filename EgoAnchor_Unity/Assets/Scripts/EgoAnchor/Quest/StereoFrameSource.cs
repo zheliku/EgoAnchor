@@ -9,6 +9,48 @@ using UnityEngine;
 namespace EgoAnchor.Quest
 {
     /// <summary>
+    /// 一次成功双目采集的图像时间代理与 payload-ready 时间。
+    /// 图像时间来自延迟 camera pose 样本，不是硬件曝光时间戳。
+    /// </summary>
+    public readonly struct FrameCaptureTiming
+    {
+        /// <summary>与协议 Header 完全一致的 frame_id。</summary>
+        public readonly long FrameId;
+
+        /// <summary>图像时间代理对应的 Unity 单调时钟毫秒。</summary>
+        public readonly double ImageMonoMs;
+
+        /// <summary>图像时间代理对应的 Unity 帧号。</summary>
+        public readonly int ImageUnityFrame;
+
+        /// <summary>JPEG 编码完成后的 payload-ready 单调时钟毫秒。</summary>
+        public readonly double SenderMonoMs;
+
+        /// <summary>payload-ready 时的 Unity 帧号。</summary>
+        public readonly int SenderUnityFrame;
+
+        /// <summary>图像时间代理相对当前 payload-ready 帧回退的成功采集样本数。</summary>
+        public readonly int ImageTimeOffsetFrames;
+
+        /// <summary>构造一条采集双时间通知。</summary>
+        public FrameCaptureTiming(
+            long frameId,
+            double imageMonoMs,
+            int imageUnityFrame,
+            double senderMonoMs,
+            int senderUnityFrame,
+            int imageTimeOffsetFrames)
+        {
+            FrameId = frameId;
+            ImageMonoMs = imageMonoMs;
+            ImageUnityFrame = imageUnityFrame;
+            SenderMonoMs = senderMonoMs;
+            SenderUnityFrame = senderUnityFrame;
+            ImageTimeOffsetFrames = imageTimeOffsetFrames;
+        }
+    }
+
+    /// <summary>
     /// Quest 双目图像源。
     ///
     /// 本类只负责读取左右 Passthrough texture、同步记录多参考 camera pose、JPEG 编码并构造 Protobuf。
@@ -37,11 +79,11 @@ namespace EgoAnchor.Quest
 
         /// <summary>frame pose 环形缓存。</summary>
         [Header("Frame Alignment")]
-        [Tooltip("frame_id -> 采集时刻 left/right/center camera pose 的环形缓存。后续 PoseResult 回来后必须用它做 frame-aligned world anchor。")]
+        [Tooltip("frame_id -> image-time proxy left/right/center camera pose 的环形缓存。PoseResult 返回后用它做 frame-aligned world anchor。")]
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>用于 frame alignment 的相机 pose 回退帧数。</summary>
-        [Tooltip("用于 frame alignment 的相机 pose 回退帧数。Quest Passthrough texture 往往比当前头显 pose 晚约两帧；默认回退 1 个成功采集帧，减少快速转头时静止物体跟随头显漂移。")]
+        [Tooltip("用于 frame alignment 的相机 pose 回退帧数。当前无硬件曝光时间戳，默认以回退 1 个成功采集样本作为 image-time proxy；正式评估需做 0/1/2 帧敏感性分析。")]
         [Min(0)]
         [SerializeField] private int cameraPoseDelayFrames = 1;
 
@@ -77,14 +119,8 @@ namespace EgoAnchor.Quest
         /// <summary>图像读回或 JPEG 编码失败次数。</summary>
         private int imageEncodeFailures;
 
-        /// <summary>FrameCaptured 订阅者异常次数。</summary>
-        private int frameCapturedCallbackFailures;
-
         /// <summary>用于补偿 passthrough 图像与当前相机 pose 时间差的短历史缓冲。</summary>
         private readonly FramePoseDelayBuffer framePoseDelayBuffer = new FramePoseDelayBuffer();
-
-        /// <summary>采集并记录一帧 frame_id 相机位姿后触发；参数为 (frameId, captureMonoMs)。无订阅者时零成本。</summary>
-        public event Action<long, double> FrameCaptured;
 
         /// <summary>
         /// 尝试采集并编码一帧 stereo Protobuf。
@@ -127,14 +163,14 @@ namespace EgoAnchor.Quest
 
             Pose centerCameraPose = ResolveCenterCameraPose(leftCameraPose, rightCameraPose);
 
-            double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+            double poseSampleMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             long currentFrameId = ++frameId;
             int unityFrame = Time.frameCount;
             FramePoseSample currentPoseSample = new FramePoseSample(
                 leftCameraPose,
                 rightCameraPose,
                 centerCameraPose,
-                senderMonoMs,
+                poseSampleMonoMs,
                 unityFrame);
 
             byte[] leftJpeg;
@@ -161,19 +197,23 @@ namespace EgoAnchor.Quest
                 return false;
             }
 
-            FramePoseSample alignmentPoseSample = framePoseDelayBuffer.Select(currentPoseSample, Mathf.Max(0, cameraPoseDelayFrames));
+            int imageTimeOffsetFrames = Mathf.Max(0, cameraPoseDelayFrames);
+            FramePoseSample alignmentPoseSample = framePoseDelayBuffer.Select(currentPoseSample, imageTimeOffsetFrames);
+            double senderMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+            int senderUnityFrame = Time.frameCount;
             framePoseHistory?.Record(
                 currentFrameId,
                 alignmentPoseSample.LeftCameraPose,
                 alignmentPoseSample.RightCameraPose,
                 alignmentPoseSample.CenterCameraPose,
+                alignmentPoseSample.MonoMs,
+                alignmentPoseSample.UnityFrame,
+                imageTimeOffsetFrames,
                 senderMonoMs,
-                unityFrame);
-            NotifyFrameCaptured(currentFrameId, senderMonoMs);
-
+                senderUnityFrame);
             frame = new QuestStereoFrame
             {
-                Header = QuestStreamSession.BuildHeader(currentFrameId, unityFrame, senderMonoMs),
+                Header = QuestStreamSession.BuildHeader(currentFrameId, senderUnityFrame, senderMonoMs),
                 LeftImageJpeg = ByteString.CopyFrom(leftJpeg),
                 RightImageJpeg = ByteString.CopyFrom(rightJpeg),
                 LeftWidth = leftRenderTexture.width,
@@ -185,29 +225,26 @@ namespace EgoAnchor.Quest
             return true;
         }
 
-        /// <summary>
-        /// 安全通知采集事件，避免诊断订阅者异常打断 stereo 数据面发送。
-        /// </summary>
-        private void NotifyFrameCaptured(long currentFrameId, double senderMonoMs)
+        /// <summary>按 frame_id 读取刚完成采集的图像代理与 payload-ready 时间。</summary>
+        /// <param name="frameId">协议 frame_id。</param>
+        /// <param name="timing">命中时返回双时间信息。</param>
+        /// <returns>该 frame_id 是否仍在历史缓存中。</returns>
+        public bool TryGetCaptureTiming(long frameId, out FrameCaptureTiming timing)
         {
-            Action<long, double> handlers = FrameCaptured;
-            if (handlers == null)
+            timing = default;
+            if (framePoseHistory == null || !framePoseHistory.TryGet(frameId, out FramePoseRecord record))
             {
-                return;
+                return false;
             }
 
-            foreach (Delegate handler in handlers.GetInvocationList())
-            {
-                try
-                {
-                    ((Action<long, double>)handler).Invoke(currentFrameId, senderMonoMs);
-                }
-                catch (Exception exc)
-                {
-                    frameCapturedCallbackFailures++;
-                    LogCaptureFailure("frame_captured_callback", frameCapturedCallbackFailures, exc);
-                }
-            }
+            timing = new FrameCaptureTiming(
+                frameId,
+                record.ImageMonoMs,
+                record.ImageUnityFrame,
+                record.SenderMonoMs,
+                record.SenderUnityFrame,
+                record.ImageTimeOffsetFrames);
+            return true;
         }
 
         /// <summary>
