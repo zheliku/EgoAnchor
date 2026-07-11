@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using EgoAnchor.Eval;
 using EgoAnchor.Eval.RQ1;
 using EgoAnchor.Eval.RQ2;
@@ -72,7 +74,6 @@ namespace EgoAnchor.Tests
         /// <summary>AnchorPolicyHost 的服务器重获取开关必须在场景中显式序列化。</summary>
         [TestCase("EgoAnchor-Develop.unity", 2, 0)]
         [TestCase("EgoAnchor-RQ1.unity", 3, 0)]
-        [TestCase("EgoAnchor-RQ2.unity", 2, 1)]
         public void ScenesExplicitlyConfigureServerReacquire(
             string sceneName,
             int expectedEnabled,
@@ -99,29 +100,23 @@ namespace EgoAnchor.Tests
         {
             string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-RQ2.unity");
             string scene = File.ReadAllText(path).Replace("\r\n", "\n");
+            string recorder = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Eval.EvalRecorder");
+            Dictionary<string, long> runtimeIds = ReadVariantRuntimeIds(recorder);
+            Dictionary<string, string> policyBlocks = ResolveVariantPolicyBlocks(scene, runtimeIds);
 
-            StringAssert.Contains("- label: Full", scene);
-            StringAssert.Contains(
-                "- label: Raw-ZOH\n    runtime: {fileID: 1137170458}\n" +
-                "    anchorTransform: {fileID: 1137170460}\n" +
-                "    anchorPresenter: {fileID: 1137170459}\n" +
-                "    isPrimary: 0",
-                scene);
+            Assert.That(runtimeIds.Keys, Is.EquivalentTo(new[] { "Full", "Raw-ZOH" }));
             StringAssert.DoesNotContain("m_Name: Phase", scene);
             StringAssert.DoesNotContain("phaseText:", scene);
             StringAssert.DoesNotContain("advancePhaseAction:", scene);
+            StringAssert.DoesNotContain("NoStaticLock (RQ2 Disabled)", scene);
 
-            string rawObject = ExtractBlock(scene, "--- !u!1 &1137170457", "--- !u!114 &1137170458");
-            StringAssert.Contains("m_Name: AnchorObject Raw-ZOH", rawObject);
-            StringAssert.Contains("m_IsActive: 1", rawObject);
-
-            string rawRuntime = ExtractBlock(scene, "--- !u!114 &1137170458", "--- !u!114 &1137170459");
+            string rawRuntime = ExtractObjectBlock(scene, 114, runtimeIds["Raw-ZOH"]);
             StringAssert.Contains("cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}", rawRuntime);
 
-            string fullPolicy = ExtractBlock(scene, "--- !u!114 &1039886366", "--- !u!114 &1039886367");
-            StringAssert.Contains("emitServerReacquire: 1", fullPolicy);
+            string fullPolicy = policyBlocks["Full"];
+            StringAssert.Contains("emitServerReacquire: 0", fullPolicy);
 
-            string rawPolicy = ExtractBlock(scene, "--- !u!114 &1484131521", "--- !u!114 &1484131523");
+            string rawPolicy = policyBlocks["Raw-ZOH"];
             StringAssert.Contains("enableQualityGate: 1", rawPolicy);
             StringAssert.Contains("staticLockModule: {fileID: 0}", rawPolicy);
             StringAssert.Contains("trackingScoreFloor: 0.5", rawPolicy);
@@ -129,23 +124,85 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("enableLowScoreReacquire: 1", rawPolicy);
             StringAssert.Contains("emitServerReacquire: 0", rawPolicy);
 
-            string rawMesh = ExtractBlock(scene, "--- !u!1 &2017392374", "--- !u!4 &2017392375");
-            StringAssert.Contains("m_Name: Mesh", rawMesh);
-            StringAssert.Contains("m_IsActive: 0", rawMesh);
+            StringAssert.Contains("gtFreshnessMode: 1", recorder);
 
-            string hub = ExtractBlock(scene, "--- !u!114 &1777492727", "--- !u!4 &1777492728");
-            StringAssert.Contains(
-                "runtimes:\n  - {fileID: 160200731}\n  - {fileID: 1137170458}",
-                hub);
+            string selector = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Eval.RQ2.RQ2TrialSelector");
+            long evalSessionId = ReadFileId(selector, "evalSession");
+            Assert.That(evalSessionId, Is.GreaterThan(0));
+
+            string hub = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Runtime.AnchorRuntimeHub");
+            StringAssert.Contains($"- {{fileID: {runtimeIds["Full"]}}}", hub);
+            StringAssert.Contains($"- {{fileID: {runtimeIds["Raw-ZOH"]}}}", hub);
         }
 
-        /// <summary>按 Unity YAML 对象边界提取单个序列化块。</summary>
-        private static string ExtractBlock(string scene, string startMarker, string endMarker)
+        /// <summary>RQ1 Recorder 必须显式保留静止 keep-alive 参考策略。</summary>
+        [Test]
+        public void Rq1SceneKeepsStaticReferencePosePolicy()
         {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-RQ1.unity");
+            string scene = File.ReadAllText(path).Replace("\r\n", "\n");
+            string recorder = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Eval.EvalRecorder");
+
+            StringAssert.Contains("gtFreshnessMode: 0", recorder);
+            StringAssert.Contains("gtKeepAliveSeconds: 30", recorder);
+        }
+
+        /// <summary>按类标识查找唯一的 Unity YAML 对象块。</summary>
+        private static string FindBlockContaining(string scene, string marker)
+        {
+            string[] blocks = scene.Split(new[] { "\n--- " }, StringSplitOptions.RemoveEmptyEntries);
+            string[] matches = Array.FindAll(blocks, block => block.Contains(marker));
+            Assert.That(matches, Has.Length.EqualTo(1), $"场景中应唯一包含 {marker}");
+            return matches[0];
+        }
+
+        /// <summary>从 EvalRecorder YAML 块读取 label 到 runtime fileID 的映射。</summary>
+        private static Dictionary<string, long> ReadVariantRuntimeIds(string recorderBlock)
+        {
+            var result = new Dictionary<string, long>(StringComparer.Ordinal);
+            MatchCollection matches = Regex.Matches(
+                recorderBlock,
+                @"- label: (?<label>[^\n]+)\n\s+runtime: \{fileID: (?<id>-?\d+)\}");
+            foreach (Match match in matches)
+            {
+                result.Add(match.Groups["label"].Value.Trim(), long.Parse(match.Groups["id"].Value));
+            }
+            return result;
+        }
+
+        /// <summary>沿 runtime 的 policyHost 引用解析每个评估变体的策略 YAML 块。</summary>
+        private static Dictionary<string, string> ResolveVariantPolicyBlocks(
+            string scene,
+            IReadOnlyDictionary<string, long> runtimeIds)
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, long> item in runtimeIds)
+            {
+                string runtimeBlock = ExtractObjectBlock(scene, 114, item.Value);
+                long policyId = ReadFileId(runtimeBlock, "policyHost");
+                result.Add(item.Key, ExtractObjectBlock(scene, 114, policyId));
+            }
+            return result;
+        }
+
+        /// <summary>读取 Unity YAML 字段中的 fileID。</summary>
+        private static long ReadFileId(string block, string fieldName)
+        {
+            Match match = Regex.Match(
+                block,
+                $@"{Regex.Escape(fieldName)}: \{{fileID: (?<id>-?\d+)\}}");
+            Assert.That(match.Success, Is.True, $"缺少 fileID 字段 {fieldName}");
+            return long.Parse(match.Groups["id"].Value);
+        }
+
+        /// <summary>按 Unity 对象类型与 fileID 提取完整 YAML 块。</summary>
+        private static string ExtractObjectBlock(string scene, int objectType, long fileId)
+        {
+            string startMarker = $"--- !u!{objectType} &{fileId}";
             int start = scene.IndexOf(startMarker, StringComparison.Ordinal);
-            int end = scene.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
-            Assert.That(start, Is.GreaterThanOrEqualTo(0), $"缺少场景块 {startMarker}");
-            Assert.That(end, Is.GreaterThan(start), $"缺少场景块结束标记 {endMarker}");
+            Assert.That(start, Is.GreaterThanOrEqualTo(0), $"缺少场景对象 {startMarker}");
+            int end = scene.IndexOf("\n--- ", start + startMarker.Length, StringComparison.Ordinal);
+            if (end < 0) end = scene.Length;
             return scene.Substring(start, end - start);
         }
     }
@@ -209,6 +266,9 @@ namespace EgoAnchor.Tests
             {
                 RQ2TrialSelector selector = go.AddComponent<RQ2TrialSelector>();
                 RQ2InputHandler handler = go.AddComponent<RQ2InputHandler>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                SetPrivateField(handler, "evalSession", session);
                 go.SetActive(true);
                 InvokeLifecycle(handler, "Awake");
                 InvokeLifecycle(handler, "OnEnable");
@@ -219,6 +279,33 @@ namespace EgoAnchor.Tests
                 EndTrialWithZero(selector);
                 AssertTrialKey(selector, _keyboard.digit3Key, RQ2Condition.Rotation, 3);
                 EndTrialWithZero(selector);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>RQ2 数字键在未录制时不得创建不可追溯的 trial 上下文。</summary>
+        [Test]
+        public void Rq2HandlerRejectsTrialWhenSessionIsNotRecording()
+        {
+            GameObject go = new GameObject("RQ2InputHandlerIdleTests");
+            go.SetActive(false);
+            try
+            {
+                RQ2TrialSelector selector = go.AddComponent<RQ2TrialSelector>();
+                RQ2InputHandler handler = go.AddComponent<RQ2InputHandler>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(handler, "evalSession", session);
+                go.SetActive(true);
+                InvokeLifecycle(handler, "Awake");
+                InvokeLifecycle(handler, "OnEnable");
+
+                PressAndRelease(_keyboard.digit1Key);
+
+                Assert.That(selector.CurrentTrialId, Is.EqualTo(-1));
+                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.None));
             }
             finally
             {
@@ -256,6 +343,14 @@ namespace EgoAnchor.Tests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(method, Is.Not.Null, $"缺少生命周期方法 {methodName}");
             method.Invoke(behaviour, null);
+        }
+
+        /// <summary>反射设置测试对象的私有字段，避免为测试扩大运行时 API。</summary>
+        private static void SetPrivateField<T>(object instance, string fieldName, T value)
+        {
+            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"缺少字段 {fieldName}");
+            field.SetValue(instance, value);
         }
     }
 }

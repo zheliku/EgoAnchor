@@ -148,10 +148,10 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
-        /// runtime 有有效 policy 输出时，快照必须标记有效，并记录绑定 Transform 的实际 world pose。
+        /// runtime 输出与显示 Transform 必须分别记录，不能因同帧采样而混用字段。
         /// </summary>
         [Test]
-        public void RecorderSnapshotUsesTransformPoseWhenRuntimeHasOutput()
+        public void RecorderSnapshotSeparatesRuntimeOutputAndDisplayPose()
         {
             GameObject recorderGo = new GameObject("EvalRecorderPositiveSnapshotTests");
             GameObject runtimeGo = new GameObject("EvalRuntimePositiveSnapshotTests");
@@ -168,7 +168,8 @@ namespace EgoAnchor.Tests
                 SetPrivateField(runtime, "policyHost", host);
                 host.Bind(runtime);
 
-                runtime.AcceptWorldPose(42, new Pose(Vector3.one, Quaternion.identity));
+                Pose runtimePose = new Pose(Vector3.one, Quaternion.identity);
+                runtime.AcceptWorldPose(42, runtimePose);
                 runtime.AdvanceAnchorOutput(Time.realtimeSinceStartupAsDouble + 0.01);
                 Assert.That(runtime.TryGetOutputPose(out _), Is.True);
                 Assert.That(runtime.LatestObservationAgeMs, Is.Not.NaN);
@@ -193,9 +194,24 @@ namespace EgoAnchor.Tests
 
                 List<EvalVariantSnapshot> snapshots = GetPrivateField<List<EvalVariantSnapshot>>(recorder, "_snapshots");
                 Assert.That(snapshots, Has.Count.EqualTo(1));
-                Assert.That(snapshots[0].HasOutputPose, Is.True);
-                Assert.That(snapshots[0].OutputPose.position, Is.EqualTo(expected.position));
-                Assert.That(Quaternion.Angle(snapshots[0].OutputPose.rotation, expected.rotation), Is.LessThan(1e-4f));
+                Assert.That(snapshots[0].HasRuntimeOutput, Is.True);
+                Assert.That(snapshots[0].RuntimeOutputPose.position, Is.EqualTo(runtimePose.position));
+                Assert.That(Quaternion.Angle(snapshots[0].RuntimeOutputPose.rotation, runtimePose.rotation), Is.LessThan(1e-4f));
+                Assert.That(snapshots[0].DisplayPose.position, Is.EqualTo(expected.position));
+                Assert.That(Quaternion.Angle(snapshots[0].DisplayPose.rotation, expected.rotation), Is.LessThan(1e-4f));
+
+                string json = EvalJson.BuildOutputLine(
+                    renderMonoMs: 2000.0,
+                    renderUnixMs: 3000.0,
+                    renderUnityFrame: 20,
+                    sourceFrameId: 42,
+                    headPose: Pose.identity,
+                    gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
+                    gtLinearSpeedMs: 0f,
+                    gtAngularSpeedDegS: 0f,
+                    variants: snapshots);
+                StringAssert.Contains("\"output_pos\":[1,1,1]", json);
+                StringAssert.Contains("\"display_pos\":[4,5,6]", json);
             }
             finally
             {
@@ -309,8 +325,7 @@ namespace EgoAnchor.Tests
                 renderUnityFrame: 20,
                 sourceFrameId: 42,
                 headPose: Pose.identity,
-                gtValid: false,
-                gtPose: Pose.identity,
+                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
                 gtLinearSpeedMs: 0f,
                 gtAngularSpeedDegS: 0f,
                 variants: new[] { snapshot });
@@ -351,7 +366,7 @@ namespace EgoAnchor.Tests
 
                 List<EvalVariantSnapshot> snapshots = GetPrivateField<List<EvalVariantSnapshot>>(recorder, "_snapshots");
                 Assert.That(snapshots, Has.Count.EqualTo(1));
-                Assert.That(snapshots[0].HasOutputPose, Is.False);
+                Assert.That(snapshots[0].HasRuntimeOutput, Is.False);
                 Assert.That(snapshots[0].HasRuntimeOutput, Is.False);
                 Assert.That(snapshots[0].HasDisplayPose, Is.True);
                 Assert.That(snapshots[0].DisplayPose.position, Is.EqualTo(go.transform.position));
@@ -376,8 +391,7 @@ namespace EgoAnchor.Tests
                 renderUnityFrame: 20,
                 sourceFrameId: 42,
                 headPose: Pose.identity,
-                gtValid: false,
-                gtPose: Pose.identity,
+                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
                 gtLinearSpeedMs: 0f,
                 gtAngularSpeedDegS: 0f,
                 variants: new[] { snapshot });
@@ -408,14 +422,84 @@ namespace EgoAnchor.Tests
                 headPose: Pose.identity,
                 cameraValid: true,
                 cameraPose: Pose.identity,
-                gtValid: true,
-                gtPose: Pose.identity,
+                gtSample: new EvalReferencePose(true, true, false, Pose.identity, 0.0),
                 cameraReference: "Left");
 
             StringAssert.Contains("\"image_time_basis\":\"camera_pose_history_proxy\"", json);
             StringAssert.Contains("\"image_time_offset_frames\":1", json);
             StringAssert.Contains("\"publish_attempt_mono_ms\":1040", json);
             StringAssert.Contains("\"publish_succeeded\":true", json);
+            StringAssert.Contains("\"gt_pose_fresh\":true", json);
+            StringAssert.Contains("\"gt_pose_keep_alive\":false", json);
+            StringAssert.Contains("\"gt_pose_fresh_age_ms\":0", json);
+        }
+
+        /// <summary>动态模式必须在丢跟时立即判参考无效，静止模式仍可在窗口内复用最后新鲜 pose。</summary>
+        [Test]
+        public void ReferencePoseTrackerSeparatesFreshOnlyAndStaticKeepAlive()
+        {
+            var tracker = new EvalReferencePoseTracker();
+            Pose pose = new Pose(new Vector3(1f, 2f, 3f), Quaternion.identity);
+
+            EvalReferencePose fresh = tracker.Resolve(
+                true, pose, true, 1000.0,
+                EvalReferenceFreshnessMode.RequireFreshTracking, 30_000.0);
+            EvalReferencePose dynamicLost = tracker.Resolve(
+                true, pose, false, 1100.0,
+                EvalReferenceFreshnessMode.RequireFreshTracking, 30_000.0);
+            EvalReferencePose staticSleep = tracker.Resolve(
+                true, pose, false, 1200.0,
+                EvalReferenceFreshnessMode.AllowStaticKeepAlive, 30_000.0);
+
+            Assert.That(fresh.Valid, Is.True);
+            Assert.That(fresh.Fresh, Is.True);
+            Assert.That(dynamicLost.Valid, Is.False);
+            Assert.That(dynamicLost.FreshAgeMs, Is.EqualTo(100.0));
+            Assert.That(staticSleep.Valid, Is.True);
+            Assert.That(staticSleep.KeepAlive, Is.True);
+            Assert.That(staticSleep.FreshAgeMs, Is.EqualTo(200.0));
+            Assert.That(staticSleep.Pose.position, Is.EqualTo(pose.position));
+        }
+
+        /// <summary>后台日志使用有界队列，饱和时必须计数，关闭时必须写完已入队数据。</summary>
+        [Test]
+        public void EvalLogCountsDroppedRowsAndFlushesQueuedRowsOnDispose()
+        {
+            string directory = Path.Combine(Application.temporaryCachePath, $"egoanchor_eval_log_{Guid.NewGuid():N}");
+            string path = Path.Combine(directory, "test.jsonl");
+            Directory.CreateDirectory(directory);
+            try
+            {
+                Type logType = typeof(EvalRecorder).Assembly.GetType("EgoAnchor.Eval.EvalLog");
+                Assert.That(logType, Is.Not.Null);
+                ConstructorInfo constructor = logType.GetConstructor(
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(bool) },
+                    null);
+                Assert.That(constructor, Is.Not.Null);
+                object log = constructor.Invoke(new object[] { path, 1, 64, 1000, false });
+                MethodInfo write = logType.GetMethod("Write", BindingFlags.Instance | BindingFlags.Public);
+                MethodInfo dispose = logType.GetMethod("Dispose", BindingFlags.Instance | BindingFlags.Public);
+                Assert.That(write, Is.Not.Null);
+                Assert.That(dispose, Is.Not.Null);
+
+                write.Invoke(log, new object[] { "{\"row\":1}" });
+                write.Invoke(log, new object[] { "{\"row\":2}" });
+                dispose.Invoke(log, Array.Empty<object>());
+
+                object stats = logType.GetProperty("Stats", BindingFlags.Instance | BindingFlags.Public)?.GetValue(log);
+                Assert.That(stats, Is.Not.Null);
+                long dropped = (long)stats.GetType().GetField("DroppedRows")?.GetValue(stats);
+                int peak = (int)stats.GetType().GetField("PeakQueueDepth")?.GetValue(stats);
+                Assert.That(dropped, Is.EqualTo(1L));
+                Assert.That(peak, Is.EqualTo(1));
+                Assert.That(File.ReadAllLines(path), Is.EqualTo(new[] { "{\"row\":1}" }));
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
         }
 
         /// <summary>
@@ -440,6 +524,9 @@ namespace EgoAnchor.Tests
             try
             {
                 RQ2TrialSelector selector = go.AddComponent<RQ2TrialSelector>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                selector.BindSession(session);
 
                 selector.StartTrial(RQ2Condition.SlowTranslation, 0.15f, float.NaN);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
@@ -560,8 +647,7 @@ namespace EgoAnchor.Tests
                 renderUnityFrame: 20,
                 sourceFrameId: 42,
                 headPose: Pose.identity,
-                gtValid: false,
-                gtPose: Pose.identity,
+                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
                 gtLinearSpeedMs: 0f,
                 gtAngularSpeedDegS: 0f,
                 variants: Array.Empty<EvalVariantSnapshot>(),
@@ -633,6 +719,61 @@ namespace EgoAnchor.Tests
                 UnityEngine.Object.DestroyImmediate(recorderGo);
                 if (Directory.Exists(directory)) Directory.Delete(directory, true);
             }
+        }
+
+        /// <summary>同一 Python session 的非空 Unity 日志存在时，重新开始录制必须拒绝覆盖。</summary>
+        [Test]
+        public void EvalSessionRefusesToOverwriteExistingPythonSessionLogs()
+        {
+            GameObject go = new GameObject("EvalSessionOverwriteTests");
+            string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_session_{Guid.NewGuid():N}");
+            const string sessionId = "20260711_120000_controller_right";
+            string sessionDir = Path.Combine(root, sessionId);
+            string capturePath = Path.Combine(sessionDir, $"{sessionId}_unity_capture.jsonl");
+            string outputPath = Path.Combine(sessionDir, $"{sessionId}_unity_output.jsonl");
+            Directory.CreateDirectory(sessionDir);
+            File.WriteAllText(capturePath, "capture-existing");
+            File.WriteAllText(outputPath, "output-existing");
+
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(hub, "latestPythonSessionId", sessionId);
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runtimeHub", hub);
+                SetPrivateField(session, "outputRoot", root);
+
+                session.StartSession();
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(File.ReadAllText(capturePath), Is.EqualTo("capture-existing"));
+                Assert.That(File.ReadAllText(outputPath), Is.EqualTo("output-existing"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        /// <summary>manifest 必须持久化后台队列丢行数与峰值，供正式采集后验收。</summary>
+        [Test]
+        public void EvalManifestWritesLogQueueStats()
+        {
+            string json = EvalJson.BuildManifest(
+                "session", "object", "editor", "python.jsonl",
+                Array.Empty<string>(), Array.Empty<EvalVariantConfig>(), string.Empty,
+                captureDroppedRows: 2,
+                capturePeakQueueDepth: 8,
+                outputDroppedRows: 3,
+                outputPeakQueueDepth: 16);
+
+            StringAssert.Contains("\"capture_dropped_rows\":2", json);
+            StringAssert.Contains("\"capture_peak_queue_depth\":8", json);
+            StringAssert.Contains("\"output_dropped_rows\":3", json);
+            StringAssert.Contains("\"output_peak_queue_depth\":16", json);
         }
 
         /// <summary>
@@ -909,7 +1050,8 @@ namespace EgoAnchor.Tests
         {
             return new EvalVariantSnapshot(
                 label: "primary", isPrimary: true, sourceFrameId: 42,
-                hasRuntimeOutput: true, hasDisplayPose: true, displayPose: Pose.identity, anchorPoseSource: "transform",
+                hasRuntimeOutput: true, runtimeOutputPose: Pose.identity,
+                hasDisplayPose: true, displayPose: Pose.identity, anchorPoseSource: "transform",
                 hasSourceCaptureTiming: true, sourceCaptureMonoMs: 1000.0, sourceCaptureUnityFrame: 10,
                 observationAgeMs: 120.0, policyOutputTargetMonoMs: policyOutputTargetMonoMs, smoothingDelayMs: smoothingDelayMs,
                 unityPoseHandleMonoMs: 1500.0,

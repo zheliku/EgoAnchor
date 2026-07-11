@@ -14,8 +14,15 @@ import numpy as np
 import pandas as pd
 
 from egoanchor.eval.research.rq2 import (
+    RQ2Config,
+    annotate_active_motion,
     build_source_observations,
     compute_motion_delay,
+    compute_operating_envelope,
+    compute_paired_summary,
+    compute_design_audit,
+    compute_session_audit,
+    compute_trial_audit,
     compute_trial_summary,
     run_rq2_analysis,
 )
@@ -347,6 +354,44 @@ class RQ2AnalyzeTest(unittest.TestCase):
         self.assertAlmostEqual(float(summary["raw_rotation_lag_ms"]), 100.0, delta=25.0)
         self.assertAlmostEqual(float(summary["display_rotation_lag_ms"]), 200.0, delta=25.0)
 
+    def test_display_lag_splits_real_hold_last_runtime_outage(self) -> None:
+        """hold-last 继续显示时，runtime 无输出区间仍必须切断 display lag。"""
+
+        output = self._lag_trajectory()
+        output["has_display_pose"] = True
+        output["display_pos"] = output["output_pos"].map(np.copy)
+        output["display_rot"] = output["output_rot"].map(np.copy)
+        gap = (output["render_mono_ms"] > 2000.0) & (output["render_mono_ms"] < 3000.0)
+        held_index = output.index[output["render_mono_ms"] <= 2000.0][-1]
+        held_pos = output.at[held_index, "display_pos"].copy()
+        held_rot = output.at[held_index, "display_rot"].copy()
+        output.loc[gap, "has_output_pose"] = False
+        output.loc[gap, "anchor_state"] = "Lost"
+        for index in output.index[gap]:
+            output.at[index, "output_pos"] = None
+            output.at[index, "output_rot"] = None
+            output.at[index, "display_pos"] = held_pos.copy()
+            output.at[index, "display_rot"] = held_rot.copy()
+
+        trial = compute_trial_summary(output, build_source_observations(output)).iloc[0]
+
+        self.assertEqual(int(trial["display_lag_segment_count"]), 2)
+        self.assertAlmostEqual(float(trial["display_translation_lag_ms"]), 200.0, delta=25.0)
+        self.assertEqual(trial["display_translation_lag_status"], "ok")
+
+    def test_display_lag_splits_single_reacquire_boundary(self) -> None:
+        """单个 reacquire 事件也应形成显式边界，不能依赖时间缺口碰巧足够大。"""
+
+        output = self._lag_trajectory()
+        boundary = output["render_mono_ms"] == 2500.0
+        output.loc[boundary, "anchor_state"] = "Reacquiring"
+        output.loc[boundary, "policy_reason"] = "server_reacquire"
+
+        trial = compute_trial_summary(output, build_source_observations(output)).iloc[0]
+
+        self.assertEqual(int(trial["display_lag_segment_count"]), 2)
+        self.assertAlmostEqual(float(trial["display_translation_lag_ms"]), 200.0, delta=25.0)
+
     def test_lag_keeps_continuous_seven_fps_stream_in_one_segment(self) -> None:
         """约 140 ms 的稳定 source 间隔不应被绝对阈值误判为 reacquire 缺口。"""
 
@@ -425,6 +470,185 @@ class RQ2AnalyzeTest(unittest.TestCase):
         self.assertAlmostEqual(float(summary.iloc[0]["smoothing_delay_p50_ms"]), 200.0)
         self.assertAlmostEqual(float(summary.iloc[0]["effective_policy_delay_p50_ms"]), 200.0)
 
+    def test_trial_audit_checks_dual_variant_and_unique_primary(self) -> None:
+        """正式 trial 必须逐 tick 同时记录双变体且恰有一个 primary。"""
+
+        full = self._trajectory("slow_translation", trial_id=21, angular=False)
+        baseline = full.copy(deep=True)
+        baseline["label"] = "Raw-ZOH"
+        baseline["is_primary"] = False
+        output = annotate_active_motion(pd.concat([full, baseline], ignore_index=True))
+        source = build_source_observations(output, session_id="s1")
+
+        accepted = compute_trial_audit(
+            output,
+            source,
+            None,
+            session_id="s1",
+            config=RQ2Config(min_active_duration_s=0.0),
+        ).iloc[0]
+        self.assertTrue(bool(accepted["accepted"]), accepted["issues"])
+        self.assertEqual(float(accepted["pair_complete_fraction"]), 1.0)
+        self.assertEqual(accepted["primary_label"], "Full")
+
+        missing = output.drop(
+            output[(output["label"] == "Raw-ZOH") & (output["tick_index"] == 3)].index
+        )
+        rejected = compute_trial_audit(
+            missing,
+            source,
+            None,
+            session_id="s1",
+            config=RQ2Config(min_active_duration_s=0.0),
+        ).iloc[0]
+        self.assertFalse(bool(rejected["accepted"]))
+        self.assertIn("incomplete_variant_tick", rejected["issues"])
+
+    def test_session_audit_rejects_dropped_rows_and_dynamic_keep_alive(self) -> None:
+        """正式动态会话不得包含后台日志丢行或参考位姿 keep-alive。"""
+
+        output = self._trajectory("slow_translation", trial_id=7, angular=False)
+        output.loc[0, "gt_pose_keep_alive"] = True
+        manifest = self._manifest("s1")
+        manifest["log_writer_stats"]["output_dropped_rows"] = 2
+
+        audit = compute_session_audit(output, manifest, session_id="s1").iloc[0]
+
+        self.assertFalse(bool(audit["accepted"]))
+        self.assertIn("output_log_rows_dropped", str(audit["issues"]))
+        self.assertIn("dynamic_gt_keep_alive", str(audit["issues"]))
+
+    def test_design_audit_requires_three_sessions_and_eight_trials(self) -> None:
+        """正式设计审计应按会话和运动类型核对预定重复次数。"""
+
+        rows = [
+            {
+                "session_id": session,
+                "condition": condition,
+                "rq2_trial_id": trial_id,
+                "accepted": True,
+            }
+            for session in ("s1", "s2", "s3")
+            for condition in ("slow_translation", "fast_motion", "rotation")
+            for trial_id in range(1, 9)
+        ]
+        audit = compute_design_audit(
+            pd.DataFrame.from_records(rows),
+            ["s1", "s2", "s3"],
+            RQ2Config(),
+        )
+
+        study = audit[audit["level"].eq("study")].iloc[0]
+        self.assertTrue(bool(study["accepted"]))
+        self.assertEqual(int(study["accepted_trials"]), 72)
+
+    def test_within_tolerance_rate_counts_runtime_loss_as_failure(self) -> None:
+        """误差合格但 runtime 无输出的 hold-last 帧仍是主终点失败。"""
+
+        output = self._trajectory("fast_motion", trial_id=22, angular=False)
+        output["has_display_pose"] = True
+        output["display_pos"] = output["gt_pos"].map(np.copy)
+        output["display_rot"] = output["gt_rot"].map(np.copy)
+        active = annotate_active_motion(output)
+        active_indices = active.index[active["active_motion"]].tolist()
+        self.assertGreaterEqual(len(active_indices), 3)
+        error_index, lost_index = active_indices[0], active_indices[1]
+        active.at[error_index, "display_pos"] = (
+            active.at[error_index, "gt_pos"] + np.array([0.2, 0.0, 0.0])
+        )
+        active.at[lost_index, "has_output_pose"] = False
+        active.at[lost_index, "output_pos"] = None
+        active.at[lost_index, "output_rot"] = None
+
+        trial = compute_trial_summary(
+            active,
+            build_source_observations(active),
+            config=RQ2Config(
+                translation_tolerance_m=0.05,
+                rotation_tolerance_deg=10.0,
+            ),
+        ).iloc[0]
+
+        denominator = int(trial["within_tolerance_denominator"])
+        self.assertEqual(int(trial["within_tolerance_numerator"]), denominator - 2)
+        self.assertAlmostEqual(
+            float(trial["within_tolerance_valid_tracking_rate"]),
+            (denominator - 2) / denominator,
+        )
+
+    def test_paired_summary_reports_full_minus_raw_zoh_and_ci(self) -> None:
+        """配对差值方向固定为 Full - Raw-ZOH，并按 session→trial 给区间。"""
+
+        rows: list[dict[str, object]] = []
+        for session_id in ("s1", "s2"):
+            for trial_id in (1, 2, 3):
+                rows.extend(
+                    [
+                        {
+                            "session_id": session_id,
+                            "condition": "fast_motion",
+                            "rq2_trial_id": trial_id,
+                            "label": "Full",
+                            "within_tolerance_valid_tracking_rate": 0.8,
+                            "display_translation_median_m": 0.04,
+                        },
+                        {
+                            "session_id": session_id,
+                            "condition": "fast_motion",
+                            "rq2_trial_id": trial_id,
+                            "label": "Raw-ZOH",
+                            "within_tolerance_valid_tracking_rate": 0.6,
+                            "display_translation_median_m": 0.06,
+                        },
+                    ]
+                )
+        summary = compute_paired_summary(
+            pd.DataFrame.from_records(rows), bootstrap_iterations=100
+        )
+        trial = summary[
+            (summary["level"] == "trial")
+            & (summary["metric"] == "within_tolerance_valid_tracking_rate")
+        ].iloc[0]
+        condition = summary[
+            (summary["level"] == "condition")
+            & (summary["metric"] == "within_tolerance_valid_tracking_rate")
+        ].iloc[0]
+
+        self.assertAlmostEqual(float(trial["delta_full_minus_raw_zoh"]), 0.2)
+        self.assertAlmostEqual(float(condition["delta_mean"]), 0.2)
+        self.assertTrue(np.isfinite(float(condition["delta_ci_low"])))
+        self.assertTrue(np.isfinite(float(condition["delta_ci_high"])))
+
+    def test_operating_envelope_uses_measured_speed(self) -> None:
+        """经验运行包络按实测速度分箱，不使用名义目标替代。"""
+
+        full = self._trajectory("fast_motion", trial_id=23, angular=False)
+        full["rq2_target_linear_speed_m_s"] = 0.8
+        for index, render_ms in full["render_mono_ms"].items():
+            position = np.array([0.4 * float(render_ms) / 1000.0, 0.0, 0.0])
+            full.at[index, "gt_pos"] = position
+            full.at[index, "output_pos"] = position.copy()
+        baseline = full.copy(deep=True)
+        baseline["label"] = "Raw-ZOH"
+        baseline["is_primary"] = False
+        output = annotate_active_motion(pd.concat([full, baseline], ignore_index=True))
+
+        envelope = compute_operating_envelope(
+            output,
+            session_id="s1",
+            accepted_keys={("fast_motion", 23)},
+            config=RQ2Config(),
+        )
+        trial = envelope[
+            (envelope["level"] == "trial")
+            & (envelope["label"] == "Full")
+            & (envelope["channel"] == "translation")
+        ].iloc[0]
+
+        self.assertAlmostEqual(float(trial["speed_median"]), 0.4, delta=0.05)
+        self.assertLessEqual(float(trial["speed_bin_left"]), 0.4)
+        self.assertGreaterEqual(float(trial["speed_bin_right"]), 0.4)
+
     def test_run_analysis_writes_trial_level_tables(self) -> None:
         """全链路入口应保留四张既有表并新增模型一致性表。"""
 
@@ -437,26 +661,37 @@ class RQ2AnalyzeTest(unittest.TestCase):
             capture=pd.DataFrame(),
             output=output,
             pose=pd.DataFrame(),
-            manifest={"session_id": "synthetic"},
+            manifest=self._manifest("synthetic"),
         )
         with tempfile.TemporaryDirectory() as tmp:
             session_dir = Path(tmp) / "session"
             report_dir = Path(tmp) / "report"
             session_dir.mkdir()
-            with patch("egoanchor.eval.research.rq2.core.load_session", return_value=logs):
-                tables = run_rq2_analysis(session_dir, report_dir=report_dir)
+            with patch("egoanchor.eval.research.rq2.pipeline.load_session", return_value=logs):
+                tables = run_rq2_analysis(
+                    session_dir,
+                    report_dir=report_dir,
+                    config=RQ2Config(min_active_duration_s=0.0),
+                )
 
-            self.assertEqual(
-                set(tables),
+            self.assertTrue(
                 {
                     "rq2_source_error",
                     "rq2_motion_delay",
                     "rq2_trial_summary",
                     "rq2_latency_summary",
                     "rq2_model_summary",
-                },
+                    "rq2_trial_audit",
+                    "rq2_session_audit",
+                    "rq2_design_audit",
+                    "rq2_paired_summary",
+                    "rq2_operating_envelope",
+                    "rq2_lag_diagnostics",
+                }.issubset(tables)
             )
             self.assertEqual(set(tables["rq2_trial_summary"]["label"]), {"Full", "Raw-ZOH"})
+            self.assertTrue(bool(tables["rq2_trial_audit"].iloc[0]["accepted"]))
+            self.assertFalse(tables["rq2_paired_summary"].empty)
             latency = tables["rq2_latency_summary"].set_index("label")
             self.assertAlmostEqual(float(latency.loc["Full", "effective_policy_delay_p50_ms"]), 120.0)
             self.assertAlmostEqual(
@@ -477,6 +712,43 @@ class RQ2AnalyzeTest(unittest.TestCase):
             self.assertNotIn("full_translation_lag_ms", latency_columns)
             for name in tables:
                 self.assertTrue((report_dir / f"{name}.csv").is_file())
+            self.assertTrue((report_dir / "rq2_accuracy_primary.pdf").is_file())
+            self.assertTrue((report_dir / "rq2_operating_envelope.pdf").is_file())
+
+    def test_run_analysis_keeps_same_trial_id_separate_across_sessions(self) -> None:
+        """多 session 联合分析不得把相同 trial 编号合并。"""
+
+        full = self._trajectory("slow_translation", trial_id=1, angular=False)
+        baseline = full.copy(deep=True)
+        baseline["label"] = "Raw-ZOH"
+        baseline["is_primary"] = False
+        output = pd.concat([full, baseline], ignore_index=True)
+        sessions = [
+            SessionLogs(
+                capture=pd.DataFrame(),
+                output=output.copy(deep=True),
+                pose=pd.DataFrame(),
+                manifest=self._manifest(session_id),
+            )
+            for session_id in ("session-a", "session-b")
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp) / "report"
+            with patch(
+                "egoanchor.eval.research.rq2.pipeline.load_session",
+                side_effect=sessions,
+            ):
+                tables = run_rq2_analysis(
+                    ["first", "second"],
+                    report_dir=report_dir,
+                    config=RQ2Config(min_active_duration_s=0.0),
+                )
+
+        summary = tables["rq2_trial_summary"]
+        self.assertEqual(set(summary["session_id"]), {"session-a", "session-b"})
+        self.assertTrue((summary["rq2_trial_id"] == 1).all())
+        audit = tables["rq2_trial_audit"]
+        self.assertEqual(int(audit["accepted"].sum()), 2)
 
     def test_model_summary_uses_trials_as_bootstrap_clusters(self) -> None:
         """模型一致性应先按 trial 汇总，并以 trial 为 bootstrap cluster。"""
@@ -501,13 +773,51 @@ class RQ2AnalyzeTest(unittest.TestCase):
 
         summary = compute_model_summary(pd.DataFrame.from_records(rows))
         trial_rows = summary[(summary["level"] == "trial") & (summary["channel"] == "translation")]
-        scene = summary[(summary["level"] == "scene") & (summary["channel"] == "translation")].iloc[0]
+        scene = summary[
+            (summary["level"] == "condition")
+            & (summary["channel"] == "translation")
+        ].iloc[0]
 
         self.assertEqual(len(trial_rows), 4)
         self.assertTrue((trial_rows["n"] == 3).all())
         self.assertAlmostEqual(float(trial_rows.iloc[0]["bias"]), 0.05, places=6)
         self.assertAlmostEqual(float(scene["slope"]), 2.0, places=6)
         self.assertAlmostEqual(float(scene["intercept"]), 0.01, places=6)
+        self.assertTrue(np.isnan(float(scene["slope_ci_low"])))
+        self.assertTrue(np.isnan(float(scene["slope_ci_high"])))
+
+    def test_model_summary_uses_session_then_trial_bootstrap(self) -> None:
+        """至少两个 session 时关联模型才报告分层 bootstrap 区间。"""
+
+        from egoanchor.eval.research.rq2 import compute_model_summary
+
+        rows: list[dict[str, object]] = []
+        for session_index, session_id in enumerate(("s1", "s2", "s3")):
+            for trial_id, predicted in enumerate((0.04, 0.08, 0.12), start=1):
+                for _ in range(3):
+                    rows.append(
+                        {
+                            "session_id": session_id,
+                            "condition": "slow_translation",
+                            "rq2_trial_id": trial_id,
+                            "label": "Full",
+                            "expected_translation_handle_m": predicted,
+                            "raw_translation_lag_error_handle_m": (
+                                0.01 + 2.0 * predicted + session_index * 0.001
+                            ),
+                        }
+                    )
+
+        summary = compute_model_summary(
+            pd.DataFrame.from_records(rows), bootstrap_iterations=100
+        )
+        scene = summary[
+            (summary["level"] == "condition")
+            & (summary["channel"] == "translation")
+        ].iloc[0]
+
+        self.assertEqual(int(scene["n_sessions"]), 3)
+        self.assertEqual(int(scene["n_trials"]), 9)
         self.assertTrue(np.isfinite(float(scene["slope_ci_low"])))
         self.assertTrue(np.isfinite(float(scene["slope_ci_high"])))
 
@@ -525,6 +835,35 @@ class RQ2AnalyzeTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("RuntimeWarning", result.stderr)
+
+    def test_cli_accepts_repeated_session_dirs(self) -> None:
+        """CLI 应按传入顺序把多个 session 交给联合分析入口。"""
+
+        from egoanchor.eval.research.rq2.analyze import main
+
+        empty_tables = {
+            "rq2_session_audit": pd.DataFrame(),
+            "rq2_trial_audit": pd.DataFrame(),
+            "rq2_design_audit": pd.DataFrame(),
+            "rq2_trial_summary": pd.DataFrame(),
+        }
+        with patch(
+            "egoanchor.eval.research.rq2.analyze.run_rq2_analysis",
+            return_value=empty_tables,
+        ) as run:
+            result = main(
+                [
+                    "--session-dir",
+                    "session-a",
+                    "--session-dir",
+                    "session-b",
+                    "--report-dir",
+                    "report",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_args.args[0], ["session-a", "session-b"])
 
     @classmethod
     def _trajectory(cls, condition: str, *, trial_id: int, angular: bool) -> pd.DataFrame:
@@ -550,6 +889,9 @@ class RQ2AnalyzeTest(unittest.TestCase):
                     "gt_pos": gt_pos,
                     "gt_rot": gt_rot,
                     "gt_pose_valid": True,
+                    "gt_pose_fresh": True,
+                    "gt_pose_keep_alive": False,
+                    "gt_pose_fresh_age_ms": 0.0,
                     "valid": True,
                     "has_output_pose": True,
                     "output_pos": gt_pos.copy(),
@@ -580,6 +922,21 @@ class RQ2AnalyzeTest(unittest.TestCase):
         half = math.radians(angle_deg) / 2.0
         return np.array([0.0, 0.0, math.sin(half), math.cos(half)], dtype=float)
 
+    @staticmethod
+    def _manifest(session_id: str) -> dict[str, object]:
+        """构造满足当前 RQ2 会话完整性契约的 manifest。"""
+
+        return {
+            "session_id": session_id,
+            "variant_labels": ["Full", "Raw-ZOH"],
+            "log_writer_stats": {
+                "capture_dropped_rows": 0,
+                "capture_peak_queue_depth": 1,
+                "output_dropped_rows": 0,
+                "output_peak_queue_depth": 1,
+            },
+        }
+
     @classmethod
     def _lag_trajectory(cls) -> pd.DataFrame:
         """构造同时含 100 ms raw 滞后和 200 ms 显示滞后的周期轨迹。"""
@@ -602,6 +959,9 @@ class RQ2AnalyzeTest(unittest.TestCase):
                     "gt_pos": gt_pos,
                     "gt_rot": gt_rot,
                     "gt_pose_valid": True,
+                    "gt_pose_fresh": True,
+                    "gt_pose_keep_alive": False,
+                    "gt_pose_fresh_age_ms": 0.0,
                     "valid": True,
                     "has_output_pose": True,
                     "output_pos": display_pos,

@@ -98,7 +98,7 @@ namespace EgoAnchor.Eval.RQ2
             if (trialDurationText != null)
             {
                 double trialDuration = selector != null ? selector.CurrentTrialDurationSeconds : 0.0;
-                trialDurationText.text = $"Trial Duration: {EvalStatusText.Duration(trialDuration)}";
+                trialDurationText.text = $"Trial Envelope: {EvalStatusText.Duration(trialDuration)}";
             }
 
             if (targetSpeedText != null)
@@ -110,18 +110,18 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>按当前场景生成唯一适用的目标速度文本。</summary>
         private string BuildTargetSpeedText(RQ2Condition condition)
         {
-            if (selector == null) return "Target: -";
+            if (selector == null) return "Nominal target: -";
             if (condition == RQ2Condition.Rotation)
             {
                 float angular = selector.TargetAngularSpeedDegS;
-                return float.IsNaN(angular) ? "Target: -" : $"Target: {angular:F1} deg/s";
+                return float.IsNaN(angular) ? "Nominal Target: -" : $"Target: {angular:F1} deg/s";
             }
             if (condition == RQ2Condition.SlowTranslation || condition == RQ2Condition.FastMotion)
             {
                 float linear = selector.TargetLinearSpeedMs;
-                return float.IsNaN(linear) ? "Target: -" : $"Target: {linear:F2} m/s";
+                return float.IsNaN(linear) ? "Nominal Target: -" : $"Target: {linear:F2} m/s";
             }
-            return "Target: -";
+            return "Nominal Target: -";
         }
 
         /// <summary>按当前试次场景绘制操作按键表，并高亮对应的场景快捷键。</summary>

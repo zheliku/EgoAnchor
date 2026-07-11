@@ -13,6 +13,11 @@ namespace EgoAnchor.Eval.RQ2
     /// </summary>
     public sealed class RQ2TrialSelector : MonoBehaviour
     {
+        /// <summary>唯一的评估 session，用于保证 trial 只在实际录制期间开始。</summary>
+        [Header("Recording State")]
+        [Tooltip("唯一的 EvalSession 录制状态来源；未绑定或未录制时拒绝开始 RQ2 trial。")]
+        [SerializeField] private EvalSession evalSession;
+
         /// <summary>当前 session 内已经分配的最大试次编号。</summary>
         private int _lastTrialId;
 
@@ -47,6 +52,15 @@ namespace EgoAnchor.Eval.RQ2
         public double CurrentTrialDurationSeconds => ElapsedSeconds(_trialStartMonoMs);
 
         /// <summary>
+        /// 绑定唯一的评估 session。输入组件在 Awake 时调用，场景也可直接在 Inspector 中绑定。
+        /// </summary>
+        /// <param name="session">提供录制状态的 EvalSession。</param>
+        public void BindSession(EvalSession session)
+        {
+            evalSession = session;
+        }
+
+        /// <summary>
         /// 立即开始新的 RQ2 试次。同一 session 中每次成功开始都会分配新的单调递增编号。
         /// </summary>
         /// <param name="condition">本次试次的运动场景，不能为 None。</param>
@@ -59,6 +73,11 @@ namespace EgoAnchor.Eval.RQ2
         {
             if (condition == RQ2Condition.None)
                 throw new ArgumentOutOfRangeException(nameof(condition), "RQ2 试次必须指定有效运动场景。");
+            if (evalSession == null || !evalSession.IsRecording)
+            {
+                EgoAnchorLog.For<RQ2TrialSelector>().Warning("RQ2 trial 开始请求已忽略：当前未录制评估 session。");
+                return;
+            }
             if (_currentTrialId > 0)
             {
                 EgoAnchorLog.For<RQ2TrialSelector>().Warning(

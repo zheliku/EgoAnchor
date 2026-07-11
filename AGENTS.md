@@ -196,7 +196,7 @@ Policy 结构：
 
 - `AnchorPolicyHost` 只置 `wantsServerReacquire`；`PoseToAnchorRuntime` 透传；`AnchorRuntimeHub` 统一 fan-in，用唯一 `reacquireCommandClient` 发 NATS reacquire。
 - 源码默认 `enableLostReacquire=true`、`enableLowScoreReacquire=true`；持续低总分超过 `lowScoreReacquireThreshold=0.45` 且持续 `0.6s` 后请求 Python 重新 register。
-- `emitServerReacquire` 只控制是否把本地 Lost/低分重获取上报给 hub，不关闭本地生命周期或低分重置。Develop、RQ1、RQ2 场景中的每个 `AnchorPolicyHost` 都必须显式序列化该字段；仅 RQ2 的被动 *Raw-ZOH* 设为 false，避免 baseline 改变共享 Python 感知状态，其余 host 保持 true。
+- `emitServerReacquire` 只控制是否把本地 Lost/低分重获取上报给 hub，不关闭本地生命周期或低分重置。Develop、RQ1、RQ2 场景中的每个 `AnchorPolicyHost` 都必须显式序列化该字段；RQ2 配对场景的 *Full* 与 *Raw-ZOH* 均设为 false，避免任一变体改变共享 Python 感知状态，RQ1 与 Develop 保持 true。
 - 不要让 leaf runtime 或 policy 自持 command client。
 
 eval 字段契约（改 schema 必须同步 Unity writer、reader、Python eval 工具和 AGENTS）：
@@ -205,6 +205,8 @@ eval 字段契约（改 schema 必须同步 Unity writer、reader、Python eval 
 - capture 时间字段：`capture_mono_ms` / `capture_unity_frame` 是 camera pose 历史给出的 image-time proxy；`image_time_basis=camera_pose_history_proxy`，`image_time_offset_frames` 是成功采集样本回退数；`sender_mono_ms` / `sender_unity_frame` 是 JPEG 完成后的 payload-ready/header 时刻，不是 ZMQ 发包时刻；`publish_attempt_mono_ms` / `publish_succeeded` 来自紧邻 `TrySend` 的发布诊断；`gt_sample_mono_ms` 是 recorder 回调实际采样平台参考 pose 的时刻。不得把这些字段解释为同刻快照。
 - output 时间字段：`observation_age_ms` / `policy_output_target_mono_ms` / `smoothing_delay_ms` / `unity_pose_handle_mono_ms`。历史日志缺失时 Python 解析为 NaN，不得用旧 `predict_ahead_ms` 补写新语义。
 - `has_output_pose` 只信任 `PoseToAnchorRuntime.TryGetOutputPose`，决定 runtime availability；`has_display_pose` / `display_pos` / `display_rot` 记录用户实际看到的 Transform，包括 Lost 后 hold-last。RQ2 各系统配置的实时误差与 lag 使用 display pose，可用率仍使用 `has_output_pose`。执行顺序固定为 `PoseToAnchorRuntime(-50) → DynamicObjectAnchor(0) → EvalRecorder(50)`。
+- `gt_pose_fresh` / `gt_pose_keep_alive` / `gt_pose_fresh_age_ms` 区分当前真实追踪样本与静止 keep-alive。RQ1 使用 `AllowStaticKeepAlive` 保留长时静止参考；RQ2 使用 `RequireFreshTracking`，动态分析不得把 keep-alive 当作参考轨迹。
+- `EvalLog` 使用有界后台队列批量写 JSONL；manifest 的 `log_writer_stats` 记录 capture/output 丢行数和峰值队列深度。正式数据要求两路 `dropped_rows=0`。`EvalSession` 在目标日志已非空时拒绝重新开始，防止 F8 后再次 F7 覆盖同一 session。
 - proto 当前字段名：`color_reprojection`、`render_quality_evaluated`。
 - `score_reprojection`、`score_depth`、`score_mask` 保持当前名；`score_phase`、`score_jump`、`score_reject`、`score_confidence` 已 reserved，不要恢复。
 - `LatestResidualMeters/Degrees` 当前返回 NaN 是为保留 eval schema，不要因此删除 public API。
@@ -244,7 +246,7 @@ Unity 代码地图（关键模块）：
 
 **论文 RQ 结构**（2026-07-07 定稿）：
 - RQ1：静态锚定质量——评估静止场景（长时静止观察、遮挡恢复）下的精度、稳定性、鲁棒性；消融静止锚定机制（Full vs. No-StaticLock，仅在静止观察场景下对比）
-- RQ2：动态追踪能力——评估动态场景（慢速平移、快速挥动、旋转）下的追踪精度、追踪连续性、有符号 raw 滞后残差与 pre-image `v·τ / ω·τ` 的关系，并同帧比较 *Full* 与 *Raw-ZOH* 的显示误差和响应滞后
+- RQ2：动态追踪能力——以误差容限内有效追踪率为主终点，评估慢速往复平移、快速往复运动和交替轴向旋转下的当前时刻配准质量；同帧比较 *Full* 与 *Raw-ZOH* 的误差、可用率和可辨识响应滞后，并把有符号 raw 滞后残差与 pre-image `v·τ / ω·τ` 仅作为探索性关联
 - RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行
 
 **实验表述规范**（2026-07-07）：
@@ -301,7 +303,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ### RQ2 分析框架
 
-**RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *Raw-ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT；除 motion model、smoothing strategy 和 static lock 外，坐标变换、质量门控、生命周期阈值与 hold-last 语义保持一致。*Raw-ZOH* 不发起 lost/low-score server reacquire，避免参照变体改变共享 Python 感知状态。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *Raw-ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件；`EvalSession` 仍是录制状态唯一真理。
+**RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *Raw-ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT，并保持坐标变换、质量门控、生命周期阈值与 hold-last 语义一致；差异只在完整锚定策略与零阶保持。配对 RQ2 的两个 host 都必须 `emitServerReacquire=false`，持续丢失作为主终点失败保留。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *Raw-ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件，而且仅允许在 `EvalSession.IsRecording=true` 时开始 trial；`EvalSession` 仍是录制状态唯一真理。
 
 **评估状态与实时监控 UI**：`EvalStatusText` 只统一录制、session、时长和活动行的纯文本格式；`RQ1StatusUI` 与 `RQ2StatusUI` 保留各自业务逻辑，不抽通用 MonoBehaviour 基类。`EvalLiveStats` 位于 `Eval/` 根目录，RQ1/RQ2 场景各保留一个实例，必须挂在右侧 `LiveStatus` 对象并绑定 `recorder` 与 `statsText`。它读取主变体的观测年龄、pose 更新率、实时误差、帧间变化、可靠性分数和锚定状态；RQ2 的帧间变化包含真实运动，不能解释为纯噪声。完整采集流程和按键语义统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
 
@@ -312,24 +314,34 @@ output 顶层试次字段：
 
 RQ2 不设 warmup/motion/cooldown phase。按 `1/2/3` 后 trial 立即生效，按 `0` 结束；Python 仅以合法 `rq2_condition` 和正 `rq2_trial_id` 识别有效试次。上述四个 RQ2 顶层字段均为当前必需契约；缺字段或仍含 `rq2_phase` 的旧日志直接报错，不做兼容。
 
-**图像时间边界**：Quest Passthrough Camera API 当前无可直接使用的硬件曝光时间戳。`StereoFrameSource.cameraPoseDelayFrames=1` 以前一成功采集样本估计图像时刻；论文和分析都必须称其为 image-time proxy，不得称硬件曝光真值或假定固定 33 ms。纹理复用、采集失败与调度会改变一次样本回退的物理时长；正式 RQ2 需做 0/1/2 个成功采集样本回退的敏感性分析。
+**正式录制协议**：至少 3 个独立 session，每个 session 的 slow translation / fast motion / rotation 各 8 个合格 trial，总计至少 72 个。每个 trial 用按键界定粗包络：前静止约 1.5 s、有效运动 8–12 s、后静止约 1.5 s；平移沿固定标记路径往复，旋转围绕固定主轴交替，低速平移和旋转均需多次反向。三类运动按分块随机顺序交错录制，并固定运动幅度、观察距离、照明与头部活动范围。Python 根据新鲜控制器参考轨迹自动提取 `active_motion`，按键反应时间和边界静止段不进入动态统计。
 
-**分析代码**：`src/egoanchor/eval/research/rq2/core.py` 实现指标，`rq2/__init__.py` 显式 re-export 包级 API，`rq2/analyze.py` 只承担 CLI，避免 `python -m` 重复导入 warning。核心 API：
-- `build_source_observations(logs)`：只从 `is_primary=true` 的主变体按 `trial × source_frame_id` 保留首次出现的 aligned raw pose，并插值 image-time 参考 pose；各显示变体共享这份感知诊断
-- `compute_motion_delay(source, output)`：生成 reference motion 暴露量、capture/handle/render 有符号 raw 滞后残差及 pre-image `v·τ / ω·τ` 预测量
-- `compute_trial_summary(output, source)`：按 `trial × label` 汇总 display/raw 误差、有效样本数、availability、显示更新率、保持比例、可识别时延与 display/raw lag；显示指标统一使用 `display_*` 字段，不保留旧 `full_*` 列。`display_update_rate_hz` 统计有效相邻渲染帧中的 pose 变化事件率，`display_hold_fraction` 统计同一 pose 样本对比例；相邻变化不超过 `1e-6 m / 1e-4 deg` 时判为保持
-- `compute_model_summary(motion)`：trial 级 bias/MAE 与场景级 slope/intercept；固定种子 1000 次 trial-cluster bootstrap，少于 3 个 trial 时 CI 为 NaN
-- `run_rq2_analysis(session_dir, report_dir=None)`：写五张 RQ2 CSV 并返回表映射
+**图像时间边界**：Quest Passthrough Camera API 当前无可直接使用的硬件曝光时间戳。系统以前一成功采集样本估计图像时刻；论文和分析都必须称其为 image-time proxy，不得称硬件曝光真值或假定固定 33 ms。纹理复用、采集失败与调度会改变代理时刻相对真实曝光的偏差，因此所有 image-time raw 误差和时延量只作带时间不确定性的诊断。
 
-输出表：`rq2_source_error.csv`、`rq2_motion_delay.csv`、`rq2_trial_summary.csv`、`rq2_latency_summary.csv`、`rq2_model_summary.csv`。
+**分析代码**：`src/egoanchor/eval/research/rq2/` 按职责拆分，`rq2/__init__.py` 显式 re-export 包级 API，`rq2/analyze.py` 只承担 CLI。核心模块：
+- `contract.py`：正式阈值、重复次数和稳定输出列
+- `trajectory.py`：新鲜 GT 轨迹、`active_motion` 与 pre-image 局部运动拟合
+- `source.py`：主变体按 `session × trial × source_frame_id` 首现去重的 image-time raw 诊断，以及 handle/render 有符号时延残差
+- `lag.py`：runtime/GT 连续段内的速度互相关与可辨识性诊断
+- `qc.py`：session、trial、3-session × 8-trial 正式设计三级审计
+- `paired.py` / `model.py`：试次级配对差值与等 trial 权重的探索性运动—时延关联
+- `pipeline.py` / `plot.py`：多 session 编排、经验运行包络、CSV 与四组论文图导出
 
-pre-image 运动拟合只使用图像时间代理之前固定 400 ms：位置采用 Theil-Sen 稳健斜率，旋转采用相邻四元数的世界系 SO(3) log / dt 中位。GT 轨迹保留显式有效 segment，GT 插值、pre-image 拟合与 lag 均不得跨参考位姿无效空窗；lag 还不得跨 tracking/reacquire 缺口。输出连续段阈值为 `max(100 ms, 2.5 × median interval)`，绝对上限 500 ms。lag 至少需要 16 个速度样本且观察长度覆盖候选搜索范围；峰值归一化相关低于 0.5、Bonferroni 校正后 `p > 0.05`、落在搜索边界或信号近似匀速/低激励时返回 NaN。
+**动态主终点**：`within_tolerance_valid_tracking_rate` 在 `active_motion` 分母中要求 runtime 有输出、display 平移误差 ≤ 50 mm 且旋转误差 ≤ 10°；runtime loss 即使仍显示 hold-last 也记为失败。显示误差和显示 lag 使用 `display_*`，availability 只使用 `has_output_pose`。经验运行包络按实测线/角速度分箱并以 trial 等权，不把未采样区间外推成物理性能边界。
+
+输出表共 11 张：`rq2_session_audit`、`rq2_trial_audit`、`rq2_design_audit`、`rq2_source_error`、`rq2_motion_delay`、`rq2_trial_summary`、`rq2_paired_summary`、`rq2_operating_envelope`、`rq2_latency_summary`、`rq2_model_summary`、`rq2_lag_diagnostics`。四组图为 `rq2_accuracy_primary`、`rq2_paired_tradeoff`、`rq2_delay_association`、`rq2_operating_envelope`。
+
+pre-image 运动拟合只使用图像时间代理之前固定 400 ms：位置采用 Theil-Sen 稳健斜率，旋转采用相邻四元数的世界系 SO(3) log / dt 中位。GT 轨迹优先要求 `gt_pose_fresh`，插值、pre-image 拟合与 lag 均不得跨参考位姿无效空窗；display lag 还不得跨 runtime 无输出、Lost/Searching 或 reacquire 缺口。运动—时延关系只纳入局部速度变异系数 ≤ 0.5 且运动轴一致性 ≥ 0.8 的样本，作为探索性关联而非时延因果验证。lag 至少需要 16 个速度样本且观察长度覆盖候选搜索范围；峰值相关低于 0.5、峰值突出度低于 0.05、落在搜索边界或信号低激励时返回 NaN，不对自相关帧计算 Pearson p 值或 Bonferroni 校正。
+
+**统计层级**：先在 trial 内计算 *Full − Raw-ZOH*，再以 session 为最高层、trial 为次层执行固定种子 1000 次层级 bootstrap。模型关联使用全部合格 source 观测，但每个 trial 具有相等总权重。正式统计只纳入 session/trial audit 通过的数据；日志丢行、manifest 双变体错误、动态 GT keep-alive、GT 覆盖低于 95%、有效运动短于 8 s或无 active source 都会拒收。
 
 **运行命令**：
 ```bash
 cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.research.rq2.analyze --session-dir data/eval/<session_id>
 ```
+
+联合正式分析重复传入至少三个 `--session-dir` 并显式指定 `--report-dir`；操作流程与检查项统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
 
 **参考系统边界**：RQ1/RQ2 的控制器 pose 是平台参考位姿，不是独立外部高精度真值。正式报告需给出模型到控制器追踪原点的固定外参标定残差、重复标定一致性、平台参考更新率，并承认控制器与头显共享追踪系统会隐藏共同世界系漂移。
 

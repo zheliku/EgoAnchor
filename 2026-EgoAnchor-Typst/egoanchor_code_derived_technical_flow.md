@@ -348,7 +348,7 @@ $$
 2. 低分重获取：`lowScoreReacquireThreshold` 持续满足后请求 Python 重新 register。
 3. 静止锚定：进入锁定、低分释放和解锁证据都会使用可靠性评分。
 
-质量评估门控对应 `enableQualityGate`。它不是独立模块，源码默认关闭；打开后，可靠性总分 $<$ 阈值或 $|$测量−预测$|$ 超跳变阈值 → Reject，不更新运动模型。论文 RQ2 的完整方法可把它作为“时空对齐 + 质量评估门控 + 静止锚定”的一项消融开关；eval 字段为 `quality_gate=enabled/disabled`。
+质量评估门控对应 `enableQualityGate`。它不是独立模块，源码默认关闭；打开后，可靠性总分 $<$ 阈值或 $|$测量−预测$|$ 超跳变阈值 → Reject，不更新运动模型。论文 RQ2 的 *Full* 与 *Raw-ZOH* 使用相同的门控配置，比较完整锚定策略与零阶保持参照的整体权衡，不把质量门控作为独立消融因素；eval 字段为 `quality_gate=enabled/disabled`。
 
 ### 10.3 运动模型
 
@@ -498,7 +498,32 @@ handler 层：类型校验 → 参数校验 → `request_id` 去重（TTL `60000
 
 产出：各指标 CSV + `summary.md` + 一组 PNG/PDF 图（误差时间线、时延堆叠、jitter-lag 散点、slip 时间线、recovery 柱状）。`plot_recorded_strategies.py` 还能把同一会话下不同平滑/预测策略的 6 通道（XYZ + RotVec XYZ）轨迹叠加对比。
 
-> 评估前统一过滤：GT 有效 ∧ 有输出 pose ∧ GT/输出 pose 数值有限。`rq2_alignment_ablation_*` 用于 RQ2 的时空对齐消融：比较 frame-aligned raw 与 arrival-time raw。
+> 共享指标引擎按各指标语义过滤有效样本。RQ2 不使用统一的“GT 有效且有输出”过滤：显示误差保留 Lost 后 hold-last，主终点则把 runtime 无输出计为失败。*Frame-aligned* / *Arrival-aligned* 仅诊断相机位姿取样时刻错配，不进入物体运动时延主模型，也不作为 RQ2 的核心消融。
+
+### 14.3 RQ2 专用动态分析
+
+RQ2 使用 `eval/research/rq2/` 下的专用分析包，不复用静态场景的聚合口径：
+
+| 模块 | 职责 |
+|---|---|
+| `contract.py` | 预注册阈值、正式重复次数与稳定输出列 |
+| `trajectory.py` | 新鲜参考轨迹、有效运动区间和图像前局部运动拟合 |
+| `source.py` | 每个 source 首现的 raw 误差与有符号时延残差 |
+| `lag.py` | 连续段互相关与峰值可辨识性诊断 |
+| `qc.py` | 会话、trial 和正式设计三级审计 |
+| `paired.py` | *Full* 与 *Raw-ZOH* 的试次级配对差值 |
+| `model.py` | 等 trial 权重的运动—时延探索性关联 |
+| `pipeline.py` | 多会话编排、经验运行包络、表格和图形导出 |
+
+Unity 按键仅界定粗 trial 包络。Python 从控制器平台参考轨迹计算平滑线速度与角速度，桥接短暂低速间隙并删除过短运动段，形成 `active_motion`。正式 trial 至少包含 8 s 有效运动；每个录制会话的三类运动各需 8 个合格 trial，联合分析至少包含 3 个独立会话。
+
+动态主终点是误差容限内有效追踪率：有效运动帧同时满足 runtime 有输出、显示平移误差不超过 50 mm、显示旋转误差不超过 10° 才记为成功。分母包含 runtime 丢失帧，因此不会因只统计成功输出而产生幸存者偏差。显示误差仍使用 `display_*`，保留用户实际看到的 hold-last；可用率只使用 `has_output_pose`。
+
+图像时刻 raw 误差与渲染时刻显示误差属于不同诊断层，不能解释为同一位姿的“补偿前后”。运动—时延分析只在图像时间代理之前 400 ms 的参考轨迹局部稳态且运动轴一致时纳入样本；`v·τ` / `ω·τ` 只作为探索性解释变量，不作感知时延的因果验证。轨迹 lag 仅在样本长度、动态激励、峰值相关、峰值突出度和非边界峰均通过时报告；不再对自相关帧计算 Pearson p 值或 Bonferroni 显著性。
+
+统计先在试次内计算 *Full* − *Raw-ZOH*，再以录制会话为最高层、trial 为次层执行层级 bootstrap。经验运行包络按实测线速度或角速度分箱，并让每个 trial 具有相同总权重；未采样区间不外推为物理性能边界。
+
+正式分析输出 source、motion-delay、trial、paired、operating-envelope、latency、model、lag-diagnostics 八类结果表，以及 session/trial/design 三类审计表。后台日志队列只要出现丢行、动态参考位姿使用 keep-alive、双变体声明不完整或 trial 参考覆盖不足，该会话或 trial 就不会进入正式配对与关联统计。
 
 ---
 

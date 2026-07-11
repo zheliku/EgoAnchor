@@ -30,8 +30,7 @@ namespace EgoAnchor.Eval
         /// <param name="headPose">回调时刻头部 world pose。</param>
         /// <param name="cameraValid">图像时刻参考相机 pose 是否有效。</param>
         /// <param name="cameraPose">图像时刻参考相机 world pose。</param>
-        /// <param name="gtValid">GT pose 是否有效。</param>
-        /// <param name="gtPose">回调实际采样的 GT world pose。</param>
+        /// <param name="gtSample">回调实际采样的参考 world pose 及其新鲜度诊断。</param>
         /// <param name="cameraReference">参考相机名称。</param>
         /// <returns>可写入 JSONL 的单行 JSON。</returns>
         public static string BuildCaptureLine(
@@ -48,8 +47,7 @@ namespace EgoAnchor.Eval
             Pose headPose,
             bool cameraValid,
             Pose cameraPose,
-            bool gtValid,
-            Pose gtPose,
+            EvalReferencePose gtSample,
             string cameraReference)
         {
             var b = new Builder(512);
@@ -70,9 +68,7 @@ namespace EgoAnchor.Eval
             b.Bool("cam_valid", cameraValid);
             b.Str("camera_reference", cameraReference ?? string.Empty);
             b.Pose("cam_pos", "cam_rot", cameraPose, cameraValid);
-            b.Pose("gt_pos", "gt_rot", gtPose, gtValid);
-            b.Bool("gt_pose_valid", gtValid);
-            b.Str("gt_pose_source", gtValid ? "transform" : "none");
+            b.ReferencePose(gtSample);
             return b.Finish();
         }
 
@@ -84,8 +80,7 @@ namespace EgoAnchor.Eval
         /// <param name="renderUnityFrame">渲染 tick 的 Unity 帧号。</param>
         /// <param name="sourceFrameId">主变体当前输出对应的源帧号。</param>
         /// <param name="headPose">渲染时刻的头部 world pose。</param>
-        /// <param name="gtValid">渲染时刻参考 pose 是否有效。</param>
-        /// <param name="gtPose">渲染时刻的平台参考 world pose。</param>
+        /// <param name="gtSample">渲染时刻的平台参考 world pose 及其新鲜度诊断。</param>
         /// <param name="gtLinearSpeedMs">平台参考 pose 的线速度，单位 m/s。</param>
         /// <param name="gtAngularSpeedDegS">平台参考 pose 的角速度，单位 deg/s。</param>
         /// <param name="variants">同一渲染 tick 的系统变体快照。</param>
@@ -102,8 +97,7 @@ namespace EgoAnchor.Eval
             int renderUnityFrame,
             long sourceFrameId,
             Pose headPose,
-            bool gtValid,
-            Pose gtPose,
+            EvalReferencePose gtSample,
             float gtLinearSpeedMs,
             float gtAngularSpeedDegS,
             IReadOnlyList<EvalVariantSnapshot> variants,
@@ -122,9 +116,7 @@ namespace EgoAnchor.Eval
             b.Long("render_unity_frame", renderUnityFrame);
             b.Long("source_frame_id", sourceFrameId);
             b.Pose("head_pos", "head_rot", headPose, true);
-            b.Pose("gt_pos", "gt_rot", gtPose, gtValid);
-            b.Bool("gt_pose_valid", gtValid);
-            b.Str("gt_pose_source", gtValid ? "transform" : "none");
+            b.ReferencePose(gtSample);
             b.Flt("gt_linear_speed_m_s", gtLinearSpeedMs);
             b.Flt("gt_angular_speed_deg_s", gtAngularSpeedDegS);
             // RQ1 手动标记字段（可选）
@@ -149,7 +141,11 @@ namespace EgoAnchor.Eval
             string pythonLogFilename,
             IReadOnlyList<string> variantLabels,
             IReadOnlyList<EvalVariantConfig> variantConfigs,
-            string notes)
+            string notes,
+            long captureDroppedRows,
+            int capturePeakQueueDepth,
+            long outputDroppedRows,
+            int outputPeakQueueDepth)
         {
             var sb = new StringBuilder(512);
             sb.Append('{');
@@ -189,6 +185,14 @@ namespace EgoAnchor.Eval
                 }
             }
             sb.Append("],");
+
+            // 后台日志队列统计
+            sb.Append("\"log_writer_stats\":{");
+            sb.Append($"\"capture_dropped_rows\":{captureDroppedRows.ToString(CultureInfo.InvariantCulture)},");
+            sb.Append($"\"capture_peak_queue_depth\":{capturePeakQueueDepth.ToString(CultureInfo.InvariantCulture)},");
+            sb.Append($"\"output_dropped_rows\":{outputDroppedRows.ToString(CultureInfo.InvariantCulture)},");
+            sb.Append($"\"output_peak_queue_depth\":{outputPeakQueueDepth.ToString(CultureInfo.InvariantCulture)}");
+            sb.Append("},");
 
             // condition_spans/event_markers 留空（RQ1 使用自动场景检测）
             sb.Append("\"condition_spans\":[],");
@@ -316,6 +320,17 @@ namespace EgoAnchor.Eval
                 if (valid) Vec3(ToEuler360(pose.rotation)); else _sb.Append("null");
             }
 
+            /// <summary>写入平台参考位姿及其真实追踪、keep-alive 和样本年龄诊断。</summary>
+            public void ReferencePose(EvalReferencePose sample)
+            {
+                Pose("gt_pos", "gt_rot", sample.Pose, sample.Valid);
+                Bool("gt_pose_valid", sample.Valid);
+                Str("gt_pose_source", sample.Valid ? "transform" : "none");
+                Bool("gt_pose_fresh", sample.Fresh);
+                Bool("gt_pose_keep_alive", sample.KeepAlive);
+                Dbl("gt_pose_fresh_age_ms", sample.FreshAgeMs);
+            }
+
             public void Variants(IReadOnlyList<EvalVariantSnapshot> variants)
             {
                 Name("variants");
@@ -339,7 +354,7 @@ namespace EgoAnchor.Eval
                 vb.Bool("is_primary", v.IsPrimary);
                 vb.Long("source_frame_id", v.SourceFrameId);
                 vb.Bool("has_output_pose", v.HasRuntimeOutput);
-                vb.Pose("output_pos", "output_rot", v.DisplayPose, v.HasRuntimeOutput);
+                vb.Pose("output_pos", "output_rot", v.RuntimeOutputPose, v.HasRuntimeOutput);
                 vb.Bool("has_display_pose", v.HasDisplayPose);
                 vb.Pose("display_pos", "display_rot", v.DisplayPose, v.HasDisplayPose);
                 vb.Str("anchor_pose_source", v.AnchorPoseSource);
@@ -438,14 +453,12 @@ namespace EgoAnchor.Eval
         public readonly long SourceFrameId;
         /// <summary>policy runtime 本帧是否给出有效输出。</summary>
         public readonly bool HasRuntimeOutput;
+        /// <summary>policy runtime 本帧给出的 world pose。</summary>
+        public readonly Pose RuntimeOutputPose;
         /// <summary>用户当前是否看到已应用或 hold-last 的 anchor pose。</summary>
         public readonly bool HasDisplayPose;
         /// <summary>实际显示 Transform 的 world pose。</summary>
         public readonly Pose DisplayPose;
-        /// <summary>兼容现有 C# 调用的 runtime 输出有效性别名。</summary>
-        public bool HasOutputPose => HasRuntimeOutput;
-        /// <summary>兼容现有 C# 调用的显示 pose 别名。</summary>
-        public Pose OutputPose => DisplayPose;
         public readonly string AnchorPoseSource;
         public readonly bool HasSourceCaptureTiming;
         public readonly double SourceCaptureMonoMs;
@@ -486,7 +499,8 @@ namespace EgoAnchor.Eval
 
         public EvalVariantSnapshot(
             string label, bool isPrimary, long sourceFrameId,
-            bool hasRuntimeOutput, bool hasDisplayPose, Pose displayPose, string anchorPoseSource,
+            bool hasRuntimeOutput, Pose runtimeOutputPose,
+            bool hasDisplayPose, Pose displayPose, string anchorPoseSource,
             bool hasSourceCaptureTiming, double sourceCaptureMonoMs, int sourceCaptureUnityFrame,
             double observationAgeMs, double policyOutputTargetMonoMs, double smoothingDelayMs,
             double unityPoseHandleMonoMs,
@@ -503,6 +517,7 @@ namespace EgoAnchor.Eval
             IsPrimary = isPrimary;
             SourceFrameId = sourceFrameId;
             HasRuntimeOutput = hasRuntimeOutput;
+            RuntimeOutputPose = runtimeOutputPose;
             HasDisplayPose = hasDisplayPose;
             DisplayPose = displayPose;
             AnchorPoseSource = anchorPoseSource ?? string.Empty;

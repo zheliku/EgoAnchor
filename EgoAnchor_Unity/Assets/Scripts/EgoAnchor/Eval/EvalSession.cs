@@ -135,6 +135,13 @@ namespace EgoAnchor.Eval
 
             string capturePath = Path.Combine(_sessionDir, $"{_sessionId}_unity_capture.jsonl");
             string outputPath  = Path.Combine(_sessionDir, $"{_sessionId}_unity_output.jsonl");
+            if (HasNonEmptyLog(capturePath) || HasNonEmptyLog(outputPath))
+            {
+                EgoAnchorLog.For<EvalSession>().Error(
+                    $"Session 启动已拒绝：目标 Unity 日志已有非空内容，禁止覆盖。session_id={_sessionId}");
+                return;
+            }
+
             recorder.BeginRecording(capturePath, outputPath);
             _recording = true;
             sessionStarted.Invoke();
@@ -199,11 +206,21 @@ namespace EgoAnchor.Eval
 
             string json = EvalJson.BuildManifest(
                 _sessionId, objectId, runMode,
-                _pythonLogFilename, _variantLabels, _variantConfigs, notes);
+                _pythonLogFilename, _variantLabels, _variantConfigs, notes,
+                recorder != null ? recorder.CaptureDroppedRows : 0L,
+                recorder != null ? recorder.CapturePeakQueueDepth : 0,
+                recorder != null ? recorder.OutputDroppedRows : 0L,
+                recorder != null ? recorder.OutputPeakQueueDepth : 0);
 
             string path = Path.Combine(_sessionDir, "session_manifest.json");
             File.WriteAllText(path, json, new UTF8Encoding(false));
             EgoAnchorLog.For<EvalSession>().Info($"Manifest 已写入：{path}");
+        }
+
+        /// <summary>检查目标日志是否已经包含数据，防止同一 Python session 被再次打开时截断。</summary>
+        private static bool HasNonEmptyLog(string path)
+        {
+            return File.Exists(path) && new FileInfo(path).Length > 0L;
         }
 
         private string ResolveOutputRoot()
@@ -245,4 +262,3 @@ namespace EgoAnchor.Eval
         }
     }
 }
-

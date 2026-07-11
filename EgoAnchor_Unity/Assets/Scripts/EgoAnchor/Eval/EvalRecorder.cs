@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using EgoAnchor.Alignment;
 using EgoAnchor.Client;
+using EgoAnchor.Diagnostics;
 using EgoAnchor.Eval.RQ1;
 using EgoAnchor.Eval.RQ2;
 using EgoAnchor.Policy;
@@ -14,6 +15,105 @@ using UnityEngine;
 
 namespace EgoAnchor.Eval
 {
+    /// <summary>
+    /// 参考位姿有效性策略。静止实验可短时复用最后一次真实追踪位姿；动态实验必须要求当前样本真实可追踪。
+    /// </summary>
+    public enum EvalReferenceFreshnessMode
+    {
+        /// <summary>允许在真实追踪暂时丢失时复用最后一次新鲜位姿，适用于静止观察。</summary>
+        AllowStaticKeepAlive = 0,
+
+        /// <summary>只有当前真实追踪样本才有效，适用于动态运动试次。</summary>
+        RequireFreshTracking = 1,
+    }
+
+    /// <summary>一次参考位姿解析结果，显式区分真实追踪样本与静止 keep-alive。</summary>
+    public readonly struct EvalReferencePose
+    {
+        /// <summary>该 pose 是否可用于当前评估样本。</summary>
+        public readonly bool Valid;
+
+        /// <summary>当前样本是否来自真实、可追踪的 Transform 更新。</summary>
+        public readonly bool Fresh;
+
+        /// <summary>当前有效 pose 是否复用了最后一次真实追踪样本。</summary>
+        public readonly bool KeepAlive;
+
+        /// <summary>参考物体的 world pose；无效时为 identity。</summary>
+        public readonly Pose Pose;
+
+        /// <summary>距最后一次真实追踪样本的毫秒数；从未追踪到时为 NaN。</summary>
+        public readonly double FreshAgeMs;
+
+        /// <summary>构造一次参考位姿解析结果。</summary>
+        public EvalReferencePose(bool valid, bool fresh, bool keepAlive, Pose pose, double freshAgeMs)
+        {
+            Valid = valid;
+            Fresh = fresh;
+            KeepAlive = keepAlive;
+            Pose = pose;
+            FreshAgeMs = freshAgeMs;
+        }
+    }
+
+    /// <summary>
+    /// 参考位姿新鲜度跟踪器。该纯 C# 状态对象不读取 OVR API，便于独立验证动态与静止有效性规则。
+    /// </summary>
+    public sealed class EvalReferencePoseTracker
+    {
+        /// <summary>最后一次真实追踪到的参考位姿。</summary>
+        private Pose _lastFreshPose;
+
+        /// <summary>最后一次真实追踪样本的 Unity 单调时钟毫秒。</summary>
+        private double _lastFreshMonoMs = double.NaN;
+
+        /// <summary>清空参考位姿历史，防止跨 session 复用旧样本。</summary>
+        public void Reset()
+        {
+            _lastFreshPose = Pose.identity;
+            _lastFreshMonoMs = double.NaN;
+        }
+
+        /// <summary>按当前追踪状态和有效性策略解析可写入评估日志的参考位姿。</summary>
+        /// <param name="hasTransform">是否绑定了参考 Transform。</param>
+        /// <param name="currentPose">当前参考 Transform 的 world pose。</param>
+        /// <param name="freshlyTracked">当前样本是否由追踪系统确认有效。</param>
+        /// <param name="nowMonoMs">当前 Unity 单调时钟毫秒。</param>
+        /// <param name="mode">动态 fresh-only 或静止 keep-alive 策略。</param>
+        /// <param name="keepAliveMs">允许复用最后新鲜 pose 的最长毫秒数。</param>
+        /// <returns>带新鲜度诊断的参考位姿样本。</returns>
+        public EvalReferencePose Resolve(
+            bool hasTransform,
+            Pose currentPose,
+            bool freshlyTracked,
+            double nowMonoMs,
+            EvalReferenceFreshnessMode mode,
+            double keepAliveMs)
+        {
+            if (!hasTransform)
+            {
+                return new EvalReferencePose(false, false, false, Pose.identity, double.NaN);
+            }
+
+            if (freshlyTracked)
+            {
+                _lastFreshPose = currentPose;
+                _lastFreshMonoMs = nowMonoMs;
+                return new EvalReferencePose(true, true, false, currentPose, 0.0);
+            }
+
+            double ageMs = double.IsNaN(_lastFreshMonoMs)
+                ? double.NaN
+                : Math.Max(0.0, nowMonoMs - _lastFreshMonoMs);
+            bool mayKeepAlive = mode == EvalReferenceFreshnessMode.AllowStaticKeepAlive
+                && !double.IsNaN(ageMs)
+                && ageMs <= Math.Max(0.0, keepAliveMs);
+            return mayKeepAlive
+                ? new EvalReferencePose(true, false, true, _lastFreshPose, ageMs)
+                : new EvalReferencePose(false, false, false, Pose.identity, ageMs);
+        }
+    }
+
     /// <summary>
     /// 评估记录变体描述——Inspector 中配置要录制的 runtime 列表。
     /// </summary>
@@ -82,11 +182,20 @@ namespace EgoAnchor.Eval
         /// <summary>
         /// 可选：用于检测 GT 手柄跟踪是否有效的 OVR 控制器类型。
         /// 设为 None 时不做有效性过滤（总是信任 groundTruth 的 Transform）。
-        /// 设为 RTouch / LTouch 后，手柄休眠或 OVR 跟踪丢失时 gt_pose_valid 自动标为 false。
+        /// 设为 RTouch / LTouch 后，由 gtFreshnessMode 决定丢跟时立即失效或静止 keep-alive。
         /// </summary>
         [Header("GT Validity")]
         [Tooltip("可选：OVR 手柄类型，用于检测手柄跟踪是否有效。设为 None 则不过滤。")]
         [SerializeField] private OVRInput.Controller gtController = OVRInput.Controller.RTouch;
+
+        /// <summary>参考位姿新鲜度策略；RQ2 必须要求真实追踪，RQ1 可允许静止 keep-alive。</summary>
+        [Tooltip("参考位姿有效性策略。RQ2 动态试次选择 RequireFreshTracking；RQ1 静止观察选择 AllowStaticKeepAlive。")]
+        [SerializeField] private EvalReferenceFreshnessMode gtFreshnessMode = EvalReferenceFreshnessMode.AllowStaticKeepAlive;
+
+        /// <summary>静止 keep-alive 最长持续时间，单位秒；fresh-only 模式下不使用。</summary>
+        [Tooltip("真实追踪暂时丢失后，静止实验允许复用最后新鲜参考位姿的秒数。RQ2 fresh-only 模式忽略此值。")]
+        [Min(0f)]
+        [SerializeField] private float gtKeepAliveSeconds = 30f;
 
         /// <summary>要录制的 runtime 变体列表；主变体（isPrimary=true）额外记录 aligned raw。</summary>
         [Header("Variants")]
@@ -109,21 +218,19 @@ namespace EgoAnchor.Eval
         private EvalLog _outputLog;
         private bool _recording;
 
+        /// <summary>最近一次关闭的 capture 日志后台队列统计。</summary>
+        private EvalLogStats _captureLogStats;
+
+        /// <summary>最近一次关闭的 output 日志后台队列统计。</summary>
+        private EvalLogStats _outputLogStats;
+
         /// <summary>上一帧 GT pose，用于计算 GT 速度。</summary>
         private Pose _lastGtPose;
         private double _lastGtMonoMs;
         private bool _hasLastGt;
 
-        /// <summary>
-        /// OVR 手柄 sleep 后的 GT keep-alive 窗口（毫秒）。
-        /// 静止放置时手柄会进入 sleep，OVR 报 tracked=false，
-        /// 但位姿本身仍然有效，keep-alive 内继续复用上次有效 pose。
-        /// </summary>
-        private const double GtKeepAliveMs = 30_000.0;
-
-        /// <summary>上次 OVR 明确跟踪到的 GT pose（用于 keep-alive）。</summary>
-        private Pose _lastTrackedGtPose;
-        private double _lastTrackedGtMonoMs = -1.0;
+        /// <summary>跨帧维护最后一次真实追踪参考 pose 的纯 C# 状态对象。</summary>
+        private readonly EvalReferencePoseTracker _gtPoseTracker = new EvalReferencePoseTracker();
 
         /// <summary>当前渲染 tick 复用的系统变体快照缓冲。</summary>
         private readonly List<EvalVariantSnapshot> _snapshots = new List<EvalVariantSnapshot>();
@@ -148,6 +255,18 @@ namespace EgoAnchor.Eval
         /// <summary>GT 来源标识，写入 manifest。</summary>
         public string GtSource => groundTruth != null ? "transform" : "transform_missing";
 
+        /// <summary>最近一次录制中 capture 日志因队列饱和或写入失败丢弃的行数。</summary>
+        public long CaptureDroppedRows => _captureLogStats.DroppedRows;
+
+        /// <summary>最近一次录制中 capture 日志观察到的最大待写队列深度。</summary>
+        public int CapturePeakQueueDepth => _captureLogStats.PeakQueueDepth;
+
+        /// <summary>最近一次录制中 output 日志因队列饱和或写入失败丢弃的行数。</summary>
+        public long OutputDroppedRows => _outputLogStats.DroppedRows;
+
+        /// <summary>最近一次录制中 output 日志观察到的最大待写队列深度。</summary>
+        public int OutputPeakQueueDepth => _outputLogStats.PeakQueueDepth;
+
         // ── 实时遥测访问器（供 EvalLiveStats 读取，不写文件、不改状态） ──
 
         /// <summary>
@@ -164,8 +283,8 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>
-        /// 主变体实际显示用 anchor Transform。实时误差按它与 GT 比较，
-        /// 与录制的 output_pos 完全同源（录制也是读这个 Transform）。
+        /// 主变体实际显示用 anchor Transform。实时误差按它与 GT 比较；
+        /// 录制时它对应 display_pos，而 output_pos 独立来自 runtime 输出。
         /// </summary>
         public Transform PrimaryAnchorTransform
         {
@@ -206,9 +325,9 @@ namespace EgoAnchor.Eval
         public bool TryGetCurrentGtPose(out Pose pose)
         {
             double nowMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
-            (bool valid, Pose resolved) = ResolveGtPose(nowMs);
-            pose = resolved;
-            return valid;
+            EvalReferencePose sample = ResolveGtPose(nowMs);
+            pose = sample.Pose;
+            return sample.Valid;
         }
 
         /// <summary>取主变体：优先 isPrimary，回退列表首个；空列表返回 default。</summary>
@@ -259,12 +378,14 @@ namespace EgoAnchor.Eval
         public void BeginRecording(string capturePath, string outputPath)
         {
             StopRecording();
+            _captureLogStats = default;
+            _outputLogStats = default;
             _captureLog = new EvalLog(capturePath);
             _outputLog  = new EvalLog(outputPath);
             RefreshConfigHashCache();
             CaptureManifestMetadata();
             _hasLastGt = false;
-            _lastTrackedGtMonoMs = -1.0;
+            _gtPoseTracker.Reset();
             _recording = true;
         }
 
@@ -272,12 +393,35 @@ namespace EgoAnchor.Eval
         public void StopRecording()
         {
             _recording = false;
-            _captureLog?.Dispose(); _captureLog = null;
-            _outputLog?.Dispose();  _outputLog  = null;
+            if (_captureLog != null)
+            {
+                _captureLogStats = CloseLog(_captureLog, "capture");
+                _captureLog = null;
+            }
+            if (_outputLog != null)
+            {
+                _outputLogStats = CloseLog(_outputLog, "output");
+                _outputLog = null;
+            }
             _snapshots.Clear();
             _configHashCache.Clear();
             _hasLastGt = false;
-            _lastTrackedGtMonoMs = -1.0;
+            _gtPoseTracker.Reset();
+        }
+
+        /// <summary>关闭单个后台日志并把丢行、队列峰值和异常写入统一日志门面。</summary>
+        private static EvalLogStats CloseLog(EvalLog log, string name)
+        {
+            if (log == null) return default;
+
+            log.Dispose();
+            EvalLogStats stats = log.Stats;
+            if (stats.DroppedRows > 0 || !string.IsNullOrEmpty(stats.Error))
+            {
+                EgoAnchorLog.For<EvalRecorder>().Warning(
+                    $"评估 {name} 日志后台写入异常：dropped={stats.DroppedRows} peak_queue={stats.PeakQueueDepth} error={stats.Error}");
+            }
+            return stats;
         }
 
         // ── Unity 生命周期 ──
@@ -318,7 +462,7 @@ namespace EgoAnchor.Eval
 
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             double gtSampleMonoMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
-            (bool gtValid, Pose gtPose) = ResolveGtPose(gtSampleMonoMs);
+            EvalReferencePose gtSample = ResolveGtPose(gtSampleMonoMs);
             Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
             _captureLog.Write(EvalJson.BuildCaptureLine(
@@ -333,7 +477,7 @@ namespace EgoAnchor.Eval
                 publishAttemptMonoMs,
                 publishSucceeded,
                 headPose, cameraValid, cameraPose,
-                gtValid, gtPose,
+                gtSample,
                 alignmentRef.ToString()));
         }
 
@@ -345,22 +489,31 @@ namespace EgoAnchor.Eval
 
             double monoMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            (bool gtValid, Pose gtPose) = ResolveGtPose(monoMs);
+            EvalReferencePose gtSample = ResolveGtPose(monoMs);
             Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
             // 计算 GT 速度（线速度 m/s，角速度 deg/s）
             float gtLinear = 0f, gtAngular = 0f;
-            if (_hasLastGt && gtValid)
+            if (_hasLastGt && gtSample.Valid)
             {
                 float dt = (float)((monoMs - _lastGtMonoMs) / 1000.0);
                 if (dt > 1e-6f)
                 {
-                    gtLinear = (gtPose.position - _lastGtPose.position).magnitude / dt;
-                    float dot = Mathf.Clamp01(Mathf.Abs(Quaternion.Dot(_lastGtPose.rotation, gtPose.rotation)));
+                    gtLinear = (gtSample.Pose.position - _lastGtPose.position).magnitude / dt;
+                    float dot = Mathf.Clamp01(Mathf.Abs(Quaternion.Dot(_lastGtPose.rotation, gtSample.Pose.rotation)));
                     gtAngular = 2f * Mathf.Acos(dot) * Mathf.Rad2Deg / dt;
                 }
             }
-            if (gtValid) { _lastGtPose = gtPose; _lastGtMonoMs = monoMs; _hasLastGt = true; }
+            if (gtSample.Valid)
+            {
+                _lastGtPose = gtSample.Pose;
+                _lastGtMonoMs = monoMs;
+                _hasLastGt = true;
+            }
+            else
+            {
+                _hasLastGt = false;
+            }
 
             // 获取 RQ1 指标标记（如果有）；未绑定或未按键时为 none。
             string rq1Metric = "none";
@@ -387,7 +540,7 @@ namespace EgoAnchor.Eval
             long sourceFrameId = BuildSnapshots();
             _outputLog.Write(EvalJson.BuildOutputLine(
                 monoMs, unixMs, UnityEngine.Time.frameCount, sourceFrameId,
-                headPose, gtValid, gtPose,
+                headPose, gtSample,
                 gtLinear, gtAngular, _snapshots,
                 rq1Metric, rq1MetricDuration,
                 rq2Condition, rq2TrialId,
@@ -408,7 +561,8 @@ namespace EgoAnchor.Eval
                 PoseToAnchorRuntime rt = ev.runtime;
                 string label = ResolveLabel(ev, i);
 
-                bool hasRuntimeOutput = rt != null && rt.TryGetOutputPose(out _);
+                Pose runtimeOutputPose = Pose.identity;
+                bool hasRuntimeOutput = rt != null && rt.TryGetOutputPose(out runtimeOutputPose);
                 DynamicObjectAnchor presenter = ev.anchorPresenter != null
                     ? ev.anchorPresenter
                     : rt != null ? rt.GetComponent<DynamicObjectAnchor>() : null;
@@ -441,7 +595,8 @@ namespace EgoAnchor.Eval
 
                 _snapshots.Add(new EvalVariantSnapshot(
                     label, ev.isPrimary, srcFrame,
-                    hasRuntimeOutput, hasDisplayPose, displayPose, poseSource,
+                    hasRuntimeOutput, runtimeOutputPose,
+                    hasDisplayPose, displayPose, poseSource,
                     hasTiming, hasTiming ? fr.ImageMonoMs : double.NaN,
                     hasTiming ? fr.ImageUnityFrame : -1,
                     rt != null ? rt.LatestObservationAgeMs             : double.NaN,
@@ -542,34 +697,27 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>
-        /// 解析当前 GT pose，支持手柄 sleep keep-alive。
+        /// 解析当前参考 pose，并按场景配置应用动态 fresh-only 或静止 keep-alive。
         /// <para>
-        /// OVR 明确跟踪时：更新缓存，返回最新 pose（valid=true）。<br/>
-        /// OVR 跟踪丢失但距上次跟踪 &lt; GtKeepAliveMs：复用缓存 pose（valid=true）——
-        /// 适用于静止放置手柄进入休眠但位姿不变的情况。<br/>
-        /// 超过 keep-alive 窗口 or 未绑定 GT：返回 identity（valid=false）。
+        /// OVR 明确跟踪时更新新鲜样本；RQ2 丢跟后立即无效，RQ1 可在配置窗口内复用静止 pose。
         /// </para>
         /// </summary>
-        private (bool valid, Pose pose) ResolveGtPose(double nowMonoMs)
+        private EvalReferencePose ResolveGtPose(double nowMonoMs)
         {
-            if (groundTruth == null) return (false, Pose.identity);
-
-            bool ovrTracked = gtController == OVRInput.Controller.None
+            bool hasTransform = groundTruth != null;
+            Pose currentPose = hasTransform
+                ? new Pose(groundTruth.position, groundTruth.rotation)
+                : Pose.identity;
+            bool freshlyTracked = hasTransform && (gtController == OVRInput.Controller.None
                 || (OVRInput.GetControllerPositionTracked(gtController)
-                    && OVRInput.GetControllerOrientationTracked(gtController));
-
-            if (ovrTracked)
-            {
-                _lastTrackedGtPose   = new Pose(groundTruth.position, groundTruth.rotation);
-                _lastTrackedGtMonoMs = nowMonoMs;
-                return (true, _lastTrackedGtPose);
-            }
-
-            // OVR 已报丢失——用 keep-alive 缓存
-            if (_lastTrackedGtMonoMs >= 0.0 && (nowMonoMs - _lastTrackedGtMonoMs) < GtKeepAliveMs)
-                return (true, _lastTrackedGtPose);
-
-            return (false, Pose.identity);
+                    && OVRInput.GetControllerOrientationTracked(gtController)));
+            return _gtPoseTracker.Resolve(
+                hasTransform,
+                currentPose,
+                freshlyTracked,
+                nowMonoMs,
+                gtFreshnessMode,
+                gtKeepAliveSeconds * 1000.0);
         }
     }
 }

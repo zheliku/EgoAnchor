@@ -74,6 +74,7 @@ namespace EgoAnchor.Eval.RQ2
         private void Awake()
         {
             if (selector == null) selector = GetComponent<RQ2TrialSelector>();
+            if (selector != null && evalSession != null) selector.BindSession(evalSession);
         }
 
         /// <summary>注册输入回调并启用全部动作。</summary>

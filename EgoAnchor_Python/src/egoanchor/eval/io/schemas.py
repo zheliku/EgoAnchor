@@ -52,6 +52,12 @@ class CaptureRow:
     gt_rot: np.ndarray | None
     gt_pose_valid: bool
     gt_pose_source: str
+    gt_pose_fresh: bool
+    """当前参考位姿是否来自真实追踪样本。"""
+    gt_pose_keep_alive: bool
+    """当前参考位姿是否复用了最后一次新鲜样本。"""
+    gt_pose_fresh_age_ms: float
+    """距最后一次真实追踪样本的时间，单位毫秒。"""
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -91,6 +97,9 @@ class CaptureRow:
             gt_rot=_array(row, "gt_rot", 4, context, allow_none=not gt_pose_valid),
             gt_pose_valid=gt_pose_valid,
             gt_pose_source=_str(row, "gt_pose_source", context),
+            gt_pose_fresh=_optional_bool(row, "gt_pose_fresh", gt_pose_valid),
+            gt_pose_keep_alive=_optional_bool(row, "gt_pose_keep_alive", False),
+            gt_pose_fresh_age_ms=_optional_float(row, "gt_pose_fresh_age_ms", np.nan),
             raw=dict(row),
         )
 
@@ -119,6 +128,9 @@ class CaptureRow:
             "gt_rot": self.gt_rot,
             "gt_pose_valid": self.gt_pose_valid,
             "gt_pose_source": self.gt_pose_source,
+            "gt_pose_fresh": self.gt_pose_fresh,
+            "gt_pose_keep_alive": self.gt_pose_keep_alive,
+            "gt_pose_fresh_age_ms": self.gt_pose_fresh_age_ms,
             "valid": self.valid,
         }
 
@@ -325,6 +337,12 @@ class OutputRow:
     gt_rot: np.ndarray | None
     gt_pose_valid: bool
     gt_pose_source: str
+    gt_pose_fresh: bool
+    """当前参考位姿是否来自真实追踪样本。"""
+    gt_pose_keep_alive: bool
+    """当前参考位姿是否复用了最后一次新鲜样本。"""
+    gt_pose_fresh_age_ms: float
+    """距最后一次真实追踪样本的时间，单位毫秒。"""
     gt_linear_speed_m_s: float
     """Unity 侧按帧差分计算的 GT 线速度，单位 m/s；首帧为 0。"""
     gt_angular_speed_deg_s: float
@@ -373,6 +391,9 @@ class OutputRow:
             gt_rot=_array(row, "gt_rot", 4, context, allow_none=not gt_pose_valid),
             gt_pose_valid=gt_pose_valid,
             gt_pose_source=_str(row, "gt_pose_source", context),
+            gt_pose_fresh=_optional_bool(row, "gt_pose_fresh", gt_pose_valid),
+            gt_pose_keep_alive=_optional_bool(row, "gt_pose_keep_alive", False),
+            gt_pose_fresh_age_ms=_optional_float(row, "gt_pose_fresh_age_ms", np.nan),
             gt_linear_speed_m_s=_optional_float(row, "gt_linear_speed_m_s", 0.0),
             gt_angular_speed_deg_s=_optional_float(row, "gt_angular_speed_deg_s", 0.0),
             rq1_metric=_optional_str(row, "rq1_metric", "none"),
@@ -413,6 +434,9 @@ class OutputRow:
                 "gt_rot": self.gt_rot,
                 "gt_pose_valid": self.gt_pose_valid,
                 "gt_pose_source": self.gt_pose_source,
+                "gt_pose_fresh": self.gt_pose_fresh,
+                "gt_pose_keep_alive": self.gt_pose_keep_alive,
+                "gt_pose_fresh_age_ms": self.gt_pose_fresh_age_ms,
                 "gt_linear_speed_m_s": self.gt_linear_speed_m_s,
                 "gt_angular_speed_deg_s": self.gt_angular_speed_deg_s,
                 "rq1_metric": self.rq1_metric,
