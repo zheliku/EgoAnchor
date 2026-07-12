@@ -98,13 +98,13 @@ ANGULAR_SPEED_BINS_DEG_S: tuple[float, ...] = (
 
 @dataclass(frozen=True)
 class RQ2Config:
-    """一次 RQ2 分析使用的预注册统计配置。"""
+    """一次 RQ2 分析使用的冻结统计配置。"""
 
     translation_tolerance_m: float = 0.05
-    """有效追踪主终点允许的最大平移误差。"""
+    """次级容限内有效率允许的最大平移误差。"""
 
     rotation_tolerance_deg: float = 10.0
-    """有效追踪主终点允许的最大旋转误差。"""
+    """次级容限内有效率允许的最大旋转误差。"""
 
     min_active_duration_s: float = 8.0
     """正式 trial 通过 active-motion 时长检查所需的最短秒数。"""

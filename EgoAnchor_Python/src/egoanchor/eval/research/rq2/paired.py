@@ -22,7 +22,7 @@ PAIRED_METRICS: tuple[str, ...] = (
     "display_translation_lag_ms",
     "display_rotation_lag_ms",
 )
-"""正式配对表保留的主终点与响应性指标。"""
+"""正式配对表保留的连续性、精度与响应性指标。"""
 
 PAIRED_COLUMNS = [
     "level",

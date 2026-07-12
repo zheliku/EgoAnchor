@@ -29,13 +29,13 @@ def main(argv: list[str] | None = None) -> int:
         "--translation-tolerance-m",
         type=float,
         default=0.05,
-        help="within-tolerance 主终点的平移误差阈值。",
+        help="次级 within-tolerance 有效率的平移误差阈值。",
     )
     parser.add_argument(
         "--rotation-tolerance-deg",
         type=float,
         default=10.0,
-        help="within-tolerance 主终点的旋转误差阈值。",
+        help="次级 within-tolerance 有效率的旋转误差阈值。",
     )
     args = parser.parse_args(argv)
     config = RQ2Config(

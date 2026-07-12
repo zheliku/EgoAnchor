@@ -22,13 +22,14 @@ from .contract import (
 from .lag import StreamLag, estimate_stream_lag, runtime_lag_mask
 from .model import compute_model_summary
 from .paired import compute_paired_summary
-from .plot import write_rq2_plots
+from .plot import write_rq2_dynamic_figure, write_rq2_hero_figure, write_rq2_plots
 from .qc import (
     accepted_trial_keys,
     compute_design_audit,
     compute_session_audit,
     compute_trial_audit,
 )
+from .smoothness import SMOOTHNESS_COLUMNS, compute_smoothness_summary
 from .source import build_source_observations, compute_motion_delay
 from .trajectory import (
     active_at_times,
@@ -181,7 +182,7 @@ def compute_trial_summary(
     session_id: str = "",
     config: RQ2Config | None = None,
 ) -> pd.DataFrame:
-    """按 active-motion 窗汇总动态精度、主终点、连续性与 lag。"""
+    """按 active-motion 窗汇总连续性、动态精度与 lag。"""
 
     settings = config or RQ2Config()
     annotated = annotate_active_motion(output) if "active_motion" not in output else output.copy()
@@ -194,13 +195,23 @@ def compute_trial_summary(
         ["rq2_condition", "rq2_trial_id", "label"], sort=True
     ):
         trial_frames = unique_trial_frames(group)
-        active_frames = trial_frames[
-            trial_frames["active_motion"].fillna(False).astype(bool)
-        ].reset_index(drop=True)
+        active_mask = (
+            trial_frames["active_motion"]
+            .fillna(False)
+            .astype(bool)
+            .reset_index(drop=True)
+        )
+        trial_output_mask = _bool_series(trial_frames, "has_output_pose")
+        trial_display_mask = _display_mask(trial_frames, trial_output_mask)
+        active_frames = trial_frames[active_mask.to_numpy(dtype=bool)].reset_index(
+            drop=True
+        )
         output_mask = _bool_series(active_frames, "has_output_pose")
         display_mask = _display_mask(active_frames, output_mask)
         display_update_rate, display_hold_fraction = _display_update_summary(
-            active_frames, display_mask
+            trial_frames,
+            trial_display_mask,
+            active_mask,
         )
         display_translation, display_rotation, tolerance_hits, tolerance_denominator = (
             _display_error_summary(active_frames, display_mask, output_mask, settings)
@@ -503,6 +514,22 @@ def run_rq2_analysis(
     for name, table in combined.items():
         table.to_csv(output_dir / f"{name}.csv", index=False)
     write_rq2_plots(combined, output_dir)
+    if len(paths) == 1:
+        hero_output = annotate_active_motion(load_session(paths[0]).output)
+        write_rq2_hero_figure(hero_output, output_dir)
+        write_rq2_dynamic_figure(
+            hero_output,
+            combined,
+            output_dir,
+            preliminary=not bool(
+                combined.get("rq2_design_audit", pd.DataFrame())
+                .pipe(
+                    lambda df: df[df["level"].eq("study")]["accepted"].fillna(False).any()
+                    if not df.empty and "level" in df.columns and "accepted" in df.columns
+                    else False
+                )
+            ),
+        )
     return combined
 
 
@@ -524,6 +551,7 @@ def _compute_session_tables(
         session_id=session_id,
         config=config,
     )
+    smoothness = compute_smoothness_summary(output, session_id=session_id)
     audit = compute_trial_audit(
         output,
         source,
@@ -564,6 +592,7 @@ def _compute_session_tables(
         "rq2_paired_summary": pd.DataFrame(),
         "rq2_operating_envelope": envelope,
         "rq2_lag_diagnostics": _build_lag_diagnostics(trial),
+        "rq2_smoothness": smoothness,
     }
 
 
@@ -586,7 +615,7 @@ def _display_error_summary(
     output_mask: pd.Series,
     config: RQ2Config,
 ) -> tuple[list[float], list[float], int, int]:
-    """汇总 display 误差和 within-tolerance 有效追踪主终点。"""
+    """汇总 display 误差和次级 within-tolerance 有效率。"""
 
     translation: list[float] = []
     rotation: list[float] = []
@@ -621,8 +650,9 @@ def _display_error_summary(
 def _display_update_summary(
     frames: pd.DataFrame,
     display_mask: pd.Series,
+    active_mask: pd.Series,
 ) -> tuple[float, float]:
-    """计算 active-motion 显示更新率与保持比例。"""
+    """只在连续 active-motion 相邻帧内计算显示更新率与保持比例。"""
 
     if len(frames) < 2 or "render_mono_ms" not in frames.columns:
         return np.nan, np.nan
@@ -630,7 +660,12 @@ def _display_update_summary(
     pair_count = held_count = changed_count = 0
     elapsed_ms = 0.0
     for index in range(1, len(frames)):
-        if not bool(display_mask.iloc[index - 1]) or not bool(display_mask.iloc[index]):
+        if (
+            not bool(active_mask.iloc[index - 1])
+            or not bool(active_mask.iloc[index])
+            or not bool(display_mask.iloc[index - 1])
+            or not bool(display_mask.iloc[index])
+        ):
             continue
         interval_ms = times[index] - times[index - 1]
         if not np.isfinite(interval_ms) or interval_ms <= 0.0:
@@ -914,6 +949,7 @@ def _combine_session_tables(
         "rq2_paired_summary",
         "rq2_operating_envelope",
         "rq2_lag_diagnostics",
+        "rq2_smoothness",
     ]
     combined: dict[str, pd.DataFrame] = {}
     for name in names:

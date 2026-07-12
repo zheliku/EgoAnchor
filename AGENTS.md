@@ -246,7 +246,7 @@ Unity 代码地图（关键模块）：
 
 **论文 RQ 结构**（2026-07-07 定稿）：
 - RQ1：静态锚定质量——评估静止场景（长时静止观察、遮挡恢复）下的精度、稳定性、鲁棒性；消融静止锚定机制（Full vs. No-StaticLock，仅在静止观察场景下对比）
-- RQ2：动态追踪能力——以误差容限内有效追踪率为主终点，评估慢速往复平移、快速往复运动和交替轴向旋转下的当前时刻配准质量；同帧比较 *Full* 与 *Raw-ZOH* 的误差、可用率和可辨识响应滞后，并把有符号 raw 滞后残差与 pre-image `v·τ / ω·τ` 仅作为探索性关联
+- RQ2：动态锚定能力——「动态」指实时连续动态锚定这一系统能力，不是"追踪精度有多高"的 benchmark。主要报告结果族是运动期实时锚定的**连续性**（显示更新率、保持帧比例、锚定输出有效帧占比），并同时报告渲染时刻瞬时精度代价；生命周期状态占比只作运行诊断，只有实际发生丢失/恢复事件时才评价恢复能力。参照为仅对最近观测作零阶保持的 *Raw-ZOH*。*Full* 与 *Raw-ZOH* 的差异应表述为连续性—瞬时精度权衡，不能掩盖任一方向的结果，也不能把查看先导数据后收窄的报告框架称为预注册或确认性主终点。有符号 raw 滞后残差与 pre-image `v·τ / ω·τ` 仅作探索性诊断。慢速往复平移、快速往复运动、交替轴向旋转三类运动中，*Full* 与 *Raw-ZOH* 同帧比较。**不用"可用性"（那是 RQ3 用户实验的概念）；"运行边界/运行包络/按速度分箱的有效追踪率曲线"已从论文移除——精度随速度下降在三类运动的精度数值里自然体现，不单列 deliverable。**
 - RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行
 
 **实验表述规范**（2026-07-07）：
@@ -303,7 +303,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/core` + `eval/metric
 
 ### RQ2 分析框架
 
-**RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *Raw-ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT，并保持坐标变换、质量门控、生命周期阈值与 hold-last 语义一致；差异只在完整锚定策略与零阶保持。配对 RQ2 的两个 host 都必须 `emitServerReacquire=false`，持续丢失作为主终点失败保留。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *Raw-ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件，而且仅允许在 `EvalSession.IsRecording=true` 时开始 trial；`EvalSession` 仍是录制状态唯一真理。
+**RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *Raw-ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT，并保持坐标变换、质量门控、生命周期阈值与 hold-last 语义一致；差异只在完整锚定策略与零阶保持。配对 RQ2 的两个 host 都必须 `emitServerReacquire=false`，持续丢失作为锚定输出失效保留。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *Raw-ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件，而且仅允许在 `EvalSession.IsRecording=true` 时开始 trial；`EvalSession` 仍是录制状态唯一真理。
 
 **评估状态与实时监控 UI**：`EvalStatusText` 只统一录制、session、时长和活动行的纯文本格式；`RQ1StatusUI` 与 `RQ2StatusUI` 保留各自业务逻辑，不抽通用 MonoBehaviour 基类。`EvalLiveStats` 位于 `Eval/` 根目录，RQ1/RQ2 场景各保留一个实例，必须挂在右侧 `LiveStatus` 对象并绑定 `recorder` 与 `statsText`。它读取主变体的观测年龄、pose 更新率、实时误差、帧间变化、可靠性分数和锚定状态；RQ2 的帧间变化包含真实运动，不能解释为纯噪声。完整采集流程和按键语义统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
 
@@ -325,11 +325,13 @@ RQ2 不设 warmup/motion/cooldown phase。按 `1/2/3` 后 trial 立即生效，�
 - `lag.py`：runtime/GT 连续段内的速度互相关与可辨识性诊断
 - `qc.py`：session、trial、3-session × 8-trial 正式设计三级审计
 - `paired.py` / `model.py`：试次级配对差值与等 trial 权重的探索性运动—时延关联
-- `pipeline.py` / `plot.py`：多 session 编排、经验运行包络、CSV 与四组论文图导出
+- `pipeline.py` / `plot.py`：多 session 编排、经验运行包络（仅内部诊断，非论文 deliverable）、CSV 与论文图导出。`write_rq2_dynamic_figure` 产出论文正文用的四面板合成图 `fig_rq2_dynamic`：A/B 分别是快速平移主轴与旋转主轴的固定 5 s 时间分辨 zoom，C 是保持帧比例，D 是与运动类型匹配的渲染时刻误差；完整 6DoF、hero 轨迹与运动—时延关系保留为诊断图
 
-**动态主终点**：`within_tolerance_valid_tracking_rate` 在 `active_motion` 分母中要求 runtime 有输出、display 平移误差 ≤ 50 mm 且旋转误差 ≤ 10°；runtime loss 即使仍显示 hold-last 也记为失败。显示误差和显示 lag 使用 `display_*`，availability 只使用 `has_output_pose`。经验运行包络按实测线/角速度分箱并以 trial 等权，不把未采样区间外推成物理性能边界。
+**连续性与动态精度**：主要报告结果族是 `display_update_rate_hz`、`display_hold_fraction` 与 `tracking_availability`；`state_*_fraction` 只作生命周期诊断。显示更新率和保持比例只统计同一连续 `active_motion` run 内、相邻两帧均有 display pose 的帧对，不能把不同 active run 之间的静止空窗计入时间分母。`within_tolerance_valid_tracking_rate`（`active_motion` 分母中要求 runtime 有输出、display 平移误差 ≤ 50 mm 且旋转误差 ≤ 10°；runtime loss 即使仍显示 hold-last 也记为失败）是次级瞬时精度读数，不合并为跨速度单一分数。显示误差和显示 lag 使用 `display_*`，availability 只使用 `has_output_pose`。`rq2_operating_envelope` 按速度分箱仍计算并落 CSV，但**不再作为论文 deliverable**（正文已删运行边界图），只作内部诊断，不把未采样区间外推成物理性能边界。
 
-输出表共 11 张：`rq2_session_audit`、`rq2_trial_audit`、`rq2_design_audit`、`rq2_source_error`、`rq2_motion_delay`、`rq2_trial_summary`、`rq2_paired_summary`、`rq2_operating_envelope`、`rq2_latency_summary`、`rq2_model_summary`、`rq2_lag_diagnostics`。四组图为 `rq2_accuracy_primary`、`rq2_paired_tradeoff`、`rq2_delay_association`、`rq2_operating_envelope`。
+输出表共 12 张：`rq2_session_audit`、`rq2_trial_audit`、`rq2_design_audit`、`rq2_source_error`、`rq2_motion_delay`、`rq2_trial_summary`、`rq2_paired_summary`、`rq2_operating_envelope`、`rq2_latency_summary`、`rq2_model_summary`、`rq2_lag_diagnostics`、`rq2_smoothness`。论文正文图为 `fig_rq2_dynamic`（`write_rq2_dynamic_figure` 四面板合成，单会话默认带 `_preliminary` 文件后缀）；诊断图为 `rq2_accuracy_primary`、`rq2_paired_tradeoff`、`rq2_delay_association`、`rq2_operating_envelope`、`rq2_hero_trajectory`。`rq2_smoothness` 当前也只作内部诊断，不进入论文结论。主图 zoom 的 trial 只按平台参考速度选择：取该运动类别中最接近 trial 中位速度的合格 trial，再从其最长平台参考有效 `active_motion` 连续段中央截取固定 5 s；不得按系统误差或视觉效果选窗。
+
+当前先导会话 `20260712_163657_controller_right` 只有一个 session、三类运动各一个长 trial，正式设计审计为 `incomplete_formal_design`。有效运动总计 97.30 s、6,768 个渲染时刻、13,536 条同步变体帧与 935 个去重时空对齐观测；这些帧数只描述时间覆盖和配对完整性，不能作为独立样本量。三个试次的 active 时长为 28.68/30.76/37.86 s，且采集顺序固定，不符合正式协议的 8–12 s、多 trial、分块随机要求。当前 active-motion 生命周期状态全部退化为 Coasting，且未发生动态丢失/恢复事件，不能用这次录制支持恢复能力。论文只能把它写成单会话描述性系统表征，不报告置信区间或总体推断。
 
 pre-image 运动拟合只使用图像时间代理之前固定 400 ms：位置采用 Theil-Sen 稳健斜率，旋转采用相邻四元数的世界系 SO(3) log / dt 中位。GT 轨迹优先要求 `gt_pose_fresh`，插值、pre-image 拟合与 lag 均不得跨参考位姿无效空窗；display lag 还不得跨 runtime 无输出、Lost/Searching 或 reacquire 缺口。运动—时延关系只纳入局部速度变异系数 ≤ 0.5 且运动轴一致性 ≥ 0.8 的样本，作为探索性关联而非时延因果验证。lag 至少需要 16 个速度样本且观察长度覆盖候选搜索范围；峰值相关低于 0.5、峰值突出度低于 0.05、落在搜索边界或信号低激励时返回 NaN，不对自相关帧计算 Pearson p 值或 Bonferroni 校正。
 

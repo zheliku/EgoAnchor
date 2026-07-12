@@ -283,6 +283,20 @@ class RQ2AnalyzeTest(unittest.TestCase):
         self.assertTrue(expected.issubset(summary.columns))
         self.assertFalse(any(column.startswith("full_") for column in summary.columns))
 
+    def test_display_update_rate_excludes_inactive_gaps(self) -> None:
+        """分离 active run 的静止空窗不得进入运动期更新率分母。"""
+
+        output = self._trajectory("fast_motion", trial_id=16, angular=False)
+        output["active_motion"] = output["render_mono_ms"].isin(
+            [0.0, 100.0, 200.0, 800.0, 900.0, 1000.0]
+        )
+
+        trial = compute_trial_summary(output, pd.DataFrame()).iloc[0]
+
+        self.assertEqual(int(trial["active_frame_count"]), 6)
+        self.assertAlmostEqual(float(trial["display_update_rate_hz"]), 10.0)
+        self.assertAlmostEqual(float(trial["display_hold_fraction"]), 0.0)
+
     def test_trial_summary_accepts_empty_source_with_fixed_columns(self) -> None:
         """没有有效 raw source 时仍应正常汇总各变体的显示输出。"""
 
@@ -543,7 +557,7 @@ class RQ2AnalyzeTest(unittest.TestCase):
         self.assertEqual(int(study["accepted_trials"]), 72)
 
     def test_within_tolerance_rate_counts_runtime_loss_as_failure(self) -> None:
-        """误差合格但 runtime 无输出的 hold-last 帧仍是主终点失败。"""
+        """误差合格但 runtime 无输出的 hold-last 帧仍不计为有效追踪。"""
 
         output = self._trajectory("fast_motion", trial_id=22, angular=False)
         output["has_display_pose"] = True
@@ -714,6 +728,42 @@ class RQ2AnalyzeTest(unittest.TestCase):
                 self.assertTrue((report_dir / f"{name}.csv").is_file())
             self.assertTrue((report_dir / "rq2_accuracy_primary.pdf").is_file())
             self.assertTrue((report_dir / "rq2_operating_envelope.pdf").is_file())
+
+    def test_smoothness_table_present(self) -> None:
+        """全链路入口应新增 smoothness 表并保留契约字段。"""
+
+        full = self._trajectory("slow_translation", trial_id=12, angular=False)
+        baseline = full.copy(deep=True)
+        baseline["label"] = "Raw-ZOH"
+        baseline["is_primary"] = False
+        output = pd.concat([full, baseline], ignore_index=True)
+        logs = SessionLogs(
+            capture=pd.DataFrame(),
+            output=output,
+            pose=pd.DataFrame(),
+            manifest=self._manifest("synthetic"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = Path(tmp) / "session"
+            report_dir = Path(tmp) / "report"
+            session_dir.mkdir()
+            with patch("egoanchor.eval.research.rq2.pipeline.load_session", return_value=logs):
+                tables = run_rq2_analysis(
+                    session_dir,
+                    report_dir=report_dir,
+                    config=RQ2Config(min_active_duration_s=0.0),
+                )
+
+            self.assertIn("rq2_smoothness", tables)
+            self.assertEqual(
+                list(tables["rq2_smoothness"].columns),
+                [
+                    "session_id", "condition", "rq2_trial_id", "label",
+                    "sample_count", "sparc_translation",
+                    "jerk_rms_translation_m_s3", "sparc_speed", "jerk_rms_speed",
+                ],
+            )
+            self.assertTrue((report_dir / "rq2_smoothness.csv").is_file())
 
     def test_run_analysis_keeps_same_trial_id_separate_across_sessions(self) -> None:
         """多 session 联合分析不得把相同 trial 编号合并。"""
