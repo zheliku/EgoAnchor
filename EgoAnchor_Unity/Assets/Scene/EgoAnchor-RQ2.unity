@@ -2082,7 +2082,7 @@ MonoBehaviour:
     anchorTransform: {fileID: 160200733}
     anchorPresenter: {fileID: 160200732}
     isPrimary: 1
-  - label: Raw-ZOH
+  - label: ZOH
     runtime: {fileID: 1137170458}
     anchorTransform: {fileID: 1137170460}
     anchorPresenter: {fileID: 1137170459}
@@ -2701,11 +2701,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.RQ2.RQ2InputHandler
   selector: {fileID: 791264645}
   evalSession: {fileID: 667335324}
-  slowTranslationSpeedMs: 0.1
-  fastMotionSpeedMs: 0.8
+  translationSpeedMs: 0.1
   rotationSpeedDegS: 90
-  startSlowTranslationAction:
-    m_Name: Start Slow Translation
+  startTranslationAction:
+    m_Name: Start Translation
     m_Type: 1
     m_ExpectedControlType: 
     m_Id: 129a3c2e-13de-47c6-9778-4043d26a0afc
@@ -2718,24 +2717,7 @@ MonoBehaviour:
       m_Interactions: 
       m_Processors: 
       m_Groups: 
-      m_Action: Start Slow Translation
-      m_Flags: 0
-    m_Flags: 0
-  startFastMotionAction:
-    m_Name: Start Fast Motion
-    m_Type: 1
-    m_ExpectedControlType: 
-    m_Id: 3089157b-7965-4e0d-be4b-a466d7aad764
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: e7fe82be-5619-410f-80f2-af6e06a918a6
-      m_Path: <Keyboard>/2
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Start Fast Motion
+      m_Action: Start Translation
       m_Flags: 0
     m_Flags: 0
   startRotationAction:
@@ -2748,7 +2730,7 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: b2d831b5-fca4-467a-ab74-bcbe904aa8a1
-      m_Path: <Keyboard>/3
+      m_Path: <Keyboard>/2
       m_Interactions: 
       m_Processors: 
       m_Groups: 
@@ -3458,7 +3440,7 @@ MonoBehaviour:
   m_MinWidth: -1
   m_MinHeight: -1
   m_PreferredWidth: -1
-  m_PreferredHeight: 160
+  m_PreferredHeight: 136
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
@@ -3482,11 +3464,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '[1]  Slow Translation
+  m_text: '[1]  Translation
 
-    [2]  Fast Motion
-
-    [3]  Rotation
+    [2]  Rotation
 
     [0] End Trial
 
@@ -4113,7 +4093,7 @@ GameObject:
   - component: {fileID: 1137170459}
   - component: {fileID: 1137170458}
   m_Layer: 0
-  m_Name: AnchorObject Raw-ZOH
+  m_Name: AnchorObject ZOH
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

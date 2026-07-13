@@ -1,185 +1,135 @@
-"""RQ2 实时轨迹 hero 图纯绘图层单测（不依赖 cv2）。"""
+"""RQ2 XYZ-帧时间线纯绘图层单测。"""
 
-import os
+from __future__ import annotations
+
+import math
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-import tempfile
 
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from egoanchor.eval.research.rq2.plot import (
-    write_rq2_dynamic_figure,
-    write_rq2_hero_figure,
+from egoanchor.eval.research.rq2 import (
+    RQ2Config,
+    world_rotation_vectors_from_reference,
+    write_rq2_timelines,
 )
 
 
-def _synthetic_output() -> pd.DataFrame:
-    """构造含参考真值 / 完整锚定 / ZOH / 感知观测的最小实时轨迹。"""
+def _yaw_quat(angle_deg: float) -> np.ndarray:
+    """构造绕世界 z 轴旋转的 xyzw 四元数。"""
 
-    dt_ms = 1000.0 / 60.0
+    half = math.radians(angle_deg) / 2.0
+    return np.array([0.0, 0.0, math.sin(half), math.cos(half)], dtype=float)
+
+
+def _timeline_output() -> pd.DataFrame:
+    """构造两类任务与三个不同速度的平移候选试次。"""
+
     rows: list[dict[str, object]] = []
-    for condition, trial_id in (("fast_motion", 2), ("rotation", 3)):
-        for i in range(480):
-            t = i * dt_ms / 1000.0
-            zoh_t = np.floor(t * 8.0) / 8.0
-            gt_x = float(0.25 * np.sin(2.0 * np.pi * 0.45 * t))
-            full_x = float(0.25 * np.sin(2.0 * np.pi * 0.45 * (t - 0.29)))
-            zoh_x = float(0.25 * np.sin(2.0 * np.pi * 0.45 * (zoh_t - 0.22)))
-            gt_angle = float(70.0 * np.sin(2.0 * np.pi * 0.32 * t))
-            full_angle = float(70.0 * np.sin(2.0 * np.pi * 0.32 * (t - 0.29)))
-            zoh_angle = float(70.0 * np.sin(2.0 * np.pi * 0.32 * (zoh_t - 0.22)))
-            gt_pos = [gt_x, 0.1, 0.2]
-            gt_rot = _yaw_quat(gt_angle)
-            for label, display_x, display_angle in (
-                ("Full", full_x, full_angle),
-                ("Raw-ZOH", zoh_x, zoh_angle),
-            ):
-                has_raw = label == "Full" and i % 8 == 0
+    tick = 0
+    specs = [
+        ("translation", 1, 0.1),
+        ("translation", 2, 0.4),
+        ("translation", 3, 0.7),
+        ("rotation", 4, 80.0),
+    ]
+    for condition, trial_id, speed in specs:
+        for sample, seconds in enumerate(np.arange(0.0, 6.0, 0.05)):
+            gt_pos = np.array([speed * seconds if condition == "translation" else 0.0, 0.02 * seconds, 0.0])
+            gt_rot = _yaw_quat(speed * seconds if condition == "rotation" else 0.0)
+            for label in ("Full", "ZOH"):
+                held = math.floor(seconds * 10.0) / 10.0
+                display_seconds = seconds if label == "Full" else held
+                display_pos = np.array(
+                    [speed * display_seconds if condition == "translation" else 0.0, 0.02 * display_seconds, 0.0]
+                )
+                display_rot = _yaw_quat(
+                    speed * display_seconds if condition == "rotation" else 0.0
+                )
                 rows.append(
                     {
+                        "session_id": "s1",
+                        "tick_index": tick,
+                        "render_unity_frame": 1000 + tick,
+                        "render_mono_ms": trial_id * 10_000.0 + seconds * 1000.0,
                         "rq2_condition": condition,
                         "rq2_trial_id": trial_id,
                         "label": label,
-                        "is_primary": label == "Full",
-                        "render_mono_ms": i * dt_ms,
-                        "source_frame_id": i // 8 if has_raw else -1,
-                        "active_motion": True,
-                        "has_display_pose": True,
-                        "display_pos": [display_x, 0.1, 0.2],
-                        "display_rot": _yaw_quat(display_angle),
-                        "has_aligned_raw": has_raw,
-                        "aligned_raw_pos": gt_pos if has_raw else None,
-                        "aligned_raw_rot": gt_rot if has_raw else None,
-                        "gt_pos": gt_pos,
-                        "gt_rot": gt_rot,
+                        "analysis_motion": True,
+                        "gt_linear_speed_smooth_m_s": speed if condition == "translation" else 0.0,
+                        "gt_angular_speed_smooth_deg_s": speed if condition == "rotation" else 0.0,
                         "gt_pose_valid": True,
                         "gt_pose_fresh": True,
-                        "gt_linear_speed_m_s": abs(
-                            float(0.25 * 2.0 * np.pi * 0.45 * np.cos(2.0 * np.pi * 0.45 * t))
-                        ),
-                        "gt_linear_speed_smooth_m_s": abs(
-                            float(0.25 * 2.0 * np.pi * 0.45 * np.cos(2.0 * np.pi * 0.45 * t))
-                        ),
-                        "gt_angular_speed_smooth_rad_s": abs(
-                            float(
-                                np.deg2rad(70.0)
-                                * 2.0
-                                * np.pi
-                                * 0.32
-                                * np.cos(2.0 * np.pi * 0.32 * t)
-                            )
-                        ),
+                        "gt_pose_keep_alive": False,
+                        "gt_pos": gt_pos,
+                        "gt_rot": gt_rot,
+                        "has_display_pose": True,
+                        "display_pos": display_pos,
+                        "display_rot": display_rot,
                     }
                 )
-    return pd.DataFrame(rows)
+            tick += 1
+    return pd.DataFrame.from_records(rows)
 
 
-def _yaw_quat(angle_deg: float) -> list[float]:
-    """构造绕 z 轴旋转的 xyzw 四元数。"""
+class TestRQ2Timeline(unittest.TestCase):
+    """时间线应保持旋转连续、固定放大并独立导出两张子图。"""
 
-    half = np.deg2rad(angle_deg) / 2.0
-    return [0.0, 0.0, float(np.sin(half)), float(np.cos(half))]
+    def test_world_rotvec_uses_exact_common_reference_for_multiaxis_motion(self) -> None:
+        from scipy.spatial.transform import Rotation
 
+        rotations = Rotation.from_euler(
+            "xyz",
+            [[10.0, 5.0, 0.0], [20.0, 15.0, 5.0], [35.0, 20.0, 15.0]],
+            degrees=True,
+        ).as_quat()
+        values = world_rotation_vectors_from_reference(rotations[0], rotations)
+        reference = Rotation.from_quat(rotations[0])
+        expected = (Rotation.from_quat(rotations) * reference.inv()).as_rotvec()
 
-class TestHeroFigure(unittest.TestCase):
-    """hero 图应在有合格 trial 时产出 PDF + PNG，空输入返回 None。"""
+        np.testing.assert_allclose(values, expected, atol=1e-12)
 
-    def test_writes_pdf(self):
+    def test_writes_two_fixed_frame_subfigures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = write_rq2_hero_figure(_synthetic_output(), tmp)
-            self.assertIsNotNone(path)
-            self.assertTrue(Path(path).exists())
-            self.assertTrue(
-                (Path(tmp) / "rq2_hero_trajectory_preliminary.png").exists()
+            metadata = write_rq2_timelines(
+                _timeline_output(),
+                tmp,
+                config=RQ2Config(zoom_frame_count=80),
             )
 
-    def test_empty_returns_none(self):
+            destination = Path(tmp)
+            self.assertTrue((destination / "fig_rq2_position_timeline.pdf").is_file())
+            self.assertTrue((destination / "fig_rq2_rotation_timeline.pdf").is_file())
+            self.assertTrue((destination / "fig_rq2_position_timeline.png").is_file())
+            self.assertTrue((destination / "fig_rq2_rotation_timeline.png").is_file())
+            self.assertEqual(len(metadata), 2)
+            self.assertTrue((metadata["render_tick_count"] == 80).all())
+            self.assertTrue((metadata["window_frame_span"] == 79).all())
+            translation = metadata[metadata["condition"].eq("translation")].iloc[0]
+            self.assertEqual(int(translation["rq2_trial_id"]), 2)
+
+    def test_empty_run_removes_stale_timelines(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertIsNone(write_rq2_hero_figure(pd.DataFrame(), tmp))
-
-
-def _synthetic_trial_summary() -> pd.DataFrame:
-    """构造三类运动 Full/Raw-ZOH 各一行的最小 trial summary。"""
-
-    rows = []
-    presets = {
-        "slow_translation": (1, 42.0, 8.2, 0.26, 0.85, 0.049, 0.116, 0.037, 0.077),
-        "fast_motion": (2, 54.1, 8.1, 0.03, 0.86, 0.129, 0.236, 0.098, 0.208),
-        "rotation": (3, 66.2, 9.5, 0.04, 0.86, 0.013, 0.039, 0.012, 0.032),
-    }
-    for condition, vals in presets.items():
-        (
-            trial_id,
-            full_hz,
-            zoh_hz,
-            full_hold,
-            zoh_hold,
-            full_med,
-            full_p95,
-            zoh_med,
-            zoh_p95,
-        ) = vals
-        rows.append(
-            {
-                "session_id": "synthetic",
-                "condition": condition,
-                "rq2_trial_id": trial_id,
-                "label": "Full",
-                "display_update_rate_hz": full_hz,
-                "display_hold_fraction": full_hold,
-                "display_translation_median_m": full_med,
-                "display_translation_p95_m": full_p95,
-                "display_rotation_median_deg": 30.7 if condition == "rotation" else 6.0,
-                "display_rotation_p95_deg": 67.5 if condition == "rotation" else 15.0,
-                "audit_accepted": True,
-            }
-        )
-        rows.append(
-            {
-                "session_id": "synthetic",
-                "condition": condition,
-                "rq2_trial_id": trial_id,
-                "label": "Raw-ZOH",
-                "display_update_rate_hz": zoh_hz,
-                "display_hold_fraction": zoh_hold,
-                "display_translation_median_m": zoh_med,
-                "display_translation_p95_m": zoh_p95,
-                "display_rotation_median_deg": 24.6 if condition == "rotation" else 5.0,
-                "display_rotation_p95_deg": 59.7 if condition == "rotation" else 13.0,
-                "audit_accepted": True,
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-class TestDynamicFigure(unittest.TestCase):
-    """四面板合成图应在有合格 trial 时产出 PDF + PNG，空表返回 None。"""
-
-    def test_writes_pdf(self):
-        tables = {
-            "rq2_trial_summary": _synthetic_trial_summary(),
-            "rq2_motion_delay": pd.DataFrame(),
-        }
-        with tempfile.TemporaryDirectory() as tmp:
-            path = write_rq2_dynamic_figure(_synthetic_output(), tables, tmp)
-            self.assertIsNotNone(path)
-            self.assertTrue(Path(path).exists())
-            self.assertTrue(
-                (Path(tmp) / "fig_rq2_dynamic_preliminary.png").exists()
+            destination = Path(tmp)
+            names = (
+                "fig_rq2_position_timeline.pdf",
+                "fig_rq2_position_timeline.png",
+                "fig_rq2_rotation_timeline.pdf",
+                "fig_rq2_rotation_timeline.png",
             )
+            for name in names:
+                (destination / name).write_bytes(b"stale")
 
-    def test_empty_summary_returns_none(self):
-        tables = {"rq2_trial_summary": pd.DataFrame(), "rq2_motion_delay": pd.DataFrame()}
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertIsNone(
-                write_rq2_dynamic_figure(_synthetic_output(), tables, tmp)
-            )
+            metadata = write_rq2_timelines(pd.DataFrame(), destination)
+
+            self.assertTrue(metadata.empty)
+            self.assertFalse(any((destination / name).exists() for name in names))
 
 
 if __name__ == "__main__":
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     unittest.main()

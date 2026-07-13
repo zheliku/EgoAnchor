@@ -94,9 +94,9 @@ namespace EgoAnchor.Tests
                 Has.Length.EqualTo(expectedDisabled));
         }
 
-        /// <summary>RQ2 场景必须同步记录 Full 与隐藏的 Raw-ZOH，且不再保留阶段 UI。</summary>
+        /// <summary>RQ2 场景必须同步记录 Full 与隐藏的 ZOH，且不再保留阶段 UI。</summary>
         [Test]
-        public void Rq2SceneUsesDirectTrialsAndPassiveRawZohBaseline()
+        public void Rq2SceneUsesDirectTrialsAndPassiveZohBaseline()
         {
             string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-RQ2.unity");
             string scene = File.ReadAllText(path).Replace("\r\n", "\n");
@@ -104,25 +104,36 @@ namespace EgoAnchor.Tests
             Dictionary<string, long> runtimeIds = ReadVariantRuntimeIds(recorder);
             Dictionary<string, string> policyBlocks = ResolveVariantPolicyBlocks(scene, runtimeIds);
 
-            Assert.That(runtimeIds.Keys, Is.EquivalentTo(new[] { "Full", "Raw-ZOH" }));
+            Assert.That(runtimeIds.Keys, Is.EquivalentTo(new[] { "Full", "ZOH" }));
             StringAssert.DoesNotContain("m_Name: Phase", scene);
             StringAssert.DoesNotContain("phaseText:", scene);
             StringAssert.DoesNotContain("advancePhaseAction:", scene);
             StringAssert.DoesNotContain("NoStaticLock (RQ2 Disabled)", scene);
 
-            string rawRuntime = ExtractObjectBlock(scene, 114, runtimeIds["Raw-ZOH"]);
-            StringAssert.Contains("cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}", rawRuntime);
+            string input = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Eval.RQ2.RQ2InputHandler");
+            StringAssert.Contains("translationSpeedMs: 0.1", input);
+            StringAssert.Contains("startTranslationAction:", input);
+            StringAssert.Contains("m_Path: <Keyboard>/1", input);
+            StringAssert.Contains("m_Path: <Keyboard>/2", input);
+            StringAssert.DoesNotContain("slowTranslationSpeedMs:", input);
+            StringAssert.DoesNotContain("fastMotionSpeedMs:", input);
+            StringAssert.DoesNotContain("startSlowTranslationAction:", input);
+            StringAssert.DoesNotContain("startFastMotionAction:", input);
+            StringAssert.DoesNotContain("m_Path: <Keyboard>/3", input);
+
+            string zohRuntime = ExtractObjectBlock(scene, 114, runtimeIds["ZOH"]);
+            StringAssert.Contains("cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}", zohRuntime);
 
             string fullPolicy = policyBlocks["Full"];
             StringAssert.Contains("emitServerReacquire: 0", fullPolicy);
 
-            string rawPolicy = policyBlocks["Raw-ZOH"];
-            StringAssert.Contains("enableQualityGate: 1", rawPolicy);
-            StringAssert.Contains("staticLockModule: {fileID: 0}", rawPolicy);
-            StringAssert.Contains("trackingScoreFloor: 0.5", rawPolicy);
-            StringAssert.Contains("enableLostReacquire: 1", rawPolicy);
-            StringAssert.Contains("enableLowScoreReacquire: 1", rawPolicy);
-            StringAssert.Contains("emitServerReacquire: 0", rawPolicy);
+            string zohPolicy = policyBlocks["ZOH"];
+            StringAssert.Contains("enableQualityGate: 1", zohPolicy);
+            StringAssert.Contains("staticLockModule: {fileID: 0}", zohPolicy);
+            StringAssert.Contains("trackingScoreFloor: 0.5", zohPolicy);
+            StringAssert.Contains("enableLostReacquire: 1", zohPolicy);
+            StringAssert.Contains("enableLowScoreReacquire: 1", zohPolicy);
+            StringAssert.Contains("emitServerReacquire: 0", zohPolicy);
 
             StringAssert.Contains("gtFreshnessMode: 1", recorder);
 
@@ -132,7 +143,7 @@ namespace EgoAnchor.Tests
 
             string hub = FindBlockContaining(scene, "EgoAnchor::EgoAnchor.Runtime.AnchorRuntimeHub");
             StringAssert.Contains($"- {{fileID: {runtimeIds["Full"]}}}", hub);
-            StringAssert.Contains($"- {{fileID: {runtimeIds["Raw-ZOH"]}}}", hub);
+            StringAssert.Contains($"- {{fileID: {runtimeIds["ZOH"]}}}", hub);
         }
 
         /// <summary>RQ1 Recorder 必须显式保留静止 keep-alive 参考策略。</summary>
@@ -273,11 +284,9 @@ namespace EgoAnchor.Tests
                 InvokeLifecycle(handler, "Awake");
                 InvokeLifecycle(handler, "OnEnable");
 
-                AssertTrialKey(selector, _keyboard.digit1Key, RQ2Condition.SlowTranslation, 1);
+                AssertTrialKey(selector, _keyboard.digit1Key, RQ2Condition.Translation, 1);
                 EndTrialWithZero(selector);
-                AssertTrialKey(selector, _keyboard.digit2Key, RQ2Condition.FastMotion, 2);
-                EndTrialWithZero(selector);
-                AssertTrialKey(selector, _keyboard.digit3Key, RQ2Condition.Rotation, 3);
+                AssertTrialKey(selector, _keyboard.digit2Key, RQ2Condition.Rotation, 2);
                 EndTrialWithZero(selector);
             }
             finally

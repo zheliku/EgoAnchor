@@ -119,15 +119,16 @@ data/research/rq1/
 
 ## 四、场景类型说明
 
-自动检测按以下阈值分类（可在 `detect_scenarios()` 调参）：
+场景标签由 Unity 明确记录，不再用速度阈值自动猜测：
 
-| 场景类型        | 判断条件                          | RQ1 用途     |
-| --------------- | --------------------------------- | ------------ |
-| `static`      | 线速度 < 0.01 m/s，角速度 < 5°/s | 精度 + 抖动  |
-| `slow_motion` | 线速度 0.01–0.15 m/s             | 运动跟踪精度 |
-| `fast_motion` | 线速度 > 0.5 m/s                  | 运动滞后     |
-| `rotation`    | 角速度 > 30°/s                   | 旋转跟踪     |
-| `occlusion`   | anchor_state == Lost              | 恢复时间     |
+| 研究问题 | 日志标签 | 用途 |
+|---|---|---|
+| RQ1 | `static_observation` | 长时静止精度与抖动 |
+| RQ1 | `occlusion_recovery` | 遮挡期行为与恢复 |
+| RQ2 | `translation` | 中低速往复平移 |
+| RQ2 | `rotation` | 中低速交替轴向旋转 |
+
+RQ2 另由平台参考轨迹提取有效运动段，并在分析阶段应用平移 `≤0.8 m/s`、旋转 `≤180 deg/s` 的速度上限。
 
 ---
 
@@ -138,7 +139,6 @@ data/research/rq1/
 | 位置误差   | `translation_rmse_m` | m    | anchor 与 GT 的欧氏距离 RMS           |
 | 旋转误差   | `rotation_rmse_deg`  | deg  | anchor 与 GT 的相对旋转角度 RMS       |
 | 静止抖动   | `jitter_pos_rms_m`   | m    | 静止期连续帧 anchor 位移 RMS          |
-| 运动滞后   | `lag_ms`             | ms   | GT 速度与 anchor 速度的互相关峰值位置 |
 | 端到端时延 | `e2e_latency_ms`     | ms   | 从采集帧到 anchor 更新的时间          |
 | 恢复时间   | `recovery_time_ms`   | ms   | 遮挡结束到误差降回阈值的时间          |
 

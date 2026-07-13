@@ -78,10 +78,10 @@ Python 推理（~159ms）+ 网络传输 + 排队，实测**采集-渲染延迟�
 
 ## 四个 baseline 算法
 
-### 1. `raw_zoh` —— 什么都不处理（零阶保持）
+### 1. `zoh` —— 零阶保持
 **逻辑**：收到观测就存下，渲染时永远输出最近一帧，直到下一帧才**硬跳变**。
 **效果**：阶梯状轨迹，每 ~200ms 一次跳，完全不平滑。作为对照基线。
-文件：`Predictors/RawZohPredictor.cs`
+文件：`Predictors/ZohPredictor.cs`
 
 ### 2. `kalman_cv` —— 卡尔曼滤波 + 预测
 **逻辑**：把轨迹建模为状态 `[位置, 速度]`（常速度模型）。
@@ -120,13 +120,13 @@ Python 推理（~159ms）+ 网络传输 + 排队，实测**采集-渲染延迟�
 ## 平滑度指标
 
 控制台打印相邻 render 帧的步长 RMS（位置 mm / 旋转 deg）——**越小越平滑、越无跳变**。
-两个数据集上排名一致：`deadreckoning_spline` < `oneeuro_predict` ≲ `kalman_cv` < `raw_zoh`。
+两个数据集上排名一致：`deadreckoning_spline` < `oneeuro_predict` ≲ `kalman_cv` < `zoh`。
 
 示例（20260614 数据集）：
 
 | 算法 | posStepRMS (mm) | rotStepRMS (deg) |
 |---|---|---|
-| raw_zoh | 4.01 | 1.50 |
+| zoh | 4.01 | 1.50 |
 | kalman_cv | 3.98 | 1.26 |
 | oneeuro_predict | 2.60 | 0.98 |
 | **deadreckoning_spline** | **1.30** | **0.48** |

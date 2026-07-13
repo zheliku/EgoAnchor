@@ -7,7 +7,7 @@ namespace EgoAnchor.Eval.RQ2
     /// <summary>
     /// RQ2 当前试次上下文选择器。
     /// <para>
-    /// 该组件只保存场景、试次编号和目标速度，供 <see cref="EvalRecorder"/>
+    /// 该组件只保存运动类型、试次编号和目标速度，供 <see cref="EvalRecorder"/>
     /// 在渲染 tick 读取。它不控制 <see cref="EvalSession"/>、不拥有录制状态，也不写文件。
     /// </para>
     /// </summary>
@@ -24,7 +24,7 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>当前试次编号；空闲时为 -1。</summary>
         private int _currentTrialId = -1;
 
-        /// <summary>当前试次的运动场景。</summary>
+        /// <summary>当前试次的运动类型。</summary>
         private RQ2Condition _currentCondition = RQ2Condition.None;
 
         /// <summary>当前试次目标线速度，单位 m/s；不适用时为 NaN。</summary>
@@ -36,7 +36,7 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>当前试次开始时的 Unity 单调时钟毫秒。</summary>
         private double _trialStartMonoMs = double.NaN;
 
-        /// <summary>当前运动场景；空闲时为 <see cref="RQ2Condition.None"/>。</summary>
+        /// <summary>当前运动类型；空闲时为 <see cref="RQ2Condition.None"/>。</summary>
         public RQ2Condition CurrentCondition => _currentCondition;
 
         /// <summary>当前 session 内的试次编号；空闲时为 -1。</summary>
@@ -63,7 +63,7 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>
         /// 立即开始新的 RQ2 试次。同一 session 中每次成功开始都会分配新的单调递增编号。
         /// </summary>
-        /// <param name="condition">本次试次的运动场景，不能为 None。</param>
+        /// <param name="condition">本次试次的运动类型，不能为 None。</param>
         /// <param name="targetLinearSpeedMs">预设目标线速度，单位 m/s；未指定时传 NaN。</param>
         /// <param name="targetAngularSpeedDegS">预设目标角速度，单位 deg/s；未指定时传 NaN。</param>
         public void StartTrial(
@@ -72,7 +72,7 @@ namespace EgoAnchor.Eval.RQ2
             float targetAngularSpeedDegS = float.NaN)
         {
             if (condition == RQ2Condition.None)
-                throw new ArgumentOutOfRangeException(nameof(condition), "RQ2 试次必须指定有效运动场景。");
+                throw new ArgumentOutOfRangeException(nameof(condition), "RQ2 试次必须指定有效运动类型。");
             if (evalSession == null || !evalSession.IsRecording)
             {
                 EgoAnchorLog.For<RQ2TrialSelector>().Warning("RQ2 trial 开始请求已忽略：当前未录制评估 session。");

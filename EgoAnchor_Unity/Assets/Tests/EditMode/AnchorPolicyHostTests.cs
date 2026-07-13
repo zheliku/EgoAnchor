@@ -165,6 +165,7 @@ namespace EgoAnchor.Tests
                 PoseToAnchorRuntime runtime = runtimeGo.AddComponent<PoseToAnchorRuntime>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
+                SetPrivateField(host, "enableQualityGate", true);
                 SetPrivateField(runtime, "policyHost", host);
                 host.Bind(runtime);
 
@@ -508,8 +509,7 @@ namespace EgoAnchor.Tests
         [Test]
         public void RQ2EnumsUseStableLogStrings()
         {
-            Assert.That(RQ2Condition.SlowTranslation.ToLogString(), Is.EqualTo("slow_translation"));
-            Assert.That(RQ2Condition.FastMotion.ToLogString(), Is.EqualTo("fast_motion"));
+            Assert.That(RQ2Condition.Translation.ToLogString(), Is.EqualTo("translation"));
             Assert.That(RQ2Condition.Rotation.ToLogString(), Is.EqualTo("rotation"));
             Assert.That(RQ2Condition.None.ToLogString(), Is.EqualTo("none"));
         }
@@ -528,15 +528,15 @@ namespace EgoAnchor.Tests
                 SetPrivateField(session, "_recording", true);
                 selector.BindSession(session);
 
-                selector.StartTrial(RQ2Condition.SlowTranslation, 0.15f, float.NaN);
+                selector.StartTrial(RQ2Condition.Translation, 0.15f, float.NaN);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.SlowTranslation));
+                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.Translation));
                 Assert.That(selector.TargetLinearSpeedMs, Is.EqualTo(0.15f));
                 Assert.That(selector.TargetAngularSpeedDegS, Is.NaN);
 
-                selector.StartTrial(RQ2Condition.FastMotion, 1.0f, float.NaN);
+                selector.StartTrial(RQ2Condition.Rotation, float.NaN, 90f);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.SlowTranslation));
+                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.Translation));
                 selector.EndTrial();
 
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(-1));
@@ -544,13 +544,15 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.TargetLinearSpeedMs, Is.NaN);
                 Assert.That(selector.TargetAngularSpeedDegS, Is.NaN);
 
-                selector.StartTrial(RQ2Condition.FastMotion, 1.0f, float.NaN);
+                selector.StartTrial(RQ2Condition.Rotation, float.NaN, 90f);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(2));
+                Assert.That(selector.TargetLinearSpeedMs, Is.NaN);
+                Assert.That(selector.TargetAngularSpeedDegS, Is.EqualTo(90f));
 
                 selector.ResetSession();
-                selector.StartTrial(RQ2Condition.Rotation, float.NaN, 90f);
+                selector.StartTrial(RQ2Condition.Translation, 0.10f, float.NaN);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.TargetAngularSpeedDegS, Is.EqualTo(90f));
+                Assert.That(selector.TargetLinearSpeedMs, Is.EqualTo(0.10f));
             }
             finally
             {
@@ -594,14 +596,11 @@ namespace EgoAnchor.Tests
 
         /// <summary>RQ2 活动场景必须只高亮对应快捷键行。</summary>
         [TestCase(
-            RQ2Condition.SlowTranslation,
-            "<color=#FFD700><b>[1]  Slow Translation  ◀</b></color>")]
-        [TestCase(
-            RQ2Condition.FastMotion,
-            "<color=#FFD700><b>[2]  Fast Motion  ◀</b></color>")]
+            RQ2Condition.Translation,
+            "<color=#FFD700><b>[1]  Translation  ◀</b></color>")]
         [TestCase(
             RQ2Condition.Rotation,
-            "<color=#FFD700><b>[3]  Rotation  ◀</b></color>")]
+            "<color=#FFD700><b>[2]  Rotation  ◀</b></color>")]
         public void RQ2StatusUiHighlightsOnlyActiveTrialShortcut(
             RQ2Condition active,
             string expectedRow)
@@ -631,8 +630,8 @@ namespace EgoAnchor.Tests
                 Is.EqualTo("Trial: Idle"));
             Assert.That(
                 InvokePrivateStaticMethod<string>(
-                    typeof(RQ2StatusUI), "BuildTrialText", 1, RQ2Condition.SlowTranslation),
-                Is.EqualTo("Trial 1: Slow Translation (Key 1)"));
+                    typeof(RQ2StatusUI), "BuildTrialText", 1, RQ2Condition.Translation),
+                Is.EqualTo("Trial 1: Translation (Key 1)"));
         }
 
         /// <summary>
@@ -690,7 +689,7 @@ namespace EgoAnchor.Tests
                 {
                     new EvalVariant
                     {
-                        label = "Full",
+                        label = "ZOH",
                         runtime = runtime,
                         anchorTransform = runtimeGo.transform,
                         isPrimary = true,
@@ -706,12 +705,12 @@ namespace EgoAnchor.Tests
                 recorder.CollectVariantLabels(labels);
                 recorder.CollectVariantConfigs(configs);
 
-                Assert.That(labels, Is.EqualTo(new[] { "Full" }));
+                Assert.That(labels, Is.EqualTo(new[] { "ZOH" }));
                 Assert.That(configs, Has.Count.EqualTo(1));
                 Assert.That(configs[0].MotionModel, Is.EqualTo("cv"));
                 Assert.That(configs[0].SmoothingStrategy, Is.EqualTo("raw_passthrough"));
-                Assert.That(configs[0].QualityGate, Is.EqualTo("disabled"));
-                Assert.That(configs[0].ConfigHash, Is.Not.Empty);
+                Assert.That(configs[0].QualityGate, Is.EqualTo("enabled"));
+                Assert.That(configs[0].ConfigHash, Is.EqualTo("87f79d178e3942a9"));
             }
             finally
             {

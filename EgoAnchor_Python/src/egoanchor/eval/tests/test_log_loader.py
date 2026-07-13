@@ -142,12 +142,12 @@ class LogLoaderTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs = load_session(self._write_session(Path(tmp)))
             output = logs.output.copy()
-            output.loc[output["tick_index"] == 0, "rq2_condition"] = "rotation"
+            output.loc[output["tick_index"] == 0, "rq2_condition"] = "translation"
             output.loc[output["tick_index"] == 0, "rq2_trial_id"] = 8
 
             labeled = label_conditions(output, logs.manifest, "render_mono_ms")
 
-            self.assertTrue((labeled.loc[labeled["tick_index"] == 0, "condition"] == "rotation").all())
+            self.assertTrue((labeled.loc[labeled["tick_index"] == 0, "condition"] == "translation").all())
             self.assertTrue((labeled.loc[labeled["tick_index"] == 1, "condition"] == "object_motion").all())
 
     def test_missing_required_field_raises_clear_schema_error(self) -> None:

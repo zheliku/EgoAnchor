@@ -134,7 +134,7 @@ def label_conditions(df: pd.DataFrame, manifest: Mapping[str, Any] | Manifest, m
         rq2 = out["rq2_condition"].fillna("none").astype(str)
         trial_source = out.get("rq2_trial_id", pd.Series(-1, index=out.index))
         trial = pd.to_numeric(trial_source, errors="coerce").fillna(-1)
-        active = rq2.isin(("slow_translation", "fast_motion", "rotation")) & (trial > 0)
+        active = rq2.isin(("translation", "rotation")) & (trial > 0)
         out.loc[active, "condition"] = rq2[active]
     return out
 

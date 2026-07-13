@@ -1,68 +1,67 @@
-"""RQ2 动态追踪多 session 分析 CLI。"""
+"""RQ2 平移/旋转双任务分析 CLI。"""
+
+from __future__ import annotations
 
 import argparse
 
-from . import RQ2Config, run_rq2_analysis
+from .contract import RQ2Config
+from .pipeline import run_rq2_analysis
 
-__all__ = [
-    "main",
-    "run_rq2_analysis",
-]
+__all__ = ["main", "run_rq2_analysis"]
 
 
 def main(argv: list[str] | None = None) -> int:
-    """解析命令行参数，运行 RQ2 分析并打印审计与 trial 汇总。"""
+    """运行描述性统计、质量审计与两张论文时间线。"""
 
-    parser = argparse.ArgumentParser(description="Run EgoAnchor RQ2 dynamic tracking analysis.")
+    parser = argparse.ArgumentParser(description="Run EgoAnchor RQ2 dynamic anchoring analysis.")
     parser.add_argument(
         "--session-dir",
         action="append",
         required=True,
-        help="data/eval/<session_id> 目录；可重复传入以联合分析多个 session。",
+        help="data/eval/<session_id> 目录；联合分析时可重复传入。",
     )
+    parser.add_argument("--report-dir", default=None, help="统计表与时间线输出目录。")
+    parser.add_argument("--figs-dir", default=None, help="可选论文图片目录；复制两张时间线。")
     parser.add_argument(
-        "--report-dir",
-        default=None,
-        help="可选输出目录；单 session 默认 <session>/report。",
-    )
-    parser.add_argument(
-        "--translation-tolerance-m",
+        "--max-translation-speed-m-s",
         type=float,
-        default=0.05,
-        help="次级 within-tolerance 有效率的平移误差阈值。",
+        default=0.8,
+        help="平移帧纳入分析的最大平台参考速度。",
     )
     parser.add_argument(
-        "--rotation-tolerance-deg",
+        "--max-rotation-speed-deg-s",
         type=float,
-        default=10.0,
-        help="次级 within-tolerance 有效率的旋转误差阈值。",
+        default=180.0,
+        help="旋转帧纳入分析的最大平台参考角速度。",
+    )
+    parser.add_argument(
+        "--zoom-frame-count",
+        type=int,
+        default=120,
+        help="XYZ-帧时间线固定放大窗口的渲染帧数。",
     )
     args = parser.parse_args(argv)
     config = RQ2Config(
-        translation_tolerance_m=args.translation_tolerance_m,
-        rotation_tolerance_deg=args.rotation_tolerance_deg,
+        max_translation_speed_m_s=args.max_translation_speed_m_s,
+        max_rotation_speed_deg_s=args.max_rotation_speed_deg_s,
+        zoom_frame_count=args.zoom_frame_count,
     )
     tables = run_rq2_analysis(
         args.session_dir,
         report_dir=args.report_dir,
+        figs_dir=args.figs_dir,
         config=config,
     )
-    session_audit = tables["rq2_session_audit"]
-    trial_audit = tables["rq2_trial_audit"]
-    design_audit = tables["rq2_design_audit"]
-    summary = tables["rq2_trial_summary"]
-    print("RQ2 session audit:")
-    print(
-        session_audit.to_string(index=False)
-        if not session_audit.empty
-        else "  <no data>"
-    )
-    print("RQ2 trial audit:")
-    print(trial_audit.to_string(index=False) if not trial_audit.empty else "  <no data>")
-    print("RQ2 design audit:")
-    print(design_audit.to_string(index=False) if not design_audit.empty else "  <no data>")
-    print("RQ2 trial summary:")
-    print(summary.to_string(index=False) if not summary.empty else "  <no data>")
+    for name in (
+        "rq2_session_audit",
+        "rq2_trial_audit",
+        "rq2_condition_summary",
+        "rq2_response_summary",
+        "rq2_timeline_windows",
+    ):
+        table = tables[name]
+        print(f"{name}:")
+        print(table.to_string(index=False) if not table.empty else "  <no data>")
     return 0
 
 

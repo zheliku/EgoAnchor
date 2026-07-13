@@ -22,37 +22,27 @@ namespace EgoAnchor.Eval.RQ2
         [Tooltip("唯一的 EvalSession 录制控制器，仅用于 F7/F8。")]
         [SerializeField] private EvalSession evalSession;
 
-        /// <summary>慢速平移试次的预设目标线速度，单位 m/s。</summary>
+        /// <summary>平移试次的预设目标线速度，单位 m/s。</summary>
         [Header("Target Speeds")]
-        [Tooltip("慢速平移试次的预设目标线速度，单位 m/s；实际速度仍以 GT 轨迹为准。")]
+        [Tooltip("平移试次的预设目标线速度，单位 m/s；实际速度仍以 GT 轨迹为准。")]
         [Min(0f)]
-        [SerializeField] private float slowTranslationSpeedMs = 0.10f;
-
-        /// <summary>快速挥动试次的预设目标线速度，单位 m/s。</summary>
-        [Tooltip("快速挥动试次的预设目标线速度，单位 m/s；实际速度仍以 GT 轨迹为准。")]
-        [Min(0f)]
-        [SerializeField] private float fastMotionSpeedMs = 0.80f;
+        [SerializeField] private float translationSpeedMs = 0.10f;
 
         /// <summary>旋转试次的预设目标角速度，单位 deg/s。</summary>
         [Tooltip("旋转试次的预设目标角速度，单位 deg/s；实际速度仍以 GT 轨迹为准。")]
         [Min(0f)]
         [SerializeField] private float rotationSpeedDegS = 90f;
 
-        /// <summary>开始慢速平移试次的输入动作，默认键为 1。</summary>
+        /// <summary>开始平移试次的输入动作，默认键为 1。</summary>
         [Header("Trial Input Actions")]
-        [Tooltip("开始慢速平移试次，默认键为 1。")]
-        [SerializeField] private InputAction startSlowTranslationAction =
-            new InputAction("Start Slow Translation", InputActionType.Button, "<Keyboard>/1");
+        [Tooltip("开始平移试次，默认键为 1。")]
+        [SerializeField] private InputAction startTranslationAction =
+            new InputAction("Start Translation", InputActionType.Button, "<Keyboard>/1");
 
-        /// <summary>开始快速挥动试次的输入动作，默认键为 2。</summary>
-        [Tooltip("开始快速挥动试次，默认键为 2。")]
-        [SerializeField] private InputAction startFastMotionAction =
-            new InputAction("Start Fast Motion", InputActionType.Button, "<Keyboard>/2");
-
-        /// <summary>开始旋转试次的输入动作，默认键为 3。</summary>
-        [Tooltip("开始旋转试次，默认键为 3。")]
+        /// <summary>开始旋转试次的输入动作，默认键为 2。</summary>
+        [Tooltip("开始旋转试次，默认键为 2。")]
         [SerializeField] private InputAction startRotationAction =
-            new InputAction("Start Rotation", InputActionType.Button, "<Keyboard>/3");
+            new InputAction("Start Rotation", InputActionType.Button, "<Keyboard>/2");
 
         /// <summary>结束当前试次的输入动作，默认键为 0。</summary>
         [Tooltip("结束当前 RQ2 试次，默认键为 0。")]
@@ -80,15 +70,13 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>注册输入回调并启用全部动作。</summary>
         private void OnEnable()
         {
-            startSlowTranslationAction.performed += OnStartSlowTranslation;
-            startFastMotionAction.performed += OnStartFastMotion;
+            startTranslationAction.performed += OnStartTranslation;
             startRotationAction.performed += OnStartRotation;
             endTrialAction.performed += OnEndTrial;
             startRecordingAction.performed += OnStartRecording;
             stopRecordingAction.performed += OnStopRecording;
 
-            startSlowTranslationAction.Enable();
-            startFastMotionAction.Enable();
+            startTranslationAction.Enable();
             startRotationAction.Enable();
             endTrialAction.Enable();
             startRecordingAction.Enable();
@@ -98,31 +86,23 @@ namespace EgoAnchor.Eval.RQ2
         /// <summary>禁用全部动作并注销输入回调，避免组件反复启用后重复触发。</summary>
         private void OnDisable()
         {
-            startSlowTranslationAction.Disable();
-            startFastMotionAction.Disable();
+            startTranslationAction.Disable();
             startRotationAction.Disable();
             endTrialAction.Disable();
             startRecordingAction.Disable();
             stopRecordingAction.Disable();
 
-            startSlowTranslationAction.performed -= OnStartSlowTranslation;
-            startFastMotionAction.performed -= OnStartFastMotion;
+            startTranslationAction.performed -= OnStartTranslation;
             startRotationAction.performed -= OnStartRotation;
             endTrialAction.performed -= OnEndTrial;
             startRecordingAction.performed -= OnStartRecording;
             stopRecordingAction.performed -= OnStopRecording;
         }
 
-        /// <summary>开始慢速平移试次。</summary>
-        private void OnStartSlowTranslation(InputAction.CallbackContext context)
+        /// <summary>开始平移试次。</summary>
+        private void OnStartTranslation(InputAction.CallbackContext context)
         {
-            selector?.StartTrial(RQ2Condition.SlowTranslation, slowTranslationSpeedMs, float.NaN);
-        }
-
-        /// <summary>开始快速挥动试次。</summary>
-        private void OnStartFastMotion(InputAction.CallbackContext context)
-        {
-            selector?.StartTrial(RQ2Condition.FastMotion, fastMotionSpeedMs, float.NaN);
+            selector?.StartTrial(RQ2Condition.Translation, translationSpeedMs, float.NaN);
         }
 
         /// <summary>开始旋转试次。</summary>

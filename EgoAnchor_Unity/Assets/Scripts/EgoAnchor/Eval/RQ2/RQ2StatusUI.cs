@@ -27,8 +27,8 @@ namespace EgoAnchor.Eval.RQ2
         [Tooltip("显示当前 session id。")]
         [SerializeField] private TextMeshProUGUI sessionIdText;
 
-        /// <summary>当前试次编号与场景文本。</summary>
-        [Tooltip("显示当前试次编号与运动场景。")]
+        /// <summary>当前试次编号与运动类型文本。</summary>
+        [Tooltip("显示当前试次编号与运动类型。")]
         [SerializeField] private TextMeshProUGUI trialText;
 
         /// <summary>目标线速度或角速度文本。</summary>
@@ -116,7 +116,7 @@ namespace EgoAnchor.Eval.RQ2
                 float angular = selector.TargetAngularSpeedDegS;
                 return float.IsNaN(angular) ? "Nominal Target: -" : $"Target: {angular:F1} deg/s";
             }
-            if (condition == RQ2Condition.SlowTranslation || condition == RQ2Condition.FastMotion)
+            if (condition == RQ2Condition.Translation)
             {
                 float linear = selector.TargetLinearSpeedMs;
                 return float.IsNaN(linear) ? "Nominal Target: -" : $"Target: {linear:F2} m/s";
@@ -124,7 +124,7 @@ namespace EgoAnchor.Eval.RQ2
             return "Nominal Target: -";
         }
 
-        /// <summary>按当前试次场景绘制操作按键表，并高亮对应的场景快捷键。</summary>
+        /// <summary>按当前运动类型绘制操作按键表，并高亮对应的快捷键。</summary>
         private void UpdateKeyBindings(RQ2Condition active)
         {
             if (keyBindingsText == null) return;
@@ -132,7 +132,7 @@ namespace EgoAnchor.Eval.RQ2
             keyBindingsText.text = BuildKeyBindingsText(active);
         }
 
-        /// <summary>生成当前试次文本；活动试次同时显示对应数字键。</summary>
+        /// <summary>生成当前试次文本；枚举值与默认数字键一致。</summary>
         private static string BuildTrialText(int trialId, RQ2Condition condition)
         {
             return trialId > 0
@@ -140,20 +140,19 @@ namespace EgoAnchor.Eval.RQ2
                 : "Trial: Idle";
         }
 
-        /// <summary>生成完整快捷键表；活动场景使用与 RQ1 相同的金色粗体和指示符。</summary>
+        /// <summary>生成完整快捷键表；活动运动类型使用与 RQ1 相同的金色粗体和指示符。</summary>
         private static string BuildKeyBindingsText(RQ2Condition active)
         {
             var sb = new StringBuilder(256);
-            AppendConditionRow(sb, "[1]", RQ2Condition.SlowTranslation, active);
-            AppendConditionRow(sb, "[2]", RQ2Condition.FastMotion, active);
-            AppendConditionRow(sb, "[3]", RQ2Condition.Rotation, active);
+            AppendConditionRow(sb, "[1]", RQ2Condition.Translation, active);
+            AppendConditionRow(sb, "[2]", RQ2Condition.Rotation, active);
             sb.AppendLine();
             sb.AppendLine("[0] End Trial");
             sb.Append("[F7] Start Recording   [F8] Stop Recording");
             return sb.ToString();
         }
 
-        /// <summary>追加一行场景快捷键；当前场景沿用 RQ1 的高亮标记。</summary>
+        /// <summary>追加一行运动类型快捷键；当前类型沿用 RQ1 的高亮标记。</summary>
         private static void AppendConditionRow(
             StringBuilder sb,
             string key,

@@ -1,163 +1,352 @@
-"""RQ1 静态锚定图的**纯绘图**层（无重依赖）。
-
-本模块只依赖 matplotlib/numpy/pandas，**不 import** metrics 引擎、io、cv2 等重依赖，
-因此既能被完整分析链路 :mod:`egoanchor.eval.research.rq1.analyze` 复用，也能被轻量
-复现脚本 :mod:`egoanchor.eval.research.rq1.plot_from_report` 直接调用——后者在只装了
-matplotlib/pandas/numpy 的环境里也能一键重绘论文图，无需重算指标、无需 cv2。
-
-绘图口径：默认画**完整静止序列**（``STATIC_STEADY_WINDOW_S = None``，不裁剪最优
-稳态区间），如实呈现全程数据。若需回到"仅稳态窗口"的旧口径，传入形如 (50.0, 75.0)
-的窗口元组即可。
-"""
+"""RQ1 静止锚定的 XYZ-帧论文图。"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from scipy.spatial.transform import Rotation
+
+from egoanchor.eval.metrics import is_pose_value
 
 
-# static_observation 展示窗口（相对该场景起点，单位秒）。
-# 设为 None 表示**不裁剪、画完整静止序列**——论文如实呈现全程数据，不取最优
-# 稳态区间。若需回到"仅稳态窗口"的旧口径，改回形如 (50.0, 75.0) 的元组即可。
-STATIC_STEADY_WINDOW_S: tuple[float, float] | None = None
-
-# 论文图导出默认目录（解析到仓库根的绝对路径，避免受 cwd 影响）。
-# 本文件位于 EgoAnchor_Python/src/egoanchor/eval/research/rq1/plot.py，
-# parents[6] = 仓库根。
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 DEFAULT_FIGS_DIR = _REPO_ROOT / "2026-EgoAnchor-Typst" / "figs" / "rq1"
+STATIC_TIMELINE_FRAME_COUNT = 180
+
+POSITION_STEM = "fig_rq1_position_timeline"
+ROTATION_STEM = "fig_rq1_rotation_timeline"
+TIMELINE_FILENAMES = tuple(
+    f"{stem}.{suffix}"
+    for stem in (POSITION_STEM, ROTATION_STEM)
+    for suffix in ("pdf", "png")
+)
+WINDOW_COLUMNS = [
+    "condition",
+    "selection_rule",
+    "window_start_unity_frame",
+    "window_end_unity_frame",
+    "window_frame_span",
+    "render_tick_count",
+    "window_start_mono_ms",
+    "window_end_mono_ms",
+]
+
+COLORS = {
+    "Reference": "#222222",
+    "Full": "#0072B2",
+    "No-StaticLock": "#D55E00",
+}
 
 
-def write_rq1_figure(
-    tables: dict[str, pd.DataFrame],
-    out_path: Path | str,
+@dataclass(frozen=True)
+class StaticWindow:
+    """不依赖误差大小选择的静止锁定帧窗口。"""
+
+    start_frame: int
+    end_frame: int
+    start_ms: float
+    end_ms: float
+    frames: pd.DataFrame
+
+
+def write_rq1_timelines(
+    output: pd.DataFrame,
+    output_dir: Path | str,
     *,
-    static_window_s: tuple[float, float] | None = STATIC_STEADY_WINDOW_S,
-) -> Path:
-    """绘制 RQ1 静态锚定质量 2×2 网格图（行=指标，列=场景）。
+    frame_count: int = STATIC_TIMELINE_FRAME_COUNT,
+) -> pd.DataFrame:
+    """绘制静止位置/旋转 XYZ-帧图，并返回选窗元数据。"""
 
-    本函数不重算指标，只消费共享引擎已算好的 ``anchor_error_detail`` 表。为消除
-    双 y 轴同色叠加造成的视觉混乱，把平移与旋转拆到各自的子图，每格只画两条同类
-    曲线（颜色区分变体）：
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    _remove_existing_timelines(destination)
+    window = _select_static_window(output, frame_count)
+    if window is None:
+        return pd.DataFrame(columns=WINDOW_COLUMNS)
+    _plot_position(window, destination / POSITION_STEM)
+    _plot_rotation(window, destination / ROTATION_STEM)
+    return pd.DataFrame.from_records(
+        [
+            {
+                "condition": "static_observation",
+                "selection_rule": "first_continuous_full_locked_valid_run",
+                "window_start_unity_frame": window.start_frame,
+                "window_end_unity_frame": window.end_frame,
+                "window_frame_span": window.end_frame - window.start_frame,
+                "render_tick_count": int(len(_reference_rows(window.frames))),
+                "window_start_mono_ms": window.start_ms,
+                "window_end_mono_ms": window.end_ms,
+            }
+        ],
+        columns=WINDOW_COLUMNS,
+    )
 
-    - 上行：平移误差（mm）；下行：旋转误差（°）。
-    - 左列：``static_observation``；右列：``occlusion_recovery``。
-    - 每格叠加 *Full*（蓝，突出）与 *No-StaticLock*（橙，半透明），并以 ``y=0``
-      点线标注 GT 零误差基线（误差即相对目标参考的偏差，理想真值为 0）。
 
-    同列共享时间轴、同行共享量纲，便于横向对比。图例在图顶统一放置一次。
+def _select_static_window(output: pd.DataFrame, frame_count: int) -> StaticWindow | None:
+    """取首个 Full 已锁定且两变体与参考均有效的连续固定帧段。"""
 
-    默认 ``static_window_s=None`` 画**完整静止序列**（不取最优区间），如实呈现全程；
-    遮挡列始终不裁（其尖峰正是要展示的 No-StaticLock 缺陷）。
-
-    Args:
-        tables: 至少含 ``anchor_error_detail`` 长表的 dict。
-        out_path: 输出文件名主干（不含后缀），同时写 ``.pdf`` 与 ``.png``。
-        static_window_s: static 列的裁剪窗 ``(start_s, end_s)``（相对该场景起点）；
-            传 ``None``（默认）则画完整 static 段。
-
-    Returns:
-        写出的 PDF 路径。
-    """
-
-    detail = tables.get("anchor_error_detail", pd.DataFrame())
-    colors = {"Full": "#2C7FB8", "No-StaticLock": "#E8853A"}
-    scenarios = (("static_observation", "Static observation"),
-                 ("occlusion_recovery", "Occlusion recovery"))
-
-    # 行=指标（平移/旋转），列=场景（静止/遮挡）；同列共享 x，同行共享 y。
-    fig, axes = plt.subplots(2, 2, figsize=(9, 4.8), sharex="col", sharey="row")
-
-    handles_by_label: dict[str, Any] = {}
-    for col, (condition, title) in enumerate(scenarios):
-        subset = _select_detail(detail, condition, None)
-        if condition == "static_observation" and static_window_s is not None:
-            subset = _clip_window(subset, static_window_s)
-        ax_t, ax_r = axes[0][col], axes[1][col]
-        if subset.empty:
-            _placeholder(ax_t, f"{title}: no data")
-            _placeholder(ax_r, "")
+    if output.empty or frame_count <= 0:
+        return None
+    static = output[output["rq1_metric"].astype(str).eq("static_observation")].copy()
+    if static.empty:
+        return None
+    full = static[static["label"].astype(str).eq("Full")].copy()
+    full = full.sort_values("render_unity_frame", kind="stable").drop_duplicates(
+        "render_unity_frame"
+    )
+    other = static[static["label"].astype(str).eq("No-StaticLock")].copy()
+    other_valid = set(
+        pd.to_numeric(
+            other.loc[_display_valid_mask(other), "render_unity_frame"],
+            errors="coerce",
+        ).dropna().astype(int)
+    )
+    full_frames = pd.to_numeric(full["render_unity_frame"], errors="coerce")
+    eligible = (
+        full["latest_static_locked"].fillna(False).astype(bool)
+        & _reference_valid_mask(full)
+        & _display_valid_mask(full)
+        & full_frames.map(lambda value: int(value) in other_valid if np.isfinite(value) else False)
+    ).to_numpy(dtype=bool)
+    unity_frames = full_frames.to_numpy(dtype=float)
+    times = pd.to_numeric(full["render_mono_ms"], errors="coerce").to_numpy(dtype=float)
+    index = 0
+    while index < len(full):
+        if not eligible[index] or not np.isfinite(unity_frames[index]):
+            index += 1
             continue
-
-        t0 = subset["render_mono_ms"].min()
-        for label, group in subset.groupby("label", sort=True):
-            group = group.sort_values("render_mono_ms")
-            t = (group["render_mono_ms"].to_numpy(dtype=float) - t0) * 0.001
-            color = colors.get(str(label), "#666666")
-            # Full 突出（实线、不透明），No-StaticLock 半透明衬托，避免噪声压过主线。
-            lw, alpha = (1.1, 1.0) if str(label) == "Full" else (0.8, 0.7)
-            (ln,) = ax_t.plot(
-                t, group["translation_error_m"].to_numpy(dtype=float) * 1000.0,
-                linewidth=lw, color=color, alpha=alpha, label=str(label),
+        start = index
+        while (
+            index + 1 < len(full)
+            and eligible[index + 1]
+            and unity_frames[index + 1] == unity_frames[index] + 1
+            and np.isfinite(times[index + 1])
+            and times[index + 1] > times[index]
+        ):
+            index += 1
+        if index + 1 - start >= frame_count:
+            selected = full.iloc[start : start + frame_count]
+            selected_frames = set(selected["render_unity_frame"].astype(int).tolist())
+            all_variants = static[static["render_unity_frame"].isin(selected_frames)].copy()
+            return StaticWindow(
+                start_frame=int(selected["render_unity_frame"].min()),
+                end_frame=int(selected["render_unity_frame"].max()),
+                start_ms=float(selected["render_mono_ms"].min()),
+                end_ms=float(selected["render_mono_ms"].max()),
+                frames=all_variants,
             )
-            ax_r.plot(
-                t, group["rotation_error_deg"].to_numpy(dtype=float),
-                linewidth=lw, color=color, alpha=alpha,
+        index += 1
+    return None
+
+
+def _plot_position(window: StaticWindow, stem: Path) -> None:
+    """绘制相对共同参考原点的静止世界系位移。"""
+
+    reference = _reference_rows(window.frames)
+    if reference.empty:
+        return
+    origin = np.asarray(reference.iloc[0]["gt_pos"], dtype=float)
+    series = {
+        "Reference": (
+            _relative_frames(reference, window.start_frame),
+            1000.0 * (np.vstack(reference["gt_pos"].to_numpy()) - origin),
+        )
+    }
+    for label in ("Full", "No-StaticLock"):
+        rows = _display_rows(window.frames, label)
+        values = (
+            1000.0 * (np.vstack(rows["display_pos"].to_numpy()) - origin)
+            if not rows.empty
+            else np.empty((0, 3))
+        )
+        series[label] = (_relative_frames(rows, window.start_frame), values)
+    _draw_xyz(series, stem, unit="mm", frame_span=window.end_frame - window.start_frame)
+
+
+def _plot_rotation(window: StaticWindow, stem: Path) -> None:
+    """绘制相对共同参考姿态的静止世界系旋转向量。"""
+
+    reference = _reference_rows(window.frames)
+    if reference.empty:
+        return
+    origin = np.asarray(reference.iloc[0]["gt_rot"], dtype=float)
+    series = {
+        "Reference": (
+            _relative_frames(reference, window.start_frame),
+            np.rad2deg(
+                _world_rotation_vectors(
+                    origin, np.vstack(reference["gt_rot"].to_numpy())
+                )
+            ),
+        )
+    }
+    for label in ("Full", "No-StaticLock"):
+        rows = _display_rows(window.frames, label)
+        values = (
+            np.rad2deg(
+                _world_rotation_vectors(
+                    origin, np.vstack(rows["display_rot"].to_numpy())
+                )
             )
-            handles_by_label.setdefault(str(label), ln)
+            if not rows.empty
+            else np.empty((0, 3))
+        )
+        series[label] = (_relative_frames(rows, window.start_frame), values)
+    _draw_xyz(series, stem, unit="deg", frame_span=window.end_frame - window.start_frame)
 
-        for ax in (ax_t, ax_r):
-            gt = ax.axhline(0.0, color="#444444", linewidth=0.8, linestyle=":")
-            ax.set_ylim(bottom=0.0)
-            ax.grid(True, alpha=0.25)
-        handles_by_label.setdefault("GT (0 error)", gt)
 
-        ax_t.set_title(title, fontsize=10)
-        ax_r.set_xlabel("time (s)")
+def _draw_xyz(
+    series: dict[str, tuple[np.ndarray, np.ndarray]],
+    stem: Path,
+    *,
+    unit: str,
+    frame_span: int,
+) -> None:
+    """用与 RQ2 一致的紧凑样式绘制三行共享帧轴。"""
 
-    axes[0][0].set_ylabel("translation error (mm)")
-    axes[1][0].set_ylabel("rotation error (deg)")
-
-    if handles_by_label:
-        fig.legend(handles_by_label.values(), handles_by_label.keys(),
-                   loc="upper center", ncol=len(handles_by_label),
-                   fontsize=8, frameon=False, bbox_to_anchor=(0.5, 1.005))
-
-    stem = Path(out_path)
-    stem.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(stem.with_suffix(".png"), dpi=200)
-    pdf_path = stem.with_suffix(".pdf")
-    fig.savefig(pdf_path)
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.size": 8.0,
+            "axes.linewidth": 0.7,
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+        }
+    )
+    fig, axes = plt.subplots(3, 1, figsize=(3.45, 2.75), sharex=True)
+    for component, axis in enumerate(axes):
+        for label in ("Reference", "Full", "No-StaticLock"):
+            frame, values = series[label]
+            if len(frame) == 0:
+                continue
+            axis.plot(
+                frame,
+                values[:, component],
+                color=COLORS[label],
+                linewidth=1.15 if label == "Reference" else 1.0,
+                alpha=0.82 if label == "No-StaticLock" else 1.0,
+                zorder=3 if label == "Reference" else 2,
+            )
+        axis.set_ylabel(f"{'XYZ'[component]} ({unit})")
+        axis.grid(True, color="#D9D9D9", linewidth=0.45, alpha=0.8)
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.set_xlim(0, max(frame_span, 1))
+        axis.tick_params(labelsize=7.0, length=2.5)
+    axes[-1].set_xlabel("Relative render frame")
+    axes[-1].set_xticks(np.unique(np.rint(np.linspace(0, max(frame_span, 1), 5)).astype(int)))
+    fig.legend(
+        handles=_legend_handles(),
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.995),
+        handlelength=2.2,
+        columnspacing=1.1,
+    )
+    fig.align_ylabels(axes)
+    fig.subplots_adjust(left=0.20, right=0.98, bottom=0.16, top=0.88, hspace=0.08)
+    fig.savefig(stem.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(stem.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
-    return pdf_path
 
 
-def _select_detail(detail: pd.DataFrame, condition: str, label: str | None) -> pd.DataFrame:
-    """从 anchor_error_detail 取指定 condition（可选 label）子集。"""
+def _reference_valid_mask(rows: pd.DataFrame) -> pd.Series:
+    """返回 RQ1 可用平台参考帧。"""
 
-    if detail.empty or "condition" not in detail.columns:
-        return pd.DataFrame()
-    view = detail[detail["condition"] == condition]
-    if label is not None and "label" in view.columns:
-        view = view[view["label"] == label]
-    return view
-
-
-def _clip_window(subset: pd.DataFrame, window_s: tuple[float, float]) -> pd.DataFrame:
-    """把 subset 裁到相对该场景起点的 ``[start_s, end_s)`` 时间窗。
-
-    起点取 subset 内最小 ``render_mono_ms``（各变体同帧录制，共享同一时间轴）；
-    仅用于绘图选段，不影响 summary 表的全段统计。
-    """
-
-    if subset.empty or "render_mono_ms" not in subset.columns:
-        return subset
-    start_s, end_s = window_s
-    t0 = float(subset["render_mono_ms"].min())
-    rel_s = (subset["render_mono_ms"].astype(float) - t0) * 0.001
-    return subset[(rel_s >= start_s) & (rel_s < end_s)]
+    return (
+        rows["gt_pose_valid"].fillna(False).astype(bool)
+        & rows["gt_pos"].map(is_pose_value)
+        & rows["gt_rot"].map(is_pose_value)
+    )
 
 
-def _placeholder(ax: "plt.Axes", message: str) -> None:
-    """空面板提示。"""
+def _display_valid_mask(rows: pd.DataFrame) -> pd.Series:
+    """返回用户实际可见显示 pose 的有效帧。"""
 
-    ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes)
-    ax.set_axis_off()
+    return (
+        rows["has_display_pose"].fillna(False).astype(bool)
+        & rows["display_pos"].map(is_pose_value)
+        & rows["display_rot"].map(is_pose_value)
+    )
+
+
+def _reference_rows(frames: pd.DataFrame) -> pd.DataFrame:
+    """从 Full 行提取唯一平台参考帧。"""
+
+    rows = frames[frames["label"].astype(str).eq("Full")].copy()
+    rows = rows[_reference_valid_mask(rows)]
+    return rows.sort_values("render_unity_frame", kind="stable").drop_duplicates(
+        "render_unity_frame"
+    )
+
+
+def _display_rows(frames: pd.DataFrame, label: str) -> pd.DataFrame:
+    """提取一个系统配置的唯一显示帧。"""
+
+    rows = frames[frames["label"].astype(str).eq(label)].copy()
+    rows = rows[_display_valid_mask(rows)]
+    return rows.sort_values("render_unity_frame", kind="stable").drop_duplicates(
+        "render_unity_frame"
+    )
+
+
+def _relative_frames(rows: pd.DataFrame, start_frame: int) -> np.ndarray:
+    """把 Unity 渲染帧号转换为窗口内相对帧。"""
+
+    if rows.empty:
+        return np.empty(0, dtype=float)
+    values = pd.to_numeric(rows["render_unity_frame"], errors="coerce").to_numpy(dtype=float)
+    return values - float(start_frame)
+
+
+def _world_rotation_vectors(reference: np.ndarray, rotations: np.ndarray) -> np.ndarray:
+    """返回世界系 ``Log(R_k R_0^-1)`` 旋转向量。"""
+
+    if len(rotations) == 0:
+        return np.empty((0, 3), dtype=float)
+    origin = Rotation.from_quat(reference)
+    return np.asarray((Rotation.from_quat(rotations) * origin.inv()).as_rotvec())
+
+
+def _legend_handles() -> list[Line2D]:
+    """返回静止轨迹图的稳定图例。"""
+
+    return [
+        Line2D([0], [0], color=COLORS["Reference"], linewidth=1.15, label="Platform ref."),
+        Line2D([0], [0], color=COLORS["Full"], linewidth=1.0, label="Full"),
+        Line2D(
+            [0],
+            [0],
+            color=COLORS["No-StaticLock"],
+            linewidth=1.0,
+            alpha=0.82,
+            label="No-StaticLock",
+        ),
+    ]
+
+
+def _remove_existing_timelines(directory: Path) -> None:
+    """删除该绘图管线拥有的旧产物。"""
+
+    for filename in TIMELINE_FILENAMES:
+        path = directory / filename
+        if path.is_file():
+            path.unlink()
+
+
+__all__ = [
+    "DEFAULT_FIGS_DIR",
+    "STATIC_TIMELINE_FRAME_COUNT",
+    "TIMELINE_FILENAMES",
+    "WINDOW_COLUMNS",
+    "write_rq1_timelines",
+]

@@ -3,7 +3,7 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// 零阶保持输出策略，用于 RQ2 的 Raw-ZOH 系统配置。
+    /// 零阶保持输出策略，用于 RQ2 的 ZOH 系统配置。
     ///
     /// 不外推、不插值、不升采样：渲染时持续输出最近一帧观测 pose，直到下一帧观测到达。
     /// 配合 ConstantVelocityModel 时形成最朴素的零阶保持参照，用于比较完整运行时的

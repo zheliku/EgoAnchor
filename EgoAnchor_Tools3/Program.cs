@@ -55,7 +55,7 @@ namespace EgoAnchor.Tools3
                 // 参照基线
                 var references = new List<IPredictor>
                 {
-                    new RawZohPredictor(),                  // 闪现/阶梯反例 (相当于 A 行)
+                    new ZohPredictor(),                     // 零阶保持阶梯基线（相当于 A 行）
                     new DeadReckoningSplinePredictor(),     // 零延迟样条参照
                 };
 
@@ -154,7 +154,7 @@ namespace EgoAnchor.Tools3
                         continue;
                     }
 
-                    var pairResults = new List<SimResult> { resultByLabel["raw_zoh"], bRes, cRes };
+                    var pairResults = new List<SimResult> { resultByLabel["zoh"], bRes, cRes };
                     TrajectoryPlotter.PlotComparison(pairResults, observations, timeZero, Path.Combine(opt.OutputDir, $"plot_{name}.png"));
                     if (opt.Zoom is { } zoomPair)
                     {

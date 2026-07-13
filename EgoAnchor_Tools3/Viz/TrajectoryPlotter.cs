@@ -63,7 +63,7 @@ namespace EgoAnchor.Tools3.Viz
         private static readonly Dictionary<string, Color> LabelColors = new()
         {
             // 参照基线
-            ["raw_zoh"] = new Color(0x99, 0x99, 0x99),                // 灰
+            ["zoh"] = new Color(0x99, 0x99, 0x99),                    // 灰
             ["deadreckoning_spline"] = new Color(0x8c, 0x56, 0x4b),   // 棕
             // B 行: 外推 + 误差融合 (实线系)
             ["cv_blend"] = new Color(0x2c, 0xa0, 0x2c),               // 绿

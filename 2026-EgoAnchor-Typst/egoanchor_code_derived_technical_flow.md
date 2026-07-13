@@ -31,17 +31,17 @@ EgoAnchor 旨在为开放消费级混合现实提供稳定的动态真实物体�
 
 本文档统一使用 `egoanchor_cn_v4.typ` 的论文术语，同时保留必要的代码标识：
 
-| 论文术语 | 代码定位 |
-| --- | --- |
-| 动态真实物体锚定 | 系统目标；最终输出为 world-space object anchor |
-| 目标语义分割 | `YOLOE-26` 或 `SAM3` 后端，经 `SegmenterResult` 统一进入流水线 |
-| 双目立体几何重建 | `Fast-FoundationStereo` 生成米制深度 |
-| 可靠性评分 | VCD 综合 `reliability_score` 与 V/C/D 子分 |
-| 时空对齐 | `frame_id` 精确回查采集时刻参考相机 world pose |
-| 质量评估门控 | `AnchorPolicyHost.enableQualityGate`、`QualityGateDecision`、`quality_gate`；独立门控模块已删，当前是默认关闭的内联可选观测拒绝逻辑 |
-| 锚定策略 | `MotionModel × SmoothingStrategy` |
-| 静止锚定 | `EgoAnchorStaticLockModule` / `StaticLockController` |
-| 生命周期状态机 | `AnchorStateMachine` |
+| 论文术语         | 代码定位                                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 动态真实物体锚定 | 系统目标；最终输出为 world-space object anchor                                                                                            |
+| 目标语义分割     | `YOLOE-26` 或 `SAM3` 后端，经 `SegmenterResult` 统一进入流水线                                                                      |
+| 双目立体几何重建 | `Fast-FoundationStereo` 生成米制深度                                                                                                    |
+| 可靠性评分       | VCD 综合`reliability_score` 与 V/C/D 子分                                                                                               |
+| 时空对齐         | `frame_id` 精确回查采集时刻参考相机 world pose                                                                                          |
+| 质量评估门控     | `AnchorPolicyHost.enableQualityGate`、`QualityGateDecision`、`quality_gate`；独立门控模块已删，当前是默认关闭的内联可选观测拒绝逻辑 |
+| 锚定策略         | `MotionModel × SmoothingStrategy`                                                                                                      |
+| 静止锚定         | `EgoAnchorStaticLockModule` / `StaticLockController`                                                                                  |
+| 生命周期状态机   | `AnchorStateMachine`                                                                                                                    |
 
 ---
 
@@ -348,7 +348,7 @@ $$
 2. 低分重获取：`lowScoreReacquireThreshold` 持续满足后请求 Python 重新 register。
 3. 静止锚定：进入锁定、低分释放和解锁证据都会使用可靠性评分。
 
-质量评估门控对应 `enableQualityGate`。它不是独立模块，源码默认关闭；打开后，可靠性总分 $<$ 阈值或 $|$测量−预测$|$ 超跳变阈值 → Reject，不更新运动模型。论文 RQ2 的 *Full* 与 *Raw-ZOH* 使用相同的门控配置，比较完整锚定策略与零阶保持参照的整体权衡，不把质量门控作为独立消融因素；eval 字段为 `quality_gate=enabled/disabled`。
+质量评估门控对应 `enableQualityGate`。它不是独立模块，源码默认关闭；打开后，可靠性总分 $<$ 阈值或 $|$测量−预测$|$ 超跳变阈值 → Reject，不更新运动模型。论文 RQ2 的 *Full* 与 *ZOH* 使用相同的门控配置，比较完整锚定策略与零阶保持参照的整体权衡，不把质量门控作为独立消融因素；eval 字段为 `quality_gate=enabled/disabled`。
 
 ### 10.3 运动模型
 
@@ -455,15 +455,15 @@ handler 层：类型校验 → 参数校验 → `request_id` 去重（TTL `60000
 
 ### 13.2 预测器与 Unity 对应
 
-| Tools3 预测器                                  | 数学要点                                                                | Unity 对应            |
-| ---------------------------------------------- | ----------------------------------------------------------------------- | --------------------- |
-| `RawZohPredictor`                            | 零阶保持                                                                | RawPassthrough        |
-| `DeadReckoningSplinePredictor`               | 死推 + C¹ Hermite 修正窗（零延迟，工业游戏引擎做法）                   | —（基线对照）        |
-| `KalmanPredictor`(+`ScalarCvKalman`)       | 同 §10.3 CV Kalman，**有** `maxPredictAhead=0.18` 限幅         | KalmanModel           |
-| `OneEuroPredictor`(+`ScalarOneEuro`)       | 同 §10.3 1€，限幅`0.12`                                             | OneEuroModel          |
-| `ResidualBlendingPredictor`                  | 外推+残差指数衰减（`decayPerFrame=0.9`），可插 CV/Kalman/1€ 运动模型 | BlendStrategy         |
-| `DelayedInterpolationPredictor`(+`Spline`) | 延迟插值，Hermite / Centripetal Catmull-Rom                             | DelayedInterpStrategy |
-| `EgoAnchorStabilizerPredictor`               | 装饰器：静止锚定 + 多路解锁 + 头动/距离自适应（同 §10.5，~25 参数）      | `StaticLockController` |
+| Tools3 预测器                                  | 数学要点                                                                | Unity 对应               |
+| ---------------------------------------------- | ----------------------------------------------------------------------- | ------------------------ |
+| `ZohPredictor`                               | 零阶保持                                                                | RawPassthrough           |
+| `DeadReckoningSplinePredictor`               | 死推 + C¹ Hermite 修正窗（零延迟，工业游戏引擎做法）                   | —（基线对照）           |
+| `KalmanPredictor`(+`ScalarCvKalman`)       | 同 §10.3 CV Kalman，**有** `maxPredictAhead=0.18` 限幅         | KalmanModel              |
+| `OneEuroPredictor`(+`ScalarOneEuro`)       | 同 §10.3 1€，限幅`0.12`                                             | OneEuroModel             |
+| `ResidualBlendingPredictor`                  | 外推+残差指数衰减（`decayPerFrame=0.9`），可插 CV/Kalman/1€ 运动模型 | BlendStrategy            |
+| `DelayedInterpolationPredictor`(+`Spline`) | 延迟插值，Hermite / Centripetal Catmull-Rom                             | DelayedInterpStrategy    |
+| `EgoAnchorStabilizerPredictor`               | 装饰器：静止锚定 + 多路解锁 + 头动/距离自适应（同 §10.5，~25 参数）    | `StaticLockController` |
 
 > 注意区别：Tools3 独立预测器保留 `maxPredictAhead` 限幅；Unity 运动模型 **取消限幅**，把外推边界交给 smoothing。两者参数（Q/R、minCutoff/beta、decay、静止锚定阈值）保持一致以保证离线结论可迁移到真机。
 
@@ -498,32 +498,29 @@ handler 层：类型校验 → 参数校验 → `request_id` 去重（TTL `60000
 
 产出：各指标 CSV + `summary.md` + 一组 PNG/PDF 图（误差时间线、时延堆叠、jitter-lag 散点、slip 时间线、recovery 柱状）。`plot_recorded_strategies.py` 还能把同一会话下不同平滑/预测策略的 6 通道（XYZ + RotVec XYZ）轨迹叠加对比。
 
-> 共享指标引擎按各指标语义过滤有效样本。RQ2 不使用统一的“GT 有效且有输出”过滤：显示误差保留 Lost 后 hold-last，主终点则把 runtime 无输出计为失败。*Frame-aligned* / *Arrival-aligned* 仅诊断相机位姿取样时刻错配，不进入物体运动时延主模型，也不作为 RQ2 的核心消融。
+> 共享指标引擎按各指标语义过滤有效样本。RQ2 不使用统一的“GT 有效且有输出”过滤：显示误差读取用户实际看到的 `display_*`，包括 Lost 后的 hold-last；锚定输出有效帧占比只读取 `has_output_pose`。*Frame-aligned* / *Arrival-aligned* 仅诊断相机位姿取样时刻错配，不作为 RQ2 的系统配置。
 
 ### 14.3 RQ2 专用动态分析
 
 RQ2 使用 `eval/research/rq2/` 下的专用分析包，不复用静态场景的聚合口径：
 
-| 模块 | 职责 |
-|---|---|
-| `contract.py` | 预注册阈值、正式重复次数与稳定输出列 |
-| `trajectory.py` | 新鲜参考轨迹、有效运动区间和图像前局部运动拟合 |
-| `source.py` | 每个 source 首现的 raw 误差与有符号时延残差 |
-| `lag.py` | 连续段互相关与峰值可辨识性诊断 |
-| `qc.py` | 会话、trial 和正式设计三级审计 |
-| `paired.py` | *Full* 与 *Raw-ZOH* 的试次级配对差值 |
-| `model.py` | 等 trial 权重的运动—时延探索性关联 |
-| `pipeline.py` | 多会话编排、经验运行包络、表格和图形导出 |
+| 模块              | 职责                                                               |
+| ----------------- | ------------------------------------------------------------------ |
+| `contract.py`   | 平移/旋转任务、速度上限、活动段、120 帧选窗与 lag 质量阈值         |
+| `trajectory.py` | 平滑参考速度、`active_motion` 与速度筛选后的 `analysis_motion` |
+| `qc.py`         | 会话丢行、双变体、参考新鲜度、速度和试次时长审计                   |
+| `response.py`   | 观测年龄、策略目标延迟覆盖率与可辨识运动 lag                       |
+| `pipeline.py`   | 试次/任务描述性统计、响应摘要、表格与时间线编排                    |
+| `plot.py`       | 平移 XYZ-帧与相对共同起点的世界系 SO(3) 对数向量 XYZ-帧            |
+| `analyze.py`    | 单会话或多会话命令行入口                                           |
 
-Unity 按键仅界定粗 trial 包络。Python 从控制器平台参考轨迹计算平滑线速度与角速度，桥接短暂低速间隙并删除过短运动段，形成 `active_motion`。正式 trial 至少包含 8 s 有效运动；每个录制会话的三类运动各需 8 个合格 trial，联合分析至少包含 3 个独立会话。
+Unity 按键只界定粗 trial 包络，正式标签仅有 `translation` 与 `rotation`。Python 从控制器平台参考轨迹计算平滑线速度与角速度，桥接短暂低速间隙并删除过短运动段，形成 `active_motion`；随后要求新鲜有效参考位姿，并应用平移 `≤0.8 m/s`、旋转 `≤180 deg/s` 的速度上限，形成 `analysis_motion`。每个 trial 至少保留 8 s 有效运动。
 
-动态主终点是误差容限内有效追踪率：有效运动帧同时满足 runtime 有输出、显示平移误差不超过 50 mm、显示旋转误差不超过 10° 才记为成功。分母包含 runtime 丢失帧，因此不会因只统计成功输出而产生幸存者偏差。显示误差仍使用 `display_*`，保留用户实际看到的 hold-last；可用率只使用 `has_output_pose`。
+连续性由显示更新率、保持帧比例与锚定输出有效帧占比描述。更新率和保持比例只在同一试次内、相邻两端均属于 `analysis_motion` 且显示位姿有效的帧对上计算，不跨被速度上限或参考失效剔除的空窗。渲染时刻误差使用 `display_pos/display_rot` 与同刻新鲜平台参考位姿逐帧比较；平移报告欧氏距离，旋转报告 SO(3) 测地角。响应摘要另报告观测年龄、策略目标延迟及其有限值覆盖率；经验运动 lag 先在每个连续活动段把 GT 与显示轨迹按时间重采样到 60 Hz，再做速度互相关。相关峰需通过强度、突出度和非边界检查，且有效速度样本覆盖率至少 50% 才报告 trial lag。
 
-图像时刻 raw 误差与渲染时刻显示误差属于不同诊断层，不能解释为同一位姿的“补偿前后”。运动—时延分析只在图像时间代理之前 400 ms 的参考轨迹局部稳态且运动轴一致时纳入样本；`v·τ` / `ω·τ` 只作为探索性解释变量，不作感知时延的因果验证。轨迹 lag 仅在样本长度、动态激励、峰值相关、峰值突出度和非边界峰均通过时报告；不再对自相关帧计算 Pearson p 值或 Bonferroni 显著性。
+论文只保留两张时间线。平移图以窗口起点平台参考位置为三个系统共有的原点；旋转图计算各姿态相对共同起点的世界系 `Log(R_k R_0^-1)`，不用 Euler 或四元数分量，也不累加非交换的相邻 SO(3) log。代表性试次按平台参考中位速度选择，窗口取最长连续 `analysis_motion` 段中央 120 个 Unity 渲染帧，不读取任一系统配置的误差。
 
-统计先在试次内计算 *Full* − *Raw-ZOH*，再以录制会话为最高层、trial 为次层执行层级 bootstrap。经验运行包络按实测线速度或角速度分箱，并让每个 trial 具有相同总权重；未采样区间不外推为物理性能边界。
-
-正式分析输出 source、motion-delay、trial、paired、operating-envelope、latency、model、lag-diagnostics 八类结果表，以及 session/trial/design 三类审计表。后台日志队列只要出现丢行、动态参考位姿使用 keep-alive、双变体声明不完整或 trial 参考覆盖不足，该会话或 trial 就不会进入正式配对与关联统计。
+分析输出 `rq2_session_audit.csv`、`rq2_trial_audit.csv`、`rq2_trial_summary.csv`、`rq2_condition_summary.csv`、`rq2_response_summary.csv`、`rq2_timeline_windows.csv`，以及平移/旋转时间线的 PDF/PNG。当前论文结果为单会话描述性表征；渲染帧只表示时间覆盖，不作为相互独立的统计样本。
 
 ---
 
