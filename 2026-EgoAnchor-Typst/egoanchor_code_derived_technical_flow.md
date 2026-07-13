@@ -488,17 +488,17 @@ handler 层：类型校验 → 参数校验 → `request_id` 去重（TTL `60000
 | ---------------- | -------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- |
 | Anchor Error     | 锚点 vs GT 的 SE(3) 误差   | $E=(T^w_\text{GT})^{-1}T^w_\text{anchor}$，平移 $\lVert E_{:3,3}\rVert$，旋转 $2\arccos|q_w | $ |                   |
 | Pose Offset      | 有符号位姿偏置（标定诊断） | $\text{offset}=p_\text{out}-p_\text{gt}$，相对四元数转欧拉                                        | m / deg           |
-| Jitter           | 静止窗内高频抖动           | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）内 1 Hz 高通后位置 RMS                                    | m / deg           |
-| Lag              | 锚点滞后真实运动           | 沿最大方差轴速度互相关峰（±500 ms 内，30 Hz 重采样）                                               | ms                |
+| Jitter           | 连续静止段内高频抖动       | GT 静止窗（$\lVert v\rVert\le0.03$ m/s）按时间缺口分段；位置与相对段首姿态的 SO(3) log 向量均做 1 Hz 二阶 Butterworth 零相位高通，再对三维残差范数求 RMS | m / deg           |
+| Lag              | 通用历史诊断               | 共享指标引擎保留速度互相关实现；当前论文 RQ2 不使用或报告该指标                                   | ms                |
 | Latency          | 端到端/分阶段时延          | `render_mono_ms − source_capture_mono_ms`，及 yolo/depth/cutie/pose 分项                         | ms（p50/p90/p95） |
 | Jump Suppression | 异常抑制有效性             | 误差$>0.05$ m 的尖刺计数 vs policy reject 计数                                                    | 计数              |
-| Slip             | 屏幕空间漂移               | 锚点与 GT 原点投影到像平面的像素距离                                                                | px（RMS/peak）    |
-| Recovery         | 遮挡/丢失后恢复时间        | 事件后首个误差$\le0.05$ m 且维持 `hold_ms=200` ms 的时刻                                        | ms                |
+| Slip             | 像面原点配准误差代理       | 锚点与 GT 原点投影到同一针孔模型后的距离；未显式传 K 时使用 640×480、90° FOV 像素等效近似，不是头显面板真实像素；当前只作分析诊断，不进入论文主表 | px-eq.（RMS/peak） |
+| Recovery         | 遮挡/丢失后恢复时间        | 只有存在可靠的“目标重新可见”事件 marker 时，才取事件后首个误差$\le0.05$ m 且维持 `hold_ms=200` ms 的时刻；当前 RQ1 无该 marker，不报告 | ms                |
 | Diagnostics      | 分数健康 + 渲染开销        | score 众数占比、尖刺漏检率、render_quality 耗时分位                                                 | —                |
 
 产出：各指标 CSV + `summary.md` + 一组 PNG/PDF 图（误差时间线、时延堆叠、jitter-lag 散点、slip 时间线、recovery 柱状）。`plot_recorded_strategies.py` 还能把同一会话下不同平滑/预测策略的 6 通道（XYZ + RotVec XYZ）轨迹叠加对比。
 
-> 共享指标引擎按各指标语义过滤有效样本。RQ2 不使用统一的“GT 有效且有输出”过滤：显示误差读取用户实际看到的 `display_*`，包括 Lost 后的 hold-last；锚定输出有效帧占比只读取 `has_output_pose`。*Frame-aligned* / *Arrival-aligned* 仅诊断相机位姿取样时刻错配，不作为 RQ2 的系统配置。
+> 共享指标引擎按各指标语义过滤有效样本。RQ2 不使用统一的“GT 有效且有输出”过滤：显示误差读取用户实际看到的 `display_*`，包括 Lost 后的 hold-last；论文所称锚点输出覆盖率只读取 `has_output_pose`。*Frame-aligned* / *Arrival-aligned* 仅诊断相机位姿取样时刻错配，不作为 RQ2 的系统配置。
 
 ### 14.3 RQ2 专用动态分析
 
@@ -506,19 +506,19 @@ RQ2 使用 `eval/research/rq2/` 下的专用分析包，不复用静态场景的
 
 | 模块              | 职责                                                               |
 | ----------------- | ------------------------------------------------------------------ |
-| `contract.py`   | 平移/旋转任务、速度上限、活动段、120 帧选窗与 lag 质量阈值         |
+| `contract.py`   | 平移/旋转任务、速度上限、活动段与 120 帧选窗                       |
 | `trajectory.py` | 平滑参考速度、`active_motion` 与速度筛选后的 `analysis_motion` |
 | `qc.py`         | 会话丢行、双变体、参考新鲜度、速度和试次时长审计                   |
-| `response.py`   | 观测年龄、策略目标延迟覆盖率与可辨识运动 lag                       |
+| `response.py`   | 观测年龄、策略目标延迟及其有限值覆盖率                             |
 | `pipeline.py`   | 试次/任务描述性统计、响应摘要、表格与时间线编排                    |
-| `plot.py`       | 平移 XYZ-帧与相对共同起点的世界系 SO(3) 对数向量 XYZ-帧            |
+| `plot.py`       | 平移 XYZ-t 与相对共同起点的世界系 SO(3) 对数向量 XYZ-t             |
 | `analyze.py`    | 单会话或多会话命令行入口                                           |
 
 Unity 按键只界定粗 trial 包络，正式标签仅有 `translation` 与 `rotation`。Python 从控制器平台参考轨迹计算平滑线速度与角速度，桥接短暂低速间隙并删除过短运动段，形成 `active_motion`；随后要求新鲜有效参考位姿，并应用平移 `≤0.8 m/s`、旋转 `≤180 deg/s` 的速度上限，形成 `analysis_motion`。每个 trial 至少保留 8 s 有效运动。
 
-连续性由显示更新率、保持帧比例与锚定输出有效帧占比描述。更新率和保持比例只在同一试次内、相邻两端均属于 `analysis_motion` 且显示位姿有效的帧对上计算，不跨被速度上限或参考失效剔除的空窗。渲染时刻误差使用 `display_pos/display_rot` 与同刻新鲜平台参考位姿逐帧比较；平移报告欧氏距离，旋转报告 SO(3) 测地角。响应摘要另报告观测年龄、策略目标延迟及其有限值覆盖率；经验运动 lag 先在每个连续活动段把 GT 与显示轨迹按时间重采样到 60 Hz，再做速度互相关。相关峰需通过强度、突出度和非边界检查，且有效速度样本覆盖率至少 50% 才报告 trial lag。
+连续性由显示更新率、未更新帧对占比与锚点输出覆盖率描述。显示更新率和未更新帧对占比只在同一试次内、相邻两端均属于 `analysis_motion` 且显示位姿有效的帧对上计算，不跨被速度上限或参考失效剔除的空窗。渲染时刻误差使用 `display_pos/display_rot` 与同刻新鲜平台参考位姿逐帧比较；平移报告欧氏距离，旋转报告 SO(3) 测地角。`response.py` 仍计算观测年龄、策略目标延迟及其有限值覆盖率；论文主文只把观测年龄表述为最新观测时延，策略目标时间量保留为实现诊断。当前 RQ2 不报告经验运动 lag。
 
-论文只保留两张时间线。平移图以窗口起点平台参考位置为三个系统共有的原点；旋转图计算各姿态相对共同起点的世界系 `Log(R_k R_0^-1)`，不用 Euler 或四元数分量，也不累加非交换的相邻 SO(3) log。代表性试次按平台参考中位速度选择，窗口取最长连续 `analysis_motion` 段中央 120 个 Unity 渲染帧，不读取任一系统配置的误差。
+论文只保留两张时间线。平移图以窗口起点平台参考位置为三个系统共有的原点；旋转图计算各姿态相对共同起点的世界系 `Log(R_k R_0^-1)`，不用 Euler 或四元数分量，也不累加非交换的相邻 SO(3) log。代表性试次按平台参考中位速度选择，窗口取最长连续 `analysis_motion` 段中央 120 个 Unity 渲染帧，不读取任一系统配置的误差。横轴使用真实 `render_mono_ms` 的相对秒，轴标签同时注明绝对 Unity 帧范围。
 
 分析输出 `rq2_session_audit.csv`、`rq2_trial_audit.csv`、`rq2_trial_summary.csv`、`rq2_condition_summary.csv`、`rq2_response_summary.csv`、`rq2_timeline_windows.csv`，以及平移/旋转时间线的 PDF/PNG。当前论文结果为单会话描述性表征；渲染帧只表示时间覆盖，不作为相互独立的统计样本。
 
@@ -555,7 +555,7 @@ Unity 按键只界定粗 trial 包络，正式标签仅有 `translation` 与 `ro
 | 静止锚定       | drift leash pos/rot                                | 0.015 m / 5°                                   | 漂移租绳                  |
 | 静止锚定       | headMaxToleranceFactor / headSettle / posMaxFactor | 4.0 / 0.6 s / 3.0                               | 头动/距离自适应           |
 | Tools3         | renderHz / latency / jitter                        | 默认自动实测；回退 60 / 300 / 60 ms             | 仿真投递                  |
-| Eval           | jitter 静止阈 / lag 窗 / 尖刺阈 / recovery hold    | 0.03 m·s⁻¹ / ±500 ms / 0.05 m / 200 ms      | 指标参数                  |
+| Eval           | jitter 静止阈 / 最小断段缺口 / 高通截止 / recovery hold | 0.03 m·s⁻¹ / 100 ms / 1 Hz / 200 ms      | 指标参数                  |
 
 ---
 

@@ -1,4 +1,4 @@
-"""RQ1 静止锚定的 XYZ-帧论文图。"""
+"""RQ1 静止锚定的 XYZ-t 论文图。"""
 
 from __future__ import annotations
 
@@ -13,13 +13,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.ticker import FormatStrFormatter
 from scipy.spatial.transform import Rotation
 
 from egoanchor.eval.metrics import is_pose_value
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
-DEFAULT_FIGS_DIR = _REPO_ROOT / "2026-EgoAnchor-Typst" / "figs" / "rq1"
+DEFAULT_FIGS_DIR = _REPO_ROOT / "2026-EgoAnchor" / "figs" / "rq1"
 STATIC_TIMELINE_FRAME_COUNT = 180
 
 POSITION_STEM = "fig_rq1_position_timeline"
@@ -64,7 +65,7 @@ def write_rq1_timelines(
     *,
     frame_count: int = STATIC_TIMELINE_FRAME_COUNT,
 ) -> pd.DataFrame:
-    """绘制静止位置/旋转 XYZ-帧图，并返回选窗元数据。"""
+    """绘制静止位置/旋转 XYZ-t 图，并返回选窗元数据。"""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -157,7 +158,7 @@ def _plot_position(window: StaticWindow, stem: Path) -> None:
     origin = np.asarray(reference.iloc[0]["gt_pos"], dtype=float)
     series = {
         "Reference": (
-            _relative_frames(reference, window.start_frame),
+            _relative_seconds(reference, window.start_ms),
             1000.0 * (np.vstack(reference["gt_pos"].to_numpy()) - origin),
         )
     }
@@ -168,8 +169,15 @@ def _plot_position(window: StaticWindow, stem: Path) -> None:
             if not rows.empty
             else np.empty((0, 3))
         )
-        series[label] = (_relative_frames(rows, window.start_frame), values)
-    _draw_xyz(series, stem, unit="mm", frame_span=window.end_frame - window.start_frame)
+        series[label] = (_relative_seconds(rows, window.start_ms), values)
+    _draw_xyz(
+        series,
+        stem,
+        unit="mm",
+        duration_s=(window.end_ms - window.start_ms) / 1000.0,
+        start_frame=window.start_frame,
+        end_frame=window.end_frame,
+    )
 
 
 def _plot_rotation(window: StaticWindow, stem: Path) -> None:
@@ -181,7 +189,7 @@ def _plot_rotation(window: StaticWindow, stem: Path) -> None:
     origin = np.asarray(reference.iloc[0]["gt_rot"], dtype=float)
     series = {
         "Reference": (
-            _relative_frames(reference, window.start_frame),
+            _relative_seconds(reference, window.start_ms),
             np.rad2deg(
                 _world_rotation_vectors(
                     origin, np.vstack(reference["gt_rot"].to_numpy())
@@ -200,8 +208,15 @@ def _plot_rotation(window: StaticWindow, stem: Path) -> None:
             if not rows.empty
             else np.empty((0, 3))
         )
-        series[label] = (_relative_frames(rows, window.start_frame), values)
-    _draw_xyz(series, stem, unit="deg", frame_span=window.end_frame - window.start_frame)
+        series[label] = (_relative_seconds(rows, window.start_ms), values)
+    _draw_xyz(
+        series,
+        stem,
+        unit="deg",
+        duration_s=(window.end_ms - window.start_ms) / 1000.0,
+        start_frame=window.start_frame,
+        end_frame=window.end_frame,
+    )
 
 
 def _draw_xyz(
@@ -209,9 +224,11 @@ def _draw_xyz(
     stem: Path,
     *,
     unit: str,
-    frame_span: int,
+    duration_s: float,
+    start_frame: int,
+    end_frame: int,
 ) -> None:
-    """用与 RQ2 一致的紧凑样式绘制三行共享帧轴。"""
+    """用与 RQ2 一致的紧凑样式绘制三行共享时间轴。"""
 
     plt.rcParams.update(
         {
@@ -225,11 +242,11 @@ def _draw_xyz(
     fig, axes = plt.subplots(3, 1, figsize=(3.45, 2.75), sharex=True)
     for component, axis in enumerate(axes):
         for label in ("Reference", "Full", "No-StaticLock"):
-            frame, values = series[label]
-            if len(frame) == 0:
+            time_s, values = series[label]
+            if len(time_s) == 0:
                 continue
             axis.plot(
-                frame,
+                time_s,
                 values[:, component],
                 color=COLORS[label],
                 linewidth=1.15 if label == "Reference" else 1.0,
@@ -239,10 +256,11 @@ def _draw_xyz(
         axis.set_ylabel(f"{'XYZ'[component]} ({unit})")
         axis.grid(True, color="#D9D9D9", linewidth=0.45, alpha=0.8)
         axis.spines[["top", "right"]].set_visible(False)
-        axis.set_xlim(0, max(frame_span, 1))
+        axis.set_xlim(0, max(duration_s, 1e-6))
         axis.tick_params(labelsize=7.0, length=2.5)
-    axes[-1].set_xlabel("Relative render frame")
-    axes[-1].set_xticks(np.unique(np.rint(np.linspace(0, max(frame_span, 1), 5)).astype(int)))
+    axes[-1].set_xlabel(f"Time (s) | Unity frames {start_frame}-{end_frame}")
+    axes[-1].set_xticks(np.linspace(0.0, max(duration_s, 1e-6), 4))
+    axes[-1].xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
     fig.legend(
         handles=_legend_handles(),
         loc="upper center",
@@ -299,13 +317,13 @@ def _display_rows(frames: pd.DataFrame, label: str) -> pd.DataFrame:
     )
 
 
-def _relative_frames(rows: pd.DataFrame, start_frame: int) -> np.ndarray:
-    """把 Unity 渲染帧号转换为窗口内相对帧。"""
+def _relative_seconds(rows: pd.DataFrame, start_ms: float) -> np.ndarray:
+    """把真实渲染时间戳转换为窗口内相对秒。"""
 
     if rows.empty:
         return np.empty(0, dtype=float)
-    values = pd.to_numeric(rows["render_unity_frame"], errors="coerce").to_numpy(dtype=float)
-    return values - float(start_frame)
+    values = pd.to_numeric(rows["render_mono_ms"], errors="coerce").to_numpy(dtype=float)
+    return (values - float(start_ms)) / 1000.0
 
 
 def _world_rotation_vectors(reference: np.ndarray, rotations: np.ndarray) -> np.ndarray:

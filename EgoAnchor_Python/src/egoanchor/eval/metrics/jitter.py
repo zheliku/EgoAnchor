@@ -6,8 +6,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.transform import Rotation
 
-from .common import angle_deg, highpass, is_pose_value, relative_rotation_quat
+from .common import highpass, is_pose_value
 from .stats import rms
 
 
@@ -24,7 +25,7 @@ SUMMARY_COLUMNS = [
 
 
 def compute_jitter(output: pd.DataFrame, *, speed_threshold_mps: float = 0.03, cutoff_hz: float = 1.0) -> pd.DataFrame:
-    """在 GT 低速窗口内计算各变体 anchor 抖动。"""
+    """在连续 GT 低速段内计算位置与旋转的高频抖动。"""
 
     if output.empty:
         return _empty_summary()
@@ -39,20 +40,37 @@ def compute_jitter(output: pd.DataFrame, *, speed_threshold_mps: float = 0.03, c
         if len(sample) < 3:
             rows.append(_insufficient(condition, label, len(sample)))
             continue
-        pos = np.vstack(sample["output_pos"].to_numpy())
-        time_ms = sample["render_mono_ms"].to_numpy(dtype=float)
-        dt = _median_dt_seconds(time_ms)
-        residual = highpass(pos, dt=dt, cutoff_hz=cutoff_hz)
-        residual_norm = np.linalg.norm(residual, axis=1)
-        rot_jitter = _rotation_jitter_deg(np.vstack(sample["output_rot"].to_numpy()))
+        position_residuals: list[np.ndarray] = []
+        rotation_residuals: list[np.ndarray] = []
+        sample_count = 0
+        for segment in _continuous_segments(sample):
+            time_ms = segment["render_mono_ms"].to_numpy(dtype=float)
+            dt = _median_dt_seconds(time_ms)
+            position = np.vstack(segment["output_pos"].to_numpy())
+            position_residuals.append(
+                np.linalg.norm(highpass(position, dt=dt, cutoff_hz=cutoff_hz), axis=1)
+            )
+            rotation_residuals.append(
+                _rotation_residual_deg(
+                    np.vstack(segment["output_rot"].to_numpy()),
+                    dt=dt,
+                    cutoff_hz=cutoff_hz,
+                )
+            )
+            sample_count += len(segment)
+        if not position_residuals or not rotation_residuals:
+            rows.append(_insufficient(condition, label, 0))
+            continue
+        position_residual = np.concatenate(position_residuals)
+        rotation_residual = np.concatenate(rotation_residuals)
         rows.append(
             {
                 "condition": condition,
                 "label": label,
-                "n": int(len(sample)),
-                "position_jitter_rms_m": rms(residual_norm),
-                "position_jitter_std_m": float(np.std(residual_norm)),
-                "rotation_jitter_rms_deg": rot_jitter,
+                "n": int(sample_count),
+                "position_jitter_rms_m": rms(position_residual),
+                "position_jitter_std_m": float(np.std(position_residual)),
+                "rotation_jitter_rms_deg": rms(rotation_residual),
                 "insufficient_data": False,
             }
         )
@@ -86,9 +104,29 @@ def _static_mask(group: pd.DataFrame, threshold_mps: float) -> np.ndarray:
     speed[1:] = step_speed
     speed[0] = step_speed[0] if step_speed.size > 0 else np.inf
     speed[~np.isfinite(speed)] = np.inf
-    if np.all(speed > threshold_mps):
-        return np.ones(len(group), dtype=bool)
     return speed <= threshold_mps
+
+
+def _continuous_segments(sample: pd.DataFrame) -> list[pd.DataFrame]:
+    """按采样时间缺口切分连续段，避免滤波跨越追踪中断。"""
+
+    if sample.empty:
+        return []
+    work = sample.sort_values("render_mono_ms", kind="stable")
+    times = pd.to_numeric(work["render_mono_ms"], errors="coerce").to_numpy(dtype=float)
+    intervals = np.diff(times)
+    positive = intervals[np.isfinite(intervals) & (intervals > 0.0)]
+    maximum_gap_ms = (
+        max(100.0, 2.5 * float(np.median(positive))) if len(positive) else 100.0
+    )
+    boundaries = np.flatnonzero(
+        ~np.isfinite(intervals)
+        | (intervals <= 0.0)
+        | (intervals > maximum_gap_ms)
+    )
+    starts = np.concatenate(([0], boundaries + 1))
+    ends = np.concatenate((boundaries + 1, [len(work)]))
+    return [work.iloc[start:end] for start, end in zip(starts, ends) if end - start >= 3]
 
 
 def _median_dt_seconds(time_ms: np.ndarray) -> float:
@@ -101,17 +139,21 @@ def _median_dt_seconds(time_ms: np.ndarray) -> float:
     return float(np.median(diffs))
 
 
-def _rotation_jitter_deg(quaternions: np.ndarray) -> float:
-    """以第一帧为参考估计旋转 RMS 抖动。"""
+def _rotation_residual_deg(
+    quaternions: np.ndarray,
+    *,
+    dt: float,
+    cutoff_hz: float,
+) -> np.ndarray:
+    """把段内姿态转换为 SO(3) 对数向量并返回高通残差范数。"""
 
     if len(quaternions) == 0:
-        return np.nan
-    reference = quaternions[0]
-    values = []
-    for quat in quaternions:
-        values.append(angle_deg(relative_rotation_quat(reference, quat)))
-    arr = np.asarray(values, dtype=float)
-    return rms(arr)
+        return np.empty(0, dtype=float)
+    rotations = Rotation.from_quat(quaternions)
+    reference = rotations[0]
+    rotation_vectors_deg = np.rad2deg((rotations * reference.inv()).as_rotvec())
+    residual = highpass(rotation_vectors_deg, dt=dt, cutoff_hz=cutoff_hz)
+    return np.linalg.norm(residual, axis=1)
 
 
 def _insufficient(condition: str, label: str, count: int) -> dict[str, Any]:

@@ -18,7 +18,7 @@
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 10. 每次操作完后记得更新AGENTS.md
-11. 注意我们论文路径目前是2026-EgoAnchor-Typst/，写的是typst语言，而不是latex，请你注意语法。写完后使用本机的typst进行编译检查通过。
+11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；当前中文主稿为 `egoanchor_cn_v6.tex`。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
 
@@ -46,7 +46,8 @@ EgoAnchor 面向开放消费级（passthrough）混合现实，把开放视觉�
 | `EgoAnchor_Unity/Assets/Scripts/EgoAnchor` | Quest 采集、帧位姿历史、camera→world 对齐、policy 输出、可视化 |
 | `EgoAnchor_Protocol` | 唯一 proto 和 subject 源；生成脚本同步 Python/Unity |
 | `EgoAnchor_Tools3` | 当前主用离线升采样仿真工具（旧 Tools/Tools2 不再作为主线验证） |
-| `2026-EgoAnchor-Typst` | Typst 论文主稿、图像资产、代码事实技术流程文档 |
+| `2026-EgoAnchor` | 当前 LaTeX 中文论文主稿 v6、v1-v6 历史版本、VGTC 模板与图像资产 |
+| `2026-EgoAnchor-Typst` | 已迁移的 Typst 历史来源与代码事实技术流程文档；不再作为论文写作入口 |
 | `EgoAnchor_Invention_Patent` | 专利工作区；当前主稿 `active/v55_透视混合现实视觉帧锚定_申请主稿.md` |
 
 ## 核心架构
@@ -104,10 +105,10 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 dotnet run --project EgoAnchor_Tools3\AnchorUpsampleSim3.csproj -c Release -- --session EgoAnchor_Python\data\eval\<session> --zoom-start 8 --zoom-end 13
 ```
 
-论文编译（仓库根目录）：
+论文编译（在 `2026-EgoAnchor` 目录运行）：
 
 ```powershell
-typst compile --root . .\2026-EgoAnchor-Typst\egoanchor_cn_v6.typ .\2026-EgoAnchor-Typst\pdf\egoanchor_cn_v6.pdf
+latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
 ```
 
 > `pixi run build` 会安装或检查 nvdiffrast、构建 FoundationPose C++ 扩展并生成 FFS ONNX/TRT artifacts，耗时且依赖 CUDA/TensorRT，不要当作轻量验证命令。
@@ -204,7 +205,7 @@ eval 字段契约（改 schema 必须同步 Unity writer、reader、Python eval 
 - JSONL 基础字段：`motion_model` / `smoothing_strategy` / `quality_gate` / `has_output_pose` / `output_pos` / `output_rot`。
 - capture 时间字段：`capture_mono_ms` / `capture_unity_frame` 是 camera pose 历史给出的 image-time proxy；`image_time_basis=camera_pose_history_proxy`，`image_time_offset_frames` 是成功采集样本回退数；`sender_mono_ms` / `sender_unity_frame` 是 JPEG 完成后的 payload-ready/header 时刻，不是 ZMQ 发包时刻；`publish_attempt_mono_ms` / `publish_succeeded` 来自紧邻 `TrySend` 的发布诊断；`gt_sample_mono_ms` 是 recorder 回调实际采样平台参考 pose 的时刻。不得把这些字段解释为同刻快照。
 - output 时间字段：`observation_age_ms` / `policy_output_target_mono_ms` / `smoothing_delay_ms` / `unity_pose_handle_mono_ms`。历史日志缺失时 Python 解析为 NaN，不得用旧 `predict_ahead_ms` 补写新语义。
-- `has_output_pose` 只信任 `PoseToAnchorRuntime.TryGetOutputPose`，决定 runtime availability；`has_display_pose` / `display_pos` / `display_rot` 记录用户实际看到的 Transform，包括 Lost 后 hold-last。RQ2 各系统配置的实时误差与 lag 使用 display pose，可用率仍使用 `has_output_pose`。执行顺序固定为 `PoseToAnchorRuntime(-50) → DynamicObjectAnchor(0) → EvalRecorder(50)`。
+- `has_output_pose` 只信任 `PoseToAnchorRuntime.TryGetOutputPose`，决定 runtime availability；`has_display_pose` / `display_pos` / `display_rot` 记录用户实际看到的 Transform，包括 Lost 后 hold-last。RQ2 各系统配置的实时误差、显示更新率与未更新帧对占比使用 display pose，锚点输出覆盖率仍使用 `has_output_pose`。执行顺序固定为 `PoseToAnchorRuntime(-50) → DynamicObjectAnchor(0) → EvalRecorder(50)`。
 - `gt_pose_fresh` / `gt_pose_keep_alive` / `gt_pose_fresh_age_ms` 区分当前真实追踪样本与静止 keep-alive。RQ1 使用 `AllowStaticKeepAlive` 保留长时静止参考；RQ2 使用 `RequireFreshTracking`，动态分析不得把 keep-alive 当作参考轨迹。
 - `EvalLog` 使用有界后台队列批量写 JSONL；manifest 的 `log_writer_stats` 记录 capture/output 丢行数和峰值队列深度。正式数据要求两路 `dropped_rows=0`。`EvalSession` 在目标日志已非空时拒绝重新开始，防止 F8 后再次 F7 覆盖同一 session。
 - proto 当前字段名：`color_reprojection`、`render_quality_evaluated`。
@@ -240,23 +241,26 @@ Unity 代码地图（关键模块）：
 
 ## 论文与评估
 
-论文源：`2026-EgoAnchor-Typst/egoanchor_cn_v6.typ`（当前中文主稿 v6）；参考文献：`egoanchor_cn.bib`；代码事实文档：`egoanchor_code_derived_technical_flow.md`。`docs/architecture/` 已完全删除，系统架构统一维护在 `egoanchor_code_derived_technical_flow.md`。
+论文源：`2026-EgoAnchor/egoanchor_cn_v6.tex`（当前中文主稿 v6）；v1-v6 均已迁移为同目录下的 LaTeX 版本，`template.tex` 是用户指定的 IEEE VR / VGTC 模板基线，图像资产位于 `2026-EgoAnchor/figs/`。正文、标题、图注、表格和行距继承 `vgtc` 默认设置，中文只补充 XeLaTeX / `xeCJK` 字形支持，不使用自定义字号或整体缩放。参考文献：`2026-EgoAnchor/egoanchor_cn.bib`。代码事实文档仍为 `2026-EgoAnchor-Typst/egoanchor_code_derived_technical_flow.md`；Typst v1-v6 仅保留作迁移审计，不再作为写作入口。`docs/architecture/` 已完全删除。
 
 论文术语基准（后续 AI 不要擅自改）：动态真实物体锚定、目标语义分割、双目立体几何重建、可靠性评分、时空对齐、运动估计与平滑、静止锚定、生命周期管理。
 
-**论文 RQ 结构**（2026-07-07 定稿）：
-- RQ1：静态锚定质量——评估静止场景（长时静止观察、遮挡恢复）下的精度、稳定性、鲁棒性；消融静止锚定机制（Full vs. No-StaticLock，仅在静止观察场景下对比）
-- RQ2：动态锚定能力——「动态」指实时连续动态锚定这一系统能力，不是追踪精度 benchmark。任务只保留中低速往复平移与交替轴向旋转；平移纳入参考线速度 `≤0.8 m/s` 的新鲜有效帧，旋转纳入参考角速度 `≤180 deg/s` 的新鲜有效帧。主要结果是显示更新率、保持帧比例和锚定输出有效帧占比，同时报告渲染时刻瞬时精度代价、观测年龄、策略目标延迟及通过可辨识性检查的经验运动滞后。参照统一命名为 *ZOH*（zero-order hold）；*Full* 与 *ZOH* 的结果表述为连续性—瞬时精度权衡。只有实际发生丢失/恢复事件时才评价恢复能力。RQ2 不做运动—时延回归、运行包络、速度分箱、配对 bootstrap 或平滑度诊断；**不用“可用性”（那是 RQ3 用户实验的概念）**。
-- RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行
+**论文 RQ 结构**（2026-07-13 定稿）：
+- RQ1：静态锚定质量——评估两个静止场景（长时静止观察、遮挡恢复）下的精度、静止稳定性与遮挡鲁棒性；两个场景均同帧比较 *Full* vs. *No-StaticLock*，后者是只关闭静止锚定的机制消融。
+- RQ2：动态锚定能力——「动态」指实时连续动态锚定这一系统能力，不是追踪精度 benchmark。任务只保留中低速往复平移与交替轴向旋转；平移纳入参考线速度 `≤0.8 m/s` 的新鲜有效帧，旋转纳入参考角速度 `≤180 deg/s` 的新鲜有效帧。主要结果是显示更新率、未更新帧对占比和锚点输出覆盖率，同时报告渲染时刻瞬时精度代价与最新观测时延。参照统一命名为 *ZOH*（zero-order hold）；*Full* 与 *ZOH* 的结果表述为连续性—瞬时精度权衡。只有实际发生丢失/恢复事件时才评价恢复能力。RQ2 主文不报告策略目标延迟或经验运动 lag，不做运动—时延回归、运行包络、速度分箱、配对 bootstrap 或平滑度诊断；**不用“可用性”（那是 RQ3 用户实验的概念）**。
+- RQ3：应用泛化能力——覆盖多类日常刚性物体与典型 MR 任务（至少 3 个代表性刚体），实验在典型室内光照条件下进行；若评价连续锚定的任务层效应，采用被试内 *Full* vs. *ZOH* 系统级比较，不把 *No-StaticLock* 带入用户研究。
 
 **实验表述规范**（2026-07-07）：
 - 实验配置用斜体标签：*Full*、*No-StaticLock*、*ZOH*、*Frame-aligned*、*Arrival-aligned*
+- 比较角色不要笼统统一为 baseline：*No-StaticLock* 是 RQ1 的机制消融，*ZOH* 是 RQ2/RQ3 的系统级参照，跨实验统一的是完整配置 *Full*。
 - 不使用"条件"描述实验配置，用"系统配置"或"变体"
 - 不用"+"罗列组件（如"运动估计+时序平滑+静止锚定"），改为"包含运动估计、时序平滑与静止锚定"
 - RQ2 不验证"时空对齐是否有效"。*Frame-aligned* / *Arrival-aligned* 只诊断相机位姿取样时刻错配，不进入物体运动时延主模型。
 - 不用同一 raw pose 在 image/handle 两时刻的误差向量作差验证 `v·τ`：raw pose 会被代数消去，只剩参考运动量。主模型使用 handle-time 有符号 raw 滞后残差，速度与运动轴只从 image 时刻之前的参考轨迹估计；capture-time 有符号残差作为偏置诊断单独报告。
 - 避免冗余表述："进行"、"通过"、"该实验旨在"等啰嗦句式应简化或删除
-- RQ1的消融实验只在静止场景下进行，不涉及动态场景
+- RQ1 的消融覆盖 `static_observation` 与 `occlusion_recovery` 两个静止场景，不进入 RQ2 动态场景
+- RQ1 的 `0.03 m/s` 是离线分析的参考静止判定阈值，正文写作「平台参考判定为静止（参考线速度不超过 0.03 m/s）」；不得称为「静止锚定阈值」，避免与运行时 StaticLock 的进入阈值混淆。
+- RQ2 正文统一使用「未更新帧对占比」「锚点输出覆盖率」「最新观测时延」；不用「保持帧比例」「锚定输出有效帧占比」「观测年龄」。
 
 评估数据目录：`data/eval/<session_id>/`（原始日志，Python/Unity 配对）；`data/research/rq1|rq2|rq3/`（分析产物，已废弃）。
 
@@ -268,12 +272,11 @@ Unity 代码地图（关键模块）：
 
 **双变体录制**：`EvalRecorder.variants` 两项——`variants[0]` label=`Full` isPrimary=true（Kalman + DelayedInterp + StaticLock 开），`variants[1]` label=`No-StaticLock` isPrimary=false（与 Full 逐项相同，仅 `EgoAnchorStaticLockModule.lockEnabled=false`）。两变体订阅同一 pose 流（同 `AnchorRuntimeHub.runtimes`）、同一渲染 tick，写进同一 `unity_output` 行的 `variants` 数组——完美同步，无需时间对齐。场景 `EgoAnchor-RQ1.unity` 的 No-StaticLock 分支（GameObject `AnchorObject - NoStaticLock`，fileID 段 700000001–010）是直接编辑场景 YAML 添加的（Unity MCP 不能持久化保存、也不能写 `List<EvalVariant>`/`List<runtime>` 引用字段）。
 
-**分析代码**：`src/egoanchor/eval/research/rq1/pipeline.py` 复用共享指标引擎，`analyze.py` 只承担 CLI，`plot.py` 只生成论文静止帧图；旧 `plot_from_report.py` 与更早的 `data_loader/gt_alignment/metrics/plot_compact/plot_comprehensive/run_analysis/run_rq1` 已删除，不保留兼容入口。核心 API：
+**分析代码**：`src/egoanchor/eval/research/rq1/pipeline.py` 复用共享指标引擎，`analyze.py` 只承担 CLI，`plot.py` 只生成论文静止 XYZ-t 图；旧 `plot_from_report.py` 与更早的 `data_loader/gt_alignment/metrics/plot_compact/plot_comprehensive/run_analysis/run_rq1` 已删除，不保留兼容入口。核心 API：
 - `RQ1_CONDITIONS = ("static_observation", "occlusion_recovery")`
-- `synthesize_occlusion_markers(output)` - 从 `rq1_metric=="occlusion_recovery"` 连续段起点在内存合成 `event_markers`（Unity 契约层恒写空数组，此处不改契约层地补齐恢复时间输入）
 - `filter_rq1_tables(tables)` - 每张含 `condition` 列的 summary 表过滤到 RQ1 两场景
-- `run_rq1_analysis(session_dir, *, report_dir=None, figs_dir=None)` - 全链路：load → 注入合成 marker → `compute_all_metrics` → 写表 → 生成静止 XYZ-帧图 → 返回过滤后的 tables
-- `write_rq1_timelines(output, figs_dir, frame_count=180)` - 从 `static_observation` 取首个 *Full* 已锁定且两变体与参考均有效的连续固定帧段；选窗不读取误差
+- `run_rq1_analysis(session_dir, *, report_dir=None, figs_dir=None)` - 全链路：load → `compute_all_metrics` → 写表 → 生成静止 XYZ-t 图 → 返回过滤后的 tables
+- `write_rq1_timelines(output, figs_dir, frame_count=180)` - 从 `static_observation` 取首个 *Full* 已锁定且两变体与参考均有效的连续固定帧段；横轴使用真实 `render_mono_ms` 的相对秒，轴标签同时注明绝对 Unity 帧范围；选窗不读取误差
 - `main(argv)` - CLI
 
 **运行命令**：
@@ -281,15 +284,15 @@ Unity 代码地图（关键模块）：
 cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.research.rq1.analyze --session-dir data/eval/<session_id>
 ```
-默认 `report_dir=<session_dir>/report`、`figs_dir=2026-EgoAnchor-Typst/figs/rq1`。
+默认 `report_dir=<session_dir>/report`、`figs_dir=2026-EgoAnchor/figs/rq1`。
 
-**测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py` 覆盖 marker 合成与场景过滤；`src/egoanchor/eval/tests/test_rq1_plot.py` 覆盖锁定状态选窗、固定帧数和陈旧图清理。只支持 `python -m egoanchor.eval.research.rq1.analyze` 包入口，不支持直接执行脚本文件。
+**测试**：`src/egoanchor/eval/tests/test_rq1_analyze.py` 覆盖场景过滤；`src/egoanchor/eval/tests/test_rq1_plot.py` 覆盖锁定状态选窗、固定帧数和陈旧图清理；`src/egoanchor/eval/tests/test_jitter.py` 覆盖连续段切分与纯运动拒绝。只支持 `python -m egoanchor.eval.research.rq1.analyze` 包入口，不支持直接执行脚本文件。
 
 **误差口径：实时逐帧对比，不做回溯时延对齐**。误差取渲染时刻锚点输出（`unity_output` 的 `variants[].output_pos/rot`）与同一 tick 采样的控制器平台参考位姿（`ResolveGtPose(monoMs)` 在 `LateUpdate` 里取）逐帧比较——Unity 侧就是实时同刻采样，Python `eval/metrics/anchor_error.py` 也不做任何时间平移。这样误差如实包含端到端时延影响，与 RQ2 的 display 实时误差口径一致。不要在 RQ1 引入「按 frame_id 回溯到图像时刻参考位姿」的补偿对齐（那会抹掉时延效应，也与代码事实不符）。
 
-**RQ1 总体统计与局部图分离**。正文精度、抖动与遮挡指标始终使用完整场景序列；论文图只展示 `static_observation` 的首个连续 180 帧锁定窗口，以解释三轴轨迹形态，不替代全程统计。当前正式窗口为 Unity 渲染帧 `550–729`；遮挡恢复不再绘图，只报告全段统计。不得按误差大小或视觉效果重新选窗。
+**RQ1 总体统计与局部图分离**。正文精度、抖动与遮挡指标始终使用完整场景序列；论文图只展示 `static_observation` 的首个连续 180 帧锁定窗口，以解释三轴轨迹形态，不替代全程统计。当前正式窗口为 Unity 渲染帧 `550–729`、时长 2.99 s；遮挡恢复不再绘图，只报告全段统计。不得按误差大小或视觉效果重新选窗。
 
-**论文更新**：§6.1 RQ1 使用 `fig_rq1_position_timeline` 与 `fig_rq1_rotation_timeline` 两张矢量图；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」；正文措辞为「实时逐帧对比」，不用「时延补偿对齐」。当前实测 session：`20260707_141751_controller_right`（静止约 70s、遮挡约 64s）。static_observation（全程）：*Full* 平移中位 5.8 mm / P95 6.6 mm、旋转中位 2.1° / P95 2.9°；抖动 *Full* 0.04 mm vs *No-StaticLock* 0.71 mm 约 18×、旋转抖动 1.71° vs 2.80°。occlusion_recovery（全段）：*Full* 平移中位 5.6 mm / P95 6.7 mm、旋转 P95 4.6°；*No-StaticLock* 平移 P95 19.3 mm 约 2.9×、旋转 P95 17.2°、屏幕漂移 1.6 vs 7.2 px 约 4.5×；生命周期 Coasting 48% / Searching 32% / Frozen 15% / Lost 5%。历史 session `20260707_122900` 已弃用。
+**论文更新**：§6.1 RQ1 使用一张全量统计表，以及 `fig_rq1_position_timeline` / `fig_rq1_rotation_timeline` 两张矢量图；配置用斜体 *Full* / *No-StaticLock* 与「系统配置/变体」表述，不用「条件」；正文措辞为「实时逐帧对比」，不用「时延补偿对齐」。当前实测 session：`20260707_141751_controller_right`，共 10,108 个 Unity 渲染帧；参考有效性过滤后，static_observation / occlusion_recovery 分别纳入 4,306 / 4,374 帧，两种配置按同一渲染时刻形成 8,680 组有效帧配对（共 17,360 条配置记录）。static_observation（全程）：*Full* 平移中位 5.8 mm / P95 6.6 mm、旋转中位 2.1° / P95 2.9°；按连续段计算的 1 Hz 二阶 Butterworth 零相位 HP-RMS 为位置 0.02 mm、旋转 0.02°，*No-StaticLock* 为 0.71 mm / 0.69°。occlusion_recovery（全段）：*Full* 平移中位 5.6 mm / P95 6.7 mm、旋转 P95 4.6°；*No-StaticLock* 平移 P95 19.3 mm、旋转 P95 17.2°；生命周期 Coasting 48% / Searching 32% / Frozen 15% / Lost 5%。分析仍生成固定针孔模型下的像素等效像面代理，但主文不报告该指标，因为它不是真实头显面板误差且与三维平移误差信息重合。当前日志没有独立的目标重新可见 marker，`recovery_summary` 为空，论文不报告恢复时间。历史 session `20260707_122900` 已弃用。
 
 正式 RQ1 session 采集时早于统一 output schema 中四个 RQ2 空上下文字段。数据已一次性补入 `rq2_condition=none`、`rq2_trial_id=-1` 和两个目标速度 `null`，manifest 的 `rq1_output_context_migration` 记录原始 SHA-256 `2f503172...`、迁移后 SHA-256 `3a8879e0...` 与 10,108 行更新；位姿、时间戳、RQ1 标签和变体内容均未改变。loader 仍严格要求当前字段，不增加旧日志兼容。
 
@@ -297,7 +300,8 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/research/rq1/pipelin
 
 - **GT 有效性只信任 Unity 写的 `gt_pose_valid`**。Unity `EvalRecorder` 已用 keep-alive 处理手柄 sleep（静止休眠时复用上次有效 pose 并保持 `gt_pose_valid=true`）；`eval/core/gt_filter.py` 因此不再做「速度≈0 判休眠剔除」或「首次运动前自动砍开头」这类速度启发式——那会和 keep-alive 正面打架，把合法长时静止帧误删。不要恢复旧的 `_detect_frozen`/`suggest_startup_cutoff`/`frozen_window_s`。
 - **RQ1 场景分组走 `rq1_metric` 手动标注**。`io/log_loader.py::label_conditions` 优先用 manifest `condition_spans`；当 `condition_spans` 为空（RQ1 当前采集就是空）则回退到 Unity 按键标注的 `rq1_metric` 作为 `condition`，使各场景各成一行。RQ1 只标注 static_observation / occlusion_recovery 两种；`pipeline.filter_rq1_tables` 再把 summary 表过滤到这两种。所有 metric 模块统一按 `condition × label` 聚合（`label` 即变体 Full / No-StaticLock）。
-- **occlusion_recovery 段不需要 GT**（遮挡期本就无 GT 语义），恢复时间靠 manifest `event_markers` 驱动 `metrics/recovery.py`，不靠 GT 误差。
+- **Jitter 必须按连续静止段计算**。位置与相对段首姿态的 SO(3) 对数向量都使用 1 Hz 二阶 Butterworth `filtfilt`，再对三维高通残差范数求 RMS；相邻有效样本间隔 `> max(100 ms, 2.5 × median_positive_dt)` 时断段，禁止跨追踪缺口滤波。`occlusion_recovery` 的高频残差混入生命周期切换，不在论文中解释为静止抖动。
+- **遮挡恢复时间当前不可识别**。`rq1_metric=occlusion_recovery` 只标出整个遮挡任务段，没有独立的目标重新可见时间；不得把段起点合成为 recovery marker，也不得报告或暗示“无需重收敛”。
 - `eval/core/run_eval.py` 已从包根迁到 `core/`，脚本直跑时 bootstrap 把 `parents[3]`（=`src`）加入 `sys.path` 才能解析 `egoanchor` 包。
 - **录制状态单一真理是 `EvalSession`**。`EvalSession._recording` 是唯一录制开关；UI（`RQ1StatusUI`）和 `EvalRecorder` 都读它。`EvalSession` 有序列化的 `sessionStarted`/`sessionStopped`（`UnityEvent`，Inspector 可视化挂接），在 `StartSession`/`StopSession` 触发，供 RQ1/RQ2/RQ3 在会话边界做副作用（如清空指标标记）。
 - **`RQ1MetricSelector`（原 `RQ1MetricRecorder`，已更名去混淆）只持有「当前指标」，不拥有录制状态、不写文件**。它只暴露 `CurrentMetric`/`CurrentMetricDuration`/`SetMetric`/`ClearMetric`；`SetMetric` 无任何门槛，按 1/2 永远直接生效。`EvalRecorder`（唯一真正写 JSONL 的）每帧直接读 `CurrentMetric`（未按键即 `none`），字段名 `rq1Selector`。历史坑：该组件曾叫 `RQ1MetricRecorder` 且自持独立 `_recording`，只在 F7 回调里 `StartRecording`，而 `autoStart`（收到首个 PoseResult 自动录制）只翻转 `EvalSession._recording`，导致 UI 显示 Recording 但按键 1/2 报「未录制状态下无法设置指标」，必须手按 F7 才生效。已彻底删除该重复状态——不要恢复 `IsRecording`/`StartRecording`/`StopRecording`，也不要因为「两个都叫 Recorder」把 `RQ1MetricSelector` 当成 `EvalRecorder` 的重复而删除（它是 Python 端按场景分组的唯一标签来源）。
@@ -308,7 +312,7 @@ RQ1 分析链路：`eval/research/rq1/analyze.py` → `eval/research/rq1/pipelin
 
 **RQ2 场景与试次契约**：场景 `EgoAnchor-RQ2.unity` 同时记录 *Full* 与隐藏的 *ZOH* shadow runtime。两者接收同一 PoseResult、共用 `FramePoseHistory`、渲染 tick 与 GT，并保持坐标变换、质量门控、生命周期阈值与 hold-last 语义一致；差异只在完整锚定策略与零阶保持。配对 RQ2 的两个 host 都必须 `emitServerReacquire=false`，持续丢失作为锚定输出失效保留。小写 `aligned raw` 仍是图像时间代理处的感知诊断，不是 *ZOH*。`RQ2TrialSelector` 只持有试次上下文，不拥有录制状态、不写文件，而且仅允许在 `EvalSession.IsRecording=true` 时开始 trial；`EvalSession` 仍是录制状态唯一真理。
 
-**评估状态与实时监控 UI**：`EvalStatusText` 只统一录制、session、时长和活动行的纯文本格式；`RQ1StatusUI` 与 `RQ2StatusUI` 保留各自业务逻辑，不抽通用 MonoBehaviour 基类。`EvalLiveStats` 位于 `Eval/` 根目录，RQ1/RQ2 场景各保留一个实例，必须挂在右侧 `LiveStatus` 对象并绑定 `recorder` 与 `statsText`。它读取主变体的观测年龄、pose 更新率、实时误差、帧间变化、可靠性分数和锚定状态；RQ2 的帧间变化包含真实运动，不能解释为纯噪声。完整采集流程和按键语义统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
+**评估状态与实时监控 UI**：`EvalStatusText` 只统一录制、session、时长和活动行的纯文本格式；`RQ1StatusUI` 与 `RQ2StatusUI` 保留各自业务逻辑，不抽通用 MonoBehaviour 基类。`EvalLiveStats` 位于 `Eval/` 根目录，RQ1/RQ2 场景各保留一个实例，必须挂在右侧 `LiveStatus` 对象并绑定 `recorder` 与 `statsText`。它读取主变体的观测年龄（论文称最新观测时延）、pose 更新率、实时误差、帧间变化、可靠性分数和锚定状态；RQ2 的帧间变化包含真实运动，不能解释为纯噪声。完整采集流程和按键语义统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。
 
 output 顶层试次字段：
 - `rq2_condition`：`none | translation | rotation`
@@ -320,25 +324,25 @@ RQ2 不设 warmup/motion/cooldown phase。按 `1` 开始 Translation、按 `2` �
 **录制协议**：每个 trial 用按键界定粗包络：前静止约 1.5 s、有效运动 8–12 s、后静止约 1.5 s；平移沿固定标记路径往复，旋转围绕固定主轴交替，两类运动均至少包含两次反向，并固定运动幅度、观察距离、照明与头部活动范围。Python 根据新鲜控制器参考轨迹自动提取 `active_motion`，按键反应时间和边界静止段不进入动态统计；随后应用速度上限得到 `analysis_motion`。
 
 **分析代码**：`src/egoanchor/eval/research/rq2/` 按职责拆分，`rq2/__init__.py` 显式 re-export 包级 API，`rq2/analyze.py` 只承担 CLI。核心模块：
-- `contract.py`：平移/旋转任务、速度上限、活动段、120 帧选窗与 lag 质量阈值
+- `contract.py`：平移/旋转任务、速度上限、活动段与 120 帧选窗
 - `trajectory.py`：平滑参考速度、`active_motion` 与 `analysis_motion`
 - `qc.py`：session/trial 的丢行、双变体、参考新鲜度、速度和时长审计
-- `response.py`：观测年龄、策略目标延迟覆盖率及连续活动段内的速度互相关 lag
+- `response.py`：观测年龄、策略目标延迟及其有限值覆盖率
 - `pipeline.py`：试次/任务描述性统计、响应摘要、表格与时间线编排
-- `plot.py`：平移 XYZ-帧与相对共同起点的世界系 SO(3) 对数向量 XYZ-帧
+- `plot.py`：平移 XYZ-t 与相对共同起点的世界系 SO(3) 对数向量 XYZ-t
 
-**连续性、动态精度与响应性**：报告 `display_update_rate_hz`、`display_hold_fraction` 与 `tracking_availability`。显示更新率和保持比例只统计同一 trial 内、相邻两端均为 `analysis_motion` 且有 display pose 的帧对，不跨速度超限或参考失效空窗。渲染误差使用 `display_*` 与同刻新鲜平台参考逐帧比较；availability 只使用 `has_output_pose`。响应摘要报告 `observation_age_ms` 和 `smoothing_delay_ms` 的中位数/P95，策略延迟必须同时给有限值覆盖率。经验运动滞后按 session × trial 与连续活动段估计：先把 GT 与显示轨迹按时间重采样到 60 Hz，平移使用世界系线速度，旋转使用相邻四元数的世界系 SO(3) 角速度；相关峰需满足相关系数 `≥0.50`、相对次峰突出度 `≥0.05`、非搜索边界，且通过检查的速度样本覆盖率 `≥50%` 才报告 trial lag。未通过写“不可稳健辨识”，不得用样本移位乘中位帧间隔，也不得因一个短片段通过就把整 trial 记为有效。当前结果为帧层描述性汇总，不执行回归、运行包络或 bootstrap。既有数据的 `0.8 m/s / 180 deg/s` 上限是在查看参考速度分布后设定的事后描述性范围，论文必须明示；它不用于假设检验或运行边界推断。
+**连续性、动态精度与最新观测时延**：`display_update_rate_hz`、`display_hold_fraction` 与 `tracking_availability` 在论文中分别称显示更新率、未更新帧对占比与锚点输出覆盖率。前两者只统计同一 trial 内、相邻两端均为 `analysis_motion` 且有 display pose 的帧对，不跨速度超限或参考失效空窗；渲染误差使用 `display_*` 与同刻新鲜平台参考逐帧比较，锚点输出覆盖率只使用 `has_output_pose`。RQ2 主文只把 `observation_age_ms` 作为最新观测时延报告中位数/P95；`smoothing_delay_ms` 及其有限值覆盖率保留为分析报告中的实现诊断，不进入主表或正文。当前 RQ2 不报告经验运动 lag。结果为帧层描述性汇总，不执行回归、运行包络或 bootstrap。既有数据的 `0.8 m/s / 180 deg/s` 上限是在查看参考速度分布后设定的事后描述性范围，论文必须明示；它不用于假设检验或运行边界推断。
 
-输出表固定为 6 张：`rq2_session_audit`、`rq2_trial_audit`、`rq2_trial_summary`、`rq2_condition_summary`、`rq2_response_summary`、`rq2_timeline_windows`。论文图固定为 `fig_rq2_position_timeline` 与 `fig_rq2_rotation_timeline` 的 PDF/PNG；每张图三行共享相对 Unity 渲染帧轴，窗口为连续 120 帧。平移使用共同平台参考原点；旋转使用相对共同起点的世界系 `Log(R_k R_0^-1)`，不用 Euler 或四元数分量，也不累加非交换的相邻 SO(3) log。代表性 trial 按每类全部纳入帧的参考速度中位数选择 trial 中位速度最接近者，再取其最长连续 `analysis_motion` 段中央；不得按系统误差或视觉效果选窗。Typst 使用 `conference.typ` 的 `figure(grid(columns: 2, ...))` 组合两个独立 PDF，不由 Python 合成四面板位图。
+输出表固定为 6 张：`rq2_session_audit`、`rq2_trial_audit`、`rq2_trial_summary`、`rq2_condition_summary`、`rq2_response_summary`、`rq2_timeline_windows`。论文图固定为 `fig_rq2_position_timeline` 与 `fig_rq2_rotation_timeline` 的 PDF/PNG；每张图三行共享真实 `render_mono_ms` 的相对秒轴，轴标签辅助注明绝对 Unity 帧范围，窗口为连续 120 帧。平移使用共同平台参考原点；旋转使用相对共同起点的世界系 `Log(R_k R_0^-1)`，不用 Euler 或四元数分量，也不累加非交换的相邻 SO(3) log。代表性 trial 按每类全部纳入帧的参考速度中位数选择 trial 中位速度最接近者，再取其最长连续 `analysis_motion` 段中央；不得按系统误差或视觉效果选窗。LaTeX 使用 `figure*` 与两个等宽 `minipage` 组合独立 PDF，不由 Python 合成四面板位图。
 
 正式数据目录为 `EgoAnchor_Python/data/eval/rq2_data`，session `20260712_163657_controller_right`。会话共 12,918 个 Unity 渲染帧，其中 8,824 帧位于两个平移 trial 与一个旋转 trial。既有 `slow_translation` 与 `fast_motion` 行已结构化合并为 `translation`，原始标签逐行保存在 `rq2_condition_original`；系统配置标签也从易与 raw-pose 诊断混淆的 *Raw-ZOH* 一次性迁移为 *ZOH*。manifest 的 `rq2_zoh_label_migration` 记录标签迁移输入 SHA-256 `58033496...` 和中间 SHA-256 `2deceb5a...`；由于 Unity 配置哈希包含 label，随后把 ZOH 的 `config_hash` 从 `6751b2fd...` 修正为 `87f79d17...`，`rq2_zoh_config_hash_migration` 记录 12,918 行更新和最终 SHA-256 `928cd6ad...`。新代码不兼容旧任务或旧配置标签。自动活动提取先得到 6,768 个渲染时刻；速度与参考有效性筛选后，平移 4,027 个、旋转 2,274 个，共保留 6,301 个时刻（93.1%）、12,602 条配对配置记录、941 个去重源帧标识和 88.97 s 双端均合格的有效运动。帧数只描述时间覆盖与配对完整性，不是独立样本量；不报告置信区间或总体推断。本次录制未发生动态丢失/恢复事件，不据此支持恢复能力。
 
-当前响应结果：平移/旋转的观测年龄中位数约 223/224 ms；*Full* 策略延迟中位数约 291/293 ms，有限值覆盖率 66.5%/82.3%。经验运动滞后均不可稳健辨识：*Full* 通过相关峰检查的速度样本覆盖率为平移 14.9%、旋转 25.4%，*ZOH* 均为 0%，低于 50% trial 门槛，因此论文不报告 lag 点估计。论文总体表使用全部有效帧；局部图窗口为平移 Unity 帧 `5314–5433`、旋转帧 `11126–11245`。
+当前主文最新观测时延结果：平移/旋转的中位数/P95 为 223/389 ms 与 224/473 ms。`rq2_response_summary.csv` 仍保留实现诊断：*Full* 策略目标延迟中位数/P95 为 291/333 ms 与 293/375 ms，有限值覆盖率 66.5%/82.3%；*ZOH* 覆盖率 100%。这些内部诊断不进入论文主表或结果正文。论文总体表使用全部有效帧；局部图窗口为平移 Unity 帧 `5314–5433`（1.67 s）、旋转帧 `11126–11245`（1.69 s）。
 
 **运行命令**：
 ```bash
 cd EgoAnchor_Python
-pixi run python -m egoanchor.eval.research.rq2.analyze --session-dir data/eval/<session_id> --figs-dir ../2026-EgoAnchor-Typst/figs/rq2 --zoom-frame-count 120
+pixi run python -m egoanchor.eval.research.rq2.analyze --session-dir data/eval/<session_id> --figs-dir ../2026-EgoAnchor/figs/rq2 --zoom-frame-count 120
 ```
 
 联合正式分析重复传入至少三个 `--session-dir` 并显式指定 `--report-dir`；操作流程与检查项统一维护在 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/README.md`。

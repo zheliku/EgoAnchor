@@ -1,11 +1,10 @@
-# EgoAnchor Typst 论文工作区
+# EgoAnchor Typst 历史归档
 
-本目录是 EgoAnchor 论文的 Typst 工作区，使用 `@preview/ieee-vgtc:0.0.4`。当前投稿目标是 IEEE VR 会议，主稿入口采用 `conference` 版式。
+中文论文 v1-v6 已迁移到 `../2026-EgoAnchor/`，当前写作入口是 `../2026-EgoAnchor/egoanchor_cn_v6.tex`。本目录保留迁移来源、Typst 模板和代码事实技术流程文档；下列 Typst 命令只用于历史复核。
 
 ## 文件分工
 
-- `egoanchor_cn_v2.typ`：当前中文主稿，正文与元信息都在这一份文件内，使用 IEEE VR conference 版式。
-- `egoanchor_cn_v1.typ`：上一版中文 Typst 草稿，保留作对照。
+- `egoanchor_cn_v1.typ` 至 `egoanchor_cn_v6.typ`：已迁移的中文历史稿，保留作内容对照。
 - `egoanchor_cn.bib`：当前主稿对应的参考文献文件；当前暂不放条目，正文引用后集中补齐。
 - `egoanchor_code_derived_technical_flow.md`：按代码事实整理的技术流程与术语依据，方法章实现细节优先以该文档和源码为准。
 - `journal.typ`：`@preview/ieee-vgtc:0.0.4` 的 journal/TVCG 原始示例模板，保留作模板参考。

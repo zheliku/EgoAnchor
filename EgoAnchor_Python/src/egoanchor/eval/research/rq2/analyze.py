@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         "--zoom-frame-count",
         type=int,
         default=120,
-        help="XYZ-帧时间线固定放大窗口的渲染帧数。",
+        help="XYZ-t 时间线固定放大窗口的渲染帧数。",
     )
     args = parser.parse_args(argv)
     config = RQ2Config(

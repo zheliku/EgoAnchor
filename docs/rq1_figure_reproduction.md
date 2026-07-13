@@ -18,8 +18,8 @@ KMP_DUPLICATE_LIB_OK=TRUE pixi run python -m egoanchor.eval.research.rq1.plot_fr
 然后编译论文：
 
 ```bash
-cd P:/VSCode-Project/EgoAnchor
-typst compile --root . 2026-EgoAnchor-Typst/egoanchor_cn_v5.typ 2026-EgoAnchor-Typst/egoanchor_cn_v5.pdf
+cd P:/VSCode-Project/EgoAnchor/2026-EgoAnchor
+latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v5.tex
 ```
 
 换 session 只改 `--report-dir` 的路径。下面是完整原理与排错。
@@ -115,35 +115,33 @@ KMP_DUPLICATE_LIB_OK=TRUE pixi run python -m egoanchor.eval.research.rq1.plot_fr
 成功会打印：
 
 ```
-wrote P:\...\2026-EgoAnchor-Typst\figs\rq1\fig_rq1_static.pdf
-wrote P:\...\2026-EgoAnchor-Typst\figs\rq1\fig_rq1_static.png
+wrote P:\...\2026-EgoAnchor\figs\rq1\fig_rq1_static.pdf
+wrote P:\...\2026-EgoAnchor\figs\rq1\fig_rq1_static.png
 ```
 
-图默认写到 `2026-EgoAnchor-Typst/figs/rq1/fig_rq1_static.{png,pdf}`，
+图默认写到 `2026-EgoAnchor/figs/rq1/fig_rq1_static.{png,pdf}`，
 **原地覆盖**旧图。想换输出位置加 `--figs-dir <目录>`。
 
-### 步骤 3：Typst 里放图（已配好，讲原理）
+### 步骤 3：LaTeX 里放图（已配好，讲原理）
 
-`egoanchor_cn_v5.typ` 里用普通 `#figure` + `#image` 引用：
+`egoanchor_cn_v5.tex` 里用 `figure*` + `includegraphics` 引用：
 
-```typst
-#figure(
-  placement: top,
-  scope: "parent",
-  align(center)[
-    #image("figs/rq1/fig_rq1_static.png", width: 100%)  // 路径相对 .typ 文件
-  ],
-  caption: [ ... ],
-) <fig:rq1-static>
+```latex
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figs/rq1/fig_rq1_static.png}
+  \caption{...}
+  \label{fig:rq1-static}
+\end{figure*}
 ```
 
-因为文件名/路径没变，**重跑步骤 2 后图原地覆盖，Typst 这行一个字都不用改**。
+因为文件名和路径不变，重跑步骤 2 后图片会原地覆盖，LaTeX 引用不用修改。
 
 ### 步骤 4：编译论文
 
 ```bash
-cd P:/VSCode-Project/EgoAnchor
-typst compile --root . 2026-EgoAnchor-Typst/egoanchor_cn_v5.typ 2026-EgoAnchor-Typst/egoanchor_cn_v5.pdf
+cd P:/VSCode-Project/EgoAnchor/2026-EgoAnchor
+latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v5.tex
 ```
 
 `--root .` 让 `#image` 的相对路径从仓库根解析。字体 warning（helvetica /
@@ -198,33 +196,34 @@ CSV 一旦生成，之后重画图就回到第 3 节的轻量路径，不再需�
 | 正文指标 | 来源 CSV |
 |---|---|
 | 平移/旋转 中位数·P95 | `anchor_error_summary.csv` |
-| 位置/旋转抖动 RMS | `jitter_summary.csv` |
-| 屏幕漂移 RMS | `slip_summary.csv` |
+| 位置/旋转 1 Hz 高通 RMS | `jitter_summary.csv` |
 | 生命周期状态占比 | 从 `anchor_error_detail.csv` 的 `anchor_state` 列按 occlusion 段统计 |
 
-改了 session 或窗口后，务必打开这些 CSV 重新核对正文里的每个数字。
+`slip_summary.csv` 仍会生成固定针孔模型下的像素等效像面代理，但它不是真实头显面板误差，当前不进入论文主表。改了 session 或窗口后，务必打开上述 CSV 重新核对正文里的每个数字。
 
 ---
 
 ## 7. 验证（改完怎么自检）
 
 ```bash
-# 绘图逻辑单元测试（无需 cv2，含"默认画完整序列不裁剪"的回归测试）
-KMP_DUPLICATE_LIB_OK=TRUE pixi run python -m unittest egoanchor.eval.tests.test_rq1_plot -v
+# 绘图与抖动逻辑单元测试
+KMP_DUPLICATE_LIB_OK=TRUE pixi run python -m unittest egoanchor.eval.tests.test_rq1_plot egoanchor.eval.tests.test_jitter -v
 
 # 论文能否编过
-typst compile --root . 2026-EgoAnchor-Typst/egoanchor_cn_v5.typ 2026-EgoAnchor-Typst/egoanchor_cn_v5.pdf
+cd ../2026-EgoAnchor
+latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
 ```
 
 两个都过 = 图和论文都健康。
 
 ---
 
-## 附：当前基线（2026-07-08）
+## 附：当前基线（2026-07-13）
 
-- 使用 session：`20260707_141751_controller_right`（静止约 70s、遮挡约 64s）
-- 口径：完整序列，不取最优区间（`STATIC_STEADY_WINDOW_S = None`）
+- 使用 session：`20260707_141751_controller_right`，共 10,108 个 Unity 渲染帧；静止/遮挡分别纳入 4,306 / 4,374 个有效帧
+- 口径：正文统计使用完整序列；局部 XYZ-t 图固定取首个连续 180 帧锁定窗口（550–729，2.99 s），选窗不读取误差
 - 静止 Full：平移中位 5.8mm / P95 6.6mm，旋转中位 2.1° / P95 2.9°
-- 位置抖动：Full 0.04mm vs No-StaticLock 0.71mm（约 18×）
-- 遮挡 No-StaticLock：平移 P95 19.3mm（约 2.9×）、旋转 P95 17.2°、漂移 1.6→7.2px（约 4.5×）
+- 连续静止段 HP-RMS（位置 / 旋转）：Full 0.02mm / 0.02°，No-StaticLock 0.71mm / 0.69°
+- 遮挡 No-StaticLock：平移 P95 19.3mm、旋转 P95 17.2°
 - 生命周期（Full）：Coasting 48% / Searching 32% / FrozenUncertain 15% / Lost 5%
+- 当前标注没有独立的目标重新可见 marker，不报告遮挡恢复时间

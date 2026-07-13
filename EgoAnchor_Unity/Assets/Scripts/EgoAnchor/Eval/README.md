@@ -147,7 +147,7 @@ pixi run python -m egoanchor.eval.research.rq1.analyze `
 
 pixi run python -m egoanchor.eval.research.rq2.analyze `
   --session-dir data/eval/<session_id> `
-  --figs-dir ../2026-EgoAnchor-Typst/figs/rq2 `
+  --figs-dir ../2026-EgoAnchor/figs/rq2 `
   --zoom-frame-count 120
 ```
 

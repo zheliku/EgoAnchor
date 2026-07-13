@@ -16,6 +16,7 @@ from .common import (
     wrap_angle_360_deg,
 )
 from .diagnostics import ReliabilityDiagnosticsResult, compute_reliability_diagnostics
+from .jitter import compute_jitter
 from .latency import compute_latency, summarize_latency
 from .pipeline import MetricsResult, build_sanity, compute_all_metrics
 from .slip import build_alignment_ablation_output
@@ -28,6 +29,7 @@ __all__ = [
     "build_alignment_ablation_output",
     "compute_all_metrics",
     "compute_anchor_error",
+    "compute_jitter",
     "compute_latency",
     "compute_reliability_diagnostics",
     "highpass",

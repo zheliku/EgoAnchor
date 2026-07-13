@@ -9,50 +9,7 @@ import pandas as pd
 from egoanchor.eval.research.rq1 import (
     RQ1_CONDITIONS,
     filter_rq1_tables,
-    synthesize_occlusion_markers,
 )
-
-
-class SynthesizeOcclusionMarkersTest(unittest.TestCase):
-    """从 rq1_metric 段起点合成遮挡事件 marker。"""
-
-    def test_one_marker_per_contiguous_occlusion_run(self) -> None:
-        """每个连续 occlusion_recovery 段生成一个 marker，mono_ms 取段首。"""
-
-        output = pd.DataFrame(
-            {
-                "render_mono_ms": [0.0, 10.0, 20.0, 30.0, 40.0, 50.0],
-                "rq1_metric": [
-                    "static_observation",
-                    "occlusion_recovery",
-                    "occlusion_recovery",
-                    "none",
-                    "occlusion_recovery",
-                    "occlusion_recovery",
-                ],
-            }
-        )
-
-        markers = synthesize_occlusion_markers(output)
-
-        self.assertEqual(len(markers), 2)
-        self.assertEqual(markers[0]["type"], "occlusion_recovery")
-        self.assertAlmostEqual(markers[0]["mono_ms"], 10.0)
-        self.assertAlmostEqual(markers[1]["mono_ms"], 40.0)
-
-    def test_no_occlusion_returns_empty(self) -> None:
-        """无遮挡段时返回空列表。"""
-
-        output = pd.DataFrame(
-            {"render_mono_ms": [0.0, 10.0], "rq1_metric": ["static_observation", "none"]}
-        )
-        self.assertEqual(synthesize_occlusion_markers(output), [])
-
-    def test_missing_column_returns_empty(self) -> None:
-        """缺少 rq1_metric 列时返回空列表，不抛异常。"""
-
-        output = pd.DataFrame({"render_mono_ms": [0.0, 10.0]})
-        self.assertEqual(synthesize_occlusion_markers(output), [])
 
 
 class FilterRq1TablesTest(unittest.TestCase):

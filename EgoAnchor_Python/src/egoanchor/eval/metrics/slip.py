@@ -16,7 +16,7 @@ SUMMARY_COLUMNS = ["condition", "label", "n", "slip_rms_px", "slip_peak_px", "in
 
 
 def compute_slip(output: pd.DataFrame, k: np.ndarray | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """计算 GT 原点与 anchor 原点投影后的像面距离。"""
+    """计算 GT 原点与 anchor 原点在同一针孔模型下的投影距离。"""
 
     if output.empty:
         return _empty_detail(), _empty_summary()
@@ -109,7 +109,7 @@ def summarize_slip(detail: pd.DataFrame) -> pd.DataFrame:
 
 
 def default_intrinsics(width: float = 640.0, height: float = 480.0, fov_deg: float = 90.0) -> np.ndarray:
-    """构造缺省近似 K；用于没有 camera_info 的 smoke 数据。"""
+    """构造固定像素等效近似 K；结果不能解释为头显面板真实像素。"""
 
     fx = (width * 0.5) / np.tan(np.deg2rad(fov_deg) * 0.5)
     fy = (height * 0.5) / np.tan(np.deg2rad(fov_deg) * 0.5)

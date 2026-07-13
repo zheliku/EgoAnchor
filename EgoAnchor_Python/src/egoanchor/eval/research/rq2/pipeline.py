@@ -144,7 +144,7 @@ def run_rq2_analysis(
     accepted_output = _filter_accepted_trials(combined, trial_audit)
     trial_summary = _attach_audit(compute_trial_summary(combined), trial_audit)
     condition_summary = compute_condition_summary(accepted_output)
-    response_summary = compute_response_summary(accepted_output, settings)
+    response_summary = compute_response_summary(accepted_output)
 
     destination = _resolve_report_dir(paths, report_dir)
     destination.mkdir(parents=True, exist_ok=True)

@@ -32,19 +32,6 @@ DISPLAY_HOLD_TRANSLATION_EPS_M = 1e-6
 DISPLAY_HOLD_ROTATION_EPS_DEG = 1e-4
 """相邻显示旋转变化不超过该值时视为零阶保持。"""
 
-LAG_MIN_SIGNAL_STD = 1e-5
-"""速度信号低于该标准差时视为动态激励不足。"""
-
-LAG_MIN_PEAK_CORRELATION = 0.50
-"""归一化互相关峰低于该值时不报告运动滞后。"""
-
-LAG_MIN_PROMINENCE = 0.05
-"""最佳相关峰相对次峰的最小突出度。"""
-
-LAG_MIN_SIGNAL_SAMPLES = 16
-"""估计运动滞后所需的最少速度样本数。"""
-
-
 @dataclass(frozen=True)
 class RQ2Config:
     """一次 RQ2 分析使用的冻结参数。"""
@@ -62,16 +49,7 @@ class RQ2Config:
     """活动段中新鲜平台参考位姿的最低覆盖率。"""
 
     zoom_frame_count: int = 120
-    """论文 XYZ-帧时间线使用的固定渲染帧数。"""
-
-    max_lag_ms: float = 500.0
-    """运动轨迹互相关允许搜索的最大绝对滞后。"""
-
-    lag_sample_hz: float = 60.0
-    """运动滞后估计统一重采样的频率。"""
-
-    min_lag_sample_coverage: float = 0.50
-    """一个试次报告运动滞后所需的最小有效速度样本覆盖率。"""
+    """论文 XYZ-t 时间线使用的固定渲染帧数。"""
 
 
 __all__ = [
@@ -82,10 +60,6 @@ __all__ = [
     "ACTIVE_TRANSLATION_MIN_M_S",
     "DISPLAY_HOLD_ROTATION_EPS_DEG",
     "DISPLAY_HOLD_TRANSLATION_EPS_M",
-    "LAG_MIN_PEAK_CORRELATION",
-    "LAG_MIN_PROMINENCE",
-    "LAG_MIN_SIGNAL_SAMPLES",
-    "LAG_MIN_SIGNAL_STD",
     "REQUIRED_VARIANTS",
     "RQ2_CONDITIONS",
     "RQ2Config",
