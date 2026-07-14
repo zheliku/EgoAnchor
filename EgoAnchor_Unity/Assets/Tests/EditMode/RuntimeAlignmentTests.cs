@@ -47,14 +47,16 @@ namespace EgoAnchor.Tests
                     aligner.TryAlign(10, cameraPose, out Pose capturePose),
                     Is.True);
                 Assert.That(
-                    aligner.TryAlignWithLatestCameraPose(
+                    history.TryGetLatest(out FramePoseRecord latestRecord),
+                    Is.True);
+                Assert.That(
+                    aligner.TryAlignWithCameraPose(
                         cameraPose,
-                        out Pose arrivalPose,
-                        out CameraReference usedReference,
-                        out FramePoseRecord latestRecord),
+                        latestRecord.LeftCameraPose,
+                        CameraReference.Left,
+                        out Pose arrivalPose),
                     Is.True);
 
-                Assert.That(usedReference, Is.EqualTo(CameraReference.Left));
                 Assert.That(latestRecord.FrameId, Is.EqualTo(11));
                 Assert.That(capturePose.position.x, Is.EqualTo(1.2f).Within(1e-5f));
                 Assert.That(arrivalPose.position.x, Is.EqualTo(4.2f).Within(1e-5f));
@@ -65,7 +67,6 @@ namespace EgoAnchor.Tests
                 Object.DestroyImmediate(historyObject);
             }
         }
-
         /// <summary>默认 runtime 语义必须是采集时刻对齐，并公开稳定的配置摘要。</summary>
         [Test]
         public void WorldAlignmentModeDefaultsToCaptureTime()

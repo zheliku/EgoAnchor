@@ -11,7 +11,7 @@ using UnityEngine.Events;
 namespace EgoAnchor.Eval
 {
     /// <summary>
-    /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 session_manifest.json。
+    /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
     /// 推荐工作流：先启动 Python 服务，<see cref="autoStart"/> 为 true 时 Unity 收到第一个 PoseResult
     /// 即自动开始录制，无需手动按键；停止时调用 <see cref="StopSession"/> 或 F8。
@@ -56,13 +56,13 @@ namespace EgoAnchor.Eval
 
         // ── Events ──
 
-        /// <summary>录制开始时触发；在 Inspector 挂会话边界回调（如 RQ1MetricSelector.ClearMetric 清空标记）。</summary>
+        /// <summary>录制开始时触发；用于重置实验上下文或写入会话边界事件。</summary>
         [Header("Session Events")]
-        [Tooltip("录制开始时触发（自动启动和 F7 手动启动都会触发）。可在 Inspector 挂 RQ1/RQ2/RQ3 的会话边界回调。")]
+        [Tooltip("录制开始时触发；自动启动和 F7 手动启动都会触发。")]
         [SerializeField] private UnityEvent sessionStarted = new UnityEvent();
 
-        /// <summary>录制停止时触发；在 Inspector 挂会话边界回调（如 RQ1MetricSelector.ClearMetric 清空标记）。</summary>
-        [Tooltip("录制停止时触发（F8 手动停止和 OnDestroy 都会触发）。可在 Inspector 挂 RQ1/RQ2/RQ3 的会话边界回调。")]
+        /// <summary>录制停止时触发；用于清理实验上下文或写入会话边界事件。</summary>
+        [Tooltip("录制停止时触发；F8 手动停止和 OnDestroy 都会触发。")]
         [SerializeField] private UnityEvent sessionStopped = new UnityEvent();
 
         // ── State ──
@@ -71,7 +71,6 @@ namespace EgoAnchor.Eval
         private string _sessionDir;
         private bool _recording;
         private bool _autoStarted;
-        private string _pythonLogFilename;
 
         private readonly List<string> _variantLabels = new List<string>();
         private readonly List<EvalVariantConfig> _variantConfigs = new List<EvalVariantConfig>();
@@ -112,7 +111,6 @@ namespace EgoAnchor.Eval
             }
 
             string root = ResolveOutputRoot();
-            _pythonLogFilename = string.Empty;
 
             string pythonId = runtimeHub != null ? runtimeHub.LatestPythonSessionId : string.Empty;
             if (!string.IsNullOrEmpty(pythonId))
@@ -120,7 +118,6 @@ namespace EgoAnchor.Eval
                 _sessionId  = pythonId;
                 _sessionDir = Path.Combine(root, _sessionId);
                 Directory.CreateDirectory(_sessionDir);
-                _pythonLogFilename = $"{_sessionId}_python_runtime.jsonl";
                 EgoAnchorLog.For<EvalSession>().Info($"复用 Python session_id：{_sessionId}");
             }
             else
@@ -132,17 +129,23 @@ namespace EgoAnchor.Eval
                 _sessionDir = Path.Combine(root, _sessionId);
                 Directory.CreateDirectory(_sessionDir);
             }
+            Directory.CreateDirectory(Path.Combine(_sessionDir, "audit_samples"));
 
-            string capturePath = Path.Combine(_sessionDir, $"{_sessionId}_unity_capture.jsonl");
-            string outputPath  = Path.Combine(_sessionDir, $"{_sessionId}_unity_output.jsonl");
-            if (HasNonEmptyLog(capturePath) || HasNonEmptyLog(outputPath))
+            string referencePath = Path.Combine(_sessionDir, EvalV2Manifest.UnityReferenceFileName);
+            string admissionPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityAdmissionFileName);
+            string renderPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityRenderFileName);
+            string eventsPath = Path.Combine(_sessionDir, EvalV2Manifest.EventsFileName);
+            if (HasNonEmptyLog(referencePath)
+                || HasNonEmptyLog(admissionPath)
+                || HasNonEmptyLog(renderPath)
+                || HasNonEmptyLog(eventsPath))
             {
                 EgoAnchorLog.For<EvalSession>().Error(
                     $"Session 启动已拒绝：目标 Unity 日志已有非空内容，禁止覆盖。session_id={_sessionId}");
                 return;
             }
 
-            recorder.BeginRecording(capturePath, outputPath);
+            recorder.BeginRecording(referencePath, admissionPath, renderPath, eventsPath, _sessionId);
             _recording = true;
             sessionStarted.Invoke();
 
@@ -151,7 +154,7 @@ namespace EgoAnchor.Eval
                 EgoAnchorLog.For<EvalSession>().Warning("GT Transform 未绑定，请在 EvalRecorder 中绑定 groundTruth。");
         }
 
-        /// <summary>停止当前 session 并写 session_manifest.json。</summary>
+        /// <summary>停止当前 session 并写 schema-v2 manifest.json。</summary>
         public void StopSession()
         {
             if (!_recording)
@@ -206,13 +209,13 @@ namespace EgoAnchor.Eval
 
             string json = EvalJson.BuildManifest(
                 _sessionId, objectId, runMode,
-                _pythonLogFilename, _variantLabels, _variantConfigs, notes,
-                recorder != null ? recorder.CaptureDroppedRows : 0L,
-                recorder != null ? recorder.CapturePeakQueueDepth : 0,
-                recorder != null ? recorder.OutputDroppedRows : 0L,
-                recorder != null ? recorder.OutputPeakQueueDepth : 0);
+                _variantLabels, _variantConfigs, notes,
+                recorder != null ? recorder.ReferenceLogStats : default,
+                recorder != null ? recorder.AdmissionLogStats : default,
+                recorder != null ? recorder.RenderLogStats : default,
+                recorder != null ? recorder.EventsLogStats : default);
 
-            string path = Path.Combine(_sessionDir, "session_manifest.json");
+            string path = Path.Combine(_sessionDir, EvalV2Manifest.ManifestFileName);
             File.WriteAllText(path, json, new UTF8Encoding(false));
             EgoAnchorLog.For<EvalSession>().Info($"Manifest 已写入：{path}");
         }

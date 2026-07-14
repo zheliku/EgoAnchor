@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Reflection;
 using System.Text;
 using EgoAnchor.Alignment;
 using EgoAnchor.Client;
 using EgoAnchor.Diagnostics;
-using EgoAnchor.Eval.RQ1;
-using EgoAnchor.Eval.RQ2;
 using EgoAnchor.Policy;
 using EgoAnchor.Quest;
+using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Runtime;
 using UnityEngine;
 
@@ -144,8 +142,8 @@ namespace EgoAnchor.Eval
     /// <summary>
     /// EgoAnchor 评估数据记录器。
     /// <para>
-    /// - 接收发布器的发送尝试通知，在采集帧时写 unity_capture 行；<br/>
-    /// - 在 <c>LateUpdate</c> 每渲染 tick 写 unity_output 行（含各变体输出和 GT 速度）。
+    /// - 接收发布器的发送尝试通知，在采集帧时写 unity_reference 行；<br/>
+    /// - 在 <c>LateUpdate</c> 每渲染 tick 写 unity_render 行（含各变体输出和参考速度）。
     /// </para>
     /// </summary>
     [DefaultExecutionOrder(50)]
@@ -188,12 +186,12 @@ namespace EgoAnchor.Eval
         [Tooltip("可选：OVR 手柄类型，用于检测手柄跟踪是否有效。设为 None 则不过滤。")]
         [SerializeField] private OVRInput.Controller gtController = OVRInput.Controller.RTouch;
 
-        /// <summary>参考位姿新鲜度策略；RQ2 必须要求真实追踪，RQ1 可允许静止 keep-alive。</summary>
-        [Tooltip("参考位姿有效性策略。RQ2 动态试次选择 RequireFreshTracking；RQ1 静止观察选择 AllowStaticKeepAlive。")]
+        /// <summary>参考位姿新鲜度策略；动态试次要求真实追踪，静止观察可允许短时 keep-alive。</summary>
+        [Tooltip("参考位姿有效性策略。动态试次选择 RequireFreshTracking；静止观察选择 AllowStaticKeepAlive。")]
         [SerializeField] private EvalReferenceFreshnessMode gtFreshnessMode = EvalReferenceFreshnessMode.AllowStaticKeepAlive;
 
         /// <summary>静止 keep-alive 最长持续时间，单位秒；fresh-only 模式下不使用。</summary>
-        [Tooltip("真实追踪暂时丢失后，静止实验允许复用最后新鲜参考位姿的秒数。RQ2 fresh-only 模式忽略此值。")]
+        [Tooltip("真实追踪暂时丢失后，静止实验允许复用最后新鲜参考位姿的秒数；fresh-only 模式忽略此值。")]
         [Min(0f)]
         [SerializeField] private float gtKeepAliveSeconds = 30f;
 
@@ -202,27 +200,26 @@ namespace EgoAnchor.Eval
         [Tooltip("要录制的 runtime 变体列表。")]
         [SerializeField] private List<EvalVariant> variants = new List<EvalVariant>();
 
-        /// <summary>可选：RQ1 指标选择器，持有用户当前标记的指标类型。</summary>
-        [Header("RQ1 Metrics (Optional)")]
-        [Tooltip("可选：RQ1 指标选择器；若绑定，则在 output 行中记录当前指标。")]
-        [SerializeField] private RQ1MetricSelector rq1Selector;
-
-        /// <summary>可选：RQ2 试次选择器，提供当前场景、编号和目标速度。</summary>
-        [Header("RQ2 Trial (Optional)")]
-        [Tooltip("可选：RQ2 试次选择器；若绑定，则在 output 行中记录当前试次上下文。")]
-        [SerializeField] private RQ2TrialSelector rq2Selector;
-
         // ── State ──
 
-        private EvalLog _captureLog;
-        private EvalLog _outputLog;
+        private EvalLog _referenceLog;
+        private EvalLog _admissionLog;
+        private EvalLog _renderLog;
+        private EvalLog _eventsLog;
         private bool _recording;
+        private string _sessionId = string.Empty;
 
         /// <summary>最近一次关闭的 capture 日志后台队列统计。</summary>
-        private EvalLogStats _captureLogStats;
+        private EvalLogStats _referenceLogStats;
 
         /// <summary>最近一次关闭的 output 日志后台队列统计。</summary>
-        private EvalLogStats _outputLogStats;
+        private EvalLogStats _admissionLogStats;
+
+        /// <summary>最近一次关闭的 render 日志后台队列统计。</summary>
+        private EvalLogStats _renderLogStats;
+
+        /// <summary>最近一次关闭的 events 日志后台队列统计。</summary>
+        private EvalLogStats _eventsLogStats;
 
         /// <summary>上一帧 GT pose，用于计算 GT 速度。</summary>
         private Pose _lastGtPose;
@@ -237,6 +234,18 @@ namespace EgoAnchor.Eval
 
         /// <summary>录制期间按标签缓存的配置 hash，避免逐帧反射读取组件参数。</summary>
         private readonly Dictionary<string, string> _configHashCache = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>本 session 已写入的 candidate × variant admission key，避免重复行。</summary>
+        private readonly HashSet<string> _admissionKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>已绑定 admission 回调的 runtime 集合，避免重复订阅。</summary>
+        private readonly HashSet<PoseToAnchorRuntime> _admissionRuntimes = new HashSet<PoseToAnchorRuntime>();
+
+        /// <summary>按 source frame 缓存 Unity 侧候选序号；同一帧的多变体共用一个 candidate_id。</summary>
+        private readonly Dictionary<long, int> _candidateSequencesByFrame = new Dictionary<long, int>();
+
+        /// <summary>下一个尚未分配的候选序号。</summary>
+        private int _nextCandidateSequence;
 
         /// <summary>会话开始时固定的变体标签，供停止后写 manifest。</summary>
         private readonly List<string> _manifestVariantLabels = new List<string>();
@@ -256,16 +265,40 @@ namespace EgoAnchor.Eval
         public string GtSource => groundTruth != null ? "transform" : "transform_missing";
 
         /// <summary>最近一次录制中 capture 日志因队列饱和或写入失败丢弃的行数。</summary>
-        public long CaptureDroppedRows => _captureLogStats.DroppedRows;
+        public long ReferenceDroppedRows => _referenceLogStats.DroppedRows;
 
         /// <summary>最近一次录制中 capture 日志观察到的最大待写队列深度。</summary>
-        public int CapturePeakQueueDepth => _captureLogStats.PeakQueueDepth;
+        public int ReferencePeakQueueDepth => _referenceLogStats.PeakQueueDepth;
 
         /// <summary>最近一次录制中 output 日志因队列饱和或写入失败丢弃的行数。</summary>
-        public long OutputDroppedRows => _outputLogStats.DroppedRows;
+        public long AdmissionDroppedRows => _admissionLogStats.DroppedRows;
 
         /// <summary>最近一次录制中 output 日志观察到的最大待写队列深度。</summary>
-        public int OutputPeakQueueDepth => _outputLogStats.PeakQueueDepth;
+        public int AdmissionPeakQueueDepth => _admissionLogStats.PeakQueueDepth;
+
+        /// <summary>最近一次录制中 render 日志丢弃的行数。</summary>
+        public long RenderDroppedRows => _renderLogStats.DroppedRows;
+
+        /// <summary>最近一次录制中 render 日志观察到的最大待写队列深度。</summary>
+        public int RenderPeakQueueDepth => _renderLogStats.PeakQueueDepth;
+
+        /// <summary>最近一次录制中 events 日志丢弃的行数。</summary>
+        public long EventsDroppedRows => _eventsLogStats.DroppedRows;
+
+        /// <summary>最近一次录制中 events 日志观察到的最大待写队列深度。</summary>
+        public int EventsPeakQueueDepth => _eventsLogStats.PeakQueueDepth;
+
+        /// <summary>reference 日志完整统计快照。</summary>
+        public EvalLogStats ReferenceLogStats => _referenceLogStats;
+
+        /// <summary>admission 日志完整统计快照。</summary>
+        public EvalLogStats AdmissionLogStats => _admissionLogStats;
+
+        /// <summary>render 日志完整统计快照。</summary>
+        public EvalLogStats RenderLogStats => _renderLogStats;
+
+        /// <summary>events 日志完整统计快照。</summary>
+        public EvalLogStats EventsLogStats => _eventsLogStats;
 
         // ── 实时遥测访问器（供 EvalLiveStats 读取，不写文件、不改状态） ──
 
@@ -302,7 +335,7 @@ namespace EgoAnchor.Eval
         /// GT Transform 原始 pose，不经 OVR tracked 门控和 keep-alive。
         /// 实时面板用它算误差：只要手柄 Transform 在动就更新，不被 OVR 把 tracked 报成
         /// false 卡住（Link/editor 下常见）。录制路径仍走 <see cref="TryGetCurrentGtPose"/>
-        /// 的门控逻辑标 gt_pose_valid，两者互不影响。
+        /// 的门控逻辑标 reference_pose_valid，两者互不影响。
         /// </summary>
         /// <param name="pose">GT Transform 绑定时输出其当前 world pose。</param>
         /// <returns>是否绑定了 GT Transform。</returns>
@@ -375,36 +408,61 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>开始写入评估日志。</summary>
-        public void BeginRecording(string capturePath, string outputPath)
+        public void BeginRecording(string referencePath, string admissionPath, string renderPath, string eventsPath, string sessionId = "")
         {
             StopRecording();
-            _captureLogStats = default;
-            _outputLogStats = default;
-            _captureLog = new EvalLog(capturePath);
-            _outputLog  = new EvalLog(outputPath);
+            _sessionId = sessionId ?? string.Empty;
+            RefreshAdmissionSubscriptions();
+            _referenceLogStats = default;
+            _admissionLogStats = default;
+            _renderLogStats = default;
+            _eventsLogStats = default;
+            _referenceLog = new EvalLog(referencePath);
+            _admissionLog = new EvalLog(admissionPath);
+            _renderLog = new EvalLog(renderPath);
+            _eventsLog = new EvalLog(eventsPath);
             RefreshConfigHashCache();
             CaptureManifestMetadata();
             _hasLastGt = false;
             _gtPoseTracker.Reset();
             _recording = true;
+            _eventsLog.Write(EvalJson.BuildEventLine(
+                _sessionId, "session_started", "unity", "recording_started",
+                UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount));
         }
 
         /// <summary>停止录制并关闭文件句柄。</summary>
         public void StopRecording()
         {
             _recording = false;
-            if (_captureLog != null)
+            if (_referenceLog != null)
             {
-                _captureLogStats = CloseLog(_captureLog, "capture");
-                _captureLog = null;
+                _referenceLogStats = CloseLog(_referenceLog, "reference");
+                _referenceLog = null;
             }
-            if (_outputLog != null)
+            if (_admissionLog != null)
             {
-                _outputLogStats = CloseLog(_outputLog, "output");
-                _outputLog = null;
+                _admissionLogStats = CloseLog(_admissionLog, "admission");
+                _admissionLog = null;
+            }
+            if (_renderLog != null)
+            {
+                _renderLogStats = CloseLog(_renderLog, "render");
+                _renderLog = null;
+            }
+            if (_eventsLog != null)
+            {
+                _eventsLog.Write(EvalJson.BuildEventLine(
+                    _sessionId, "session_stopped", "unity", "recording_stopped",
+                    UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount));
+                _eventsLogStats = CloseLog(_eventsLog, "events");
+                _eventsLog = null;
             }
             _snapshots.Clear();
             _configHashCache.Clear();
+            _admissionKeys.Clear();
+            _candidateSequencesByFrame.Clear();
+            _nextCandidateSequence = 0;
             _hasLastGt = false;
             _gtPoseTracker.Reset();
         }
@@ -430,12 +488,14 @@ namespace EgoAnchor.Eval
         {
             if (streamPublisher != null)
                 streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
+            RefreshAdmissionSubscriptions();
         }
 
         private void OnDisable()
         {
             if (streamPublisher != null)
                 streamPublisher.StereoPublishAttempted -= RecordCapturePublishAttempt;
+            ClearAdmissionSubscriptions();
         }
 
         private void OnDestroy() => StopRecording();
@@ -443,6 +503,29 @@ namespace EgoAnchor.Eval
         private void OnValidate()
         {
             if (variants == null) variants = new List<EvalVariant>();
+        }
+
+        /// <summary>按 Inspector 变体列表绑定每个 runtime 的真实 admission 回调。</summary>
+        private void RefreshAdmissionSubscriptions()
+        {
+            ClearAdmissionSubscriptions();
+            for (int i = 0; i < variants.Count; i++)
+            {
+                PoseToAnchorRuntime runtime = variants[i].runtime;
+                if (runtime != null && _admissionRuntimes.Add(runtime))
+                    runtime.AdmissionProcessed += RecordAdmission;
+            }
+        }
+
+        /// <summary>解除所有 admission 回调。</summary>
+        private void ClearAdmissionSubscriptions()
+        {
+            foreach (PoseToAnchorRuntime runtime in _admissionRuntimes)
+            {
+                if (runtime != null)
+                    runtime.AdmissionProcessed -= RecordAdmission;
+            }
+            _admissionRuntimes.Clear();
         }
 
         // ── 采集事件：写 capture 行 ──
@@ -453,7 +536,7 @@ namespace EgoAnchor.Eval
             double publishAttemptMonoMs,
             bool publishSucceeded)
         {
-            if (!_recording || _captureLog == null) return;
+            if (!_recording || _referenceLog == null) return;
 
             FramePoseRecord fr = default;
             bool hasFrameRecord = framePoseHistory != null && framePoseHistory.TryGet(timing.FrameId, out fr);
@@ -465,7 +548,7 @@ namespace EgoAnchor.Eval
             EvalReferencePose gtSample = ResolveGtPose(gtSampleMonoMs);
             Pose headPose = headAnchor != null ? new Pose(headAnchor.position, headAnchor.rotation) : Pose.identity;
 
-            _captureLog.Write(EvalJson.BuildCaptureLine(
+            _referenceLog.Write(EvalJson.BuildReferenceLine(
                 timing.FrameId,
                 hasFrameRecord ? fr.ImageMonoMs : timing.ImageMonoMs,
                 unixMs,
@@ -478,14 +561,15 @@ namespace EgoAnchor.Eval
                 publishSucceeded,
                 headPose, cameraValid, cameraPose,
                 gtSample,
-                alignmentRef.ToString()));
+                alignmentRef.ToString(),
+                _sessionId));
         }
 
         // ── 渲染 tick：写 output 行 ──
 
         private void LateUpdate()
         {
-            if (!_recording || _outputLog == null) return;
+            if (!_recording || _renderLog == null) return;
 
             double monoMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
             double unixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -515,36 +599,14 @@ namespace EgoAnchor.Eval
                 _hasLastGt = false;
             }
 
-            // 获取 RQ1 指标标记（如果有）；未绑定或未按键时为 none。
-            string rq1Metric = "none";
-            double rq1MetricDuration = 0.0;
-            if (rq1Selector != null)
-            {
-                rq1Metric = rq1Selector.CurrentMetric.ToLogString();
-                rq1MetricDuration = rq1Selector.CurrentMetricDuration;
-            }
-
-            // 获取 RQ2 试次上下文（如果有）；未绑定或未开始试次时使用显式空闲值。
-            string rq2Condition = "none";
-            int rq2TrialId = -1;
-            float rq2TargetLinearSpeed = float.NaN;
-            float rq2TargetAngularSpeed = float.NaN;
-            if (rq2Selector != null)
-            {
-                rq2Condition = rq2Selector.CurrentCondition.ToLogString();
-                rq2TrialId = rq2Selector.CurrentTrialId;
-                rq2TargetLinearSpeed = rq2Selector.TargetLinearSpeedMs;
-                rq2TargetAngularSpeed = rq2Selector.TargetAngularSpeedDegS;
-            }
-
             long sourceFrameId = BuildSnapshots();
-            _outputLog.Write(EvalJson.BuildOutputLine(
-                monoMs, unixMs, UnityEngine.Time.frameCount, sourceFrameId,
-                headPose, gtSample,
-                gtLinear, gtAngular, _snapshots,
-                rq1Metric, rq1MetricDuration,
-                rq2Condition, rq2TrialId,
-                rq2TargetLinearSpeed, rq2TargetAngularSpeed));
+            for (int i = 0; i < _snapshots.Count; i++)
+            {
+                _renderLog.Write(EvalJson.BuildRenderLine(
+                    monoMs, unixMs, UnityEngine.Time.frameCount,
+                    headPose, gtSample, gtLinear, gtAngular,
+                    _snapshots[i], _sessionId));
+            }
         }
 
         // ── 内部辅助 ──
@@ -625,11 +687,89 @@ namespace EgoAnchor.Eval
                     rt != null ? rt.LatestArrivalTimeRawUnityFrame   : -1,
                     rt != null ? rt.LatestArrivalTimeCameraReference.ToString() : string.Empty,
                     rt != null ? rt.LatestReliabilityScore           : 0f));
+
             }
 
             if (!hasPrimary && _snapshots.Count > 0)
                 primary = _snapshots[0].SourceFrameId;
             return primary;
+        }
+
+        /// <summary>把 runtime 实际处理结果写成 candidate × variant admission 长表行。</summary>
+        private void RecordAdmission(
+            PoseToAnchorRuntime runtime,
+            PoseResult result,
+            PoseToAnchorRuntime.AcceptResult acceptResult)
+        {
+            if (!_recording || _admissionLog == null || runtime == null || result?.Header == null)
+                return;
+
+            long frameId = result.Header.FrameId;
+            string candidateId = BuildCandidateId(frameId);
+            for (int i = 0; i < variants.Count; i++)
+            {
+                EvalVariant variant = variants[i];
+                if (variant.runtime != runtime)
+                    continue;
+
+                string label = ResolveLabel(variant, i);
+                if (!_admissionKeys.Add($"{candidateId}:{label}"))
+                    continue;
+
+                Pose rawPose = Pose.identity;
+                bool hasRaw = acceptResult == PoseToAnchorRuntime.AcceptResult.Aligned
+                    && runtime.TryGetRawPose(out rawPose);
+                Pose arrivalPose = Pose.identity;
+                bool hasArrival = runtime.TryGetArrivalTimeRawPose(out arrivalPose);
+                string decision = runtime.LatestPolicyAction;
+                if (string.IsNullOrEmpty(decision))
+                    decision = ToAdmissionDecision(acceptResult);
+                string reason = runtime.LatestPolicyReason;
+                if (string.IsNullOrEmpty(reason))
+                    reason = runtime.LatestFailure;
+
+                _admissionLog.Write(EvalJson.BuildAdmissionLine(new EvalAdmissionSnapshot(
+                    _sessionId,
+                    candidateId,
+                    frameId,
+                    label,
+                    label,
+                    runtime.LatestUnityPoseHandleMonoMs,
+                    runtime.UsesCaptureTimeAlignment ? WorldAlignmentMode.CaptureTime : WorldAlignmentMode.ArrivalTime,
+                    runtime.UsesCaptureTimeAlignment,
+                    hasRaw,
+                    hasRaw ? rawPose : Pose.identity,
+                    hasArrival,
+                    hasArrival ? arrivalPose : Pose.identity,
+                    runtime.QualityGateMode == "enabled",
+                    runtime.LatestReliabilityScore,
+                    decision,
+                    reason,
+                    runtime.CurrentAnchorState.ToString(),
+                    ResolveCachedConfigHash(variant, label))));
+            }
+        }
+
+        private static string ToAdmissionDecision(PoseToAnchorRuntime.AcceptResult result)
+        {
+            switch (result)
+            {
+                case PoseToAnchorRuntime.AcceptResult.Aligned: return "aligned";
+                case PoseToAnchorRuntime.AcceptResult.NoPose: return "no_pose";
+                case PoseToAnchorRuntime.AcceptResult.InvalidMatrix: return "invalid_matrix";
+                default: return "align_failed";
+            }
+        }
+
+        /// <summary>构造与 Python candidate 行可配对的 Unity candidate 标识。</summary>
+        private string BuildCandidateId(long frameId)
+        {
+            if (!_candidateSequencesByFrame.TryGetValue(frameId, out int sequence))
+            {
+                sequence = ++_nextCandidateSequence;
+                _candidateSequencesByFrame[frameId] = sequence;
+            }
+            return $"{_sessionId}:{frameId}:{sequence}";
         }
 
         private static string ResolveLabel(EvalVariant v, int index)
@@ -679,7 +819,18 @@ namespace EgoAnchor.Eval
             string smoothing      = policy != null ? policy.SmoothingStrategyName : (rt != null ? rt.SmoothingStrategyName : string.Empty);
             string qualityGate    = rt != null ? rt.QualityGateMode : string.Empty;
             string hash           = ComputeHash(label, motionModel, smoothing, qualityGate);
-            return new EvalVariantConfig(label, motionModel, smoothing, qualityGate, hash);
+            return new EvalVariantConfig(
+                label,
+                motionModel,
+                smoothing,
+                qualityGate,
+                hash,
+                rt != null ? rt.WorldAlignmentModeName : string.Empty,
+                rt != null && rt.UsesCaptureTimeAlignment,
+                qualityGate == "enabled",
+                smoothing.IndexOf("Delayed", StringComparison.OrdinalIgnoreCase) >= 0
+                    || smoothing.IndexOf("Hermite", StringComparison.OrdinalIgnoreCase) >= 0,
+                policy != null && policy.LatestStaticLocked);
         }
 
         /// <summary>FNV-1a 配置摘要，确保相同配置产生相同 hash。</summary>
@@ -699,7 +850,7 @@ namespace EgoAnchor.Eval
         /// <summary>
         /// 解析当前参考 pose，并按场景配置应用动态 fresh-only 或静止 keep-alive。
         /// <para>
-        /// OVR 明确跟踪时更新新鲜样本；RQ2 丢跟后立即无效，RQ1 可在配置窗口内复用静止 pose。
+        /// OVR 明确跟踪时更新新鲜样本；fresh-only 丢跟后立即无效，keep-alive 模式可短时复用静止 pose。
         /// </para>
         /// </summary>
         private EvalReferencePose ResolveGtPose(double nowMonoMs)

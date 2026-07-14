@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using EgoAnchor.Alignment;
 using EgoAnchor.Eval;
-using EgoAnchor.Eval.RQ2;
 using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Runtime;
@@ -201,16 +200,15 @@ namespace EgoAnchor.Tests
                 Assert.That(snapshots[0].DisplayPose.position, Is.EqualTo(expected.position));
                 Assert.That(Quaternion.Angle(snapshots[0].DisplayPose.rotation, expected.rotation), Is.LessThan(1e-4f));
 
-                string json = EvalJson.BuildOutputLine(
+                string json = EvalJson.BuildRenderLine(
                     renderMonoMs: 2000.0,
                     renderUnixMs: 3000.0,
                     renderUnityFrame: 20,
-                    sourceFrameId: 42,
                     headPose: Pose.identity,
-                    gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
-                    gtLinearSpeedMs: 0f,
-                    gtAngularSpeedDegS: 0f,
-                    variants: snapshots);
+                    referencePose: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
+                    referenceLinearSpeedMs: 0f,
+                    referenceAngularSpeedDegS: 0f,
+                    variant: snapshots[0]);
                 StringAssert.Contains("\"output_pos\":[1,1,1]", json);
                 StringAssert.Contains("\"display_pos\":[4,5,6]", json);
             }
@@ -320,16 +318,15 @@ namespace EgoAnchor.Tests
                 policyOutputTargetMonoMs: double.NaN,
                 smoothingDelayMs: double.NaN);
 
-            string json = EvalJson.BuildOutputLine(
+            string json = EvalJson.BuildRenderLine(
                 renderMonoMs: 2000.0,
                 renderUnixMs: 3000.0,
                 renderUnityFrame: 20,
-                sourceFrameId: 42,
                 headPose: Pose.identity,
-                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
-                gtLinearSpeedMs: 0f,
-                gtAngularSpeedDegS: 0f,
-                variants: new[] { snapshot });
+                referencePose: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
+                referenceLinearSpeedMs: 0f,
+                referenceAngularSpeedDegS: 0f,
+                variant: snapshot);
 
             StringAssert.Contains("\"policy_output_target_mono_ms\":null", json);
             StringAssert.Contains("\"smoothing_delay_ms\":null", json);
@@ -386,16 +383,15 @@ namespace EgoAnchor.Tests
         {
             EvalVariantSnapshot snapshot = CreateTimingSnapshot();
 
-            string json = EvalJson.BuildOutputLine(
+            string json = EvalJson.BuildRenderLine(
                 renderMonoMs: 2000.0,
                 renderUnixMs: 3000.0,
                 renderUnityFrame: 20,
-                sourceFrameId: 42,
                 headPose: Pose.identity,
-                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
-                gtLinearSpeedMs: 0f,
-                gtAngularSpeedDegS: 0f,
-                variants: new[] { snapshot });
+                referencePose: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
+                referenceLinearSpeedMs: 0f,
+                referenceAngularSpeedDegS: 0f,
+                variant: snapshot);
 
             StringAssert.Contains("\"observation_age_ms\":120", json);
             StringAssert.Contains("\"policy_output_target_mono_ms\":1880", json);
@@ -409,7 +405,7 @@ namespace EgoAnchor.Tests
         [Test]
         public void EvalJsonWritesCaptureTimingBasisAndPublishAttempt()
         {
-            string json = EvalJson.BuildCaptureLine(
+            string json = EvalJson.BuildReferenceLine(
                 frameId: 42,
                 captureMonoMs: 1000.0,
                 captureUnixMs: 3000.0,
@@ -430,9 +426,9 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"image_time_offset_frames\":1", json);
             StringAssert.Contains("\"publish_attempt_mono_ms\":1040", json);
             StringAssert.Contains("\"publish_succeeded\":true", json);
-            StringAssert.Contains("\"gt_pose_fresh\":true", json);
-            StringAssert.Contains("\"gt_pose_keep_alive\":false", json);
-            StringAssert.Contains("\"gt_pose_fresh_age_ms\":0", json);
+            StringAssert.Contains("\"reference_pose_fresh\":true", json);
+            StringAssert.Contains("\"reference_pose_keep_alive\":false", json);
+            StringAssert.Contains("\"reference_pose_fresh_age_ms\":0", json);
         }
 
         /// <summary>动态模式必须在丢跟时立即判参考无效，静止模式仍可在窗口内复用最后新鲜 pose。</summary>
@@ -504,165 +500,6 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
-        /// RQ2 场景必须使用稳定的 snake_case 日志值，供 Python 分组时直接读取。
-        /// </summary>
-        [Test]
-        public void RQ2EnumsUseStableLogStrings()
-        {
-            Assert.That(RQ2Condition.Translation.ToLogString(), Is.EqualTo("translation"));
-            Assert.That(RQ2Condition.Rotation.ToLogString(), Is.EqualTo("rotation"));
-            Assert.That(RQ2Condition.None.ToLogString(), Is.EqualTo("none"));
-        }
-
-        /// <summary>
-        /// selector 只维护试次上下文：按键开始后立即有效，编号在 session 内递增，结束后回到空闲态。
-        /// </summary>
-        [Test]
-        public void RQ2TrialSelectorMaintainsTrialContext()
-        {
-            GameObject go = new GameObject("RQ2TrialSelectorTests");
-            try
-            {
-                RQ2TrialSelector selector = go.AddComponent<RQ2TrialSelector>();
-                EvalSession session = go.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                selector.BindSession(session);
-
-                selector.StartTrial(RQ2Condition.Translation, 0.15f, float.NaN);
-                Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.Translation));
-                Assert.That(selector.TargetLinearSpeedMs, Is.EqualTo(0.15f));
-                Assert.That(selector.TargetAngularSpeedDegS, Is.NaN);
-
-                selector.StartTrial(RQ2Condition.Rotation, float.NaN, 90f);
-                Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.Translation));
-                selector.EndTrial();
-
-                Assert.That(selector.CurrentTrialId, Is.EqualTo(-1));
-                Assert.That(selector.CurrentCondition, Is.EqualTo(RQ2Condition.None));
-                Assert.That(selector.TargetLinearSpeedMs, Is.NaN);
-                Assert.That(selector.TargetAngularSpeedDegS, Is.NaN);
-
-                selector.StartTrial(RQ2Condition.Rotation, float.NaN, 90f);
-                Assert.That(selector.CurrentTrialId, Is.EqualTo(2));
-                Assert.That(selector.TargetLinearSpeedMs, Is.NaN);
-                Assert.That(selector.TargetAngularSpeedDegS, Is.EqualTo(90f));
-
-                selector.ResetSession();
-                selector.StartTrial(RQ2Condition.Translation, 0.10f, float.NaN);
-                Assert.That(selector.CurrentTrialId, Is.EqualTo(1));
-                Assert.That(selector.TargetLinearSpeedMs, Is.EqualTo(0.10f));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        /// <summary>RQ2 直接试次流程不得继续暴露阶段枚举、阶段推进方法或空格输入动作。</summary>
-        [Test]
-        public void RQ2DirectTrialFlowRemovesPhaseApi()
-        {
-            Assert.That(
-                typeof(RQ2TrialSelector).Assembly.GetType("EgoAnchor.Eval.RQ2.RQ2TrialPhase"),
-                Is.Null);
-            Assert.That(
-                typeof(RQ2TrialSelector).GetProperty("CurrentPhase"),
-                Is.Null);
-            Assert.That(
-                typeof(RQ2TrialSelector).GetMethod("AdvancePhase"),
-                Is.Null);
-            Assert.That(
-                typeof(RQ2InputHandler).GetField(
-                    "advancePhaseAction",
-                    BindingFlags.Instance | BindingFlags.NonPublic),
-                Is.Null);
-        }
-
-        /// <summary>
-        /// RQ2 状态面板空闲时不能残留任何场景快捷键高亮。
-        /// </summary>
-        [Test]
-        public void RQ2StatusUiLeavesTrialShortcutsUnhighlightedWhenIdle()
-        {
-            string idleBindings = InvokePrivateStaticMethod<string>(
-                typeof(RQ2StatusUI), "BuildKeyBindingsText", RQ2Condition.None);
-            StringAssert.DoesNotContain("<color=#FFD700>", idleBindings);
-            StringAssert.DoesNotContain("Space", idleBindings);
-            StringAssert.DoesNotContain("Phase", idleBindings);
-            StringAssert.Contains("[0] End Trial", idleBindings);
-        }
-
-        /// <summary>RQ2 活动场景必须只高亮对应快捷键行。</summary>
-        [TestCase(
-            RQ2Condition.Translation,
-            "<color=#FFD700><b>[1]  Translation  ◀</b></color>")]
-        [TestCase(
-            RQ2Condition.Rotation,
-            "<color=#FFD700><b>[2]  Rotation  ◀</b></color>")]
-        public void RQ2StatusUiHighlightsOnlyActiveTrialShortcut(
-            RQ2Condition active,
-            string expectedRow)
-        {
-            string activeBindings = InvokePrivateStaticMethod<string>(
-                typeof(RQ2StatusUI), "BuildKeyBindingsText", active);
-            StringAssert.Contains(expectedRow, activeBindings);
-            int highlightCount = activeBindings
-                .Split(new[] { "<color=#FFD700>" }, StringSplitOptions.None)
-                .Length - 1;
-            Assert.That(highlightCount, Is.EqualTo(1));
-        }
-
-        /// <summary>公共录制状态与 RQ2 活动试次文本必须使用统一视觉标记。</summary>
-        [Test]
-        public void RQ2StatusUiUsesSharedRecordingAndTrialMarkers()
-        {
-            Assert.That(
-                EvalStatusText.Recording(true),
-                Is.EqualTo("● Recording"));
-            Assert.That(
-                EvalStatusText.Recording(false),
-                Is.EqualTo("○ Not Recording"));
-            Assert.That(
-                InvokePrivateStaticMethod<string>(
-                    typeof(RQ2StatusUI), "BuildTrialText", -1, RQ2Condition.None),
-                Is.EqualTo("Trial: Idle"));
-            Assert.That(
-                InvokePrivateStaticMethod<string>(
-                    typeof(RQ2StatusUI), "BuildTrialText", 1, RQ2Condition.Translation),
-                Is.EqualTo("Trial 1: Translation (Key 1)"));
-        }
-
-        /// <summary>
-        /// output JSON 顶层必须逐帧保存 RQ2 试次上下文，不再写入已删除的阶段字段。
-        /// </summary>
-        [Test]
-        public void EvalJsonWritesRQ2TrialContext()
-        {
-            string json = EvalJson.BuildOutputLine(
-                renderMonoMs: 2000.0,
-                renderUnixMs: 3000.0,
-                renderUnityFrame: 20,
-                sourceFrameId: 42,
-                headPose: Pose.identity,
-                gtSample: new EvalReferencePose(false, false, false, Pose.identity, double.NaN),
-                gtLinearSpeedMs: 0f,
-                gtAngularSpeedDegS: 0f,
-                variants: Array.Empty<EvalVariantSnapshot>(),
-                rq2Condition: "rotation",
-                rq2TrialId: 7,
-                rq2TargetLinearSpeedMs: float.NaN,
-                rq2TargetAngularSpeedDegS: 90f);
-
-            StringAssert.Contains("\"rq2_condition\":\"rotation\"", json);
-            StringAssert.Contains("\"rq2_trial_id\":7", json);
-            StringAssert.DoesNotContain("\"rq2_phase\"", json);
-            StringAssert.Contains("\"rq2_target_linear_speed_m_s\":null", json);
-            StringAssert.Contains("\"rq2_target_angular_speed_deg_s\":90", json);
-        }
-
-        /// <summary>
         /// manifest 配置必须取会话开始时快照；停止后 runtime 被销毁也不能把配置摘要写成空字符串。
         /// </summary>
         [Test]
@@ -696,7 +533,9 @@ namespace EgoAnchor.Tests
                     },
                 });
 
-                recorder.BeginRecording(capturePath, outputPath);
+                string admissionPath = Path.Combine(directory, "unity_admission.jsonl");
+                string eventsPath = Path.Combine(directory, "events.jsonl");
+                recorder.BeginRecording(capturePath, admissionPath, outputPath, eventsPath);
                 UnityEngine.Object.DestroyImmediate(runtimeGo);
                 recorder.StopRecording();
 
@@ -728,8 +567,8 @@ namespace EgoAnchor.Tests
             string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_session_{Guid.NewGuid():N}");
             const string sessionId = "20260711_120000_controller_right";
             string sessionDir = Path.Combine(root, sessionId);
-            string capturePath = Path.Combine(sessionDir, $"{sessionId}_unity_capture.jsonl");
-            string outputPath = Path.Combine(sessionDir, $"{sessionId}_unity_output.jsonl");
+            string capturePath = Path.Combine(sessionDir, "unity_reference.jsonl");
+            string outputPath = Path.Combine(sessionDir, "unity_render.jsonl");
             Directory.CreateDirectory(sessionDir);
             File.WriteAllText(capturePath, "capture-existing");
             File.WriteAllText(outputPath, "output-existing");
@@ -762,17 +601,16 @@ namespace EgoAnchor.Tests
         public void EvalManifestWritesLogQueueStats()
         {
             string json = EvalJson.BuildManifest(
-                "session", "object", "editor", "python.jsonl",
+                "session", "object", "editor",
                 Array.Empty<string>(), Array.Empty<EvalVariantConfig>(), string.Empty,
-                captureDroppedRows: 2,
-                capturePeakQueueDepth: 8,
-                outputDroppedRows: 3,
-                outputPeakQueueDepth: 16);
+                referenceStats: new EvalLogStats(2, 8, null),
+                admissionStats: new EvalLogStats(1, 4, null),
+                renderStats: new EvalLogStats(3, 16, null),
+                eventsStats: new EvalLogStats(0, 2, null));
 
-            StringAssert.Contains("\"capture_dropped_rows\":2", json);
-            StringAssert.Contains("\"capture_peak_queue_depth\":8", json);
-            StringAssert.Contains("\"output_dropped_rows\":3", json);
-            StringAssert.Contains("\"output_peak_queue_depth\":16", json);
+            StringAssert.Contains("\"unity_reference.jsonl\":{\"dropped_rows\":2,\"peak_queue_depth\":8}", json);
+            StringAssert.Contains("\"unity_admission.jsonl\":{\"dropped_rows\":1,\"peak_queue_depth\":4}", json);
+            StringAssert.Contains("\"unity_render.jsonl\":{\"dropped_rows\":3,\"peak_queue_depth\":16}", json);
         }
 
         /// <summary>
@@ -1014,14 +852,6 @@ namespace EgoAnchor.Tests
             FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, $"missing field {fieldName}");
             return (T)field.GetValue(instance);
-        }
-
-        /// <summary>反射调用私有静态格式化方法，避免为测试扩大运行时 API。</summary>
-        private static T InvokePrivateStaticMethod<T>(Type type, string methodName, params object[] arguments)
-        {
-            MethodInfo method = type.GetMethod(methodName, BindingFlags.Static | BindingFlags.NonPublic);
-            Assert.That(method, Is.Not.Null, $"missing method {methodName}");
-            return (T)method.Invoke(null, arguments);
         }
 
         /// <summary>反射调用评估快照构建，避免为测试扩大生产 API。</summary>

@@ -34,6 +34,9 @@ namespace EgoAnchor.Runtime
             AlignFailed,
         }
 
+        /// <summary>一条 PoseResult 在当前 runtime 中完成 admission 处理后的通知。</summary>
+        public event Action<PoseToAnchorRuntime, PoseResult, AcceptResult> AdmissionProcessed;
+
         /// <summary>frame_id -> image-time proxy 多参考 camera world pose 缓存。</summary>
         [Header("Frame Alignment")]
         [Tooltip("frame_id -> image-time proxy left/right/center camera world pose 缓存。必须与 StereoFrameSource/QuestStreamPublisher 使用同一个实例。")]
@@ -282,7 +285,7 @@ namespace EgoAnchor.Runtime
                 SetFailure("paused");
                 latestPolicyAction = "paused";
                 latestPolicyReason = "pose_ignored_while_paused";
-                return AcceptResult.NoPose;
+                return NotifyAdmission(result, AcceptResult.NoPose);
             }
 
             if (!result.HasPose)
@@ -291,7 +294,7 @@ namespace EgoAnchor.Runtime
                 string reason = string.IsNullOrEmpty(result.LastError?.Code) ? "no_pose" : result.LastError.Code;
                 SetFailure(reason);
                 NotifyMissingPose(result.Header.FrameId, FailureSampleTime(), reason, latestPhase);
-                return AcceptResult.NoPose;
+                return NotifyAdmission(result, AcceptResult.NoPose);
             }
 
             if (!HasFinitePoseMatrix(result))
@@ -299,7 +302,7 @@ namespace EgoAnchor.Runtime
                 hasArrivalTimeRawPose = false;
                 SetFailure("invalid_matrix");
                 NotifyAlignFailure(result.Header.FrameId, FailureSampleTime(), "invalid_matrix", latestPhase);
-                return AcceptResult.InvalidMatrix;
+                return NotifyAdmission(result, AcceptResult.InvalidMatrix);
             }
 
             double now = Time.realtimeSinceStartupAsDouble;
@@ -324,7 +327,7 @@ namespace EgoAnchor.Runtime
                 string reason = $"align_failed_frame_{result.Header.FrameId}";
                 SetFailure(reason);
                 NotifyAlignFailure(result.Header.FrameId, now, reason, latestPhase);
-                return AcceptResult.AlignFailed;
+                return NotifyAdmission(result, AcceptResult.AlignFailed);
             }
 
             double measurementTime = worldAlignmentMode == WorldAlignmentMode.CaptureTime
@@ -332,7 +335,21 @@ namespace EgoAnchor.Runtime
                 : now;
             AcceptWorldPose(result.Header.FrameId, worldPose, result, now, measurementTime);
             latestFailure = string.Empty;
-            return AcceptResult.Aligned;
+            return NotifyAdmission(result, AcceptResult.Aligned);
+        }
+
+        /// <summary>发布 admission 结果；评估订阅者异常不得阻断实时 pose 处理。</summary>
+        private AcceptResult NotifyAdmission(PoseResult result, AcceptResult acceptResult)
+        {
+            try
+            {
+                AdmissionProcessed?.Invoke(this, result, acceptResult);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"admission 记录回调失败：{ex.Message}", this);
+            }
+            return acceptResult;
         }
 
         /// <summary>尝试获取当前 raw anchor pose，不经过任何 policy 输出整形。</summary>

@@ -8,14 +8,14 @@ namespace EgoAnchor.Eval
 {
     /// <summary>
     /// 评估 JSONL 单行构建工具；只做字符串拼接，不依赖 JsonUtility。
-    /// 输出字段名与 Python eval/io/schemas.py 保持一致，不得擅自更改。
+    /// 输出字段名与 Python schema-v2 契约保持一致，不得擅自更改。
     /// </summary>
     public static class EvalJson
     {
         // ─────────────── 公共构建入口 ───────────────
 
         /// <summary>
-        /// 构建每个 frame_id 采集瞬间的 unity_capture 行。
+        /// 构建每个 frame_id 采集瞬间的 unity_reference 行。
         /// </summary>
         /// <param name="frameId">协议帧号。</param>
         /// <param name="captureMonoMs">图像时间代理对应的 Unity 单调时钟毫秒。</param>
@@ -33,7 +33,7 @@ namespace EgoAnchor.Eval
         /// <param name="gtSample">回调实际采样的参考 world pose 及其新鲜度诊断。</param>
         /// <param name="cameraReference">参考相机名称。</param>
         /// <returns>可写入 JSONL 的单行 JSON。</returns>
-        public static string BuildCaptureLine(
+        public static string BuildReferenceLine(
             long frameId,
             double captureMonoMs,
             double captureUnixMs,
@@ -48,10 +48,13 @@ namespace EgoAnchor.Eval
             bool cameraValid,
             Pose cameraPose,
             EvalReferencePose gtSample,
-            string cameraReference)
+            string cameraReference,
+            string sessionId = "")
         {
             var b = new Builder(512);
-            b.Str("event", "unity_capture");
+            b.Long("schema_version", 2);
+            b.Str("event", "unity_reference");
+            b.Str("session_id", sessionId);
             b.Long("frame_id", frameId);
             b.Dbl("capture_mono_ms", captureMonoMs);
             b.Dbl("capture_unix_ms", captureUnixMs);
@@ -59,7 +62,7 @@ namespace EgoAnchor.Eval
             b.Long("capture_unity_frame", captureUnityFrame);
             b.Dbl("sender_mono_ms", senderMonoMs);
             b.Long("sender_unity_frame", senderUnityFrame);
-            b.Dbl("gt_sample_mono_ms", gtSampleMonoMs);
+            b.Dbl("reference_sample_mono_ms", gtSampleMonoMs);
             b.Str("image_time_basis", "camera_pose_history_proxy");
             b.Long("image_time_offset_frames", imageTimeOffsetFrames);
             b.Dbl("publish_attempt_mono_ms", publishAttemptMonoMs);
@@ -72,87 +75,146 @@ namespace EgoAnchor.Eval
             return b.Finish();
         }
 
-        /// <summary>
-        /// 构建每个渲染 tick 的 unity_output 行。
-        /// </summary>
-        /// <param name="renderMonoMs">渲染 tick 的 Unity 单调时钟毫秒。</param>
-        /// <param name="renderUnixMs">渲染 tick 的 Unix 时钟毫秒。</param>
-        /// <param name="renderUnityFrame">渲染 tick 的 Unity 帧号。</param>
-        /// <param name="sourceFrameId">主变体当前输出对应的源帧号。</param>
-        /// <param name="headPose">渲染时刻的头部 world pose。</param>
-        /// <param name="gtSample">渲染时刻的平台参考 world pose 及其新鲜度诊断。</param>
-        /// <param name="gtLinearSpeedMs">平台参考 pose 的线速度，单位 m/s。</param>
-        /// <param name="gtAngularSpeedDegS">平台参考 pose 的角速度，单位 deg/s。</param>
-        /// <param name="variants">同一渲染 tick 的系统变体快照。</param>
-        /// <param name="rq1Metric">可选的 RQ1 场景标签。</param>
-        /// <param name="rq1MetricDuration">RQ1 场景标签持续时间，单位秒。</param>
-        /// <param name="rq2Condition">可选的 RQ2 运动场景标签。</param>
-        /// <param name="rq2TrialId">RQ2 session 内试次编号；空闲时为 -1。</param>
-        /// <param name="rq2TargetLinearSpeedMs">RQ2 目标线速度，单位 m/s；不适用时为 NaN。</param>
-        /// <param name="rq2TargetAngularSpeedDegS">RQ2 目标角速度，单位 deg/s；不适用时为 NaN。</param>
-        /// <returns>可写入 JSONL 的单行 JSON。</returns>
-        public static string BuildOutputLine(
+
+        /// <summary>构建一条 candidate × variant 的 unity_admission 长表行。</summary>
+        public static string BuildAdmissionLine(EvalAdmissionSnapshot snapshot)
+        {
+            var b = new Builder(1024);
+            b.Long("schema_version", 2);
+            b.Str("event", "unity_admission");
+            b.Str("session_id", snapshot.SessionId);
+            b.Str("candidate_id", snapshot.CandidateId);
+            b.Long("frame_id", snapshot.FrameId);
+            b.Str("variant_id", snapshot.VariantId);
+            b.Str("variant_label", snapshot.VariantLabel);
+            b.Dbl("unity_pose_handle_mono_ms", snapshot.PoseHandleMonoMs);
+            b.Str("world_alignment_mode", snapshot.AlignmentMode.ToString());
+            b.Bool("uses_capture_time_alignment", snapshot.UsesCaptureTimeAlignment);
+            b.Bool("has_aligned_raw", snapshot.HasAlignedRaw);
+            b.Pose("aligned_raw_pos", "aligned_raw_rot", snapshot.AlignedRawPose, snapshot.HasAlignedRaw);
+            b.Bool("has_arrival_time_raw", snapshot.HasArrivalTimeRaw);
+            b.Pose("arrival_time_raw_pos", "arrival_time_raw_rot", snapshot.ArrivalTimeRawPose, snapshot.HasArrivalTimeRaw);
+            b.Bool("uses_vcd_admission", snapshot.UsesVcdAdmission);
+            b.Flt("vcd_score", snapshot.VcdScore);
+            b.Str("admission_decision", snapshot.AdmissionDecision);
+            b.Str("policy_reason", snapshot.PolicyReason);
+            b.Str("anchor_state", snapshot.AnchorState);
+            b.Str("config_hash", snapshot.ConfigHash);
+            return b.Finish();
+        }
+
+        /// <summary>构建一条 session/runtime 边界事件行。</summary>
+        public static string BuildEventLine(
+            string sessionId,
+            string eventType,
+            string source,
+            string message,
+            double monoMs,
+            int unityFrame)
+        {
+            var b = new Builder(256);
+            b.Long("schema_version", 2);
+            b.Str("event", eventType);
+            b.Str("session_id", sessionId);
+            b.Str("event_type", eventType);
+            b.Str("source", source);
+            b.Dbl("mono_ms", monoMs);
+            b.Long("unity_frame", unityFrame);
+            b.Str("message", message);
+            return b.Finish();
+        }
+
+        /// <summary>构建一条单变体 unity_render 长表行，不嵌套 variants 数组。</summary>
+        public static string BuildRenderLine(
             double renderMonoMs,
             double renderUnixMs,
             int renderUnityFrame,
-            long sourceFrameId,
             Pose headPose,
-            EvalReferencePose gtSample,
-            float gtLinearSpeedMs,
-            float gtAngularSpeedDegS,
-            IReadOnlyList<EvalVariantSnapshot> variants,
-            string rq1Metric = null,
-            double rq1MetricDuration = 0.0,
-            string rq2Condition = null,
-            long rq2TrialId = -1,
-            float rq2TargetLinearSpeedMs = float.NaN,
-            float rq2TargetAngularSpeedDegS = float.NaN)
+            EvalReferencePose referencePose,
+            float referenceLinearSpeedMs,
+            float referenceAngularSpeedDegS,
+            EvalVariantSnapshot variant,
+            string sessionId = "")
         {
             var b = new Builder(1024);
-            b.Str("event", "unity_output");
+            b.Long("schema_version", 2);
+            b.Str("event", "unity_render");
+            b.Str("session_id", sessionId);
+            b.Long("render_tick_id", renderUnityFrame);
             b.Dbl("render_mono_ms", renderMonoMs);
             b.Dbl("render_unix_ms", renderUnixMs);
             b.TimeStr("render", renderUnixMs);
             b.Long("render_unity_frame", renderUnityFrame);
-            b.Long("source_frame_id", sourceFrameId);
+            b.Str("variant_id", variant.Label);
+            b.Str("variant_label", variant.Label);
+            b.Long("source_frame_id", variant.SourceFrameId);
             b.Pose("head_pos", "head_rot", headPose, true);
-            b.ReferencePose(gtSample);
-            b.Flt("gt_linear_speed_m_s", gtLinearSpeedMs);
-            b.Flt("gt_angular_speed_deg_s", gtAngularSpeedDegS);
-            // RQ1 手动标记字段（可选）
-            b.Str("rq1_metric", rq1Metric ?? "none");
-            b.Dbl("rq1_metric_duration", rq1MetricDuration);
-            // RQ2 试次上下文字段（可选）
-            b.Str("rq2_condition", rq2Condition ?? "none");
-            b.Long("rq2_trial_id", rq2TrialId);
-            b.Flt("rq2_target_linear_speed_m_s", rq2TargetLinearSpeedMs);
-            b.Flt("rq2_target_angular_speed_deg_s", rq2TargetAngularSpeedDegS);
-            b.Variants(variants);
+            b.ReferencePose(referencePose);
+            b.Flt("reference_linear_speed_m_s", referenceLinearSpeedMs);
+            b.Flt("reference_angular_speed_deg_s", referenceAngularSpeedDegS);
+            AppendVariantFields(ref b, variant);
             return b.Finish();
         }
 
+        private static void AppendVariantFields(ref Builder b, EvalVariantSnapshot v)
+        {
+            b.Bool("has_output_pose", v.HasRuntimeOutput);
+            b.Pose("output_pos", "output_rot", v.RuntimeOutputPose, v.HasRuntimeOutput);
+            b.Bool("has_display_pose", v.HasDisplayPose);
+            b.Pose("display_pos", "display_rot", v.DisplayPose, v.HasDisplayPose);
+            b.Str("anchor_pose_source", v.AnchorPoseSource);
+            b.Bool("has_source_capture_timing", v.HasSourceCaptureTiming);
+            b.Dbl("source_capture_mono_ms", v.HasSourceCaptureTiming ? v.SourceCaptureMonoMs : double.NaN);
+            b.Long("source_capture_unity_frame", v.HasSourceCaptureTiming ? v.SourceCaptureUnityFrame : -1);
+            b.Dbl("observation_age_ms", v.ObservationAgeMs);
+            b.Dbl("policy_output_target_mono_ms", v.PolicyOutputTargetMonoMs);
+            b.Dbl("smoothing_delay_ms", v.SmoothingDelayMs);
+            b.Dbl("unity_pose_handle_mono_ms", v.UnityPoseHandleMonoMs);
+            b.Str("anchor_state", v.AnchorState);
+            b.Str("policy_action", v.PolicyAction);
+            b.Str("policy_reason", v.PolicyReason);
+            b.Str("latest_phase", v.LatestPhase);
+            b.Str("latest_failure", v.LatestFailure);
+            b.Str("motion_state", v.MotionState);
+            b.Dbl("predict_ahead_ms", v.PredictAheadMs);
+            b.Str("strategy_label", v.StrategyLabel);
+            b.Str("quality_gate", v.QualityGate);
+            b.Str("motion_model", v.MotionModel);
+            b.Str("smoothing_strategy", v.SmoothingStrategy);
+            b.Str("config_hash", v.ConfigHash);
+            b.Flt("latest_residual_meters", v.ResidualMeters);
+            b.Flt("latest_residual_degrees", v.ResidualDegrees);
+            b.Flt("latest_accepted_score", v.AcceptedScore);
+            b.Bool("latest_static_locked", v.StaticLocked);
+        }
+
         /// <summary>
-        /// 构建 session_manifest.json 内容。
+        /// 构建 schema-v2 manifest.json 内容。
         /// </summary>
         public static string BuildManifest(
             string sessionId,
             string objectId,
             string unityRunMode,
-            string pythonLogFilename,
             IReadOnlyList<string> variantLabels,
             IReadOnlyList<EvalVariantConfig> variantConfigs,
             string notes,
-            long captureDroppedRows,
-            int capturePeakQueueDepth,
-            long outputDroppedRows,
-            int outputPeakQueueDepth)
+            EvalLogStats referenceStats,
+            EvalLogStats admissionStats,
+            EvalLogStats renderStats,
+            EvalLogStats eventsStats)
         {
             var sb = new StringBuilder(512);
             sb.Append('{');
+            sb.Append("\"schema_version\":2,");
             sb.Append($"\"session_id\":{JStr(sessionId)},");
             sb.Append($"\"object_id\":{JStr(objectId)},");
             sb.Append($"\"unity_run_mode\":{JStr(unityRunMode)},");
-            sb.Append($"\"python_log_filename\":{JStr(pythonLogFilename)},");
+            sb.Append("\"log_files\":{");
+            sb.Append($"\"python_candidates\":{JStr(EvalV2Manifest.PythonCandidatesFileName)},");
+            sb.Append($"\"unity_reference\":{JStr(EvalV2Manifest.UnityReferenceFileName)},");
+            sb.Append($"\"unity_admission\":{JStr(EvalV2Manifest.UnityAdmissionFileName)},");
+            sb.Append($"\"unity_render\":{JStr(EvalV2Manifest.UnityRenderFileName)},");
+            sb.Append($"\"events\":{JStr(EvalV2Manifest.EventsFileName)}}},");
             sb.Append($"\"notes\":{JStr(notes ?? string.Empty)},");
 
             // variant_labels 数组
@@ -186,19 +248,46 @@ namespace EgoAnchor.Eval
             }
             sb.Append("],");
 
-            // 后台日志队列统计
+            // 后台日志队列统计按固定文件名分组，供 Python QC 直接读取。
             sb.Append("\"log_writer_stats\":{");
-            sb.Append($"\"capture_dropped_rows\":{captureDroppedRows.ToString(CultureInfo.InvariantCulture)},");
-            sb.Append($"\"capture_peak_queue_depth\":{capturePeakQueueDepth.ToString(CultureInfo.InvariantCulture)},");
-            sb.Append($"\"output_dropped_rows\":{outputDroppedRows.ToString(CultureInfo.InvariantCulture)},");
-            sb.Append($"\"output_peak_queue_depth\":{outputPeakQueueDepth.ToString(CultureInfo.InvariantCulture)}");
+            AppendLogStats(sb, EvalV2Manifest.PythonCandidatesFileName, new EvalLogStats(0, 0, null), false);
+            AppendLogStats(sb, EvalV2Manifest.UnityReferenceFileName, referenceStats, true);
+            AppendLogStats(sb, EvalV2Manifest.UnityAdmissionFileName, admissionStats, true);
+            AppendLogStats(sb, EvalV2Manifest.UnityRenderFileName, renderStats, true);
+            AppendLogStats(sb, EvalV2Manifest.EventsFileName, eventsStats, true);
             sb.Append("},");
 
-            // condition_spans/event_markers 留空（RQ1 使用自动场景检测）
-            sb.Append("\"condition_spans\":[],");
-            sb.Append("\"event_markers\":[]");
+            sb.Append("\"experiment_ids\":[],\"variant_definitions\":[");
+            if (variantConfigs != null)
+            {
+                for (int i = 0; i < variantConfigs.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    EvalVariantConfig c = variantConfigs[i];
+                    sb.Append('{');
+                    sb.Append($"\"variant_id\":{JStr(c.Label)},");
+                    sb.Append($"\"variant_label\":{JStr(c.Label)},");
+                    sb.Append($"\"world_alignment_mode\":{JStr(c.WorldAlignmentMode)},");
+                    sb.Append($"\"uses_capture_time_alignment\":{(c.UsesCaptureTimeAlignment ? "true" : "false")},");
+                    sb.Append($"\"uses_vcd_admission\":{(c.UsesVcdAdmission ? "true" : "false")},");
+                    sb.Append($"\"uses_temporal_synthesis\":{(c.UsesTemporalSynthesis ? "true" : "false")},");
+                    sb.Append($"\"uses_static_lock\":{(c.UsesStaticLock ? "true" : "false")},");
+                    sb.Append($"\"config_hash\":{JStr(c.ConfigHash)}");
+                    sb.Append('}');
+                }
+            }
+            sb.Append("],\"trial_plan\":[]");
             sb.Append('}');
             return sb.ToString();
+        }
+
+        private static void AppendLogStats(StringBuilder sb, string name, EvalLogStats stats, bool prependComma)
+        {
+            if (prependComma) sb.Append(',');
+            sb.Append(JStr(name)).Append(":{");
+            sb.Append("\"dropped_rows\":").Append(stats.DroppedRows.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append("\"peak_queue_depth\":").Append(stats.PeakQueueDepth.ToString(CultureInfo.InvariantCulture));
+            sb.Append('}');
         }
 
         // ─────────────── 内部工具 ───────────────
@@ -323,76 +412,12 @@ namespace EgoAnchor.Eval
             /// <summary>写入平台参考位姿及其真实追踪、keep-alive 和样本年龄诊断。</summary>
             public void ReferencePose(EvalReferencePose sample)
             {
-                Pose("gt_pos", "gt_rot", sample.Pose, sample.Valid);
-                Bool("gt_pose_valid", sample.Valid);
-                Str("gt_pose_source", sample.Valid ? "transform" : "none");
-                Bool("gt_pose_fresh", sample.Fresh);
-                Bool("gt_pose_keep_alive", sample.KeepAlive);
-                Dbl("gt_pose_fresh_age_ms", sample.FreshAgeMs);
-            }
-
-            public void Variants(IReadOnlyList<EvalVariantSnapshot> variants)
-            {
-                Name("variants");
-                _sb.Append('[');
-                if (variants != null)
-                {
-                    for (int i = 0; i < variants.Count; i++)
-                    {
-                        if (i > 0) _sb.Append(',');
-                        AppendVariant(variants[i]);
-                    }
-                }
-                _sb.Append(']');
-            }
-
-            private void AppendVariant(EvalVariantSnapshot v)
-            {
-                // 用独立 Builder 构建 variant object，Finish() 返回完整 {...}
-                var vb = new Builder(512);
-                vb.Str("label", v.Label);
-                vb.Bool("is_primary", v.IsPrimary);
-                vb.Long("source_frame_id", v.SourceFrameId);
-                vb.Bool("has_output_pose", v.HasRuntimeOutput);
-                vb.Pose("output_pos", "output_rot", v.RuntimeOutputPose, v.HasRuntimeOutput);
-                vb.Bool("has_display_pose", v.HasDisplayPose);
-                vb.Pose("display_pos", "display_rot", v.DisplayPose, v.HasDisplayPose);
-                vb.Str("anchor_pose_source", v.AnchorPoseSource);
-                vb.Bool("has_source_capture_timing", v.HasSourceCaptureTiming);
-                vb.Dbl("source_capture_mono_ms", v.HasSourceCaptureTiming ? v.SourceCaptureMonoMs : double.NaN);
-                vb.Long("source_capture_unity_frame", v.HasSourceCaptureTiming ? v.SourceCaptureUnityFrame : -1);
-                vb.Dbl("observation_age_ms", v.ObservationAgeMs);
-                vb.Dbl("policy_output_target_mono_ms", v.PolicyOutputTargetMonoMs);
-                vb.Dbl("smoothing_delay_ms", v.SmoothingDelayMs);
-                vb.Dbl("unity_pose_handle_mono_ms", v.UnityPoseHandleMonoMs);
-                vb.Str("anchor_state", v.AnchorState);
-                vb.Str("policy_action", v.PolicyAction);
-                vb.Str("policy_reason", v.PolicyReason);
-                vb.Str("latest_phase", v.LatestPhase);
-                vb.Str("latest_failure", v.LatestFailure);
-                vb.Str("motion_state", v.MotionState);
-                vb.Dbl("predict_ahead_ms", v.PredictAheadMs);
-                vb.Str("strategy_label", v.StrategyLabel);
-                vb.Str("quality_gate", v.QualityGate);
-                vb.Str("motion_model", v.MotionModel);
-                vb.Str("smoothing_strategy", v.SmoothingStrategy);
-                vb.Str("config_hash", v.ConfigHash);
-                vb.Flt("latest_residual_meters", v.ResidualMeters);
-                vb.Flt("latest_residual_degrees", v.ResidualDegrees);
-                vb.Flt("latest_accepted_score", v.AcceptedScore);
-                vb.Bool("latest_static_locked", v.StaticLocked);
-                if (v.IsPrimary)
-                {
-                    vb.Bool("has_aligned_raw", v.HasAlignedRaw);
-                    vb.Pose("aligned_raw_pos", "aligned_raw_rot", v.AlignedRawPose, v.HasAlignedRaw);
-                    vb.Bool("has_arrival_time_raw", v.HasArrivalTimeRaw);
-                    vb.Pose("arrival_time_raw_pos", "arrival_time_raw_rot", v.ArrivalTimeRawPose, v.HasArrivalTimeRaw);
-                    vb.Dbl("arrival_time_raw_mono_ms", v.HasArrivalTimeRaw ? v.ArrivalTimeRawMonoMs : double.NaN);
-                    vb.Long("arrival_time_raw_unity_frame", v.HasArrivalTimeRaw ? v.ArrivalTimeRawUnityFrame : -1);
-                    vb.Str("arrival_time_camera_reference", v.ArrivalTimeCameraReference);
-                    vb.Flt("reliability_score", v.ReliabilityScore);
-                }
-                _sb.Append(vb.Finish()); // 产出完整 {...}
+                Pose("reference_pos", "reference_rot", sample.Pose, sample.Valid);
+                Bool("reference_pose_valid", sample.Valid);
+                Str("reference_pose_source", sample.Valid ? "transform" : "none");
+                Bool("reference_pose_fresh", sample.Fresh);
+                Bool("reference_pose_keep_alive", sample.KeepAlive);
+                Dbl("reference_pose_fresh_age_ms", sample.FreshAgeMs);
             }
 
             public string Finish()
@@ -563,14 +588,34 @@ namespace EgoAnchor.Eval
         public readonly string SmoothingStrategy;
         public readonly string QualityGate;
         public readonly string ConfigHash;
+        public readonly string WorldAlignmentMode;
+        public readonly bool UsesCaptureTimeAlignment;
+        public readonly bool UsesVcdAdmission;
+        public readonly bool UsesTemporalSynthesis;
+        public readonly bool UsesStaticLock;
 
-        public EvalVariantConfig(string label, string motionModel, string smoothingStrategy, string qualityGate, string configHash)
+        public EvalVariantConfig(
+            string label,
+            string motionModel,
+            string smoothingStrategy,
+            string qualityGate,
+            string configHash,
+            string worldAlignmentMode = "",
+            bool usesCaptureTimeAlignment = false,
+            bool usesVcdAdmission = false,
+            bool usesTemporalSynthesis = false,
+            bool usesStaticLock = false)
         {
             Label = label ?? string.Empty;
             MotionModel = motionModel ?? string.Empty;
             SmoothingStrategy = smoothingStrategy ?? string.Empty;
             QualityGate = qualityGate ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
+            WorldAlignmentMode = worldAlignmentMode ?? string.Empty;
+            UsesCaptureTimeAlignment = usesCaptureTimeAlignment;
+            UsesVcdAdmission = usesVcdAdmission;
+            UsesTemporalSynthesis = usesTemporalSynthesis;
+            UsesStaticLock = usesStaticLock;
         }
     }
 }

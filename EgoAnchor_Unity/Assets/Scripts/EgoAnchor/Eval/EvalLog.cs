@@ -8,7 +8,7 @@ using System.Threading;
 namespace EgoAnchor.Eval
 {
     /// <summary>一次评估日志写入器的最终队列统计。</summary>
-    internal readonly struct EvalLogStats
+    public readonly struct EvalLogStats
     {
         /// <summary>因有界队列已满或后台写入失败而丢弃的行数。</summary>
         public readonly long DroppedRows;
