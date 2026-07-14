@@ -47,6 +47,10 @@ namespace EgoAnchor.Runtime
         [Tooltip("camera-local 轴翻转和 camera/anchor/world 三路 pose 补偿的统一配置。")]
         [SerializeField] private AnchorPoseTransform poseTransform = AnchorPoseTransform.OpenCvToUnityDefault;
 
+        [Header("World Alignment")]
+        [Tooltip("Camera-space pose 复合到 Unity world 时使用的参考时刻。")]
+        [SerializeField] private WorldAlignmentMode worldAlignmentMode = WorldAlignmentMode.CaptureTime;
+
         /// <summary>Unity 侧 anchor policy 宿主。</summary>
         [Header("Anchor Policy")]
         [Tooltip("Unity 侧 anchor policy 宿主。持有 MotionModel + SmoothingStrategy 两个模块（可选内联质量评估门控），每渲染帧输出平滑 anchor pose。")]
@@ -139,6 +143,12 @@ namespace EgoAnchor.Runtime
 
         /// <summary>当前绑定的 Unity policy host，只用于 eval 配置摘要。</summary>
         public AnchorPolicyHost PolicyHost => policyHost;
+
+        /// <summary>当前 world alignment 变体名称。</summary>
+        public string WorldAlignmentModeName => worldAlignmentMode.ToString();
+
+        /// <summary>是否使用采集时刻相机姿态。</summary>
+        public bool UsesCaptureTimeAlignment => worldAlignmentMode == WorldAlignmentMode.CaptureTime;
 
         /// <summary>当前质量评估门控模式。</summary>
         public string QualityGateMode => policyHost != null ? policyHost.QualityGateMode : "";
@@ -299,7 +309,17 @@ namespace EgoAnchor.Runtime
             }
 
             CaptureArrivalTimeRaw(result, now);
-            if (aligner == null || !aligner.TryAlign(result, out Pose worldPose, out _))
+            Pose worldPose = default;
+            bool aligned;
+            if (worldAlignmentMode == WorldAlignmentMode.CaptureTime)
+            {
+                aligned = aligner != null && aligner.TryAlign(result, out worldPose, out _);
+            }
+            else
+            {
+                aligned = aligner != null && aligner.TryAlignWithLatestCameraPose(result, out worldPose, out _, out _);
+            }
+            if (!aligned)
             {
                 string reason = $"align_failed_frame_{result.Header.FrameId}";
                 SetFailure(reason);
@@ -307,7 +327,10 @@ namespace EgoAnchor.Runtime
                 return AcceptResult.AlignFailed;
             }
 
-            AcceptWorldPose(result.Header.FrameId, worldPose, result, now);
+            double measurementTime = worldAlignmentMode == WorldAlignmentMode.CaptureTime
+                ? ResolveCaptureTimeSeconds(result.Header.FrameId)
+                : now;
+            AcceptWorldPose(result.Header.FrameId, worldPose, result, now, measurementTime);
             latestFailure = string.Empty;
             return AcceptResult.Aligned;
         }
@@ -395,12 +418,22 @@ namespace EgoAnchor.Runtime
 
         private void AcceptWorldPose(long frameId, Pose worldPose, PoseResult sourceResult, double sampleTime)
         {
+            AcceptWorldPose(frameId, worldPose, sourceResult, sampleTime, ResolveCaptureTimeSeconds(frameId));
+        }
+
+        private void AcceptWorldPose(
+            long frameId,
+            Pose worldPose,
+            PoseResult sourceResult,
+            double sampleTime,
+            double captureTimeSeconds)
+        {
             bool hasHeadPose = TryResolveHeadPose(frameId, out Pose headPose);
             AnchorObservation observation = PoseResultPolicyMapper.FromAlignedPose(
                 frameId,
                 worldPose,
                 sampleTime,
-                ResolveCaptureTimeSeconds(frameId),
+                captureTimeSeconds,
                 sourceResult,
                 latestPhase,
                 hasHeadPose,
