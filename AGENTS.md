@@ -26,23 +26,23 @@
 
 ## IEEE VR 2027 论文路线
 
-权威实施计划：`2026-EgoAnchor/IEEEVR2027_RQ12_REFACTOR_PLAN.md`。后续论文、工程、采集和分析都以该计划为准。
+当前中文主稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_v6.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
 
-中心论点：开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor。EgoAnchor 恢复图像时间代理处的世界坐标关系，以 VCD 生成观测可靠性评分，再按静止或运动区制控制锚点输出。
+中心论点：开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor。EgoAnchor 将低频、异步、质量不均的视觉位姿观测，转换为消费级混合现实应用可持续使用的世界系对象锚点。
 
-论文主叙事固定为 `pose estimate != usable MR anchor`：平台原生支持范围只解释外部感知为何必要，零样本视觉感知只说明给定模型的更多刚体为何可被定位。两者不能被写成核心贡献；研究问题是如何为异步、低频、质量不均的视觉观测恢复时间语义、判断是否接纳，并控制持续 MR 锚点的输出与生命周期。
+论文主叙事固定为 `pose estimate != usable MR anchor`：平台原生支持范围只解释外部感知为何必要，零样本视觉感知只说明给定模型的更多刚体为何可被定位。两者不能被写成核心贡献；核心问题是如何为异步视觉观测恢复时间语义、判断是否接纳，并控制持续 MR 锚点的逐帧输出与生命周期。
 
 三项贡献：
 
-1. 感知后端与锚定运行时解耦的对象锚定系统，以及基于 `frame_id` 的采集时刻世界对齐。
-2. VCD 观测可靠性评分。
-3. 显式静止锚定及其区制转换控制。
+1. 感知后端与锚定运行时解耦的端到端对象锚定系统，以及基于 `frame_id` 的采集时刻世界对齐。
+2. 观测到锚点运行时：VCD 观测接纳、Kalman-Hermite 时序合成、显式静止锚定和生命周期管理。
+3. 系统实现与分层评估：端到端系统表征、关键组件归因和计划中的跨对象任务层用户研究。
 
-研究问题：
+论文外部不再使用 RQ1/RQ2/RQ3 作为顶层结构。当前实验组织为：
 
-- **RQ1**：VCD 能否为 TRACK 候选提供有效的观测可靠性评分，使高分候选对应更低的锚点更新风险，并在给定接纳覆盖率下降低尾部误差。
-- **RQ2**：在同一 VCD-admitted observation stream 上，*ZOH*、*One Euro*、*Ours-NoLock* 与 *Ours-Full* 在静止稳定性、起停响应和持续运动性能上的差异。
-- **RQ3**：完整系统在所测日常刚体上的初始化、持续输出、遮挡恢复和停止后稳定性。本轮只冻结协议，实验延期。
+- **实验一：端到端系统表征**。在静止目标与主动头动、起停 6DoF、持续平移/旋转、遮挡恢复条件下，比较 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor* 的系统行为。
+- **实验二：系统设计归因**。在同一日志格式和平台参考下关闭单一设计，归因采集时刻世界对齐、VCD 观测接纳、时序合成和静止锚定的贡献与代价。
+- **实验三：跨对象用户研究**。比较 *One-Euro Anchor* 与完整 *EgoAnchor* 在日常刚性物体对象附着任务中的表现与体验收益；当前只冻结设计，实验一/二完成后再启动正式采集。
 
 VCD 的三个语义层次不得混淆：
 
@@ -50,18 +50,17 @@ VCD 的三个语义层次不得混淆：
 - 运行时以冻结阈值执行 admission。
 - 离线按分数诱导候选顺序，使用 risk-coverage/AURC 检验评分的风险判别性。VCD 本身不是排序算法，也不是位姿正确概率。
 
-RQ2 四配置均为正式比较对象：
+系统配置命名：
 
-- *Ours-Full* vs. *Ours-NoLock*：StaticLock 的直接机制归因。
-- *Ours-Full* vs. *One Euro*：完整区制感知运行时与外部标准滤波器的系统级比较。
-- *Ours-NoLock* vs. *One Euro*：Kalman-Hermite 连续估计与标准自适应滤波的比较。
-- *ZOH*：离散保持参照，用于量化不进行时序合成时的连续性代价。
+- *Arrival-Hold*：到达时刻复合、接受全部合法候选、零阶保持。
+- *Capture-Hold*：采集时刻世界复合、接受全部合法候选、零阶保持，用于隔离 frame alignment。
+- *One-Euro Anchor*：采集时刻世界复合、基本有效性检查、One Euro 自适应滤波与保持。
+- *EgoAnchor*：采集时刻世界复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
+- 组件消融使用 `EgoAnchor w/o <component>` 风格命名，不再恢复旧 RQ 命名或旧 CLI 兼容层。
 
-*One Euro* 与 *Ours-NoLock* 统一称为“无显式区制切换的单区制时序策略”，不得称为 motion-agnostic。*Ours-NoLock* 包含 Kalman 与 Hermite，不得简称“纯 Kalman”。
+IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。Run 2 完成实验一/二后正文不得超过 8.4 页，为实验三用户研究保留空间。实验三是已规划的任务层效用验证，但当前先搁置，待实验一/二完成后再启动正式采集。
 
-IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。Run 2 完成 RQ1/RQ2 后正文不得超过 8.4 页，为 RQ3 保留空间。RQ3 未回答时，稿件不得作为投稿终稿。
-
-两次执行边界：Run 1 完成采集前全部工程、论文框架、QC、分析骨架和中文采集手册；用户完成 smoke 与正式采集；Run 2 完成 RQ1/RQ2 分析、图表和论文回填。两次运行都不提交 Git。
+两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成 smoke 与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。两次运行都不提交 Git。
 
 ## 诚实边界
 
@@ -70,7 +69,7 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 - 控制器 pose 是平台参考位姿，不是外部光学真值；它与头显共享追踪系统，会隐藏共模世界漂移。
 - frame alignment 只校正相机采集/到达时刻错配，不补偿采集后的物体运动。
 - 单操作员、多 session 的帧只表示时间覆盖，不作为独立样本量。
-- Meta、Apple 与专用追踪附件只作为论文中的能力定位对象；相关工作、紧凑能力表和讨论必须以官方或同行评审来源说明其对象绑定语义与前提。跨平台数值实验不是 RQ1/RQ2 的必做证据，只有同一对象、统一参考和相同协议均成立且不影响主实验时才可作为描述性上下文，不能支撑核心贡献。
+- Meta、Apple 与专用追踪附件只作为论文中的能力定位对象；相关工作、紧凑能力表和讨论必须以官方或同行评审来源说明其对象绑定语义与前提。跨平台数值实验不是实验一/二的必做证据，只有同一对象、统一参考和相同协议均成立且不影响主实验时才可作为描述性上下文，不能支撑核心贡献。
 
 ## 主线目录
 
@@ -81,7 +80,7 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 | `EgoAnchor_Protocol` | Proto 与 subject 唯一来源 |
 | `2026-EgoAnchor` | 中文主稿、VGTC 模板、图表与权威重构计划 |
 
-`EgoAnchor_Tools3` 和旧 RQ1/RQ2 分析/场景属于 Run 1 删除范围，不再扩展。
+`EgoAnchor_Tools3` 和旧 RQ1/RQ2 分析/场景属于 Run 1 删除范围，不再扩展；正式评估入口改为实验一/二命名。
 
 ## 不可破坏的系统约束
 
@@ -103,21 +102,21 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 
 ## Run 1 目标架构
 
-当前 `AnchorPolicyHost` 的自由组合和 per-variant gate 是待替换实现。Run 1 目标链路：
+Run 1 目标是完成实验一/二采集前工程与分析骨架。详细工程实现计划见 `2026-EgoAnchor/experiment_1_2_implementation_plan.md`，该计划是当前实验一/二实现的执行入口。正式链路：
 
 ```text
 PoseResult candidate
-  -> shared frame alignment
-  -> shared VCD admission
-  -> immutable AdmittedObservation
-  -> ZOH / One Euro / Ours-NoLock / Ours-Full
+  -> frame_id-based capture-time alignment
+  -> optional VCD admission
+  -> Arrival-Hold / Capture-Hold / One-Euro Anchor / EgoAnchor / component ablations
   -> synchronized display and logs
 ```
 
-- 候选只对齐一次、判定一次；四变体必须记录相同 `latest_admitted_id`。
-- *One Euro* 只在新 admitted observation 到达时按 measurement timestamp 更新；render tick 只读取并保持最近滤波输出，不重复输入 held target。
-- *Ours-NoLock* 使用 Kalman-Hermite；*Ours-Full* 使用同一 estimator 并增加 StaticLock decorator。
-- Full 未锁定且不处于过渡时，Full/NoLock 内部 estimator 状态必须一致。
+- *Arrival-Hold* 用到达时刻复合和零阶保持，作为直接消费异步视觉位姿的朴素系统基线。
+- *Capture-Hold* 用采集时刻复合和零阶保持，作为 Arrival-Hold 与 One-Euro Anchor 之间的时间对齐桥接配置。
+- *One-Euro Anchor* 用采集时刻复合、基本有效性检查和 One Euro 自适应滤波，作为标准滤波锚定基线。
+- *EgoAnchor* 用采集时刻复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
+- 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
 - 模型相关 per-variant jump gate 不进入正式比较。
 
 ## Python 关键约束
@@ -132,7 +131,7 @@ PoseResult candidate
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
-关键 ownership：`config/` 不导入模型/网络；`transport/` 只管传输；`routing/handlers` 不碰 GPU；`runtime/tracking_runtime.py` 是 pipeline owner；`perception/quest_pose_pipeline.py` 组合视觉模块；`reliability/` 计算 VCD；新 `eval/` 只处理 schema-v2、QC、RQ1/RQ2 和论文产物。
+关键 ownership：`config/` 不导入模型/网络；`transport/` 只管传输；`routing/handlers` 不碰 GPU；`runtime/tracking_runtime.py` 是 pipeline owner；`perception/quest_pose_pipeline.py` 组合视觉模块；`reliability/` 计算 VCD；新 `eval/` 只处理 schema-v2、QC、实验一/二和论文产物。
 
 ## Unity 关键约束
 
@@ -150,11 +149,12 @@ PoseResult candidate
 Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl` 和审计样本目录。旧 schema 不兼容。
 
 - `capture_mono_ms` 是 image-time proxy，不得称曝光真值。
-- RQ1 用新鲜平台参考轨迹对 capture proxy 做位置插值与 quaternion SLERP，并记录插值跨度和失败原因。
-- RQ2 每个 trial 都比较四配置；主因果 estimand 是 `Ours-Full - Ours-NoLock`。
+- 平台参考轨迹用于同一 Quest、同一时间线下的配对系统行为分析，不得称外部物理真值。
+- 实验一比较 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor* 的端到端系统行为。
+- 实验二通过单组件关闭归因采集时刻世界对齐、VCD 接纳、时序合成和 StaticLock。
 - 静止指标同时报告 HP-RMS、绝对误差和漂移，避免“冻结错误位姿”获得虚假优势。
 - 转换指标至少包括 visible response、unlock/relock、peak error 与 settling time。
-- 分析先在 `session x trial x variant` 内计算，再做 trial 配对和 session 汇总；不做 frame-level 推断。
+- 分析先在 `session x trial/event x variant` 内计算，再做 trial/event 配对和 session 汇总；不做 frame-level 推断。
 - 正式参数只用开发/calibration 数据冻结；formal session 后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 
