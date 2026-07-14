@@ -57,6 +57,9 @@ class PoseQualityBreakdown:
     mask_score: float
     """可见面积子分 V（Visibility）。"""
 
+    geometry_core_score: float
+    """有效颜色与深度证据构成的几何核 G_CD，范围 0..1。"""
+
     flags: tuple[str, ...]
     """解释最终分数的 flags。"""
 
@@ -87,6 +90,7 @@ def score_observation_breakdown(
             reprojection_score=0.0,
             depth_score=0.0,
             mask_score=0.0,
+            geometry_core_score=0.0,
             flags=tuple(flags),
         )
 
@@ -109,6 +113,7 @@ def score_observation_breakdown(
         reprojection_score=clamp01(reprojection_score),
         depth_score=clamp01(depth_score),
         mask_score=clamp01(v_score),
+        geometry_core_score=clamp01(g_score),
         flags=tuple(flags),
     )
 
@@ -185,10 +190,10 @@ def _has_render_depth_signal(observation: PoseObservation) -> bool:
 
 
 def _mask_factor(observation: PoseObservation, flags: list[str]) -> float:
-    """把 mask 可见面积映射为 V 子分。"""
+    """计算 V = |M_obs intersection M_rnd| / |M_rnd|。"""
 
     if _has_projection_area_signal(observation):
-        score = clamp01(float(observation.render_quality_area_ratio_score))
+        score = clamp01(float(observation.render_quality_render_visible_ratio))
         if score < 0.35:
             flags.append("mask_visible_area_low")
         elif score < 0.65:
@@ -211,7 +216,7 @@ def _mask_factor(observation: PoseObservation, flags: list[str]) -> float:
 
 
 def _has_projection_area_signal(observation: PoseObservation) -> bool:
-    """判断本帧投影面积是否可用于 V 子分。"""
+    """判断本帧是否有可用于计算可见比例的渲染投影。"""
 
     status = str(observation.render_quality_status or "")
     return observation.render_quality_render_area_px > 0 and (observation.color_reprojection >= 0.0 or status.startswith("valid"))

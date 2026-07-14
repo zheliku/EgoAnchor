@@ -263,6 +263,87 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertAlmostEqual(row["render_quality_depth_residual_m"], 0.012)
             self.assertAlmostEqual(row["render_quality_ms"], 4.5)
 
+    def test_eval_mode_splits_candidates_and_events(self) -> None:
+        """评估模式必须把 pose candidate 与 runtime 事件写入不同 schema-v2 文件。"""
+
+        class Header:
+            frame_id = 11
+
+        class PoseMatrix:
+            values = (
+                1.0, 0.0, 0.0, 0.1,
+                0.0, 1.0, 0.0, 0.2,
+                0.0, 0.0, 1.0, 0.3,
+                0.0, 0.0, 0.0, 1.0,
+            )
+
+        class PoseMsg:
+            header = Header()
+            has_pose = True
+            phase = "TRACK"
+            stage = 4
+            pose_source = "TRACK"
+            reliability_score = 0.8
+            reliability_flags = []
+            depth_valid_ratio = 1.0
+            depth_valid_in_mask = 1.0
+            mask_area_ratio = 0.1
+            det_count = 1
+            fps = 10.0
+            timing = SimpleNamespace(total_ms=1.0, yolo_ms=0.1, depth_ms=0.2, cutie_ms=0.3, pose_ms=0.4)
+            server_receive_mono_ms = 100.0
+            server_publish_mono_ms = 110.0
+            pose_matrix_cv_camera = PoseMatrix()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.enabled = True
+            writer = RuntimeLogWriter(
+                cfg,
+                session_id="session-v2",
+                eval_session=SimpleNamespace(session_dir=Path(tmp)),
+            )
+            try:
+                writer.event("runtime_started", state="WAITING_INPUT")
+                writer.pose_result(
+                    PoseMsg(),
+                    state=RuntimeState.TRACKING,
+                    diagnostics=SimpleNamespace(
+                        score_mask=0.7,
+                        geometry_core_score=0.8,
+                        color_reprojection=-1.0,
+                        score_depth=0.6,
+                        render_quality_depth_absolute=0.5,
+                        render_quality_depth_structural=0.4,
+                        render_quality_depth_alpha=0.3,
+                    ),
+                )
+            finally:
+                writer.close()
+
+            event_rows = [json.loads(line) for line in (Path(tmp) / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+            candidate_rows = [json.loads(line) for line in (Path(tmp) / "python_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+
+            self.assertEqual([row["event"] for row in event_rows], ["runtime_started"])
+            self.assertEqual(candidate_rows[0]["event"], "python_candidate")
+            self.assertEqual(candidate_rows[0]["schema_version"], 2)
+            self.assertEqual(candidate_rows[0]["candidate_id"], "session-v2:11:1")
+            self.assertEqual(candidate_rows[0]["session_id"], "session-v2")
+            self.assertEqual(candidate_rows[0]["vcd_score"], 0.8)
+            self.assertEqual(candidate_rows[0]["visibility_score"], 0.7)
+            self.assertEqual(candidate_rows[0]["geometry_core_score"], 0.8)
+            self.assertEqual(candidate_rows[0]["depth_alignment_score"], 0.6)
+            self.assertEqual(candidate_rows[0]["depth_abs_score"], 0.5)
+            self.assertEqual(candidate_rows[0]["depth_struct_score"], 0.4)
+            self.assertEqual(candidate_rows[0]["depth_alpha"], 0.3)
+            self.assertIsNone(candidate_rows[0]["color_projection_score"])
+            self.assertIn("color_signal_unavailable", candidate_rows[0]["reliability_flags"])
+            for key in ("render_diagnostics",):
+                self.assertIn(key, candidate_rows[0])
+            self.assertNotIn("pose_score", candidate_rows[0])
+            self.assertNotIn("score_depth", candidate_rows[0])
+            self.assertNotIn("score_mask", candidate_rows[0])
+
 
 if __name__ == "__main__":
     unittest.main()

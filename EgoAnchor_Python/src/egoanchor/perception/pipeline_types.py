@@ -113,6 +113,9 @@ class FrameDiagnostics:
     score_mask: float = 0.0
     """reliability 最终分中的可见面积子分（V，Visibility）。"""
 
+    geometry_core_score: float = 0.0
+    """VCD 中由有效颜色与深度证据构成的几何核 G_CD。"""
+
     color_reprojection: float = -1.0
     """颜色投影分（Color projection），0..1；-1 表示本帧无有效颜色信号。"""
 
@@ -131,11 +134,20 @@ class FrameDiagnostics:
     render_quality_depth_alignment: float = 0.0
     """由深度 inlier 和中位残差共同得到的连续深度对齐分。"""
 
+    render_quality_depth_absolute: float = 0.0
+    """绝对深度残差分数 D_abs。"""
+
+    render_quality_depth_structural: float = 0.0
+    """归一化深度结构一致性分数 D_struct。"""
+
+    render_quality_depth_alpha: float = 0.0
+    """深度融合中结构分的自适应权重 alpha。"""
+
     render_quality_area_ratio_score: float = 0.0
-    """观测 Cutie mask 面积 / 渲染投影面积的比例分，低值表示遮挡或投影面积过大。"""
+    """旧面积比诊断量；正式 VCD 可见度不使用该字段。"""
 
     render_quality_render_visible_ratio: float = 0.0
-    """渲染前景中被观测 mask 覆盖的比例，遮挡时会下降。"""
+    """渲染前景中被观测 mask 覆盖的比例，即正式 VCD 的 V。"""
 
     render_quality_observed_visible_ratio: float = 0.0
     """观测 mask 中被渲染前景解释的比例，低值表示 pose 未覆盖可见区域。"""

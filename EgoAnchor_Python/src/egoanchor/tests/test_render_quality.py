@@ -207,6 +207,32 @@ class DepthAlignmentCheckerTest(unittest.TestCase):
         self.assertEqual(result.status, "depth_coverage_insufficient")
         self.assertAlmostEqual(result.score, 0.5)
 
+    def test_zero_structural_iqr_threshold_uses_max_weight(self) -> None:
+        """结构阈值为零时应直接采用最大权重，不能发生除以零。"""
+
+        yy, xx = np.indices((10, 10), dtype=np.float32)
+        render_depth = 0.5 + xx * 0.01 + yy * 0.005
+        observed_depth = render_depth + 0.002
+        result = DepthAlignmentChecker._score_from_maps(
+            render_depth,
+            observed_depth,
+            np.ones((10, 10), dtype=bool),
+            pose_distance_m=0.6,
+            depth_coverage=1.0,
+            distance_ratio=0.02,
+            min_inlier_thresh_m=0.005,
+            min_depth_coverage=0.10,
+            residual_scale=2.5,
+            enable_structural=True,
+            structural_max_weight=0.35,
+            structural_iqr_thresh=0.0,
+            core_erode_kernel=0,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertAlmostEqual(result.structural_weight, 0.35)
+        self.assertGreater(result.structural_score, 0.99)
+
 
 class RenderQualityCheckerTest(unittest.TestCase):
     """验证一次渲染后会拆出重投影和深度两个质量信号。"""

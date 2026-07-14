@@ -896,6 +896,9 @@ class QuestPosePipeline:
         diagnostics.render_quality_mask_iou = result.mask_iou
         diagnostics.render_quality_depth_inlier = result.depth_inlier_ratio
         diagnostics.render_quality_depth_alignment = result.depth_alignment_score
+        diagnostics.render_quality_depth_absolute = result.depth_absolute_score
+        diagnostics.render_quality_depth_structural = result.depth_structural_score
+        diagnostics.render_quality_depth_alpha = result.depth_structural_weight
         diagnostics.render_quality_area_ratio_score = result.area_ratio_score
         diagnostics.render_quality_depth_residual_m = result.depth_median_residual_m
         diagnostics.render_quality_render_visible_ratio = result.render_visible_ratio
@@ -946,6 +949,7 @@ class QuestPosePipeline:
             score_reprojection=diagnostics.score_reprojection,
             score_depth=diagnostics.score_depth,
             score_mask=diagnostics.score_mask,
+            geometry_core_score=diagnostics.geometry_core_score,
             mask_area_ratio=diagnostics.mask_area_ratio,
             render_quality_evaluated=diagnostics.render_quality_evaluated,
             render_quality_status=diagnostics.render_quality_status,
@@ -953,6 +957,9 @@ class QuestPosePipeline:
             render_quality_mask_iou=diagnostics.render_quality_mask_iou,
             render_quality_depth_inlier=diagnostics.render_quality_depth_inlier,
             render_quality_depth_alignment=diagnostics.render_quality_depth_alignment,
+            render_quality_depth_absolute=diagnostics.render_quality_depth_absolute,
+            render_quality_depth_structural=diagnostics.render_quality_depth_structural,
+            render_quality_depth_alpha=diagnostics.render_quality_depth_alpha,
             render_quality_area_ratio_score=diagnostics.render_quality_area_ratio_score,
             render_quality_render_visible_ratio=diagnostics.render_quality_render_visible_ratio,
             render_quality_observed_visible_ratio=diagnostics.render_quality_observed_visible_ratio,
@@ -975,11 +982,13 @@ class QuestPosePipeline:
         diagnostics.score_reprojection = breakdown.reprojection_score
         diagnostics.score_depth = breakdown.depth_score
         diagnostics.score_mask = breakdown.mask_score
+        diagnostics.geometry_core_score = breakdown.geometry_core_score
         return replace(
             observation,
             score_reprojection=breakdown.reprojection_score,
             score_depth=breakdown.depth_score,
             score_mask=breakdown.mask_score,
+            geometry_core_score=breakdown.geometry_core_score,
             reliability_score=breakdown.final_score,
             reliability_flags=breakdown.flags,
         )

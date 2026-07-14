@@ -9,7 +9,7 @@ from egoanchor.reliability import PoseScoreConfig, score_observation_breakdown
 
 
 class PoseQualityTest(unittest.TestCase):
-    """验证 Gate × Quality × Confidence 评分能让各子分承担独立职责。"""
+    """验证 VCD 评分的可见度、颜色和深度证据各自承担独立职责。"""
 
     def test_score_uses_reprojection_as_quality_signal(self) -> None:
         """低重投影分应降低 Quality，并写入 reprojection_low。"""
@@ -167,22 +167,34 @@ class PoseQualityTest(unittest.TestCase):
         self.assertIn("mask_too_small", tiny.flags)
         self.assertIn("mask_too_large", large.flags)
 
-    def test_mask_score_uses_projected_area_ratio_without_touching_depth(self) -> None:
-        """投影面积可用时，mask_score 使用 Cutie 面积/投影面积，depth 保持自己的深度匹配。"""
+    def test_mask_score_uses_render_visible_ratio_without_touching_depth(self) -> None:
+        """投影可用时，V 使用观测覆盖渲染前景比例，旧面积比只保留为诊断量。"""
 
         breakdown = score_observation_breakdown(
             self._track_observation(
                 color_reprojection=0.95,
                 render_quality_depth_alignment=0.9,
                 render_quality_area_ratio_score=0.25,
+                render_quality_render_visible_ratio=0.72,
                 render_quality_render_area_px=200,
             )
         )
 
         self.assertAlmostEqual(breakdown.reprojection_score, 0.95)
         self.assertAlmostEqual(breakdown.depth_score, 0.9)
-        self.assertAlmostEqual(breakdown.mask_score, 0.25)
-        self.assertIn("mask_visible_area_low", breakdown.flags)
+        self.assertAlmostEqual(breakdown.mask_score, 0.72)
+        self.assertNotIn("mask_visible_area_low", breakdown.flags)
+
+        legacy_area_only = score_observation_breakdown(
+            self._track_observation(
+                color_reprojection=0.95,
+                render_quality_depth_alignment=0.9,
+                render_quality_area_ratio_score=0.01,
+                render_quality_render_visible_ratio=0.72,
+                render_quality_render_area_px=200,
+            )
+        )
+        self.assertAlmostEqual(legacy_area_only.mask_score, breakdown.mask_score)
 
     def test_both_weights_zero_falls_back(self) -> None:
         """重投影和深度权重都清零时，应回退 0.5/0.5 避免几何核无效。"""
@@ -215,7 +227,10 @@ class PoseQualityTest(unittest.TestCase):
         self.assertAlmostEqual(breakdown.reprojection_score, 0.4)
         self.assertGreater(breakdown.depth_score, 0.0)
         self.assertAlmostEqual(breakdown.mask_score, 1.0)
-        self.assertAlmostEqual(breakdown.final_score, breakdown.final_score)  # VCD: R = V × C^α × D^β
+        self.assertAlmostEqual(
+            breakdown.final_score,
+            breakdown.mask_score * breakdown.geometry_core_score,
+        )
 
     @staticmethod
     def _score_and_flags(observation: PoseObservation) -> tuple[float, tuple[str, ...]]:
@@ -238,6 +253,7 @@ class PoseQualityTest(unittest.TestCase):
         frame_dt_s: float = 1.0 / 30.0,
         render_quality_evaluated: bool = False,
         render_quality_area_ratio_score: float = 1.0,
+        render_quality_render_visible_ratio: float = 0.0,
         render_quality_render_area_px: int = 0,
         render_quality_depth_inlier: float | None = None,
         render_quality_depth_residual_m: float = 0.0,
@@ -279,6 +295,7 @@ class PoseQualityTest(unittest.TestCase):
             else max(render_quality_depth_alignment, 0.0),
             render_quality_depth_alignment=render_quality_depth_alignment,
             render_quality_area_ratio_score=render_quality_area_ratio_score,
+            render_quality_render_visible_ratio=render_quality_render_visible_ratio,
             render_quality_render_area_px=render_quality_render_area_px,
             render_quality_depth_residual_m=render_quality_depth_residual_m,
             last_translation_delta_m=last_translation_delta_m,

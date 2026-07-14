@@ -35,6 +35,9 @@ class DepthAlignmentResult:
     depth_coverage: float
     """观测 mask 内有效深度覆盖率。"""
 
+    absolute_score: float = 0.0
+    """绝对深度残差分数 D_abs，范围 0..1。"""
+
     structural_score: float = 0.0
     """深度结构一致性分数（归一化深度ZNCC），范围 0..1。"""
 
@@ -260,8 +263,10 @@ class DepthAlignmentChecker:
                     zncc = np.clip(zncc, -1.0, 1.0)
                     D_struct = (1.0 + zncc) / 2.0  # 映射到 [0, 1]
 
-                    # 自适应权重：根据深度起伏幅度决定结构分数的重要性
-                    alpha = float(structural_max_weight) * min(render_iqr / float(structural_iqr_thresh), 1.0)
+                    # 阈值为零表示只要结构信号有效就直接采用最大权重；显式分支避免配置边界除以零。
+                    iqr_threshold = float(structural_iqr_thresh)
+                    complexity_scale = 1.0 if iqr_threshold <= 1e-6 else min(render_iqr / iqr_threshold, 1.0)
+                    alpha = float(structural_max_weight) * complexity_scale
                     alpha = clamp01(alpha)
 
         # Step 4: 融合绝对和结构分数
@@ -276,6 +281,7 @@ class DepthAlignmentChecker:
             median_residual_m=max(0.0, median_residual),
             inlier_thresh_m=global_thresh,
             depth_coverage=coverage,
+            absolute_score=clamp01(D_abs),
             structural_score=clamp01(D_struct),
             structural_weight=alpha,
             valid=True,
@@ -302,6 +308,7 @@ class DepthAlignmentChecker:
             median_residual_m=0.0,
             inlier_thresh_m=max(0.0, float(inlier_thresh_m)),
             depth_coverage=clamp01(float(depth_coverage)),
+            absolute_score=0.0,
             structural_score=0.0,
             structural_weight=0.0,
             valid=False,

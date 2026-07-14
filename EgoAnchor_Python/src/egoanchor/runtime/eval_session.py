@@ -30,7 +30,10 @@ class EvalSessionPaths:
     """共享 eval session 目录。"""
 
     python_log_filename: str
-    """Python runtime JSONL 文件名。"""
+    """Python candidate JSONL 文件名；固定为 `python_candidates.jsonl`。"""
+
+    events_log_filename: str
+    """Python event JSONL 文件名；固定为 `events.jsonl`。"""
 
     metadata_path: Path
     """Unity 自动配对读取的 metadata JSON 路径。"""
@@ -48,16 +51,20 @@ def create_eval_session(
 
     root_path = Path(root).expanduser()
     safe_object_id = sanitize_session_token(object_id or "default")
+    if python_log_filename and Path(python_log_filename).name != "python_candidates.jsonl":
+        raise ValueError("schema-v2 candidate output requires python_candidates.jsonl")
     session_id = _resolve_unique_session_id(root_path, build_eval_session_id(now or beijing_now(), safe_object_id))
     session_dir = root_path / session_id
     session_dir.mkdir(parents=True, exist_ok=False)
-    log_filename = Path(python_log_filename).name if python_log_filename else f"{session_id}_python_runtime.jsonl"
+    log_filename = Path(python_log_filename).name if python_log_filename else "python_candidates.jsonl"
+    events_log_filename = "events.jsonl"
     metadata_path = session_dir / Path(metadata_filename).name
     paths = EvalSessionPaths(
         session_id=session_id,
         object_id=safe_object_id,
         session_dir=session_dir,
         python_log_filename=log_filename,
+        events_log_filename=events_log_filename,
         metadata_path=metadata_path,
     )
     write_python_session_metadata(paths)
@@ -73,6 +80,8 @@ def write_python_session_metadata(paths: EvalSessionPaths) -> None:
         "object_id": paths.object_id,
         "python_log_filename": paths.python_log_filename,
         "python_log_relative_path": paths.python_log_filename,
+        "events_log_filename": paths.events_log_filename,
+        "events_log_relative_path": paths.events_log_filename,
         "created_unix_ms": created_unix_ms,
         "created_utc": datetime.fromtimestamp(created_unix_ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "state": "python_started",

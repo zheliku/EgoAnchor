@@ -39,6 +39,15 @@ class RenderQualityResult:
     depth_alignment_score: float
     """渲染深度与观测深度对齐连续分，范围 0..1。"""
 
+    depth_absolute_score: float
+    """绝对深度残差分数 D_abs，范围 0..1。"""
+
+    depth_structural_score: float
+    """归一化深度结构一致性分数 D_struct，范围 0..1。"""
+
+    depth_structural_weight: float
+    """结构分在深度融合中的自适应权重 alpha，范围 0..1。"""
+
     depth_median_residual_m: float
     """交集区域深度残差中位数，单位米。"""
 
@@ -187,6 +196,9 @@ class RenderQualityChecker:
             area_ratio_score=clamp01(reprojection.area_ratio_score),
             depth_inlier_ratio=clamp01(depth.inlier_ratio),
             depth_alignment_score=clamp01(depth.score),
+            depth_absolute_score=clamp01(depth.absolute_score),
+            depth_structural_score=clamp01(depth.structural_score),
+            depth_structural_weight=clamp01(depth.structural_weight),
             depth_median_residual_m=max(0.0, depth.median_residual_m),
             render_visible_ratio=clamp01(reprojection.render_visible_ratio),
             observed_visible_ratio=clamp01(reprojection.observed_visible_ratio),
@@ -265,6 +277,9 @@ class RenderQualityChecker:
             area_ratio_score=0.0,
             depth_inlier_ratio=0.0,
             depth_alignment_score=0.0,
+            depth_absolute_score=0.0,
+            depth_structural_score=0.0,
+            depth_structural_weight=0.0,
             depth_median_residual_m=0.0,
             render_visible_ratio=0.0,
             observed_visible_ratio=0.0,

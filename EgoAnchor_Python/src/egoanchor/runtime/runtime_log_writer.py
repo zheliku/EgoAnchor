@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from egoanchor.diagnostics import RuntimeEventLogger
+from egoanchor.eval.schema_v2 import JsonlTableWriter, PythonCandidateRow
 from egoanchor.utils import clamp, get_logger, rotation_matrix_to_quaternion
 from .runtime_state import RuntimeState
 
@@ -131,11 +132,26 @@ class RuntimeLogWriter:
         self.log_write_failures = 0
         """JSONL 写入失败次数；日志写入失败不应阻断实时链路。"""
 
+        self._candidate_seq = 0
+        """评估会话内严格递增的 candidate 序号，用于构造稳定唯一 ID。"""
+
+        self._schema_candidates: JsonlTableWriter | None = None
+        self._schema_events: JsonlTableWriter | None = None
+        # 与旧日志开关保持一致：关闭 runtime 日志时不创建评估产物。
+        if eval_session is not None and self.logger.enabled:
+            session_dir = Path(getattr(eval_session, "session_dir"))
+            self._schema_candidates = JsonlTableWriter(session_dir / "python_candidates.jsonl", expected_event="python_candidate")
+            self._schema_events = JsonlTableWriter(session_dir / "events.jsonl")
+
     def close(self) -> None:
         """关闭底层日志文件。"""
 
         try:
             self.logger.close()
+            if self._schema_candidates is not None:
+                self._schema_candidates.close()
+            if self._schema_events is not None:
+                self._schema_events.close()
         except Exception as exc:  # pragma: no cover - 退出路径只做 best-effort 收尾
             LOGGER.debug("关闭 runtime JSONL 日志失败，已忽略：%s", exc)
 
@@ -143,7 +159,17 @@ class RuntimeLogWriter:
         """写入一条通用 runtime 事件。"""
 
         try:
-            self.logger.write(event_type, **fields)
+            if self._schema_events is not None:
+                row = {
+                    "schema_version": 2,
+                    "event": str(event_type),
+                    "session_id": self.logger.session_id,
+                    "event_type": str(event_type),
+                    **fields,
+                }
+                self._schema_events.write(row)
+            else:
+                self.logger.write(event_type, **fields)
         except Exception as exc:
             self.log_write_failures += 1
             if self._should_report_log_failure():
@@ -196,11 +222,117 @@ class RuntimeLogWriter:
                 render_quality_render_area_px=int(getattr(diagnostics, "render_quality_render_area_px", 0)),
                 render_quality_depth_inlier=float(getattr(diagnostics, "render_quality_depth_inlier", 0.0)),
                 render_quality_depth_alignment=float(getattr(diagnostics, "render_quality_depth_alignment", 0.0)),
+                render_quality_depth_absolute=float(getattr(diagnostics, "render_quality_depth_absolute", 0.0)),
+                render_quality_depth_structural=float(getattr(diagnostics, "render_quality_depth_structural", 0.0)),
+                render_quality_depth_alpha=float(getattr(diagnostics, "render_quality_depth_alpha", 0.0)),
                 render_quality_depth_residual_m=float(getattr(diagnostics, "render_quality_depth_residual_m", 0.0)),
                 render_quality_ms=float(getattr(diagnostics, "render_quality_ms", 0.0)),
             )
         fields.update(self.pose_factory.build(msg))
-        self.event("pose_result", **fields)
+        if self._schema_candidates is not None:
+            self._candidate_seq += 1
+            row = self._build_candidate_row(
+                msg,
+                fields=fields,
+                diagnostics=diagnostics,
+                candidate_seq=self._candidate_seq,
+            )
+            try:
+                self._schema_candidates.write(row)
+            except Exception as exc:
+                self.log_write_failures += 1
+                if self._should_report_log_failure():
+                    LOGGER.warning("schema-v2 candidate 写入失败 frame=%s：%s", fields.get("frame_id"), exc)
+        else:
+            self.event("pose_result", **fields)
+
+    def _build_candidate_row(
+        self,
+        msg: object,
+        *,
+        fields: dict[str, Any],
+        diagnostics: object | None,
+        candidate_seq: int,
+    ) -> PythonCandidateRow:
+        """把 PoseResult 和旁路诊断映射为严格 schema-v2 候选行。"""
+
+        color_score = _optional_score(diagnostics, "color_reprojection", default=-1.0)
+        flags = [str(flag) for flag in getattr(msg, "reliability_flags", ())]
+        if color_score < 0.0 and "color_signal_unavailable" not in flags:
+            flags.append("color_signal_unavailable")
+        pose_fields = {
+            key: fields.get(key)
+            for key in (
+                "pose_matrix_cv_camera",
+                "pose_tx_m",
+                "pose_ty_m",
+                "pose_tz_m",
+                "pose_qx",
+                "pose_qy",
+                "pose_qz",
+                "pose_qw",
+            )
+        }
+        render_diagnostics = {
+            key: fields[key]
+            for key in (
+                "render_quality_evaluated",
+                "render_quality_status",
+                "render_quality_mask_iou",
+                "render_quality_area_ratio_score",
+                "render_quality_render_visible_ratio",
+                "render_quality_observed_visible_ratio",
+                "render_quality_render_area_px",
+                "render_quality_depth_inlier",
+                "render_quality_depth_alignment",
+                "render_quality_depth_absolute",
+                "render_quality_depth_structural",
+                "render_quality_depth_alpha",
+                "render_quality_depth_residual_m",
+                "render_quality_ms",
+            )
+            if key in fields
+        }
+        failure_reason = str(
+            getattr(diagnostics, "failure_reason", "")
+            or getattr(msg, "failure_reason", "")
+            or ""
+        )
+        return PythonCandidateRow(
+            session_id=self.logger.session_id,
+            frame_id=int(fields["frame_id"]),
+            candidate_id=f"{self.logger.session_id}:{fields['frame_id']}:{candidate_seq}",
+            server_receive_mono_ms=float(fields["server_receive_mono_ms"]),
+            server_publish_mono_ms=float(fields["server_publish_mono_ms"]),
+            has_pose=bool(fields["has_pose"]),
+            pose_matrix_cv_camera=pose_fields["pose_matrix_cv_camera"],
+            pose_tx_m=pose_fields["pose_tx_m"],
+            pose_ty_m=pose_fields["pose_ty_m"],
+            pose_tz_m=pose_fields["pose_tz_m"],
+            pose_qx=pose_fields["pose_qx"],
+            pose_qy=pose_fields["pose_qy"],
+            pose_qz=pose_fields["pose_qz"],
+            pose_qw=pose_fields["pose_qw"],
+            pose_source=str(fields["pose_source"]),
+            phase=str(fields["phase"]),
+            stage=int(fields["stage"]),
+            failure_reason=failure_reason,
+            reliability_flags=flags,
+            vcd_score=_optional_score(msg, "reliability_score"),
+            visibility_score=_optional_score(diagnostics, "score_mask"),
+            geometry_core_score=_optional_score(diagnostics, "geometry_core_score"),
+            color_projection_score=None if color_score < 0.0 else color_score,
+            depth_alignment_score=_optional_score(diagnostics, "score_depth"),
+            depth_abs_score=_optional_score(diagnostics, "render_quality_depth_absolute"),
+            depth_struct_score=_optional_score(diagnostics, "render_quality_depth_structural"),
+            depth_alpha=_optional_score(diagnostics, "render_quality_depth_alpha"),
+            render_diagnostics=render_diagnostics,
+            total_ms=float(fields["total_ms"]),
+            yolo_ms=float(fields["yolo_ms"]),
+            depth_ms=float(fields["depth_ms"]),
+            cutie_ms=float(fields["cutie_ms"]),
+            pose_ms=float(fields["pose_ms"]),
+        )
 
     def status(self, status: object, *, previous: RuntimeState) -> None:
         """记录 AnchorStatusEvent 的状态迁移摘要。"""
@@ -259,7 +391,7 @@ class RuntimeLogWriter:
         logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
         if eval_session is not None:
             output_dir = Path(getattr(eval_session, "session_dir"))
-            filename = str(getattr(eval_session, "python_log_filename"))
+            filename = "events.jsonl"
         else:
             python_root = Path(getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd()))
             raw_output_dir = Path(str(getattr(logging_cfg, "output_dir", "data/runtime_logs"))).expanduser()
@@ -285,6 +417,18 @@ class RuntimeLogWriter:
 
         count = self.log_write_failures
         return count <= 3 or count in (10, 100) or count % 1000 == 0
+
+
+def _optional_score(source: object | None, name: str, *, default: float | None = None) -> float | None:
+    """读取可选评分并把缺失或非有限值转换为 JSON null 语义。"""
+
+    if source is None or not hasattr(source, name):
+        return default
+    try:
+        value = float(getattr(source, name))
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) else default
 
 
 __all__ = ["PoseLogFactory", "RuntimeLogWriter"]

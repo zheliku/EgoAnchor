@@ -28,7 +28,7 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
 
             self.assertEqual(first.session_id, "20260602_155723_controller_right")
             self.assertEqual(second.session_id, "20260602_155723_controller_right_02")
-            self.assertEqual(first.python_log_filename, "20260602_155723_controller_right_python_runtime.jsonl")
+            self.assertEqual(first.python_log_filename, "python_candidates.jsonl")
             self.assertTrue(first.session_dir.is_dir())
 
             metadata = json.loads(first.metadata_path.read_text(encoding="utf-8"))
@@ -52,14 +52,16 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             finally:
                 runtime.log_writer.close()
 
-            log_path = runtime.log_writer.logger.log_path
-            metadata_path = log_path.parent / "python_session.json"
+            session_dir = runtime.log_writer.logger.log_path.parent
+            metadata_path = session_dir / "python_session.json"
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
-            self.assertEqual(runtime.session_id, log_path.parent.name)
+            self.assertEqual(runtime.session_id, session_dir.name)
             self.assertTrue(runtime.session_id.endswith("_controller_right"))
-            self.assertEqual(log_path.name, f"{runtime.session_id}_python_runtime.jsonl")
-            self.assertEqual(metadata["python_log_filename"], log_path.name)
+            self.assertEqual(metadata["python_log_filename"], "python_candidates.jsonl")
+            self.assertEqual(metadata["events_log_filename"], "events.jsonl")
+            self.assertTrue((session_dir / "events.jsonl").exists())
+            self.assertTrue((session_dir / "python_candidates.jsonl").exists())
             self.assertEqual(metadata["object_id"], "controller_right")
 
 
