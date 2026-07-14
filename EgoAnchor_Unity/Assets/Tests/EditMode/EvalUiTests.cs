@@ -1,7 +1,9 @@
 using System.Text;
 using System;
 using EgoAnchor.Eval;
+using EgoAnchor.Eval.Experiment;
 using NUnit.Framework;
+using System.Reflection;
 using UnityEngine;
 
 namespace EgoAnchor.Tests
@@ -83,6 +85,108 @@ namespace EgoAnchor.Tests
                 EvalV2Manifest.FixedLogFileNames);
             StringAssert.Contains("\"dropped_rows\":0", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
+        }
+    }
+
+    /// <summary>实验一/实验二采集上下文和输入状态机测试。</summary>
+    public sealed class ExperimentContextTests
+    {
+        /// <summary>未录制时不得创建场景、trial 或事件上下文。</summary>
+        [Test]
+        public void SelectorRejectsContextChangesBeforeRecording()
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+
+                Assert.That(selector.SelectSystemScenario(1), Is.False);
+                Assert.That(selector.BeginTrial(), Is.False);
+                Assert.That(selector.MarkEvent(), Is.False);
+                Assert.That(selector.CurrentContext.IsSelected, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>实验一场景、trial、event 和结束动作必须生成稳定上下文标识。</summary>
+        [Test]
+        public void SelectorMaintainsStableTrialAndEventContext()
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+
+                Assert.That(selector.SelectSystemScenario(1), Is.True);
+                Assert.That(selector.CurrentExperimentId, Is.EqualTo(ExperimentId.SystemCharacterization));
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("static_head_motion"));
+                Assert.That(selector.BeginTrial(), Is.True);
+                Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
+                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
+                Assert.That(selector.EndTrial(), Is.True);
+                Assert.That(selector.CurrentTrialId, Is.Empty);
+                Assert.That(selector.CurrentEventId, Is.Empty);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>状态 UI 文本必须显示实验命名并拒绝旧 RQ 顶层文案。</summary>
+        [Test]
+        public void StatusUiUsesExperimentNaming()
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            GameObject uiObject = new GameObject("ExperimentContextTests.UI");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+                selector.SelectAttributionScenario(2);
+                selector.BeginTrial();
+
+                ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
+                SetPrivateField(status, "selector", selector);
+                SetPrivateField(status, "session", session);
+                string text = status.BuildStatusText();
+
+                StringAssert.Contains("EXP2 | DESIGN ATTRIBUTION", text);
+                StringAssert.Contains("Ablation: VCD admission", text);
+                StringAssert.Contains("trial_001", text);
+                StringAssert.DoesNotContain("RQ1", text);
+                StringAssert.DoesNotContain("RQ2", text);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(uiObject);
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>通过反射设置测试所需的私有录制状态，不扩大生产 API。</summary>
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"missing private field {fieldName}");
+            field.SetValue(target, value);
         }
     }
 }

@@ -100,6 +100,11 @@ namespace EgoAnchor.Eval
             b.Str("policy_reason", snapshot.PolicyReason);
             b.Str("anchor_state", snapshot.AnchorState);
             b.Str("config_hash", snapshot.ConfigHash);
+            b.Str("experiment_id", snapshot.ExperimentId);
+            b.Str("scenario_id", snapshot.ScenarioId);
+            b.Str("trial_id", snapshot.TrialId);
+            b.Str("event_id", snapshot.EventId);
+            b.Str("condition_id", snapshot.ConditionId);
             return b.Finish();
         }
 
@@ -110,7 +115,12 @@ namespace EgoAnchor.Eval
             string source,
             string message,
             double monoMs,
-            int unityFrame)
+            int unityFrame,
+            string experimentId = "",
+            string scenarioId = "",
+            string trialId = "",
+            string eventId = "",
+            string conditionId = "")
         {
             var b = new Builder(256);
             b.Long("schema_version", 2);
@@ -121,6 +131,11 @@ namespace EgoAnchor.Eval
             b.Dbl("mono_ms", monoMs);
             b.Long("unity_frame", unityFrame);
             b.Str("message", message);
+            b.Str("experiment_id", experimentId);
+            b.Str("scenario_id", scenarioId);
+            b.Str("trial_id", trialId);
+            b.Str("event_id", eventId);
+            b.Str("condition_id", conditionId);
             return b.Finish();
         }
 
@@ -134,7 +149,12 @@ namespace EgoAnchor.Eval
             float referenceLinearSpeedMs,
             float referenceAngularSpeedDegS,
             EvalVariantSnapshot variant,
-            string sessionId = "")
+            string sessionId = "",
+            string experimentId = "",
+            string scenarioId = "",
+            string trialId = "",
+            string eventId = "",
+            string conditionId = "")
         {
             var b = new Builder(1024);
             b.Long("schema_version", 2);
@@ -152,6 +172,11 @@ namespace EgoAnchor.Eval
             b.ReferencePose(referencePose);
             b.Flt("reference_linear_speed_m_s", referenceLinearSpeedMs);
             b.Flt("reference_angular_speed_deg_s", referenceAngularSpeedDegS);
+            b.Str("experiment_id", experimentId);
+            b.Str("scenario_id", scenarioId);
+            b.Str("trial_id", trialId);
+            b.Str("event_id", eventId);
+            b.Str("condition_id", conditionId);
             AppendVariantFields(ref b, variant);
             return b.Finish();
         }

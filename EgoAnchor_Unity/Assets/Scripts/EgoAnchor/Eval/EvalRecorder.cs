@@ -5,6 +5,7 @@ using System.Text;
 using EgoAnchor.Alignment;
 using EgoAnchor.Client;
 using EgoAnchor.Diagnostics;
+using EgoAnchor.Eval.Experiment;
 using EgoAnchor.Policy;
 using EgoAnchor.Quest;
 using EgoAnchor.Protocol.Generated;
@@ -200,6 +201,11 @@ namespace EgoAnchor.Eval
         [Tooltip("要录制的 runtime 变体列表。")]
         [SerializeField] private List<EvalVariant> variants = new List<EvalVariant>();
 
+        /// <summary>实验上下文选择器；其状态会写入 admission/render/events 长表。</summary>
+        [Header("Experiment Context")]
+        [Tooltip("实验一/实验二上下文选择器；状态由 selector 统一维护并写入日志。")]
+        [SerializeField] private ExperimentTrialSelector experimentSelector;
+
         // ── State ──
 
         private EvalLog _referenceLog;
@@ -255,6 +261,11 @@ namespace EgoAnchor.Eval
 
         /// <summary>当前是否已经保存可供 manifest 使用的会话配置快照。</summary>
         private bool _hasManifestMetadataSnapshot;
+
+        /// <summary>当前实验上下文快照。</summary>
+        private ExperimentContext CurrentExperimentContext => experimentSelector != null
+            ? experimentSelector.CurrentContext
+            : default;
 
         // ── Public API ──
 
@@ -428,7 +439,10 @@ namespace EgoAnchor.Eval
             _recording = true;
             _eventsLog.Write(EvalJson.BuildEventLine(
                 _sessionId, "session_started", "unity", "recording_started",
-                UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount));
+                UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount,
+                CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
+                CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
+                CurrentExperimentContext.ConditionId));
         }
 
         /// <summary>停止录制并关闭文件句柄。</summary>
@@ -454,7 +468,10 @@ namespace EgoAnchor.Eval
             {
                 _eventsLog.Write(EvalJson.BuildEventLine(
                     _sessionId, "session_stopped", "unity", "recording_stopped",
-                    UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount));
+                    UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount,
+                    CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
+                    CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
+                    CurrentExperimentContext.ConditionId));
                 _eventsLogStats = CloseLog(_eventsLog, "events");
                 _eventsLog = null;
             }
@@ -489,6 +506,8 @@ namespace EgoAnchor.Eval
             if (streamPublisher != null)
                 streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
             RefreshAdmissionSubscriptions();
+            if (experimentSelector != null)
+                experimentSelector.ContextEvent += RecordExperimentEvent;
         }
 
         private void OnDisable()
@@ -496,6 +515,8 @@ namespace EgoAnchor.Eval
             if (streamPublisher != null)
                 streamPublisher.StereoPublishAttempted -= RecordCapturePublishAttempt;
             ClearAdmissionSubscriptions();
+            if (experimentSelector != null)
+                experimentSelector.ContextEvent -= RecordExperimentEvent;
         }
 
         private void OnDestroy() => StopRecording();
@@ -605,7 +626,10 @@ namespace EgoAnchor.Eval
                 _renderLog.Write(EvalJson.BuildRenderLine(
                     monoMs, unixMs, UnityEngine.Time.frameCount,
                     headPose, gtSample, gtLinear, gtAngular,
-                    _snapshots[i], _sessionId));
+                    _snapshots[i], _sessionId,
+                    CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
+                    CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
+                    CurrentExperimentContext.ConditionId));
             }
         }
 
@@ -746,8 +770,25 @@ namespace EgoAnchor.Eval
                     decision,
                     reason,
                     runtime.CurrentAnchorState.ToString(),
-                    ResolveCachedConfigHash(variant, label))));
+                    ResolveCachedConfigHash(variant, label),
+                    CurrentExperimentContext.ExperimentId,
+                    CurrentExperimentContext.ScenarioId,
+                    CurrentExperimentContext.TrialId,
+                    CurrentExperimentContext.EventId,
+                    CurrentExperimentContext.ConditionId)));
             }
+        }
+
+        /// <summary>把 trial、场景和人工事件变化写入 events.jsonl。</summary>
+        private void RecordExperimentEvent(ExperimentContext context, string eventType)
+        {
+            if (!_recording || _eventsLog == null) return;
+            _eventsLog.Write(EvalJson.BuildEventLine(
+                _sessionId, eventType, "experiment_ui", eventType,
+                UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0,
+                UnityEngine.Time.frameCount,
+                context.ExperimentId, context.ScenarioId, context.TrialId,
+                context.EventId, context.ConditionId));
         }
 
         private static string ToAdmissionDecision(PoseToAnchorRuntime.AcceptResult result)

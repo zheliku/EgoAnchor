@@ -60,7 +60,7 @@ VCD 的三个语义层次不得混淆：
 
 IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。Run 2 完成实验一/二后正文不得超过 8.4 页，为实验三用户研究保留空间。实验三是已规划的任务层效用验证，但当前先搁置，待实验一/二完成后再启动正式采集。
 
-两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成 smoke 与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。两次运行都不提交 Git。
+两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成 smoke 与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。本轮按用户明确要求，每个 Task 验证后独立提交并推送。
 
 ## 诚实边界
 
@@ -80,7 +80,7 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 | `EgoAnchor_Protocol` | Proto 与 subject 唯一来源 |
 | `2026-EgoAnchor` | 中文主稿、VGTC 模板、图表与权威重构计划 |
 
-`EgoAnchor_Tools3` 和旧 RQ1/RQ2 分析/场景属于 Run 1 删除范围，不再扩展；正式评估入口改为实验一/二命名。
+旧 RQ1/RQ2 Unity 脚本、场景和 Python 分析包已删除，不得恢复；`EgoAnchor_Tools3` 仍属于 Run 1 删除范围，不再扩展。正式评估入口只使用实验一/二命名。
 
 ## 不可破坏的系统约束
 
@@ -128,6 +128,7 @@ PoseResult candidate
 - VCD 目标公式为 `R = V * G_CD`，其中 `V = |M_obs intersection M_rnd| / |M_rnd|`。正式采集前必须确保公式、代码和日志一致；当前面积比旧实现不得进入正式结果。
 - `color_reprojection < 0` 表示颜色信号不可用，应从几何核排除，而不是视作坏 pose。
 - 深度评分保留绝对与结构分量 `D = (1-alpha) D_abs + alpha D_struct`；Run 1 日志必须暴露消融所需分量。
+- Python 评估模式的 `RuntimeLogWriter` 已将候选行映射为严格 `PythonCandidateRow`，颜色不可用写入 `null` 并保留解释 flag；runtime 事件与候选行分写固定 schema-v2 文件。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
@@ -141,6 +142,8 @@ PoseResult candidate
 - 头动期间不冻结真实运动证据；`headSettleSeconds` 只覆盖头停后的沉降窗口。
 - 距离自适应只放大位置通道；旋转 tether 必须高于旋转噪声地板。
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
+- Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和 `events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。
+- Unity 采集场景已接入 `ExperimentTrialSelector`、`ExperimentInputHandler` 和 `ExperimentStatusUI`；实验、场景、trial、event、condition 上下文随 schema-v2 录制行和事件写入。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。
 

@@ -62,6 +62,21 @@ namespace EgoAnchor.Eval
         /// <summary>配置摘要 hash。</summary>
         public readonly string ConfigHash;
 
+        /// <summary>实验上下文：实验标识。</summary>
+        public readonly string ExperimentId;
+
+        /// <summary>实验上下文：场景标识。</summary>
+        public readonly string ScenarioId;
+
+        /// <summary>实验上下文：trial 标识。</summary>
+        public readonly string TrialId;
+
+        /// <summary>实验上下文：事件标识。</summary>
+        public readonly string EventId;
+
+        /// <summary>实验上下文：条件标识。</summary>
+        public readonly string ConditionId;
+
         /// <summary>构造一条 admission 快照。</summary>
         public EvalAdmissionSnapshot(
             string sessionId,
@@ -81,7 +96,12 @@ namespace EgoAnchor.Eval
             string admissionDecision,
             string policyReason,
             string anchorState,
-            string configHash)
+            string configHash,
+            string experimentId = "",
+            string scenarioId = "",
+            string trialId = "",
+            string eventId = "",
+            string conditionId = "")
         {
             SessionId = sessionId ?? string.Empty;
             CandidateId = candidateId ?? string.Empty;
@@ -101,6 +121,11 @@ namespace EgoAnchor.Eval
             PolicyReason = policyReason ?? string.Empty;
             AnchorState = anchorState ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
+            ExperimentId = experimentId ?? string.Empty;
+            ScenarioId = scenarioId ?? string.Empty;
+            TrialId = trialId ?? string.Empty;
+            EventId = eventId ?? string.Empty;
+            ConditionId = conditionId ?? string.Empty;
         }
     }
 }
