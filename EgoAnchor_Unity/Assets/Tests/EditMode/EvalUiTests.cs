@@ -54,8 +54,10 @@ namespace EgoAnchor.Tests
                 new EvalReferencePose(true, true, false, Pose.identity, 0), "Left", "s01");
             string admission = EvalJson.BuildAdmissionLine(new EvalAdmissionSnapshot(
                 "s01", "s01:7:1", 7, "egoanchor", "EgoAnchor", 1040,
-                Runtime.WorldAlignmentMode.CaptureTime, true, true, Pose.identity,
-                false, Pose.identity, true, 0.8f, "accepted", "quality_ok", "Tracking", "cfg"));
+                5, Runtime.WorldAlignmentMode.CaptureTime, true, 1000, 3,
+                true, Pose.identity, false, Pose.identity, double.NaN,
+                true, 0.8f, "aligned", "accepted", "quality_ok", "Tracking",
+                "enabled", "kalman", "interp_hermite", true, true, "cfg"));
             EvalVariantSnapshot variant = new EvalVariantSnapshot(
                 "egoanchor", true, 7, true, Pose.identity, true, Pose.identity, "transform",
                 true, 1000, 3, 20, 1010, 10, 1040, "Tracking", "accepted", "quality_ok",
@@ -65,8 +67,15 @@ namespace EgoAnchor.Tests
                 1100, 2100, 5, Pose.identity,
                 new EvalReferencePose(false, false, false, Pose.identity, double.NaN), 0, 0,
                 variant, "s01");
+            string eventLine = EvalJson.BuildEventLine(
+                "s01", "event_marker", "experiment_ui", "marked", 1050, 5,
+                ExperimentId.SystemCharacterization, "static_head_motion", "trial_001", "event_001",
+                "exp1_system_characterization/static_head_motion", "info", "egoanchor");
             string manifest = EvalJson.BuildManifest(
-                "s01", "controller_right", "editor_link",
+                new EvalManifestMetadata(
+                    "s01", "controller_right", "smoke", "operator-01", 2000,
+                    "editor_link", string.Empty, "6000.3.11f1", string.Empty,
+                    "commit", "v1", "dev-1", "controller-mesh-v1", string.Empty),
                 new[] { "EgoAnchor" },
                 new[]
                 {
@@ -74,9 +83,8 @@ namespace EgoAnchor.Tests
                         "EgoAnchor", "kalman", "interp_hermite", "enabled", "cfg",
                         "CaptureTime", true, true, true, true, true, true),
                 },
-                string.Empty,
-                new EvalLogStats(0, 1, null), new EvalLogStats(0, 1, null),
-                new EvalLogStats(0, 1, null), new EvalLogStats(0, 1, null));
+                new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2),
+                new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2));
 
             foreach (string line in new[] { reference, admission, render })
             {
@@ -88,6 +96,22 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"event\":\"unity_reference\"", reference);
             StringAssert.Contains("\"event\":\"unity_admission\"", admission);
             StringAssert.Contains("\"event\":\"unity_render\"", render);
+            foreach (string field in new[]
+            {
+                "event_type", "source", "created_unix_ms", "mono_ms", "unity_frame", "severity",
+                "experiment_id", "scenario_id", "trial_id", "event_id", "variant_id", "message", "payload",
+            })
+                StringAssert.Contains($"\"{field}\":", eventLine);
+            StringAssert.Contains("\"severity\":\"info\"", eventLine);
+            StringAssert.Contains("\"variant_id\":\"egoanchor\"", eventLine);
+            StringAssert.Contains("\"payload\":{\"condition_id\":", eventLine);
+            foreach (string field in new[]
+            {
+                "unity_frame", "source_capture_mono_ms", "source_capture_unity_frame",
+                "arrival_time_raw_mono_ms", "quality_gate", "policy_action", "motion_model",
+                "smoothing_strategy", "uses_temporal_synthesis", "uses_static_lock",
+            })
+                StringAssert.Contains($"\"{field}\":", admission);
             StringAssert.DoesNotContain("\"variants\"", render);
             foreach (string file in new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "events.jsonl" })
                 StringAssert.Contains(file, manifest);
@@ -95,7 +119,22 @@ namespace EgoAnchor.Tests
                 new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "events.jsonl" },
                 EvalV2Manifest.FixedLogFileNames);
             StringAssert.Contains("\"dropped_rows\":0", manifest);
+            StringAssert.Contains("\"python_candidates.jsonl\":{\"rows_written\":null,\"dropped_rows\":null", manifest);
+            StringAssert.Contains("\"status\":\"pending_python_fragment_merge\"", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
+            StringAssert.Contains("\"run_kind\":\"smoke\"", manifest);
+            StringAssert.Contains("\"frozen_parameter_set_id\":\"dev-1\"", manifest);
+            StringAssert.Contains("\"experiment_ids\":[\"exp1_system_characterization\",\"exp2_design_attribution\"]", manifest);
+            foreach (string field in new[]
+            {
+                "session_id", "object_id", "run_kind", "experiment_ids", "operator_id", "created_unix_ms",
+                "unity_run_mode", "python_host", "unity_version", "python_version", "egoanchor_git_commit",
+                "protocol_version", "config_hash", "frozen_parameter_set_id", "object_model_id",
+                "variant_definitions", "trial_plan", "log_files", "log_writer_stats",
+            })
+                StringAssert.Contains($"\"{field}\":", manifest);
+            StringAssert.Contains("\"scenario_id\":\"occlusion_recovery\"", manifest);
+            StringAssert.Contains("\"scenario_id\":\"without_static_lock\"", manifest);
             StringAssert.Contains("\"config_hash\":", manifest);
             StringAssert.Contains("\"uses_vcd_admission\":true", manifest);
             StringAssert.Contains("\"uses_temporal_synthesis\":true", manifest);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using EgoAnchor.Alignment;
 using EgoAnchor.Client;
@@ -250,8 +251,9 @@ namespace EgoAnchor.Eval
         /// <summary>按 source frame 缓存 Unity 侧候选序号；同一帧的多变体共用一个 candidate_id。</summary>
         private readonly Dictionary<long, int> _candidateSequencesByFrame = new Dictionary<long, int>();
 
-        /// <summary>下一个尚未分配的候选序号。</summary>
-        private int _nextCandidateSequence;
+        /// <summary>按 PoseResult 对象缓存 candidate_id，确保八个 runtime 回调复用同一标识。</summary>
+        private ConditionalWeakTable<PoseResult, CandidateIdHolder> _candidateIdsByResult =
+            new ConditionalWeakTable<PoseResult, CandidateIdHolder>();
 
         /// <summary>会话开始时固定的变体标签，供停止后写 manifest。</summary>
         private readonly List<string> _manifestVariantLabels = new List<string>();
@@ -418,20 +420,63 @@ namespace EgoAnchor.Eval
             }
         }
 
+        /// <summary>验证当前变体的标签、runtime 绑定和配置 hash 是否可用于正式采集。</summary>
+        public bool TryValidateCurrentVariants(out string error)
+        {
+            error = string.Empty;
+            if (variants == null || variants.Count == 0)
+            {
+                error = "variantConfigs";
+                return false;
+            }
+
+            var labels = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < variants.Count; i++)
+            {
+                EvalVariant variant = variants[i];
+                string label = ResolveLabel(variant, i);
+                if (!labels.Add(label))
+                {
+                    error = $"duplicateVariantLabel[{label}]";
+                    return false;
+                }
+                if (variant.runtime == null)
+                {
+                    error = $"variantRuntime[{label}]";
+                    return false;
+                }
+                if (string.IsNullOrWhiteSpace(BuildVariantConfig(variant, label).ConfigHash))
+                {
+                    error = $"variantConfigHash[{label}]";
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>开始写入评估日志。</summary>
         public void BeginRecording(string referencePath, string admissionPath, string renderPath, string eventsPath, string sessionId = "")
         {
             StopRecording();
-            _sessionId = sessionId ?? string.Empty;
-            RefreshAdmissionSubscriptions();
             _referenceLogStats = default;
             _admissionLogStats = default;
             _renderLogStats = default;
             _eventsLogStats = default;
-            _referenceLog = new EvalLog(referencePath);
-            _admissionLog = new EvalLog(admissionPath);
-            _renderLog = new EvalLog(renderPath);
-            _eventsLog = new EvalLog(eventsPath);
+            try
+            {
+                _referenceLog = new EvalLog(referencePath);
+                _admissionLog = new EvalLog(admissionPath);
+                _renderLog = new EvalLog(renderPath);
+                _eventsLog = new EvalLog(eventsPath, sharedAppend: true);
+            }
+            catch
+            {
+                CloseOpenLogsAfterStartFailure();
+                throw;
+            }
+
+            _sessionId = sessionId ?? string.Empty;
+            RefreshAdmissionSubscriptions();
             RefreshConfigHashCache();
             CaptureManifestMetadata();
             _hasLastGt = false;
@@ -443,6 +488,19 @@ namespace EgoAnchor.Eval
                 CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
                 CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
                 CurrentExperimentContext.ConditionId));
+        }
+
+        /// <summary>录制启动中途失败时关闭已经打开的文件和后台线程。</summary>
+        private void CloseOpenLogsAfterStartFailure()
+        {
+            _referenceLog?.Dispose();
+            _referenceLog = null;
+            _admissionLog?.Dispose();
+            _admissionLog = null;
+            _renderLog?.Dispose();
+            _renderLog = null;
+            _eventsLog?.Dispose();
+            _eventsLog = null;
         }
 
         /// <summary>停止录制并关闭文件句柄。</summary>
@@ -479,7 +537,7 @@ namespace EgoAnchor.Eval
             _configHashCache.Clear();
             _admissionKeys.Clear();
             _candidateSequencesByFrame.Clear();
-            _nextCandidateSequence = 0;
+            _candidateIdsByResult = new ConditionalWeakTable<PoseResult, CandidateIdHolder>();
             _hasLastGt = false;
             _gtPoseTracker.Reset();
         }
@@ -729,7 +787,7 @@ namespace EgoAnchor.Eval
                 return;
 
             long frameId = result.Header.FrameId;
-            string candidateId = BuildCandidateId(frameId);
+            string candidateId = BuildCandidateId(result);
             for (int i = 0; i < variants.Count; i++)
             {
                 EvalVariant variant = variants[i];
@@ -745,12 +803,17 @@ namespace EgoAnchor.Eval
                     && runtime.TryGetRawPose(out rawPose);
                 Pose arrivalPose = Pose.identity;
                 bool hasArrival = runtime.TryGetArrivalTimeRawPose(out arrivalPose);
-                string decision = runtime.LatestPolicyAction;
-                if (string.IsNullOrEmpty(decision))
-                    decision = ToAdmissionDecision(acceptResult);
                 string reason = runtime.LatestPolicyReason;
                 if (string.IsNullOrEmpty(reason))
                     reason = runtime.LatestFailure;
+
+                AnchorPolicyHost policy = runtime.PolicyHost;
+                FramePoseRecord sourceRecord = default;
+                bool hasSourceTiming = framePoseHistory != null && framePoseHistory.TryGet(frameId, out sourceRecord);
+                bool hasPolicy = policy != null;
+                bool hasArrivalTiming = hasArrival && !double.IsNaN(runtime.LatestArrivalTimeRawMonoMs);
+                string policyAction = runtime.LatestPolicyAction;
+                string admissionDecision = ToAdmissionDecision(acceptResult, policyAction);
 
                 _admissionLog.Write(EvalJson.BuildAdmissionLine(new EvalAdmissionSnapshot(
                     _sessionId,
@@ -759,17 +822,27 @@ namespace EgoAnchor.Eval
                     label,
                     label,
                     runtime.LatestUnityPoseHandleMonoMs,
+                    Time.frameCount,
                     runtime.UsesCaptureTimeAlignment ? WorldAlignmentMode.CaptureTime : WorldAlignmentMode.ArrivalTime,
                     runtime.UsesCaptureTimeAlignment,
+                    hasSourceTiming ? sourceRecord.ImageMonoMs : double.NaN,
+                    hasSourceTiming ? sourceRecord.ImageUnityFrame : -1,
                     hasRaw,
                     hasRaw ? rawPose : Pose.identity,
                     hasArrival,
                     hasArrival ? arrivalPose : Pose.identity,
-                    runtime.QualityGateMode == "enabled",
+                    hasArrivalTiming ? runtime.LatestArrivalTimeRawMonoMs : double.NaN,
+                    hasPolicy && policy.UsesVcdAdmission,
                     runtime.LatestReliabilityScore,
-                    decision,
+                    admissionDecision,
+                    policyAction,
                     reason,
                     runtime.CurrentAnchorState.ToString(),
+                    hasPolicy ? policy.QualityGateMode : runtime.QualityGateMode,
+                    hasPolicy ? policy.MotionModelName : runtime.MotionModelName,
+                    hasPolicy ? policy.SmoothingStrategyName : runtime.SmoothingStrategyName,
+                    hasPolicy && policy.UsesTemporalSynthesis,
+                    hasPolicy && policy.UsesStaticLock,
                     ResolveCachedConfigHash(variant, label),
                     CurrentExperimentContext.ExperimentId,
                     CurrentExperimentContext.ScenarioId,
@@ -791,11 +864,18 @@ namespace EgoAnchor.Eval
                 context.EventId, context.ConditionId));
         }
 
-        private static string ToAdmissionDecision(PoseToAnchorRuntime.AcceptResult result)
+        private static string ToAdmissionDecision(PoseToAnchorRuntime.AcceptResult result, string policyAction)
         {
+            if (result == PoseToAnchorRuntime.AcceptResult.Aligned)
+            {
+                if (string.Equals(policyAction, nameof(AnchorPolicyAction.Accept), StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(policyAction, nameof(AnchorPolicyAction.Snap), StringComparison.OrdinalIgnoreCase))
+                    return "accepted";
+                return "rejected";
+            }
+
             switch (result)
             {
-                case PoseToAnchorRuntime.AcceptResult.Aligned: return "aligned";
                 case PoseToAnchorRuntime.AcceptResult.NoPose: return "no_pose";
                 case PoseToAnchorRuntime.AcceptResult.InvalidMatrix: return "invalid_matrix";
                 default: return "align_failed";
@@ -803,14 +883,32 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>构造与 Python candidate 行可配对的 Unity candidate 标识。</summary>
-        private string BuildCandidateId(long frameId)
+        private string BuildCandidateId(PoseResult result)
         {
+            if (result == null || result.Header == null)
+                return string.Empty;
+
+            if (_candidateIdsByResult.TryGetValue(result, out CandidateIdHolder existing))
+                return existing.Value;
+
+            long frameId = result.Header.FrameId;
             if (!_candidateSequencesByFrame.TryGetValue(frameId, out int sequence))
-            {
-                sequence = ++_nextCandidateSequence;
-                _candidateSequencesByFrame[frameId] = sequence;
-            }
-            return $"{_sessionId}:{frameId}:{sequence}";
+                sequence = 0;
+            sequence++;
+            _candidateSequencesByFrame[frameId] = sequence;
+            string candidateId = $"{_sessionId}:{frameId}:{sequence}";
+            _candidateIdsByResult.Add(result, new CandidateIdHolder(candidateId));
+            return candidateId;
+        }
+
+        /// <summary>弱引用表的 candidate id 值对象。</summary>
+        private sealed class CandidateIdHolder
+        {
+            /// <summary>跨端稳定 candidate id。</summary>
+            public readonly string Value;
+
+            /// <summary>构造不可变 candidate id 值。</summary>
+            public CandidateIdHolder(string value) => Value = value ?? string.Empty;
         }
 
         private static string ResolveLabel(EvalVariant v, int index)

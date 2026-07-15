@@ -152,7 +152,7 @@ class RuntimeLogWriter:
         if eval_session is not None and self.logger.enabled:
             session_dir = Path(getattr(eval_session, "session_dir"))
             self._schema_candidates = JsonlTableWriter(session_dir / "python_candidates.jsonl", expected_event="python_candidate")
-            self._schema_events = JsonlTableWriter(session_dir / "events.jsonl")
+            self._schema_events = JsonlTableWriter(session_dir / "events.jsonl", shared_append=True)
 
     def close(self) -> None:
         """关闭底层日志文件并回写 schema-v2 writer 统计。"""

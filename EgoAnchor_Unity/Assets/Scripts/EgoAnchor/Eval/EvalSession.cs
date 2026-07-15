@@ -10,6 +10,22 @@ using UnityEngine.Events;
 
 namespace EgoAnchor.Eval
 {
+    /// <summary>评估 session 的用途；决定正式参数冻结门禁。</summary>
+    public enum EvalRunKind
+    {
+        /// <summary>开发调试。</summary>
+        Debug,
+
+        /// <summary>采集链路冒烟。</summary>
+        Smoke,
+
+        /// <summary>仅用于冻结正式参数的开发采集。</summary>
+        Calibration,
+
+        /// <summary>论文正式采集；开始前必须填写冻结元数据。</summary>
+        Formal,
+    }
+
     /// <summary>
     /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
@@ -45,6 +61,30 @@ namespace EgoAnchor.Eval
         [Tooltip("Unity 运行模式，写入 manifest，例如 editor_link。真机 build 时手动改写。")]
         [SerializeField] private string runMode = "editor_link";
 
+        /// <summary>本次 session 用途。</summary>
+        [Tooltip("Session 用途：Debug、Smoke、Calibration 或 Formal。Formal 会强制检查冻结参数、对象模型、操作员和 Git commit。")]
+        [SerializeField] private EvalRunKind runKind = EvalRunKind.Debug;
+
+        /// <summary>操作员匿名标识。</summary>
+        [Tooltip("操作员匿名标识。Formal session 必填；不得写姓名等直接身份信息。")]
+        [SerializeField] private string operatorId = string.Empty;
+
+        /// <summary>正式参数集合标识。</summary>
+        [Tooltip("Calibration 后冻结的参数集合标识。Formal session 必填，正式数据采集后不得修改。")]
+        [SerializeField] private string frozenParameterSetId = string.Empty;
+
+        /// <summary>目标三维模型标识。</summary>
+        [Tooltip("当前目标三维模型或 mesh 版本标识。Formal session 必填。")]
+        [SerializeField] private string objectModelId = string.Empty;
+
+        /// <summary>采集代码 Git commit。</summary>
+        [Tooltip("开始采集前冻结的 EgoAnchor Git commit。Formal session 必填。")]
+        [SerializeField] private string egoanchorGitCommit = string.Empty;
+
+        /// <summary>协议版本。</summary>
+        [Tooltip("跨端协议版本；当前固定为 v1。")]
+        [SerializeField] private string protocolVersion = "v1";
+
         /// <summary>收到第一个 PoseResult 时是否自动开始录制。</summary>
         [Tooltip("收到第一个 PoseResult 时自动开始录制；无需手动按 F7。")]
         [SerializeField] private bool autoStart = true;
@@ -71,6 +111,8 @@ namespace EgoAnchor.Eval
         private string _sessionDir;
         private bool _recording;
         private bool _autoStarted;
+        private double _createdUnixMs;
+        private double _nextAutoStartAttemptMonoMs;
 
         private readonly List<string> _variantLabels = new List<string>();
         private readonly List<EvalVariantConfig> _variantConfigs = new List<EvalVariantConfig>();
@@ -110,9 +152,18 @@ namespace EgoAnchor.Eval
                 return;
             }
 
+            if (!ValidateFormalMetadata())
+                return;
+
             string root = ResolveOutputRoot();
 
             string pythonId = runtimeHub != null ? runtimeHub.LatestPythonSessionId : string.Empty;
+            if (runKind == EvalRunKind.Formal && string.IsNullOrWhiteSpace(pythonId))
+            {
+                EgoAnchorLog.For<EvalSession>().Error(
+                    "Formal session 启动已拒绝：尚未收到 Python session_id，禁止生成无法跨端配对的本地 session。");
+                return;
+            }
             if (!string.IsNullOrEmpty(pythonId))
             {
                 _sessionId  = pythonId;
@@ -135,23 +186,33 @@ namespace EgoAnchor.Eval
             string admissionPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityAdmissionFileName);
             string renderPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityRenderFileName);
             string eventsPath = Path.Combine(_sessionDir, EvalV2Manifest.EventsFileName);
+            string manifestPath = Path.Combine(_sessionDir, EvalV2Manifest.ManifestFileName);
             if (HasNonEmptyLog(referencePath)
                 || HasNonEmptyLog(admissionPath)
                 || HasNonEmptyLog(renderPath)
-                || HasNonEmptyLog(eventsPath))
+                || HasNonEmptyLog(manifestPath))
             {
                 EgoAnchorLog.For<EvalSession>().Error(
                     $"Session 启动已拒绝：目标 Unity 日志已有非空内容，禁止覆盖。session_id={_sessionId}");
                 return;
             }
 
-            recorder.BeginRecording(referencePath, admissionPath, renderPath, eventsPath, _sessionId);
+            _createdUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            try
+            {
+                recorder.BeginRecording(referencePath, admissionPath, renderPath, eventsPath, _sessionId);
+            }
+            catch (Exception exc)
+            {
+                EgoAnchorLog.For<EvalSession>().Error($"Session 启动失败，已关闭部分日志：{exc}");
+                return;
+            }
             _recording = true;
             sessionStarted.Invoke();
 
-            EgoAnchorLog.For<EvalSession>().Info($"Session 开始：{_sessionDir}  object_id={objectId}  gt={recorder.GtTransformName}");
+            EgoAnchorLog.For<EvalSession>().Info($"Session 开始：{_sessionDir}  object_id={objectId}  platform_reference={recorder.GtTransformName}");
             if (string.IsNullOrEmpty(recorder.GtTransformName))
-                EgoAnchorLog.For<EvalSession>().Warning("GT Transform 未绑定，请在 EvalRecorder 中绑定 groundTruth。");
+                EgoAnchorLog.For<EvalSession>().Warning("平台参考 Transform 未绑定，请在 EvalRecorder 中绑定 reference transform。");
         }
 
         /// <summary>停止当前 session 并写 schema-v2 manifest.json。</summary>
@@ -182,12 +243,16 @@ namespace EgoAnchor.Eval
         {
             if (!autoStart || _recording || _autoStarted) return;
             if (runtimeHub == null) return;
+            double nowMonoMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+            if (nowMonoMs < _nextAutoStartAttemptMonoMs) return;
             string pythonId = runtimeHub.LatestPythonSessionId;
             if (!string.IsNullOrEmpty(pythonId))
             {
-                _autoStarted = true;
                 EgoAnchorLog.For<EvalSession>().Info($"自动启动录制，Python session_id={pythonId}");
                 StartSession();
+                _autoStarted = _recording;
+                if (!_recording)
+                    _nextAutoStartAttemptMonoMs = nowMonoMs + 1000.0;
             }
         }
 
@@ -207,9 +272,24 @@ namespace EgoAnchor.Eval
             recorder?.CollectVariantLabels(_variantLabels);
             recorder?.CollectVariantConfigs(_variantConfigs);
 
+            var metadata = new EvalManifestMetadata(
+                _sessionId,
+                objectId,
+                RunKindName(runKind),
+                operatorId,
+                _createdUnixMs,
+                runMode,
+                string.Empty,
+                Application.unityVersion,
+                string.Empty,
+                egoanchorGitCommit,
+                protocolVersion,
+                frozenParameterSetId,
+                objectModelId,
+                notes);
             string json = EvalJson.BuildManifest(
-                _sessionId, objectId, runMode,
-                _variantLabels, _variantConfigs, notes,
+                metadata,
+                _variantLabels, _variantConfigs,
                 recorder != null ? recorder.ReferenceLogStats : default,
                 recorder != null ? recorder.AdmissionLogStats : default,
                 recorder != null ? recorder.RenderLogStats : default,
@@ -220,7 +300,45 @@ namespace EgoAnchor.Eval
             EgoAnchorLog.For<EvalSession>().Info($"Manifest 已写入：{path}");
         }
 
-        /// <summary>检查目标日志是否已经包含数据，防止同一 Python session 被再次打开时截断。</summary>
+        /// <summary>Formal session 必须在采集前冻结关键元数据和完整变体配置；其他 run kind 不受此门禁影响。</summary>
+        private bool ValidateFormalMetadata()
+        {
+            if (runKind != EvalRunKind.Formal)
+                return true;
+
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(objectId)) missing.Add(nameof(objectId));
+            if (string.IsNullOrWhiteSpace(runMode)) missing.Add(nameof(runMode));
+            if (string.IsNullOrWhiteSpace(operatorId)) missing.Add(nameof(operatorId));
+            if (string.IsNullOrWhiteSpace(frozenParameterSetId)) missing.Add(nameof(frozenParameterSetId));
+            if (string.IsNullOrWhiteSpace(objectModelId)) missing.Add(nameof(objectModelId));
+            if (string.IsNullOrWhiteSpace(egoanchorGitCommit)) missing.Add(nameof(egoanchorGitCommit));
+            if (string.IsNullOrWhiteSpace(protocolVersion)) missing.Add(nameof(protocolVersion));
+
+            string variantError = string.Empty;
+            if (recorder == null || !recorder.TryValidateCurrentVariants(out variantError))
+                missing.Add(string.IsNullOrWhiteSpace(variantError) ? "variantConfigs" : variantError);
+            if (missing.Count == 0)
+                return true;
+
+            EgoAnchorLog.For<EvalSession>().Error(
+                $"Formal session 启动已拒绝：正式采集配置不完整 {string.Join(", ", missing)}。");
+            return false;
+        }
+
+        /// <summary>把 Inspector enum 转换为 schema-v2 固定小写值。</summary>
+        private static string RunKindName(EvalRunKind value)
+        {
+            switch (value)
+            {
+                case EvalRunKind.Smoke: return "smoke";
+                case EvalRunKind.Calibration: return "calibration";
+                case EvalRunKind.Formal: return "formal";
+                default: return "debug";
+            }
+        }
+
+        /// <summary>检查 Unity 独占日志是否已经包含数据，防止同一 Python session 被再次录制。</summary>
         private static bool HasNonEmptyLog(string path)
         {
             return File.Exists(path) && new FileInfo(path).Length > 0L;

@@ -490,8 +490,10 @@ namespace EgoAnchor.Tests
                 object stats = logType.GetProperty("Stats", BindingFlags.Instance | BindingFlags.Public)?.GetValue(log);
                 Assert.That(stats, Is.Not.Null);
                 long dropped = (long)stats.GetType().GetField("DroppedRows")?.GetValue(stats);
+                long written = (long)stats.GetType().GetField("RowsWritten")?.GetValue(stats);
                 int peak = (int)stats.GetType().GetField("PeakQueueDepth")?.GetValue(stats);
                 Assert.That(dropped, Is.EqualTo(1L));
+                Assert.That(written, Is.EqualTo(1L));
                 Assert.That(peak, Is.EqualTo(1));
                 Assert.That(File.ReadAllLines(path), Is.EqualTo(new[] { "{\"row\":1}" }));
             }
@@ -605,21 +607,218 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>已有 manifest 即代表 session 已结束，Unity 不得覆盖审计元数据后重新录制。</summary>
+        [Test]
+        public void EvalSessionRefusesToOverwriteExistingManifest()
+        {
+            GameObject go = new GameObject("EvalSessionManifestOverwriteTests");
+            string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_manifest_{Guid.NewGuid():N}");
+            const string sessionId = "20260711_121000_controller_right";
+            string sessionDir = Path.Combine(root, sessionId);
+            string manifestPath = Path.Combine(sessionDir, "manifest.json");
+            Directory.CreateDirectory(sessionDir);
+            File.WriteAllText(manifestPath, "{\"schema_version\":2}");
+
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(hub, "latestPythonSessionId", sessionId);
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runtimeHub", hub);
+                SetPrivateField(session, "outputRoot", root);
+
+                LogAssert.Expect(LogType.Error, new Regex("Session 启动已拒绝.*禁止覆盖"));
+                session.StartSession();
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(File.ReadAllText(manifestPath), Is.EqualTo("{\"schema_version\":2}"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        /// <summary>Python 已写入事件时，Unity 必须保留原行并继续向同一跨端事件表追加。</summary>
+        [Test]
+        public void EvalSessionAppendsToExistingPythonEvents()
+        {
+            GameObject go = new GameObject("EvalSessionSharedEventsTests");
+            string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_events_{Guid.NewGuid():N}");
+            const string sessionId = "20260711_130000_controller_right";
+            string sessionDir = Path.Combine(root, sessionId);
+            string eventsPath = Path.Combine(sessionDir, "events.jsonl");
+            Directory.CreateDirectory(sessionDir);
+            const string pythonEvent = "{\"schema_version\":2,\"event\":\"runtime_started\",\"source\":\"python_runtime\"}";
+            File.WriteAllText(eventsPath, pythonEvent + Environment.NewLine);
+
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(hub, "latestPythonSessionId", sessionId);
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runtimeHub", hub);
+                SetPrivateField(session, "outputRoot", root);
+
+                session.StartSession();
+                Assert.That(session.IsRecording, Is.True);
+                session.StopSession();
+
+                string events = File.ReadAllText(eventsPath);
+                StringAssert.StartsWith(pythonEvent + Environment.NewLine, events);
+                StringAssert.Contains("\"event\":\"session_started\"", events);
+                StringAssert.Contains("\"event\":\"session_stopped\"", events);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        /// <summary>Formal session 缺少冻结元数据时必须在创建日志前拒绝启动。</summary>
+        [Test]
+        public void FormalSessionRejectsMissingFrozenMetadata()
+        {
+            GameObject go = new GameObject("EvalFormalMetadataTests");
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runKind", EvalRunKind.Formal);
+
+                LogAssert.Expect(LogType.Error, new Regex("Formal session 启动已拒绝.*正式采集配置不完整"));
+                session.StartSession();
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(session.SessionId, Is.Null.Or.Empty);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>即使 Formal 元数据齐全，没有任何变体配置也不得开始正式采集。</summary>
+        [Test]
+        public void FormalSessionRejectsMissingVariantConfigs()
+        {
+            GameObject go = new GameObject("EvalFormalVariantConfigTests");
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runKind", EvalRunKind.Formal);
+                SetPrivateField(session, "operatorId", "operator-01");
+                SetPrivateField(session, "frozenParameterSetId", "frozen-v1");
+                SetPrivateField(session, "objectModelId", "controller-mesh-v1");
+                SetPrivateField(session, "egoanchorGitCommit", "0123456789abcdef");
+
+                LogAssert.Expect(LogType.Error, new Regex("Formal session 启动已拒绝.*variantConfigs"));
+                session.StartSession();
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(session.SessionId, Is.Null.Or.Empty);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>重复 label 会破坏 admission 去重和 config hash 映射，正式采集前必须拒绝。</summary>
+        [Test]
+        public void RecorderRejectsDuplicateVariantLabels()
+        {
+            GameObject go = new GameObject("EvalDuplicateVariantTests");
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                PoseToAnchorRuntime runtimeA = go.AddComponent<PoseToAnchorRuntime>();
+                PoseToAnchorRuntime runtimeB = go.AddComponent<PoseToAnchorRuntime>();
+                SetPrivateField(recorder, "variants", new List<EvalVariant>
+                {
+                    new EvalVariant { label = "duplicate", runtime = runtimeA },
+                    new EvalVariant { label = "duplicate", runtime = runtimeB },
+                });
+
+                Assert.That(recorder.TryValidateCurrentVariants(out string error), Is.False);
+                Assert.That(error, Is.EqualTo("duplicateVariantLabel[duplicate]"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>admission 必须表达策略是否接纳，而不是只表达 world alignment 是否成功。</summary>
+        [TestCase("Accept", "accepted")]
+        [TestCase("Snap", "accepted")]
+        [TestCase("Reject", "rejected")]
+        [TestCase("Reacquire", "rejected")]
+        public void AdmissionDecisionUsesPolicyOutcome(string policyAction, string expected)
+        {
+            MethodInfo method = typeof(EvalRecorder).GetMethod(
+                "ToAdmissionDecision", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            Assert.That(
+                method.Invoke(null, new object[] { PoseToAnchorRuntime.AcceptResult.Aligned, policyAction }),
+                Is.EqualTo(expected));
+        }
+
+        /// <summary>同一 PoseResult 的八个回调共用 ID，同 frame 的下一候选序号递增。</summary>
+        [Test]
+        public void RecorderCandidateIdUsesResultIdentityAndFrameLocalSequence()
+        {
+            GameObject go = new GameObject("EvalCandidateIdTests");
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                SetPrivateField(recorder, "_sessionId", "session");
+                MethodInfo build = typeof(EvalRecorder).GetMethod(
+                    "BuildCandidateId", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(build, Is.Not.Null);
+
+                PoseResult first = NewPoseResult(11);
+                PoseResult second = NewPoseResult(11);
+                PoseResult otherFrame = NewPoseResult(12);
+                Assert.That(build.Invoke(recorder, new object[] { first }), Is.EqualTo("session:11:1"));
+                Assert.That(build.Invoke(recorder, new object[] { first }), Is.EqualTo("session:11:1"));
+                Assert.That(build.Invoke(recorder, new object[] { second }), Is.EqualTo("session:11:2"));
+                Assert.That(build.Invoke(recorder, new object[] { otherFrame }), Is.EqualTo("session:12:1"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
         /// <summary>manifest 必须持久化后台队列丢行数与峰值，供正式采集后验收。</summary>
         [Test]
         public void EvalManifestWritesLogQueueStats()
         {
             string json = EvalJson.BuildManifest(
-                "session", "object", "editor",
-                Array.Empty<string>(), Array.Empty<EvalVariantConfig>(), string.Empty,
-                referenceStats: new EvalLogStats(2, 8, null),
-                admissionStats: new EvalLogStats(1, 4, null),
-                renderStats: new EvalLogStats(3, 16, null),
-                eventsStats: new EvalLogStats(0, 2, null));
+                new EvalManifestMetadata(
+                    "session", "object", "debug", string.Empty, 1, "editor",
+                    string.Empty, "unity", string.Empty, "commit", "v1", string.Empty, string.Empty, string.Empty),
+                Array.Empty<string>(), Array.Empty<EvalVariantConfig>(),
+                referenceStats: new EvalLogStats(2, 8, null, 10),
+                admissionStats: new EvalLogStats(1, 4, null, 20),
+                renderStats: new EvalLogStats(3, 16, null, 30),
+                eventsStats: new EvalLogStats(0, 2, null, 4));
 
-            StringAssert.Contains("\"unity_reference.jsonl\":{\"dropped_rows\":2,\"peak_queue_depth\":8}", json);
-            StringAssert.Contains("\"unity_admission.jsonl\":{\"dropped_rows\":1,\"peak_queue_depth\":4}", json);
-            StringAssert.Contains("\"unity_render.jsonl\":{\"dropped_rows\":3,\"peak_queue_depth\":16}", json);
+            StringAssert.Contains("\"unity_reference.jsonl\":{\"rows_written\":10,\"dropped_rows\":2,\"peak_queue_depth\":8", json);
+            StringAssert.Contains("\"unity_admission.jsonl\":{\"rows_written\":20,\"dropped_rows\":1,\"peak_queue_depth\":4", json);
+            StringAssert.Contains("\"unity_render.jsonl\":{\"rows_written\":30,\"dropped_rows\":3,\"peak_queue_depth\":16", json);
+            StringAssert.Contains("\"events.jsonl\":{\"rows_written\":null,\"dropped_rows\":null", json);
+            StringAssert.Contains("\"unity\":{\"rows_written\":4,\"dropped_rows\":0,\"peak_queue_depth\":2", json);
         }
 
         /// <summary>
@@ -841,6 +1040,12 @@ namespace EgoAnchor.Tests
             Assert.That(observation.DepthValid, Is.False);
             Assert.That(observation.GeometryScore(0.2f, 0.8f, out bool hasEvidence), Is.EqualTo(1.0f));
             Assert.That(hasEvidence, Is.False);
+        }
+
+        /// <summary>构造带 frame id 的最小 PoseResult。</summary>
+        private static PoseResult NewPoseResult(long frameId)
+        {
+            return new PoseResult { Header = new MessageHeader { FrameId = frameId } };
         }
 
         /// <summary>

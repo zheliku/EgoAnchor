@@ -2,10 +2,90 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using EgoAnchor.Eval.Experiment;
 using UnityEngine;
 
 namespace EgoAnchor.Eval
 {
+    /// <summary>一次 schema-v2 session 的冻结 manifest 元数据。</summary>
+    public readonly struct EvalManifestMetadata
+    {
+        /// <summary>跨端共享 session 标识。</summary>
+        public readonly string SessionId;
+
+        /// <summary>追踪对象标识。</summary>
+        public readonly string ObjectId;
+
+        /// <summary>运行类型：smoke、calibration、formal 或 debug。</summary>
+        public readonly string RunKind;
+
+        /// <summary>操作员匿名标识。</summary>
+        public readonly string OperatorId;
+
+        /// <summary>session 开始时的 Unix 毫秒时间。</summary>
+        public readonly double CreatedUnixMs;
+
+        /// <summary>Unity 执行模式。</summary>
+        public readonly string UnityRunMode;
+
+        /// <summary>Python 主机标识；跨机器 fragment 合并前可为空。</summary>
+        public readonly string PythonHost;
+
+        /// <summary>Unity 版本。</summary>
+        public readonly string UnityVersion;
+
+        /// <summary>Python 版本；跨机器 fragment 合并前可为空。</summary>
+        public readonly string PythonVersion;
+
+        /// <summary>采集代码的 Git commit。</summary>
+        public readonly string GitCommit;
+
+        /// <summary>协议版本。</summary>
+        public readonly string ProtocolVersion;
+
+        /// <summary>正式参数冻结集合标识。</summary>
+        public readonly string FrozenParameterSetId;
+
+        /// <summary>目标三维模型标识。</summary>
+        public readonly string ObjectModelId;
+
+        /// <summary>采集备注。</summary>
+        public readonly string Notes;
+
+        /// <summary>构造冻结 manifest 元数据。</summary>
+        public EvalManifestMetadata(
+            string sessionId,
+            string objectId,
+            string runKind,
+            string operatorId,
+            double createdUnixMs,
+            string unityRunMode,
+            string pythonHost,
+            string unityVersion,
+            string pythonVersion,
+            string gitCommit,
+            string protocolVersion,
+            string frozenParameterSetId,
+            string objectModelId,
+            string notes)
+        {
+            SessionId = sessionId ?? string.Empty;
+            ObjectId = objectId ?? string.Empty;
+            RunKind = runKind ?? string.Empty;
+            OperatorId = operatorId ?? string.Empty;
+            CreatedUnixMs = createdUnixMs;
+            UnityRunMode = unityRunMode ?? string.Empty;
+            PythonHost = pythonHost ?? string.Empty;
+            UnityVersion = unityVersion ?? string.Empty;
+            PythonVersion = pythonVersion ?? string.Empty;
+            GitCommit = gitCommit ?? string.Empty;
+            ProtocolVersion = protocolVersion ?? string.Empty;
+            FrozenParameterSetId = frozenParameterSetId ?? string.Empty;
+            ObjectModelId = objectModelId ?? string.Empty;
+            Notes = notes ?? string.Empty;
+        }
+    }
+
     /// <summary>
     /// 评估 JSONL 单行构建工具；只做字符串拼接，不依赖 JsonUtility。
     /// 输出字段名与 Python schema-v2 契约保持一致，不得擅自更改。
@@ -88,17 +168,27 @@ namespace EgoAnchor.Eval
             b.Str("variant_id", snapshot.VariantId);
             b.Str("variant_label", snapshot.VariantLabel);
             b.Dbl("unity_pose_handle_mono_ms", snapshot.PoseHandleMonoMs);
+            b.Long("unity_frame", snapshot.UnityFrame);
             b.Str("world_alignment_mode", snapshot.AlignmentMode.ToString());
             b.Bool("uses_capture_time_alignment", snapshot.UsesCaptureTimeAlignment);
+            b.Dbl("source_capture_mono_ms", snapshot.SourceCaptureMonoMs);
+            b.Long("source_capture_unity_frame", snapshot.SourceCaptureUnityFrame);
             b.Bool("has_aligned_raw", snapshot.HasAlignedRaw);
             b.Pose("aligned_raw_pos", "aligned_raw_rot", snapshot.AlignedRawPose, snapshot.HasAlignedRaw);
             b.Bool("has_arrival_time_raw", snapshot.HasArrivalTimeRaw);
             b.Pose("arrival_time_raw_pos", "arrival_time_raw_rot", snapshot.ArrivalTimeRawPose, snapshot.HasArrivalTimeRaw);
+            b.Dbl("arrival_time_raw_mono_ms", snapshot.ArrivalTimeRawMonoMs);
             b.Bool("uses_vcd_admission", snapshot.UsesVcdAdmission);
             b.Flt("vcd_score", snapshot.VcdScore);
+            b.Str("quality_gate", snapshot.QualityGate);
             b.Str("admission_decision", snapshot.AdmissionDecision);
+            b.Str("policy_action", snapshot.PolicyAction);
             b.Str("policy_reason", snapshot.PolicyReason);
             b.Str("anchor_state", snapshot.AnchorState);
+            b.Str("motion_model", snapshot.MotionModel);
+            b.Str("smoothing_strategy", snapshot.SmoothingStrategy);
+            b.Bool("uses_temporal_synthesis", snapshot.UsesTemporalSynthesis);
+            b.Bool("uses_static_lock", snapshot.UsesStaticLock);
             b.Str("config_hash", snapshot.ConfigHash);
             b.Str("experiment_id", snapshot.ExperimentId);
             b.Str("scenario_id", snapshot.ScenarioId);
@@ -120,22 +210,27 @@ namespace EgoAnchor.Eval
             string scenarioId = "",
             string trialId = "",
             string eventId = "",
-            string conditionId = "")
+            string conditionId = "",
+            string severity = "info",
+            string variantId = "")
         {
             var b = new Builder(256);
             b.Long("schema_version", 2);
             b.Str("event", eventType);
-            b.Str("session_id", sessionId);
             b.Str("event_type", eventType);
+            b.Str("session_id", sessionId);
             b.Str("source", source);
+            b.Dbl("created_unix_ms", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             b.Dbl("mono_ms", monoMs);
             b.Long("unity_frame", unityFrame);
-            b.Str("message", message);
+            b.Str("severity", severity);
             b.Str("experiment_id", experimentId);
             b.Str("scenario_id", scenarioId);
             b.Str("trial_id", trialId);
             b.Str("event_id", eventId);
-            b.Str("condition_id", conditionId);
+            b.Str("variant_id", variantId);
+            b.Str("message", message);
+            b.StringObject("payload", "condition_id", conditionId);
             return b.Finish();
         }
 
@@ -217,12 +312,9 @@ namespace EgoAnchor.Eval
         /// 构建 schema-v2 manifest.json 内容。
         /// </summary>
         public static string BuildManifest(
-            string sessionId,
-            string objectId,
-            string unityRunMode,
+            EvalManifestMetadata metadata,
             IReadOnlyList<string> variantLabels,
             IReadOnlyList<EvalVariantConfig> variantConfigs,
-            string notes,
             EvalLogStats referenceStats,
             EvalLogStats admissionStats,
             EvalLogStats renderStats,
@@ -231,17 +323,28 @@ namespace EgoAnchor.Eval
             var sb = new StringBuilder(512);
             sb.Append('{');
             sb.Append("\"schema_version\":2,");
-            sb.Append($"\"session_id\":{JStr(sessionId)},");
-            sb.Append($"\"object_id\":{JStr(objectId)},");
-            sb.Append($"\"unity_run_mode\":{JStr(unityRunMode)},");
+            sb.Append($"\"session_id\":{JStr(metadata.SessionId)},");
+            sb.Append($"\"object_id\":{JStr(metadata.ObjectId)},");
+            sb.Append($"\"run_kind\":{JStr(metadata.RunKind)},");
+            AppendExperimentIds(sb);
+            sb.Append($"\"operator_id\":{JStr(metadata.OperatorId)},");
+            sb.Append("\"created_unix_ms\":").Append(metadata.CreatedUnixMs.ToString("R", CultureInfo.InvariantCulture)).Append(',');
+            sb.Append($"\"unity_run_mode\":{JStr(metadata.UnityRunMode)},");
+            sb.Append($"\"python_host\":{JStr(metadata.PythonHost)},");
+            sb.Append($"\"unity_version\":{JStr(metadata.UnityVersion)},");
+            sb.Append($"\"python_version\":{JStr(metadata.PythonVersion)},");
+            sb.Append($"\"egoanchor_git_commit\":{JStr(metadata.GitCommit)},");
+            sb.Append($"\"protocol_version\":{JStr(metadata.ProtocolVersion)},");
             sb.Append($"\"config_hash\":{JStr(BuildAggregateConfigHash(variantConfigs))},");
+            sb.Append($"\"frozen_parameter_set_id\":{JStr(metadata.FrozenParameterSetId)},");
+            sb.Append($"\"object_model_id\":{JStr(metadata.ObjectModelId)},");
             sb.Append("\"log_files\":{");
             sb.Append($"\"python_candidates\":{JStr(EvalV2Manifest.PythonCandidatesFileName)},");
             sb.Append($"\"unity_reference\":{JStr(EvalV2Manifest.UnityReferenceFileName)},");
             sb.Append($"\"unity_admission\":{JStr(EvalV2Manifest.UnityAdmissionFileName)},");
             sb.Append($"\"unity_render\":{JStr(EvalV2Manifest.UnityRenderFileName)},");
             sb.Append($"\"events\":{JStr(EvalV2Manifest.EventsFileName)}}},");
-            sb.Append($"\"notes\":{JStr(notes ?? string.Empty)},");
+            sb.Append($"\"notes\":{JStr(metadata.Notes)},");
 
             // variant_labels 数组
             sb.Append("\"variant_labels\":[");
@@ -276,14 +379,14 @@ namespace EgoAnchor.Eval
 
             // 后台日志队列统计按固定文件名分组，供 Python QC 直接读取。
             sb.Append("\"log_writer_stats\":{");
-            AppendLogStats(sb, EvalV2Manifest.PythonCandidatesFileName, new EvalLogStats(0, 0, null), false);
+            AppendPendingPythonStats(sb, EvalV2Manifest.PythonCandidatesFileName, false);
             AppendLogStats(sb, EvalV2Manifest.UnityReferenceFileName, referenceStats, true);
             AppendLogStats(sb, EvalV2Manifest.UnityAdmissionFileName, admissionStats, true);
             AppendLogStats(sb, EvalV2Manifest.UnityRenderFileName, renderStats, true);
-            AppendLogStats(sb, EvalV2Manifest.EventsFileName, eventsStats, true);
+            AppendPendingMergedEventStats(sb, EvalV2Manifest.EventsFileName, eventsStats, true);
             sb.Append("},");
 
-            sb.Append("\"experiment_ids\":[],\"variant_definitions\":[");
+            sb.Append("\"variant_definitions\":[");
             if (variantConfigs != null)
             {
                 for (int i = 0; i < variantConfigs.Count; i++)
@@ -304,7 +407,8 @@ namespace EgoAnchor.Eval
                     sb.Append('}');
                 }
             }
-            sb.Append("],\"trial_plan\":[]");
+            sb.Append("],");
+            AppendTrialPlan(sb);
             sb.Append('}');
             return sb.ToString();
         }
@@ -313,9 +417,71 @@ namespace EgoAnchor.Eval
         {
             if (prependComma) sb.Append(',');
             sb.Append(JStr(name)).Append(":{");
+            sb.Append("\"rows_written\":").Append(stats.RowsWritten.ToString(CultureInfo.InvariantCulture)).Append(',');
             sb.Append("\"dropped_rows\":").Append(stats.DroppedRows.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append("\"peak_queue_depth\":").Append(stats.PeakQueueDepth.ToString(CultureInfo.InvariantCulture));
+            sb.Append("\"peak_queue_depth\":").Append(stats.PeakQueueDepth.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append("\"write_error\":").Append(JStr(stats.Error));
             sb.Append('}');
+        }
+
+        /// <summary>Python writer 仍在外部进程中运行时写显式 pending，而不是伪造零丢行。</summary>
+        private static void AppendPendingPythonStats(StringBuilder sb, string name, bool prependComma)
+        {
+            if (prependComma) sb.Append(',');
+            sb.Append(JStr(name)).Append(":{");
+            sb.Append("\"rows_written\":null,\"dropped_rows\":null,\"log_write_failures\":null,");
+            sb.Append("\"status\":\"pending_python_fragment\"}");
+        }
+
+        /// <summary>events 需要在离线阶段合并 Python 与 Unity 来源，因此顶层统计保持 pending。</summary>
+        private static void AppendPendingMergedEventStats(
+            StringBuilder sb,
+            string name,
+            EvalLogStats unityStats,
+            bool prependComma)
+        {
+            if (prependComma) sb.Append(',');
+            sb.Append(JStr(name)).Append(":{");
+            sb.Append("\"rows_written\":null,\"dropped_rows\":null,\"log_write_failures\":null,");
+            sb.Append("\"status\":\"pending_python_fragment_merge\",\"unity\":{");
+            sb.Append("\"rows_written\":").Append(unityStats.RowsWritten.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append("\"dropped_rows\":").Append(unityStats.DroppedRows.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append("\"peak_queue_depth\":").Append(unityStats.PeakQueueDepth.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append("\"write_error\":").Append(JStr(unityStats.Error)).Append("}}");
+        }
+
+        /// <summary>写入本轮冻结的实验一/二标识。</summary>
+        private static void AppendExperimentIds(StringBuilder sb)
+        {
+            sb.Append("\"experiment_ids\":[")
+                .Append(JStr(ExperimentId.SystemCharacterization)).Append(',')
+                .Append(JStr(ExperimentId.DesignAttribution)).Append("],");
+        }
+
+        /// <summary>写入正式采集使用的九类实验场景计划。</summary>
+        private static void AppendTrialPlan(StringBuilder sb)
+        {
+            sb.Append("\"trial_plan\":[");
+            bool first = true;
+            AppendTrialPlanEntries(sb, ExperimentId.SystemCharacterization, ExperimentScenario.SystemScenarios, ref first);
+            AppendTrialPlanEntries(sb, ExperimentId.DesignAttribution, ExperimentScenario.AttributionScenarios, ref first);
+            sb.Append(']');
+        }
+
+        /// <summary>把一个实验的场景数组追加为 manifest trial plan 条目。</summary>
+        private static void AppendTrialPlanEntries(
+            StringBuilder sb,
+            string experimentId,
+            IReadOnlyList<string> scenarios,
+            ref bool first)
+        {
+            for (int i = 0; i < scenarios.Count; i++)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"experiment_id\":").Append(JStr(experimentId))
+                    .Append(",\"scenario_id\":").Append(JStr(scenarios[i])).Append('}');
+            }
         }
 
         /// <summary>按 manifest 中的变体顺序生成整体配置摘要。</summary>
@@ -404,6 +570,14 @@ namespace EgoAnchor.Eval
             {
                 Name(key);
                 _sb.Append(JStr(value ?? string.Empty));
+            }
+
+            /// <summary>写入只含一个字符串字段的 JSON object。</summary>
+            public void StringObject(string key, string fieldName, string fieldValue)
+            {
+                Name(key);
+                _sb.Append('{').Append(JStr(fieldName)).Append(':')
+                    .Append(JStr(fieldValue ?? string.Empty)).Append('}');
             }
 
             public void Bool(string key, bool value)

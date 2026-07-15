@@ -6,6 +6,7 @@ import json
 import math
 import os
 import threading
+import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -20,17 +21,34 @@ class JsonlTableWriter:
     并可选地 `fsync`，便于 session 结束时对照 manifest 中的 writer stats。
     """
 
-    def __init__(self, path: str | Path, *, expected_event: str | None = None, fsync: bool = False) -> None:
+    _SHARED_LOCK_TIMEOUT_SECONDS = 1.0
+    """跨进程共享表单次等待锁的最长秒数。"""
+
+    _STALE_SHARED_LOCK_SECONDS = 30.0
+    """崩溃进程遗留锁的回收阈值。"""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_event: str | None = None,
+        fsync: bool = False,
+        shared_append: bool = False,
+    ) -> None:
         """创建父目录并打开 UTF-8 JSONL 文件。"""
 
         self.path = Path(path)
         self.expected_event = expected_event
         self.fsync = fsync
+        self.shared_append = bool(shared_append)
+        """是否按 Python/Unity 共享锁协议逐行追加。"""
         self.rows_written = 0
         self.dropped_rows = 0
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._handle = self.path.open("a", encoding="utf-8", newline="\n")
+        self._handle = None if self.shared_append else self.path.open("a", encoding="utf-8", newline="\n")
+        if self.shared_append:
+            self.path.touch(exist_ok=True)
 
     def write(self, row: Mapping[str, Any] | Any) -> None:
         """校验并写入一行；拒绝 NaN/Infinity，非有限数序列化为 JSON null。"""
@@ -43,18 +61,61 @@ class JsonlTableWriter:
         except (TypeError, ValueError, OverflowError, SchemaV2Error):
             self.dropped_rows += 1
             raise
-        with self._lock:
-            self._handle.write(encoded + "\n")
-            self._handle.flush()
-            if self.fsync:
-                os.fsync(self._handle.fileno())
-            self.rows_written += 1
+        try:
+            with self._lock:
+                if self.shared_append:
+                    self._write_shared_line(encoded)
+                else:
+                    assert self._handle is not None
+                    self._handle.write(encoded + "\n")
+                    self._handle.flush()
+                    if self.fsync:
+                        os.fsync(self._handle.fileno())
+                self.rows_written += 1
+        except Exception:
+            self.dropped_rows += 1
+            raise
 
     def close(self) -> None:
         """关闭文件句柄。"""
 
-        if not self._handle.closed:
+        if self._handle is not None and not self._handle.closed:
             self._handle.close()
+
+    def _write_shared_line(self, encoded: str) -> None:
+        """在跨进程锁内追加一行，协议与 Unity EvalLog 一致。"""
+
+        lock_path = Path(f"{self.path}.lock")
+        deadline = time.monotonic() + self._SHARED_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(descriptor)
+                break
+            except FileExistsError:
+                self._remove_stale_lock(lock_path)
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"跨进程事件日志锁等待超时：{lock_path}")
+                time.sleep(0.002)
+
+        try:
+            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(encoded + "\n")
+                handle.flush()
+                if self.fsync:
+                    os.fsync(handle.fileno())
+        finally:
+            lock_path.unlink(missing_ok=True)
+
+    def _remove_stale_lock(self, lock_path: Path) -> None:
+        """回收超过阈值的崩溃遗留锁；活跃锁保持不动。"""
+
+        try:
+            age_seconds = time.time() - lock_path.stat().st_mtime
+            if age_seconds >= self._STALE_SHARED_LOCK_SECONDS:
+                lock_path.unlink(missing_ok=True)
+        except FileNotFoundError:
+            return
 
     def __enter__(self) -> "JsonlTableWriter":
         """进入上下文管理器。"""
