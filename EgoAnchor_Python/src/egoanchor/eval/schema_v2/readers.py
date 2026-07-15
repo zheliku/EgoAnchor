@@ -3,14 +3,30 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import math
+import types
+from copy import deepcopy
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args, get_origin, get_type_hints
 
 import pandas as pd
 
 from .paths import EvalV2Paths
-from .rows import SCHEMA_VERSION, SchemaV2Error, validate_schema_mapping
+from .rows import (
+    EventRow,
+    ManifestV2,
+    PythonCandidateRow,
+    SchemaV2Error,
+    UnityAdmissionRow,
+    UnityReferenceRow,
+    UnityRenderRow,
+    validate_schema_mapping,
+)
+
+
+_PYTHON_FRAGMENT_NAME = "python_session.json"
+"""Python runtime 停止时写入的统计片段文件名。"""
 
 
 @dataclass(frozen=True)
@@ -33,59 +49,69 @@ class EvalSessionV2:
 
 
 def join_candidate_admission(session: EvalSessionV2) -> pd.DataFrame:
-    """Join Python candidates to Unity admission rows without duplicating keys.
-
-    Admission is a candidate x variant table, so the candidate fields are
-    repeated for every configured runtime variant.  The join is intentionally
-    left-preserving and uses ``candidate_id`` (plus session_id when present)
-    rather than frame_id, which may have multiple candidates.
-    """
+    """按稳定 candidate_id 连接 Python candidate 与 Unity admission。"""
 
     candidates = session.python_candidates.copy()
     admission = session.unity_admission.copy()
-    if candidates.empty or admission.empty:
-        return pd.DataFrame()
-    keys = ["candidate_id"]
-    if "session_id" in candidates.columns and "session_id" in admission.columns:
-        keys.insert(0, "session_id")
-    return admission.merge(candidates, on=keys, how="left", suffixes=("", "_candidate"), validate="many_to_one")
+    keys = ["session_id", "candidate_id"]
+    try:
+        joined = admission.merge(
+            candidates,
+            on=keys,
+            how="left",
+            suffixes=("", "_candidate"),
+            validate="many_to_one",
+            indicator=True,
+        )
+    except pd.errors.MergeError as exc:
+        raise SchemaV2Error(f"candidate/admission join cardinality violation: {exc}") from exc
+    missing = joined.loc[joined["_merge"] != "both", "candidate_id"].astype(str).unique().tolist()
+    if missing:
+        raise SchemaV2Error(f"unity_admission references unknown candidate_id values: {sorted(missing)}")
+    return joined.drop(columns="_merge")
 
 
 def join_render_reference(session: EvalSessionV2) -> pd.DataFrame:
-    """Join display/render rows to the captured platform reference by frame."""
+    """按 source_frame_id 连接 render 行与采集时刻平台参考。"""
 
     render = session.unity_render.copy()
     reference = session.unity_reference.copy()
-    if render.empty or reference.empty:
-        return pd.DataFrame()
-    render_key = "frame_id" if "frame_id" in render.columns else "source_frame_id"
-    if render_key not in render.columns or "frame_id" not in reference.columns:
-        raise SchemaV2Error("unity_render requires source_frame_id and unity_reference requires frame_id for joining")
-    left_on = [render_key]
-    right_on = ["frame_id"]
-    if "session_id" in render.columns and "session_id" in reference.columns:
-        left_on.insert(0, "session_id")
-        right_on.insert(0, "session_id")
-    return render.merge(
-        reference,
-        left_on=left_on,
-        right_on=right_on,
-        how="left",
-        suffixes=("", "_reference"),
-        validate="many_to_one",
-    )
+    try:
+        joined = render.merge(
+            reference,
+            left_on=["session_id", "source_frame_id"],
+            right_on=["session_id", "frame_id"],
+            how="left",
+            suffixes=("", "_reference"),
+            validate="many_to_one",
+            indicator=True,
+        )
+    except pd.errors.MergeError as exc:
+        raise SchemaV2Error(f"render/reference join cardinality violation: {exc}") from exc
+    missing_mask = (joined["source_frame_id"] >= 0) & (joined["_merge"] != "both")
+    missing = joined.loc[missing_mask, "source_frame_id"].unique().tolist()
+    if missing:
+        raise SchemaV2Error(f"unity_render references unknown source_frame_id values: {sorted(missing)}")
+    return joined.drop(columns="_merge")
 
 
 def select_trials(session: EvalSessionV2, experiment_id: str) -> EvalSessionV2:
-    """Return a session view containing rows for one experiment id."""
+    """返回单个实验及其关联 candidate/reference/event 的严格 session 视图。"""
 
     if not experiment_id:
         raise ValueError("experiment_id must be non-empty")
 
+    experiment_ids = session.manifest.get("experiment_ids")
+    if not isinstance(experiment_ids, list) or experiment_id not in experiment_ids:
+        raise SchemaV2Error(f"manifest does not declare experiment_id={experiment_id!r}")
+
     admission = session.unity_admission
     render = session.unity_render
+
     def by_experiment(table: pd.DataFrame) -> pd.DataFrame:
-        if table.empty or "experiment_id" not in table.columns:
+        """按必需 experiment_id 列筛选。"""
+
+        if table.empty:
             return table.copy()
         return table[table["experiment_id"].astype(str) == experiment_id].copy()
 
@@ -93,26 +119,25 @@ def select_trials(session: EvalSessionV2, experiment_id: str) -> EvalSessionV2:
     render_filtered = by_experiment(render)
 
     def by_values(table: pd.DataFrame, column: str, values: set[Any]) -> pd.DataFrame:
-        if table.empty or column not in table.columns:
+        """按已由实验行确定的稳定键筛选关联表。"""
+
+        if table.empty:
             return table.copy()
         return table[table[column].isin(values)].copy()
 
     candidate_ids = set(admission_filtered.get("candidate_id", pd.Series(dtype=str)).dropna())
     frame_ids = set(admission_filtered.get("frame_id", pd.Series(dtype=int)).dropna())
     frame_ids.update(render_filtered.get("source_frame_id", pd.Series(dtype=int)).dropna())
-    trial_ids = set(admission_filtered.get("trial_id", pd.Series(dtype=str)).dropna())
-    trial_ids.update(render_filtered.get("trial_id", pd.Series(dtype=str)).dropna())
 
     def filter_events(events: pd.DataFrame) -> pd.DataFrame:
+        """保留目标实验事件和 experiment_id 为空的 session-global 事件。"""
+
         if events.empty:
             return events.copy()
-        if "experiment_id" in events.columns:
-            return events[events["experiment_id"].astype(str) == experiment_id].copy()
-        return by_values(events, "trial_id", trial_ids)
+        values = events["experiment_id"].astype(str)
+        return events[(values == experiment_id) | (values == "")].copy()
 
     manifest = dict(session.manifest)
-    if isinstance(manifest.get("experiment_ids"), list):
-        manifest["experiment_ids"] = [experiment_id] if experiment_id in manifest["experiment_ids"] else []
     return EvalSessionV2(
         paths=session.paths,
         manifest=manifest,
@@ -142,6 +167,8 @@ def load_session_v2(session_dir: str | Path) -> EvalSessionV2:
     if not isinstance(manifest, dict):
         raise SchemaV2Error("manifest.json must contain an object")
     validate_schema_mapping(manifest)
+    _require_fields(manifest, ManifestV2, "manifest.json")
+    _validate_field_types(manifest, ManifestV2, "manifest.json")
     session_id = manifest.get("session_id")
     if not isinstance(session_id, str) or not session_id:
         raise SchemaV2Error("manifest.json requires non-empty session_id")
@@ -149,10 +176,12 @@ def load_session_v2(session_dir: str | Path) -> EvalSessionV2:
     # 前四个数据文件各自只有一种固定行类型；events.jsonl 则承载
     # session_started、trial_started、runtime_error 等多种事件，不应锁死事件名。
     expected_events = ("python_candidate", "unity_reference", "unity_admission", "unity_render", None)
+    row_types = (PythonCandidateRow, UnityReferenceRow, UnityAdmissionRow, UnityRenderRow, EventRow)
     tables = [
-        _read_jsonl(path, session_id=session_id, expected_event=event)
-        for path, event in zip(paths.jsonl_paths(), expected_events, strict=True)
+        _read_jsonl(path, session_id=session_id, expected_event=event, row_type=row_type)
+        for path, event, row_type in zip(paths.jsonl_paths(), expected_events, row_types, strict=True)
     ]
+    manifest = _merge_python_fragment(paths, manifest)
     return EvalSessionV2(
         paths=paths,
         manifest=manifest,
@@ -164,7 +193,13 @@ def load_session_v2(session_dir: str | Path) -> EvalSessionV2:
     )
 
 
-def _read_jsonl(path: Path, *, session_id: str, expected_event: str | None) -> pd.DataFrame:
+def _read_jsonl(
+    path: Path,
+    *,
+    session_id: str,
+    expected_event: str | None,
+    row_type: type[Any],
+) -> pd.DataFrame:
     """读取单个 JSONL 文件并验证每行固定 schema。"""
 
     if not path.is_file():
@@ -189,8 +224,238 @@ def _read_jsonl(path: Path, *, session_id: str, expected_event: str | None) -> p
             raise SchemaV2Error(f"{path.name}:{line_number}: {exc}") from exc
         if row.get("session_id") != session_id:
             raise SchemaV2Error(f"{path.name}:{line_number}: session_id does not match manifest")
+        _require_fields(row, row_type, f"{path.name}:{line_number}")
+        _validate_field_types(row, row_type, f"{path.name}:{line_number}")
+        _validate_stable_keys(row, row_type, f"{path.name}:{line_number}")
         rows.append(row)
-    return pd.DataFrame.from_records(rows)
+    if rows:
+        return pd.DataFrame.from_records(rows)
+    return pd.DataFrame(columns=[item.name for item in fields(row_type)])
+
+
+def _require_fields(row: dict[str, Any], row_type: type[Any], source: str) -> None:
+    """按 schema dataclass 字段检查固定行必需键，允许额外诊断字段。"""
+
+    required = {item.name for item in fields(row_type)}
+    missing = sorted(required - row.keys())
+    if missing:
+        raise SchemaV2Error(f"{source}: missing required fields: {', '.join(missing)}")
+
+
+def _validate_field_types(row: dict[str, Any], row_type: type[Any], source: str) -> None:
+    """按 dataclass 注解严格验证 JSON 字段类型和定长 pose 向量。"""
+
+    type_hints = get_type_hints(row_type)
+    for item in fields(row_type):
+        value = row[item.name]
+        expected = type_hints[item.name]
+        if not _matches_type(value, expected):
+            raise SchemaV2Error(
+                f"{source}: {item.name} has invalid type {type(value).__name__}; expected {expected}"
+            )
+        expected_length = _fixed_vector_length(item.name)
+        if value is not None and expected_length is not None and len(value) != expected_length:
+            raise SchemaV2Error(
+                f"{source}: {item.name} must contain exactly {expected_length} values"
+            )
+
+
+def _matches_type(value: Any, expected: Any) -> bool:
+    """验证 JSON 可表达值是否满足 dataclass 类型，拒绝 bool 冒充数值。"""
+
+    if expected is Any:
+        return True
+    origin = get_origin(expected)
+    arguments = get_args(expected)
+    if origin is types.UnionType:
+        return any(_matches_type(value, item) for item in arguments)
+    if origin is list:
+        return isinstance(value, list) and all(_matches_type(item, arguments[0]) for item in value)
+    if origin is dict:
+        return isinstance(value, dict) and all(
+            _matches_type(key, arguments[0]) and _matches_type(item, arguments[1])
+            for key, item in value.items()
+        )
+    if expected is type(None):
+        return value is None
+    if expected is bool:
+        return isinstance(value, bool)
+    if expected is int:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected is float:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(value)
+        except OverflowError:
+            return False
+    if expected is str:
+        return isinstance(value, str)
+    return isinstance(value, expected)
+
+
+def _fixed_vector_length(field_name: str) -> int | None:
+    """返回 schema 中矩阵、位置和四元数数组的固定长度。"""
+
+    if field_name == "pose_matrix_cv_camera":
+        return 16
+    if field_name.endswith("_pos"):
+        return 3
+    if field_name.endswith("_rot"):
+        return 4
+    return None
+
+
+def _validate_stable_keys(row: dict[str, Any], row_type: type[Any], source: str) -> None:
+    """验证跨表 join 和矩阵检查依赖的稳定键类型与取值范围。"""
+
+    _nonempty_string(row, "session_id", source)
+    _nonempty_string(row, "event", source)
+    if row_type is PythonCandidateRow:
+        _nonempty_string(row, "candidate_id", source)
+        _bounded_int(row, "frame_id", source, minimum=0)
+        _validate_candidate_id(row, source)
+    elif row_type is UnityReferenceRow:
+        _bounded_int(row, "frame_id", source, minimum=0)
+    elif row_type is UnityAdmissionRow:
+        _nonempty_string(row, "candidate_id", source)
+        _nonempty_string(row, "variant_id", source)
+        _bounded_int(row, "frame_id", source, minimum=0)
+        _validate_candidate_id(row, source)
+    elif row_type is UnityRenderRow:
+        _nonempty_string(row, "variant_id", source)
+        _bounded_int(row, "render_tick_id", source, minimum=0)
+        _bounded_int(row, "source_frame_id", source, minimum=-1)
+    elif row_type is EventRow:
+        _nonempty_string(row, "event_type", source)
+
+
+def _nonempty_string(row: dict[str, Any], key: str, source: str) -> None:
+    """要求稳定字符串键为非空字符串。"""
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise SchemaV2Error(f"{source}: {key} must be a non-empty string")
+
+
+def _bounded_int(row: dict[str, Any], key: str, source: str, *, minimum: int) -> None:
+    """要求稳定整数键不低于给定下界，并拒绝 bool 冒充整数。"""
+
+    value = row.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise SchemaV2Error(f"{source}: {key} must be an integer >= {minimum}")
+
+
+def _validate_candidate_id(row: dict[str, Any], source: str) -> None:
+    """校验 candidate_id 的 session、frame 与 frame-local sequence 语义。"""
+
+    candidate_id = str(row["candidate_id"])
+    parts = candidate_id.rsplit(":", 2)
+    if len(parts) != 3:
+        raise SchemaV2Error(f"{source}: candidate_id must use session_id:frame_id:frame_local_seq")
+    id_session, id_frame_text, sequence_text = parts
+    try:
+        id_frame = int(id_frame_text)
+        sequence = int(sequence_text)
+    except ValueError as exc:
+        raise SchemaV2Error(f"{source}: candidate_id frame and sequence must be integers") from exc
+    if id_session != row["session_id"] or id_frame != row["frame_id"] or sequence < 1:
+        raise SchemaV2Error(f"{source}: candidate_id does not match session_id/frame_id or has invalid sequence")
+
+
+def _merge_python_fragment(paths: EvalV2Paths, manifest: dict[str, Any]) -> dict[str, Any]:
+    """把 Python 停止片段中的 writer stats 合并到 Unity manifest 内存副本。"""
+
+    fragment_path = paths.session_dir / _PYTHON_FRAGMENT_NAME
+    if not fragment_path.is_file():
+        return manifest
+    try:
+        fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SchemaV2Error(f"cannot read {_PYTHON_FRAGMENT_NAME}: {exc}") from exc
+    if not isinstance(fragment, dict):
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} must contain an object")
+    validate_schema_mapping(fragment)
+    if fragment.get("session_id") != manifest.get("session_id"):
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} session_id does not match manifest")
+    if fragment.get("object_id") != manifest.get("object_id"):
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} object_id does not match manifest")
+    expected_files = {"python_candidates": "python_candidates.jsonl", "events": "events.jsonl"}
+    if fragment.get("python_log_filename") != "python_candidates.jsonl":
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} requires python_log_filename=python_candidates.jsonl")
+    if fragment.get("events_log_filename") != "events.jsonl":
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} requires events_log_filename=events.jsonl")
+    if fragment.get("log_files") != expected_files:
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME}.log_files must equal fixed schema-v2 mapping")
+    for key in ("python_host", "python_version"):
+        value = fragment.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME}.{key} must be a non-empty string")
+
+    merged = deepcopy(manifest)
+    stats = merged.get("log_writer_stats")
+    if not isinstance(stats, dict):
+        raise SchemaV2Error("manifest.log_writer_stats must be an object")
+    if fragment.get("state") != "python_stopped":
+        _mark_python_stats_pending(stats, str(fragment.get("state", "unknown")))
+        return merged
+
+    fragment_stats = fragment.get("log_writer_stats")
+    if not isinstance(fragment_stats, dict):
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME}.log_writer_stats must be an object")
+    python_candidates = _python_stats(fragment_stats, "python_candidates.jsonl")
+    python_events = _python_stats(fragment_stats, "events.jsonl")
+    stats["python_candidates.jsonl"] = {**python_candidates, "status": "merged"}
+
+    event_stats = stats.get("events.jsonl")
+    unity_events = event_stats.get("unity") if isinstance(event_stats, dict) else None
+    if not isinstance(unity_events, dict):
+        raise SchemaV2Error("manifest events.jsonl stats require unity source stats before merge")
+    unity_rows = _nonnegative_int(unity_events, "rows_written", "manifest events unity stats")
+    unity_dropped = _nonnegative_int(unity_events, "dropped_rows", "manifest events unity stats")
+    unity_error = str(unity_events.get("write_error") or "")
+    stats["events.jsonl"] = {
+        "rows_written": unity_rows + python_events["rows_written"],
+        "dropped_rows": unity_dropped + python_events["dropped_rows"],
+        "log_write_failures": python_events["log_write_failures"] + int(bool(unity_error)),
+        "write_error": unity_error,
+        "status": "merged",
+        "sources": {"unity": unity_events, "python": python_events},
+    }
+    merged["python_host"] = fragment["python_host"]
+    merged["python_version"] = fragment["python_version"]
+    return merged
+
+
+def _mark_python_stats_pending(stats: dict[str, Any], state: str) -> None:
+    """Python 尚未正常停止时保留显式 pending 状态供 QC 拒绝。"""
+
+    for name in ("python_candidates.jsonl", "events.jsonl"):
+        value = stats.get(name)
+        if isinstance(value, dict):
+            value["status"] = f"pending_python_state:{state}"
+
+
+def _python_stats(fragment_stats: dict[str, Any], name: str) -> dict[str, int]:
+    """读取一个 Python writer 的完整非负统计。"""
+
+    raw = fragment_stats.get(name)
+    if not isinstance(raw, dict):
+        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} missing writer stats for {name}")
+    return {
+        "rows_written": _nonnegative_int(raw, "rows_written", f"{_PYTHON_FRAGMENT_NAME} {name}"),
+        "dropped_rows": _nonnegative_int(raw, "dropped_rows", f"{_PYTHON_FRAGMENT_NAME} {name}"),
+        "log_write_failures": _nonnegative_int(raw, "log_write_failures", f"{_PYTHON_FRAGMENT_NAME} {name}"),
+    }
+
+
+def _nonnegative_int(raw: dict[str, Any], key: str, source: str) -> int:
+    """读取严格非负整数，拒绝 bool、null 和字符串伪装的统计。"""
+
+    value = raw.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SchemaV2Error(f"{source}.{key} must be a non-negative integer")
+    return value
 
 
 __all__ = [

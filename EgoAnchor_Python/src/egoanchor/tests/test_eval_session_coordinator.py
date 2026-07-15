@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import platform
+import socket
 import tempfile
 import unittest
 from datetime import datetime
@@ -39,6 +41,8 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             self.assertEqual(metadata["log_files"]["python_candidates"], "python_candidates.jsonl")
             self.assertEqual(metadata["log_writer_stats"], {})
             self.assertEqual(metadata["state"], "python_started")
+            self.assertEqual(metadata["python_host"], socket.gethostname())
+            self.assertEqual(metadata["python_version"], platform.python_version())
 
     def test_tracking_runtime_uses_eval_session_dir_when_enabled(self) -> None:
         """启用 eval session 后，runtime JSONL 应直接写入共享 session 目录。"""

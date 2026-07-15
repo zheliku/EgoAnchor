@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
 
-from egoanchor.eval.schema_v2 import SchemaV2Error, load_session_v2
+from egoanchor.eval.schema_v2 import (
+    EventRow,
+    PythonCandidateRow,
+    SchemaV2Error,
+    UnityAdmissionRow,
+    UnityReferenceRow,
+    UnityRenderRow,
+    aggregate_config_hash,
+    join_candidate_admission,
+    join_render_reference,
+    load_session_v2,
+    select_trials,
+)
 
 
 class SchemaV2ReaderTest(unittest.TestCase):
@@ -33,11 +46,189 @@ class SchemaV2ReaderTest(unittest.TestCase):
             session = load_session_v2(session_dir)
 
             self.assertEqual(session.manifest["session_id"], "s01")
-            self.assertEqual(len(session.python_candidates), 1)
-            self.assertEqual(len(session.unity_reference), 1)
-            self.assertEqual(len(session.unity_admission), 2)
-            self.assertEqual(len(session.unity_render), 2)
-            self.assertEqual(len(session.events), 1)
+            self.assertEqual(session.manifest["python_host"], "python-host")
+            self.assertEqual(session.manifest["python_version"], "3.11")
+            self.assertEqual(len(session.python_candidates), 2)
+            self.assertEqual(len(session.unity_reference), 2)
+            self.assertEqual(len(session.unity_admission), 4)
+            self.assertEqual(len(session.unity_render), 4)
+            self.assertEqual(len(session.events), 3)
+            self.assertEqual(
+                session.manifest["log_writer_stats"]["python_candidates.jsonl"]["status"],
+                "merged",
+            )
+            self.assertEqual(session.manifest["log_writer_stats"]["events.jsonl"]["rows_written"], 3)
+
+    def test_joins_preserve_candidate_and_reference_matches(self) -> None:
+        """candidate/admission 与 render/reference join 必须保留全部变体行并命中右表。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+
+            candidate_join = join_candidate_admission(session)
+            reference_join = join_render_reference(session)
+
+            self.assertEqual(len(candidate_join), 4)
+            self.assertTrue(candidate_join["server_receive_mono_ms"].notna().all())
+            self.assertEqual(len(reference_join), 4)
+            self.assertTrue(reference_join["capture_mono_ms"].notna().all())
+
+    def test_select_trials_filters_all_related_tables(self) -> None:
+        """实验筛选必须同步裁剪 candidate、reference、admission、render 与 event。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+
+            selected = select_trials(session, "exp1_system_characterization")
+
+            self.assertEqual(len(selected.python_candidates), 1)
+            self.assertEqual(len(selected.unity_reference), 1)
+            self.assertEqual(len(selected.unity_admission), 2)
+            self.assertEqual(len(selected.unity_render), 2)
+            self.assertEqual(len(selected.events), 2)
+            self.assertEqual(set(selected.events["experiment_id"]), {"", "exp1_system_characterization"})
+            self.assertEqual(
+                selected.manifest["experiment_ids"],
+                ["exp1_system_characterization", "exp2_design_attribution"],
+            )
+
+    def test_candidate_join_rejects_unknown_candidate_id(self) -> None:
+        """Admission 指向不存在的 candidate_id 时不得产生带空值的伪连接。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.unity_admission.loc[0, "candidate_id"] = "s01:999:1"
+
+            with self.assertRaisesRegex(SchemaV2Error, "unknown candidate_id"):
+                join_candidate_admission(session)
+
+    def test_render_join_rejects_unknown_source_frame_id(self) -> None:
+        """Render 指向不存在的 source_frame_id 时不得伪造平台参考。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.unity_render.loc[0, "source_frame_id"] = 999
+
+            with self.assertRaisesRegex(SchemaV2Error, "unknown source_frame_id"):
+                join_render_reference(session)
+
+    def test_render_join_allows_uninitialized_source_frame(self) -> None:
+        """尚无观测时的 source_frame_id=-1 是合法启动状态，应保留为未匹配参考行。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.unity_render.loc[0, "source_frame_id"] = -1
+
+            joined = join_render_reference(session)
+
+            self.assertEqual(len(joined), 4)
+            self.assertTrue(math.isnan(float(joined.loc[0, "frame_id"])))
+
+    def test_reader_rejects_null_candidate_id(self) -> None:
+        """null candidate_id 不得利用 pandas 的 null 匹配语义形成伪连接。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            candidate_path = session_dir / "python_candidates.jsonl"
+            rows = [json.loads(line) for line in candidate_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["candidate_id"] = None
+            _write_jsonl(candidate_path, rows)
+
+            with self.assertRaisesRegex(SchemaV2Error, "candidate_id has invalid type"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_missing_required_row_field(self) -> None:
+        """固定行类型缺少任一 dataclass 字段时必须在读取阶段失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            rows = [
+                json.loads(line)
+                for line in (session_dir / "unity_render.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            rows[0].pop("has_display_pose")
+            _write_jsonl(session_dir / "unity_render.jsonl", rows)
+
+            with self.assertRaisesRegex(SchemaV2Error, "missing required fields.*has_display_pose"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_string_encoded_boolean(self) -> None:
+        """布尔字段不得接受字符串，否则 pandas 后续 bool 转换会反转 false 语义。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            render_path = session_dir / "unity_render.jsonl"
+            rows = [json.loads(line) for line in render_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["has_output_pose"] = "false"
+            _write_jsonl(render_path, rows)
+
+            with self.assertRaisesRegex(SchemaV2Error, "has_output_pose has invalid type"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_wrong_pose_vector_length(self) -> None:
+        """位置与四元数数组必须保持固定维度，防止分析阶段才出现广播错误。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            render_path = session_dir / "unity_render.jsonl"
+            rows = [json.loads(line) for line in render_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["display_rot"] = [0.0, 0.0, 1.0]
+            _write_jsonl(render_path, rows)
+
+            with self.assertRaisesRegex(SchemaV2Error, "display_rot must contain exactly 4 values"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_python_fragment_identity_mismatch(self) -> None:
+        """Python fragment 与 Unity manifest 的 session_id 不一致时不得合并。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["session_id"] = "other-session"
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "python_session.json session_id does not match"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_candidate_id_frame_mismatch(self) -> None:
+        """candidate_id 内嵌 frame 必须与显式 frame_id 完全一致。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            admission_path = session_dir / "unity_admission.jsonl"
+            rows = [json.loads(line) for line in admission_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["frame_id"] = 999
+            _write_jsonl(admission_path, rows)
+
+            with self.assertRaisesRegex(SchemaV2Error, "candidate_id does not match"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_python_fragment_file_mapping_mismatch(self) -> None:
+        """Python fragment 必须声明与 schema-v2 相同的固定文件映射。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["events_log_filename"] = "other.jsonl"
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "events_log_filename=events.jsonl"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_python_fragment_host_type_coercion(self) -> None:
+        """host/version 必须原生为非空字符串，不得把数组或数字强制转换后通过 Formal QC。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["python_host"] = ["bad-host"]
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "python_host must be a non-empty string"):
+                load_session_v2(session_dir)
 
 
 def _write_minimal_session(root: Path) -> Path:
@@ -46,17 +237,28 @@ def _write_minimal_session(root: Path) -> Path:
     session_dir = root / "s01"
     session_dir.mkdir()
     (session_dir / "audit_samples").mkdir()
+    variant_definitions = [
+        {"variant_id": "arrival", "variant_label": "Arrival-Hold", "config_hash": "arrival-cfg"},
+        {"variant_id": "egoanchor", "variant_label": "EgoAnchor", "config_hash": "egoanchor-cfg"},
+    ]
     manifest = {
         "schema_version": 2,
         "session_id": "s01",
         "object_id": "controller_right",
         "run_kind": "smoke",
-        "config_hash": "cfg-1",
+        "experiment_ids": ["exp1_system_characterization", "exp2_design_attribution"],
+        "operator_id": "operator-01",
+        "created_unix_ms": 10000.0,
+        "unity_run_mode": "editor_link",
+        "python_host": "python-host",
+        "unity_version": "6000.3.11f1",
+        "python_version": "3.11",
+        "egoanchor_git_commit": "0123456789abcdef",
+        "protocol_version": "v1",
+        "config_hash": aggregate_config_hash(variant_definitions),
         "frozen_parameter_set_id": "dev-1",
-        "variant_definitions": [
-            {"variant_id": "arrival", "variant_label": "Arrival-Hold"},
-            {"variant_id": "egoanchor", "variant_label": "EgoAnchor"},
-        ],
+        "object_model_id": "controller-mesh-v1",
+        "variant_definitions": variant_definitions,
         "log_files": {
             "python_candidates": "python_candidates.jsonl",
             "unity_reference": "unity_reference.jsonl",
@@ -64,52 +266,131 @@ def _write_minimal_session(root: Path) -> Path:
             "unity_render": "unity_render.jsonl",
             "events": "events.jsonl",
         },
+        "trial_plan": [
+            {"experiment_id": "exp1_system_characterization", "scenario_id": "static_head_motion"},
+        ],
         "log_writer_stats": {
-            "python_candidates.jsonl": {"dropped_rows": 0},
-            "unity_reference.jsonl": {"dropped_rows": 0},
-            "unity_admission.jsonl": {"dropped_rows": 0},
-            "unity_render.jsonl": {"dropped_rows": 0},
-            "events.jsonl": {"dropped_rows": 0},
+            "python_candidates.jsonl": {
+                "rows_written": None,
+                "dropped_rows": None,
+                "status": "pending_python_fragment",
+            },
+            "unity_reference.jsonl": {"rows_written": 2, "dropped_rows": 0, "write_error": ""},
+            "unity_admission.jsonl": {"rows_written": 4, "dropped_rows": 0, "write_error": ""},
+            "unity_render.jsonl": {"rows_written": 4, "dropped_rows": 0, "write_error": ""},
+            "events.jsonl": {
+                "rows_written": None,
+                "dropped_rows": None,
+                "status": "pending_python_fragment_merge",
+                "unity": {"rows_written": 2, "dropped_rows": 0, "write_error": ""},
+            },
         },
     }
     (session_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (session_dir / "python_session.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "s01",
+                "object_id": "controller_right",
+                "state": "python_stopped",
+                "python_host": "python-host",
+                "python_version": "3.11",
+                "python_log_filename": "python_candidates.jsonl",
+                "events_log_filename": "events.jsonl",
+                "log_files": {
+                    "python_candidates": "python_candidates.jsonl",
+                    "events": "events.jsonl",
+                },
+                "log_writer_stats": {
+                    "python_candidates.jsonl": {"rows_written": 2, "dropped_rows": 0, "log_write_failures": 0},
+                    "events.jsonl": {"rows_written": 1, "dropped_rows": 0, "log_write_failures": 0},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     _write_jsonl(
         session_dir / "python_candidates.jsonl",
-        [{"schema_version": 2, "event": "python_candidate", "session_id": "s01", "frame_id": 1}],
+        [
+            PythonCandidateRow(
+                session_id="s01", frame_id=frame_id, candidate_id=f"s01:{frame_id}:1",
+                server_receive_mono_ms=1000.0 + frame_id, server_publish_mono_ms=1010.0 + frame_id,
+                has_pose=True, pose_matrix_cv_camera=[1.0] * 16,
+            ).to_dict()
+            for frame_id in (1, 2)
+        ],
     )
     _write_jsonl(
         session_dir / "unity_reference.jsonl",
-        [{"schema_version": 2, "event": "unity_reference", "session_id": "s01", "frame_id": 1}],
+        [
+            UnityReferenceRow(
+                session_id="s01", frame_id=frame_id, capture_mono_ms=900.0 + frame_id,
+                capture_unix_ms=10000.0 + frame_id, capture_unity_frame=frame_id,
+                sender_mono_ms=905.0 + frame_id, sender_unity_frame=frame_id,
+                publish_attempt_mono_ms=906.0 + frame_id, publish_succeeded=True,
+                cam_valid=True, camera_reference="Left", reference_pose_valid=True,
+            ).to_dict()
+            for frame_id in (1, 2)
+        ],
     )
     _write_jsonl(
         session_dir / "unity_admission.jsonl",
         [
-            {
-                "schema_version": 2,
-                "event": "unity_admission",
-                "session_id": "s01",
-                "candidate_id": "s01:1:1",
-                "variant_id": variant_id,
-            }
+            UnityAdmissionRow(
+                session_id="s01", candidate_id=f"s01:{frame_id}:1", frame_id=frame_id,
+                variant_id=variant_id, variant_label=variant_id,
+                experiment_id=("exp1_system_characterization" if frame_id == 1 else "exp2_design_attribution"),
+                scenario_id=("static_head_motion" if frame_id == 1 else "ablation_capture_alignment"),
+                trial_id=f"trial-{frame_id:02d}", event_id=f"event-{frame_id:02d}",
+                condition_id=f"condition-{frame_id:02d}",
+                unity_pose_handle_mono_ms=1020.0 + frame_id, unity_frame=frame_id,
+                world_alignment_mode="CaptureTime", uses_capture_time_alignment=True,
+                admission_decision="accepted", policy_action="Accept",
+                config_hash=f"{variant_id}-cfg",
+            ).to_dict()
+            for frame_id in (1, 2)
             for variant_id in ("arrival", "egoanchor")
         ],
     )
     _write_jsonl(
         session_dir / "unity_render.jsonl",
         [
-            {
-                "schema_version": 2,
-                "event": "unity_render",
-                "session_id": "s01",
-                "render_tick_id": 1,
-                "variant_id": variant_id,
-            }
+            UnityRenderRow(
+                session_id="s01", render_tick_id=frame_id, render_mono_ms=1100.0 + frame_id,
+                render_unix_ms=11000.0 + frame_id, render_unity_frame=frame_id,
+                variant_id=variant_id, variant_label=variant_id,
+                experiment_id=("exp1_system_characterization" if frame_id == 1 else "exp2_design_attribution"),
+                scenario_id=("static_head_motion" if frame_id == 1 else "ablation_capture_alignment"),
+                trial_id=f"trial-{frame_id:02d}", event_id=f"event-{frame_id:02d}",
+                condition_id=f"condition-{frame_id:02d}",
+                source_frame_id=frame_id, has_output_pose=True, has_display_pose=True,
+                config_hash=f"{variant_id}-cfg",
+            ).to_dict()
+            for frame_id in (1, 2)
             for variant_id in ("arrival", "egoanchor")
         ],
     )
     _write_jsonl(
         session_dir / "events.jsonl",
-        [{"schema_version": 2, "event": "session_started", "session_id": "s01"}],
+        [
+            EventRow(
+                session_id="s01", event="runtime_started", event_type="runtime_started",
+                source="python_runtime", created_unix_ms=12000.0, mono_ms=1200.0,
+            ).to_dict(),
+            EventRow(
+                session_id="s01", event="event_marker", event_type="event_marker", source="unity",
+                created_unix_ms=12001.0, mono_ms=1201.0,
+                experiment_id="exp1_system_characterization", scenario_id="static_head_motion",
+                trial_id="trial-01", event_id="event-01",
+            ).to_dict(),
+            EventRow(
+                session_id="s01", event="event_marker", event_type="event_marker", source="unity",
+                created_unix_ms=12002.0, mono_ms=1202.0,
+                experiment_id="exp2_design_attribution", scenario_id="ablation_capture_alignment",
+                trial_id="trial-02", event_id="event-02",
+            ).to_dict(),
+        ],
     )
     return session_dir
 

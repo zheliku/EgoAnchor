@@ -7,7 +7,9 @@ Unity 录制开始时即可自动复用该目录，避免手动填写 runtime lo
 from __future__ import annotations
 
 import json
+import platform
 import re
+import socket
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -113,6 +115,8 @@ def _write_python_session_metadata(
         "created_unix_ms": created_unix_ms,
         "created_utc": datetime.fromtimestamp(created_unix_ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "state": state,
+        "python_host": socket.gethostname(),
+        "python_version": platform.python_version(),
     }
     paths.metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 

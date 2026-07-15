@@ -8,6 +8,22 @@ from typing import Any
 from .readers import EvalSessionV2
 
 
+FORMAL_VARIANTS = (
+    "Arrival-Hold",
+    "Capture-Hold",
+    "One-Euro Anchor",
+    "EgoAnchor",
+    "EgoAnchor w/o capture-time alignment",
+    "EgoAnchor w/o VCD",
+    "EgoAnchor w/o temporal synthesis",
+    "EgoAnchor w/o StaticLock",
+)
+"""正式实验一/二场景冻结的八个唯一 runtime 变体。"""
+
+_RUN_KINDS = {"debug", "smoke", "calibration", "formal"}
+"""schema-v2 允许的 session 用途。"""
+
+
 @dataclass(frozen=True)
 class SchemaQcReport:
     """结构性质量检查结果。"""
@@ -31,18 +47,16 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     metrics: dict[str, Any] = {}
     manifest = session.manifest
     _check_forbidden_fields(session, errors)
-    variants = _variant_ids(manifest.get("variant_definitions"))
+    _check_log_files(manifest, errors)
+    variants = _variant_ids(manifest.get("variant_definitions"), errors)
     if not variants:
         errors.append("manifest.variant_definitions must contain at least one variant_id")
     metrics["variant_count"] = len(variants)
 
-    for file_name, stats in (manifest.get("log_writer_stats") or {}).items():
-        if not isinstance(stats, dict):
-            errors.append(f"log_writer_stats[{file_name!r}] must be an object")
-            continue
-        dropped = stats.get("dropped_rows", 0)
-        if dropped:
-            errors.append(f"writer dropped rows for {file_name}: {dropped}")
+    _check_writer_stats(session, errors, metrics)
+    _check_run_kind_and_formal_freeze(manifest, variants, errors)
+    _check_variant_hashes(session, variants, errors)
+    _check_primary_keys(session, errors)
 
     if session.python_candidates.empty:
         errors.append("python_candidates is empty")
@@ -56,16 +70,178 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     return SchemaQcReport(errors=errors, warnings=warnings, metrics=metrics)
 
 
-def _variant_ids(raw: Any) -> set[str]:
+def _variant_ids(raw: Any, errors: list[str]) -> set[str]:
     """提取并验证 manifest 中的 variant id。"""
 
     if not isinstance(raw, list):
         return set()
     result: set[str] = set()
-    for item in raw:
-        if isinstance(item, dict) and isinstance(item.get("variant_id"), str) and item["variant_id"]:
-            result.add(item["variant_id"])
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append(f"manifest.variant_definitions[{index}] must be an object")
+            continue
+        variant_id = item.get("variant_id")
+        if not isinstance(variant_id, str) or not variant_id:
+            errors.append(f"manifest.variant_definitions[{index}] requires non-empty variant_id")
+            continue
+        if variant_id in result:
+            errors.append(f"manifest.variant_definitions contains duplicate variant_id: {variant_id}")
+        result.add(variant_id)
     return result
+
+
+def _check_log_files(manifest: dict[str, Any], errors: list[str]) -> None:
+    """manifest 必须声明固定逻辑名到固定文件名的精确映射。"""
+
+    expected = {
+        "python_candidates": "python_candidates.jsonl",
+        "unity_reference": "unity_reference.jsonl",
+        "unity_admission": "unity_admission.jsonl",
+        "unity_render": "unity_render.jsonl",
+        "events": "events.jsonl",
+    }
+    if manifest.get("log_files") != expected:
+        errors.append(f"manifest.log_files must equal fixed schema-v2 mapping: {expected}")
+
+
+def _check_writer_stats(session: EvalSessionV2, errors: list[str], metrics: dict[str, Any]) -> None:
+    """检查每个固定文件的完整统计、失败标记及实际行数。"""
+
+    expected_rows = {
+        "python_candidates.jsonl": len(session.python_candidates),
+        "unity_reference.jsonl": len(session.unity_reference),
+        "unity_admission.jsonl": len(session.unity_admission),
+        "unity_render.jsonl": len(session.unity_render),
+        "events.jsonl": len(session.events),
+    }
+    raw_stats = session.manifest.get("log_writer_stats")
+    if not isinstance(raw_stats, dict):
+        errors.append("manifest.log_writer_stats must be an object")
+        return
+    missing = sorted(set(expected_rows) - raw_stats.keys())
+    extra = sorted(raw_stats.keys() - set(expected_rows))
+    if missing:
+        errors.append(f"manifest.log_writer_stats missing files: {missing}")
+    if extra:
+        errors.append(f"manifest.log_writer_stats has unknown files: {extra}")
+
+    for file_name, actual_rows in expected_rows.items():
+        stats = raw_stats.get(file_name)
+        if not isinstance(stats, dict):
+            if file_name not in missing:
+                errors.append(f"log_writer_stats[{file_name!r}] must be an object")
+            continue
+        status = str(stats.get("status") or "")
+        if status.startswith("pending"):
+            errors.append(f"writer stats pending for {file_name}: {status}")
+        rows_written = _stats_int(stats, "rows_written", file_name, errors)
+        dropped = _stats_int(stats, "dropped_rows", file_name, errors)
+        failures = stats.get("log_write_failures", 0)
+        if isinstance(failures, bool) or not isinstance(failures, int) or failures < 0:
+            errors.append(f"writer stats {file_name}.log_write_failures must be a non-negative integer")
+        elif failures:
+            errors.append(f"writer failures for {file_name}: {failures}")
+        write_error = str(stats.get("write_error") or "")
+        if write_error:
+            errors.append(f"writer error for {file_name}: {write_error}")
+        if dropped is not None and dropped != 0:
+            errors.append(f"writer dropped rows for {file_name}: {dropped}")
+        if rows_written is not None and rows_written != actual_rows:
+            errors.append(f"writer row count mismatch for {file_name}: stats={rows_written}, actual={actual_rows}")
+        metrics[f"{file_name}.rows"] = actual_rows
+
+
+def _stats_int(stats: dict[str, Any], key: str, file_name: str, errors: list[str]) -> int | None:
+    """读取 manifest writer 非负整数统计；null 和 bool 都视为错误。"""
+
+    value = stats.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        errors.append(f"writer stats {file_name}.{key} must be a non-negative integer")
+        return None
+    return value
+
+
+def _check_run_kind_and_formal_freeze(
+    manifest: dict[str, Any],
+    variants: set[str],
+    errors: list[str],
+) -> None:
+    """验证 run kind；Formal 额外要求八变体与完整冻结元数据。"""
+
+    raw_run_kind = manifest.get("run_kind")
+    normalized = raw_run_kind.strip().lower() if isinstance(raw_run_kind, str) else ""
+    if normalized not in _RUN_KINDS or raw_run_kind != normalized:
+        errors.append(f"manifest.run_kind must be one of {sorted(_RUN_KINDS)} using canonical lowercase spelling")
+    if normalized != "formal":
+        return
+    expected_variants = set(FORMAL_VARIANTS)
+    if variants != expected_variants:
+        errors.append(
+            "formal session requires exact eight variants: "
+            f"missing={sorted(expected_variants - variants)}, extra={sorted(variants - expected_variants)}"
+        )
+    for key in (
+        "object_id",
+        "operator_id",
+        "unity_run_mode",
+        "python_host",
+        "unity_version",
+        "python_version",
+        "egoanchor_git_commit",
+        "protocol_version",
+        "config_hash",
+        "frozen_parameter_set_id",
+        "object_model_id",
+    ):
+        if not isinstance(manifest.get(key), str) or not str(manifest[key]).strip():
+            errors.append(f"formal session requires non-empty manifest.{key}")
+
+
+def _check_variant_hashes(session: EvalSessionV2, variants: set[str], errors: list[str]) -> None:
+    """manifest、admission 与 render 必须对每个变体使用同一非空配置 hash。"""
+
+    definitions = session.manifest.get("variant_definitions")
+    if not isinstance(definitions, list):
+        return
+    expected: dict[str, str] = {}
+    for item in definitions:
+        if not isinstance(item, dict) or item.get("variant_id") not in variants:
+            continue
+        variant_id = str(item["variant_id"])
+        config_hash = item.get("config_hash")
+        if not isinstance(config_hash, str) or not config_hash.strip():
+            errors.append(f"variant {variant_id!r} requires non-empty manifest config_hash")
+            continue
+        expected[variant_id] = config_hash
+
+    try:
+        aggregate = aggregate_config_hash(definitions)
+    except ValueError as exc:
+        errors.append(str(exc))
+    else:
+        if session.manifest.get("config_hash") != aggregate:
+            errors.append(
+                "manifest.config_hash does not match ordered variant config hashes: "
+                f"expected={aggregate}, observed={session.manifest.get('config_hash')!r}"
+            )
+
+    for table_name, table in (("unity_admission", session.unity_admission), ("unity_render", session.unity_render)):
+        if table.empty:
+            continue
+        if "config_hash" not in table.columns:
+            errors.append(f"{table_name} requires config_hash")
+            continue
+        for index, row in table.iterrows():
+            variant_id = str(row.get("variant_id"))
+            expected_hash = expected.get(variant_id)
+            if expected_hash is None:
+                continue
+            observed_hash = row["config_hash"]
+            if not isinstance(observed_hash, str) or not observed_hash.strip() or observed_hash != expected_hash:
+                errors.append(
+                    f"{table_name} row {index!r} variant {variant_id!r} config_hash mismatch: "
+                    f"expected={expected_hash!r}, observed={observed_hash!r}"
+                )
 
 
 def _check_render_matrix(session: EvalSessionV2, variants: set[str], errors: list[str], metrics: dict[str, Any]) -> None:
@@ -75,10 +251,31 @@ def _check_render_matrix(session: EvalSessionV2, variants: set[str], errors: lis
     if table.empty:
         errors.append("unity_render is empty")
         return
-    if "render_tick_id" not in table or "variant_id" not in table:
-        errors.append("unity_render requires render_tick_id and variant_id")
+    required = {
+        "session_id",
+        "render_tick_id",
+        "variant_id",
+        "source_frame_id",
+        "has_output_pose",
+        "has_display_pose",
+    }
+    if not _require_columns(table, "unity_render", required, errors):
         return
     metrics["render_tick_count"] = int(table["render_tick_id"].nunique())
+    if table.duplicated(["session_id", "render_tick_id", "variant_id"]).any():
+        errors.append("unity_render contains duplicate session/render_tick/variant primary keys")
+    reference_ids = (
+        {int(item) for item in session.unity_reference["frame_id"].dropna()}
+        if "frame_id" in session.unity_reference
+        else set()
+    )
+    for index, row in table.iterrows():
+        source_frame_id = int(row["source_frame_id"])
+        if source_frame_id < 0:
+            if bool(row["has_output_pose"]) or bool(row["has_display_pose"]):
+                errors.append(f"render row {index!r} has display/output pose without a source frame")
+        elif source_frame_id not in reference_ids:
+            errors.append(f"render row {index!r} references unknown source_frame_id: {source_frame_id}")
     for tick_id, group in table.groupby("render_tick_id", dropna=False):
         observed = {str(item) for item in group["variant_id"].dropna()}
         missing = variants - observed
@@ -98,23 +295,39 @@ def _check_admission_matrix(session: EvalSessionV2, variants: set[str], errors: 
     if table.empty:
         errors.append("unity_admission is empty")
         return
-    if "candidate_id" not in table or "variant_id" not in table:
-        errors.append("unity_admission requires candidate_id and variant_id")
+    if not _require_columns(table, "unity_admission", {"candidate_id", "variant_id"}, errors):
         return
     metrics["candidate_count"] = int(table["candidate_id"].nunique())
+    expected_candidates = (
+        {str(item) for item in session.python_candidates["candidate_id"].dropna()}
+        if "candidate_id" in session.python_candidates
+        else set()
+    )
+    observed_candidates = {str(item) for item in table["candidate_id"].dropna()}
+    missing_candidates = expected_candidates - observed_candidates
+    extra_candidates = observed_candidates - expected_candidates
+    if missing_candidates:
+        errors.append(f"python candidates missing admission rows: {sorted(missing_candidates)}")
+    if extra_candidates:
+        errors.append(f"admission has unknown candidate_id values: {sorted(extra_candidates)}")
     for candidate_id, group in table.groupby("candidate_id", dropna=False):
         observed = {str(item) for item in group["variant_id"].dropna()}
         missing = variants - observed
         if missing:
             errors.append(f"candidate {candidate_id!r} missing admission variants: {sorted(missing)}")
+        extra = observed - variants
+        if extra:
+            errors.append(f"candidate {candidate_id!r} has unknown admission variants: {sorted(extra)}")
         if group.duplicated(["candidate_id", "variant_id"]).any():
             errors.append(f"candidate {candidate_id!r} contains duplicate admission variants")
 
 
 def _check_forbidden_fields(session: EvalSessionV2, errors: list[str]) -> None:
-    """Reject retired RQ/legacy fields anywhere in formal schema tables."""
+    """递归拒绝 manifest、payload 和表中重新出现的旧字段。"""
 
-    forbidden = ("rq1_", "rq2_", "session_manifest", "unity_capture", "unity_output")
+    hits = _find_forbidden_keys(session.manifest, prefix="manifest")
+    if hits:
+        errors.append(f"manifest contains forbidden legacy fields: {sorted(hits)}")
     for name, table in (
         ("python_candidates", session.python_candidates),
         ("unity_reference", session.unity_reference),
@@ -122,9 +335,78 @@ def _check_forbidden_fields(session: EvalSessionV2, errors: list[str]) -> None:
         ("unity_render", session.unity_render),
         ("events", session.events),
     ):
-        hits = [str(column) for column in table.columns if any(token in str(column).lower() for token in forbidden)]
+        hits: set[str] = set()
+        for index, row in enumerate(table.to_dict(orient="records")):
+            hits.update(_find_forbidden_keys(row, prefix=f"{name}[{index}]"))
         if hits:
             errors.append(f"{name} contains forbidden legacy fields: {sorted(hits)}")
 
 
-__all__ = ["SchemaQcReport", "run_schema_qc"]
+def _check_primary_keys(session: EvalSessionV2, errors: list[str]) -> None:
+    """candidate 与 reference 右表主键必须唯一，保证 many-to-one join 可执行。"""
+
+    candidates = session.python_candidates
+    if (
+        not candidates.empty
+        and _require_columns(candidates, "python_candidates", {"session_id", "candidate_id"}, errors)
+        and candidates.duplicated(["session_id", "candidate_id"]).any()
+    ):
+        errors.append("python_candidates contains duplicate session_id/candidate_id primary keys")
+    reference = session.unity_reference
+    if (
+        not reference.empty
+        and _require_columns(reference, "unity_reference", {"session_id", "frame_id"}, errors)
+        and reference.duplicated(["session_id", "frame_id"]).any()
+    ):
+        errors.append("unity_reference contains duplicate session_id/frame_id primary keys")
+
+
+def _require_columns(table: Any, table_name: str, required: set[str], errors: list[str]) -> bool:
+    """要求 QC 直接接收的 DataFrame 具备结构列，损坏输入只返回错误而不抛 KeyError。"""
+
+    missing = sorted(required - set(table.columns))
+    if missing:
+        errors.append(f"{table_name} requires columns: {', '.join(missing)}")
+        return False
+    return True
+
+
+def _find_forbidden_keys(value: Any, *, prefix: str) -> set[str]:
+    """递归查找旧 RQ、GT 和旧文件语义字段键。"""
+
+    hits: set[str] = set()
+    if isinstance(value, dict):
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            path = f"{prefix}.{key}"
+            lowered = key.lower()
+            if lowered.startswith(("rq1_", "rq2_", "gt_")) or any(
+                token in lowered for token in ("session_manifest", "unity_capture", "unity_output")
+            ):
+                hits.add(path)
+            hits.update(_find_forbidden_keys(item, prefix=path))
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            hits.update(_find_forbidden_keys(item, prefix=f"{prefix}[{index}]"))
+    return hits
+
+
+def aggregate_config_hash(variant_definitions: Any) -> str:
+    """复现 Unity EvalJson 对有序 variant config hash 列表的 FNV-1a 汇总。"""
+
+    if not isinstance(variant_definitions, list):
+        raise ValueError("manifest.variant_definitions must be a list for aggregate config hash")
+    hash_value = 14695981039346656037
+    prime = 1099511628211
+    mask = (1 << 64) - 1
+    for index, item in enumerate(variant_definitions):
+        config_hash = item.get("config_hash") if isinstance(item, dict) else None
+        if not isinstance(config_hash, str) or not config_hash.strip():
+            raise ValueError(f"variant_definitions[{index}] requires non-empty config_hash")
+        for value in config_hash.encode("utf-8"):
+            hash_value ^= value
+            hash_value = (hash_value * prime) & mask
+    return f"{hash_value:016x}"
+
+
+__all__ = ["FORMAL_VARIANTS", "SchemaQcReport", "aggregate_config_hash", "run_schema_qc"]

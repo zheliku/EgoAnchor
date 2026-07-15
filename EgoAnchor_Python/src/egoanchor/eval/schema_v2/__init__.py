@@ -1,7 +1,7 @@
 """EgoAnchor formal evaluation schema v2 package."""
 
 from .paths import EvalV2Paths
-from .qc import SchemaQcReport, run_schema_qc
+from .qc import FORMAL_VARIANTS, SchemaQcReport, aggregate_config_hash, run_schema_qc
 from .readers import (
     EvalSessionV2,
     join_candidate_admission,
@@ -27,6 +27,7 @@ __all__ = [
     "EvalSessionV2",
     "EvalV2Paths",
     "EventRow",
+    "FORMAL_VARIANTS",
     "JsonlTableWriter",
     "LEGACY_FIELD_PREFIXES",
     "ManifestV2",
@@ -37,6 +38,7 @@ __all__ = [
     "UnityAdmissionRow",
     "UnityReferenceRow",
     "UnityRenderRow",
+    "aggregate_config_hash",
     "load_session_v2",
     "join_candidate_admission",
     "join_render_reference",

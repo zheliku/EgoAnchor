@@ -41,6 +41,9 @@ namespace EgoAnchor.Runtime
         /// <summary>目标 Transform 当前是否实际显示一个已经应用或保留的 anchor pose。</summary>
         public bool HasDisplayPose => lastAppliedFrameId >= 0 && !renderersHidden;
 
+        /// <summary>最近一次实际应用且仍在显示的来源 frame_id；从未应用或已隐藏时为 -1。</summary>
+        public long LastAppliedFrameId => HasDisplayPose ? lastAppliedFrameId : -1;
+
         [Header("Debug")]
         /// <summary>最近一次成功应用的 frame_id。</summary>
         [Tooltip("最近一次成功应用的 frame_id。只用于 Inspector/日志诊断。")]

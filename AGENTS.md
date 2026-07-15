@@ -139,6 +139,7 @@ PoseResult candidate
 
 - `MeasurementTimeSeconds` 属于采集时间轴，用于运动估计与静止锚定；生命周期 freshness 使用到达/生命周期时间轴。不得用 capture time 刷新 stale/lost。
 - `has_output_pose` 表示 runtime 是否有输出；`has_display_pose` 表示用户实际看到的 Transform，包括 hold-last。显示误差使用 display pose，输出覆盖率使用 output pose。
+- hold-last 显示行从 `DynamicObjectAnchor.LastAppliedFrameId` 保留实际来源帧；只有从未应用或已隐藏的显示才允许 `source_frame_id=-1`。
 - StaticLock tether 计算 `obsConsensus -> anchorOrigin`，不得改成单帧观测或 `lockedPose`。
 - 头动期间不冻结真实运动证据；`headSettleSeconds` 只覆盖头停后的沉降窗口。
 - 距离自适应只放大位置通道；旋转 tether 必须高于旋转噪声地板。
@@ -164,6 +165,8 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - 分析先在 `session x trial/event x variant` 内计算，再做 trial/event 配对和 session 汇总；不做 frame-level 推断。
 - 正式参数只用开发/calibration 数据冻结；formal session 后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
+- schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest；pending、错配或非法 fragment 不得进入正式分析。
+- schema-v2 QC 对 Formal session 固定要求场景中的 8 个唯一 runtime、按 Unity FNV-1a 规则重算整体 `config_hash`，并检查 writer 行数/丢行/失败、candidate/reference 主键、candidate×variant 与 tick×variant 矩阵及递归旧字段。
 
 ## 协议与生成输出
 

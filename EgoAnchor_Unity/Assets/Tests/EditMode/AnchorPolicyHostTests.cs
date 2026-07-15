@@ -335,7 +335,7 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
-        /// Transform 仍保留旧 pose 时，若 runtime 已没有 policy 输出，评估快照不得伪报有效输出。
+        /// Transform 仍保留旧 pose 时，若 runtime 已没有 policy 输出，快照仍须保留显示来源帧且不得伪报有效输出。
         /// </summary>
         [Test]
         public void RecorderSnapshotIsInvalidWhenRuntimeHasNoOutput()
@@ -367,8 +367,9 @@ namespace EgoAnchor.Tests
                 List<EvalVariantSnapshot> snapshots = GetPrivateField<List<EvalVariantSnapshot>>(recorder, "_snapshots");
                 Assert.That(snapshots, Has.Count.EqualTo(1));
                 Assert.That(snapshots[0].HasRuntimeOutput, Is.False);
-                Assert.That(snapshots[0].HasRuntimeOutput, Is.False);
                 Assert.That(snapshots[0].HasDisplayPose, Is.True);
+                Assert.That(snapshots[0].SourceFrameId, Is.EqualTo(42L));
+                Assert.That(snapshots[0].AnchorPoseSource, Is.EqualTo("hold_last"));
                 Assert.That(snapshots[0].DisplayPose.position, Is.EqualTo(go.transform.position));
             }
             finally

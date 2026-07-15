@@ -732,6 +732,10 @@ namespace EgoAnchor.Eval
                 if (rt != null && ev.isPrimary) hasArrival = rt.TryGetArrivalTimeRawPose(out arrivalPose);
 
                 long srcFrame = rt != null ? rt.LatestAlignedFrameId : -1;
+                if (srcFrame < 0 && hasDisplayPose && presenter != null)
+                {
+                    srcFrame = presenter.LastAppliedFrameId;
+                }
                 FramePoseRecord fr = default;
                 bool hasTiming = framePoseHistory != null && framePoseHistory.TryGet(srcFrame, out fr);
 

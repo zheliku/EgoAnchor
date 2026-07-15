@@ -92,7 +92,9 @@ class JsonlTableWriter:
                 descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.close(descriptor)
                 break
-            except FileExistsError:
+            except (FileExistsError, PermissionError):
+                # Windows 可能在另一 writer 创建或删除锁文件时短暂返回 PermissionError；
+                # 统一按有界锁竞争重试，真实权限错误仍会在 deadline 后明确失败。
                 self._remove_stale_lock(lock_path)
                 if time.monotonic() >= deadline:
                     raise TimeoutError(f"跨进程事件日志锁等待超时：{lock_path}")
@@ -105,7 +107,7 @@ class JsonlTableWriter:
                 if self.fsync:
                     os.fsync(handle.fileno())
         finally:
-            lock_path.unlink(missing_ok=True)
+            self._release_shared_lock(lock_path)
 
     def _remove_stale_lock(self, lock_path: Path) -> None:
         """回收超过阈值的崩溃遗留锁；活跃锁保持不动。"""
@@ -114,8 +116,21 @@ class JsonlTableWriter:
             age_seconds = time.time() - lock_path.stat().st_mtime
             if age_seconds >= self._STALE_SHARED_LOCK_SECONDS:
                 lock_path.unlink(missing_ok=True)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             return
+
+    def _release_shared_lock(self, lock_path: Path) -> None:
+        """有界重试 Windows 瞬时文件共享冲突，确保已写入行不会因一次清理竞态失败。"""
+
+        deadline = time.monotonic() + self._SHARED_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                lock_path.unlink(missing_ok=True)
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"跨进程事件日志锁释放超时：{lock_path}")
+                time.sleep(0.002)
 
     def __enter__(self) -> "JsonlTableWriter":
         """进入上下文管理器。"""
