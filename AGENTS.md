@@ -173,6 +173,8 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - 旧 `eval/io`、`eval/core`、`eval/report`、`run_eval` 和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
 - 实验一分析先对完整 8-runtime session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融 runtime 不得混入实验一的 VCD、时延、图表或 LaTeX 数字。
 - 实验一专属 QC 检查五场景、reference coverage 和 tick×variant 完整性。失败时只写 session/trial QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
+- 实验二先验证完整 8-runtime schema-v2 session，再投影完整 *EgoAnchor* 与四个消融。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
+- 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 
 ## 协议与生成输出
 
