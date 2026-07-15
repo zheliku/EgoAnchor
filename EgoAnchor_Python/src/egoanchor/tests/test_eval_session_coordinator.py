@@ -32,9 +32,12 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             self.assertTrue(first.session_dir.is_dir())
 
             metadata = json.loads(first.metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["schema_version"], 2)
             self.assertEqual(metadata["session_id"], first.session_id)
             self.assertEqual(metadata["object_id"], "controller_right")
             self.assertEqual(metadata["python_log_filename"], first.python_log_filename)
+            self.assertEqual(metadata["log_files"]["python_candidates"], "python_candidates.jsonl")
+            self.assertEqual(metadata["log_writer_stats"], {})
             self.assertEqual(metadata["state"], "python_started")
 
     def test_tracking_runtime_uses_eval_session_dir_when_enabled(self) -> None:
@@ -46,14 +49,15 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             cfg.runtime.logging.eval_session_enabled = True
             cfg.runtime.logging.eval_output_dir = tmp
             runtime = TrackingRuntime(cfg, SubjectRegistry.load())
+            session_dir = runtime.log_writer.logger.log_path.parent
+            metadata_path = session_dir / "python_session.json"
+            created_unix_ms = json.loads(metadata_path.read_text(encoding="utf-8"))["created_unix_ms"]
 
             try:
                 runtime.log_writer.event("unit_test")
             finally:
                 runtime.log_writer.close()
 
-            session_dir = runtime.log_writer.logger.log_path.parent
-            metadata_path = session_dir / "python_session.json"
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
             self.assertEqual(runtime.session_id, session_dir.name)
@@ -63,6 +67,10 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             self.assertTrue((session_dir / "events.jsonl").exists())
             self.assertTrue((session_dir / "python_candidates.jsonl").exists())
             self.assertEqual(metadata["object_id"], "controller_right")
+            self.assertEqual(metadata["state"], "python_stopped")
+            self.assertEqual(metadata["created_unix_ms"], created_unix_ms)
+            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["rows_written"], 1)
+            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["dropped_rows"], 0)
 
 
 if __name__ == "__main__":

@@ -74,19 +74,61 @@ def create_eval_session(
 def write_python_session_metadata(paths: EvalSessionPaths) -> None:
     """写出 Unity 侧自动配对需要的 Python session metadata。"""
 
-    created_unix_ms = time.time() * 1000.0
+    _write_python_session_metadata(paths, state="python_started", log_writer_stats={})
+
+
+def update_python_session_metadata(
+    paths: EvalSessionPaths,
+    *,
+    state: str,
+    log_writer_stats: dict[str, dict[str, int]],
+) -> None:
+    """写出 Python 端最终 writer 统计，作为 Unity manifest 的汇总片段。"""
+
+    _write_python_session_metadata(paths, state=state, log_writer_stats=log_writer_stats)
+
+
+def _write_python_session_metadata(
+    paths: EvalSessionPaths,
+    *,
+    state: str,
+    log_writer_stats: dict[str, dict[str, int]],
+) -> None:
+    """使用固定 schema-v2 文件名写 metadata，避免启动和停止路径重复装配。"""
+
+    created_unix_ms = _read_created_unix_ms(paths.metadata_path)
     metadata = {
+        "schema_version": 2,
         "session_id": paths.session_id,
         "object_id": paths.object_id,
         "python_log_filename": paths.python_log_filename,
         "python_log_relative_path": paths.python_log_filename,
         "events_log_filename": paths.events_log_filename,
         "events_log_relative_path": paths.events_log_filename,
+        "log_files": {
+            "python_candidates": paths.python_log_filename,
+            "events": paths.events_log_filename,
+        },
+        "log_writer_stats": log_writer_stats,
         "created_unix_ms": created_unix_ms,
         "created_utc": datetime.fromtimestamp(created_unix_ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-        "state": "python_started",
+        "state": state,
     }
     paths.metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _read_created_unix_ms(metadata_path: Path) -> float:
+    """更新 metadata 时保留首次创建时间；文件无效时退回当前时间。"""
+
+    if metadata_path.is_file():
+        try:
+            existing = json.loads(metadata_path.read_text(encoding="utf-8"))
+            value = float(existing.get("created_unix_ms"))
+            if value > 0.0:
+                return value
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+    return time.time() * 1000.0
 
 
 def build_eval_session_id(now: datetime, object_id: str) -> str:
@@ -117,6 +159,7 @@ __all__ = [
     "EvalSessionPaths",
     "build_eval_session_id",
     "create_eval_session",
+    "update_python_session_metadata",
     "sanitize_session_token",
     "write_python_session_metadata",
 ]

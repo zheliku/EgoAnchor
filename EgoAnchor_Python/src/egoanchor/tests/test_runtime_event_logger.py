@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.config import load_config
 from egoanchor.protocol import ErrorInfo, MessageHeader, SubjectRegistry, anchor_pb2
-from egoanchor.runtime import RuntimeLogWriter, RuntimeState, TrackingRuntime
+from egoanchor.runtime import RuntimeLogWriter, RuntimeState, TrackingRuntime, create_eval_session
 
 
 class RuntimeEventLoggerTest(unittest.TestCase):
@@ -325,10 +325,56 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             candidate_rows = [json.loads(line) for line in (Path(tmp) / "python_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
 
             self.assertEqual([row["event"] for row in event_rows], ["runtime_started"])
+            event = event_rows[0]
+            for key in (
+                "schema_version",
+                "event_type",
+                "session_id",
+                "source",
+                "created_unix_ms",
+                "mono_ms",
+                "unity_frame",
+                "severity",
+                "experiment_id",
+                "scenario_id",
+                "trial_id",
+                "event_id",
+                "variant_id",
+                "message",
+                "payload",
+            ):
+                self.assertIn(key, event)
+            self.assertEqual(event["schema_version"], 2)
+            self.assertEqual(event["source"], "python_runtime")
+            self.assertEqual(event["payload"]["state"], "WAITING_INPUT")
             self.assertEqual(candidate_rows[0]["event"], "python_candidate")
             self.assertEqual(candidate_rows[0]["schema_version"], 2)
             self.assertEqual(candidate_rows[0]["candidate_id"], "session-v2:11:1")
             self.assertEqual(candidate_rows[0]["session_id"], "session-v2")
+            for key in (
+                "frame_id",
+                "server_receive_mono_ms",
+                "server_publish_mono_ms",
+                "has_pose",
+                "pose_matrix_cv_camera",
+                "pose_tx_m",
+                "pose_ty_m",
+                "pose_tz_m",
+                "pose_qx",
+                "pose_qy",
+                "pose_qz",
+                "pose_qw",
+                "pose_source",
+                "phase",
+                "stage",
+                "failure_reason",
+                "total_ms",
+                "yolo_ms",
+                "depth_ms",
+                "cutie_ms",
+                "pose_ms",
+            ):
+                self.assertIn(key, candidate_rows[0])
             self.assertEqual(candidate_rows[0]["vcd_score"], 0.8)
             self.assertEqual(candidate_rows[0]["visibility_score"], 0.7)
             self.assertEqual(candidate_rows[0]["geometry_core_score"], 0.8)
@@ -343,6 +389,87 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertNotIn("pose_score", candidate_rows[0])
             self.assertNotIn("score_depth", candidate_rows[0])
             self.assertNotIn("score_mask", candidate_rows[0])
+            self.assertEqual(writer.schema_writer_stats["python_candidates.jsonl"]["rows_written"], 1)
+            self.assertEqual(writer.schema_writer_stats["python_candidates.jsonl"]["dropped_rows"], 0)
+
+    def test_candidate_id_sequence_is_independent_per_frame(self) -> None:
+        """不同 frame 的失败或缺失不能改变当前 frame 的可复现序号。"""
+
+        class Header:
+            frame_id = 11
+
+        class PoseMatrix:
+            values = (
+                1.0, 0.0, 0.0, 0.1,
+                0.0, 1.0, 0.0, 0.2,
+                0.0, 0.0, 1.0, 0.3,
+                0.0, 0.0, 0.0, 1.0,
+            )
+
+        class PoseMsg:
+            header = Header()
+            has_pose = True
+            phase = "TRACK"
+            stage = 4
+            pose_source = "TRACK"
+            reliability_score = 0.8
+            reliability_flags = []
+            depth_valid_ratio = 1.0
+            depth_valid_in_mask = 1.0
+            mask_area_ratio = 0.1
+            det_count = 1
+            fps = 10.0
+            timing = SimpleNamespace(total_ms=1.0, yolo_ms=0.1, depth_ms=0.2, cutie_ms=0.3, pose_ms=0.4)
+            server_receive_mono_ms = 100.0
+            server_publish_mono_ms = 110.0
+            pose_matrix_cv_camera = PoseMatrix()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.enabled = True
+            writer = RuntimeLogWriter(
+                cfg,
+                session_id="session-v2",
+                eval_session=SimpleNamespace(session_dir=Path(tmp)),
+            )
+            try:
+                msg = PoseMsg()
+                diagnostics = SimpleNamespace(color_reprojection=0.5)
+                writer.pose_result(msg, state=RuntimeState.TRACKING, diagnostics=diagnostics)
+                msg.header.frame_id = 12
+                msg.has_pose = False
+                writer.pose_result(msg, state=RuntimeState.TRACKING, diagnostics=diagnostics)
+                msg.header.frame_id = 11
+                msg.has_pose = True
+                writer.pose_result(msg, state=RuntimeState.TRACKING, diagnostics=diagnostics)
+            finally:
+                writer.close()
+
+            rows = [
+                json.loads(line)
+                for line in (Path(tmp) / "python_candidates.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(
+                [row["candidate_id"] for row in rows],
+                ["session-v2:11:1", "session-v2:12:1", "session-v2:11:2"],
+            )
+
+    def test_eval_session_metadata_contains_real_schema_writer_stats(self) -> None:
+        """关闭 writer 后 metadata 必须反映真实 rows_written/dropped_rows。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.enabled = True
+            paths = create_eval_session(Path(tmp), "controller_right")
+            writer = RuntimeLogWriter(cfg, session_id=paths.session_id, eval_session=paths)
+            writer.event("runtime_started", state="WAITING_INPUT")
+            writer.close()
+
+            metadata = json.loads(paths.metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["state"], "python_stopped")
+            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["rows_written"], 1)
+            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["dropped_rows"], 0)
+            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["log_write_failures"], 0)
 
 
 if __name__ == "__main__":

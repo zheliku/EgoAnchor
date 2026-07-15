@@ -57,6 +57,12 @@ class RuntimeEventLogger:
         self._written_since_flush = 0
         """上一次 flush 之后写入的行数。"""
 
+        self.rows_written = 0
+        """成功写入的 JSONL 行数。"""
+
+        self.dropped_rows = 0
+        """序列化或文件写入失败的行数。"""
+
     @property
     def log_path(self) -> Path:
         """返回当前 JSONL 文件路径。"""
@@ -69,20 +75,25 @@ class RuntimeEventLogger:
         if not self.enabled:
             return
 
-        row = {
-            "event": str(event or ""),
-            "session_id": self.session_id,
-            "log_filename": self.filename,
-            "created_unix_ms": time.time() * 1000.0,
-            "mono_ms": time.monotonic() * 1000.0,
-        }
-        row.update(self._json_safe(fields))
-        handle = self._ensure_file()
-        handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
-        self._written_since_flush += 1
-        if self._written_since_flush >= self.flush_every:
-            handle.flush()
-            self._written_since_flush = 0
+        try:
+            row = {
+                "event": str(event or ""),
+                "session_id": self.session_id,
+                "log_filename": self.filename,
+                "created_unix_ms": time.time() * 1000.0,
+                "mono_ms": time.monotonic() * 1000.0,
+            }
+            row.update(self._json_safe(fields))
+            handle = self._ensure_file()
+            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
+            self._written_since_flush += 1
+            if self._written_since_flush >= self.flush_every:
+                handle.flush()
+                self._written_since_flush = 0
+            self.rows_written += 1
+        except Exception:
+            self.dropped_rows += 1
+            raise
 
     def close(self) -> None:
         """关闭日志文件。"""

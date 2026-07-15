@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.eval.schema_v2 import JsonlTableWriter, PythonCandidateRow
 from egoanchor.utils import clamp, get_logger, rotation_matrix_to_quaternion
+from .eval_session import update_python_session_metadata
 from .runtime_state import RuntimeState
 
 LOGGER = get_logger(__name__, component="RuntimeLogWriter")
@@ -114,6 +116,9 @@ class RuntimeLogWriter:
         self.logger = self._build_event_logger(cfg, session_id=session_id, eval_session=eval_session)
         """底层 JSONL 事件日志器。"""
 
+        self._eval_session = eval_session
+        """共享 eval session；关闭时回写 Python writer 统计片段。"""
+
         self.pose_results = self._flag(cfg, "log_pose_results", True)
         """是否记录 PoseResult 摘要事件。"""
 
@@ -132,8 +137,14 @@ class RuntimeLogWriter:
         self.log_write_failures = 0
         """JSONL 写入失败次数；日志写入失败不应阻断实时链路。"""
 
-        self._candidate_seq = 0
-        """评估会话内严格递增的 candidate 序号，用于构造稳定唯一 ID。"""
+        self._candidate_write_failures = 0
+        """python_candidates.jsonl 的独立写入失败次数。"""
+
+        self._event_write_failures = 0
+        """events.jsonl 的独立写入失败次数。"""
+
+        self._candidate_sequences_by_frame: dict[int, int] = {}
+        """每个 frame_id 独立计数的 candidate 序号，避免跨端启动时间影响 ID。"""
 
         self._schema_candidates: JsonlTableWriter | None = None
         self._schema_events: JsonlTableWriter | None = None
@@ -144,7 +155,7 @@ class RuntimeLogWriter:
             self._schema_events = JsonlTableWriter(session_dir / "events.jsonl")
 
     def close(self) -> None:
-        """关闭底层日志文件。"""
+        """关闭底层日志文件并回写 schema-v2 writer 统计。"""
 
         try:
             self.logger.close()
@@ -152,26 +163,84 @@ class RuntimeLogWriter:
                 self._schema_candidates.close()
             if self._schema_events is not None:
                 self._schema_events.close()
+            if self._eval_session is not None and hasattr(self._eval_session, "metadata_path"):
+                update_python_session_metadata(
+                    self._eval_session,
+                    state="python_stopped",
+                    log_writer_stats=self.schema_writer_stats,
+                )
         except Exception as exc:  # pragma: no cover - 退出路径只做 best-effort 收尾
             LOGGER.debug("关闭 runtime JSONL 日志失败，已忽略：%s", exc)
 
+    @property
+    def schema_writer_stats(self) -> dict[str, dict[str, int]]:
+        """返回 Python schema-v2 文件的真实写入、丢弃和失败统计。"""
+
+        stats: dict[str, dict[str, int]] = {}
+        if self._schema_candidates is not None:
+            stats["python_candidates.jsonl"] = {
+                "rows_written": self._schema_candidates.rows_written,
+                "dropped_rows": self._schema_candidates.dropped_rows,
+                "log_write_failures": self._candidate_write_failures,
+            }
+        if self._schema_events is not None:
+            stats["events.jsonl"] = {
+                "rows_written": self._schema_events.rows_written,
+                "dropped_rows": self._schema_events.dropped_rows,
+                "log_write_failures": self._event_write_failures,
+            }
+        return stats
+
     def event(self, event_type: str, **fields: Any) -> None:
-        """写入一条通用 runtime 事件。"""
+        """写入一条含固定字段和 payload 的 schema-v2 runtime 事件。"""
 
         try:
             if self._schema_events is not None:
+                event_fields = dict(fields)
+                payload = dict(event_fields.pop("payload", {}) or {})
+                reserved = {
+                    "schema_version",
+                    "event",
+                    "event_type",
+                    "session_id",
+                    "source",
+                    "created_unix_ms",
+                    "mono_ms",
+                    "unity_frame",
+                    "severity",
+                    "experiment_id",
+                    "scenario_id",
+                    "trial_id",
+                    "event_id",
+                    "variant_id",
+                    "message",
+                }
+                payload.update({key: value for key, value in event_fields.items() if key not in reserved})
                 row = {
                     "schema_version": 2,
                     "event": str(event_type),
-                    "session_id": self.logger.session_id,
                     "event_type": str(event_type),
-                    **fields,
+                    "session_id": self.logger.session_id,
+                    "source": str(event_fields.get("source", "python_runtime")),
+                    "created_unix_ms": float(event_fields.get("created_unix_ms", time.time() * 1000.0)),
+                    "mono_ms": float(event_fields.get("mono_ms", time.monotonic() * 1000.0)),
+                    "unity_frame": int(event_fields.get("unity_frame", -1)),
+                    "severity": str(event_fields.get("severity", _event_severity(event_type))),
+                    "experiment_id": str(event_fields.get("experiment_id", "")),
+                    "scenario_id": str(event_fields.get("scenario_id", "")),
+                    "trial_id": str(event_fields.get("trial_id", "")),
+                    "event_id": str(event_fields.get("event_id", "")),
+                    "variant_id": str(event_fields.get("variant_id", "")),
+                    "message": str(event_fields.get("message", "")),
+                    "payload": payload,
                 }
                 self._schema_events.write(row)
             else:
                 self.logger.write(event_type, **fields)
         except Exception as exc:
             self.log_write_failures += 1
+            if self._schema_events is not None:
+                self._event_write_failures += 1
             if self._should_report_log_failure():
                 LOGGER.warning("runtime JSONL 写入失败，已跳过 event=%s failures=%d：%s", event_type, self.log_write_failures, exc)
 
@@ -230,17 +299,19 @@ class RuntimeLogWriter:
             )
         fields.update(self.pose_factory.build(msg))
         if self._schema_candidates is not None:
-            self._candidate_seq += 1
+            frame_id = int(fields["frame_id"])
+            candidate_seq = self._next_candidate_sequence(frame_id)
             row = self._build_candidate_row(
                 msg,
                 fields=fields,
                 diagnostics=diagnostics,
-                candidate_seq=self._candidate_seq,
+                candidate_seq=candidate_seq,
             )
             try:
                 self._schema_candidates.write(row)
             except Exception as exc:
                 self.log_write_failures += 1
+                self._candidate_write_failures += 1
                 if self._should_report_log_failure():
                     LOGGER.warning("schema-v2 candidate 写入失败 frame=%s：%s", fields.get("frame_id"), exc)
         else:
@@ -334,6 +405,13 @@ class RuntimeLogWriter:
             pose_ms=float(fields["pose_ms"]),
         )
 
+    def _next_candidate_sequence(self, frame_id: int) -> int:
+        """为 frame_id 分配从 1 开始的稳定序号。"""
+
+        sequence = self._candidate_sequences_by_frame.get(frame_id, 0) + 1
+        self._candidate_sequences_by_frame[frame_id] = sequence
+        return sequence
+
     def status(self, status: object, *, previous: RuntimeState) -> None:
         """记录 AnchorStatusEvent 的状态迁移摘要。"""
 
@@ -417,6 +495,12 @@ class RuntimeLogWriter:
 
         count = self.log_write_failures
         return count <= 3 or count in (10, 100) or count % 1000 == 0
+
+
+def _event_severity(event_type: str) -> str:
+    """按事件名称提供默认严重级别，显式 severity 仍由调用方覆盖。"""
+
+    return "error" if "error" in str(event_type).lower() else "info"
 
 
 def _optional_score(source: object | None, name: str, *, default: float | None = None) -> float | None:
