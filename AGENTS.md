@@ -175,7 +175,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - 实验一专属 QC 检查五场景、reference coverage 和 tick×variant 完整性。失败时只写 session/trial QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
 - 实验二先验证完整 8-runtime schema-v2 session，再投影完整 *EgoAnchor* 与四个消融。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
-- 统一分析 CLI 只提供 `qc`、`analyze-exp1`、`analyze-exp2`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；不恢复 `run_eval` 或 `batch_eval`。
+- 统一分析 CLI 只提供 `qc`、`analyze-exp1`、`analyze-exp2`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；旧 `run_eval`、`batch_eval` 和对应 Pixi 别名均已删除，不得恢复。
 - `--out` 保存一次分析的完整 CSV/PDF/TeX；分析成功后，固定 TeX 原子发布到 `2026-EgoAnchor/generated/`，固定 PDF 发布到 `2026-EgoAnchor/figures/generated/`。默认论文根目录从模块位置解析，不依赖当前工作目录，测试和外部调用可用 `--paper-root` 覆盖。
 
 ## 协议与生成输出
