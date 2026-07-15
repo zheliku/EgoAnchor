@@ -18,6 +18,11 @@ audit_samples/
 
 Python 还会写 `python_session.json`，记录停止状态和 writer 统计。运行 QC 前应先正常停止 Python，使其中的 `state` 变为 `python_stopped`。schema-v2 是唯一受支持的数据契约。reader 会校验文件集合、行级字段、时间语义和跨日志关联；QC 失败的 session 不进入正式汇总。平台参考位姿用于同一 Quest、同一时间线下的配对分析，不作为外部物理真值。
 
+基础 QC 检查 session 的全部原始行。实验一/二的正式 QC 和分析随后只选择已有 `trial_ended` 且没有
+`trial_rejected` 的 trial。作废尝试不会删除，仍可从原始日志审计，但不会进入指标、配对或 VCD
+risk-coverage。manifest 的 `completed_tasks` 是本 session 的任务摘要，QC 会用生命周期事件重新计算并
+核对，不能手工修改。
+
 ## 启动采集服务
 
 以下命令都从 `EgoAnchor_Python` 目录执行。当前默认配置已启用 eval session，启动时会创建 `data/eval/<session_id>/`：
@@ -44,12 +49,18 @@ Python 就绪后再打开 Unity 的 `EgoAnchor-Experiment12.unity` 场景开始�
 pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
-QC 会把一行 JSON 写到标准输出，便于脚本直接解析。实验分析可一次接收多个 session 目录：
+QC 会把一行 JSON 写到标准输出，便于脚本直接解析。一个 session 可以只完成任意任务子集。实验分析接收
+同一冻结配置的多个目录，在批次层检查任务覆盖：
 
 ```powershell
 pixi run python -m egoanchor.eval.cli analyze-exp1 .\data\eval\<session_id_1> .\data\eval\<session_id_2> --out .\data\analysis\exp1
 pixi run python -m egoanchor.eval.cli analyze-exp2 .\data\eval\<session_id_1> .\data\eval\<session_id_2> --out .\data\analysis\exp2
 ```
+
+实验一要求所有输入目录合计覆盖任务 1--5，实验二要求合计覆盖任务 6--9。没有当前实验任务的 session 会
+被忽略。批次拒绝重复 `session_id`，并要求 run kind、对象、模型、协议、冻结参数和 runtime 定义一致。
+Unity 与 Python 均正常停止后，可以给 session 目录增加 `tasks-01-03__` 之类的前缀；内部固定文件名和
+manifest 的 `session_id` 不能修改。
 
 `--out` 保存本次分析的完整 CSV、PDF 和 TeX，目录可自行指定。分析成功后，固定 TeX 会发布到 `2026-EgoAnchor/generated/`，固定 PDF 会发布到 `2026-EgoAnchor/figures/generated/`。默认论文路径从模块位置查找，不受当前工作目录影响。若仓库不使用标准目录结构，可显式覆盖：
 

@@ -22,6 +22,25 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertTrue(report.passed, report.errors)
 
+    def test_completed_task_summary_must_match_lifecycle_events(self) -> None:
+        """manifest 不得把没有 trial_ended 的任务伪装成已完成。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.manifest["completed_tasks"] = [
+                {
+                    "task_number": 1,
+                    "experiment_id": "exp1_system_characterization",
+                    "scenario_id": "static_head_motion",
+                    "trial_id": "trial-01",
+                }
+            ]
+
+            report = run_schema_qc(session)
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("accepted lifecycle trials" in error for error in report.errors))
+
     def test_missing_render_variant_fails_qc(self) -> None:
         """任一 tick 缺少固定变体时必须失败。"""
 
@@ -270,6 +289,14 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
     manifest["run_kind"] = "formal"
     manifest["variant_definitions"] = definitions
     manifest["config_hash"] = aggregate_config_hash(definitions)
+    manifest["completed_tasks"] = [
+        {
+            "task_number": 1,
+            "experiment_id": "exp1_system_characterization",
+            "scenario_id": "static_head_motion",
+            "trial_id": "trial-01",
+        }
+    ]
 
     admission_path = session_dir / "unity_admission.jsonl"
     admission_templates = {}
@@ -295,8 +322,16 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
             renders.append(row)
     _write_jsonl(render_path, renders)
 
+    events_path = session_dir / "events.jsonl"
+    events = _read_jsonl(events_path)
+    ended = dict(events[1])
+    ended.update(event="trial_ended", event_type="trial_ended")
+    events.append(ended)
+    _write_jsonl(events_path, events)
+
     manifest["log_writer_stats"]["unity_admission.jsonl"]["rows_written"] = len(admissions)
     manifest["log_writer_stats"]["unity_render.jsonl"]["rows_written"] = len(renders)
+    manifest["log_writer_stats"]["events.jsonl"]["unity"]["rows_written"] = 3
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 

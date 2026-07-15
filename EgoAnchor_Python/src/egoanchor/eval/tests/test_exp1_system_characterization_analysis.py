@@ -69,13 +69,29 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
         _admission_row(session_id, label, index)
         for index, label in enumerate(VARIANTS)
     ]
-    events = pd.DataFrame(
-        [
-            _event_row(session_id, "start_stop_6dof", "trial-2", "transition-start", 500.0, "transition_started"),
-            _event_row(session_id, "occlusion_recovery", "trial-5", "occlusion-start", 1000.0, "occlusion_started"),
-            _event_row(session_id, "occlusion_recovery", "trial-5", "target-visible", 1100.0, "target_visible"),
-        ]
+    event_rows = [
+        _event_row(session_id, "start_stop_6dof", "trial-2", "transition-start", 500.0, "transition_started"),
+        _event_row(session_id, "occlusion_recovery", "trial-5", "occlusion-start", 1000.0, "occlusion_started"),
+        _event_row(session_id, "occlusion_recovery", "trial-5", "target-visible", 1100.0, "target_visible"),
+    ]
+    final_event_ids = {
+        "static_head_motion": "event-1",
+        "start_stop_6dof": "transition-start",
+        "continuous_translation": "event-3",
+        "continuous_rotation": "event-4",
+        "occlusion_recovery": "target-visible",
+    }
+    event_rows.extend(
+        _trial_ended_row(
+            session_id,
+            scenario,
+            f"trial-{index}",
+            final_event_ids[scenario],
+            6000.0 + index,
+        )
+        for index, scenario in enumerate(SCENARIOS, start=1)
     )
+    events = pd.DataFrame(event_rows)
     reference = pd.DataFrame(
         [
             {
@@ -101,6 +117,19 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
         "experiment_ids": [EXPERIMENT_ID],
         "variant_definitions": definitions,
         "config_hash": aggregate_config_hash(definitions),
+        "completed_tasks": [
+            {
+                "task_number": index,
+                "experiment_id": EXPERIMENT_ID,
+                "scenario_id": scenario,
+                "trial_id": f"trial-{index}",
+            }
+            for index, scenario in enumerate(SCENARIOS, start=1)
+        ],
+        "trial_plan": [
+            {"experiment_id": EXPERIMENT_ID, "scenario_id": scenario}
+            for scenario in SCENARIOS
+        ],
         "log_files": {
             "python_candidates": "python_candidates.jsonl",
             "unity_reference": "unity_reference.jsonl",
@@ -151,6 +180,67 @@ class Exp1AnalysisTest(unittest.TestCase):
             for name in OUTPUT_TABLES:
                 self.assertTrue((root / "out" / name).is_file(), name)
 
+    def test_analysis_combines_partial_sessions_by_scenario_union(self) -> None:
+        """任务 1、3 与任务 2、4、5 分开采集后应在批次层凑齐实验一。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = make_exp1_session(root)
+            first = _exp1_subset(
+                source,
+                {"static_head_motion", "continuous_translation"},
+                "s-exp1-tasks-13",
+            )
+            second = _exp1_subset(
+                source,
+                set(SCENARIOS) - {"static_head_motion", "continuous_translation"},
+                "s-exp1-tasks-245",
+            )
+
+            self.assertTrue(run_exp1_qc(first).passed, run_exp1_qc(first).errors)
+            self.assertTrue(run_exp1_qc(second).passed, run_exp1_qc(second).errors)
+            result = run_exp1_system_characterization([first, second], root / "partial-out")
+
+            batch = result.session_qc[result.session_qc["session_id"].eq("batch")].iloc[0]
+            self.assertTrue(bool(batch["passed"]), batch["errors"])
+            self.assertEqual(int(batch["observed_scenario_count"]), len(SCENARIOS))
+
+    def test_analysis_rejects_incomplete_partial_session_batch(self) -> None:
+        """只提供任务 1、3 时必须保留 QC 审计并拒绝发布正式指标。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = _exp1_subset(
+                make_exp1_session(root),
+                {"static_head_motion", "continuous_translation"},
+                "s-exp1-tasks-13",
+            )
+            with self.assertRaisesRegex(ValueError, "批次缺少场景"):
+                run_exp1_system_characterization([first], root / "incomplete-out")
+            self.assertTrue((root / "incomplete-out" / "exp1_session_qc.csv").is_file())
+            self.assertFalse((root / "incomplete-out" / "exp1_trial_metrics.csv").exists())
+
+    def test_analysis_rejects_duplicate_session_and_frozen_config_drift(self) -> None:
+        """批次不得重复计入同一 session，也不得混用不同冻结参数。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _with_formal_runtime_matrix(make_exp1_session(root))
+            first_scenarios = {"static_head_motion", "continuous_translation"}
+            first = _exp1_subset(source, first_scenarios, "s-exp1-tasks-13")
+            second = _exp1_subset(
+                source,
+                set(SCENARIOS) - first_scenarios,
+                "s-exp1-tasks-245",
+            )
+
+            with self.assertRaisesRegex(ValueError, "重复 session_id"):
+                run_exp1_system_characterization([first, first], root / "duplicate-out")
+
+            second.manifest["frozen_parameter_set_id"] = "different-frozen-set"
+            with self.assertRaisesRegex(ValueError, "冻结字段不一致"):
+                run_exp1_system_characterization([first, second], root / "drift-out")
+
     def test_qc_rejects_missing_variant(self) -> None:
         """任一实验一配置缺失必须失败。"""
 
@@ -164,8 +254,8 @@ class Exp1AnalysisTest(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertTrue(any("缺少配置" in error or "配对不完整" in error for error in report.errors))
 
-    def test_qc_rejects_missing_scenario(self) -> None:
-        """任一正式场景缺失必须失败。"""
+    def test_qc_rejects_completed_task_without_render_data(self) -> None:
+        """manifest 声明完成的任务缺少 render 数据时必须失败。"""
 
         with tempfile.TemporaryDirectory() as temp:
             session = make_exp1_session(Path(temp))
@@ -176,7 +266,7 @@ class Exp1AnalysisTest(unittest.TestCase):
             )
             report = run_exp1_qc(session)
             self.assertFalse(report.passed)
-            self.assertTrue(any("缺少场景" in error for error in report.errors))
+            self.assertTrue(any("完成任务缺少 render 数据" in error for error in report.errors))
 
     def test_qc_rejects_low_reference_coverage(self) -> None:
         """trial/event 的平台参考覆盖不足必须失败。"""
@@ -317,6 +407,75 @@ def _with_formal_runtime_matrix(session: EvalSessionV2) -> EvalSessionV2:
     )
 
 
+def _exp1_subset(
+    source: EvalSessionV2,
+    scenarios: set[str],
+    session_id: str,
+) -> EvalSessionV2:
+    """从完整 fixture 构造一个仅完成指定实验一任务的独立 session。"""
+
+    if not scenarios:
+        raise ValueError("实验一子集至少需要一个场景。")
+    indexes = {scenario: index for index, scenario in enumerate(SCENARIOS, start=1)}
+    render = source.unity_render[source.unity_render["scenario_id"].isin(scenarios)].copy()
+    events = source.events[source.events["scenario_id"].isin(scenarios)].copy()
+    admission = source.unity_admission.copy()
+    admission_scenario = min(scenarios, key=lambda item: indexes[item])
+    admission_index = indexes[admission_scenario]
+    admission.loc[:, "scenario_id"] = admission_scenario
+    admission.loc[:, "trial_id"] = f"trial-{admission_index}"
+    admission.loc[:, "event_id"] = f"event-{admission_index}"
+    admission.loc[:, "condition_id"] = admission_scenario
+
+    candidates = source.python_candidates.copy()
+    reference = source.unity_reference.copy()
+    for table in (candidates, reference, admission, render, events):
+        table.loc[:, "session_id"] = session_id
+    candidates.loc[:, "candidate_id"] = f"{session_id}:1:1"
+    admission.loc[:, "candidate_id"] = f"{session_id}:1:1"
+
+    manifest = {
+        **source.manifest,
+        "session_id": session_id,
+        "completed_tasks": [
+            {
+                "task_number": index,
+                "experiment_id": EXPERIMENT_ID,
+                "scenario_id": scenario,
+                "trial_id": f"trial-{index}",
+            }
+            for index, scenario in enumerate(SCENARIOS, start=1)
+            if scenario in scenarios
+        ],
+    }
+    tables = {
+        "python_candidates.jsonl": candidates,
+        "unity_reference.jsonl": reference,
+        "unity_admission.jsonl": admission,
+        "unity_render.jsonl": render,
+        "events.jsonl": events,
+    }
+    manifest["log_writer_stats"] = {
+        name: {
+            "rows_written": len(table),
+            "dropped_rows": 0,
+            "log_write_failures": 0,
+            "status": "closed",
+            "write_error": "",
+        }
+        for name, table in tables.items()
+    }
+    return EvalSessionV2(
+        paths=EvalV2Paths.for_session(source.paths.session_dir.parent / session_id),
+        manifest=manifest,
+        python_candidates=candidates,
+        unity_reference=reference,
+        unity_admission=admission,
+        unity_render=render,
+        events=events,
+    )
+
+
 def _render_row(
     *,
     session_id: str,
@@ -435,6 +594,27 @@ def _event_row(
         "event_type": "event_marker",
         "mono_ms": mono_ms,
         "payload": {"event_role": role},
+    }
+
+
+def _trial_ended_row(
+    session_id: str,
+    scenario: str,
+    trial_id: str,
+    event_id: str,
+    mono_ms: float,
+) -> dict[str, object]:
+    """构造一个正常完成 trial 的生命周期事件。"""
+
+    return {
+        "session_id": session_id,
+        "experiment_id": EXPERIMENT_ID,
+        "scenario_id": scenario,
+        "trial_id": trial_id,
+        "event_id": event_id,
+        "event_type": "trial_ended",
+        "mono_ms": mono_ms,
+        "payload": {"event_role": ""},
     }
 
 

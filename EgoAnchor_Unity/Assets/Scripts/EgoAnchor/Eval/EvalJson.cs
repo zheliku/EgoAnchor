@@ -322,7 +322,8 @@ namespace EgoAnchor.Eval
             EvalLogStats referenceStats,
             EvalLogStats admissionStats,
             EvalLogStats renderStats,
-            EvalLogStats eventsStats)
+            EvalLogStats eventsStats,
+            IReadOnlyList<CompletedExperimentTask> completedTasks = null)
         {
             string configHash = BuildAggregateConfigHash(variantConfigs);
             string frozenParameterSetId = string.IsNullOrWhiteSpace(metadata.FrozenParameterSetId)
@@ -416,9 +417,33 @@ namespace EgoAnchor.Eval
                 }
             }
             sb.Append("],");
+            AppendCompletedTasks(sb, completedTasks);
             AppendTrialPlan(sb);
             sb.Append('}');
             return sb.ToString();
+        }
+
+        /// <summary>写入本 session 实际完成且未作废的任务，而不是固定九项计划。</summary>
+        private static void AppendCompletedTasks(
+            StringBuilder sb,
+            IReadOnlyList<CompletedExperimentTask> completedTasks)
+        {
+            sb.Append("\"completed_tasks\":[");
+            if (completedTasks != null)
+            {
+                for (int index = 0; index < completedTasks.Count; index++)
+                {
+                    if (index > 0) sb.Append(',');
+                    CompletedExperimentTask task = completedTasks[index];
+                    sb.Append("{\"task_number\":")
+                        .Append(task.TaskNumber.ToString(CultureInfo.InvariantCulture))
+                        .Append(",\"experiment_id\":").Append(JStr(task.ExperimentId))
+                        .Append(",\"scenario_id\":").Append(JStr(task.ScenarioId))
+                        .Append(",\"trial_id\":").Append(JStr(task.TrialId))
+                        .Append('}');
+                }
+            }
+            sb.Append("],");
         }
 
         private static void AppendLogStats(StringBuilder sb, string name, EvalLogStats stats, bool prependComma)
@@ -470,26 +495,17 @@ namespace EgoAnchor.Eval
         private static void AppendTrialPlan(StringBuilder sb)
         {
             sb.Append("\"trial_plan\":[");
-            bool first = true;
-            AppendTrialPlanEntries(sb, ExperimentId.SystemCharacterization, ExperimentScenario.SystemScenarios, ref first);
-            AppendTrialPlanEntries(sb, ExperimentId.DesignAttribution, ExperimentScenario.AttributionScenarios, ref first);
-            sb.Append(']');
-        }
-
-        /// <summary>把一个实验的场景数组追加为 manifest trial plan 条目。</summary>
-        private static void AppendTrialPlanEntries(
-            StringBuilder sb,
-            string experimentId,
-            IReadOnlyList<string> scenarios,
-            ref bool first)
-        {
-            for (int i = 0; i < scenarios.Count; i++)
+            for (int index = 0; index < ExperimentScenario.Tasks.Length; index++)
             {
-                if (!first) sb.Append(',');
-                first = false;
-                sb.Append("{\"experiment_id\":").Append(JStr(experimentId))
-                    .Append(",\"scenario_id\":").Append(JStr(scenarios[i])).Append('}');
+                if (index > 0) sb.Append(',');
+                ExperimentTask task = ExperimentScenario.Tasks[index];
+                sb.Append("{\"experiment_id\":").Append(JStr(task.ExperimentId))
+                    .Append(",\"scenario_id\":").Append(JStr(task.ScenarioId))
+                    .Append(",\"minimum_seconds\":").Append(task.MinimumSeconds.ToString(CultureInfo.InvariantCulture))
+                    .Append(",\"maximum_seconds\":").Append(task.MaximumSeconds.ToString(CultureInfo.InvariantCulture))
+                    .Append('}');
             }
+            sb.Append(']');
         }
 
         /// <summary>按 manifest 中的变体顺序生成整体配置摘要。</summary>

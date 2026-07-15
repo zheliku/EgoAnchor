@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using EgoAnchor.Diagnostics;
+using EgoAnchor.Eval.Experiment;
 using EgoAnchor.Runtime;
 using UnityEngine;
 using UnityEngine.Events;
@@ -30,7 +31,7 @@ namespace EgoAnchor.Eval
     /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
     /// 推荐工作流：先启动 Python 服务，<see cref="autoStart"/> 为 true 时 Unity 收到第一个 PoseResult
-    /// 即自动开始录制；固定九场景计划完成后自动调用 <see cref="StopSession"/>。
+    /// 即自动开始录制；完成任意任务子集并经操作者确认后调用 <see cref="StopSession"/>。
     /// </para>
     /// </summary>
     public sealed class EvalSession : MonoBehaviour
@@ -68,18 +69,18 @@ namespace EgoAnchor.Eval
         [SerializeField] private EvalRunKind runKind = EvalRunKind.Debug;
 
         /// <summary>收到第一个 PoseResult 时是否自动开始录制。</summary>
-        [Tooltip("收到第一个 PoseResult 时自动开始录制；固定计划完成后自动停止。")]
+        [Tooltip("收到第一个 PoseResult 时自动开始录制；完成本次需要的任意任务子集后由操作者确认停止。")]
         [SerializeField] private bool autoStart = true;
 
         // ── Events ──
 
-        /// <summary>录制开始时触发；用于准备固定采集计划或写入会话边界事件。</summary>
+        /// <summary>录制开始时触发；用于重置九任务状态或写入会话边界事件。</summary>
         [Header("Session Events")]
         [Tooltip("录制自动开始时触发。")]
         [SerializeField] private UnityEvent sessionStarted = new UnityEvent();
 
         /// <summary>录制停止时触发；用于清理实验上下文或写入会话边界事件。</summary>
-        [Tooltip("固定采集计划完成或组件销毁时触发。")]
+        [Tooltip("操作者确认完成全部任务或组件销毁时触发。")]
         [SerializeField] private UnityEvent sessionStopped = new UnityEvent();
 
         // ── State ──
@@ -93,6 +94,9 @@ namespace EgoAnchor.Eval
 
         private readonly List<string> _variantLabels = new List<string>();
         private readonly List<EvalVariantConfig> _variantConfigs = new List<EvalVariantConfig>();
+
+        /// <summary>停止录制前冻结的已完成任务摘要。</summary>
+        private readonly List<CompletedExperimentTask> _completedTasks = new List<CompletedExperimentTask>();
 
         // ── Public API ──
 
@@ -201,6 +205,7 @@ namespace EgoAnchor.Eval
                 return;
             }
 
+            recorder?.CollectCompletedTasks(_completedTasks);
             recorder?.StopRecording();
             _recording = false;
             sessionStopped.Invoke();
@@ -270,7 +275,8 @@ namespace EgoAnchor.Eval
                 recorder != null ? recorder.ReferenceLogStats : default,
                 recorder != null ? recorder.AdmissionLogStats : default,
                 recorder != null ? recorder.RenderLogStats : default,
-                recorder != null ? recorder.EventsLogStats : default);
+                recorder != null ? recorder.EventsLogStats : default,
+                _completedTasks);
 
             string path = Path.Combine(_sessionDir, EvalV2Manifest.ManifestFileName);
             File.WriteAllText(path, json, new UTF8Encoding(false));

@@ -4,9 +4,12 @@ from .paths import EvalV2Paths
 from .qc import FORMAL_VARIANTS, SchemaQcReport, aggregate_config_hash, run_schema_qc
 from .readers import (
     EvalSessionV2,
+    accepted_trial_keys,
+    accepted_trial_table,
     join_candidate_admission,
     join_render_reference,
     load_session_v2,
+    select_completed_trials,
     select_trials,
 )
 from .rows import (
@@ -25,6 +28,8 @@ from .writers import JsonlTableWriter
 
 __all__ = [
     "EvalSessionV2",
+    "accepted_trial_keys",
+    "accepted_trial_table",
     "EvalV2Paths",
     "EventRow",
     "FORMAL_VARIANTS",
@@ -43,6 +48,7 @@ __all__ = [
     "join_candidate_admission",
     "join_render_reference",
     "run_schema_qc",
+    "select_completed_trials",
     "select_trials",
     "validate_schema_mapping",
 ]

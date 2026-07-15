@@ -1753,15 +1753,8 @@ MonoBehaviour:
   runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
-  runMode: editor_link
   runKind: 0
-  operatorId: 
-  frozenParameterSetId: 
-  objectModelId: 
-  egoanchorGitCommit: 
-  protocolVersion: v1
   autoStart: 1
-  notes: 
   sessionStarted:
     m_PersistentCalls:
       m_Calls: []
@@ -1781,8 +1774,253 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler
   selector: {fileID: 667335327}
-  controlSessionShortcuts: 1
-  session: {fileID: 667335324}
+  navigateAction:
+    m_Name: NavigateTask
+    m_Type: 0
+    m_ExpectedControlType: Vector2
+    m_Id: 1390d55b-2b28-44d3-9b9b-68a6d4be7f20
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 7d6db501-81e3-401c-b270-652c2628258b
+      m_Path: <XRController>{RightHand}/primary2DAxis
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: NavigateTask
+      m_Flags: 0
+    m_Flags: 0
+  startAction:
+    m_Name: StartTask
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 66dc2ac3-d340-4a06-bf53-56ef245b19b0
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 69efdbc9-e5d8-45f7-846f-59d4ab74b914
+      m_Path: <XRController>{RightHand}/primaryButton
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: StartTask
+      m_Flags: 0
+    m_Flags: 0
+  markAction:
+    m_Name: MarkEvent
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 0908d5cd-8483-4681-800e-f4b6cc85fbfb
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 2b30cf86-7420-4600-a6bb-e38373f33231
+      m_Path: <XRController>{RightHand}/triggerPressed
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: MarkEvent
+      m_Flags: 0
+    m_Flags: 0
+  stopAction:
+    m_Name: StopOrFinish
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: f28b52a9-5e35-4d94-b922-6a90e110d75a
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 9adcc4cc-80aa-4beb-8f46-da37148186eb
+      m_Path: <XRController>{RightHand}/secondaryButton
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: StopOrFinish
+      m_Flags: 0
+    - m_Name:
+      m_Id: 16e92c9f-351b-456b-bbf2-d65d6f9caf1b
+      m_Path: <Keyboard>/enter
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: StopOrFinish
+      m_Flags: 0
+    m_Flags: 0
+  rejectAction:
+    m_Name: RejectTrial
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 1c3016cc-0044-483e-be80-650ebca18ad7
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 59781968-fa94-4dae-bbbb-c789c801a5f2
+      m_Path: <XRController>{RightHand}/thumbstickClicked
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: RejectTrial
+      m_Flags: 0
+    - m_Name:
+      m_Id: b5ffe169-315b-42c1-afab-3b1dd7ac7afc
+      m_Path: <Keyboard>/backspace
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: RejectTrial
+      m_Flags: 0
+    m_Flags: 0
+  taskActions:
+  - m_Name: Task1
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 3cecd1d8-768e-4ab2-9940-e500b988dadc
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 8d6464ef-32ec-419e-8004-74ee6e3807c4
+      m_Path: <Keyboard>/digit1
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task1
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task2
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 5deb84c9-2ab0-4a9d-8821-a5e364467c2e
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 2422bbee-04c9-43c5-8236-23b650216bea
+      m_Path: <Keyboard>/digit2
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task2
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task3
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 59431a9a-fa48-43ba-8e91-c9f0b4afaade
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: ba384746-7c52-47e8-b092-017b167bf3ae
+      m_Path: <Keyboard>/digit3
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task3
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task4
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 047d679f-743b-494b-973f-57bf386e53cf
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 7a75b4af-ba6a-47a9-a41a-acfb50f5e1e3
+      m_Path: <Keyboard>/digit4
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task4
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task5
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 6f4b435c-6c01-4268-854f-dcf31af05123
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: b2a3eb87-f76b-4882-8df9-f190b89558f8
+      m_Path: <Keyboard>/digit5
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task5
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task6
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: f287d38c-f64a-42fc-ab12-f94a8b619f51
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 57aa94f7-4805-4257-aa21-2b511e047298
+      m_Path: <Keyboard>/digit6
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task6
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task7
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 5a4a5459-b84d-49c9-98da-da3609693a94
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 92813af9-285f-4fdc-a123-882b45a9d3d1
+      m_Path: <Keyboard>/digit7
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task7
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task8
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 56cb7178-0069-4207-883e-08289edc8d6e
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 277e235d-0787-4068-b868-77afcb805a4d
+      m_Path: <Keyboard>/digit8
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task8
+      m_Flags: 0
+    m_Flags: 0
+  - m_Name: Task9
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 38c3e904-ee73-4829-a222-f3579070441a
+    m_Processors:
+    m_Interactions:
+    m_SingletonActionBindings:
+    - m_Name:
+      m_Id: 07c5adc8-d3f4-4e13-bdcf-423a5f26897c
+      m_Path: <Keyboard>/digit9
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task9
+      m_Flags: 0
+    m_Flags: 0
+  navigationThreshold: 0.7
 --- !u!114 &667335327
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4856,8 +5094,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 18
+  m_fontSizeBase: 18
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -5079,7 +5317,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 960, y: -80}
-  m_SizeDelta: {x: 700, y: 500}
+  m_SizeDelta: {x: 900, y: 650}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &2012808181
 MonoBehaviour:

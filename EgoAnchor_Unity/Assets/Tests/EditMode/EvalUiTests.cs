@@ -9,6 +9,7 @@ using EgoAnchor.Eval.Experiment;
 using EgoAnchor.Policy;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace EgoAnchor.Tests
 {
@@ -85,7 +86,14 @@ namespace EgoAnchor.Tests
                         "CaptureTime", true, true, true, true, true, true),
                 },
                 new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2),
-                new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2));
+                new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2),
+                new[]
+                {
+                    new CompletedExperimentTask(
+                        1, ExperimentId.SystemCharacterization, "static_head_motion", "trial_001"),
+                    new CompletedExperimentTask(
+                        3, ExperimentId.SystemCharacterization, "continuous_translation", "trial_002"),
+                });
 
             foreach (string line in new[] { reference, admission, render })
             {
@@ -137,11 +145,16 @@ namespace EgoAnchor.Tests
                 "session_id", "object_id", "run_kind", "experiment_ids", "operator_id", "created_unix_ms",
                 "unity_run_mode", "python_host", "unity_version", "python_version", "egoanchor_git_commit",
                 "protocol_version", "config_hash", "frozen_parameter_set_id", "object_model_id",
-                "variant_definitions", "trial_plan", "log_files", "log_writer_stats",
+                "variant_definitions", "completed_tasks", "trial_plan", "log_files", "log_writer_stats",
             })
                 StringAssert.Contains($"\"{field}\":", manifest);
+            StringAssert.Contains(
+                "\"completed_tasks\":[{\"task_number\":1,\"experiment_id\":\"exp1_system_characterization\",\"scenario_id\":\"static_head_motion\",\"trial_id\":\"trial_001\"},{\"task_number\":3",
+                manifest);
             StringAssert.Contains("\"scenario_id\":\"occlusion_recovery\"", manifest);
             StringAssert.Contains("\"scenario_id\":\"without_static_lock\"", manifest);
+            StringAssert.Contains("\"minimum_seconds\":90", manifest);
+            StringAssert.Contains("\"maximum_seconds\":120", manifest);
             StringAssert.Contains("\"config_hash\":", manifest);
             StringAssert.Contains("\"uses_vcd_admission\":true", manifest);
             StringAssert.Contains("\"uses_temporal_synthesis\":true", manifest);
@@ -154,233 +167,265 @@ namespace EgoAnchor.Tests
     /// <summary>实验一/实验二采集上下文和输入状态机测试。</summary>
     public sealed class ExperimentContextTests
     {
-        /// <summary>未录制时不得创建场景、trial 或事件上下文。</summary>
+        /// <summary>未录制时不得选择、开始或标记 trial。</summary>
         [Test]
-        public void SelectorRejectsContextChangesBeforeRecording()
+        public void SelectorRejectsChangesBeforeRecording()
         {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            try
+            WithSelector((_, selector) =>
             {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
-
-                Assert.That(selector.Advance(), Is.False);
+                Assert.That(selector.SelectTask(0), Is.False);
+                Assert.That(selector.StartTrial(), Is.False);
+                Assert.That(selector.MarkEvent(), Is.False);
                 Assert.That(selector.CurrentContext.IsSelected, Is.False);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
+            }, recording: false);
         }
 
-        /// <summary>普通场景三次推进必须依次开始、标记并结束，然后自动切换场景。</summary>
+        /// <summary>摇杆四方向必须按三乘三网格选场，运行中禁止切换。</summary>
         [Test]
-        public void SelectorAdvancesNormalScenarioWithOneAction()
+        public void SelectorNavigatesTaskGridAndLocksDuringTrial()
         {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            try
+            WithSelector((_, selector) =>
             {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(0));
+                Assert.That(selector.MoveSelection(Vector2.right), Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(1));
+                Assert.That(selector.MoveSelection(Vector2.down), Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(4));
+                Assert.That(selector.MoveSelection(Vector2.left), Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(3));
+                Assert.That(selector.MoveSelection(Vector2.up), Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(0));
+                Assert.That(selector.MoveSelection(Vector2.left), Is.False);
 
-                Assert.That(selector.CurrentExperimentId, Is.EqualTo(ExperimentId.SystemCharacterization));
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("static_head_motion"));
-                Assert.That(selector.CurrentPlanStep, Is.EqualTo(1));
-                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.StartTrial(), Is.True);
+                Assert.That(selector.MoveSelection(Vector2.right), Is.False);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(0));
+            });
+        }
+
+        /// <summary>普通任务必须独立开始、写主事件并结束，不自动切换场景。</summary>
+        [Test]
+        public void SelectorRunsSelectedTaskWithExplicitActions()
+        {
+            WithSelector((_, selector) =>
+            {
+                Assert.That(selector.SelectTask(1), Is.True);
+                Assert.That(selector.StartTrial(), Is.True);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
-                Assert.That(selector.Advance(), Is.True);
-                Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
-                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
-                Assert.That(selector.Advance(), Is.True);
-                Assert.That(selector.CurrentTrialId, Is.Empty);
-                Assert.That(selector.CurrentEventId, Is.Empty);
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("start_stop_6dof"));
-                Assert.That(selector.CurrentPlanStep, Is.EqualTo(2));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
-        }
-
-        /// <summary>固定计划的起停场景必须把第二次推进标记为转换开始。</summary>
-        [Test]
-        public void SelectorMapsTransitionScenarioToTransitionStarted()
-        {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            try
-            {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
-
-                CompleteCurrentScenario(selector);
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("start_stop_6dof"));
-                Assert.That(selector.Advance(), Is.True);
-                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStarted));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
+                Assert.That(selector.StopOrFinish(), Is.True);
+
+                Assert.That(selector.HasActiveTrial, Is.False);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(1));
+                Assert.That(selector.IsTaskCompleted(1), Is.True);
+                Assert.That(selector.CompletedTaskCount, Is.EqualTo(1));
+            });
         }
 
-        /// <summary>遮挡场景四次推进必须依次开始、遮挡、可见并切换到实验二。</summary>
+        /// <summary>遮挡任务必须允许多组遮挡/可见 marker，悬空遮挡时不得结束。</summary>
         [Test]
-        public void SelectorAdvancesOcclusionRolesInOrder()
+        public void SelectorAlternatesOcclusionMarkers()
         {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            try
+            WithSelector((_, selector) =>
             {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
-
-                for (int i = 0; i < 4; i++) CompleteCurrentScenario(selector);
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("occlusion_recovery"));
-
-                Assert.That(selector.Advance(), Is.True);
-                Assert.That(selector.Advance(), Is.True);
+                selector.SelectTask(4);
+                selector.StartTrial();
+                Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
                 Assert.That(selector.HasOpenOcclusion, Is.True);
-                string occlusionEventId = selector.CurrentEventId;
+                Assert.That(selector.StopOrFinish(), Is.False);
 
-                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
-                Assert.That(selector.CurrentEventId, Is.Not.EqualTo(occlusionEventId));
                 Assert.That(selector.HasOpenOcclusion, Is.False);
-                Assert.That(selector.Advance(), Is.True);
-                Assert.That(selector.CurrentExperimentId, Is.EqualTo(ExperimentId.DesignAttribution));
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("without_capture_time_alignment"));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
+                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
+                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
+                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.IsTaskCompleted(4), Is.True);
+            });
         }
 
-        /// <summary>固定九场景全部完成后必须自动停止 session，无需额外停止键。</summary>
+        /// <summary>作废活动或已完成 trial 后只重做该任务，不清空其他完成状态。</summary>
         [Test]
-        public void SelectorStopsSessionAfterFinalScenario()
+        public void SelectorRejectsOnlySelectedTrialForRedo()
         {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            try
+            WithSelector((_, selector) =>
             {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
+                var eventTypes = new List<string>();
+                selector.ContextEvent += (_, eventType) => eventTypes.Add(eventType);
 
-                for (int guard = 0; session.IsRecording && guard < 40; guard++)
-                    Assert.That(selector.Advance(), Is.True);
+                CompleteTask(selector, 0);
+                Assert.That(selector.IsTaskCompleted(0), Is.True);
+                Assert.That(selector.RejectCurrentOrSelected(), Is.True);
+                Assert.That(selector.IsTaskCompleted(0), Is.False);
+                CollectionAssert.Contains(eventTypes, "trial_rejected");
 
+                selector.SelectTask(1);
+                selector.StartTrial();
+                Assert.That(selector.RejectCurrentOrSelected(), Is.True);
+                Assert.That(selector.HasActiveTrial, Is.False);
+                Assert.That(selector.IsTaskCompleted(1), Is.False);
+                Assert.That(eventTypes.FindAll(item => item == "trial_rejected").Count, Is.EqualTo(2));
+            });
+        }
+
+        /// <summary>完成任意任务子集后必须等待额外确认，再结束模块化 session。</summary>
+        [Test]
+        public void SelectorFinishesPartialSessionAfterExplicitConfirmation()
+        {
+            WithSelector((session, selector) =>
+            {
+                CompleteTask(selector, 0);
+                CompleteTask(selector, 2);
+
+                Assert.That(selector.CompletedTaskCount, Is.EqualTo(2));
+                Assert.That(selector.CanFinishSession, Is.True);
+                Assert.That(session.IsRecording, Is.True);
+                Assert.That(selector.StopOrFinish(), Is.True);
                 Assert.That(session.IsRecording, Is.False);
-                Assert.That(selector.IsPlanComplete, Is.True);
-                Assert.That(selector.CurrentPlanStep, Is.EqualTo(ExperimentScenario.PlanCount));
-                Assert.That(selector.NextActionText, Is.EqualTo("COLLECTION COMPLETE"));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
+            });
         }
 
-        /// <summary>手柄与键盘 binding 必须共用同一个推进状态机。</summary>
+        /// <summary>零项完成时不得生成空的正式 session。</summary>
         [Test]
-        public void InputHandlerExposesControllerAndKeyboardBindings()
+        public void SelectorRejectsEmptySessionFinish()
+        {
+            WithSelector((session, selector) =>
+            {
+                Assert.That(selector.CanFinishSession, Is.False);
+                Assert.That(selector.StopOrFinish(), Is.False);
+                Assert.That(session.IsRecording, Is.True);
+            });
+        }
+
+        /// <summary>完成摘要只保留未作废任务，并按任务编号稳定排序。</summary>
+        [Test]
+        public void SelectorCollectsFinalCompletedTaskSubset()
+        {
+            WithSelector((_, selector) =>
+            {
+                CompleteTask(selector, 2);
+                CompleteTask(selector, 0);
+                selector.SelectTask(2);
+                Assert.That(selector.RejectCurrentOrSelected(), Is.True);
+
+                var tasks = new List<CompletedExperimentTask>();
+                selector.CollectCompletedTasks(tasks);
+
+                Assert.That(tasks.Count, Is.EqualTo(1));
+                Assert.That(tasks[0].TaskNumber, Is.EqualTo(1));
+                Assert.That(tasks[0].ScenarioId, Is.EqualTo("static_head_motion"));
+                Assert.That(tasks[0].TrialId, Is.EqualTo("trial_002"));
+            });
+        }
+
+        /// <summary>输入组件必须暴露内联 InputAction，键盘任务键复用对应任务状态机。</summary>
+        [Test]
+        public void InputHandlerUsesInlineActionsAndTaskKeys()
+        {
+            WithSelector((_, selector) =>
+            {
+                GameObject inputObject = new GameObject("ExperimentContextTests.Input");
+                try
+                {
+                    ExperimentInputHandler input = inputObject.AddComponent<ExperimentInputHandler>();
+                    SetPrivateField(input, "selector", selector);
+
+                    Assert.That(input.HandleTask(2), Is.True);
+                    Assert.That(selector.SelectedTaskIndex, Is.EqualTo(2));
+                    Assert.That(selector.HasActiveTrial, Is.True);
+                    Assert.That(input.HandleTask(2), Is.True);
+                    Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
+                    Assert.That(input.HandleStop(), Is.True);
+                    Assert.That(selector.IsTaskCompleted(2), Is.True);
+
+                    foreach (string fieldName in new[]
+                    {
+                        "navigateAction", "startAction", "markAction", "stopAction", "rejectAction"
+                    })
+                        Assert.That(GetPrivateField(input, fieldName), Is.TypeOf<InputAction>());
+                    Assert.That(GetPrivateField(input, "taskActions"), Is.TypeOf<InputAction[]>());
+                    Assert.That(((InputAction[])GetPrivateField(input, "taskActions")).Length, Is.EqualTo(9));
+                    Assert.That(input.GetType().GetField("controllerBinding", BindingFlags.Instance | BindingFlags.NonPublic), Is.Null);
+                    Assert.That(input.GetType().GetField("keyboardBinding", BindingFlags.Instance | BindingFlags.NonPublic), Is.Null);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(inputObject);
+                }
+            });
+        }
+
+        /// <summary>UI 必须同时显示九任务状态、选中项、当前阶段与 90--120 秒时长。</summary>
+        [Test]
+        public void StatusUiShowsTaskBoardAndLivePhase()
+        {
+            WithSelector((session, selector) =>
+            {
+                GameObject uiObject = new GameObject("ExperimentContextTests.UI");
+                try
+                {
+                    CompleteTask(selector, 0);
+                    selector.SelectTask(4);
+                    selector.StartTrial();
+                    selector.MarkEvent();
+
+                    ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
+                    SetPrivateField(status, "selector", selector);
+                    SetPrivateField(status, "session", session);
+                    string text = status.BuildStatusText();
+
+                    StringAssert.Contains("Completed: 1 / 9", text);
+                    StringAssert.Contains("This session: 1", text);
+                    StringAssert.Contains("[OK]1 HEAD", text);
+                    StringAssert.Contains(">[RUN]5 OCC", text);
+                    StringAssert.Contains("Occlusion recovery", text);
+                    StringAssert.Contains("Phase: OCCLUDED", text);
+                    StringAssert.Contains("Recommended: 90-120 s", text);
+                    StringAssert.DoesNotContain("RQ1", text);
+                    StringAssert.DoesNotContain("RQ2", text);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(uiObject);
+                }
+            });
+        }
+
+        /// <summary>完成一个指定任务，遮挡任务自动补齐 target_visible。</summary>
+        private static void CompleteTask(ExperimentTrialSelector selector, int index)
+        {
+            Assert.That(selector.SelectTask(index), Is.True);
+            Assert.That(selector.StartTrial(), Is.True);
+            Assert.That(selector.MarkEvent(), Is.True);
+            if (selector.HasOpenOcclusion)
+                Assert.That(selector.MarkEvent(), Is.True);
+            Assert.That(selector.StopOrFinish(), Is.True);
+        }
+
+        /// <summary>创建 selector，并按需模拟已开始录制的 session。</summary>
+        private static void WithSelector(
+            Action<EvalSession, ExperimentTrialSelector> test,
+            bool recording = true)
         {
             GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
             GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            GameObject inputObject = new GameObject("ExperimentContextTests.Input");
             try
             {
                 EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
+                SetPrivateField(session, "_recording", recording);
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
-                ExperimentInputHandler input = inputObject.AddComponent<ExperimentInputHandler>();
-                SetPrivateField(input, "selector", selector);
-                Assert.That(input.HandleAdvance(), Is.True);
-                Assert.That(selector.HasActiveTrial, Is.True);
-                Assert.That(input.HandleAdvance(), Is.True);
-                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
-
-                Assert.That(
-                    GetPrivateField(input, "controllerBinding"),
-                    Is.EqualTo("<XRController>{RightHand}/primaryButton"));
-                Assert.That(GetPrivateField(input, "keyboardBinding"), Is.EqualTo("<Keyboard>/space"));
+                test(session, selector);
             }
             finally
             {
-                UnityEngine.Object.DestroyImmediate(inputObject);
                 UnityEngine.Object.DestroyImmediate(selectorObject);
                 UnityEngine.Object.DestroyImmediate(sessionObject);
             }
-        }
-
-        /// <summary>状态 UI 文本必须显示实验命名并拒绝旧 RQ 顶层文案。</summary>
-        [Test]
-        public void StatusUiUsesExperimentNaming()
-        {
-            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
-            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
-            GameObject uiObject = new GameObject("ExperimentContextTests.UI");
-            try
-            {
-                EvalSession session = sessionObject.AddComponent<EvalSession>();
-                SetPrivateField(session, "_recording", true);
-                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                selector.BindSession(session);
-                for (int i = 0; i < 6; i++) CompleteCurrentScenario(selector);
-                Assert.That(selector.CurrentScenarioId, Is.EqualTo("without_vcd_admission"));
-                selector.Advance();
-                selector.Advance();
-
-                ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
-                SetPrivateField(status, "selector", selector);
-                SetPrivateField(status, "session", session);
-                string text = status.BuildStatusText();
-
-                StringAssert.Contains("EXP2 | DESIGN ATTRIBUTION", text);
-                StringAssert.Contains("Ablation: VCD admission", text);
-                StringAssert.Contains("Progress: 7 / 9", text);
-                StringAssert.Contains("NEXT: PRESS RIGHT A WHEN TARGET IS VISIBLE", text);
-                StringAssert.Contains("trial_007", text);
-                StringAssert.Contains("Role: occlusion_started", text);
-                StringAssert.DoesNotContain("RQ1", text);
-                StringAssert.DoesNotContain("RQ2", text);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(uiObject);
-                UnityEngine.Object.DestroyImmediate(selectorObject);
-                UnityEngine.Object.DestroyImmediate(sessionObject);
-            }
-        }
-
-        /// <summary>完成当前场景，自动适配普通和遮挡场景需要的推进次数。</summary>
-        private static void CompleteCurrentScenario(ExperimentTrialSelector selector)
-        {
-            int step = selector.CurrentPlanStep;
-            for (int guard = 0; selector.CurrentPlanStep == step && guard < 5; guard++)
-                Assert.That(selector.Advance(), Is.True);
-            Assert.That(selector.CurrentPlanStep, Is.Not.EqualTo(step));
         }
 
         /// <summary>通过反射读取测试所需的私有字段。</summary>
@@ -493,9 +538,9 @@ namespace EgoAnchor.Tests
             Assert.That(distinctRuntimeIds.Count, Is.EqualTo(RequiredLabels.Length));
         }
 
-        /// <summary>正式场景必须固定 Formal，并暴露右手手柄与键盘两条统一推进 binding。</summary>
+        /// <summary>正式场景必须固定 Formal，并序列化可在 Inspector 编辑的内联 InputAction。</summary>
         [Test]
-        public void ExperimentSceneUsesFormalSingleActionInput()
+        public void ExperimentSceneUsesFormalInlineInputActions()
         {
             string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
             string yaml = File.ReadAllText(path);
@@ -517,8 +562,64 @@ namespace EgoAnchor.Tests
             })
                 StringAssert.DoesNotContain(removedField, sessionSection);
 
-            StringAssert.Contains("controllerBinding: <XRController>{RightHand}/primaryButton", inputSection);
-            StringAssert.Contains("keyboardBinding: <Keyboard>/space", inputSection);
+            StringAssert.DoesNotContain("controllerBinding:", inputSection);
+            StringAssert.DoesNotContain("keyboardBinding:", inputSection);
+            foreach (string actionField in new[]
+            {
+                "navigateAction:", "startAction:", "markAction:", "stopAction:",
+                "rejectAction:", "taskActions:"
+            })
+                StringAssert.Contains(actionField, inputSection);
+            foreach (string bindingPath in new[]
+            {
+                "<XRController>{RightHand}/primary2DAxis",
+                "<XRController>{RightHand}/primaryButton",
+                "<XRController>{RightHand}/triggerPressed",
+                "<XRController>{RightHand}/secondaryButton",
+                "<XRController>{RightHand}/thumbstickClicked",
+                "<Keyboard>/enter",
+                "<Keyboard>/backspace",
+                "<Keyboard>/digit1",
+                "<Keyboard>/digit9",
+            })
+                StringAssert.Contains($"m_Path: {bindingPath}", inputSection);
+            Assert.That(
+                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
+                Is.EqualTo(ExperimentScenario.PlanCount));
+
+            MatchCollection ids = Regex.Matches(inputSection, @"(?m)^\s+m_Id: (?<id>[^\r\n]+)$");
+            var distinctIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Match match in ids)
+                Assert.That(distinctIds.Add(match.Groups["id"].Value), Is.True, "InputAction GUID 必须唯一");
+            Assert.That(distinctIds.Count, Is.GreaterThanOrEqualTo(20));
+
+            string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
+            StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
+        }
+
+        /// <summary>开发场景必须使用相同内联动作，才能按正式流程执行 smoke。</summary>
+        [Test]
+        public void DevelopmentSceneUsesInlineInputActions()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Develop.unity");
+            string yaml = File.ReadAllText(path);
+            string sessionSection = GetSectionContaining(
+                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalSession");
+            string inputSection = GetSectionContaining(
+                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
+
+            StringAssert.Contains("runKind: 0", sessionSection);
+            StringAssert.DoesNotContain("controlSessionShortcuts:", inputSection);
+            StringAssert.DoesNotContain("controllerBinding:", inputSection);
+            StringAssert.Contains("navigateAction:", inputSection);
+            StringAssert.Contains("taskActions:", inputSection);
+            StringAssert.Contains("m_Path: <XRController>{RightHand}/primaryButton", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/digit1", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/digit9", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/backspace", inputSection);
+            Assert.That(
+                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
+                Is.EqualTo(ExperimentScenario.PlanCount));
 
             string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));

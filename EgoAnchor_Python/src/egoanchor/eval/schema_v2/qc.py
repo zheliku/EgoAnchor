@@ -7,7 +7,8 @@ from typing import Any
 
 import pandas as pd
 
-from .readers import EvalSessionV2
+from .readers import EvalSessionV2, accepted_trial_keys
+from .rows import SchemaV2Error
 
 
 FORMAL_VARIANTS = (
@@ -58,6 +59,7 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     _check_writer_stats(session, errors, metrics)
     _check_run_kind_and_formal_freeze(manifest, variants, errors)
     _check_variant_hashes(session, variants, errors)
+    _check_completed_tasks(session, errors, metrics)
     _check_primary_keys(session, errors)
     _check_score_ranges(session, errors)
 
@@ -71,6 +73,71 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     _check_render_matrix(session, variants, errors, metrics)
     _check_admission_matrix(session, variants, errors, metrics)
     return SchemaQcReport(errors=errors, warnings=warnings, metrics=metrics)
+
+
+def _check_completed_tasks(
+    session: EvalSessionV2,
+    errors: list[str],
+    metrics: dict[str, Any],
+) -> None:
+    """核对 manifest 完成任务摘要、固定计划和生命周期事件。"""
+
+    raw = session.manifest.get("completed_tasks")
+    plan = session.manifest.get("trial_plan")
+    if not isinstance(raw, list):
+        errors.append("manifest.completed_tasks must be an array")
+        return
+    if not isinstance(plan, list):
+        errors.append("manifest.trial_plan must be an array")
+        return
+
+    manifest_keys: set[tuple[str, str, str, str]] = set()
+    previous_number = 0
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append(f"manifest.completed_tasks[{index}] must be an object")
+            continue
+        task_number = item.get("task_number")
+        if isinstance(task_number, bool) or not isinstance(task_number, int):
+            errors.append(f"manifest.completed_tasks[{index}].task_number must be an integer")
+            continue
+        if task_number <= previous_number:
+            errors.append("manifest.completed_tasks must use unique ascending task_number values")
+        previous_number = task_number
+        if task_number < 1 or task_number > len(plan):
+            errors.append(
+                f"manifest.completed_tasks[{index}].task_number is outside trial_plan: {task_number}"
+            )
+            continue
+
+        values = tuple(str(item.get(key) or "") for key in ("experiment_id", "scenario_id", "trial_id"))
+        if any(not value for value in values):
+            errors.append(
+                f"manifest.completed_tasks[{index}] requires experiment_id/scenario_id/trial_id"
+            )
+            continue
+        planned = plan[task_number - 1]
+        if not isinstance(planned, dict) or (
+            planned.get("experiment_id"), planned.get("scenario_id")
+        ) != values[:2]:
+            errors.append(
+                f"manifest.completed_tasks[{index}] does not match trial_plan task {task_number}"
+            )
+        manifest_keys.add((session.session_id, *values))
+
+    try:
+        event_keys = accepted_trial_keys(session)
+    except SchemaV2Error as exc:
+        errors.append(str(exc))
+        event_keys = set()
+    if manifest_keys != event_keys:
+        errors.append(
+            "manifest.completed_tasks does not match accepted lifecycle trials: "
+            f"missing={sorted(event_keys - manifest_keys)}, extra={sorted(manifest_keys - event_keys)}"
+        )
+    if str(session.manifest.get("run_kind", "")).lower() == "formal" and not event_keys:
+        errors.append("formal session requires at least one completed task")
+    metrics["completed_task_count"] = len(event_keys)
 
 
 def _variant_ids(raw: Any, errors: list[str]) -> set[str]:

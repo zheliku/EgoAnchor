@@ -10,8 +10,11 @@ from typing import Any, Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2
+from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, select_completed_trials
 
+from ..batch import BatchQcReport, run_batch_qc
+
+from .contract import EXPERIMENT_ID, SCENARIO_ABLATION
 from .figures import write_exp2_figures
 from .latex import write_exp2_latex, write_exp2_tables
 from .metrics import aggregate_component_deltas, compute_exp2_paired_deltas
@@ -54,22 +57,30 @@ def run_exp2_design_attribution(
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     reports = [run_exp2_qc(session) for session in sessions]
-    session_qc = _session_qc_table(reports)
+    coverage_qc = run_batch_qc(
+        sessions,
+        experiment_id=EXPERIMENT_ID,
+        required_scenarios=SCENARIO_ABLATION,
+    )
+    session_qc = _session_qc_table(reports, coverage_qc)
     trial_qc = pd.concat([report.trial_qc for report in reports], ignore_index=True)
     session_qc.to_csv(output / "exp2_session_qc.csv", index=False)
     trial_qc.to_csv(output / "exp2_trial_qc.csv", index=False)
-    batch_qc = _batch_qc(reports, trial_qc)
+    batch_qc = _batch_qc(reports, trial_qc, coverage_qc)
     _write_qc_json(batch_qc, output / "exp2_qc.json")
 
-    failed = [report for report in reports if not report.passed]
-    if failed:
-        details = "; ".join(
-            f"{report.session_id}: {' | '.join(report.errors)}" for report in failed
-        )
+    if not batch_qc.passed:
+        details = " | ".join(batch_qc.errors)
         raise ValueError(f"实验二 QC 失败，已停止指标生成：{details}")
 
+    contributing_ids = set(coverage_qc.contributing_session_ids)
+    accepted_sessions = [
+        select_completed_trials(session)
+        for session in sessions
+        if session.session_id in contributing_ids
+    ]
     deltas = pd.concat(
-        [compute_exp2_paired_deltas(session) for session in sessions],
+        [compute_exp2_paired_deltas(session) for session in accepted_sessions],
         ignore_index=True,
     )
     summary = aggregate_component_deltas(deltas)
@@ -80,7 +91,7 @@ def run_exp2_design_attribution(
                 session.unity_admission,
                 session.unity_reference,
             )
-            for session in sessions
+            for session in accepted_sessions
         ]
     )
     tables = {
@@ -113,31 +124,48 @@ def _as_session(item: EvalSessionV2 | str | Path) -> EvalSessionV2:
     return item if isinstance(item, EvalSessionV2) else load_session_v2(item)
 
 
-def _session_qc_table(reports: list[Exp2QcReport]) -> pd.DataFrame:
-    """把逐 session QC 转成固定审计表。"""
+def _session_qc_table(
+    reports: list[Exp2QcReport],
+    coverage: BatchQcReport,
+) -> pd.DataFrame:
+    """把逐 session 与批次覆盖 QC 转成固定审计表。"""
 
-    return pd.DataFrame.from_records(
-        [
-            {
-                "session_id": report.session_id,
-                "passed": report.passed,
-                "errors": " | ".join(report.errors),
-                "warnings": " | ".join(report.warnings),
-                **report.metrics,
-            }
-            for report in reports
-        ]
+    rows = [
+        {
+            "session_id": report.session_id,
+            "passed": report.passed,
+            "errors": " | ".join(report.errors),
+            "warnings": " | ".join(report.warnings),
+            "contributes": report.contributes,
+            **report.metrics,
+        }
+        for report in reports
+    ]
+    rows.append(
+        {
+            "session_id": "batch",
+            "passed": coverage.passed,
+            "errors": " | ".join(coverage.errors),
+            "warnings": "",
+            "contributes": True,
+            **coverage.metrics,
+        }
     )
+    return pd.DataFrame.from_records(rows)
 
 
-def _batch_qc(reports: list[Exp2QcReport], trial_qc: pd.DataFrame) -> Exp2QcReport:
+def _batch_qc(
+    reports: list[Exp2QcReport],
+    trial_qc: pd.DataFrame,
+    coverage: BatchQcReport,
+) -> Exp2QcReport:
     """合并逐 session QC，同时保留每个错误的 session 上下文。"""
 
     errors = tuple(
         f"{report.session_id}: {message}"
         for report in reports
         for message in report.errors
-    )
+    ) + tuple(f"batch: {message}" for message in coverage.errors)
     warnings = tuple(
         f"{report.session_id}: {message}"
         for report in reports
@@ -148,7 +176,7 @@ def _batch_qc(reports: list[Exp2QcReport], trial_qc: pd.DataFrame) -> Exp2QcRepo
         passed=not errors,
         errors=errors,
         warnings=warnings,
-        metrics={"session_count": len(reports)},
+        metrics=dict(coverage.metrics),
         trial_qc=trial_qc,
     )
 

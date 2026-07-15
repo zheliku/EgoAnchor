@@ -38,6 +38,7 @@ class ManifestV2:
     frozen_parameter_set_id: str = ""
     object_model_id: str = ""
     variant_definitions: list[dict[str, Any]] = field(default_factory=list)
+    completed_tasks: list[dict[str, Any]] = field(default_factory=list)
     trial_plan: list[dict[str, Any]] = field(default_factory=list)
     log_files: dict[str, str] = field(default_factory=dict)
     log_writer_stats: dict[str, Any] = field(default_factory=dict)

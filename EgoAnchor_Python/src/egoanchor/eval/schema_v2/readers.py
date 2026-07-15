@@ -28,6 +28,9 @@ from .rows import (
 _PYTHON_FRAGMENT_NAME = "python_session.json"
 """Python runtime 停止时写入的统计片段文件名。"""
 
+TRIAL_KEY_COLUMNS = ("session_id", "experiment_id", "scenario_id", "trial_id")
+"""完成、作废和跨表投影共用的 trial 稳定键。"""
+
 
 @dataclass(frozen=True)
 class EvalSessionV2:
@@ -147,6 +150,104 @@ def select_trials(session: EvalSessionV2, experiment_id: str) -> EvalSessionV2:
         unity_render=render_filtered,
         events=filter_events(session.events),
     )
+
+
+def select_completed_trials(session: EvalSessionV2) -> EvalSessionV2:
+    """只保留已正常结束且没有被 ``trial_rejected`` 作废的 trial。
+
+    原始 schema-v2 表保持不可变，基础 QC 仍检查全部行。实验一/二的正式 QC、指标和
+    risk-coverage 使用本投影视图，从而允许操作者保留错误尝试的审计记录并只重做该任务。
+    """
+
+    trial_columns = TRIAL_KEY_COLUMNS
+    events = session.events
+    accepted = accepted_trial_keys(session)
+
+    def by_trial(table: pd.DataFrame) -> pd.DataFrame:
+        """按完整 trial 键投影一张带实验上下文的表。"""
+
+        if table.empty:
+            return table.copy()
+        keys = table.loc[:, trial_columns].astype(str)
+        mask = [tuple(values) in accepted for values in keys.itertuples(index=False, name=None)]
+        return table.loc[mask].copy()
+
+    admission = by_trial(session.unity_admission)
+    render = by_trial(session.unity_render)
+    candidate_ids = set(admission.get("candidate_id", pd.Series(dtype=str)).dropna())
+    frame_ids = set(admission.get("frame_id", pd.Series(dtype=int)).dropna())
+    frame_ids.update(
+        value
+        for value in render.get("source_frame_id", pd.Series(dtype=int)).dropna()
+        if int(value) >= 0
+    )
+
+    if events.empty:
+        filtered_events = events.copy()
+    else:
+        trial_ids = events["trial_id"].astype(str)
+        global_events = trial_ids.eq("")
+        event_keys = events.loc[:, trial_columns].astype(str)
+        accepted_events = [
+            tuple(values) in accepted
+            for values in event_keys.itertuples(index=False, name=None)
+        ]
+        filtered_events = events.loc[global_events | pd.Series(accepted_events, index=events.index)].copy()
+
+    def by_values(table: pd.DataFrame, column: str, values: set[Any]) -> pd.DataFrame:
+        """按完成 trial 关联出的稳定键裁剪无上下文表。"""
+
+        if table.empty:
+            return table.copy()
+        return table[table[column].isin(values)].copy()
+
+    return EvalSessionV2(
+        paths=session.paths,
+        manifest=dict(session.manifest),
+        python_candidates=by_values(session.python_candidates, "candidate_id", candidate_ids),
+        unity_reference=by_values(session.unity_reference, "frame_id", frame_ids),
+        unity_admission=admission,
+        unity_render=render,
+        events=filtered_events,
+    )
+
+
+def accepted_trial_keys(session: EvalSessionV2) -> set[tuple[str, ...]]:
+    """从生命周期事件返回已结束且未作废的 trial 稳定键。"""
+
+    events = session.events
+    if events.empty:
+        return set()
+    required = {"event_type", *TRIAL_KEY_COLUMNS}
+    missing = sorted(required - set(events.columns))
+    if missing:
+        raise SchemaV2Error(f"events requires completed-trial columns: {missing}")
+
+    lifecycle = events[
+        events["event_type"].astype(str).isin({"trial_ended", "trial_rejected"})
+    ]
+    records: dict[str, set[tuple[str, ...]]] = {
+        "trial_ended": set(),
+        "trial_rejected": set(),
+    }
+    for _, row in lifecycle.iterrows():
+        key = tuple(str(row[column]) for column in TRIAL_KEY_COLUMNS)
+        if any(not value for value in key):
+            raise SchemaV2Error(
+                f"{row['event_type']} requires non-empty " + "/".join(TRIAL_KEY_COLUMNS)
+            )
+        records[str(row["event_type"])].add(key)
+    return records["trial_ended"] - records["trial_rejected"]
+
+
+def accepted_trial_table(session: EvalSessionV2) -> pd.DataFrame:
+    """把当前 session 的最终完成 trial 转为稳定、去重、排序的数据表。"""
+
+    columns = list(TRIAL_KEY_COLUMNS)
+    records = [dict(zip(columns, key, strict=True)) for key in accepted_trial_keys(session)]
+    if not records:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame.from_records(records, columns=columns).sort_values(columns).reset_index(drop=True)
 
 
 def load_session_v2(session_dir: str | Path) -> EvalSessionV2:
@@ -463,5 +564,6 @@ __all__ = [
     "join_candidate_admission",
     "join_render_reference",
     "load_session_v2",
+    "select_completed_trials",
     "select_trials",
 ]

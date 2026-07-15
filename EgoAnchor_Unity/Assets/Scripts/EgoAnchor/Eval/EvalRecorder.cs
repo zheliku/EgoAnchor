@@ -420,6 +420,14 @@ namespace EgoAnchor.Eval
             }
         }
 
+        /// <summary>复制本 session 最终未作废的完成任务，供 manifest 固化模块化采集范围。</summary>
+        public void CollectCompletedTasks(List<CompletedExperimentTask> tasks)
+        {
+            if (tasks == null) throw new ArgumentNullException(nameof(tasks));
+            tasks.Clear();
+            experimentSelector?.CollectCompletedTasks(tasks);
+        }
+
         /// <summary>验证当前变体的标签、runtime 绑定和配置 hash 是否可用于正式采集。</summary>
         public bool TryValidateCurrentVariants(out string error)
         {

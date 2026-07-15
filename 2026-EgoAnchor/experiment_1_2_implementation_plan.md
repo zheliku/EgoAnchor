@@ -751,18 +751,20 @@ EgoAnchor_Python/data/eval/<session_id>/
 
 - [ ] **Step 1: 写输入测试**
 
-  - 右手控制器 A 与键盘 Space 是两条等价的 Input System binding，路径暴露在 Inspector。
-  - 单一 `Advance()` 依次执行开始 trial、主事件、遮挡恢复和结束 trial。
-  - 固定计划自动按实验一 5 个场景、实验二 4 个场景推进。
-  - 最后一个场景完成后自动停止 session；未 recording 时不得创建 trial context。
+  - 不使用 InputActionAsset；手柄选场、开始、事件、结束、作废和键盘任务键均为 Inspector 内联
+    `InputAction`。
+  - 右手摇杆按 3×3 九宫格选场；A 开始、扳机标记、B 结束、摇杆按下作废。
+  - 键盘 `1`--`9` 各自负责一项任务及其 marker，`Enter` 结束，`Backspace` 作废。
+  - 运行中不得切场；输入回中前不得重复跨格；未 recording 时不得创建 trial context。
 - [ ] **Step 2: 实现 selector**
 
-  Selector 维护上下文和固定计划，不直接写文件。session start 时重置并选择第一个场景；每个场景结束后
-  自动选择下一项。
+  Selector 独立维护九项任务的 selected、running 和 completed 状态，不直接写文件。场景可任意顺序完成；
+  活动或已完成 trial 可写 `trial_rejected` 后只重做该项。空闲且至少完成一项时，额外确认即可停止当前
+  模块化 session，不强制一次跑完九项。
 - [ ] **Step 3: 实现 status UI**
 
-  UI 显示计划进度和下一次推进动作，使用实验一/实验二命名，不出现 RQ。公共状态文本继续复用
-  `EvalStatusText`，Canvas 保持场景中的固定 world-space 位置。
+  UI 显示九任务状态板、本 session 已完成任务编号、当前选择、phase、trial/phase 计时、90--120 秒范围
+  和下一合法动作。使用实验一/实验二命名，不出现 RQ。Canvas 保持场景中的固定 world-space 位置。
 - [ ] **Step 4: 验证**
 
   Run:
@@ -771,7 +773,8 @@ EgoAnchor_Python/data/eval/<session_id>/
   dotnet build "EgoAnchor_Unity\EgoAnchor.Tests.csproj" --no-restore
   ```
 
-  Expected: 两条 binding 共用同一状态机，输入回调不累积；未录制时 trial context 保持空。
+  Expected: 内联 Action GUID 唯一，四方向选场与作废重做状态正确，输入回调不累积；未录制时 trial
+  context 保持空。
 
 ### Task 7: Unity policy 配置摘要与四系统配置/消融场景
 
@@ -800,7 +803,7 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `UsesServerReacquire`
 - [ ] **Step 3: 创建正式实验场景**
 
-  `EgoAnchor-Experiment12.unity` 配置九个 runtime 变体：
+  `EgoAnchor-Experiment12.unity` 配置八个唯一 runtime 变体；完整 `EgoAnchor` 由两个实验共享：
 
   实验一：
 
@@ -1007,7 +1010,8 @@ EgoAnchor_Python/data/eval/<session_id>/
   ```
 - [ ] **Step 2: 写 QC 测试**
 
-  缺任一 variant、缺任一 scenario、reference coverage 不足、render tick 配对不完整时 QC 必须 fail。
+  单 session 只检查其实际完成任务的 variant、reference coverage 和 render tick 配对；多个 session 的场景
+  并集必须覆盖五类场景。批次缺场景、重复 session id 或冻结配置漂移时必须 fail。
 - [ ] **Step 3: 实现 analysis 输出表**
 
   生成：
@@ -1088,7 +1092,8 @@ EgoAnchor_Python/data/eval/<session_id>/
   ```
 - [ ] **Step 2: 写 single-component QC 测试**
 
-  每个 ablation 的 manifest flags 与 EgoAnchor 比较只能有一个组件差异；多于一个差异必须 fail。
+  每个 ablation 的 manifest flags 与 EgoAnchor 比较只能有一个组件差异；多于一个差异必须 fail。单 session
+  可只包含部分归因任务，批次并集必须覆盖四个归因场景。
 - [ ] **Step 3: 实现 paired delta**
 
   以 `session_id × scenario_id × trial_id × event_id` 配对完整 EgoAnchor 和每个 ablation，输出：
@@ -1188,7 +1193,9 @@ EgoAnchor_Python/data/eval/<session_id>/
   - Unity 场景名
   - NATS/ZMQ 连接检查
   - session 自动配对检查
-  - 双输入单推进 smoke 操作
+  - 手柄选场/开始/标记/结束/作废与键盘任务键 smoke 操作
+  - 九任务状态、90--120 秒计时和单任务 rejected 重做检查
+  - 任意任务子集结束 session、`completed_tasks` 摘要与多 session 批次覆盖检查
   - 停止 session 后文件检查
   - QC 命令
 - [ ] **Step 2: 写实验一采集流程**
@@ -1289,9 +1296,9 @@ Run 1 结束时必须满足：
 2. Python runtime 能写 `python_candidates.jsonl` 和 `events.jsonl`。
 3. Unity runtime 能同步驱动四个实验一配置和四个实验二消融配置。
 4. `Arrival-Hold` 是真实 runtime 输出，而不是诊断字段。
-5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl`。
+5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl`；manifest 的 `completed_tasks` 与最终未作废 trial 一致。
 6. Python reader 只接受 schema-v2，遇到旧 schema 报错。
-7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通。
+7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通，并支持多个模块化 session 在批次层补齐九项任务。
 8. 中文采集手册清楚写出 smoke、calibration、formal session 的操作顺序和失败重采规则。
 9. `AGENTS.md` 指向本计划和 schema-v2 当前事实。
 

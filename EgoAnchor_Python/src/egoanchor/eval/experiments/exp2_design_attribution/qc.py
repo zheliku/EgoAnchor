@@ -8,7 +8,13 @@ from typing import Any
 
 import pandas as pd
 
-from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, run_schema_qc
+from egoanchor.eval.schema_v2 import (
+    EvalSessionV2,
+    accepted_trial_table,
+    load_session_v2,
+    run_schema_qc,
+    select_completed_trials,
+)
 
 from .contract import (
     ABLATION_COMPONENT,
@@ -54,6 +60,9 @@ class Exp2QcReport:
     trial_qc: pd.DataFrame = field(default_factory=pd.DataFrame)
     """逐 trial/event 的对应消融配对检查。"""
 
+    contributes: bool = False
+    """当前 session 是否包含至少一个实验二完成任务。"""
+
 
 def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
     """先执行完整 schema-v2 QC，再验证实验二专属契约。"""
@@ -63,6 +72,11 @@ def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
     errors = list(base.errors)
     warnings = list(base.warnings)
     metrics = dict(base.metrics)
+    accepted = select_completed_trials(loaded)
+
+    completed = accepted_trial_table(loaded)
+    target_trials = completed[completed["experiment_id"].astype(str).eq(EXPERIMENT_ID)]
+    contributes = not target_trials.empty
 
     experiment_ids = loaded.manifest.get("experiment_ids")
     if not isinstance(experiment_ids, list) or EXPERIMENT_ID not in experiment_ids:
@@ -75,29 +89,34 @@ def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
         contracts = {}
     _check_component_contract(contracts, errors)
 
-    render = _experiment_rows(loaded.unity_render)
-    admission = _experiment_rows(loaded.unity_admission)
-    _check_table_variants(render, "unity_render", errors)
-    _check_table_variants(admission, "unity_admission", errors)
-    _check_render_ticks(render, errors)
+    render = _experiment_rows(accepted.unity_render)
+    admission = _experiment_rows(accepted.unity_admission)
     trial_qc = build_trial_qc(render)
+    observed_scenarios = set(target_trials["scenario_id"].astype(str))
+    unknown_scenarios = sorted(observed_scenarios - set(SCENARIO_ABLATION))
+    if unknown_scenarios:
+        errors.append(f"实验二 session 包含未知归因场景：{unknown_scenarios}")
+    if contributes:
+        missing_render_scenarios = sorted(
+            observed_scenarios
+            - set(render.get("scenario_id", pd.Series(dtype=str)).dropna().astype(str))
+        )
+        if missing_render_scenarios:
+            errors.append(f"实验二完成任务缺少 render 数据：{missing_render_scenarios}")
+        _check_table_variants(render, "unity_render", errors)
+        _check_table_variants(admission, "unity_admission", errors)
+        _check_render_ticks(render, errors)
     for _, row in trial_qc.loc[~trial_qc["passed"]].iterrows():
         context = "/".join(str(row[column]) for column in TRIAL_COLUMNS)
         errors.append(f"实验二 trial QC 失败 {context}：{row['reason']}")
-
-    observed_scenarios = set(
-        render.get("scenario_id", pd.Series(dtype=str)).dropna().astype(str)
-    )
-    if str(loaded.manifest.get("run_kind", "")).lower() == "formal":
-        missing_scenarios = sorted(set(SCENARIO_ABLATION) - observed_scenarios)
-        if missing_scenarios:
-            errors.append(f"实验二 Formal session 缺少归因场景：{missing_scenarios}")
 
     metrics.update(
         exp2_render_rows=int(len(render)),
         exp2_admission_rows=int(len(admission)),
         exp2_scenario_count=int(len(observed_scenarios)),
         exp2_trial_count=int(len(trial_qc)),
+        exp2_rejected_trial_count=_rejected_trial_count(loaded.events),
+        exp2_observed_scenarios=",".join(sorted(observed_scenarios)),
     )
     return Exp2QcReport(
         session_id=loaded.session_id,
@@ -106,7 +125,18 @@ def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
         warnings=tuple(warnings),
         metrics=metrics,
         trial_qc=trial_qc,
+        contributes=contributes,
     )
+
+
+def _rejected_trial_count(events: pd.DataFrame) -> int:
+    """返回 session 中被操作者显式作废的唯一 trial 数。"""
+
+    if events.empty or "event_type" not in events.columns:
+        return 0
+    rejected = events[events["event_type"].astype(str).eq("trial_rejected")]
+    keys = ["session_id", "experiment_id", "scenario_id", "trial_id"]
+    return int(len(rejected.loc[:, keys].drop_duplicates()))
 
 
 def build_trial_qc(render: pd.DataFrame) -> pd.DataFrame:

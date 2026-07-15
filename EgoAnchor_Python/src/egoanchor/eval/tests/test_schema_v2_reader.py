@@ -6,7 +6,10 @@ import json
 import math
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+
+import pandas as pd
 
 from egoanchor.eval.schema_v2 import (
     EventRow,
@@ -19,6 +22,7 @@ from egoanchor.eval.schema_v2 import (
     join_candidate_admission,
     join_render_reference,
     load_session_v2,
+    select_completed_trials,
     select_trials,
 )
 
@@ -53,6 +57,19 @@ class SchemaV2ReaderTest(unittest.TestCase):
             self.assertEqual(len(session.unity_admission), 4)
             self.assertEqual(len(session.unity_render), 4)
             self.assertEqual(len(session.events), 3)
+
+    def test_reader_allows_task_prefix_on_session_directory(self) -> None:
+        """跨端都停止后可给目录增加任务前缀，内部 session_id 保持不变。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            original = _write_minimal_session(Path(tmp))
+            renamed = original.parent / "task01_head__s01"
+            original.rename(renamed)
+
+            session = load_session_v2(renamed)
+
+            self.assertEqual(session.session_id, "s01")
+            self.assertEqual(session.paths.session_dir, renamed)
             self.assertEqual(
                 session.manifest["log_writer_stats"]["python_candidates.jsonl"]["status"],
                 "merged",
@@ -91,6 +108,28 @@ class SchemaV2ReaderTest(unittest.TestCase):
                 selected.manifest["experiment_ids"],
                 ["exp1_system_characterization", "exp2_design_attribution"],
             )
+
+    def test_select_completed_trials_excludes_incomplete_and_rejected_trials(self) -> None:
+        """分析视图只保留已结束且没有后续 trial_rejected 的任务。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            lifecycle = pd.DataFrame(
+                [
+                    _trial_event("s01", "exp1_system_characterization", "static_head_motion", "trial-01", "event-01", "trial_ended", 1300.0),
+                    _trial_event("s01", "exp2_design_attribution", "ablation_capture_alignment", "trial-02", "event-02", "trial_ended", 1301.0),
+                    _trial_event("s01", "exp2_design_attribution", "ablation_capture_alignment", "trial-02", "event-02", "trial_rejected", 1302.0),
+                ]
+            )
+            session = replace(session, events=pd.concat([session.events, lifecycle], ignore_index=True))
+
+            selected = select_completed_trials(session)
+
+            self.assertEqual(set(selected.unity_render["trial_id"]), {"trial-01"})
+            self.assertEqual(set(selected.unity_admission["trial_id"]), {"trial-01"})
+            self.assertEqual(set(selected.python_candidates["frame_id"]), {1})
+            self.assertEqual(set(selected.unity_reference["frame_id"]), {1})
+            self.assertNotIn("trial-02", set(selected.events["trial_id"]))
 
     def test_candidate_join_rejects_unknown_candidate_id(self) -> None:
         """Admission 指向不存在的 candidate_id 时不得产生带空值的伪连接。"""
@@ -259,6 +298,7 @@ def _write_minimal_session(root: Path) -> Path:
         "frozen_parameter_set_id": "dev-1",
         "object_model_id": "controller-mesh-v1",
         "variant_definitions": variant_definitions,
+        "completed_tasks": [],
         "log_files": {
             "python_candidates": "python_candidates.jsonl",
             "unity_reference": "unity_reference.jsonl",
@@ -399,6 +439,31 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     """把测试行写成 UTF-8 JSONL。"""
 
     path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def _trial_event(
+    session_id: str,
+    experiment_id: str,
+    scenario_id: str,
+    trial_id: str,
+    event_id: str,
+    event_type: str,
+    mono_ms: float,
+) -> dict[str, object]:
+    """构造一个用于完成态投影测试的 trial 生命周期事件。"""
+
+    return EventRow(
+        session_id=session_id,
+        event=event_type,
+        event_type=event_type,
+        source="experiment_ui",
+        created_unix_ms=mono_ms + 10000.0,
+        mono_ms=mono_ms,
+        experiment_id=experiment_id,
+        scenario_id=scenario_id,
+        trial_id=trial_id,
+        event_id=event_id,
+    ).to_dict()
 
 
 __all__ = ["_write_minimal_session"]

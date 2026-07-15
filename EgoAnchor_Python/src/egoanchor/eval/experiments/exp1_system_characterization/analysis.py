@@ -8,9 +8,11 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2
+from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, select_completed_trials
 
-from .contract import DEFAULT_MIN_REFERENCE_COVERAGE, OUTPUT_TABLES
+from ..batch import BatchQcReport, run_batch_qc
+
+from .contract import DEFAULT_MIN_REFERENCE_COVERAGE, EXPERIMENT_ID, OUTPUT_TABLES, SCENARIOS
 from .figures import write_exp1_figures
 from .latex import write_exp1_latex
 from .metrics import build_condition_summary, compute_exp1_tables, concat_exp1_tables
@@ -65,18 +67,33 @@ def run_exp1_system_characterization(
 
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    session_qc = _session_qc_table(reports)
+    batch_qc = run_batch_qc(
+        sessions,
+        experiment_id=EXPERIMENT_ID,
+        required_scenarios=SCENARIOS,
+    )
+    session_qc = _session_qc_table(reports, batch_qc)
     trial_qc = pd.concat([report.trial_qc for report in reports], ignore_index=True)
     session_qc.to_csv(output / "exp1_session_qc.csv", index=False)
     trial_qc.to_csv(output / "exp1_trial_qc.csv", index=False)
     failed = [report for report in reports if not report.passed]
-    if failed:
+    if failed or not batch_qc.passed:
         details = "; ".join(
             f"{report.session_id}: {' | '.join(report.errors)}" for report in failed
         )
+        if batch_qc.errors:
+            details = "; ".join(filter(None, (details, f"batch: {' | '.join(batch_qc.errors)}")))
         raise ValueError(f"实验一 QC 失败，已停止指标生成：{details}")
 
-    metric_tables = concat_exp1_tables([compute_exp1_tables(session) for session in sessions])
+    contributing_ids = set(batch_qc.contributing_session_ids)
+    accepted_sessions = [
+        select_completed_trials(session)
+        for session in sessions
+        if session.session_id in contributing_ids
+    ]
+    metric_tables = concat_exp1_tables(
+        [compute_exp1_tables(session) for session in accepted_sessions]
+    )
     metric_tables["exp1_condition_summary"] = build_condition_summary(
         metric_tables["exp1_trial_metrics"]
     )
@@ -94,7 +111,10 @@ def run_exp1_system_characterization(
     for name, table in tables.items():
         table.to_csv(output / f"{name}.csv", index=False)
 
-    render = pd.concat([session.unity_render for session in sessions], ignore_index=True)
+    render = pd.concat(
+        [session.unity_render for session in accepted_sessions],
+        ignore_index=True,
+    )
     figure_files = tuple(write_exp1_figures(render, tables, output))
     latex_files = tuple(write_exp1_latex(tables, output))
     return Exp1Result(
@@ -113,8 +133,11 @@ def _load_session(session: EvalSessionV2 | str | Path) -> EvalSessionV2:
     return session if isinstance(session, EvalSessionV2) else load_session_v2(session)
 
 
-def _session_qc_table(reports: list[Exp1QcReport]) -> pd.DataFrame:
-    """把结构化 QC 报告转换为稳定 CSV 行。"""
+def _session_qc_table(
+    reports: list[Exp1QcReport],
+    batch: BatchQcReport,
+) -> pd.DataFrame:
+    """把逐 session 与批次覆盖报告转换为稳定 CSV 行。"""
 
     rows = [
         {
@@ -122,10 +145,21 @@ def _session_qc_table(reports: list[Exp1QcReport]) -> pd.DataFrame:
             "passed": report.passed,
             "errors": " | ".join(report.errors),
             "warnings": " | ".join(report.warnings),
+            "contributes": report.contributes,
             **report.metrics,
         }
         for report in reports
     ]
+    rows.append(
+        {
+            "session_id": "batch",
+            "passed": batch.passed,
+            "errors": " | ".join(batch.errors),
+            "warnings": "",
+            "contributes": True,
+            **batch.metrics,
+        }
+    )
     return pd.DataFrame.from_records(rows)
 
 

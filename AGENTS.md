@@ -146,8 +146,8 @@ PoseResult candidate
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
 - Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和 `events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。`events.jsonl` 由 Python 与 Unity 通过同名 `.lock` 文件逐行互斥追加，Unity 不得因已有 Python 事件拒绝启动或截断文件。
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
-- Unity manifest 写出 run kind、自动配置哈希、对象、版本、实验/场景计划和真实 Unity writer 统计；`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
-- Unity 采集场景使用固定九场景计划。右手控制器 A 与键盘 `Space` 是两条等价的 Input System 推进入口，binding path 暴露在 `ExperimentInputHandler` Inspector；普通场景按“开始、主事件、结束”推进，遮挡场景增加一次 `target_visible`，最后一个场景完成后自动停止 session。旧数字键、Enter、Shift、0 和 F7/F8 采集接口不得恢复。
+- Unity manifest 写出 run kind、自动配置哈希、对象、版本、带 90--120 秒范围的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计；`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
+- Unity 采集场景维护九项可任意选择的任务状态。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆按 3×3 九宫格选场，A 开始、扳机标记、B 结束、摇杆按下作废，键盘 `1`--`9` 对应任务及 marker、`Enter` 结束、`Backspace` 作废。运行中禁止切场；空闲且至少完成一项时，额外确认即可停止包含任意任务子集的模块化 session。错误 trial 写 `trial_rejected` 并只重做对应任务，Canvas 保持场景根节点静止。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 8 个唯一 runtime：Hub 下以两个空物体分别组织实验一四配置和实验二四个单组件消融，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。
@@ -169,12 +169,14 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - schema-v2 QC 对 Formal session 固定要求场景中的 8 个唯一 runtime、按 Unity FNV-1a 规则重算整体 `config_hash`，并检查 writer 行数/丢行/失败、candidate/reference 主键、candidate×variant 与 tick×variant 矩阵及递归旧字段。
 - 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
-- 人工事件角色写入 `events.payload.event_role`。统一推进动作按状态记录场景主事件，遮挡场景的下一次推进记录新的 `target_visible` 事件；转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
+- 人工事件角色写入 `events.payload.event_role`。独立 marker 动作记录场景主事件；遮挡场景在 `occlusion_started` 与 `target_visible` 之间交替并允许多轮成对标记。转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
+- schema-v2 基础 QC 始终检查全部原始行；实验一/二正式 QC、指标和 VCD risk-coverage 只投影已有 `trial_ended` 且没有后续 `trial_rejected` 的 trial。被作废和未完成的尝试保留审计记录，但不得进入论文结果。
 - 旧 `eval/io`、`eval/core`、`eval/report`、`run_eval` 和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
 - 旧命名扫描按语义判定：Unity/Python runtime、writer、namespace 和 CLI 不得依赖或输出旧 RQ/schema 名称；`schema_v2/readers.py`、`schema_v2/qc.py` 及其测试可保留旧文件名和字段名，仅用于显式拒绝旧输入，不得把这些 reject-only guard 当作兼容层删除。
 - 实验一分析先对完整 8-runtime session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融 runtime 不得混入实验一的 VCD、时延、图表或 LaTeX 数字。
-- 实验一专属 QC 检查五场景、reference coverage 和 tick×variant 完整性。失败时只写 session/trial QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
-- 实验二先验证完整 8-runtime schema-v2 session，再投影完整 *EgoAnchor* 与四个消融。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
+- 实验一单 session QC 只检查实际完成任务的 reference coverage 和 tick×variant 完整性；批次 QC 按已完成 trial 的场景并集要求任务 1--5 全部覆盖。失败时只写 session/trial/批次 QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
+- 实验二先验证每个 8-runtime schema-v2 模块化 session，再投影完整 *EgoAnchor* 与四个消融；批次按场景并集要求任务 6--9 全部覆盖。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
+- 同一分析批次不得包含重复 `session_id`，且 run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Unity 与 Python 正常停止后允许给最外层目录增加任务前缀；内部固定文件名和 manifest `session_id` 不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 统一分析 CLI 只提供 `qc`、`analyze-exp1`、`analyze-exp2`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；旧 `run_eval`、`batch_eval` 和对应 Pixi 别名均已删除，不得恢复。
 - `--out` 保存一次分析的完整 CSV/PDF/TeX；分析成功后，固定 TeX 原子发布到 `2026-EgoAnchor/generated/`，固定 PDF 发布到 `2026-EgoAnchor/figures/generated/`。默认论文根目录从模块位置解析，不依赖当前工作目录，测试和外部调用可用 `--paper-root` 覆盖。

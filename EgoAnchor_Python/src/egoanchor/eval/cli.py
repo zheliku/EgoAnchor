@@ -73,7 +73,7 @@ def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
         "session_dirs",
         nargs="+",
         type=Path,
-        help="一个或多个 schema-v2 session 目录",
+        help="同一采集批次的一个或多个模块化 schema-v2 session 目录",
     )
     parser.add_argument(
         "--out",
