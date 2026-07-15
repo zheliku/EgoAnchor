@@ -171,6 +171,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
 - 人工事件角色写入 `events.payload.event_role`。`Space` 记录场景主事件，遮挡场景用 `Shift+Space` 记录新的 `target_visible` 事件；转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
 - 旧 `eval/io`、`eval/core`、`eval/report`、`run_eval` 和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
+- 旧命名扫描按语义判定：Unity/Python runtime、writer、namespace 和 CLI 不得依赖或输出旧 RQ/schema 名称；`schema_v2/readers.py`、`schema_v2/qc.py` 及其测试可保留旧文件名和字段名，仅用于显式拒绝旧输入，不得把这些 reject-only guard 当作兼容层删除。
 - 实验一分析先对完整 8-runtime session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融 runtime 不得混入实验一的 VCD、时延、图表或 LaTeX 数字。
 - 实验一专属 QC 检查五场景、reference coverage 和 tick×variant 完整性。失败时只写 session/trial QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
 - 实验二先验证完整 8-runtime schema-v2 session，再投影完整 *EgoAnchor* 与四个消融。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
