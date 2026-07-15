@@ -71,11 +71,9 @@
 | `motionModel` | 拖入运动模型子类 | 见上矩阵 |
 | `smoothingStrategy` | 拖入平滑策略子类 | 见上矩阵 |
 | `strategyLabel` | eval 用的名字，空则自动 `<model>_<strategy>` | 留空 |
-| **质量评估门控（可选）** | | |
-| `enableQualityGate` | 是否拒绝低分/跳变坏观测。baseline 关；论文 RQ2 完整方法变体可开 | baseline `false` |
+| **VCD 观测接纳（可选）** | | |
+| `enableQualityGate` | 是否拒绝低可靠分观测。三类实验一基线关闭，完整 EgoAnchor 开启 | baseline `false` |
 | `minQualityScore` | 接受观测的最低可靠分 (0..1)，低于则拒绝 | `0.2` |
-| `maxQualityJumpMeters` | 相对预测平移超过此值判为坏跳变拒绝 | `0.8` |
-| `maxQualityJumpDegrees` | 相对预测旋转超过此值判为坏跳变拒绝 | `120` |
 | **Lifecycle** | | |
 | `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，EgoAnchor 真机显示可设 `0.5` 作为低质提示 | `0.0` |
 | `coastTimeoutSeconds` | 短时无观测仍继续外推/插值的时长 | `0.45` |
@@ -191,7 +189,7 @@
 一次录制用 `AnchorEvalRecorder` 拿全部数据，离线 `eval/` 出指标对比图。
 
 **EgoAnchor 方法**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
-挂 `EgoAnchorStaticLockModule` 且 `lockEnabled=true`（核心）；论文 RQ2 完整方法变体可额外开启 `enableQualityGate=true`。
+挂 `EgoAnchorStaticLockModule` 且 `lockEnabled=true`（核心）；完整 EgoAnchor 开启 `enableQualityGate=true`。
 
 > **EgoAnchor 不是"又一个滤波器"，而是建立在任意 baseline (model×strategy) 之上的可靠性约束静止锚定控制层。**
 > 被锚定的真实物体绝大多数时间静止（动的是头显，噪的是观测）。所有 baseline 都是 motion-agnostic 滤波器，

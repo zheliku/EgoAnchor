@@ -859,25 +859,59 @@ namespace EgoAnchor.Eval
             string motionModel    = policy != null ? policy.MotionModelName    : (rt != null ? rt.MotionModelName    : string.Empty);
             string smoothing      = policy != null ? policy.SmoothingStrategyName : (rt != null ? rt.SmoothingStrategyName : string.Empty);
             string qualityGate    = rt != null ? rt.QualityGateMode : string.Empty;
-            string hash           = ComputeHash(label, motionModel, smoothing, qualityGate);
+            string worldAlignment = rt != null ? rt.WorldAlignmentModeName : string.Empty;
+            bool usesCaptureTime  = rt != null && rt.UsesCaptureTimeAlignment;
+            bool usesVcd          = policy != null && policy.UsesVcdAdmission;
+            bool usesTemporal     = policy != null && policy.UsesTemporalSynthesis;
+            bool usesStaticLock   = policy != null && policy.UsesStaticLock;
+            bool usesLowScore     = policy != null && policy.UsesLowScoreReacquire;
+            bool usesServer       = policy != null && policy.UsesServerReacquire;
+            string hash = ComputeHash(
+                label, motionModel, smoothing, qualityGate, worldAlignment,
+                usesCaptureTime, usesVcd, usesTemporal, usesStaticLock, usesLowScore, usesServer);
             return new EvalVariantConfig(
                 label,
                 motionModel,
                 smoothing,
                 qualityGate,
                 hash,
-                rt != null ? rt.WorldAlignmentModeName : string.Empty,
-                rt != null && rt.UsesCaptureTimeAlignment,
-                qualityGate == "enabled",
-                smoothing.IndexOf("Delayed", StringComparison.OrdinalIgnoreCase) >= 0
-                    || smoothing.IndexOf("Hermite", StringComparison.OrdinalIgnoreCase) >= 0,
-                policy != null && policy.LatestStaticLocked);
+                worldAlignment,
+                usesCaptureTime,
+                usesVcd,
+                usesTemporal,
+                usesStaticLock,
+                usesLowScore,
+                usesServer);
         }
 
         /// <summary>FNV-1a 配置摘要，确保相同配置产生相同 hash。</summary>
-        private static string ComputeHash(string label, string motionModel, string smoothing, string qualityGate)
+        private static string ComputeHash(
+            string label,
+            string motionModel,
+            string smoothing,
+            string qualityGate,
+            string worldAlignment,
+            bool usesCaptureTime,
+            bool usesVcd,
+            bool usesTemporal,
+            bool usesStaticLock,
+            bool usesLowScore,
+            bool usesServer)
         {
-            string raw = $"{label}|{motionModel}|{smoothing}|{qualityGate}";
+            string raw = string.Join("|", new[]
+            {
+                label,
+                motionModel,
+                smoothing,
+                qualityGate,
+                worldAlignment,
+                usesCaptureTime ? "1" : "0",
+                usesVcd ? "1" : "0",
+                usesTemporal ? "1" : "0",
+                usesStaticLock ? "1" : "0",
+                usesLowScore ? "1" : "0",
+                usesServer ? "1" : "0",
+            });
             unchecked
             {
                 const ulong offset = 14695981039346656037UL;

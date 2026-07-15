@@ -1,9 +1,13 @@
-using System.Text;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 using EgoAnchor.Eval;
 using EgoAnchor.Eval.Experiment;
+using EgoAnchor.Policy;
 using NUnit.Framework;
-using System.Reflection;
 using UnityEngine;
 
 namespace EgoAnchor.Tests
@@ -63,7 +67,14 @@ namespace EgoAnchor.Tests
                 variant, "s01");
             string manifest = EvalJson.BuildManifest(
                 "s01", "controller_right", "editor_link",
-                Array.Empty<string>(), Array.Empty<EvalVariantConfig>(), string.Empty,
+                new[] { "EgoAnchor" },
+                new[]
+                {
+                    new EvalVariantConfig(
+                        "EgoAnchor", "kalman", "interp_hermite", "enabled", "cfg",
+                        "CaptureTime", true, true, true, true, true, true),
+                },
+                string.Empty,
                 new EvalLogStats(0, 1, null), new EvalLogStats(0, 1, null),
                 new EvalLogStats(0, 1, null), new EvalLogStats(0, 1, null));
 
@@ -85,6 +96,12 @@ namespace EgoAnchor.Tests
                 EvalV2Manifest.FixedLogFileNames);
             StringAssert.Contains("\"dropped_rows\":0", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
+            StringAssert.Contains("\"config_hash\":", manifest);
+            StringAssert.Contains("\"uses_vcd_admission\":true", manifest);
+            StringAssert.Contains("\"uses_temporal_synthesis\":true", manifest);
+            StringAssert.Contains("\"uses_static_lock\":true", manifest);
+            StringAssert.Contains("\"uses_low_score_reacquire\":true", manifest);
+            StringAssert.Contains("\"uses_server_reacquire\":true", manifest);
         }
     }
 
@@ -182,6 +199,259 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>通过反射设置测试所需的私有录制状态，不扩大生产 API。</summary>
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"missing private field {fieldName}");
+            field.SetValue(target, value);
+        }
+    }
+
+    /// <summary>正式实验一/二场景和 policy capability 的契约测试。</summary>
+    public sealed class ExperimentSceneContractTests
+    {
+        /// <summary>正式场景中必须出现的八个唯一 runtime 标签。</summary>
+        private static readonly string[] RequiredLabels =
+        {
+            "Arrival-Hold",
+            "Capture-Hold",
+            "One-Euro Anchor",
+            "EgoAnchor",
+            "EgoAnchor w/o capture-time alignment",
+            "EgoAnchor w/o VCD",
+            "EgoAnchor w/o temporal synthesis",
+            "EgoAnchor w/o StaticLock",
+        };
+
+        /// <summary>capability flags 必须反映实际绑定组件和生命周期开关。</summary>
+        [Test]
+        public void PolicyFlagsReflectConfiguredComponents()
+        {
+            GameObject owner = new GameObject("ExperimentSceneContractTests.Policy");
+            try
+            {
+                KalmanModel model = owner.AddComponent<KalmanModel>();
+                DelayedInterpStrategy smoothing = owner.AddComponent<DelayedInterpStrategy>();
+                EgoAnchorStaticLockModule staticLock = owner.AddComponent<EgoAnchorStaticLockModule>();
+                AnchorPolicyHost host = owner.AddComponent<AnchorPolicyHost>();
+                SetPrivateField(host, "motionModel", model);
+                SetPrivateField(host, "smoothingStrategy", smoothing);
+                SetPrivateField(host, "staticLockModule", staticLock);
+                SetPrivateField(host, "enableQualityGate", true);
+
+                Assert.That(host.UsesVcdAdmission, Is.True);
+                Assert.That(host.UsesTemporalSynthesis, Is.True);
+                Assert.That(host.UsesStaticLock, Is.True);
+                Assert.That(host.UsesLowScoreReacquire, Is.True);
+                Assert.That(host.UsesServerReacquire, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
+        /// <summary>YAML 必须包含真实、启用且由 Hub 注册的全部 runtime。</summary>
+        [Test]
+        public void ExperimentSceneContainsConfiguredRuntimeGraph()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            Assert.That(File.Exists(path), Is.True, $"missing scene: {path}");
+            string yaml = File.ReadAllText(path);
+
+            StringAssert.DoesNotContain("EgoAnchor-RQ1", yaml);
+            StringAssert.DoesNotContain("EgoAnchor-RQ2", yaml);
+            StringAssert.DoesNotContain("EvalHotkeys", yaml);
+            Assert.That(
+                Regex.Matches(yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime").Count,
+                Is.EqualTo(RequiredLabels.Length));
+
+            var runtimeIds = new Dictionary<string, string>(StringComparer.Ordinal);
+            MatchCollection variantMatches = Regex.Matches(
+                yaml,
+                @"(?m)^  - label: (?<label>[^\r\n]+)\r?\n    runtime: \{fileID: (?<id>\d+)\}");
+            foreach (Match match in variantMatches)
+            {
+                runtimeIds[match.Groups["label"].Value] = match.Groups["id"].Value;
+            }
+
+            string hubSection = GetSectionContaining(
+                yaml,
+                "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.AnchorRuntimeHub");
+            var distinctRuntimeIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string label in RequiredLabels)
+            {
+                Assert.That(runtimeIds.TryGetValue(label, out string runtimeId), Is.True, $"missing variant: {label}");
+                Assert.That(distinctRuntimeIds.Add(runtimeId), Is.True, $"duplicate runtime: {runtimeId}");
+
+                string runtimeSection = GetSection(yaml, runtimeId);
+                StringAssert.Contains("EgoAnchor.Runtime.PoseToAnchorRuntime", runtimeSection);
+                StringAssert.Contains($"- {{fileID: {runtimeId}}}", hubSection);
+
+                string gameObjectId = ReadReference(runtimeSection, "m_GameObject");
+                StringAssert.Contains("m_IsActive: 1", GetSection(yaml, gameObjectId));
+
+                string policyId = ReadReference(runtimeSection, "policyHost");
+                string policySection = GetSection(yaml, policyId);
+                int expectedEmit = IsShadowBaseline(label) ? 0 : 1;
+                StringAssert.Contains($"emitServerReacquire: {expectedEmit}", policySection);
+            }
+
+            Assert.That(distinctRuntimeIds.Count, Is.EqualTo(RequiredLabels.Length));
+        }
+
+        /// <summary>各配置只能按实验定义切换目标组件，避免消融同时改变无关机制。</summary>
+        [Test]
+        public void ExperimentSceneVariantsMatchFrozenComponentMatrix()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+
+            AssertVariantConfig(yaml, "Arrival-Hold", 1, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "One-Euro Anchor", 0, 0, "OneEuroModel", "RawPassthroughStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "DelayedInterpStrategy", true, 0, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "ConstantVelocityModel", "RawPassthroughStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "DelayedInterpStrategy", false, 1, 1);
+        }
+
+        /// <summary>Hub 层级必须按实验一与实验二分组，完整 EgoAnchor 只保留一个共享 runtime。</summary>
+        [Test]
+        public void ExperimentSceneHierarchySeparatesExperimentGroups()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+
+            string experiment1Transform = ReadFirstComponentReference(GetSectionContaining(
+                yaml, "m_Name: Experiment 1 - System Characterization"));
+            string experiment2Transform = ReadFirstComponentReference(GetSectionContaining(
+                yaml, "m_Name: Experiment 2 - Design Attribution (Ablations)"));
+            string experiment1Section = GetSection(yaml, experiment1Transform);
+            string experiment2Section = GetSection(yaml, experiment2Transform);
+
+            AssertVariantParent(yaml, "Arrival-Hold", experiment1Transform, experiment1Section);
+            AssertVariantParent(yaml, "Capture-Hold", experiment1Transform, experiment1Section);
+            AssertVariantParent(yaml, "One-Euro Anchor", experiment1Transform, experiment1Section);
+            AssertVariantParent(yaml, "EgoAnchor", experiment1Transform, experiment1Section);
+            AssertVariantParent(yaml, "EgoAnchor w/o capture-time alignment", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "EgoAnchor w/o VCD", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "EgoAnchor w/o temporal synthesis", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "EgoAnchor w/o StaticLock", experiment2Transform, experiment2Section);
+
+            StringAssert.Contains("AnchorObject - EgoAnchor [Shared Full System]", yaml);
+            string hubTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: AnchorRuntimeHub"));
+            string hubSection = GetSection(yaml, hubTransform);
+            Assert.That(Regex.Matches(hubSection, @"(?m)^  - \{fileID: \d+\}$").Count, Is.EqualTo(2));
+            StringAssert.Contains($"- {{fileID: {experiment1Transform}}}", hubSection);
+            StringAssert.Contains($"- {{fileID: {experiment2Transform}}}", hubSection);
+        }
+
+        /// <summary>验证一条 recorder 变体引用的 runtime 与 policy 组件矩阵。</summary>
+        private static void AssertVariantConfig(
+            string yaml,
+            string label,
+            int worldAlignmentMode,
+            int qualityGate,
+            string motionModel,
+            string smoothingStrategy,
+            bool usesStaticLock,
+            int lowScoreReacquire,
+            int serverReacquire)
+        {
+            Match variant = Regex.Match(
+                yaml,
+                $@"(?m)^  - label: {Regex.Escape(label)}\r?\n    runtime: \{{fileID: (?<id>\d+)\}}");
+            Assert.That(variant.Success, Is.True, $"missing variant: {label}");
+
+            string runtimeSection = GetSection(yaml, variant.Groups["id"].Value);
+            StringAssert.Contains($"worldAlignmentMode: {worldAlignmentMode}", runtimeSection);
+
+            string policySection = GetSection(yaml, ReadReference(runtimeSection, "policyHost"));
+            StringAssert.Contains($"enableQualityGate: {qualityGate}", policySection);
+            StringAssert.Contains($"enableLowScoreReacquire: {lowScoreReacquire}", policySection);
+            StringAssert.Contains($"emitServerReacquire: {serverReacquire}", policySection);
+
+            string modelSection = GetSection(yaml, ReadReference(policySection, "motionModel"));
+            string smoothingSection = GetSection(yaml, ReadReference(policySection, "smoothingStrategy"));
+            StringAssert.Contains($"EgoAnchor.Policy.{motionModel}", modelSection);
+            StringAssert.Contains($"EgoAnchor.Policy.{smoothingStrategy}", smoothingSection);
+
+            string staticLockId = ReadReference(policySection, "staticLockModule");
+            if (usesStaticLock)
+            {
+                StringAssert.Contains("EgoAnchor.Policy.EgoAnchorStaticLockModule", GetSection(yaml, staticLockId));
+            }
+            else
+            {
+                Assert.That(staticLockId, Is.EqualTo("0"));
+            }
+        }
+
+        /// <summary>验证一个 recorder 变体对应的锚点对象直接属于指定实验分组。</summary>
+        private static void AssertVariantParent(
+            string yaml,
+            string label,
+            string expectedParentTransform,
+            string parentSection)
+        {
+            Match variant = Regex.Match(
+                yaml,
+                $@"(?m)^  - label: {Regex.Escape(label)}\r?\n    runtime: \{{fileID: (?<id>\d+)\}}");
+            Assert.That(variant.Success, Is.True, $"missing variant: {label}");
+            string runtimeSection = GetSection(yaml, variant.Groups["id"].Value);
+            string gameObjectSection = GetSection(yaml, ReadReference(runtimeSection, "m_GameObject"));
+            string anchorTransform = ReadFirstComponentReference(gameObjectSection);
+            StringAssert.Contains($"m_Father: {{fileID: {expectedParentTransform}}}", GetSection(yaml, anchorTransform));
+            StringAssert.Contains($"- {{fileID: {anchorTransform}}}", parentSection);
+        }
+
+        /// <summary>三类实验一基线不得请求共享 Python pipeline 重获取。</summary>
+        private static bool IsShadowBaseline(string label)
+        {
+            return label == "Arrival-Hold" || label == "Capture-Hold" || label == "One-Euro Anchor";
+        }
+
+        /// <summary>读取包含指定标记的完整 Unity YAML 对象段。</summary>
+        private static string GetSectionContaining(string yaml, string marker)
+        {
+            int markerIndex = yaml.IndexOf(marker, StringComparison.Ordinal);
+            Assert.That(markerIndex, Is.GreaterThanOrEqualTo(0), $"missing marker: {marker}");
+            int start = yaml.LastIndexOf("\n--- !u!", markerIndex, StringComparison.Ordinal);
+            start = start < 0 ? 0 : start + 1;
+            int end = yaml.IndexOf("\n--- !u!", markerIndex, StringComparison.Ordinal);
+            return yaml.Substring(start, end < 0 ? yaml.Length - start : end - start);
+        }
+
+        /// <summary>按 fileID 读取完整 Unity YAML 对象段。</summary>
+        private static string GetSection(string yaml, string fileId)
+        {
+            string marker = $"&{fileId}\r\n";
+            if (yaml.IndexOf(marker, StringComparison.Ordinal) < 0)
+            {
+                marker = $"&{fileId}\n";
+            }
+            return GetSectionContaining(yaml, marker);
+        }
+
+        /// <summary>读取 YAML 对象段中的本地 fileID 引用。</summary>
+        private static string ReadReference(string section, string field)
+        {
+            Match match = Regex.Match(section, $@"(?m)^  {Regex.Escape(field)}: \{{fileID: (?<id>\d+)\}}");
+            Assert.That(match.Success, Is.True, $"missing reference: {field}");
+            return match.Groups["id"].Value;
+        }
+
+        /// <summary>读取 GameObject 的第一个组件引用；Unity 保证该组件为 Transform。</summary>
+        private static string ReadFirstComponentReference(string gameObjectSection)
+        {
+            Match match = Regex.Match(gameObjectSection, @"(?m)^  - component: \{fileID: (?<id>\d+)\}");
+            Assert.That(match.Success, Is.True, "missing GameObject component reference");
+            return match.Groups["id"].Value;
+        }
+
+        /// <summary>设置测试所需的私有序列化字段。</summary>
         private static void SetPrivateField(object target, string fieldName, object value)
         {
             FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);

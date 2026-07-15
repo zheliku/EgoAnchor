@@ -292,7 +292,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2518c50cb3fc6a6458d4b743c2f69c7d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.PointableCanvasModule
   m_SendPointerHoverToParent: 1
   _useInitialPressPositionForDrag: 1
@@ -307,7 +307,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
   m_SendPointerHoverToParent: 1
   m_MoveRepeatDelay: 0.5
@@ -338,7 +338,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.EventSystem
   m_FirstSelected: {fileID: 0}
   m_sendNavigationEvents: 1
@@ -438,7 +438,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
   m_Navigation:
     m_Mode: 3
@@ -481,7 +481,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: 
+          m_StringArgument:
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &126332664
@@ -494,7 +494,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -534,7 +534,7 @@ GameObject:
   - component: {fileID: 160200732}
   - component: {fileID: 160200731}
   m_Layer: 0
-  m_Name: AnchorObject - EgoAnchor
+  m_Name: 'AnchorObject - EgoAnchor [Shared Full System]'
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -550,7 +550,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
   framePoseHistory: {fileID: 1764014454}
   alignmentReference: 1
@@ -576,7 +576,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 160200731}
   targetTransform: {fileID: 160200733}
@@ -601,7 +601,7 @@ Transform:
   - {fileID: 722913590}
   - {fileID: 4868159}
   - {fileID: 466547748}
-  m_Father: {fileID: 1777492728}
+  m_Father: {fileID: 1969858009}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &209670095
 GameObject:
@@ -831,8 +831,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 555725d48e9051a4bb6b8d45178c2fdd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   projectionSurfaceType: 0
   overlayType: 1
   compositionDepth: 0
@@ -897,13 +897,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b023183069df224080314a560e6e1ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Meta.XR.BuildingBlocks::Meta.XR.BuildingBlocks.BuildingBlock
   blockId: f0540b20-dfd6-420e-b20d-c270f88dc77e
   instanceId: 6862df35-4e62-4936-9d6d-a1096ae1a97a
   version: 1
   installationRoutineCheckpoint:
-    _installationRoutineId: 
+    _installationRoutineId:
     _installationVariants: []
 --- !u!4 &245400389
 Transform:
@@ -919,6 +919,41 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &248773934
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 248773935}
+  m_Layer: 0
+  m_Name: Experiment 2 - Design Attribution (Ablations)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &248773935
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 248773934}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7200000003}
+  - {fileID: 7300000003}
+  - {fileID: 7400000003}
+  - {fileID: 7500000003}
+  m_Father: {fileID: 1777492728}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &369174976
 PrefabInstance:
@@ -1259,7 +1294,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: 
+          m_StringArgument:
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &454056835
@@ -1272,7 +1307,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -1310,7 +1345,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -1387,7 +1422,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4b061f34f7544f49aca9bacbff4ec128, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AnchorViz.AnchorStatusLabel
   runtime: {fileID: 160200731}
   label: {fileID: 905865785}
@@ -1487,7 +1522,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8a8695521f0d02e499659fee002a26c2, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.GridLayoutGroup
   m_Padding:
     m_Left: 0
@@ -1560,7 +1595,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 06ee8ae5601298d42a2ce6836f93bf28, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.NatsControlClient
   natsUrl: nats://172.24.247.32:4222
   connectOnStart: 1
@@ -1614,7 +1649,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: da6b0f8e7e843ed409c2cbec20e48b87, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Quest.StereoFrameSource
   leftCameraAccess: {fileID: 838830482}
   rightCameraAccess: {fileID: 880946284}
@@ -1633,7 +1668,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9a81a36f5269a046baac00deede74b1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Quest.CameraInfoSource
   leftCameraAccess: {fileID: 838830482}
   rightCameraAccess: {fileID: 880946284}
@@ -1647,7 +1682,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5e8e5138777cb66478ff2773ef2fad5d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher
   serverIp: 172.24.247.32
   serverPort: 15557
@@ -1704,7 +1739,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2353b8d5430e36b4e9b252a745cf8d89, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder
   groundTruth: {fileID: 728089507}
   headAnchor: {fileID: 1846668452}
@@ -1716,10 +1751,45 @@ MonoBehaviour:
   gtFreshnessMode: 0
   gtKeepAliveSeconds: 30
   variants:
-  - label: egoanchor
+  - label: Arrival-Hold
+    runtime: {fileID: 1137170458}
+    anchorTransform: {fileID: 1137170460}
+    anchorPresenter: {fileID: 1137170459}
+    isPrimary: 0
+  - label: Capture-Hold
+    runtime: {fileID: 7000000001}
+    anchorTransform: {fileID: 7000000003}
+    anchorPresenter: {fileID: 7000000002}
+    isPrimary: 0
+  - label: One-Euro Anchor
+    runtime: {fileID: 7100000001}
+    anchorTransform: {fileID: 7100000003}
+    anchorPresenter: {fileID: 7100000002}
+    isPrimary: 0
+  - label: EgoAnchor
     runtime: {fileID: 160200731}
     anchorTransform: {fileID: 160200733}
-    anchorPresenter: {fileID: 0}
+    anchorPresenter: {fileID: 160200732}
+    isPrimary: 1
+  - label: EgoAnchor w/o capture-time alignment
+    runtime: {fileID: 7200000001}
+    anchorTransform: {fileID: 7200000003}
+    anchorPresenter: {fileID: 7200000002}
+    isPrimary: 0
+  - label: EgoAnchor w/o VCD
+    runtime: {fileID: 7300000001}
+    anchorTransform: {fileID: 7300000003}
+    anchorPresenter: {fileID: 7300000002}
+    isPrimary: 0
+  - label: EgoAnchor w/o temporal synthesis
+    runtime: {fileID: 7400000001}
+    anchorTransform: {fileID: 7400000003}
+    anchorPresenter: {fileID: 7400000002}
+    isPrimary: 0
+  - label: EgoAnchor w/o StaticLock
+    runtime: {fileID: 7500000001}
+    anchorTransform: {fileID: 7500000003}
+    anchorPresenter: {fileID: 7500000002}
     isPrimary: 0
   experimentSelector: {fileID: 667335327}
 --- !u!4 &667335323
@@ -1747,15 +1817,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5ede288ff7460744eb350cb8f9be1782, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalSession
   recorder: {fileID: 667335322}
   runtimeHub: {fileID: 1777492727}
-  outputRoot: 
+  outputRoot:
   objectId: controller_right
   runMode: editor_link
   autoStart: 1
-  notes: 
+  notes:
   sessionStarted:
     m_PersistentCalls:
       m_Calls: []
@@ -1839,7 +1909,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 888380afc233049ce9e618f9f36c8ba8, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: HighlightPlus.Runtime::HighlightPlus.HighlightEffect
   profile: {fileID: 0}
   profileSync: 0
@@ -1851,12 +1921,12 @@ MonoBehaviour:
   effectGroupLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  effectNameFilter: 
+  effectNameFilter:
   effectNameUseRegEx: 0
   excludeObjectsWithHighlightEffect: 0
   combineMeshes: 0
   alphaCutOff: 0
-  alphaCutOffTextureName: 
+  alphaCutOffTextureName:
   cullBackFaces: 1
   ignoreObjectVisibility: 0
   reflectionProbes: 0
@@ -1868,7 +1938,7 @@ MonoBehaviour:
   cameraDistanceFadeNear: 0
   cameraDistanceFadeFar: 1000
   useOriginalShader: 0
-  customPassName: 
+  customPassName:
   normalsOption: 0
   ignore: 0
   _highlighted: 1
@@ -2107,15 +2177,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 435407831072319256, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _leftEyeAnchor
-      value: 
+      value:
       objectReference: {fileID: 1846668455}
     - target: {fileID: 435407831072319256, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _rightEyeAnchor
-      value: 
+      value:
       objectReference: {fileID: 1846668453}
     - target: {fileID: 435407831072319256, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _centerEyeCamera
-      value: 
+      value:
       objectReference: {fileID: 1846668450}
     - target: {fileID: 1168042862842845266, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_showState
@@ -2123,15 +2193,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _leftEyeAnchor
-      value: 
+      value:
       objectReference: {fileID: 1846668455}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _rightEyeAnchor
-      value: 
+      value:
       objectReference: {fileID: 1846668453}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _centerEyeCamera
-      value: 
+      value:
       objectReference: {fileID: 1846668450}
     - target: {fileID: 3903482226883268838, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_IsActive
@@ -2187,15 +2257,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5801245061754409418, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _playerEyes
-      value: 
+      value:
       objectReference: {fileID: 1846668452}
     - target: {fileID: 5801245061754409418, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _playerOrigin
-      value: 
+      value:
       objectReference: {fileID: 1846668449}
     - target: {fileID: 6267690530596161800, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _ovrCameraRig
-      value: 
+      value:
       objectReference: {fileID: 1846668448}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2240,13 +2310,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ef9a7893e57c04c0db4114c70954b915, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: meta.xr.mrutilitykit::Meta.XR.PassthroughCameraAccess
   CameraPosition: 0
   RequestedResolution: {x: 640, y: 480}
   _maxFramerate: 60
   TargetMaterial: {fileID: 0}
-  _texturePropertyName: 
+  _texturePropertyName:
 --- !u!114 &838830483
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2257,13 +2327,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b023183069df224080314a560e6e1ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Meta.XR.BuildingBlocks::Meta.XR.BuildingBlocks.BuildingBlock
   blockId: 0792d3af-c7d9-4f9c-a6f0-fd580a051e48
   instanceId: 0ca5d764-3d29-411b-85ea-2beb4516ee06
   version: 1
   installationRoutineCheckpoint:
-    _installationRoutineId: 
+    _installationRoutineId:
     _installationVariants: []
 --- !u!4 &838830484
 Transform:
@@ -2369,13 +2439,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ef9a7893e57c04c0db4114c70954b915, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: meta.xr.mrutilitykit::Meta.XR.PassthroughCameraAccess
   CameraPosition: 1
   RequestedResolution: {x: 640, y: 480}
   _maxFramerate: 60
   TargetMaterial: {fileID: 0}
-  _texturePropertyName: 
+  _texturePropertyName:
 --- !u!114 &880946285
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2386,13 +2456,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b023183069df224080314a560e6e1ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Meta.XR.BuildingBlocks::Meta.XR.BuildingBlocks.BuildingBlock
   blockId: 0792d3af-c7d9-4f9c-a6f0-fd580a051e48
   instanceId: a9973f30-b54c-4ad4-99f2-853eda890e56
   version: 1
   installationRoutineCheckpoint:
-    _installationRoutineId: 
+    _installationRoutineId:
     _installationVariants: []
 --- !u!4 &880946286
 Transform:
@@ -2456,7 +2526,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9541d86e2fd84c1d9990edf0852d74ab, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshPro
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -2639,8 +2709,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4bd1f1e23a51a7d428dd152466736b7a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _boundsClipper: {fileID: 923541078}
 --- !u!114 &923541078
 MonoBehaviour:
@@ -2652,8 +2722,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e08ab46e8fb05dc46b34e54466dc11e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _position: {x: 0, y: 0, z: 0}
   _size: {x: 1920, y: 1080, z: 0.01}
 --- !u!114 &923541079
@@ -2666,8 +2736,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: efd927768041afd4d90e5d822283f0f4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _planeSurface: {fileID: 923541080}
   _clippers:
   - {fileID: 923541078}
@@ -2681,8 +2751,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9cf2a74d69b1c1e41916d2a7afdff5be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _facing: 0
   _doubleSided: 0
 --- !u!1 &974527965
@@ -3001,7 +3071,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bcf0c42a33a8485cb98559da71e81e79, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.AnchorStatusReceiver
   natsClient: {fileID: 626098605}
   logStats: 1
@@ -3053,11 +3123,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 1039886368}
   smoothingStrategy: {fileID: 1039886367}
-  strategyLabel: 
+  strategyLabel:
   enableQualityGate: 1
   minQualityScore: 0.2
   staticLockModule: {fileID: 1039886369}
@@ -3085,7 +3155,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
@@ -3101,7 +3171,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
   positionProcessNoise: 0.2
   positionMeasurementNoise: 0.0004
@@ -3117,7 +3187,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05
@@ -3222,7 +3292,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -3364,7 +3434,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -3395,12 +3465,12 @@ GameObject:
   - component: {fileID: 1137170459}
   - component: {fileID: 1137170458}
   m_Layer: 0
-  m_Name: AnchorObject Raw
+  m_Name: AnchorObject - Arrival-Hold
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1137170458
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3411,7 +3481,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
   framePoseHistory: {fileID: 1764014454}
   alignmentReference: 1
@@ -3425,7 +3495,7 @@ MonoBehaviour:
     cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
     anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
     worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
-  worldAlignmentMode: 0
+  worldAlignmentMode: 1
   policyHost: {fileID: 1484131521}
 --- !u!114 &1137170459
 MonoBehaviour:
@@ -3437,7 +3507,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 1137170458}
   targetTransform: {fileID: 1137170460}
@@ -3460,7 +3530,7 @@ Transform:
   m_Children:
   - {fileID: 1484131517}
   - {fileID: 2017392375}
-  m_Father: {fileID: 1777492728}
+  m_Father: {fileID: 1969858009}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1181091638
 GameObject:
@@ -3565,7 +3635,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -3679,8 +3749,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_IgnoreLayout: 1
   m_MinWidth: -1
   m_MinHeight: -1
@@ -3699,8 +3769,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3ffe41fe81087fa41a2062cc69b99615, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _transferOnSecondSelection: 0
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
@@ -3715,8 +3785,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 317e663e2bb60ea408fe22b908b59295, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _interactorFilters: []
   _maxInteractors: -1
   _maxSelectingInteractors: -1
@@ -3895,11 +3965,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 1484131523}
   smoothingStrategy: {fileID: 1484131524}
-  strategyLabel: 
+  strategyLabel: arrival_hold
   enableQualityGate: 0
   minQualityScore: 0.2
   staticLockModule: {fileID: 0}
@@ -3908,9 +3978,9 @@ MonoBehaviour:
   lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
-  enableLostReacquire: 1
+  enableLostReacquire: 0
   enableLowScoreReacquire: 0
-  emitServerReacquire: 1
+  emitServerReacquire: 0
   lowScoreReacquireThreshold: 0.45
   lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
@@ -3927,7 +3997,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
 --- !u!114 &1484131524
 MonoBehaviour:
@@ -3939,7 +4009,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
 --- !u!1001 &1535159674
 PrefabInstance:
@@ -4138,13 +4208,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b023183069df224080314a560e6e1ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Meta.XR.BuildingBlocks::Meta.XR.BuildingBlocks.BuildingBlock
   blockId: e47682b9-c270-40b1-b16d-90b627a5ce1b
   instanceId: 4ded81d2-cca9-4073-bba3-ef8259844152
   version: 1
   installationRoutineCheckpoint:
-    _installationRoutineId: 
+    _installationRoutineId:
     _installationVariants: []
 --- !u!1 &1701618917
 GameObject:
@@ -4263,7 +4333,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7c9ab8cd461317948afac390c493aeda, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Alignment.FramePoseHistory
   capacity: 512
 --- !u!4 &1764014455
@@ -4308,11 +4378,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9c95f3f2ad00f5742acb92a69e18078a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.AnchorRuntimeHub
   runtimes:
   - {fileID: 160200731}
   - {fileID: 1137170458}
+  - {fileID: 7000000001}
+  - {fileID: 7100000001}
+  - {fileID: 7200000001}
+  - {fileID: 7300000001}
+  - {fileID: 7400000001}
+  - {fileID: 7500000001}
   logStats: 1
   statsIntervalMessages: 120
   reacquireCommandClient: {fileID: 1814303323}
@@ -4330,8 +4406,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 160200733}
-  - {fileID: 1137170460}
+  - {fileID: 1969858009}
+  - {fileID: 248773935}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1797798961
@@ -4376,7 +4452,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8cc97e63d18f46349c4fc0e59c3a7ac9, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.ServerHeartbeatReceiver
   natsClient: {fileID: 626098605}
   logStats: 1
@@ -4424,14 +4500,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c94c9ad8d1a85244badc404f49815dfc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.AnchorCommandClient
   natsClient: {fileID: 626098605}
   clientId: egoanchor-unity
   anchorId: default
   requestTimeoutSeconds: 1.5
   logCommandAck: 1
-  sessionId: 
+  sessionId:
 --- !u!1001 &1846668446
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4626,8 +4702,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: df9f338034892c44ebb62d97894772f1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!4 &1846668449 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 400004, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
@@ -4693,7 +4769,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -4903,6 +4979,41 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1954894678}
   m_CullTransparentMesh: 1
+--- !u!1 &1969858008
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1969858009}
+  m_Layer: 0
+  m_Name: Experiment 1 - System Characterization
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1969858009
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1969858008}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1137170460}
+  - {fileID: 7000000003}
+  - {fileID: 7100000003}
+  - {fileID: 160200733}
+  m_Father: {fileID: 1777492728}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2000378734
 GameObject:
   m_ObjectHideFlags: 0
@@ -4995,7 +5106,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: 
+          m_StringArgument:
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &2000378737
@@ -5208,7 +5319,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -5347,7 +5458,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
   m_Navigation:
     m_Mode: 3
@@ -5390,7 +5501,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: 
+          m_StringArgument:
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &2033538209
@@ -5403,7 +5514,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -5465,7 +5576,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.GraphicRaycaster
   m_IgnoreReversedGraphics: 1
   m_BlockingObjects: 0
@@ -5482,7 +5593,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.CanvasScaler
   m_UiScaleMode: 0
   m_ReferencePixelsPerUnit: 100
@@ -5540,6 +5651,1161 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 1920, y: 1080}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &7000000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7000000003}
+  - component: {fileID: 7000000002}
+  - component: {fileID: 7000000001}
+  m_Layer: 0
+  m_Name: AnchorObject - Capture-Hold
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 0
+  policyHost: {fileID: 7000000012}
+--- !u!114 &7000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7000000001}
+  targetTransform: {fileID: 7000000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7000000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7000000011}
+  m_Father: {fileID: 1969858009}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7000000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7000000011}
+  - component: {fileID: 7000000012}
+  - component: {fileID: 7000000013}
+  - component: {fileID: 7000000014}
+  m_Layer: 0
+  m_Name: Policy - Capture-Hold
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7000000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7000000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7000000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7000000013}
+  smoothingStrategy: {fileID: 7000000014}
+  strategyLabel: capture_hold
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 0}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 0
+  enableLowScoreReacquire: 0
+  emitServerReacquire: 0
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7000000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
+--- !u!114 &7000000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7000000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+--- !u!1 &7100000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000003}
+  - component: {fileID: 7100000002}
+  - component: {fileID: 7100000001}
+  m_Layer: 0
+  m_Name: AnchorObject - One-Euro Anchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7100000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 0
+  policyHost: {fileID: 7100000012}
+--- !u!114 &7100000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7100000001}
+  targetTransform: {fileID: 7100000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7100000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7100000011}
+  m_Father: {fileID: 1969858009}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7100000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000011}
+  - component: {fileID: 7100000012}
+  - component: {fileID: 7100000013}
+  - component: {fileID: 7100000014}
+  m_Layer: 0
+  m_Name: Policy - One-Euro Anchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7100000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7100000013}
+  smoothingStrategy: {fileID: 7100000014}
+  strategyLabel: one_euro_anchor
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 0}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
+  emitServerReacquire: 0
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7100000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0775045992455dd4da165d5c787fa427, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.OneEuroModel
+  minCutoff: 1
+  beta: 0.25
+  derivativeCutoff: 1
+--- !u!114 &7100000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+--- !u!1 &7200000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7200000003}
+  - component: {fileID: 7200000002}
+  - component: {fileID: 7200000001}
+  m_Layer: 0
+  m_Name: AnchorObject - EgoAnchor w-o capture-time alignment
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7200000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 1
+  policyHost: {fileID: 7200000012}
+--- !u!114 &7200000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7200000001}
+  targetTransform: {fileID: 7200000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7200000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7200000011}
+  m_Father: {fileID: 248773935}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7200000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7200000011}
+  - component: {fileID: 7200000012}
+  - component: {fileID: 7200000013}
+  - component: {fileID: 7200000014}
+  - component: {fileID: 7200000015}
+  m_Layer: 0
+  m_Name: Policy - EgoAnchor w-o capture-time alignment
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7200000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7200000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7200000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7200000013}
+  smoothingStrategy: {fileID: 7200000014}
+  strategyLabel: egoanchor_without_capture_time_alignment
+  enableQualityGate: 1
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 7200000015}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0.5
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 1
+  emitServerReacquire: 1
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7200000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
+--- !u!114 &7200000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
+  hermiteTangentChordRatio: 3
+--- !u!114 &7200000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7200000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
+  lockEnabled: 1
+  enterSpeedMps: 0.05
+  enterAngSpeedDps: 35
+  dwellSeconds: 0.35
+  minScore: 0.25
+  deadbandMeters: 0.008
+  deadbandDegrees: 3
+  unlockEvidenceMeters: 0.08
+  unlockEvidenceDegrees: 20
+  unlockDriftMeters: 0.015
+  unlockDriftDegrees: 5
+  evidenceHalfLifeSeconds: 0.27
+  creepHalfLifeSeconds: 2.7
+  relockSuppressSeconds: 1
+  unlockSpeedFactor: 2.5
+  unlockMovingSeconds: 0.4
+  seamDecayPerFrame: 0.85
+  refObsIntervalSeconds: 0.2
+  headRotForFullToleranceDps: 60
+  headLinForFullToleranceMps: 0.3
+  headMaxToleranceFactor: 4
+  headSettleSeconds: 0.6
+  posToleranceRefDistanceMeters: 0.4
+  posToleranceDistanceSlope: 1
+  posToleranceMaxFactor: 3
+  lowScoreReleaseScore: 0.3
+  lowScoreReleaseSeconds: 0.6
+--- !u!1 &7300000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7300000003}
+  - component: {fileID: 7300000002}
+  - component: {fileID: 7300000001}
+  m_Layer: 0
+  m_Name: AnchorObject - EgoAnchor w-o VCD
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7300000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 0
+  policyHost: {fileID: 7300000012}
+--- !u!114 &7300000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7300000001}
+  targetTransform: {fileID: 7300000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7300000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7300000011}
+  m_Father: {fileID: 248773935}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7300000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7300000011}
+  - component: {fileID: 7300000012}
+  - component: {fileID: 7300000013}
+  - component: {fileID: 7300000014}
+  - component: {fileID: 7300000015}
+  m_Layer: 0
+  m_Name: Policy - EgoAnchor w-o VCD
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7300000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7300000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7300000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7300000013}
+  smoothingStrategy: {fileID: 7300000014}
+  strategyLabel: egoanchor_without_vcd
+  enableQualityGate: 0
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 7300000015}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 0
+  emitServerReacquire: 1
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7300000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
+--- !u!114 &7300000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
+  hermiteTangentChordRatio: 3
+--- !u!114 &7300000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7300000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
+  lockEnabled: 1
+  enterSpeedMps: 0.05
+  enterAngSpeedDps: 35
+  dwellSeconds: 0.35
+  minScore: 0.25
+  deadbandMeters: 0.008
+  deadbandDegrees: 3
+  unlockEvidenceMeters: 0.08
+  unlockEvidenceDegrees: 20
+  unlockDriftMeters: 0.015
+  unlockDriftDegrees: 5
+  evidenceHalfLifeSeconds: 0.27
+  creepHalfLifeSeconds: 2.7
+  relockSuppressSeconds: 1
+  unlockSpeedFactor: 2.5
+  unlockMovingSeconds: 0.4
+  seamDecayPerFrame: 0.85
+  refObsIntervalSeconds: 0.2
+  headRotForFullToleranceDps: 60
+  headLinForFullToleranceMps: 0.3
+  headMaxToleranceFactor: 4
+  headSettleSeconds: 0.6
+  posToleranceRefDistanceMeters: 0.4
+  posToleranceDistanceSlope: 1
+  posToleranceMaxFactor: 3
+  lowScoreReleaseScore: 0.3
+  lowScoreReleaseSeconds: 0.6
+--- !u!1 &7400000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7400000003}
+  - component: {fileID: 7400000002}
+  - component: {fileID: 7400000001}
+  m_Layer: 0
+  m_Name: AnchorObject - EgoAnchor w-o temporal synthesis
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7400000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 0
+  policyHost: {fileID: 7400000012}
+--- !u!114 &7400000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7400000001}
+  targetTransform: {fileID: 7400000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7400000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7400000011}
+  m_Father: {fileID: 248773935}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7400000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7400000011}
+  - component: {fileID: 7400000012}
+  - component: {fileID: 7400000013}
+  - component: {fileID: 7400000014}
+  - component: {fileID: 7400000015}
+  m_Layer: 0
+  m_Name: Policy - EgoAnchor w-o temporal synthesis
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7400000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7400000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7400000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7400000013}
+  smoothingStrategy: {fileID: 7400000014}
+  strategyLabel: egoanchor_without_temporal_synthesis
+  enableQualityGate: 1
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 7400000015}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0.5
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 1
+  emitServerReacquire: 1
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7400000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
+--- !u!114 &7400000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+--- !u!114 &7400000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
+  lockEnabled: 1
+  enterSpeedMps: 0.05
+  enterAngSpeedDps: 35
+  dwellSeconds: 0.35
+  minScore: 0.25
+  deadbandMeters: 0.008
+  deadbandDegrees: 3
+  unlockEvidenceMeters: 0.08
+  unlockEvidenceDegrees: 20
+  unlockDriftMeters: 0.015
+  unlockDriftDegrees: 5
+  evidenceHalfLifeSeconds: 0.27
+  creepHalfLifeSeconds: 2.7
+  relockSuppressSeconds: 1
+  unlockSpeedFactor: 2.5
+  unlockMovingSeconds: 0.4
+  seamDecayPerFrame: 0.85
+  refObsIntervalSeconds: 0.2
+  headRotForFullToleranceDps: 60
+  headLinForFullToleranceMps: 0.3
+  headMaxToleranceFactor: 4
+  headSettleSeconds: 0.6
+  posToleranceRefDistanceMeters: 0.4
+  posToleranceDistanceSlope: 1
+  posToleranceMaxFactor: 3
+  lowScoreReleaseScore: 0.3
+  lowScoreReleaseSeconds: 0.6
+--- !u!1 &7500000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7500000003}
+  - component: {fileID: 7500000002}
+  - component: {fileID: 7500000001}
+  m_Layer: 0
+  m_Name: AnchorObject - EgoAnchor w-o StaticLock
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &7500000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
+  framePoseHistory: {fileID: 1764014454}
+  alignmentReference: 1
+  poseTransform:
+    flipX: 0
+    flipY: 1
+    flipZ: 0
+    cameraLocalPositionOffset: {x: 0, y: 0, z: -0.016}
+    anchorLocalPositionOffset: {x: 0, y: 0, z: 0}
+    worldPositionOffset: {x: 0, y: 0, z: 0}
+    cameraLocalRotationOffsetEuler: {x: 0, y: 0, z: 0}
+    anchorLocalRotationOffsetEuler: {x: 0, y: 0, z: 180}
+    worldRotationOffsetEuler: {x: 0, y: 0, z: 0}
+  worldAlignmentMode: 0
+  policyHost: {fileID: 7500000012}
+--- !u!114 &7500000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
+  runtime: {fileID: 7500000001}
+  targetTransform: {fileID: 7500000003}
+  applyPosition: 1
+  applyRotation: 1
+  holdLastPoseWhenMissing: 1
+  lastAppliedFrameId: -1
+--- !u!4 &7500000003
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7500000011}
+  m_Father: {fileID: 248773935}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7500000010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7500000011}
+  - component: {fileID: 7500000012}
+  - component: {fileID: 7500000013}
+  - component: {fileID: 7500000014}
+  m_Layer: 0
+  m_Name: Policy - EgoAnchor w-o StaticLock
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7500000011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7500000003}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7500000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
+  motionModel: {fileID: 7500000013}
+  smoothingStrategy: {fileID: 7500000014}
+  strategyLabel: egoanchor_without_static_lock
+  enableQualityGate: 1
+  minQualityScore: 0.2
+  staticLockModule: {fileID: 0}
+  coastTimeoutSeconds: 0.45
+  trackingScoreFloor: 0.5
+  lostTimeoutSeconds: 1
+  staticSpeedThresholdMps: 0.015
+  staticAngularSpeedThresholdDps: 1.5
+  enableLostReacquire: 1
+  enableLowScoreReacquire: 1
+  emitServerReacquire: 1
+  lowScoreReacquireThreshold: 0.45
+  lowScoreReacquireSeconds: 0.6
+  lowScoreReacquireCooldownSeconds: 3
+  reacquireGeometryFloor: 0.5
+  reacquireReprojWeight: 0.2
+  reacquireDepthWeight: 0.8
+--- !u!114 &7500000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
+--- !u!114 &7500000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7500000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  spline: 0
+  hermiteTangentChordRatio: 3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -12,8 +12,8 @@ namespace EgoAnchor.Policy
     ///   2. 维护 anchor 生命周期状态机 (Tracking / Coasting / Lost / Reacquire ...)；
     ///   3. 把观测喂给模块，并每渲染帧产出平滑 pose。
     ///
-    /// 质量评估门控 (拒绝低分/跳变坏观测) 作为本 host 的可选内联功能 (默认关闭)，
-    /// 论文 RQ2 完整方法变体需要时才在 Inspector 打开。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
+    /// VCD 观测接纳门控作为本 host 的可选内联功能 (默认关闭)，
+    /// 完整 EgoAnchor 配置需要时在 Inspector 打开。每帧平滑由 SmoothingStrategy 负责 (外推+残差融合 或 延迟插值)，
     /// 不再靠运动模型内部限幅 predict-ahead，因此低频 pose 也能逐帧连续输出。
     /// </summary>
     public sealed class AnchorPolicyHost : MonoBehaviour
@@ -33,23 +33,15 @@ namespace EgoAnchor.Policy
         [Tooltip("策略 label，写入 eval；为空时自动用 \"<model>_<strategy>\"。")]
         [SerializeField] private string strategyLabel = "";
 
-        /// <summary>是否启用质量评估门控 (拒绝低分/跳变坏观测)。</summary>
+        /// <summary>是否启用 VCD 观测接纳门控。</summary>
         [Header("Quality Gate (optional)")]
-        [Tooltip("是否启用质量评估门控：拒绝低可靠分或大跳变的坏观测。baseline 应关闭 (照单全收)；论文 RQ2 完整方法变体可开启。默认关闭。")]
+        [Tooltip("是否启用 VCD 观测接纳门控：拒绝低可靠分的观测。Arrival-Hold、Capture-Hold 和 One-Euro Anchor 应关闭；完整 EgoAnchor 与其组件消融按实验定义配置。默认关闭。")]
         [SerializeField] private bool enableQualityGate = false;
 
         /// <summary>接受观测所需的最低可靠性分数。</summary>
         [Tooltip("接受观测所需的最低可靠性分数 (0..1)。低于此值的观测被拒绝、不更新模型。仅在启用门控时生效。默认 0.2。")]
         [Range(0f, 1f)]
         [SerializeField] private float minQualityScore = 0.2f;
-
-        /// <summary>判定坏跳变的平移阈值，单位米。</summary>
-        [Tooltip("判定坏跳变的平移阈值 (米)：新观测相对当前预测的平移超过此值则拒绝。仅在启用门控时生效。默认 0.8。")]
-        [SerializeField] private float maxQualityJumpMeters = 0.8f;
-
-        /// <summary>判定坏跳变的旋转阈值，单位度。</summary>
-        [Tooltip("判定坏跳变的旋转阈值 (度)：新观测相对当前预测的旋转超过此值则拒绝。仅在启用门控时生效。默认 120。")]
-        [SerializeField] private float maxQualityJumpDegrees = 120f;
 
         /// <summary>EgoAnchor 静止锚定方法模块 (可选)。剥离自本 host, 持有静止锁参数和控制器。</summary>
         [Header("Static Anchoring (EgoAnchor 方法, optional)")]
@@ -179,6 +171,21 @@ namespace EgoAnchor.Policy
         /// <summary>质量评估门控模式，写入 eval 的 quality_gate 字段。</summary>
         public string QualityGateMode => enableQualityGate ? "enabled" : "disabled";
 
+        /// <summary>是否启用 VCD 观测接纳。</summary>
+        public bool UsesVcdAdmission => enableQualityGate;
+
+        /// <summary>是否启用时序合成；延迟 Hermite 插值属于完整系统的时序合成。</summary>
+        public bool UsesTemporalSynthesis => smoothingStrategy is DelayedInterpStrategy;
+
+        /// <summary>是否启用显式静止锚定模块。</summary>
+        public bool UsesStaticLock => staticLockModule != null && staticLockModule.Enabled;
+
+        /// <summary>是否启用低分触发的本地重获取。</summary>
+        public bool UsesLowScoreReacquire => enableLowScoreReacquire;
+
+        /// <summary>是否允许向共享 AnchorRuntimeHub 发出服务器重获取请求。</summary>
+        public bool UsesServerReacquire => emitServerReacquire && (enableLostReacquire || enableLowScoreReacquire);
+
         /// <summary>运动模型组件引用，仅用于 eval 配置摘要。</summary>
         public MotionModel MotionModel => motionModel;
 
@@ -306,8 +313,8 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reacquire, stateMachine.State, "low_score_reacquire");
             }
 
-            // 可选质量评估门控 (论文 RQ2 完整方法变体可开启)
-            if (ShouldRejectObservation(observation, observation.MeasurementTimeSeconds, out string rejectReason))
+            // 可选 VCD 观测接纳门控；系统基线关闭，完整系统按实验定义开启。
+            if (ShouldRejectObservation(observation, out string rejectReason))
             {
                 RejectedCount++;
                 latestQualityGateDecision = QualityGateDecision.Reject(rejectReason);
@@ -533,7 +540,7 @@ namespace EgoAnchor.Policy
             return true;
         }
 
-        private bool ShouldRejectObservation(in AnchorObservation observation, double now, out string reason)
+        private bool ShouldRejectObservation(in AnchorObservation observation, out string reason)
         {
             reason = string.Empty;
             if (!enableQualityGate)
@@ -545,19 +552,6 @@ namespace EgoAnchor.Policy
             {
                 reason = "low_score";
                 return true;
-            }
-
-            // 跳变检测：与当前预测比较 (需已有状态，且不是重定位帧)
-            if (motionModel.HasState && !observation.IsRelocalization)
-            {
-                Pose predicted = motionModel.PredictAt(now);
-                float dPos = Vector3.Distance(predicted.position, observation.WorldPose.position);
-                float dDeg = AnchorMath.AngleDegrees(predicted.rotation, observation.WorldPose.rotation);
-                if (dPos > maxQualityJumpMeters || dDeg > maxQualityJumpDegrees)
-                {
-                    reason = "jump";
-                    return true;
-                }
             }
 
             return false;

@@ -143,7 +143,8 @@ PoseResult candidate
 - 距离自适应只放大位置通道；旋转 tether 必须高于旋转噪声地板。
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
 - Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和 `events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。
-- Unity 采集场景已接入 `ExperimentTrialSelector`、`ExperimentInputHandler` 和 `ExperimentStatusUI`；实验、场景、trial、event、condition 上下文随 schema-v2 录制行和事件写入。
+- Unity 采集场景已接入 `ExperimentTrialSelector`、`ExperimentInputHandler` 和 `ExperimentStatusUI`，不再挂载已删除的 `EvalHotkeys`；实验、场景、trial、event、condition 上下文随 schema-v2 录制行和事件写入。
+- 正式 `EgoAnchor-Experiment12.unity` 场景使用 8 个唯一 runtime：Hub 下以两个空物体分别组织实验一四配置和实验二四个单组件消融，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。
 

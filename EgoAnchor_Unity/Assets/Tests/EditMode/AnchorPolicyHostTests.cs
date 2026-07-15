@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using EgoAnchor.Alignment;
 using EgoAnchor.Eval;
 using EgoAnchor.Policy;
@@ -9,6 +10,7 @@ using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Runtime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace EgoAnchor.Tests
 {
@@ -521,6 +523,7 @@ namespace EgoAnchor.Tests
                 PoseToAnchorRuntime runtime = runtimeGo.AddComponent<PoseToAnchorRuntime>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
+                SetPrivateField(host, "enableQualityGate", true);
                 SetPrivateField(runtime, "policyHost", host);
                 SetPrivateField(recorder, "variants", new List<EvalVariant>
                 {
@@ -536,6 +539,10 @@ namespace EgoAnchor.Tests
                 string admissionPath = Path.Combine(directory, "unity_admission.jsonl");
                 string eventsPath = Path.Combine(directory, "events.jsonl");
                 recorder.BeginRecording(capturePath, admissionPath, outputPath, eventsPath);
+                var configsBeforeDestroy = new List<EvalVariantConfig>();
+                recorder.CollectVariantConfigs(configsBeforeDestroy);
+                Assert.That(configsBeforeDestroy, Has.Count.EqualTo(1));
+                string expectedConfigHash = configsBeforeDestroy[0].ConfigHash;
                 UnityEngine.Object.DestroyImmediate(runtimeGo);
                 recorder.StopRecording();
 
@@ -549,7 +556,8 @@ namespace EgoAnchor.Tests
                 Assert.That(configs[0].MotionModel, Is.EqualTo("cv"));
                 Assert.That(configs[0].SmoothingStrategy, Is.EqualTo("raw_passthrough"));
                 Assert.That(configs[0].QualityGate, Is.EqualTo("enabled"));
-                Assert.That(configs[0].ConfigHash, Is.EqualTo("87f79d178e3942a9"));
+                Assert.That(configs[0].UsesVcdAdmission, Is.True);
+                Assert.That(configs[0].ConfigHash, Is.EqualTo(expectedConfigHash));
             }
             finally
             {
@@ -583,6 +591,7 @@ namespace EgoAnchor.Tests
                 SetPrivateField(session, "runtimeHub", hub);
                 SetPrivateField(session, "outputRoot", root);
 
+                LogAssert.Expect(LogType.Error, new Regex("Session 启动已拒绝.*禁止覆盖"));
                 session.StartSession();
 
                 Assert.That(session.IsRecording, Is.False);

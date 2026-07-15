@@ -234,6 +234,7 @@ namespace EgoAnchor.Eval
             sb.Append($"\"session_id\":{JStr(sessionId)},");
             sb.Append($"\"object_id\":{JStr(objectId)},");
             sb.Append($"\"unity_run_mode\":{JStr(unityRunMode)},");
+            sb.Append($"\"config_hash\":{JStr(BuildAggregateConfigHash(variantConfigs))},");
             sb.Append("\"log_files\":{");
             sb.Append($"\"python_candidates\":{JStr(EvalV2Manifest.PythonCandidatesFileName)},");
             sb.Append($"\"unity_reference\":{JStr(EvalV2Manifest.UnityReferenceFileName)},");
@@ -297,6 +298,8 @@ namespace EgoAnchor.Eval
                     sb.Append($"\"uses_vcd_admission\":{(c.UsesVcdAdmission ? "true" : "false")},");
                     sb.Append($"\"uses_temporal_synthesis\":{(c.UsesTemporalSynthesis ? "true" : "false")},");
                     sb.Append($"\"uses_static_lock\":{(c.UsesStaticLock ? "true" : "false")},");
+                    sb.Append($"\"uses_low_score_reacquire\":{(c.UsesLowScoreReacquire ? "true" : "false")},");
+                    sb.Append($"\"uses_server_reacquire\":{(c.UsesServerReacquire ? "true" : "false")},");
                     sb.Append($"\"config_hash\":{JStr(c.ConfigHash)}");
                     sb.Append('}');
                 }
@@ -313,6 +316,29 @@ namespace EgoAnchor.Eval
             sb.Append("\"dropped_rows\":").Append(stats.DroppedRows.ToString(CultureInfo.InvariantCulture)).Append(',');
             sb.Append("\"peak_queue_depth\":").Append(stats.PeakQueueDepth.ToString(CultureInfo.InvariantCulture));
             sb.Append('}');
+        }
+
+        /// <summary>按 manifest 中的变体顺序生成整体配置摘要。</summary>
+        private static string BuildAggregateConfigHash(IReadOnlyList<EvalVariantConfig> configs)
+        {
+            unchecked
+            {
+                const ulong offset = 14695981039346656037UL;
+                const ulong prime = 1099511628211UL;
+                ulong hash = offset;
+                if (configs != null)
+                {
+                    for (int i = 0; i < configs.Count; i++)
+                    {
+                        foreach (byte value in Encoding.UTF8.GetBytes(configs[i].ConfigHash ?? string.Empty))
+                        {
+                            hash ^= value;
+                            hash *= prime;
+                        }
+                    }
+                }
+                return hash.ToString("x16", CultureInfo.InvariantCulture);
+            }
         }
 
         // ─────────────── 内部工具 ───────────────
@@ -608,17 +634,43 @@ namespace EgoAnchor.Eval
     /// <summary>变体配置摘要，写入 manifest。</summary>
     public readonly struct EvalVariantConfig
     {
+        /// <summary>变体稳定标签。</summary>
         public readonly string Label;
+
+        /// <summary>运动模型名称。</summary>
         public readonly string MotionModel;
+
+        /// <summary>平滑策略名称。</summary>
         public readonly string SmoothingStrategy;
+
+        /// <summary>观测接纳门控模式。</summary>
         public readonly string QualityGate;
+
+        /// <summary>该变体全部生效组件的配置摘要。</summary>
         public readonly string ConfigHash;
+
+        /// <summary>世界系复合使用的时刻模式。</summary>
         public readonly string WorldAlignmentMode;
+
+        /// <summary>是否使用采集时刻世界对齐。</summary>
         public readonly bool UsesCaptureTimeAlignment;
+
+        /// <summary>是否启用 VCD 观测接纳。</summary>
         public readonly bool UsesVcdAdmission;
+
+        /// <summary>是否启用连续时序合成。</summary>
         public readonly bool UsesTemporalSynthesis;
+
+        /// <summary>是否启用显式静止锚定。</summary>
         public readonly bool UsesStaticLock;
 
+        /// <summary>是否允许低分触发本地重获取。</summary>
+        public readonly bool UsesLowScoreReacquire;
+
+        /// <summary>是否允许向共享 hub 请求服务器重获取。</summary>
+        public readonly bool UsesServerReacquire;
+
+        /// <summary>构造不可变的变体配置摘要。</summary>
         public EvalVariantConfig(
             string label,
             string motionModel,
@@ -629,7 +681,9 @@ namespace EgoAnchor.Eval
             bool usesCaptureTimeAlignment = false,
             bool usesVcdAdmission = false,
             bool usesTemporalSynthesis = false,
-            bool usesStaticLock = false)
+            bool usesStaticLock = false,
+            bool usesLowScoreReacquire = false,
+            bool usesServerReacquire = false)
         {
             Label = label ?? string.Empty;
             MotionModel = motionModel ?? string.Empty;
@@ -641,6 +695,8 @@ namespace EgoAnchor.Eval
             UsesVcdAdmission = usesVcdAdmission;
             UsesTemporalSynthesis = usesTemporalSynthesis;
             UsesStaticLock = usesStaticLock;
+            UsesLowScoreReacquire = usesLowScoreReacquire;
+            UsesServerReacquire = usesServerReacquire;
         }
     }
 }
