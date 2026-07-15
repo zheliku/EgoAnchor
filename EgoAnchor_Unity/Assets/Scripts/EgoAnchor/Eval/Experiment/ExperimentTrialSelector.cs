@@ -1,5 +1,4 @@
 using System;
-using EgoAnchor.Eval;
 using UnityEngine;
 
 namespace EgoAnchor.Eval.Experiment
@@ -46,12 +45,11 @@ namespace EgoAnchor.Eval.Experiment
         public bool IsSelected => !string.IsNullOrEmpty(ExperimentId) && !string.IsNullOrEmpty(ScenarioId);
     }
 
-    /// <summary>维护实验选择、trial 生命周期和人工事件标记，不直接写文件。</summary>
+    /// <summary>按固定九场景计划维护 trial 和人工事件；操作者只需执行单一推进动作。</summary>
     public sealed class ExperimentTrialSelector : MonoBehaviour
     {
-        /// <summary>绑定 session 生命周期；未录制时所有操作均被忽略。</summary>
-        [Header("Session")]
-        [Tooltip("绑定 EvalSession；只有录制期间才允许创建 trial 和 event。")]
+        /// <summary>绑定 session 生命周期；未录制时推进动作被忽略。</summary>
+        [Tooltip("绑定 EvalSession；录制开始时自动选择固定计划的第一个场景。")]
         [SerializeField] private EvalSession session;
 
         /// <summary>当前实验标识。</summary>
@@ -71,6 +69,12 @@ namespace EgoAnchor.Eval.Experiment
 
         /// <summary>当前是否已有尚未写入 target_visible 的遮挡事件。</summary>
         private bool _hasOpenOcclusion;
+
+        /// <summary>固定采集计划的零基索引。</summary>
+        private int _planIndex = -1;
+
+        /// <summary>九个场景是否已经全部完成。</summary>
+        private bool _planComplete;
 
         /// <summary>当前 trial 序号。</summary>
         private int _trialSequence;
@@ -96,32 +100,62 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前是否正在等待遮挡目标重新可见标记。</summary>
         public bool HasOpenOcclusion => _hasOpenOcclusion;
 
+        /// <summary>当前是否处于活动 trial。</summary>
+        public bool HasActiveTrial => !string.IsNullOrEmpty(_trialId);
+
+        /// <summary>当前是否允许推进采集。</summary>
+        public bool IsRecording => session != null && session.IsRecording;
+
+        /// <summary>当前是否已完成固定采集计划。</summary>
+        public bool IsPlanComplete => _planComplete;
+
+        /// <summary>当前场景在九场景计划中的一基序号。</summary>
+        public int CurrentPlanStep => _planIndex >= 0 ? _planIndex + 1 : 0;
+
+        /// <summary>固定采集计划的场景总数。</summary>
+        public int PlanStepCount => ExperimentScenario.PlanCount;
+
         /// <summary>当前条件标识。</summary>
         public string CurrentConditionId => string.IsNullOrEmpty(_experimentId) || string.IsNullOrEmpty(_scenarioId)
             ? string.Empty
             : $"{_experimentId}/{_scenarioId}";
 
-        /// <summary>当前是否处于活动 trial。</summary>
-        public bool HasActiveTrial => !string.IsNullOrEmpty(_trialId);
-
-        /// <summary>当前是否允许修改采集上下文。</summary>
-        public bool IsRecording => session != null && session.IsRecording;
-
         /// <summary>当前上下文快照。</summary>
         public ExperimentContext CurrentContext => new ExperimentContext(
             _experimentId, _scenarioId, _trialId, _eventId, CurrentConditionId, _eventRole);
 
-        /// <summary>上下文变化事件，供可视化面板刷新。</summary>
+        /// <summary>返回头显面板应显示的下一步动作。</summary>
+        public string NextActionText
+        {
+            get
+            {
+                if (_planComplete) return "COLLECTION COMPLETE";
+                if (!IsRecording) return "WAITING FOR PYTHON";
+                if (!CurrentContext.IsSelected) return "PREPARING COLLECTION";
+                if (!HasActiveTrial) return "PRESS RIGHT A TO START TRIAL";
+                if (_hasOpenOcclusion) return "PRESS RIGHT A WHEN TARGET IS VISIBLE";
+                if (!string.IsNullOrEmpty(_eventId)) return "PRESS RIGHT A TO FINISH TRIAL";
+
+                string role = ExperimentEventRole.ResolvePrimary(_scenarioId);
+                if (role == ExperimentEventRole.OcclusionStarted)
+                    return "PRESS RIGHT A WHEN OCCLUSION STARTS";
+                if (role == ExperimentEventRole.TransitionStarted)
+                    return "PRESS RIGHT A WHEN MOTION STARTS";
+                return "PRESS RIGHT A BEFORE THE ACTION";
+            }
+        }
+
+        /// <summary>上下文变化事件，供录制器和可视化面板共享。</summary>
         public event Action<ExperimentContext, string> ContextEvent;
 
-        /// <summary>绑定或替换 session，并同步监听开始/停止事件。</summary>
+        /// <summary>绑定或替换 session，并监听录制开始事件。</summary>
         public void BindSession(EvalSession target)
         {
             UnbindSession();
             session = target;
             if (session == null) return;
-            session.SessionStarted.AddListener(ResetForSession);
-            session.SessionStopped.AddListener(ResetForSession);
+            session.SessionStarted.AddListener(PreparePlan);
+            if (session.IsRecording) PreparePlan();
         }
 
         /// <summary>Unity 启用时绑定 Inspector 中配置的 session。</summary>
@@ -136,20 +170,33 @@ namespace EgoAnchor.Eval.Experiment
             UnbindSession();
         }
 
-        /// <summary>选择实验一场景；活动 trial 中不允许切换。</summary>
-        public bool SelectSystemScenario(int key)
+        /// <summary>
+        /// 执行唯一的采集推进动作：开始 trial、标记主事件、标记目标可见或结束并切换场景。
+        /// </summary>
+        public bool Advance()
         {
-            return SelectScenario(ExperimentId.SystemCharacterization, ExperimentScenario.GetSystemScenario(key));
+            if (!IsRecording || _planComplete || !CurrentContext.IsSelected) return false;
+            if (!HasActiveTrial) return BeginTrial();
+            if (string.IsNullOrEmpty(_eventId)) return MarkPrimaryEvent();
+            if (_hasOpenOcclusion) return MarkTargetVisible();
+            return FinishTrialAndAdvance();
         }
 
-        /// <summary>选择实验二归因场景；活动 trial 中不允许切换。</summary>
-        public bool SelectAttributionScenario(int key)
+        /// <summary>录制开始时重置计数并自动选择固定计划的第一个场景。</summary>
+        public void PreparePlan()
         {
-            return SelectScenario(ExperimentId.DesignAttribution, ExperimentScenario.GetAttributionScenario(key));
+            ResetState();
+            if (IsRecording) SelectPlanItem(0);
         }
 
-        /// <summary>开始当前场景的一个 trial。</summary>
-        public bool BeginTrial()
+        /// <summary>返回当前场景显示名称。</summary>
+        public string CurrentScenarioDisplayName => ExperimentScenario.ToDisplayName(_scenarioId);
+
+        /// <summary>返回当前实验显示名称。</summary>
+        public string CurrentExperimentDisplayName => ExperimentId.ToDisplayName(_experimentId);
+
+        /// <summary>开始当前场景的 trial。</summary>
+        private bool BeginTrial()
         {
             if (!IsRecording || string.IsNullOrEmpty(_scenarioId) || HasActiveTrial) return false;
             _trialId = $"trial_{++_trialSequence:000}";
@@ -160,37 +207,22 @@ namespace EgoAnchor.Eval.Experiment
             return true;
         }
 
-        /// <summary>结束当前 trial，并保留实验和场景选择。</summary>
-        public bool EndTrial()
+        /// <summary>按当前场景协议标记主事件。</summary>
+        private bool MarkPrimaryEvent()
         {
-            if (!IsRecording || !HasActiveTrial || _hasOpenOcclusion) return false;
-            Emit("trial_ended");
-            _trialId = string.Empty;
-            _eventId = string.Empty;
-            _eventRole = ExperimentEventRole.None;
-            return true;
-        }
-
-        /// <summary>按当前场景协议标记主事件；遮挡未闭合时拒绝重复开始。</summary>
-        public bool MarkPrimaryEvent()
-        {
-            if (!IsRecording || !HasActiveTrial) return false;
-            string role = ExperimentEventRole.ResolvePrimary(_scenarioId);
-            if (role == ExperimentEventRole.OcclusionStarted && _hasOpenOcclusion) return false;
-
+            if (!IsRecording || !HasActiveTrial || !string.IsNullOrEmpty(_eventId)) return false;
             _eventId = $"event_{++_eventSequence:000}";
-            _eventRole = role;
-            _hasOpenOcclusion = role == ExperimentEventRole.OcclusionStarted;
+            _eventRole = ExperimentEventRole.ResolvePrimary(_scenarioId);
+            _hasOpenOcclusion = _eventRole == ExperimentEventRole.OcclusionStarted;
             Emit("event_marker");
             return true;
         }
 
-        /// <summary>标记遮挡目标重新可见；没有开放遮挡或场景不支持时拒绝。</summary>
-        public bool MarkTargetVisible()
+        /// <summary>在遮挡场景中标记目标重新可见。</summary>
+        private bool MarkTargetVisible()
         {
             if (!IsRecording || !HasActiveTrial || !_hasOpenOcclusion) return false;
             if (!ExperimentEventRole.SupportsTargetVisible(_scenarioId)) return false;
-
             _eventId = $"event_{++_eventSequence:000}";
             _eventRole = ExperimentEventRole.TargetVisible;
             _hasOpenOcclusion = false;
@@ -198,31 +230,38 @@ namespace EgoAnchor.Eval.Experiment
             return true;
         }
 
-        /// <summary>清空 session 内的实验、trial 和事件上下文。</summary>
-        public void ResetForSession()
+        /// <summary>结束当前 trial；最后一个场景完成后自动停止 session。</summary>
+        private bool FinishTrialAndAdvance()
         {
-            _experimentId = ExperimentId.None;
-            _scenarioId = string.Empty;
+            if (!EndTrial()) return false;
+            if (SelectPlanItem(_planIndex + 1)) return true;
+
+            _planComplete = true;
+            Emit("collection_completed");
+            session.StopSession();
+            return true;
+        }
+
+        /// <summary>结束当前 trial，并在事件发出后清空 trial 上下文。</summary>
+        private bool EndTrial()
+        {
+            if (!IsRecording || !HasActiveTrial || _hasOpenOcclusion || string.IsNullOrEmpty(_eventId)) return false;
+            Emit("trial_ended");
             _trialId = string.Empty;
             _eventId = string.Empty;
             _eventRole = ExperimentEventRole.None;
-            _hasOpenOcclusion = false;
-            _trialSequence = 0;
-            _eventSequence = 0;
+            return true;
         }
 
-        /// <summary>返回当前场景显示名称。</summary>
-        public string CurrentScenarioDisplayName => ExperimentScenario.ToDisplayName(_scenarioId);
-
-        /// <summary>返回当前实验显示名称。</summary>
-        public string CurrentExperimentDisplayName => ExperimentId.ToDisplayName(_experimentId);
-
-        /// <summary>执行场景切换并通知订阅者。</summary>
-        private bool SelectScenario(string experimentId, string scenarioId)
+        /// <summary>选择固定计划中的一项；越过末尾时返回 false。</summary>
+        private bool SelectPlanItem(int index)
         {
-            if (!IsRecording || HasActiveTrial || string.IsNullOrEmpty(scenarioId)) return false;
+            if (!ExperimentScenario.TryGetPlanItem(index, out string experimentId, out string scenarioId))
+                return false;
+            _planIndex = index;
             _experimentId = experimentId;
             _scenarioId = scenarioId;
+            _trialId = string.Empty;
             _eventId = string.Empty;
             _eventRole = ExperimentEventRole.None;
             _hasOpenOcclusion = false;
@@ -230,7 +269,22 @@ namespace EgoAnchor.Eval.Experiment
             return true;
         }
 
-        /// <summary>发送当前上下文事件；订阅者异常不得阻断输入状态机。</summary>
+        /// <summary>清空上一 session 的计划、trial 和事件状态。</summary>
+        private void ResetState()
+        {
+            _experimentId = ExperimentId.None;
+            _scenarioId = string.Empty;
+            _trialId = string.Empty;
+            _eventId = string.Empty;
+            _eventRole = ExperimentEventRole.None;
+            _hasOpenOcclusion = false;
+            _planIndex = -1;
+            _planComplete = false;
+            _trialSequence = 0;
+            _eventSequence = 0;
+        }
+
+        /// <summary>发送当前上下文事件；订阅者异常不得阻断采集状态机。</summary>
         private void Emit(string eventType)
         {
             try
@@ -243,12 +297,11 @@ namespace EgoAnchor.Eval.Experiment
             }
         }
 
-        /// <summary>解除 session 开始/停止监听。</summary>
+        /// <summary>解除 session 开始监听。</summary>
         private void UnbindSession()
         {
             if (session == null) return;
-            session.SessionStarted.RemoveListener(ResetForSession);
-            session.SessionStopped.RemoveListener(ResetForSession);
+            session.SessionStarted.RemoveListener(PreparePlan);
         }
     }
 }

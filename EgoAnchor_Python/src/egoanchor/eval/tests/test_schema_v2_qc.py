@@ -91,6 +91,21 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertTrue(report.passed, report.errors)
 
+    def test_formal_session_allows_missing_optional_git_commit(self) -> None:
+        """Git commit 是可选审计信息，不得要求操作者在每次采集前填写。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            _expand_to_formal_variants(session_dir)
+            manifest_path = session_dir / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["egoanchor_git_commit"] = ""
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            report = run_schema_qc(load_session_v2(session_dir))
+
+            self.assertTrue(report.passed, report.errors)
+
     def test_unknown_admission_variant_fails_qc(self) -> None:
         """Admission 混入 manifest 未声明变体时必须失败。"""
 

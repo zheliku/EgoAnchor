@@ -18,7 +18,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>不需要专用时序语义的通用人工标记。</summary>
         public const string GenericMarker = "generic_marker";
 
-        /// <summary>根据场景协议解析 Space 键应写入的主事件角色。</summary>
+        /// <summary>根据场景协议解析单键推进动作应写入的主事件角色。</summary>
         public static string ResolvePrimary(string scenarioId)
         {
             switch (scenarioId)

@@ -1823,15 +1823,8 @@ MonoBehaviour:
   runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
-  runMode: editor_link
-  runKind: 0
-  operatorId: 
-  frozenParameterSetId: 
-  objectModelId: 
-  egoanchorGitCommit: 
-  protocolVersion: v1
+  runKind: 3
   autoStart: 1
-  notes: 
   sessionStarted:
     m_PersistentCalls:
       m_Calls: []
@@ -1851,8 +1844,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler
   selector: {fileID: 667335327}
-  controlSessionShortcuts: 1
-  session: {fileID: 667335324}
+  controllerBinding: <XRController>{RightHand}/primaryButton
+  keyboardBinding: <Keyboard>/space
 --- !u!114 &667335327
 MonoBehaviour:
   m_ObjectHideFlags: 0

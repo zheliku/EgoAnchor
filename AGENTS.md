@@ -146,8 +146,8 @@ PoseResult candidate
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
 - Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和 `events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。`events.jsonl` 由 Python 与 Unity 通过同名 `.lock` 文件逐行互斥追加，Unity 不得因已有 Python 事件拒绝启动或截断文件。
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
-- Unity manifest 写出 run kind、冻结参数、对象模型、版本、实验/场景计划和真实 Unity writer 统计；Formal 启动门禁同时要求对象、运行模式、协议版本和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，Task 8 必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
-- Unity 采集场景已接入 `ExperimentTrialSelector`、`ExperimentInputHandler` 和 `ExperimentStatusUI`，不再挂载已删除的 `EvalHotkeys`；实验、场景、trial、event、condition 上下文随 schema-v2 录制行和事件写入。
+- Unity manifest 写出 run kind、自动配置哈希、对象、版本、实验/场景计划和真实 Unity writer 统计；`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
+- Unity 采集场景使用固定九场景计划。右手控制器 A 与键盘 `Space` 是两条等价的 Input System 推进入口，binding path 暴露在 `ExperimentInputHandler` Inspector；普通场景按“开始、主事件、结束”推进，遮挡场景增加一次 `target_visible`，最后一个场景完成后自动停止 session。旧数字键、Enter、Shift、0 和 F7/F8 采集接口不得恢复。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 8 个唯一 runtime：Hub 下以两个空物体分别组织实验一四配置和实验二四个单组件消融，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。
@@ -169,7 +169,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - schema-v2 QC 对 Formal session 固定要求场景中的 8 个唯一 runtime、按 Unity FNV-1a 规则重算整体 `config_hash`，并检查 writer 行数/丢行/失败、candidate/reference 主键、candidate×variant 与 tick×variant 矩阵及递归旧字段。
 - 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
-- 人工事件角色写入 `events.payload.event_role`。`Space` 记录场景主事件，遮挡场景用 `Shift+Space` 记录新的 `target_visible` 事件；转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
+- 人工事件角色写入 `events.payload.event_role`。统一推进动作按状态记录场景主事件，遮挡场景的下一次推进记录新的 `target_visible` 事件；转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
 - 旧 `eval/io`、`eval/core`、`eval/report`、`run_eval` 和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
 - 旧命名扫描按语义判定：Unity/Python runtime、writer、namespace 和 CLI 不得依赖或输出旧 RQ/schema 名称；`schema_v2/readers.py`、`schema_v2/qc.py` 及其测试可保留旧文件名和字段名，仅用于显式拒绝旧输入，不得把这些 reject-only guard 当作兼容层删除。
 - 实验一分析先对完整 8-runtime session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融 runtime 不得混入实验一的 VCD、时延、图表或 LaTeX 数字。

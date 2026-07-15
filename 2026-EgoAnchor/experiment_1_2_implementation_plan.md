@@ -751,18 +751,18 @@ EgoAnchor_Python/data/eval/<session_id>/
 
 - [ ] **Step 1: 写输入测试**
 
-  - 数字键 1-5 选择实验一场景。
-  - Shift+数字键选择实验二 ablation scenario。
-  - Enter 开始 trial。
-  - Space 写 event marker。
-  - 0 结束 trial。
-  - 未 recording 时不得创建 trial context。
+  - 右手控制器 A 与键盘 Space 是两条等价的 Input System binding，路径暴露在 Inspector。
+  - 单一 `Advance()` 依次执行开始 trial、主事件、遮挡恢复和结束 trial。
+  - 固定计划自动按实验一 5 个场景、实验二 4 个场景推进。
+  - 最后一个场景完成后自动停止 session；未 recording 时不得创建 trial context。
 - [ ] **Step 2: 实现 selector**
 
-  Selector 只维护上下文，不直接写文件。session start 时清空，session stop 时清空。
+  Selector 维护上下文和固定计划，不直接写文件。session start 时重置并选择第一个场景；每个场景结束后
+  自动选择下一项。
 - [ ] **Step 3: 实现 status UI**
 
-  UI 文案使用实验一/实验二命名，不出现 RQ。公共状态文本继续复用 `EvalStatusText`。
+  UI 显示计划进度和下一次推进动作，使用实验一/实验二命名，不出现 RQ。公共状态文本继续复用
+  `EvalStatusText`，Canvas 保持场景中的固定 world-space 位置。
 - [ ] **Step 4: 验证**
 
   Run:
@@ -771,7 +771,7 @@ EgoAnchor_Python/data/eval/<session_id>/
   dotnet build "EgoAnchor_Unity\EgoAnchor.Tests.csproj" --no-restore
   ```
 
-  Expected: 输入回调不累积；未录制时 trial context 保持空。
+  Expected: 两条 binding 共用同一状态机，输入回调不累积；未录制时 trial context 保持空。
 
 ### Task 7: Unity policy 配置摘要与四系统配置/消融场景
 
@@ -1188,7 +1188,7 @@ EgoAnchor_Python/data/eval/<session_id>/
   - Unity 场景名
   - NATS/ZMQ 连接检查
   - session 自动配对检查
-  - 1 分钟 smoke 操作
+  - 双输入单推进 smoke 操作
   - 停止 session 后文件检查
   - QC 命令
 - [ ] **Step 2: 写实验一采集流程**
@@ -1199,7 +1199,8 @@ EgoAnchor_Python/data/eval/<session_id>/
   说明与实验一共用同一候选流和 reference，组件消融通过同场景多 runtime 同步驱动，不单独重跑 Python 感知。
 - [ ] **Step 4: 写 formal 参数冻结规则**
 
-  明确 calibration session 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定；formal session 后不得调参。
+  明确 calibration session 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定；formal
+  session 后不得调参。Formal 场景不要求现场填写元数据，参数集标识由整体 config hash 自动生成。
 - [ ] **Step 5: 验证手册命令与 CLI 名称一致**
 
   Run:

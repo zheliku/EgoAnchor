@@ -3,69 +3,63 @@ using UnityEngine.InputSystem;
 
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>实验采集键盘输入：数字键选场景，Enter/Space/Shift+Space/0 管理 trial 和事件。</summary>
+    /// <summary>把右手控制器 A 或桌面 Space 映射为唯一的采集推进动作。</summary>
     public sealed class ExperimentInputHandler : MonoBehaviour
     {
-        /// <summary>接收输入的实验上下文选择器。</summary>
+        /// <summary>接收推进动作的实验上下文选择器。</summary>
         [Header("References")]
-        [Tooltip("实验 trial selector；输入只调用 selector，不直接写日志。")]
+        [Tooltip("固定采集计划选择器；右手 A 和键盘 Space 只调用其 Advance。")]
         [SerializeField] private ExperimentTrialSelector selector;
 
-        /// <summary>是否允许 F7/F8 控制 EvalSession。</summary>
-        [Tooltip("启用后 F7 开始 session，F8 停止 session。")]
-        [SerializeField] private bool controlSessionShortcuts = true;
+        /// <summary>Quest 右手 A 键的 Input System binding path，可在 Inspector 中改绑。</summary>
+        [Header("Input System Bindings")]
+        [Tooltip("手柄推进输入。默认是 Quest 右手 A；可填写其他 Input System binding path。")]
+        [SerializeField] private string controllerBinding = "<XRController>{RightHand}/primaryButton";
 
-        /// <summary>可选的 session 快捷键目标。</summary>
-        [SerializeField] private EvalSession session;
+        /// <summary>桌面键盘后备的 Input System binding path，可在 Inspector 中改绑。</summary>
+        [Tooltip("键盘推进输入。默认是 Space；与手柄输入执行完全相同的采集动作。")]
+        [SerializeField] private string keyboardBinding = "<Keyboard>/space";
 
-        /// <summary>轮询 Unity Input System 键盘状态。</summary>
-        private void Update()
+        /// <summary>运行时创建的单一输入动作，避免在场景中维护多组快捷键。</summary>
+        private InputAction _advanceAction;
+
+        /// <summary>启用组件时创建并打开控制器/键盘绑定。</summary>
+        private void OnEnable()
         {
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard == null) return;
-
-            bool shift = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
-            if (keyboard.digit1Key.wasPressedThisFrame) HandleNumber(1, shift);
-            if (keyboard.digit2Key.wasPressedThisFrame) HandleNumber(2, shift);
-            if (keyboard.digit3Key.wasPressedThisFrame) HandleNumber(3, shift);
-            if (keyboard.digit4Key.wasPressedThisFrame) HandleNumber(4, shift);
-            if (keyboard.digit5Key.wasPressedThisFrame) HandleNumber(5, shift);
-            if (keyboard.enterKey.wasPressedThisFrame) HandleEnter();
-            if (keyboard.spaceKey.wasPressedThisFrame) HandleSpace(shift);
-            if (keyboard.digit0Key.wasPressedThisFrame) HandleZero();
-
-            if (controlSessionShortcuts && keyboard.f7Key.wasPressedThisFrame)
-                session?.StartSession();
-            if (controlSessionShortcuts && keyboard.f8Key.wasPressedThisFrame)
-                session?.StopSession();
+            _advanceAction = new InputAction("AdvanceCollection", InputActionType.Button);
+            AddBinding(controllerBinding);
+            AddBinding(keyboardBinding);
+            _advanceAction.performed += OnAdvancePerformed;
+            _advanceAction.Enable();
         }
 
-        /// <summary>处理数字键场景选择；按住 Shift 时进入实验二归因。</summary>
-        public void HandleNumber(int key, bool shift)
+        /// <summary>向统一动作添加一条非空 binding path。</summary>
+        private void AddBinding(string bindingPath)
         {
-            if (selector == null) return;
-            if (shift) selector.SelectAttributionScenario(key);
-            else if (key <= 5) selector.SelectSystemScenario(key);
+            if (!string.IsNullOrWhiteSpace(bindingPath))
+                _advanceAction.AddBinding(bindingPath.Trim());
         }
 
-        /// <summary>处理 Enter：开始当前场景 trial。</summary>
-        public void HandleEnter()
+        /// <summary>禁用组件时释放 Input System 资源，避免 Play Mode 重入后重复回调。</summary>
+        private void OnDisable()
         {
-            selector?.BeginTrial();
+            if (_advanceAction == null) return;
+            _advanceAction.performed -= OnAdvancePerformed;
+            _advanceAction.Disable();
+            _advanceAction.Dispose();
+            _advanceAction = null;
         }
 
-        /// <summary>处理 Space：普通按键标记主事件，按住 Shift 标记目标重新可见。</summary>
-        public void HandleSpace(bool shift)
+        /// <summary>处理 Input System performed 回调。</summary>
+        private void OnAdvancePerformed(InputAction.CallbackContext context)
         {
-            if (selector == null) return;
-            if (shift) selector.MarkTargetVisible();
-            else selector.MarkPrimaryEvent();
+            HandleAdvance();
         }
 
-        /// <summary>处理 0：结束当前 trial。</summary>
-        public void HandleZero()
+        /// <summary>推进固定采集状态机；供输入回调和 EditMode 测试共用。</summary>
+        public bool HandleAdvance()
         {
-            selector?.EndTrial();
+            return selector != null && selector.Advance();
         }
     }
 }

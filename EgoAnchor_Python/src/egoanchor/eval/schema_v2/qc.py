@@ -169,7 +169,7 @@ def _check_run_kind_and_formal_freeze(
     variants: set[str],
     errors: list[str],
 ) -> None:
-    """验证 run kind；Formal 额外要求八变体与完整冻结元数据。"""
+    """验证 run kind；Formal 额外要求八变体与自动生成的运行元数据。"""
 
     raw_run_kind = manifest.get("run_kind")
     normalized = raw_run_kind.strip().lower() if isinstance(raw_run_kind, str) else ""
@@ -190,7 +190,6 @@ def _check_run_kind_and_formal_freeze(
         "python_host",
         "unity_version",
         "python_version",
-        "egoanchor_git_commit",
         "protocol_version",
         "config_hash",
         "frozen_parameter_set_id",

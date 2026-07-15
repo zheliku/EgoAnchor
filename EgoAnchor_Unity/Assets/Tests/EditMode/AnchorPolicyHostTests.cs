@@ -682,27 +682,25 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>Formal session 缺少冻结元数据时必须在创建日志前拒绝启动。</summary>
+        /// <summary>Formal 现场不再暴露需要逐次填写的审计字段。</summary>
         [Test]
-        public void FormalSessionRejectsMissingFrozenMetadata()
+        public void FormalSessionDoesNotExposeManualMetadataFields()
         {
-            GameObject go = new GameObject("EvalFormalMetadataTests");
-            try
+            foreach (string fieldName in new[]
             {
-                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
-                EvalSession session = go.AddComponent<EvalSession>();
-                SetPrivateField(session, "recorder", recorder);
-                SetPrivateField(session, "runKind", EvalRunKind.Formal);
-
-                LogAssert.Expect(LogType.Error, new Regex("Formal session 启动已拒绝.*正式采集配置不完整"));
-                session.StartSession();
-
-                Assert.That(session.IsRecording, Is.False);
-                Assert.That(session.SessionId, Is.Null.Or.Empty);
-            }
-            finally
+                "runMode",
+                "operatorId",
+                "frozenParameterSetId",
+                "objectModelId",
+                "egoanchorGitCommit",
+                "protocolVersion",
+                "notes",
+            })
             {
-                UnityEngine.Object.DestroyImmediate(go);
+                Assert.That(
+                    typeof(EvalSession).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic),
+                    Is.Null,
+                    $"manual field should not be serialized: {fieldName}");
             }
         }
 
@@ -717,10 +715,6 @@ namespace EgoAnchor.Tests
                 EvalSession session = go.AddComponent<EvalSession>();
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runKind", EvalRunKind.Formal);
-                SetPrivateField(session, "operatorId", "operator-01");
-                SetPrivateField(session, "frozenParameterSetId", "frozen-v1");
-                SetPrivateField(session, "objectModelId", "controller-mesh-v1");
-                SetPrivateField(session, "egoanchorGitCommit", "0123456789abcdef");
 
                 LogAssert.Expect(LogType.Error, new Regex("Formal session 启动已拒绝.*variantConfigs"));
                 session.StartSession();

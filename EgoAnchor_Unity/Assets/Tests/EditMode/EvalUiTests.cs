@@ -76,7 +76,7 @@ namespace EgoAnchor.Tests
                 new EvalManifestMetadata(
                     "s01", "controller_right", "smoke", "operator-01", 2000,
                     "editor_link", string.Empty, "6000.3.11f1", string.Empty,
-                    "commit", "v1", "dev-1", "controller-mesh-v1", string.Empty),
+                    "commit", "v1", string.Empty, "controller-mesh-v1", string.Empty),
                 new[] { "EgoAnchor" },
                 new[]
                 {
@@ -126,7 +126,11 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"status\":\"pending_python_fragment_merge\"", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
             StringAssert.Contains("\"run_kind\":\"smoke\"", manifest);
-            StringAssert.Contains("\"frozen_parameter_set_id\":\"dev-1\"", manifest);
+            Match configHash = Regex.Match(manifest, "\\\"config_hash\\\":\\\"(?<hash>[0-9a-f]{16})\\\"");
+            Assert.That(configHash.Success, Is.True);
+            StringAssert.Contains(
+                $"\"frozen_parameter_set_id\":\"{configHash.Groups["hash"].Value}\"",
+                manifest);
             StringAssert.Contains("\"experiment_ids\":[\"exp1_system_characterization\",\"exp2_design_attribution\"]", manifest);
             foreach (string field in new[]
             {
@@ -162,10 +166,7 @@ namespace EgoAnchor.Tests
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
 
-                Assert.That(selector.SelectSystemScenario(1), Is.False);
-                Assert.That(selector.BeginTrial(), Is.False);
-                Assert.That(selector.MarkPrimaryEvent(), Is.False);
-                Assert.That(selector.MarkTargetVisible(), Is.False);
+                Assert.That(selector.Advance(), Is.False);
                 Assert.That(selector.CurrentContext.IsSelected, Is.False);
             }
             finally
@@ -175,9 +176,9 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>实验一场景、trial、event 和结束动作必须生成稳定上下文标识。</summary>
+        /// <summary>普通场景三次推进必须依次开始、标记并结束，然后自动切换场景。</summary>
         [Test]
-        public void SelectorMaintainsStableTrialAndEventContext()
+        public void SelectorAdvancesNormalScenarioWithOneAction()
         {
             GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
             GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
@@ -188,17 +189,19 @@ namespace EgoAnchor.Tests
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
 
-                Assert.That(selector.SelectSystemScenario(1), Is.True);
                 Assert.That(selector.CurrentExperimentId, Is.EqualTo(ExperimentId.SystemCharacterization));
                 Assert.That(selector.CurrentScenarioId, Is.EqualTo("static_head_motion"));
-                Assert.That(selector.BeginTrial(), Is.True);
+                Assert.That(selector.CurrentPlanStep, Is.EqualTo(1));
+                Assert.That(selector.Advance(), Is.True);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
-                Assert.That(selector.MarkPrimaryEvent(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
                 Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
-                Assert.That(selector.EndTrial(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
                 Assert.That(selector.CurrentTrialId, Is.Empty);
                 Assert.That(selector.CurrentEventId, Is.Empty);
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("start_stop_6dof"));
+                Assert.That(selector.CurrentPlanStep, Is.EqualTo(2));
             }
             finally
             {
@@ -207,11 +210,9 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>起停与对应消融必须把主事件标记为转换开始。</summary>
-        [TestCase(false, 2)]
-        [TestCase(true, 3)]
-        [TestCase(true, 4)]
-        public void SelectorMapsTransitionScenariosToTransitionStarted(bool attribution, int scenarioKey)
+        /// <summary>固定计划的起停场景必须把第二次推进标记为转换开始。</summary>
+        [Test]
+        public void SelectorMapsTransitionScenarioToTransitionStarted()
         {
             GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
             GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
@@ -222,12 +223,10 @@ namespace EgoAnchor.Tests
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
 
-                bool selected = attribution
-                    ? selector.SelectAttributionScenario(scenarioKey)
-                    : selector.SelectSystemScenario(scenarioKey);
-                Assert.That(selected, Is.True);
-                Assert.That(selector.BeginTrial(), Is.True);
-                Assert.That(selector.MarkPrimaryEvent(), Is.True);
+                CompleteCurrentScenario(selector);
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("start_stop_6dof"));
+                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStarted));
             }
             finally
@@ -237,10 +236,9 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>遮挡协议必须为两个角色分配连续事件标识，并拒绝重复开始和无开始的可见标记。</summary>
-        [TestCase(false, 5)]
-        [TestCase(true, 2)]
-        public void SelectorEnforcesOcclusionEventOrder(bool attribution, int scenarioKey)
+        /// <summary>遮挡场景四次推进必须依次开始、遮挡、可见并切换到实验二。</summary>
+        [Test]
+        public void SelectorAdvancesOcclusionRolesInOrder()
         {
             GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
             GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
@@ -251,25 +249,22 @@ namespace EgoAnchor.Tests
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
 
-                bool selected = attribution
-                    ? selector.SelectAttributionScenario(scenarioKey)
-                    : selector.SelectSystemScenario(scenarioKey);
-                Assert.That(selected, Is.True);
-                Assert.That(selector.BeginTrial(), Is.True);
-                Assert.That(selector.MarkTargetVisible(), Is.False);
-                Assert.That(selector.MarkPrimaryEvent(), Is.True);
-                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
-                Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
-                Assert.That(selector.HasOpenOcclusion, Is.True);
-                Assert.That(selector.MarkPrimaryEvent(), Is.False);
-                Assert.That(selector.EndTrial(), Is.False);
+                for (int i = 0; i < 4; i++) CompleteCurrentScenario(selector);
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("occlusion_recovery"));
 
-                Assert.That(selector.MarkTargetVisible(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
+                Assert.That(selector.HasOpenOcclusion, Is.True);
+                string occlusionEventId = selector.CurrentEventId;
+
+                Assert.That(selector.Advance(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
-                Assert.That(selector.CurrentEventId, Is.EqualTo("event_002"));
+                Assert.That(selector.CurrentEventId, Is.Not.EqualTo(occlusionEventId));
                 Assert.That(selector.HasOpenOcclusion, Is.False);
-                Assert.That(selector.MarkTargetVisible(), Is.False);
-                Assert.That(selector.EndTrial(), Is.True);
+                Assert.That(selector.Advance(), Is.True);
+                Assert.That(selector.CurrentExperimentId, Is.EqualTo(ExperimentId.DesignAttribution));
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("without_capture_time_alignment"));
             }
             finally
             {
@@ -278,9 +273,37 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>输入层必须把 Space 和 Shift+Space 分别路由到遮挡开始和目标重新可见。</summary>
+        /// <summary>固定九场景全部完成后必须自动停止 session，无需额外停止键。</summary>
         [Test]
-        public void InputHandlerRoutesSpaceByShiftState()
+        public void SelectorStopsSessionAfterFinalScenario()
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+
+                for (int guard = 0; session.IsRecording && guard < 40; guard++)
+                    Assert.That(selector.Advance(), Is.True);
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(selector.IsPlanComplete, Is.True);
+                Assert.That(selector.CurrentPlanStep, Is.EqualTo(ExperimentScenario.PlanCount));
+                Assert.That(selector.NextActionText, Is.EqualTo("COLLECTION COMPLETE"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>手柄与键盘 binding 必须共用同一个推进状态机。</summary>
+        [Test]
+        public void InputHandlerExposesControllerAndKeyboardBindings()
         {
             GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
             GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
@@ -291,18 +314,17 @@ namespace EgoAnchor.Tests
                 SetPrivateField(session, "_recording", true);
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
-                selector.SelectSystemScenario(5);
-                selector.BeginTrial();
-
                 ExperimentInputHandler input = inputObject.AddComponent<ExperimentInputHandler>();
                 SetPrivateField(input, "selector", selector);
-                input.HandleSpace(true);
-                Assert.That(selector.CurrentEventId, Is.Empty);
+                Assert.That(input.HandleAdvance(), Is.True);
+                Assert.That(selector.HasActiveTrial, Is.True);
+                Assert.That(input.HandleAdvance(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
 
-                input.HandleSpace(false);
-                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
-                input.HandleSpace(true);
-                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
+                Assert.That(
+                    GetPrivateField(input, "controllerBinding"),
+                    Is.EqualTo("<XRController>{RightHand}/primaryButton"));
+                Assert.That(GetPrivateField(input, "keyboardBinding"), Is.EqualTo("<Keyboard>/space"));
             }
             finally
             {
@@ -325,9 +347,10 @@ namespace EgoAnchor.Tests
                 SetPrivateField(session, "_recording", true);
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
                 selector.BindSession(session);
-                selector.SelectAttributionScenario(2);
-                selector.BeginTrial();
-                selector.MarkPrimaryEvent();
+                for (int i = 0; i < 6; i++) CompleteCurrentScenario(selector);
+                Assert.That(selector.CurrentScenarioId, Is.EqualTo("without_vcd_admission"));
+                selector.Advance();
+                selector.Advance();
 
                 ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
                 SetPrivateField(status, "selector", selector);
@@ -336,9 +359,10 @@ namespace EgoAnchor.Tests
 
                 StringAssert.Contains("EXP2 | DESIGN ATTRIBUTION", text);
                 StringAssert.Contains("Ablation: VCD admission", text);
-                StringAssert.Contains("trial_001", text);
+                StringAssert.Contains("Progress: 7 / 9", text);
+                StringAssert.Contains("NEXT: PRESS RIGHT A WHEN TARGET IS VISIBLE", text);
+                StringAssert.Contains("trial_007", text);
                 StringAssert.Contains("Role: occlusion_started", text);
-                StringAssert.Contains("Occlusion: Waiting for target visible", text);
                 StringAssert.DoesNotContain("RQ1", text);
                 StringAssert.DoesNotContain("RQ2", text);
             }
@@ -348,6 +372,23 @@ namespace EgoAnchor.Tests
                 UnityEngine.Object.DestroyImmediate(selectorObject);
                 UnityEngine.Object.DestroyImmediate(sessionObject);
             }
+        }
+
+        /// <summary>完成当前场景，自动适配普通和遮挡场景需要的推进次数。</summary>
+        private static void CompleteCurrentScenario(ExperimentTrialSelector selector)
+        {
+            int step = selector.CurrentPlanStep;
+            for (int guard = 0; selector.CurrentPlanStep == step && guard < 5; guard++)
+                Assert.That(selector.Advance(), Is.True);
+            Assert.That(selector.CurrentPlanStep, Is.Not.EqualTo(step));
+        }
+
+        /// <summary>通过反射读取测试所需的私有字段。</summary>
+        private static object GetPrivateField(object target, string fieldName)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"missing private field {fieldName}");
+            return field.GetValue(target);
         }
 
         /// <summary>通过反射设置测试所需的私有录制状态，不扩大生产 API。</summary>
@@ -450,6 +491,37 @@ namespace EgoAnchor.Tests
             }
 
             Assert.That(distinctRuntimeIds.Count, Is.EqualTo(RequiredLabels.Length));
+        }
+
+        /// <summary>正式场景必须固定 Formal，并暴露右手手柄与键盘两条统一推进 binding。</summary>
+        [Test]
+        public void ExperimentSceneUsesFormalSingleActionInput()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+            string sessionSection = GetSectionContaining(
+                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalSession");
+            string inputSection = GetSectionContaining(
+                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
+
+            StringAssert.Contains("runKind: 3", sessionSection);
+            foreach (string removedField in new[]
+            {
+                "runMode:",
+                "operatorId:",
+                "frozenParameterSetId:",
+                "objectModelId:",
+                "egoanchorGitCommit:",
+                "protocolVersion:",
+                "notes:",
+            })
+                StringAssert.DoesNotContain(removedField, sessionSection);
+
+            StringAssert.Contains("controllerBinding: <XRController>{RightHand}/primaryButton", inputSection);
+            StringAssert.Contains("keyboardBinding: <Keyboard>/space", inputSection);
+
+            string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
+            StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
         }
 
         /// <summary>各配置只能按实验定义切换目标组件，避免消融同时改变无关机制。</summary>

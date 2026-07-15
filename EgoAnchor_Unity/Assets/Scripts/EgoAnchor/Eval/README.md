@@ -10,11 +10,13 @@
    pixi run python .\src\run_server.py
    ```
 
-2. 在 Unity 打开当前实验配置场景并进入 Play Mode。
-3. 等待 Python 返回非空 `session_id`，确认面板显示 `Recording` 后开始动作。
-4. 停止 Play Mode 或按场景配置的停止操作，确认 manifest 已写入。
+2. 正式采集打开 `EgoAnchor-Experiment12.unity` 并进入 Play Mode；场景已固定为 Formal。
+3. 等待 Python 返回非空 `session_id`，确认面板显示 `Recording`。
+4. 用右手控制器 A 或键盘 `Space` 推进固定九场景计划；最后一个场景完成后自动写 manifest。
 
-`EvalSession` 管理 session 生命周期，`EvalRecorder` 写入 Unity 采集和渲染日志。录制停止后不要在同一 Python session 中再次开始，以免覆盖同名日志。
+`EvalSession` 自动管理 session 生命周期，`ExperimentTrialSelector` 依次选择实验一 5 个场景和实验二
+4 个场景，`EvalRecorder` 写入 Unity 采集和渲染日志。手柄与键盘 Input System binding 均暴露在
+`ExperimentInputHandler` Inspector 中。录制停止后不要在同一 Python session 中再次开始。
 
 ## schema-v2 输出
 
@@ -37,4 +39,5 @@ writer 会记录 `rows_written` 与 `dropped_rows`。正式分析前必须确认
 
 实验二以完整系统为参照，每次只关闭一个归因组件。采集时保持同一输入流和同一参考位姿，分析阶段按 `session x trial/event x variant` 配对汇总，不把逐帧记录当作独立样本。
 
-动作协议、速度上限和统计参数以 `EgoAnchor_Python/src/egoanchor/eval/README.md` 及实验计划为准。采集阶段只记录事实，不在 Unity 端推断统计结果或手工修改日志。
+具体动作、按键时机和失败重采规则见 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`。采集阶段
+只记录事实，不在 Unity 端推断统计结果或手工修改日志。

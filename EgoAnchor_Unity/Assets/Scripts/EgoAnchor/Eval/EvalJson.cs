@@ -324,6 +324,10 @@ namespace EgoAnchor.Eval
             EvalLogStats renderStats,
             EvalLogStats eventsStats)
         {
+            string configHash = BuildAggregateConfigHash(variantConfigs);
+            string frozenParameterSetId = string.IsNullOrWhiteSpace(metadata.FrozenParameterSetId)
+                ? configHash
+                : metadata.FrozenParameterSetId;
             var sb = new StringBuilder(512);
             sb.Append('{');
             sb.Append("\"schema_version\":2,");
@@ -339,8 +343,8 @@ namespace EgoAnchor.Eval
             sb.Append($"\"python_version\":{JStr(metadata.PythonVersion)},");
             sb.Append($"\"egoanchor_git_commit\":{JStr(metadata.GitCommit)},");
             sb.Append($"\"protocol_version\":{JStr(metadata.ProtocolVersion)},");
-            sb.Append($"\"config_hash\":{JStr(BuildAggregateConfigHash(variantConfigs))},");
-            sb.Append($"\"frozen_parameter_set_id\":{JStr(metadata.FrozenParameterSetId)},");
+            sb.Append($"\"config_hash\":{JStr(configHash)},");
+            sb.Append($"\"frozen_parameter_set_id\":{JStr(frozenParameterSetId)},");
             sb.Append($"\"object_model_id\":{JStr(metadata.ObjectModelId)},");
             sb.Append("\"log_files\":{");
             sb.Append($"\"python_candidates\":{JStr(EvalV2Manifest.PythonCandidatesFileName)},");

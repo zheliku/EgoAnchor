@@ -22,7 +22,7 @@ namespace EgoAnchor.Eval
         /// <summary>仅用于冻结正式参数的开发采集。</summary>
         Calibration,
 
-        /// <summary>论文正式采集；开始前必须填写冻结元数据。</summary>
+        /// <summary>论文正式采集；使用场景内固定配置和自动元数据。</summary>
         Formal,
     }
 
@@ -30,11 +30,17 @@ namespace EgoAnchor.Eval
     /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
     /// 推荐工作流：先启动 Python 服务，<see cref="autoStart"/> 为 true 时 Unity 收到第一个 PoseResult
-    /// 即自动开始录制，无需手动按键；停止时调用 <see cref="StopSession"/> 或 F8。
+    /// 即自动开始录制；固定九场景计划完成后自动调用 <see cref="StopSession"/>。
     /// </para>
     /// </summary>
     public sealed class EvalSession : MonoBehaviour
     {
+        /// <summary>当前单操作员采集使用的匿名标识，不要求现场填写。</summary>
+        private const string OperatorId = "single_operator";
+
+        /// <summary>当前跨端协议版本。</summary>
+        private const string ProtocolVersion = "v1";
+
         // ── References ──
 
         /// <summary>负责写 JSONL 的记录器。</summary>
@@ -57,52 +63,23 @@ namespace EgoAnchor.Eval
         [Tooltip("追踪对象 ID，例如 controller_right。必须与 Python --object 参数一致。")]
         [SerializeField] private string objectId = "controller_right";
 
-        /// <summary>Unity 运行模式，写入 manifest，例如 editor_link 或 build_standalone。</summary>
-        [Tooltip("Unity 运行模式，写入 manifest，例如 editor_link。真机 build 时手动改写。")]
-        [SerializeField] private string runMode = "editor_link";
-
         /// <summary>本次 session 用途。</summary>
-        [Tooltip("Session 用途：Debug、Smoke、Calibration 或 Formal。Formal 会强制检查冻结参数、对象模型、操作员和 Git commit。")]
+        [Tooltip("Session 用途。正式 Experiment12 场景固定为 Formal，开发场景保持 Debug。")]
         [SerializeField] private EvalRunKind runKind = EvalRunKind.Debug;
 
-        /// <summary>操作员匿名标识。</summary>
-        [Tooltip("操作员匿名标识。Formal session 必填；不得写姓名等直接身份信息。")]
-        [SerializeField] private string operatorId = string.Empty;
-
-        /// <summary>正式参数集合标识。</summary>
-        [Tooltip("Calibration 后冻结的参数集合标识。Formal session 必填，正式数据采集后不得修改。")]
-        [SerializeField] private string frozenParameterSetId = string.Empty;
-
-        /// <summary>目标三维模型标识。</summary>
-        [Tooltip("当前目标三维模型或 mesh 版本标识。Formal session 必填。")]
-        [SerializeField] private string objectModelId = string.Empty;
-
-        /// <summary>采集代码 Git commit。</summary>
-        [Tooltip("开始采集前冻结的 EgoAnchor Git commit。Formal session 必填。")]
-        [SerializeField] private string egoanchorGitCommit = string.Empty;
-
-        /// <summary>协议版本。</summary>
-        [Tooltip("跨端协议版本；当前固定为 v1。")]
-        [SerializeField] private string protocolVersion = "v1";
-
         /// <summary>收到第一个 PoseResult 时是否自动开始录制。</summary>
-        [Tooltip("收到第一个 PoseResult 时自动开始录制；无需手动按 F7。")]
+        [Tooltip("收到第一个 PoseResult 时自动开始录制；固定计划完成后自动停止。")]
         [SerializeField] private bool autoStart = true;
-
-        /// <summary>实验备注，写入 manifest。</summary>
-        [Tooltip("实验备注，例如光照条件、mesh 版本等。")]
-        [TextArea]
-        [SerializeField] private string notes = string.Empty;
 
         // ── Events ──
 
-        /// <summary>录制开始时触发；用于重置实验上下文或写入会话边界事件。</summary>
+        /// <summary>录制开始时触发；用于准备固定采集计划或写入会话边界事件。</summary>
         [Header("Session Events")]
-        [Tooltip("录制开始时触发；自动启动和 F7 手动启动都会触发。")]
+        [Tooltip("录制自动开始时触发。")]
         [SerializeField] private UnityEvent sessionStarted = new UnityEvent();
 
         /// <summary>录制停止时触发；用于清理实验上下文或写入会话边界事件。</summary>
-        [Tooltip("录制停止时触发；F8 手动停止和 OnDestroy 都会触发。")]
+        [Tooltip("固定采集计划完成或组件销毁时触发。")]
         [SerializeField] private UnityEvent sessionStopped = new UnityEvent();
 
         // ── State ──
@@ -128,10 +105,10 @@ namespace EgoAnchor.Eval
         /// <summary>当前是否正在录制。</summary>
         public bool IsRecording => _recording;
 
-        /// <summary>录制开始事件；自动启动和 F7 手动启动都会触发，供会话边界回调订阅。</summary>
+        /// <summary>录制开始事件；供固定计划和会话边界回调订阅。</summary>
         public UnityEvent SessionStarted => sessionStarted;
 
-        /// <summary>录制停止事件；F8 手动停止和 OnDestroy 都会触发，供会话边界回调订阅。</summary>
+        /// <summary>录制停止事件；供会话边界回调订阅。</summary>
         public UnityEvent SessionStopped => sessionStopped;
 
         /// <summary>
@@ -152,7 +129,7 @@ namespace EgoAnchor.Eval
                 return;
             }
 
-            if (!ValidateFormalMetadata())
+            if (!ValidateFormalConfiguration())
                 return;
 
             string root = ResolveOutputRoot();
@@ -276,17 +253,17 @@ namespace EgoAnchor.Eval
                 _sessionId,
                 objectId,
                 RunKindName(runKind),
-                operatorId,
+                OperatorId,
                 _createdUnixMs,
-                runMode,
+                ResolveRunMode(),
                 string.Empty,
                 Application.unityVersion,
                 string.Empty,
-                egoanchorGitCommit,
-                protocolVersion,
-                frozenParameterSetId,
-                objectModelId,
-                notes);
+                string.Empty,
+                ProtocolVersion,
+                string.Empty,
+                objectId,
+                string.Empty);
             string json = EvalJson.BuildManifest(
                 metadata,
                 _variantLabels, _variantConfigs,
@@ -300,20 +277,14 @@ namespace EgoAnchor.Eval
             EgoAnchorLog.For<EvalSession>().Info($"Manifest 已写入：{path}");
         }
 
-        /// <summary>Formal session 必须在采集前冻结关键元数据和完整变体配置；其他 run kind 不受此门禁影响。</summary>
-        private bool ValidateFormalMetadata()
+        /// <summary>Formal session 只检查自动配置和完整变体矩阵，不要求现场填写审计字段。</summary>
+        private bool ValidateFormalConfiguration()
         {
             if (runKind != EvalRunKind.Formal)
                 return true;
 
             var missing = new List<string>();
             if (string.IsNullOrWhiteSpace(objectId)) missing.Add(nameof(objectId));
-            if (string.IsNullOrWhiteSpace(runMode)) missing.Add(nameof(runMode));
-            if (string.IsNullOrWhiteSpace(operatorId)) missing.Add(nameof(operatorId));
-            if (string.IsNullOrWhiteSpace(frozenParameterSetId)) missing.Add(nameof(frozenParameterSetId));
-            if (string.IsNullOrWhiteSpace(objectModelId)) missing.Add(nameof(objectModelId));
-            if (string.IsNullOrWhiteSpace(egoanchorGitCommit)) missing.Add(nameof(egoanchorGitCommit));
-            if (string.IsNullOrWhiteSpace(protocolVersion)) missing.Add(nameof(protocolVersion));
 
             string variantError = string.Empty;
             if (recorder == null || !recorder.TryValidateCurrentVariants(out variantError))
@@ -324,6 +295,14 @@ namespace EgoAnchor.Eval
             EgoAnchorLog.For<EvalSession>().Error(
                 $"Formal session 启动已拒绝：正式采集配置不完整 {string.Join(", ", missing)}。");
             return false;
+        }
+
+        /// <summary>根据当前 Unity 运行环境生成稳定模式标识。</summary>
+        private static string ResolveRunMode()
+        {
+            return Application.isEditor
+                ? "editor_link"
+                : $"player_{Application.platform.ToString().ToLowerInvariant()}";
         }
 
         /// <summary>把 Inspector enum 转换为 schema-v2 固定小写值。</summary>

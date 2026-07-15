@@ -1,11 +1,9 @@
-using System;
-
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>实验一/实验二的场景和归因组件稳定标识。</summary>
+    /// <summary>实验一/实验二的场景和固定采集顺序。</summary>
     public static class ExperimentScenario
     {
-        /// <summary>实验一场景集合，顺序对应数字键 1 至 5。</summary>
+        /// <summary>实验一场景集合，按正式采集顺序排列。</summary>
         public static readonly string[] SystemScenarios =
         {
             "static_head_motion",
@@ -15,7 +13,7 @@ namespace EgoAnchor.Eval.Experiment
             "occlusion_recovery",
         };
 
-        /// <summary>实验二归因场景集合，顺序对应 Shift+数字键 1 至 4。</summary>
+        /// <summary>实验二归因场景集合，紧接实验一执行。</summary>
         public static readonly string[] AttributionScenarios =
         {
             "without_capture_time_alignment",
@@ -23,6 +21,32 @@ namespace EgoAnchor.Eval.Experiment
             "without_temporal_synthesis",
             "without_static_lock",
         };
+
+        /// <summary>一次正式 session 需要完成的场景总数。</summary>
+        public static int PlanCount => SystemScenarios.Length + AttributionScenarios.Length;
+
+        /// <summary>按零基索引读取固定采集计划中的实验和场景。</summary>
+        public static bool TryGetPlanItem(int index, out string experimentId, out string scenarioId)
+        {
+            if (index >= 0 && index < SystemScenarios.Length)
+            {
+                experimentId = ExperimentId.SystemCharacterization;
+                scenarioId = SystemScenarios[index];
+                return true;
+            }
+
+            int attributionIndex = index - SystemScenarios.Length;
+            if (attributionIndex >= 0 && attributionIndex < AttributionScenarios.Length)
+            {
+                experimentId = ExperimentId.DesignAttribution;
+                scenarioId = AttributionScenarios[attributionIndex];
+                return true;
+            }
+
+            experimentId = ExperimentId.None;
+            scenarioId = string.Empty;
+            return false;
+        }
 
         /// <summary>把场景标识转换为采集界面显示名称。</summary>
         public static string ToDisplayName(string scenarioId)
@@ -40,25 +64,6 @@ namespace EgoAnchor.Eval.Experiment
                 case "without_static_lock": return "Ablation: StaticLock";
                 default: return "NO SCENARIO";
             }
-        }
-
-        /// <summary>获取指定数字键对应的实验一场景；非法键返回空值。</summary>
-        public static string GetSystemScenario(int key)
-        {
-            return key >= 1 && key <= SystemScenarios.Length ? SystemScenarios[key - 1] : string.Empty;
-        }
-
-        /// <summary>获取指定数字键对应的实验二归因场景；非法键返回空值。</summary>
-        public static string GetAttributionScenario(int key)
-        {
-            return key >= 1 && key <= AttributionScenarios.Length ? AttributionScenarios[key - 1] : string.Empty;
-        }
-
-        /// <summary>判断场景标识是否属于当前实验计划。</summary>
-        public static bool IsKnown(string scenarioId)
-        {
-            return Array.IndexOf(SystemScenarios, scenarioId) >= 0
-                || Array.IndexOf(AttributionScenarios, scenarioId) >= 0;
         }
     }
 }
