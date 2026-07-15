@@ -23,7 +23,7 @@
 - 重获取只有一个中央 owner：`AnchorRuntimeHub` 汇聚 server reacquire 请求；各变体不得各自持有 command client。
 - VCD 三层语义分开：连续可靠性评分、运行时 admission、离线 risk-coverage 诊断。VCD 不是排序算法，也不是位姿正确概率。
 - 正式参数只允许使用开发/calibration 数据冻结；formal session 后不得调参。
-- Run 1 不提交 Git；每个任务结束只保留工作树改动和验证输出。
+- 本轮每个 Task 完成并验证后独立提交并推送；提交边界必须与 Task 边界一致。
 
 ---
 
@@ -89,40 +89,26 @@ Python 侧旧 RQ 代码和旧 schema：
 
 保留并改造：
 
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`  
-  增加 world alignment mode，使 Arrival-Hold 成为真实 runtime 变体，而不是诊断字段。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPolicyHost.cs`  
-  删除 RQ 文案，增加可序列化的实验组件开关摘要。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalRecorder.cs`  
-  重写为 schema-v2 recorder，输出 reference/admission/render 三张长表。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalSession.cs`  
-  重写为 schema-v2 session 控制器，写 `manifest.json`，不写 `session_manifest.json`。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalJson.cs`  
-  重写字段生成器，移除 `unity_capture`、`unity_output`、`rq1_*`、`rq2_*`。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalLog.cs`  
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/PoseToAnchorRuntime.cs`增加 world alignment mode，使 Arrival-Hold 成为真实 runtime 变体，而不是诊断字段。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPolicyHost.cs`删除 RQ 文案，增加可序列化的实验组件开关摘要。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalRecorder.cs`重写为 schema-v2 recorder，输出 reference/admission/render 三张长表。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalSession.cs`重写为 schema-v2 session 控制器，写 `manifest.json`，不写 `session_manifest.json`。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalJson.cs`重写字段生成器，移除 `unity_capture`、`unity_output`、`rq1_*`、`rq2_*`。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalLog.cs`
   保留有界后台队列，增加每个 schema-v2 文件的 dropped rows 统计。
 
 新增：
 
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/WorldAlignmentMode.cs`  
-  定义 `CaptureTime` 与 `ArrivalTime`。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentId.cs`  
-  定义 `exp1_system_characterization` 与 `exp2_design_attribution`。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentScenario.cs`  
-  定义 `static_head_motion`、`start_stop_6dof`、`continuous_translation`、`continuous_rotation`、`occlusion_recovery`。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentTrialSelector.cs`  
-  管理 experiment/scenario/trial/event 上下文，替代 RQ1/RQ2 selector。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentInputHandler.cs`  
-  管理键盘输入，替代 RQ1/RQ2 input handler。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentStatusUI.cs`  
-  显示 session、variant、trial、event 状态，替代 RQ1/RQ2 status UI。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalV2Manifest.cs`  
-  生成 schema-v2 manifest。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalAdmissionSnapshot.cs`  
-  表达一条 candidate × variant admission 记录。
-- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalRenderSnapshot.cs`  
-  表达一条 render tick × variant 记录。
-- `EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`  
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/WorldAlignmentMode.cs`定义 `CaptureTime` 与 `ArrivalTime`。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentId.cs`定义 `exp1_system_characterization` 与 `exp2_design_attribution`。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentScenario.cs`定义 `static_head_motion`、`start_stop_6dof`、`continuous_translation`、`continuous_rotation`、`occlusion_recovery`。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentTrialSelector.cs`管理 experiment/scenario/trial/event 上下文，替代 RQ1/RQ2 selector。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentInputHandler.cs`管理键盘输入，替代 RQ1/RQ2 input handler。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/Experiment/ExperimentStatusUI.cs`显示 session、variant、trial、event 状态，替代 RQ1/RQ2 status UI。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalV2Manifest.cs`生成 schema-v2 manifest。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalAdmissionSnapshot.cs`表达一条 candidate × variant admission 记录。
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Eval/EvalRenderSnapshot.cs`表达一条 render tick × variant 记录。
+- `EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`
   正式实验一/二采集场景，配置所有端到端系统变体和组件消融。
 
 删除：
@@ -136,13 +122,10 @@ Python 侧旧 RQ 代码和旧 schema：
 
 保留并改造：
 
-- `EgoAnchor_Python/src/egoanchor/runtime/eval_session.py`  
-  生成 schema-v2 session 元数据和固定文件名。
-- `EgoAnchor_Python/src/egoanchor/runtime/runtime_log_writer.py`  
-  改为写 `python_candidates.jsonl` 和 `events.jsonl`。
-- `EgoAnchor_Python/src/egoanchor/diagnostics/runtime_event_log.py`  
-  保留 JSONL writer 能力，但禁止旧 event 字段进入正式 schema。
-- `EgoAnchor_Python/src/egoanchor/eval/metrics/*.py`  
+- `EgoAnchor_Python/src/egoanchor/runtime/eval_session.py`生成 schema-v2 session 元数据和固定文件名。
+- `EgoAnchor_Python/src/egoanchor/runtime/runtime_log_writer.py`改为写 `python_candidates.jsonl` 和 `events.jsonl`。
+- `EgoAnchor_Python/src/egoanchor/diagnostics/runtime_event_log.py`保留 JSONL writer 能力，但禁止旧 event 字段进入正式 schema。
+- `EgoAnchor_Python/src/egoanchor/eval/metrics/*.py`
   迁移 RQ 中性的 error、jitter、latency、recovery、diagnostics 逻辑到 schema-v2 normalized tables。
 
 新增：
@@ -182,8 +165,7 @@ Python 侧旧 RQ 代码和旧 schema：
 
 新增：
 
-- `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`  
-  中文采集手册：启动顺序、smoke checklist、实验一/二 trial 操作、停止条件、数据目录检查。
+- `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`中文采集手册：启动顺序、smoke checklist、实验一/二 trial 操作、停止条件、数据目录检查。
 - `2026-EgoAnchor/generated/exp1_numbers.tex`
 - `2026-EgoAnchor/generated/exp1_tables.tex`
 - `2026-EgoAnchor/generated/exp2_numbers.tex`
@@ -198,12 +180,12 @@ Python 侧旧 RQ 代码和旧 schema：
 
 ### 2.1 实验一四个端到端配置
 
-| 配置 | World alignment | Admission | Temporal output | Lifecycle / loss |
-|---|---|---|---|---|
-| `Arrival-Hold` | 到达时刻复合，用 `FramePoseHistory.TryGetLatest` 的最新 camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
-| `Capture-Hold` | 采集时刻复合，用 `frame_id` 回查 image-time proxy camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
-| `One-Euro Anchor` | 采集时刻复合 | 基本有效性检查 | `OneEuroModel` + `RawPassthroughStrategy`，滤波后保持 | 短时保持，超时后重新初始化；禁用 VCD gate 与 StaticLock |
-| `EgoAnchor` | 采集时刻复合 | VCD admission | `KalmanModel` + `DelayedInterpStrategy(Hermite)` | 启用 StaticLock、分级退化、重获取 fan-in |
+| 配置                | World alignment                                                      | Admission                    | Temporal output                                                  | Lifecycle / loss                                        |
+| ------------------- | -------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| `Arrival-Hold`    | 到达时刻复合，用`FramePoseHistory.TryGetLatest` 的最新 camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
+| `Capture-Hold`    | 采集时刻复合，用`frame_id` 回查 image-time proxy camera pose       | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
+| `One-Euro Anchor` | 采集时刻复合                                                         | 基本有效性检查               | `OneEuroModel` + `RawPassthroughStrategy`，滤波后保持        | 短时保持，超时后重新初始化；禁用 VCD gate 与 StaticLock |
+| `EgoAnchor`       | 采集时刻复合                                                         | VCD admission                | `KalmanModel` + `DelayedInterpStrategy(Hermite)`             | 启用 StaticLock、分级退化、重获取 fan-in                |
 
 关键实现点：
 
@@ -215,13 +197,13 @@ Python 侧旧 RQ 代码和旧 schema：
 
 ### 2.2 实验二组件归因配置
 
-| 配置 | 与完整 EgoAnchor 的唯一差异 |
-|---|---|
-| `EgoAnchor` | 完整系统：capture-time alignment + VCD admission + Kalman--Hermite + StaticLock + lifecycle |
-| `EgoAnchor w/o capture-time alignment` | world alignment mode 改为 arrival-time；其余 VCD、Kalman--Hermite、StaticLock、lifecycle 保持完整 |
-| `EgoAnchor w/o VCD` | admission mode 改为 basic-validity；禁用 quality gate、trackingScoreFloor、low-score reacquire；其余 capture-time alignment、Kalman--Hermite、StaticLock 保持 |
-| `EgoAnchor w/o temporal synthesis` | temporal output 改为 `ConstantVelocityModel` + `RawPassthroughStrategy`；其余 capture-time alignment、VCD admission、StaticLock、lifecycle 保持 |
-| `EgoAnchor w/o StaticLock` | `staticLockModule` 为空或 disabled；其余 capture-time alignment、VCD admission、Kalman--Hermite、lifecycle 保持 |
+| 配置                                     | 与完整 EgoAnchor 的唯一差异                                                                                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EgoAnchor`                            | 完整系统：capture-time alignment + VCD admission + Kalman--Hermite + StaticLock + lifecycle                                                                   |
+| `EgoAnchor w/o capture-time alignment` | world alignment mode 改为 arrival-time；其余 VCD、Kalman--Hermite、StaticLock、lifecycle 保持完整                                                             |
+| `EgoAnchor w/o VCD`                    | admission mode 改为 basic-validity；禁用 quality gate、trackingScoreFloor、low-score reacquire；其余 capture-time alignment、Kalman--Hermite、StaticLock 保持 |
+| `EgoAnchor w/o temporal synthesis`     | temporal output 改为`ConstantVelocityModel` + `RawPassthroughStrategy`；其余 capture-time alignment、VCD admission、StaticLock、lifecycle 保持            |
+| `EgoAnchor w/o StaticLock`             | `staticLockModule` 为空或 disabled；其余 capture-time alignment、VCD admission、Kalman--Hermite、lifecycle 保持                                             |
 
 关键实现点：
 
@@ -489,19 +471,15 @@ EgoAnchor_Python/data/eval/<session_id>/
       assert importlib.util.find_spec("egoanchor.eval.research.rq1") is None
       assert importlib.util.find_spec("egoanchor.eval.research.rq2") is None
   ```
-
 - [ ] **Step 2: 删除 Unity RQ scripts 和 scenes**
 
   删除 RQ1/RQ2 目录与场景，不创建 alias，不添加 `FormerlySerializedAs`。
-
 - [ ] **Step 3: 删除 Python RQ packages 和 tests**
 
   删除 `eval/research/` 下旧 RQ 包与旧 RQ tests。
-
 - [ ] **Step 4: 重写 README 顶层说明**
 
   `EgoAnchor_Python/src/egoanchor/eval/README.md` 只说明 schema-v2、实验一、实验二、Run 1/Run 2 边界，不出现旧命令。
-
 - [ ] **Step 5: 验证没有旧 namespace 编译依赖**
 
   Run:
@@ -549,15 +527,12 @@ EgoAnchor_Python/data/eval/<session_id>/
       assert paths.events.name == "events.jsonl"
       assert paths.audit_samples.name == "audit_samples"
   ```
-
 - [ ] **Step 2: 写 reader 拒绝旧 schema 测试**
 
   构造只有 `session_manifest.json` 的 session 目录，`load_session_v2` 必须抛 `SchemaV2Error`，错误信息含 `schema-v2 requires manifest.json`。
-
 - [ ] **Step 3: 写 writer 禁止旧字段测试**
 
   给 writer 输入包含 `rq1_metric` 或 `rq2_trial_id` 的 dict，必须抛 `SchemaV2Error`。
-
 - [ ] **Step 4: 实现 rows/dataclasses**
 
   `rows.py` 定义：
@@ -571,11 +546,9 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `UnityRenderRow`
   - `EventRow`
   - `SchemaV2Error`
-
 - [ ] **Step 5: 实现 writer/reader/QC**
 
   `readers.py` 只读固定文件；不自动 glob。`qc.py` 检查 session_id 一致、schema_version 为 2、文件齐全、dropped rows 为 0、render tick × variant 完整。
-
 - [ ] **Step 6: 验证**
 
   Run:
@@ -607,7 +580,6 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 1: 更新 eval session 测试**
 
   测试 Python session 创建后包含 `python_session.json` 或 manifest fragment，并声明 schema-v2 文件名。旧 `<session_id>_python_runtime.jsonl` 不再出现。
-
 - [ ] **Step 2: 实现 candidate row mapping**
 
   从 `PoseObservation` 和 render diagnostics 映射到 `PythonCandidateRow`。必须写出：
@@ -622,15 +594,12 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `depth_abs_score`
   - `depth_struct_score`
   - `depth_alpha`
-
 - [ ] **Step 3: 保留颜色不可用语义**
 
   当 `color_reprojection < 0` 时，candidate 行写 `color_projection_score = null` 或 `NaN`，同时 `reliability_flags` 包含颜色不可用原因；不得把它算成坏 pose。
-
 - [ ] **Step 4: 拆分 events**
 
   status、heartbeat、command、runtime_error 写 `events.jsonl`，pose candidate 不再混入 events。
-
 - [ ] **Step 5: 验证**
 
   Run:
@@ -664,7 +633,6 @@ EgoAnchor_Python/data/eval/<session_id>/
 
   - `CaptureTime` 输出应使用 source frame camera pose。
   - `ArrivalTime` 输出应使用 latest camera pose。
-
 - [ ] **Step 2: 新增 enum**
 
   `WorldAlignmentMode.cs`:
@@ -682,7 +650,6 @@ EgoAnchor_Python/data/eval/<session_id>/
       }
   }
   ```
-
 - [ ] **Step 3: 修改 `PoseToAnchorRuntime.AcceptPoseResult`**
 
   - `CaptureTime` 调用 `aligner.TryAlign(result, out worldPose, out usedReference)`。
@@ -690,14 +657,12 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `ArrivalTime` 的 observation measurement time 使用 `now`。
   - `CaptureTime` 的 observation measurement time 使用 `ResolveCaptureTimeSeconds(frameId)`。
   - 两种模式都继续记录 arrival raw 诊断，但只有 `ArrivalTime` 把 arrival raw 作为 runtime 输入。
-
 - [ ] **Step 4: 在 runtime public API 暴露配置摘要**
 
   增加：
 
   - `public string WorldAlignmentModeName => worldAlignmentMode.ToString();`
   - `public bool UsesCaptureTimeAlignment => worldAlignmentMode == WorldAlignmentMode.CaptureTime;`
-
 - [ ] **Step 5: 验证**
 
   Run:
@@ -733,7 +698,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - 含 `schema_version:2`
   - 不含 `rq1_`、`rq2_`、`gt_`
   - `unity_render` 是单 variant 长表行，不内嵌 `variants` 数组
-
 - [ ] **Step 2: 重写 `EvalSession.StartSession`**
 
   输出文件固定为：
@@ -745,23 +709,18 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `manifest.json`
 
   若目标文件已有非空内容，拒绝启动，防止覆盖。
-
 - [ ] **Step 3: 重写 reference logging**
 
   原 `unity_capture` 改为 `unity_reference`。字段名从 `gt_*` 改为 `reference_*`。
-
 - [ ] **Step 4: 实现 admission logging**
 
   `PoseToAnchorRuntime` 在处理每条 PoseResult 后产生 `EvalAdmissionSnapshot`。`EvalRecorder` 订阅所有 variants 的 snapshot 并写 `unity_admission.jsonl`。
-
 - [ ] **Step 5: 重写 render logging**
 
   `LateUpdate` 中对每个 variant 写一行 `unity_render`。`has_output_pose` 来自 runtime，`has_display_pose` 来自 `DynamicObjectAnchor` 或实际显示 Transform 状态。
-
 - [ ] **Step 6: 写 manifest**
 
   `manifest.json` 包含 schema-v2 文件名、variant definitions、trial plan、config hash 和 dropped rows。停止 session 时写入，不写旧 `session_manifest.json`。
-
 - [ ] **Step 7: 验证**
 
   Run:
@@ -798,15 +757,12 @@ EgoAnchor_Python/data/eval/<session_id>/
   - Space 写 event marker。
   - 0 结束 trial。
   - 未 recording 时不得创建 trial context。
-
 - [ ] **Step 2: 实现 selector**
 
   Selector 只维护上下文，不直接写文件。session start 时清空，session stop 时清空。
-
 - [ ] **Step 3: 实现 status UI**
 
   UI 文案使用实验一/实验二命名，不出现 RQ。公共状态文本继续复用 `EvalStatusText`。
-
 - [ ] **Step 4: 验证**
 
   Run:
@@ -833,7 +789,6 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 1: 移除 RQ tooltip 和 summary 文案**
 
   `AnchorPolicyHost`、`RawPassthroughStrategy` 等注释和 Tooltip 中的 RQ2 文案改成系统配置文案。
-
 - [ ] **Step 2: 增加 component flags**
 
   `AnchorPolicyHost` 暴露：
@@ -843,7 +798,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `UsesStaticLock`
   - `UsesLowScoreReacquire`
   - `UsesServerReacquire`
-
 - [ ] **Step 3: 创建正式实验场景**
 
   `EgoAnchor-Experiment12.unity` 配置九个 runtime 变体：
@@ -863,7 +817,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `EgoAnchor w/o StaticLock`
 
   其中完整 `EgoAnchor` 可被实验一和实验二共享同一个 runtime，manifest 中以 variant_id 区分实验用途。
-
 - [ ] **Step 4: 场景契约测试**
 
   测试 YAML 中：
@@ -872,7 +825,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `EvalRecorder` variants 含所有 required labels。
   - `AnchorRuntimeHub` 注册所有 active runtime。
   - 只有完整 EgoAnchor 或需要完整 lifecycle 的消融允许 `emitServerReacquire=1`，shadow baselines 不发 server reacquire。
-
 - [ ] **Step 5: 验证**
 
   Run:
@@ -901,7 +853,6 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 1: 写 fixture session**
 
   在测试内构造最小 schema-v2 session：2 frames、2 variants、2 render ticks，包含 reference/admission/render/events。
-
 - [ ] **Step 2: 实现 normalized loading**
 
   `load_session_v2` 返回：
@@ -912,7 +863,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `unity_admission`
   - `unity_render`
   - `events`
-
 - [ ] **Step 3: 实现 joins**
 
   提供：
@@ -920,7 +870,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `join_candidate_admission(session)`
   - `join_render_reference(session)`
   - `select_trials(session, experiment_id)`
-
 - [ ] **Step 4: 实现 QC**
 
   必查：
@@ -933,7 +882,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - dropped rows 为 0
   - 无 `rq1_`、`rq2_` 字段
   - formal session config hash 已冻结
-
 - [ ] **Step 5: 验证**
 
   Run:
@@ -967,7 +915,6 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 1: 写 display/output 区分测试**
 
   构造一行 `has_output_pose=false` 但 `has_display_pose=true` 的 hold-last render row。误差计算使用 display pose；availability 计算 output pose。
-
 - [ ] **Step 2: 实现 display error**
 
   输出：
@@ -978,7 +925,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `rotation_error_deg_median`
   - `rotation_error_deg_iqr`
   - `rotation_error_deg_p95`
-
 - [ ] **Step 3: 实现 static metrics**
 
   静止段同时报告：
@@ -988,7 +934,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - drift
 
   防止“冻结错误位姿”在 jitter 指标上虚假获胜。
-
 - [ ] **Step 4: 实现 transition metrics**
 
   起停/转换段至少输出：
@@ -997,7 +942,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - unlock/relock
   - peak error
   - settling time
-
 - [ ] **Step 5: 实现 occlusion/recovery metrics**
 
   遮挡恢复段输出：
@@ -1007,7 +951,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - jump P95
   - recovery success
   - recovery time
-
 - [ ] **Step 6: 实现 latency diagnostics**
 
   输出：
@@ -1017,7 +960,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - candidate arrival/processing latency
   - visual perception frequency
   - render frequency
-
 - [ ] **Step 7: 验证**
 
   Run:
@@ -1063,11 +1005,9 @@ EgoAnchor_Python/data/eval/<session_id>/
       "occlusion_recovery",
   )
   ```
-
 - [ ] **Step 2: 写 QC 测试**
 
   缺任一 variant、缺任一 scenario、reference coverage 不足、render tick 配对不完整时 QC 必须 fail。
-
 - [ ] **Step 3: 实现 analysis 输出表**
 
   生成：
@@ -1082,7 +1022,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `exp1_occlusion_recovery.csv`
   - `exp1_latency_summary.csv`
   - `exp1_vcd_diagnostics.csv`
-
 - [ ] **Step 4: 实现 figures**
 
   输出 PDF：
@@ -1093,7 +1032,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `exp1_system_summary.pdf`
 
   图中 categorical hue 顺序固定为 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor`、`EgoAnchor`，不得按排序结果换色。
-
 - [ ] **Step 5: 实现 LaTeX 输出**
 
   输出：
@@ -1102,7 +1040,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `2026-EgoAnchor/generated/exp1_tables.tex`
 
   macro 前缀使用 `\EAExpOne...`，不含 RQ。
-
 - [ ] **Step 6: 验证**
 
   Run:
@@ -1149,11 +1086,9 @@ EgoAnchor_Python/data/eval/<session_id>/
   )
   REQUIRED_VARIANTS = (BASELINE_VARIANT,) + ABLATION_VARIANTS
   ```
-
 - [ ] **Step 2: 写 single-component QC 测试**
 
   每个 ablation 的 manifest flags 与 EgoAnchor 比较只能有一个组件差异；多于一个差异必须 fail。
-
 - [ ] **Step 3: 实现 paired delta**
 
   以 `session_id × scenario_id × trial_id × event_id` 配对完整 EgoAnchor 和每个 ablation，输出：
@@ -1162,11 +1097,9 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `metric_value_ablation`
   - `delta_ablation_minus_full`
   - `paired_n`
-
 - [ ] **Step 4: 实现 VCD risk-coverage 诊断**
 
   只作为实验二评分风险判别性诊断，输出 `exp2_vcd_risk_coverage.csv` 和 AURC 数字。文案不称 VCD 为排序算法。
-
 - [ ] **Step 5: 实现 figures**
 
   输出 PDF：
@@ -1176,7 +1109,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `exp2_temporal_synthesis_effect.pdf`
   - `exp2_static_lock_tradeoff.pdf`
   - `exp2_vcd_risk_coverage.pdf`
-
 - [ ] **Step 6: 实现 LaTeX 输出**
 
   输出：
@@ -1185,7 +1117,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `2026-EgoAnchor/generated/exp2_tables.tex`
 
   macro 前缀使用 `\EAExpTwo...`，不含 RQ。
-
 - [ ] **Step 7: 验证**
 
   Run:
@@ -1217,18 +1148,15 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 1: 写 CLI 测试**
 
   用合成 session 调用 `main([...])`，验证输出文件存在。
-
 - [ ] **Step 2: 实现 CLI**
 
   不保留旧 `run_eval`、`batch_eval` 命令别名。
-
 - [ ] **Step 3: 固定论文输出路径**
 
   默认输出到：
 
   - `2026-EgoAnchor/generated/`
   - `2026-EgoAnchor/figures/generated/`
-
 - [ ] **Step 4: 验证**
 
   Run:
@@ -1263,19 +1191,15 @@ EgoAnchor_Python/data/eval/<session_id>/
   - 1 分钟 smoke 操作
   - 停止 session 后文件检查
   - QC 命令
-
 - [ ] **Step 2: 写实验一采集流程**
 
   包含五类 scenario 的动作说明、事件标记时机、失败重采规则。
-
 - [ ] **Step 3: 写实验二采集流程**
 
   说明与实验一共用同一候选流和 reference，组件消融通过同场景多 runtime 同步驱动，不单独重跑 Python 感知。
-
 - [ ] **Step 4: 写 formal 参数冻结规则**
 
   明确 calibration session 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定；formal session 后不得调参。
-
 - [ ] **Step 5: 验证手册命令与 CLI 名称一致**
 
   Run:
@@ -1308,7 +1232,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   ```
 
   Expected: exit 0。
-
 - [ ] **Step 2: Python 编译与测试验证**
 
   Run:
@@ -1320,7 +1243,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   ```
 
   Expected: exit 0。
-
 - [ ] **Step 3: 旧命名扫描**
 
   扫描规则：生产代码中不得出现新的 RQ namespace、schema 字段或 CLI；允许计划文件和删除说明中提到旧名。
@@ -1334,7 +1256,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `session_manifest.json`
   - `unity_capture`
   - `unity_output`
-
 - [ ] **Step 4: 合成 schema-v2 分析验证**
 
   Run:
@@ -1346,7 +1267,6 @@ EgoAnchor_Python/data/eval/<session_id>/
   ```
 
   Expected: CSV、PDF、LaTeX files 生成，QC 通过。
-
 - [ ] **Step 5: 论文编译验证**
 
   Run:
@@ -1373,7 +1293,6 @@ Run 1 结束时必须满足：
 7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通。
 8. 中文采集手册清楚写出 smoke、calibration、formal session 的操作顺序和失败重采规则。
 9. `AGENTS.md` 指向本计划和 schema-v2 当前事实。
-10. 不提交 Git。
 
 ## 6. Run 2 边界
 

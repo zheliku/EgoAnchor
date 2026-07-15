@@ -9,7 +9,7 @@ namespace EgoAnchor.Eval
     /// <summary>
     /// 评估场景共享的实时遥测面板。
     /// <para>
-    /// 本组件与 RQ1/RQ2 的实验状态面板解耦，只读取主变体并显示观测年龄、pose 更新率、
+    /// 本组件与实验状态面板解耦，只读取主变体并显示观测年龄、pose 更新率、
     /// 实时误差、帧间输出变化、可靠性分数与锚定状态。
     /// </para>
     /// <para>
@@ -18,7 +18,7 @@ namespace EgoAnchor.Eval
     /// </para>
     /// <para>
     /// 指标按帧采样且不做平滑，文本绘制按 <see cref="updateRate"/> 节流。帧间输出变化在
-    /// RQ2 动态试次中包含物体真实运动，不能解释为纯追踪噪声。
+    /// 动态试次中包含物体真实运动，不能解释为纯追踪噪声。
     /// </para>
     /// <para>
     /// Latency 的语义是 <c>now - 最新对齐 frame_id 的 ImageMonoMs</c>，属于基于图像时间代理的
