@@ -22,14 +22,24 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前条件稳定标识。</summary>
         public readonly string ConditionId;
 
+        /// <summary>当前人工事件的协议角色。</summary>
+        public readonly string EventRole;
+
         /// <summary>构造实验上下文快照。</summary>
-        public ExperimentContext(string experimentId, string scenarioId, string trialId, string eventId, string conditionId)
+        public ExperimentContext(
+            string experimentId,
+            string scenarioId,
+            string trialId,
+            string eventId,
+            string conditionId,
+            string eventRole)
         {
             ExperimentId = experimentId ?? string.Empty;
             ScenarioId = scenarioId ?? string.Empty;
             TrialId = trialId ?? string.Empty;
             EventId = eventId ?? string.Empty;
             ConditionId = conditionId ?? string.Empty;
+            EventRole = eventRole ?? ExperimentEventRole.None;
         }
 
         /// <summary>当前是否已选择实验和场景。</summary>
@@ -56,6 +66,12 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前事件标识。</summary>
         private string _eventId = string.Empty;
 
+        /// <summary>当前事件的实验协议角色。</summary>
+        private string _eventRole = ExperimentEventRole.None;
+
+        /// <summary>当前是否已有尚未写入 target_visible 的遮挡事件。</summary>
+        private bool _hasOpenOcclusion;
+
         /// <summary>当前 trial 序号。</summary>
         private int _trialSequence;
 
@@ -74,6 +90,12 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前事件标识；空值表示当前 trial 尚无事件标记。</summary>
         public string CurrentEventId => _eventId;
 
+        /// <summary>当前人工事件角色；空值表示当前 trial 尚无事件标记。</summary>
+        public string CurrentEventRole => _eventRole;
+
+        /// <summary>当前是否正在等待遮挡目标重新可见标记。</summary>
+        public bool HasOpenOcclusion => _hasOpenOcclusion;
+
         /// <summary>当前条件标识。</summary>
         public string CurrentConditionId => string.IsNullOrEmpty(_experimentId) || string.IsNullOrEmpty(_scenarioId)
             ? string.Empty
@@ -87,7 +109,7 @@ namespace EgoAnchor.Eval.Experiment
 
         /// <summary>当前上下文快照。</summary>
         public ExperimentContext CurrentContext => new ExperimentContext(
-            _experimentId, _scenarioId, _trialId, _eventId, CurrentConditionId);
+            _experimentId, _scenarioId, _trialId, _eventId, CurrentConditionId, _eventRole);
 
         /// <summary>上下文变化事件，供可视化面板刷新。</summary>
         public event Action<ExperimentContext, string> ContextEvent;
@@ -132,6 +154,8 @@ namespace EgoAnchor.Eval.Experiment
             if (!IsRecording || string.IsNullOrEmpty(_scenarioId) || HasActiveTrial) return false;
             _trialId = $"trial_{++_trialSequence:000}";
             _eventId = string.Empty;
+            _eventRole = ExperimentEventRole.None;
+            _hasOpenOcclusion = false;
             Emit("trial_started");
             return true;
         }
@@ -139,18 +163,37 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>结束当前 trial，并保留实验和场景选择。</summary>
         public bool EndTrial()
         {
-            if (!IsRecording || !HasActiveTrial) return false;
+            if (!IsRecording || !HasActiveTrial || _hasOpenOcclusion) return false;
             Emit("trial_ended");
             _trialId = string.Empty;
             _eventId = string.Empty;
+            _eventRole = ExperimentEventRole.None;
             return true;
         }
 
-        /// <summary>在当前 trial 中标记一个人工事件。</summary>
-        public bool MarkEvent()
+        /// <summary>按当前场景协议标记主事件；遮挡未闭合时拒绝重复开始。</summary>
+        public bool MarkPrimaryEvent()
         {
             if (!IsRecording || !HasActiveTrial) return false;
+            string role = ExperimentEventRole.ResolvePrimary(_scenarioId);
+            if (role == ExperimentEventRole.OcclusionStarted && _hasOpenOcclusion) return false;
+
             _eventId = $"event_{++_eventSequence:000}";
+            _eventRole = role;
+            _hasOpenOcclusion = role == ExperimentEventRole.OcclusionStarted;
+            Emit("event_marker");
+            return true;
+        }
+
+        /// <summary>标记遮挡目标重新可见；没有开放遮挡或场景不支持时拒绝。</summary>
+        public bool MarkTargetVisible()
+        {
+            if (!IsRecording || !HasActiveTrial || !_hasOpenOcclusion) return false;
+            if (!ExperimentEventRole.SupportsTargetVisible(_scenarioId)) return false;
+
+            _eventId = $"event_{++_eventSequence:000}";
+            _eventRole = ExperimentEventRole.TargetVisible;
+            _hasOpenOcclusion = false;
             Emit("event_marker");
             return true;
         }
@@ -162,6 +205,8 @@ namespace EgoAnchor.Eval.Experiment
             _scenarioId = string.Empty;
             _trialId = string.Empty;
             _eventId = string.Empty;
+            _eventRole = ExperimentEventRole.None;
+            _hasOpenOcclusion = false;
             _trialSequence = 0;
             _eventSequence = 0;
         }
@@ -179,6 +224,8 @@ namespace EgoAnchor.Eval.Experiment
             _experimentId = experimentId;
             _scenarioId = scenarioId;
             _eventId = string.Empty;
+            _eventRole = ExperimentEventRole.None;
+            _hasOpenOcclusion = false;
             Emit("scenario_selected");
             return true;
         }

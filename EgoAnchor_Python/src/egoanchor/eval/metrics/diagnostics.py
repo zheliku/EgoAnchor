@@ -1,172 +1,266 @@
-"""可靠性与渲染质量轻量分布诊断。"""
+"""schema-v2 可靠性评分与接纳行为诊断。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
 
+from .common import METRIC_GROUP_COLUMNS, iter_metric_groups, require_columns
 from .stats import finite_percentile
+
+
+_SCORE_COLUMNS = (
+    "vcd_score",
+    "visibility_score",
+    "geometry_core_score",
+    "color_projection_score",
+    "depth_alignment_score",
+    "depth_abs_score",
+    "depth_struct_score",
+    "depth_alpha",
+)
+"""candidate 顶层连续评分字段。"""
+
+_RENDER_NUMERIC_KEYS = (
+    "render_quality_mask_iou",
+    "render_quality_area_ratio_score",
+    "render_quality_render_visible_ratio",
+    "render_quality_observed_visible_ratio",
+    "render_quality_render_area_px",
+    "render_quality_depth_inlier",
+    "render_quality_depth_alignment",
+    "render_quality_depth_absolute",
+    "render_quality_depth_structural",
+    "render_quality_depth_alpha",
+    "render_quality_depth_residual_m",
+    "render_quality_ms",
+)
+"""保留在 render_diagnostics 中的数值诊断字段。"""
+
+_CANDIDATE_COLUMNS = [
+    "session_id",
+    "candidate_id",
+    "has_pose",
+    *_SCORE_COLUMNS,
+    "render_diagnostics",
+]
+"""可靠性诊断所需的 Python candidate 字段。"""
+
+_ADMISSION_COLUMNS = [
+    *METRIC_GROUP_COLUMNS,
+    "candidate_id",
+    "admission_decision",
+    "policy_action",
+    "policy_reason",
+]
+"""可靠性诊断所需的 Unity admission 字段。"""
 
 
 @dataclass(frozen=True)
 class ReliabilityDiagnosticsResult:
-    """可靠性诊断输出表集合。"""
+    """一组按上下文和 variant 对齐的可靠性诊断表。"""
 
     summary: pd.DataFrame
-    """单行汇总，包括 score 展开程度、重投影有效帧数和渲染质量耗时。"""
+    """candidate 评分与渲染诊断的上下文汇总。"""
 
-    score_histogram: pd.DataFrame
-    """`pose_score` 的 0..1 直方图。"""
+    vcd_histogram: pd.DataFrame
+    """按上下文和 variant 统计的 VCD 分数直方图。"""
 
-    color_reprojection_histogram: pd.DataFrame
-    """有效 `color_reprojection` 的 0..1 直方图。"""
-
-    policy_distribution: pd.DataFrame
-    """Unity policy action/reason 分布计数。"""
+    admission_distribution: pd.DataFrame
+    """按 candidate 统计的 admission decision/action/reason 分布。"""
 
 
 def compute_reliability_diagnostics(
-    pose: pd.DataFrame,
-    output: pd.DataFrame | None = None,
-    anchor_error_detail: pd.DataFrame | None = None,
+    python_candidates: pd.DataFrame,
+    unity_admission: pd.DataFrame,
     *,
-    spike_threshold_m: float = 0.05,
+    histogram_bins: int = 10,
 ) -> ReliabilityDiagnosticsResult:
-    """计算不依赖 GT 标定的 reliability 轻量诊断。
+    """连接 candidate 与 admission，生成 schema-v2 可靠性诊断。
 
-    该函数只消费离线 DataFrame，不导入 runtime 或模型。它回答两个问题：
-    score 是否仍坍缩、渲染质量检测开销是否可接受，以及 Unity policy 是否真的在
-    产生 reject/hold/coast 等动作。
+    Python candidate 本身不带实验上下文，因此先通过稳定 ``candidate_id`` 与
+    Unity admission 连接。一个 candidate 可被多个 variant 消费，连接后的每个
+    variant 都独立汇总，但 admission 行不会按 render tick 重复计数。
     """
 
-    pose_frame = pose.copy() if pose is not None else pd.DataFrame()
-    scores = _numeric_series(pose_frame, "pose_score")
-    color_reprojection = _numeric_series(pose_frame, "color_reprojection")
-    valid_color_reprojection = color_reprojection[color_reprojection >= 0.0]
-    render_quality_ms = _numeric_series(pose_frame, "render_quality_ms")
-    if not valid_color_reprojection.empty and not render_quality_ms.empty:
-        render_quality_ms = render_quality_ms.loc[valid_color_reprojection.index]
-    else:
-        render_quality_ms = pd.Series(dtype=float)
+    if histogram_bins <= 0:
+        raise ValueError("histogram_bins 必须大于 0。")
+    require_columns(python_candidates, _CANDIDATE_COLUMNS, table_name="python_candidates")
+    require_columns(unity_admission, _ADMISSION_COLUMNS, table_name="unity_admission")
 
-    summary = pd.DataFrame.from_records(
-        [
-            {
-                "pose_rows": int(len(pose_frame)),
-                "score_unique_count": int(scores.nunique(dropna=True)) if not scores.empty else 0,
-                "score_mode": _mode_value(scores),
-                "score_mode_share": _mode_share(scores),
-                "score_min": _nan_stat(scores, np.nanmin),
-                "score_p50": _nan_stat(scores, np.nanmedian),
-                "score_p95": finite_percentile(scores, 95),
-                "color_reprojection_valid_count": int(len(valid_color_reprojection)),
-                "color_reprojection_min": _nan_stat(valid_color_reprojection, np.nanmin),
-                "color_reprojection_p50": _nan_stat(valid_color_reprojection, np.nanmedian),
-                "color_reprojection_p95": finite_percentile(valid_color_reprojection, 95),
-                "render_quality_ms_p50": _nan_stat(render_quality_ms, np.nanmedian),
-                "render_quality_ms_p95": finite_percentile(render_quality_ms, 95),
-                **_spike_summary(anchor_error_detail, spike_threshold_m=spike_threshold_m),
-            }
-        ]
-    )
-
+    joined = _join_candidates(python_candidates, unity_admission)
     return ReliabilityDiagnosticsResult(
-        summary=summary,
-        score_histogram=_histogram(scores, value_name="pose_score"),
-        color_reprojection_histogram=_histogram(valid_color_reprojection, value_name="color_reprojection"),
-        policy_distribution=_policy_distribution(output),
+        summary=_summarize_candidates(joined),
+        vcd_histogram=_build_vcd_histogram(joined, bins=histogram_bins),
+        admission_distribution=_build_admission_distribution(joined),
     )
 
 
-def _numeric_series(frame: pd.DataFrame, column: str) -> pd.Series:
-    """读取数值列；缺列时返回空 Series。"""
+def _join_candidates(
+    python_candidates: pd.DataFrame,
+    unity_admission: pd.DataFrame,
+) -> pd.DataFrame:
+    """按稳定 candidate 主键连接两端数据，并拒绝含糊的重复记录。"""
 
-    if frame is None or column not in frame:
-        return pd.Series(dtype=float)
-    return pd.to_numeric(frame[column], errors="coerce").dropna()
+    candidate_keys = ["session_id", "candidate_id"]
+    if python_candidates.duplicated(candidate_keys).any():
+        raise ValueError("python_candidates 包含重复的 session_id + candidate_id。")
+
+    admission_keys = ["session_id", "candidate_id", "variant_id"]
+    if unity_admission.duplicated(admission_keys).any():
+        raise ValueError(
+            "unity_admission 包含重复的 session_id + candidate_id + variant_id。"
+        )
+
+    admission = unity_admission.loc[:, _ADMISSION_COLUMNS].copy()
+    candidates = python_candidates.loc[:, _CANDIDATE_COLUMNS].copy()
+    joined = admission.merge(
+        candidates,
+        on=candidate_keys,
+        how="left",
+        validate="many_to_one",
+        indicator=True,
+    )
+    missing = sorted(
+        joined.loc[joined["_merge"] != "both", "candidate_id"].astype(str).unique()
+    )
+    if missing:
+        raise ValueError(f"unity_admission 引用了未知 candidate_id: {missing}")
+    return joined.drop(columns="_merge")
 
 
-def _histogram(values: pd.Series, *, value_name: str, bins: int = 10) -> pd.DataFrame:
-    """生成 0..1 直方图表。"""
+def _summarize_candidates(joined: pd.DataFrame) -> pd.DataFrame:
+    """按公共上下文键汇总连续评分和嵌套渲染诊断。"""
 
-    columns = ["value", "bin_left", "bin_right", "count"]
-    if values.empty:
-        return pd.DataFrame(columns=columns)
-    clipped = np.clip(values.to_numpy(dtype=float), 0.0, 1.0)
-    counts, edges = np.histogram(clipped, bins=bins, range=(0.0, 1.0))
-    rows = [
-        {
-            "value": value_name,
-            "bin_left": float(edges[index]),
-            "bin_right": float(edges[index + 1]),
-            "count": int(count),
+    rows: list[dict[str, Any]] = []
+    for group_keys, group in iter_metric_groups(joined):
+        row: dict[str, Any] = {
+            **group_keys,
+            "candidate_count": int(group["candidate_id"].nunique()),
+            "has_pose_count": int(group["has_pose"].fillna(False).astype(bool).sum()),
         }
-        for index, count in enumerate(counts)
-    ]
+        for column in _SCORE_COLUMNS:
+            row.update(_numeric_summary(group[column], prefix=column))
+
+        render_diagnostics = group["render_diagnostics"]
+        row["render_quality_evaluated_count"] = int(
+            render_diagnostics.map(
+                lambda value: bool(value.get("render_quality_evaluated", False))
+                if isinstance(value, Mapping)
+                else False
+            ).sum()
+        )
+        row["render_quality_valid_count"] = int(
+            render_diagnostics.map(
+                lambda value: value.get("render_quality_status") == "valid"
+                if isinstance(value, Mapping)
+                else False
+            ).sum()
+        )
+        for key in _RENDER_NUMERIC_KEYS:
+            row.update(_numeric_summary(_render_values(render_diagnostics, key), prefix=key))
+        rows.append(row)
+
+    return pd.DataFrame.from_records(rows, columns=_summary_columns())
+
+
+def _build_vcd_histogram(joined: pd.DataFrame, *, bins: int) -> pd.DataFrame:
+    """按上下文和 variant 生成 ``[0, 1]`` VCD 候选直方图。"""
+
+    columns = [*METRIC_GROUP_COLUMNS, "bin_left", "bin_right", "candidate_count"]
+    rows: list[dict[str, Any]] = []
+    for group_keys, group in iter_metric_groups(joined):
+        scores = _finite_values(group["vcd_score"])
+        if scores.size == 0:
+            continue
+        if ((scores < 0.0) | (scores > 1.0)).any():
+            raise ValueError("vcd_score 必须位于 [0, 1]，不得在指标阶段裁剪越界值。")
+        counts, edges = np.histogram(scores, bins=bins, range=(0.0, 1.0))
+        rows.extend(
+            {
+                **group_keys,
+                "bin_left": float(edges[index]),
+                "bin_right": float(edges[index + 1]),
+                "candidate_count": int(count),
+            }
+            for index, count in enumerate(counts)
+        )
     return pd.DataFrame.from_records(rows, columns=columns)
 
 
-def _policy_distribution(output: pd.DataFrame | None) -> pd.DataFrame:
-    """按 label/action/reason 统计 Unity policy 分布。"""
+def _build_admission_distribution(joined: pd.DataFrame) -> pd.DataFrame:
+    """按唯一 candidate 汇总 admission 决策，不使用 render tick。"""
 
-    columns = ["label", "policy_action", "policy_reason", "count"]
-    if output is None or output.empty or "policy_action" not in output or "policy_reason" not in output:
-        return pd.DataFrame(columns=columns)
-    frame = output.copy()
-    if "label" not in frame:
-        frame["label"] = "unknown"
-    grouped = frame.groupby(["label", "policy_action", "policy_reason"], dropna=False, sort=True).size().reset_index(name="count")
-    return grouped[columns]
+    decision_columns = ["admission_decision", "policy_action", "policy_reason"]
+    columns = [*METRIC_GROUP_COLUMNS, *decision_columns, "candidate_count", "candidate_share"]
+    rows: list[dict[str, Any]] = []
+    for group_keys, group in iter_metric_groups(joined):
+        candidate_count = int(group["candidate_id"].nunique())
+        distributions = (
+            group.groupby(decision_columns, dropna=False, sort=True)["candidate_id"]
+            .nunique()
+            .reset_index(name="candidate_count")
+        )
+        for _, distribution in distributions.iterrows():
+            count = int(distribution["candidate_count"])
+            rows.append(
+                {
+                    **group_keys,
+                    **{column: str(distribution[column]) for column in decision_columns},
+                    "candidate_count": count,
+                    "candidate_share": (
+                        float(count / candidate_count) if candidate_count else np.nan
+                    ),
+                }
+            )
+    return pd.DataFrame.from_records(rows, columns=columns)
 
 
-def _spike_summary(anchor_error_detail: pd.DataFrame | None, *, spike_threshold_m: float) -> dict[str, Any]:
-    """用已有 anchor error 明细估计尖峰是否被 policy 拒绝或 hold。"""
+def _numeric_summary(values: pd.Series, *, prefix: str) -> dict[str, Any]:
+    """返回连续诊断量的有效计数、最小值、中位数和 P95。"""
 
-    if anchor_error_detail is None or anchor_error_detail.empty or "translation_error_m" not in anchor_error_detail:
-        return {"spike_threshold_m": float(spike_threshold_m), "spike_count": 0, "spike_missed_count": 0, "spike_missed_rate": np.nan}
-    errors = pd.to_numeric(anchor_error_detail["translation_error_m"], errors="coerce")
-    spike_mask = errors > float(spike_threshold_m)
-    spike_count = int(spike_mask.sum())
-    if spike_count <= 0 or "policy_action" not in anchor_error_detail:
-        return {"spike_threshold_m": float(spike_threshold_m), "spike_count": spike_count, "spike_missed_count": 0, "spike_missed_rate": 0.0 if spike_count == 0 else np.nan}
-    actions = anchor_error_detail.loc[spike_mask, "policy_action"].astype(str).str.lower()
-    caught = actions.str.contains("reject|hold", regex=True, na=False)
-    missed = int((~caught).sum())
+    finite = _finite_values(values)
     return {
-        "spike_threshold_m": float(spike_threshold_m),
-        "spike_count": spike_count,
-        "spike_missed_count": missed,
-        "spike_missed_rate": float(missed / spike_count),
+        f"{prefix}_count": int(finite.size),
+        f"{prefix}_min": float(np.min(finite)) if finite.size else np.nan,
+        f"{prefix}_p50": finite_percentile(finite, 50),
+        f"{prefix}_p95": finite_percentile(finite, 95),
     }
 
 
-def _mode_value(values: pd.Series) -> float:
-    """返回众数；空输入返回 NaN。"""
+def _finite_values(values: pd.Series) -> np.ndarray:
+    """把 Series 转为有限浮点数组；``None`` 和非数值值会被排除。"""
 
-    if values.empty:
-        return float("nan")
-    modes = values.mode(dropna=True)
-    return float(modes.iloc[0]) if not modes.empty else float("nan")
+    numeric = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+    return numeric[np.isfinite(numeric)]
 
 
-def _mode_share(values: pd.Series) -> float:
-    """返回众数占比；用于识别 score 是否坍缩。"""
+def _render_values(diagnostics: pd.Series, key: str) -> pd.Series:
+    """从每条 candidate 的 render_diagnostics 中读取一个数值字段。"""
 
-    if values.empty:
-        return float("nan")
-    counts = values.value_counts(dropna=True)
-    return float(counts.iloc[0] / len(values)) if not counts.empty else float("nan")
+    return diagnostics.map(
+        lambda value: value.get(key) if isinstance(value, Mapping) else None
+    )
 
 
-def _nan_stat(values: pd.Series, fn: Any) -> float:
-    """对非空 Series 计算统计量；空输入返回 NaN。"""
+def _summary_columns() -> list[str]:
+    """返回固定的可靠性汇总列顺序。"""
 
-    if values.empty:
-        return float("nan")
-    return float(fn(values.to_numpy(dtype=float)))
+    columns = [*METRIC_GROUP_COLUMNS, "candidate_count", "has_pose_count"]
+    for prefix in (*_SCORE_COLUMNS, *_RENDER_NUMERIC_KEYS):
+        columns.extend(
+            [
+                f"{prefix}_count",
+                f"{prefix}_min",
+                f"{prefix}_p50",
+                f"{prefix}_p95",
+            ]
+        )
+    columns.extend(["render_quality_evaluated_count", "render_quality_valid_count"])
+    return columns
 
 
 __all__ = ["ReliabilityDiagnosticsResult", "compute_reliability_diagnostics"]

@@ -7,13 +7,79 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from typing import Iterable, Iterator
 
 import numpy as np
+import pandas as pd
 from scipy.signal import butter, filtfilt
 from scipy.spatial.transform import Rotation, Slerp
 
 from egoanchor.utils import clamp
+
+
+METRIC_GROUP_COLUMNS = (
+    "session_id",
+    "experiment_id",
+    "scenario_id",
+    "trial_id",
+    "event_id",
+    "condition_id",
+    "variant_id",
+    "variant_label",
+)
+"""trial/event/variant 级指标使用的固定上下文键。"""
+
+
+def require_columns(
+    frame: pd.DataFrame,
+    columns: Iterable[str],
+    *,
+    table_name: str,
+) -> None:
+    """严格要求 DataFrame 包含指定列，缺列时拒绝继续计算指标。"""
+
+    missing = sorted(set(columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"{table_name} 缺少必需列：{', '.join(missing)}")
+
+
+def iter_metric_groups(frame: pd.DataFrame) -> Iterator[tuple[dict[str, str], pd.DataFrame]]:
+    """按固定上下文键遍历指标组，并返回字符串化上下文和组内副本。"""
+
+    require_columns(frame, METRIC_GROUP_COLUMNS, table_name="metric table")
+    grouped = frame.groupby(list(METRIC_GROUP_COLUMNS), dropna=False, sort=True)
+    for values, group in grouped:
+        value_tuple = values if isinstance(values, tuple) else (values,)
+        context = {
+            column: str(value)
+            for column, value in zip(METRIC_GROUP_COLUMNS, value_tuple, strict=True)
+        }
+        yield context, group.copy()
+
+
+def is_pose_vector(value: object, length: int) -> bool:
+    """判断值是否为给定长度且全部有限的数值位姿向量。"""
+
+    if (
+        length <= 0
+        or value is None
+        or isinstance(value, (str, bytes))
+        or not isinstance(value, Iterable)
+    ):
+        return False
+    try:
+        items = list(value)
+        if any(isinstance(item, (bool, np.bool_)) for item in items):
+            return False
+        raw = np.asarray(value)
+        vector = np.asarray(value, dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return (
+        raw.dtype.kind != "b"
+        and vector.shape == (length,)
+        and bool(np.isfinite(vector).all())
+    )
 
 
 def normalize_quat(q: Iterable[float]) -> np.ndarray:
@@ -57,33 +123,36 @@ def pos_quat_to_mat(pos: Iterable[float], quat: Iterable[float]) -> np.ndarray:
 
 
 def pose_error(
-    gt_pos: Iterable[float],
-    gt_quat: Iterable[float],
-    anchor_pos: Iterable[float],
-    anchor_quat: Iterable[float],
+    reference_pos: Iterable[float],
+    reference_quat: Iterable[float],
+    display_pos: Iterable[float],
+    display_quat: Iterable[float],
 ) -> tuple[float, float]:
-    """直接计算 Transform GT 与 anchor Transform 的 SE(3) 误差。
+    """直接计算平台 reference 与实际 display pose 的 SE(3) 误差。
 
     返回:
         `(translation_m, rotation_deg)`，其中误差矩阵为
-        `inv(W_T_GT) @ W_T_Anchor`。
+        `inv(W_T_Reference) @ W_T_Display`。
     """
 
-    w_t_gt = pos_quat_to_mat(gt_pos, gt_quat)
-    w_t_anchor = pos_quat_to_mat(anchor_pos, anchor_quat)
-    error = np.linalg.inv(w_t_gt) @ w_t_anchor
+    w_t_reference = pos_quat_to_mat(reference_pos, reference_quat)
+    w_t_display = pos_quat_to_mat(display_pos, display_quat)
+    error = np.linalg.inv(w_t_reference) @ w_t_display
     translation_m = float(np.linalg.norm(error[:3, 3]))
     rotation_deg = angle_deg(Rotation.from_matrix(error[:3, :3]).as_quat())
     return translation_m, rotation_deg
 
 
-def relative_rotation_quat(gt_quat: Iterable[float], anchor_quat: Iterable[float]) -> np.ndarray:
-    """计算 `inv(q_gt) * q_anchor` 的相对旋转四元数。
+def relative_rotation_quat(reference_quat: Iterable[float], display_quat: Iterable[float]) -> np.ndarray:
+    """计算 `inv(q_reference) * q_display` 的相对旋转四元数。
 
     返回 xyzw 顺序，并统一到 `qw >= 0`，方便跨帧求均值和写 CSV。
     """
 
-    relative = (Rotation.from_quat(normalize_quat(gt_quat)).inv() * Rotation.from_quat(normalize_quat(anchor_quat))).as_quat()
+    relative = (
+        Rotation.from_quat(normalize_quat(reference_quat)).inv()
+        * Rotation.from_quat(normalize_quat(display_quat))
+    ).as_quat()
     if relative[3] < 0.0:
         relative = -relative
     return normalize_quat(relative)
@@ -212,9 +281,12 @@ def project_point(k: np.ndarray, w_t_cam: np.ndarray, p_world: Iterable[float]) 
 
 
 __all__ = [
+    "METRIC_GROUP_COLUMNS",
     "angle_deg",
     "highpass",
+    "is_pose_vector",
     "is_pose_value",
+    "iter_metric_groups",
     "mat_to_pos_quat",
     "normalize_quat",
     "pose_error",
@@ -222,6 +294,7 @@ __all__ = [
     "project_point",
     "quat_to_euler_deg",
     "relative_rotation_quat",
+    "require_columns",
     "slerp_lerp_resample",
     "wrap_angle_360_deg",
 ]

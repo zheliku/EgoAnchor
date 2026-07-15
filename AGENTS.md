@@ -167,6 +167,10 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`un
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 - schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest；pending、错配或非法 fragment 不得进入正式分析。
 - schema-v2 QC 对 Formal session 固定要求场景中的 8 个唯一 runtime、按 Unity FNV-1a 规则重算整体 `config_hash`，并检查 writer 行数/丢行/失败、candidate/reference 主键、candidate×variant 与 tick×variant 矩阵及递归旧字段。
+- 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
+- candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
+- 人工事件角色写入 `events.payload.event_role`。`Space` 记录场景主事件，遮挡场景用 `Shift+Space` 记录新的 `target_visible` 事件；转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
+- 旧 `eval/io`、`eval/core`、`eval/report`、`run_eval` 和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
 
 ## 协议与生成输出
 

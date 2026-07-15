@@ -1,130 +1,72 @@
-"""组合所有离线评估指标。"""
+"""组合 schema-v2 的中性离线评估指标。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
-import numpy as np
 import pandas as pd
 
-from egoanchor.eval.io import SessionLogs, label_conditions
+from egoanchor.eval.schema_v2 import EvalSessionV2
 
 from .anchor_error import compute_anchor_error, summarize_pose_offset
-from .common import is_pose_value, pose_error
 from .diagnostics import compute_reliability_diagnostics
-from .jitter import compute_jitter
-from .jump_suppression import compute_jump_suppression
-from .lag import compute_lag
+from .jitter import compute_static_metrics
 from .latency import compute_latency
-from .recovery import compute_recovery
-from .slip import build_alignment_ablation_output, compute_slip
-from .stats import finite_percentile
+from .recovery import compute_occlusion_metrics, compute_transition_metrics
 
 
 @dataclass(frozen=True)
 class MetricsResult:
-    """一次 session 的全部离线评估结果。"""
+    """一个 schema-v2 session 的全部中性指标表。"""
 
     tables: dict[str, pd.DataFrame]
-    """表名到 DataFrame 的映射。"""
-
-    sanity: dict[str, Any]
-    """GT/anchor 语义一致性诊断。"""
+    """稳定表名到 DataFrame 的映射；表名不得携带旧 RQ 语义。"""
 
 
-def compute_all_metrics(logs: SessionLogs) -> MetricsResult:
-    """对一个已加载 session 计算所有可用指标。"""
+def compute_all_metrics(session: EvalSessionV2) -> MetricsResult:
+    """从 normalized schema-v2 表计算 trial/event/variant 级指标。
 
-    output = label_conditions(logs.output, logs.manifest, "render_mono_ms")
-    anchor_detail, anchor_summary = compute_anchor_error(output)
-    alignment_ablation_output = build_alignment_ablation_output(output)
-    alignment_anchor_detail, alignment_anchor_summary = compute_anchor_error(alignment_ablation_output)
-    latency_detail, latency_summary = compute_latency(output, logs.pose)
-    slip_detail, slip_summary = compute_slip(output)
-    alignment_slip_detail, alignment_slip_summary = compute_slip(alignment_ablation_output)
-    reliability = compute_reliability_diagnostics(logs.pose, output, anchor_detail)
+    平台 reference 只用于同一 Quest 时间线下的系统行为比较，不在本函数或输出中
+    称为外部真值。display error 包含 hold-last；runtime output availability 由恢复指标
+    单独读取 ``has_output_pose``。
+    """
+
+    render = session.unity_render
+    display_error_detail, display_error_summary = compute_anchor_error(render)
+    latency = compute_latency(
+        render,
+        session.unity_reference,
+        session.python_candidates,
+        session.unity_admission,
+    )
+    reliability = compute_reliability_diagnostics(
+        session.python_candidates,
+        session.unity_admission,
+    )
     tables = {
-        "anchor_error_detail": anchor_detail,
-        "anchor_error_summary": anchor_summary,
-        "pose_offset_summary": summarize_pose_offset(anchor_detail),
-        "rq2_alignment_ablation_error_detail": alignment_anchor_detail,
-        "rq2_alignment_ablation_error_summary": alignment_anchor_summary,
-        "rq2_alignment_ablation_slip_detail": alignment_slip_detail,
-        "rq2_alignment_ablation_slip_summary": alignment_slip_summary,
-        "latency_detail": latency_detail,
-        "latency_summary": latency_summary,
-        "jitter_summary": compute_jitter(output),
-        "slip_detail": slip_detail,
-        "slip_summary": slip_summary,
-        "lag_summary": compute_lag(output),
-        "jump_suppression_summary": compute_jump_suppression(anchor_detail),
-        "recovery_summary": compute_recovery(anchor_detail, logs.manifest),
-        "reliability_diagnostics_summary": reliability.summary,
-        "reliability_score_histogram": reliability.score_histogram,
-        "color_reprojection_histogram": reliability.color_reprojection_histogram,
-        "policy_distribution": reliability.policy_distribution,
+        "display_error_detail": display_error_detail,
+        "display_error_summary": display_error_summary,
+        "display_offset_summary": summarize_pose_offset(display_error_detail),
+        "static_metrics": compute_static_metrics(render),
+        "transition_metrics": compute_transition_metrics(render, session.events),
+        "occlusion_recovery_metrics": compute_occlusion_metrics(render, session.events),
+        "latency_candidate_detail": latency.candidate_detail,
+        "latency_render_detail": latency.render_detail,
+        "latency_summary": latency.summary,
+        "reliability_summary": reliability.summary,
+        "vcd_histogram": reliability.vcd_histogram,
+        "admission_distribution": reliability.admission_distribution,
     }
-    return MetricsResult(tables=tables, sanity=build_sanity(logs, output))
+    _reject_legacy_table_names(tables)
+    return MetricsResult(tables=tables)
 
 
-def build_sanity(logs: SessionLogs, output: pd.DataFrame) -> dict[str, Any]:
-    """生成 GT Transform 与各 variant 输出的语义一致性诊断。"""
+def _reject_legacy_table_names(tables: dict[str, pd.DataFrame]) -> None:
+    """防止旧 RQ 命名重新进入正式输出接口。"""
 
-    manifest = logs.manifest
-    sanity: dict[str, Any] = {
-        "session_id": str(manifest.get("session_id", "")),
-        "object_id": str(manifest.get("object_id", "")),
-        "gt_source": str(manifest.get("gt_source", "")),
-        "gt_transform": str(manifest.get("gt_transform", "")),
-        "variant_labels": list(manifest.get("variant_labels", [])),
-        "capture_rows": int(len(logs.capture)),
-        "output_rows": int(len(output)),
-        "pose_rows": int(len(logs.pose)),
-        "gt_valid_output_rows": int(output["valid"].fillna(False).astype(bool).sum()) if "valid" in output else 0,
-        "variants": {},
-    }
-    for label, group in output.groupby("label", sort=True):
-        stable_mask = group["has_output_pose"].fillna(False).astype(bool)
-        source_counts = group["anchor_pose_source"].astype(str).value_counts().to_dict()
-        sanity["variants"][str(label)] = {
-            "rows": int(len(group)),
-            "stable_rows": int(stable_mask.sum()),
-            "anchor_pose_source_counts": {str(key): int(value) for key, value in source_counts.items()},
-        }
-
-    aligned_raw = output[
-        output["is_primary"].fillna(False).astype(bool)
-        & output["has_aligned_raw"].fillna(False).astype(bool)
-        & output["gt_pos"].map(is_pose_value)
-        & output["gt_rot"].map(is_pose_value)
-        & output["aligned_raw_pos"].map(is_pose_value)
-        & output["aligned_raw_rot"].map(is_pose_value)
-    ]
-    sanity["aligned_raw_error"] = _aligned_raw_error_summary(aligned_raw)
-    return sanity
+    legacy = sorted(name for name in tables if "rq" in name.lower())
+    if legacy:
+        raise ValueError(f"指标表名不得包含旧 RQ 语义：{legacy}")
 
 
-def _aligned_raw_error_summary(rows: pd.DataFrame) -> dict[str, Any]:
-    """汇总主变体 aligned raw 与 GT 的直接误差。"""
-
-    if rows.empty:
-        return {"n": 0, "translation_median_m": np.nan, "translation_p95_m": np.nan, "rotation_median_deg": np.nan}
-    translations = []
-    rotations = []
-    for _, row in rows.iterrows():
-        t, r = pose_error(row["gt_pos"], row["gt_rot"], row["aligned_raw_pos"], row["aligned_raw_rot"])
-        translations.append(t)
-        rotations.append(r)
-    t_arr = np.asarray(translations, dtype=float)
-    r_arr = np.asarray(rotations, dtype=float)
-    return {
-        "n": int(len(rows)),
-        "translation_median_m": float(np.nanmedian(t_arr)),
-        "translation_p95_m": finite_percentile(t_arr, 95),
-        "rotation_median_deg": float(np.nanmedian(r_arr)),
-    }
-
-
-__all__ = ["MetricsResult", "build_sanity", "compute_all_metrics"]
-
+__all__ = ["MetricsResult", "compute_all_metrics"]

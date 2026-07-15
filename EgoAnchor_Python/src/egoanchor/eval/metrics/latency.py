@@ -1,179 +1,405 @@
-"""端到端 latency 与 Python 分模块耗时指标。"""
+"""schema-v2 的候选处理、运行时时效性与频率诊断。"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from .common import METRIC_GROUP_COLUMNS, iter_metric_groups, require_columns
 from .stats import finite_percentile
 
 
-DETAIL_COLUMNS = [
-    "label",
-    "condition",
+CANDIDATE_DETAIL_COLUMNS = [
+    *METRIC_GROUP_COLUMNS,
+    "candidate_id",
     "frame_id",
-    "render_mono_ms",
+    "reference_capture_mono_ms",
     "source_capture_mono_ms",
-    "capture_to_apply_ms",
-    "image_to_handle_ms",
-    "observation_age_ms",
-    "effective_policy_delay_ms",
-    "smoothing_delay_ms",
-    "perception_total_ms",
+    "server_receive_mono_ms",
+    "server_publish_mono_ms",
+    "unity_pose_handle_mono_ms",
+    "candidate_arrival_ms",
+    "candidate_processing_ms",
+    "total_ms",
     "yolo_ms",
     "depth_ms",
     "cutie_ms",
     "pose_ms",
 ]
-"""逐 frame latency 表字段。"""
+"""逐 candidate×variant 的处理时延字段。"""
+
+RENDER_DETAIL_COLUMNS = [
+    *METRIC_GROUP_COLUMNS,
+    "render_tick_id",
+    "render_mono_ms",
+    "source_frame_id",
+    "has_output_pose",
+    "has_display_pose",
+    "observation_age_ms",
+    "smoothing_delay_ms",
+]
+"""逐 render tick×variant 的运行时时效性字段。"""
 
 SUMMARY_COLUMNS = [
-    "condition",
-    "label",
-    "n",
-    "capture_to_apply_p50_ms",
-    "capture_to_apply_p90_ms",
-    "capture_to_apply_p95_ms",
-    "image_to_handle_p50_ms",
+    *METRIC_GROUP_COLUMNS,
+    "candidate_count",
+    "render_tick_count",
+    "candidate_arrival_p50_ms",
+    "candidate_arrival_p95_ms",
+    "candidate_processing_p50_ms",
+    "candidate_processing_p95_ms",
     "observation_age_p50_ms",
-    "effective_policy_delay_p50_ms",
+    "observation_age_p95_ms",
     "smoothing_delay_p50_ms",
-    "perception_total_p50_ms",
-    "yolo_p50_ms",
-    "depth_p50_ms",
-    "cutie_p50_ms",
-    "pose_p50_ms",
+    "smoothing_delay_p95_ms",
+    "visual_perception_hz",
+    "render_hz",
 ]
-"""latency 汇总字段。"""
+"""每个 trial/event/variant 的时延与频率汇总字段。"""
 
 
-def compute_latency(output: pd.DataFrame, pose: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """计算每个 source frame 首次出现在输出中的端到端延迟。"""
+@dataclass(frozen=True)
+class LatencyMetricsResult:
+    """一次 schema-v2 session 的时延诊断表集合。"""
 
-    if output.empty:
-        return _empty_detail(), _empty_summary()
-    mask = (
-        output["has_source_capture_timing"].fillna(False).astype(bool)
-        & output["has_output_pose"].fillna(False).astype(bool)
-        & output["source_capture_mono_ms"].notna()
-        & output["source_frame_id"].notna()
+    candidate_detail: pd.DataFrame
+    """逐 candidate×variant 的跨端到达与 Python 处理时延。"""
+
+    render_detail: pd.DataFrame
+    """逐 tick×variant 的观测年龄和主动平滑延迟。"""
+
+    summary: pd.DataFrame
+    """按完整实验上下文和 variant 汇总的时延与频率。"""
+
+
+def compute_latency(
+    unity_render: pd.DataFrame,
+    unity_reference: pd.DataFrame,
+    python_candidates: pd.DataFrame,
+    unity_admission: pd.DataFrame,
+) -> LatencyMetricsResult:
+    """连接 schema-v2 四张表并计算候选处理、输出时效性和系统频率。
+
+    candidate 必须通过 ``candidate_id`` 连接 admission；同一 ``frame_id`` 的多个
+    candidate 保持为多行，禁止用 frame 去重。视觉频率以每个上下文内 candidate 的
+    Python 发布时间计算，render 频率以唯一 render tick 的时间计算。
+    """
+
+    _validate_inputs(unity_render, unity_reference, python_candidates, unity_admission)
+    candidate_detail = _build_candidate_detail(
+        unity_reference,
+        python_candidates,
+        unity_admission,
     )
-    candidates = output.loc[mask].copy()
-    if candidates.empty:
-        return _empty_detail(), _empty_summary()
+    render_detail = _build_render_detail(unity_render)
+    summary = _summarize_latency(candidate_detail, render_detail)
+    return LatencyMetricsResult(
+        candidate_detail=candidate_detail,
+        render_detail=render_detail,
+        summary=summary,
+    )
 
-    candidates["frame_id"] = candidates["source_frame_id"].astype(int)
-    candidates = candidates[candidates["frame_id"] >= 0]
-    candidates = candidates.sort_values(["label", "frame_id", "render_mono_ms"])
-    first_apply = candidates.drop_duplicates(["label", "frame_id"], keep="first")
 
-    pose_cols = [
+def _validate_inputs(
+    render: pd.DataFrame,
+    reference: pd.DataFrame,
+    candidates: pd.DataFrame,
+    admission: pd.DataFrame,
+) -> None:
+    """校验连接和指标计算所需的最小字段集合。"""
+
+    require_columns(
+        render,
+        {
+            *METRIC_GROUP_COLUMNS,
+            "render_tick_id",
+            "render_mono_ms",
+            "source_frame_id",
+            "has_output_pose",
+            "has_display_pose",
+            "observation_age_ms",
+            "smoothing_delay_ms",
+        },
+        table_name="unity_render",
+    )
+    require_columns(
+        reference,
+        {"session_id", "frame_id", "capture_mono_ms"},
+        table_name="unity_reference",
+    )
+    require_columns(
+        candidates,
+        {
+            "session_id",
+            "candidate_id",
+            "frame_id",
+            "server_receive_mono_ms",
+            "server_publish_mono_ms",
+            "total_ms",
+            "yolo_ms",
+            "depth_ms",
+            "cutie_ms",
+            "pose_ms",
+        },
+        table_name="python_candidates",
+    )
+    require_columns(
+        admission,
+        {
+            *METRIC_GROUP_COLUMNS,
+            "candidate_id",
+            "frame_id",
+            "source_capture_mono_ms",
+            "unity_pose_handle_mono_ms",
+        },
+        table_name="unity_admission",
+    )
+
+    _require_unique(reference, ["session_id", "frame_id"], "unity_reference")
+    _require_unique(candidates, ["session_id", "candidate_id"], "python_candidates")
+    _require_unique(
+        admission,
+        ["session_id", "candidate_id", "variant_id"],
+        "unity_admission",
+    )
+
+
+def _build_candidate_detail(
+    reference: pd.DataFrame,
+    candidates: pd.DataFrame,
+    admission: pd.DataFrame,
+) -> pd.DataFrame:
+    """构造逐 candidate×variant 明细，不折叠同帧多 candidate。"""
+
+    if candidates.empty or admission.empty:
+        return pd.DataFrame(columns=CANDIDATE_DETAIL_COLUMNS)
+
+    candidate_columns = [
+        "session_id",
+        "candidate_id",
         "frame_id",
+        "server_receive_mono_ms",
+        "server_publish_mono_ms",
         "total_ms",
         "yolo_ms",
         "depth_ms",
         "cutie_ms",
         "pose_ms",
-        "server_publish_mono_ms",
     ]
-    pose_frame = pose.reset_index(drop=True)
-    pose_frame = pose_frame[[col for col in pose_cols if col in pose_frame.columns]].copy()
-    merged = first_apply.merge(pose_frame, on="frame_id", how="left", suffixes=("", "_pose"))
+    admission_columns = [
+        *METRIC_GROUP_COLUMNS,
+        "candidate_id",
+        "frame_id",
+        "source_capture_mono_ms",
+        "unity_pose_handle_mono_ms",
+    ]
+    merged = admission[admission_columns].merge(
+        candidates[candidate_columns],
+        on=["session_id", "candidate_id", "frame_id"],
+        how="left",
+        validate="many_to_one",
+        indicator="_candidate_join",
+    )
+    _require_complete_join(merged, "_candidate_join", "unity_admission -> python_candidates")
+    merged = merged.drop(columns="_candidate_join")
+    merged = merged.merge(
+        reference[["session_id", "frame_id", "capture_mono_ms"]].rename(
+            columns={"capture_mono_ms": "reference_capture_mono_ms"}
+        ),
+        on=["session_id", "frame_id"],
+        how="left",
+        validate="many_to_one",
+        indicator="_reference_join",
+    )
+    _require_complete_join(merged, "_reference_join", "python_candidates -> unity_reference")
+    merged = merged.drop(columns="_reference_join")
+    if merged.empty:
+        return pd.DataFrame(columns=CANDIDATE_DETAIL_COLUMNS)
+    _validate_capture_provenance(merged)
 
     records: list[dict[str, Any]] = []
     for _, row in merged.iterrows():
-        capture_to_apply = float(row["render_mono_ms"]) - float(row["source_capture_mono_ms"])
-        image_to_handle = _difference(
-            row.get("unity_pose_handle_mono_ms"), row.get("source_capture_mono_ms")
-        )
-        effective_policy_delay = _difference(
-            row.get("render_mono_ms"), row.get("policy_output_target_mono_ms")
-        )
-        records.append(
+        record = {column: str(row[column]) for column in METRIC_GROUP_COLUMNS}
+        record.update(
             {
-                "label": str(row["label"]),
-                "condition": str(row.get("condition", "unlabeled")),
+                "candidate_id": str(row["candidate_id"]),
                 "frame_id": int(row["frame_id"]),
-                "render_mono_ms": float(row["render_mono_ms"]),
-                "source_capture_mono_ms": float(row["source_capture_mono_ms"]),
-                "capture_to_apply_ms": capture_to_apply,
-                "image_to_handle_ms": image_to_handle,
-                "observation_age_ms": _float(row.get("observation_age_ms")),
-                "effective_policy_delay_ms": effective_policy_delay,
-                "smoothing_delay_ms": _float(row.get("smoothing_delay_ms")),
-                "perception_total_ms": _float(row.get("total_ms")),
-                "yolo_ms": _float(row.get("yolo_ms")),
-                "depth_ms": _float(row.get("depth_ms")),
-                "cutie_ms": _float(row.get("cutie_ms")),
-                "pose_ms": _float(row.get("pose_ms")),
+                "reference_capture_mono_ms": _number(row["reference_capture_mono_ms"]),
+                "source_capture_mono_ms": _number(row["source_capture_mono_ms"]),
+                "server_receive_mono_ms": _number(row["server_receive_mono_ms"]),
+                "server_publish_mono_ms": _number(row["server_publish_mono_ms"]),
+                "unity_pose_handle_mono_ms": _number(row["unity_pose_handle_mono_ms"]),
+                "candidate_arrival_ms": _difference(
+                    row["unity_pose_handle_mono_ms"], row["source_capture_mono_ms"]
+                ),
+                "candidate_processing_ms": _difference(
+                    row["server_publish_mono_ms"], row["server_receive_mono_ms"]
+                ),
+                "total_ms": _number(row["total_ms"]),
+                "yolo_ms": _number(row["yolo_ms"]),
+                "depth_ms": _number(row["depth_ms"]),
+                "cutie_ms": _number(row["cutie_ms"]),
+                "pose_ms": _number(row["pose_ms"]),
             }
         )
-    detail = pd.DataFrame.from_records(records, columns=DETAIL_COLUMNS)
-    return detail, summarize_latency(detail)
+        records.append(record)
+    return pd.DataFrame.from_records(records, columns=CANDIDATE_DETAIL_COLUMNS)
 
 
-def summarize_latency(detail: pd.DataFrame) -> pd.DataFrame:
-    """按 condition × label 汇总 latency。"""
+def _build_render_detail(render: pd.DataFrame) -> pd.DataFrame:
+    """选择逐 tick 时效性字段并规范数值类型。"""
 
-    if detail.empty:
-        return _empty_summary()
+    if render.empty:
+        return pd.DataFrame(columns=RENDER_DETAIL_COLUMNS)
+    records: list[dict[str, Any]] = []
+    for _, row in render.iterrows():
+        record = {column: str(row[column]) for column in METRIC_GROUP_COLUMNS}
+        record.update(
+            {
+                "render_tick_id": int(row["render_tick_id"]),
+                "render_mono_ms": _number(row["render_mono_ms"]),
+                "source_frame_id": int(row["source_frame_id"]),
+                "has_output_pose": bool(row["has_output_pose"]),
+                "has_display_pose": bool(row["has_display_pose"]),
+                "observation_age_ms": _number(row["observation_age_ms"]),
+                "smoothing_delay_ms": _number(row["smoothing_delay_ms"]),
+            }
+        )
+        records.append(record)
+    return pd.DataFrame.from_records(records, columns=RENDER_DETAIL_COLUMNS)
+
+
+def _summarize_latency(
+    candidate_detail: pd.DataFrame,
+    render_detail: pd.DataFrame,
+) -> pd.DataFrame:
+    """按完整实验上下文与 variant 合并候选和 render 统计。"""
+
+    candidate_groups = _group_map(candidate_detail)
+    render_groups = _group_map(render_detail)
+    group_keys = sorted(set(candidate_groups) | set(render_groups))
     rows: list[dict[str, Any]] = []
-    for (condition, label), group in detail.groupby(["condition", "label"], sort=True):
+    for key in group_keys:
+        candidates = candidate_groups.get(key, pd.DataFrame(columns=CANDIDATE_DETAIL_COLUMNS))
+        render = render_groups.get(key, pd.DataFrame(columns=RENDER_DETAIL_COLUMNS))
+        context_source = candidates if not candidates.empty else render
+        context = {
+            column: str(context_source.iloc[0][column])
+            for column in METRIC_GROUP_COLUMNS
+        }
         rows.append(
             {
-                "condition": condition,
-                "label": label,
-                "n": int(len(group)),
-                "capture_to_apply_p50_ms": finite_percentile(group["capture_to_apply_ms"], 50),
-                "capture_to_apply_p90_ms": finite_percentile(group["capture_to_apply_ms"], 90),
-                "capture_to_apply_p95_ms": finite_percentile(group["capture_to_apply_ms"], 95),
-                "image_to_handle_p50_ms": finite_percentile(group["image_to_handle_ms"], 50),
-                "observation_age_p50_ms": finite_percentile(group["observation_age_ms"], 50),
-                "effective_policy_delay_p50_ms": finite_percentile(
-                    group["effective_policy_delay_ms"], 50
+                **context,
+                "candidate_count": int(candidates["candidate_id"].nunique()),
+                "render_tick_count": int(render["render_tick_id"].nunique()),
+                "candidate_arrival_p50_ms": _percentile(candidates, "candidate_arrival_ms", 50),
+                "candidate_arrival_p95_ms": _percentile(candidates, "candidate_arrival_ms", 95),
+                "candidate_processing_p50_ms": _percentile(candidates, "candidate_processing_ms", 50),
+                "candidate_processing_p95_ms": _percentile(candidates, "candidate_processing_ms", 95),
+                "observation_age_p50_ms": _percentile(render, "observation_age_ms", 50),
+                "observation_age_p95_ms": _percentile(render, "observation_age_ms", 95),
+                "smoothing_delay_p50_ms": _percentile(render, "smoothing_delay_ms", 50),
+                "smoothing_delay_p95_ms": _percentile(render, "smoothing_delay_ms", 95),
+                "visual_perception_hz": _frequency_hz(
+                    candidates,
+                    id_column="candidate_id",
+                    time_column="server_publish_mono_ms",
                 ),
-                "smoothing_delay_p50_ms": finite_percentile(group["smoothing_delay_ms"], 50),
-                "perception_total_p50_ms": finite_percentile(group["perception_total_ms"], 50),
-                "yolo_p50_ms": finite_percentile(group["yolo_ms"], 50),
-                "depth_p50_ms": finite_percentile(group["depth_ms"], 50),
-                "cutie_p50_ms": finite_percentile(group["cutie_ms"], 50),
-                "pose_p50_ms": finite_percentile(group["pose_ms"], 50),
+                "render_hz": _frequency_hz(
+                    render,
+                    id_column="render_tick_id",
+                    time_column="render_mono_ms",
+                ),
             }
         )
     return pd.DataFrame.from_records(rows, columns=SUMMARY_COLUMNS)
 
 
-def _float(value: object) -> float:
-    """宽容读取 float。"""
+def _group_map(frame: pd.DataFrame) -> dict[tuple[str, ...], pd.DataFrame]:
+    """把共享分组迭代器转换成可跨表合并的稳定键映射。"""
+
+    if frame.empty:
+        return {}
+    return {
+        tuple(context[column] for column in METRIC_GROUP_COLUMNS): group
+        for context, group in iter_metric_groups(frame)
+    }
+
+
+def _require_unique(frame: pd.DataFrame, columns: list[str], table_name: str) -> None:
+    """拒绝会使跨表连接产生笛卡尔复制的重复主键。"""
+
+    if frame.duplicated(columns, keep=False).any():
+        raise ValueError(f"{table_name} 的主键 {columns} 不唯一。")
+
+
+def _require_complete_join(frame: pd.DataFrame, indicator: str, join_name: str) -> None:
+    """拒绝跨表连接缺失，避免指标阶段静默丢弃 candidate。"""
+
+    missing = frame[indicator].ne("both")
+    if missing.any():
+        raise ValueError(f"{join_name} 有 {int(missing.sum())} 行无法匹配。")
+
+
+def _validate_capture_provenance(frame: pd.DataFrame, *, tolerance_ms: float = 1e-3) -> None:
+    """要求 admission 来源时刻与同 frame reference 的采集时刻一致。"""
+
+    source = pd.to_numeric(frame["source_capture_mono_ms"], errors="coerce").to_numpy(dtype=float)
+    reference = pd.to_numeric(frame["reference_capture_mono_ms"], errors="coerce").to_numpy(dtype=float)
+    comparable = np.isfinite(source) & np.isfinite(reference)
+    mismatch = comparable & (np.abs(source - reference) > tolerance_ms)
+    if mismatch.any():
+        raise ValueError(
+            "unity_admission 与 unity_reference 的 capture provenance "
+            f"有 {int(mismatch.sum())} 行不一致。"
+        )
+
+
+def _percentile(frame: pd.DataFrame, column: str, percentile: float) -> float:
+    """对可选明细列计算有限值分位数。"""
+
+    if frame.empty or column not in frame:
+        return np.nan
+    return finite_percentile(pd.to_numeric(frame[column], errors="coerce"), percentile)
+
+
+def _frequency_hz(frame: pd.DataFrame, *, id_column: str, time_column: str) -> float:
+    """以唯一事件的首个时间戳估计平均频率；不足两个事件时返回 NaN。"""
+
+    if frame.empty:
+        return np.nan
+    events = frame[[id_column, time_column]].drop_duplicates(id_column, keep="first")
+    times = pd.to_numeric(events[time_column], errors="coerce").dropna().to_numpy(dtype=float)
+    times = np.sort(times[np.isfinite(times)])
+    if len(times) < 2:
+        return np.nan
+    span_ms = float(times[-1] - times[0])
+    if span_ms <= 0.0:
+        return np.nan
+    return float((len(times) - 1) * 1000.0 / span_ms)
+
+
+def _number(value: object) -> float:
+    """把可选数值转换成有限 float，不可用时返回 NaN。"""
 
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return np.nan
+    return number if np.isfinite(number) else np.nan
 
 
 def _difference(later: object, earlier: object) -> float:
-    """计算两个日志时刻之差；任一不可得时返回 NaN。"""
+    """计算两个时刻之差；任一不可用时返回 NaN。"""
 
-    later_value = _float(later)
-    earlier_value = _float(earlier)
+    later_value = _number(later)
+    earlier_value = _number(earlier)
     if not np.isfinite(later_value) or not np.isfinite(earlier_value):
         return np.nan
     return float(later_value - earlier_value)
 
 
-def _empty_detail() -> pd.DataFrame:
-    """返回空逐 frame latency 表。"""
-
-    return pd.DataFrame(columns=DETAIL_COLUMNS)
-
-
-def _empty_summary() -> pd.DataFrame:
-    """返回空 latency 汇总表。"""
-
-    return pd.DataFrame(columns=SUMMARY_COLUMNS)
-
-
-__all__ = ["compute_latency", "summarize_latency"]
+__all__ = ["LatencyMetricsResult", "compute_latency"]

@@ -227,6 +227,20 @@ class SchemaV2QcTest(unittest.TestCase):
             self.assertTrue(any("writer failures" in error for error in report.errors))
             self.assertTrue(any("writer error" in error for error in report.errors))
 
+    def test_out_of_range_reliability_scores_fail_qc(self) -> None:
+        """candidate 或 admission 的连续评分越界时正式分析门禁必须失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.python_candidates.loc[0, "vcd_score"] = 1.01
+            session.unity_admission.loc[0, "vcd_score"] = -0.01
+
+            report = run_schema_qc(session)
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("python_candidates.vcd_score" in error for error in report.errors))
+            self.assertTrue(any("unity_admission.vcd_score" in error for error in report.errors))
+
 
 def _expand_to_formal_variants(session_dir: Path) -> None:
     """把 2-variant smoke fixture 扩展为冻结的 8-variant Formal fixture。"""

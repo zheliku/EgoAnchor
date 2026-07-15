@@ -70,7 +70,8 @@ namespace EgoAnchor.Tests
             string eventLine = EvalJson.BuildEventLine(
                 "s01", "event_marker", "experiment_ui", "marked", 1050, 5,
                 ExperimentId.SystemCharacterization, "static_head_motion", "trial_001", "event_001",
-                "exp1_system_characterization/static_head_motion", "info", "egoanchor");
+                "exp1_system_characterization/static_head_motion", ExperimentEventRole.GenericMarker,
+                "info", "egoanchor");
             string manifest = EvalJson.BuildManifest(
                 new EvalManifestMetadata(
                     "s01", "controller_right", "smoke", "operator-01", 2000,
@@ -104,7 +105,9 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains($"\"{field}\":", eventLine);
             StringAssert.Contains("\"severity\":\"info\"", eventLine);
             StringAssert.Contains("\"variant_id\":\"egoanchor\"", eventLine);
-            StringAssert.Contains("\"payload\":{\"condition_id\":", eventLine);
+            StringAssert.Contains(
+                "\"payload\":{\"condition_id\":\"exp1_system_characterization/static_head_motion\",\"event_role\":\"generic_marker\"}",
+                eventLine);
             foreach (string field in new[]
             {
                 "unity_frame", "source_capture_mono_ms", "source_capture_unity_frame",
@@ -161,7 +164,8 @@ namespace EgoAnchor.Tests
 
                 Assert.That(selector.SelectSystemScenario(1), Is.False);
                 Assert.That(selector.BeginTrial(), Is.False);
-                Assert.That(selector.MarkEvent(), Is.False);
+                Assert.That(selector.MarkPrimaryEvent(), Is.False);
+                Assert.That(selector.MarkTargetVisible(), Is.False);
                 Assert.That(selector.CurrentContext.IsSelected, Is.False);
             }
             finally
@@ -189,14 +193,120 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.CurrentScenarioId, Is.EqualTo("static_head_motion"));
                 Assert.That(selector.BeginTrial(), Is.True);
                 Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
-                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.MarkPrimaryEvent(), Is.True);
                 Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
                 Assert.That(selector.EndTrial(), Is.True);
                 Assert.That(selector.CurrentTrialId, Is.Empty);
                 Assert.That(selector.CurrentEventId, Is.Empty);
             }
             finally
             {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>起停与对应消融必须把主事件标记为转换开始。</summary>
+        [TestCase(false, 2)]
+        [TestCase(true, 3)]
+        [TestCase(true, 4)]
+        public void SelectorMapsTransitionScenariosToTransitionStarted(bool attribution, int scenarioKey)
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+
+                bool selected = attribution
+                    ? selector.SelectAttributionScenario(scenarioKey)
+                    : selector.SelectSystemScenario(scenarioKey);
+                Assert.That(selected, Is.True);
+                Assert.That(selector.BeginTrial(), Is.True);
+                Assert.That(selector.MarkPrimaryEvent(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStarted));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>遮挡协议必须为两个角色分配连续事件标识，并拒绝重复开始和无开始的可见标记。</summary>
+        [TestCase(false, 5)]
+        [TestCase(true, 2)]
+        public void SelectorEnforcesOcclusionEventOrder(bool attribution, int scenarioKey)
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+
+                bool selected = attribution
+                    ? selector.SelectAttributionScenario(scenarioKey)
+                    : selector.SelectSystemScenario(scenarioKey);
+                Assert.That(selected, Is.True);
+                Assert.That(selector.BeginTrial(), Is.True);
+                Assert.That(selector.MarkTargetVisible(), Is.False);
+                Assert.That(selector.MarkPrimaryEvent(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
+                Assert.That(selector.CurrentEventId, Is.EqualTo("event_001"));
+                Assert.That(selector.HasOpenOcclusion, Is.True);
+                Assert.That(selector.MarkPrimaryEvent(), Is.False);
+                Assert.That(selector.EndTrial(), Is.False);
+
+                Assert.That(selector.MarkTargetVisible(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
+                Assert.That(selector.CurrentEventId, Is.EqualTo("event_002"));
+                Assert.That(selector.HasOpenOcclusion, Is.False);
+                Assert.That(selector.MarkTargetVisible(), Is.False);
+                Assert.That(selector.EndTrial(), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectorObject);
+                UnityEngine.Object.DestroyImmediate(sessionObject);
+            }
+        }
+
+        /// <summary>输入层必须把 Space 和 Shift+Space 分别路由到遮挡开始和目标重新可见。</summary>
+        [Test]
+        public void InputHandlerRoutesSpaceByShiftState()
+        {
+            GameObject sessionObject = new GameObject("ExperimentContextTests.Session");
+            GameObject selectorObject = new GameObject("ExperimentContextTests.Selector");
+            GameObject inputObject = new GameObject("ExperimentContextTests.Input");
+            try
+            {
+                EvalSession session = sessionObject.AddComponent<EvalSession>();
+                SetPrivateField(session, "_recording", true);
+                ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                selector.BindSession(session);
+                selector.SelectSystemScenario(5);
+                selector.BeginTrial();
+
+                ExperimentInputHandler input = inputObject.AddComponent<ExperimentInputHandler>();
+                SetPrivateField(input, "selector", selector);
+                input.HandleSpace(true);
+                Assert.That(selector.CurrentEventId, Is.Empty);
+
+                input.HandleSpace(false);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
+                input.HandleSpace(true);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(inputObject);
                 UnityEngine.Object.DestroyImmediate(selectorObject);
                 UnityEngine.Object.DestroyImmediate(sessionObject);
             }
@@ -217,6 +327,7 @@ namespace EgoAnchor.Tests
                 selector.BindSession(session);
                 selector.SelectAttributionScenario(2);
                 selector.BeginTrial();
+                selector.MarkPrimaryEvent();
 
                 ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
                 SetPrivateField(status, "selector", selector);
@@ -226,6 +337,8 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains("EXP2 | DESIGN ATTRIBUTION", text);
                 StringAssert.Contains("Ablation: VCD admission", text);
                 StringAssert.Contains("trial_001", text);
+                StringAssert.Contains("Role: occlusion_started", text);
+                StringAssert.Contains("Occlusion: Waiting for target visible", text);
                 StringAssert.DoesNotContain("RQ1", text);
                 StringAssert.DoesNotContain("RQ2", text);
             }

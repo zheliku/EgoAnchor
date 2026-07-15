@@ -1,4 +1,4 @@
-"""轻量可靠性诊断指标测试。"""
+"""schema-v2 可靠性诊断指标测试。"""
 
 from __future__ import annotations
 
@@ -6,93 +6,173 @@ import unittest
 
 import pandas as pd
 
-from egoanchor.eval.io.schemas import PoseResultRow
-from egoanchor.eval.metrics.diagnostics import compute_reliability_diagnostics
+from egoanchor.eval.metrics import compute_reliability_diagnostics
 
 
 class ReliabilityDiagnosticsTest(unittest.TestCase):
-    """验证 Python reliability 分布诊断不依赖 runtime 或模型。"""
+    """验证 VCD 分量和 admission 只按 candidate 统计。"""
 
-    def test_pose_result_row_preserves_render_quality_fields(self) -> None:
-        """runtime JSONL 中的渲染质量旁路字段应进入 pose DataFrame。"""
+    def test_summary_uses_schema_v2_scores_and_excludes_missing_color(self) -> None:
+        """颜色不可用的 ``None`` 不得污染分数统计。"""
 
-        row = PoseResultRow.from_dict(
-            {
-                "event": "pose_result",
-                "frame_id": 7,
-                "has_pose": True,
-                "pose_matrix_cv_camera": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                "pose_score": 0.73,
-                "reliability_flags": ["reprojection_low"],
-                "score_reprojection": 0.42,
-                "score_depth": 0.71,
-                "score_mask": 1.0,
-                "color_reprojection": 0.42,
-                "render_quality_evaluated": True,
-                "render_quality_status": "valid",
-                "render_quality_mask_iou": 0.35,
-                "render_quality_area_ratio_score": 0.31,
-                "render_quality_render_visible_ratio": 0.52,
-                "render_quality_observed_visible_ratio": 0.63,
-                "render_quality_render_area_px": 128,
-                "render_quality_depth_inlier": 0.58,
-                "render_quality_depth_alignment": 0.62,
-                "render_quality_depth_residual_m": 0.014,
-                "render_quality_ms": 4.2,
-            },
-            source="unit",
+        result = compute_reliability_diagnostics(
+            _candidate_rows(),
+            _admission_rows(variant_id="egoanchor", variant_label="EgoAnchor"),
+            histogram_bins=5,
         )
 
-        record = row.to_record()
-
-        self.assertAlmostEqual(record["score_reprojection"], 0.42)
-        self.assertAlmostEqual(record["score_depth"], 0.71)
-        self.assertAlmostEqual(record["score_mask"], 1.0)
-        self.assertAlmostEqual(record["color_reprojection"], 0.42)
-        self.assertTrue(record["render_quality_evaluated"])
-        self.assertEqual(record["render_quality_status"], "valid")
-        self.assertAlmostEqual(record["render_quality_mask_iou"], 0.35)
-        self.assertAlmostEqual(record["render_quality_area_ratio_score"], 0.31)
-        self.assertAlmostEqual(record["render_quality_render_visible_ratio"], 0.52)
-        self.assertAlmostEqual(record["render_quality_observed_visible_ratio"], 0.63)
-        self.assertEqual(record["render_quality_render_area_px"], 128)
-        self.assertAlmostEqual(record["render_quality_depth_inlier"], 0.58)
-        self.assertAlmostEqual(record["render_quality_depth_alignment"], 0.62)
-        self.assertAlmostEqual(record["render_quality_depth_residual_m"], 0.014)
-        self.assertAlmostEqual(record["render_quality_ms"], 4.2)
-
-    def test_compute_reliability_diagnostics_summarizes_distribution(self) -> None:
-        """诊断应输出 score 展开程度、渲染质量开销和 policy 分布。"""
-
-        pose = pd.DataFrame(
-            {
-                "pose_score": [1.0, 1.0, 0.4],
-                "color_reprojection": [-1.0, 0.8, 0.3],
-                "render_quality_ms": [0.0, 4.0, 6.0],
-            }
-        )
-        output = pd.DataFrame(
-            {
-                "label": ["policy", "policy", "raw"],
-                "policy_action": ["Accept", "Reject", "Hold"],
-                "policy_reason": ["score_accept", "reprojection_low", "coast"],
-            }
-        )
-
-        result = compute_reliability_diagnostics(pose, output)
         summary = result.summary.iloc[0]
-
-        self.assertEqual(int(summary["pose_rows"]), 3)
-        self.assertEqual(int(summary["score_unique_count"]), 2)
-        self.assertAlmostEqual(float(summary["score_mode_share"]), 2.0 / 3.0)
-        self.assertEqual(int(summary["color_reprojection_valid_count"]), 2)
+        self.assertEqual(int(summary["candidate_count"]), 2)
+        self.assertEqual(int(summary["has_pose_count"]), 2)
+        self.assertAlmostEqual(float(summary["vcd_score_p50"]), 0.6)
+        self.assertAlmostEqual(float(summary["visibility_score_p50"]), 0.7)
+        self.assertAlmostEqual(float(summary["geometry_core_score_p50"]), 0.5)
+        self.assertEqual(int(summary["color_projection_score_count"]), 1)
+        self.assertAlmostEqual(float(summary["color_projection_score_p50"]), 0.2)
+        self.assertAlmostEqual(float(summary["depth_alignment_score_p50"]), 0.5)
+        self.assertAlmostEqual(float(summary["depth_abs_score_p50"]), 0.45)
+        self.assertAlmostEqual(float(summary["depth_struct_score_p50"]), 0.4)
+        self.assertAlmostEqual(float(summary["depth_alpha_p50"]), 0.25)
+        self.assertEqual(int(summary["render_quality_evaluated_count"]), 2)
+        self.assertEqual(int(summary["render_quality_valid_count"]), 2)
         self.assertAlmostEqual(float(summary["render_quality_ms_p50"]), 5.0)
-        self.assertAlmostEqual(float(summary["render_quality_ms_p95"]), 5.9)
-        self.assertEqual(int(result.score_histogram["count"].sum()), 3)
-        self.assertEqual(int(result.color_reprojection_histogram["count"].sum()), 2)
-        self.assertEqual(int(result.policy_distribution["count"].sum()), 3)
+        self.assertEqual(int(result.vcd_histogram["candidate_count"].sum()), 2)
+        self.assertFalse(any("rq" in column.lower() for column in result.summary.columns))
+
+    def test_admission_distribution_counts_candidates_per_variant(self) -> None:
+        """多 variant 消费同一 candidate 时，每个 variant 各计一次 candidate。"""
+
+        admission = pd.concat(
+            [
+                _admission_rows(variant_id="arrival", variant_label="Arrival-Hold"),
+                _admission_rows(variant_id="egoanchor", variant_label="EgoAnchor"),
+            ],
+            ignore_index=True,
+        )
+
+        result = compute_reliability_diagnostics(_candidate_rows(), admission)
+
+        totals = result.admission_distribution.groupby("variant_id")["candidate_count"].sum()
+        self.assertEqual(int(totals["arrival"]), 2)
+        self.assertEqual(int(totals["egoanchor"]), 2)
+        shares = result.admission_distribution.groupby("variant_id")["candidate_share"].sum()
+        self.assertAlmostEqual(float(shares["arrival"]), 1.0)
+        self.assertAlmostEqual(float(shares["egoanchor"]), 1.0)
+        self.assertEqual(set(result.summary["variant_id"]), {"arrival", "egoanchor"})
+
+    def test_unknown_candidate_is_rejected(self) -> None:
+        """admission 引用未知 candidate 时必须立即失败。"""
+
+        admission = _admission_rows(variant_id="egoanchor", variant_label="EgoAnchor")
+        admission.loc[1, "candidate_id"] = "session-a:999:1"
+
+        with self.assertRaisesRegex(ValueError, "未知 candidate_id"):
+            compute_reliability_diagnostics(_candidate_rows(), admission)
+
+    def test_out_of_range_vcd_score_is_rejected(self) -> None:
+        """VCD 连续评分越界时必须失败，不能裁剪到直方图边界。"""
+
+        candidates = _candidate_rows()
+        candidates.loc[0, "vcd_score"] = 1.1
+
+        with self.assertRaisesRegex(ValueError, "必须位于"):
+            compute_reliability_diagnostics(
+                candidates,
+                _admission_rows(variant_id="egoanchor", variant_label="EgoAnchor"),
+            )
+
+
+def _candidate_rows() -> pd.DataFrame:
+    """构造两条包含完整 VCD 分量的 schema-v2 candidate。"""
+
+    return pd.DataFrame.from_records(
+        [
+            {
+                "session_id": "session-a",
+                "candidate_id": "session-a:1:1",
+                "has_pose": True,
+                "vcd_score": 0.8,
+                "visibility_score": 0.9,
+                "geometry_core_score": 0.7,
+                "color_projection_score": None,
+                "depth_alignment_score": 0.6,
+                "depth_abs_score": 0.5,
+                "depth_struct_score": 0.45,
+                "depth_alpha": 0.25,
+                "render_diagnostics": {
+                    "render_quality_evaluated": True,
+                    "render_quality_status": "valid",
+                    "render_quality_mask_iou": 0.6,
+                    "render_quality_area_ratio_score": 0.7,
+                    "render_quality_render_visible_ratio": 0.8,
+                    "render_quality_observed_visible_ratio": 0.9,
+                    "render_quality_render_area_px": 120,
+                    "render_quality_depth_inlier": 0.7,
+                    "render_quality_depth_alignment": 0.6,
+                    "render_quality_depth_absolute": 0.5,
+                    "render_quality_depth_structural": 0.45,
+                    "render_quality_depth_alpha": 0.25,
+                    "render_quality_depth_residual_m": 0.01,
+                    "render_quality_ms": 4.0,
+                },
+            },
+            {
+                "session_id": "session-a",
+                "candidate_id": "session-a:2:1",
+                "has_pose": True,
+                "vcd_score": 0.4,
+                "visibility_score": 0.5,
+                "geometry_core_score": 0.3,
+                "color_projection_score": 0.2,
+                "depth_alignment_score": 0.4,
+                "depth_abs_score": 0.4,
+                "depth_struct_score": 0.35,
+                "depth_alpha": 0.25,
+                "render_diagnostics": {
+                    "render_quality_evaluated": True,
+                    "render_quality_status": "valid",
+                    "render_quality_mask_iou": 0.4,
+                    "render_quality_area_ratio_score": 0.5,
+                    "render_quality_render_visible_ratio": 0.6,
+                    "render_quality_observed_visible_ratio": 0.7,
+                    "render_quality_render_area_px": 100,
+                    "render_quality_depth_inlier": 0.5,
+                    "render_quality_depth_alignment": 0.4,
+                    "render_quality_depth_absolute": 0.4,
+                    "render_quality_depth_structural": 0.35,
+                    "render_quality_depth_alpha": 0.25,
+                    "render_quality_depth_residual_m": 0.02,
+                    "render_quality_ms": 6.0,
+                },
+            },
+        ]
+    )
+
+
+def _admission_rows(*, variant_id: str, variant_label: str) -> pd.DataFrame:
+    """构造同一上下文内两个 candidate 的 schema-v2 admission。"""
+
+    records = []
+    for index, candidate_id in enumerate(("session-a:1:1", "session-a:2:1")):
+        accepted = index == 0
+        records.append(
+            {
+                "session_id": "session-a",
+                "experiment_id": "exp2_design_attribution",
+                "scenario_id": "occlusion_recovery",
+                "trial_id": "trial-01",
+                "event_id": "event-01",
+                "condition_id": "occlusion",
+                "variant_id": variant_id,
+                "variant_label": variant_label,
+                "candidate_id": candidate_id,
+                "admission_decision": "accepted" if accepted else "rejected",
+                "policy_action": "accept" if accepted else "reject",
+                "policy_reason": "score_accept" if accepted else "vcd_below_threshold",
+            }
+        )
+    return pd.DataFrame.from_records(records)
 
 
 if __name__ == "__main__":
     unittest.main()
-

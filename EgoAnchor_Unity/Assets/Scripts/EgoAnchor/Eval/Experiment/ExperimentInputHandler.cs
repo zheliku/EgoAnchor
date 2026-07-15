@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>实验采集键盘输入：数字键选场景，Enter/Space/0 管理 trial 和事件。</summary>
+    /// <summary>实验采集键盘输入：数字键选场景，Enter/Space/Shift+Space/0 管理 trial 和事件。</summary>
     public sealed class ExperimentInputHandler : MonoBehaviour
     {
         /// <summary>接收输入的实验上下文选择器。</summary>
@@ -31,7 +31,7 @@ namespace EgoAnchor.Eval.Experiment
             if (keyboard.digit4Key.wasPressedThisFrame) HandleNumber(4, shift);
             if (keyboard.digit5Key.wasPressedThisFrame) HandleNumber(5, shift);
             if (keyboard.enterKey.wasPressedThisFrame) HandleEnter();
-            if (keyboard.spaceKey.wasPressedThisFrame) HandleSpace();
+            if (keyboard.spaceKey.wasPressedThisFrame) HandleSpace(shift);
             if (keyboard.digit0Key.wasPressedThisFrame) HandleZero();
 
             if (controlSessionShortcuts && keyboard.f7Key.wasPressedThisFrame)
@@ -54,10 +54,12 @@ namespace EgoAnchor.Eval.Experiment
             selector?.BeginTrial();
         }
 
-        /// <summary>处理 Space：标记当前 trial 事件。</summary>
-        public void HandleSpace()
+        /// <summary>处理 Space：普通按键标记主事件，按住 Shift 标记目标重新可见。</summary>
+        public void HandleSpace(bool shift)
         {
-            selector?.MarkEvent();
+            if (selector == null) return;
+            if (shift) selector.MarkTargetVisible();
+            else selector.MarkPrimaryEvent();
         }
 
         /// <summary>处理 0：结束当前 trial。</summary>

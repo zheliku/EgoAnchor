@@ -487,7 +487,7 @@ namespace EgoAnchor.Eval
                 UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount,
                 CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
                 CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
-                CurrentExperimentContext.ConditionId));
+                CurrentExperimentContext.ConditionId, CurrentExperimentContext.EventRole));
         }
 
         /// <summary>录制启动中途失败时关闭已经打开的文件和后台线程。</summary>
@@ -529,7 +529,7 @@ namespace EgoAnchor.Eval
                     UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0, UnityEngine.Time.frameCount,
                     CurrentExperimentContext.ExperimentId, CurrentExperimentContext.ScenarioId,
                     CurrentExperimentContext.TrialId, CurrentExperimentContext.EventId,
-                    CurrentExperimentContext.ConditionId));
+                    CurrentExperimentContext.ConditionId, CurrentExperimentContext.EventRole));
                 _eventsLogStats = CloseLog(_eventsLog, "events");
                 _eventsLog = null;
             }
@@ -865,7 +865,7 @@ namespace EgoAnchor.Eval
                 UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0,
                 UnityEngine.Time.frameCount,
                 context.ExperimentId, context.ScenarioId, context.TrialId,
-                context.EventId, context.ConditionId));
+                context.EventId, context.ConditionId, context.EventRole));
         }
 
         private static string ToAdmissionDecision(PoseToAnchorRuntime.AcceptResult result, string policyAction)

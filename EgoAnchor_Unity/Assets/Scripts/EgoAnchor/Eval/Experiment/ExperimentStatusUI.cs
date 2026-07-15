@@ -66,6 +66,9 @@ namespace EgoAnchor.Eval.Experiment
             sb.AppendLine($"Scenario: {selector.CurrentScenarioDisplayName}");
             sb.AppendLine($"Trial: {(selector.HasActiveTrial ? selector.CurrentTrialId : "Idle")}");
             sb.AppendLine($"Event: {(string.IsNullOrEmpty(selector.CurrentEventId) ? "None" : selector.CurrentEventId)}");
+            sb.AppendLine($"Role: {(string.IsNullOrEmpty(selector.CurrentEventRole) ? "None" : selector.CurrentEventRole)}");
+            if (selector.HasOpenOcclusion)
+                sb.AppendLine("Occlusion: Waiting for target visible");
             sb.AppendLine();
             AppendScenarioRows(sb, selector.CurrentExperimentId == ExperimentId.DesignAttribution);
             return sb.ToString();

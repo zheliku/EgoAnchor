@@ -211,6 +211,7 @@ namespace EgoAnchor.Eval
             string trialId = "",
             string eventId = "",
             string conditionId = "",
+            string eventRole = "",
             string severity = "info",
             string variantId = "")
         {
@@ -230,7 +231,10 @@ namespace EgoAnchor.Eval
             b.Str("event_id", eventId);
             b.Str("variant_id", variantId);
             b.Str("message", message);
-            b.StringObject("payload", "condition_id", conditionId);
+            b.StringPairObject(
+                "payload",
+                "condition_id", conditionId,
+                "event_role", eventRole);
             return b.Finish();
         }
 
@@ -572,12 +576,19 @@ namespace EgoAnchor.Eval
                 _sb.Append(JStr(value ?? string.Empty));
             }
 
-            /// <summary>写入只含一个字符串字段的 JSON object。</summary>
-            public void StringObject(string key, string fieldName, string fieldValue)
+            /// <summary>写入只含两个字符串字段的 JSON object。</summary>
+            public void StringPairObject(
+                string key,
+                string firstName,
+                string firstValue,
+                string secondName,
+                string secondValue)
             {
                 Name(key);
-                _sb.Append('{').Append(JStr(fieldName)).Append(':')
-                    .Append(JStr(fieldValue ?? string.Empty)).Append('}');
+                _sb.Append('{').Append(JStr(firstName)).Append(':')
+                    .Append(JStr(firstValue ?? string.Empty)).Append(',')
+                    .Append(JStr(secondName)).Append(':')
+                    .Append(JStr(secondValue ?? string.Empty)).Append('}');
             }
 
             public void Bool(string key, bool value)

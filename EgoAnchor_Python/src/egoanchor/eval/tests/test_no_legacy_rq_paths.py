@@ -28,3 +28,10 @@ class LegacyRqPathTests(unittest.TestCase):
         self.assertFalse((eval_root / "research" / "rq3").exists())
         self.assertTrue(_module_is_missing("egoanchor.eval.research.rq1"))
         self.assertTrue(_module_is_missing("egoanchor.eval.research.rq2"))
+
+    def test_legacy_schema_cli_and_report_packages_are_removed(self) -> None:
+        """旧 schema reader、run_eval CLI 和 report 不得与 schema-v2 并存。"""
+
+        for package in ("io", "core", "report"):
+            package_path = ROOT / "egoanchor" / "eval" / package
+            self.assertFalse(any(package_path.glob("*.py")))

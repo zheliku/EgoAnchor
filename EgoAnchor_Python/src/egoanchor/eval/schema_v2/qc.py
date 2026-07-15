@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import pandas as pd
+
 from .readers import EvalSessionV2
 
 
@@ -57,6 +59,7 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     _check_run_kind_and_formal_freeze(manifest, variants, errors)
     _check_variant_hashes(session, variants, errors)
     _check_primary_keys(session, errors)
+    _check_score_ranges(session, errors)
 
     if session.python_candidates.empty:
         errors.append("python_candidates is empty")
@@ -359,6 +362,38 @@ def _check_primary_keys(session: EvalSessionV2, errors: list[str]) -> None:
         and reference.duplicated(["session_id", "frame_id"]).any()
     ):
         errors.append("unity_reference contains duplicate session_id/frame_id primary keys")
+
+
+def _check_score_ranges(session: EvalSessionV2, errors: list[str]) -> None:
+    """连续可靠性评分必须保持 `[0,1]`，null 表示信号不可用。"""
+
+    candidate_scores = (
+        "vcd_score",
+        "visibility_score",
+        "geometry_core_score",
+        "color_projection_score",
+        "depth_alignment_score",
+        "depth_abs_score",
+        "depth_struct_score",
+        "depth_alpha",
+    )
+    for table_name, table, columns in (
+        ("python_candidates", session.python_candidates, candidate_scores),
+        ("unity_admission", session.unity_admission, ("vcd_score",)),
+    ):
+        for column in columns:
+            if column not in table.columns:
+                errors.append(f"{table_name} requires score column {column}")
+                continue
+            present = table[column].notna()
+            values = pd.to_numeric(table[column], errors="coerce")
+            invalid = present & (
+                values.isna() | ~values.between(0.0, 1.0, inclusive="both")
+            )
+            if invalid.any():
+                errors.append(
+                    f"{table_name}.{column} contains {int(invalid.sum())} values outside [0, 1]"
+                )
 
 
 def _require_columns(table: Any, table_name: str, required: set[str], errors: list[str]) -> bool:
