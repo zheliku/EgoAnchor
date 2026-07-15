@@ -16,7 +16,63 @@ events.jsonl
 audit_samples/
 ```
 
-schema-v2 是唯一受支持的数据契约。reader 会校验文件集合、行级字段、时间语义和跨日志关联；QC 失败的 session 不进入正式汇总。平台参考位姿用于同一 Quest、同一时间线下的配对分析，不作为外部物理真值。
+Python 还会写 `python_session.json`，记录停止状态和 writer 统计。运行 QC 前应先正常停止 Python，使其中的 `state` 变为 `python_stopped`。schema-v2 是唯一受支持的数据契约。reader 会校验文件集合、行级字段、时间语义和跨日志关联；QC 失败的 session 不进入正式汇总。平台参考位姿用于同一 Quest、同一时间线下的配对分析，不作为外部物理真值。
+
+## 启动采集服务
+
+以下命令都从 `EgoAnchor_Python` 目录执行。当前默认配置已启用 eval session，启动时会创建 `data/eval/<session_id>/`：
+
+```powershell
+pixi run python .\src\run_server.py --object controller_right
+```
+
+`--object` 应换成当前三维模型对应的对象名。需要检查参数时运行：
+
+```powershell
+pixi run python .\src\run_server.py --help
+```
+
+Python 就绪后再打开 Unity 的 `EgoAnchor-Experiment12.unity` 场景开始采集。场景选择、事件标记和失败重采规则见 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`，这里不重复列出快捷键。
+
+## 统一分析 CLI
+
+正式入口只有 `qc`、`analyze-exp1` 和 `analyze-exp2`。旧 `run_eval`、`batch_eval` 及对应别名不再使用。
+
+先检查单个 session：
+
+```powershell
+pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
+```
+
+QC 会把一行 JSON 写到标准输出，便于脚本直接解析。实验分析可一次接收多个 session 目录：
+
+```powershell
+pixi run python -m egoanchor.eval.cli analyze-exp1 .\data\eval\<session_id_1> .\data\eval\<session_id_2> --out .\data\analysis\exp1
+pixi run python -m egoanchor.eval.cli analyze-exp2 .\data\eval\<session_id_1> .\data\eval\<session_id_2> --out .\data\analysis\exp2
+```
+
+`--out` 保存本次分析的完整 CSV、PDF 和 TeX，目录可自行指定。分析成功后，固定 TeX 会发布到 `2026-EgoAnchor/generated/`，固定 PDF 会发布到 `2026-EgoAnchor/figures/generated/`。默认论文路径从模块位置查找，不受当前工作目录影响。若仓库不使用标准目录结构，可显式覆盖：
+
+```powershell
+pixi run python -m egoanchor.eval.cli analyze-exp1 .\data\eval\<session_id> --out .\data\analysis\exp1 --paper-root ..\2026-EgoAnchor
+```
+
+CLI 返回码固定如下：
+
+| 返回码 | 含义 |
+|---:|---|
+| `0` | QC 或分析完成，可以进入下一步 |
+| `1` | session 文件、输出目录或论文发布产物存在文件系统问题 |
+| `2` | schema、QC 或分析数据契约失败 |
+
+命令和参数可直接从帮助页核对：
+
+```powershell
+pixi run python -m egoanchor.eval.cli --help
+pixi run python -m egoanchor.eval.cli qc --help
+pixi run python -m egoanchor.eval.cli analyze-exp1 --help
+pixi run python -m egoanchor.eval.cli analyze-exp2 --help
+```
 
 ## 实验一：端到端系统表征
 
@@ -33,8 +89,12 @@ schema-v2 是唯一受支持的数据契约。reader 会校验文件集合、行
 
 实验二以完整 `EgoAnchor` 为参照，每次只关闭一个组件：采集时刻世界对齐、VCD admission、时序合成或 StaticLock。分析输出配对差值，并单独检查 VCD 的 risk-coverage 与 AURC。VCD 分数表示连续可靠性，不解释为位姿正确概率。
 
-## 执行边界
+## Smoke、calibration 和 formal 边界
 
-Run 1 完成采集前工程：schema-v2 writer/reader、QC、分析与绘图骨架、合成 smoke 和采集手册。正式参数只用开发或 calibration 数据冻结。
+Smoke 只检查连接、日志和操作流程。它可以运行 QC 和分析来确认产物链，但数据不进入论文统计。Smoke 的 QC 返回 `0` 后再开始 calibration。
 
-用户完成实验一、实验二的 smoke 和正式采集后，Run 2 读取冻结数据，完成统计、图表、LaTeX 产物和论文回填。正式 session 开始后不再调参，论文数字由评估模块生成，不手工抄写。
+Calibration 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定参数。它与 formal 数据分开保存，也不进入正式结果。
+
+参数冻结后才能开始 formal session，开始后不再调参。所有 writer 的 `dropped_rows` 必须为 `0`；QC 失败时报告需要重采的 trial 或 session，不手工修补日志。
+
+Run 1 负责采集前工程和采集流程准备。用户完成 smoke 与实验一/二正式采集后，Run 2 才读取冻结数据，生成统计、图表和 LaTeX 产物并回填论文。论文数字由评估模块生成，不手工抄写。

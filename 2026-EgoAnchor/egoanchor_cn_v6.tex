@@ -23,6 +23,10 @@
 \usepackage{tabularx}
 \usepackage{xcolor}
 
+% Run 1 尚无正式结果；分析产物发布后才加载数字宏。
+\IfFileExists{generated/exp1_numbers.tex}{\input{generated/exp1_numbers.tex}}{}
+\IfFileExists{generated/exp2_numbers.tex}{\input{generated/exp2_numbers.tex}}{}
+
 \onlineid{0}
 \vgtccategory{Research}
 \vgtcinsertpkg
@@ -439,6 +443,24 @@ Quest 控制器固定于桌面，操作者依次执行左右偏航、俯仰、�
 
 正式采集前使用独立预实验冻结 One Euro 参数、VCD 接纳阈值、时序合成参数、静止锚定参数和事件判定规则。正式序列只用于报告系统行为，不再参与调参。
 
+% 正式分析完成前不占用版面，也不写入占位数字。
+\IfFileExists{generated/exp1_tables.tex}{%
+  \begin{table}[t]
+    \centering
+    \caption{实验一四种系统配置的汇总结果。}
+    \label{tab:exp1-generated-summary}
+    \resizebox{\columnwidth}{!}{\input{generated/exp1_tables.tex}}
+  \end{table}
+}{}
+\IfFileExists{figures/generated/exp1_system_summary.pdf}{%
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/generated/exp1_system_summary.pdf}
+    \caption{实验一四种系统配置的系统行为汇总。}
+    \label{fig:exp1-generated-summary}
+  \end{figure}
+}{}
+
 \subsection{实验二：系统设计归因}
 
 实验二在同一日志格式和同一平台参考下关闭单一系统设计，分析其对最终锚点输出的影响。该实验不把 VCD 或静止锚定作为独立算法问题，而是检验它们是否解释端到端系统行为。
@@ -454,6 +476,27 @@ Quest 控制器固定于桌面，操作者依次执行左右偏航、俯仰、�
 
 \textbf{静止锚定。}
 比较完整 EgoAnchor 与关闭静止锚定的变体。两种配置共享相同的候选接纳、状态估计、插值和生命周期策略。分析运动前后静止阶段的抖动、起动可见响应时间、停止后稳定时间以及运动阶段的位姿误差，从而量化静止稳定性收益及其转换代价。
+
+\IfFileExists{generated/exp2_tables.tex}{%
+  \begin{table*}[t]
+    \centering
+    \caption{实验二的组件消融汇总。}
+    \label{tab:exp2-generated-summary}
+    \resizebox{\textwidth}{!}{\input{generated/exp2_tables.tex}}
+  \end{table*}
+}{}
+\IfFileExists{figures/generated/exp2_component_delta.pdf}{%
+  \IfFileExists{figures/generated/exp2_vcd_risk_coverage.pdf}{%
+    \begin{figure*}[t]
+      \centering
+      \includegraphics[width=0.48\textwidth]{figures/generated/exp2_component_delta.pdf}
+      \hfill
+      \includegraphics[width=0.48\textwidth]{figures/generated/exp2_vcd_risk_coverage.pdf}
+      \caption{实验二的组件差值与 VCD risk--coverage 诊断。组件差值按消融配置减完整 EgoAnchor 计算。}
+      \label{fig:exp2-generated-summary}
+    \end{figure*}
+  }{}
+}{}
 
 \subsection{评价指标与汇总}
 
