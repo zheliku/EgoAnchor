@@ -200,7 +200,7 @@ namespace EgoAnchor.Eval.Experiment
             get
             {
                 if (!IsRecording) return "WAITING FOR SESSION";
-                if (!HasActiveTrial) return "SELECT TASK OR FINISH SESSION";
+                if (!HasActiveTrial) return "TASK SELECTED - NOT RUNNING";
                 if (_trialEventCount == 0) return "RECORDING BASELINE";
                 if (_hasOpenOcclusion) return "TARGET OCCLUDED";
                 if (ExperimentEventRole.SupportsTargetVisible(CurrentScenarioId)) return "TARGET VISIBLE";

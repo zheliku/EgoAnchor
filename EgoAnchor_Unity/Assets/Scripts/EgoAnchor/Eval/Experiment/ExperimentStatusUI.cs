@@ -107,7 +107,7 @@ namespace EgoAnchor.Eval.Experiment
         public string BuildStatusText()
         {
             var builder = new StringBuilder(768);
-            bool recording = session != null && session.IsRecording;
+            bool sessionActive = session != null && session.IsRecording;
             if (selector == null)
             {
                 builder.AppendLine("<size=34><b>EGOANCHOR COLLECTION</b></size>");
@@ -116,14 +116,15 @@ namespace EgoAnchor.Eval.Experiment
             }
 
             builder.AppendLine("<size=34><b>EGOANCHOR COLLECTION</b></size>");
-            string recordingText = recording ? "[REC] RECORDING" : "[WAIT] NOT RECORDING";
+            string sessionText = sessionActive ? "[READY] SESSION ACTIVE" : "[WAIT] NO SESSION";
             builder.AppendLine(
-                $"{Colorize(recordingText, recording ? runningTaskColor : blockedStatusColor)} | " +
+                $"{Colorize(sessionText, sessionActive ? runningTaskColor : blockedStatusColor)} | " +
                 EvalStatusText.Session(session != null ? session.SessionId : string.Empty));
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage))
             {
-                string status = $"SERVER  {session.SessionStatusMessage}";
-                builder.AppendLine($"<size=22>{(recording ? status : Colorize(status, blockedStatusColor))}</size>");
+                string serverStatus = sessionActive ? "SERVER  CONNECTED" : $"SERVER  {session.SessionStatusMessage}";
+                builder.AppendLine(
+                    $"<size=22>{(sessionActive ? serverStatus : Colorize(serverStatus, blockedStatusColor))}</size>");
             }
 
             builder.AppendLine($"NEXT  <size=25><b>{Colorize(selector.NextActionText, nextActionColor)}</b></size>");

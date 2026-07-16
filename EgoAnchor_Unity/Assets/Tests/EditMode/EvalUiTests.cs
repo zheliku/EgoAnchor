@@ -635,6 +635,37 @@ namespace EgoAnchor.Tests
             });
         }
 
+        /// <summary>session 配对后任务 1 只能处于选中状态，必须显式开始后才能进入运行状态。</summary>
+        [Test]
+        public void StatusUiKeepsInitialTaskSelectedButIdle()
+        {
+            WithSelector((session, selector) =>
+            {
+                GameObject uiObject = new GameObject("ExperimentContextTests.InitialUI");
+                try
+                {
+                    ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
+                    SetPrivateField(status, "selector", selector);
+                    SetPrivateField(status, "session", session);
+                    string text = status.BuildStatusText();
+
+                    Assert.That(selector.SelectedTaskIndex, Is.EqualTo(0));
+                    Assert.That(selector.HasActiveTrial, Is.False);
+                    StringAssert.Contains("[READY] SESSION ACTIVE", text);
+                    StringAssert.Contains("SERVER  CONNECTED", text);
+                    StringAssert.Contains("<b><color=#FFD054>>[ ]1 HEAD", text);
+                    StringAssert.Contains("STATE  <color=#6DD3FF>TASK SELECTED - NOT RUNNING", text);
+                    StringAssert.Contains("TIME  <color=#B1BCCC>--:--", text);
+                    StringAssert.DoesNotContain("[REC] RECORDING", text);
+                    StringAssert.DoesNotContain("[RUN]1 HEAD", text);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(uiObject);
+                }
+            });
+        }
+
         /// <summary>UI 必须显示九任务状态、直白操作状态、单一计时和统一按键图例。</summary>
         [Test]
         public void StatusUiShowsTaskBoardAndLivePhase()
