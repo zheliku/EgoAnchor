@@ -329,7 +329,7 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>
-        /// 主变体实际显示用 anchor Transform。实时误差按它与 GT 比较；
+        /// 主变体实际显示用 anchor Transform。实时差异按它与平台控制器参考比较；
         /// 录制时它对应 display_pos，而 output_pos 独立来自 runtime 输出。
         /// </summary>
         public Transform PrimaryAnchorTransform
@@ -341,25 +341,62 @@ namespace EgoAnchor.Eval
             }
         }
 
+        /// <summary>主变体在 manifest 和实时诊断中使用的稳定标签。</summary>
+        public string PrimaryVariantLabel
+        {
+            get
+            {
+                EvalVariant primary = ResolvePrimaryVariant();
+                return primary.label ?? string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 读取主变体当前实际显示的 pose。优先使用 presenter，以保留 hold-last 与隐藏语义；
+        /// 没有 presenter 时，仅在 runtime 有 output 且 Transform 已绑定时回退。
+        /// </summary>
+        /// <param name="pose">当前用户可见的 world pose。</param>
+        /// <returns>主变体当前是否实际显示 pose。</returns>
+        public bool TryGetPrimaryDisplayPose(out Pose pose)
+        {
+            EvalVariant primary = ResolvePrimaryVariant();
+            DynamicObjectAnchor presenter = primary.anchorPresenter != null
+                ? primary.anchorPresenter
+                : primary.runtime != null ? primary.runtime.GetComponent<DynamicObjectAnchor>() : null;
+            if (presenter != null)
+                return presenter.TryGetDisplayPose(out pose);
+
+            bool hasOutput = primary.runtime != null && primary.runtime.TryGetOutputPose(out _);
+            bool hasDisplay = hasOutput && primary.anchorTransform != null;
+            pose = hasDisplay
+                ? new Pose(primary.anchorTransform.position, primary.anchorTransform.rotation)
+                : Pose.identity;
+            return hasDisplay;
+        }
+
         /// <summary>frame_id → 图像时间代理 pose/时间缓存，用于反查 ImageMonoMs 算观测年龄。</summary>
         public FramePoseHistory FrameHistory => framePoseHistory;
 
         /// <summary>
-        /// GT Transform 原始 pose，不经 OVR tracked 门控和 keep-alive。
-        /// 实时面板用它算误差：只要手柄 Transform 在动就更新，不被 OVR 把 tracked 报成
-        /// false 卡住（Link/editor 下常见）。录制路径仍走 <see cref="TryGetCurrentGtPose"/>
-        /// 的门控逻辑标 reference_pose_valid，两者互不影响。
+        /// 读取平台控制器参考的当前 Transform，并独立报告平台追踪有效性。
+        /// 本方法不更新 <see cref="EvalReferencePoseTracker"/>，因此实时面板不会改变正式日志的
+        /// fresh/keep-alive 状态。返回的参考不是外部光学真值。
         /// </summary>
-        /// <param name="pose">GT Transform 绑定时输出其当前 world pose。</param>
-        /// <returns>是否绑定了 GT Transform。</returns>
-        public bool TryGetLiveGtPose(out Pose pose)
+        /// <param name="pose">参考 Transform 绑定时输出其当前 world pose。</param>
+        /// <param name="tracked">平台是否报告位置和旋转均被追踪；未绑定时为 false。</param>
+        /// <returns>是否绑定了参考 Transform。</returns>
+        public bool TryGetLiveReferencePose(out Pose pose, out bool tracked)
         {
             if (groundTruth == null)
             {
                 pose = Pose.identity;
+                tracked = false;
                 return false;
             }
             pose = new Pose(groundTruth.position, groundTruth.rotation);
+            tracked = gtController == OVRInput.Controller.None
+                || (OVRInput.GetControllerPositionTracked(gtController)
+                    && OVRInput.GetControllerOrientationTracked(gtController));
             return true;
         }
 
@@ -572,7 +609,10 @@ namespace EgoAnchor.Eval
         private void OnEnable()
         {
             if (streamPublisher != null)
+            {
                 streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
+                streamPublisher.VrFocusChanged += RecordVrFocusChanged;
+            }
             RefreshAdmissionSubscriptions();
             if (experimentSelector != null)
                 experimentSelector.ContextEvent += RecordExperimentEvent;
@@ -581,7 +621,10 @@ namespace EgoAnchor.Eval
         private void OnDisable()
         {
             if (streamPublisher != null)
+            {
                 streamPublisher.StereoPublishAttempted -= RecordCapturePublishAttempt;
+                streamPublisher.VrFocusChanged -= RecordVrFocusChanged;
+            }
             ClearAdmissionSubscriptions();
             if (experimentSelector != null)
                 experimentSelector.ContextEvent -= RecordExperimentEvent;
@@ -872,6 +915,21 @@ namespace EgoAnchor.Eval
             if (!_recording || _eventsLog == null) return;
             _eventsLog.Write(EvalJson.BuildEventLine(
                 _sessionId, eventType, "experiment_ui", eventType,
+                UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0,
+                UnityEngine.Time.frameCount,
+                context.ExperimentId, context.ScenarioId, context.TrialId,
+                context.EventId, context.ConditionId, context.EventRole));
+        }
+
+        /// <summary>把 Quest Link/OpenXR 的 VR focus 丢失和恢复写入 Unity 事件流。</summary>
+        private void RecordVrFocusChanged(bool hasFocus)
+        {
+            if (!_recording || _eventsLog == null) return;
+            ExperimentContext context = CurrentExperimentContext;
+            string eventType = hasFocus ? "xr_focus_acquired" : "xr_focus_lost";
+            string state = hasFocus ? "focused" : "unfocused";
+            _eventsLog.Write(EvalJson.BuildEventLine(
+                _sessionId, eventType, "unity_xr", state,
                 UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0,
                 UnityEngine.Time.frameCount,
                 context.ExperimentId, context.ScenarioId, context.TrialId,

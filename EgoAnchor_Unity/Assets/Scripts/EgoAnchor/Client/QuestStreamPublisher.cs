@@ -75,6 +75,11 @@ namespace EgoAnchor.Client
         [Min(1)]
         [SerializeField] private int statsIntervalFrames = 120;
 
+        /// <summary>Quest Link/OpenXR 丢失 VR focus 时是否暂停高负载图像采集。</summary>
+        [Header("XR Focus")]
+        [Tooltip("VR focus 丢失时暂停双目 GPU 读回和 JPEG 编码；focus 恢复后自动继续，避免黑屏期间继续占用渲染主线程。")]
+        [SerializeField] private bool pauseWhenVrFocusLost = true;
+
         /// <summary>底层 ZMQ topic 发布器。</summary>
         private ZmqTopicPublisher publisher;
 
@@ -101,6 +106,15 @@ namespace EgoAnchor.Client
 
         /// <summary>stereo 完成一次 ZMQ 发布尝试后触发；订阅者异常不会中断数据面。</summary>
         public event Action<FrameCaptureTiming, double, bool> StereoPublishAttempted;
+
+        /// <summary>Quest Link/OpenXR 的 VR focus 状态变化后触发。</summary>
+        public event Action<bool> VrFocusChanged;
+
+        /// <summary>OpenXR 当前是否把 VR focus 交给 Unity 应用。</summary>
+        public bool HasVrFocus { get; private set; } = true;
+
+        /// <summary>当前是否因 VR focus 丢失而暂停双目采集。</summary>
+        public bool CapturePausedForVrFocus => pauseWhenVrFocusLost && !HasVrFocus;
 
         /// <summary>上次尝试重建 publisher 的 Unity 单调时间。</summary>
         private double lastPublisherAttemptTime;
@@ -150,6 +164,9 @@ namespace EgoAnchor.Client
         /// </summary>
         private void OnEnable()
         {
+            OVRManager.VrFocusAcquired += OnVrFocusAcquired;
+            OVRManager.VrFocusLost += OnVrFocusLost;
+            HasVrFocus = !Application.isPlaying || OVRManager.hasVrFocus;
             QuestStreamSession.BeginNewSession();
             TryStartPublisher(force: true);
         }
@@ -171,6 +188,12 @@ namespace EgoAnchor.Client
             double now = Time.realtimeSinceStartupAsDouble;
             TryStartPublisher(force: false);
             if (publisher == null)
+            {
+                MaybeLogStats();
+                return;
+            }
+
+            if (CapturePausedForVrFocus)
             {
                 MaybeLogStats();
                 return;
@@ -307,6 +330,8 @@ namespace EgoAnchor.Client
         /// </summary>
         private void OnDisable()
         {
+            OVRManager.VrFocusAcquired -= OnVrFocusAcquired;
+            OVRManager.VrFocusLost -= OnVrFocusLost;
             DisposePublisher();
         }
 
@@ -325,6 +350,49 @@ namespace EgoAnchor.Client
         {
             publisher?.Dispose();
             publisher = null;
+        }
+
+        /// <summary>VR focus 恢复后继续采集，并通知评估事件记录器。</summary>
+        private void OnVrFocusAcquired()
+        {
+            SetVrFocus(true);
+        }
+
+        /// <summary>VR focus 丢失后立即暂停高负载采集，并通知评估事件记录器。</summary>
+        private void OnVrFocusLost()
+        {
+            SetVrFocus(false);
+        }
+
+        /// <summary>更新 VR focus 状态并隔离诊断订阅者异常。</summary>
+        private void SetVrFocus(bool hasFocus)
+        {
+            if (HasVrFocus == hasFocus) return;
+            HasVrFocus = hasFocus;
+            if (hasFocus)
+            {
+                lastStereoSendTime = Time.realtimeSinceStartupAsDouble;
+                lastCameraInfoSendTime = lastStereoSendTime;
+                Log.Info("Quest VR focus restored; stereo capture resumed.", this);
+            }
+            else
+            {
+                Log.Warning("Quest VR focus lost; stereo capture paused until focus returns.", this);
+            }
+
+            Action<bool> handlers = VrFocusChanged;
+            if (handlers == null) return;
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<bool>)handler).Invoke(hasFocus);
+                }
+                catch (Exception exc)
+                {
+                    Log.Warning($"VR focus diagnostic callback ignored: {exc.Message}", this);
+                }
+            }
         }
 
         /// <summary>

@@ -4,9 +4,13 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using EgoAnchor.Alignment;
+using EgoAnchor.Client;
 using EgoAnchor.Eval;
 using EgoAnchor.Eval.Experiment;
 using EgoAnchor.Policy;
+using EgoAnchor.Protocol.Generated;
+using EgoAnchor.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -39,6 +43,199 @@ namespace EgoAnchor.Tests
             Assert.That(
                 builder.ToString(),
                 Is.EqualTo("[1]  Static\n<color=#FFD700><b>[2]  Occlusion  ◀</b></color>\n"));
+        }
+    }
+
+    /// <summary>实时诊断面板的采样语义和文本契约测试。</summary>
+    public sealed class EvalLiveStatsTests
+    {
+        /// <summary>面板必须实时计算显示 pose 相对平台参考的差异，并保持 ASCII 输出。</summary>
+        [Test]
+        public void LiveStatsSamplesPrimaryDisplayAgainstTrackedPlatformReference()
+        {
+            GameObject recorderObject = new GameObject("LiveStatsTests.Recorder");
+            GameObject runtimeObject = new GameObject("LiveStatsTests.Runtime");
+            GameObject referenceObject = new GameObject("LiveStatsTests.Reference");
+            GameObject statsObject = new GameObject("LiveStatsTests.Panel");
+            GameObject historyObject = new GameObject("LiveStatsTests.History");
+            try
+            {
+                EvalRecorder recorder = recorderObject.AddComponent<EvalRecorder>();
+                PoseToAnchorRuntime runtime = runtimeObject.AddComponent<PoseToAnchorRuntime>();
+                EvalLiveStats stats = statsObject.AddComponent<EvalLiveStats>();
+                FramePoseHistory history = historyObject.AddComponent<FramePoseHistory>();
+
+                SetPrivateField(recorder, "groundTruth", referenceObject.transform);
+                SetPrivateEnumField(recorder, "gtController", 0);
+                SetPrivateField(recorder, "variants", new List<EvalVariant>
+                {
+                    new EvalVariant
+                    {
+                        label = "EgoAnchor",
+                        runtime = runtime,
+                        anchorTransform = runtimeObject.transform,
+                        isPrimary = true,
+                    },
+                });
+                SetPrivateField(recorder, "framePoseHistory", history);
+                SetPrivateField(stats, "recorder", recorder);
+
+                var timingResult = new PoseResult
+                {
+                    Header = new MessageHeader { FrameId = 7 },
+                    HasPose = false,
+                    ServerReceiveMonoMs = 1000.0,
+                    ServerPublishMonoMs = 1042.0,
+                };
+                runtime.AcceptPoseResult(timingResult);
+
+                double nowMs = Time.realtimeSinceStartupAsDouble * 1000.0;
+                history.Record(
+                    7,
+                    Pose.identity,
+                    Pose.identity,
+                    Pose.identity,
+                    nowMs - 100.0,
+                    1,
+                    0,
+                    nowMs - 90.0,
+                    1);
+                SetPrivateField(runtime, "latestAlignedFrameId", 7L);
+                SetPrivateField(runtime, "latestUnityPoseHandleFrameId", 7L);
+                SetPrivateField(runtime, "latestUnityPoseHandleMonoMs", nowMs - 30.0);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", Pose.identity);
+                runtimeObject.transform.SetPositionAndRotation(
+                    new Vector3(0.01f, 0f, 0f),
+                    Quaternion.Euler(0f, 10f, 0f));
+                InvokeSample(stats);
+
+                runtimeObject.transform.SetPositionAndRotation(
+                    new Vector3(0.012f, 0f, 0f),
+                    Quaternion.Euler(0f, 12f, 0f));
+                InvokeSample(stats);
+
+                Assert.That(stats.HasOutput, Is.True);
+                Assert.That(stats.HasReference, Is.True);
+                Assert.That(stats.ReferenceTracked, Is.True);
+                Assert.That(stats.HasDisplay, Is.True);
+                Assert.That(stats.LatestE2eArrivalMs, Is.EqualTo(70.0).Within(2.0));
+                Assert.That(runtime.LatestServerProcessingMs, Is.EqualTo(42.0).Within(1e-6));
+                Assert.That(stats.LatestPositionDeltaM, Is.EqualTo(0.012).Within(1e-5));
+                Assert.That(stats.LatestRotationDeltaDeg, Is.EqualTo(12.0).Within(1e-3));
+                Assert.That(stats.LatestFrameStepM, Is.EqualTo(0.002).Within(1e-5));
+                Assert.That(stats.LatestFrameStepDeg, Is.EqualTo(2.0).Within(1e-3));
+
+                string text = stats.BuildStatsText();
+                StringAssert.Contains("LIVE SYSTEM DIAGNOSTICS", text);
+                StringAssert.Contains("PRIMARY  EgoAnchor", text);
+                StringAssert.Contains("XR DEVICE  NOT RUNNING", text);
+                StringAssert.Contains("XR FOCUS   NOT RUNNING", text);
+                StringAssert.Contains("DISPLAY VS PLATFORM CONTROLLER", text);
+                StringAssert.Contains("POSITION DELTA", text);
+                StringAssert.Contains("12.0 mm", text);
+                StringAssert.Contains("ROTATION DELTA", text);
+                StringAssert.Contains("12.00 deg", text);
+                StringAssert.Contains("E2E ARRIVAL", text);
+                StringAssert.Contains("SERVER  42 ms", text);
+                StringAssert.Contains("VCD  LATEST", text);
+                StringAssert.Contains("FRAME STEP  2.0 mm / 2.00 deg", text);
+                StringAssert.Contains("REF <color=#4DD6A6>TRACKED</color>", text);
+                StringAssert.DoesNotContain("Ground Truth", text);
+                StringAssert.DoesNotContain("Latency", text);
+                AssertAscii(text);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(statsObject);
+                UnityEngine.Object.DestroyImmediate(historyObject);
+                UnityEngine.Object.DestroyImmediate(referenceObject);
+                UnityEngine.Object.DestroyImmediate(runtimeObject);
+                UnityEngine.Object.DestroyImmediate(recorderObject);
+            }
+        }
+
+        /// <summary>反射调用私有采样入口，避免为了测试扩大逐帧更新 API。</summary>
+        private static void InvokeSample(EvalLiveStats stats)
+        {
+            MethodInfo method = typeof(EvalLiveStats).GetMethod(
+                "SampleLiveSignals",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(stats, Array.Empty<object>());
+        }
+
+        /// <summary>设置测试需要的序列化字段。</summary>
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"missing private field {fieldName}");
+            field.SetValue(target, value);
+        }
+
+        /// <summary>设置测试程序集无法直接引用的外部枚举字段。</summary>
+        private static void SetPrivateEnumField(object target, string fieldName, int value)
+        {
+            FieldInfo field = target.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"missing private enum field {fieldName}");
+            Assert.That(field.FieldType.IsEnum, Is.True, $"field {fieldName} is not an enum");
+            field.SetValue(target, Enum.ToObject(field.FieldType, value));
+        }
+
+        /// <summary>实时头显文本必须使用当前字体可稳定显示的 ASCII 字符。</summary>
+        private static void AssertAscii(string text)
+        {
+            foreach (char character in text)
+            {
+                bool allowed = character == '\r' || character == '\n' || character == '\t'
+                    || (character >= ' ' && character <= '~');
+                Assert.That(allowed, Is.True, $"non-ASCII character U+{(int)character:X4}");
+            }
+        }
+    }
+
+    /// <summary>Quest 双目发布器的 XR focus 保护测试。</summary>
+    public sealed class QuestStreamPublisherTests
+    {
+        /// <summary>VR focus 丢失时必须暂停采集，恢复后继续并各通知一次。</summary>
+        [Test]
+        public void PublisherPausesCaptureWhileVrFocusIsLost()
+        {
+            GameObject owner = new GameObject("QuestStreamPublisherTests.Owner");
+            owner.SetActive(false);
+            try
+            {
+                QuestStreamPublisher publisher = owner.AddComponent<QuestStreamPublisher>();
+                var focusEvents = new List<bool>();
+                publisher.VrFocusChanged += focusEvents.Add;
+
+                InvokeVrFocus(publisher, false);
+                Assert.That(publisher.HasVrFocus, Is.False);
+                Assert.That(publisher.CapturePausedForVrFocus, Is.True);
+
+                InvokeVrFocus(publisher, true);
+                Assert.That(publisher.HasVrFocus, Is.True);
+                Assert.That(publisher.CapturePausedForVrFocus, Is.False);
+                Assert.That(focusEvents, Is.EqualTo(new[] { false, true }));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
+        /// <summary>反射调用私有 focus 更新入口，避免测试触发真实 OpenXR 生命周期。</summary>
+        private static void InvokeVrFocus(QuestStreamPublisher publisher, bool hasFocus)
+        {
+            MethodInfo method = typeof(QuestStreamPublisher).GetMethod(
+                "SetVrFocus",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(publisher, new object[] { hasFocus });
         }
     }
 
@@ -176,6 +373,9 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.SelectTask(0), Is.False);
                 Assert.That(selector.StartTrial(), Is.False);
                 Assert.That(selector.MarkEvent(), Is.False);
+                Assert.That(selector.HasMarkerFeedback, Is.True);
+                Assert.That(selector.MarkerFeedbackSucceeded, Is.False);
+                Assert.That(selector.MarkerFeedbackText, Is.EqualTo("MARKER IGNORED: START A TASK FIRST"));
                 Assert.That(selector.CurrentContext.IsSelected, Is.False);
             }, recording: false);
         }
@@ -214,6 +414,9 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStarted));
+                Assert.That(selector.HasMarkerFeedback, Is.True);
+                Assert.That(selector.MarkerFeedbackSucceeded, Is.True);
+                Assert.That(selector.MarkerFeedbackText, Is.EqualTo("MARKER SAVED #1: MOTION START"));
                 Assert.That(selector.CurrentPhaseText, Is.EqualTo("MOTION IN PROGRESS"));
                 StringAssert.DoesNotContain("RECOVERY", selector.CurrentPhaseText);
                 Assert.That(selector.EndTrial(), Is.True);
@@ -456,7 +659,7 @@ namespace EgoAnchor.Tests
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
                     StringAssert.Contains("<b><color=#4DD6A6>>[RUN]5 OCC", text);
-                    StringAssert.Contains("MARKER  <size=24><color=#FFA95C>Numpad + / M / Trigger when the target becomes visible.", text);
+                    StringAssert.Contains("MARKER  <size=26><b><color=#4DD6A6>MARKER SAVED #1: OCCLUSION START", text);
                     StringAssert.Contains("Occlusion and reappearance", text);
                     StringAssert.Contains("STATE  <color=#6DD3FF>TARGET OCCLUDED", text);
                     StringAssert.Contains("TIME  <color=#4DD6A6>", text);
@@ -793,6 +996,55 @@ namespace EgoAnchor.Tests
 
             string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
+        }
+
+        /// <summary>两个采集场景都必须使用静止根 Canvas 下互不重叠的任务板和实时诊断板。</summary>
+        [Test]
+        public void CollectionScenesContainWiredLiveMetricsPanel()
+        {
+            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
+            {
+                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
+                string yaml = File.ReadAllText(path);
+                Assert.That(
+                    Regex.Matches(yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats").Count,
+                    Is.EqualTo(1),
+                    sceneName);
+
+                string canvasSection = GetSectionContaining(yaml, "m_Name: Canvas");
+                string canvasTransformId = ReadFirstComponentReference(canvasSection);
+                string canvasTransform = GetSection(yaml, canvasTransformId);
+                StringAssert.Contains("m_Father: {fileID: 0}", canvasTransform, sceneName);
+
+                string statusPanel = GetSectionContaining(yaml, "m_Name: ExperimentStatusPanel");
+                string statusRect = GetSection(yaml, ReadFirstComponentReference(statusPanel));
+                StringAssert.Contains("m_AnchoredPosition: {x: -450, y: 0}", statusRect, sceneName);
+                StringAssert.Contains("m_SizeDelta: {x: 900, y: 650}", statusRect, sceneName);
+                StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", statusRect, sceneName);
+
+                string livePanel = GetSectionContaining(yaml, "m_Name: LiveMetricsPanel");
+                string liveRect = GetSection(yaml, ReadFirstComponentReference(livePanel));
+                StringAssert.Contains("m_AnchoredPosition: {x: 470, y: 0}", liveRect, sceneName);
+                StringAssert.Contains("m_SizeDelta: {x: 720, y: 650}", liveRect, sceneName);
+                StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", liveRect, sceneName);
+
+                string stats = GetSectionContaining(
+                    yaml,
+                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats");
+                string recorderId = ReadReference(stats, "recorder");
+                string statsTextId = ReadReference(stats, "statsText");
+                Assert.That(recorderId, Is.Not.EqualTo("0"), sceneName);
+                Assert.That(statsTextId, Is.Not.EqualTo("0"), sceneName);
+
+                string statsText = GetSection(yaml, statsTextId);
+                string statsTextObject = GetSection(yaml, ReadReference(statsText, "m_GameObject"));
+                StringAssert.Contains("m_Name: LiveMetricsText", statsTextObject, sceneName);
+
+                string publisher = GetSectionContaining(
+                    yaml,
+                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher");
+                StringAssert.Contains("pauseWhenVrFocusLost: 1", publisher, sceneName);
+            }
         }
 
         /// <summary>每个任务必须同时绑定数字行与小键盘，并且路径能被当前 Input System 解析。</summary>

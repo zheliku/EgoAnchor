@@ -143,7 +143,16 @@ namespace EgoAnchor.Eval.Experiment
             builder.AppendLine(
                 $"STATE  {Colorize(selector.CurrentPhaseText, phaseStatusColor)} | " +
                 $"TIME  {Colorize(timer, TimerColor())}");
-            builder.AppendLine($"MARKER  <size=24>{Colorize(selector.MarkerInstructionText, markerStatusColor)}</size>");
+            if (selector.HasMarkerFeedback)
+            {
+                Color feedbackColor = selector.MarkerFeedbackSucceeded ? runningTaskColor : blockedStatusColor;
+                builder.AppendLine(
+                    $"MARKER  <size=26><b>{Colorize(selector.MarkerFeedbackText, feedbackColor)}</b></size>");
+            }
+            else
+            {
+                builder.AppendLine($"MARKER  <size=24>{Colorize(selector.MarkerInstructionText, markerStatusColor)}</size>");
+            }
             builder.AppendLine("<size=22>KEYPAD  1-9 Select | Enter Start | + Marker | 0 End");
             builder.AppendLine("ALT     Arrows Select | Enter Start | M Marker | E End");
             builder.AppendLine("VR      Stick Select | A Start | Trigger Marker | Tap B End");

@@ -27,6 +27,8 @@
 - 普通运动任务在动作开始前按 marker；
 - 遮挡任务需要在“遮挡开始”和“重新可见”两个时刻各按一次 marker。
 
+marker 按下后，状态板会保留 2 秒确认信息。绿色 `MARKER SAVED #N` 表示已经写入，并附带 `MOTION START`、`OCCLUSION START` 或 `TARGET VISIBLE`。红色 `MARKER IGNORED` 表示当前没有活动任务，这次按键没有写入日志。看到绿色确认后再开始动作，不要连续快速重复按键。
+
 ## 二、右手手柄和键盘怎么用
 
 ### 右手手柄
@@ -54,6 +56,10 @@
 ## 三、UI 怎么看
 
 Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。
+
+Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实时系统诊断板。两块面板都固定在场景根节点。
+
+### 左侧任务采集状态板
 
 ```text
 1 HEAD    2 6DOF    3 MOVE
@@ -83,6 +89,31 @@ Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。
 
 面板不再显示分析内部的 `Phase`、`Role` 或双计时。`TASKS` 和九宫格用于核对完成范围，`CURRENT` 是当前选中任务，`TIME` 是该任务的总时长，`NEXT` 是当前最应该执行的操作。底部固定列出手柄和键盘按键。
 
+### 右侧实时系统诊断板
+
+右侧面板在 Play Mode 中持续采样，每秒刷新 10 次。它在任务开始前、任务运行中和任务结束后都会更新。
+
+| 面板字段 | 含义 |
+|---|---|
+| `XR DEVICE / WORN` | 是否检测到头显，以及 Meta runtime 是否判断头显正在佩戴 |
+| `XR FOCUS / INPUT` | Unity 是否持有 VR 画面和输入 focus；`LOST` 会显示红色 |
+| `OUTPUT / DISPLAY / REF` | 主 runtime 是否有输出、锚点是否实际可见、平台控制器参考是否可用 |
+| `POSITION DELTA` | 显示锚点相对 Quest 平台控制器参考的位置差异，单位 mm |
+| `ROTATION DELTA` | 显示锚点相对 Quest 平台控制器参考的旋转差异，单位 deg |
+| `OBS AGE` | 当前显示使用的图像观测距现在有多久；它包含等待和运行时保持，不是纯网络时延 |
+| `E2E ARRIVAL` | 同一 Unity 单调时钟下，从图像时间代理到 Unity 处理该 PoseResult 的时间 |
+| `SERVER` | Python 同一单调时钟下的服务端处理时间，不与 Unity 时钟相减 |
+| `SMOOTH` | 时序合成当前引入的实际输出延迟 |
+| `POSE RATE` | 新 PoseResult 对应 frame_id 的实时更新率 |
+| `VCD LATEST / ACCEPTED` | 最新候选评分，以及最近一次被 policy 接受的评分 |
+| `RESIDUAL` | policy 输出阶段的平移和旋转残差 |
+| `FRAME STEP` | 相邻 Unity 帧实际显示锚点的位姿变化，包含真实物体运动，不能直接当作抖动指标 |
+| `ANCHOR / MOTION / STATIC LOCK` | 锚点生命周期、运动状态和静止锁定状态 |
+
+开始任务前，先确认 `WORN YES`、`VR ACTIVE`、`INPUT ACTIVE`，并且 `OUTPUT`、`DISPLAY`、`REF` 都不是红色。再观察几秒，确认 `POSE RATE` 持续更新，`OBS AGE` 和 `E2E ARRIVAL` 没有不断上升，然后按 A 或 `Enter`。
+
+不要为了得到更好看的结果，等 `POSITION DELTA`、`ROTATION DELTA` 或 VCD 分数特别低时才开始。右侧面板是连接和运行状态诊断，不是正式数据筛选器。控制器 pose 也不是外部光学真值；正式指标以日志完成后的 schema-v2 配对分析为准。
+
 ## 四、启动顺序
 
 ### 1. 启动 NATS
@@ -108,6 +139,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 4. 等待 Python 显示 NATS 已连接、ZMQ 正在监听 `15557`。
 5. 等待 Unity UI 显示 `Recording` 和 Python 的 `session_id`。
 6. 确认任务 1 已被选中，但仍是 `[ ]`，不是 `[RUN]`。
+7. 查看右侧实时诊断板，确认 `WORN YES`、`VR ACTIVE`、`INPUT ACTIVE`，并等待输出信号和更新率稳定。
 
 如果 UI 显示“当前 Python session 已有 Unity 日志”，这个 `session_id` 已经用过。停止并重新启动 Python，取得新的 `session_id`，不要覆盖旧目录。
 
@@ -122,6 +154,8 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 7. 短按 B 或按 `E`，确认任务变成蓝色 `[OK]`。
 
 按 marker 时应先按键，再开始动作。不要已经移动几秒后才补按。
+
+每次按 marker 都要看到绿色 `MARKER SAVED #N`。没有看到确认时先停止动作，检查当前任务是否仍为 `[RUN]`，不要靠重复按键猜测是否写入。
 
 ## 六、任务 1--9 逐项操作
 
@@ -247,4 +281,19 @@ pixi run python -m egoanchor.eval.cli analyze-exp2 `
 
 本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Finish Action`、`Reject Action` 和 9 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
 
-开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`9`、两个 `Enter`、小键盘 `+`、小键盘 `0`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，遮挡 marker 能正确配对，Canvas 不跟随头部，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。
+开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`9`、两个 `Enter`、小键盘 `+`、小键盘 `0`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，marker 成功和拒绝都有明显反馈，遮挡 marker 能正确配对，两块 Canvas 面板不跟随头部，实时指标持续更新，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。
+
+## 十一、Quest 串流黑屏怎么处理
+
+如果头显突然黑屏，先看右侧面板最后显示的 XR 状态。`WORN NO`、`VR LOST` 或 `INPUT LOST` 说明 Meta runtime 已经撤回画面或输入 focus。代码会立即暂停双目 GPU 读回和 JPEG 编码；focus 恢复后自动继续，并把 `xr_focus_lost`、`xr_focus_acquired` 写入 `unity_events.jsonl`。
+
+按以下顺序处理：
+
+1. 确认头显仍然佩戴稳固，近距传感器没有被面罩、胶带或头发遮挡。
+2. 唤醒头显并确认 Quest Link 仍连接；需要时回到 Link 界面后再进入 Unity。
+3. 等面板恢复为 `WORN YES | VR ACTIVE | INPUT ACTIVE`，并确认 `POSE RATE` 重新更新。
+4. 作废黑屏期间正在运行的 trial，再重新采该任务。已经完成的其他任务不用重做。
+
+本次排查过的黑屏日志在故障点依次出现 `HMDUnmounted`、`VrFocusLost` 和 `InputFocusLost`。同一时段的 render、双目发送和日志队列仍正常，没有 OOM、显卡设备丢失、发送失败或 writer 丢行，因此不能把这次故障归因于录制代码卡死。双目同步 `ReadPixels` 和 JPEG 编码仍是长期性能风险；如果以后在 `WORN YES`、`VR ACTIVE` 时再次黑屏，再单独采集 Unity Profiler、Meta Link 日志和 GPU/GC 数据。
+
+正式采集进入 Play Mode 后，不要修改脚本、保存场景、刷新 AssetDatabase，也不要让 Unity MCP 启动或停止 Play Mode。先结束 session 并退出 Play Mode，再进行代码改动。

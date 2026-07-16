@@ -7,306 +7,432 @@ using UnityEngine;
 namespace EgoAnchor.Eval
 {
     /// <summary>
-    /// 评估场景共享的实时遥测面板。
+    /// 正式评估场景的只读实时诊断面板。
     /// <para>
-    /// 本组件与实验状态面板解耦，只读取主变体并显示观测年龄、pose 更新率、
-    /// 实时误差、帧间输出变化、可靠性分数与锚定状态。
+    /// 面板读取完整 EgoAnchor 变体、平台控制器参考和 frame history，显示当前输出差异、
+    /// 图像观测年龄、pose 更新率、可靠性、残差、帧间变化与锚点状态。
     /// </para>
     /// <para>
-    /// 主变体 runtime、显示 Transform、frame 缓存和参考位姿都从 <see cref="EvalRecorder"/> 读取。
-    /// 面板不修改运行状态，也不写文件；实时参考位姿不受离线日志的跟踪有效性门控。
-    /// </para>
-    /// <para>
-    /// 指标按帧采样且不做平滑，文本绘制按 <see cref="updateRate"/> 节流。帧间输出变化在
-    /// 动态试次中包含物体真实运动，不能解释为纯追踪噪声。
-    /// </para>
-    /// <para>
-    /// Latency 的语义是 <c>now - 最新对齐 frame_id 的 ImageMonoMs</c>，属于基于图像时间代理的
-    /// 观测年龄，不是纯网络时延。
+    /// 位置和旋转差异使用平台控制器参考，不是外部光学真值；观测年龄使用 Unity 同一
+    /// 单调时钟计算，不是纯网络时延。面板只用于采集前检查和现场排障，论文指标仍以
+    /// schema-v2 离线配对分析为准。
     /// </para>
     /// </summary>
     public sealed class EvalLiveStats : MonoBehaviour
     {
-        // ── References ──
-
-        /// <summary>提供主变体 runtime、显示 Transform、frame 缓存与实时参考位姿。</summary>
+        /// <summary>提供完整 EgoAnchor runtime、显示 Transform、参考位姿和 frame history。</summary>
         [Header("References")]
-        [Tooltip("评估记录器；主变体 runtime / anchor Transform / frame 缓存 / GT pose 都从它取，与录制同源。")]
+        [Tooltip("评估记录器；实时诊断与正式日志使用同一主变体、平台参考和 frame history。")]
         [SerializeField] private EvalRecorder recorder;
 
-        /// <summary>实时遥测输出文本。</summary>
-        [Tooltip("实时性遥测文本。")]
+        /// <summary>实时诊断文本。</summary>
+        [Tooltip("独立实时诊断面板的 TextMeshProUGUI。")]
         [SerializeField] private TextMeshProUGUI statsText;
 
-        // ── Settings ──
-
-        /// <summary>文本每秒刷新次数；信号仍按帧采样。</summary>
-        [Header("Settings")]
-        [Tooltip("UI 刷新频率（Hz）。数值仍是每帧采样的瞬时值，此项只控制文本重绘节流。")]
+        /// <summary>文本刷新频率；信号仍在每个 Unity frame 采样。</summary>
+        [Header("Refresh")]
         [Min(1f)]
+        [Tooltip("文本每秒刷新次数。指标仍按 Unity frame 采样，此值只限制文本重绘。")]
         [SerializeField] private float updateRate = 10f;
 
-        /// <summary>观测年龄低于该阈值时显示绿色，单位毫秒。</summary>
-        [Header("Latency Thresholds (ms)")]
-        [Tooltip("时延低于此值显示绿色（良好）。")]
-        [SerializeField] private float latencyGoodMs = 120f;
+        /// <summary>超过该时间没有新 frame_id 时，pose rate 显示为 0。</summary>
+        [Min(0.1f)]
+        [Tooltip("连续多少秒没有新 frame_id 后把 pose rate 置为 0，避免保留过期更新率。")]
+        [SerializeField] private float poseRateTimeoutSeconds = 2f;
 
-        /// <summary>观测年龄高于该阈值时显示红色，单位毫秒。</summary>
-        [Tooltip("时延高于此值显示红色（差）；介于两者之间显示黄色。")]
-        [SerializeField] private float latencyBadMs = 200f;
+        /// <summary>观测年龄绿色上限，单位毫秒。</summary>
+        [Header("Observation Age Thresholds (ms)")]
+        [Tooltip("观测年龄不高于此值时显示绿色。它不是纯网络时延。")]
+        [SerializeField] private float observationAgeGoodMs = 120f;
 
-        /// <summary>平移误差低于该阈值时显示绿色，单位毫米。</summary>
-        [Header("Error Thresholds (vs GT)")]
-        [Tooltip("平移误差低于此值显示绿色（良好），单位毫米。")]
-        [SerializeField] private float transErrGoodMm = 10f;
+        /// <summary>观测年龄红色下限，单位毫秒。</summary>
+        [Tooltip("观测年龄不低于此值时显示红色；中间区间显示黄色。")]
+        [SerializeField] private float observationAgeBadMs = 200f;
 
-        /// <summary>平移误差高于该阈值时显示红色，单位毫米。</summary>
-        [Tooltip("平移误差高于此值显示红色（差），单位毫米；介于两者之间显示黄色。")]
-        [SerializeField] private float transErrBadMm = 20f;
+        /// <summary>平台参考位置差异绿色上限，单位毫米。</summary>
+        [Header("Platform Reference Delta Thresholds")]
+        [Tooltip("显示 pose 相对平台控制器参考的位置差异绿色上限，单位毫米。")]
+        [SerializeField] private float positionDeltaGoodMm = 10f;
 
-        /// <summary>旋转误差低于该阈值时显示绿色，单位度。</summary>
-        [Tooltip("旋转误差低于此值显示绿色（良好），单位度。")]
-        [SerializeField] private float rotErrGoodDeg = 5f;
+        /// <summary>平台参考位置差异红色下限，单位毫米。</summary>
+        [Tooltip("显示 pose 相对平台控制器参考的位置差异红色下限，单位毫米。")]
+        [SerializeField] private float positionDeltaBadMm = 20f;
 
-        /// <summary>旋转误差高于该阈值时显示红色，单位度。</summary>
-        [Tooltip("旋转误差高于此值显示红色（差），单位度；介于两者之间显示黄色。")]
-        [SerializeField] private float rotErrBadDeg = 20f;
+        /// <summary>平台参考旋转差异绿色上限，单位度。</summary>
+        [Tooltip("显示 pose 相对平台控制器参考的旋转差异绿色上限，单位度。")]
+        [SerializeField] private float rotationDeltaGoodDeg = 5f;
 
-        // ── State ──
+        /// <summary>平台参考旋转差异红色下限，单位度。</summary>
+        [Tooltip("显示 pose 相对平台控制器参考的旋转差异红色下限，单位度。")]
+        [SerializeField] private float rotationDeltaBadDeg = 20f;
 
-        /// <summary>当前文本刷新周期内累计的时间。</summary>
+        /// <summary>当前文本刷新周期内累计时间。</summary>
         private float _updateTimer;
 
-        /// <summary>上次观测到 LatestAlignedFrameId 变化的时刻（毫秒），用于估 pose 更新率。</summary>
+        /// <summary>最近一次看到的主变体 frame_id。</summary>
         private long _lastSeenFrameId = long.MinValue;
-        private double _lastFrameChangeMonoMs = -1.0;
 
-        /// <summary>最新一帧的端到端时延（毫秒）；无有效数据时为 NaN。</summary>
-        private double _latestLatencyMs = double.NaN;
+        /// <summary>最近一次 frame_id 变化的 Unity 单调时钟毫秒。</summary>
+        private double _lastFrameChangeMonoMs = double.NaN;
 
-        /// <summary>最新观测的 pose 更新率（Hz）；无有效数据时为 NaN。</summary>
+        /// <summary>最新图像观测年龄，单位毫秒。</summary>
+        private double _latestObservationAgeMs = double.NaN;
+
+        /// <summary>图像时间代理到 Unity 完成 pose 处理的同帧到达延迟，单位毫秒。</summary>
+        private double _latestE2eArrivalMs = double.NaN;
+
+        /// <summary>最新 pose 更新率，单位 Hz。</summary>
         private double _latestPoseHz = double.NaN;
 
-        /// <summary>最新一帧的锚定平移误差（米）；无 GT 或无输出时为 NaN。</summary>
-        private double _latestTransErrM = double.NaN;
+        /// <summary>显示 pose 相对平台参考的位置差异，单位米。</summary>
+        private double _latestPositionDeltaM = double.NaN;
 
-        /// <summary>最新一帧的锚定旋转误差（度）；无 GT 或无输出时为 NaN。</summary>
-        private double _latestRotErrDeg = double.NaN;
+        /// <summary>显示 pose 相对平台参考的旋转差异，单位度。</summary>
+        private double _latestRotationDeltaDeg = double.NaN;
 
-        /// <summary>上一帧 anchor pose，用于估计位置/旋转抖动。</summary>
-        private Vector3 _lastAnchorPos;
-        private Quaternion _lastAnchorRot;
-        private bool _hasLastAnchorPos;
+        /// <summary>相邻 Unity frame 的显示位置变化，单位米。</summary>
+        private double _latestFrameStepM = double.NaN;
 
-        /// <summary>最新一帧的位置抖动（米，帧间位移幅度）；无数据时为 NaN。</summary>
-        private double _latestJitterM = double.NaN;
+        /// <summary>相邻 Unity frame 的显示旋转变化，单位度。</summary>
+        private double _latestFrameStepDeg = double.NaN;
 
-        /// <summary>最新一帧的旋转抖动（度，帧间旋转幅度）；无数据时为 NaN。</summary>
-        private double _latestJitterDeg = double.NaN;
+        /// <summary>上一帧显示 pose，用于计算帧间变化。</summary>
+        private Pose _lastDisplayPose;
 
-        // ── Public API（供其它诊断/测试读取，不写文件） ──
+        /// <summary>是否已有上一帧显示 pose。</summary>
+        private bool _hasLastDisplayPose;
 
-        /// <summary>最新一帧的端到端时延（毫秒）；无数据为 NaN。</summary>
-        public double LatestLatencyMs => _latestLatencyMs;
+        /// <summary>主 runtime 当前是否提供有效 output pose。</summary>
+        private bool _hasOutput;
 
-        /// <summary>最新观测的 pose 更新率（Hz）；无数据为 NaN。</summary>
+        /// <summary>主变体当前是否实际显示 pose，包括 hold-last。</summary>
+        private bool _hasDisplay;
+
+        /// <summary>平台参考 Transform 是否已绑定。</summary>
+        private bool _hasReference;
+
+        /// <summary>平台当前是否报告参考控制器的位置和旋转均被追踪。</summary>
+        private bool _referenceTracked;
+
+        /// <summary>当前是否处于可读取 OpenXR 状态的 Play Mode。</summary>
+        private bool _xrRuntimeActive;
+
+        /// <summary>OpenXR 当前是否检测到头显设备。</summary>
+        private bool _hmdPresent;
+
+        /// <summary>Meta runtime 当前是否判断用户佩戴着头显。</summary>
+        private bool _userPresent;
+
+        /// <summary>Unity 应用当前是否持有 VR focus。</summary>
+        private bool _vrFocus;
+
+        /// <summary>Unity 应用当前是否持有 XR 输入 focus。</summary>
+        private bool _inputFocus;
+
+        /// <summary>最新图像观测年龄，单位毫秒；无有效 frame 时为 NaN。</summary>
+        public double LatestObservationAgeMs => _latestObservationAgeMs;
+
+        /// <summary>图像时间代理到 Unity 完成 pose 处理的同帧到达延迟，单位毫秒。</summary>
+        public double LatestE2eArrivalMs => _latestE2eArrivalMs;
+
+        /// <summary>最新 pose 更新率，单位 Hz；尚未得到两个 frame_id 时为 NaN。</summary>
         public double LatestPoseHz => _latestPoseHz;
 
-        /// <summary>最新一帧的平移误差（米）；无数据为 NaN。</summary>
-        public double LatestTranslationErrorM => _latestTransErrM;
+        /// <summary>显示 pose 相对平台参考的位置差异，单位米。</summary>
+        public double LatestPositionDeltaM => _latestPositionDeltaM;
 
-        /// <summary>最新一帧的旋转误差（度）；无数据为 NaN。</summary>
-        public double LatestRotationErrorDeg => _latestRotErrDeg;
+        /// <summary>显示 pose 相对平台参考的旋转差异，单位度。</summary>
+        public double LatestRotationDeltaDeg => _latestRotationDeltaDeg;
 
-        /// <summary>最新一帧的位置抖动（米）；无数据为 NaN。</summary>
-        public double LatestJitterM => _latestJitterM;
+        /// <summary>相邻 Unity frame 的显示位置变化，单位米。</summary>
+        public double LatestFrameStepM => _latestFrameStepM;
 
-        /// <summary>最新一帧的旋转抖动（度）；无数据为 NaN。</summary>
-        public double LatestJitterDeg => _latestJitterDeg;
+        /// <summary>相邻 Unity frame 的显示旋转变化，单位度。</summary>
+        public double LatestFrameStepDeg => _latestFrameStepDeg;
 
-        // ── Unity 生命周期 ──
+        /// <summary>主 runtime 当前是否有有效 output pose。</summary>
+        public bool HasOutput => _hasOutput;
+
+        /// <summary>主变体当前是否实际显示 pose，包括 hold-last。</summary>
+        public bool HasDisplay => _hasDisplay;
+
+        /// <summary>平台参考 Transform 是否已绑定。</summary>
+        public bool HasReference => _hasReference;
+
+        /// <summary>平台当前是否报告参考控制器被追踪。</summary>
+        public bool ReferenceTracked => _referenceTracked;
 
         /// <summary>每帧采样实时信号，并按配置频率重绘文本。</summary>
         private void Update()
         {
             SampleLiveSignals();
-
             _updateTimer += Time.deltaTime;
-            if (_updateTimer >= 1f / Mathf.Max(1f, updateRate))
-            {
-                _updateTimer = 0f;
-                RenderText();
-            }
+            if (_updateTimer < 1f / Mathf.Max(1f, updateRate)) return;
+
+            _updateTimer = 0f;
+            RenderText();
         }
 
-        // ── 采样与估计 ──
-
-        /// <summary>
-        /// 每帧采样：pose 更新率、端到端时延、锚定误差、位置抖动，全部从 recorder 同源取瞬时值。
-        /// </summary>
+        /// <summary>从主变体和平台参考读取一次不改变运行状态的实时快照。</summary>
         private void SampleLiveSignals()
         {
-            if (recorder == null)
-            {
-                return;
-            }
-
-            PoseToAnchorRuntime runtime = recorder.PrimaryRuntime;
+            SampleXrStatus();
+            PoseToAnchorRuntime runtime = recorder != null ? recorder.PrimaryRuntime : null;
             if (runtime == null)
             {
+                ClearAllSignals();
                 return;
             }
 
             double nowMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             long frameId = runtime.LatestAlignedFrameId;
+            UpdatePoseRate(frameId, nowMs);
+            UpdateTiming(frameId, nowMs, runtime.LatestUnityPoseHandleMonoMs);
 
-            // pose 更新率：LatestAlignedFrameId 发生变化即视为收到一条新的有效 pose
+            _hasOutput = runtime.TryGetOutputPose(out _);
+            _hasReference = recorder.TryGetLiveReferencePose(out Pose referencePose, out _referenceTracked);
+
+            _hasDisplay = recorder.TryGetPrimaryDisplayPose(out Pose displayPose);
+            if (!_hasDisplay)
+            {
+                ClearDisplaySignals();
+                return;
+            }
+            UpdateFrameStep(displayPose);
+
+            _latestPositionDeltaM = double.NaN;
+            _latestRotationDeltaDeg = double.NaN;
+            if (_hasReference && _referenceTracked)
+            {
+                _latestPositionDeltaM = (displayPose.position - referencePose.position).magnitude;
+                _latestRotationDeltaDeg = Quaternion.Angle(displayPose.rotation, referencePose.rotation);
+            }
+        }
+
+        /// <summary>读取 Meta OpenXR 的设备、佩戴和 focus 状态；EditMode 不调用原生 XR API。</summary>
+        private void SampleXrStatus()
+        {
+            _xrRuntimeActive = Application.isPlaying;
+            if (!_xrRuntimeActive)
+            {
+                _hmdPresent = false;
+                _userPresent = false;
+                _vrFocus = false;
+                _inputFocus = false;
+                return;
+            }
+
+            _hmdPresent = OVRManager.isHmdPresent;
+            _userPresent = OVRManager.instance != null && OVRManager.instance.isUserPresent;
+            _vrFocus = OVRManager.hasVrFocus;
+            _inputFocus = OVRManager.hasInputFocus;
+        }
+
+        /// <summary>按新 frame_id 的到达间隔更新 pose rate，并在数据停滞时归零。</summary>
+        private void UpdatePoseRate(long frameId, double nowMs)
+        {
             if (frameId >= 0 && frameId != _lastSeenFrameId)
             {
-                if (_lastFrameChangeMonoMs >= 0.0)
+                if (!double.IsNaN(_lastFrameChangeMonoMs))
                 {
                     double intervalMs = nowMs - _lastFrameChangeMonoMs;
-                    if (intervalMs > 1e-3)
-                    {
-                        _latestPoseHz = 1000.0 / intervalMs;
-                    }
+                    if (intervalMs > 1e-3) _latestPoseHz = 1000.0 / intervalMs;
                 }
-                _lastFrameChangeMonoMs = nowMs;
+
                 _lastSeenFrameId = frameId;
+                _lastFrameChangeMonoMs = nowMs;
+                return;
             }
 
-            // 观测年龄代理：now - 该 frame_id 图像时间代理 ImageMonoMs（同一 Unity 单调时钟）
+            double timeoutMs = Mathf.Max(0.1f, poseRateTimeoutSeconds) * 1000.0;
+            if (!double.IsNaN(_lastFrameChangeMonoMs) && nowMs - _lastFrameChangeMonoMs >= timeoutMs)
+                _latestPoseHz = 0.0;
+        }
+
+        /// <summary>
+        /// 使用 Unity 同一单调时钟计算观测年龄和同帧 E2E arrival。
+        /// E2E arrival 只在 handle 时间仍与当前 aligned frame_id 原子对应时有效。
+        /// </summary>
+        private void UpdateTiming(long frameId, double nowMs, double handleMonoMs)
+        {
+            _latestObservationAgeMs = double.NaN;
+            _latestE2eArrivalMs = double.NaN;
             FramePoseHistory history = recorder.FrameHistory;
-            if (frameId >= 0 && history != null
-                && history.TryGet(frameId, out FramePoseRecord record))
-            {
-                double latencyMs = nowMs - record.ImageMonoMs;
-                if (latencyMs >= 0.0)
-                {
-                    _latestLatencyMs = latencyMs;
-                }
-            }
-
-            // 只有 runtime 当前有效输出时才报告误差，避免把 hold-last 误报为有效追踪。
-            if (!runtime.TryGetOutputPose(out _))
-            {
-                ClearPoseSignals();
+            if (frameId < 0 || history == null || !history.TryGet(frameId, out FramePoseRecord record))
                 return;
-            }
 
-            // 锚定误差与抖动基于主变体显示用 anchor Transform。
-            Transform anchor = recorder.PrimaryAnchorTransform;
-            if (anchor == null)
-            {
-                ClearPoseSignals();
-                return;
-            }
+            double ageMs = nowMs - record.ImageMonoMs;
+            if (ageMs >= 0.0) _latestObservationAgeMs = ageMs;
 
-            // 面板用 live GT（直读 Transform，不受 OVR tracked 门控）；无参考位姿时清空旧误差。
-            _latestTransErrM = double.NaN;
-            _latestRotErrDeg = double.NaN;
-            if (recorder.TryGetLiveGtPose(out Pose gtPose))
-            {
-                _latestTransErrM = (anchor.position - gtPose.position).magnitude;
-                _latestRotErrDeg = Quaternion.Angle(anchor.rotation, gtPose.rotation);
-            }
-
-            // 位置/旋转抖动：相邻帧 anchor 位移与旋转幅度（不依赖 GT，反映输出平滑度）。
-            if (_hasLastAnchorPos)
-            {
-                _latestJitterM = (anchor.position - _lastAnchorPos).magnitude;
-                _latestJitterDeg = Quaternion.Angle(anchor.rotation, _lastAnchorRot);
-            }
-            _lastAnchorPos = anchor.position;
-            _lastAnchorRot = anchor.rotation;
-            _hasLastAnchorPos = true;
+            double arrivalMs = handleMonoMs - record.ImageMonoMs;
+            if (!double.IsNaN(handleMonoMs) && arrivalMs >= 0.0)
+                _latestE2eArrivalMs = arrivalMs;
         }
 
-        /// <summary>清空依赖有效输出的误差和帧间变化，终止上一段连续序列。</summary>
-        private void ClearPoseSignals()
+        /// <summary>计算连续显示 pose 的帧间位置和旋转变化。</summary>
+        private void UpdateFrameStep(Pose displayPose)
         {
-            _latestTransErrM = double.NaN;
-            _latestRotErrDeg = double.NaN;
-            _latestJitterM = double.NaN;
-            _latestJitterDeg = double.NaN;
-            _hasLastAnchorPos = false;
-        }
-
-        // ── 渲染 ──
-
-        /// <summary>把最新采样值写入 TextMesh Pro 文本。</summary>
-        private void RenderText()
-        {
-            if (statsText == null)
+            if (_hasLastDisplayPose)
             {
-                return;
+                _latestFrameStepM = (displayPose.position - _lastDisplayPose.position).magnitude;
+                _latestFrameStepDeg = Quaternion.Angle(displayPose.rotation, _lastDisplayPose.rotation);
             }
 
+            _lastDisplayPose = displayPose;
+            _hasLastDisplayPose = true;
+        }
+
+        /// <summary>清空依赖有效显示输出的差异和帧间变化。</summary>
+        private void ClearDisplaySignals()
+        {
+            _latestPositionDeltaM = double.NaN;
+            _latestRotationDeltaDeg = double.NaN;
+            _latestFrameStepM = double.NaN;
+            _latestFrameStepDeg = double.NaN;
+            _hasLastDisplayPose = false;
+        }
+
+        /// <summary>主 runtime 不存在时清空全部实时状态。</summary>
+        private void ClearAllSignals()
+        {
+            _latestObservationAgeMs = double.NaN;
+            _latestE2eArrivalMs = double.NaN;
+            _latestPoseHz = double.NaN;
+            _lastSeenFrameId = long.MinValue;
+            _lastFrameChangeMonoMs = double.NaN;
+            _hasOutput = false;
+            _hasDisplay = false;
+            _hasReference = false;
+            _referenceTracked = false;
+            ClearDisplaySignals();
+        }
+
+        /// <summary>按最新采样状态构建实时诊断文本，供运行时和测试复用。</summary>
+        public string BuildStatsText()
+        {
             PoseToAnchorRuntime runtime = recorder != null ? recorder.PrimaryRuntime : null;
             if (runtime == null)
-            {
-                statsText.text = "Live Stats: no runtime";
-                return;
-            }
+                return "<size=30><b>LIVE SYSTEM DIAGNOSTICS</b></size>\nRuntime not configured";
 
-            var sb = new StringBuilder();
+            var builder = new StringBuilder();
+            string outputStatus = Status(_hasOutput, "VALID", "WAITING");
+            string displayStatus = Status(_hasDisplay, "VISIBLE", "HIDDEN");
+            string e2eArrival = Number(_latestE2eArrivalMs, "0", " ms");
+            string serverProcessing = Number(runtime.LatestServerProcessingMs, "0", " ms");
+            string smoothingDelay = Number(runtime.LatestSmoothingDelayMs, "0", " ms");
+            string poseRate = Number(_latestPoseHz, "0.0", " Hz");
+            string residualPosition = Number(runtime.LatestResidualMeters * 1000.0, "0.0", " mm");
+            string residualRotation = Number(runtime.LatestResidualDegrees, "0.00", " deg");
+            string frameStepPosition = Number(_latestFrameStepM * 1000.0, "0.0", " mm");
+            string frameStepRotation = Number(_latestFrameStepDeg, "0.00", " deg");
+            string staticLock = runtime.LatestStaticLocked ? "ON" : "OFF";
 
-            // 时延（带颜色阈值，一眼看好坏）
-            sb.AppendLine(double.IsNaN(_latestLatencyMs)
-                ? "Latency: --"
-                : $"Latency: <color={LatencyColor(_latestLatencyMs)}>{_latestLatencyMs:0} ms</color>");
+            builder.AppendLine("<size=30><b>LIVE SYSTEM DIAGNOSTICS</b></size>");
+            builder.AppendLine($"<size=19>PRIMARY  {Escape(recorder.PrimaryVariantLabel)}</size>");
+            builder.AppendLine(XrDeviceStatusText());
+            builder.AppendLine(XrFocusStatusText());
+            builder.AppendLine($"SIGNALS  OUTPUT {outputStatus} | DISPLAY {displayStatus} | REF {ReferenceStatus()}");
+            builder.AppendLine("<size=18>DISPLAY VS PLATFORM CONTROLLER</size>");
+            builder.AppendLine($"POSITION DELTA  {PositionDeltaText()}");
+            builder.AppendLine($"ROTATION DELTA  {RotationDeltaText()}");
+            builder.AppendLine($"OBS AGE  {ObservationAgeText()} | E2E ARRIVAL  {e2eArrival}");
+            builder.AppendLine($"SERVER  {serverProcessing} | SMOOTH  {smoothingDelay} | POSE RATE  {poseRate}");
 
-            // pose 更新率
-            sb.AppendLine(double.IsNaN(_latestPoseHz)
-                ? "Pose rate: --"
-                : $"Pose rate: {_latestPoseHz:0.0} Hz");
-
-            // 锚定误差 vs GT（平移带颜色阈值）
-            sb.AppendLine(double.IsNaN(_latestTransErrM)
-                ? "Trans err: --"
-                : $"Trans err: <color={TransErrColor(_latestTransErrM * 1000.0)}>{_latestTransErrM * 1000.0:0} mm</color>");
-            sb.AppendLine(double.IsNaN(_latestRotErrDeg)
-                ? "Rot err: --"
-                : $"Rot err: <color={RotErrColor(_latestRotErrDeg)}>{_latestRotErrDeg:0.0}°</color>");
-
-            // 抖动（帧间位移/旋转，越小越稳）
-            string jitterPos = double.IsNaN(_latestJitterM) ? "--" : $"{_latestJitterM * 1000.0:0.0} mm";
-            string jitterRot = double.IsNaN(_latestJitterDeg) ? "--" : $"{_latestJitterDeg:0.00}°";
-            sb.AppendLine($"Jitter: {jitterPos} / {jitterRot}");
-
-            // 可靠性分数（policy 接受分优先，回退到原始可靠性分）
-            float accepted = runtime.LatestAcceptedScore;
-            float score = float.IsNaN(accepted) ? runtime.LatestReliabilityScore : accepted;
-            sb.AppendLine($"Score: {score:0.00}");
-
-            // 锚定状态 + 静止锁定
-            sb.Append($"State: {runtime.CurrentAnchorState}");
-            if (runtime.LatestStaticLocked)
-            {
-                sb.Append("  <color=#7FDBFF>[LOCKED]</color>");
-            }
-
-            statsText.text = sb.ToString();
+            string latestScore = runtime.LatestAlignedFrameId < 0
+                ? "--"
+                : runtime.LatestReliabilityScore.ToString("0.00");
+            string acceptedScore = float.IsNaN(runtime.LatestAcceptedScore)
+                ? "--"
+                : runtime.LatestAcceptedScore.ToString("0.00");
+            builder.AppendLine($"VCD  LATEST {latestScore} | ACCEPTED {acceptedScore}");
+            builder.AppendLine($"RESIDUAL  {residualPosition} / {residualRotation}");
+            builder.AppendLine($"FRAME STEP  {frameStepPosition} / {frameStepRotation}");
+            builder.AppendLine($"ANCHOR  {runtime.CurrentAnchorState} | MOTION  {Escape(runtime.CurrentMotionStateName)}");
+            builder.AppendLine($"STATIC LOCK  {staticLock} | FRAME  {FrameText(runtime.LatestAlignedFrameId)}");
+            builder.Append("<size=17><color=#B1BCCC>Live diagnostic only; offline paired metrics are authoritative.</color></size>");
+            return builder.ToString();
         }
 
-        /// <summary>按阈值把时延映射到 绿/黄/红。</summary>
-        private string LatencyColor(double latencyMs)
-            => ThresholdColor(latencyMs, latencyGoodMs, latencyBadMs);
+        /// <summary>把最新诊断文本写入 TextMesh Pro。</summary>
+        private void RenderText()
+        {
+            if (statsText != null) statsText.text = BuildStatsText();
+        }
 
-        /// <summary>按阈值把平移误差（毫米）映射到 绿/黄/红。</summary>
-        private string TransErrColor(double errMm)
-            => ThresholdColor(errMm, transErrGoodMm, transErrBadMm);
+        /// <summary>生成平台参考追踪状态文本。</summary>
+        private string ReferenceStatus()
+        {
+            if (!_hasReference) return $"<color=#FF7D6A>MISSING</color>";
+            return _referenceTracked
+                ? "<color=#4DD6A6>TRACKED</color>"
+                : "<color=#FFD054>UNTRACKED</color>";
+        }
 
-        /// <summary>按阈值把旋转误差（度）映射到 绿/黄/红。</summary>
-        private string RotErrColor(double errDeg)
-            => ThresholdColor(errDeg, rotErrGoodDeg, rotErrBadDeg);
+        /// <summary>生成头显连接和佩戴状态文本。</summary>
+        private string XrDeviceStatusText()
+        {
+            if (!_xrRuntimeActive) return "XR DEVICE  NOT RUNNING";
+            return $"XR DEVICE  HMD {Status(_hmdPresent, "PRESENT", "MISSING")} | " +
+                $"WORN {Status(_userPresent, "YES", "NO")}";
+        }
 
-        /// <summary>低于 good 绿、高于 bad 红、之间黄。</summary>
+        /// <summary>生成 VR 和输入 focus 状态文本；黑屏排查优先查看本行。</summary>
+        private string XrFocusStatusText()
+        {
+            if (!_xrRuntimeActive) return "XR FOCUS   NOT RUNNING";
+            return $"XR FOCUS   VR {Status(_vrFocus, "ACTIVE", "LOST")} | " +
+                $"INPUT {Status(_inputFocus, "ACTIVE", "LOST")}";
+        }
+
+        /// <summary>生成带阈值颜色的位置差异文本。</summary>
+        private string PositionDeltaText()
+        {
+            if (double.IsNaN(_latestPositionDeltaM)) return "--";
+            double millimeters = _latestPositionDeltaM * 1000.0;
+            return $"<color={ThresholdColor(millimeters, positionDeltaGoodMm, positionDeltaBadMm)}>{millimeters:0.0} mm</color>";
+        }
+
+        /// <summary>生成带阈值颜色的旋转差异文本。</summary>
+        private string RotationDeltaText()
+        {
+            if (double.IsNaN(_latestRotationDeltaDeg)) return "--";
+            return $"<color={ThresholdColor(_latestRotationDeltaDeg, rotationDeltaGoodDeg, rotationDeltaBadDeg)}>{_latestRotationDeltaDeg:0.00} deg</color>";
+        }
+
+        /// <summary>生成带阈值颜色的观测年龄文本。</summary>
+        private string ObservationAgeText()
+        {
+            if (double.IsNaN(_latestObservationAgeMs)) return "--";
+            return $"<color={ThresholdColor(_latestObservationAgeMs, observationAgeGoodMs, observationAgeBadMs)}>{_latestObservationAgeMs:0} ms</color>";
+        }
+
+        /// <summary>生成真假状态文本。</summary>
+        private static string Status(bool value, string trueText, string falseText)
+            => value
+                ? $"<color=#4DD6A6>{trueText}</color>"
+                : $"<color=#FF7D6A>{falseText}</color>";
+
+        /// <summary>格式化可选数值；NaN 和 Infinity 显示为占位符。</summary>
+        private static string Number(double value, string format, string suffix)
+            => double.IsNaN(value) || double.IsInfinity(value)
+                ? "--"
+                : value.ToString(format) + suffix;
+
+        /// <summary>格式化 frame_id。</summary>
+        private static string FrameText(long frameId) => frameId >= 0 ? frameId.ToString() : "--";
+
+        /// <summary>转义可能来自 Inspector 的富文本控制字符。</summary>
+        private static string Escape(string value)
+            => string.IsNullOrWhiteSpace(value)
+                ? "UNNAMED"
+                : value.Replace("<", "&lt;").Replace(">", "&gt;");
+
+        /// <summary>低于 good 显示绿，高于 bad 显示红，中间显示黄。</summary>
         private static string ThresholdColor(double value, double good, double bad)
         {
-            if (value <= good) return "#3AD16B";  // 绿：良好
-            if (value >= bad) return "#E74C3C";    // 红：差
-            return "#F1C40F";                       // 黄：一般
+            if (value <= good) return "#4DD6A6";
+            if (value >= bad) return "#FF7D6A";
+            return "#FFD054";
         }
     }
 }

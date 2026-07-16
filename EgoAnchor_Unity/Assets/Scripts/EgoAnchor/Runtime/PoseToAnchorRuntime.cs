@@ -97,6 +97,9 @@ namespace EgoAnchor.Runtime
         /// <summary>与 latestUnityPoseHandleMonoMs 原子对应的 source frame_id。</summary>
         private long latestUnityPoseHandleFrameId = -1;
 
+        /// <summary>最近一条 PoseResult 在 Python 内部的处理时长，单位毫秒。</summary>
+        private double latestServerProcessingMs = double.NaN;
+
         /// <summary>最近成功对齐的 frame_id。</summary>
         public long LatestAlignedFrameId => latestAlignedFrameId;
 
@@ -140,6 +143,12 @@ namespace EgoAnchor.Runtime
         public double LatestUnityPoseHandleMonoMs => latestUnityPoseHandleFrameId == latestAlignedFrameId
             ? latestUnityPoseHandleMonoMs
             : double.NaN;
+
+        /// <summary>
+        /// 最近一条 PoseResult 的 Python 内部处理时长，单位毫秒。
+        /// 只在 server_receive_mono_ms 与 server_publish_mono_ms 同属 Python 单调时钟且顺序合法时有效。
+        /// </summary>
+        public double LatestServerProcessingMs => latestServerProcessingMs;
 
         /// <summary>当前 eval 策略 label。</summary>
         public string StrategyLabel => policyHost != null ? policyHost.StrategyLabel : "";
@@ -280,6 +289,10 @@ namespace EgoAnchor.Runtime
 
             latestPhase = result.Phase ?? string.Empty;
             latestReliabilityScore = PoseResultPolicyMapper.ReadReliabilityScore(result);
+            latestServerProcessingMs = result.ServerReceiveMonoMs > 0.0
+                && result.ServerPublishMonoMs >= result.ServerReceiveMonoMs
+                    ? result.ServerPublishMonoMs - result.ServerReceiveMonoMs
+                    : double.NaN;
             if (IsPausedLocally())
             {
                 SetFailure("paused");
@@ -831,6 +844,7 @@ namespace EgoAnchor.Runtime
             latestAlignedFrameId = -1;
             latestUnityPoseHandleFrameId = -1;
             latestUnityPoseHandleMonoMs = double.NaN;
+            latestServerProcessingMs = double.NaN;
             latestObservationAgeMs = double.NaN;
             latestPolicyOutputTargetMonoMs = double.NaN;
             latestSmoothingDelayMs = double.NaN;

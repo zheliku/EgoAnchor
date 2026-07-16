@@ -81,6 +81,20 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前 trial 已记录的 marker 数量。</summary>
         private int _trialEventCount;
 
+        /// <summary>最近一次 marker 操作的头显反馈文本。</summary>
+        private string _markerFeedbackText = string.Empty;
+
+        /// <summary>最近一次 marker 操作是否成功。</summary>
+        private bool _markerFeedbackSucceeded;
+
+        /// <summary>最近一次 marker 反馈停止显示的 Unity 非缩放时刻。</summary>
+        private double _markerFeedbackUntil;
+
+        /// <summary>marker 操作反馈在头显状态板中的显示时长。</summary>
+        [Min(0.5f)]
+        [Tooltip("marker 成功或被拒绝后，确认信息在头显状态板中保留的秒数。")]
+        [SerializeField] private float markerFeedbackSeconds = 2.0f;
+
         /// <summary>当前 trial 开始的 Unity 单调时刻。</summary>
         private double _trialStartedAt;
 
@@ -110,6 +124,16 @@ namespace EgoAnchor.Eval.Experiment
 
         /// <summary>当前人工事件角色。</summary>
         public string CurrentEventRole => _eventRole;
+
+        /// <summary>最近一次 marker 操作仍在显示期内时返回确认文本。</summary>
+        public string MarkerFeedbackText => HasMarkerFeedback ? _markerFeedbackText : string.Empty;
+
+        /// <summary>最近一次 marker 操作是否成功；只在 <see cref="HasMarkerFeedback"/> 为真时使用。</summary>
+        public bool MarkerFeedbackSucceeded => _markerFeedbackSucceeded;
+
+        /// <summary>最近一次 marker 操作是否仍应显示即时反馈。</summary>
+        public bool HasMarkerFeedback => !string.IsNullOrEmpty(_markerFeedbackText)
+            && Time.unscaledTimeAsDouble <= _markerFeedbackUntil;
 
         /// <summary>当前是否正在等待目标重新可见 marker。</summary>
         public bool HasOpenOcclusion => _hasOpenOcclusion;
@@ -322,7 +346,11 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>写入主事件；遮挡任务在遮挡开始与目标可见之间交替。</summary>
         public bool MarkEvent()
         {
-            if (!IsRecording || !HasActiveTrial) return false;
+            if (!IsRecording || !HasActiveTrial)
+            {
+                SetMarkerFeedback("MARKER IGNORED: START A TASK FIRST", false);
+                return false;
+            }
 
             string role;
             if (ExperimentEventRole.SupportsTargetVisible(CurrentScenarioId))
@@ -340,6 +368,7 @@ namespace EgoAnchor.Eval.Experiment
             _eventId = $"event_{++_eventSequence:000}";
             _eventRole = role;
             _trialEventCount++;
+            SetMarkerFeedback($"MARKER SAVED #{_trialEventCount}: {MarkerRoleText(role)}", true);
             Emit(CurrentContext, "event_marker");
             return true;
         }
@@ -438,6 +467,26 @@ namespace EgoAnchor.Eval.Experiment
             Array.Clear(_completedContexts, 0, _completedContexts.Length);
             _trialSequence = 0;
             _eventSequence = 0;
+            _markerFeedbackText = string.Empty;
+            _markerFeedbackSucceeded = false;
+            _markerFeedbackUntil = 0.0;
+        }
+
+        /// <summary>保存短时 marker 操作反馈；它只影响 UI，不写入实验事件流。</summary>
+        private void SetMarkerFeedback(string text, bool succeeded)
+        {
+            _markerFeedbackText = text ?? string.Empty;
+            _markerFeedbackSucceeded = succeeded;
+            _markerFeedbackUntil = Time.unscaledTimeAsDouble + Math.Max(0.5f, markerFeedbackSeconds);
+        }
+
+        /// <summary>把 marker 协议角色转换为操作者可直接识别的 ASCII 文本。</summary>
+        private static string MarkerRoleText(string role)
+        {
+            if (role == ExperimentEventRole.OcclusionStarted) return "OCCLUSION START";
+            if (role == ExperimentEventRole.TargetVisible) return "TARGET VISIBLE";
+            if (role == ExperimentEventRole.TransitionStarted) return "MOTION START";
+            return "EVENT";
         }
 
         /// <summary>发送指定上下文事件；订阅者异常不得阻断采集状态机。</summary>
