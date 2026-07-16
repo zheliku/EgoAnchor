@@ -434,31 +434,29 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"reference_pose_fresh_age_ms\":0", json);
         }
 
-        /// <summary>动态模式必须在丢跟时立即判参考无效，静止模式仍可在窗口内复用最后新鲜 pose。</summary>
+        /// <summary>参考失活后必须无限期保持最后一次激活 Transform，重新激活后继续更新。</summary>
         [Test]
-        public void ReferencePoseTrackerSeparatesFreshOnlyAndStaticKeepAlive()
+        public void ReferencePoseTrackerHoldsLastActiveTransformUntilReactivated()
         {
             var tracker = new EvalReferencePoseTracker();
-            Pose pose = new Pose(new Vector3(1f, 2f, 3f), Quaternion.identity);
+            Pose firstPose = new Pose(new Vector3(1f, 2f, 3f), Quaternion.identity);
+            Pose nextPose = new Pose(new Vector3(4f, 5f, 6f), Quaternion.Euler(0f, 30f, 0f));
 
-            EvalReferencePose fresh = tracker.Resolve(
-                true, pose, true, 1000.0,
-                EvalReferenceFreshnessMode.RequireFreshTracking, 30_000.0);
-            EvalReferencePose dynamicLost = tracker.Resolve(
-                true, pose, false, 1100.0,
-                EvalReferenceFreshnessMode.RequireFreshTracking, 30_000.0);
-            EvalReferencePose staticSleep = tracker.Resolve(
-                true, pose, false, 1200.0,
-                EvalReferenceFreshnessMode.AllowStaticKeepAlive, 30_000.0);
+            EvalReferencePose fresh = tracker.Resolve(true, firstPose, true, 1000.0);
+            EvalReferencePose held = tracker.Resolve(true, nextPose, false, 91_000.0);
+            EvalReferencePose reactivated = tracker.Resolve(true, nextPose, true, 92_000.0);
 
             Assert.That(fresh.Valid, Is.True);
             Assert.That(fresh.Fresh, Is.True);
-            Assert.That(dynamicLost.Valid, Is.False);
-            Assert.That(dynamicLost.FreshAgeMs, Is.EqualTo(100.0));
-            Assert.That(staticSleep.Valid, Is.True);
-            Assert.That(staticSleep.KeepAlive, Is.True);
-            Assert.That(staticSleep.FreshAgeMs, Is.EqualTo(200.0));
-            Assert.That(staticSleep.Pose.position, Is.EqualTo(pose.position));
+            Assert.That(held.Valid, Is.True);
+            Assert.That(held.Fresh, Is.False);
+            Assert.That(held.KeepAlive, Is.True);
+            Assert.That(held.FreshAgeMs, Is.EqualTo(90_000.0));
+            Assert.That(held.Pose.position, Is.EqualTo(firstPose.position));
+            Assert.That(reactivated.Valid, Is.True);
+            Assert.That(reactivated.Fresh, Is.True);
+            Assert.That(reactivated.KeepAlive, Is.False);
+            Assert.That(reactivated.Pose.position, Is.EqualTo(nextPose.position));
         }
 
         /// <summary>后台日志使用有界队列，饱和时必须计数，关闭时必须写完已入队数据。</summary>

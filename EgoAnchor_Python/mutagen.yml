@@ -86,12 +86,12 @@ sync:
         - "/mutagen.yml"
         - "/mutagen.yml.lock"
 
-  push-4090:
-    alpha: "."
-    beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
-    mode: one-way-replica
-    ignore:
-      paths: *source_ignore
+  # push-4090:
+  #   alpha: "."
+  #   beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
+  #   mode: one-way-replica
+  #   ignore:
+  #     paths: *source_ignore
 
   # --- 5080 DISABLED until its Chinese-locale UTF-8 handshake is fixed ---
   # On a Chinese (GBK/936) Windows box, "remote did not return UTF-8 output" is a
@@ -125,10 +125,10 @@ sync:
   # and local-only content is never deleted. Run session dirs are uniquely
   # timestamped, so the three machines' pulls never collide.
 
-  logs-4090:
-    alpha: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python/data/eval"
-    beta: "./data/eval"
-    mode: one-way-safe
+  # logs-4090:
+  #   alpha: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python/data/eval"
+  #   beta: "./data/eval"
+  #   mode: one-way-safe
 
   logs-5090:
     alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"

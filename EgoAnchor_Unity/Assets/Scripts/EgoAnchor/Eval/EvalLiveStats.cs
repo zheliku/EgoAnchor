@@ -111,8 +111,8 @@ namespace EgoAnchor.Eval
         /// <summary>平台参考 Transform 是否已绑定。</summary>
         private bool _hasReference;
 
-        /// <summary>平台当前是否报告参考控制器的位置和旋转均被追踪。</summary>
-        private bool _referenceTracked;
+        /// <summary>平台参考 Transform 当前是否激活；false 时 pose 保持最后一次激活值。</summary>
+        private bool _referenceActive;
 
         /// <summary>当前是否处于可读取 OpenXR 状态的 Play Mode。</summary>
         private bool _xrRuntimeActive;
@@ -159,8 +159,8 @@ namespace EgoAnchor.Eval
         /// <summary>平台参考 Transform 是否已绑定。</summary>
         public bool HasReference => _hasReference;
 
-        /// <summary>平台当前是否报告参考控制器被追踪。</summary>
-        public bool ReferenceTracked => _referenceTracked;
+        /// <summary>平台参考 Transform 当前是否激活。</summary>
+        public bool ReferenceActive => _referenceActive;
 
         /// <summary>每帧采样实时信号，并按配置频率重绘文本。</summary>
         private void Update()
@@ -190,7 +190,7 @@ namespace EgoAnchor.Eval
             UpdateTiming(frameId, nowMs, runtime.LatestUnityPoseHandleMonoMs);
 
             _hasOutput = runtime.TryGetOutputPose(out _);
-            _hasReference = recorder.TryGetLiveReferencePose(out Pose referencePose, out _referenceTracked);
+            _hasReference = recorder.TryGetLiveReferencePose(out Pose referencePose, out _referenceActive);
 
             _hasDisplay = recorder.TryGetPrimaryDisplayPose(out Pose displayPose);
             if (!_hasDisplay)
@@ -202,7 +202,7 @@ namespace EgoAnchor.Eval
 
             _latestPositionDeltaM = double.NaN;
             _latestRotationDeltaDeg = double.NaN;
-            if (_hasReference && _referenceTracked)
+            if (_hasReference)
             {
                 _latestPositionDeltaM = (displayPose.position - referencePose.position).magnitude;
                 _latestRotationDeltaDeg = Quaternion.Angle(displayPose.rotation, referencePose.rotation);
@@ -303,7 +303,7 @@ namespace EgoAnchor.Eval
             _hasOutput = false;
             _hasDisplay = false;
             _hasReference = false;
-            _referenceTracked = false;
+            _referenceActive = false;
             ClearDisplaySignals();
         }
 
@@ -359,13 +359,13 @@ namespace EgoAnchor.Eval
             if (statsText != null) statsText.text = BuildStatsText();
         }
 
-        /// <summary>生成平台参考追踪状态文本。</summary>
+        /// <summary>生成平台参考 Transform 的激活/保持状态文本。</summary>
         private string ReferenceStatus()
         {
             if (!_hasReference) return $"<color=#FF7D6A>MISSING</color>";
-            return _referenceTracked
-                ? "<color=#4DD6A6>TRACKED</color>"
-                : "<color=#FFD054>UNTRACKED</color>";
+            return _referenceActive
+                ? "<color=#4DD6A6>ACTIVE</color>"
+                : "<color=#FFD054>HELD</color>";
         }
 
         /// <summary>生成头显连接和佩戴状态文本。</summary>

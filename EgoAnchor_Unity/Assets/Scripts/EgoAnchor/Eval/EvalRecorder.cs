@@ -15,34 +15,22 @@ using UnityEngine;
 
 namespace EgoAnchor.Eval
 {
-    /// <summary>
-    /// 参考位姿有效性策略。静止实验可短时复用最后一次真实追踪位姿；动态实验必须要求当前样本真实可追踪。
-    /// </summary>
-    public enum EvalReferenceFreshnessMode
-    {
-        /// <summary>允许在真实追踪暂时丢失时复用最后一次新鲜位姿，适用于静止观察。</summary>
-        AllowStaticKeepAlive = 0,
-
-        /// <summary>只有当前真实追踪样本才有效，适用于动态运动试次。</summary>
-        RequireFreshTracking = 1,
-    }
-
-    /// <summary>一次参考位姿解析结果，显式区分真实追踪样本与静止 keep-alive。</summary>
+    /// <summary>一次参考位姿解析结果，显式区分激活 Transform 与失活后的保持状态。</summary>
     public readonly struct EvalReferencePose
     {
         /// <summary>该 pose 是否可用于当前评估样本。</summary>
         public readonly bool Valid;
 
-        /// <summary>当前样本是否来自真实、可追踪的 Transform 更新。</summary>
+        /// <summary>当前样本是否来自激活状态下的 Transform 更新。</summary>
         public readonly bool Fresh;
 
-        /// <summary>当前有效 pose 是否复用了最后一次真实追踪样本。</summary>
+        /// <summary>当前有效 pose 是否复用了最后一次激活状态下的 Transform。</summary>
         public readonly bool KeepAlive;
 
         /// <summary>参考物体的 world pose；无效时为 identity。</summary>
         public readonly Pose Pose;
 
-        /// <summary>距最后一次真实追踪样本的毫秒数；从未追踪到时为 NaN。</summary>
+        /// <summary>距最后一次激活 Transform 样本的毫秒数；从未激活时为 NaN。</summary>
         public readonly double FreshAgeMs;
 
         /// <summary>构造一次参考位姿解析结果。</summary>
@@ -57,59 +45,52 @@ namespace EgoAnchor.Eval
     }
 
     /// <summary>
-    /// 参考位姿新鲜度跟踪器。该纯 C# 状态对象不读取 OVR API，便于独立验证动态与静止有效性规则。
+    /// 参考 Transform 保持器。激活时更新 world pose，失活或隐藏后无限期保持最后一次激活 pose。
     /// </summary>
     public sealed class EvalReferencePoseTracker
     {
-        /// <summary>最后一次真实追踪到的参考位姿。</summary>
-        private Pose _lastFreshPose;
+        /// <summary>最后一次激活状态下读取到的参考位姿。</summary>
+        private Pose _lastActivePose;
 
-        /// <summary>最后一次真实追踪样本的 Unity 单调时钟毫秒。</summary>
-        private double _lastFreshMonoMs = double.NaN;
+        /// <summary>最后一次激活 Transform 样本的 Unity 单调时钟毫秒。</summary>
+        private double _lastActiveMonoMs = double.NaN;
 
         /// <summary>清空参考位姿历史，防止跨 session 复用旧样本。</summary>
         public void Reset()
         {
-            _lastFreshPose = Pose.identity;
-            _lastFreshMonoMs = double.NaN;
+            _lastActivePose = Pose.identity;
+            _lastActiveMonoMs = double.NaN;
         }
 
-        /// <summary>按当前追踪状态和有效性策略解析可写入评估日志的参考位姿。</summary>
+        /// <summary>按 Transform 激活状态解析可写入评估日志和实时面板的参考位姿。</summary>
         /// <param name="hasTransform">是否绑定了参考 Transform。</param>
         /// <param name="currentPose">当前参考 Transform 的 world pose。</param>
-        /// <param name="freshlyTracked">当前样本是否由追踪系统确认有效。</param>
+        /// <param name="active">参考对象当前是否激活且平台报告控制器可追踪。</param>
         /// <param name="nowMonoMs">当前 Unity 单调时钟毫秒。</param>
-        /// <param name="mode">动态 fresh-only 或静止 keep-alive 策略。</param>
-        /// <param name="keepAliveMs">允许复用最后新鲜 pose 的最长毫秒数。</param>
         /// <returns>带新鲜度诊断的参考位姿样本。</returns>
         public EvalReferencePose Resolve(
             bool hasTransform,
             Pose currentPose,
-            bool freshlyTracked,
-            double nowMonoMs,
-            EvalReferenceFreshnessMode mode,
-            double keepAliveMs)
+            bool active,
+            double nowMonoMs)
         {
             if (!hasTransform)
             {
                 return new EvalReferencePose(false, false, false, Pose.identity, double.NaN);
             }
 
-            if (freshlyTracked)
+            if (active)
             {
-                _lastFreshPose = currentPose;
-                _lastFreshMonoMs = nowMonoMs;
+                _lastActivePose = currentPose;
+                _lastActiveMonoMs = nowMonoMs;
                 return new EvalReferencePose(true, true, false, currentPose, 0.0);
             }
 
-            double ageMs = double.IsNaN(_lastFreshMonoMs)
+            double ageMs = double.IsNaN(_lastActiveMonoMs)
                 ? double.NaN
-                : Math.Max(0.0, nowMonoMs - _lastFreshMonoMs);
-            bool mayKeepAlive = mode == EvalReferenceFreshnessMode.AllowStaticKeepAlive
-                && !double.IsNaN(ageMs)
-                && ageMs <= Math.Max(0.0, keepAliveMs);
-            return mayKeepAlive
-                ? new EvalReferencePose(true, false, true, _lastFreshPose, ageMs)
+                : Math.Max(0.0, nowMonoMs - _lastActiveMonoMs);
+            return !double.IsNaN(ageMs)
+                ? new EvalReferencePose(true, false, true, _lastActivePose, ageMs)
                 : new EvalReferencePose(false, false, false, Pose.identity, ageMs);
         }
     }
@@ -153,9 +134,9 @@ namespace EgoAnchor.Eval
     {
         // ── References ──
 
-        /// <summary>Ground Truth Transform，通常绑定 OVRControllerPrefab 根节点。</summary>
-        [Header("Ground Truth")]
-        [Tooltip("作为 GT 的场景 Transform，通常绑定 OVRControllerPrefab 根节点。")]
+        /// <summary>平台参考 Transform；位姿始终从该 Transform 读取，不把 OVR 状态当作另一套 pose 来源。</summary>
+        [Header("Platform Reference")]
+        [Tooltip("平台参考 Transform。激活时更新位姿，失活或隐藏时保持最后一次激活位姿。")]
         [SerializeField] private Transform groundTruth;
 
         /// <summary>头部中心参考 Transform，通常为 CenterEyeAnchor。</summary>
@@ -180,22 +161,12 @@ namespace EgoAnchor.Eval
         [SerializeField] private FramePoseHistory framePoseHistory;
 
         /// <summary>
-        /// 可选：用于检测 GT 手柄跟踪是否有效的 OVR 控制器类型。
-        /// 设为 None 时不做有效性过滤（总是信任 groundTruth 的 Transform）。
-        /// 设为 RTouch / LTouch 后，由 gtFreshnessMode 决定丢跟时立即失效或静止 keep-alive。
+        /// 可选：用于显示平台参考手柄当前是否激活的 OVR 控制器类型。
+        /// 该状态只决定是否更新 Transform 快照；参考 pose 始终来自 groundTruth Transform。
         /// </summary>
-        [Header("GT Validity")]
-        [Tooltip("可选：OVR 手柄类型，用于检测手柄跟踪是否有效。设为 None 则不过滤。")]
+        [Header("Platform Reference State")]
+        [Tooltip("用于判断平台参考当前是否激活。设为 None 时仅使用 Transform 的层级激活状态。")]
         [SerializeField] private OVRInput.Controller gtController = OVRInput.Controller.RTouch;
-
-        /// <summary>参考位姿新鲜度策略；动态试次要求真实追踪，静止观察可允许短时 keep-alive。</summary>
-        [Tooltip("参考位姿有效性策略。动态试次选择 RequireFreshTracking；静止观察选择 AllowStaticKeepAlive。")]
-        [SerializeField] private EvalReferenceFreshnessMode gtFreshnessMode = EvalReferenceFreshnessMode.AllowStaticKeepAlive;
-
-        /// <summary>静止 keep-alive 最长持续时间，单位秒；fresh-only 模式下不使用。</summary>
-        [Tooltip("真实追踪暂时丢失后，静止实验允许复用最后新鲜参考位姿的秒数；fresh-only 模式忽略此值。")]
-        [Min(0f)]
-        [SerializeField] private float gtKeepAliveSeconds = 30f;
 
         /// <summary>要录制的 runtime 变体列表；主变体（isPrimary=true）额外记录 aligned raw。</summary>
         [Header("Variants")]
@@ -273,9 +244,6 @@ namespace EgoAnchor.Eval
 
         /// <summary>GT Transform 名称，写入 manifest。</summary>
         public string GtTransformName => groundTruth != null ? groundTruth.name : string.Empty;
-
-        /// <summary>GT 来源标识，写入 manifest。</summary>
-        public string GtSource => groundTruth != null ? "transform" : "transform_missing";
 
         /// <summary>最近一次录制中 capture 日志因队列饱和或写入失败丢弃的行数。</summary>
         public long ReferenceDroppedRows => _referenceLogStats.DroppedRows;
@@ -378,38 +346,19 @@ namespace EgoAnchor.Eval
         public FramePoseHistory FrameHistory => framePoseHistory;
 
         /// <summary>
-        /// 读取平台控制器参考的当前 Transform，并独立报告平台追踪有效性。
-        /// 本方法不更新 <see cref="EvalReferencePoseTracker"/>，因此实时面板不会改变正式日志的
-        /// fresh/keep-alive 状态。返回的参考不是外部光学真值。
+        /// 读取平台控制器参考的统一 Transform 快照，并独立报告当前激活状态。
+        /// 实时面板与正式日志共用 <see cref="EvalReferencePoseTracker"/>，失活时均保持最后一次激活 pose。
+        /// 返回的参考不是外部光学真值。
         /// </summary>
-        /// <param name="pose">参考 Transform 绑定时输出其当前 world pose。</param>
-        /// <param name="tracked">平台是否报告位置和旋转均被追踪；未绑定时为 false。</param>
-        /// <returns>是否绑定了参考 Transform。</returns>
-        public bool TryGetLiveReferencePose(out Pose pose, out bool tracked)
-        {
-            if (groundTruth == null)
-            {
-                pose = Pose.identity;
-                tracked = false;
-                return false;
-            }
-            pose = new Pose(groundTruth.position, groundTruth.rotation);
-            tracked = gtController == OVRInput.Controller.None
-                || (OVRInput.GetControllerPositionTracked(gtController)
-                    && OVRInput.GetControllerOrientationTracked(gtController));
-            return true;
-        }
-
-        /// <summary>
-        /// 解析当前 GT pose（含手柄 sleep keep-alive），与录制逻辑同一入口。
-        /// </summary>
-        /// <param name="pose">有效时输出当前 GT world pose。</param>
-        /// <returns>GT 当前是否有效。</returns>
-        public bool TryGetCurrentGtPose(out Pose pose)
+        /// <param name="pose">有效时输出当前或保持中的参考 world pose。</param>
+        /// <param name="active">参考对象当前是否激活；未绑定或保持中为 false。</param>
+        /// <returns>当前或保持中的参考 pose 是否有效。</returns>
+        public bool TryGetLiveReferencePose(out Pose pose, out bool active)
         {
             double nowMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
             EvalReferencePose sample = ResolveGtPose(nowMs);
             pose = sample.Pose;
+            active = sample.Fresh;
             return sample.Valid;
         }
 
@@ -527,7 +476,6 @@ namespace EgoAnchor.Eval
             RefreshConfigHashCache();
             CaptureManifestMetadata();
             _hasLastGt = false;
-            _gtPoseTracker.Reset();
             _recording = true;
             _eventsLog.Write(EvalJson.BuildEventLine(
                 _sessionId, "session_started", "unity", "recording_started",
@@ -586,7 +534,6 @@ namespace EgoAnchor.Eval
             _candidateSequencesByFrame.Clear();
             _candidateIdsByResult = new ConditionalWeakTable<PoseResult, CandidateIdHolder>();
             _hasLastGt = false;
-            _gtPoseTracker.Reset();
         }
 
         /// <summary>关闭单个后台日志并把丢行、队列峰值和异常写入统一日志门面。</summary>
@@ -608,6 +555,7 @@ namespace EgoAnchor.Eval
 
         private void OnEnable()
         {
+            _gtPoseTracker.Reset();
             if (streamPublisher != null)
             {
                 streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
@@ -1093,9 +1041,9 @@ namespace EgoAnchor.Eval
         }
 
         /// <summary>
-        /// 解析当前参考 pose，并按场景配置应用动态 fresh-only 或静止 keep-alive。
+        /// 解析当前平台参考 pose。位姿只从 Transform 读取，OVR 状态只决定是否更新快照。
         /// <para>
-        /// OVR 明确跟踪时更新新鲜样本；fresh-only 丢跟后立即无效，keep-alive 模式可短时复用静止 pose。
+        /// 参考对象激活时更新；失活或隐藏时无限期保持最后一次激活 world pose，重新激活后继续更新。
         /// </para>
         /// </summary>
         private EvalReferencePose ResolveGtPose(double nowMonoMs)
@@ -1104,16 +1052,15 @@ namespace EgoAnchor.Eval
             Pose currentPose = hasTransform
                 ? new Pose(groundTruth.position, groundTruth.rotation)
                 : Pose.identity;
-            bool freshlyTracked = hasTransform && (gtController == OVRInput.Controller.None
+            bool active = hasTransform && groundTruth.gameObject.activeInHierarchy
+                && (gtController == OVRInput.Controller.None
                 || (OVRInput.GetControllerPositionTracked(gtController)
                     && OVRInput.GetControllerOrientationTracked(gtController)));
             return _gtPoseTracker.Resolve(
                 hasTransform,
                 currentPose,
-                freshlyTracked,
-                nowMonoMs,
-                gtFreshnessMode,
-                gtKeepAliveSeconds * 1000.0);
+                active,
+                nowMonoMs);
         }
     }
 }

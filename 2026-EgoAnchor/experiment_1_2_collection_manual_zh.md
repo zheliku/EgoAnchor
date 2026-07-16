@@ -97,7 +97,7 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 |---|---|
 | `XR DEVICE / WORN` | 是否检测到头显，以及 Meta runtime 是否判断头显正在佩戴 |
 | `XR FOCUS / INPUT` | Unity 是否持有 VR 画面和输入 focus；`LOST` 会显示红色 |
-| `OUTPUT / DISPLAY / REF` | 主 runtime 是否有输出、锚点是否实际可见、平台控制器参考是否可用 |
+| `OUTPUT / DISPLAY / REF` | 主 runtime 是否有输出、锚点是否实际可见、平台参考 Transform 是否可用；`ACTIVE` 表示正在更新，`HELD` 表示手柄失活后继续使用最后一次激活位姿 |
 | `POSITION DELTA` | 显示锚点相对 Quest 平台控制器参考的位置差异，单位 mm |
 | `ROTATION DELTA` | 显示锚点相对 Quest 平台控制器参考的旋转差异，单位 deg |
 | `OBS AGE` | 当前显示使用的图像观测距现在有多久；它包含等待和运行时保持，不是纯网络时延 |
@@ -113,6 +113,8 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 开始任务前，先确认 `WORN YES`、`VR ACTIVE`、`INPUT ACTIVE`，并且 `OUTPUT`、`DISPLAY`、`REF` 都不是红色。再观察几秒，确认 `POSE RATE` 持续更新，`OBS AGE` 和 `E2E ARRIVAL` 没有不断上升，然后按 A 或 `Enter`。
 
 不要为了得到更好看的结果，等 `POSITION DELTA`、`ROTATION DELTA` 或 VCD 分数特别低时才开始。右侧面板是连接和运行状态诊断，不是正式数据筛选器。控制器 pose 也不是外部光学真值；正式指标以日志完成后的 schema-v2 配对分析为准。
+
+手柄静止后可能被平台隐藏。此时 `REF` 显示 `HELD`，位置和旋转差异仍按最后一次激活的 Transform 位姿计算；手柄重新激活后，参考位姿自动继续更新。`HELD` 不是错误，不需要为了让面板变回 `ACTIVE` 而移动手柄。
 
 ## 四、启动顺序
 

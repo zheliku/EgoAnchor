@@ -51,7 +51,7 @@ namespace EgoAnchor.Tests
     {
         /// <summary>面板必须实时计算显示 pose 相对平台参考的差异，并保持 ASCII 输出。</summary>
         [Test]
-        public void LiveStatsSamplesPrimaryDisplayAgainstTrackedPlatformReference()
+        public void LiveStatsUsesHeldPlatformReferenceWhileTransformIsInactive()
         {
             GameObject recorderObject = new GameObject("LiveStatsTests.Recorder");
             GameObject runtimeObject = new GameObject("LiveStatsTests.Runtime");
@@ -117,7 +117,7 @@ namespace EgoAnchor.Tests
 
                 Assert.That(stats.HasOutput, Is.True);
                 Assert.That(stats.HasReference, Is.True);
-                Assert.That(stats.ReferenceTracked, Is.True);
+                Assert.That(stats.ReferenceActive, Is.True);
                 Assert.That(stats.HasDisplay, Is.True);
                 Assert.That(stats.LatestE2eArrivalMs, Is.EqualTo(70.0).Within(2.0));
                 Assert.That(runtime.LatestServerProcessingMs, Is.EqualTo(42.0).Within(1e-6));
@@ -140,10 +140,22 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains("SERVER  42 ms", text);
                 StringAssert.Contains("VCD  LATEST", text);
                 StringAssert.Contains("FRAME STEP  2.0 mm / 2.00 deg", text);
-                StringAssert.Contains("REF <color=#4DD6A6>TRACKED</color>", text);
+                StringAssert.Contains("REF <color=#4DD6A6>ACTIVE</color>", text);
                 StringAssert.DoesNotContain("Ground Truth", text);
                 StringAssert.DoesNotContain("Latency", text);
                 AssertAscii(text);
+
+                referenceObject.SetActive(false);
+                referenceObject.transform.SetPositionAndRotation(
+                    new Vector3(100f, 0f, 0f),
+                    Quaternion.Euler(0f, 180f, 0f));
+                InvokeSample(stats);
+
+                Assert.That(stats.HasReference, Is.True);
+                Assert.That(stats.ReferenceActive, Is.False);
+                Assert.That(stats.LatestPositionDeltaM, Is.EqualTo(0.012).Within(1e-5));
+                Assert.That(stats.LatestRotationDeltaDeg, Is.EqualTo(12.0).Within(1e-3));
+                StringAssert.Contains("REF <color=#FFD054>HELD</color>", stats.BuildStatsText());
             }
             finally
             {
@@ -152,6 +164,54 @@ namespace EgoAnchor.Tests
                 UnityEngine.Object.DestroyImmediate(referenceObject);
                 UnityEngine.Object.DestroyImmediate(runtimeObject);
                 UnityEngine.Object.DestroyImmediate(recorderObject);
+            }
+        }
+
+        /// <summary>session 开始时参考已失活，也必须沿用 Play 生命周期内最后一次激活 Transform。</summary>
+        [Test]
+        public void RecorderKeepsLastActiveReferenceAcrossSessionStart()
+        {
+            GameObject recorderObject = new GameObject("LiveStatsTests.SessionRecorder");
+            GameObject referenceObject = new GameObject("LiveStatsTests.SessionReference");
+            string directory = Path.Combine(
+                Application.temporaryCachePath,
+                $"egoanchor_reference_hold_{Guid.NewGuid():N}");
+            try
+            {
+                EvalRecorder recorder = recorderObject.AddComponent<EvalRecorder>();
+                SetPrivateField(recorder, "groundTruth", referenceObject.transform);
+                SetPrivateEnumField(recorder, "gtController", 0);
+
+                referenceObject.transform.SetPositionAndRotation(
+                    new Vector3(1f, 2f, 3f),
+                    Quaternion.Euler(0f, 20f, 0f));
+                Assert.That(recorder.TryGetLiveReferencePose(out Pose activePose, out bool active), Is.True);
+                Assert.That(active, Is.True);
+
+                referenceObject.SetActive(false);
+                referenceObject.transform.SetPositionAndRotation(
+                    new Vector3(100f, 200f, 300f),
+                    Quaternion.Euler(0f, 180f, 0f));
+                Directory.CreateDirectory(directory);
+                recorder.BeginRecording(
+                    Path.Combine(directory, "reference.jsonl"),
+                    Path.Combine(directory, "admission.jsonl"),
+                    Path.Combine(directory, "render.jsonl"),
+                    Path.Combine(directory, "events.jsonl"),
+                    "reference-hold-session");
+
+                Assert.That(recorder.TryGetLiveReferencePose(out Pose heldPose, out active), Is.True);
+                Assert.That(active, Is.False);
+                Assert.That(heldPose.position, Is.EqualTo(activePose.position));
+                Assert.That(Quaternion.Angle(heldPose.rotation, activePose.rotation), Is.LessThan(1e-4f));
+            }
+            finally
+            {
+                EvalRecorder recorder = recorderObject.GetComponent<EvalRecorder>();
+                if (recorder != null) recorder.StopRecording();
+                UnityEngine.Object.DestroyImmediate(referenceObject);
+                UnityEngine.Object.DestroyImmediate(recorderObject);
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
             }
         }
 
@@ -1144,6 +1204,24 @@ namespace EgoAnchor.Tests
                     yaml,
                     "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher");
                 StringAssert.Contains("pauseWhenVrFocusLost: 1", publisher, sceneName);
+            }
+        }
+
+        /// <summary>两个采集场景都必须绑定平台参考 Transform，且不得恢复限时 freshness 策略。</summary>
+        [Test]
+        public void CollectionScenesUseTransformReferenceWithoutTimedFreshnessPolicy()
+        {
+            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
+            {
+                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
+                string yaml = File.ReadAllText(path);
+                string recorder = GetSectionContaining(
+                    yaml,
+                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder");
+
+                Assert.That(ReadReference(recorder, "groundTruth"), Is.Not.EqualTo("0"), sceneName);
+                StringAssert.DoesNotContain("gtFreshnessMode:", recorder, sceneName);
+                StringAssert.DoesNotContain("gtKeepAliveSeconds:", recorder, sceneName);
             }
         }
 

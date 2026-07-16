@@ -140,6 +140,7 @@ PoseResult candidate
 - `MeasurementTimeSeconds` 属于采集时间轴，用于运动估计与静止锚定；生命周期 freshness 使用到达/生命周期时间轴。不得用 capture time 刷新 stale/lost。
 - `has_output_pose` 表示 runtime 是否有输出；`has_display_pose` 表示用户实际看到的 Transform，包括 hold-last。显示误差使用 display pose，输出覆盖率使用 output pose。
 - hold-last 显示行从 `DynamicObjectAnchor.LastAppliedFrameId` 保留实际来源帧；只有从未应用或已隐藏的显示才允许 `source_frame_id=-1`。
+- 平台控制器参考 pose 只从 `EvalRecorder.groundTruth` 绑定的 Transform 读取。参考对象激活且平台报告可追踪时更新 world pose；失活或隐藏时无限期保持最后一次激活 pose，重新激活后继续更新。激活状态只写入 `reference_pose_fresh/reference_pose_keep_alive` 并在实时板显示 `ACTIVE/HELD`，不得把 OVR 状态当作另一套 pose 来源，也不得因失活停止计算实时差异或让正式日志参考失效。
 - StaticLock tether 计算 `obsConsensus -> anchorOrigin`，不得改成单帧观测或 `lockedPose`。
 - 头动期间不冻结真实运动证据；`headSettleSeconds` 只覆盖头停后的沉降窗口。
 - 距离自适应只放大位置通道；旋转 tether 必须高于旋转噪声地板。
