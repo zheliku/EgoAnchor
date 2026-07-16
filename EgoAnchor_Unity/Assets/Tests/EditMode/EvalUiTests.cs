@@ -456,16 +456,16 @@ namespace EgoAnchor.Tests
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
                     StringAssert.Contains("<b><color=#4DD6A6>>[RUN]5 OCC", text);
-                    StringAssert.Contains("MARKER  <size=24><color=#FFA95C>M / Trigger when the target becomes visible.", text);
+                    StringAssert.Contains("MARKER  <size=24><color=#FFA95C>Numpad + / M / Trigger when the target becomes visible.", text);
                     StringAssert.Contains("Occlusion and reappearance", text);
                     StringAssert.Contains("STATE  <color=#6DD3FF>TARGET OCCLUDED", text);
                     StringAssert.Contains("TIME  <color=#4DD6A6>", text);
                     StringAssert.DoesNotContain("01:30", text);
                     StringAssert.DoesNotContain("02:00", text);
                     StringAssert.DoesNotContain("TO MINIMUM", text);
-                    StringAssert.Contains("START   A / Enter / Numpad Enter", text);
-                    StringAssert.Contains("STOP SESSION Hold B / F", text);
-                    StringAssert.Contains("REJECT   Stick Click / Space", text);
+                    StringAssert.Contains("KEYPAD  1-9 Select | Enter Start | + Marker | 0 End", text);
+                    StringAssert.Contains("VR      Stick Select | A Start | Trigger Marker | Tap B End", text);
+                    StringAssert.Contains("OTHER   Space Reject | F Stop Session | Hold B Stop", text);
                     StringAssert.DoesNotContain("Phase:", text);
                     StringAssert.DoesNotContain("Role:", text);
                     StringAssert.DoesNotContain("RECOVERY", text);
@@ -500,7 +500,7 @@ namespace EgoAnchor.Tests
 
                     StringAssert.Contains("<b><color=#5BA9FF>>[OK]1 HEAD", text);
                     StringAssert.DoesNotContain("<b><color=#FFD054>>[OK]1 HEAD", text);
-                    StringAssert.Contains("RERECORD: ENTER / A", text);
+                    StringAssert.Contains("RERECORD: NUMPAD ENTER | REJECT: SPACE", text);
                 }
                 finally
                 {
@@ -738,7 +738,9 @@ namespace EgoAnchor.Tests
                 "<Keyboard>/enter",
                 "<Keyboard>/numpadEnter",
                 "<Keyboard>/m",
+                "<Keyboard>/numpadPlus",
                 "<Keyboard>/e",
+                "<Keyboard>/numpad0",
                 "<Keyboard>/f",
                 "<Keyboard>/space",
             })
@@ -841,7 +843,9 @@ namespace EgoAnchor.Tests
             foreach (string path in new[] { "<Keyboard>/enter", "<Keyboard>/numpadEnter" })
                 StringAssert.Contains($"m_Path: {path}", start);
             StringAssert.Contains("m_Path: <Keyboard>/m", mark);
+            StringAssert.Contains("m_Path: <Keyboard>/numpadPlus", mark);
             StringAssert.Contains("m_Path: <Keyboard>/e", stop);
+            StringAssert.Contains("m_Path: <Keyboard>/numpad0", stop);
             StringAssert.Contains("m_Interactions: Tap(duration=0.5)", stop);
             StringAssert.Contains("m_Path: <Keyboard>/f", finish);
             StringAssert.Contains("m_Interactions: Hold(duration=1.5)", finish);
@@ -852,7 +856,9 @@ namespace EgoAnchor.Tests
                 "<Keyboard>/upArrow", "<Keyboard>/downArrow",
                 "<Keyboard>/leftArrow", "<Keyboard>/rightArrow",
                 "<Keyboard>/enter", "<Keyboard>/numpadEnter",
-                "<Keyboard>/m", "<Keyboard>/e", "<Keyboard>/f", "<Keyboard>/space",
+                "<Keyboard>/m", "<Keyboard>/numpadPlus",
+                "<Keyboard>/e", "<Keyboard>/numpad0",
+                "<Keyboard>/f", "<Keyboard>/space",
             })
             {
                 using (var action = new InputAction(type: InputActionType.Button, binding: path))

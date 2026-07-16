@@ -198,13 +198,13 @@ namespace EgoAnchor.Eval.Experiment
                 }
                 if (!CurrentContext.IsSelected) return "SELECT A TASK";
                 if (!HasActiveTrial && IsTaskCompleted(_selectedTaskIndex))
-                    return "RERECORD: ENTER / A | REJECT: SPACE / STICK CLICK";
-                if (!HasActiveTrial) return "START: ENTER / A | FINISH SESSION: E / B";
+                    return "RERECORD: NUMPAD ENTER | REJECT: SPACE";
+                if (!HasActiveTrial) return "START: NUMPAD ENTER | STOP SESSION: F";
                 if (_trialEventCount == 0)
-                    return "AT EVENT START: M / TRIGGER";
+                    return "MARK NOW: NUMPAD +";
                 if (_hasOpenOcclusion)
-                    return "WHEN TARGET IS VISIBLE: M / TRIGGER";
-                return "END TASK: E / B | NEXT EVENT: M / TRIGGER";
+                    return "TARGET VISIBLE: NUMPAD +";
+                return "END: NUMPAD 0 | NEXT MARKER: NUMPAD +";
             }
         }
 
@@ -216,9 +216,9 @@ namespace EgoAnchor.Eval.Experiment
                 if (!HasActiveTrial)
                     return "Marker is available only while a task is recording.";
                 if (_trialEventCount == 0)
-                    return "M / Trigger at action or occlusion start.";
+                    return "Numpad + / M / Trigger at action or occlusion start.";
                 if (_hasOpenOcclusion)
-                    return "M / Trigger when the target becomes visible.";
+                    return "Numpad + / M / Trigger when the target becomes visible.";
                 if (_eventRole == ExperimentEventRole.TargetVisible)
                     return "Pair saved. Mark again at the next occlusion.";
                 if (_eventRole == ExperimentEventRole.TransitionStarted)

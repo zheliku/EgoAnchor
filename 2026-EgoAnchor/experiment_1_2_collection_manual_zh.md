@@ -14,15 +14,15 @@
 |---|---|---|---|
 | 选择任务 | 右摇杆上下左右 | 方向键，或数字行/小键盘 `1`--`9` | 只改变黄色选中项，不开始采集 |
 | 开始任务 | A | 主键盘 `Enter` 或小键盘 `Enter` | 开始当前选中任务的 trial |
-| 写 marker | 右扳机 | `M` | 在当前 trial 中记录动作、遮挡或重新可见的准确时刻 |
-| 结束任务 | 快速短按 B | `E` | 结束当前任务；必需 marker 完整后变成 `[OK]` |
+| 写 marker | 右扳机 | 小键盘 `+` 或 `M` | 在当前 trial 中记录动作、遮挡或重新可见的准确时刻 |
+| 结束任务 | 快速短按 B | 小键盘 `0` 或 `E` | 结束当前任务；必需 marker 完整后变成 `[OK]` |
 | 作废选中任务 | 按下右摇杆 | `Space` | 只作废当前或选中任务，其他 `[OK]` 任务不变 |
 | 停止 session | 长按 B 1.5 秒 | `F` | 随时停止整个 session；活动 trial 会先记为 `trial_rejected` |
 
 最容易混淆的是 marker：
 
 - marker **不会开始录制**，A 或 `Enter` 才会开始任务；
-- marker **不会结束录制**，B 或 `E` 才会结束任务；
+- marker **不会结束录制**，小键盘 `0`、B 或 `E` 才会结束任务；
 - marker 只是给日志插入一个准确时间点；
 - 普通运动任务在动作开始前按 marker；
 - 遮挡任务需要在“遮挡开始”和“重新可见”两个时刻各按一次 marker。
@@ -45,7 +45,8 @@
 - 方向键与右摇杆完全相同，按一次只在九宫格移动一格。
 - 主键盘数字行和小键盘 `1`--`9` 可以直接选中对应任务，但不会自动开始。
 - 主键盘 `Enter` 和小键盘 `Enter` 都会开始当前选中任务。
-- `M` 写 marker，`E` 结束任务，`Space` 只作废当前或选中任务，`F` 随时停止整个 session。
+- 主流程可以全部在小键盘完成：`1`--`9` 选任务，`Enter` 开始，`+` 写 marker，`0` 结束任务。
+- `M` 和 `E` 分别是 marker 与结束任务的兼容键；`Space` 只作废当前或选中任务，`F` 随时停止整个 session。
 - 任务运行时会锁定选择；方向键和数字键都不会切换任务，也不会误写 marker。
 
 键盘和手柄完全通用。可以用手柄开始、键盘写 marker、再用手柄结束，日志语义相同。
@@ -162,7 +163,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 4. 等目标重新稳定；重复多轮，部分遮挡和完全遮挡都要有。
 5. 最后一轮必须以“目标重新可见”marker 闭合，然后即可结束。
 
-如果 UI 仍显示 `TARGET OCCLUDED`，B 或 `E` 不会结束任务。先让目标重新可见并补按 marker。
+如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
 ### 任务 6：ALIGN，关闭采集时刻对齐
 
@@ -246,4 +247,4 @@ pixi run python -m egoanchor.eval.cli analyze-exp2 `
 
 本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Finish Action`、`Reject Action` 和 9 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
 
-开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`9`、两个 `Enter`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，遮挡 marker 能正确配对，Canvas 不跟随头部，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。
+开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`9`、两个 `Enter`、小键盘 `+`、小键盘 `0`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，遮挡 marker 能正确配对，Canvas 不跟随头部，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。

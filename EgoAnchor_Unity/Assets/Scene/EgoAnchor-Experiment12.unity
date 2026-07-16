@@ -1957,6 +1957,14 @@ MonoBehaviour:
       m_Groups: 
       m_Action: MarkEvent
       m_Flags: 0
+    - m_Name: 
+      m_Id: 6c9044c9-cae7-44fe-aad0-cecb25501187
+      m_Path: <Keyboard>/numpadPlus
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: MarkEvent
+      m_Flags: 0
     m_Flags: 0
   stopAction:
     m_Name: EndTask
@@ -1977,6 +1985,14 @@ MonoBehaviour:
     - m_Name: 
       m_Id: 7d68ffc8-cc5d-48a1-8cbc-359c6c9bbb1e
       m_Path: <Keyboard>/e
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: EndTask
+      m_Flags: 0
+    - m_Name: 
+      m_Id: 589f2531-4ee9-48ca-b170-7e57fe0221a7
+      m_Path: <Keyboard>/numpad0
       m_Interactions: 
       m_Processors: 
       m_Groups: 

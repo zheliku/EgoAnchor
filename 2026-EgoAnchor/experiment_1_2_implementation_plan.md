@@ -753,7 +753,8 @@ EgoAnchor_Python/data/eval/<session_id>/
 
   - 不使用 InputActionAsset；手柄选场、开始、事件、结束、作废和键盘任务键均为 Inspector 内联
     `InputAction`。
-  - 右手摇杆与键盘方向键按 3×3 九宫格选场；A/Enter 开始、扳机/`M` 标记、快速短按 B/`E` 结束任务、摇杆按下/`Space` 作废。
+  - 右手摇杆与键盘方向键按 3×3 九宫格选场；A/Enter 开始、扳机/小键盘 `+`/`M` 标记、快速短按 B/小键盘 `0`/`E` 结束任务、摇杆按下/`Space` 作废。
+  - 小键盘主流程固定为 `1`--`9` 选任务、`Enter` 开始、`+` 标记、`0` 结束；主键盘原有动作继续可用。
   - 数字行与小键盘 `1`--`9` 只负责选中；长按 B 1.5 秒或 `F` 随时停止 session，活动 trial 先记为 rejected。B 的短按与长按分别使用 `Tap(duration=0.5)` 和 `Hold(duration=1.5)`，不得相互抢占。
   - 运行中不得切场；输入回中前不得重复跨格；未 recording 时不得创建 trial context。
 - [ ] **Step 2: 实现 selector**

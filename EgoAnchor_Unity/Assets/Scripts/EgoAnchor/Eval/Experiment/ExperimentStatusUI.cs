@@ -144,10 +144,10 @@ namespace EgoAnchor.Eval.Experiment
                 $"STATE  {Colorize(selector.CurrentPhaseText, phaseStatusColor)} | " +
                 $"TIME  {Colorize(timer, TimerColor())}");
             builder.AppendLine($"MARKER  <size=24>{Colorize(selector.MarkerInstructionText, markerStatusColor)}</size>");
-            builder.AppendLine("<size=22>SELECT  Stick / Arrows / Number 1-9");
-            builder.AppendLine("START   A / Enter / Numpad Enter    MARK   Trigger / M");
-            builder.AppendLine("END TASK Tap B / E         STOP SESSION Hold B / F");
-            builder.AppendLine("REJECT   Stick Click / Space</size>");
+            builder.AppendLine("<size=22>KEYPAD  1-9 Select | Enter Start | + Marker | 0 End");
+            builder.AppendLine("ALT     Arrows Select | Enter Start | M Marker | E End");
+            builder.AppendLine("VR      Stick Select | A Start | Trigger Marker | Tap B End");
+            builder.AppendLine("OTHER   Space Reject | F Stop Session | Hold B Stop</size>");
             return builder.ToString();
         }
 

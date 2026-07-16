@@ -24,12 +24,12 @@ namespace EgoAnchor.Eval.Experiment
             new InputAction("StartTask", InputActionType.Button);
 
         /// <summary>记录主事件或目标重新可见的动作。</summary>
-        [Tooltip("写入事件 marker；默认绑定右手扳机与键盘 M。")]
+        [Tooltip("写入事件 marker；默认绑定右手扳机、键盘 M 与小键盘 +。")]
         [SerializeField] private InputAction markAction =
             new InputAction("MarkEvent", InputActionType.Button);
 
         /// <summary>结束当前任务的动作。</summary>
-        [Tooltip("结束当前任务；默认绑定右手 B 与键盘 E。")]
+        [Tooltip("结束当前任务；默认绑定右手 B、键盘 E 与小键盘 0。")]
         [SerializeField] private InputAction stopAction =
             new InputAction("EndTask", InputActionType.Button);
 
