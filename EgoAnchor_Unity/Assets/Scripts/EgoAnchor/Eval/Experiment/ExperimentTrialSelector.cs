@@ -53,6 +53,11 @@ namespace EgoAnchor.Eval.Experiment
         [Tooltip("绑定 EvalSession；录制开始时重置九项任务状态并选中任务 1。")]
         [SerializeField] private EvalSession session;
 
+        /// <summary>是否禁止在任务达到建议最短时长前结束。</summary>
+        [Header("Collection Rules")]
+        [Tooltip("正式采集应保持开启：任务未达到 MinimumSeconds 时，B / Enter 不会结束 trial。Smoke 可临时关闭。")]
+        [SerializeField] private bool enforceMinimumDuration = true;
+
         /// <summary>九宫格当前选中的任务索引。</summary>
         private int _selectedTaskIndex = -1;
 
@@ -178,6 +183,20 @@ namespace EgoAnchor.Eval.Experiment
             ? Math.Max(0.0, Time.realtimeSinceStartupAsDouble - _phaseStartedAt)
             : 0.0;
 
+        /// <summary>距离当前任务建议最短时长还剩多少秒；达到后为 0。</summary>
+        public double RemainingMinimumSeconds => HasActiveTrial
+            ? Math.Max(0.0, CurrentTask.MinimumSeconds - TrialElapsedSeconds)
+            : 0.0;
+
+        /// <summary>当前 trial 是否已进入建议的 90--120 秒结束窗口。</summary>
+        public bool IsWithinRecommendedDuration => HasActiveTrial
+            && TrialElapsedSeconds >= CurrentTask.MinimumSeconds
+            && TrialElapsedSeconds <= CurrentTask.MaximumSeconds;
+
+        /// <summary>当前 trial 是否已经超过建议最长时长。</summary>
+        public bool IsOverRecommendedDuration => HasActiveTrial
+            && TrialElapsedSeconds > CurrentTask.MaximumSeconds;
+
         /// <summary>当前头显 UI 使用的阶段名称。</summary>
         public string CurrentPhaseText
         {
@@ -206,13 +225,38 @@ namespace EgoAnchor.Eval.Experiment
                 }
                 if (!CurrentContext.IsSelected) return "SELECT A TASK";
                 if (!HasActiveTrial && IsTaskCompleted(_selectedTaskIndex))
-                    return "SELECT ANOTHER TASK, REJECT IT, OR FINISH SESSION";
+                    return "已完成；按 A / 当前任务键重录，Backspace 作废，B / Enter 结束";
                 if (!HasActiveTrial && CompletedTaskCount > 0)
-                    return "START SELECTED TASK OR FINISH SESSION";
-                if (!HasActiveTrial) return "START SELECTED TASK";
-                if (_trialEventCount == 0) return "MARK THE FIRST EVENT AFTER BASELINE";
-                if (_hasOpenOcclusion) return "MARK WHEN TARGET BECOMES VISIBLE";
-                return "MARK THE NEXT EVENT OR FINISH THIS TASK";
+                    return "未开始；按 A / 当前任务键开始，B / Enter 结束 session";
+                if (!HasActiveTrial) return "未开始；按 A / 当前任务键开始";
+                if (_trialEventCount == 0)
+                    return "已开始；先保持基线约 5 秒，再按扳机 / 当前任务键标记动作";
+                if (_hasOpenOcclusion)
+                    return "已标记遮挡开始；目标重新可见后，按扳机 / 当前任务键";
+                if (IsOverRecommendedDuration)
+                    return "已超过 120 秒；尽快按 B / Enter 结束任务";
+                if (IsWithinRecommendedDuration)
+                    return "已达到建议时长；按 B / Enter 结束任务";
+                return $"事件已标记；继续执行任务，至少再采集 {Math.Ceiling(RemainingMinimumSeconds):0} 秒";
+            }
+        }
+
+        /// <summary>把当前 marker 的协议角色翻译为头显操作者可直接执行的提示。</summary>
+        public string MarkerInstructionText
+        {
+            get
+            {
+                if (!HasActiveTrial)
+                    return "当前没有活动任务；A / 当前任务键开始，B / Enter 结束 session。";
+                if (_trialEventCount == 0)
+                    return "marker 只记录动作时刻，不会开始或停止录制；基线完成后按一次。";
+                if (_hasOpenOcclusion)
+                    return "遮挡开始已记下；目标重新可见时再次按扳机 / 当前任务键。";
+                if (_eventRole == ExperimentEventRole.TargetVisible)
+                    return "目标重新可见已记下；可继续下一轮遮挡，或采满时长后结束。";
+                if (_eventRole == ExperimentEventRole.TransitionStarted)
+                    return "运动开始时刻已记下；继续完成本轮动作，可重复标记下一轮。";
+                return "动作时刻已记下；继续完成任务，可重复标记下一轮。";
             }
         }
 
@@ -289,11 +333,16 @@ namespace EgoAnchor.Eval.Experiment
             return SelectTask(row * 3 + column);
         }
 
-        /// <summary>开始当前选中任务；已完成任务必须先显式作废后才能重做。</summary>
+        /// <summary>开始当前选中任务；已完成任务会先自动写入 trial_rejected，再开始新 trial。</summary>
         public bool StartTrial()
         {
             if (!IsRecording || HasActiveTrial || _selectedTaskIndex < 0) return false;
-            if (IsTaskCompleted(_selectedTaskIndex)) return false;
+            if (IsTaskCompleted(_selectedTaskIndex))
+            {
+                Emit(_completedContexts[_selectedTaskIndex], "trial_rejected");
+                _completed[_selectedTaskIndex] = false;
+                _completedContexts[_selectedTaskIndex] = default;
+            }
 
             _activeTaskIndex = _selectedTaskIndex;
             _trialId = $"trial_{++_trialSequence:000}";
@@ -390,6 +439,7 @@ namespace EgoAnchor.Eval.Experiment
         private bool FinishTrial()
         {
             if (_trialEventCount == 0 || _hasOpenOcclusion) return false;
+            if (enforceMinimumDuration && TrialElapsedSeconds < CurrentTask.MinimumSeconds) return false;
 
             ExperimentContext completedContext = CurrentContext;
             Emit(completedContext, "trial_ended");

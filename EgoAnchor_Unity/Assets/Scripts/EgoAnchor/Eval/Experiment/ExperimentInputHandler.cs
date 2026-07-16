@@ -196,7 +196,7 @@ namespace EgoAnchor.Eval.Experiment
             return selector != null && selector.RejectCurrentOrSelected();
         }
 
-        /// <summary>键盘任务键：空闲时选择并开始，同一活动任务中再次按下写 marker。</summary>
+        /// <summary>键盘任务键：空闲时选择并开始；已完成任务直接重录；活动任务中再次按下写 marker。</summary>
         public bool HandleTask(int taskIndex)
         {
             if (selector == null || taskIndex < 0 || taskIndex >= ExperimentScenario.PlanCount)
@@ -207,7 +207,7 @@ namespace EgoAnchor.Eval.Experiment
             }
 
             if (!selector.SelectTask(taskIndex)) return false;
-            return selector.IsTaskCompleted(taskIndex) || selector.StartTrial();
+            return selector.StartTrial();
         }
 
         /// <summary>创建九个没有硬编码 binding 的内联键盘任务动作。</summary>

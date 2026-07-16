@@ -243,6 +243,20 @@ class SchemaV2ReaderTest(unittest.TestCase):
             with self.assertRaisesRegex(SchemaV2Error, "has_output_pose has invalid type"):
                 load_session_v2(session_dir)
 
+    def test_reader_accepts_null_for_optional_admission_time(self) -> None:
+        """无 pose candidate 的 Unity 处理时刻允许为 null，Python 3.14 也必须正确识别联合类型。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            admission_path = session_dir / "unity_admission.jsonl"
+            rows = [json.loads(line) for line in admission_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["unity_pose_handle_mono_ms"] = None
+            _write_jsonl(admission_path, rows)
+
+            session = load_session_v2(session_dir)
+
+            self.assertTrue(pd.isna(session.unity_admission.loc[0, "unity_pose_handle_mono_ms"]))
+
     def test_reader_rejects_wrong_pose_vector_length(self) -> None:
         """位置与四元数数组必须保持固定维度，防止分析阶段才出现广播错误。"""
 

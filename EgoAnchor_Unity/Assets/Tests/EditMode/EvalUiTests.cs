@@ -223,6 +223,27 @@ namespace EgoAnchor.Tests
             });
         }
 
+        /// <summary>正式时长门禁开启时，未满 90 秒不能误结束；达到最短时长后才可完成。</summary>
+        [Test]
+        public void SelectorEnforcesMinimumDurationWhenEnabled()
+        {
+            WithSelector((_, selector) =>
+            {
+                SetPrivateField(selector, "enforceMinimumDuration", true);
+                Assert.That(selector.StartTrial(), Is.True);
+                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.StopOrFinish(), Is.False);
+
+                SetPrivateField(
+                    selector,
+                    "_trialStartedAt",
+                    Time.realtimeSinceStartupAsDouble - selector.CurrentTask.MinimumSeconds - 1.0);
+
+                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.IsTaskCompleted(0), Is.True);
+            });
+        }
+
         /// <summary>遮挡任务必须允许多组遮挡/可见 marker，悬空遮挡时不得结束。</summary>
         [Test]
         public void SelectorAlternatesOcclusionMarkers()
@@ -269,6 +290,28 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.HasActiveTrial, Is.False);
                 Assert.That(selector.IsTaskCompleted(1), Is.False);
                 Assert.That(eventTypes.FindAll(item => item == "trial_rejected").Count, Is.EqualTo(2));
+            });
+        }
+
+        /// <summary>按开始动作重录已完成任务时，旧 trial 必须先写入 rejected 审计。</summary>
+        [Test]
+        public void SelectorRerecordsCompletedTaskWithRejectedAudit()
+        {
+            WithSelector((_, selector) =>
+            {
+                var events = new List<Tuple<ExperimentContext, string>>();
+                selector.ContextEvent += (context, eventType) => events.Add(Tuple.Create(context, eventType));
+
+                CompleteTask(selector, 0);
+                Assert.That(selector.CurrentTrialId, Is.Empty);
+                Assert.That(selector.StartTrial(), Is.True);
+                Assert.That(selector.HasActiveTrial, Is.True);
+                Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_002"));
+                Assert.That(selector.IsTaskCompleted(0), Is.False);
+
+                Assert.That(
+                    events.Exists(item => item.Item1.TrialId == "trial_001" && item.Item2 == "trial_rejected"),
+                    Is.True);
             });
         }
 
@@ -341,6 +384,10 @@ namespace EgoAnchor.Tests
                     Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
                     Assert.That(input.HandleStop(), Is.True);
                     Assert.That(selector.IsTaskCompleted(2), Is.True);
+                    Assert.That(input.HandleTask(2), Is.True);
+                    Assert.That(selector.HasActiveTrial, Is.True);
+                    Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_002"));
+                    Assert.That(selector.IsTaskCompleted(2), Is.False);
 
                     foreach (string fieldName in new[]
                     {
@@ -378,17 +425,46 @@ namespace EgoAnchor.Tests
                     SetPrivateField(status, "session", session);
                     string text = status.BuildStatusText();
 
-                    StringAssert.Contains("Completed: 1 / 9", text);
+                    StringAssert.Contains("Completed: <color=#5BA9FF>1 / 9</color>", text);
                     StringAssert.Contains("This session: 1", text);
                     StringAssert.Contains("[OK]1 HEAD", text);
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
-                    StringAssert.Contains("<b><color=#FFD054>>[RUN]5 OCC", text);
+                    StringAssert.Contains("<b><color=#4DD6A6>>[RUN]5 OCC", text);
+                    StringAssert.Contains("Marker: <color=#FFA95C>遮挡开始已记下", text);
                     StringAssert.Contains("Occlusion recovery", text);
-                    StringAssert.Contains("Phase: OCCLUDED", text);
+                    StringAssert.Contains("Phase: <color=#6DD3FF>OCCLUDED", text);
                     StringAssert.Contains("Recommended: 90-120 s", text);
                     StringAssert.DoesNotContain("RQ1", text);
                     StringAssert.DoesNotContain("RQ2", text);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(uiObject);
+                }
+            });
+        }
+
+        /// <summary>已完成任务被选中时仍显示完成蓝色，选中只增加箭头和粗体。</summary>
+        [Test]
+        public void StatusUiKeepsCompletedColorWhenTaskIsSelected()
+        {
+            WithSelector((session, selector) =>
+            {
+                GameObject uiObject = new GameObject("ExperimentContextTests.CompletedUI");
+                try
+                {
+                    CompleteTask(selector, 0);
+                    selector.SelectTask(0);
+
+                    ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
+                    SetPrivateField(status, "selector", selector);
+                    SetPrivateField(status, "session", session);
+                    string text = status.BuildStatusText();
+
+                    StringAssert.Contains("<b><color=#5BA9FF>>[OK]1 HEAD", text);
+                    StringAssert.DoesNotContain("<b><color=#FFD054>>[OK]1 HEAD", text);
+                    StringAssert.Contains("已完成；按 A / 当前任务键重录", text);
                 }
                 finally
                 {
@@ -415,7 +491,7 @@ namespace EgoAnchor.Tests
                     string text = status.BuildStatusText();
 
                     StringAssert.Contains(reason, text);
-                    StringAssert.Contains($"NEXT: {reason}", text);
+                    StringAssert.Contains($"NEXT: <color=#FFD054>{reason}</color>", text);
                 }
                 finally
                 {
@@ -447,6 +523,7 @@ namespace EgoAnchor.Tests
                 EvalSession session = sessionObject.AddComponent<EvalSession>();
                 SetPrivateField(session, "_recording", recording);
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
+                SetPrivateField(selector, "enforceMinimumDuration", false);
                 selector.BindSession(session);
                 test(session, selector);
             }

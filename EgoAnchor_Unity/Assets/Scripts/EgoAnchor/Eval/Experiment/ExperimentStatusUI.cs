@@ -46,6 +46,23 @@ namespace EgoAnchor.Eval.Experiment
         [Tooltip("Python session 未配对或启动被阻断时的提示颜色。")]
         [SerializeField] private Color blockedStatusColor = new Color32(255, 125, 106, 255);
 
+        /// <summary>下一步操作提示的颜色。</summary>
+        [Header("Live Status Colors")]
+        [Tooltip("NEXT 下一步操作提示颜色。")]
+        [SerializeField] private Color nextActionColor = new Color32(255, 208, 84, 255);
+
+        /// <summary>当前阶段提示的颜色。</summary>
+        [Tooltip("Phase 当前采集阶段提示颜色。")]
+        [SerializeField] private Color phaseStatusColor = new Color32(109, 211, 255, 255);
+
+        /// <summary>marker 操作说明的颜色。</summary>
+        [Tooltip("Marker 操作说明颜色。")]
+        [SerializeField] private Color markerStatusColor = new Color32(255, 169, 92, 255);
+
+        /// <summary>处于建议结束窗口时的计时颜色。</summary>
+        [Tooltip("Trial 达到建议 90--120 秒窗口时的计时颜色。")]
+        [SerializeField] private Color readyTimerColor = new Color32(77, 214, 166, 255);
+
         /// <summary>文本重绘计时器。</summary>
         private float _updateTimer;
 
@@ -102,8 +119,8 @@ namespace EgoAnchor.Eval.Experiment
                 return builder.ToString();
             }
 
-            builder.AppendLine($"NEXT: {selector.NextActionText}");
-            builder.AppendLine($"Completed: {selector.CompletedTaskCount} / {selector.PlanStepCount}");
+            builder.AppendLine($"NEXT: {Colorize(selector.NextActionText, nextActionColor)}");
+            builder.AppendLine($"Completed: {Colorize($"{selector.CompletedTaskCount} / {selector.PlanStepCount}", completedTaskColor)}");
             AppendCompletedTaskNumbers(builder);
             builder.AppendLine($"{EvalStatusText.Recording(recording)} | {EvalStatusText.Session(session != null ? session.SessionId : string.Empty)}");
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage))
@@ -122,11 +139,14 @@ namespace EgoAnchor.Eval.Experiment
             {
                 builder.AppendLine("Selected: Waiting for session");
             }
-            builder.AppendLine($"Trial: {(selector.HasActiveTrial ? selector.CurrentTrialId : "Idle")}");
-            builder.AppendLine($"Phase: {selector.CurrentPhaseText} | Trial {selector.TrialElapsedSeconds:0.0} s | Phase {selector.PhaseElapsedSeconds:0.0} s");
+            string trialState = selector.HasActiveTrial ? selector.CurrentTrialId : "Idle";
+            builder.AppendLine($"Trial: {Colorize(trialState, selector.HasActiveTrial ? runningTaskColor : pendingTaskColor)}");
+            string timer = $"Trial {selector.TrialElapsedSeconds:0.0} s | Phase {selector.PhaseElapsedSeconds:0.0} s";
+            builder.AppendLine($"Phase: {Colorize(selector.CurrentPhaseText, phaseStatusColor)} | {Colorize(timer, TimerColor())}");
             builder.AppendLine(selector.SelectedTaskIndex >= 0
                 ? $"Recommended: {selector.CurrentTask.MinimumSeconds}-{selector.CurrentTask.MaximumSeconds} s"
                 : "Recommended: 90-120 s per task");
+            builder.AppendLine($"Marker: {Colorize(selector.MarkerInstructionText, markerStatusColor)}");
             builder.AppendLine($"Role: {(string.IsNullOrEmpty(selector.CurrentEventRole) ? "None" : selector.CurrentEventRole)}");
             return builder.ToString();
         }
@@ -176,13 +196,22 @@ namespace EgoAnchor.Eval.Experiment
             return "[ ]";
         }
 
-        /// <summary>按选中、运行、完成、待执行优先级返回任务颜色。</summary>
+        /// <summary>按运行、完成、选中、待执行优先级返回任务颜色；选中通过箭头和粗体提示。</summary>
         private Color TaskColor(int index)
         {
-            if (selector.SelectedTaskIndex == index) return selectedTaskColor;
             if (selector.ActiveTaskIndex == index) return runningTaskColor;
             if (selector.IsTaskCompleted(index)) return completedTaskColor;
+            if (selector.SelectedTaskIndex == index) return selectedTaskColor;
             return pendingTaskColor;
+        }
+
+        /// <summary>按未达最短时长、建议窗口和超时三种状态返回实时计时颜色。</summary>
+        private Color TimerColor()
+        {
+            if (!selector.HasActiveTrial) return pendingTaskColor;
+            if (selector.IsOverRecommendedDuration) return blockedStatusColor;
+            if (selector.IsWithinRecommendedDuration) return readyTimerColor;
+            return selectedTaskColor;
         }
 
         /// <summary>把一段任务状态文本包装为 TextMesh Pro 富文本颜色标签。</summary>

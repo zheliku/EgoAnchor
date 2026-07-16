@@ -238,13 +238,11 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
                         )
                     )
         last_event_id, last_event_ms, _ = specs[-1]
-        event_rows.append(
-            _trial_ended_row(
-                session_id,
-                scenario,
-                trial_id,
-                last_event_id,
-                last_event_ms + 500.0,
+        ended_ms = last_event_ms + 500.0
+        event_rows.extend(
+            (
+                _trial_started_row(session_id, scenario, trial_id, ended_ms - 90000.0),
+                _trial_ended_row(session_id, scenario, trial_id, last_event_id, ended_ms),
             )
         )
 
@@ -287,6 +285,8 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
                 {
                     "experiment_id": "exp1_system_characterization",
                     "scenario_id": scenario,
+                    "minimum_seconds": 90,
+                    "maximum_seconds": 120,
                 }
                 for scenario in (
                     "static_head_motion",
@@ -297,7 +297,12 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
                 )
             ],
             *[
-                {"experiment_id": EXPERIMENT_ID, "scenario_id": scenario}
+                {
+                    "experiment_id": EXPERIMENT_ID,
+                    "scenario_id": scenario,
+                    "minimum_seconds": 90,
+                    "maximum_seconds": 120,
+                }
                 for scenario in event_specs
             ],
         ],
@@ -623,6 +628,27 @@ def _trial_ended_row(
         "event_id": event_id,
         "condition_id": scenario,
         "event_type": "trial_ended",
+        "mono_ms": mono_ms,
+        "payload": {"event_role": ""},
+    }
+
+
+def _trial_started_row(
+    session_id: str,
+    scenario: str,
+    trial_id: str,
+    mono_ms: float,
+) -> dict[str, object]:
+    """构造与完成事件相隔 90 秒的 trial 开始事件。"""
+
+    return {
+        "session_id": session_id,
+        "experiment_id": EXPERIMENT_ID,
+        "scenario_id": scenario,
+        "trial_id": trial_id,
+        "event_id": "",
+        "condition_id": scenario,
+        "event_type": "trial_started",
         "mono_ms": mono_ms,
         "payload": {"event_role": ""},
     }

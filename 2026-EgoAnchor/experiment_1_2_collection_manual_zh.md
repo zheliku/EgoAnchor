@@ -1,62 +1,55 @@
 # EgoAnchor 实验一/二采集手册
 
-正式采集使用 `EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。场景已经设为
-Formal，不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。
+正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-9 项任务可以拆到多个 session 中采集。每个 session 可完成 1--9 中任意数量的任务，也不要求按顺序。
-例如，第一次只采任务 1 和 3，第二次再采 2、4、5、6、7、8、9。分析时把这些目录一起传入，批次合计
-覆盖 9 项即可。头显面板会显示本次 session 已完成的任务编号。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。每次 session 可以只采任务 1--9 中的任意几项，不必一次做完，也不必按顺序。最后只要同一冻结配置下的所有 session 合起来覆盖任务 1--9 即可。
 
-每项任务持续 90--120 秒。一次只采一项时，完成后可以立即结束 Unity 和 Python；采多项时，任务之间可
-停下来准备，但不要退出 Play Mode。9 项纯采集时间合计约为 13.5--18 分钟。
+每项正式任务必须持续 **90--120 秒**。默认开启最短时长门禁：不足 90 秒时，B 或 `Enter` 不会结束当前任务。超过 120 秒时 UI 计时会变红，请尽快结束。
 
-平台 reference 来自 Quest 追踪系统，不是外部光学真值。`capture_mono_ms` 是 image-time proxy，
-也不是曝光真值。
+## 一、先弄清四个动作
 
-## 1. 默认输入
+采集时只有四类操作，含义不要混用。
 
-### 右手控制器
+| 操作 | 右手手柄 | 键盘 | 实际含义 |
+|---|---|---|---|
+| 开始任务 | A | 第一次按任务数字 `1`--`9` | 开始当前任务的 trial。从这一刻起，该任务的数据才会进入正式分析范围 |
+| 写 marker | 右扳机 | 任务运行中再次按同一个数字 | 只在当前 trial 中记一个时间点，告诉分析程序“动作或遮挡在这里发生” |
+| 结束任务 | B | `Enter` | 结束当前任务。满足事件和时长要求后，任务变成 `[OK]` |
+| 作废 | 按下右摇杆 | `Backspace` | 当前操作做错时作废该 trial；原始日志保留，但正式分析会排除 |
 
-| 操作 | 默认输入 | 作用 |
-|---|---|---|
-| 选择任务 | 右摇杆上下左右 | 在 3×3 九宫格中移动选中项 |
-| 开始 | A | 开始当前选中的任务 |
-| 事件标记 | 右扳机 | 标记动作开始、遮挡开始或目标重新可见 |
-| 结束 | B | 结束当前任务；空闲且至少完成一项时，再按一次结束本次 session |
-| 作废 | 按下右摇杆 | 作废当前 trial，或作废选中任务最后一次完成 trial |
+最容易混淆的是 marker：
 
-任务运行时摇杆选场会被锁定，避免误切到其他任务。按键会轻微扰动控制器，所以应先按下事件键，再开始
-移动目标。作废键只用于操作错误，不要把它当暂停键。
+- marker **不会开始录制**，A 或第一次按任务数字才会开始任务；
+- marker **不会结束录制**，B 或 `Enter` 才会结束任务；
+- marker 只是给日志插入一个准确时间点；
+- 普通运动任务在动作开始前按 marker；
+- 遮挡任务需要在“遮挡开始”和“重新可见”两个时刻各按一次 marker。
+
+## 二、右手手柄和键盘怎么用
+
+### 右手手柄
+
+1. 用右摇杆上下左右，在 3×3 九宫格中选择任务。
+2. 按 A 开始选中的任务。
+3. 需要标记事件时按右扳机。
+4. 采满 90--120 秒后按 B 结束任务。
+5. 做错时按下右摇杆作废。
+
+任务正在运行时不能切换任务，防止误操作。
 
 ### 键盘
 
-键盘采用“一项任务一个键”的方式：
+- `1`--`9` 分别对应任务 1--9。
+- 任务空闲时按数字：选择并立即开始该任务。
+- 任务运行时再按同一个数字：写 marker。
+- `Enter`：结束当前任务。
+- `Backspace`：作废当前任务或选中的已完成任务。
 
-| 按键 | 作用 |
-|---|---|
-| `1`--`9` | 第一次按下会选择并开始对应任务；任务运行中再次按同一个数字键会写事件标记 |
-| `Enter` | 结束当前任务；空闲且至少完成一项时，再按一次结束本次 session |
-| `Backspace` | 作废当前 trial，或作废当前选中的已完成 trial |
+键盘和手柄完全通用。可以用手柄开始、键盘写 marker、再用手柄结束，日志语义相同。
 
-遮挡任务需要交替记录“遮挡开始”和“目标重新可见”，所以同一个数字键会按多次。UI 的 `NEXT` 和
-`Phase` 会说明下一次按键的含义。
+## 三、UI 怎么看
 
-## 2. 在 Inspector 中改绑
-
-本项目不使用 InputActionAsset。所有动作都直接序列化在正式场景的 `ExperimentInputHandler` 组件中：
-
-1. 在 Hierarchy 选择 `EvalRecorder`。
-2. 找到 `Experiment Input Handler`。
-3. 展开 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action` 和 `Reject Action`。
-4. `Task Actions` 固定有 9 项，对应键盘任务 1--9。
-5. 在每个 Action 的 Bindings 中直接修改设备和按键。
-
-这些字段是真正的 `InputAction`，不是 binding path 字符串，也不引用外部 InputActionAsset。修改绑定后先跑
-smoke，逐个确认 Inspector 中的 Action 与实际操作一致。Formal 开始后不要再改绑定或场景。
-
-## 3. 状态面板
-
-Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。面板中的九宫格编号与键盘数字键一致：
+Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。
 
 ```text
 1 HEAD    2 6DOF    3 MOVE
@@ -64,179 +57,152 @@ Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。面板中�
 7 VCD     8 TEMP    9 LOCK
 ```
 
-状态符号：
+任务状态：
 
 - `[ ]`：未完成；
 - `[RUN]`：正在采集；
-- `[OK]`：已有一个有效完成 trial；
-- `>`：摇杆当前选中的任务。
+- `[OK]`：已完成；
+- `>`：当前选中；
+- 选中一个已经完成的任务时，它仍保持蓝色，只增加箭头和粗体。
 
-面板还会显示：
+颜色：
 
-- `Completed`：已完成任务数量；
-- `This session`：本次日志最终会包含的任务编号；
-- `Trial`：当前 trial ID；
-- `Phase`：当前处于基线、动作、遮挡或恢复阶段；
-- `Trial ... s`：当前任务已录制秒数；
-- `Recommended: 90-120 s`：正式时长范围；
-- `NEXT`：下一项合法操作。
+- 黄色任务：当前选中的未完成任务；
+- 绿色任务：正在录制；
+- 蓝色任务：本 session 已完成；
+- 灰色任务：尚未完成；
+- 黄色 `NEXT`：下一步该做什么；
+- 青色 `Phase`：当前采集阶段；
+- 橙色 `Marker`：下一次 marker 的作用；
+- 黄色计时：尚未达到 90 秒；
+- 绿色计时：已经进入 90--120 秒结束窗口；
+- 红色计时：已经超过 120 秒；
+- 红色 session 提示：Python 未配对、目录已被使用或 session 启动失败。
 
-九宫格颜色含义固定为：黄色表示当前选中，绿色表示正在录制，蓝色表示本 session 已完成，灰色表示尚未开始。
-如果 Python session 尚未配对或已被使用，状态提示会用红色显示原因；这时按键不会改变任务状态，应先重启 Python
-并等待新的 `session_id`。
+重要字段：`This session` 是本次最终保留的任务编号；`Trial` 是当前 trial ID；`Trial ... s` 是当前任务总时长；`Phase ... s` 是当前阶段持续时间；`Role` 是最近一个 marker 角色；`NEXT` 是当前最应该执行的操作。
 
-## 4. 启动
+## 四、启动顺序
 
-先启动 NATS：
+### 1. 启动 NATS
 
 ```powershell
 nats-server
 ```
 
-再启动 Python：
+### 2. 在 5090 电脑启动 Python
 
 ```powershell
 cd EgoAnchor_Python
 pixi run python .\src\run_server.py --object controller_right
 ```
 
-`--object` 必须与正式场景中的 `EvalSession.objectId` 一致。默认值都是 `controller_right`。
+Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen 回传到本机 `EgoAnchor_Python/data/eval/`。Unity 不应直接覆盖 Python 的日志文件。
 
-Python 就绪后：
+### 3. 启动 Unity
 
 1. 打开 `Assets/Scene/EgoAnchor-Experiment12.unity`。
 2. 检查 `ServerEndpointConfig` 的服务器 IP。
 3. 进入 Play Mode。
-4. 等待 Python 显示 NATS 已连接和 ZMQ 正在监听 `15557`。
-5. 等 Unity 显示复用了 Python 的 `session_id`。
-6. 确认面板出现 `Recording`，任务 1 被选中，但还没有 `[RUN]`。
+4. 等待 Python 显示 NATS 已连接、ZMQ 正在监听 `15557`。
+5. 等待 Unity UI 显示 `Recording` 和 Python 的 `session_id`。
+6. 确认任务 1 已被选中，但仍是 `[ ]`，不是 `[RUN]`。
 
-收到第一个带 Python `session_id` 的 PoseResult 后，Unity 自动开始 session。不要手工创建日志目录，也不要
-在同一个 Python session 中重新启动 Unity 录制。每次开始新的模块化 session，都要重新启动 Python，取得
-新的 `session_id`。
+如果 UI 显示“当前 Python session 已有 Unity 日志”，这个 `session_id` 已经用过。停止并重新启动 Python，取得新的 `session_id`，不要覆盖旧目录。
 
-## 5. 通用采集方法
+## 五、每个任务都按这个节奏
 
-每项任务都按下面的节奏执行：
+1. 选择任务。
+2. 按 A，或按对应数字键，确认任务变成绿色 `[RUN]`。
+3. 按任务说明记录 10--15 秒初始基线。
+4. 在动作真正开始前按 marker。
+5. 执行动作。需要多轮动作时，每轮开始前再次按 marker。
+6. 最后留 10--15 秒静止或恢复段。
+7. 等计时进入绿色的 90--120 秒窗口。
+8. 按 B 或 `Enter`，确认任务变成蓝色 `[OK]`。
 
-1. 用摇杆选任务，或按该任务的数字键。
-2. 手柄按 A 开始；键盘首次按数字键时已经自动开始。
-3. 保持 10--15 秒基线。此时目标和头部按任务要求保持静止。
-4. 在动作真正开始前按右扳机；键盘再次按同一个数字键。
-5. 按任务说明执行动作。需要多轮事件时，每轮开始前都重新标记。
-6. 总时长达到 90 秒后，留出最后 10--15 秒恢复或静止段。
-7. 在 120 秒前按 B 或 `Enter` 结束任务，确认状态变为 `[OK]`。
+按 marker 时应先按键，再开始动作。不要已经移动几秒后才补按。
 
-不要在按下 marker 前就开始动作。转换指标需要 marker 后、平台 reference 开始运动前的短基线；遮挡恢复
-指标还要求遮挡开始和目标重新可见两个 marker 严格配对。
-
-## 6. 九项任务怎么做
+## 六、任务 1--9 逐项操作
 
 ### 任务 1：HEAD，静止目标与主动头动
 
-目标控制器固定在桌面，全程不移动。
-
-1. 开始任务后静止观察 10--15 秒。
-2. 标记一次主事件。
-3. 依次做左右偏航、上下俯仰、左右侧移、靠近、远离和组合头动。
-4. 每种头动持续约 8--12 秒，相邻动作之间静止 3--5 秒。
-5. 最后保持头部和目标静止 10--15 秒，再结束任务。
+1. 把右手控制器稳定放在桌面或固定支架上，全程不要移动。
+2. 选择任务 1，按 A；键盘直接按 `1`。
+3. 正视目标并保持头部静止 10--15 秒。
+4. 按一次 marker，然后依次做左右转头、上下点头、左右侧移、靠近和远离。
+5. 每种头动做 8--12 秒，中间静止 3--5 秒；切换动作前可以再按 marker。
+6. 最后保持目标和头部静止 10--15 秒，90--120 秒内结束。
 
 ### 任务 2：6DOF，起停六自由度
 
-1. 先记录 10--15 秒静止基线。
-2. 每轮拿起前标记一次 `transition_started`。
-3. 平移并旋转控制器 6--8 秒，随后放下并保持静止 8--10 秒。
-4. 重复 5--6 轮。平移和旋转方向要有变化，但不要快速甩动。
-5. 最后一轮放下后至少静止 10 秒，再结束任务。
+1. 控制器放在桌面，开始任务 2：A 或数字 `2`。
+2. 静止 10--15 秒。
+3. 准备拿起时先按 marker，然后立即拿起控制器。
+4. 同时做平移和旋转 6--8 秒，再放回桌面静止 8--10 秒。
+5. 重复 5--6 轮，每轮拿起前都按 marker；最后静止 10--15 秒后结束。
 
 ### 任务 3：MOVE，持续平移
 
-1. 先记录 10--15 秒静止基线，然后标记主事件。
-2. 在桌面上方或预定轨迹内做中低速往复平移，尽量保持控制器朝向不变。
-3. 前后、左右和斜向轨迹都要覆盖，每次换向不要突然加速。
-4. 连续运动约 65--85 秒，最后静止 10--15 秒后结束。
+1. 开始任务 3：A 或数字 `3`，静止 10--15 秒。
+2. 按 marker，开始中低速连续平移。
+3. 覆盖前后、左右和斜向轨迹，换向不要突然加速；换主要方向前可以再按 marker。
+4. 连续运动约 65--85 秒，最后静止 10--15 秒，90--120 秒内结束。
 
 ### 任务 4：ROT，持续旋转
 
-1. 先记录 10--15 秒静止基线，然后标记主事件。
-2. 尽量保持控制器中心位置不变，依次绕 yaw、pitch 和 roll 轴旋转。
-3. 每个轴正反方向各做若干次，采用连续中低速旋转。
-4. 连续运动约 65--85 秒，最后静止 10--15 秒后结束。
+1. 开始任务 4：A 或数字 `4`，保持控制器中心位置稳定 10--15 秒。
+2. 按 marker，依次绕 yaw、pitch、roll 轴做正反方向的中低速旋转。
+3. 切换旋转轴前可以再按 marker；连续旋转约 65--85 秒，最后静止 10--15 秒后结束。
 
 ### 任务 5：OCC，遮挡与恢复
 
-1. 可见且静止 10--15 秒。
-2. 遮挡开始的同一时刻按 marker，UI 进入 `OCCLUDED`。
-3. 部分或完全遮挡 8--12 秒。
-4. 移开遮挡物。当目标刚重新可见时再次按 marker，UI 进入 `VISIBLE / RECOVERY`。
-5. 保持目标静止并等待恢复 8--12 秒。
-6. 重复 4--5 轮，覆盖部分遮挡和完全遮挡。
-7. 最后一轮必须以 `target_visible` 闭合。总时长达到 90 秒后再结束。
+1. 开始任务 5：A 或数字 `5`，保持目标完整可见且静止 10--15 秒。
+2. 即将遮挡时按第一次 marker，马上遮挡目标；UI 进入 `OCCLUDED`。
+3. 遮挡 8--12 秒，移开遮挡物；目标刚重新可见时按第二次 marker。
+4. 可见且静止 8--12 秒，等待恢复；重复 4--5 轮，部分遮挡和完全遮挡都要有。
+5. 最后一轮必须以“目标重新可见”marker 闭合，90--120 秒内结束。
 
-遮挡未闭合时 B 和 `Enter` 不会结束任务，这是为了防止缺失 `target_visible`。
+如果 UI 仍显示 `OCCLUDED`，B 或 `Enter` 不会结束任务。先让目标重新可见并补按 marker。
 
-### 任务 6：ALIGN，关闭采集时刻对齐的归因场景
+### 任务 6：ALIGN，关闭采集时刻对齐
 
-动作与任务 1 相同：目标固定，记录主动头动。重点增加较明显的头部侧移、靠近和远离。目标本身不能动。
+动作与任务 1 相同：目标固定，静止 10--15 秒后按 marker，做左右转头、上下点头、明显侧移、靠近和远离，最后静止 10--15 秒，90--120 秒内结束。
 
-### 任务 7：VCD，关闭 VCD 接纳的归因场景
+### 任务 7：VCD，关闭 VCD 接纳
 
-动作与任务 5 相同：执行 4--5 轮遮挡与恢复，每轮都要成对标记 `occlusion_started` 和
-`target_visible`。
+动作与任务 5 相同：遮挡开始和重新可见各按一次 marker，重复 4--5 轮，最后一轮必须闭合，90--120 秒内结束。
 
-### 任务 8：TEMP，关闭时序合成的归因场景
+### 任务 8：TEMP，关闭时序合成
 
-动作与任务 2 相同：重复 5--6 轮“静止、标记、起动、六自由度运动、放下、重新静止”。每轮动作前都要
-标记 `transition_started`。
+动作与任务 2 相同：静止 10--15 秒，每轮拿起前按 marker，平移加旋转 6--8 秒，放下后静止 8--10 秒，重复 5--6 轮，最后静止 10--15 秒。
 
-### 任务 9：LOCK，关闭 StaticLock 的归因场景
+### 任务 9：LOCK，关闭 StaticLock
 
-1. 开始后先静止 15 秒，让完整 EgoAnchor 有充分时间进入静止锚定。
-2. 每轮动作前标记 `transition_started`。
-3. 移动并旋转 6--8 秒，随后放下并静止 10--12 秒。
-4. 重复 4--5 轮。
-5. 最后一轮结束后静止 15 秒，再结束任务。
+1. 开始任务 9：A 或数字 `9`，控制器放在桌面并静止 15 秒。
+2. 每轮拿起前按 marker，平移加旋转 6--8 秒，放下后静止 10--12 秒。
+3. 重复 4--5 轮，最后静止 15 秒；90--120 秒内结束。
 
-## 7. 做错后怎么重做
+## 七、做错了怎么处理
 
-### 任务还在 `[RUN]`
+当前任务是 `[RUN]` 时，按右摇杆或 `Backspace` 作废，任务回到 `[ ]`，其他 `[OK]` 不受影响。
 
-按下右摇杆，或按 `Backspace`。当前 trial 会写入 `trial_rejected`，任务回到 `[ ]`。修正准备后重新开始
-这一项即可。
+任务已经是 `[OK]` 时可以直接重采，不需要先删除：手柄选中后按 A，或键盘直接按对应数字。代码会先把旧 trial 写成 `trial_rejected`，再立即开始新 trial。旧日志保留用于审计，正式分析只使用新的未作废完成 trial。
 
-### 已经按了结束，任务显示 `[OK]`
+如果只想删除完成状态而暂时不重采，选中任务后按右摇杆或 `Backspace`，任务回到 `[ ]`，不会自动开始。
 
-1. 用摇杆选中该任务；键盘也可以按对应数字键，此时只会选中，不会直接覆盖旧 trial。
-2. 按下右摇杆或 `Backspace`，状态回到 `[ ]`。
-3. 重新采集这一项。
+## 八、结束一个模块化 session
 
-被作废的原始行会保留在日志中，便于审计。正式 QC、指标和 VCD risk-coverage 只读取正常 `trial_ended`
-且没有后续 `trial_rejected` 的 trial，不会把错误尝试混入论文结果。
+为了避免 Python 停止后的尾帧没有 Unity admission，最后一项任务完成后严格按以下顺序：
 
-以下问题需要放弃当前 session，但不会影响其他已经通过 QC 的模块化 session：
+1. 确认没有 `[RUN]`，查看 `This session` 核对任务编号。
+2. **先停止 5090 上的 Python**，按 `q`、`Esc` 或正常终止服务。
+3. 等 `python_session.json` 的 `state` 变为 `python_stopped`，并等待 Mutagen 回传完成。
+4. Unity 保持 Play Mode 和空闲状态，此时按 B 或 `Enter` 结束 session。
+5. 等 Unity 控制台显示 manifest 已写入，最后退出 Play Mode。
 
-- Unity 与 Python 的 session ID 不一致；
-- NATS/ZMQ 中断或 pose 流长时间停止；
-- writer 丢行或写入失败；
-- Formal 过程中改了代码、模型、参数或场景配置；
-- 平台 reference 长时间无效，导致多项任务不可用。
+不要在 Python 仍持续发布 PoseResult 时先结束 Unity session。QC 会统计跨端未消费的 Python candidate；实际进入 Unity 的 candidate 仍必须完整覆盖 8 个 runtime。
 
-## 8. 完成一个模块化 session
-
-本次需要的任务显示 `[OK]` 后，先检查 `This session`。确认没有需要重做的任务，再在空闲状态按一次 B 或
-`Enter`。不需要等 9 项全部完成。Unity 会写入 `manifest.json`，其中 `completed_tasks` 按编号记录本次最终
-保留的任务和 trial。
-
-随后：
-
-1. 等 Unity 控制台显示 manifest 已写入和 session 已结束。
-2. 立即退出 Unity Play Mode，停止继续发送图像帧。
-3. 在 Python OpenCV 窗口按 `q` 或 `Esc`。
-4. 等 `python_session.json` 的 `state` 变为 `python_stopped`。
-5. 远端采集时，等日志同步完成后再运行 QC。
-
-同名 session 目录应包含：
+目录应包含：
 
 ```text
 manifest.json
@@ -251,69 +217,35 @@ events.jsonl
 audit_samples/
 ```
 
-`python_events.jsonl` 由 5090 Python 服务独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。
-两端通过 Mutagen 完成同步后，`qc` 或实验分析入口会按固定顺序生成最终的 `events.jsonl`，并核对两个分片的
-实际行数与 `python_session.json`、Unity manifest 中的 writer 统计。不要手工编辑或让任意一端直接追加最终文件。
+`python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会合并生成 `events.jsonl`。不要手工修改内部固定文件或 manifest 的 `session_id`。两端正常停止后，可以给最外层目录加任务前缀，例如 `tasks-01-03__20260716_153000_controller_right/`。
 
-五个 JSONL 文件都不能是空文件。所有 writer 的 `dropped_rows` 和 `log_write_failures` 必须为 0。
-
-Unity 和 Python 都正常停止后，可以给最外层目录增加任务前缀，例如：
-
-```text
-tasks-01-03__20260716_153000_controller_right/
-```
-
-不要修改目录内的固定文件名，也不要修改 `manifest.json` 中的 `session_id`。目录名前缀只用于人工整理；
-reader 仍以 manifest 内的稳定 ID 配对数据。重采任务 3 后，保留新旧目录作审计，正式分析时只传入要采用的
-新目录即可。
-
-运行 QC：
+## 九、运行 QC 和分析
 
 ```powershell
 cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算通过。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，遮挡没有悬空 marker，每个被 Unity 消费的 candidate 有 8 个 admission，每个 render tick 有 8 个 runtime。
 
-如果 QC 提示缺少事件分片，先确认 5090 的 Python 已经正常停止、`python_session.json` 的 `state` 为
-`python_stopped`，再等待 Mutagen 将 `python_events.jsonl` 和 `python_session.json` 同步回本机。旧的只有
-`events.jsonl` 的目录属于旧共享写入格式，当前 schema-v2 会拒绝读取。
-
-每个 session 都通过基础 QC 后，将同一冻结配置下的目录一起交给分析。可以把全部模块化目录同时传给两个
-命令；没有对应实验任务的 session 会被忽略：
+实验一批次必须合计覆盖任务 1--5，实验二批次必须合计覆盖任务 6--9：
 
 ```powershell
 pixi run python -m egoanchor.eval.cli analyze-exp1 `
   .\data\eval\tasks-01-03__<session_a> `
   .\data\eval\tasks-02-04-05__<session_b> `
-  .\data\eval\tasks-06-07-08-09__<session_c> `
   --out .\data\analysis\exp1
 
 pixi run python -m egoanchor.eval.cli analyze-exp2 `
-  .\data\eval\tasks-01-03__<session_a> `
-  .\data\eval\tasks-02-04-05__<session_b> `
-  .\data\eval\tasks-06-07-08-09__<session_c> `
+  .\data\eval\tasks-06-07__<session_c> `
+  .\data\eval\tasks-08-09__<session_d> `
   --out .\data\analysis\exp2
 ```
 
-实验一要求批次覆盖任务 1--5，实验二要求覆盖任务 6--9。批次会拒绝重复 `session_id`，也会检查对象、
-协议、`config_hash`、`frozen_parameter_set_id` 和八个 runtime 定义是否一致。不能把 calibration、不同参数
-或不同对象的目录拼进 Formal 批次。
+## 十、Inspector 改绑与 smoke
 
-## 9. Smoke 与 calibration
+本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Reject Action` 和 9 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
 
-第一次正式采集前，在 `EgoAnchor-Develop.unity` 跑 smoke 和 calibration。它们不进入论文结果。
+正式采集前先跑 smoke，确认右手摇杆、A、右扳机、B、摇杆按下、键盘 `1`--`9`、`Enter`、`Backspace` 都有效；运行中不能切换；完成任务选中后仍为蓝色并能直接重采；遮挡 marker 交替；Canvas 不跟随头部；日志无 dropped row 和 write failure。
 
-Smoke 至少检查：
-
-- 手柄五个动作和键盘 `1`--`9`、`Enter`、`Backspace` 都能被识别；
-- 摇杆四方向按九宫格移动，运行中不能误切任务；
-- 普通任务、转换任务和遮挡任务产生正确事件角色；
-- 作废后只影响当前任务，其他 `[OK]` 状态不变；
-- 只完成一项后可以用第二次 B/`Enter` 结束 session，manifest 的 `completed_tasks` 只列这一项；
-- Canvas 保持静止，不跟随头部；
-- NATS/ZMQ 计数持续增加，日志没有 dropped row 或 write failure。
-
-Calibration 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock、动作速度和事件判定规则。Formal 每项
-仍按 90--120 秒执行，不得用正式数据继续调参。
+Smoke 如需快速测试，可以临时关闭 `ExperimentTrialSelector.enforceMinimumDuration`。正式场景开始采集前必须重新开启，Formal 期间不得修改代码、模型、参数、输入绑定或场景配置。

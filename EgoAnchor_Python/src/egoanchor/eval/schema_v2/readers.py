@@ -8,7 +8,7 @@ import types
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import pandas as pd
 
@@ -385,7 +385,9 @@ def _matches_type(value: Any, expected: Any) -> bool:
         return True
     origin = get_origin(expected)
     arguments = get_args(expected)
-    if origin is types.UnionType:
+    # Python 3.14 会把 ``T | None`` 的 origin 暴露为 typing.Union；
+    # 早期版本则可能返回 types.UnionType，两种形式都必须按联合类型处理。
+    if origin in (types.UnionType, Union):
         return any(_matches_type(value, item) for item in arguments)
     if origin is list:
         return isinstance(value, list) and all(_matches_type(item, arguments[0]) for item in value)

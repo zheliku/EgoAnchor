@@ -71,7 +71,7 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
         warnings.append("events is empty")
 
     _check_render_matrix(session, variants, errors, metrics)
-    _check_admission_matrix(session, variants, errors, metrics)
+    _check_admission_matrix(session, variants, errors, warnings, metrics)
     return SchemaQcReport(errors=errors, warnings=warnings, metrics=metrics)
 
 
@@ -137,7 +137,62 @@ def _check_completed_tasks(
         )
     if str(session.manifest.get("run_kind", "")).lower() == "formal" and not event_keys:
         errors.append("formal session requires at least one completed task")
+    if str(session.manifest.get("run_kind", "")).lower() == "formal":
+        _check_formal_trial_durations(session, event_keys, plan, errors, metrics)
     metrics["completed_task_count"] = len(event_keys)
+
+
+def _check_formal_trial_durations(
+    session: EvalSessionV2,
+    event_keys: set[tuple[str, str, str, str]],
+    plan: list[Any],
+    errors: list[str],
+    metrics: dict[str, Any],
+) -> None:
+    """正式完成 trial 必须具有唯一开始/结束事件，且持续时间落在冻结计划范围内。"""
+
+    plan_by_condition = {
+        (str(item.get("experiment_id") or ""), str(item.get("scenario_id") or "")): item
+        for item in plan
+        if isinstance(item, dict)
+    }
+    durations: dict[str, float] = {}
+    for session_id, experiment_id, scenario_id, trial_id in sorted(event_keys):
+        rows = session.events[
+            (session.events["session_id"].astype(str) == session_id)
+            & (session.events["experiment_id"].astype(str) == experiment_id)
+            & (session.events["scenario_id"].astype(str) == scenario_id)
+            & (session.events["trial_id"].astype(str) == trial_id)
+        ]
+        starts = rows[rows["event_type"] == "trial_started"]
+        ends = rows[rows["event_type"] == "trial_ended"]
+        if len(starts) != 1 or len(ends) != 1:
+            errors.append(
+                f"formal trial {trial_id!r} requires exactly one trial_started and trial_ended event"
+            )
+            continue
+
+        duration_seconds = (float(ends.iloc[0]["mono_ms"]) - float(starts.iloc[0]["mono_ms"])) / 1000.0
+        durations[trial_id] = round(duration_seconds, 3)
+        planned = plan_by_condition.get((experiment_id, scenario_id), {})
+        minimum_raw = planned.get("minimum_seconds")
+        maximum_raw = planned.get("maximum_seconds")
+        if (
+            isinstance(minimum_raw, bool)
+            or not isinstance(minimum_raw, (int, float))
+            or isinstance(maximum_raw, bool)
+            or not isinstance(maximum_raw, (int, float))
+        ):
+            errors.append(f"formal trial plan for {experiment_id}/{scenario_id} requires numeric duration bounds")
+            continue
+        minimum = float(minimum_raw)
+        maximum = float(maximum_raw)
+        if duration_seconds < minimum or duration_seconds > maximum:
+            errors.append(
+                f"formal trial {trial_id!r} duration {duration_seconds:.3f}s is outside "
+                f"[{minimum:.3f}, {maximum:.3f}]s"
+            )
+    metrics["completed_trial_duration_seconds"] = durations
 
 
 def _variant_ids(raw: Any, errors: list[str]) -> set[str]:
@@ -357,8 +412,14 @@ def _check_render_matrix(session: EvalSessionV2, variants: set[str], errors: lis
             errors.append(f"render tick {tick_id!r} contains duplicate variant rows")
 
 
-def _check_admission_matrix(session: EvalSessionV2, variants: set[str], errors: list[str], metrics: dict[str, Any]) -> None:
-    """每个 candidate 必须在所有 variant 上有明确 admission 行。"""
+def _check_admission_matrix(
+    session: EvalSessionV2,
+    variants: set[str],
+    errors: list[str],
+    warnings: list[str],
+    metrics: dict[str, Any],
+) -> None:
+    """每个被 Unity 消费的 candidate 必须在所有 variant 上有明确 admission 行。"""
 
     table = session.unity_admission
     if table.empty:
@@ -375,8 +436,14 @@ def _check_admission_matrix(session: EvalSessionV2, variants: set[str], errors: 
     observed_candidates = {str(item) for item in table["candidate_id"].dropna()}
     missing_candidates = expected_candidates - observed_candidates
     extra_candidates = observed_candidates - expected_candidates
+    metrics["python_candidate_count"] = len(expected_candidates)
+    metrics["python_candidates_without_unity_admission"] = len(missing_candidates)
     if missing_candidates:
-        errors.append(f"python candidates missing admission rows: {sorted(missing_candidates)}")
+        sample = sorted(missing_candidates)[:5]
+        warnings.append(
+            f"{len(missing_candidates)} python candidates were not consumed by Unity admission "
+            f"(latest-only delivery or session boundary); excluded from candidate-level analysis; sample={sample}"
+        )
     if extra_candidates:
         errors.append(f"admission has unknown candidate_id values: {sorted(extra_candidates)}")
     for candidate_id, group in table.groupby("candidate_id", dropna=False):

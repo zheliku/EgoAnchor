@@ -125,6 +125,26 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertTrue(report.passed, report.errors)
 
+    def test_formal_trial_duration_outside_plan_fails_qc(self) -> None:
+        """Formal trial 即使正常结束，低于 90 秒或超过 120 秒也不得进入正式分析。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            _expand_to_formal_variants(session_dir)
+            events_path = session_dir / "unity_events.jsonl"
+            events = _read_jsonl(events_path)
+            for event in events:
+                if event["event_type"] == "trial_ended":
+                    event["mono_ms"] = 11000.0
+                    event["created_unix_ms"] = 21000.0
+            _write_jsonl(events_path, events)
+            (session_dir / "events.jsonl").unlink(missing_ok=True)
+
+            report = run_schema_qc(load_session_v2(session_dir))
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("duration" in error and "outside" in error for error in report.errors))
+
     def test_unknown_admission_variant_fails_qc(self) -> None:
         """Admission 混入 manifest 未声明变体时必须失败。"""
 
@@ -143,6 +163,22 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertFalse(report.passed)
             self.assertTrue(any("unknown admission variants" in error for error in report.errors))
+
+    def test_unconsumed_python_candidate_is_reported_without_faking_admission(self) -> None:
+        """latest-only 或停机边界未被 Unity 消费的 Python candidate 应统计警告，不伪造 admission。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            admission_path = session_dir / "unity_admission.jsonl"
+            rows = [row for row in _read_jsonl(admission_path) if row["candidate_id"] != "s01:2:1"]
+            _write_jsonl(admission_path, rows)
+            _set_writer_rows(session_dir, "unity_admission.jsonl", len(rows))
+
+            report = run_schema_qc(load_session_v2(session_dir))
+
+            self.assertTrue(report.passed, report.errors)
+            self.assertEqual(report.metrics["python_candidates_without_unity_admission"], 1)
+            self.assertTrue(any("not consumed by Unity admission" in warning for warning in report.warnings))
 
     def test_duplicate_candidate_and_reference_keys_fail_qc(self) -> None:
         """join 右表的 candidate/reference 主键重复必须在 QC 阶段阻断。"""
@@ -290,6 +326,7 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
     manifest["run_kind"] = "formal"
     manifest["variant_definitions"] = definitions
     manifest["config_hash"] = aggregate_config_hash(definitions)
+    manifest["trial_plan"][0].update(minimum_seconds=90, maximum_seconds=120)
     manifest["completed_tasks"] = [
         {
             "task_number": 1,
@@ -325,14 +362,22 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
 
     events_path = session_dir / "unity_events.jsonl"
     events = _read_jsonl(events_path)
-    ended = dict(events[0])
-    ended.update(event="trial_ended", event_type="trial_ended")
-    events.append(ended)
+    started = dict(events[0])
+    started.update(
+        event="trial_started",
+        event_type="trial_started",
+        source="experiment_ui",
+        mono_ms=2000.0,
+        created_unix_ms=12000.0,
+    )
+    ended = dict(started)
+    ended.update(event="trial_ended", event_type="trial_ended", mono_ms=92000.0, created_unix_ms=102000.0)
+    events.extend((started, ended))
     _write_jsonl(events_path, events)
 
     manifest["log_writer_stats"]["unity_admission.jsonl"]["rows_written"] = len(admissions)
     manifest["log_writer_stats"]["unity_render.jsonl"]["rows_written"] = len(renders)
-    manifest["log_writer_stats"]["events.jsonl"]["unity"]["rows_written"] = 3
+    manifest["log_writer_stats"]["events.jsonl"]["unity"]["rows_written"] = 4
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 

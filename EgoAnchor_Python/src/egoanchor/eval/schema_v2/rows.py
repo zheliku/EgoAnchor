@@ -156,7 +156,7 @@ class UnityAdmissionRow(_SchemaRow):
     trial_id: str = ""
     event_id: str = ""
     condition_id: str = ""
-    unity_pose_handle_mono_ms: float = 0.0
+    unity_pose_handle_mono_ms: float | None = None
     unity_frame: int = 0
     world_alignment_mode: str = ""
     uses_capture_time_alignment: bool = False
