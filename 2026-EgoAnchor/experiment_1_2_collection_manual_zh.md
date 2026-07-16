@@ -39,7 +39,7 @@
 
 ### 键盘
 
-- `1`--`9` 分别对应任务 1--9。
+- 主键盘数字行和小键盘的 `1`--`9` 都对应任务 1--9。
 - 任务空闲时按数字：选择并立即开始该任务。
 - 任务运行时再按同一个数字：写 marker。
 - `Enter`：结束当前任务。
@@ -246,6 +246,6 @@ pixi run python -m egoanchor.eval.cli analyze-exp2 `
 
 本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Reject Action` 和 9 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
 
-正式采集前先跑 smoke，确认右手摇杆、A、右扳机、B、摇杆按下、键盘 `1`--`9`、`Enter`、`Backspace` 都有效；运行中不能切换；完成任务选中后仍为蓝色并能直接重采；遮挡 marker 交替；Canvas 不跟随头部；日志无 dropped row 和 write failure。
+正式采集前先跑 smoke，确认右手摇杆、A、右扳机、B、摇杆按下、主键盘及小键盘 `1`--`9`、`Enter`、`Backspace` 都有效；运行中不能切换；完成任务选中后仍为蓝色并能直接重采；遮挡 marker 交替；Canvas 不跟随头部；日志无 dropped row 和 write failure。
 
 Smoke 如需快速测试，可以临时关闭 `ExperimentTrialSelector.enforceMinimumDuration`。正式场景开始采集前必须重新开启，Formal 期间不得修改代码、模型、参数、输入绑定或场景配置。

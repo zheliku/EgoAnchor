@@ -1955,10 +1955,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: aa8d80ec-ef8f-46a8-ae82-3a673b3475df
-      m_Path: <Keyboard>/digit1
+      m_Path: <Keyboard>/1
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task1
+      m_Flags: 0
+    - m_Name:
+      m_Id: 7a0b5f63-220f-4440-a9d5-6d9564aa28b2
+      m_Path: <Keyboard>/numpad1
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task1
       m_Flags: 0
     m_Flags: 0
@@ -1971,10 +1979,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 7c16884e-038f-4db8-8efb-143bd121d9c8
-      m_Path: <Keyboard>/digit2
+      m_Path: <Keyboard>/2
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task2
+      m_Flags: 0
+    - m_Name:
+      m_Id: a412c632-64e8-4b00-9877-b10986186587
+      m_Path: <Keyboard>/numpad2
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task2
       m_Flags: 0
     m_Flags: 0
@@ -1987,10 +2003,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 3f2aee52-f568-4473-9b8d-d30981b8e3ba
-      m_Path: <Keyboard>/digit3
+      m_Path: <Keyboard>/3
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task3
+      m_Flags: 0
+    - m_Name:
+      m_Id: 5e7f6859-1817-4427-af92-1b4b5b54643b
+      m_Path: <Keyboard>/numpad3
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task3
       m_Flags: 0
     m_Flags: 0
@@ -2003,10 +2027,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 19251850-5e94-4972-8181-433c81eb797b
-      m_Path: <Keyboard>/digit4
+      m_Path: <Keyboard>/4
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task4
+      m_Flags: 0
+    - m_Name:
+      m_Id: b2543211-dfb3-45a8-8c14-98ccdb6e1982
+      m_Path: <Keyboard>/numpad4
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task4
       m_Flags: 0
     m_Flags: 0
@@ -2019,10 +2051,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 775ff1f9-e3c1-4d83-8387-f2d27b527adf
-      m_Path: <Keyboard>/digit5
+      m_Path: <Keyboard>/5
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task5
+      m_Flags: 0
+    - m_Name:
+      m_Id: a8c7e96d-aa6a-4f88-b02a-7a9e3e5fc8eb
+      m_Path: <Keyboard>/numpad5
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task5
       m_Flags: 0
     m_Flags: 0
@@ -2035,10 +2075,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: c181ee64-37e1-4025-b5da-219747b3b1b1
-      m_Path: <Keyboard>/digit6
+      m_Path: <Keyboard>/6
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task6
+      m_Flags: 0
+    - m_Name:
+      m_Id: 332c4422-2a31-49d4-a90f-4c9e63cf40a4
+      m_Path: <Keyboard>/numpad6
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task6
       m_Flags: 0
     m_Flags: 0
@@ -2051,10 +2099,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 5d7c483d-1382-4e38-842d-099f6186ebda
-      m_Path: <Keyboard>/digit7
+      m_Path: <Keyboard>/7
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task7
+      m_Flags: 0
+    - m_Name:
+      m_Id: 6cfcece3-abdb-495b-977b-bead2fb44bb8
+      m_Path: <Keyboard>/numpad7
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task7
       m_Flags: 0
     m_Flags: 0
@@ -2067,10 +2123,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 31f4e063-8fa4-4b0b-a2de-0f797e9785bc
-      m_Path: <Keyboard>/digit8
+      m_Path: <Keyboard>/8
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task8
+      m_Flags: 0
+    - m_Name:
+      m_Id: e71ada47-81b2-466f-a651-c61194712ef4
+      m_Path: <Keyboard>/numpad8
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task8
       m_Flags: 0
     m_Flags: 0
@@ -2083,10 +2147,18 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name: 
       m_Id: 7f0b79d4-aaf6-44f3-8a08-386eca5f9f8d
-      m_Path: <Keyboard>/digit9
+      m_Path: <Keyboard>/9
       m_Interactions: 
       m_Processors: 
       m_Groups: 
+      m_Action: Task9
+      m_Flags: 0
+    - m_Name:
+      m_Id: d0b8e2a2-b659-4955-b242-91a2803837a9
+      m_Path: <Keyboard>/numpad9
+      m_Interactions:
+      m_Processors:
+      m_Groups:
       m_Action: Task9
       m_Flags: 0
     m_Flags: 0

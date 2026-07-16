@@ -687,10 +687,9 @@ namespace EgoAnchor.Tests
                 "<XRController>{RightHand}/thumbstickClicked",
                 "<Keyboard>/enter",
                 "<Keyboard>/backspace",
-                "<Keyboard>/digit1",
-                "<Keyboard>/digit9",
             })
                 StringAssert.Contains($"m_Path: {bindingPath}", inputSection);
+            AssertKeyboardTaskBindings(inputSection);
             Assert.That(
                 Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
                 Is.EqualTo(ExperimentScenario.PlanCount));
@@ -722,15 +721,43 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("navigateAction:", inputSection);
             StringAssert.Contains("taskActions:", inputSection);
             StringAssert.Contains("m_Path: <XRController>{RightHand}/primaryButton", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/digit1", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/digit9", inputSection);
             StringAssert.Contains("m_Path: <Keyboard>/backspace", inputSection);
+            AssertKeyboardTaskBindings(inputSection);
             Assert.That(
                 Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
                 Is.EqualTo(ExperimentScenario.PlanCount));
 
             string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
+        }
+
+        /// <summary>每个任务必须同时绑定数字行与小键盘，并且路径能被当前 Input System 解析。</summary>
+        private static void AssertKeyboardTaskBindings(string inputSection)
+        {
+            StringAssert.DoesNotContain("<Keyboard>/digit", inputSection);
+            for (int taskNumber = 1; taskNumber <= ExperimentScenario.PlanCount; taskNumber++)
+            {
+                Match task = Regex.Match(
+                    inputSection,
+                    $@"(?ms)^  - m_Name: Task{taskNumber}\r?\n(?<body>.*?)(?=^  - m_Name: Task|\r?\n  navigationThreshold:)"
+                );
+                Assert.That(task.Success, Is.True, $"missing Task{taskNumber} action");
+
+                string[] expectedPaths =
+                {
+                    $"<Keyboard>/{taskNumber}",
+                    $"<Keyboard>/numpad{taskNumber}",
+                };
+                foreach (string path in expectedPaths)
+                {
+                    StringAssert.Contains($"m_Path: {path}", task.Groups["body"].Value);
+                    using (var action = new InputAction(type: InputActionType.Button, binding: path))
+                    {
+                        action.Enable();
+                        Assert.That(action.controls, Is.Not.Empty, $"unresolved Input System path: {path}");
+                    }
+                }
+            }
         }
 
         /// <summary>各配置只能按实验定义切换目标组件，避免消融同时改变无关机制。</summary>

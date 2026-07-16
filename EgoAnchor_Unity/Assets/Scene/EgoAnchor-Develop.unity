@@ -1885,7 +1885,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 8d6464ef-32ec-419e-8004-74ee6e3807c4
-      m_Path: <Keyboard>/digit1
+      m_Path: <Keyboard>/1
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task1
+      m_Flags: 0
+    - m_Name:
+      m_Id: 8a19a120-330f-4f4c-9d3b-7a88272fbf69
+      m_Path: <Keyboard>/numpad1
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1901,7 +1909,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 2422bbee-04c9-43c5-8236-23b650216bea
-      m_Path: <Keyboard>/digit2
+      m_Path: <Keyboard>/2
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task2
+      m_Flags: 0
+    - m_Name:
+      m_Id: 5f51c086-bf26-493c-9138-acd023639ae8
+      m_Path: <Keyboard>/numpad2
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1917,7 +1933,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: ba384746-7c52-47e8-b092-017b167bf3ae
-      m_Path: <Keyboard>/digit3
+      m_Path: <Keyboard>/3
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task3
+      m_Flags: 0
+    - m_Name:
+      m_Id: 6a895a8c-5d61-46e2-9b1c-9db6d5da1342
+      m_Path: <Keyboard>/numpad3
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1933,7 +1957,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 7a75b4af-ba6a-47a9-a41a-acfb50f5e1e3
-      m_Path: <Keyboard>/digit4
+      m_Path: <Keyboard>/4
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task4
+      m_Flags: 0
+    - m_Name:
+      m_Id: bfa2cb60-c674-46fd-81f7-1ae6da535785
+      m_Path: <Keyboard>/numpad4
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1949,7 +1981,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: b2a3eb87-f76b-4882-8df9-f190b89558f8
-      m_Path: <Keyboard>/digit5
+      m_Path: <Keyboard>/5
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task5
+      m_Flags: 0
+    - m_Name:
+      m_Id: 92d7efa5-5312-43f2-94d8-102c7454abd5
+      m_Path: <Keyboard>/numpad5
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1965,7 +2005,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 57aa94f7-4805-4257-aa21-2b511e047298
-      m_Path: <Keyboard>/digit6
+      m_Path: <Keyboard>/6
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task6
+      m_Flags: 0
+    - m_Name:
+      m_Id: 4619fd41-b7dd-4328-9132-27ec3adf85de
+      m_Path: <Keyboard>/numpad6
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1981,7 +2029,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 92813af9-285f-4fdc-a123-882b45a9d3d1
-      m_Path: <Keyboard>/digit7
+      m_Path: <Keyboard>/7
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task7
+      m_Flags: 0
+    - m_Name:
+      m_Id: 1c906c26-3f15-43ad-a962-a3a675ac578d
+      m_Path: <Keyboard>/numpad7
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -1997,7 +2053,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 277e235d-0787-4068-b868-77afcb805a4d
-      m_Path: <Keyboard>/digit8
+      m_Path: <Keyboard>/8
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task8
+      m_Flags: 0
+    - m_Name:
+      m_Id: 9a394b74-54ab-45de-a54d-6bc0b6e21ca2
+      m_Path: <Keyboard>/numpad8
       m_Interactions:
       m_Processors:
       m_Groups:
@@ -2013,7 +2077,15 @@ MonoBehaviour:
     m_SingletonActionBindings:
     - m_Name:
       m_Id: 07c5adc8-d3f4-4e13-bdcf-423a5f26897c
-      m_Path: <Keyboard>/digit9
+      m_Path: <Keyboard>/9
+      m_Interactions:
+      m_Processors:
+      m_Groups:
+      m_Action: Task9
+      m_Flags: 0
+    - m_Name:
+      m_Id: 03aefda2-5048-4061-b4e5-924f4fea8804
+      m_Path: <Keyboard>/numpad9
       m_Interactions:
       m_Processors:
       m_Groups:
