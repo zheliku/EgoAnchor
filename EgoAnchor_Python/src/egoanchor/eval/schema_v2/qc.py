@@ -23,7 +23,7 @@ FORMAL_VARIANTS = (
 )
 """正式实验一/二场景冻结的八个唯一 runtime 变体。"""
 
-_RUN_KINDS = {"debug", "smoke", "calibration", "formal"}
+_RUN_KINDS = {"formal"}
 """schema-v2 允许的 session 用途。"""
 
 
@@ -135,27 +135,19 @@ def _check_completed_tasks(
             "manifest.completed_tasks does not match accepted lifecycle trials: "
             f"missing={sorted(event_keys - manifest_keys)}, extra={sorted(manifest_keys - event_keys)}"
         )
-    if str(session.manifest.get("run_kind", "")).lower() == "formal" and not event_keys:
-        errors.append("formal session requires at least one completed task")
     if str(session.manifest.get("run_kind", "")).lower() == "formal":
-        _check_formal_trial_durations(session, event_keys, plan, errors, metrics)
+        _check_formal_trial_lifecycle(session, event_keys, errors, metrics)
     metrics["completed_task_count"] = len(event_keys)
 
 
-def _check_formal_trial_durations(
+def _check_formal_trial_lifecycle(
     session: EvalSessionV2,
     event_keys: set[tuple[str, str, str, str]],
-    plan: list[Any],
     errors: list[str],
     metrics: dict[str, Any],
 ) -> None:
-    """正式完成 trial 必须具有唯一开始/结束事件，且持续时间落在冻结计划范围内。"""
+    """正式完成 trial 必须具有唯一且单调有序的开始/结束事件。"""
 
-    plan_by_condition = {
-        (str(item.get("experiment_id") or ""), str(item.get("scenario_id") or "")): item
-        for item in plan
-        if isinstance(item, dict)
-    }
     durations: dict[str, float] = {}
     for session_id, experiment_id, scenario_id, trial_id in sorted(event_keys):
         rows = session.events[
@@ -174,23 +166,10 @@ def _check_formal_trial_durations(
 
         duration_seconds = (float(ends.iloc[0]["mono_ms"]) - float(starts.iloc[0]["mono_ms"])) / 1000.0
         durations[trial_id] = round(duration_seconds, 3)
-        planned = plan_by_condition.get((experiment_id, scenario_id), {})
-        minimum_raw = planned.get("minimum_seconds")
-        maximum_raw = planned.get("maximum_seconds")
-        if (
-            isinstance(minimum_raw, bool)
-            or not isinstance(minimum_raw, (int, float))
-            or isinstance(maximum_raw, bool)
-            or not isinstance(maximum_raw, (int, float))
-        ):
-            errors.append(f"formal trial plan for {experiment_id}/{scenario_id} requires numeric duration bounds")
-            continue
-        minimum = float(minimum_raw)
-        maximum = float(maximum_raw)
-        if duration_seconds < minimum or duration_seconds > maximum:
+        if duration_seconds < 0.0:
             errors.append(
-                f"formal trial {trial_id!r} duration {duration_seconds:.3f}s is outside "
-                f"[{minimum:.3f}, {maximum:.3f}]s"
+                f"formal trial {trial_id!r} trial_ended precedes trial_started: "
+                f"duration={duration_seconds:.3f}s"
             )
     metrics["completed_trial_duration_seconds"] = durations
 

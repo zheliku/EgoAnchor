@@ -12,34 +12,39 @@ namespace EgoAnchor.Eval.Experiment
         [Tooltip("九任务采集选择器；所有 InputAction 最终只调用该状态机。")]
         [SerializeField] private ExperimentTrialSelector selector;
 
-        /// <summary>右手摇杆二维选场动作。</summary>
+        /// <summary>右手摇杆或键盘方向键的二维选场动作。</summary>
         [Header("Inline Input Actions")]
-        [Tooltip("九宫格选场动作，期望 Vector2；正式场景默认绑定右手摇杆。")]
+        [Tooltip("九宫格选场动作，期望 Vector2；默认绑定右手摇杆与键盘方向键。")]
         [SerializeField] private InputAction navigateAction =
             new InputAction("NavigateTask", InputActionType.Value, expectedControlType: "Vector2");
 
         /// <summary>开始当前选中任务的动作。</summary>
-        [Tooltip("开始任务；正式场景默认绑定右手 A。")]
+        [Tooltip("确认并开始当前选中任务；默认绑定右手 A 与键盘 Enter。")]
         [SerializeField] private InputAction startAction =
             new InputAction("StartTask", InputActionType.Button);
 
         /// <summary>记录主事件或目标重新可见的动作。</summary>
-        [Tooltip("写入事件 marker；正式场景默认绑定右手扳机。")]
+        [Tooltip("写入事件 marker；默认绑定右手扳机与键盘 M。")]
         [SerializeField] private InputAction markAction =
             new InputAction("MarkEvent", InputActionType.Button);
 
-        /// <summary>结束当前任务或最终结束 session 的动作。</summary>
-        [Tooltip("结束任务；空闲且至少完成一项时再次执行会结束本次 session。默认绑定右手 B 和 Enter。")]
+        /// <summary>结束当前任务的动作。</summary>
+        [Tooltip("结束当前任务；默认绑定右手 B 与键盘 E。")]
         [SerializeField] private InputAction stopAction =
-            new InputAction("StopOrFinish", InputActionType.Button);
+            new InputAction("EndTask", InputActionType.Button);
+
+        /// <summary>立即停止整个 session 的动作。</summary>
+        [Tooltip("随时停止 session；活动 trial 会先记为 rejected。默认绑定长按右手 B 与键盘 F。")]
+        [SerializeField] private InputAction finishAction =
+            new InputAction("FinishSession", InputActionType.Button);
 
         /// <summary>作废活动或选中完成 trial 的动作。</summary>
-        [Tooltip("作废当前 trial 或选中任务最后一次完成 trial。默认绑定摇杆按下和 Backspace。")]
+        [Tooltip("只作废当前或选中任务，不影响其他任务。默认绑定摇杆按下与键盘 Space。")]
         [SerializeField] private InputAction rejectAction =
             new InputAction("RejectTrial", InputActionType.Button);
 
-        /// <summary>键盘 1--9 对应的九项任务动作。</summary>
-        [Tooltip("九个内联 Button Action，顺序对应任务 1--9；首次按下开始任务，后续按下写事件 marker。")]
+        /// <summary>键盘数字行和小键盘 1--9 对应的九项任务选择动作。</summary>
+        [Tooltip("九个内联 Button Action，顺序对应任务 1--9；只切换选中任务，不开始、标记或结束。")]
         [SerializeField] private InputAction[] taskActions = CreateTaskActions();
 
         /// <summary>摇杆触发一次选择所需的最小幅度。</summary>
@@ -72,7 +77,7 @@ namespace EgoAnchor.Eval.Experiment
             _navigationLatched = false;
         }
 
-        /// <summary>订阅手柄和九个键盘任务动作。</summary>
+        /// <summary>订阅手柄、键盘方向动作和九个数字任务选择动作。</summary>
         private void SubscribeActions()
         {
             if (_subscribed) return;
@@ -81,6 +86,7 @@ namespace EgoAnchor.Eval.Experiment
             startAction.performed += OnStartPerformed;
             markAction.performed += OnMarkPerformed;
             stopAction.performed += OnStopPerformed;
+            finishAction.performed += OnFinishPerformed;
             rejectAction.performed += OnRejectPerformed;
 
             int count = taskActions?.Length ?? 0;
@@ -105,6 +111,7 @@ namespace EgoAnchor.Eval.Experiment
             startAction.performed -= OnStartPerformed;
             markAction.performed -= OnMarkPerformed;
             stopAction.performed -= OnStopPerformed;
+            finishAction.performed -= OnFinishPerformed;
             rejectAction.performed -= OnRejectPerformed;
 
             int count = Math.Min(taskActions?.Length ?? 0, _taskCallbacks?.Length ?? 0);
@@ -125,6 +132,7 @@ namespace EgoAnchor.Eval.Experiment
             SetActionEnabled(startAction, enabled);
             SetActionEnabled(markAction, enabled);
             SetActionEnabled(stopAction, enabled);
+            SetActionEnabled(finishAction, enabled);
             SetActionEnabled(rejectAction, enabled);
             if (taskActions == null) return;
             foreach (InputAction action in taskActions)
@@ -139,7 +147,7 @@ namespace EgoAnchor.Eval.Experiment
             else action.Disable();
         }
 
-        /// <summary>读取摇杆并在回中前只执行一次九宫格移动。</summary>
+        /// <summary>读取摇杆或方向键组合，并在回中前只执行一次九宫格移动。</summary>
         private void OnNavigatePerformed(InputAction.CallbackContext context)
         {
             Vector2 value = context.ReadValue<Vector2>();
@@ -148,7 +156,7 @@ namespace EgoAnchor.Eval.Experiment
             HandleNavigate(value);
         }
 
-        /// <summary>摇杆回中后解除选择锁。</summary>
+        /// <summary>摇杆或方向键回中后解除选择锁。</summary>
         private void OnNavigateCanceled(InputAction.CallbackContext context)
         {
             _navigationLatched = false;
@@ -162,6 +170,9 @@ namespace EgoAnchor.Eval.Experiment
 
         /// <summary>处理结束动作回调。</summary>
         private void OnStopPerformed(InputAction.CallbackContext context) => HandleStop();
+
+        /// <summary>处理立即停止 session 动作回调。</summary>
+        private void OnFinishPerformed(InputAction.CallbackContext context) => HandleFinish();
 
         /// <summary>处理作废动作回调。</summary>
         private void OnRejectPerformed(InputAction.CallbackContext context) => HandleReject();
@@ -184,30 +195,30 @@ namespace EgoAnchor.Eval.Experiment
             return selector != null && selector.MarkEvent();
         }
 
-        /// <summary>结束当前任务，或在至少完成一项后确认结束模块化 session。</summary>
+        /// <summary>结束当前任务；不会顺带停止 session。</summary>
         public bool HandleStop()
         {
-            return selector != null && selector.StopOrFinish();
+            return selector != null && selector.EndTrial();
         }
 
-        /// <summary>作废当前或选中任务的 trial。</summary>
+        /// <summary>随时停止 session；活动 trial 会作为 rejected 保留审计记录。</summary>
+        public bool HandleFinish()
+        {
+            return selector != null && selector.FinishSessionNow();
+        }
+
+        /// <summary>只作废当前或选中任务的 trial，其他任务状态不变。</summary>
         public bool HandleReject()
         {
             return selector != null && selector.RejectCurrentOrSelected();
         }
 
-        /// <summary>键盘任务键：空闲时选择并开始；已完成任务直接重录；活动任务中再次按下写 marker。</summary>
+        /// <summary>数字任务键只负责选择；运行中锁定选择并忽略数字键。</summary>
         public bool HandleTask(int taskIndex)
         {
             if (selector == null || taskIndex < 0 || taskIndex >= ExperimentScenario.PlanCount)
                 return false;
-            if (selector.HasActiveTrial)
-            {
-                return selector.ActiveTaskIndex == taskIndex && selector.MarkEvent();
-            }
-
-            if (!selector.SelectTask(taskIndex)) return false;
-            return selector.StartTrial();
+            return !selector.HasActiveTrial && selector.SelectTask(taskIndex);
         }
 
         /// <summary>创建九个没有硬编码 binding 的内联键盘任务动作。</summary>

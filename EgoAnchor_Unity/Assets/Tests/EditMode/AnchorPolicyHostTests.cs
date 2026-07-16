@@ -589,6 +589,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
+                ConfigureMinimalFormalVariant(go, recorder);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -624,6 +625,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
+                ConfigureMinimalFormalVariant(go, recorder);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -668,6 +670,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
+                ConfigureMinimalFormalVariant(go, recorder);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -705,6 +708,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
+                ConfigureMinimalFormalVariant(go, recorder);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -759,7 +763,6 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 EvalSession session = go.AddComponent<EvalSession>();
                 SetPrivateField(session, "recorder", recorder);
-                SetPrivateField(session, "runKind", EvalRunKind.Formal);
 
                 LogAssert.Expect(LogType.Error, new Regex("Formal session 启动已拒绝.*variantConfigs"));
                 session.StartSession();
@@ -846,7 +849,7 @@ namespace EgoAnchor.Tests
         {
             string json = EvalJson.BuildManifest(
                 new EvalManifestMetadata(
-                    "session", "object", "debug", string.Empty, 1, "editor",
+                    "session", "object", string.Empty, 1, "editor",
                     string.Empty, "unity", string.Empty, "commit", "v1", string.Empty, string.Empty, string.Empty),
                 Array.Empty<string>(), Array.Empty<EvalVariantConfig>(),
                 referenceStats: new EvalLogStats(2, 8, null, 10),
@@ -1106,6 +1109,22 @@ namespace EgoAnchor.Tests
             FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, $"missing field {fieldName}");
             return (T)field.GetValue(instance);
+        }
+
+        /// <summary>为非场景测试配置一个可通过正式启动校验的最小 runtime。</summary>
+        private static void ConfigureMinimalFormalVariant(GameObject owner, EvalRecorder recorder)
+        {
+            PoseToAnchorRuntime runtime = owner.AddComponent<PoseToAnchorRuntime>();
+            SetPrivateField(recorder, "variants", new List<EvalVariant>
+            {
+                new EvalVariant
+                {
+                    label = "test-formal",
+                    runtime = runtime,
+                    anchorTransform = owner.transform,
+                    isPrimary = true,
+                },
+            });
         }
 
         /// <summary>反射调用评估快照构建，避免为测试扩大生产 API。</summary>

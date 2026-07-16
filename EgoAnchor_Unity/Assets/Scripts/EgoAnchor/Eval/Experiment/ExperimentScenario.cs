@@ -1,6 +1,6 @@
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>一个正式采集任务的稳定标识、显示名和冻结时长范围。</summary>
+    /// <summary>一个正式采集任务的稳定标识和显示名称。</summary>
     public readonly struct ExperimentTask
     {
         /// <summary>所属实验标识。</summary>
@@ -15,27 +15,17 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>九宫格使用的短名称。</summary>
         public readonly string ShortName;
 
-        /// <summary>论文协议允许的最短采集秒数。</summary>
-        public readonly int MinimumSeconds;
-
-        /// <summary>论文协议建议的最长采集秒数。</summary>
-        public readonly int MaximumSeconds;
-
         /// <summary>构造一个正式采集任务定义。</summary>
         public ExperimentTask(
             string experimentId,
             string scenarioId,
             string displayName,
-            string shortName,
-            int minimumSeconds = 90,
-            int maximumSeconds = 120)
+            string shortName)
         {
             ExperimentId = experimentId;
             ScenarioId = scenarioId;
             DisplayName = displayName;
             ShortName = shortName;
-            MinimumSeconds = minimumSeconds;
-            MaximumSeconds = maximumSeconds;
         }
     }
 
@@ -68,7 +58,7 @@ namespace EgoAnchor.Eval.Experiment
         }
     }
 
-    /// <summary>实验一/实验二的九项正式采集任务和论文冻结时长。</summary>
+    /// <summary>实验一/实验二的九项正式采集任务。</summary>
     public static class ExperimentScenario
     {
         /// <summary>九项任务按键盘 1--9 和手柄九宫格顺序排列。</summary>
@@ -97,7 +87,7 @@ namespace EgoAnchor.Eval.Experiment
             new ExperimentTask(
                 ExperimentId.SystemCharacterization,
                 "occlusion_recovery",
-                "Occlusion recovery",
+                "Occlusion and reappearance",
                 "OCC"),
             new ExperimentTask(
                 ExperimentId.DesignAttribution,

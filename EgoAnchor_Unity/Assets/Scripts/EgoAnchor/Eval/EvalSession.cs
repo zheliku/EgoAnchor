@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using EgoAnchor.Diagnostics;
@@ -11,27 +10,11 @@ using UnityEngine.Events;
 
 namespace EgoAnchor.Eval
 {
-    /// <summary>评估 session 的用途；决定正式参数冻结门禁。</summary>
-    public enum EvalRunKind
-    {
-        /// <summary>开发调试。</summary>
-        Debug,
-
-        /// <summary>采集链路冒烟。</summary>
-        Smoke,
-
-        /// <summary>仅用于冻结正式参数的开发采集。</summary>
-        Calibration,
-
-        /// <summary>论文正式采集；使用场景内固定配置和自动元数据。</summary>
-        Formal,
-    }
-
     /// <summary>
     /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
     /// 推荐工作流：先启动 Python 服务，<see cref="autoStart"/> 为 true 时 Unity 收到第一个 PoseResult
-    /// 即自动开始录制；完成任意任务子集并经操作者确认后调用 <see cref="StopSession"/>。
+        /// 即自动开始录制；操作者可在任意时刻通过实验输入调用 <see cref="StopSession"/>。
     /// </para>
     /// </summary>
     public sealed class EvalSession : MonoBehaviour
@@ -70,12 +53,8 @@ namespace EgoAnchor.Eval
         [Tooltip("追踪对象 ID，例如 controller_right。必须与 Python --object 参数一致。")]
         [SerializeField] private string objectId = "controller_right";
 
-        /// <summary>本次 session 用途。</summary>
-        [Tooltip("Session 用途。正式 Experiment12 场景固定为 Formal，开发场景保持 Debug。")]
-        [SerializeField] private EvalRunKind runKind = EvalRunKind.Debug;
-
         /// <summary>收到第一个 PoseResult 时是否自动开始录制。</summary>
-        [Tooltip("收到第一个 PoseResult 时自动开始录制；完成本次需要的任意任务子集后由操作者确认停止。")]
+        [Tooltip("收到第一个 PoseResult 时自动开始正式录制；操作者可随时停止。")]
         [SerializeField] private bool autoStart = true;
 
         // ── Events ──
@@ -131,8 +110,7 @@ namespace EgoAnchor.Eval
         public UnityEvent SessionStopped => sessionStopped;
 
         /// <summary>
-        /// 启动一个新的评估 session。
-        /// 若 Python session_id 已通过 NATS 到达，则复用其命名；否则回退到本地时钟命名。
+        /// 启动一个新的正式评估 session，并严格复用 NATS 到达的 Python session_id。
         /// </summary>
         public void StartSession()
         {
@@ -150,44 +128,29 @@ namespace EgoAnchor.Eval
                 return;
             }
 
-            if (!ValidateFormalConfiguration())
+            if (!ValidateConfiguration())
                 return;
 
             string root = ResolveOutputRoot();
 
             string pythonId = runtimeHub != null ? runtimeHub.LatestPythonSessionId : string.Empty;
-            if (runKind == EvalRunKind.Formal && string.IsNullOrWhiteSpace(pythonId))
+            if (string.IsNullOrWhiteSpace(pythonId))
             {
                 SetSessionStatus("WAITING FOR PYTHON SESSION ID - START THE REMOTE PYTHON SERVER");
                 EgoAnchorLog.For<EvalSession>().Error(
                     "Formal session 启动已拒绝：尚未收到 Python session_id，禁止生成无法跨端配对的本地 session。");
                 return;
             }
-            if (!string.IsNullOrEmpty(pythonId))
-            {
-                _sessionId  = pythonId;
-                _sessionDir = Path.Combine(root, _sessionId);
+            _sessionId = pythonId;
+            _sessionDir = Path.Combine(root, _sessionId);
 
-                // 同一个远端 session 的 Unity 日志一旦存在，就不再每帧重复检查和刷屏；
-                // 只有收到不同的 Python session_id 后才重新尝试。
-                if (string.Equals(_lastRejectedPythonSessionId, pythonId, StringComparison.Ordinal))
-                    return;
+            // 同一个远端 session 的 Unity 日志一旦存在，就不再每帧重复检查和刷屏；
+            // 只有收到不同的 Python session_id 后才重新尝试。
+            if (string.Equals(_lastRejectedPythonSessionId, pythonId, StringComparison.Ordinal))
+                return;
 
-                Directory.CreateDirectory(_sessionDir);
-                EgoAnchorLog.For<EvalSession>().Info($"复用 Python session_id：{_sessionId}");
-            }
-            else
-            {
-                if (autoStart)
-                {
-                    SetSessionStatus("LOCAL SESSION - PYTHON SESSION ID NOT RECEIVED");
-                    EgoAnchorLog.For<EvalSession>().Warning("尚未收到 Python session_id，回退到本地时钟。先启动 Python 再录制可自动配对。");
-                }
-                string baseId = BuildSessionId(DateTimeOffset.UtcNow, objectId);
-                _sessionId  = ResolveUniqueId(root, baseId);
-                _sessionDir = Path.Combine(root, _sessionId);
-                Directory.CreateDirectory(_sessionDir);
-            }
+            Directory.CreateDirectory(_sessionDir);
+            EgoAnchorLog.For<EvalSession>().Info($"复用 Python session_id：{_sessionId}");
             Directory.CreateDirectory(Path.Combine(_sessionDir, "audit_samples"));
 
             string referencePath = Path.Combine(_sessionDir, EvalV2Manifest.UnityReferenceFileName);
@@ -304,7 +267,6 @@ namespace EgoAnchor.Eval
             var metadata = new EvalManifestMetadata(
                 _sessionId,
                 objectId,
-                RunKindName(runKind),
                 OperatorId,
                 _createdUnixMs,
                 ResolveRunMode(),
@@ -330,12 +292,9 @@ namespace EgoAnchor.Eval
             EgoAnchorLog.For<EvalSession>().Info($"Manifest 已写入：{path}");
         }
 
-        /// <summary>Formal session 只检查自动配置和完整变体矩阵，不要求现场填写审计字段。</summary>
-        private bool ValidateFormalConfiguration()
+        /// <summary>所有评估 session 都检查正式自动配置和完整变体矩阵。</summary>
+        private bool ValidateConfiguration()
         {
-            if (runKind != EvalRunKind.Formal)
-                return true;
-
             var missing = new List<string>();
             if (string.IsNullOrWhiteSpace(objectId)) missing.Add(nameof(objectId));
 
@@ -359,18 +318,6 @@ namespace EgoAnchor.Eval
                 : $"player_{Application.platform.ToString().ToLowerInvariant()}";
         }
 
-        /// <summary>把 Inspector enum 转换为 schema-v2 固定小写值。</summary>
-        private static string RunKindName(EvalRunKind value)
-        {
-            switch (value)
-            {
-                case EvalRunKind.Smoke: return "smoke";
-                case EvalRunKind.Calibration: return "calibration";
-                case EvalRunKind.Formal: return "formal";
-                default: return "debug";
-            }
-        }
-
         /// <summary>检查 Unity 独占日志是否已经包含数据，防止同一 Python session 被再次录制。</summary>
         private static bool HasNonEmptyLog(string path)
         {
@@ -390,29 +337,5 @@ namespace EgoAnchor.Eval
                 Path.Combine(Application.dataPath, "..", "..", "EgoAnchor_Python", "data", "eval"));
         }
 
-        /// <summary>构建人类可读 session id；时间取北京时间 UTC+8。</summary>
-        public static string BuildSessionId(DateTimeOffset time, string objId)
-        {
-            string safe = SanitizeToken(string.IsNullOrWhiteSpace(objId) ? "object" : objId);
-            return $"{time.ToOffset(TimeSpan.FromHours(8)).ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}_{safe}";
-        }
-
-        private static string ResolveUniqueId(string root, string baseId)
-        {
-            string id = baseId;
-            int n = 2;
-            while (Directory.Exists(Path.Combine(root, id)))
-                id = $"{baseId}_{n++:00}";
-            return id;
-        }
-
-        private static string SanitizeToken(string value)
-        {
-            var sb = new StringBuilder(value.Length);
-            foreach (char c in value)
-                sb.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_');
-            string t = sb.ToString().Trim('_', '-');
-            return string.IsNullOrEmpty(t) ? "object" : t;
-        }
     }
 }

@@ -24,7 +24,7 @@ class ManifestV2:
     schema_version: int = SCHEMA_VERSION
     session_id: str = ""
     object_id: str = ""
-    run_kind: str = "debug"
+    run_kind: str = "formal"
     experiment_ids: list[str] = field(default_factory=list)
     operator_id: str = ""
     created_unix_ms: float = 0.0

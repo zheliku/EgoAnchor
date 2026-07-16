@@ -106,12 +106,10 @@ pixi run python -m egoanchor.eval.cli analyze-exp2 --help
 
 实验二以完整 `EgoAnchor` 为参照，每次只关闭一个组件：采集时刻世界对齐、VCD admission、时序合成或 StaticLock。分析输出配对差值，并单独检查 VCD 的 risk-coverage 与 AURC。VCD 分数表示连续可靠性，不解释为位姿正确概率。
 
-## Smoke、calibration 和 formal 边界
+## 正式采集边界
 
-Smoke 只检查连接、日志和操作流程。它可以运行 QC 和分析来确认产物链，但数据不进入论文统计。Smoke 的 QC 返回 `0` 后再开始 calibration。
+评估链路只接受 `run_kind="formal"` 的真实采集。连接、输入和日志功能可以在工程环境中自检，但工程自检不创建另一类评估 session，也不写入论文数据目录。
 
-Calibration 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定参数。它与 formal 数据分开保存，也不进入正式结果。
+One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定参数在正式采集开始前随实现配置固定。所有记录下来的实验一/二 session 都是正式数据，采集后不再调参。所有 writer 的 `dropped_rows` 必须为 `0`；QC 失败时报告需要重采的 trial 或 session，不手工修补日志。
 
-参数冻结后才能开始 formal session，开始后不再调参。所有 writer 的 `dropped_rows` 必须为 `0`；QC 失败时报告需要重采的 trial 或 session，不手工修补日志。
-
-Run 1 负责采集前工程和采集流程准备。用户完成 smoke 与实验一/二正式采集后，Run 2 才读取冻结数据，生成统计、图表和 LaTeX 产物并回填论文。论文数字由评估模块生成，不手工抄写。
+Run 1 负责采集前工程和采集流程准备。用户完成实验一/二正式采集后，Run 2 才读取冻结数据，生成统计、图表和 LaTeX 产物并回填论文。论文数字由评估模块生成，不手工抄写。

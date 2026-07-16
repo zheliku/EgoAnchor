@@ -60,7 +60,7 @@ VCD 的三个语义层次不得混淆：
 
 IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。Run 2 完成实验一/二后正文不得超过 8.4 页，为实验三用户研究保留空间。实验三是已规划的任务层效用验证，但当前先搁置，待实验一/二完成后再启动正式采集。
 
-两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成 smoke 与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。本轮按用户明确要求，每个 Task 验证后独立提交并推送。
+两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成功能自检与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。本轮按用户明确要求，每个 Task 验证后独立提交并推送。
 
 ## 诚实边界
 
@@ -146,8 +146,8 @@ PoseResult candidate
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
 - Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和本机独占的 `unity_events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。Python 远端独占写入 `python_events.jsonl`，Mutagen 同步完成后由本机 schema-v2 reader 确定性发布最终 `events.jsonl`，两端不再通过跨机器 `.lock` 共同追加同名文件。
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
-- Unity manifest 写出 run kind、自动配置哈希、对象、版本、带 90--120 秒范围的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计；`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
-- Unity 采集场景维护九项可任意选择的任务状态。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆按 3×3 九宫格选场，A 开始、扳机标记、B 结束、摇杆按下作废，主键盘数字行与小键盘 `1`--`9` 都对应任务及 marker、`Enter` 结束、`Backspace` 作废。数字行路径必须写 `<Keyboard>/1`--`9`，小键盘路径写 `<Keyboard>/numpad1`--`numpad9`，不得使用无法解析的 `<Keyboard>/digitN`。运行中禁止切场；默认启用 90 秒最短 trial 时长门禁，超过 120 秒由 UI 红色提示；空闲且至少完成一项时，额外确认即可停止包含任意任务子集的模块化 session。已完成任务可直接按 A 或对应数字重录，旧 trial 先写 `trial_rejected`；单独作废仍只影响选中任务。状态板以绿色表示运行、蓝色表示完成、黄色表示选中、灰色表示待执行，已完成任务被选中时保持蓝色并以箭头和粗体区分；Canvas 保持场景根节点静止。
+- Unity manifest 将 `run_kind` 固定写为 `formal`，不再暴露运行类型选择；同时写出自动配置哈希、对象、版本、无时长上下界的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计。`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
+- Unity 采集场景维护九项可任意选择的任务状态。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆与键盘方向键共用 3×3 九宫格导航，主键盘数字行与小键盘 `1`--`9` 只负责直接选中任务，A/主键盘 Enter/小键盘 Enter 开始，右扳机/`M` 标记，快速短按 B/`E` 结束任务，摇杆按下/`Space` 只作废当前或选中任务，长按 B 1.5 秒/`F` 可随时停止 session。右手 B 的结束绑定固定为 `Tap(duration=0.5)`，停止绑定固定为 `Hold(duration=1.5)`，防止长按停止前先误结束 trial。停止 session 时活动 trial 先写 `trial_rejected`，已经完成的任务保持不变。数字行路径必须写 `<Keyboard>/1`--`9`，小键盘路径写 `<Keyboard>/numpad1`--`numpad9`，不得使用无法解析的 `<Keyboard>/digitN`。运行中禁止切场；任务和 session 均无持续时间门禁，实际 trial 时长只记录不判定成败。已完成任务选中后可按开始动作重录，旧 trial 先写 `trial_rejected`；单独作废仍只影响选中任务。状态板只显示 `NEXT`、九宫格、`CURRENT`、直白 `STATE`、单一实际 trial 计时和固定按键图例，不暴露分析内部的 phase/event role；绿色表示运行、蓝色表示完成、黄色表示选中、灰色表示待执行，已完成任务被选中时保持蓝色并以箭头和粗体区分；Canvas 保持场景根节点静止。
 - 头显状态板运行时文本统一使用英文 ASCII，因为当前 TextMesh Pro 字体资产不保证 CJK 字形；中文只用于代码注释、Inspector Tooltip、控制台日志和采集手册，不得把中文动态状态字符串传给 `ExperimentStatusUI`。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 8 个唯一 runtime：Hub 下以两个空物体分别组织实验一四配置和实验二四个单组件消融，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
@@ -164,11 +164,11 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 静止指标同时报告 HP-RMS、绝对误差和漂移，避免“冻结错误位姿”获得虚假优势。
 - 转换指标至少包括 visible response、unlock/relock、peak error 与 settling time。
 - 分析先在 `session x trial/event x variant` 内计算，再做 trial/event 配对和 session 汇总；不做 frame-level 推断。
-- 正式参数只用开发/calibration 数据冻结；formal session 后不得调参。
+- 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 - schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest；pending、错配或非法 fragment 不得进入正式分析。
 - schema-v2 QC 对 Formal session 固定要求场景中的 8 个唯一 runtime、按 Unity FNV-1a 规则重算整体 `config_hash`，并检查 writer 行数/丢行/失败、candidate/reference 主键、Unity 已消费 candidate×variant 与 tick×variant 矩阵及递归旧字段。NATS PoseResult 使用 latest-only 消费，Python 已发布但未进入 Unity 的 candidate 只能统计并警告，分析按 admission 投影排除，禁止为未收到的消息伪造 admission；Unity admission 指向未知 Python candidate 仍是硬错误。
-- Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial，持续时间必须落在 manifest 冻结的 90--120 秒范围；缺少唯一开始/结束事件、过短或超时都不得进入正式分析。
+- Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial；开始/结束事件必须唯一且顺序合法。实际持续时间作为描述性审计指标记录，不设上下界，也不决定 QC 成败。
 - 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
 - 人工事件角色写入 `events.payload.event_role`。独立 marker 动作记录场景主事件；遮挡场景在 `occlusion_started` 与 `target_visible` 之间交替并允许多轮成对标记。转换与恢复指标按角色切窗，不得根据场景名猜测事件含义。
@@ -178,11 +178,11 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 实验一分析先对完整 8-runtime session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融 runtime 不得混入实验一的 VCD、时延、图表或 LaTeX 数字。
 - 实验一单 session QC 只检查实际完成任务的 reference coverage 和 tick×variant 完整性；批次 QC 按已完成 trial 的场景并集要求任务 1--5 全部覆盖。失败时只写 session/trial/批次 QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
 - 实验二先验证每个 8-runtime schema-v2 模块化 session，再投影完整 *EgoAnchor* 与四个消融；批次按场景并集要求任务 6--9 全部覆盖。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
-- 同一分析批次不得包含重复 `session_id`，且 run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Unity 与 Python 正常停止后允许给最外层目录增加任务前缀；内部固定文件名和 manifest `session_id` 不得修改。
+- 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Unity 与 Python 正常停止后允许给最外层目录增加任务前缀；内部固定文件名和 manifest `session_id` 不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 统一分析 CLI 只提供 `qc`、`analyze-exp1`、`analyze-exp2`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；旧 `run_eval`、`batch_eval` 和对应 Pixi 别名均已删除，不得恢复。
 - `--out` 保存一次分析的完整 CSV/PDF/TeX；分析成功后，固定 TeX 原子发布到 `2026-EgoAnchor/generated/`，固定 PDF 发布到 `2026-EgoAnchor/figures/generated/`。默认论文根目录从模块位置解析，不依赖当前工作目录，测试和外部调用可用 `--paper-root` 覆盖。
-- Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、QC、失败重采和 calibration/formal 冻结边界。
+- Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
 - 中文主稿通过 `\IfFileExists` 加载 `generated/exp{1,2}_numbers.tex`、`generated/exp{1,2}_tables.tex` 和 `figures/generated/` 下的固定 PDF；正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
@@ -239,7 +239,7 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 ## 项目级实现要求
 
 - 日志统一走门面：Python 使用 `egoanchor.utils`，Unity 使用 `EgoAnchorLog`。
-- 新行为先补测试或 smoke；最终提供可复现验证命令。
+- 新行为先补测试或工程功能自检；最终提供可复现验证命令。
 - 不恢复旧端口、旧 MessagePack/JSON pose、旧 NATS 图像流、旧 Python/Unity 入口或旧 eval schema。
 - 不添加 `FormerlySerializedAs`、旧字段、旧路径、旧标签或旧 CLI 兼容层。
 - 改 schema 时同步 writer、reader、分析、论文接口和本文件。

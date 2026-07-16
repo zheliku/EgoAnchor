@@ -285,8 +285,6 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
                 {
                     "experiment_id": "exp1_system_characterization",
                     "scenario_id": scenario,
-                    "minimum_seconds": 90,
-                    "maximum_seconds": 120,
                 }
                 for scenario in (
                     "static_head_motion",
@@ -300,8 +298,6 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
                 {
                     "experiment_id": EXPERIMENT_ID,
                     "scenario_id": scenario,
-                    "minimum_seconds": 90,
-                    "maximum_seconds": 120,
                 }
                 for scenario in event_specs
             ],

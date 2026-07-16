@@ -1823,7 +1823,6 @@ MonoBehaviour:
   runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
-  runKind: 3
   autoStart: 1
   sessionStarted:
     m_PersistentCalls:
@@ -1853,13 +1852,53 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings:
     - m_Name: 
-      m_Id: 63344778-bddf-4fa4-92cf-fe54ad666ad5
+      m_Id: d10c7430-003d-4ba4-b4f3-168cd9f63fe9
       m_Path: <XRController>{RightHand}/primary2DAxis
       m_Interactions: 
       m_Processors: 
       m_Groups: 
       m_Action: NavigateTask
       m_Flags: 0
+    - m_Name: 2DVector
+      m_Id: 2e40ea99-9772-4f08-a3ec-db70859f1eae
+      m_Path: 2DVector
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: NavigateTask
+      m_Flags: 4
+    - m_Name: Up
+      m_Id: e726066a-7d06-4b51-a45c-c1fa50ab2035
+      m_Path: <Keyboard>/upArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: NavigateTask
+      m_Flags: 8
+    - m_Name: Down
+      m_Id: fd89996e-8bd0-415e-8063-11d1eeceea93
+      m_Path: <Keyboard>/downArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: NavigateTask
+      m_Flags: 8
+    - m_Name: Left
+      m_Id: 29154e46-ad93-447b-a0db-bf6bf0a69d02
+      m_Path: <Keyboard>/leftArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: NavigateTask
+      m_Flags: 8
+    - m_Name: Right
+      m_Id: 1a2f4935-62bc-4b6d-b2cf-3e7dbe56d518
+      m_Path: <Keyboard>/rightArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: NavigateTask
+      m_Flags: 8
     m_Flags: 0
   startAction:
     m_Name: StartTask
@@ -1870,8 +1909,24 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings:
     - m_Name: 
-      m_Id: c94a5dfe-8d64-49ea-9459-f729c8781731
+      m_Id: cb027f38-dd25-4bea-9300-1f7b7421fea4
       m_Path: <XRController>{RightHand}/primaryButton
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: StartTask
+      m_Flags: 0
+    - m_Name: 
+      m_Id: 4721b47f-0425-41c6-a16e-a63f5d4748fe
+      m_Path: <Keyboard>/enter
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: StartTask
+      m_Flags: 0
+    - m_Name: 
+      m_Id: db50b604-4c4f-41a0-8e95-7730fd7a9f7e
+      m_Path: <Keyboard>/numpadEnter
       m_Interactions: 
       m_Processors: 
       m_Groups: 
@@ -1887,8 +1942,16 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings:
     - m_Name: 
-      m_Id: b43f11e0-5a07-4e98-8f3b-96e9fdb1802a
+      m_Id: 52acc9d2-7a34-489c-a4f4-be37fa68373d
       m_Path: <XRController>{RightHand}/triggerPressed
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: MarkEvent
+      m_Flags: 0
+    - m_Name: 
+      m_Id: b416094f-59d0-471e-8190-1eae9cdfa2d3
+      m_Path: <Keyboard>/m
       m_Interactions: 
       m_Processors: 
       m_Groups: 
@@ -1896,7 +1959,7 @@ MonoBehaviour:
       m_Flags: 0
     m_Flags: 0
   stopAction:
-    m_Name: StopOrFinish
+    m_Name: EndTask
     m_Type: 1
     m_ExpectedControlType: Button
     m_Id: 6500769a-ccaf-44a3-91c0-720b540498cd
@@ -1904,20 +1967,45 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings:
     - m_Name: 
-      m_Id: 162c47a1-2189-4322-99aa-db4d7403985c
+      m_Id: afdb5907-dc6e-4618-9668-694ddbc6182a
       m_Path: <XRController>{RightHand}/secondaryButton
-      m_Interactions: 
+      m_Interactions: Tap(duration=0.5)
       m_Processors: 
       m_Groups: 
-      m_Action: StopOrFinish
+      m_Action: EndTask
       m_Flags: 0
     - m_Name: 
-      m_Id: 0609bd6b-80a0-4ffb-a724-1e27349c731f
-      m_Path: <Keyboard>/enter
+      m_Id: 7d68ffc8-cc5d-48a1-8cbc-359c6c9bbb1e
+      m_Path: <Keyboard>/e
       m_Interactions: 
       m_Processors: 
       m_Groups: 
-      m_Action: StopOrFinish
+      m_Action: EndTask
+      m_Flags: 0
+    m_Flags: 0
+  finishAction:
+    m_Name: FinishSession
+    m_Type: 1
+    m_ExpectedControlType: 
+    m_Id: df3e542f-86ac-416e-8d1a-14bbecbcfb44
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: 3ea79255-cf01-4b3b-8422-81db88e0a087
+      m_Path: <XRController>{RightHand}/secondaryButton
+      m_Interactions: Hold(duration=1.5)
+      m_Processors: 
+      m_Groups: 
+      m_Action: FinishSession
+      m_Flags: 0
+    - m_Name: 
+      m_Id: 6404aa95-963f-484f-8755-3cb995ecd921
+      m_Path: <Keyboard>/f
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: FinishSession
       m_Flags: 0
     m_Flags: 0
   rejectAction:
@@ -1929,7 +2017,7 @@ MonoBehaviour:
     m_Interactions: 
     m_SingletonActionBindings:
     - m_Name: 
-      m_Id: 1d85d3d1-ddeb-4ce9-ae88-683879ae48cc
+      m_Id: 53ae5e1f-6e5a-410b-9f2f-63ec0f320fa3
       m_Path: <XRController>{RightHand}/thumbstickClicked
       m_Interactions: 
       m_Processors: 
@@ -1937,8 +2025,8 @@ MonoBehaviour:
       m_Action: RejectTrial
       m_Flags: 0
     - m_Name: 
-      m_Id: da060f25-50a9-4328-974c-c4163d08416d
-      m_Path: <Keyboard>/backspace
+      m_Id: 1fe64c1b-b0d4-4a05-b106-f25a056fbcdd
+      m_Path: <Keyboard>/space
       m_Interactions: 
       m_Processors: 
       m_Groups: 
@@ -1961,12 +2049,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task1
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: 7a0b5f63-220f-4440-a9d5-6d9564aa28b2
       m_Path: <Keyboard>/numpad1
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task1
       m_Flags: 0
     m_Flags: 0
@@ -1985,12 +2073,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task2
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: a412c632-64e8-4b00-9877-b10986186587
       m_Path: <Keyboard>/numpad2
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task2
       m_Flags: 0
     m_Flags: 0
@@ -2009,12 +2097,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task3
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: 5e7f6859-1817-4427-af92-1b4b5b54643b
       m_Path: <Keyboard>/numpad3
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task3
       m_Flags: 0
     m_Flags: 0
@@ -2033,12 +2121,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task4
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: b2543211-dfb3-45a8-8c14-98ccdb6e1982
       m_Path: <Keyboard>/numpad4
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task4
       m_Flags: 0
     m_Flags: 0
@@ -2057,12 +2145,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task5
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: a8c7e96d-aa6a-4f88-b02a-7a9e3e5fc8eb
       m_Path: <Keyboard>/numpad5
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task5
       m_Flags: 0
     m_Flags: 0
@@ -2081,12 +2169,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task6
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: 332c4422-2a31-49d4-a90f-4c9e63cf40a4
       m_Path: <Keyboard>/numpad6
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task6
       m_Flags: 0
     m_Flags: 0
@@ -2105,12 +2193,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task7
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: 6cfcece3-abdb-495b-977b-bead2fb44bb8
       m_Path: <Keyboard>/numpad7
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task7
       m_Flags: 0
     m_Flags: 0
@@ -2129,12 +2217,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task8
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: e71ada47-81b2-466f-a651-c61194712ef4
       m_Path: <Keyboard>/numpad8
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task8
       m_Flags: 0
     m_Flags: 0
@@ -2153,12 +2241,12 @@ MonoBehaviour:
       m_Groups: 
       m_Action: Task9
       m_Flags: 0
-    - m_Name:
+    - m_Name: 
       m_Id: d0b8e2a2-b659-4955-b242-91a2803837a9
       m_Path: <Keyboard>/numpad9
-      m_Interactions:
-      m_Processors:
-      m_Groups:
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
       m_Action: Task9
       m_Flags: 0
     m_Flags: 0
@@ -2176,7 +2264,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentTrialSelector
   session: {fileID: 667335324}
-  enforceMinimumDuration: 1
 --- !u!1 &722913589
 GameObject:
   m_ObjectHideFlags: 0
@@ -5214,12 +5301,47 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "NEXT: WAIT FOR PYTHON SESSION\nCompleted: 0 / 9\nThis session: None\n\u25CB
-    Not Recording | Session: Not Started\nTasks (3 x 3):\n [ ]1 HEAD        [ ]2
-    6DOF        [ ]3 MOVE       \n [ ]4 ROT          [ ]5 OCC          [ ]6 ALIGN     
-    \n [ ]7 VCD          [ ]8 TEMP        [ ]9 LOCK       \nSelected: Waiting for
-    session\nTrial: Idle\nPhase: WAITING | Trial 0.0 s | Phase 0.0 s\nRecommended:
-    90-120 s per task\nRole: None\n"
+  m_text: '<size=34><b>EGOANCHOR COLLECTION</b></size>
+
+    <color=#4DD6A6>[REC]
+    RECORDING</color> | Session: Not Started
+
+    <size=22>SERVER  WAITING FOR PYTHON
+    SESSION ID</size>
+
+    NEXT  <size=25><b><color=#FFD054>WHEN TARGET IS VISIBLE:
+    M / TRIGGER</color></b></size>
+
+    TASKS  <color=#5BA9FF>0/9 COMPLETE</color>
+
+    <color=#B1BCCC>
+    [ ]1 HEAD       </color><color=#B1BCCC> [ ]2 6DOF       </color><color=#B1BCCC>
+    [ ]3 MOVE       </color>
+
+    <color=#B1BCCC> [ ]4 ROT        </color><b><color=#4DD6A6>>[RUN]5
+    OCC      </color></b><color=#B1BCCC> [ ]6 ALIGN      </color>
+
+    <color=#B1BCCC>
+    [ ]7 VCD        </color><color=#B1BCCC> [ ]8 TEMP       </color><color=#B1BCCC>
+    [ ]9 LOCK       </color>
+
+    CURRENT  <b>5. Occlusion and reappearance</b>
+
+    STATE 
+    <color=#6DD3FF>TARGET OCCLUDED</color> | TIME  <color=#4DD6A6>01:36 / 01:30-02:00</color>
+
+    MARKER 
+    <size=24><color=#FFA95C>M / Trigger when the target becomes visible.</color></size>
+
+    <size=22>SELECT 
+    Stick / Arrows / Number 1-9
+
+    START   A / Enter / Numpad Enter    MARK   Trigger
+    / M
+
+    END     B / E                       REJECT Stick Click / Space</size>
+
+'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 373842770}
@@ -5265,7 +5387,7 @@ MonoBehaviour:
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_TextWrappingMode: 1
+  m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
@@ -5532,7 +5654,6 @@ MonoBehaviour:
   nextActionColor: {r: 1, g: 0.8156863, b: 0.32941177, a: 1}
   phaseStatusColor: {r: 0.42745098, g: 0.827451, b: 1, a: 1}
   markerStatusColor: {r: 1, g: 0.6627451, b: 0.36078432, a: 1}
-  readyTimerColor: {r: 0.3019608, g: 0.8392157, b: 0.6509804, a: 1}
 --- !u!114 &2012808182
 MonoBehaviour:
   m_ObjectHideFlags: 0

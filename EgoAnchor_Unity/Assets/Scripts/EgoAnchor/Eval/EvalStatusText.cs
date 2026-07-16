@@ -14,7 +14,7 @@ namespace EgoAnchor.Eval
         /// <summary>根据录制状态返回带实心或空心标记的文本。</summary>
         public static string Recording(bool recording)
         {
-            return recording ? "● Recording" : "○ Not Recording";
+            return recording ? "[REC] Recording" : "[IDLE] Not Recording";
         }
 
         /// <summary>格式化 session id；空值表示尚未建立 session。</summary>

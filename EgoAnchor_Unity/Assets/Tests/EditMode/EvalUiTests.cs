@@ -20,8 +20,8 @@ namespace EgoAnchor.Tests
         [Test]
         public void CommonStatusTextUsesStableFormatting()
         {
-            Assert.That(EvalStatusText.Recording(true), Is.EqualTo("● Recording"));
-            Assert.That(EvalStatusText.Recording(false), Is.EqualTo("○ Not Recording"));
+            Assert.That(EvalStatusText.Recording(true), Is.EqualTo("[REC] Recording"));
+            Assert.That(EvalStatusText.Recording(false), Is.EqualTo("[IDLE] Not Recording"));
             Assert.That(EvalStatusText.Session(string.Empty), Is.EqualTo("Session: Not Started"));
             Assert.That(EvalStatusText.Session("session-01"), Is.EqualTo("Session: session-01"));
             Assert.That(EvalStatusText.Duration(-1.0), Is.EqualTo("00:00"));
@@ -75,7 +75,7 @@ namespace EgoAnchor.Tests
                 "info", "egoanchor");
             string manifest = EvalJson.BuildManifest(
                 new EvalManifestMetadata(
-                    "s01", "controller_right", "smoke", "operator-01", 2000,
+                    "s01", "controller_right", "operator-01", 2000,
                     "editor_link", string.Empty, "6000.3.11f1", string.Empty,
                     "commit", "v1", string.Empty, "controller-mesh-v1", string.Empty),
                 new[] { "EgoAnchor" },
@@ -133,7 +133,7 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"python_candidates.jsonl\":{\"rows_written\":null,\"dropped_rows\":null", manifest);
             StringAssert.Contains("\"status\":\"pending_python_fragment_merge\"", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
-            StringAssert.Contains("\"run_kind\":\"smoke\"", manifest);
+            StringAssert.Contains("\"run_kind\":\"formal\"", manifest);
             Match configHash = Regex.Match(manifest, "\\\"config_hash\\\":\\\"(?<hash>[0-9a-f]{16})\\\"");
             Assert.That(configHash.Success, Is.True);
             StringAssert.Contains(
@@ -153,8 +153,8 @@ namespace EgoAnchor.Tests
                 manifest);
             StringAssert.Contains("\"scenario_id\":\"occlusion_recovery\"", manifest);
             StringAssert.Contains("\"scenario_id\":\"without_static_lock\"", manifest);
-            StringAssert.Contains("\"minimum_seconds\":90", manifest);
-            StringAssert.Contains("\"maximum_seconds\":120", manifest);
+            StringAssert.DoesNotContain("minimum_seconds", manifest);
+            StringAssert.DoesNotContain("maximum_seconds", manifest);
             StringAssert.Contains("\"config_hash\":", manifest);
             StringAssert.Contains("\"uses_vcd_admission\":true", manifest);
             StringAssert.Contains("\"uses_temporal_synthesis\":true", manifest);
@@ -171,7 +171,7 @@ namespace EgoAnchor.Tests
         [Test]
         public void SelectorRejectsChangesBeforeRecording()
         {
-            WithSelector((_, selector) =>
+            WithSelector((session, selector) =>
             {
                 Assert.That(selector.SelectTask(0), Is.False);
                 Assert.That(selector.StartTrial(), Is.False);
@@ -214,7 +214,9 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStarted));
-                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.CurrentPhaseText, Is.EqualTo("MOTION IN PROGRESS"));
+                StringAssert.DoesNotContain("RECOVERY", selector.CurrentPhaseText);
+                Assert.That(selector.EndTrial(), Is.True);
 
                 Assert.That(selector.HasActiveTrial, Is.False);
                 Assert.That(selector.SelectedTaskIndex, Is.EqualTo(1));
@@ -223,23 +225,15 @@ namespace EgoAnchor.Tests
             });
         }
 
-        /// <summary>正式时长门禁开启时，未满 90 秒不能误结束；达到最短时长后才可完成。</summary>
+        /// <summary>写入必需 marker 后可立即结束，不以经过时长作为门禁。</summary>
         [Test]
-        public void SelectorEnforcesMinimumDurationWhenEnabled()
+        public void SelectorAllowsImmediateEndAfterRequiredMarker()
         {
             WithSelector((_, selector) =>
             {
-                SetPrivateField(selector, "enforceMinimumDuration", true);
                 Assert.That(selector.StartTrial(), Is.True);
                 Assert.That(selector.MarkEvent(), Is.True);
-                Assert.That(selector.StopOrFinish(), Is.False);
-
-                SetPrivateField(
-                    selector,
-                    "_trialStartedAt",
-                    Time.realtimeSinceStartupAsDouble - selector.CurrentTask.MinimumSeconds - 1.0);
-
-                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.EndTrial(), Is.True);
                 Assert.That(selector.IsTaskCompleted(0), Is.True);
             });
         }
@@ -255,16 +249,17 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
                 Assert.That(selector.HasOpenOcclusion, Is.True);
-                Assert.That(selector.StopOrFinish(), Is.False);
+                Assert.That(selector.EndTrial(), Is.False);
 
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
                 Assert.That(selector.HasOpenOcclusion, Is.False);
+                Assert.That(selector.CurrentPhaseText, Is.EqualTo("TARGET VISIBLE"));
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.OcclusionStarted));
                 Assert.That(selector.MarkEvent(), Is.True);
                 Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TargetVisible));
-                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.EndTrial(), Is.True);
                 Assert.That(selector.IsTaskCompleted(4), Is.True);
             });
         }
@@ -279,16 +274,21 @@ namespace EgoAnchor.Tests
                 selector.ContextEvent += (_, eventType) => eventTypes.Add(eventType);
 
                 CompleteTask(selector, 0);
+                CompleteTask(selector, 1);
+                selector.SelectTask(0);
                 Assert.That(selector.IsTaskCompleted(0), Is.True);
                 Assert.That(selector.RejectCurrentOrSelected(), Is.True);
                 Assert.That(selector.IsTaskCompleted(0), Is.False);
+                Assert.That(selector.IsTaskCompleted(1), Is.True);
+                Assert.That(selector.CompletedTaskCount, Is.EqualTo(1));
                 CollectionAssert.Contains(eventTypes, "trial_rejected");
 
-                selector.SelectTask(1);
+                selector.SelectTask(2);
                 selector.StartTrial();
                 Assert.That(selector.RejectCurrentOrSelected(), Is.True);
                 Assert.That(selector.HasActiveTrial, Is.False);
-                Assert.That(selector.IsTaskCompleted(1), Is.False);
+                Assert.That(selector.IsTaskCompleted(1), Is.True);
+                Assert.That(selector.IsTaskCompleted(2), Is.False);
                 Assert.That(eventTypes.FindAll(item => item == "trial_rejected").Count, Is.EqualTo(2));
             });
         }
@@ -315,7 +315,7 @@ namespace EgoAnchor.Tests
             });
         }
 
-        /// <summary>完成任意任务子集后必须等待额外确认，再结束模块化 session。</summary>
+        /// <summary>完成任意任务子集后可独立停止模块化 session。</summary>
         [Test]
         public void SelectorFinishesPartialSessionAfterExplicitConfirmation()
         {
@@ -327,20 +327,39 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.CompletedTaskCount, Is.EqualTo(2));
                 Assert.That(selector.CanFinishSession, Is.True);
                 Assert.That(session.IsRecording, Is.True);
-                Assert.That(selector.StopOrFinish(), Is.True);
+                Assert.That(selector.FinishSessionNow(), Is.True);
                 Assert.That(session.IsRecording, Is.False);
             });
         }
 
-        /// <summary>零项完成时不得生成空的正式 session。</summary>
+        /// <summary>即使尚无完成任务，也允许随时正常关闭 session。</summary>
         [Test]
-        public void SelectorRejectsEmptySessionFinish()
+        public void SelectorAllowsEmptySessionFinish()
         {
             WithSelector((session, selector) =>
             {
-                Assert.That(selector.CanFinishSession, Is.False);
-                Assert.That(selector.StopOrFinish(), Is.False);
-                Assert.That(session.IsRecording, Is.True);
+                Assert.That(selector.CanFinishSession, Is.True);
+                Assert.That(selector.FinishSessionNow(), Is.True);
+                Assert.That(session.IsRecording, Is.False);
+            });
+        }
+
+        /// <summary>活动任务中停止 session 时只作废该 trial，并保留其他完成任务。</summary>
+        [Test]
+        public void SelectorRejectsActiveTrialWhenSessionStops()
+        {
+            WithSelector((session, selector) =>
+            {
+                CompleteTask(selector, 0);
+                selector.SelectTask(2);
+                selector.StartTrial();
+                Assert.That(selector.CanFinishSession, Is.True);
+                Assert.That(selector.FinishSessionNow(), Is.True);
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(selector.HasActiveTrial, Is.False);
+                Assert.That(selector.IsTaskCompleted(0), Is.True);
+                Assert.That(selector.IsTaskCompleted(2), Is.False);
             });
         }
 
@@ -365,11 +384,11 @@ namespace EgoAnchor.Tests
             });
         }
 
-        /// <summary>输入组件必须暴露内联 InputAction，键盘任务键复用对应任务状态机。</summary>
+        /// <summary>输入组件必须暴露内联 InputAction，数字键只选择，其他动作与手柄共用状态机。</summary>
         [Test]
         public void InputHandlerUsesInlineActionsAndTaskKeys()
         {
-            WithSelector((_, selector) =>
+            WithSelector((session, selector) =>
             {
                 GameObject inputObject = new GameObject("ExperimentContextTests.Input");
                 try
@@ -379,19 +398,26 @@ namespace EgoAnchor.Tests
 
                     Assert.That(input.HandleTask(2), Is.True);
                     Assert.That(selector.SelectedTaskIndex, Is.EqualTo(2));
+                    Assert.That(selector.HasActiveTrial, Is.False);
+                    Assert.That(input.HandleStart(), Is.True);
                     Assert.That(selector.HasActiveTrial, Is.True);
-                    Assert.That(input.HandleTask(2), Is.True);
+                    Assert.That(input.HandleTask(2), Is.False);
+                    Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.None));
+                    Assert.That(input.HandleMark(), Is.True);
                     Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.GenericMarker));
                     Assert.That(input.HandleStop(), Is.True);
                     Assert.That(selector.IsTaskCompleted(2), Is.True);
                     Assert.That(input.HandleTask(2), Is.True);
-                    Assert.That(selector.HasActiveTrial, Is.True);
+                    Assert.That(selector.HasActiveTrial, Is.False);
+                    Assert.That(input.HandleStart(), Is.True);
                     Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_002"));
                     Assert.That(selector.IsTaskCompleted(2), Is.False);
+                    Assert.That(input.HandleFinish(), Is.True);
+                    Assert.That(session.IsRecording, Is.False);
 
                     foreach (string fieldName in new[]
                     {
-                        "navigateAction", "startAction", "markAction", "stopAction", "rejectAction"
+                        "navigateAction", "startAction", "markAction", "stopAction", "finishAction", "rejectAction"
                     })
                         Assert.That(GetPrivateField(input, fieldName), Is.TypeOf<InputAction>());
                     Assert.That(GetPrivateField(input, "taskActions"), Is.TypeOf<InputAction[]>());
@@ -406,7 +432,7 @@ namespace EgoAnchor.Tests
             });
         }
 
-        /// <summary>UI 必须同时显示九任务状态、选中项、当前阶段与 90--120 秒时长。</summary>
+        /// <summary>UI 必须显示九任务状态、直白操作状态、单一计时和统一按键图例。</summary>
         [Test]
         public void StatusUiShowsTaskBoardAndLivePhase()
         {
@@ -425,19 +451,28 @@ namespace EgoAnchor.Tests
                     SetPrivateField(status, "session", session);
                     string text = status.BuildStatusText();
 
-                    StringAssert.Contains("Completed: <color=#5BA9FF>1 / 9</color>", text);
-                    StringAssert.Contains("This session: 1", text);
+                    StringAssert.Contains("TASKS  <color=#5BA9FF>1/9 COMPLETE</color>", text);
                     StringAssert.Contains("[OK]1 HEAD", text);
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
                     StringAssert.Contains("<b><color=#4DD6A6>>[RUN]5 OCC", text);
-                    StringAssert.Contains("Marker: <color=#FFA95C>Occlusion start saved", text);
-                    StringAssert.Contains("Occlusion recovery", text);
-                    StringAssert.Contains("Phase: <color=#6DD3FF>OCCLUDED", text);
-                    StringAssert.Contains("Recommended: 90-120 s", text);
+                    StringAssert.Contains("MARKER  <size=24><color=#FFA95C>M / Trigger when the target becomes visible.", text);
+                    StringAssert.Contains("Occlusion and reappearance", text);
+                    StringAssert.Contains("STATE  <color=#6DD3FF>TARGET OCCLUDED", text);
+                    StringAssert.Contains("TIME  <color=#4DD6A6>", text);
+                    StringAssert.DoesNotContain("01:30", text);
+                    StringAssert.DoesNotContain("02:00", text);
+                    StringAssert.DoesNotContain("TO MINIMUM", text);
+                    StringAssert.Contains("START   A / Enter / Numpad Enter", text);
+                    StringAssert.Contains("STOP SESSION Hold B / F", text);
+                    StringAssert.Contains("REJECT   Stick Click / Space", text);
+                    StringAssert.DoesNotContain("Phase:", text);
+                    StringAssert.DoesNotContain("Role:", text);
+                    StringAssert.DoesNotContain("RECOVERY", text);
+                    StringAssert.DoesNotContain(ExperimentEventRole.OcclusionStarted, text);
                     StringAssert.DoesNotContain("RQ1", text);
                     StringAssert.DoesNotContain("RQ2", text);
-                    Assert.That(Regex.IsMatch(text, @"[\u3400-\u9FFF]"), Is.False);
+                    AssertAscii(text);
                 }
                 finally
                 {
@@ -465,7 +500,7 @@ namespace EgoAnchor.Tests
 
                     StringAssert.Contains("<b><color=#5BA9FF>>[OK]1 HEAD", text);
                     StringAssert.DoesNotContain("<b><color=#FFD054>>[OK]1 HEAD", text);
-                    StringAssert.Contains("COMPLETED - A / TASK KEY: RERECORD", text);
+                    StringAssert.Contains("RERECORD: ENTER / A", text);
                 }
                 finally
                 {
@@ -492,8 +527,8 @@ namespace EgoAnchor.Tests
                     string text = status.BuildStatusText();
 
                     StringAssert.Contains(reason, text);
-                    StringAssert.Contains($"NEXT: <color=#FFD054>{reason}</color>", text);
-                    Assert.That(Regex.IsMatch(text, @"[\u3400-\u9FFF]"), Is.False);
+                    StringAssert.Contains($"NEXT  <size=25><b><color=#FFD054>{reason}</color>", text);
+                    AssertAscii(text);
                 }
                 finally
                 {
@@ -510,7 +545,19 @@ namespace EgoAnchor.Tests
             Assert.That(selector.MarkEvent(), Is.True);
             if (selector.HasOpenOcclusion)
                 Assert.That(selector.MarkEvent(), Is.True);
-            Assert.That(selector.StopOrFinish(), Is.True);
+            Assert.That(selector.EndTrial(), Is.True);
+        }
+
+        /// <summary>运行时可见文本只能使用 ASCII，避免默认 TMP 字体回退成乱码。</summary>
+        private static void AssertAscii(string text)
+        {
+            Assert.That(text, Is.Not.Null);
+            foreach (char character in text)
+            {
+                bool allowed = character == '\r' || character == '\n' || character == '\t'
+                    || (character >= ' ' && character <= '~');
+                Assert.That(allowed, Is.True, $"non-ASCII character U+{(int)character:X4}");
+            }
         }
 
         /// <summary>创建 selector，并按需模拟已开始录制的 session。</summary>
@@ -525,7 +572,6 @@ namespace EgoAnchor.Tests
                 EvalSession session = sessionObject.AddComponent<EvalSession>();
                 SetPrivateField(session, "_recording", recording);
                 ExperimentTrialSelector selector = selectorObject.AddComponent<ExperimentTrialSelector>();
-                SetPrivateField(selector, "enforceMinimumDuration", false);
                 selector.BindSession(session);
                 test(session, selector);
             }
@@ -646,7 +692,7 @@ namespace EgoAnchor.Tests
             Assert.That(distinctRuntimeIds.Count, Is.EqualTo(RequiredLabels.Length));
         }
 
-        /// <summary>正式场景必须固定 Formal，并序列化可在 Inspector 编辑的内联 InputAction。</summary>
+        /// <summary>正式场景只允许 Formal，并序列化可在 Inspector 编辑的内联 InputAction。</summary>
         [Test]
         public void ExperimentSceneUsesFormalInlineInputActions()
         {
@@ -657,9 +703,9 @@ namespace EgoAnchor.Tests
             string inputSection = GetSectionContaining(
                 yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
 
-            StringAssert.Contains("runKind: 3", sessionSection);
             foreach (string removedField in new[]
             {
+                "runKind:",
                 "runMode:",
                 "operatorId:",
                 "frozenParameterSetId:",
@@ -675,7 +721,7 @@ namespace EgoAnchor.Tests
             foreach (string actionField in new[]
             {
                 "navigateAction:", "startAction:", "markAction:", "stopAction:",
-                "rejectAction:", "taskActions:"
+                "finishAction:", "rejectAction:", "taskActions:"
             })
                 StringAssert.Contains(actionField, inputSection);
             foreach (string bindingPath in new[]
@@ -685,10 +731,21 @@ namespace EgoAnchor.Tests
                 "<XRController>{RightHand}/triggerPressed",
                 "<XRController>{RightHand}/secondaryButton",
                 "<XRController>{RightHand}/thumbstickClicked",
+                "<Keyboard>/upArrow",
+                "<Keyboard>/downArrow",
+                "<Keyboard>/leftArrow",
+                "<Keyboard>/rightArrow",
                 "<Keyboard>/enter",
-                "<Keyboard>/backspace",
+                "<Keyboard>/numpadEnter",
+                "<Keyboard>/m",
+                "<Keyboard>/e",
+                "<Keyboard>/f",
+                "<Keyboard>/space",
             })
                 StringAssert.Contains($"m_Path: {bindingPath}", inputSection);
+            StringAssert.DoesNotContain("<Keyboard>/backspace", inputSection);
+            StringAssert.DoesNotContain("enforceMinimumDuration:", yaml);
+            AssertUnifiedActionBindings(inputSection);
             AssertKeyboardTaskBindings(inputSection);
             Assert.That(
                 Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
@@ -704,7 +761,7 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
         }
 
-        /// <summary>开发场景必须使用相同内联动作，才能按正式流程执行 smoke。</summary>
+        /// <summary>工程开发场景复用正式输入，但不再产生另一类评估 session。</summary>
         [Test]
         public void DevelopmentSceneUsesInlineInputActions()
         {
@@ -715,13 +772,18 @@ namespace EgoAnchor.Tests
             string inputSection = GetSectionContaining(
                 yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
 
-            StringAssert.Contains("runKind: 0", sessionSection);
+            StringAssert.DoesNotContain("runKind:", sessionSection);
             StringAssert.DoesNotContain("controlSessionShortcuts:", inputSection);
             StringAssert.DoesNotContain("controllerBinding:", inputSection);
             StringAssert.Contains("navigateAction:", inputSection);
             StringAssert.Contains("taskActions:", inputSection);
             StringAssert.Contains("m_Path: <XRController>{RightHand}/primaryButton", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/backspace", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/numpadEnter", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/f", inputSection);
+            StringAssert.Contains("m_Path: <Keyboard>/space", inputSection);
+            StringAssert.DoesNotContain("<Keyboard>/backspace", inputSection);
+            StringAssert.DoesNotContain("enforceMinimumDuration:", yaml);
+            AssertUnifiedActionBindings(inputSection);
             AssertKeyboardTaskBindings(inputSection);
             Assert.That(
                 Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
@@ -758,6 +820,58 @@ namespace EgoAnchor.Tests
                     }
                 }
             }
+        }
+
+        /// <summary>键盘必须复用手柄动作语义，并验证主 Enter 与小键盘 Enter 均可解析。</summary>
+        private static void AssertUnifiedActionBindings(string inputSection)
+        {
+            string navigate = ReadInlineAction(inputSection, "navigateAction", "startAction");
+            string start = ReadInlineAction(inputSection, "startAction", "markAction");
+            string mark = ReadInlineAction(inputSection, "markAction", "stopAction");
+            string stop = ReadInlineAction(inputSection, "stopAction", "finishAction");
+            string finish = ReadInlineAction(inputSection, "finishAction", "rejectAction");
+            string reject = ReadInlineAction(inputSection, "rejectAction", "taskActions");
+
+            foreach (string path in new[]
+            {
+                "<Keyboard>/upArrow", "<Keyboard>/downArrow",
+                "<Keyboard>/leftArrow", "<Keyboard>/rightArrow",
+            })
+                StringAssert.Contains($"m_Path: {path}", navigate);
+            foreach (string path in new[] { "<Keyboard>/enter", "<Keyboard>/numpadEnter" })
+                StringAssert.Contains($"m_Path: {path}", start);
+            StringAssert.Contains("m_Path: <Keyboard>/m", mark);
+            StringAssert.Contains("m_Path: <Keyboard>/e", stop);
+            StringAssert.Contains("m_Interactions: Tap(duration=0.5)", stop);
+            StringAssert.Contains("m_Path: <Keyboard>/f", finish);
+            StringAssert.Contains("m_Interactions: Hold(duration=1.5)", finish);
+            StringAssert.Contains("m_Path: <Keyboard>/space", reject);
+
+            foreach (string path in new[]
+            {
+                "<Keyboard>/upArrow", "<Keyboard>/downArrow",
+                "<Keyboard>/leftArrow", "<Keyboard>/rightArrow",
+                "<Keyboard>/enter", "<Keyboard>/numpadEnter",
+                "<Keyboard>/m", "<Keyboard>/e", "<Keyboard>/f", "<Keyboard>/space",
+            })
+            {
+                using (var action = new InputAction(type: InputActionType.Button, binding: path))
+                {
+                    action.Enable();
+                    Assert.That(action.controls, Is.Not.Empty, $"unresolved Input System path: {path}");
+                }
+            }
+        }
+
+        /// <summary>从场景 YAML 中读取一个内联 InputAction 段。</summary>
+        private static string ReadInlineAction(string inputSection, string field, string nextField)
+        {
+            Match match = Regex.Match(
+                inputSection,
+                $@"(?ms)^  {Regex.Escape(field)}:\r?\n(?<body>.*?)(?=^  {Regex.Escape(nextField)}:)"
+            );
+            Assert.That(match.Success, Is.True, $"missing inline action: {field}");
+            return match.Groups["body"].Value;
         }
 
         /// <summary>各配置只能按实验定义切换目标组件，避免消融同时改变无关机制。</summary>

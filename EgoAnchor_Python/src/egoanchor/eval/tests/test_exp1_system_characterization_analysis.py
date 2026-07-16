@@ -117,7 +117,7 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
     }
     manifest = {
         "session_id": session_id,
-        "run_kind": "debug",
+        "run_kind": "formal",
         "experiment_ids": [EXPERIMENT_ID],
         "variant_definitions": definitions,
         "config_hash": aggregate_config_hash(definitions),
@@ -134,8 +134,6 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
             {
                 "experiment_id": EXPERIMENT_ID,
                 "scenario_id": scenario,
-                "minimum_seconds": 90,
-                "maximum_seconds": 120,
             }
             for scenario in SCENARIOS
         ],
@@ -157,7 +155,7 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
             for name, table in tables.items()
         },
     }
-    return EvalSessionV2(
+    session = EvalSessionV2(
         paths=EvalV2Paths.for_session(root / session_id),
         manifest=manifest,
         python_candidates=tables["python_candidates.jsonl"],
@@ -166,6 +164,7 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
         unity_render=tables["unity_render.jsonl"],
         events=events,
     )
+    return _with_formal_runtime_matrix(session)
 
 
 class Exp1AnalysisTest(unittest.TestCase):
@@ -234,7 +233,7 @@ class Exp1AnalysisTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = _with_formal_runtime_matrix(make_exp1_session(root))
+            source = make_exp1_session(root)
             first_scenarios = {"static_head_motion", "continuous_translation"}
             first = _exp1_subset(source, first_scenarios, "s-exp1-tasks-13")
             second = _exp1_subset(
@@ -319,7 +318,7 @@ class Exp1AnalysisTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            session = _with_formal_runtime_matrix(make_exp1_session(root))
+            session = make_exp1_session(root)
 
             report = run_exp1_qc(session)
             self.assertTrue(report.passed, report.errors)
@@ -338,7 +337,7 @@ class Exp1AnalysisTest(unittest.TestCase):
 
 
 def _with_formal_runtime_matrix(session: EvalSessionV2) -> EvalSessionV2:
-    """把四配置 debug fixture 扩展为基础 QC 所需的八 runtime Formal session。"""
+    """把四配置分析投影扩展为基础 QC 所需的八 runtime 正式 session。"""
 
     definitions = [
         {

@@ -337,7 +337,7 @@ def _write_minimal_session(root: Path) -> Path:
         "schema_version": 2,
         "session_id": "s01",
         "object_id": "controller_right",
-        "run_kind": "smoke",
+        "run_kind": "formal",
         "experiment_ids": ["exp1_system_characterization", "exp2_design_attribution"],
         "operator_id": "operator-01",
         "created_unix_ms": 10000.0,

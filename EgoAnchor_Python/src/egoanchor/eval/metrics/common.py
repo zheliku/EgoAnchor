@@ -224,7 +224,7 @@ def slerp_lerp_resample(
 def highpass(signal: np.ndarray, dt: float, cutoff_hz: float) -> np.ndarray:
     """对一维或二维信号做 Butterworth 高通滤波。
 
-    数据太短无法 `filtfilt` 时，退化为减均值，保证 smoke session 也能出数。
+    数据太短无法 `filtfilt` 时，退化为减均值，保证短序列也能稳定计算。
     """
 
     values = np.asarray(signal, dtype=float)

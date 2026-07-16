@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>显示九项任务完成表、当前阶段、计时和实际输入绑定。</summary>
+    /// <summary>以固定层级显示九项任务、当前操作、计时和两套输入说明。</summary>
     public sealed class ExperimentStatusUI : MonoBehaviour
     {
         /// <summary>提供任务选择、完成状态和实时阶段。</summary>
@@ -17,7 +17,7 @@ namespace EgoAnchor.Eval.Experiment
         [SerializeField] private EvalSession session;
 
         /// <summary>显示实时状态的 TextMesh Pro 文本。</summary>
-        [Tooltip("显示任务九宫格、当前阶段、时间和下一项操作的 TMP 文本。")]
+        [Tooltip("显示任务九宫格、当前状态、单一计时、下一步操作和固定输入图例的 TMP 文本。")]
         [SerializeField] private TextMeshProUGUI statusText;
 
         /// <summary>计时文本的重绘频率。</summary>
@@ -58,10 +58,6 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>marker 操作说明的颜色。</summary>
         [Tooltip("Marker 操作说明颜色。")]
         [SerializeField] private Color markerStatusColor = new Color32(255, 169, 92, 255);
-
-        /// <summary>处于建议结束窗口时的计时颜色。</summary>
-        [Tooltip("Trial 达到建议 90--120 秒窗口时的计时颜色。")]
-        [SerializeField] private Color readyTimerColor = new Color32(77, 214, 166, 255);
 
         /// <summary>文本重绘计时器。</summary>
         private float _updateTimer;
@@ -107,63 +103,52 @@ namespace EgoAnchor.Eval.Experiment
             RenderText();
         }
 
-        /// <summary>构建当前完整状态文本。</summary>
+        /// <summary>构建头显中的紧凑状态板；只显示操作者当前需要的信息。</summary>
         public string BuildStatusText()
         {
             var builder = new StringBuilder(768);
             bool recording = session != null && session.IsRecording;
             if (selector == null)
             {
-                builder.AppendLine("NEXT: NOT CONFIGURED");
-                builder.AppendLine(EvalStatusText.Recording(recording));
+                builder.AppendLine("<size=34><b>EGOANCHOR COLLECTION</b></size>");
+                builder.AppendLine(Colorize("[BLOCKED] NOT CONFIGURED", blockedStatusColor));
                 return builder.ToString();
             }
 
-            builder.AppendLine($"NEXT: {Colorize(selector.NextActionText, nextActionColor)}");
-            builder.AppendLine($"Completed: {Colorize($"{selector.CompletedTaskCount} / {selector.PlanStepCount}", completedTaskColor)}");
-            AppendCompletedTaskNumbers(builder);
-            builder.AppendLine($"{EvalStatusText.Recording(recording)} | {EvalStatusText.Session(session != null ? session.SessionId : string.Empty)}");
+            builder.AppendLine("<size=34><b>EGOANCHOR COLLECTION</b></size>");
+            string recordingText = recording ? "[REC] RECORDING" : "[WAIT] NOT RECORDING";
+            builder.AppendLine(
+                $"{Colorize(recordingText, recording ? runningTaskColor : blockedStatusColor)} | " +
+                EvalStatusText.Session(session != null ? session.SessionId : string.Empty));
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage))
             {
-                string status = $"Session status: {session.SessionStatusMessage}";
-                builder.AppendLine(recording ? status : Colorize(status, blockedStatusColor));
+                string status = $"SERVER  {session.SessionStatusMessage}";
+                builder.AppendLine($"<size=22>{(recording ? status : Colorize(status, blockedStatusColor))}</size>");
             }
-            builder.AppendLine("Tasks (3 x 3):");
+
+            builder.AppendLine($"NEXT  <size=25><b>{Colorize(selector.NextActionText, nextActionColor)}</b></size>");
+            builder.AppendLine($"TASKS  {Colorize($"{selector.CompletedTaskCount}/{selector.PlanStepCount} COMPLETE", completedTaskColor)}");
             AppendTaskGrid(builder);
             if (selector.SelectedTaskIndex >= 0)
             {
-                builder.AppendLine($"Selected: {selector.SelectedTaskIndex + 1}. {selector.CurrentScenarioDisplayName}");
-                builder.AppendLine($"Experiment: {selector.CurrentExperimentDisplayName}");
+                builder.AppendLine($"CURRENT  <b>{selector.SelectedTaskIndex + 1}. {selector.CurrentScenarioDisplayName}</b>");
             }
             else
             {
-                builder.AppendLine("Selected: Waiting for session");
+                builder.AppendLine("CURRENT  WAITING FOR SESSION");
             }
-            string trialState = selector.HasActiveTrial ? selector.CurrentTrialId : "Idle";
-            builder.AppendLine($"Trial: {Colorize(trialState, selector.HasActiveTrial ? runningTaskColor : pendingTaskColor)}");
-            string timer = $"Trial {selector.TrialElapsedSeconds:0.0} s | Phase {selector.PhaseElapsedSeconds:0.0} s";
-            builder.AppendLine($"Phase: {Colorize(selector.CurrentPhaseText, phaseStatusColor)} | {Colorize(timer, TimerColor())}");
-            builder.AppendLine(selector.SelectedTaskIndex >= 0
-                ? $"Recommended: {selector.CurrentTask.MinimumSeconds}-{selector.CurrentTask.MaximumSeconds} s"
-                : "Recommended: 90-120 s per task");
-            builder.AppendLine($"Marker: {Colorize(selector.MarkerInstructionText, markerStatusColor)}");
-            builder.AppendLine($"Role: {(string.IsNullOrEmpty(selector.CurrentEventRole) ? "None" : selector.CurrentEventRole)}");
+            string timer = selector.HasActiveTrial
+                ? EvalStatusText.Duration(selector.TrialElapsedSeconds)
+                : "--:--";
+            builder.AppendLine(
+                $"STATE  {Colorize(selector.CurrentPhaseText, phaseStatusColor)} | " +
+                $"TIME  {Colorize(timer, TimerColor())}");
+            builder.AppendLine($"MARKER  <size=24>{Colorize(selector.MarkerInstructionText, markerStatusColor)}</size>");
+            builder.AppendLine("<size=22>SELECT  Stick / Arrows / Number 1-9");
+            builder.AppendLine("START   A / Enter / Numpad Enter    MARK   Trigger / M");
+            builder.AppendLine("END TASK Tap B / E         STOP SESSION Hold B / F");
+            builder.AppendLine("REJECT   Stick Click / Space</size>");
             return builder.ToString();
-        }
-
-        /// <summary>显示当前 session 已完成的任务编号，便于停止前核对模块化采集范围。</summary>
-        private void AppendCompletedTaskNumbers(StringBuilder builder)
-        {
-            builder.Append("This session: ");
-            bool hasCompleted = false;
-            for (int index = 0; index < selector.PlanStepCount; index++)
-            {
-                if (!selector.IsTaskCompleted(index)) continue;
-                if (hasCompleted) builder.Append(", ");
-                builder.Append(index + 1);
-                hasCompleted = true;
-            }
-            builder.AppendLine(hasCompleted ? string.Empty : "None");
         }
 
         /// <summary>按三乘三布局写入九项任务状态。</summary>
@@ -178,9 +163,8 @@ namespace EgoAnchor.Eval.Experiment
                     string state = TaskState(index);
                     ExperimentScenario.TryGetTask(index, out ExperimentTask task);
                     string cell = $"{pointer}{state}{index + 1} {task.ShortName}";
-                    string paddedCell = cell.PadRight(17);
                     bool selected = selector.SelectedTaskIndex == index;
-                    string coloredCell = Colorize(paddedCell, TaskColor(index));
+                    string coloredCell = Colorize(cell.PadRight(17), TaskColor(index));
                     builder.Append(selected ? $"<b>{coloredCell}</b>" : coloredCell);
                 }
 
@@ -205,13 +189,10 @@ namespace EgoAnchor.Eval.Experiment
             return pendingTaskColor;
         }
 
-        /// <summary>按未达最短时长、建议窗口和超时三种状态返回实时计时颜色。</summary>
+        /// <summary>活动 trial 使用运行色，空闲时使用待执行色。</summary>
         private Color TimerColor()
         {
-            if (!selector.HasActiveTrial) return pendingTaskColor;
-            if (selector.IsOverRecommendedDuration) return blockedStatusColor;
-            if (selector.IsWithinRecommendedDuration) return readyTimerColor;
-            return selectedTaskColor;
+            return selector.HasActiveTrial ? runningTaskColor : pendingTaskColor;
         }
 
         /// <summary>把一段任务状态文本包装为 TextMesh Pro 富文本颜色标签。</summary>

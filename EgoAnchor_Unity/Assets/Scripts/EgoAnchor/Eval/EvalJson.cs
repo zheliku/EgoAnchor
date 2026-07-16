@@ -16,9 +16,6 @@ namespace EgoAnchor.Eval
         /// <summary>追踪对象标识。</summary>
         public readonly string ObjectId;
 
-        /// <summary>运行类型：smoke、calibration、formal 或 debug。</summary>
-        public readonly string RunKind;
-
         /// <summary>操作员匿名标识。</summary>
         public readonly string OperatorId;
 
@@ -56,7 +53,6 @@ namespace EgoAnchor.Eval
         public EvalManifestMetadata(
             string sessionId,
             string objectId,
-            string runKind,
             string operatorId,
             double createdUnixMs,
             string unityRunMode,
@@ -71,7 +67,6 @@ namespace EgoAnchor.Eval
         {
             SessionId = sessionId ?? string.Empty;
             ObjectId = objectId ?? string.Empty;
-            RunKind = runKind ?? string.Empty;
             OperatorId = operatorId ?? string.Empty;
             CreatedUnixMs = createdUnixMs;
             UnityRunMode = unityRunMode ?? string.Empty;
@@ -92,6 +87,9 @@ namespace EgoAnchor.Eval
     /// </summary>
     public static class EvalJson
     {
+        /// <summary>评估 manifest 固定标记为正式采集。</summary>
+        private const string RunKind = "formal";
+
         // ─────────────── 公共构建入口 ───────────────
 
         /// <summary>
@@ -334,7 +332,7 @@ namespace EgoAnchor.Eval
             sb.Append("\"schema_version\":2,");
             sb.Append($"\"session_id\":{JStr(metadata.SessionId)},");
             sb.Append($"\"object_id\":{JStr(metadata.ObjectId)},");
-            sb.Append($"\"run_kind\":{JStr(metadata.RunKind)},");
+            sb.Append($"\"run_kind\":{JStr(RunKind)},");
             AppendExperimentIds(sb);
             sb.Append($"\"operator_id\":{JStr(metadata.OperatorId)},");
             sb.Append("\"created_unix_ms\":").Append(metadata.CreatedUnixMs.ToString("R", CultureInfo.InvariantCulture)).Append(',');
@@ -501,8 +499,6 @@ namespace EgoAnchor.Eval
                 ExperimentTask task = ExperimentScenario.Tasks[index];
                 sb.Append("{\"experiment_id\":").Append(JStr(task.ExperimentId))
                     .Append(",\"scenario_id\":").Append(JStr(task.ScenarioId))
-                    .Append(",\"minimum_seconds\":").Append(task.MinimumSeconds.ToString(CultureInfo.InvariantCulture))
-                    .Append(",\"maximum_seconds\":").Append(task.MaximumSeconds.ToString(CultureInfo.InvariantCulture))
                     .Append('}');
             }
             sb.Append(']');

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` when executing this plan task-by-task. If subagents are not available, use `superpowers:executing-plans`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 Run 1 完成实验一和实验二正式采集前的全部工程准备：旧 RQ 代码硬删除、schema-v2 日志链路、Unity 四系统配置与组件消融、Python QC/分析/绘图/LaTeX 骨架、smoke 流程和中文采集手册。
+**Goal:** 在 Run 1 完成实验一和实验二正式采集前的全部工程准备：旧 RQ 代码硬删除、schema-v2 日志链路、Unity 四系统配置与组件消融、Python QC/分析/绘图/LaTeX 骨架、工程功能自检和中文采集手册。
 
 **Architecture:** 本计划采用硬切换架构。Unity 运行时继续复用 `PoseToAnchorRuntime`、`AnchorRuntimeHub`、`AnchorPolicyHost`、`FramePoseHistory` 和现有 policy 模块，但删除 RQ1/RQ2 UI、场景与日志字段；Python 评估侧以 schema-v2 为唯一入口，不读取旧 `session_manifest.json`、旧 `*_unity_capture.jsonl`、旧 `*_unity_output.jsonl` 或旧 RQ 包。实验一比较四个端到端系统配置，实验二在完整 EgoAnchor 上关闭单一组件做配对归因。
 
@@ -22,7 +22,7 @@
 - `MeasurementTimeSeconds` 属于观测采集/组合语义时间轴；生命周期 freshness 使用到达/生命周期时间轴。不得用 capture time 刷新 stale/lost。
 - 重获取只有一个中央 owner：`AnchorRuntimeHub` 汇聚 server reacquire 请求；各变体不得各自持有 command client。
 - VCD 三层语义分开：连续可靠性评分、运行时 admission、离线 risk-coverage 诊断。VCD 不是排序算法，也不是位姿正确概率。
-- 正式参数只允许使用开发/calibration 数据冻结；formal session 后不得调参。
+- 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 本轮每个 Task 完成并验证后独立提交并推送；提交边界必须与 Task 边界一致。
 
 ---
@@ -165,7 +165,7 @@ Python 侧旧 RQ 代码和旧 schema：
 
 新增：
 
-- `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`中文采集手册：启动顺序、smoke checklist、实验一/二 trial 操作、停止条件、数据目录检查。
+- `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`中文采集手册：启动顺序、工程功能自检、实验一/二 trial 操作、停止条件、数据目录检查。
 - `2026-EgoAnchor/generated/exp1_numbers.tex`
 - `2026-EgoAnchor/generated/exp1_tables.tex`
 - `2026-EgoAnchor/generated/exp2_numbers.tex`
@@ -245,7 +245,7 @@ EgoAnchor_Python/data/eval/<session_id>/
 - `schema_version: 2`
 - `session_id`
 - `object_id`
-- `run_kind`: `smoke`、`calibration`、`formal`、`debug`
+- `run_kind`: 固定为 `formal`；Unity 不暴露运行类型选择器
 - `experiment_ids`
 - `operator_id`
 - `created_unix_ms`
@@ -753,18 +753,18 @@ EgoAnchor_Python/data/eval/<session_id>/
 
   - 不使用 InputActionAsset；手柄选场、开始、事件、结束、作废和键盘任务键均为 Inspector 内联
     `InputAction`。
-  - 右手摇杆按 3×3 九宫格选场；A 开始、扳机标记、B 结束、摇杆按下作废。
-  - 键盘 `1`--`9` 各自负责一项任务及其 marker，`Enter` 结束，`Backspace` 作废。
+  - 右手摇杆与键盘方向键按 3×3 九宫格选场；A/Enter 开始、扳机/`M` 标记、快速短按 B/`E` 结束任务、摇杆按下/`Space` 作废。
+  - 数字行与小键盘 `1`--`9` 只负责选中；长按 B 1.5 秒或 `F` 随时停止 session，活动 trial 先记为 rejected。B 的短按与长按分别使用 `Tap(duration=0.5)` 和 `Hold(duration=1.5)`，不得相互抢占。
   - 运行中不得切场；输入回中前不得重复跨格；未 recording 时不得创建 trial context。
 - [ ] **Step 2: 实现 selector**
 
   Selector 独立维护九项任务的 selected、running 和 completed 状态，不直接写文件。场景可任意顺序完成；
-  活动或已完成 trial 可写 `trial_rejected` 后只重做该项。空闲且至少完成一项时，额外确认即可停止当前
-  模块化 session，不强制一次跑完九项。
+  活动或已完成 trial 可写 `trial_rejected` 后只重做该项。session 可随时停止，不要求已有完成任务；
+  活动 trial 在停止前先记为 rejected，不强制一次跑完九项。
 - [ ] **Step 3: 实现 status UI**
 
-  UI 显示九任务状态板、本 session 已完成任务编号、当前选择、phase、trial/phase 计时、90--120 秒范围
-  和下一合法动作。使用实验一/实验二命名，不出现 RQ。Canvas 保持场景中的固定 world-space 位置。
+  UI 显示九任务状态板、当前选择、直白操作状态、实际 trial 计时和下一合法动作。实际时长只记录，
+  不设置上下界或颜色门禁。使用实验一/实验二命名，不出现 RQ。Canvas 保持场景中的固定 world-space 位置。
 - [ ] **Step 4: 验证**
 
   Run:
@@ -1173,7 +1173,7 @@ EgoAnchor_Python/data/eval/<session_id>/
 
   Expected: CLI 测试通过，旧命令不存在。
 
-### Task 13: Run 1 smoke session 与采集手册
+### Task 13: Run 1 工程功能自检与正式采集手册
 
 **Files:**
 
@@ -1183,9 +1183,9 @@ EgoAnchor_Python/data/eval/<session_id>/
 
 **Interfaces:**
 
-- Produces: 用户可手动执行 smoke 与 formal 采集的中文流程。
+- Produces: 用户可手动执行工程功能自检与 formal 采集的中文流程；功能自检不形成另一类实验 session。
 
-- [ ] **Step 1: 写 smoke checklist**
+- [ ] **Step 1: 写工程功能自检 checklist**
 
   手册必须包含：
 
@@ -1193,8 +1193,8 @@ EgoAnchor_Python/data/eval/<session_id>/
   - Unity 场景名
   - NATS/ZMQ 连接检查
   - session 自动配对检查
-  - 手柄选场/开始/标记/结束/作废与键盘任务键 smoke 操作
-  - 九任务状态、90--120 秒计时和单任务 rejected 重做检查
+  - 手柄与键盘的选择、开始、标记、结束任务、作废和随时停止 session 操作
+  - 九任务状态、实际时长显示和单任务 rejected 重做检查
   - 任意任务子集结束 session、`completed_tasks` 摘要与多 session 批次覆盖检查
   - 停止 session 后文件检查
   - QC 命令
@@ -1204,10 +1204,10 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 3: 写实验二采集流程**
 
   说明与实验一共用同一候选流和 reference，组件消融通过同场景多 runtime 同步驱动，不单独重跑 Python 感知。
-- [ ] **Step 4: 写 formal 参数冻结规则**
+- [ ] **Step 4: 写 formal 参数固定规则**
 
-  明确 calibration session 用于冻结 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定；formal
-  session 后不得调参。Formal 场景不要求现场填写元数据，参数集标识由整体 config hash 自动生成。
+  明确 One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定随实现配置固定；所有记录的 session
+  均为 formal，采集后不得调参。Formal 场景不要求现场填写元数据，参数集标识由整体 config hash 自动生成。
 - [ ] **Step 5: 验证手册命令与 CLI 名称一致**
 
   Run:
@@ -1299,12 +1299,12 @@ Run 1 结束时必须满足：
 5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl`；manifest 的 `completed_tasks` 与最终未作废 trial 一致。
 6. Python reader 只接受 schema-v2，遇到旧 schema 报错。
 7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通，并支持多个模块化 session 在批次层补齐九项任务。
-8. 中文采集手册清楚写出 smoke、calibration、formal session 的操作顺序和失败重采规则。
+8. 中文采集手册清楚写出工程功能自检、formal session 的操作顺序和失败重采规则；不定义其他采集类型。
 9. `AGENTS.md` 指向本计划和 schema-v2 当前事实。
 
 ## 6. Run 2 边界
 
-Run 2 只在用户完成 smoke 与实验一/二正式采集后启动。Run 2 不重新设计 schema，不重新命名系统配置，不在 formal 数据后调参。Run 2 只做：
+Run 2 只在用户完成实验一/二正式采集后启动。Run 2 不重新设计 schema，不重新命名系统配置，不在 formal 数据后调参。Run 2 只做：
 
 - 读取 formal schema-v2 sessions。
 - 跑 QC；若 QC fail，只报告失败原因和需要重采的 trial/session。

@@ -18,7 +18,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """完整的 render tick × variant 矩阵应通过 QC。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            report = run_schema_qc(load_session_v2(_write_minimal_session(Path(tmp))))
+            report = run_schema_qc(load_session_v2(_write_qc_session(Path(tmp))))
 
             self.assertTrue(report.passed, report.errors)
 
@@ -26,13 +26,13 @@ class SchemaV2QcTest(unittest.TestCase):
         """manifest 不得把没有 trial_ended 的任务伪装成已完成。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session = load_session_v2(_write_qc_session(Path(tmp)))
             session.manifest["completed_tasks"] = [
                 {
                     "task_number": 1,
                     "experiment_id": "exp1_system_characterization",
                     "scenario_id": "static_head_motion",
-                    "trial_id": "trial-01",
+                    "trial_id": "trial-missing",
                 }
             ]
 
@@ -45,7 +45,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """任一 tick 缺少固定变体时必须失败。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             render_path = session_dir / "unity_render.jsonl"
             render_path.write_text(render_path.read_text(encoding="utf-8").splitlines()[0] + "\n", encoding="utf-8")
 
@@ -58,7 +58,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """Python 未停止或 fragment 缺失时，pending 统计不得被当作零丢行。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             (session_dir / "python_session.json").unlink()
 
             report = run_schema_qc(load_session_v2(session_dir))
@@ -70,7 +70,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """Formal session 缺少整体或参数集合 hash 时必须失败。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             manifest_path = session_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["run_kind"] = "formal"
@@ -88,7 +88,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """重复 variant_id 不得被 set 静默吞掉。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             manifest_path = session_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["variant_definitions"].append(dict(manifest["variant_definitions"][0]))
@@ -103,8 +103,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """冻结的 8 个 runtime 与正确 aggregate hash 应通过 Formal QC。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
-            _expand_to_formal_variants(session_dir)
+            session_dir = _write_qc_session(Path(tmp))
 
             report = run_schema_qc(load_session_v2(session_dir))
 
@@ -114,8 +113,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """Git commit 是可选审计信息，不得要求操作者在每次采集前填写。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
-            _expand_to_formal_variants(session_dir)
+            session_dir = _write_qc_session(Path(tmp))
             manifest_path = session_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["egoanchor_git_commit"] = ""
@@ -125,31 +123,48 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertTrue(report.passed, report.errors)
 
-    def test_formal_trial_duration_outside_plan_fails_qc(self) -> None:
-        """Formal trial 即使正常结束，低于 90 秒或超过 120 秒也不得进入正式分析。"""
+    def test_formal_trial_has_no_duration_bounds(self) -> None:
+        """Formal trial 可在事件协议完成后立即结束，不设持续时间上下界。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
-            _expand_to_formal_variants(session_dir)
+            session_dir = _write_qc_session(Path(tmp))
             events_path = session_dir / "unity_events.jsonl"
             events = _read_jsonl(events_path)
             for event in events:
                 if event["event_type"] == "trial_ended":
-                    event["mono_ms"] = 11000.0
-                    event["created_unix_ms"] = 21000.0
+                    event["mono_ms"] = 2000.0
+                    event["created_unix_ms"] = 12000.0
+            _write_jsonl(events_path, events)
+            (session_dir / "events.jsonl").unlink(missing_ok=True)
+
+            report = run_schema_qc(load_session_v2(session_dir))
+
+            self.assertTrue(report.passed, report.errors)
+            self.assertEqual(report.metrics["completed_trial_duration_seconds"]["trial-01"], 0.0)
+
+    def test_formal_trial_end_before_start_fails_qc(self) -> None:
+        """取消时长门禁后仍必须拒绝结束时刻早于开始时刻的损坏日志。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_qc_session(Path(tmp))
+            events_path = session_dir / "unity_events.jsonl"
+            events = _read_jsonl(events_path)
+            for event in events:
+                if event["event_type"] == "trial_ended":
+                    event["mono_ms"] = 1000.0
             _write_jsonl(events_path, events)
             (session_dir / "events.jsonl").unlink(missing_ok=True)
 
             report = run_schema_qc(load_session_v2(session_dir))
 
             self.assertFalse(report.passed)
-            self.assertTrue(any("duration" in error and "outside" in error for error in report.errors))
+            self.assertTrue(any("precedes trial_started" in error for error in report.errors))
 
     def test_unknown_admission_variant_fails_qc(self) -> None:
         """Admission 混入 manifest 未声明变体时必须失败。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             admission_path = session_dir / "unity_admission.jsonl"
             rows = _read_jsonl(admission_path)
             unknown = dict(rows[0])
@@ -168,7 +183,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """latest-only 或停机边界未被 Unity 消费的 Python candidate 应统计警告，不伪造 admission。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             admission_path = session_dir / "unity_admission.jsonl"
             rows = [row for row in _read_jsonl(admission_path) if row["candidate_id"] != "s01:2:1"]
             _write_jsonl(admission_path, rows)
@@ -184,7 +199,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """join 右表的 candidate/reference 主键重复必须在 QC 阶段阻断。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             for file_name in ("python_candidates.jsonl", "unity_reference.jsonl"):
                 path = session_dir / file_name
                 rows = _read_jsonl(path)
@@ -202,7 +217,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """嵌套旧字段和任一 writer 丢行都不得逃过 QC。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             events_path = session_dir / "unity_events.jsonl"
             events = _read_jsonl(events_path)
             events[0]["payload"] = {"unity_output": "legacy"}
@@ -223,7 +238,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """run kind 拼写和非空但错误的 aggregate hash 都不得绕过门禁。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             manifest_path = session_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["run_kind"] = "forml"
@@ -240,7 +255,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """逐行 hash 为空或不匹配时不得被同变体的其他正确行掩盖。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session = load_session_v2(_write_qc_session(Path(tmp)))
             session.unity_admission.loc[0, "config_hash"] = None
             session.unity_render.loc[0, "config_hash"] = "wrong-hash"
 
@@ -254,7 +269,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """直接传入损坏 DataFrame 时，QC 应返回缺列错误而不是抛出 KeyError。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session = load_session_v2(_write_qc_session(Path(tmp)))
             session.unity_render.drop(columns="source_frame_id", inplace=True)
 
             report = run_schema_qc(session)
@@ -266,7 +281,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """source_frame_id=-1 只允许尚无 output/display 的初始化行。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             render_path = session_dir / "unity_render.jsonl"
             rows = _read_jsonl(render_path)
             rows[0]["source_frame_id"] = -1
@@ -282,7 +297,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """归一后的 Python failure 和 Unity write_error 均必须失败。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session_dir = _write_minimal_session(Path(tmp))
+            session_dir = _write_qc_session(Path(tmp))
             fragment_path = session_dir / "python_session.json"
             fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
             fragment["log_writer_stats"]["python_candidates.jsonl"]["log_write_failures"] = 1
@@ -302,7 +317,7 @@ class SchemaV2QcTest(unittest.TestCase):
         """candidate 或 admission 的连续评分越界时正式分析门禁必须失败。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session = load_session_v2(_write_qc_session(Path(tmp)))
             session.python_candidates.loc[0, "vcd_score"] = 1.01
             session.unity_admission.loc[0, "vcd_score"] = -0.01
 
@@ -313,8 +328,16 @@ class SchemaV2QcTest(unittest.TestCase):
             self.assertTrue(any("unity_admission.vcd_score" in error for error in report.errors))
 
 
+def _write_qc_session(root: Path) -> Path:
+    """创建满足唯一 formal run kind 和八 runtime 契约的 QC fixture。"""
+
+    session_dir = _write_minimal_session(root)
+    _expand_to_formal_variants(session_dir)
+    return session_dir
+
+
 def _expand_to_formal_variants(session_dir: Path) -> None:
-    """把 2-variant smoke fixture 扩展为冻结的 8-variant Formal fixture。"""
+    """把双变体工程 fixture 扩展为冻结的 8-variant Formal fixture。"""
 
     definitions = [
         {"variant_id": label, "variant_label": label, "config_hash": f"formal-{index:02d}"}
@@ -326,7 +349,6 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
     manifest["run_kind"] = "formal"
     manifest["variant_definitions"] = definitions
     manifest["config_hash"] = aggregate_config_hash(definitions)
-    manifest["trial_plan"][0].update(minimum_seconds=90, maximum_seconds=120)
     manifest["completed_tasks"] = [
         {
             "task_number": 1,
