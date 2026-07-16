@@ -9,14 +9,20 @@
 ```text
 manifest.json
 python_candidates.jsonl
+python_events.jsonl
 unity_reference.jsonl
 unity_admission.jsonl
 unity_render.jsonl
+unity_events.jsonl
 events.jsonl
 audit_samples/
 ```
 
-Python 还会写 `python_session.json`，记录停止状态和 writer 统计。运行 QC 前应先正常停止 Python，使其中的 `state` 变为 `python_stopped`。schema-v2 是唯一受支持的数据契约。reader 会校验文件集合、行级字段、时间语义和跨日志关联；QC 失败的 session 不进入正式汇总。平台参考位姿用于同一 Quest、同一时间线下的配对分析，不作为外部物理真值。
+Python 还会写 `python_session.json`，记录停止状态和 Python 分片 writer 统计。Unity 只写 `unity_events.jsonl`。
+两端停止并完成 Mutagen 同步后，`load_session_v2` 在本机确定性生成最终 `events.jsonl`，再核对两个分片和最终文件
+的行数。运行 QC 前应先正常停止 Python，使其中的 `state` 变为 `python_stopped`。schema-v2 是唯一受支持的数据契约。
+reader 会校验文件集合、行级字段、时间语义和跨日志关联；QC 失败的 session 不进入正式汇总。平台参考位姿用于同一
+Quest、同一时间线下的配对分析，不作为外部物理真值。
 
 基础 QC 检查 session 的全部原始行。实验一/二的正式 QC 和分析随后只选择已有 `trial_ended` 且没有
 `trial_rejected` 的 trial。作废尝试不会删除，仍可从原始日志审计，但不会进入指标、配对或 VCD

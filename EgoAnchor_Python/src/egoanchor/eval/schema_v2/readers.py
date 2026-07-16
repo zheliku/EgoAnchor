@@ -274,6 +274,10 @@ def load_session_v2(session_dir: str | Path) -> EvalSessionV2:
     if not isinstance(session_id, str) or not session_id:
         raise SchemaV2Error("manifest.json requires non-empty session_id")
 
+    # Python 与 Unity 事件分别同步后，在本机生成唯一的最终 events.jsonl。
+    # 这一步也会拒绝只含旧 events.jsonl 的目录，避免把历史共享写入结果混入分析。
+    merge_event_fragments(paths, session_id=session_id)
+
     # 前四个数据文件各自只有一种固定行类型；events.jsonl 则承载
     # session_started、trial_started、runtime_error 等多种事件，不应锁死事件名。
     expected_events = ("python_candidate", "unity_reference", "unity_admission", "unity_render", None)
@@ -303,6 +307,21 @@ def _read_jsonl(
 ) -> pd.DataFrame:
     """读取单个 JSONL 文件并验证每行固定 schema。"""
 
+    rows = _read_jsonl_rows(path, session_id=session_id, expected_event=expected_event, row_type=row_type)
+    if rows:
+        return pd.DataFrame.from_records(rows)
+    return pd.DataFrame(columns=[item.name for item in fields(row_type)])
+
+
+def _read_jsonl_rows(
+    path: Path,
+    *,
+    session_id: str,
+    expected_event: str | None,
+    row_type: type[Any],
+) -> list[dict[str, Any]]:
+    """读取并验证 JSONL，保留原始字典供分片合并使用。"""
+
     if not path.is_file():
         raise SchemaV2Error(f"schema-v2 requires {path.name}")
     rows: list[dict[str, Any]] = []
@@ -329,9 +348,7 @@ def _read_jsonl(
         _validate_field_types(row, row_type, f"{path.name}:{line_number}")
         _validate_stable_keys(row, row_type, f"{path.name}:{line_number}")
         rows.append(row)
-    if rows:
-        return pd.DataFrame.from_records(rows)
-    return pd.DataFrame(columns=[item.name for item in fields(row_type)])
+    return rows
 
 
 def _require_fields(row: dict[str, Any], row_type: type[Any], source: str) -> None:
@@ -464,6 +481,95 @@ def _validate_candidate_id(row: dict[str, Any], source: str) -> None:
         raise SchemaV2Error(f"{source}: candidate_id does not match session_id/frame_id or has invalid sequence")
 
 
+def merge_event_fragments(
+    session_dir: str | Path | EvalV2Paths,
+    *,
+    session_id: str | None = None,
+) -> dict[str, int]:
+    """把 Python/Unity 事件分片确定性合并为最终 ``events.jsonl``。
+
+    两个分片由 Mutagen 分别同步，不再争用同一个锁文件。合并按创建时间、来源、
+    单调时间和规范 JSON 排序，结果通过临时文件原子替换；已有最终文件若内容不一致
+    会拒绝覆盖。只有旧 ``events.jsonl`` 而没有两个分片的输入明确视为旧 schema。
+    """
+
+    paths = session_dir if isinstance(session_dir, EvalV2Paths) else EvalV2Paths.for_session(session_dir)
+    expected_session = session_id
+    if expected_session is None and paths.manifest.is_file():
+        try:
+            manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+            expected_session = manifest.get("session_id") if isinstance(manifest, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SchemaV2Error(f"cannot read manifest.json before event merge: {exc}") from exc
+    if not isinstance(expected_session, str) or not expected_session:
+        raise SchemaV2Error("event merge requires non-empty session_id")
+
+    fragment_paths = (paths.python_events, paths.unity_events)
+    existing_fragments = [path for path in fragment_paths if path.is_file()]
+    if not existing_fragments:
+        if paths.events.is_file():
+            raise SchemaV2Error(
+                "events.jsonl is a legacy shared event file; expected python_events.jsonl and unity_events.jsonl"
+            )
+        raise SchemaV2Error("event merge requires python_events.jsonl and unity_events.jsonl")
+    if len(existing_fragments) != len(fragment_paths):
+        missing = ", ".join(path.name for path in fragment_paths if not path.is_file())
+        raise SchemaV2Error(f"event merge is incomplete; missing fragment: {missing}")
+
+    rows: list[tuple[int, dict[str, Any]]] = []
+    for source_rank, path in enumerate(fragment_paths):
+        fragment_rows = _read_jsonl_rows(
+            path,
+            session_id=expected_session,
+            expected_event=None,
+            row_type=EventRow,
+        )
+        for row in fragment_rows:
+            row_source = str(row.get("source") or ("python_runtime" if source_rank == 0 else "unity"))
+            row["source"] = row_source
+            rows.append((source_rank, row))
+
+    def sort_key(item: tuple[int, dict[str, Any]]) -> tuple[float, int, float, str, str, str]:
+        """为跨机器事件提供不依赖 monotonic 时钟的稳定全序。"""
+
+        source_rank, row = item
+        created = float(row.get("created_unix_ms", 0.0))
+        mono = float(row.get("mono_ms", 0.0))
+        canonical = json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return (
+            created,
+            source_rank,
+            mono,
+            str(row.get("event_type", row.get("event", ""))),
+            str(row.get("event_id", "")),
+            canonical,
+        )
+
+    rows.sort(key=sort_key)
+    encoded = "".join(
+        json.dumps(row, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        for _, row in rows
+    )
+    if paths.events.is_file():
+        existing = paths.events.read_text(encoding="utf-8")
+        if existing != encoded:
+            raise SchemaV2Error("events.jsonl exists but does not match deterministic fragment merge")
+    else:
+        temporary = paths.events.with_name(f".{paths.events.name}.merge.tmp")
+        try:
+            temporary.write_text(encoded, encoding="utf-8", newline="\n")
+            temporary.replace(paths.events)
+        except OSError as exc:
+            raise SchemaV2Error(f"cannot publish merged events.jsonl: {exc}") from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+    return {
+        "python_rows": sum(1 for source_rank, _ in rows if source_rank == 0),
+        "unity_rows": sum(1 for source_rank, _ in rows if source_rank == 1),
+        "rows": len(rows),
+    }
+
+
 def _merge_python_fragment(paths: EvalV2Paths, manifest: dict[str, Any]) -> dict[str, Any]:
     """把 Python 停止片段中的 writer stats 合并到 Unity manifest 内存副本。"""
 
@@ -481,11 +587,13 @@ def _merge_python_fragment(paths: EvalV2Paths, manifest: dict[str, Any]) -> dict
         raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} session_id does not match manifest")
     if fragment.get("object_id") != manifest.get("object_id"):
         raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} object_id does not match manifest")
-    expected_files = {"python_candidates": "python_candidates.jsonl", "events": "events.jsonl"}
+    expected_files = {"python_candidates": "python_candidates.jsonl", "python_events": "python_events.jsonl"}
     if fragment.get("python_log_filename") != "python_candidates.jsonl":
         raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} requires python_log_filename=python_candidates.jsonl")
-    if fragment.get("events_log_filename") != "events.jsonl":
-        raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME} requires events_log_filename=events.jsonl")
+    if fragment.get("python_events_log_filename") != "python_events.jsonl":
+        raise SchemaV2Error(
+            f"{_PYTHON_FRAGMENT_NAME} requires python_events_log_filename=python_events.jsonl"
+        )
     if fragment.get("log_files") != expected_files:
         raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME}.log_files must equal fixed schema-v2 mapping")
     for key in ("python_host", "python_version"):
@@ -505,7 +613,7 @@ def _merge_python_fragment(paths: EvalV2Paths, manifest: dict[str, Any]) -> dict
     if not isinstance(fragment_stats, dict):
         raise SchemaV2Error(f"{_PYTHON_FRAGMENT_NAME}.log_writer_stats must be an object")
     python_candidates = _python_stats(fragment_stats, "python_candidates.jsonl")
-    python_events = _python_stats(fragment_stats, "events.jsonl")
+    python_events = _python_stats(fragment_stats, "python_events.jsonl")
     stats["python_candidates.jsonl"] = {**python_candidates, "status": "merged"}
 
     event_stats = stats.get("events.jsonl")
@@ -525,6 +633,39 @@ def _merge_python_fragment(paths: EvalV2Paths, manifest: dict[str, Any]) -> dict
     }
     merged["python_host"] = fragment["python_host"]
     merged["python_version"] = fragment["python_version"]
+    event_rows = _read_jsonl_rows(
+        paths.events,
+        session_id=str(manifest["session_id"]),
+        expected_event=None,
+        row_type=EventRow,
+    )
+    python_fragment_rows = _read_jsonl_rows(
+        paths.python_events,
+        session_id=str(manifest["session_id"]),
+        expected_event=None,
+        row_type=EventRow,
+    )
+    unity_fragment_rows = _read_jsonl_rows(
+        paths.unity_events,
+        session_id=str(manifest["session_id"]),
+        expected_event=None,
+        row_type=EventRow,
+    )
+    if len(python_fragment_rows) != python_events["rows_written"]:
+        raise SchemaV2Error(
+            f"python_events.jsonl row count {len(python_fragment_rows)} does not match "
+            f"python writer stats {python_events['rows_written']}"
+        )
+    if len(unity_fragment_rows) != unity_rows:
+        raise SchemaV2Error(
+            f"unity_events.jsonl row count {len(unity_fragment_rows)} does not match "
+            f"Unity writer stats {unity_rows}"
+        )
+    expected_rows = unity_rows + python_events["rows_written"]
+    if len(event_rows) != expected_rows:
+        raise SchemaV2Error(
+            f"events.jsonl row count {len(event_rows)} does not match merged writer stats {expected_rows}"
+        )
     return merged
 
 

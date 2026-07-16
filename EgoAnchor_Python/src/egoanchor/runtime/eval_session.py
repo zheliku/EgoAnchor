@@ -34,8 +34,8 @@ class EvalSessionPaths:
     python_log_filename: str
     """Python candidate JSONL 文件名；固定为 `python_candidates.jsonl`。"""
 
-    events_log_filename: str
-    """Python event JSONL 文件名；固定为 `events.jsonl`。"""
+    python_events_log_filename: str
+    """Python 事件分片文件名；固定为 `python_events.jsonl`。"""
 
     metadata_path: Path
     """Unity 自动配对读取的 metadata JSON 路径。"""
@@ -59,14 +59,14 @@ def create_eval_session(
     session_dir = root_path / session_id
     session_dir.mkdir(parents=True, exist_ok=False)
     log_filename = Path(python_log_filename).name if python_log_filename else "python_candidates.jsonl"
-    events_log_filename = "events.jsonl"
+    python_events_log_filename = "python_events.jsonl"
     metadata_path = session_dir / Path(metadata_filename).name
     paths = EvalSessionPaths(
         session_id=session_id,
         object_id=safe_object_id,
         session_dir=session_dir,
         python_log_filename=log_filename,
-        events_log_filename=events_log_filename,
+        python_events_log_filename=python_events_log_filename,
         metadata_path=metadata_path,
     )
     write_python_session_metadata(paths)
@@ -105,11 +105,11 @@ def _write_python_session_metadata(
         "object_id": paths.object_id,
         "python_log_filename": paths.python_log_filename,
         "python_log_relative_path": paths.python_log_filename,
-        "events_log_filename": paths.events_log_filename,
-        "events_log_relative_path": paths.events_log_filename,
+        "python_events_log_filename": paths.python_events_log_filename,
+        "python_events_log_relative_path": paths.python_events_log_filename,
         "log_files": {
             "python_candidates": paths.python_log_filename,
-            "events": paths.events_log_filename,
+            "python_events": paths.python_events_log_filename,
         },
         "log_writer_stats": log_writer_stats,
         "created_unix_ms": created_unix_ms,

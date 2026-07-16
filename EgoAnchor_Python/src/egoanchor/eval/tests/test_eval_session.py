@@ -17,10 +17,10 @@ class EvalSessionTest(unittest.TestCase):
             paths = create_eval_session(Path(tmp), "controller_right")
 
             self.assertEqual(paths.python_log_filename, "python_candidates.jsonl")
-            self.assertEqual(paths.events_log_filename, "events.jsonl")
+            self.assertEqual(paths.python_events_log_filename, "python_events.jsonl")
             metadata = paths.metadata_path.read_text(encoding="utf-8")
             self.assertIn('"python_log_filename": "python_candidates.jsonl"', metadata)
-            self.assertIn('"events_log_filename": "events.jsonl"', metadata)
+            self.assertIn('"python_events_log_filename": "python_events.jsonl"', metadata)
 
     def test_events_filename_cannot_be_used_for_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

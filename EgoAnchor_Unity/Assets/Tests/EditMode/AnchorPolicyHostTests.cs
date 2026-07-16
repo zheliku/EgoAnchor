@@ -540,7 +540,7 @@ namespace EgoAnchor.Tests
                 });
 
                 string admissionPath = Path.Combine(directory, "unity_admission.jsonl");
-                string eventsPath = Path.Combine(directory, "events.jsonl");
+                string eventsPath = Path.Combine(directory, "unity_events.jsonl");
                 recorder.BeginRecording(capturePath, admissionPath, outputPath, eventsPath);
                 var configsBeforeDestroy = new List<EvalVariantConfig>();
                 recorder.CollectVariantConfigs(configsBeforeDestroy);
@@ -608,6 +608,49 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>同一个已拒绝的 Python session 只记录一次阻断，避免 LateUpdate 每秒刷屏。</summary>
+        [Test]
+        public void EvalSessionSuppressesRepeatedRejectForSamePythonSession()
+        {
+            GameObject go = new GameObject("EvalSessionRepeatedRejectTests");
+            string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_session_repeat_{Guid.NewGuid():N}");
+            const string sessionId = "20260711_120500_controller_right";
+            string sessionDir = Path.Combine(root, sessionId);
+            Directory.CreateDirectory(sessionDir);
+            File.WriteAllText(Path.Combine(sessionDir, "unity_reference.jsonl"), "capture-existing");
+
+            try
+            {
+                EvalRecorder recorder = go.AddComponent<EvalRecorder>();
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                EvalSession session = go.AddComponent<EvalSession>();
+                SetPrivateField(hub, "latestPythonSessionId", sessionId);
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runtimeHub", hub);
+                SetPrivateField(session, "outputRoot", root);
+
+                LogAssert.Expect(LogType.Error, new Regex("Session 启动已拒绝.*禁止覆盖"));
+                session.StartSession();
+                session.StartSession();
+
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(
+                    session.SessionStatusMessage,
+                    Is.EqualTo("当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。"));
+
+                const string nextSessionId = "20260711_120501_controller_right";
+                SetPrivateField(hub, "latestPythonSessionId", nextSessionId);
+                session.StartSession();
+                Assert.That(session.IsRecording, Is.True);
+                session.StopSession();
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
         /// <summary>已有 manifest 即代表 session 已结束，Unity 不得覆盖审计元数据后重新录制。</summary>
         [Test]
         public void EvalSessionRefusesToOverwriteExistingManifest()
@@ -643,18 +686,19 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>Python 已写入事件时，Unity 必须保留原行并继续向同一跨端事件表追加。</summary>
+        /// <summary>Python 已写入远端事件分片时，Unity 只写本机独占分片。</summary>
         [Test]
-        public void EvalSessionAppendsToExistingPythonEvents()
+        public void EvalSessionWritesIndependentUnityEventFragment()
         {
-            GameObject go = new GameObject("EvalSessionSharedEventsTests");
+            GameObject go = new GameObject("EvalSessionEventFragmentTests");
             string root = Path.Combine(Application.temporaryCachePath, $"egoanchor_events_{Guid.NewGuid():N}");
             const string sessionId = "20260711_130000_controller_right";
             string sessionDir = Path.Combine(root, sessionId);
-            string eventsPath = Path.Combine(sessionDir, "events.jsonl");
+            string pythonEventsPath = Path.Combine(sessionDir, "python_events.jsonl");
+            string unityEventsPath = Path.Combine(sessionDir, "unity_events.jsonl");
             Directory.CreateDirectory(sessionDir);
-            const string pythonEvent = "{\"schema_version\":2,\"event\":\"runtime_started\",\"source\":\"python_runtime\"}";
-            File.WriteAllText(eventsPath, pythonEvent + Environment.NewLine);
+            const string pythonEvent = "{\"schema_version\":2,\"event\":\"runtime_started\",\"event_type\":\"runtime_started\",\"session_id\":\"20260711_130000_controller_right\",\"source\":\"python_runtime\",\"created_unix_ms\":1,\"mono_ms\":1,\"unity_frame\":-1,\"severity\":\"info\",\"experiment_id\":\"\",\"scenario_id\":\"\",\"trial_id\":\"\",\"event_id\":\"\",\"variant_id\":\"\",\"message\":\"\",\"payload\":{}}";
+            File.WriteAllText(pythonEventsPath, pythonEvent + Environment.NewLine);
 
             try
             {
@@ -670,10 +714,11 @@ namespace EgoAnchor.Tests
                 Assert.That(session.IsRecording, Is.True);
                 session.StopSession();
 
-                string events = File.ReadAllText(eventsPath);
-                StringAssert.StartsWith(pythonEvent + Environment.NewLine, events);
-                StringAssert.Contains("\"event\":\"session_started\"", events);
-                StringAssert.Contains("\"event\":\"session_stopped\"", events);
+                Assert.That(File.ReadAllText(pythonEventsPath), Is.EqualTo(pythonEvent + Environment.NewLine));
+                string unityEvents = File.ReadAllText(unityEventsPath);
+                StringAssert.Contains("\"event\":\"session_started\"", unityEvents);
+                StringAssert.Contains("\"event\":\"session_stopped\"", unityEvents);
+                Assert.That(File.Exists(Path.Combine(sessionDir, "events.jsonl")), Is.False);
             }
             finally
             {

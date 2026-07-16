@@ -141,7 +141,7 @@ class RuntimeLogWriter:
         """python_candidates.jsonl 的独立写入失败次数。"""
 
         self._event_write_failures = 0
-        """events.jsonl 的独立写入失败次数。"""
+        """python_events.jsonl 的独立写入失败次数。"""
 
         self._candidate_sequences_by_frame: dict[int, int] = {}
         """每个 frame_id 独立计数的 candidate 序号，避免跨端启动时间影响 ID。"""
@@ -152,7 +152,7 @@ class RuntimeLogWriter:
         if eval_session is not None and self.logger.enabled:
             session_dir = Path(getattr(eval_session, "session_dir"))
             self._schema_candidates = JsonlTableWriter(session_dir / "python_candidates.jsonl", expected_event="python_candidate")
-            self._schema_events = JsonlTableWriter(session_dir / "events.jsonl", shared_append=True)
+            self._schema_events = JsonlTableWriter(session_dir / "python_events.jsonl")
 
     def close(self) -> None:
         """关闭底层日志文件并回写 schema-v2 writer 统计。"""
@@ -184,7 +184,7 @@ class RuntimeLogWriter:
                 "log_write_failures": self._candidate_write_failures,
             }
         if self._schema_events is not None:
-            stats["events.jsonl"] = {
+            stats["python_events.jsonl"] = {
                 "rows_written": self._schema_events.rows_written,
                 "dropped_rows": self._schema_events.dropped_rows,
                 "log_write_failures": self._event_write_failures,
@@ -469,7 +469,7 @@ class RuntimeLogWriter:
         logging_cfg = getattr(getattr(cfg, "runtime", SimpleNamespace()), "logging", SimpleNamespace())
         if eval_session is not None:
             output_dir = Path(getattr(eval_session, "session_dir"))
-            filename = "events.jsonl"
+            filename = "python_events.jsonl"
         else:
             python_root = Path(getattr(getattr(cfg, "paths", SimpleNamespace()), "python_root", Path.cwd()))
             raw_output_dir = Path(str(getattr(logging_cfg, "output_dir", "data/runtime_logs"))).expanduser()

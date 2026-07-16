@@ -16,6 +16,7 @@ from .schema_v2 import (
     SchemaQcReport,
     SchemaV2Error,
     load_session_v2,
+    merge_event_fragments,
     run_schema_qc,
 )
 
@@ -30,6 +31,7 @@ __all__ = [
     "SchemaV2Error",
     "compute_all_metrics",
     "load_session_v2",
+    "merge_event_fragments",
     "run_exp1_qc",
     "run_exp1_system_characterization",
     "run_exp2_design_attribution",

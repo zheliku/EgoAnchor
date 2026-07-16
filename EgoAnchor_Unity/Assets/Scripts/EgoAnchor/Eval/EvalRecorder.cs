@@ -475,7 +475,9 @@ namespace EgoAnchor.Eval
                 _referenceLog = new EvalLog(referencePath);
                 _admissionLog = new EvalLog(admissionPath);
                 _renderLog = new EvalLog(renderPath);
-                _eventsLog = new EvalLog(eventsPath, sharedAppend: true);
+                // Python 运行在远端机器，不能与 Unity 通过本地 lock 文件共享追加。
+                // 这里写本机独占分片，停止后由 schema-v2 finalize 合并为 events.jsonl。
+                _eventsLog = new EvalLog(eventsPath);
             }
             catch
             {

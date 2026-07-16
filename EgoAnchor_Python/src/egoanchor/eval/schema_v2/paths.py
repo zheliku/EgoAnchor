@@ -22,6 +22,12 @@ class EvalV2Paths:
     python_candidates: Path
     """Python candidate 长表。"""
 
+    python_events: Path
+    """Python runtime 事件分片。"""
+
+    unity_events: Path
+    """Unity runtime 与人工事件分片。"""
+
     unity_reference: Path
     """Unity 平台参考轨迹。"""
 
@@ -46,6 +52,8 @@ class EvalV2Paths:
             session_dir=root,
             manifest=root / "manifest.json",
             python_candidates=root / "python_candidates.jsonl",
+            python_events=root / "python_events.jsonl",
+            unity_events=root / "unity_events.jsonl",
             unity_reference=root / "unity_reference.jsonl",
             unity_admission=root / "unity_admission.jsonl",
             unity_render=root / "unity_render.jsonl",

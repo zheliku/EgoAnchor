@@ -67,14 +67,14 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             self.assertEqual(runtime.session_id, session_dir.name)
             self.assertTrue(runtime.session_id.endswith("_controller_right"))
             self.assertEqual(metadata["python_log_filename"], "python_candidates.jsonl")
-            self.assertEqual(metadata["events_log_filename"], "events.jsonl")
-            self.assertTrue((session_dir / "events.jsonl").exists())
+            self.assertEqual(metadata["python_events_log_filename"], "python_events.jsonl")
+            self.assertTrue((session_dir / "python_events.jsonl").exists())
             self.assertTrue((session_dir / "python_candidates.jsonl").exists())
             self.assertEqual(metadata["object_id"], "controller_right")
             self.assertEqual(metadata["state"], "python_stopped")
             self.assertEqual(metadata["created_unix_ms"], created_unix_ms)
-            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["rows_written"], 1)
-            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["dropped_rows"], 0)
+            self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["rows_written"], 1)
+            self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["dropped_rows"], 0)
 
 
 if __name__ == "__main__":

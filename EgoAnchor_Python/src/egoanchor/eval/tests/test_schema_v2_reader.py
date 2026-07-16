@@ -22,6 +22,7 @@ from egoanchor.eval.schema_v2 import (
     join_candidate_admission,
     join_render_reference,
     load_session_v2,
+    merge_event_fragments,
     select_completed_trials,
     select_trials,
 )
@@ -57,6 +58,44 @@ class SchemaV2ReaderTest(unittest.TestCase):
             self.assertEqual(len(session.unity_admission), 4)
             self.assertEqual(len(session.unity_render), 4)
             self.assertEqual(len(session.events), 3)
+
+    def test_merge_event_fragments_is_deterministic_and_counted(self) -> None:
+        """模拟 Mutagen 回传两个端的分片，合并结果可重复且行数可核对。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            stats = merge_event_fragments(session_dir)
+            first = (session_dir / "events.jsonl").read_text(encoding="utf-8")
+
+            self.assertEqual(stats, {"python_rows": 1, "unity_rows": 2, "rows": 3})
+            self.assertEqual(len(first.splitlines()), 3)
+            self.assertEqual(merge_event_fragments(session_dir), stats)
+            self.assertEqual((session_dir / "events.jsonl").read_text(encoding="utf-8"), first)
+
+    def test_reader_rejects_legacy_shared_events_file(self) -> None:
+        """只有旧共享 events.jsonl 的目录不得被当作当前 schema。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            merge_event_fragments(session_dir)
+            (session_dir / "python_events.jsonl").unlink()
+            (session_dir / "unity_events.jsonl").unlink()
+
+            with self.assertRaisesRegex(SchemaV2Error, "legacy shared event file"):
+                load_session_v2(session_dir)
+
+    def test_reader_rejects_event_fragment_stat_mismatch(self) -> None:
+        """任一端分片行数与其停止片段统计不一致时不得合并通过。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["log_writer_stats"]["python_events.jsonl"]["rows_written"] = 2
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "python_events.jsonl row count"):
+                load_session_v2(session_dir)
 
     def test_reader_allows_task_prefix_on_session_directory(self) -> None:
         """跨端都停止后可给目录增加任务前缀，内部 session_id 保持不变。"""
@@ -250,10 +289,10 @@ class SchemaV2ReaderTest(unittest.TestCase):
             session_dir = _write_minimal_session(Path(tmp))
             fragment_path = session_dir / "python_session.json"
             fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
-            fragment["events_log_filename"] = "other.jsonl"
+            fragment["python_events_log_filename"] = "other.jsonl"
             fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
 
-            with self.assertRaisesRegex(SchemaV2Error, "events_log_filename=events.jsonl"):
+            with self.assertRaisesRegex(SchemaV2Error, "python_events_log_filename=python_events.jsonl"):
                 load_session_v2(session_dir)
 
     def test_reader_rejects_python_fragment_host_type_coercion(self) -> None:
@@ -337,14 +376,14 @@ def _write_minimal_session(root: Path) -> Path:
                 "python_host": "python-host",
                 "python_version": "3.11",
                 "python_log_filename": "python_candidates.jsonl",
-                "events_log_filename": "events.jsonl",
+                "python_events_log_filename": "python_events.jsonl",
                 "log_files": {
                     "python_candidates": "python_candidates.jsonl",
-                    "events": "events.jsonl",
+                    "python_events": "python_events.jsonl",
                 },
                 "log_writer_stats": {
                     "python_candidates.jsonl": {"rows_written": 2, "dropped_rows": 0, "log_write_failures": 0},
-                    "events.jsonl": {"rows_written": 1, "dropped_rows": 0, "log_write_failures": 0},
+                    "python_events.jsonl": {"rows_written": 1, "dropped_rows": 0, "log_write_failures": 0},
                 },
             }
         ),
@@ -412,12 +451,17 @@ def _write_minimal_session(root: Path) -> Path:
         ],
     )
     _write_jsonl(
-        session_dir / "events.jsonl",
+        session_dir / "python_events.jsonl",
         [
             EventRow(
                 session_id="s01", event="runtime_started", event_type="runtime_started",
                 source="python_runtime", created_unix_ms=12000.0, mono_ms=1200.0,
             ).to_dict(),
+        ],
+    )
+    _write_jsonl(
+        session_dir / "unity_events.jsonl",
+        [
             EventRow(
                 session_id="s01", event="event_marker", event_type="event_marker", source="unity",
                 created_unix_ms=12001.0, mono_ms=1201.0,

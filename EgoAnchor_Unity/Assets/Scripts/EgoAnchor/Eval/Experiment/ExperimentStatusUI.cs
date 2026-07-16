@@ -25,6 +25,27 @@ namespace EgoAnchor.Eval.Experiment
         [Tooltip("每秒刷新次数；任务状态变化会立即刷新。")]
         [SerializeField] private float updateRate = 10f;
 
+        /// <summary>九宫格当前选中任务的颜色。</summary>
+        [Header("Task Colors")]
+        [Tooltip("当前选中任务的高亮颜色；状态板使用 TMP 富文本显示。")]
+        [SerializeField] private Color selectedTaskColor = new Color32(255, 208, 84, 255);
+
+        /// <summary>正在运行任务的颜色。</summary>
+        [Tooltip("正在录制的任务颜色。")]
+        [SerializeField] private Color runningTaskColor = new Color32(77, 214, 166, 255);
+
+        /// <summary>已完成任务的颜色。</summary>
+        [Tooltip("本 session 已完成任务的颜色。")]
+        [SerializeField] private Color completedTaskColor = new Color32(91, 169, 255, 255);
+
+        /// <summary>未完成任务的颜色。</summary>
+        [Tooltip("尚未开始任务的颜色。")]
+        [SerializeField] private Color pendingTaskColor = new Color32(177, 188, 204, 255);
+
+        /// <summary>session 阻断或等待状态的颜色。</summary>
+        [Tooltip("Python session 未配对或启动被阻断时的提示颜色。")]
+        [SerializeField] private Color blockedStatusColor = new Color32(255, 125, 106, 255);
+
         /// <summary>文本重绘计时器。</summary>
         private float _updateTimer;
 
@@ -85,6 +106,11 @@ namespace EgoAnchor.Eval.Experiment
             builder.AppendLine($"Completed: {selector.CompletedTaskCount} / {selector.PlanStepCount}");
             AppendCompletedTaskNumbers(builder);
             builder.AppendLine($"{EvalStatusText.Recording(recording)} | {EvalStatusText.Session(session != null ? session.SessionId : string.Empty)}");
+            if (session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage))
+            {
+                string status = $"Session status: {session.SessionStatusMessage}";
+                builder.AppendLine(recording ? status : Colorize(status, blockedStatusColor));
+            }
             builder.AppendLine("Tasks (3 x 3):");
             AppendTaskGrid(builder);
             if (selector.SelectedTaskIndex >= 0)
@@ -132,7 +158,10 @@ namespace EgoAnchor.Eval.Experiment
                     string state = TaskState(index);
                     ExperimentScenario.TryGetTask(index, out ExperimentTask task);
                     string cell = $"{pointer}{state}{index + 1} {task.ShortName}";
-                    builder.Append(cell.PadRight(17));
+                    string paddedCell = cell.PadRight(17);
+                    bool selected = selector.SelectedTaskIndex == index;
+                    string coloredCell = Colorize(paddedCell, TaskColor(index));
+                    builder.Append(selected ? $"<b>{coloredCell}</b>" : coloredCell);
                 }
 
                 builder.AppendLine();
@@ -145,6 +174,21 @@ namespace EgoAnchor.Eval.Experiment
             if (selector.ActiveTaskIndex == index) return "[RUN]";
             if (selector.IsTaskCompleted(index)) return "[OK]";
             return "[ ]";
+        }
+
+        /// <summary>按选中、运行、完成、待执行优先级返回任务颜色。</summary>
+        private Color TaskColor(int index)
+        {
+            if (selector.SelectedTaskIndex == index) return selectedTaskColor;
+            if (selector.ActiveTaskIndex == index) return runningTaskColor;
+            if (selector.IsTaskCompleted(index)) return completedTaskColor;
+            return pendingTaskColor;
+        }
+
+        /// <summary>把一段任务状态文本包装为 TextMesh Pro 富文本颜色标签。</summary>
+        private static string Colorize(string text, Color color)
+        {
+            return $"<color=#{ColorUtility.ToHtmlStringRGB(color)}>{text}</color>";
         }
 
         /// <summary>将文本写入 TMP 组件。</summary>

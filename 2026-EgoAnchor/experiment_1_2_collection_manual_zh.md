@@ -81,6 +81,10 @@ Canvas 固定在场景世界坐标中，不跟随 `CenterEyeAnchor`。面板中�
 - `Recommended: 90-120 s`：正式时长范围；
 - `NEXT`：下一项合法操作。
 
+九宫格颜色含义固定为：黄色表示当前选中，绿色表示正在录制，蓝色表示本 session 已完成，灰色表示尚未开始。
+如果 Python session 尚未配对或已被使用，状态提示会用红色显示原因；这时按键不会改变任务状态，应先重启 Python
+并等待新的 `session_id`。
+
 ## 4. 启动
 
 先启动 NATS：
@@ -238,12 +242,18 @@ Python 就绪后：
 manifest.json
 python_session.json
 python_candidates.jsonl
+python_events.jsonl
 unity_reference.jsonl
 unity_admission.jsonl
 unity_render.jsonl
+unity_events.jsonl
 events.jsonl
 audit_samples/
 ```
+
+`python_events.jsonl` 由 5090 Python 服务独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。
+两端通过 Mutagen 完成同步后，`qc` 或实验分析入口会按固定顺序生成最终的 `events.jsonl`，并核对两个分片的
+实际行数与 `python_session.json`、Unity manifest 中的 writer 统计。不要手工编辑或让任意一端直接追加最终文件。
 
 五个 JSONL 文件都不能是空文件。所有 writer 的 `dropped_rows` 和 `log_write_failures` 必须为 0。
 
@@ -265,6 +275,10 @@ pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
 返回码为 `0` 且 JSON 中 `"passed": true` 才算通过。
+
+如果 QC 提示缺少事件分片，先确认 5090 的 Python 已经正常停止、`python_session.json` 的 `state` 为
+`python_stopped`，再等待 Mutagen 将 `python_events.jsonl` 和 `python_session.json` 同步回本机。旧的只有
+`events.jsonl` 的目录属于旧共享写入格式，当前 schema-v2 会拒绝读取。
 
 每个 session 都通过基础 QC 后，将同一冻结配置下的目录一起交给分析。可以把全部模块化目录同时传给两个
 命令；没有对应实验任务的 session 会被忽略：

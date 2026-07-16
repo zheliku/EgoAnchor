@@ -20,6 +20,8 @@ class SchemaV2PathsTest(unittest.TestCase):
 
             self.assertEqual(paths.manifest.name, "manifest.json")
             self.assertEqual(paths.python_candidates.name, "python_candidates.jsonl")
+            self.assertEqual(paths.python_events.name, "python_events.jsonl")
+            self.assertEqual(paths.unity_events.name, "unity_events.jsonl")
             self.assertEqual(paths.unity_reference.name, "unity_reference.jsonl")
             self.assertEqual(paths.unity_admission.name, "unity_admission.jsonl")
             self.assertEqual(paths.unity_render.name, "unity_render.jsonl")

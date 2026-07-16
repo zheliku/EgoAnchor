@@ -167,10 +167,11 @@ class SchemaV2QcTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             session_dir = _write_minimal_session(Path(tmp))
-            events_path = session_dir / "events.jsonl"
+            events_path = session_dir / "unity_events.jsonl"
             events = _read_jsonl(events_path)
             events[0]["payload"] = {"unity_output": "legacy"}
             _write_jsonl(events_path, events)
+            (session_dir / "events.jsonl").unlink(missing_ok=True)
             manifest_path = session_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["log_writer_stats"]["unity_render.jsonl"]["dropped_rows"] = 1
@@ -322,9 +323,9 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
             renders.append(row)
     _write_jsonl(render_path, renders)
 
-    events_path = session_dir / "events.jsonl"
+    events_path = session_dir / "unity_events.jsonl"
     events = _read_jsonl(events_path)
-    ended = dict(events[1])
+    ended = dict(events[0])
     ended.update(event="trial_ended", event_type="trial_ended")
     events.append(ended)
     _write_jsonl(events_path, events)

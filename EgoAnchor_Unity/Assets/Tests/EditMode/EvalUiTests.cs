@@ -382,6 +382,8 @@ namespace EgoAnchor.Tests
                     StringAssert.Contains("This session: 1", text);
                     StringAssert.Contains("[OK]1 HEAD", text);
                     StringAssert.Contains(">[RUN]5 OCC", text);
+                    StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
+                    StringAssert.Contains("<b><color=#FFD054>>[RUN]5 OCC", text);
                     StringAssert.Contains("Occlusion recovery", text);
                     StringAssert.Contains("Phase: OCCLUDED", text);
                     StringAssert.Contains("Recommended: 90-120 s", text);
@@ -393,6 +395,33 @@ namespace EgoAnchor.Tests
                     UnityEngine.Object.DestroyImmediate(uiObject);
                 }
             });
+        }
+
+        /// <summary>session 启动被阻断时，状态面板必须显示可执行的跨端配对原因。</summary>
+        [Test]
+        public void StatusUiShowsSessionStartBlockReason()
+        {
+            WithSelector((session, selector) =>
+            {
+                GameObject uiObject = new GameObject("ExperimentContextTests.BlockedUI");
+                try
+                {
+                    const string reason = "当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。";
+                    SetPrivateField(session, "_sessionStatusMessage", reason);
+
+                    ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
+                    SetPrivateField(status, "selector", selector);
+                    SetPrivateField(status, "session", session);
+                    string text = status.BuildStatusText();
+
+                    StringAssert.Contains(reason, text);
+                    StringAssert.Contains($"NEXT: {reason}", text);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(uiObject);
+                }
+            }, recording: false);
         }
 
         /// <summary>完成一个指定任务，遮挡任务自动补齐 target_visible。</summary>

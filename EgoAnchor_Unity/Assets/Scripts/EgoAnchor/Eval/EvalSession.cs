@@ -92,6 +92,12 @@ namespace EgoAnchor.Eval
         private double _createdUnixMs;
         private double _nextAutoStartAttemptMonoMs;
 
+        /// <summary>最近一次被 Unity 日志占用而拒绝的 Python session_id。</summary>
+        private string _lastRejectedPythonSessionId = string.Empty;
+
+        /// <summary>当前 session 启动状态，供头显状态面板显示阻断原因。</summary>
+        private string _sessionStatusMessage = "等待 Python session_id";
+
         private readonly List<string> _variantLabels = new List<string>();
         private readonly List<EvalVariantConfig> _variantConfigs = new List<EvalVariantConfig>();
 
@@ -109,6 +115,9 @@ namespace EgoAnchor.Eval
         /// <summary>当前是否正在录制。</summary>
         public bool IsRecording => _recording;
 
+        /// <summary>当前 session 启动状态或阻断原因；空值表示没有额外诊断信息。</summary>
+        public string SessionStatusMessage => _sessionStatusMessage;
+
         /// <summary>录制开始事件；供固定计划和会话边界回调订阅。</summary>
         public UnityEvent SessionStarted => sessionStarted;
 
@@ -123,12 +132,14 @@ namespace EgoAnchor.Eval
         {
             if (recorder == null)
             {
+                SetSessionStatus("EvalRecorder 未绑定，无法开始录制。");
                 EgoAnchorLog.For<EvalSession>().Warning("EvalRecorder 未绑定，session 未启动。");
                 return;
             }
 
             if (_recording)
             {
+                SetSessionStatus("录制进行中。");
                 EgoAnchorLog.For<EvalSession>().Warning("StartSession 忽略：已有进行中的 session，请先调用 StopSession。数据不会被截断。");
                 return;
             }
@@ -141,6 +152,7 @@ namespace EgoAnchor.Eval
             string pythonId = runtimeHub != null ? runtimeHub.LatestPythonSessionId : string.Empty;
             if (runKind == EvalRunKind.Formal && string.IsNullOrWhiteSpace(pythonId))
             {
+                SetSessionStatus("等待 Python session_id；请确认远端 Python 已启动并正在发布 PoseResult。");
                 EgoAnchorLog.For<EvalSession>().Error(
                     "Formal session 启动已拒绝：尚未收到 Python session_id，禁止生成无法跨端配对的本地 session。");
                 return;
@@ -149,13 +161,22 @@ namespace EgoAnchor.Eval
             {
                 _sessionId  = pythonId;
                 _sessionDir = Path.Combine(root, _sessionId);
+
+                // 同一个远端 session 的 Unity 日志一旦存在，就不再每帧重复检查和刷屏；
+                // 只有收到不同的 Python session_id 后才重新尝试。
+                if (string.Equals(_lastRejectedPythonSessionId, pythonId, StringComparison.Ordinal))
+                    return;
+
                 Directory.CreateDirectory(_sessionDir);
                 EgoAnchorLog.For<EvalSession>().Info($"复用 Python session_id：{_sessionId}");
             }
             else
             {
                 if (autoStart)
+                {
+                    SetSessionStatus("未收到 Python session_id，当前使用本地 session。");
                     EgoAnchorLog.For<EvalSession>().Warning("尚未收到 Python session_id，回退到本地时钟。先启动 Python 再录制可自动配对。");
+                }
                 string baseId = BuildSessionId(DateTimeOffset.UtcNow, objectId);
                 _sessionId  = ResolveUniqueId(root, baseId);
                 _sessionDir = Path.Combine(root, _sessionId);
@@ -166,29 +187,36 @@ namespace EgoAnchor.Eval
             string referencePath = Path.Combine(_sessionDir, EvalV2Manifest.UnityReferenceFileName);
             string admissionPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityAdmissionFileName);
             string renderPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityRenderFileName);
-            string eventsPath = Path.Combine(_sessionDir, EvalV2Manifest.EventsFileName);
+            string unityEventsPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityEventsFileName);
+            string mergedEventsPath = Path.Combine(_sessionDir, EvalV2Manifest.EventsFileName);
             string manifestPath = Path.Combine(_sessionDir, EvalV2Manifest.ManifestFileName);
             if (HasNonEmptyLog(referencePath)
                 || HasNonEmptyLog(admissionPath)
                 || HasNonEmptyLog(renderPath)
+                || HasNonEmptyLog(unityEventsPath)
+                || HasNonEmptyLog(mergedEventsPath)
                 || HasNonEmptyLog(manifestPath))
             {
                 EgoAnchorLog.For<EvalSession>().Error(
                     $"Session 启动已拒绝：目标 Unity 日志已有非空内容，禁止覆盖。session_id={_sessionId}");
+                _lastRejectedPythonSessionId = pythonId;
+                SetSessionStatus("当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。");
                 return;
             }
 
             _createdUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             try
             {
-                recorder.BeginRecording(referencePath, admissionPath, renderPath, eventsPath, _sessionId);
+                recorder.BeginRecording(referencePath, admissionPath, renderPath, unityEventsPath, _sessionId);
             }
             catch (Exception exc)
             {
+                SetSessionStatus("Session 启动失败，请检查 Unity 日志目录和 EvalRecorder 配置。");
                 EgoAnchorLog.For<EvalSession>().Error($"Session 启动失败，已关闭部分日志：{exc}");
                 return;
             }
             _recording = true;
+            SetSessionStatus("录制进行中。");
             sessionStarted.Invoke();
 
             EgoAnchorLog.For<EvalSession>().Info($"Session 开始：{_sessionDir}  object_id={objectId}  platform_reference={recorder.GtTransformName}");
@@ -208,6 +236,7 @@ namespace EgoAnchor.Eval
             recorder?.CollectCompletedTasks(_completedTasks);
             recorder?.StopRecording();
             _recording = false;
+            SetSessionStatus("Session 已停止。");
             sessionStopped.Invoke();
             WriteManifest();
             EgoAnchorLog.For<EvalSession>().Info($"Session 结束：{_sessionDir}");
@@ -230,12 +259,24 @@ namespace EgoAnchor.Eval
             string pythonId = runtimeHub.LatestPythonSessionId;
             if (!string.IsNullOrEmpty(pythonId))
             {
+                if (string.Equals(_lastRejectedPythonSessionId, pythonId, StringComparison.Ordinal))
+                {
+                    SetSessionStatus("当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。");
+                    return;
+                }
+
                 EgoAnchorLog.For<EvalSession>().Info($"自动启动录制，Python session_id={pythonId}");
                 StartSession();
                 _autoStarted = _recording;
                 if (!_recording)
                     _nextAutoStartAttemptMonoMs = nowMonoMs + 1000.0;
             }
+        }
+
+        /// <summary>更新状态面板文本；重复状态不触发额外日志或状态抖动。</summary>
+        private void SetSessionStatus(string message)
+        {
+            _sessionStatusMessage = message ?? string.Empty;
         }
 
         private void OnDestroy()
@@ -298,6 +339,7 @@ namespace EgoAnchor.Eval
             if (missing.Count == 0)
                 return true;
 
+            SetSessionStatus("Formal session 配置不完整，请检查 Inspector。");
             EgoAnchorLog.For<EvalSession>().Error(
                 $"Formal session 启动已拒绝：正式采集配置不完整 {string.Join(", ", missing)}。");
             return false;

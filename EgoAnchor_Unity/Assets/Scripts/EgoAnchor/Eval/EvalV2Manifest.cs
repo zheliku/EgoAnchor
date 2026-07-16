@@ -20,6 +20,9 @@ namespace EgoAnchor.Eval
         /// <summary>Unity render 长表文件名。</summary>
         public const string UnityRenderFileName = "unity_render.jsonl";
 
+        /// <summary>Unity session 与实验事件分片文件名；由本机独占写入。</summary>
+        public const string UnityEventsFileName = "unity_events.jsonl";
+
         /// <summary>session 边界与运行事件文件名。</summary>
         public const string EventsFileName = "events.jsonl";
 

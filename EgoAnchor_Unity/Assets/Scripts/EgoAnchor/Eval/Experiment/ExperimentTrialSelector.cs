@@ -198,7 +198,12 @@ namespace EgoAnchor.Eval.Experiment
         {
             get
             {
-                if (!IsRecording) return "WAIT FOR PYTHON SESSION";
+                if (!IsRecording)
+                {
+                    return session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage)
+                        ? session.SessionStatusMessage
+                        : "WAIT FOR PYTHON SESSION";
+                }
                 if (!CurrentContext.IsSelected) return "SELECT A TASK";
                 if (!HasActiveTrial && IsTaskCompleted(_selectedTaskIndex))
                     return "SELECT ANOTHER TASK, REJECT IT, OR FINISH SESSION";

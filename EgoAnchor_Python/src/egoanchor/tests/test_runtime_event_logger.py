@@ -321,7 +321,7 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             finally:
                 writer.close()
 
-            event_rows = [json.loads(line) for line in (Path(tmp) / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+            event_rows = [json.loads(line) for line in (Path(tmp) / "python_events.jsonl").read_text(encoding="utf-8").splitlines()]
             candidate_rows = [json.loads(line) for line in (Path(tmp) / "python_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
 
             self.assertEqual([row["event"] for row in event_rows], ["runtime_started"])
@@ -467,9 +467,9 @@ class RuntimeEventLoggerTest(unittest.TestCase):
 
             metadata = json.loads(paths.metadata_path.read_text(encoding="utf-8"))
             self.assertEqual(metadata["state"], "python_stopped")
-            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["rows_written"], 1)
-            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["dropped_rows"], 0)
-            self.assertEqual(metadata["log_writer_stats"]["events.jsonl"]["log_write_failures"], 0)
+            self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["rows_written"], 1)
+            self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["dropped_rows"], 0)
+            self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["log_write_failures"], 0)
 
 
 if __name__ == "__main__":

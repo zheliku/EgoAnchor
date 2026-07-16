@@ -144,7 +144,7 @@ PoseResult candidate
 - 头动期间不冻结真实运动证据；`headSettleSeconds` 只覆盖头停后的沉降窗口。
 - 距离自适应只放大位置通道；旋转 tether 必须高于旋转噪声地板。
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
-- Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和 `events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。`events.jsonl` 由 Python 与 Unity 通过同名 `.lock` 文件逐行互斥追加，Unity 不得因已有 Python 事件拒绝启动或截断文件。
+- Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和本机独占的 `unity_events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。Python 远端独占写入 `python_events.jsonl`，Mutagen 同步完成后由本机 schema-v2 reader 确定性发布最终 `events.jsonl`，两端不再通过跨机器 `.lock` 共同追加同名文件。
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
 - Unity manifest 写出 run kind、自动配置哈希、对象、版本、带 90--120 秒范围的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计；`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
 - Unity 采集场景维护九项可任意选择的任务状态。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆按 3×3 九宫格选场，A 开始、扳机标记、B 结束、摇杆按下作废，键盘 `1`--`9` 对应任务及 marker、`Enter` 结束、`Backspace` 作废。运行中禁止切场；空闲且至少完成一项时，额外确认即可停止包含任意任务子集的模块化 session。错误 trial 写 `trial_rejected` 并只重做对应任务，Canvas 保持场景根节点静止。
@@ -154,7 +154,7 @@ PoseResult candidate
 
 ## Schema-v2 与评估原则
 
-Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl` 和审计样本目录。旧 schema 不兼容。
+Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`python_events.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`、合并后的 `events.jsonl` 和审计样本目录。旧共享事件文件格式不兼容。
 
 - `capture_mono_ms` 是 image-time proxy，不得称曝光真值。
 - 平台参考轨迹用于同一 Quest、同一时间线下的配对系统行为分析，不得称外部物理真值。

@@ -9,6 +9,7 @@ from .readers import (
     join_candidate_admission,
     join_render_reference,
     load_session_v2,
+    merge_event_fragments,
     select_completed_trials,
     select_trials,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "UnityRenderRow",
     "aggregate_config_hash",
     "load_session_v2",
+    "merge_event_fragments",
     "join_candidate_admission",
     "join_render_reference",
     "run_schema_qc",
