@@ -148,6 +148,7 @@ PoseResult candidate
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
 - Unity manifest 写出 run kind、自动配置哈希、对象、版本、带 90--120 秒范围的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计；`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
 - Unity 采集场景维护九项可任意选择的任务状态。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆按 3×3 九宫格选场，A 开始、扳机标记、B 结束、摇杆按下作废，键盘 `1`--`9` 对应任务及 marker、`Enter` 结束、`Backspace` 作废。运行中禁止切场；默认启用 90 秒最短 trial 时长门禁，超过 120 秒由 UI 红色提示；空闲且至少完成一项时，额外确认即可停止包含任意任务子集的模块化 session。已完成任务可直接按 A 或对应数字重录，旧 trial 先写 `trial_rejected`；单独作废仍只影响选中任务。状态板以绿色表示运行、蓝色表示完成、黄色表示选中、灰色表示待执行，已完成任务被选中时保持蓝色并以箭头和粗体区分；Canvas 保持场景根节点静止。
+- 头显状态板运行时文本统一使用英文 ASCII，因为当前 TextMesh Pro 字体资产不保证 CJK 字形；中文只用于代码注释、Inspector Tooltip、控制台日志和采集手册，不得把中文动态状态字符串传给 `ExperimentStatusUI`。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 8 个唯一 runtime：Hub 下以两个空物体分别组织实验一四配置和实验二四个单组件消融，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。

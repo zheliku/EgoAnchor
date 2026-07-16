@@ -636,7 +636,7 @@ namespace EgoAnchor.Tests
                 Assert.That(session.IsRecording, Is.False);
                 Assert.That(
                     session.SessionStatusMessage,
-                    Is.EqualTo("当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。"));
+                    Is.EqualTo("PYTHON SESSION ALREADY HAS UNITY LOGS - RESTART PYTHON"));
 
                 const string nextSessionId = "20260711_120501_controller_right";
                 SetPrivateField(hub, "latestPythonSessionId", nextSessionId);

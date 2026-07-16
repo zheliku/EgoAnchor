@@ -431,12 +431,13 @@ namespace EgoAnchor.Tests
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
                     StringAssert.Contains("<b><color=#4DD6A6>>[RUN]5 OCC", text);
-                    StringAssert.Contains("Marker: <color=#FFA95C>遮挡开始已记下", text);
+                    StringAssert.Contains("Marker: <color=#FFA95C>Occlusion start saved", text);
                     StringAssert.Contains("Occlusion recovery", text);
                     StringAssert.Contains("Phase: <color=#6DD3FF>OCCLUDED", text);
                     StringAssert.Contains("Recommended: 90-120 s", text);
                     StringAssert.DoesNotContain("RQ1", text);
                     StringAssert.DoesNotContain("RQ2", text);
+                    Assert.That(Regex.IsMatch(text, @"[\u3400-\u9FFF]"), Is.False);
                 }
                 finally
                 {
@@ -464,7 +465,7 @@ namespace EgoAnchor.Tests
 
                     StringAssert.Contains("<b><color=#5BA9FF>>[OK]1 HEAD", text);
                     StringAssert.DoesNotContain("<b><color=#FFD054>>[OK]1 HEAD", text);
-                    StringAssert.Contains("已完成；按 A / 当前任务键重录", text);
+                    StringAssert.Contains("COMPLETED - A / TASK KEY: RERECORD", text);
                 }
                 finally
                 {
@@ -482,7 +483,7 @@ namespace EgoAnchor.Tests
                 GameObject uiObject = new GameObject("ExperimentContextTests.BlockedUI");
                 try
                 {
-                    const string reason = "当前 Python session 已有 Unity 日志，请重启 Python 获取新的 session_id。";
+                    const string reason = "PYTHON SESSION ALREADY HAS UNITY LOGS - RESTART PYTHON";
                     SetPrivateField(session, "_sessionStatusMessage", reason);
 
                     ExperimentStatusUI status = uiObject.AddComponent<ExperimentStatusUI>();
@@ -492,6 +493,7 @@ namespace EgoAnchor.Tests
 
                     StringAssert.Contains(reason, text);
                     StringAssert.Contains($"NEXT: <color=#FFD054>{reason}</color>", text);
+                    Assert.That(Regex.IsMatch(text, @"[\u3400-\u9FFF]"), Is.False);
                 }
                 finally
                 {

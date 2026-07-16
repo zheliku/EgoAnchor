@@ -225,19 +225,19 @@ namespace EgoAnchor.Eval.Experiment
                 }
                 if (!CurrentContext.IsSelected) return "SELECT A TASK";
                 if (!HasActiveTrial && IsTaskCompleted(_selectedTaskIndex))
-                    return "已完成；按 A / 当前任务键重录，Backspace 作废，B / Enter 结束";
+                    return "COMPLETED - A / TASK KEY: RERECORD; BACKSPACE: REJECT; B / ENTER: FINISH SESSION";
                 if (!HasActiveTrial && CompletedTaskCount > 0)
-                    return "未开始；按 A / 当前任务键开始，B / Enter 结束 session";
-                if (!HasActiveTrial) return "未开始；按 A / 当前任务键开始";
+                    return "A / TASK KEY: START; B / ENTER: FINISH SESSION";
+                if (!HasActiveTrial) return "A / TASK KEY: START SELECTED TASK";
                 if (_trialEventCount == 0)
-                    return "已开始；先保持基线约 5 秒，再按扳机 / 当前任务键标记动作";
+                    return "BASELINE 5 S, THEN TRIGGER / TASK KEY TO MARK ACTION";
                 if (_hasOpenOcclusion)
-                    return "已标记遮挡开始；目标重新可见后，按扳机 / 当前任务键";
+                    return "OCCLUSION MARKED - WHEN VISIBLE, TRIGGER / TASK KEY";
                 if (IsOverRecommendedDuration)
-                    return "已超过 120 秒；尽快按 B / Enter 结束任务";
+                    return "OVER 120 S - B / ENTER TO END TASK";
                 if (IsWithinRecommendedDuration)
-                    return "已达到建议时长；按 B / Enter 结束任务";
-                return $"事件已标记；继续执行任务，至少再采集 {Math.Ceiling(RemainingMinimumSeconds):0} 秒";
+                    return "90 S REACHED - B / ENTER TO END TASK";
+                return $"EVENT MARKED - CONTINUE FOR AT LEAST {Math.Ceiling(RemainingMinimumSeconds):0} S";
             }
         }
 
@@ -247,16 +247,16 @@ namespace EgoAnchor.Eval.Experiment
             get
             {
                 if (!HasActiveTrial)
-                    return "当前没有活动任务；A / 当前任务键开始，B / Enter 结束 session。";
+                    return "No active task. A / task key starts; B / Enter finishes the session.";
                 if (_trialEventCount == 0)
-                    return "marker 只记录动作时刻，不会开始或停止录制；基线完成后按一次。";
+                    return "A marker timestamps an action; it does not start or stop recording.";
                 if (_hasOpenOcclusion)
-                    return "遮挡开始已记下；目标重新可见时再次按扳机 / 当前任务键。";
+                    return "Occlusion start saved. Mark again when the target becomes visible.";
                 if (_eventRole == ExperimentEventRole.TargetVisible)
-                    return "目标重新可见已记下；可继续下一轮遮挡，或采满时长后结束。";
+                    return "Target-visible marker saved. Start another occlusion or finish after 90 s.";
                 if (_eventRole == ExperimentEventRole.TransitionStarted)
-                    return "运动开始时刻已记下；继续完成本轮动作，可重复标记下一轮。";
-                return "动作时刻已记下；继续完成任务，可重复标记下一轮。";
+                    return "Motion-start marker saved. Complete this motion; mark again before the next one.";
+                return "Action marker saved. Continue the task; mark again before the next action.";
             }
         }
 
