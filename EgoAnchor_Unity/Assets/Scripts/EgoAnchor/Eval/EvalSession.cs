@@ -13,8 +13,8 @@ namespace EgoAnchor.Eval
     /// <summary>
     /// 评估 session 控制器：管理录制开始/停止，自动从 Python session_id 命名目录，写 schema-v2 manifest.json。
     /// <para>
-    /// 推荐工作流：先启动 Python 服务，<see cref="autoStart"/> 为 true 时 Unity 收到第一个 PoseResult
-        /// 即自动开始录制；操作者可在任意时刻通过实验输入调用 <see cref="StopSession"/>。
+    /// 推荐工作流：先启动 Python 服务，在 Unity 中选择任务后按一次开始动作；该动作会同时
+    /// 启动 session 与当前 trial。操作者可在任意时刻通过实验输入调用 <see cref="StopSession"/>。
     /// </para>
     /// </summary>
     public sealed class EvalSession : MonoBehaviour
@@ -53,9 +53,9 @@ namespace EgoAnchor.Eval
         [Tooltip("追踪对象 ID，例如 controller_right。必须与 Python --object 参数一致。")]
         [SerializeField] private string objectId = "controller_right";
 
-        /// <summary>收到第一个 PoseResult 时是否自动开始录制。</summary>
-        [Tooltip("收到第一个 PoseResult 时自动开始正式录制；操作者可随时停止。")]
-        [SerializeField] private bool autoStart = true;
+        /// <summary>收到第一个 PoseResult 时是否自动开始录制；正式采集应保持关闭。</summary>
+        [Tooltip("仅供诊断使用；正式采集保持关闭，由 Enter/A 一次启动 session 与当前任务。")]
+        [SerializeField] private bool autoStart;
 
         // ── Events ──
 
@@ -102,6 +102,17 @@ namespace EgoAnchor.Eval
 
         /// <summary>当前 session 启动状态或阻断原因；空值表示没有额外诊断信息。</summary>
         public string SessionStatusMessage => _sessionStatusMessage;
+
+        /// <summary>是否已收到一个尚未被本机日志占用的 Python session_id。</summary>
+        public bool HasPendingPythonSession
+        {
+            get
+            {
+                string pythonId = runtimeHub != null ? runtimeHub.LatestPythonSessionId : string.Empty;
+                return !string.IsNullOrWhiteSpace(pythonId)
+                    && !string.Equals(_lastRejectedPythonSessionId, pythonId, StringComparison.Ordinal);
+            }
+        }
 
         /// <summary>录制开始事件；供固定计划和会话边界回调订阅。</summary>
         public UnityEvent SessionStarted => sessionStarted;

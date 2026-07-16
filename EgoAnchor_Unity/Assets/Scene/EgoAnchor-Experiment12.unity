@@ -1824,7 +1824,7 @@ MonoBehaviour:
   runtimeHub: {fileID: 1777492727}
   outputRoot: 
   objectId: controller_right
-  autoStart: 1
+  autoStart: 0
   sessionStarted:
     m_PersistentCalls:
       m_Calls: []

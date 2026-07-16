@@ -364,20 +364,87 @@ namespace EgoAnchor.Tests
     /// <summary>实验一/实验二采集上下文和输入状态机测试。</summary>
     public sealed class ExperimentContextTests
     {
-        /// <summary>未录制时不得选择、开始或标记 trial。</summary>
+        /// <summary>未录制时可先选择任务，但不得写入 marker。</summary>
         [Test]
-        public void SelectorRejectsChangesBeforeRecording()
+        public void SelectorAllowsSelectionBeforeRecording()
         {
-            WithSelector((session, selector) =>
+            WithSelector((_, selector) =>
             {
-                Assert.That(selector.SelectTask(0), Is.False);
-                Assert.That(selector.StartTrial(), Is.False);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(0));
+                Assert.That(selector.MoveSelection(Vector2.right), Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(1));
+                Assert.That(selector.SelectTask(4), Is.True);
                 Assert.That(selector.MarkEvent(), Is.False);
                 Assert.That(selector.HasMarkerFeedback, Is.True);
                 Assert.That(selector.MarkerFeedbackSucceeded, Is.False);
                 Assert.That(selector.MarkerFeedbackText, Is.EqualTo("MARKER IGNORED: START A TASK FIRST"));
-                Assert.That(selector.CurrentContext.IsSelected, Is.False);
+                Assert.That(selector.CurrentContext.IsSelected, Is.True);
+                Assert.That(selector.CurrentPhaseText, Is.EqualTo("TASK SELECTED - READY"));
             }, recording: false);
+        }
+
+        /// <summary>第一次开始动作必须原子地启动 session 和当前选中 trial，不要求第二次确认。</summary>
+        [Test]
+        public void StartActionStartsSessionAndSelectedTrialOnce()
+        {
+            string root = Path.Combine(
+                Application.temporaryCachePath,
+                $"egoanchor_one_start_{Guid.NewGuid():N}");
+            string sessionId = $"test_{Guid.NewGuid():N}_controller_right";
+            GameObject owner = new GameObject("ExperimentContextTests.OneStart");
+            try
+            {
+                EvalRecorder recorder = owner.AddComponent<EvalRecorder>();
+                PoseToAnchorRuntime runtime = owner.AddComponent<PoseToAnchorRuntime>();
+                AnchorRuntimeHub hub = owner.AddComponent<AnchorRuntimeHub>();
+                EvalSession session = owner.AddComponent<EvalSession>();
+                ExperimentTrialSelector selector = owner.AddComponent<ExperimentTrialSelector>();
+                ExperimentInputHandler input = owner.AddComponent<ExperimentInputHandler>();
+
+                SetPrivateField(recorder, "groundTruth", owner.transform);
+                SetPrivateField(recorder, "variants", new List<EvalVariant>
+                {
+                    new EvalVariant
+                    {
+                        label = "test-formal",
+                        runtime = runtime,
+                        anchorTransform = owner.transform,
+                        isPrimary = true,
+                    },
+                });
+                SetPrivateField(recorder, "experimentSelector", selector);
+                SetPrivateField(hub, "latestPythonSessionId", sessionId);
+                SetPrivateField(session, "recorder", recorder);
+                SetPrivateField(session, "runtimeHub", hub);
+                SetPrivateField(session, "outputRoot", root);
+                SetPrivateField(input, "selector", selector);
+                selector.BindSession(session);
+
+                var eventTypes = new List<string>();
+                selector.ContextEvent += (_, eventType) => eventTypes.Add(eventType);
+                Assert.That(selector.SelectTask(4), Is.True);
+                Assert.That(session.IsRecording, Is.False);
+                Assert.That(selector.HasActiveTrial, Is.False);
+
+                Assert.That(input.HandleStart(), Is.True);
+
+                Assert.That(session.IsRecording, Is.True);
+                Assert.That(selector.HasActiveTrial, Is.True);
+                Assert.That(selector.SelectedTaskIndex, Is.EqualTo(4));
+                Assert.That(selector.ActiveTaskIndex, Is.EqualTo(4));
+                Assert.That(selector.CurrentTrialId, Is.EqualTo("trial_001"));
+                Assert.That(eventTypes.FindAll(item => item == "trial_started").Count, Is.EqualTo(1));
+                Assert.That(input.HandleStart(), Is.False);
+                Assert.That(eventTypes.FindAll(item => item == "trial_started").Count, Is.EqualTo(1));
+
+                Assert.That(input.HandleFinish(), Is.True);
+                Assert.That(session.IsRecording, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
         }
 
         /// <summary>摇杆四方向必须按三乘三网格选场，运行中禁止切换。</summary>
@@ -949,6 +1016,7 @@ namespace EgoAnchor.Tests
                 "notes:",
             })
                 StringAssert.DoesNotContain(removedField, sessionSection);
+            StringAssert.Contains("autoStart: 0", sessionSection);
 
             StringAssert.DoesNotContain("controllerBinding:", inputSection);
             StringAssert.DoesNotContain("keyboardBinding:", inputSection);
@@ -1009,6 +1077,7 @@ namespace EgoAnchor.Tests
                 yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
 
             StringAssert.DoesNotContain("runKind:", sessionSection);
+            StringAssert.Contains("autoStart: 0", sessionSection);
             StringAssert.DoesNotContain("controlSessionShortcuts:", inputSection);
             StringAssert.DoesNotContain("controllerBinding:", inputSection);
             StringAssert.Contains("navigateAction:", inputSection);

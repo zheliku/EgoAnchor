@@ -49,8 +49,8 @@ namespace EgoAnchor.Eval.Experiment
     /// <summary>维护可任意选择、可作废重做的九项实验采集任务。</summary>
     public sealed class ExperimentTrialSelector : MonoBehaviour
     {
-        /// <summary>绑定 session 生命周期；未录制时所有采集动作都被拒绝。</summary>
-        [Tooltip("绑定 EvalSession；录制开始时重置九项任务状态并选中任务 1。")]
+        /// <summary>绑定 session 生命周期；选择动作可在录制开始前使用。</summary>
+        [Tooltip("绑定 EvalSession；进入场景时选中任务 1，开始动作会启动 session 和当前任务。")]
         [SerializeField] private EvalSession session;
 
         /// <summary>九宫格当前选中的任务索引。</summary>
@@ -199,7 +199,9 @@ namespace EgoAnchor.Eval.Experiment
         {
             get
             {
-                if (!IsRecording) return "WAITING FOR SESSION";
+                if (!IsRecording) return CurrentContext.IsSelected
+                    ? "TASK SELECTED - READY"
+                    : "SELECT A TASK";
                 if (!HasActiveTrial) return "TASK SELECTED - NOT RUNNING";
                 if (_trialEventCount == 0) return "RECORDING BASELINE";
                 if (_hasOpenOcclusion) return "TARGET OCCLUDED";
@@ -216,6 +218,9 @@ namespace EgoAnchor.Eval.Experiment
             {
                 if (!IsRecording)
                 {
+                    if (!CurrentContext.IsSelected) return "SELECT A TASK";
+                    if (session != null && session.HasPendingPythonSession)
+                        return "START RECORDING: NUMPAD ENTER | A";
                     return session != null && !string.IsNullOrWhiteSpace(session.SessionStatusMessage)
                         ? session.SessionStatusMessage
                         : "WAIT FOR PYTHON SESSION";
@@ -264,7 +269,14 @@ namespace EgoAnchor.Eval.Experiment
             session = target;
             if (session == null) return;
             session.SessionStarted.AddListener(PrepareCollection);
-            if (session.IsRecording) PrepareCollection();
+            if (session.IsRecording)
+            {
+                PrepareCollection();
+            }
+            else if (_selectedTaskIndex < 0)
+            {
+                SelectTask(0);
+            }
         }
 
         /// <summary>Unity 启用时绑定 Inspector 中配置的 session。</summary>
@@ -279,17 +291,20 @@ namespace EgoAnchor.Eval.Experiment
             UnbindSession();
         }
 
-        /// <summary>录制开始时清空上一 session 状态并选中任务 1。</summary>
+        /// <summary>录制开始时清空上一 session 状态，并保留操作者已选中的任务。</summary>
         public void PrepareCollection()
         {
+            int selectedTaskIndex = _selectedTaskIndex;
             ResetState();
-            if (IsRecording) SelectTask(0);
+            if (!ExperimentScenario.TryGetTask(selectedTaskIndex, out _))
+                selectedTaskIndex = 0;
+            SelectTask(selectedTaskIndex);
         }
 
-        /// <summary>选择一项任务；活动 trial 期间禁止切换。</summary>
+        /// <summary>选择一项任务；session 启动前允许选择，活动 trial 期间禁止切换。</summary>
         public bool SelectTask(int index)
         {
-            if (!IsRecording || HasActiveTrial || !ExperimentScenario.TryGetTask(index, out _))
+            if (HasActiveTrial || !ExperimentScenario.TryGetTask(index, out _))
                 return false;
             if (_selectedTaskIndex == index) return true;
 
@@ -301,7 +316,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>按三乘三九宫格移动选择，斜向输入只取绝对值更大的轴。</summary>
         public bool MoveSelection(Vector2 direction)
         {
-            if (!IsRecording || HasActiveTrial || _selectedTaskIndex < 0) return false;
+            if (HasActiveTrial || _selectedTaskIndex < 0) return false;
             int column = _selectedTaskIndex % 3;
             int row = _selectedTaskIndex / 3;
             if (Mathf.Abs(direction.x) >= Mathf.Abs(direction.y))
@@ -321,10 +336,16 @@ namespace EgoAnchor.Eval.Experiment
             return SelectTask(row * 3 + column);
         }
 
-        /// <summary>开始当前选中任务；已完成任务会先自动写入 trial_rejected，再开始新 trial。</summary>
+        /// <summary>开始当前选中任务；首次调用会在同一动作中启动 session。</summary>
         public bool StartTrial()
         {
-            if (!IsRecording || HasActiveTrial || _selectedTaskIndex < 0) return false;
+            if (HasActiveTrial || _selectedTaskIndex < 0 || session == null) return false;
+            if (!IsRecording)
+            {
+                session.StartSession();
+                if (!IsRecording) return false;
+            }
+
             if (IsTaskCompleted(_selectedTaskIndex))
             {
                 Emit(_completedContexts[_selectedTaskIndex], "trial_rejected");
