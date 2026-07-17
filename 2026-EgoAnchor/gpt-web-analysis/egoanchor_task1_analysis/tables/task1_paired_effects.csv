@@ -1,0 +1,15 @@
+variant_a,variant_b,metric,phase_subset,variant_a_median,variant_b_median,paired_difference_median,a_better_phases,b_better_phases,equivalent_phases,n_phases
+EgoAnchor,One-Euro Anchor,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,3.6791361183987994,8.272756716217224,-3.8266254559306336,4,0,0,4
+EgoAnchor,One-Euro Anchor,rotation_p95_deg,Head rotation A | Head rotation B | Head translation A | Head translation B,2.8552056332175226,3.6996188543229396,-0.9504757258322687,4,0,0,4
+EgoAnchor,One-Euro Anchor,hp_translation_rms_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,0.03889474925495164,1.00988337061886,-0.5611542189958143,4,0,0,4
+EgoAnchor,One-Euro Anchor,translation_jump_p99_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,0.15290710776006478,2.209299455581285,-1.6320996898200715,4,0,0,4
+Capture-Hold,Arrival-Hold,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,8.57343647808917,22.237085128882228,-14.606163557857826,4,0,0,4
+EgoAnchor,EgoAnchor w/o capture-time alignment,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,3.6791361183987994,8.729948710622578,-5.584645962745194,3,1,0,4
+EgoAnchor,EgoAnchor w/o capture-time alignment,translation_p95_mm,Head rotation A | Head rotation B,4.626964990213695,22.297188709849177,-17.67022371963548,2,0,0,2
+EgoAnchor,EgoAnchor w/o capture-time alignment,rotation_p95_deg,Head rotation A | Head rotation B | Head translation A | Head translation B,2.8552056332175226,3.2649974401432056,-0.4097918069256832,4,0,0,4
+EgoAnchor,EgoAnchor w/o StaticLock,hp_translation_rms_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,0.03889474925495164,2.04093629080752,-1.8008311900095118,4,0,0,4
+EgoAnchor,EgoAnchor w/o StaticLock,hp_rotation_rms_deg,Head rotation A | Head rotation B | Head translation A | Head translation B,0.016990011349787747,0.8607397654028672,-0.7342430689111188,4,0,0,4
+EgoAnchor,EgoAnchor w/o StaticLock,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,3.6791361183987994,8.629793525608509,-4.275318837018563,4,0,0,4
+EgoAnchor,EgoAnchor w/o StaticLock,translation_jump_p99_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,0.15290710776006478,3.0493869045888613,-2.8891427311186284,4,0,0,4
+EgoAnchor,EgoAnchor w/o temporal synthesis,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,3.6791361183987994,3.6791747191973245,0.00700976251083274,2,2,1,4
+EgoAnchor,EgoAnchor w/o VCD,translation_p95_mm,Head rotation A | Head rotation B | Head translation A | Head translation B,3.6791361183987994,3.6791361183987994,1.38633405377675e-06,0,2,2,4

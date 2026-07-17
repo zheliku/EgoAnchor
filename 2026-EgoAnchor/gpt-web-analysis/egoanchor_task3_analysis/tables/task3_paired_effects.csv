@@ -1,0 +1,11 @@
+comparison,metric,metric_label,variant_a,variant_b,variant_a_median,variant_b_median,paired_difference_median,bootstrap_ci_low,bootstrap_ci_high,a_better_segments,b_better_segments,ties,n_segments
+EgoAnchor - One-Euro Anchor,translation_median_mm,Translation median (mm),EgoAnchor,One-Euro Anchor,84.91318320015694,98.78338423572725,-14.064134291971527,-15.060055602182942,-12.32733609955497,17,0,0,17
+EgoAnchor - One-Euro Anchor,translation_p95_mm,Translation P95 (mm),EgoAnchor,One-Euro Anchor,111.4721905990494,139.52177833674136,-27.800294392654536,-29.94121228105702,-23.140905418614665,17,0,0,17
+EgoAnchor - One-Euro Anchor,effective_lag_ms,Effective lag (ms),EgoAnchor,One-Euro Anchor,320.0,380.0,-60.0,-65.0,-55.0,17,0,0,17
+EgoAnchor - One-Euro Anchor,lag_compensated_residual_mm,Lag-compensated residual (mm),EgoAnchor,One-Euro Anchor,4.5317174207128055,8.146597307550033,-3.749582268473441,-4.333371799311832,-1.945706270633429,16,1,0,17
+EgoAnchor - One-Euro Anchor,translation_jump_p99_mm,Translation jump P99 (mm),EgoAnchor,One-Euro Anchor,8.984964915073755,39.80200794783392,-30.44233119469696,-33.27351124798367,-24.92596592972555,17,0,0,17
+EgoAnchor - EgoAnchor w/o temporal synthesis,translation_jump_p99_mm,Temporal synthesis: jump P99 (mm),EgoAnchor,EgoAnchor w/o temporal synthesis,8.984964915073755,40.98533509204898,-31.25839445727368,-33.99596529195101,-25.699780808961798,17,0,0,17
+EgoAnchor - EgoAnchor w/o temporal synthesis,translation_median_mm,Temporal synthesis: raw median (mm),EgoAnchor,EgoAnchor w/o temporal synthesis,84.91318320015694,65.89512687902157,19.39358669047153,17.566910516429544,21.35410875859658,0,17,0,17
+EgoAnchor - EgoAnchor w/o temporal synthesis,effective_lag_ms,Temporal synthesis: lag (ms),EgoAnchor,EgoAnchor w/o temporal synthesis,320.0,255.0,65.0,55.0,75.0,0,17,0,17
+EgoAnchor - EgoAnchor w/o capture-time alignment,translation_median_mm,Capture alignment: median (mm),EgoAnchor,EgoAnchor w/o capture-time alignment,84.91318320015694,97.22686689974168,-13.721355621832771,-17.37737395351344,-11.573669072069322,17,0,0,17
+EgoAnchor - EgoAnchor w/o capture-time alignment,cross_track_median_mm,Capture alignment: cross-track (mm),EgoAnchor,EgoAnchor w/o capture-time alignment,6.9211493125579455,11.084031187842179,-3.2787700510091184,-5.069992929779168,-1.1073441150916103,16,1,0,17

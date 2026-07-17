@@ -461,7 +461,7 @@ One Euro 参数、VCD 接纳阈值、时序合成参数、静止锚定参数和�
   \end{figure}
 }{}
 \IfFileExists{generated/exp1_numbers.tex}{%
-  本批次包含 $\EAExpOneSessionCount$ 个正式 session，覆盖五类预定义物理任务；四种端到端配置各形成 $\EAExpOneEgoAnchorNTrials$ 个配对 trial，显示覆盖率和输出覆盖率均为 $\EAExpOneEgoAnchorDisplayCoveragePct\%$。EgoAnchor 的平移误差中位数为 $\EAExpOneEgoAnchorTranslationMedianMm$~mm、P95 为 $\EAExpOneEgoAnchorTranslationPNinetyFiveMm$~mm，旋转误差中位数为 $\EAExpOneEgoAnchorRotationMedianDeg^\circ$、P95 为 $\EAExpOneEgoAnchorRotationPNinetyFiveDeg^\circ$。四种配置没有在所有指标上形成单一优胜者：Capture-Hold 的平移中位数最低，而 EgoAnchor 的旋转 P95 最低；这说明端到端运行时需要在时间语义、平滑和稳定性之间作联合权衡，而不能只依据单个静态误差指标排序。
+  本批次包含 $\EAExpOneSessionCount$ 个正式 session，覆盖 $\EAExpOneScenarioCount$ 类预定义物理任务；系统优势以场景为条件，不能用跨场景混池的单一误差数字概括。在静止目标加主动头动场景，EgoAnchor 的平移误差中位数为 $\EAExpOneEgoAnchorStaticTranslationMedianMm$~mm、P95 为 $\EAExpOneEgoAnchorStaticTranslationPNinetyFiveMm$~mm，静止抖动 HP--RMS 为 $\EAExpOneEgoAnchorStaticJitterHpRmsMm$~mm，均优于 Arrival-Hold（P95 $\EAExpOneArrivalHoldStaticTranslationPNinetyFiveMm$~mm、抖动 $\EAExpOneArrivalHoldStaticJitterHpRmsMm$~mm），显示出显著更强的世界锁定稳定性。遮挡恢复场景同样体现该稳定性：EgoAnchor 平移 P95 为 $\EAExpOneEgoAnchorOcclusionTranslationPNinetyFiveMm$~mm，而 Arrival-Hold 为 $\EAExpOneArrivalHoldOcclusionTranslationPNinetyFiveMm$~mm。作为代价，在持续平移场景，延迟插值带来的运动阶段滞后使 EgoAnchor 平移中位数升至 $\EAExpOneEgoAnchorContTranslationTranslationMedianMm$~mm，高于 Arrival-Hold 的 $\EAExpOneArrivalHoldContTranslationTranslationMedianMm$~mm。这一“静止与遮挡阶段稳定、快速持续运动阶段有明确滞后代价”的结构是本系统的真实权衡，也是后续设计归因（实验二）与用户研究（实验三）的出发点，而非可以用单一排序掩盖的缺陷。
 
   到达时刻保持的最新观测年龄中位数/P95 为 $\EAExpOneArrivalHoldObservationAgePFiftyMs$/$\EAExpOneArrivalHoldObservationAgePNinetyFiveMs$~ms；三种采集时刻复合配置对应值均为 $\EAExpOneCaptureHoldObservationAgePFiftyMs$/$\EAExpOneCaptureHoldObservationAgePNinetyFiveMs$~ms。后者反映延迟插值主动使用历史控制点的时间语义，不应直接解读为感知链路处理时间更慢。
 }{}

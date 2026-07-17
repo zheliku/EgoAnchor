@@ -120,6 +120,23 @@ PoseResult candidate
 - 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
 - 模型相关 per-variant jump gate 不进入正式比较。
 
+## Run 2 离线分析架构
+
+实验一/二正式数据采集已经完成。Run 2 当前执行入口为 `2026-EgoAnchor/experiment_1_2_analysis_rebuild_plan.md`，离线分析固定为四阶段：
+
+```text
+schema-v2 task directory
+  -> per-task complete XLSX with full QC
+  -> trial/event/session metrics and plot-ready CSV
+  -> PDF figures and auditable TeX intermediates
+  -> generated experiment data materialized into egoanchor_cn_v6.tex
+```
+
+- 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续分析不得再读取 JSON/JSONL，Stage 2 只读取完整 XLSX。
+- Stage 3 只读取 Stage 2 发布的 CSV，不得重新连接 reference、切事件窗或计算科学指标；Stage 4 只读取 Stage 3 的 TeX 中间产物。
+- 每个 task 输出一个完整 XLSX，必须包含目录内所有文件的信息、来源行、hash、数据字典和 QC，不得截断或静默丢弃嵌套字段。
+- 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
+
 ## Python 关键约束
 
 入口：`EgoAnchor_Python/src/run_server.py` -> `egoanchor.app.tracking_server`。配置位于 `src/egoanchor/config/defaults.toml` 与 `objects.toml`。
@@ -185,13 +202,13 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 实验二复用实验一任务 1--5 的同一批 8-runtime schema-v2 session，再按组件适用的物理场景投影完整 *EgoAnchor* 与对应消融：采集时刻对齐和 StaticLock 使用静止头动任务，VCD 使用遮挡恢复任务，时序合成使用起停 6DoF 任务；批次仍要求五项物理任务全部覆盖，使同一组输入目录能够同时生成实验一和实验二产物。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始 `data/eval/<session_id>` 目录名、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
-- 统一分析 CLI 只提供 `qc`、`analyze-exp1`、`analyze-exp2`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；旧 `run_eval`、`batch_eval` 和对应 Pixi 别名均已删除，不得恢复。
-- `--out` 保存一次分析的完整 CSV/PDF/TeX；分析成功后，固定 TeX 原子发布到 `2026-EgoAnchor/generated/`，固定 PDF 发布到 `2026-EgoAnchor/figures/generated/`。默认论文根目录从模块位置解析，不依赖当前工作目录，测试和外部调用可用 `--paper-root` 覆盖。
+- 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；旧 `run_eval`、`batch_eval`、`analyze-exp1`、`analyze-exp2` 和对应 Pixi 别名均不保留。
+- `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从 XLSX 发布完整 CSV；`publish` 只从 CSV 发布固定 TeX 到 `2026-EgoAnchor/generated/` 和固定 PDF 到 `2026-EgoAnchor/figures/generated/`；`materialize-paper` 将 TeX 中间产物写入主稿的受控区块。默认论文根目录从模块位置解析，测试和外部调用可用 `--paper-root` 覆盖。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
-- 中文主稿通过 `\IfFileExists` 加载 `generated/exp{1,2}_numbers.tex`、`generated/exp{1,2}_tables.tex` 和 `figures/generated/` 下的固定 PDF；正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿中的实验宏和表格由 `materialize-paper` 写入稳定自动生成区块，不再通过 `\IfFileExists` 或 `\input` 依赖 `generated/exp{1,2}_*.tex`；图仍从 `figures/generated/` 加载固定 PDF。正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
 

@@ -15,6 +15,7 @@ from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, select_comp
 from ..batch import BatchQcReport, run_batch_qc
 
 from .contract import ABLATION_METRIC_PREFIX, SOURCE_EXPERIMENT_ID, SOURCE_SCENARIOS
+from .excel import write_exp2_excel
 from .figures import write_exp2_figures
 from .latex import write_exp2_latex, write_exp2_tables
 from .metrics import aggregate_component_deltas, compute_exp2_paired_deltas
@@ -37,6 +38,9 @@ class Exp2Result:
 
     metrics: dict[str, Any] = field(default_factory=dict)
     """需要进入论文宏的批量标量。"""
+
+    excel_file: Path | None = None
+    """生成的多 sheet 分析 Excel。"""
 
 
 def run_exp2_design_attribution(
@@ -111,11 +115,13 @@ def run_exp2_design_attribution(
     write_exp2_figures(summary, risk.curve, output)
     write_exp2_latex(summary, aurc_median, output / "exp2_numbers.tex")
     write_exp2_tables(summary, output / "exp2_tables.tex")
+    excel_file = write_exp2_excel(tables, output)
     return Exp2Result(
         output_dir=output,
         qc=batch_qc,
         tables=tables,
         metrics={"vcd_aurc_mm_median": aurc_median},
+        excel_file=excel_file,
     )
 
 

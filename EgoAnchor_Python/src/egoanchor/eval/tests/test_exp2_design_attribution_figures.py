@@ -1,17 +1,21 @@
-"""实验二 PDF 产物契约测试。"""
+"""实验二 PDF 产物契约测试。
+
+新绘图层核心为组件归因热力图（替代单指标条形），另有三张单组件效应图和
+VCD risk-coverage 曲线。测试验证固定文件名和有效 PDF 内容，不再依赖条形
+图颜色调用次序（热力图用 Rectangle 而非 bar 绘制）。
+"""
 
 from __future__ import annotations
 
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import pandas as pd
-from matplotlib.axes import Axes
 
 from egoanchor.eval.experiments.exp2_design_attribution import (
-    REQUIRED_VARIANTS,
+    ABLATION_VARIANTS,
+    BASELINE_VARIANT,
     write_exp2_figures,
 )
 
@@ -26,60 +30,42 @@ _OUTPUT_FIGURES = (
 
 
 def _summary() -> pd.DataFrame:
-    """构造逆序消融行，验证绘图不受输入顺序影响。"""
+    """构造覆盖四个消融和多指标的配对差汇总。"""
 
     rows: list[dict[str, object]] = []
-    for index, variant in enumerate(reversed(REQUIRED_VARIANTS[1:]), start=1):
-        rows.append(
-            {
-                "scenario_id": f"scenario-{index}",
-                "variant_label": variant,
-                "metric": "display_error.translation_error_mm_median",
-                "paired_n": 4,
-                "delta_mean": float(index),
-                "delta_median": float(index),
-            }
-        )
-    rows.extend(
-        (
-            {
-                "scenario_id": "without_temporal_synthesis",
-                "variant_label": REQUIRED_VARIANTS[3],
-                "metric": "transition.visible_response_time_ms",
-                "paired_n": 4,
-                "delta_mean": 12.0,
-                "delta_median": 12.0,
-            },
-            {
-                "scenario_id": "without_static_lock",
-                "variant_label": REQUIRED_VARIANTS[4],
-                "metric": "static.position_hp_rms_mm",
-                "paired_n": 4,
-                "delta_mean": 3.5,
-                "delta_median": 3.5,
-            },
-        )
-    )
-    return pd.DataFrame(rows)
+    for variant_index, variant in enumerate(ABLATION_VARIANTS):
+        for metric_index, metric in enumerate(
+            (
+                "display_error.translation_error_mm_median",
+                "display_error.translation_error_mm_p95",
+                "static.position_hp_rms_mm",
+                "transition.visible_response_time_ms",
+            )
+        ):
+            rows.append(
+                {
+                    "scenario_id": f"scenario-{variant_index}",
+                    "variant_label": variant,
+                    "metric": metric,
+                    "paired_n": 5,
+                    "delta_mean": float(variant_index + metric_index) * 0.5,
+                    "delta_median": float(variant_index + metric_index) * 0.5,
+                }
+            )
+    return pd.DataFrame.from_records(rows)
 
 
 class Exp2FiguresTest(unittest.TestCase):
-    """验证五个 PDF 及全部类别图的冻结顺序与颜色。"""
+    """验证五个 PDF 固定文件名与有效内容。"""
 
-    def test_write_exp2_figures_uses_fixed_variant_order_and_palette(self) -> None:
-        calls: list[tuple[str, str]] = []
-        original_bar = Axes.bar
-
-        def record_bar(axes: Axes, *args: object, **kwargs: object) -> object:
-            """记录类别图例和颜色，同时执行真实绘制。"""
-
-            calls.append((str(kwargs.get("label", "")), str(kwargs.get("color", ""))))
-            return original_bar(axes, *args, **kwargs)
-
+    def test_write_exp2_figures_emits_all_pdfs(self) -> None:
         risk = pd.DataFrame(
-            {"coverage": [0.5, 1.0], "selective_risk_mm": [10.0, 20.0]}
+            {
+                "coverage": [0.2, 0.5, 0.8, 1.0],
+                "selective_risk_mm": [8.0, 10.0, 15.0, 20.0],
+            }
         )
-        with tempfile.TemporaryDirectory() as temp, patch.object(Axes, "bar", record_bar):
+        with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
             write_exp2_figures(_summary(), risk, output)
             for filename in _OUTPUT_FIGURES:
@@ -87,20 +73,17 @@ class Exp2FiguresTest(unittest.TestCase):
                 self.assertTrue(path.is_file(), filename)
                 self.assertEqual(path.read_bytes()[:5], b"%PDF-")
                 self.assertGreater(path.stat().st_size, 1000)
-            self.assertEqual(list(output.glob("*.png")), [])
 
-        palette = ("#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2")
-        colors = dict(zip(REQUIRED_VARIANTS, palette, strict=True))
-        expected_variants = (
-            *REQUIRED_VARIANTS,
-            REQUIRED_VARIANTS[0],
-            REQUIRED_VARIANTS[1],
-            REQUIRED_VARIANTS[0],
-            REQUIRED_VARIANTS[3],
-            REQUIRED_VARIANTS[0],
-            REQUIRED_VARIANTS[4],
-        )
-        self.assertEqual(calls, [(variant, colors[variant]) for variant in expected_variants])
+    def test_write_exp2_figures_tolerates_empty_summary(self) -> None:
+        """summary 缺失时仍应写出占位图，不抛异常。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            write_exp2_figures(pd.DataFrame(), pd.DataFrame(), output)
+            for filename in _OUTPUT_FIGURES:
+                path = output / filename
+                self.assertTrue(path.is_file(), filename)
+                self.assertEqual(path.read_bytes()[:5], b"%PDF-")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, select_comp
 from ..batch import BatchQcReport, run_batch_qc
 
 from .contract import DEFAULT_MIN_REFERENCE_COVERAGE, EXPERIMENT_ID, OUTPUT_TABLES, SCENARIOS
+from .excel import write_exp1_excel
 from .figures import write_exp1_figures
 from .latex import write_exp1_latex
 from .metrics import build_condition_summary, compute_exp1_tables, concat_exp1_tables
@@ -40,6 +41,9 @@ class Exp1Result:
 
     figure_files: tuple[Path, ...] = ()
     """生成的 PDF 图文件。"""
+
+    excel_file: Path | None = None
+    """生成的多 sheet 分析 Excel。"""
 
 
 def run_exp1_system_characterization(
@@ -115,7 +119,14 @@ def run_exp1_system_characterization(
         [session.unity_render for session in accepted_sessions],
         ignore_index=True,
     )
-    figure_files = tuple(write_exp1_figures(render, tables, output))
+    events = pd.concat(
+        [session.events for session in accepted_sessions],
+        ignore_index=True,
+    )
+    # 时间线图需要事件角色做相位/遮挡标注；events 只经绘图层消费，不进入 CSV 契约。
+    figure_tables = {**tables, "events": events}
+    figure_files = tuple(write_exp1_figures(render, figure_tables, output))
+    excel_file = write_exp1_excel(render, tables, output)
     latex_files = tuple(
         write_exp1_latex(tables, output, session_count=len(accepted_sessions))
     )
@@ -126,6 +137,7 @@ def run_exp1_system_characterization(
         trial_qc=trial_qc,
         latex_files=latex_files,
         figure_files=figure_files,
+        excel_file=excel_file,
     )
 
 

@@ -1,0 +1,3 @@
+component,diagnostic_metric,full_value,ablated_value,benefit_pct,secondary_benefit_metric,secondary_full_value,secondary_ablated_value,cost_metric,full_cost_value,ablated_cost_value,cost_delta,additional_effective_lag_ms
+Temporal synthesis,Translation jump P99 (mm),8.984964915073755,40.98533509204898,78.07761021132457,Lag-compensated residual (mm),4.5317174207128055,8.784177697043644,Raw translation median (mm),84.91318320015694,65.89512687902157,19.01805632113536,65.0
+Capture-time alignment,Translation median (mm),84.91318320015694,97.22686689974168,12.664898183217566,Cross-track median (mm),6.9211493125579455,11.084031187842179,Effective lag (ms),320.0,385.0,-65.0,

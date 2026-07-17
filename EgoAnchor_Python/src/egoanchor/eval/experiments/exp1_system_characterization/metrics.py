@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any, cast
 
@@ -195,6 +196,258 @@ def concat_exp1_tables(
     }
 
 
+# ---------------------------------------------------------------------------
+# 论文展示层的形状化：把已通过 QC 的按场景指标整理为图表和 LaTeX 直接消费的
+# 宽表。核心原则是绝不跨场景混池——旧实现把五个场景的中位误差再取一次中位，
+# 使连续运动的滤波滞后淹没了静止/遮挡场景的稳定性收益。
+# ---------------------------------------------------------------------------
+
+SCENARIO_ORDER = (
+    "static_head_motion",
+    "start_stop_6dof",
+    "continuous_translation",
+    "continuous_rotation",
+    "occlusion_recovery",
+)
+"""展示层的固定场景顺序，静止/遮挡等 EgoAnchor 优势场景优先靠前。"""
+
+HEADLINE_COLUMNS = [
+    "scenario_id",
+    "variant_label",
+    "translation_median_mm",
+    "translation_p95_mm",
+    "translation_p99_mm",
+    "rotation_median_deg",
+    "rotation_p95_deg",
+    "position_hp_rms_mm",
+    "display_jump_p95_mm",
+    "display_coverage",
+    "trial_count",
+]
+"""每个 scenario×variant 一行的展示层核心指标，供网格图与场景表复用。"""
+
+
+def build_scenario_headline(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """把按场景的中性指标整理成每个 scenario×variant 一行的展示宽表。
+
+    误差分位来自 ``exp1_condition_summary``（trial 级汇总的中位）；静止抖动来自
+    ``exp1_static_quality``；遮挡逐更新跳变来自 ``exp1_occlusion_recovery``。所有
+    数值都保持在各自场景内，不跨场景聚合。
+    """
+
+    condition = tables.get("exp1_condition_summary", pd.DataFrame())
+    static_quality = tables.get("exp1_static_quality", pd.DataFrame())
+    occlusion = tables.get("exp1_occlusion_recovery", pd.DataFrame())
+
+    rows: list[dict[str, Any]] = []
+    for scenario in SCENARIO_ORDER:
+        for variant in VARIANTS:
+            rows.append(
+                {
+                    "scenario_id": scenario,
+                    "variant_label": variant,
+                    "translation_median_mm": _condition_stat(
+                        condition, scenario, variant, "translation_error_mm_median"
+                    ),
+                    "translation_p95_mm": _condition_stat(
+                        condition, scenario, variant, "translation_error_mm_p95"
+                    ),
+                    "translation_p99_mm": _condition_stat(
+                        condition, scenario, variant, "translation_error_mm_median", statistic="p95"
+                    ),
+                    "rotation_median_deg": _condition_stat(
+                        condition, scenario, variant, "rotation_error_deg_median"
+                    ),
+                    "rotation_p95_deg": _condition_stat(
+                        condition, scenario, variant, "rotation_error_deg_p95"
+                    ),
+                    "position_hp_rms_mm": _scenario_metric_mean(
+                        static_quality, scenario, variant, "position_hp_rms_mm"
+                    ),
+                    "display_jump_p95_mm": _scenario_metric_mean(
+                        occlusion, scenario, variant, "display_jump_p95_mm"
+                    ),
+                    "display_coverage": _condition_stat(
+                        condition, scenario, variant, "display_coverage"
+                    ),
+                    "trial_count": _condition_trial_count(condition, scenario, variant),
+                }
+            )
+    return pd.DataFrame.from_records(rows, columns=HEADLINE_COLUMNS)
+
+
+def _condition_stat(
+    condition: pd.DataFrame,
+    scenario: str,
+    variant: str,
+    metric_name: str,
+    *,
+    statistic: str = "median",
+) -> float:
+    """从 ``exp1_condition_summary`` 读取一个场景/配置/指标的 trial 级统计。"""
+
+    required = {"scenario_id", "variant_label", "metric_name", statistic}
+    if condition.empty or not required.issubset(condition.columns):
+        return np.nan
+    selected = pd.to_numeric(
+        condition.loc[
+            condition["scenario_id"].astype(str).eq(scenario)
+            & condition["variant_label"].astype(str).eq(variant)
+            & condition["metric_name"].astype(str).eq(metric_name),
+            statistic,
+        ],
+        errors="coerce",
+    ).dropna()
+    return float(selected.median()) if not selected.empty else np.nan
+
+
+def _condition_trial_count(condition: pd.DataFrame, scenario: str, variant: str) -> float:
+    """返回一个场景/配置进入误差分位的有限 trial 数。"""
+
+    required = {"scenario_id", "variant_label", "metric_name", "trial_count"}
+    if condition.empty or not required.issubset(condition.columns):
+        return 0
+    selected = pd.to_numeric(
+        condition.loc[
+            condition["scenario_id"].astype(str).eq(scenario)
+            & condition["variant_label"].astype(str).eq(variant)
+            & condition["metric_name"].astype(str).eq("translation_error_mm_median"),
+            "trial_count",
+        ],
+        errors="coerce",
+    ).dropna()
+    return int(selected.sum()) if not selected.empty else 0
+
+
+def _scenario_metric_mean(
+    table: pd.DataFrame,
+    scenario: str,
+    variant: str,
+    metric: str,
+) -> float:
+    """从场景专属指标表（静止/遮挡）读取 event 级指标的场景内均值。"""
+
+    required = {"scenario_id", "variant_label", metric}
+    if table.empty or not required.issubset(table.columns):
+        return np.nan
+    selected = pd.to_numeric(
+        table.loc[
+            table["scenario_id"].astype(str).eq(scenario)
+            & table["variant_label"].astype(str).eq(variant),
+            metric,
+        ],
+        errors="coerce",
+    ).dropna()
+    return float(selected.mean()) if not selected.empty else np.nan
+
+
+def extract_timeline_series(
+    render: pd.DataFrame,
+    scenario: str,
+) -> dict[str, Any]:
+    """提取一个场景代表 trial 的逐帧显示误差时间线，供 timeline 图使用。
+
+    返回按 ``render_mono_ms`` 归零到 trial 起点的相对时间轴（秒）和每个配置的
+    平移误差序列（毫米）。逐帧轨迹仅用于展示系统行为，不作为统计样本。
+    """
+
+    from egoanchor.eval.metrics import pose_error  # 延迟导入避免绘图层强依赖。
+
+    empty = {"time_s": {}, "translation_mm": {}, "trial_id": "", "t0_ms": np.nan}
+    if render.empty or "scenario_id" not in render.columns:
+        return empty
+    scenario_rows = render.loc[render["scenario_id"].astype(str).eq(scenario)].copy()
+    if scenario_rows.empty:
+        return empty
+
+    # 选取样本最多的 trial 作为代表，保证时间线连续、信息量最大。
+    trial_id = (
+        scenario_rows["trial_id"].astype(str).value_counts().idxmax()
+    )
+    trial_rows = scenario_rows.loc[scenario_rows["trial_id"].astype(str).eq(trial_id)]
+    times = pd.to_numeric(trial_rows["render_mono_ms"], errors="coerce")
+    t0 = float(times.min())
+
+    time_s: dict[str, np.ndarray] = {}
+    translation_mm: dict[str, np.ndarray] = {}
+    for variant in VARIANTS:
+        variant_rows = trial_rows.loc[
+            trial_rows["variant_label"].astype(str).eq(variant)
+        ].sort_values("render_mono_ms", kind="stable")
+        series_t: list[float] = []
+        series_e: list[float] = []
+        for _, row in variant_rows.iterrows():
+            if not bool(row.get("reference_pose_valid")) or not bool(row.get("has_display_pose")):
+                continue
+            reference_pos = row.get("reference_pos")
+            reference_rot = row.get("reference_rot")
+            display_pos = row.get("display_pos")
+            display_rot = row.get("display_rot")
+            if reference_pos is None or display_pos is None:
+                continue
+            translation_m, _ = pose_error(reference_pos, reference_rot, display_pos, display_rot)
+            series_t.append((float(row["render_mono_ms"]) - t0) / 1000.0)
+            series_e.append(translation_m * 1000.0)
+        time_s[variant] = np.asarray(series_t, dtype=float)
+        translation_mm[variant] = np.asarray(series_e, dtype=float)
+    return {
+        "time_s": time_s,
+        "translation_mm": translation_mm,
+        "trial_id": str(trial_id),
+        "t0_ms": t0,
+    }
+
+
+def extract_event_times(
+    events: pd.DataFrame,
+    scenario: str,
+    trial_id: str,
+    t0_ms: float,
+    *,
+    roles: Sequence[str] | None = None,
+) -> dict[str, list[float]]:
+    """按事件角色返回相对 trial 起点（秒）的标注时刻，供时间线阴影/竖线使用。"""
+
+    result: dict[str, list[float]] = {}
+    required = {"scenario_id", "trial_id", "event_type", "mono_ms", "payload"}
+    if events.empty or not required.issubset(events.columns) or not np.isfinite(t0_ms):
+        return result
+    marker = events.loc[
+        events["event_type"].astype(str).eq("event_marker")
+        & events["scenario_id"].astype(str).eq(scenario)
+        & events["trial_id"].astype(str).eq(trial_id)
+    ]
+    for _, row in marker.iterrows():
+        payload = row.get("payload")
+        role = str(payload.get("event_role", "")) if isinstance(payload, dict) else ""
+        if roles is not None and role not in roles:
+            continue
+        mono = pd.to_numeric(pd.Series([row.get("mono_ms")]), errors="coerce").iloc[0]
+        if np.isfinite(mono):
+            result.setdefault(role or "marker", []).append((float(mono) - t0_ms) / 1000.0)
+    return result
+
+
+def occlusion_intervals(events: pd.DataFrame, trial_id: str, t0_ms: float) -> list[tuple[float, float]]:
+    """把 occlusion_started→target_visible 成对事件转换为相对秒的遮挡区间。"""
+
+    annotations = extract_event_times(
+        events,
+        "occlusion_recovery",
+        trial_id,
+        t0_ms,
+        roles=("occlusion_started", "target_visible"),
+    )
+    starts = sorted(annotations.get("occlusion_started", []))
+    visibles = sorted(annotations.get("target_visible", []))
+    intervals: list[tuple[float, float]] = []
+    for start in starts:
+        end_candidates = [value for value in visibles if value > start]
+        if end_candidates:
+            intervals.append((start, min(end_candidates)))
+    return intervals
+
+
 def _coverage_metrics(render: pd.DataFrame) -> pd.DataFrame:
     """按完整上下文统计 reference、display 和 runtime output 覆盖率。"""
 
@@ -325,11 +578,17 @@ def _quantile(values: pd.Series, quantile: float) -> float:
 
 
 __all__ = [
+    "HEADLINE_COLUMNS",
     "PAIR_COLUMNS",
+    "SCENARIO_ORDER",
     "TRIAL_VALUE_COLUMNS",
     "build_condition_summary",
     "build_paired_trial_metrics",
+    "build_scenario_headline",
     "build_trial_metrics",
     "compute_exp1_tables",
     "concat_exp1_tables",
+    "extract_event_times",
+    "extract_timeline_series",
+    "occlusion_intervals",
 ]

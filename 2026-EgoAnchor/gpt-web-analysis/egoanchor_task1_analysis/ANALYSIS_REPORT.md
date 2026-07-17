@@ -1,0 +1,8 @@
+##Task 1: static target under head motion
+The 89.3-s sequence contained a low-motion baseline followed by four marker-defined head-motion phases: two rotation-dominant and two translation-dominant phases. We treated each active phase as one paired analysis unit. Across the four phases, EgoAnchor reduced the median phase-level translation P95 from 8.27 mm for One-Euro Anchor to 3.68 mm, with the same direction in all four phases. Rotation P95 decreased from 3.70 degrees to 2.86 degrees, also improving in all four phases. The median 1-s high-pass translation RMS was 0.039 mm for EgoAnchor versus 1.01 mm for One-Euro Anchor.
+
+##Capture-time alignment
+Capture-Hold reduced active-phase translation P95 from 22.24 mm for Arrival-Hold to 8.57 mm. Within the complete system, removing capture-time alignment increased the median translation P95 in the two rotation-dominant phases from 4.63 to 22.30 mm. The complete system retained StaticLock for 97.6% of active-phase frames with one 1.85-s unlock episode, whereas the ablation retained it for 90.2% with four episodes totaling 7.31 s. The capture-alignment benefit was strongest under head rotation and approximately neutral in the final translation phase.
+
+##StaticLock attribution
+Disabling StaticLock increased the median active-phase high-pass translation RMS from 0.039 to 2.04 mm (98% reduction for the complete system), increased translation jump P99 from 0.15 to 3.05 mm, and increased translation P95 from 3.68 to 8.63 mm. Removing VCD produced no meaningful change because all 864 valid pose candidates were accepted, and removing temporal synthesis was also an expected negative control once StaticLock dominated the static-target output.

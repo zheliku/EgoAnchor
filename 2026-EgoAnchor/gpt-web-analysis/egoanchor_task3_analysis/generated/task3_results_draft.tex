@@ -1,0 +1,15 @@
+\paragraph{Task 3: continuous translation.}
+The sequence contained 17 marker-to-marker translation traversals over 66.5 s.
+We treated each traversal as one paired analysis unit and evaluated frames with platform-reference speed at least 0.10 m/s.
+EgoAnchor reduced the per-traversal median translation error from 98.8 to 84.9 mm relative to One-Euro Anchor, and reduced the median traversal P95 from 139.5 to 111.5 mm.
+The paired P95 reduction was 27.8 mm (bootstrap 95\% interval 23.1--29.9 mm), with the same direction in all 17 traversals.
+
+\paragraph{Separating lag from spatial fidelity.}
+A trajectory-shift analysis estimated median effective lags of 180, 255, 380, and 320 ms for Arrival-Hold, Capture-Hold, One-Euro Anchor, and EgoAnchor.
+After compensating for the fitted lag, EgoAnchor had the lowest residual (4.5 mm), improving over One-Euro Anchor by 3.7 mm in 16 of 17 traversals.
+Arrival-Hold's smaller raw error is therefore interpreted as an implicit temporal warp caused by incorrect arrival-time world semantics, rather than superior spatial consistency.
+
+\paragraph{Design attribution.}
+Temporal synthesis reduced the median traversal P99 translation jump from 41.0 to 9.0 mm (78\%), but added 65 ms effective lag and increased raw median error by 19.0 mm.
+Capture-time alignment reduced median translation error by 13\% and cross-track error from 11.1 to 6.9 mm.
+VCD and StaticLock produced negligible differences in this continuously visible, continuously moving task, serving as expected negative controls.
