@@ -140,6 +140,7 @@ schema-v2 task directory
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`；QC 或分析契约失败时返回退出码 2，禁止生成后续正式产物。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
+- Task 2 已冻结 `egoanchor.eval.contracts` 的 workbook、CSV、指标和版本目录；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`，契约目录必须可序列化且 TeX 后缀不得含阿拉伯数字。
 - 每个 task 输出一个完整 XLSX，必须包含目录内所有文件的信息、来源行、hash、数据字典和 QC，不得截断或静默丢弃嵌套字段。
 - 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
 

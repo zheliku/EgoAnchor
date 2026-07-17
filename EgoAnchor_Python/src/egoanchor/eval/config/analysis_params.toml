@@ -1,0 +1,26 @@
+# EgoAnchor 离线分析冻结参数；修改任何参数都必须递增 analysis_params 契约版本。
+
+[contract]
+version = 1 # 分析参数契约版本。
+unit_system = "metric" # 所有距离使用米或毫米，角度使用度，时间使用毫秒。
+statistics_unit = "event_segment" # 统计单位固定为 event/segment，不是 frame。
+
+[metrics]
+p95_quantile = 0.95 # event/segment 内部使用的 P95 分位点。
+p99_quantile = 0.99 # jump 尾部诊断使用的 P99 分位点。
+hp_rms_cutoff_hz = 1.0 # 位置 HP-RMS 的低通分界频率，单位 Hz。
+minimum_event_samples = 2 # 计算 event 指标所需的最少有效样本数。
+
+[thresholds]
+pose_quaternion_norm_tolerance = 0.000001 # 四元数归一化允许的数值误差。
+vcd_score_minimum = 0.0 # VCD 合法分数下界。
+vcd_score_maximum = 1.0 # VCD 合法分数上界。
+recovery_position_tolerance_mm = 20.0 # 持久恢复判定的位置误差阈值，单位毫米。
+recovery_duration_ms = 250.0 # 持久恢复窗口长度，单位毫秒。
+settling_position_tolerance_mm = 20.0 # 沉降判定的位置误差阈值，单位毫米。
+settling_duration_ms = 250.0 # 沉降判定需要持续满足的时间，单位毫秒。
+
+[vcd]
+coverage_group_tie = "include_all" # 并列 VCD 分数按同一阈值整组纳入。
+risk_unit = "mm" # VCD risk 使用同帧平台参考的平移误差，单位毫米。
+alignment_source = "capture_time_aligned_raw" # 风险只使用采集时刻对齐的 raw pose。
