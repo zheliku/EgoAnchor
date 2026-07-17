@@ -93,10 +93,50 @@ def join_render_reference(session: EvalSessionV2) -> pd.DataFrame:
     except pd.errors.MergeError as exc:
         raise SchemaV2Error(f"render/reference join cardinality violation: {exc}") from exc
     missing_mask = (joined["source_frame_id"] >= 0) & (joined["_merge"] != "both")
+    warmup_mask = _pre_reference_warmup_mask(joined, reference)
+    missing_mask &= ~warmup_mask
     missing = joined.loc[missing_mask, "source_frame_id"].unique().tolist()
     if missing:
         raise SchemaV2Error(f"unity_render references unknown source_frame_id values: {sorted(missing)}")
     return joined.drop(columns="_merge")
+
+
+def _pre_reference_warmup_mask(
+    render: pd.DataFrame,
+    reference: pd.DataFrame,
+) -> pd.Series:
+    """识别首个参考帧前的连续启动行；仅接受 render 内嵌的有效参考快照。
+
+    采集开始时 runtime 可能已经产生少量显示行，而参考写入回调尚未收到
+    第一帧。此窗口不能伪造右表参考，因此只在 render 自带有效参考、采集
+    单调时间早于首个参考采样且 ``source_frame_id`` 小于首个已记录参考帧
+    时允许保留；任意中间缺帧或首帧之后的未知 key 仍然由调用方拒绝。
+    """
+
+    if "source_frame_id" not in render or "frame_id" not in reference:
+        return pd.Series(False, index=render.index)
+    reference_ids = pd.to_numeric(reference["frame_id"], errors="coerce").dropna()
+    if reference_ids.empty:
+        return pd.Series(False, index=render.index)
+    first_reference = int(reference_ids.min())
+    reference_times = pd.to_numeric(
+        reference.get("reference_sample_mono_ms", pd.Series(dtype=float)), errors="coerce"
+    ).dropna()
+    if reference_times.empty:
+        return pd.Series(False, index=render.index)
+    first_reference_time = float(reference_times.min())
+    source_ids = pd.to_numeric(render["source_frame_id"], errors="coerce")
+    valid_snapshot = render.get("reference_pose_valid", pd.Series(False, index=render.index))
+    capture_times = pd.to_numeric(
+        render.get("source_capture_mono_ms", pd.Series(index=render.index, dtype=float)),
+        errors="coerce",
+    )
+    return (
+        source_ids.ge(0)
+        & source_ids.lt(first_reference)
+        & capture_times.lt(first_reference_time)
+        & valid_snapshot.fillna(False).astype(bool)
+    )
 
 
 def select_trials(session: EvalSessionV2, experiment_id: str) -> EvalSessionV2:

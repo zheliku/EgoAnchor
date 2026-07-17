@@ -57,6 +57,46 @@ class MetricsPipelineTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "capture provenance"):
             compute_latency(render, reference, candidates, admission)
 
+    def test_latency_drops_pre_reference_warmup_candidate(self) -> None:
+        """首条参考采样前的 candidate 无右表时延基准，应从候选明细排除。"""
+
+        render, reference, candidates, admission = _latency_tables()
+        candidates = pd.concat(
+            [
+                candidates,
+                candidates.iloc[[0]].assign(candidate_id="s01:0:1", frame_id=0),
+            ],
+            ignore_index=True,
+        )
+        admission = pd.concat(
+            [
+                admission,
+                admission.iloc[[0]].assign(candidate_id="s01:0:1", frame_id=0, source_capture_mono_ms=50.0),
+            ],
+            ignore_index=True,
+        )
+
+        result = compute_latency(render, reference, candidates, admission)
+
+        self.assertEqual(len(result.candidate_detail), 2)
+        self.assertNotIn("s01:0:1", set(result.candidate_detail["candidate_id"]))
+
+    def test_latency_rejects_unknown_frame_after_reference_start(self) -> None:
+        """参考开始后出现的未知 frame-id 仍必须硬失败。"""
+
+        render, reference, candidates, admission = _latency_tables()
+        candidates = pd.concat(
+            [candidates, candidates.iloc[[0]].assign(candidate_id="s01:0:1", frame_id=0)],
+            ignore_index=True,
+        )
+        admission = pd.concat(
+            [admission, admission.iloc[[0]].assign(candidate_id="s01:0:1", frame_id=0, source_capture_mono_ms=150.0)],
+            ignore_index=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "python_candidates -> unity_reference"):
+            compute_latency(render, reference, candidates, admission)
+
     def test_transition_routes_experiment_two_role_and_uses_final_stop(self) -> None:
         """实验二场景依角色路由；中途暂停不得被误判为最终停止。"""
 

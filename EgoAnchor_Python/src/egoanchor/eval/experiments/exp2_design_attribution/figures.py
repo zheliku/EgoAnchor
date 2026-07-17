@@ -103,8 +103,6 @@ def _draw_delta(
     axes.set_title(title)
     axes.axhline(0.0, color="#333333", linewidth=0.8)
     axes.grid(axis="y", alpha=0.25, linewidth=0.6)
-    if metric is not None:
-        axes.text(0.01, 0.98, metric, transform=axes.transAxes, va="top", fontsize=7)
     if not np.isfinite(values[1:]).any():
         axes.text(
             0.5,
@@ -211,7 +209,7 @@ def write_exp2_figures(
         REQUIRED_VARIANTS,
         preferred_metric=_DISPLAY_METRIC,
         metric_prefix="display_error.",
-        title="Component attribution",
+        title="Display translation attribution",
         ylabel="Ablation - full (mm)",
     )
     _write_delta_figure(

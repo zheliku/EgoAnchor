@@ -14,13 +14,13 @@ from .contract import VARIANTS
 
 _NUMBER_METRICS = (
     ("TranslationMedianMm", "translation_error_mm_median", "median", 1.0),
-    ("TranslationP95Mm", "translation_error_mm_p95", "median", 1.0),
+    ("TranslationPNinetyFiveMm", "translation_error_mm_p95", "median", 1.0),
     ("RotationMedianDeg", "rotation_error_deg_median", "median", 1.0),
-    ("RotationP95Deg", "rotation_error_deg_p95", "median", 1.0),
+    ("RotationPNinetyFiveDeg", "rotation_error_deg_p95", "median", 1.0),
     ("DisplayCoveragePct", "display_coverage", "median", 100.0),
     ("OutputCoveragePct", "output_coverage", "median", 100.0),
-    ("ObservationAgeP50Ms", "observation_age_p50_ms", "median", 1.0),
-    ("ObservationAgeP95Ms", "observation_age_p95_ms", "median", 1.0),
+    ("ObservationAgePFiftyMs", "observation_age_p50_ms", "median", 1.0),
+    ("ObservationAgePNinetyFiveMs", "observation_age_p95_ms", "median", 1.0),
 )
 
 
@@ -80,10 +80,16 @@ def _trial_count(summary: pd.DataFrame, variant: str) -> str:
     return str(int(selected.sum())) if not selected.empty else "--"
 
 
-def _write_numbers(summary: pd.DataFrame, path: Path) -> None:
+def _write_numbers(summary: pd.DataFrame, path: Path, session_count: int | None) -> None:
     """为四个冻结系统写出相同的宏集合。"""
 
     lines = ["% Auto-generated experiment-one numbers. Do not edit manually."]
+    if session_count is not None and session_count < 1:
+        raise ValueError("实验一 LaTeX 发布的 session_count 必须为正整数。")
+    lines.append(
+        f"\\providecommand{{\\EAExpOneSessionCount}}"
+        f"{{{session_count if session_count is not None else '--'}}}"
+    )
     for variant in VARIANTS:
         prefix = f"EAExpOne{_macro_part(variant)}"
         lines.append(f"\\providecommand{{\\{prefix}NTrials}}{{{_trial_count(summary, variant)}}}")
@@ -119,6 +125,8 @@ def _write_table(summary: pd.DataFrame, path: Path) -> None:
 def write_exp1_latex(
     tables: Mapping[str, pd.DataFrame],
     output_dir: str | Path,
+    *,
+    session_count: int | None = None,
 ) -> list[Path]:
     """生成固定文件名、固定系统顺序的实验一 LaTeX 片段。"""
 
@@ -128,7 +136,7 @@ def write_exp1_latex(
 
     numbers_path = output / "exp1_numbers.tex"
     tables_path = output / "exp1_tables.tex"
-    _write_numbers(summary, numbers_path)
+    _write_numbers(summary, numbers_path, session_count)
     _write_table(summary, tables_path)
     return [numbers_path, tables_path]
 

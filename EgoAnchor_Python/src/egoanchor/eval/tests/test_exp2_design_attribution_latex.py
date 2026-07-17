@@ -25,10 +25,16 @@ class Exp2LatexTest(unittest.TestCase):
             REQUIRED_VARIANTS[3]: ("transition.visible_response_time_ms", 12.0),
             REQUIRED_VARIANTS[4]: ("static.position_hp_rms_mm", 3.5),
         }
+        scenarios = {
+            REQUIRED_VARIANTS[1]: "static_head_motion",
+            REQUIRED_VARIANTS[2]: "occlusion_recovery",
+            REQUIRED_VARIANTS[3]: "start_stop_6dof",
+            REQUIRED_VARIANTS[4]: "static_head_motion",
+        }
         summary = pd.DataFrame(
             [
                 {
-                    "scenario_id": f"scenario_{index}",
+                    "scenario_id": scenarios[variant],
                     "variant_label": variant,
                     "metric": metric,
                     "paired_n": 5,
@@ -77,7 +83,10 @@ class Exp2LatexTest(unittest.TestCase):
         self.assertNotIn("RQ", numbers + table)
         positions = [table.index(variant) for variant in REQUIRED_VARIANTS[1:]]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn(r"display\_error.translation\_error\_mm\_median", table)
+        self.assertIn("Static target + head motion", table)
+        self.assertIn("Display translation median (mm)", table)
+        self.assertIn("Visible response time (ms)", table)
+        self.assertNotIn(r"display\_error.translation\_error\_mm\_median", table)
         self.assertNotIn(r"candidate\_count", table)
         self.assertIn(r"\begin{tabular}{lllrr}", table)
         self.assertIn(r"\bottomrule", table)

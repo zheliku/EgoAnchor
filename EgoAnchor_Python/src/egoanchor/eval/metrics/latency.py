@@ -214,7 +214,14 @@ def _build_candidate_detail(
         validate="many_to_one",
         indicator="_reference_join",
     )
-    _require_complete_join(merged, "_reference_join", "python_candidates -> unity_reference")
+    missing_reference = merged["_reference_join"].ne("both")
+    warmup_mask = _pre_reference_warmup_candidate_mask(merged, reference)
+    invalid_missing = missing_reference & ~warmup_mask
+    if invalid_missing.any():
+        _require_complete_join(merged.loc[invalid_missing], "_reference_join", "python_candidates -> unity_reference")
+    # 启动时参考 writer 尚未产生首条右表行；这些 candidate 仍可计算到达/处理时延，
+    # 但没有可引用的 reference_capture_mono_ms，因此从需要完整参考的候选明细中排除。
+    merged = merged.loc[~warmup_mask].copy()
     merged = merged.drop(columns="_reference_join")
     if merged.empty:
         return pd.DataFrame(columns=CANDIDATE_DETAIL_COLUMNS)
@@ -247,6 +254,23 @@ def _build_candidate_detail(
         )
         records.append(record)
     return pd.DataFrame.from_records(records, columns=CANDIDATE_DETAIL_COLUMNS)
+
+
+def _pre_reference_warmup_candidate_mask(
+    merged: pd.DataFrame,
+    reference: pd.DataFrame,
+) -> pd.Series:
+    """识别 candidate/admission 连接中的参考启动窗口。"""
+
+    if reference.empty:
+        return pd.Series(False, index=merged.index)
+    reference_ids = pd.to_numeric(reference["frame_id"], errors="coerce").dropna()
+    reference_times = pd.to_numeric(reference["capture_mono_ms"], errors="coerce").dropna()
+    if reference_ids.empty or reference_times.empty:
+        return pd.Series(False, index=merged.index)
+    source_ids = pd.to_numeric(merged["frame_id"], errors="coerce")
+    source_times = pd.to_numeric(merged["source_capture_mono_ms"], errors="coerce")
+    return source_ids.ge(0) & source_ids.lt(float(reference_ids.min())) & source_times.lt(float(reference_times.min()))
 
 
 def _build_render_detail(render: pd.DataFrame) -> pd.DataFrame:

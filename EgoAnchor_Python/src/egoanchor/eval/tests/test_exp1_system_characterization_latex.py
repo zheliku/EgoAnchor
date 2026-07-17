@@ -47,6 +47,7 @@ class Exp1LatexTest(unittest.TestCase):
             paths = write_exp1_latex(
                 {"exp1_condition_summary": summary},
                 root / "out",
+                session_count=3,
             )
 
             self.assertEqual(
@@ -64,7 +65,11 @@ class Exp1LatexTest(unittest.TestCase):
         )
         for prefix in expected_prefixes:
             self.assertIn(f"\\providecommand{{\\{prefix}TranslationMedianMm}}{{10}}", numbers)
+            self.assertIn(f"\\providecommand{{\\{prefix}TranslationPNinetyFiveMm}}{{20}}", numbers)
+            self.assertIn(f"\\providecommand{{\\{prefix}ObservationAgePFiftyMs}}{{20}}", numbers)
             self.assertIn(f"\\providecommand{{\\{prefix}DisplayCoveragePct}}{{100}}", numbers)
+        self.assertIn(r"\providecommand{\EAExpOneSessionCount}{3}", numbers)
+        self.assertNotRegex(numbers, r"\\providecommand\{\\[^}]*[0-9][^}]*\}")
         self.assertNotIn("RQ", numbers + table)
         self.assertEqual(
             [table.index(variant) for variant in VARIANTS],

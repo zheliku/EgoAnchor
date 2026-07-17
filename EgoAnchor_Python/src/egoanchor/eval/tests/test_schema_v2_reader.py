@@ -280,6 +280,34 @@ class SchemaV2ReaderTest(unittest.TestCase):
             self.assertEqual(len(joined), 4)
             self.assertTrue(math.isnan(float(joined.loc[0, "frame_id"])))
 
+    def test_render_join_allows_pre_reference_warmup_snapshot(self) -> None:
+        """首条参考写入前的有效内嵌快照可保留，但不伪造右表参考。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.unity_render.loc[0, "source_frame_id"] = 0
+            session.unity_render.loc[0, "source_capture_mono_ms"] = 900.0
+            session.unity_render.loc[0, "reference_pose_valid"] = True
+            session.unity_reference["reference_sample_mono_ms"] = [901.0, 902.0]
+
+            joined = join_render_reference(session)
+
+            self.assertEqual(len(joined), 4)
+            self.assertTrue(math.isnan(float(joined.loc[0, "frame_id"])))
+
+    def test_render_join_rejects_old_frame_id_after_reference_start(self) -> None:
+        """首条参考之后出现的旧 frame-id 即使带快照也不得被当作启动行。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_minimal_session(Path(tmp)))
+            session.unity_render.loc[0, "source_frame_id"] = 0
+            session.unity_render.loc[0, "source_capture_mono_ms"] = 999.0
+            session.unity_render.loc[0, "reference_pose_valid"] = True
+            session.unity_reference["reference_sample_mono_ms"] = [901.0, 902.0]
+
+            with self.assertRaisesRegex(SchemaV2Error, "unknown source_frame_id"):
+                join_render_reference(session)
+
     def test_reader_rejects_null_candidate_id(self) -> None:
         """null candidate_id 不得利用 pandas 的 null 匹配语义形成伪连接。"""
 

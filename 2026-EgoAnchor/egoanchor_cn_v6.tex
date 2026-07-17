@@ -23,7 +23,7 @@
 \usepackage{tabularx}
 \usepackage{xcolor}
 
-% Run 1 尚无正式结果；分析产物发布后才加载数字宏。
+% 自动发布的实验宏；缺失时不写入占位数字。
 \IfFileExists{generated/exp1_numbers.tex}{\input{generated/exp1_numbers.tex}}{}
 \IfFileExists{generated/exp2_numbers.tex}{\input{generated/exp2_numbers.tex}}{}
 
@@ -37,13 +37,13 @@
 
 \teaser{
   \centering
-  \fbox{\rule{0pt}{2.0in}\rule{0.95\linewidth}{0pt}}
-  \caption{EgoAnchor 系统概览。}
+  \includegraphics[width=0.95\linewidth]{figs/pipeline.pdf}
+  \caption{EgoAnchor 将异步视觉候选转换为可持续消费的世界系对象锚点：采集时刻对齐、VCD 接纳、时序合成、静止锚定与生命周期管理共同作用于逐帧显示。}
   \label{fig:teaser}
 }
 
 \abstract{%
-以真实物体为中心的混合现实应用需要一种能够随物体运动持续更新的对象级空间参考。然而，视觉后端输出的异步六自由度位姿并不等同于可被应用直接消费的对象锚点：观测对应历史图像采集时刻，候选质量随遮挡与几何条件波动，且低频、含噪的位姿流无法直接满足逐帧渲染对稳定性、连续性与生命周期管理的要求。本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。系统仅依赖头戴显示器双目图像与目标物体的可用三维模型，无需物理标记、物体侧追踪硬件或逐物体训练。EgoAnchor 采用视觉感知后端与对象锚定运行时解耦的架构，通过采集时刻世界对齐恢复异步观测的时间语义，以可视度门控的颜色--深度一致性评分过滤不适合更新锚点的候选，并通过连续时序合成、显式静止锚定与生命周期管理，将低频观测转换为世界坐标系下持续、稳定且可恢复的对象锚点。我们在 Meta Quest 3 上实现该系统。受控定量评价以具有平台参考位姿的 Quest 控制器为目标，在相同视觉候选流和时间线上比较到达时刻保持、采集时刻保持、One-Euro 锚定与完整 EgoAnchor 的系统行为，并通过消融分析采集时刻对齐、VCD 接纳、时序合成和静止锚定的作用；随后规划跨对象用户实验，用于检验系统差异在对象附着型任务中的效用。%
+以真实物体为中心的混合现实应用需要一种能够随物体运动持续更新的对象级空间参考。然而，视觉后端输出的异步六自由度位姿并不等同于可被应用直接消费的对象锚点：观测对应历史图像采集时刻，候选质量随遮挡与几何条件波动，且低频、含噪的位姿流无法直接满足逐帧渲染对稳定性、连续性与生命周期管理的要求。本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。系统仅依赖头戴显示器双目图像与目标物体的可用三维模型，无需物理标记、物体侧追踪硬件或逐物体训练。EgoAnchor 采用视觉感知后端与对象锚定运行时解耦的架构，通过采集时刻世界对齐恢复异步观测的时间语义，以可视度门控的颜色--深度一致性评分过滤不适合更新锚点的候选，并通过连续时序合成、显式静止锚定与生命周期管理，将低频观测转换为世界坐标系下持续、稳定且可恢复的对象锚点。我们在 Meta Quest 3 上实现该系统。受控定量评价以具有平台参考位姿的 Quest 控制器为目标，在相同视觉候选流和时间线上比较到达时刻保持、采集时刻保持、One-Euro 锚定与完整 EgoAnchor 的系统行为，并通过消融分析采集时刻对齐、VCD 接纳、时序合成和静止锚定的作用。\IfFileExists{generated/exp1_numbers.tex}{在 $\EAExpOneSessionCount$ 个正式 session 中，四种配置各形成 $\EAExpOneEgoAnchorNTrials$ 个配对 trial；完整 EgoAnchor 的显示和输出覆盖率均为 $\EAExpOneEgoAnchorDisplayCoveragePct\%$，平台参考下的平移与旋转中位误差分别为 $\EAExpOneEgoAnchorTranslationMedianMm$~mm 和 $\EAExpOneEgoAnchorRotationMedianDeg^\circ$。这些结果刻画同一设备与时间线下的系统行为，不构成外部物理真值或跨对象效用主张。}{}%
 }
 
 \keywords{透视混合现实, 动态对象锚定, 6DoF 位姿估计, 动态物体追踪, 6D 物体定位}
@@ -55,13 +55,13 @@
 
 透视混合现实（Passthrough Mixed Reality, PMR）正在把越来越多的虚拟内容附着到用户身边的真实物体上，例如物体说明、操作引导、状态可视化与近物交互界面。这些应用不仅需要识别物体，还需要一个能够随真实物体移动而持续存在的对象级空间参考：当用户转头、拿起、旋转、放下或短暂遮挡物体时，虚拟内容仍应保持与物体一致的六自由度（6DoF）关系。传统空间锚点适合静态环境，却不能表达物体自身的运动，因此动态真实物体锚定是以物体为中心的消费级混合现实应用的一项基础系统能力。
 
-现有方案从不同层面提供了部分支持。平台原生对象追踪通常具有良好的系统集成，但其对象范围、模型准备流程与运行时行为由平台定义；物理标记和专用追踪器能够提供稳定位置，却要求改造或装备目标物体；近年来的开放词表分割、双目重建与零样本 6DoF 位姿估计则使给定三维模型的更多刚性物体能够被视觉后端定位。然而，这些方法主要输出某一图像时刻下、相机坐标系中的物体位姿，尚未定义该位姿如何成为混合现实应用可持续使用的对象锚点。
+现有方案从不同层面提供了部分支持。平台原生对象追踪通常具有良好的系统集成，但其对象范围、模型准备流程与运行时行为由平台定义~\cite{appleObjectAnchor,azureObjectAnchors,vuforiaModelTargets,metaDynamicObjectTracker}；物理标记和专用追踪器能够提供稳定位置，却要求改造或装备目标物体；近年来的开放词表分割、双目重建与零样本 6DoF 位姿估计则使给定三维模型的更多刚性物体能够被视觉后端定位~\cite{posecnn2017,densefusion2019,cosypose2020,megapose2022,foundationpose2023}。然而，这些方法主要输出某一图像时刻下、相机坐标系中的物体位姿，尚未定义该位姿如何成为混合现实应用可持续使用的对象锚点。
 
 从视觉位姿到对象锚点之间存在三个运行时缺口。首先，异步推理结果在到达应用时已经滞后，其相机系位姿属于历史图像采集时刻；若直接与到达时刻的头显位姿复合，用户头动会被错误地写入物体的世界位置。其次，形式合法的位姿候选仍可能因遮挡、深度噪声或几何错配而不适合更新锚点，错误接纳会直接表现为可见跳变。最后，即使观测正确，低频、时序不规则且含噪的位姿流也不能直接满足逐帧渲染；运行时必须同时定义静止稳定性、运动连续性、起停转换、短时失效与重新获取的行为。换言之，\emph{pose estimate is not yet an application-ready MR anchor}。
 
-本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。EgoAnchor 由视觉感知后端与对象锚定运行时组成。视觉后端从头显双目图像、目标语义与可用三维模型中持续生成相机系 6DoF 位姿及其可靠性诊断；锚定运行时利用帧标识恢复采集时刻的相机世界变换，在统一观测边界上执行候选接纳，并通过运动估计、延迟插值、显式静止锚定和生命周期管理，合成应用可直接绑定虚拟内容的世界系对象锚点。该设计不重新发明开放词表检测或零样本位姿估计，而是为这些异步视觉能力定义一套面向 PMR 的观测到锚点契约。
+本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。EgoAnchor 由视觉感知后端与对象锚定运行时组成。视觉后端从头显双目图像、目标语义与可用三维模型中持续生成相机系 6DoF 位姿及其可靠性诊断~\cite{yoloe2025,cutie2024,foundationstereo2025,foundationpose2023}；锚定运行时利用帧标识恢复采集时刻的相机世界变换，在统一观测边界上执行候选接纳，并通过运动估计、延迟插值、显式静止锚定和生命周期管理，合成应用可直接绑定虚拟内容的世界系对象锚点。该设计不重新发明开放词表检测或零样本位姿估计，而是为这些异步视觉能力定义一套面向 PMR 的观测到锚点契约。
 
-我们在 Meta Quest 3 与外部 GPU 工作站上实现 EgoAnchor。受控定量评价使用具有设备原生平台参考位姿的 Quest 控制器作为目标，在静止头动、起停六自由度运动、持续平移/旋转和遮挡恢复序列中比较系统行为。实验首先将 EgoAnchor 与到达时刻保持、采集时刻保持、One-Euro 锚定等系统配置比较，再通过受控消融归因采集时刻世界对齐、VCD 接纳、时序合成和静止锚定的作用。第三项实验规划跨对象用户任务，用于在完成系统定量实验后检验对象附着型 MR 任务中的应用效用。平台原生对象追踪的能力差异在相关工作与讨论中单独定位。
+我们在 Meta Quest 3 与外部 GPU 工作站上实现 EgoAnchor。受控定量评价使用具有设备原生平台参考位姿的 Quest 控制器作为目标，在静止头动、起停六自由度运动、持续平移/旋转和遮挡恢复序列中比较系统行为。实验首先将 EgoAnchor 与到达时刻保持、采集时刻保持、One-Euro 锚定等系统配置比较，再通过受控消融归因采集时刻世界对齐、VCD 接纳、时序合成和静止锚定的作用。第三项实验规划跨对象用户任务，用于在完成系统定量实验后检验对象附着型 MR 任务中的应用效用。平台原生对象追踪的能力差异在相关工作与讨论中单独定位~\cite{appleObjectAnchor,azureObjectAnchors,metaDynamicObjectTracker}。
 
 本文的主要贡献如下：
 
@@ -79,7 +79,7 @@
 
 真实物体锚定旨在为物理对象建立稳定的对象级空间参考，使虚拟内容能够持续附着于真实物体，是近年来混合现实平台的重要能力。随着消费级头戴显示设备的发展，主流 XR 平台逐步开始提供对象追踪或对象锚定能力，但在开放部署、对象泛化以及动态支持方面仍存在一定局限。
 
-早期系统主要采用基于物理标记的方法，通过 AprilTag、ArUco 等人工标记获得稳定的位姿估计，ARToolKit、ARCore Augmented Images 等系统均属于这一范式。这类方法实现简单、鲁棒性较高，但需要预先在物体表面贴附标记，不仅改变真实物体外观，也难以适用于开放场景中的多类日常刚性物体。
+早期系统主要采用基于物理标记的方法，通过 AprilTag、ArUco 等人工标记获得稳定的位姿估计，ARToolKit、ARCore Augmented Images 等系统均属于这一范式~\cite{kato1999artoolkit,olson2011apriltag,garridojurado2014aruco,googleArcoreAugmentedImages}。这类方法实现简单、鲁棒性较高，但需要预先在物体表面贴附标记，不仅改变真实物体外观，也难以适用于开放场景中的多类日常刚性物体。
 
 近年来，消费级混合现实平台开始提供免标记对象追踪能力。HoloLens 2 的 Azure Object Anchors 利用设备感知与对象数字模型完成对象匹配，但公开资料显示其能力主要面向较大尺寸的静态对象；Apple Vision Pro 提供对象追踪能力，但依赖基于三维模型构建的参考对象以及离线训练流程；Vuforia Model Targets 基于对象形状以及三维模型实现真实物体识别与跟踪，但因其受约束的初始化与准备流程，常见于工业与设备场景；Meta Quest 近年来也开始支持动态对象追踪，但当前仍属于受系统支持对象集合与用户设置约束的受控能力。
 
@@ -97,11 +97,11 @@
 \subsection{XR 时延补偿与时间一致性}
 
 
-配准误差（Registration Error）与端到端时延（End-to-end Latency）自增强现实诞生以来便被认为是影响用户体验的核心问题，也是导致虚实错位、视觉疲劳与沉浸感下降的重要原因。经典增强现实研究指出，时延与运动速度的乘积是动态配准误差的主要来源；后续系统分析进一步量化了不同误差源对配准精度的影响。对于依赖异步视觉感知的混合现实系统而言，图像采集、网络传输与模型推理通常会引入数十毫秒乃至更高的端到端时延；当物体或用户快速运动时，这种异步时延便会表现为虚拟内容相对于真实物体的明显漂移与打滑。
+配准误差（Registration Error）与端到端时延（End-to-end Latency）自增强现实诞生以来便被认为是影响用户体验的核心问题，也是导致虚实错位、视觉疲劳与沉浸感下降的重要原因~\cite{azuma1994improving,diluca2010latency}。经典增强现实研究指出，时延与运动速度的乘积是动态配准误差的主要来源；后续系统分析进一步量化了不同误差源对配准精度的影响。对于依赖异步视觉感知的混合现实系统而言，图像采集、网络传输与模型推理通常会引入数十毫秒乃至更高的端到端时延；当物体或用户快速运动时，这种异步时延便会表现为虚拟内容相对于真实物体的明显漂移与打滑。
 
 围绕时延补偿，学界与工业界发展出两类互补思路。其一是预测式跟踪：头部位姿外推可以降低动态配准误差，双指数平滑等方法提供了更轻量的预测替代。在交互输入侧，One Euro 滤波器以速度自适应的方式权衡抖动与延迟，是三维用户界面处理含噪输入的常用基线，但也揭示了卡尔曼滤波在快速运动下引入滞后的固有折衷。其二是后渲染对齐：后渲染三维 warp 将已渲染画面重投影到新视角，成为时间扭曲的概念源头；异步时间扭曲（ATW）在扫描输出前用最新头显位姿重投影画面，已成为消费级头显的标准时延补偿手段。
 
-上述工作主要围绕头部运动预测、渲染重投影以及交互输入滤波展开，其目标是降低显示链路中的时延影响。相比之下，由异步视觉模块输出的对象位姿对应于历史采集时刻，其世界坐标关系需要结合设备历史位姿进行恢复。尽管 OpenXR 及各类平台运行时提供了设备级时空同步能力，这些机制主要面向设备自身位姿管理，尚未进一步支持由第三方异步视觉感知驱动的动态真实物体锚定。因此，如何面向异步物体位姿流建立统一的对象锚定运行时，仍然是消费级混合现实系统中的关键问题。
+上述工作主要围绕头部运动预测、渲染重投影以及交互输入滤波展开，其目标是降低显示链路中的时延影响~\cite{vanwaveren2016atw}。相比之下，由异步视觉模块输出的对象位姿对应于历史采集时刻，其世界坐标关系需要结合设备历史位姿进行恢复。尽管 OpenXR 及各类平台运行时提供了设备级时空同步能力，这些机制主要面向设备自身位姿管理，尚未进一步支持由第三方异步视觉感知驱动的动态真实物体锚定。因此，如何面向异步物体位姿流建立统一的对象锚定运行时，仍然是消费级混合现实系统中的关键问题。
 
 \section{EgoAnchor 系统}\label{sec:pipeline}
 
@@ -279,7 +279,7 @@ T_o^w (f) = T_c^w (f) \circ T_o^{c_f}
 
 世界坐标系下的观测序列 ${T_o^w (f)}$ 仍受视觉位姿估计不确定性与跨端传输时延波动影响。一方面，零样本位姿估计算法在光照变化、遮挡与弱纹理等条件下产生的位姿估计存在逐帧波动；另一方面，感知后端到锚定运行时的网络传输引入的时延抖动使观测到达间隔不均匀。运行时需将这种低频、含噪且时序不规则的观测流转换为高帧率稳定轨迹。系统采用运动估计与时序平滑的两阶段策略：前者从观测中恢复状态与速度，后者将状态合成为渲染输出。
 
-运动估计采用常速度卡尔曼滤波。状态向量 $\mathbf{x} = [\mathbf{p}, \mathbf{v}]^T$ 联合编码位置 $\mathbf{p} \in \mathbb{R}^3$ 与速度 $\mathbf{v} \in \mathbb{R}^3$，通过预测-更新循环实现位置与速度的联合估计。位置通道与旋转通道分别维护独立的状态估计器，旋转通道在对数映射空间执行相同的常速度滤波。
+运动估计采用常速度卡尔曼滤波~\cite{kalman1960new}。状态向量 $\mathbf{x} = [\mathbf{p}, \mathbf{v}]^T$ 联合编码位置 $\mathbf{p} \in \mathbb{R}^3$ 与速度 $\mathbf{v} \in \mathbb{R}^3$，通过预测-更新循环实现位置与速度的联合估计。位置通道与旋转通道分别维护独立的状态估计器，旋转通道在对数映射空间执行相同的常速度滤波。
 
 时序平滑采用延迟插值策略。运行时以非对称指数移动平均估计最新控制点的采集至渲染时延 $\widehat{\tau}_{\mathrm{cap-render}}$，并按
 
@@ -443,7 +443,7 @@ Quest 控制器固定于桌面，操作者依次执行左右偏航、俯仰、�
 
 One Euro 参数、VCD 接纳阈值、时序合成参数、静止锚定参数和事件判定规则在系统实现完成时随配置固定。所有记录下来的实验 session 均为正式数据，采集后不再依据实验结果调参。
 
-% 正式分析完成前不占用版面，也不写入占位数字。
+% 正式分析产物通过条件加载；缺失时不占用版面，也不写入占位数字。
 \IfFileExists{generated/exp1_tables.tex}{%
   \begin{table}[t]
     \centering
@@ -459,6 +459,23 @@ One Euro 参数、VCD 接纳阈值、时序合成参数、静止锚定参数和�
     \caption{实验一四种系统配置的系统行为汇总。}
     \label{fig:exp1-generated-summary}
   \end{figure}
+}{}
+\IfFileExists{generated/exp1_numbers.tex}{%
+  本批次包含 $\EAExpOneSessionCount$ 个正式 session，覆盖五类预定义物理任务；四种端到端配置各形成 $\EAExpOneEgoAnchorNTrials$ 个配对 trial，显示覆盖率和输出覆盖率均为 $\EAExpOneEgoAnchorDisplayCoveragePct\%$。EgoAnchor 的平移误差中位数为 $\EAExpOneEgoAnchorTranslationMedianMm$~mm、P95 为 $\EAExpOneEgoAnchorTranslationPNinetyFiveMm$~mm，旋转误差中位数为 $\EAExpOneEgoAnchorRotationMedianDeg^\circ$、P95 为 $\EAExpOneEgoAnchorRotationPNinetyFiveDeg^\circ$。四种配置没有在所有指标上形成单一优胜者：Capture-Hold 的平移中位数最低，而 EgoAnchor 的旋转 P95 最低；这说明端到端运行时需要在时间语义、平滑和稳定性之间作联合权衡，而不能只依据单个静态误差指标排序。
+
+  到达时刻保持的最新观测年龄中位数/P95 为 $\EAExpOneArrivalHoldObservationAgePFiftyMs$/$\EAExpOneArrivalHoldObservationAgePNinetyFiveMs$~ms；三种采集时刻复合配置对应值均为 $\EAExpOneCaptureHoldObservationAgePFiftyMs$/$\EAExpOneCaptureHoldObservationAgePNinetyFiveMs$~ms。后者反映延迟插值主动使用历史控制点的时间语义，不应直接解读为感知链路处理时间更慢。
+}{}
+\IfFileExists{figures/generated/exp1_static_timeline.pdf}{%
+  \begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.32\textwidth]{figures/generated/exp1_static_timeline.pdf}
+    \hfill
+    \includegraphics[width=0.32\textwidth]{figures/generated/exp1_motion_timeline.pdf}
+    \hfill
+    \includegraphics[width=0.32\textwidth]{figures/generated/exp1_occlusion_recovery.pdf}
+    \caption{实验一的静止头动、运动和遮挡恢复时间线。图中保留逐帧轨迹用于展示系统行为，统计推断仍在 trial/event 层完成。}
+    \label{fig:exp1-generated-timelines}
+  \end{figure*}
 }{}
 
 \subsection{实验二：系统设计归因}
@@ -497,6 +514,10 @@ One Euro 参数、VCD 接纳阈值、时序合成参数、静止锚定参数和�
     \end{figure*}
   }{}
 }{}
+\IfFileExists{generated/exp2_numbers.tex}{%
+  实验二的配对差值显示，关闭采集时刻对齐后静止头动平移误差中位数增加 $\EAExpTwoCaptureAlignmentTranslationMedianDeltaMm$~mm；关闭静止锚定后静止位置 HP--RMS 增加 $\EAExpTwoStaticLockPositionHpRmsDeltaMm$~mm。遮挡恢复场景中，关闭 VCD 的平移中位数差值为 $\EAExpTwoVCDTranslationMedianDeltaMm$~mm，当前批次的差异近似为零；完整系统 VCD 分数诱导的风险--覆盖 AURC 为 $\EAExpTwoAURC$~mm，因此该结果应视为本对象和本遮挡协议下的诊断，而不是 VCD 泛化有效性的证明。时序合成差值为 $\EAExpTwoTemporalVisibleResponseDeltaMs$~ms，但对应起停事件只有单个可配对条目，本文将其作为描述性证据，不作总体性结论。
+}{}
+\clearpage
 
 \subsection{评价指标与汇总}
 

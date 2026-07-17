@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from .readers import EvalSessionV2, accepted_trial_keys
+from .readers import EvalSessionV2, _pre_reference_warmup_mask, accepted_trial_keys
 from .rows import SchemaV2Error
 
 
@@ -80,7 +80,7 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
     if session.events.empty:
         warnings.append("events is empty")
 
-    _check_render_matrix(session, variants, errors, metrics)
+    _check_render_matrix(session, variants, errors, warnings, metrics)
     _check_admission_matrix(session, variants, errors, warnings, metrics)
     return SchemaQcReport(errors=errors, warnings=warnings, metrics=metrics)
 
@@ -439,7 +439,13 @@ def _check_variant_hashes(session: EvalSessionV2, variants: set[str], errors: li
                 )
 
 
-def _check_render_matrix(session: EvalSessionV2, variants: set[str], errors: list[str], metrics: dict[str, Any]) -> None:
+def _check_render_matrix(
+    session: EvalSessionV2,
+    variants: set[str],
+    errors: list[str],
+    warnings: list[str],
+    metrics: dict[str, Any],
+) -> None:
     """每个 render tick 必须包含全部 variant。"""
 
     table = session.unity_render
@@ -464,12 +470,20 @@ def _check_render_matrix(session: EvalSessionV2, variants: set[str], errors: lis
         if "frame_id" in session.unity_reference
         else set()
     )
+    warmup_mask = _pre_reference_warmup_mask(table, session.unity_reference)
+    warmup_rows = int(warmup_mask.sum())
+    if warmup_rows:
+        metrics["render_pre_reference_warmup_rows"] = warmup_rows
+        warnings.append(
+            f"{warmup_rows} render rows precede the first unity_reference frame; "
+            "they are retained using their embedded valid reference snapshot"
+        )
     for index, row in table.iterrows():
         source_frame_id = int(row["source_frame_id"])
         if source_frame_id < 0:
             if bool(row["has_output_pose"]) or bool(row["has_display_pose"]):
                 errors.append(f"render row {index!r} has display/output pose without a source frame")
-        elif source_frame_id not in reference_ids:
+        elif source_frame_id not in reference_ids and not bool(warmup_mask.loc[index]):
             errors.append(f"render row {index!r} references unknown source_frame_id: {source_frame_id}")
     for tick_id, group in table.groupby("render_tick_id", dropna=False):
         observed = {str(item) for item in group["variant_id"].dropna()}

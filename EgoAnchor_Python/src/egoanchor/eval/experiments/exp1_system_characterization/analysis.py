@@ -116,7 +116,9 @@ def run_exp1_system_characterization(
         ignore_index=True,
     )
     figure_files = tuple(write_exp1_figures(render, tables, output))
-    latex_files = tuple(write_exp1_latex(tables, output))
+    latex_files = tuple(
+        write_exp1_latex(tables, output, session_count=len(accepted_sessions))
+    )
     return Exp1Result(
         output_dir=output,
         tables=tables,

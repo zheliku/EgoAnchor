@@ -1,0 +1,109 @@
+scenario_id,variant_label,metric,paired_n,delta_mean,delta_median
+occlusion_recovery,EgoAnchor w/o VCD,display_error.rotation_error_deg_iqr,15,10.849659122457476,6.299748197768906e-06
+occlusion_recovery,EgoAnchor w/o VCD,display_error.rotation_error_deg_median,15,8.595024215275197,5.2048209928656775e-06
+occlusion_recovery,EgoAnchor w/o VCD,display_error.rotation_error_deg_p95,15,10.810777477209836,2.210684532766294e-05
+occlusion_recovery,EgoAnchor w/o VCD,display_error.translation_error_mm_iqr,15,12.630830794662442,1.5426600468160245e-06
+occlusion_recovery,EgoAnchor w/o VCD,display_error.translation_error_mm_median,15,10.36567039878324,-1.7795544209331382e-06
+occlusion_recovery,EgoAnchor w/o VCD,display_error.translation_error_mm_p95,15,12.637762437594834,3.953908372489323e-06
+occlusion_recovery,EgoAnchor w/o VCD,latency.candidate_arrival_p50_ms,15,0.20621999962410578,0.20625000252039172
+occlusion_recovery,EgoAnchor w/o VCD,latency.candidate_arrival_p95_ms,15,0.22027199947236417,0.21394999930635095
+occlusion_recovery,EgoAnchor w/o VCD,latency.candidate_processing_p50_ms,15,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,latency.candidate_processing_p95_ms,15,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,latency.observation_age_p50_ms,15,-10.460950000803374,-0.02920000406447798
+occlusion_recovery,EgoAnchor w/o VCD,latency.observation_age_p95_ms,15,-45.816568332763126,-11.51143999886699
+occlusion_recovery,EgoAnchor w/o VCD,latency.render_hz,15,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,latency.smoothing_delay_p50_ms,8,-1.553092878566531,0.009300001693191007
+occlusion_recovery,EgoAnchor w/o VCD,latency.smoothing_delay_p95_ms,8,-0.07115250059541722,0.009554999996908009
+occlusion_recovery,EgoAnchor w/o VCD,latency.visual_perception_hz,15,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.display_availability,7,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.display_jump_p95_mm,7,0.32826136365798064,0.2597164508390749
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.display_rotation_jump_p95_deg,7,0.3053310104542922,0.39354795163482625
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.output_availability,7,0.008776269227252989,0.00987654320987652
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.recovery_success,7,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,occlusion.recovery_time_ms,7,0.0,0.0
+occlusion_recovery,EgoAnchor w/o VCD,static.position_drift_mm,15,0.03089968141272875,1.4611480558812673e-07
+occlusion_recovery,EgoAnchor w/o VCD,static.position_hp_rms_mm,15,1.6123435638505506,1.9820119802338443e-08
+occlusion_recovery,EgoAnchor w/o VCD,static.rotation_drift_deg,15,0.023659754942791413,1.2327822515478815e-05
+occlusion_recovery,EgoAnchor w/o VCD,static.rotation_error_deg_median,15,8.595024215275197,5.2048209928656775e-06
+occlusion_recovery,EgoAnchor w/o VCD,static.rotation_error_deg_p95,15,10.80725087835894,9.36850051402871e-06
+occlusion_recovery,EgoAnchor w/o VCD,static.rotation_hp_rms_deg,15,1.501273971507527,1.1914439302929125e-06
+occlusion_recovery,EgoAnchor w/o VCD,static.translation_error_mm_median,15,10.365670227822658,-1.7795544209331382e-06
+occlusion_recovery,EgoAnchor w/o VCD,static.translation_error_mm_p95,15,12.631689486518992,3.953908372489323e-06
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.rotation_error_deg_iqr,6,-0.6351435944218636,-0.45760153732367326
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.rotation_error_deg_median,6,-0.19133206582506937,-0.2671310165602927
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.rotation_error_deg_p95,6,-3.1792056652613803,-2.936965853856498
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.translation_error_mm_iqr,6,-0.9207365730167041,-0.0649732863588176
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.translation_error_mm_median,6,0.015340147839114823,0.04176652426037064
+start_stop_6dof,EgoAnchor w/o temporal synthesis,display_error.translation_error_mm_p95,6,-8.726870592041902,-9.45556329997525
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.candidate_arrival_p50_ms,6,0.2527833324469005,0.24900000062189065
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.candidate_arrival_p95_ms,6,0.304040001113511,0.2595200014184229
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.candidate_processing_p50_ms,6,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.candidate_processing_p95_ms,6,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.observation_age_p50_ms,6,0.01689166674623266,0.01692500154604204
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.observation_age_p95_ms,6,0.015200002295993423,0.015250003161781933
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.render_hz,6,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.smoothing_delay_p50_ms,5,-65.22495069875731,-67.41736036201473
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.smoothing_delay_p95_ms,5,-15.788889676405233,-32.689625643979525
+start_stop_6dof,EgoAnchor w/o temporal synthesis,latency.visual_perception_hz,6,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.position_drift_mm,6,1.374275874839767,1.402498876609005
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.position_hp_rms_mm,6,0.10664180174992148,0.08851331102885543
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.rotation_drift_deg,6,0.6073395678720969,0.5056818644270659
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.rotation_error_deg_median,6,-0.08592381899833001,-0.15378598495725226
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.rotation_error_deg_p95,6,-0.2673204761335402,-0.15455640660048608
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.rotation_hp_rms_deg,6,0.0596402319561202,0.06292888267016207
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.translation_error_mm_median,6,-0.04370795671460718,-0.017198093056983943
+start_stop_6dof,EgoAnchor w/o temporal synthesis,static.translation_error_mm_p95,6,-1.0828268422028953,0.01805202498309022
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.peak_rotation_error_deg,5,-1.4310377627698219,-0.03180560852553782
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.peak_translation_error_mm,5,-0.8544935579041578,0.03968796550353204
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.relock_success,5,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.unlock_success,5,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.unlock_time_ms,5,0.0,0.0
+start_stop_6dof,EgoAnchor w/o temporal synthesis,transition.visible_response_time_ms,1,-21.46980000543408,-21.46980000543408
+static_head_motion,EgoAnchor w/o StaticLock,display_error.rotation_error_deg_iqr,5,0.9372772846033766,0.8002838441226556
+static_head_motion,EgoAnchor w/o StaticLock,display_error.rotation_error_deg_median,5,0.0702116367481553,0.09053473229332942
+static_head_motion,EgoAnchor w/o StaticLock,display_error.rotation_error_deg_p95,5,1.3300674299104789,1.2089056535563047
+static_head_motion,EgoAnchor w/o StaticLock,display_error.translation_error_mm_iqr,5,2.3617629922061,2.9325514259053556
+static_head_motion,EgoAnchor w/o StaticLock,display_error.translation_error_mm_median,5,0.8933125222060688,1.072495845627004
+static_head_motion,EgoAnchor w/o StaticLock,display_error.translation_error_mm_p95,5,3.570998633160466,4.078336938134405
+static_head_motion,EgoAnchor w/o StaticLock,latency.candidate_arrival_p50_ms,5,0.29060000015306287,0.2786999975796789
+static_head_motion,EgoAnchor w/o StaticLock,latency.candidate_arrival_p95_ms,5,0.28549200054840185,0.2896199977840297
+static_head_motion,EgoAnchor w/o StaticLock,latency.candidate_processing_p50_ms,5,0.0,0.0
+static_head_motion,EgoAnchor w/o StaticLock,latency.candidate_processing_p95_ms,5,0.0,0.0
+static_head_motion,EgoAnchor w/o StaticLock,latency.observation_age_p50_ms,5,0.017469998419983312,0.016949998098425567
+static_head_motion,EgoAnchor w/o StaticLock,latency.observation_age_p95_ms,5,0.015654000380891375,0.015559997700620443
+static_head_motion,EgoAnchor w/o StaticLock,latency.render_hz,5,0.0,0.0
+static_head_motion,EgoAnchor w/o StaticLock,latency.smoothing_delay_p50_ms,1,8.421137928962708,8.421137928962708
+static_head_motion,EgoAnchor w/o StaticLock,latency.smoothing_delay_p95_ms,1,17.23182499408722,17.23182499408722
+static_head_motion,EgoAnchor w/o StaticLock,latency.visual_perception_hz,5,0.0,0.0
+static_head_motion,EgoAnchor w/o StaticLock,static.position_drift_mm,5,-0.01337289859810431,0.23906828221101506
+static_head_motion,EgoAnchor w/o StaticLock,static.position_hp_rms_mm,5,1.3598126200986287,1.102021160723066
+static_head_motion,EgoAnchor w/o StaticLock,static.rotation_drift_deg,5,0.4168797082792892,-0.32285719430187165
+static_head_motion,EgoAnchor w/o StaticLock,static.rotation_error_deg_median,5,0.0702116367481553,0.09053473229332942
+static_head_motion,EgoAnchor w/o StaticLock,static.rotation_error_deg_p95,5,1.3300674299104789,1.2089056535563047
+static_head_motion,EgoAnchor w/o StaticLock,static.rotation_hp_rms_deg,5,0.5809365219040267,0.585111103940857
+static_head_motion,EgoAnchor w/o StaticLock,static.translation_error_mm_median,5,0.8933125222060688,1.072495845627004
+static_head_motion,EgoAnchor w/o StaticLock,static.translation_error_mm_p95,5,3.570998633160466,4.078336938134405
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.rotation_error_deg_iqr,5,0.27864200221889385,0.07408854675153487
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.rotation_error_deg_median,5,0.22984262093731003,0.06633251223953618
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.rotation_error_deg_p95,5,0.49746725434812744,0.2721536816063064
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.translation_error_mm_iqr,5,2.227465238708868,0.22669247503562007
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.translation_error_mm_median,5,0.824009730879574,0.5256431279364926
+static_head_motion,EgoAnchor w/o capture-time alignment,display_error.translation_error_mm_p95,5,7.199516830025073,0.9210165375860409
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.candidate_arrival_p50_ms,5,0.19040000188397244,0.18220000492874533
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.candidate_arrival_p95_ms,5,0.1848479996988317,0.18553999834693968
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.candidate_processing_p50_ms,5,0.0,0.0
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.candidate_processing_p95_ms,5,0.0,0.0
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.observation_age_p50_ms,5,-171.75165999797173,-168.93870000058087
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.observation_age_p95_ms,5,-183.8151090014435,-179.46747000387404
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.render_hz,5,0.0,0.0
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.smoothing_delay_p50_ms,1,-26.553884148597717,-26.553884148597717
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.smoothing_delay_p95_ms,1,-33.645887672901154,-33.645887672901154
+static_head_motion,EgoAnchor w/o capture-time alignment,latency.visual_perception_hz,5,0.0,0.0
+static_head_motion,EgoAnchor w/o capture-time alignment,static.position_drift_mm,5,0.09705598948254898,0.15174307032566414
+static_head_motion,EgoAnchor w/o capture-time alignment,static.position_hp_rms_mm,5,1.0158778167031814,0.03134739142025945
+static_head_motion,EgoAnchor w/o capture-time alignment,static.rotation_drift_deg,5,-0.17689153893822424,-0.047096427048437306
+static_head_motion,EgoAnchor w/o capture-time alignment,static.rotation_error_deg_median,5,0.22984262093731003,0.06633251223953618
+static_head_motion,EgoAnchor w/o capture-time alignment,static.rotation_error_deg_p95,5,0.49746725434812744,0.2721536816063064
+static_head_motion,EgoAnchor w/o capture-time alignment,static.rotation_hp_rms_deg,5,0.08402394887901103,0.00041963436018965794
+static_head_motion,EgoAnchor w/o capture-time alignment,static.translation_error_mm_median,5,0.824009730879574,0.5256431279364926
+static_head_motion,EgoAnchor w/o capture-time alignment,static.translation_error_mm_p95,5,7.199516830025073,0.9210165375860409

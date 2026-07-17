@@ -38,6 +38,20 @@ _MACRO_METRICS = (
     ),
 )
 
+_PAPER_SCENARIOS = {
+    "static_head_motion": "Static target + head motion",
+    "start_stop_6dof": "Start-stop 6DoF",
+    "occlusion_recovery": "Occlusion + recovery",
+}
+"""论文表格使用的物理场景标签；CSV 继续保留稳定机器标识。"""
+
+_PAPER_METRICS = {
+    "display_error.translation_error_mm_median": "Display translation median (mm)",
+    "transition.visible_response_time_ms": "Visible response time (ms)",
+    "static.position_hp_rms_mm": "Static position HP-RMS (mm)",
+}
+"""论文表格使用的指标标签；避免把分析内部字段名暴露给读者。"""
+
 
 def _format_number(value: object) -> str:
     """格式化有限浮点数，缺失值统一写作 ``--``。"""
@@ -114,7 +128,7 @@ def write_exp2_tables(summary: pd.DataFrame, path: Path | str) -> None:
         "% Auto-generated experiment-two table. Do not edit manually.",
         "\\begin{tabular}{lllrr}",
         "\\toprule",
-        "Ablation & Scenario & Metric & Paired $n$ & Median delta \\\\",
+        "Ablation & Source scenario & Outcome & Paired $n$ & Median delta \\\\",
         "\\midrule",
     ]
     wrote_row = False
@@ -133,8 +147,8 @@ def write_exp2_tables(summary: pd.DataFrame, path: Path | str) -> None:
             row = rows.iloc[0]
             lines.append(
                 f"{_escape_latex(variant)} & "
-                f"{_escape_latex(str(row['scenario_id']))} & "
-                f"{_escape_latex(metric)} & "
+                f"{_escape_latex(_paper_scenario_label(str(row['scenario_id'])))} & "
+                f"{_escape_latex(_paper_metric_label(metric))} & "
                 f"{int(row['paired_n'])} & {_format_number(row['delta_median'])} \\\\"
             )
             wrote_row = True
@@ -145,6 +159,18 @@ def write_exp2_tables(summary: pd.DataFrame, path: Path | str) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _paper_scenario_label(scenario_id: str) -> str:
+    """返回论文表格的场景标签，未知值仍保留原文用于审计。"""
+
+    return _PAPER_SCENARIOS.get(scenario_id, scenario_id)
+
+
+def _paper_metric_label(metric: str) -> str:
+    """返回论文表格的指标标签，未知值仍保留原文用于审计。"""
+
+    return _PAPER_METRICS.get(metric, metric)
 
 
 def _escape_latex(value: str) -> str:
