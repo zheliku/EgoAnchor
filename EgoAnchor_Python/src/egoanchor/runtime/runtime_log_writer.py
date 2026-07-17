@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from egoanchor.diagnostics import RuntimeEventLogger
-from egoanchor.eval.schema_v2 import JsonlTableWriter, PythonCandidateRow
+from egoanchor.eval import JsonlTableWriter, PythonCandidateRow
 from egoanchor.utils import clamp, get_logger, rotation_matrix_to_quaternion
 from .eval_session import update_python_session_metadata
 from .runtime_state import RuntimeState

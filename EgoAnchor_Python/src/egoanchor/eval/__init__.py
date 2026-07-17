@@ -1,40 +1,33 @@
-"""EgoAnchor schema-v2 离线评估包级入口。"""
+"""EgoAnchor 离线评估包级入口。
 
-from .experiments import (
-    Exp1QcReport,
-    Exp1Result,
-    Exp2QcReport,
-    Exp2Result,
-    run_exp1_qc,
-    run_exp1_system_characterization,
-    run_exp2_design_attribution,
-    run_exp2_qc,
-)
-from .metrics import MetricsResult, compute_all_metrics
+运行时只依赖这里重新导出的 schema-v2 类型；四阶段分析实现按阶段包逐步加入，
+避免评估包初始化时加载已删除的旧实验实现。
+"""
+
 from .schema_v2 import (
-    EvalSessionV2,
-    SchemaQcReport,
+    EventRow,
+    EvalV2Paths,
+    JsonlTableWriter,
+    ManifestV2,
+    PythonCandidateRow,
     SchemaV2Error,
-    load_session_v2,
-    merge_event_fragments,
-    run_schema_qc,
+    SCHEMA_VERSION,
+    UnityAdmissionRow,
+    UnityReferenceRow,
+    UnityRenderRow,
+    validate_schema_mapping,
 )
 
 __all__ = [
-    "Exp1QcReport",
-    "Exp1Result",
-    "Exp2QcReport",
-    "Exp2Result",
-    "EvalSessionV2",
-    "MetricsResult",
-    "SchemaQcReport",
+    "EventRow",
+    "EvalV2Paths",
+    "JsonlTableWriter",
+    "ManifestV2",
+    "PythonCandidateRow",
     "SchemaV2Error",
-    "compute_all_metrics",
-    "load_session_v2",
-    "merge_event_fragments",
-    "run_exp1_qc",
-    "run_exp1_system_characterization",
-    "run_exp2_design_attribution",
-    "run_exp2_qc",
-    "run_schema_qc",
+    "SCHEMA_VERSION",
+    "UnityAdmissionRow",
+    "UnityReferenceRow",
+    "UnityRenderRow",
+    "validate_schema_mapping",
 ]
