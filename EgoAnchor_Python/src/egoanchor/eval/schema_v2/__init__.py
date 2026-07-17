@@ -23,7 +23,6 @@ __all__ = [
     "ManifestV2",
     "PythonCandidateRow",
     "SCHEMA_VERSION",
-    "SchemaQcReport",
     "SchemaV2Error",
     "UnityAdmissionRow",
     "UnityReferenceRow",

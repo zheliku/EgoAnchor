@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+
+from .preprocess import run_task_qc
 
 
 EXIT_OK = 0
@@ -36,7 +40,16 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
     for command in STAGE_COMMANDS:
         child = subparsers.add_parser(command, help=_command_help(command))
-        child.set_defaults(handler=_run_skeleton_command)
+        if command == "qc":
+            child.add_argument(
+                "task_dirs",
+                nargs="+",
+                type=Path,
+                help="一个或多个完整 schema-v2 task 目录",
+            )
+            child.set_defaults(handler=_run_qc)
+        else:
+            child.set_defaults(handler=_run_skeleton_command)
     return parser
 
 
@@ -63,6 +76,21 @@ def _run_skeleton_command(args: argparse.Namespace) -> int:
 
     del args
     return EXIT_OK
+
+
+def _run_qc(args: argparse.Namespace) -> int:
+    """只读检查一个或多个 task，打印稳定 JSON 并返回统一退出码。"""
+
+    reports = [run_task_qc(path) for path in args.task_dirs]
+    if len(reports) == 1:
+        payload: object = reports[0].to_dict()
+    else:
+        payload = {
+            "passed": all(report.passed for report in reports),
+            "tasks": [report.to_dict() for report in reports],
+        }
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return EXIT_OK if all(report.passed for report in reports) else EXIT_DATA_ERROR
 
 
 def _command_help(command: str) -> str:

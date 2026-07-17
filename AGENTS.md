@@ -134,6 +134,7 @@ schema-v2 task directory
 
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`preprocess`）** 只读取原始 task 目录的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；不得把 XLSX 之前的任何中间文件作为后续输入。
+- Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 检查八 runtime 矩阵、主外键、生命周期、事件合并、warmup reference 和两端 writer 停止态统计，未消费 candidate 仅作为 latest-only 警告。
 - **Stage 2（`analyze`）** 只读取 Stage 1 发布的完整 XLSX，计算 event/trial/session 指标并发布 CSV；禁止访问原始 task 目录或 JSON/JSONL。
 - **Stage 3（`publish`）** 只读取 Stage 2 发布的 CSV（包括 `plots/` 与 `paper/`），生成 PDF、PNG 和 TeX；禁止回读 XLSX 或 JSON/JSONL，也不得重新连接 reference、切事件窗或计算科学指标。
 - **Stage 4（`materialize-paper`）** 只读取 Stage 3 发布的 TeX 中间产物，将内容写入主稿受控区块；禁止直接读取 CSV、XLSX 或 JSON/JSONL。
