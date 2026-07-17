@@ -24,11 +24,8 @@ namespace EgoAnchor.Eval.Experiment
             switch (scenarioId)
             {
                 case "start_stop_6dof":
-                case "without_temporal_synthesis":
-                case "without_static_lock":
                     return TransitionStarted;
                 case "occlusion_recovery":
-                case "without_vcd_admission":
                     return OcclusionStarted;
                 default:
                     return GenericMarker;
@@ -38,7 +35,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>判断当前场景是否使用“遮挡开始到目标重新可见”的双角色协议。</summary>
         public static bool SupportsTargetVisible(string scenarioId)
         {
-            return scenarioId == "occlusion_recovery" || scenarioId == "without_vcd_admission";
+            return scenarioId == "occlusion_recovery";
         }
     }
 }

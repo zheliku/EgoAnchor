@@ -1424,6 +1424,8 @@ MonoBehaviour:
   streamPublisher: {fileID: 634882301}
   framePoseHistory: {fileID: 1764014454}
   gtController: 2
+  referencePreflightTranslationMeters: 0.01
+  referencePreflightRotationDegrees: 5
   variants:
   - label: Arrival-Hold
     runtime: {fileID: 1137170458}
@@ -1842,102 +1844,6 @@ MonoBehaviour:
       m_Processors: 
       m_Groups: 
       m_Action: Task5
-      m_Flags: 0
-    m_Flags: 0
-  - m_Name: Task6
-    m_Type: 1
-    m_ExpectedControlType: Button
-    m_Id: de9987c5-0c8f-4b3d-98f4-d22840669f13
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: c181ee64-37e1-4025-b5da-219747b3b1b1
-      m_Path: <Keyboard>/6
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task6
-      m_Flags: 0
-    - m_Name: 
-      m_Id: 332c4422-2a31-49d4-a90f-4c9e63cf40a4
-      m_Path: <Keyboard>/numpad6
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task6
-      m_Flags: 0
-    m_Flags: 0
-  - m_Name: Task7
-    m_Type: 1
-    m_ExpectedControlType: Button
-    m_Id: 37d13f67-d368-463a-baf3-46e6b355fc23
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 5d7c483d-1382-4e38-842d-099f6186ebda
-      m_Path: <Keyboard>/7
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task7
-      m_Flags: 0
-    - m_Name: 
-      m_Id: 6cfcece3-abdb-495b-977b-bead2fb44bb8
-      m_Path: <Keyboard>/numpad7
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task7
-      m_Flags: 0
-    m_Flags: 0
-  - m_Name: Task8
-    m_Type: 1
-    m_ExpectedControlType: Button
-    m_Id: 57a82ae4-6d6c-4560-8fc6-f17898d27e23
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 31f4e063-8fa4-4b0b-a2de-0f797e9785bc
-      m_Path: <Keyboard>/8
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task8
-      m_Flags: 0
-    - m_Name: 
-      m_Id: e71ada47-81b2-466f-a651-c61194712ef4
-      m_Path: <Keyboard>/numpad8
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task8
-      m_Flags: 0
-    m_Flags: 0
-  - m_Name: Task9
-    m_Type: 1
-    m_ExpectedControlType: Button
-    m_Id: e1901491-be23-41c7-b7ed-90ccd377b848
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 7f0b79d4-aaf6-44f3-8a08-386eca5f9f8d
-      m_Path: <Keyboard>/9
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task9
-      m_Flags: 0
-    - m_Name: 
-      m_Id: d0b8e2a2-b659-4955-b242-91a2803837a9
-      m_Path: <Keyboard>/numpad9
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Task9
       m_Flags: 0
     m_Flags: 0
   navigationThreshold: 0.7

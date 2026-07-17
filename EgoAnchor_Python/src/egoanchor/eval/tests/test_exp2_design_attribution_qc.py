@@ -8,9 +8,10 @@ import pandas as pd
 
 from egoanchor.eval.experiments.exp2_design_attribution import (
     ABLATION_COMPONENT,
+    ABLATION_SCENARIO,
     BASELINE_VARIANT,
     COMPONENT_KEYS,
-    SCENARIO_ABLATION,
+    SOURCE_EXPERIMENT_ID,
     build_trial_qc,
     variant_contracts,
 )
@@ -40,14 +41,29 @@ class Exp2QcTest(unittest.TestCase):
     def test_trial_qc_rejects_nonmatching_ablation(self) -> None:
         """场景中只有另一个消融时不能算成有效配对。"""
 
-        scenario = "without_vcd_admission"
+        scenario = "occlusion_recovery"
         rows = [
             _trial_row(scenario, BASELINE_VARIANT),
-            _trial_row(scenario, SCENARIO_ABLATION["without_static_lock"]),
+            _trial_row(scenario, "EgoAnchor w/o StaticLock"),
         ]
         report = build_trial_qc(pd.DataFrame(rows))
         self.assertFalse(bool(report.iloc[0]["passed"]))
-        self.assertIn(SCENARIO_ABLATION[scenario], str(report.iloc[0]["reason"]))
+        self.assertIn("EgoAnchor w/o VCD", str(report.iloc[0]["reason"]))
+
+    def test_static_task_checks_alignment_and_static_lock_separately(self) -> None:
+        """同一个静止头动 trial 必须生成两个互不混淆的组件配对检查。"""
+
+        scenario = "static_head_motion"
+        labels = [
+            BASELINE_VARIANT,
+            "EgoAnchor w/o capture-time alignment",
+            "EgoAnchor w/o StaticLock",
+        ]
+        report = build_trial_qc(pd.DataFrame([_trial_row(scenario, label) for label in labels]))
+        self.assertTrue(report["passed"].all())
+        self.assertEqual(set(report["paired_variant"]), {
+            label for label, source in ABLATION_SCENARIO.items() if source == scenario
+        })
 
 
 def _manifest_contract() -> dict[str, object]:
@@ -72,7 +88,7 @@ def _trial_row(scenario: str, label: str) -> dict[str, object]:
 
     return {
         "session_id": "s",
-        "experiment_id": "exp2_design_attribution",
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": "t",
         "event_id": "e",

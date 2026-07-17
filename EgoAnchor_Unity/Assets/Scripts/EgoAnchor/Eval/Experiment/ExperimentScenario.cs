@@ -58,10 +58,13 @@ namespace EgoAnchor.Eval.Experiment
         }
     }
 
-    /// <summary>实验一/实验二的九项正式采集任务。</summary>
+    /// <summary>实验一/实验二共用的五项正式采集任务。</summary>
     public static class ExperimentScenario
     {
-        /// <summary>九项任务按键盘 1--9 和手柄九宫格顺序排列。</summary>
+        /// <summary>
+        /// 五项物理任务按键盘 1--5 和手柄网格顺序排列。
+        /// 每项任务同时记录四个系统配置和四个组件消融，实验二不再重复采集任务 6--9。
+        /// </summary>
         public static readonly ExperimentTask[] Tasks =
         {
             new ExperimentTask(
@@ -89,26 +92,6 @@ namespace EgoAnchor.Eval.Experiment
                 "occlusion_recovery",
                 "Occlusion and reappearance",
                 "OCC"),
-            new ExperimentTask(
-                ExperimentId.DesignAttribution,
-                "without_capture_time_alignment",
-                "Ablation: capture-time alignment",
-                "ALIGN"),
-            new ExperimentTask(
-                ExperimentId.DesignAttribution,
-                "without_vcd_admission",
-                "Ablation: VCD admission",
-                "VCD"),
-            new ExperimentTask(
-                ExperimentId.DesignAttribution,
-                "without_temporal_synthesis",
-                "Ablation: temporal synthesis",
-                "TEMP"),
-            new ExperimentTask(
-                ExperimentId.DesignAttribution,
-                "without_static_lock",
-                "Ablation: StaticLock",
-                "LOCK"),
         };
 
         /// <summary>一个完整采集批次需要覆盖的任务总数；单个 session 可只采其中任意子集。</summary>

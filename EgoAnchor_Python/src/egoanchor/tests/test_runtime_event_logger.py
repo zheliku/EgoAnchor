@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from egoanchor.diagnostics import RuntimeEventLogger
 from egoanchor.config import load_config
@@ -470,6 +471,58 @@ class RuntimeEventLoggerTest(unittest.TestCase):
             self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["rows_written"], 1)
             self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["dropped_rows"], 0)
             self.assertEqual(metadata["log_writer_stats"]["python_events.jsonl"]["log_write_failures"], 0)
+
+    def test_close_attempts_metadata_after_each_writer_close_failure(self) -> None:
+        """任一 writer 关闭失败都必须累计，但不能跳过其余 writer 和最终 metadata。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.enabled = True
+            paths = create_eval_session(Path(tmp), "controller_right")
+            writer = RuntimeLogWriter(cfg, session_id=paths.session_id, eval_session=paths)
+            assert writer._schema_candidates is not None
+            assert writer._schema_events is not None
+
+            with (
+                patch.object(writer.logger, "close", side_effect=OSError("runtime close failed")),
+                patch.object(writer._schema_candidates, "close", side_effect=OSError("candidate close failed")),
+                patch.object(writer._schema_events, "close", side_effect=OSError("event close failed")),
+                patch(
+                    "egoanchor.runtime.runtime_log_writer.update_python_session_metadata"
+                ) as update_metadata,
+            ):
+                writer.close()
+
+            self.assertEqual(writer.log_write_failures, 3)
+            update_metadata.assert_called_once()
+            stats = update_metadata.call_args.kwargs["log_writer_stats"]
+            self.assertEqual(stats["python_candidates.jsonl"]["log_write_failures"], 1)
+            self.assertEqual(stats["python_events.jsonl"]["log_write_failures"], 1)
+
+            # 解除故障注入后关闭真实句柄，避免测试临时目录残留打开文件。
+            writer.close()
+
+    def test_metadata_replace_failure_preserves_started_fragment(self) -> None:
+        """最终 metadata 原子替换失败时保留原文件，并显式累计关闭失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = load_config()
+            cfg.runtime.logging.enabled = True
+            paths = create_eval_session(Path(tmp), "controller_right")
+            original = paths.metadata_path.read_text(encoding="utf-8")
+            writer = RuntimeLogWriter(cfg, session_id=paths.session_id, eval_session=paths)
+
+            with patch.object(Path, "replace", side_effect=OSError("replace unavailable")):
+                writer.close()
+
+            self.assertEqual(writer.log_write_failures, 1)
+            self.assertEqual(paths.metadata_path.read_text(encoding="utf-8"), original)
+            self.assertEqual(list(paths.session_dir.glob(".python_session.json.*.tmp")), [])
+
+            # 第二次关闭允许 metadata 正常完成，证明失败没有破坏重试路径。
+            writer.close()
+            metadata = json.loads(paths.metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["state"], "python_stopped")
 
 
 if __name__ == "__main__":

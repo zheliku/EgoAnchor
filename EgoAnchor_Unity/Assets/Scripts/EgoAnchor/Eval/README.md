@@ -11,10 +11,11 @@
    ```
 
 2. 正式采集打开 `EgoAnchor-Experiment12.unity` 并进入 Play Mode；场景已固定为 Formal。
-3. 等待 Python 返回非空 `session_id`，确认面板显示 `Recording`。
-4. 用右手摇杆或键盘 `1`--`9` 选择任务，按独立动作开始、标记、结束或作废 trial。
+3. 等待 Python 返回非空 `session_id`，确认任务 1 只是选中而没有进入 `[RUN]`。
+4. 移动右手平台参考控制器，确认实时面板显示 `CHECK VERIFIED`。
+5. 用右手摇杆或键盘 `1`--`5` 选择任务；一次 A 或 Enter 同时启动 session 和当前 trial，随后用独立动作标记、结束或作废。
 
-`EvalSession` 自动管理 session 生命周期，`ExperimentTrialSelector` 独立维护九项任务的选择、运行与完成
+`EvalSession` 管理 session 生命周期，`ExperimentTrialSelector` 独立维护五项任务的选择、运行与完成
 状态，`EvalRecorder` 写入 Unity 采集和渲染日志。`ExperimentInputHandler` 直接在 Inspector 暴露内联
 `InputAction`，不使用 InputActionAsset。完成本次需要的任意任务子集后，在空闲状态再次按结束键即可停止
 session；零项完成时不能生成空 session。
@@ -29,10 +30,13 @@ session；零项完成时不能生成空 session。
 
 ```text
 manifest.json
+python_session.json
 python_candidates.jsonl
+python_events.jsonl
 unity_reference.jsonl
 unity_admission.jsonl
 unity_render.jsonl
+unity_events.jsonl
 events.jsonl
 ```
 
@@ -43,8 +47,9 @@ writer 会记录 `rows_written` 与 `dropped_rows`。正式分析前必须确认
 实验一比较四个完整系统配置，覆盖静止观察、主动头动、起停 6DoF、持续运动和遮挡恢复。五项任务可以拆到
 多个 session，Python 在分析批次层检查场景并集。
 
-实验二以完整系统为参照，每次只关闭一个归因组件。四项任务同样允许拆分。采集时保持同一输入流和同一
-参考位姿，分析阶段按 `session x trial/event x variant` 配对汇总，不跨 session 拼接逐帧记录。
+实验二以完整系统为参照，每次只关闭一个归因组件。它不再单独采集四项任务，而是直接复用任务 1--5
+同时写出的四个消融 runtime。采集时保持同一输入流和同一参考位姿，分析阶段按
+`session x trial/event x variant` 配对汇总，不跨 session 拼接逐帧记录。
 
 具体动作、按键时机和失败重采规则见 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`。采集阶段
 只记录事实，不在 Unity 端推断统计结果或手工修改日志。

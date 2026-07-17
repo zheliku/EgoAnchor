@@ -155,22 +155,43 @@ class RuntimeLogWriter:
             self._schema_events = JsonlTableWriter(session_dir / "python_events.jsonl")
 
     def close(self) -> None:
-        """关闭底层日志文件并回写 schema-v2 writer 统计。"""
+        """逐项关闭日志，并始终尝试回写 schema-v2 最终统计。"""
 
         try:
             self.logger.close()
-            if self._schema_candidates is not None:
+        except Exception as exc:  # pragma: no cover - 依赖底层文件系统故障
+            self.log_write_failures += 1
+            LOGGER.error("关闭 runtime event logger 失败：%s", exc)
+
+        if self._schema_candidates is not None:
+            try:
                 self._schema_candidates.close()
-            if self._schema_events is not None:
+            except Exception as exc:  # pragma: no cover - 依赖底层文件系统故障
+                self.log_write_failures += 1
+                self._candidate_write_failures += 1
+                LOGGER.error("关闭 python_candidates.jsonl 失败：%s", exc)
+
+        if self._schema_events is not None:
+            try:
                 self._schema_events.close()
-            if self._eval_session is not None and hasattr(self._eval_session, "metadata_path"):
+            except Exception as exc:  # pragma: no cover - 依赖底层文件系统故障
+                self.log_write_failures += 1
+                self._event_write_failures += 1
+                LOGGER.error("关闭 python_events.jsonl 失败：%s", exc)
+
+        if self._eval_session is not None and hasattr(self._eval_session, "metadata_path"):
+            try:
                 update_python_session_metadata(
                     self._eval_session,
                     state="python_stopped",
                     log_writer_stats=self.schema_writer_stats,
                 )
-        except Exception as exc:  # pragma: no cover - 退出路径只做 best-effort 收尾
-            LOGGER.debug("关闭 runtime JSONL 日志失败，已忽略：%s", exc)
+            except Exception as exc:  # pragma: no cover - 依赖底层文件系统故障
+                self.log_write_failures += 1
+                LOGGER.error(
+                    "写入 python_session.json 最终停止态失败；本 session 将被 QC 拒绝：%s",
+                    exc,
+                )
 
     @property
     def schema_writer_stats(self) -> dict[str, dict[str, int]]:

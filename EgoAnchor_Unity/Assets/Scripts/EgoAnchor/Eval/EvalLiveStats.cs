@@ -363,9 +363,13 @@ namespace EgoAnchor.Eval
         private string ReferenceStatus()
         {
             if (!_hasReference) return $"<color=#FF7D6A>MISSING</color>";
-            return _referenceActive
+            string activeState = _referenceActive
                 ? "<color=#4DD6A6>ACTIVE</color>"
                 : "<color=#FFD054>HELD</color>";
+            string preflight = recorder != null && recorder.PlatformReferencePreflightPassed
+                ? "<color=#4DD6A6>VERIFIED</color>"
+                : "<color=#FF7D6A>MOVE TO VERIFY</color>";
+            return $"{activeState} | CHECK {preflight}";
         }
 
         /// <summary>生成头显连接和佩戴状态文本。</summary>

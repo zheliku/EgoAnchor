@@ -49,6 +49,15 @@ namespace EgoAnchor.Eval
         /// <summary>采集备注。</summary>
         public readonly string Notes;
 
+        /// <summary>平台参考 Transform 的完整场景层级路径。</summary>
+        public readonly string PlatformReferenceTransformPath;
+
+        /// <summary>平台参考使用的 OVR 控制器枚举名。</summary>
+        public readonly string PlatformReferenceController;
+
+        /// <summary>正式 session 开始前是否观察到参考对象有效运动。</summary>
+        public readonly bool PlatformReferencePreflightPassed;
+
         /// <summary>构造冻结 manifest 元数据。</summary>
         public EvalManifestMetadata(
             string sessionId,
@@ -63,7 +72,10 @@ namespace EgoAnchor.Eval
             string protocolVersion,
             string frozenParameterSetId,
             string objectModelId,
-            string notes)
+            string notes,
+            string platformReferenceTransformPath,
+            string platformReferenceController,
+            bool platformReferencePreflightPassed)
         {
             SessionId = sessionId ?? string.Empty;
             ObjectId = objectId ?? string.Empty;
@@ -78,6 +90,9 @@ namespace EgoAnchor.Eval
             FrozenParameterSetId = frozenParameterSetId ?? string.Empty;
             ObjectModelId = objectModelId ?? string.Empty;
             Notes = notes ?? string.Empty;
+            PlatformReferenceTransformPath = platformReferenceTransformPath ?? string.Empty;
+            PlatformReferenceController = platformReferenceController ?? string.Empty;
+            PlatformReferencePreflightPassed = platformReferencePreflightPassed;
         }
     }
 
@@ -345,6 +360,10 @@ namespace EgoAnchor.Eval
             sb.Append($"\"config_hash\":{JStr(configHash)},");
             sb.Append($"\"frozen_parameter_set_id\":{JStr(frozenParameterSetId)},");
             sb.Append($"\"object_model_id\":{JStr(metadata.ObjectModelId)},");
+            sb.Append("\"platform_reference\":{");
+            sb.Append($"\"transform_path\":{JStr(metadata.PlatformReferenceTransformPath)},");
+            sb.Append($"\"controller\":{JStr(metadata.PlatformReferenceController)},");
+            sb.Append($"\"preflight_passed\":{(metadata.PlatformReferencePreflightPassed ? "true" : "false")}}},");
             sb.Append("\"log_files\":{");
             sb.Append($"\"python_candidates\":{JStr(EvalV2Manifest.PythonCandidatesFileName)},");
             sb.Append($"\"unity_reference\":{JStr(EvalV2Manifest.UnityReferenceFileName)},");
@@ -421,7 +440,7 @@ namespace EgoAnchor.Eval
             return sb.ToString();
         }
 
-        /// <summary>写入本 session 实际完成且未作废的任务，而不是固定九项计划。</summary>
+        /// <summary>写入本 session 实际完成且未作废的任务，而不是固定整批五项计划。</summary>
         private static void AppendCompletedTasks(
             StringBuilder sb,
             IReadOnlyList<CompletedExperimentTask> completedTasks)
@@ -489,7 +508,7 @@ namespace EgoAnchor.Eval
                 .Append(JStr(ExperimentId.DesignAttribution)).Append("],");
         }
 
-        /// <summary>写入正式采集使用的九类实验场景计划。</summary>
+        /// <summary>写入正式采集使用的五类共享物理场景计划。</summary>
         private static void AppendTrialPlan(StringBuilder sb)
         {
             sb.Append("\"trial_plan\":[");

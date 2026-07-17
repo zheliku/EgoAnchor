@@ -70,7 +70,10 @@ def make_exp1_session(root: Path) -> EvalSessionV2:
         for index, label in enumerate(VARIANTS)
     ]
     event_rows = [
+        _event_row(session_id, "static_head_motion", "trial-1", "event-1", 1000.0, "generic_marker"),
         _event_row(session_id, "start_stop_6dof", "trial-2", "transition-start", 500.0, "transition_started"),
+        _event_row(session_id, "continuous_translation", "trial-3", "event-3", 3000.0, "generic_marker"),
+        _event_row(session_id, "continuous_rotation", "trial-4", "event-4", 4000.0, "generic_marker"),
         _event_row(session_id, "occlusion_recovery", "trial-5", "occlusion-start", 1000.0, "occlusion_started"),
         _event_row(session_id, "occlusion_recovery", "trial-5", "target-visible", 1100.0, "target_visible"),
     ]
@@ -386,6 +389,11 @@ def _with_formal_runtime_matrix(session: EvalSessionV2) -> EvalSessionV2:
         "protocol_version": "v1",
         "frozen_parameter_set_id": "frozen-1",
         "object_model_id": "controller-model",
+        "platform_reference": {
+            "transform_path": "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab",
+            "controller": "RTouch",
+            "preflight_passed": True,
+        },
     }
     manifest["log_writer_stats"] = {
         **manifest["log_writer_stats"],

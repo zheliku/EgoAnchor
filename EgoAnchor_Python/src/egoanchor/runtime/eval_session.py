@@ -11,6 +11,7 @@ import platform
 import re
 import socket
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -118,7 +119,15 @@ def _write_python_session_metadata(
         "python_host": socket.gethostname(),
         "python_version": platform.python_version(),
     }
-    paths.metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    encoded = json.dumps(metadata, ensure_ascii=False, indent=2)
+    temporary = paths.metadata_path.with_name(
+        f".{paths.metadata_path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        temporary.write_text(encoded, encoding="utf-8")
+        temporary.replace(paths.metadata_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _read_created_unix_ms(metadata_path: Path) -> float:

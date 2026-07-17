@@ -168,6 +168,16 @@ namespace EgoAnchor.Eval
         [Tooltip("用于判断平台参考当前是否激活。设为 None 时仅使用 Transform 的层级激活状态。")]
         [SerializeField] private OVRInput.Controller gtController = OVRInput.Controller.RTouch;
 
+        /// <summary>参考预检要求观察到的最小平移，单位米。</summary>
+        [Min(0.001f)]
+        [Tooltip("开始正式 session 前，平台参考至少需要产生该平移或下方旋转量，防止绑定到不会更新的静态对象。")]
+        [SerializeField] private float referencePreflightTranslationMeters = 0.01f;
+
+        /// <summary>参考预检要求观察到的最小旋转，单位度。</summary>
+        [Min(0.1f)]
+        [Tooltip("开始正式 session 前，平台参考至少需要产生该旋转或上方平移量。")]
+        [SerializeField] private float referencePreflightRotationDegrees = 5f;
+
         /// <summary>要录制的 runtime 变体列表；主变体（isPrimary=true）额外记录 aligned raw。</summary>
         [Header("Variants")]
         [Tooltip("要录制的 runtime 变体列表。")]
@@ -207,6 +217,15 @@ namespace EgoAnchor.Eval
         /// <summary>跨帧维护最后一次真实追踪参考 pose 的纯 C# 状态对象。</summary>
         private readonly EvalReferencePoseTracker _gtPoseTracker = new EvalReferencePoseTracker();
 
+        /// <summary>参考预检第一次激活时的位姿。</summary>
+        private Pose _referencePreflightOrigin;
+
+        /// <summary>是否已经观察到参考对象的激活位姿。</summary>
+        private bool _hasReferencePreflightOrigin;
+
+        /// <summary>参考对象是否在本次 Play 生命周期中产生过可验证运动。</summary>
+        private bool _referencePreflightPassed;
+
         /// <summary>当前渲染 tick 复用的系统变体快照缓冲。</summary>
         private readonly List<EvalVariantSnapshot> _snapshots = new List<EvalVariantSnapshot>();
 
@@ -244,6 +263,15 @@ namespace EgoAnchor.Eval
 
         /// <summary>GT Transform 名称，写入 manifest。</summary>
         public string GtTransformName => groundTruth != null ? groundTruth.name : string.Empty;
+
+        /// <summary>平台参考 Transform 的完整场景层级路径，写入 manifest 供审计。</summary>
+        public string PlatformReferenceTransformPath => BuildTransformPath(groundTruth);
+
+        /// <summary>平台参考使用的 OVR 控制器枚举名，写入 manifest 供审计。</summary>
+        public string PlatformReferenceController => gtController.ToString();
+
+        /// <summary>本次 Play 生命周期是否观察到平台参考的有效运动。</summary>
+        public bool PlatformReferencePreflightPassed => _referencePreflightPassed;
 
         /// <summary>最近一次录制中 capture 日志因队列饱和或写入失败丢弃的行数。</summary>
         public long ReferenceDroppedRows => _referenceLogStats.DroppedRows;
@@ -360,6 +388,49 @@ namespace EgoAnchor.Eval
             pose = sample.Pose;
             active = sample.Fresh;
             return sample.Valid;
+        }
+
+        /// <summary>
+        /// 验证正式采集使用的平台参考绑定和本次 Play 生命周期的运动预检。
+        /// controller_right 必须绑定右手 OVRControllerVisual 的 prefab 根节点，不能只靠重名对象通过。
+        /// </summary>
+        public bool TryValidatePlatformReference(string objectId, out string error)
+        {
+            if (groundTruth == null)
+            {
+                error = "platformReferenceTransform";
+                return false;
+            }
+
+            if (string.Equals(objectId, "controller_right", StringComparison.Ordinal))
+            {
+                const string expectedPath =
+                    "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab";
+                if (!string.Equals(
+                        PlatformReferenceTransformPath,
+                        expectedPath,
+                        StringComparison.Ordinal))
+                {
+                    error = $"platformReferencePath[{PlatformReferenceTransformPath}]";
+                    return false;
+                }
+                OVRControllerHelper helper = groundTruth.GetComponent<OVRControllerHelper>();
+                if (helper == null || helper.m_controller != OVRInput.Controller.RTouch
+                    || gtController != OVRInput.Controller.RTouch)
+                {
+                    error = "platformReferenceController[expected RTouch]";
+                    return false;
+                }
+            }
+
+            if (!_referencePreflightPassed)
+            {
+                error = "platformReferencePreflight[move the reference controller before starting]";
+                return false;
+            }
+
+            error = string.Empty;
+            return true;
         }
 
         /// <summary>取主变体：优先 isPrimary，回退列表首个；空列表返回 default。</summary>
@@ -556,6 +627,9 @@ namespace EgoAnchor.Eval
         private void OnEnable()
         {
             _gtPoseTracker.Reset();
+            _referencePreflightOrigin = Pose.identity;
+            _hasReferencePreflightOrigin = false;
+            _referencePreflightPassed = false;
             if (streamPublisher != null)
             {
                 streamPublisher.StereoPublishAttempted += RecordCapturePublishAttempt;
@@ -564,6 +638,30 @@ namespace EgoAnchor.Eval
             RefreshAdmissionSubscriptions();
             if (experimentSelector != null)
                 experimentSelector.ContextEvent += RecordExperimentEvent;
+        }
+
+        /// <summary>在 session 启动前持续观察平台参考，确认绑定对象确实会更新。</summary>
+        private void Update()
+        {
+            if (_referencePreflightPassed) return;
+            double nowMs = UnityEngine.Time.realtimeSinceStartupAsDouble * 1000.0;
+            EvalReferencePose sample = ResolveGtPose(nowMs);
+            if (!sample.Fresh) return;
+            if (!_hasReferencePreflightOrigin)
+            {
+                _referencePreflightOrigin = sample.Pose;
+                _hasReferencePreflightOrigin = true;
+                return;
+            }
+
+            float translation = Vector3.Distance(
+                _referencePreflightOrigin.position,
+                sample.Pose.position);
+            float rotation = Quaternion.Angle(
+                _referencePreflightOrigin.rotation,
+                sample.Pose.rotation);
+            _referencePreflightPassed = translation >= referencePreflightTranslationMeters
+                || rotation >= referencePreflightRotationDegrees;
         }
 
         private void OnDisable()
@@ -1061,6 +1159,16 @@ namespace EgoAnchor.Eval
                 currentPose,
                 active,
                 nowMonoMs);
+        }
+
+        /// <summary>返回包含场景根节点的 Transform 层级路径。</summary>
+        private static string BuildTransformPath(Transform target)
+        {
+            if (target == null) return string.Empty;
+            var names = new Stack<string>();
+            for (Transform current = target; current != null; current = current.parent)
+                names.Push(current.name);
+            return string.Join("/", names);
         }
     }
 }

@@ -26,6 +26,15 @@ FORMAL_VARIANTS = (
 _RUN_KINDS = {"formal"}
 """schema-v2 允许的 session 用途。"""
 
+_MARKER_SCENARIOS = {
+    "static_head_motion",
+    "start_stop_6dof",
+    "continuous_translation",
+    "continuous_rotation",
+    "occlusion_recovery",
+}
+"""五个共享物理任务都必须具有至少一个人工事件 marker。"""
+
 
 @dataclass(frozen=True)
 class SchemaQcReport:
@@ -58,6 +67,7 @@ def run_schema_qc(session: EvalSessionV2) -> SchemaQcReport:
 
     _check_writer_stats(session, errors, metrics)
     _check_run_kind_and_formal_freeze(manifest, variants, errors)
+    _check_platform_reference(manifest, errors, metrics)
     _check_variant_hashes(session, variants, errors)
     _check_completed_tasks(session, errors, metrics)
     _check_primary_keys(session, errors)
@@ -171,7 +181,48 @@ def _check_formal_trial_lifecycle(
                 f"formal trial {trial_id!r} trial_ended precedes trial_started: "
                 f"duration={duration_seconds:.3f}s"
             )
+        _check_trial_event_roles(rows, scenario_id, trial_id, errors)
     metrics["completed_trial_duration_seconds"] = durations
+
+
+def _check_trial_event_roles(
+    rows: pd.DataFrame,
+    scenario_id: str,
+    trial_id: str,
+    errors: list[str],
+) -> None:
+    """冻结五个物理任务的 marker 最低覆盖和遮挡闭合顺序。"""
+
+    if scenario_id not in _MARKER_SCENARIOS:
+        return
+    markers = rows[rows["event_type"] == "event_marker"].sort_values(
+        "mono_ms",
+        kind="stable",
+    )
+    roles = [
+        str(payload.get("event_role") or "")
+        for payload in markers["payload"]
+        if isinstance(payload, dict)
+    ]
+    if not roles:
+        errors.append(f"formal trial {trial_id!r} requires at least one event marker")
+        return
+    if scenario_id == "start_stop_6dof" and "transition_started" not in roles:
+        errors.append(
+            f"formal trial {trial_id!r} requires transition_started event marker"
+        )
+    if scenario_id != "occlusion_recovery":
+        return
+
+    expected = [
+        "occlusion_started" if index % 2 == 0 else "target_visible"
+        for index in range(len(roles))
+    ]
+    if len(roles) < 2 or roles != expected or len(roles) % 2 != 0:
+        errors.append(
+            f"formal trial {trial_id!r} requires closed alternating occlusion markers: "
+            f"observed={roles}"
+        )
 
 
 def _variant_ids(raw: Any, errors: list[str]) -> set[str]:
@@ -298,6 +349,47 @@ def _check_run_kind_and_formal_freeze(
     ):
         if not isinstance(manifest.get(key), str) or not str(manifest[key]).strip():
             errors.append(f"formal session requires non-empty manifest.{key}")
+
+
+def _check_platform_reference(
+    manifest: dict[str, Any],
+    errors: list[str],
+    metrics: dict[str, Any],
+) -> None:
+    """冻结正式采集的平台参考身份和启动前运动预检。"""
+
+    raw = manifest.get("platform_reference")
+    if not isinstance(raw, dict):
+        errors.append("formal session requires manifest.platform_reference object")
+        return
+    transform_path = raw.get("transform_path")
+    controller = raw.get("controller")
+    preflight = raw.get("preflight_passed")
+    if not isinstance(transform_path, str) or not transform_path.strip():
+        errors.append("manifest.platform_reference.transform_path must be non-empty")
+        transform_path = ""
+    if not isinstance(controller, str) or not controller.strip():
+        errors.append("manifest.platform_reference.controller must be non-empty")
+        controller = ""
+    if not isinstance(preflight, bool) or not preflight:
+        errors.append("manifest.platform_reference.preflight_passed must be true")
+
+    if manifest.get("object_id") == "controller_right":
+        expected_path = (
+            "OVRCameraRig/OVRInteractionComprehensive/"
+            "OVRControllerVisualRight/OVRControllerPrefab"
+        )
+        if transform_path != expected_path:
+            errors.append(
+                "controller_right requires exact platform reference path "
+                f"{expected_path}"
+            )
+        if controller != "RTouch":
+            errors.append("controller_right requires platform reference controller RTouch")
+
+    metrics["platform_reference_transform_path"] = transform_path
+    metrics["platform_reference_controller"] = controller
+    metrics["platform_reference_preflight_passed"] = bool(preflight)
 
 
 def _check_variant_hashes(session: EvalSessionV2, variants: set[str], errors: list[str]) -> None:

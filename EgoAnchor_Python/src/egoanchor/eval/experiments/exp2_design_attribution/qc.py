@@ -18,11 +18,13 @@ from egoanchor.eval.schema_v2 import (
 
 from .contract import (
     ABLATION_COMPONENT,
+    ABLATION_SCENARIO,
     BASELINE_VARIANT,
     COMPONENT_KEYS,
     EXPERIMENT_ID,
     REQUIRED_VARIANTS,
-    SCENARIO_ABLATION,
+    SOURCE_EXPERIMENT_ID,
+    SOURCE_SCENARIOS,
     variant_contracts,
 )
 
@@ -75,12 +77,14 @@ def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
     accepted = select_completed_trials(loaded)
 
     completed = accepted_trial_table(loaded)
-    target_trials = completed[completed["experiment_id"].astype(str).eq(EXPERIMENT_ID)]
+    target_trials = completed[
+        completed["experiment_id"].astype(str).eq(SOURCE_EXPERIMENT_ID)
+    ]
     contributes = not target_trials.empty
 
     experiment_ids = loaded.manifest.get("experiment_ids")
-    if not isinstance(experiment_ids, list) or EXPERIMENT_ID not in experiment_ids:
-        errors.append(f"manifest.experiment_ids 缺少 {EXPERIMENT_ID}")
+    if not isinstance(experiment_ids, list) or SOURCE_EXPERIMENT_ID not in experiment_ids:
+        errors.append(f"manifest.experiment_ids 缺少 {SOURCE_EXPERIMENT_ID}")
 
     try:
         contracts = variant_contracts(loaded.manifest)
@@ -93,7 +97,7 @@ def run_exp2_qc(session: EvalSessionV2 | str | Path) -> Exp2QcReport:
     admission = _experiment_rows(accepted.unity_admission)
     trial_qc = build_trial_qc(render)
     observed_scenarios = set(target_trials["scenario_id"].astype(str))
-    unknown_scenarios = sorted(observed_scenarios - set(SCENARIO_ABLATION))
+    unknown_scenarios = sorted(observed_scenarios - set(SOURCE_SCENARIOS))
     if unknown_scenarios:
         errors.append(f"实验二 session 包含未知归因场景：{unknown_scenarios}")
     if contributes:
@@ -154,13 +158,15 @@ def build_trial_qc(render: pd.DataFrame) -> pd.DataFrame:
     for values, group in render.groupby(list(TRIAL_COLUMNS), dropna=False, sort=True):
         context = dict(zip(TRIAL_COLUMNS, values, strict=True))
         scenario_id = str(context["scenario_id"])
-        paired_variant = SCENARIO_ABLATION.get(scenario_id, "")
-        expected = {BASELINE_VARIANT, paired_variant} if paired_variant else set()
-        labels = set(group["variant_label"].dropna().astype(str))
-        reasons: list[str] = []
-        if not paired_variant:
-            reasons.append(f"unknown attribution scenario={scenario_id}")
-        else:
+        context["experiment_id"] = EXPERIMENT_ID
+        paired_variants = tuple(
+            label for label, source_scenario in ABLATION_SCENARIO.items()
+            if source_scenario == scenario_id
+        )
+        for paired_variant in paired_variants:
+            expected = {BASELINE_VARIANT, paired_variant}
+            labels = set(group["variant_label"].dropna().astype(str))
+            reasons: list[str] = []
             missing_labels = sorted(expected - labels)
             if missing_labels:
                 reasons.append(f"missing paired variants={missing_labels}")
@@ -169,15 +175,15 @@ def build_trial_qc(render: pd.DataFrame) -> pd.DataFrame:
                 if any(tick_labels.count(label) != 1 for label in expected):
                     reasons.append(f"tick={tick_id!r} does not contain one paired row per variant")
                     break
-        rows.append(
-            {
-                **context,
-                "paired_variant": paired_variant,
-                "render_tick_count": int(group["render_tick_id"].nunique()),
-                "passed": not reasons,
-                "reason": " | ".join(reasons),
-            }
-        )
+            rows.append(
+                {
+                    **context,
+                    "paired_variant": paired_variant,
+                    "render_tick_count": int(group["render_tick_id"].nunique()),
+                    "passed": not reasons,
+                    "reason": " | ".join(reasons),
+                }
+            )
     return pd.DataFrame.from_records(rows, columns=columns)
 
 
@@ -207,12 +213,12 @@ def _check_component_contract(
 
 
 def _experiment_rows(table: pd.DataFrame) -> pd.DataFrame:
-    """在基础 QC 后仅投影实验二五个配置，不混入实验一基线。"""
+    """从任务 1--5 源表投影完整系统与四个单组件消融。"""
 
     if table.empty or not {"experiment_id", "variant_label"} <= set(table.columns):
         return table.iloc[0:0].copy()
     mask = (
-        table["experiment_id"].astype(str).eq(EXPERIMENT_ID)
+        table["experiment_id"].astype(str).eq(SOURCE_EXPERIMENT_ID)
         & table["variant_label"].astype(str).isin(REQUIRED_VARIANTS)
     )
     return table.loc[mask].copy()

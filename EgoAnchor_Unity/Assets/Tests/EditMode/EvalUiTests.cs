@@ -215,6 +215,51 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>正式参考必须在开始前观察到真实运动；右手 prefab 身份由场景契约另行冻结。</summary>
+        [Test]
+        public void RecorderRequiresReferenceMotionPreflight()
+        {
+            GameObject rig = new GameObject("OVRCameraRig");
+            GameObject interaction = new GameObject("OVRInteractionComprehensive");
+            GameObject visual = new GameObject("OVRControllerVisualRight");
+            GameObject reference = new GameObject("OVRControllerPrefab");
+            GameObject recorderObject = new GameObject("ReferenceValidation.Recorder");
+            try
+            {
+                interaction.transform.SetParent(rig.transform, false);
+                visual.transform.SetParent(interaction.transform, false);
+                reference.transform.SetParent(visual.transform, false);
+                EvalRecorder recorder = recorderObject.AddComponent<EvalRecorder>();
+                SetPrivateField(recorder, "groundTruth", reference.transform);
+                SetPrivateEnumField(recorder, "gtController", 0);
+                InvokeReferencePreflight(recorder);
+                Assert.That(
+                    recorder.TryValidatePlatformReference("custom_object", out string error),
+                    Is.False);
+                StringAssert.Contains("platformReferencePreflight", error);
+
+                reference.transform.position = new Vector3(0.02f, 0f, 0f);
+                InvokeReferencePreflight(recorder);
+
+                Assert.That(recorder.TryValidatePlatformReference("custom_object", out error), Is.True);
+                Assert.That(error, Is.Empty);
+                Assert.That(
+                    recorder.PlatformReferenceTransformPath,
+                    Is.EqualTo(
+                        "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab"));
+                Assert.That(recorder.PlatformReferenceController, Is.EqualTo("None"));
+                Assert.That(
+                    recorder.TryValidatePlatformReference("controller_right", out error),
+                    Is.False);
+                StringAssert.Contains("platformReferenceController", error);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(recorderObject);
+                UnityEngine.Object.DestroyImmediate(rig);
+            }
+        }
+
         /// <summary>反射调用私有采样入口，避免为了测试扩大逐帧更新 API。</summary>
         private static void InvokeSample(EvalLiveStats stats)
         {
@@ -223,6 +268,16 @@ namespace EgoAnchor.Tests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(method, Is.Not.Null);
             method.Invoke(stats, Array.Empty<object>());
+        }
+
+        /// <summary>反射执行一次参考运动预检采样。</summary>
+        private static void InvokeReferencePreflight(EvalRecorder recorder)
+        {
+            MethodInfo method = typeof(EvalRecorder).GetMethod(
+                "Update",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(recorder, Array.Empty<object>());
         }
 
         /// <summary>设置测试需要的序列化字段。</summary>
@@ -334,7 +389,9 @@ namespace EgoAnchor.Tests
                 new EvalManifestMetadata(
                     "s01", "controller_right", "operator-01", 2000,
                     "editor_link", string.Empty, "6000.3.11f1", string.Empty,
-                    "commit", "v1", string.Empty, "controller-mesh-v1", string.Empty),
+                    "commit", "v1", string.Empty, "controller-mesh-v1", string.Empty,
+                    "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab",
+                    "RTouch", true),
                 new[] { "EgoAnchor" },
                 new[]
                 {
@@ -402,14 +459,17 @@ namespace EgoAnchor.Tests
                 "session_id", "object_id", "run_kind", "experiment_ids", "operator_id", "created_unix_ms",
                 "unity_run_mode", "python_host", "unity_version", "python_version", "egoanchor_git_commit",
                 "protocol_version", "config_hash", "frozen_parameter_set_id", "object_model_id",
-                "variant_definitions", "completed_tasks", "trial_plan", "log_files", "log_writer_stats",
+                "platform_reference", "variant_definitions", "completed_tasks", "trial_plan",
+                "log_files", "log_writer_stats",
             })
                 StringAssert.Contains($"\"{field}\":", manifest);
             StringAssert.Contains(
                 "\"completed_tasks\":[{\"task_number\":1,\"experiment_id\":\"exp1_system_characterization\",\"scenario_id\":\"static_head_motion\",\"trial_id\":\"trial_001\"},{\"task_number\":3",
                 manifest);
             StringAssert.Contains("\"scenario_id\":\"occlusion_recovery\"", manifest);
-            StringAssert.Contains("\"scenario_id\":\"without_static_lock\"", manifest);
+            StringAssert.DoesNotContain("\"scenario_id\":\"without_static_lock\"", manifest);
+            StringAssert.Contains("\"controller\":\"RTouch\"", manifest);
+            StringAssert.Contains("\"preflight_passed\":true", manifest);
             StringAssert.DoesNotContain("minimum_seconds", manifest);
             StringAssert.DoesNotContain("maximum_seconds", manifest);
             StringAssert.Contains("\"config_hash\":", manifest);
@@ -462,6 +522,7 @@ namespace EgoAnchor.Tests
                 ExperimentInputHandler input = owner.AddComponent<ExperimentInputHandler>();
 
                 SetPrivateField(recorder, "groundTruth", owner.transform);
+                SetPrivateField(recorder, "_referencePreflightPassed", true);
                 SetPrivateField(recorder, "variants", new List<EvalVariant>
                 {
                     new EvalVariant
@@ -477,6 +538,7 @@ namespace EgoAnchor.Tests
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
                 SetPrivateField(session, "outputRoot", root);
+                SetPrivateField(session, "objectId", "test_object");
                 SetPrivateField(input, "selector", selector);
                 selector.BindSession(session);
 
@@ -751,7 +813,7 @@ namespace EgoAnchor.Tests
                     })
                         Assert.That(GetPrivateField(input, fieldName), Is.TypeOf<InputAction>());
                     Assert.That(GetPrivateField(input, "taskActions"), Is.TypeOf<InputAction[]>());
-                    Assert.That(((InputAction[])GetPrivateField(input, "taskActions")).Length, Is.EqualTo(9));
+                    Assert.That(((InputAction[])GetPrivateField(input, "taskActions")).Length, Is.EqualTo(5));
                     Assert.That(input.GetType().GetField("controllerBinding", BindingFlags.Instance | BindingFlags.NonPublic), Is.Null);
                     Assert.That(input.GetType().GetField("keyboardBinding", BindingFlags.Instance | BindingFlags.NonPublic), Is.Null);
                 }
@@ -793,7 +855,7 @@ namespace EgoAnchor.Tests
             });
         }
 
-        /// <summary>UI 必须显示九任务状态、直白操作状态、单一计时和统一按键图例。</summary>
+        /// <summary>UI 必须显示五任务状态、直白操作状态、单一计时和统一按键图例。</summary>
         [Test]
         public void StatusUiShowsTaskBoardAndLivePhase()
         {
@@ -812,7 +874,7 @@ namespace EgoAnchor.Tests
                     SetPrivateField(status, "session", session);
                     string text = status.BuildStatusText();
 
-                    StringAssert.Contains("TASKS  <color=#5BA9FF>1/9 COMPLETE</color>", text);
+                    StringAssert.Contains("TASKS  <color=#5BA9FF>1/5 COMPLETE</color>", text);
                     StringAssert.Contains("[OK]1 HEAD", text);
                     StringAssert.Contains(">[RUN]5 OCC", text);
                     StringAssert.Contains("<color=#5BA9FF> [OK]1 HEAD", text);
@@ -824,7 +886,7 @@ namespace EgoAnchor.Tests
                     StringAssert.DoesNotContain("01:30", text);
                     StringAssert.DoesNotContain("02:00", text);
                     StringAssert.DoesNotContain("TO MINIMUM", text);
-                    StringAssert.Contains("KEYPAD  1-9 Select | Enter Start | + Marker | 0 End", text);
+                    StringAssert.Contains("KEYPAD  1-5 Select | Enter Start | + Marker | 0 End", text);
                     StringAssert.Contains("VR      Stick Select | A Start | Trigger Marker | Tap B End", text);
                     StringAssert.Contains("OTHER   Space Reject | F Stop Session | Hold B Stop", text);
                     StringAssert.DoesNotContain("Phase:", text);
@@ -1112,7 +1174,7 @@ namespace EgoAnchor.Tests
             AssertUnifiedActionBindings(inputSection);
             AssertKeyboardTaskBindings(inputSection);
             Assert.That(
-                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
+                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-5]\r?$").Count,
                 Is.EqualTo(ExperimentScenario.PlanCount));
 
             MatchCollection ids = Regex.Matches(inputSection, @"(?m)^\s+m_Id: (?<id>[^\r\n]+)$");
@@ -1151,7 +1213,7 @@ namespace EgoAnchor.Tests
             AssertUnifiedActionBindings(inputSection);
             AssertKeyboardTaskBindings(inputSection);
             Assert.That(
-                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-9]\r?$").Count,
+                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-5]\r?$").Count,
                 Is.EqualTo(ExperimentScenario.PlanCount));
 
             string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
@@ -1178,15 +1240,34 @@ namespace EgoAnchor.Tests
 
                 string statusPanel = GetSectionContaining(yaml, "m_Name: ExperimentStatusPanel");
                 string statusRect = GetSection(yaml, ReadFirstComponentReference(statusPanel));
-                StringAssert.Contains("m_AnchoredPosition: {x: -450, y: 0}", statusRect, sceneName);
-                StringAssert.Contains("m_SizeDelta: {x: 900, y: 650}", statusRect, sceneName);
                 StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", statusRect, sceneName);
 
                 string livePanel = GetSectionContaining(yaml, "m_Name: LiveMetricsPanel");
                 string liveRect = GetSection(yaml, ReadFirstComponentReference(livePanel));
-                StringAssert.Contains("m_AnchoredPosition: {x: 470, y: 0}", liveRect, sceneName);
-                StringAssert.Contains("m_SizeDelta: {x: 720, y: 650}", liveRect, sceneName);
                 StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", liveRect, sceneName);
+
+                bool centeredColumns =
+                    statusRect.Contains("m_AnchoredPosition: {x: -450, y: 0}")
+                    && statusRect.Contains("m_SizeDelta: {x: 900, y: 650}")
+                    && statusRect.Contains("m_Pivot: {x: 0.5, y: 0.5}")
+                    && liveRect.Contains("m_AnchoredPosition: {x: 470, y: 0}")
+                    && liveRect.Contains("m_SizeDelta: {x: 720, y: 650}")
+                    && liveRect.Contains("m_Pivot: {x: 0.5, y: 0.5}");
+                bool edgeColumns =
+                    statusRect.Contains("m_AnchorMin: {x: 0, y: 0}")
+                    && statusRect.Contains("m_AnchorMax: {x: 0, y: 1}")
+                    && statusRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
+                    && statusRect.Contains("m_SizeDelta: {x: 800, y: 0}")
+                    && statusRect.Contains("m_Pivot: {x: 0, y: 0.5}")
+                    && liveRect.Contains("m_AnchorMin: {x: 1, y: 0}")
+                    && liveRect.Contains("m_AnchorMax: {x: 1, y: 1}")
+                    && liveRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
+                    && liveRect.Contains("m_SizeDelta: {x: 500, y: 0}")
+                    && liveRect.Contains("m_Pivot: {x: 1, y: 0.5}");
+                Assert.That(
+                    centeredColumns || edgeColumns,
+                    Is.True,
+                    $"{sceneName} 的两个同级面板必须使用已验证的无重叠布局。");
 
                 string stats = GetSectionContaining(
                     yaml,
@@ -1219,7 +1300,15 @@ namespace EgoAnchor.Tests
                     yaml,
                     "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder");
 
-                Assert.That(ReadReference(recorder, "groundTruth"), Is.Not.EqualTo("0"), sceneName);
+                string groundTruthId = ReadReference(recorder, "groundTruth");
+                Assert.That(groundTruthId, Is.Not.EqualTo("0"), sceneName);
+                string groundTruth = GetSection(yaml, groundTruthId);
+                StringAssert.Contains(
+                    "m_CorrespondingSourceObject: {fileID: 1168042862848623612, " +
+                    "guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}",
+                    groundTruth,
+                    sceneName);
+                StringAssert.Contains("gtController: 2", recorder, sceneName);
                 StringAssert.DoesNotContain("gtFreshnessMode:", recorder, sceneName);
                 StringAssert.DoesNotContain("gtKeepAliveSeconds:", recorder, sceneName);
             }
@@ -1437,12 +1526,14 @@ namespace EgoAnchor.Tests
         /// <summary>按 fileID 读取完整 Unity YAML 对象段。</summary>
         private static string GetSection(string yaml, string fileId)
         {
-            string marker = $"&{fileId}\r\n";
-            if (yaml.IndexOf(marker, StringComparison.Ordinal) < 0)
-            {
-                marker = $"&{fileId}\n";
-            }
-            return GetSectionContaining(yaml, marker);
+            Match header = Regex.Match(
+                yaml,
+                $@"(?m)^--- !u!\d+ &{Regex.Escape(fileId)}(?: stripped)?\r?$");
+            Assert.That(header.Success, Is.True, $"missing Unity YAML object: {fileId}");
+            int end = yaml.IndexOf("\n--- !u!", header.Index + header.Length, StringComparison.Ordinal);
+            return yaml.Substring(
+                header.Index,
+                end < 0 ? yaml.Length - header.Index : end - header.Index);
         }
 
         /// <summary>读取 YAML 对象段中的本地 fileID 引用。</summary>

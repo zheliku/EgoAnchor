@@ -587,7 +587,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
-                ConfigureMinimalFormalVariant(go, recorder);
+                ConfigureMinimalFormalSession(go, recorder, session);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -623,7 +623,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
-                ConfigureMinimalFormalVariant(go, recorder);
+                ConfigureMinimalFormalSession(go, recorder, session);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -668,7 +668,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
-                ConfigureMinimalFormalVariant(go, recorder);
+                ConfigureMinimalFormalSession(go, recorder, session);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -706,7 +706,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = go.AddComponent<EvalRecorder>();
                 AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
                 EvalSession session = go.AddComponent<EvalSession>();
-                ConfigureMinimalFormalVariant(go, recorder);
+                ConfigureMinimalFormalSession(go, recorder, session);
                 SetPrivateField(hub, "latestPythonSessionId", sessionId);
                 SetPrivateField(session, "recorder", recorder);
                 SetPrivateField(session, "runtimeHub", hub);
@@ -848,7 +848,9 @@ namespace EgoAnchor.Tests
             string json = EvalJson.BuildManifest(
                 new EvalManifestMetadata(
                     "session", "object", string.Empty, 1, "editor",
-                    string.Empty, "unity", string.Empty, "commit", "v1", string.Empty, string.Empty, string.Empty),
+                    string.Empty, "unity", string.Empty, "commit", "v1", string.Empty, string.Empty, string.Empty,
+                    "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab",
+                    "RTouch", true),
                 Array.Empty<string>(), Array.Empty<EvalVariantConfig>(),
                 referenceStats: new EvalLogStats(2, 8, null, 10),
                 admissionStats: new EvalLogStats(1, 4, null, 20),
@@ -1109,8 +1111,11 @@ namespace EgoAnchor.Tests
             return (T)field.GetValue(instance);
         }
 
-        /// <summary>为非场景测试配置一个可通过正式启动校验的最小 runtime。</summary>
-        private static void ConfigureMinimalFormalVariant(GameObject owner, EvalRecorder recorder)
+        /// <summary>为非场景测试配置一个可通过正式启动校验的最小 runtime 与参考对象。</summary>
+        private static void ConfigureMinimalFormalSession(
+            GameObject owner,
+            EvalRecorder recorder,
+            EvalSession session)
         {
             PoseToAnchorRuntime runtime = owner.AddComponent<PoseToAnchorRuntime>();
             SetPrivateField(recorder, "variants", new List<EvalVariant>
@@ -1123,6 +1128,9 @@ namespace EgoAnchor.Tests
                     isPrimary = true,
                 },
             });
+            SetPrivateField(recorder, "groundTruth", owner.transform);
+            SetPrivateField(recorder, "_referencePreflightPassed", true);
+            SetPrivateField(session, "objectId", "test_object");
         }
 
         /// <summary>反射调用评估快照构建，避免为测试扩大生产 API。</summary>

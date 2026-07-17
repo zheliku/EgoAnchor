@@ -2,7 +2,9 @@
 
 正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。每次 session 可以只采任务 1--9 中的任意几项，不必一次做完，也不必按顺序。最后只要同一冻结配置下的所有 session 合起来覆盖任务 1--9 即可。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置和四个实验二组件消融。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
+
+推荐在同一个 session 中依次完成任务 1--5。确需中断时，也可以拆成多个 session；只要它们使用完全相同的冻结配置，并且合起来覆盖任务 1--5 即可。
 
 任务和 session 都没有持续时间上下限。UI 的 `TIME` 只告诉你已经录了多久，不会阻止结束，也不会因为过短或过长判定失败。完成当前任务要求的动作和 marker 后即可结束；需要中止时也可以直接停止整个 session。
 
@@ -12,7 +14,7 @@
 
 | 操作 | 右手手柄 | 键盘 | 实际含义 |
 |---|---|---|---|
-| 选择任务 | 右摇杆上下左右 | 方向键，或数字行/小键盘 `1`--`9` | 只改变黄色选中项，不开始采集 |
+| 选择任务 | 右摇杆上下左右 | 方向键，或数字行/小键盘 `1`--`5` | 只改变黄色选中项，不开始采集 |
 | 开始任务 | A | 主键盘 `Enter` 或小键盘 `Enter` | 开始当前选中任务的 trial |
 | 写 marker | 右扳机 | 小键盘 `+` 或 `M` | 在当前 trial 中记录动作、遮挡或重新可见的准确时刻 |
 | 结束任务 | 快速短按 B | 小键盘 `0` 或 `E` | 结束当前任务；必需 marker 完整后变成 `[OK]` |
@@ -45,9 +47,9 @@ marker 按下后，状态板会保留 2 秒确认信息。绿色 `MARKER SAVED #
 ### 键盘
 
 - 方向键与右摇杆完全相同，按一次只在九宫格移动一格。
-- 主键盘数字行和小键盘 `1`--`9` 可以直接选中对应任务，但不会自动开始。
+- 主键盘数字行和小键盘 `1`--`5` 可以直接选中对应任务，但不会自动开始。
 - 主键盘 `Enter` 和小键盘 `Enter` 都会开始当前选中任务。
-- 主流程可以全部在小键盘完成：`1`--`9` 选任务，`Enter` 开始，`+` 写 marker，`0` 结束任务。
+- 主流程可以全部在小键盘完成：`1`--`5` 选任务，`Enter` 开始，`+` 写 marker，`0` 结束任务。
 - `M` 和 `E` 分别是 marker 与结束任务的兼容键；`Space` 只作废当前或选中任务，`F` 随时停止整个 session。
 - 任务运行时会锁定选择；方向键和数字键都不会切换任务，也不会误写 marker。
 
@@ -63,8 +65,7 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 
 ```text
 1 HEAD    2 6DOF    3 MOVE
-4 ROT     5 OCC     6 ALIGN
-7 VCD     8 TEMP    9 LOCK
+4 ROT     5 OCC
 ```
 
 任务状态：
@@ -97,7 +98,7 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 |---|---|
 | `XR DEVICE / WORN` | 是否检测到头显，以及 Meta runtime 是否判断头显正在佩戴 |
 | `XR FOCUS / INPUT` | Unity 是否持有 VR 画面和输入 focus；`LOST` 会显示红色 |
-| `OUTPUT / DISPLAY / REF` | 主 runtime 是否有输出、锚点是否实际可见、平台参考 Transform 是否可用；`ACTIVE` 表示正在更新，`HELD` 表示手柄失活后继续使用最后一次激活位姿 |
+| `OUTPUT / DISPLAY / REF` | 主 runtime 是否有输出、锚点是否实际可见、平台参考 Transform 是否可用；`ACTIVE` 表示正在更新，`HELD` 表示手柄失活后继续使用最后一次激活位姿；`CHECK VERIFIED` 表示参考绑定已通过运动预检 |
 | `POSITION DELTA` | 显示锚点相对 Quest 平台控制器参考的位置差异，单位 mm |
 | `ROTATION DELTA` | 显示锚点相对 Quest 平台控制器参考的旋转差异，单位 deg |
 | `OBS AGE` | 当前显示使用的图像观测距现在有多久；它包含等待和运行时保持，不是纯网络时延 |
@@ -116,6 +117,8 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 
 手柄静止后可能被平台隐藏。此时 `REF` 显示 `HELD`，位置和旋转差异仍按最后一次激活的 Transform 位姿计算；手柄重新激活后，参考位姿自动继续更新。`HELD` 不是错误，不需要为了让面板变回 `ACTIVE` 而移动手柄。
 
+正式 session 启动前必须看到 `REF ... | CHECK VERIFIED`。进入 Play Mode 后，先拿起右手控制器移动至少约 1 cm，或旋转至少约 5 度，确认提示从 `MOVE TO VERIFY` 变为 `VERIFIED`，再把控制器放到任务要求的位置。这个预检用来证明 Recorder 绑定的是会随平台追踪更新的对象，而不是名称相似但不会更新的静态节点。
+
 ## 四、启动顺序
 
 ### 1. 启动 NATS
@@ -124,7 +127,17 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 nats-server
 ```
 
-### 2. 在 5090 电脑启动 Python
+### 2. 在本机启动并检查 Mutagen
+
+```powershell
+cd EgoAnchor_Python
+mutagen project start
+mutagen sync list
+```
+
+确认 `logs-5090` 为 `Watching for changes`，且没有 conflict。建议从采集前就保持同步；如果中途未开启，只要远端 Python 日志完整落盘，停止后再开启同步仍可使用，但必须等所有分片完整回传后才能运行 QC。
+
+### 3. 在 5090 电脑启动 Python
 
 ```powershell
 cd EgoAnchor_Python
@@ -133,15 +146,16 @@ pixi run python .\src\run_server.py --object controller_right
 
 Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen 回传到本机 `EgoAnchor_Python/data/eval/`。Unity 不应直接覆盖 Python 的日志文件。
 
-### 3. 启动 Unity
+### 4. 启动 Unity
 
 1. 打开 `Assets/Scene/EgoAnchor-Experiment12.unity`。
 2. 检查 `ServerEndpointConfig` 的服务器 IP。
 3. 进入 Play Mode。
 4. 等待 Python 显示 NATS 已连接、ZMQ 正在监听 `15557`。
-5. 等待 Unity UI 显示 `Recording` 和 Python 的 `session_id`。
-6. 确认任务 1 已被选中，但仍是 `[ ]`，不是 `[RUN]`。
+5. 等待 Unity 收到 Python 的 `session_id`。此时任务 1 只应呈黄色选中状态，不能显示 `[RUN]`，计时仍为 `--:--`。
+6. 拿起右手控制器做一次明显的小幅移动或旋转，确认右侧 `REF` 显示 `CHECK VERIFIED`。
 7. 查看右侧实时诊断板，确认 `WORN YES`、`VR ACTIVE`、`INPUT ACTIVE`，并等待输出信号和更新率稳定。
+8. 只有按下一次 A、主键盘 `Enter` 或小键盘 `Enter` 后，Unity 才会在同一个输入回调中启动 session 和当前选中的任务。
 
 如果 UI 显示“当前 Python session 已有 Unity 日志”，这个 `session_id` 已经用过。停止并重新启动 Python，取得新的 `session_id`，不要覆盖旧目录。
 
@@ -159,7 +173,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 每次按 marker 都要看到绿色 `MARKER SAVED #N`。没有看到确认时先停止动作，检查当前任务是否仍为 `[RUN]`，不要靠重复按键猜测是否写入。
 
-## 六、任务 1--9 逐项操作
+## 六、任务 1--5 逐项操作
 
 ### 任务 1：HEAD，静止目标与主动头动
 
@@ -201,23 +215,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-### 任务 6：ALIGN，关闭采集时刻对齐
-
-动作与任务 1 相同：目标固定，稳定后按 marker，做左右转头、上下点头、明显侧移、靠近和远离，覆盖完整并回到稳定后结束。
-
-### 任务 7：VCD，关闭 VCD 接纳
-
-动作与任务 5 相同：遮挡开始和重新可见各按一次 marker，覆盖部分遮挡和完全遮挡，最后一轮必须闭合。
-
-### 任务 8：TEMP，关闭时序合成
-
-动作与任务 2 相同：先保持静止，每轮拿起前按 marker，完成平移加旋转后放下并等待稳定，重复多轮以覆盖起停变化。
-
-### 任务 9：LOCK，关闭 StaticLock
-
-1. 选中任务 9，按 A 或 `Enter` 开始，控制器放在桌面并保持静止。
-2. 每轮拿起前按 marker，完成平移加旋转后放下并等待稳定。
-3. 重复多轮，确认静止锚定和重新运动都已覆盖后结束。
+任务 1--5 运行期间，场景中的 8 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。操作者不需要为实验二再重复一遍动作。
 
 ## 七、做错了怎么处理
 
@@ -232,10 +230,10 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 为了避免 Python 停止后的尾帧没有 Unity admission，最后一项任务完成后严格按以下顺序：
 
 1. 确认没有 `[RUN]`，用 `TASKS` 和蓝色 `[OK]` 核对本次完成的任务。
-2. **先停止 5090 上的 Python**，按 `q`、`Esc` 或正常终止服务。
-3. 等 `python_session.json` 的 `state` 变为 `python_stopped`，并等待 Mutagen 回传完成。
-4. Unity 保持 Play Mode，按 `F` 或长按右手 B 1.5 秒停止 session。若有活动 trial，它会自动写入 `trial_rejected`，已经完成的 `[OK]` 任务不受影响。
-5. 等 Unity 控制台显示 manifest 已写入，最后退出 Play Mode。
+2. **先停止 5090 上的 Python**，按 `q`、`Esc` 或正常终止服务，并在远端确认 `python_session.json` 的 `state` 已变为 `python_stopped`。
+3. 立即回到 Unity，保持 Play Mode，按 `F` 或长按右手 B 1.5 秒停止 session。若有活动 trial，它会自动写入 `trial_rejected`，已经完成的 `[OK]` 任务不受影响。
+4. 等 Unity 控制台显示 manifest 已写入，再退出 Play Mode。
+5. 等 Mutagen 的 `logs-5090` 回到 `Watching for changes`，确认没有 conflict，然后运行 QC。QC 会在两个事件分片完整时原子生成最终 `events.jsonl`。
 
 不要在 Python 仍持续发布 PoseResult 时先结束 Unity session。QC 会统计跨端未消费的 Python candidate；实际进入 Unity 的 candidate 仍必须完整覆盖 8 个 runtime。
 
@@ -254,7 +252,7 @@ events.jsonl
 audit_samples/
 ```
 
-`python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会合并生成 `events.jsonl`。不要手工修改内部固定文件或 manifest 的 `session_id`。两端正常停止后，可以给最外层目录加任务前缀，例如 `tasks-01-03__20260716_153000_controller_right/`。
+`python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会合并生成 `events.jsonl`。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。
 
 ## 九、运行 QC 和分析
 
@@ -263,27 +261,27 @@ cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，遮挡没有悬空 marker，每个被 Unity 消费的 candidate 有 8 个 admission，每个 render tick 有 8 个 runtime。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，五个任务都有 marker，任务 2 至少有一个 `transition_started`，任务 5 的遮挡/重新可见 marker 成对闭合，每个被 Unity 消费的 candidate 有 8 个 admission，每个 render tick 有 8 个 runtime。分析还会检查四个消融是否都产生了对应关键指标；缺少任一项时不会发布正式 CSV、PDF 或 TeX。
 
-实验一批次必须合计覆盖任务 1--5，实验二批次必须合计覆盖任务 6--9：
+实验一和实验二使用同一组输入目录，批次都必须合计覆盖任务 1--5：
 
 ```powershell
 pixi run python -m egoanchor.eval.cli analyze-exp1 `
-  .\data\eval\tasks-01-03__<session_a> `
-  .\data\eval\tasks-02-04-05__<session_b> `
+  .\data\eval\<session_a> `
+  .\data\eval\<session_b> `
   --out .\data\analysis\exp1
 
 pixi run python -m egoanchor.eval.cli analyze-exp2 `
-  .\data\eval\tasks-06-07__<session_c> `
-  .\data\eval\tasks-08-09__<session_d> `
+  .\data\eval\<session_a> `
+  .\data\eval\<session_b> `
   --out .\data\analysis\exp2
 ```
 
 ## 十、Inspector 改绑与正式采集前自检
 
-本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Finish Action`、`Reject Action` 和 9 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
+本项目不使用 InputActionAsset。正式场景的 `ExperimentInputHandler` 直接在 Inspector 序列化 `Navigate Action`、`Start Action`、`Mark Action`、`Stop Action`、`Finish Action`、`Reject Action` 和 5 项 `Task Actions`。需要改绑时展开对应 Action 的 Bindings 直接修改。`ExperimentStatusUI` 的所有颜色也暴露在 Inspector 中。
 
-开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`9`、两个 `Enter`、小键盘 `+`、小键盘 `0`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，marker 成功和拒绝都有明显反馈，遮挡 marker 能正确配对，两块 Canvas 面板不跟随头部，实时指标持续更新，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。
+开始正式采集前做一次工程功能自检，确认右手摇杆、A、右扳机、B 短按/长按、摇杆按下，以及键盘方向键、数字行/小键盘 `1`--`5`、两个 `Enter`、小键盘 `+`、小键盘 `0`、`M`、`E`、`F`、`Space` 都有效。还要确认数字键只选择、不自动开始，运行中不能切换，`Space` 只作废选中任务，`F` 或长按 B 可以随时停止 session，完成任务选中后仍为蓝色并能直接重采，marker 成功和拒绝都有明显反馈，遮挡 marker 能正确配对，两块 Canvas 面板不跟随头部，实时指标持续更新，`REF` 运动预检能从 `MOVE TO VERIFY` 变为 `VERIFIED`，日志无 dropped row 和 write failure。工程功能自检不是另一类实验 session；真正写入评估目录的数据统一为 formal。
 
 ## 十一、Quest 串流黑屏怎么处理
 

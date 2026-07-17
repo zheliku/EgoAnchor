@@ -43,6 +43,7 @@ class EvalSessionCoordinatorTest(unittest.TestCase):
             self.assertEqual(metadata["state"], "python_started")
             self.assertEqual(metadata["python_host"], socket.gethostname())
             self.assertEqual(metadata["python_version"], platform.python_version())
+            self.assertEqual(list(first.session_dir.glob(".python_session.json.*.tmp")), [])
 
     def test_tracking_runtime_uses_eval_session_dir_when_enabled(self) -> None:
         """启用 eval session 后，runtime JSONL 应直接写入共享 session 目录。"""

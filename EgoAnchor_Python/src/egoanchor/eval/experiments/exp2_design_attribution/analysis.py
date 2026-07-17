@@ -14,7 +14,7 @@ from egoanchor.eval.schema_v2 import EvalSessionV2, load_session_v2, select_comp
 
 from ..batch import BatchQcReport, run_batch_qc
 
-from .contract import EXPERIMENT_ID, SCENARIO_ABLATION
+from .contract import ABLATION_METRIC_PREFIX, SOURCE_EXPERIMENT_ID, SOURCE_SCENARIOS
 from .figures import write_exp2_figures
 from .latex import write_exp2_latex, write_exp2_tables
 from .metrics import aggregate_component_deltas, compute_exp2_paired_deltas
@@ -59,8 +59,8 @@ def run_exp2_design_attribution(
     reports = [run_exp2_qc(session) for session in sessions]
     coverage_qc = run_batch_qc(
         sessions,
-        experiment_id=EXPERIMENT_ID,
-        required_scenarios=SCENARIO_ABLATION,
+        experiment_id=SOURCE_EXPERIMENT_ID,
+        required_scenarios=SOURCE_SCENARIOS,
     )
     session_qc = _session_qc_table(reports, coverage_qc)
     trial_qc = pd.concat([report.trial_qc for report in reports], ignore_index=True)
@@ -83,6 +83,7 @@ def run_exp2_design_attribution(
         [compute_exp2_paired_deltas(session) for session in accepted_sessions],
         ignore_index=True,
     )
+    _require_component_evidence(deltas)
     summary = aggregate_component_deltas(deltas)
     risk = _concat_risk_results(
         [
@@ -209,6 +210,21 @@ def _aurc_median(aurc: pd.DataFrame) -> float:
     values = pd.to_numeric(aurc.get("aurc_mm", pd.Series(dtype=float)), errors="coerce")
     finite = values[np.isfinite(values)]
     return float(finite.median()) if not finite.empty else float("nan")
+
+
+def _require_component_evidence(deltas: pd.DataFrame) -> None:
+    """拒绝缺少任一消融关键归因指标的表面成功批次。"""
+
+    missing: list[str] = []
+    for label, metric_prefix in ABLATION_METRIC_PREFIX.items():
+        rows = deltas[
+            deltas["variant_label"].astype(str).eq(label)
+            & deltas["metric"].astype(str).str.startswith(metric_prefix)
+        ] if not deltas.empty else deltas
+        if rows.empty:
+            missing.append(f"{label}:{metric_prefix}*")
+    if missing:
+        raise ValueError(f"实验二缺少关键组件归因指标：{missing}")
 
 
 __all__ = ["Exp2Result", "run_exp2_design_attribution"]

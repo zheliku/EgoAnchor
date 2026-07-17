@@ -3,12 +3,15 @@
 from .analysis import Exp2Result, run_exp2_design_attribution
 from .contract import (
     ABLATION_COMPONENT,
+    ABLATION_METRIC_PREFIX,
+    ABLATION_SCENARIO,
     ABLATION_VARIANTS,
     BASELINE_VARIANT,
     COMPONENT_KEYS,
     EXPERIMENT_ID,
     REQUIRED_VARIANTS,
-    SCENARIO_ABLATION,
+    SOURCE_EXPERIMENT_ID,
+    SOURCE_SCENARIOS,
     VariantContract,
     variant_contracts,
 )
@@ -25,13 +28,16 @@ from .risk_coverage import VcdRiskCoverageResult, compute_vcd_risk_coverage
 
 __all__ = [
     "ABLATION_COMPONENT",
+    "ABLATION_METRIC_PREFIX",
+    "ABLATION_SCENARIO",
     "ABLATION_VARIANTS",
     "BASELINE_VARIANT",
     "COMPONENT_KEYS",
     "EXPERIMENT_ID",
     "PAIR_KEYS",
     "REQUIRED_VARIANTS",
-    "SCENARIO_ABLATION",
+    "SOURCE_EXPERIMENT_ID",
+    "SOURCE_SCENARIOS",
     "VariantContract",
     "Exp2QcReport",
     "Exp2Result",

@@ -46,7 +46,7 @@ namespace EgoAnchor.Eval.Experiment
         public bool IsSelected => !string.IsNullOrEmpty(ExperimentId) && !string.IsNullOrEmpty(ScenarioId);
     }
 
-    /// <summary>维护可任意选择、可作废重做的九项实验采集任务。</summary>
+    /// <summary>维护可任意选择、可作废重做的五项共享物理采集任务。</summary>
     public sealed class ExperimentTrialSelector : MonoBehaviour
     {
         /// <summary>绑定 session 生命周期；选择动作可在录制开始前使用。</summary>
@@ -59,7 +59,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>正在录制的任务索引；空闲时为 -1。</summary>
         private int _activeTaskIndex = -1;
 
-        /// <summary>九项任务各自是否已有一个未作废的完成 trial。</summary>
+        /// <summary>五项任务各自是否已有一个未作废的完成 trial。</summary>
         private readonly bool[] _completed = new bool[ExperimentScenario.PlanCount];
 
         /// <summary>每项任务最后一次完成 trial 的完整上下文，供事后作废。</summary>
@@ -313,7 +313,7 @@ namespace EgoAnchor.Eval.Experiment
             return true;
         }
 
-        /// <summary>按三乘三九宫格移动选择，斜向输入只取绝对值更大的轴。</summary>
+        /// <summary>按每行三项的任务网格移动选择，斜向输入只取绝对值更大的轴。</summary>
         public bool MoveSelection(Vector2 direction)
         {
             if (HasActiveTrial || _selectedTaskIndex < 0) return false;
@@ -332,8 +332,10 @@ namespace EgoAnchor.Eval.Experiment
                 else return false;
             }
 
-            if (column < 0 || column >= 3 || row < 0 || row >= 3) return false;
-            return SelectTask(row * 3 + column);
+            int target = row * 3 + column;
+            if (column < 0 || column >= 3 || target < 0 || target >= ExperimentScenario.PlanCount)
+                return false;
+            return SelectTask(target);
         }
 
         /// <summary>开始当前选中任务；首次调用会在同一动作中启动 session。</summary>

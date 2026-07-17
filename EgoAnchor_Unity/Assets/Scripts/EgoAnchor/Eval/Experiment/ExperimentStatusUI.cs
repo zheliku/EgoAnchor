@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>以固定层级显示九项任务、当前操作、计时和两套输入说明。</summary>
+    /// <summary>以固定层级显示五项任务、当前操作、计时和两套输入说明。</summary>
     public sealed class ExperimentStatusUI : MonoBehaviour
     {
         /// <summary>提供任务选择、完成状态和实时阶段。</summary>
         [Header("References")]
-        [Tooltip("九任务采集选择器。")]
+        [Tooltip("五任务采集选择器。")]
         [SerializeField] private ExperimentTrialSelector selector;
 
         /// <summary>提供录制状态和 session id。</summary>
@@ -17,7 +17,7 @@ namespace EgoAnchor.Eval.Experiment
         [SerializeField] private EvalSession session;
 
         /// <summary>显示实时状态的 TextMesh Pro 文本。</summary>
-        [Tooltip("显示任务九宫格、当前状态、单一计时、下一步操作和固定输入图例的 TMP 文本。")]
+        [Tooltip("显示五任务网格、当前状态、单一计时、下一步操作和固定输入图例的 TMP 文本。")]
         [SerializeField] private TextMeshProUGUI statusText;
 
         /// <summary>计时文本的重绘频率。</summary>
@@ -154,21 +154,27 @@ namespace EgoAnchor.Eval.Experiment
             {
                 builder.AppendLine($"MARKER  <size=24>{Colorize(selector.MarkerInstructionText, markerStatusColor)}</size>");
             }
-            builder.AppendLine("<size=22>KEYPAD  1-9 Select | Enter Start | + Marker | 0 End");
+            builder.AppendLine("<size=22>KEYPAD  1-5 Select | Enter Start | + Marker | 0 End");
             builder.AppendLine("ALT     Arrows Select | Enter Start | M Marker | E End");
             builder.AppendLine("VR      Stick Select | A Start | Trigger Marker | Tap B End");
             builder.AppendLine("OTHER   Space Reject | F Stop Session | Hold B Stop</size>");
             return builder.ToString();
         }
 
-        /// <summary>按三乘三布局写入九项任务状态。</summary>
+        /// <summary>按每行三项写入五项任务状态。</summary>
         private void AppendTaskGrid(StringBuilder builder)
         {
-            for (int row = 0; row < 3; row++)
+            int rowCount = (ExperimentScenario.PlanCount + 2) / 3;
+            for (int row = 0; row < rowCount; row++)
             {
                 for (int column = 0; column < 3; column++)
                 {
                     int index = row * 3 + column;
+                    if (index >= ExperimentScenario.PlanCount)
+                    {
+                        builder.Append(' ', 17);
+                        continue;
+                    }
                     string pointer = selector.SelectedTaskIndex == index ? ">" : " ";
                     string state = TaskState(index);
                     ExperimentScenario.TryGetTask(index, out ExperimentTask task);

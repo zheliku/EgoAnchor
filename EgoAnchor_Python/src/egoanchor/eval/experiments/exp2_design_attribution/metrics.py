@@ -1,4 +1,4 @@
-"""实验二基于 Task 9 中性指标的 trial/event 级配对归因。"""
+"""实验二基于统一中性指标的 trial/event 级配对归因。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pandas as pd
 from egoanchor.eval.metrics import compute_all_metrics
 from egoanchor.eval.schema_v2 import EvalSessionV2
 
-from .contract import BASELINE_VARIANT, EXPERIMENT_ID, SCENARIO_ABLATION
+from .contract import ABLATION_SCENARIO, BASELINE_VARIANT, SOURCE_EXPERIMENT_ID
 
 
 PAIR_KEYS = ("session_id", "scenario_id", "trial_id", "event_id")
@@ -81,12 +81,12 @@ _NEUTRAL_TABLES = {
         ),
     ),
 }
-"""允许进入实验二配对的 Task 9 中性表和结果指标白名单。"""
+"""允许进入实验二配对的中性表和结果指标白名单。"""
 
 def compute_exp2_paired_deltas(session: EvalSessionV2) -> pd.DataFrame:
     """计算一个 session 中四个场景各自唯一消融的配对差值。
 
-    本函数先调用 Task 9 中性指标管线，再在 trial/event 汇总行上配对。原始
+    本函数先调用统一中性指标管线，再在 trial/event 汇总行上配对。原始
     render frame 不进入 merge，因此不会把同一 trial 内的帧当成独立样本。
     """
 
@@ -96,8 +96,8 @@ def compute_exp2_paired_deltas(session: EvalSessionV2) -> pd.DataFrame:
         table = neutral.tables[table_name]
         if table.empty:
             continue
-        for scenario_id, ablation_label in SCENARIO_ABLATION.items():
-            scenario = _select_scenario(table, scenario_id)
+        for ablation_label, scenario_id in ABLATION_SCENARIO.items():
+            scenario = _select_scenario(table, scenario_id, ablation_label)
             if scenario.empty:
                 continue
             metric_columns = [
@@ -196,17 +196,21 @@ def aggregate_component_deltas(deltas: pd.DataFrame) -> pd.DataFrame:
     return summary.loc[:, columns]
 
 
-def _select_scenario(table: pd.DataFrame, scenario_id: str) -> pd.DataFrame:
+def _select_scenario(
+    table: pd.DataFrame,
+    scenario_id: str,
+    ablation_label: str,
+) -> pd.DataFrame:
     """从中性表投影实验二指定场景和允许的两个配置。"""
 
     _require_columns(
         table,
         [*PAIR_KEYS, "experiment_id", "variant_label"],
-        "Task 9 中性指标",
+        "中性指标",
     )
-    allowed = {BASELINE_VARIANT, SCENARIO_ABLATION[scenario_id]}
+    allowed = {BASELINE_VARIANT, ablation_label}
     mask = (
-        table["experiment_id"].astype(str).eq(EXPERIMENT_ID)
+        table["experiment_id"].astype(str).eq(SOURCE_EXPERIMENT_ID)
         & table["scenario_id"].astype(str).eq(scenario_id)
         & table["variant_label"].astype(str).isin(allowed)
     )

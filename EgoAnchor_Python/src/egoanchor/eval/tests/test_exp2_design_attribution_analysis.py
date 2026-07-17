@@ -5,16 +5,22 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 from egoanchor.eval.experiments.exp2_design_attribution import (
+    ABLATION_SCENARIO,
     BASELINE_VARIANT,
     EXPERIMENT_ID,
-    SCENARIO_ABLATION,
+    SOURCE_EXPERIMENT_ID,
+    SOURCE_SCENARIOS,
     compute_paired_deltas,
     run_exp2_design_attribution,
     run_exp2_qc,
+)
+from egoanchor.eval.experiments.exp1_system_characterization import (
+    run_exp1_system_characterization,
 )
 from egoanchor.eval.schema_v2 import (
     FORMAL_VARIANTS,
@@ -36,10 +42,17 @@ class Exp2AnalysisTest(unittest.TestCase):
 
             deltas = result.tables["exp2_component_deltas"]
             self.assertFalse(deltas.empty)
+            self.assertEqual(
+                set(result.tables["exp2_trial_qc"]["experiment_id"]),
+                {EXPERIMENT_ID},
+            )
             observed = set(
                 zip(deltas["scenario_id"], deltas["variant_label"], strict=True)
             )
-            self.assertEqual(observed, set(SCENARIO_ABLATION.items()))
+            self.assertEqual(
+                observed,
+                {(scenario, label) for label, scenario in ABLATION_SCENARIO.items()},
+            )
             self.assertTrue((deltas["paired_n"] == 1).all())
             self.assertFalse(
                 deltas.duplicated(
@@ -61,18 +74,32 @@ class Exp2AnalysisTest(unittest.TestCase):
             self.assertIn("exp2_vcd_aurc", result.tables)
             self.assertTrue((root / "out" / "exp2_component_deltas.csv").is_file())
 
+    def test_same_five_task_session_supports_both_experiments(self) -> None:
+        """同一份五任务八 runtime session 必须同时生成实验一和实验二产物。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            session = make_exp2_session(root)
+            exp1 = run_exp1_system_characterization([session], root / "exp1")
+            exp2 = run_exp2_design_attribution([session], root / "exp2")
+
+            self.assertFalse(exp1.tables["exp1_trial_metrics"].empty)
+            self.assertFalse(exp2.tables["exp2_component_deltas"].empty)
+            self.assertTrue((root / "exp1" / "exp1_system_summary.pdf").is_file())
+            self.assertTrue((root / "exp2" / "exp2_component_delta.pdf").is_file())
+
     def test_analysis_combines_partial_sessions_by_scenario_union(self) -> None:
-        """四个归因任务拆到两个 session 后应按批次场景并集分析。"""
+        """五个物理任务拆到两个 session 后应按批次场景并集分析。"""
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = make_exp2_session(root)
-            first_scenarios = {"without_capture_time_alignment", "without_temporal_synthesis"}
+            first_scenarios = {"static_head_motion", "continuous_translation"}
             first = _exp2_subset(source, first_scenarios, "s-exp2-tasks-68")
             second = _exp2_subset(
                 source,
-                set(SCENARIO_ABLATION) - first_scenarios,
-                "s-exp2-tasks-79",
+                set(SOURCE_SCENARIOS) - first_scenarios,
+                "s-exp2-tasks-245",
             )
 
             self.assertTrue(run_exp2_qc(first).passed, run_exp2_qc(first).errors)
@@ -80,10 +107,10 @@ class Exp2AnalysisTest(unittest.TestCase):
             result = run_exp2_design_attribution([first, second], root / "partial-out")
 
             self.assertTrue(result.qc.passed, result.qc.errors)
-            self.assertEqual(result.qc.metrics["observed_scenario_count"], 4)
+            self.assertEqual(result.qc.metrics["observed_scenario_count"], 5)
             self.assertEqual(
                 set(result.tables["exp2_component_deltas"]["scenario_id"]),
-                set(SCENARIO_ABLATION),
+                set(ABLATION_SCENARIO.values()),
             )
 
     def test_analysis_rejects_incomplete_partial_session_batch(self) -> None:
@@ -93,8 +120,8 @@ class Exp2AnalysisTest(unittest.TestCase):
             root = Path(temp)
             first = _exp2_subset(
                 make_exp2_session(root),
-                {"without_capture_time_alignment", "without_temporal_synthesis"},
-                "s-exp2-tasks-68",
+                {"static_head_motion", "continuous_translation"},
+                "s-exp2-tasks-13",
             )
             with self.assertRaisesRegex(ValueError, "已停止指标生成"):
                 run_exp2_design_attribution([first], root / "incomplete-out")
@@ -116,6 +143,31 @@ class Exp2AnalysisTest(unittest.TestCase):
             self.assertTrue((root / "failed" / "exp2_qc.json").is_file())
             self.assertFalse((root / "failed" / "exp2_component_deltas.csv").exists())
             self.assertFalse((root / "failed" / "exp2_component_delta.pdf").exists())
+
+    def test_analysis_rejects_missing_component_key_metrics(self) -> None:
+        """任一消融没有关键归因指标时不得生成正式图表。"""
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            session = make_exp2_session(root)
+            from egoanchor.eval.experiments.exp2_design_attribution.metrics import (
+                compute_exp2_paired_deltas,
+            )
+
+            incomplete = compute_exp2_paired_deltas(session)
+            incomplete = incomplete[
+                ~incomplete["variant_label"].eq("EgoAnchor w/o temporal synthesis")
+            ]
+            with patch(
+                "egoanchor.eval.experiments.exp2_design_attribution.analysis.compute_exp2_paired_deltas",
+                return_value=incomplete,
+            ):
+                with self.assertRaisesRegex(ValueError, "缺少关键组件归因指标"):
+                    run_exp2_design_attribution([session], root / "missing-evidence")
+
+            self.assertFalse(
+                (root / "missing-evidence" / "exp2_component_deltas.csv").exists()
+            )
 
     def test_qc_rejects_more_than_one_component_difference(self) -> None:
         """任一消融同时关闭两个组件时必须失败。"""
@@ -158,7 +210,7 @@ class Exp2AnalysisTest(unittest.TestCase):
 
         row = {
             "session_id": "s",
-            "scenario_id": "without_vcd_admission",
+            "scenario_id": "occlusion_recovery",
             "trial_id": "t",
             "event_id": "e",
             "value": 1.0,
@@ -175,18 +227,19 @@ class Exp2AnalysisTest(unittest.TestCase):
 
 
 def make_exp2_session(root: Path) -> EvalSessionV2:
-    """构造覆盖八 runtime、四归因场景和显式事件角色的 Formal session。"""
+    """构造覆盖八 runtime、五个物理任务和显式事件角色的 Formal session。"""
 
     session_id = "s-exp2"
     definitions = [_variant_definition(label, index) for index, label in enumerate(FORMAL_VARIANTS)]
     event_specs = {
-        "without_capture_time_alignment": (("capture-event", 1000.0, "generic_marker"),),
-        "without_vcd_admission": (
-            ("occlusion-start", 2000.0, "occlusion_started"),
-            ("target-visible", 2100.0, "target_visible"),
+        "static_head_motion": (("static-event", 1000.0, "generic_marker"),),
+        "start_stop_6dof": (("transition-event", 2000.0, "transition_started"),),
+        "continuous_translation": (("translation-event", 3000.0, "generic_marker"),),
+        "continuous_rotation": (("rotation-event", 4000.0, "generic_marker"),),
+        "occlusion_recovery": (
+            ("occlusion-start", 5000.0, "occlusion_started"),
+            ("target-visible", 5100.0, "target_visible"),
         ),
-        "without_temporal_synthesis": (("temporal-event", 3000.0, "transition_started"),),
-        "without_static_lock": (("static-event", 4000.0, "transition_started"),),
     }
     render_rows: list[dict[str, object]] = []
     event_rows: list[dict[str, object]] = []
@@ -258,7 +311,7 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
         "session_id": session_id,
         "object_id": "controller_right",
         "run_kind": "formal",
-        "experiment_ids": [EXPERIMENT_ID],
+        "experiment_ids": [SOURCE_EXPERIMENT_ID, EXPERIMENT_ID],
         "operator_id": "operator-1",
         "created_unix_ms": 1,
         "unity_run_mode": "evaluation",
@@ -270,37 +323,27 @@ def make_exp2_session(root: Path) -> EvalSessionV2:
         "config_hash": aggregate_config_hash(definitions),
         "frozen_parameter_set_id": "frozen-1",
         "object_model_id": "controller-model",
+        "platform_reference": {
+            "transform_path": "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab",
+            "controller": "RTouch",
+            "preflight_passed": True,
+        },
         "variant_definitions": definitions,
         "completed_tasks": [
             {
-                "task_number": index + 5,
-                "experiment_id": EXPERIMENT_ID,
+                "task_number": index,
+                "experiment_id": SOURCE_EXPERIMENT_ID,
                 "scenario_id": scenario,
                 "trial_id": f"trial-{index}",
             }
             for index, scenario in enumerate(event_specs, start=1)
         ],
         "trial_plan": [
-            *[
-                {
-                    "experiment_id": "exp1_system_characterization",
-                    "scenario_id": scenario,
-                }
-                for scenario in (
-                    "static_head_motion",
-                    "start_stop_6dof",
-                    "continuous_translation",
-                    "continuous_rotation",
-                    "occlusion_recovery",
-                )
-            ],
-            *[
-                {
-                    "experiment_id": EXPERIMENT_ID,
-                    "scenario_id": scenario,
-                }
-                for scenario in event_specs
-            ],
+            {
+                "experiment_id": SOURCE_EXPERIMENT_ID,
+                "scenario_id": scenario,
+            }
+            for scenario in event_specs
         ],
         "log_files": {
             "python_candidates": "python_candidates.jsonl",
@@ -404,7 +447,7 @@ def _exp2_subset(
     )
 
     scenario_numbers = {
-        scenario: index + 5 for index, scenario in enumerate(SCENARIO_ABLATION, start=1)
+        scenario: index for index, scenario in enumerate(SOURCE_SCENARIOS, start=1)
     }
     manifest = {
         **source.manifest,
@@ -412,11 +455,11 @@ def _exp2_subset(
         "completed_tasks": [
             {
                 "task_number": scenario_numbers[scenario],
-                "experiment_id": EXPERIMENT_ID,
+                "experiment_id": SOURCE_EXPERIMENT_ID,
                 "scenario_id": scenario,
-                "trial_id": f"trial-{scenario_numbers[scenario] - 5}",
+                "trial_id": f"trial-{scenario_numbers[scenario]}",
             }
-            for scenario in SCENARIO_ABLATION
+            for scenario in SOURCE_SCENARIOS
             if scenario in scenarios
         ],
     }
@@ -511,7 +554,7 @@ def _admission_row(
     score = 0.95 - score_index * 0.1
     return {
         "session_id": session_id,
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": trial_id,
         "event_id": event_id,
@@ -547,13 +590,16 @@ def _render_row(
 ) -> dict[str, object]:
     """构造一条完整 render tick×variant 行。"""
 
-    target = SCENARIO_ABLATION[scenario]
-    offset = 0.01 if label == BASELINE_VARIANT else (0.02 if label == target else 0.08)
-    moving = scenario in {"without_temporal_synthesis", "without_static_lock"} and sample in {1, 2}
+    targets = {
+        variant for variant, source_scenario in ABLATION_SCENARIO.items()
+        if source_scenario == scenario
+    }
+    offset = 0.01 if label == BASELINE_VARIANT else (0.02 if label in targets else 0.08)
+    moving = scenario == "start_stop_6dof" and sample in {1, 2}
     reference_x = 0.02 if moving else 0.0
     return {
         "session_id": session_id,
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": trial_id,
         "event_id": event_id,
@@ -596,7 +642,7 @@ def _event_row(
 
     return {
         "session_id": session_id,
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": trial_id,
         "event_id": event_id,
@@ -618,7 +664,7 @@ def _trial_ended_row(
 
     return {
         "session_id": session_id,
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": trial_id,
         "event_id": event_id,
@@ -639,7 +685,7 @@ def _trial_started_row(
 
     return {
         "session_id": session_id,
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": SOURCE_EXPERIMENT_ID,
         "scenario_id": scenario,
         "trial_id": trial_id,
         "event_id": "",

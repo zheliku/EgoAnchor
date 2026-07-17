@@ -63,10 +63,10 @@ pixi run python -m egoanchor.eval.cli analyze-exp1 .\data\eval\<session_id_1> .\
 pixi run python -m egoanchor.eval.cli analyze-exp2 .\data\eval\<session_id_1> .\data\eval\<session_id_2> --out .\data\analysis\exp2
 ```
 
-实验一要求所有输入目录合计覆盖任务 1--5，实验二要求合计覆盖任务 6--9。没有当前实验任务的 session 会
-被忽略。批次拒绝重复 `session_id`，并要求 run kind、对象、模型、协议、冻结参数和 runtime 定义一致。
-Unity 与 Python 均正常停止后，可以给 session 目录增加 `tasks-01-03__` 之类的前缀；内部固定文件名和
-manifest 的 `session_id` 不能修改。
+实验一和实验二都要求输入目录合计覆盖任务 1--5，并使用完全相同的一组 session。每个物理任务已经同时
+记录四个实验一系统配置和四个实验二组件消融；实验二在分析阶段从同一批原始长表投影完整系统与对应消融，
+不再要求任务 6--9。批次拒绝重复 `session_id`，并要求 run kind、对象、模型、协议、冻结参数和 runtime
+定义一致。内部固定文件名、原始 session 目录名和 manifest 的 `session_id` 不能修改。
 
 `--out` 保存本次分析的完整 CSV、PDF 和 TeX，目录可自行指定。分析成功后，固定 TeX 会发布到 `2026-EgoAnchor/generated/`，固定 PDF 会发布到 `2026-EgoAnchor/figures/generated/`。默认论文路径从模块位置查找，不受当前工作目录影响。若仓库不使用标准目录结构，可显式覆盖：
 
@@ -104,12 +104,12 @@ pixi run python -m egoanchor.eval.cli analyze-exp2 --help
 
 ## 实验二：系统设计归因
 
-实验二以完整 `EgoAnchor` 为参照，每次只关闭一个组件：采集时刻世界对齐、VCD admission、时序合成或 StaticLock。分析输出配对差值，并单独检查 VCD 的 risk-coverage 与 AURC。VCD 分数表示连续可靠性，不解释为位姿正确概率。
+实验二以完整 `EgoAnchor` 为参照，每次只关闭一个组件：采集时刻世界对齐、VCD admission、时序合成或 StaticLock。任务 1--5 的同一组 session 同时提供这些消融行；分析按组件适用的物理场景配对完整系统和对应消融，输出配对差值，并单独检查 VCD 的 risk-coverage 与 AURC。VCD 分数表示连续可靠性，不解释为位姿正确概率。
 
 ## 正式采集边界
 
 评估链路只接受 `run_kind="formal"` 的真实采集。连接、输入和日志功能可以在工程环境中自检，但工程自检不创建另一类评估 session，也不写入论文数据目录。
 
-One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定参数在正式采集开始前随实现配置固定。所有记录下来的实验一/二 session 都是正式数据，采集后不再调参。所有 writer 的 `dropped_rows` 必须为 `0`；QC 失败时报告需要重采的 trial 或 session，不手工修补日志。
+One Euro、VCD、Kalman--Hermite、StaticLock 和事件判定参数在正式采集开始前随实现配置固定。所有记录下来的实验一/二 session 都是正式数据，采集后不再调参。正式 manifest 还必须记录通过运动预检的平台参考 Transform 路径和控制器类型；参考未验证、路径错误或 writer 的 `dropped_rows` 非零时，QC 必须拒绝该 session，不手工修补日志。
 
 Run 1 负责采集前工程和采集流程准备。用户完成实验一/二正式采集后，Run 2 才读取冻结数据，生成统计、图表和 LaTeX 产物并回填论文。论文数字由评估模块生成，不手工抄写。

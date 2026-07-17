@@ -15,7 +15,7 @@
 - 论文外部不再使用 RQ1/RQ2/RQ3 作为顶层结构；正式命名只使用实验一、实验二、实验三以及系统配置名。
 - 实验一系统配置固定为 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor`、`EgoAnchor`。
 - 实验二组件归因固定为 `EgoAnchor`、`EgoAnchor w/o capture-time alignment`、`EgoAnchor w/o VCD`、`EgoAnchor w/o temporal synthesis`、`EgoAnchor w/o StaticLock`。
-- schema-v2 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl` 和 `audit_samples/`。
+- schema-v2 原始日志固定为 `manifest.json`、`python_session.json`、`python_candidates.jsonl`、`python_events.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl` 和 `audit_samples/`；`events.jsonl` 是两端停止并同步后在本机原子生成的派生文件。
 - `capture_mono_ms` 是 image-time proxy，不得称曝光真值。
 - 平台参考轨迹只称 platform reference，不称外部物理真值。
 - `has_output_pose` 表示 runtime 是否有输出；`has_display_pose` 表示用户实际看到的 Transform。显示误差使用 display pose，输出覆盖率使用 output pose。
@@ -123,7 +123,7 @@ Python 侧旧 RQ 代码和旧 schema：
 保留并改造：
 
 - `EgoAnchor_Python/src/egoanchor/runtime/eval_session.py`生成 schema-v2 session 元数据和固定文件名。
-- `EgoAnchor_Python/src/egoanchor/runtime/runtime_log_writer.py`改为写 `python_candidates.jsonl` 和 `events.jsonl`。
+- `EgoAnchor_Python/src/egoanchor/runtime/runtime_log_writer.py`改为写 `python_candidates.jsonl` 和 Python 独占的 `python_events.jsonl`。
 - `EgoAnchor_Python/src/egoanchor/diagnostics/runtime_event_log.py`保留 JSONL writer 能力，但禁止旧 event 字段进入正式 schema。
 - `EgoAnchor_Python/src/egoanchor/eval/metrics/*.py`
   迁移 RQ 中性的 error、jitter、latency、recovery、diagnostics 逻辑到 schema-v2 normalized tables。
@@ -223,10 +223,13 @@ Python 侧旧 RQ 代码和旧 schema：
 ```text
 EgoAnchor_Python/data/eval/<session_id>/
   manifest.json
+  python_session.json
   python_candidates.jsonl
+  python_events.jsonl
   unity_reference.jsonl
   unity_admission.jsonl
   unity_render.jsonl
+  unity_events.jsonl
   events.jsonl
   audit_samples/
 ```
@@ -404,9 +407,13 @@ EgoAnchor_Python/data/eval/<session_id>/
 - `smoothing_strategy`
 - `config_hash`
 
-### 3.7 `events.jsonl`
+### 3.7 事件分片与派生 `events.jsonl`
 
-每行是 session/runtime/event marker。必须包含：
+Python 远端独占写入 `python_events.jsonl`，Unity 本机独占写入 `unity_events.jsonl`。Mutagen 完成回传后，
+schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分片实际行数分别匹配 writer 统计时，
+才原子生成可重建的 `events.jsonl`。两个进程、两台机器不得直接追加同一个物理事件文件。
+
+三个事件文件中的每行都使用同一事件 schema，必须包含：
 
 - `schema_version`
 - `event`
@@ -521,9 +528,11 @@ EgoAnchor_Python/data/eval/<session_id>/
       paths = EvalV2Paths.for_session(tmp_path / "s01")
       assert paths.manifest.name == "manifest.json"
       assert paths.python_candidates.name == "python_candidates.jsonl"
+      assert paths.python_events.name == "python_events.jsonl"
       assert paths.unity_reference.name == "unity_reference.jsonl"
       assert paths.unity_admission.name == "unity_admission.jsonl"
       assert paths.unity_render.name == "unity_render.jsonl"
+      assert paths.unity_events.name == "unity_events.jsonl"
       assert paths.events.name == "events.jsonl"
       assert paths.audit_samples.name == "audit_samples"
   ```
@@ -575,7 +584,7 @@ EgoAnchor_Python/data/eval/<session_id>/
 **Interfaces:**
 
 - Consumes: `EvalV2Paths` and `JsonlTableWriter` from Task 2。
-- Produces: Python writes `python_candidates.jsonl` and `events.jsonl` into session directory.
+- Produces: Python writes `python_candidates.jsonl`、`python_events.jsonl` and atomic `python_session.json` into session directory.
 
 - [ ] **Step 1: 更新 eval session 测试**
 
@@ -597,9 +606,9 @@ EgoAnchor_Python/data/eval/<session_id>/
 - [ ] **Step 3: 保留颜色不可用语义**
 
   当 `color_reprojection < 0` 时，candidate 行写 `color_projection_score = null` 或 `NaN`，同时 `reliability_flags` 包含颜色不可用原因；不得把它算成坏 pose。
-- [ ] **Step 4: 拆分 events**
+- [ ] **Step 4: 写 Python 事件分片**
 
-  status、heartbeat、command、runtime_error 写 `events.jsonl`，pose candidate 不再混入 events。
+  status、heartbeat、command、runtime_error 写 `python_events.jsonl`，pose candidate 不再混入 events；Python 停止时把最终 writer 统计原子写入 `python_session.json`。
 - [ ] **Step 5: 验证**
 
   Run:
@@ -689,7 +698,7 @@ EgoAnchor_Python/data/eval/<session_id>/
 **Interfaces:**
 
 - Consumes: `WorldAlignmentMode` from Task 4。
-- Produces: Unity writes `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl`。
+- Produces: Unity writes `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`。
 
 - [ ] **Step 1: 写 JSON contract tests**
 
@@ -705,7 +714,7 @@ EgoAnchor_Python/data/eval/<session_id>/
   - `unity_reference.jsonl`
   - `unity_admission.jsonl`
   - `unity_render.jsonl`
-  - `events.jsonl`
+  - `unity_events.jsonl`
   - `manifest.json`
 
   若目标文件已有非空内容，拒绝启动，防止覆盖。
@@ -754,17 +763,17 @@ EgoAnchor_Python/data/eval/<session_id>/
   - 不使用 InputActionAsset；手柄选场、开始、事件、结束、作废和键盘任务键均为 Inspector 内联
     `InputAction`。
   - 右手摇杆与键盘方向键按 3×3 九宫格选场；A/Enter 开始、扳机/小键盘 `+`/`M` 标记、快速短按 B/小键盘 `0`/`E` 结束任务、摇杆按下/`Space` 作废。
-  - 小键盘主流程固定为 `1`--`9` 选任务、`Enter` 开始、`+` 标记、`0` 结束；主键盘原有动作继续可用。
-  - 数字行与小键盘 `1`--`9` 只负责选中；长按 B 1.5 秒或 `F` 随时停止 session，活动 trial 先记为 rejected。B 的短按与长按分别使用 `Tap(duration=0.5)` 和 `Hold(duration=1.5)`，不得相互抢占。
+  - 小键盘主流程固定为 `1`--`5` 选任务、`Enter` 开始、`+` 标记、`0` 结束；主键盘原有动作继续可用。
+  - 数字行与小键盘 `1`--`5` 只负责选中；长按 B 1.5 秒或 `F` 随时停止 session，活动 trial 先记为 rejected。B 的短按与长按分别使用 `Tap(duration=0.5)` 和 `Hold(duration=1.5)`，不得相互抢占。
   - 运行中不得切场；输入回中前不得重复跨格；未 recording 时不得创建 trial context。
 - [ ] **Step 2: 实现 selector**
 
-  Selector 独立维护九项任务的 selected、running 和 completed 状态，不直接写文件。场景可任意顺序完成；
+  Selector 独立维护五项共享物理任务的 selected、running 和 completed 状态，不直接写文件。场景可任意顺序完成；
   活动或已完成 trial 可写 `trial_rejected` 后只重做该项。session 可随时停止，不要求已有完成任务；
-  活动 trial 在停止前先记为 rejected，不强制一次跑完九项。
+  活动 trial 在停止前先记为 rejected，不强制一次跑完五项。同一 trial 同时记录四个实验一配置与四个实验二消融。
 - [ ] **Step 3: 实现 status UI**
 
-  UI 显示九任务状态板、当前选择、直白操作状态、实际 trial 计时和下一合法动作。实际时长只记录，
+  UI 显示五任务状态板、当前选择、直白操作状态、实际 trial 计时和下一合法动作。实际时长只记录，
   不设置上下界或颜色门禁。使用实验一/实验二命名，不出现 RQ。Canvas 保持场景中的固定 world-space 位置。
 - [ ] **Step 4: 验证**
 
@@ -1294,12 +1303,12 @@ EgoAnchor_Python/data/eval/<session_id>/
 Run 1 结束时必须满足：
 
 1. Unity 和 Python 正式代码不再依赖旧 RQ1/RQ2 包、场景、selector、schema 字段或 CLI。
-2. Python runtime 能写 `python_candidates.jsonl` 和 `events.jsonl`。
+2. Python runtime 能写 `python_candidates.jsonl`、`python_events.jsonl` 和停止态 `python_session.json`。
 3. Unity runtime 能同步驱动四个实验一配置和四个实验二消融配置。
 4. `Arrival-Hold` 是真实 runtime 输出，而不是诊断字段。
-5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`events.jsonl`；manifest 的 `completed_tasks` 与最终未作废 trial 一致。
+5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`；manifest 的 `completed_tasks` 与最终未作废 trial 一致；reader 在同步完成后确定性生成 `events.jsonl`。
 6. Python reader 只接受 schema-v2，遇到旧 schema 报错。
-7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通，并支持多个模块化 session 在批次层补齐九项任务。
+7. 实验一和实验二的 QC、analysis、figures、LaTeX 输出能在合成 fixture 上跑通，并支持同一批任务 1--5 session 同时生成两个实验的全部产物。
 8. 中文采集手册清楚写出工程功能自检、formal session 的操作顺序和失败重采规则；不定义其他采集类型。
 9. `AGENTS.md` 指向本计划和 schema-v2 当前事实。
 

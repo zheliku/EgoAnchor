@@ -6,7 +6,11 @@ import unittest
 
 import pandas as pd
 
-from egoanchor.eval.experiments.exp2_design_attribution import compute_vcd_risk_coverage
+from egoanchor.eval.experiments.exp2_design_attribution import (
+    EXPERIMENT_ID,
+    SOURCE_EXPERIMENT_ID,
+    compute_vcd_risk_coverage,
+)
 
 
 class Exp2VcdRiskCoverageTest(unittest.TestCase):
@@ -22,6 +26,7 @@ class Exp2VcdRiskCoverageTest(unittest.TestCase):
         result = compute_vcd_risk_coverage(candidates, admissions, references)
 
         self.assertEqual(result.curve["accepted_candidates"].tolist(), [1, 3])
+        self.assertEqual(set(result.curve["experiment_id"]), {EXPERIMENT_ID})
         self.assertEqual(result.curve["candidate_count"].tolist(), [3, 3])
         self.assertAlmostEqual(float(result.curve.iloc[0]["selective_risk_mm"]), 10.0)
         self.assertAlmostEqual(float(result.curve.iloc[1]["selective_risk_mm"]), 30.0)
@@ -58,14 +63,43 @@ class Exp2VcdRiskCoverageTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "未知 candidate_id"):
             compute_vcd_risk_coverage(candidates, admissions, references)
 
-    def test_missing_reference_match_is_rejected(self) -> None:
-        """没有同 frame 平台参考时不得回退到 VCD 组成分数作为 risk。"""
+    def test_missing_reference_match_is_counted_as_ineligible(self) -> None:
+        """没有同 frame 平台参考时显式排除，不得回退到评分分量。"""
 
         candidates, admissions, references = _tables([(1, 0.9, 0.01, "trial-a")])
         references.loc[0, "frame_id"] = 99
 
-        with self.assertRaisesRegex(ValueError, "平台参考"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "没有 eligible 候选.*excluded_invalid_reference_count.*1",
+        ):
             compute_vcd_risk_coverage(candidates, admissions, references)
+
+    def test_ineligible_candidates_are_reported_by_reason(self) -> None:
+        """no-pose、无对齐、无参考和空上下文必须进入可审计排除统计。"""
+
+        candidates, admissions, references = _tables(
+            [
+                (1, 0.9, 0.01, "eligible"),
+                (2, 0.8, 0.02, "no-pose"),
+                (3, 0.7, 0.03, "no-aligned"),
+                (4, 0.6, 0.04, "no-reference"),
+                (5, 0.5, 0.05, "no-context"),
+            ]
+        )
+        candidates.loc[candidates["frame_id"].eq(2), "has_pose"] = False
+        admissions.loc[admissions["frame_id"].eq(3), "has_aligned_raw"] = False
+        references.loc[references["frame_id"].eq(4), "reference_pose_valid"] = False
+        admissions.loc[admissions["frame_id"].eq(5), "event_id"] = ""
+
+        summary = compute_vcd_risk_coverage(candidates, admissions, references).summary.iloc[0]
+        self.assertEqual(int(summary["baseline_admission_count"]), 5)
+        self.assertEqual(int(summary["eligible_candidate_count"]), 1)
+        self.assertEqual(int(summary["excluded_candidate_count"]), 4)
+        self.assertEqual(int(summary["excluded_no_pose_count"]), 1)
+        self.assertEqual(int(summary["excluded_no_aligned_raw_count"]), 1)
+        self.assertEqual(int(summary["excluded_invalid_reference_count"]), 1)
+        self.assertEqual(int(summary["excluded_incomplete_context_count"]), 1)
 
     def test_other_runtime_rows_do_not_duplicate_candidates(self) -> None:
         """同 candidate 的消融 runtime admission 不得重复进入完整系统曲线。"""
@@ -103,8 +137,8 @@ def _tables(
         admissions.append(
             {
                 "session_id": "session-a",
-                "experiment_id": "exp2_design_attribution",
-                "scenario_id": "without_vcd_admission",
+                "experiment_id": SOURCE_EXPERIMENT_ID,
+                "scenario_id": "occlusion_recovery",
                 "trial_id": trial_id,
                 "event_id": f"event-{trial_id}",
                 "condition_id": "condition-a",

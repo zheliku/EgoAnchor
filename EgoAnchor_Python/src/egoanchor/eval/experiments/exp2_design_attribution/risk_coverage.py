@@ -9,7 +9,7 @@ import pandas as pd
 
 from egoanchor.eval.metrics import is_pose_vector, pose_error, require_columns
 
-from .contract import BASELINE_VARIANT, EXPERIMENT_ID
+from .contract import BASELINE_VARIANT, EXPERIMENT_ID, SOURCE_EXPERIMENT_ID
 
 
 RISK_GROUP_COLUMNS = (
@@ -46,8 +46,15 @@ SUMMARY_COLUMNS = (
     "candidate_count",
     "aurc_mm_median",
     "aurc_mm_iqr",
+    "baseline_admission_count",
+    "eligible_candidate_count",
+    "excluded_candidate_count",
+    "excluded_no_pose_count",
+    "excluded_no_aligned_raw_count",
+    "excluded_invalid_reference_count",
+    "excluded_incomplete_context_count",
 )
-"""先得到单元 AURC，再进行的 session 级可审计汇总。"""
+"""单元 AURC、eligible 数量和各排除原因的 session 级汇总。"""
 
 
 @dataclass(frozen=True)
@@ -78,11 +85,11 @@ def compute_vcd_risk_coverage(
 
     _validate_columns(candidates, admissions, references)
     baseline = admissions.loc[
-        (admissions["experiment_id"].astype(str) == EXPERIMENT_ID)
+        (admissions["experiment_id"].astype(str) == SOURCE_EXPERIMENT_ID)
         & (admissions["variant_label"].astype(str) == BASELINE_VARIANT)
     ].copy()
     if baseline.empty:
-        raise ValueError("unity_admission 缺少实验二完整 EgoAnchor 候选，无法计算 VCD risk。")
+        raise ValueError("任务 1--5 的 unity_admission 缺少完整 EgoAnchor 候选，无法计算 VCD risk。")
 
     _require_unique(candidates, ["session_id", "candidate_id"], "python_candidates")
     _require_unique(baseline, ["session_id", "candidate_id"], "exp2 EgoAnchor admission")
@@ -125,19 +132,20 @@ def compute_vcd_risk_coverage(
         validate="many_to_one",
         indicator="reference_match",
     )
-    missing_references = sorted(
-        joined.loc[joined["reference_match"] != "both", "frame_id"].astype(str).unique()
-    )
-    if missing_references:
-        raise ValueError(f"VCD risk 缺少同 frame_id 平台参考：{missing_references}")
-
     _validate_joined_rows(joined)
-    detail = _compute_candidate_risk(joined)
+    detail, eligibility = _compute_candidate_risk(joined)
+    if detail.empty:
+        audit = (
+            eligibility.iloc[0].to_dict()
+            if len(eligibility) == 1
+            else eligibility.to_dict(orient="records")
+        )
+        raise ValueError(f"VCD risk 没有 eligible 候选；排除统计={audit}")
     curve, aurc = _compute_group_curves(detail)
     return VcdRiskCoverageResult(
         curve=curve,
         aurc=aurc,
-        summary=_summarize_aurc(aurc),
+        summary=_summarize_aurc(aurc, eligibility),
     )
 
 
@@ -188,12 +196,7 @@ def _require_unique(frame: pd.DataFrame, keys: list[str], table_name: str) -> No
 
 
 def _validate_joined_rows(joined: pd.DataFrame) -> None:
-    """校验分数、上下文和用于 risk 的两端世界系 pose。"""
-
-    for column in RISK_GROUP_COLUMNS:
-        invalid = joined[column].isna() | joined[column].astype(str).str.strip().eq("")
-        if invalid.any():
-            raise ValueError(f"VCD risk 缺少分组字段 {column}。")
+    """校验分数与布尔字段类型；预期的不可用 pose 留给 eligibility 统计。"""
 
     candidate_scores = pd.to_numeric(joined["candidate_vcd_score"], errors="coerce")
     admission_scores = pd.to_numeric(joined["vcd_score"], errors="coerce")
@@ -208,22 +211,18 @@ def _validate_joined_rows(joined: pd.DataFrame) -> None:
     if not np.allclose(candidate_scores, admission_scores, rtol=0.0, atol=1e-6):
         raise ValueError("candidate 与 admission 的 vcd_score 不一致。")
 
-    _require_true_bool(joined, "has_pose", "python candidate pose")
-    _require_true_bool(joined, "has_aligned_raw", "capture-time aligned raw pose")
-    _require_true_bool(joined, "reference_pose_valid", "platform reference pose")
-    for _, row in joined.iterrows():
-        if not _valid_pose(row["aligned_raw_pos"], row["aligned_raw_rot"]):
-            raise ValueError(f"candidate {row['candidate_id']!r} 的 aligned raw pose 非法。")
-        if not _valid_pose(row["reference_pos"], row["reference_rot"]):
-            raise ValueError(f"frame {row['frame_id']!r} 的平台参考 pose 非法。")
+    _require_bool(joined, "has_pose")
+    _require_bool(joined, "has_aligned_raw")
+    reference_matches = joined["reference_match"].astype(str).eq("both")
+    _require_bool(joined.loc[reference_matches], "reference_pose_valid")
 
 
-def _require_true_bool(frame: pd.DataFrame, column: str, label: str) -> None:
-    """要求 schema 布尔列为真正的 true，拒绝字符串和缺失值伪装。"""
+def _require_bool(frame: pd.DataFrame, column: str) -> None:
+    """要求已存在的 schema 布尔列使用真正的布尔值。"""
 
-    valid = frame[column].map(lambda value: isinstance(value, (bool, np.bool_)) and bool(value))
+    valid = frame[column].map(lambda value: isinstance(value, (bool, np.bool_)))
     if not valid.all():
-        raise ValueError(f"VCD risk 要求每条记录都有有效 {label}。")
+        raise ValueError(f"VCD risk 要求 {column} 使用真正的布尔值。")
 
 
 def _valid_pose(position: object, rotation: object) -> bool:
@@ -236,11 +235,52 @@ def _valid_pose(position: object, rotation: object) -> bool:
     )
 
 
-def _compute_candidate_risk(joined: pd.DataFrame) -> pd.DataFrame:
-    """计算每条匹配候选相对平台参考的平移风险，单位为毫米。"""
+def _compute_candidate_risk(
+    joined: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """筛选 eligible 候选并返回逐 session 的显式排除统计。"""
 
     detail = joined.copy()
-    risks = []
+    context_complete = pd.Series(True, index=detail.index)
+    for column in RISK_GROUP_COLUMNS:
+        context_complete &= (
+            detail[column].notna() & detail[column].astype(str).str.strip().ne("")
+        )
+    has_pose = detail["has_pose"].astype(bool)
+    has_aligned = detail["has_aligned_raw"].astype(bool) & detail.apply(
+        lambda row: _valid_pose(row["aligned_raw_pos"], row["aligned_raw_rot"]),
+        axis=1,
+    )
+    has_reference = (
+        detail["reference_match"].astype(str).eq("both")
+        & detail["reference_pose_valid"].fillna(False).astype(bool)
+        & detail.apply(
+            lambda row: _valid_pose(row["reference_pos"], row["reference_rot"]),
+            axis=1,
+        )
+    )
+    eligible = has_pose & has_aligned & has_reference & context_complete
+
+    eligibility_rows: list[dict[str, object]] = []
+    for session_id, indexes in detail.groupby("session_id", dropna=False, sort=True).groups.items():
+        selected = pd.Index(indexes)
+        selected_eligible = eligible.loc[selected]
+        eligibility_rows.append(
+            {
+                "session_id": session_id,
+                "baseline_admission_count": int(len(selected)),
+                "eligible_candidate_count": int(selected_eligible.sum()),
+                "excluded_candidate_count": int((~selected_eligible).sum()),
+                "excluded_no_pose_count": int((~has_pose.loc[selected]).sum()),
+                "excluded_no_aligned_raw_count": int((~has_aligned.loc[selected]).sum()),
+                "excluded_invalid_reference_count": int((~has_reference.loc[selected]).sum()),
+                "excluded_incomplete_context_count": int((~context_complete.loc[selected]).sum()),
+            }
+        )
+
+    detail = detail.loc[eligible].copy()
+    detail["experiment_id"] = EXPERIMENT_ID
+    risks: list[float] = []
     for _, row in detail.iterrows():
         translation_m, _ = pose_error(
             row["reference_pos"],
@@ -251,7 +291,20 @@ def _compute_candidate_risk(joined: pd.DataFrame) -> pd.DataFrame:
         risks.append(translation_m * 1000.0)
     detail["score"] = pd.to_numeric(detail["candidate_vcd_score"], errors="raise")
     detail["risk_mm"] = risks
-    return detail
+    eligibility_columns = (
+        "session_id",
+        "baseline_admission_count",
+        "eligible_candidate_count",
+        "excluded_candidate_count",
+        "excluded_no_pose_count",
+        "excluded_no_aligned_raw_count",
+        "excluded_invalid_reference_count",
+        "excluded_incomplete_context_count",
+    )
+    return detail, pd.DataFrame.from_records(
+        eligibility_rows,
+        columns=eligibility_columns,
+    )
 
 
 def _compute_group_curves(detail: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -296,13 +349,16 @@ def _compute_group_curves(detail: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     )
 
 
-def _summarize_aurc(aurc: pd.DataFrame) -> pd.DataFrame:
-    """以 trial/event AURC 为观察单位生成 session 级中位数和 IQR。"""
+def _summarize_aurc(
+    aurc: pd.DataFrame,
+    eligibility: pd.DataFrame,
+) -> pd.DataFrame:
+    """合并 trial/event AURC 与逐 session eligibility 审计统计。"""
 
-    rows: list[dict[str, object]] = []
+    aurc_rows: list[dict[str, object]] = []
     for session_id, group in aurc.groupby("session_id", dropna=False, sort=True):
         values = group["aurc_mm"].to_numpy(dtype=float)
-        rows.append(
+        aurc_rows.append(
             {
                 "session_id": session_id,
                 "unit_count": int(len(group)),
@@ -311,7 +367,21 @@ def _summarize_aurc(aurc: pd.DataFrame) -> pd.DataFrame:
                 "aurc_mm_iqr": float(np.quantile(values, 0.75) - np.quantile(values, 0.25)),
             }
         )
-    return pd.DataFrame.from_records(rows, columns=SUMMARY_COLUMNS)
+    aurc_summary = pd.DataFrame.from_records(
+        aurc_rows,
+        columns=SUMMARY_COLUMNS[:5],
+    )
+    if eligibility.empty:
+        return pd.DataFrame(columns=SUMMARY_COLUMNS)
+    merged = eligibility.merge(
+        aurc_summary,
+        on="session_id",
+        how="left",
+        validate="one_to_one",
+    )
+    merged["unit_count"] = merged["unit_count"].fillna(0).astype(int)
+    merged["candidate_count"] = merged["candidate_count"].fillna(0).astype(int)
+    return merged.loc[:, SUMMARY_COLUMNS]
 
 
 __all__ = [

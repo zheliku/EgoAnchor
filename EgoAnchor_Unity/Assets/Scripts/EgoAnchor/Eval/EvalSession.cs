@@ -288,7 +288,10 @@ namespace EgoAnchor.Eval
                 ProtocolVersion,
                 string.Empty,
                 objectId,
-                string.Empty);
+                string.Empty,
+                recorder != null ? recorder.PlatformReferenceTransformPath : string.Empty,
+                recorder != null ? recorder.PlatformReferenceController : string.Empty,
+                recorder != null && recorder.PlatformReferencePreflightPassed);
             string json = EvalJson.BuildManifest(
                 metadata,
                 _variantLabels, _variantConfigs,
@@ -312,6 +315,11 @@ namespace EgoAnchor.Eval
             string variantError = string.Empty;
             if (recorder == null || !recorder.TryValidateCurrentVariants(out variantError))
                 missing.Add(string.IsNullOrWhiteSpace(variantError) ? "variantConfigs" : variantError);
+            string referenceError = string.Empty;
+            if (recorder == null || !recorder.TryValidatePlatformReference(objectId, out referenceError))
+                missing.Add(string.IsNullOrWhiteSpace(referenceError)
+                    ? "platformReference"
+                    : referenceError);
             if (missing.Count == 0)
                 return true;
 

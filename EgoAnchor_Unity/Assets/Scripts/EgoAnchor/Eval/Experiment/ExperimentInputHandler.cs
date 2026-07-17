@@ -4,17 +4,17 @@ using UnityEngine.InputSystem;
 
 namespace EgoAnchor.Eval.Experiment
 {
-    /// <summary>把 Inspector 内联 InputAction 路由到九任务采集状态机。</summary>
+    /// <summary>把 Inspector 内联 InputAction 路由到五任务采集状态机。</summary>
     public sealed class ExperimentInputHandler : MonoBehaviour
     {
         /// <summary>接收选择、开始、标记、结束和作废动作的任务选择器。</summary>
         [Header("References")]
-        [Tooltip("九任务采集选择器；所有 InputAction 最终只调用该状态机。")]
+        [Tooltip("五任务采集选择器；所有 InputAction 最终只调用该状态机。")]
         [SerializeField] private ExperimentTrialSelector selector;
 
         /// <summary>右手摇杆或键盘方向键的二维选场动作。</summary>
         [Header("Inline Input Actions")]
-        [Tooltip("九宫格选场动作，期望 Vector2；默认绑定右手摇杆与键盘方向键。")]
+        [Tooltip("任务网格导航动作，期望 Vector2；默认绑定右手摇杆与键盘方向键。")]
         [SerializeField] private InputAction navigateAction =
             new InputAction("NavigateTask", InputActionType.Value, expectedControlType: "Vector2");
 
@@ -43,8 +43,8 @@ namespace EgoAnchor.Eval.Experiment
         [SerializeField] private InputAction rejectAction =
             new InputAction("RejectTrial", InputActionType.Button);
 
-        /// <summary>键盘数字行和小键盘 1--9 对应的九项任务选择动作。</summary>
-        [Tooltip("九个内联 Button Action，顺序对应任务 1--9；只切换选中任务，不开始、标记或结束。")]
+        /// <summary>键盘数字行和小键盘 1--5 对应的五项任务选择动作。</summary>
+        [Tooltip("五个内联 Button Action，顺序对应任务 1--5；只切换选中任务，不开始、标记或结束。")]
         [SerializeField] private InputAction[] taskActions = CreateTaskActions();
 
         /// <summary>摇杆触发一次选择所需的最小幅度。</summary>
@@ -77,7 +77,7 @@ namespace EgoAnchor.Eval.Experiment
             _navigationLatched = false;
         }
 
-        /// <summary>订阅手柄、键盘方向动作和九个数字任务选择动作。</summary>
+        /// <summary>订阅手柄、键盘方向动作和五个数字任务选择动作。</summary>
         private void SubscribeActions()
         {
             if (_subscribed) return;
@@ -147,7 +147,7 @@ namespace EgoAnchor.Eval.Experiment
             else action.Disable();
         }
 
-        /// <summary>读取摇杆或方向键组合，并在回中前只执行一次九宫格移动。</summary>
+        /// <summary>读取摇杆或方向键组合，并在回中前只执行一次网格移动。</summary>
         private void OnNavigatePerformed(InputAction.CallbackContext context)
         {
             Vector2 value = context.ReadValue<Vector2>();
@@ -177,7 +177,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>处理作废动作回调。</summary>
         private void OnRejectPerformed(InputAction.CallbackContext context) => HandleReject();
 
-        /// <summary>移动九宫格选中项。</summary>
+        /// <summary>移动任务网格选中项。</summary>
         public bool HandleNavigate(Vector2 direction)
         {
             return selector != null && selector.MoveSelection(direction);
@@ -221,7 +221,7 @@ namespace EgoAnchor.Eval.Experiment
             return !selector.HasActiveTrial && selector.SelectTask(taskIndex);
         }
 
-        /// <summary>创建九个没有硬编码 binding 的内联键盘任务动作。</summary>
+        /// <summary>创建五个没有硬编码 binding 的内联键盘任务动作。</summary>
         private static InputAction[] CreateTaskActions()
         {
             var actions = new InputAction[ExperimentScenario.PlanCount];

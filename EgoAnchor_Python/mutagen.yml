@@ -18,7 +18,7 @@
 #
 # Targets:
 #   4090  johnren@172.24.244.55  /home/johnren/tmp/EgoAnchor_Python      (Linux)
-#   5090  BNU@172.24.247.32      D:/Project/EgoAnchor_Python (2)         (Windows)
+#   5090  BNU@172.24.247.32      D:/Project/EgoAnchor_Python             (Windows)
 #   5080  gjw@192.168.3.9        C:/Users/gjw/projects/EgoAnchor_Python  (Windows)
 #
 # !! VERIFY the 5090 IP (172.24.247.32) after Windows reinstall.

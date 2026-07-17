@@ -7,7 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from egoanchor.eval.schema_v2 import FORMAL_VARIANTS, aggregate_config_hash, load_session_v2, run_schema_qc
+from egoanchor.eval.schema_v2 import (
+    FORMAL_VARIANTS,
+    SchemaV2Error,
+    aggregate_config_hash,
+    load_session_v2,
+    run_schema_qc,
+)
 from egoanchor.eval.tests.test_schema_v2_reader import _write_minimal_session
 
 
@@ -54,17 +60,16 @@ class SchemaV2QcTest(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertTrue(any("render tick" in error for error in report.errors))
 
-    def test_pending_python_stats_fail_qc(self) -> None:
-        """Python 未停止或 fragment 缺失时，pending 统计不得被当作零丢行。"""
+    def test_missing_python_fragment_fails_before_qc(self) -> None:
+        """Python 停止片段缺失时 reader 必须拒绝，且不得发布派生事件。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             session_dir = _write_qc_session(Path(tmp))
             (session_dir / "python_session.json").unlink()
 
-            report = run_schema_qc(load_session_v2(session_dir))
-
-            self.assertFalse(report.passed)
-            self.assertTrue(any("pending" in error for error in report.errors))
+            with self.assertRaisesRegex(SchemaV2Error, "requires python_session.json"):
+                load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
 
     def test_formal_session_requires_frozen_hashes(self) -> None:
         """Formal session 缺少整体或参数集合 hash 时必须失败。"""
@@ -123,6 +128,24 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertTrue(report.passed, report.errors)
 
+    def test_formal_session_requires_verified_right_controller_reference(self) -> None:
+        """右手正式采集必须固化正确 prefab 路径、控制器和运动预检。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_qc_session(Path(tmp)))
+            session.manifest["platform_reference"] = {
+                "transform_path": "OVRCameraRig/WrongStaticObject",
+                "controller": "LTouch",
+                "preflight_passed": False,
+            }
+
+            report = run_schema_qc(session)
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("platform reference path" in error for error in report.errors))
+            self.assertTrue(any("controller RTouch" in error for error in report.errors))
+            self.assertTrue(any("preflight_passed" in error for error in report.errors))
+
     def test_formal_trial_has_no_duration_bounds(self) -> None:
         """Formal trial 可在事件协议完成后立即结束，不设持续时间上下界。"""
 
@@ -159,6 +182,50 @@ class SchemaV2QcTest(unittest.TestCase):
 
             self.assertFalse(report.passed)
             self.assertTrue(any("precedes trial_started" in error for error in report.errors))
+
+    def test_start_stop_trial_requires_transition_marker(self) -> None:
+        """任务 2 漏按起动 marker 时不得发布实验一/二指标。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_qc_session(Path(tmp)))
+            session.manifest["completed_tasks"][0]["scenario_id"] = "start_stop_6dof"
+            session.manifest["trial_plan"][0]["scenario_id"] = "start_stop_6dof"
+            session.events.loc[
+                session.events["trial_id"].eq("trial-01"),
+                "scenario_id",
+            ] = "start_stop_6dof"
+            marker_index = session.events.index[
+                session.events["event_type"].eq("event_marker")
+            ][0]
+            session.events.at[marker_index, "payload"] = {"event_role": "generic_marker"}
+
+            report = run_schema_qc(session)
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("transition_started" in error for error in report.errors))
+
+    def test_occlusion_trial_requires_closed_marker_pairs(self) -> None:
+        """任务 5 缺少重新可见 marker 时必须失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session = load_session_v2(_write_qc_session(Path(tmp)))
+            session.manifest["completed_tasks"][0]["scenario_id"] = "occlusion_recovery"
+            session.manifest["trial_plan"][0]["scenario_id"] = "occlusion_recovery"
+            session.events.loc[
+                session.events["trial_id"].eq("trial-01"),
+                "scenario_id",
+            ] = "occlusion_recovery"
+            marker_index = session.events.index[
+                session.events["event_type"].eq("event_marker")
+            ][0]
+            session.events.at[marker_index, "payload"] = {
+                "event_role": "occlusion_started"
+            }
+
+            report = run_schema_qc(session)
+
+            self.assertFalse(report.passed)
+            self.assertTrue(any("closed alternating occlusion markers" in error for error in report.errors))
 
     def test_unknown_admission_variant_fails_qc(self) -> None:
         """Admission 混入 manifest 未声明变体时必须失败。"""
@@ -394,12 +461,20 @@ def _expand_to_formal_variants(session_dir: Path) -> None:
     )
     ended = dict(started)
     ended.update(event="trial_ended", event_type="trial_ended", mono_ms=92000.0, created_unix_ms=102000.0)
-    events.extend((started, ended))
+    marker = dict(started)
+    marker.update(
+        event="event_marker",
+        event_type="event_marker",
+        mono_ms=3000.0,
+        created_unix_ms=13000.0,
+        payload={"event_role": "generic_marker"},
+    )
+    events.extend((started, marker, ended))
     _write_jsonl(events_path, events)
 
     manifest["log_writer_stats"]["unity_admission.jsonl"]["rows_written"] = len(admissions)
     manifest["log_writer_stats"]["unity_render.jsonl"]["rows_written"] = len(renders)
-    manifest["log_writer_stats"]["events.jsonl"]["unity"]["rows_written"] = 4
+    manifest["log_writer_stats"]["events.jsonl"]["unity"]["rows_written"] = 5
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 

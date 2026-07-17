@@ -7,21 +7,13 @@ from typing import Any, Mapping
 
 
 EXPERIMENT_ID = "exp2_design_attribution"
-"""schema-v2 中实验二的稳定标识。"""
+"""论文产物和公开分析入口使用的实验二稳定标识。"""
+
+SOURCE_EXPERIMENT_ID = "exp1_system_characterization"
+"""实验二复用的任务 1--5 原始采集上下文标识。"""
 
 BASELINE_VARIANT = "EgoAnchor"
 """所有组件消融共同配对的完整系统。"""
-
-ABLATION_VARIANTS = (
-    "EgoAnchor w/o capture-time alignment",
-    "EgoAnchor w/o VCD",
-    "EgoAnchor w/o temporal synthesis",
-    "EgoAnchor w/o StaticLock",
-)
-"""实验二冻结的四个单组件消融，顺序与采集界面一致。"""
-
-REQUIRED_VARIANTS = (BASELINE_VARIANT,) + ABLATION_VARIANTS
-"""实验二分析允许进入配对的五个配置。"""
 
 COMPONENT_KEYS = (
     "uses_capture_time_alignment",
@@ -31,21 +23,63 @@ COMPONENT_KEYS = (
 )
 """single-component QC 使用的四个独立组件开关。"""
 
-SCENARIO_ABLATION = {
-    "without_capture_time_alignment": "EgoAnchor w/o capture-time alignment",
-    "without_vcd_admission": "EgoAnchor w/o VCD",
-    "without_temporal_synthesis": "EgoAnchor w/o temporal synthesis",
-    "without_static_lock": "EgoAnchor w/o StaticLock",
+SOURCE_SCENARIOS = (
+    "static_head_motion",
+    "start_stop_6dof",
+    "continuous_translation",
+    "continuous_rotation",
+    "occlusion_recovery",
+)
+"""一次完整采集批次必须覆盖的五个物理任务。"""
+
+_ABLATION_SPECS = (
+    (
+        "EgoAnchor w/o capture-time alignment",
+        "uses_capture_time_alignment",
+        "static_head_motion",
+        "display_error.",
+    ),
+    (
+        "EgoAnchor w/o VCD",
+        "uses_vcd_admission",
+        "occlusion_recovery",
+        "occlusion.",
+    ),
+    (
+        "EgoAnchor w/o temporal synthesis",
+        "uses_temporal_synthesis",
+        "start_stop_6dof",
+        "transition.",
+    ),
+    (
+        "EgoAnchor w/o StaticLock",
+        "uses_static_lock",
+        "static_head_motion",
+        "static.",
+    ),
+)
+"""消融显示名、唯一关闭组件、主场景和关键指标前缀的单一冻结来源。"""
+
+ABLATION_VARIANTS = tuple(label for label, _, _, _ in _ABLATION_SPECS)
+"""实验二冻结的四个单组件消融，顺序与采集界面一致。"""
+
+REQUIRED_VARIANTS = (BASELINE_VARIANT,) + ABLATION_VARIANTS
+"""实验二分析允许进入配对的五个配置。"""
+
+ABLATION_SCENARIO = {
+    label: scenario for label, _, scenario, _ in _ABLATION_SPECS
 }
-"""实验二场景到唯一被归因消融的冻结映射。"""
+"""每个单组件消融到其主归因物理场景的冻结映射。"""
 
 ABLATION_COMPONENT = {
-    "EgoAnchor w/o capture-time alignment": "uses_capture_time_alignment",
-    "EgoAnchor w/o VCD": "uses_vcd_admission",
-    "EgoAnchor w/o temporal synthesis": "uses_temporal_synthesis",
-    "EgoAnchor w/o StaticLock": "uses_static_lock",
+    label: component for label, component, _, _ in _ABLATION_SPECS
 }
 """消融显示名到唯一关闭组件的冻结映射。"""
+
+ABLATION_METRIC_PREFIX = {
+    label: metric_prefix for label, _, _, metric_prefix in _ABLATION_SPECS
+}
+"""每个消融必须产生的关键归因指标前缀。"""
 
 
 @dataclass(frozen=True)
@@ -107,12 +141,15 @@ def variant_contracts(manifest: Mapping[str, Any]) -> dict[str, VariantContract]
 
 __all__ = [
     "ABLATION_COMPONENT",
+    "ABLATION_METRIC_PREFIX",
+    "ABLATION_SCENARIO",
     "ABLATION_VARIANTS",
     "BASELINE_VARIANT",
     "COMPONENT_KEYS",
     "EXPERIMENT_ID",
     "REQUIRED_VARIANTS",
-    "SCENARIO_ABLATION",
+    "SOURCE_EXPERIMENT_ID",
+    "SOURCE_SCENARIOS",
     "VariantContract",
     "variant_contracts",
 ]

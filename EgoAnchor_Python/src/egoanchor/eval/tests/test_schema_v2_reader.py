@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -96,6 +97,83 @@ class SchemaV2ReaderTest(unittest.TestCase):
 
             with self.assertRaisesRegex(SchemaV2Error, "python_events.jsonl row count"):
                 load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
+
+    def test_reader_does_not_publish_events_while_python_is_running(self) -> None:
+        """Python 未停止时即使两个分片存在，也不得留下派生事件文件。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["state"] = "python_started"
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "state must be python_stopped"):
+                load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
+
+    def test_reader_retries_after_mutagen_completes_partial_fragment(self) -> None:
+        """metadata 先到而事件仍在同步时不发布，补齐后同一目录可以直接重试。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            fragment_path = session_dir / "python_session.json"
+            fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
+            fragment["log_writer_stats"]["python_events.jsonl"]["rows_written"] = 2
+            fragment_path.write_text(json.dumps(fragment), encoding="utf-8")
+
+            with self.assertRaisesRegex(SchemaV2Error, "python_events.jsonl row count"):
+                load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
+
+            python_events_path = session_dir / "python_events.jsonl"
+            rows = [json.loads(line) for line in python_events_path.read_text(encoding="utf-8").splitlines()]
+            second = dict(rows[0])
+            second.update(
+                event="runtime_stopped",
+                event_type="runtime_stopped",
+                created_unix_ms=12003.0,
+                mono_ms=1203.0,
+            )
+            _write_jsonl(python_events_path, [*rows, second])
+
+            session = load_session_v2(session_dir)
+
+            self.assertEqual(len(session.events), 4)
+            self.assertEqual(len((session_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()), 4)
+
+    def test_reader_atomically_repairs_early_derived_events(self) -> None:
+        """完整权威分片到齐后应重建早期生成的部分 events，而不是永久拒绝。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            events_path = session_dir / "events.jsonl"
+            events_path.write_text(
+                (session_dir / "python_events.jsonl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            session = load_session_v2(session_dir)
+
+            self.assertEqual(len(session.events), 3)
+            self.assertEqual(len(events_path.read_text(encoding="utf-8").splitlines()), 3)
+
+    def test_event_publish_failure_preserves_existing_file_and_cleans_temp(self) -> None:
+        """原子替换失败时不得损坏旧文件，也不得遗留 merge 临时文件。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = _write_minimal_session(Path(tmp))
+            events_path = session_dir / "events.jsonl"
+            original = "previous-derived-content\n"
+            events_path.write_text(original, encoding="utf-8")
+
+            with patch.object(Path, "replace", side_effect=OSError("replace unavailable")):
+                with self.assertRaisesRegex(SchemaV2Error, "cannot publish merged events.jsonl"):
+                    load_session_v2(session_dir)
+
+            self.assertEqual(events_path.read_text(encoding="utf-8"), original)
+            self.assertEqual(list(session_dir.glob(".events.jsonl.*.merge.tmp")), [])
 
     def test_reader_allows_task_prefix_on_session_directory(self) -> None:
         """跨端都停止后可给目录增加任务前缀，内部 session_id 保持不变。"""
@@ -282,6 +360,7 @@ class SchemaV2ReaderTest(unittest.TestCase):
 
             with self.assertRaisesRegex(SchemaV2Error, "python_session.json session_id does not match"):
                 load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
 
     def test_reader_rejects_candidate_id_frame_mismatch(self) -> None:
         """candidate_id 内嵌 frame 必须与显式 frame_id 完全一致。"""
@@ -308,6 +387,7 @@ class SchemaV2ReaderTest(unittest.TestCase):
 
             with self.assertRaisesRegex(SchemaV2Error, "python_events_log_filename=python_events.jsonl"):
                 load_session_v2(session_dir)
+            self.assertFalse((session_dir / "events.jsonl").exists())
 
     def test_reader_rejects_python_fragment_host_type_coercion(self) -> None:
         """host/version 必须原生为非空字符串，不得把数组或数字强制转换后通过 Formal QC。"""
@@ -350,6 +430,11 @@ def _write_minimal_session(root: Path) -> Path:
         "config_hash": aggregate_config_hash(variant_definitions),
         "frozen_parameter_set_id": "dev-1",
         "object_model_id": "controller-mesh-v1",
+        "platform_reference": {
+            "transform_path": "OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab",
+            "controller": "RTouch",
+            "preflight_passed": True,
+        },
         "variant_definitions": variant_definitions,
         "completed_tasks": [],
         "log_files": {
