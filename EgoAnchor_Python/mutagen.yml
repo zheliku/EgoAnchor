@@ -111,13 +111,13 @@ sync:
   # WRONG OLD NOTE (retracted): the earlier "switch cmd.exe -> PowerShell" advice
   # was backwards — PowerShell as DefaultShell is what BREAKS the agent bootstrap.
   # Then un-comment the two 5080 blocks below and re-run `mutagen project start`.
-  #
-  # push-5080:
-  #   alpha: "."
-  #   beta: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python"
-  #   mode: one-way-replica
-  #   ignore:
-  #     paths: *source_ignore
+  
+  push-5080:
+    alpha: "."
+    beta: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+      paths: *source_ignore
 
   # ============================ EVAL-LOG PULL ============================
   # Remote data/eval -> local data/eval (shared dir for all machines).
@@ -135,7 +135,7 @@ sync:
     beta: "./data/eval"
     mode: one-way-safe
 
-  # logs-5080:
-  #   alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"
-  #   beta: "./data/eval"
-  #   mode: one-way-safe
+  logs-5080:
+    alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe

@@ -1275,7 +1275,7 @@ MonoBehaviour:
   natsUrl: nats://172.24.247.32:4222
   connectOnStart: 1
   pendingCapacity: 8
-  retryOnInitialConnect: 0
+  retryOnInitialConnect: 1
   reconnectWaitMinSeconds: 0.25
   reconnectWaitMaxSeconds: 1
   logStats: 0

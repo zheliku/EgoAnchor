@@ -1220,6 +1220,22 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
         }
 
+        /// <summary>采集场景首次连接 NATS 失败后必须持续重试，避免依赖 Python 的启动顺序。</summary>
+        [Test]
+        public void CollectionScenesRetryInitialNatsConnection()
+        {
+            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
+            {
+                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
+                string yaml = File.ReadAllText(path);
+                string natsSection = GetSectionContaining(
+                    yaml,
+                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.NatsControlClient");
+
+                StringAssert.Contains("retryOnInitialConnect: 1", natsSection, sceneName);
+            }
+        }
+
         /// <summary>两个采集场景都必须使用静止根 Canvas 下互不重叠的任务板和实时诊断板。</summary>
         [Test]
         public void CollectionScenesContainWiredLiveMetricsPanel()

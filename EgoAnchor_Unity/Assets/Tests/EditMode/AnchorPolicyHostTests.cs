@@ -19,6 +19,27 @@ namespace EgoAnchor.Tests
     /// </summary>
     public sealed class AnchorPolicyHostTests
     {
+        /// <summary>Python 尚未产生 pose 时，心跳也必须让正式采集获得可配对 session 标识。</summary>
+        [Test]
+        public void HeartbeatProvidesPythonSessionIdBeforeFirstPose()
+        {
+            GameObject go = new GameObject("HeartbeatSessionPairingTests");
+            try
+            {
+                AnchorRuntimeHub hub = go.AddComponent<AnchorRuntimeHub>();
+                hub.PublishHeartbeat(new ServerHeartbeat
+                {
+                    Header = new MessageHeader { SessionId = "20260717_210000_controller_right" },
+                });
+
+                Assert.That(hub.LatestPythonSessionId, Is.EqualTo("20260717_210000_controller_right"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
         /// <summary>
         /// frame history 必须同时保留图像时间代理、回退样本数与 payload-ready 时刻，避免混用时间轴。
         /// </summary>

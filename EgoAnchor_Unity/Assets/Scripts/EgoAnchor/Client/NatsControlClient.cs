@@ -44,7 +44,7 @@ namespace EgoAnchor.Client
 
         /// <summary>初次连接失败时是否继续重试。</summary>
         [Tooltip("是否在初次连接失败时持续重试。开发时 NATS server 可能晚于 Unity 启动，建议保持开启。")]
-        [SerializeField] private bool retryOnInitialConnect = false;
+        [SerializeField] private bool retryOnInitialConnect = true;
 
         /// <summary>初次连接重试间隔下限秒数。</summary>
         [Tooltip("NATS 初次连接失败后的最小重试间隔。只在 Retry On Initial Connect 开启时生效；保持较小可避免长时间卡住退出。")]
@@ -440,5 +440,4 @@ namespace EgoAnchor.Client
         }
     }
 }
-
 
