@@ -1,0 +1,222 @@
+"""Task 10 CSV-only 图表发布的契约测试。"""
+
+from __future__ import annotations
+
+import csv
+import contextlib
+import hashlib
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from egoanchor.eval import CSV_TABLE_CONTRACTS, publish_figures
+from egoanchor.eval import cli as eval_cli
+
+
+_PLOT_NAMES = (
+    "exp1_static_timeline",
+    "exp1_motion_events",
+    "exp1_occlusion_events",
+    "exp2_component_deltas",
+    "exp2_vcd_curve",
+)
+
+
+def _contract(name: str):
+    """按逻辑名读取 CSV 契约。"""
+
+    return next(item for item in CSV_TABLE_CONTRACTS if item.name == name)
+
+
+def _write_table(root: Path, name: str, rows: list[dict[str, object]]) -> Path:
+    """用冻结列顺序创建测试 CSV。"""
+
+    contract = _contract(name)
+    path = root / "plots" / f"{name}.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=contract.column_names())
+        writer.writeheader()
+        writer.writerows({column: row.get(column, "") for column in contract.column_names()} for row in rows)
+    return path
+
+
+def _write_fixture(root: Path) -> None:
+    """写入五张最小但可绘图的 plot CSV 和 catalog。"""
+
+    result = {
+        "session_id": "s",
+        "experiment_id": "exp1_system_characterization",
+        "scenario_id": "static_head_motion",
+        "trial_id": "t",
+        "event_id": "e",
+        "condition_id": "c",
+        "variant_id": "Arrival-Hold",
+        "metric_key": "translation_event_pninetyfive_mm",
+        "metric_value": 10.0,
+        "metric_unit": "mm",
+        "aggregation_level": "event",
+        "input_workbook_sha256": "a" * 64,
+    }
+    rows: dict[str, list[dict[str, object]]] = {
+        "exp1_static_timeline": [{**result, "plot_id": "exp1_static_timeline", "panel_id": "static"}],
+        "exp1_motion_events": [{**result, "plot_id": "exp1_motion_events", "panel_id": "motion", "scenario_id": "start_stop_6dof"}],
+        "exp1_occlusion_events": [{**result, "plot_id": "exp1_occlusion_events", "panel_id": "occlusion", "scenario_id": "occlusion_recovery"}],
+        "exp2_component_deltas": [
+            {
+                **result,
+                "plot_id": "exp2_component_deltas",
+                "panel_id": "components",
+                "experiment_id": "exp2_design_attribution",
+                "component_id": "vcd_admission",
+                "full_variant_id": "EgoAnchor",
+                "ablation_variant_id": "EgoAnchor w/o VCD",
+                "full_value": 1.0,
+                "ablation_value": 2.0,
+                "delta": 1.0,
+                "pair_status": "complete",
+            }
+        ],
+        "exp2_vcd_curve": [
+            {
+                "scenario_id": "occlusion_recovery",
+                "reference_kind": "vcd",
+                "risk_kind": "mean",
+                "point_index": 0,
+                "threshold": 0.8,
+                "coverage": 1.0,
+                "risk_mm": 4.0,
+                "group_count": 1,
+                "cumulative_count": 1,
+                "coverage_denominator": 1,
+                "input_workbook_sha256": "a" * 64,
+                "plot_id": "exp2_vcd_curve",
+                "panel_id": "risk",
+            }
+        ],
+    }
+    catalog_rows: list[dict[str, object]] = []
+    for order, name in enumerate(_PLOT_NAMES):
+        path = _write_table(root, name, rows[name])
+        catalog_rows.append(
+            {
+                "plot_id": name,
+                "panel_id": "panel",
+                "source_csv": f"plots/{name}.csv",
+                "x": "event_id" if name != "exp2_vcd_curve" else "coverage",
+                "y": "metric_value" if name != "exp2_vcd_curve" else "risk_mm",
+                "hue": "reference_kind" if name == "exp2_vcd_curve" else "variant_id",
+                "filter_rule_id": "completed_formal_trials",
+                "order": order,
+                "unit": "mm",
+                "target_width": "columnwidth",
+                "expected_rows": len(rows[name]),
+                "data_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    path = root / "plots" / "plot_catalog.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_contract("plot_catalog").column_names())
+        writer.writeheader()
+        writer.writerows(catalog_rows)
+
+
+class FigurePublishingTests(unittest.TestCase):
+    """验证 Task 10 图表发布的输入边界和输出完整性。"""
+
+    def test_publish_creates_all_five_pdf_png_and_manifest(self) -> None:
+        """五个图名、两种格式和输入 hash manifest 必须完整。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            output = Path(tmp) / "figures"
+            _write_fixture(csv_root)
+            result = publish_figures(csv_root, output)
+            self.assertEqual(set(result.figure_hashes), set(_PLOT_NAMES))
+            for name in _PLOT_NAMES:
+                self.assertTrue((output / f"{name}.pdf").is_file())
+                self.assertTrue((output / f"{name}.png").is_file())
+            manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["plot_count"], 5)
+            self.assertEqual(len(manifest["input_csv_sha256"]), 6)
+
+    def test_changing_declared_plot_csv_changes_input_lineage(self) -> None:
+        """修改 plot CSV 后 manifest 中对应 hash 必须变化。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            first = Path(tmp) / "figures_1"
+            second = Path(tmp) / "figures_2"
+            _write_fixture(csv_root)
+            publish_figures(csv_root, first)
+            target = csv_root / "plots" / "exp1_static_timeline.csv"
+            target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            catalog = csv_root / "plots" / "plot_catalog.csv"
+            with catalog.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            next(row for row in rows if row["plot_id"] == "exp1_static_timeline")["data_sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+            with catalog.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=_contract("plot_catalog").column_names())
+                writer.writeheader()
+                writer.writerows(rows)
+            publish_figures(csv_root, second)
+            left = json.loads((first / "figure_manifest.json").read_text(encoding="utf-8"))
+            right = json.loads((second / "figure_manifest.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(left["input_csv_sha256"], right["input_csv_sha256"])
+
+    def test_missing_declared_plot_csv_fails_without_output(self) -> None:
+        """catalog 声明的源 CSV 缺失时不得生成半套图。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            output = Path(tmp) / "figures"
+            _write_fixture(csv_root)
+            (csv_root / "plots" / "exp2_vcd_curve.csv").unlink()
+            with self.assertRaisesRegex(FileNotFoundError, "不存在"):
+                publish_figures(csv_root, output)
+            self.assertFalse(output.exists())
+
+    def test_cli_missing_csv_root_returns_io_error(self) -> None:
+        """publish 缺少 Stage 2 CSV 根目录时返回一且不建论文图目录。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "figures"
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = eval_cli.main(["publish", str(Path(tmp) / "missing"), "--out", str(output)])
+            self.assertEqual(code, eval_cli.EXIT_IO_ERROR)
+            self.assertFalse(output.exists())
+
+    def test_catalog_source_must_stay_under_plots(self) -> None:
+        """catalog 不得诱导 Stage 3 读取 audit、paper 或其他 CSV。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            output = Path(tmp) / "figures"
+            _write_fixture(csv_root)
+            catalog = csv_root / "plots" / "plot_catalog.csv"
+            with catalog.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            rows[0]["source_csv"] = "paper/numbers.csv"
+            with catalog.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=_contract("plot_catalog").column_names())
+                writer.writeheader()
+                writer.writerows(rows)
+            with self.assertRaisesRegex(ValueError, "越过"):
+                publish_figures(csv_root, output)
+            self.assertFalse(output.exists())
+
+    def test_output_cannot_replace_csv_input_tree(self) -> None:
+        """图表输出不得放进 Stage 2 CSV 根目录。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            _write_fixture(csv_root)
+            with self.assertRaisesRegex(ValueError, "不得位于"):
+                publish_figures(csv_root, csv_root / "figures")
+
+
+if __name__ == "__main__":
+    unittest.main()

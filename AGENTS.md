@@ -285,6 +285,11 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 - 不添加 `FormerlySerializedAs`、旧字段、旧路径、旧标签或旧 CLI 兼容层。
 - 改 schema 时同步 writer、reader、分析、论文接口和本文件。
 
+## 当前离线分析事实
+
+- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制五张 PDF/PNG，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
+
 ## AGENTS.md 维护规则
 
 - 不修改顶部 `USER-MAINTAINED-REQUIREMENTS` 区块。

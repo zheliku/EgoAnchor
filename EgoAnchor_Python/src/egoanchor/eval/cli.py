@@ -8,6 +8,7 @@ import re
 import sys
 from dataclasses import asdict
 from collections.abc import Sequence
+from typing import Any
 from pathlib import Path
 
 from .analysis import (
@@ -20,6 +21,7 @@ from .analysis import (
     write_csv_tables,
 )
 from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
+from .publishing import publish_figures
 
 
 EXIT_OK = 0
@@ -94,6 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
                 child.add_argument("--code-version", default="unknown", help="审计版本标识")
                 child.set_defaults(handler=_run_analyze)
                 continue
+            if command == "publish":
+                child.add_argument("csv_root", type=Path, help="Stage 2 CSV 结果目录")
+                child.add_argument(
+                    "--paper-root",
+                    type=Path,
+                    default=None,
+                    help="论文根目录，默认从包位置解析",
+                )
+                child.add_argument("--out", type=Path, default=None, help="覆盖图表输出目录")
+                child.set_defaults(handler=_run_publish)
+                continue
             child.set_defaults(handler=_run_skeleton_command)
     return parser
 
@@ -120,6 +133,34 @@ def _run_skeleton_command(args: argparse.Namespace) -> int:
     """保留阶段入口但暂不产出结果，具体实现由后续 Task 接管。"""
 
     del args
+    return EXIT_OK
+
+
+def _default_paper_root() -> Path:
+    """从 ``egoanchor/eval`` 模块位置解析仓库论文根目录。"""
+
+    return Path(__file__).resolve().parents[4] / "2026-EgoAnchor"
+
+
+def _run_publish(args: argparse.Namespace) -> int:
+    """只从 Stage 2 CSV 发布论文图表，不回读 XLSX 或原始 JSONL。"""
+
+    paper_root = args.paper_root.expanduser() if args.paper_root is not None else _default_paper_root()
+    output = args.out.expanduser() if args.out is not None else paper_root / "figures" / "generated"
+    result = publish_figures(args.csv_root, output)
+    print(
+        json.dumps(
+            {
+                "passed": True,
+                "output_root": str(result.output_root),
+                "plot_count": result.plot_count,
+                "input_csv_sha256": dict(result.input_csv_sha256),
+                "figure_sha256": {name: dict(value) for name, value in result.figure_hashes.items()},
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     return EXIT_OK
 
 
@@ -194,20 +235,31 @@ def _run_analyze(args: argparse.Namespace) -> int:
             {"check_id": "completed_trial_count", "status": "passed", "observed": len(batch.trials), "expected": len(batch.trials), "details": "final trial 投影完成"},
         ],
     }
+    def plot_row(row: Any, plot_id: str) -> dict[str, object]:
+        """为冻结 plot 主键加入 session/trial，避免跨任务 event_id 碰撞。"""
+
+        values = asdict(row)
+        values["event_id"] = f"{values['session_id']}:{values['trial_id']}:{values['event_id']}"
+        values["plot_id"] = plot_id
+        values["panel_id"] = values["scenario_id"]
+        return values
+
     tables["exp1_static_timeline"] = [
-        {**asdict(row), "plot_id": "exp1_static_timeline", "panel_id": row.scenario_id}
+        plot_row(row, "exp1_static_timeline")
         for row in exp1.event_metrics
         if row.scenario_id == "static_head_motion"
         and row.metric_key == "translation_event_pninetyfive_mm"
     ]
     tables["exp1_motion_events"] = [
-        {**asdict(row), "plot_id": "exp1_motion_events", "panel_id": row.scenario_id}
+        plot_row(row, "exp1_motion_events")
         for row in exp1.event_metrics
-        if row.scenario_id in {"start_stop_6dof", "continuous_motion"}
-        and row.metric_key == "translation_event_pninetyfive_mm"
+        if (
+            (row.scenario_id == "start_stop_6dof" and row.metric_key == "translation_event_pninetyfive_mm")
+            or (row.scenario_id == "continuous_translation" and row.metric_key == "translation_event_pninetyfive_mm_continuous")
+        )
     ]
     tables["exp1_occlusion_events"] = [
-        {**asdict(row), "plot_id": "exp1_occlusion_events", "panel_id": row.scenario_id}
+        plot_row(row, "exp1_occlusion_events")
         for row in exp1.event_metrics
         if row.scenario_id == "occlusion_recovery"
         and row.metric_key == "translation_event_pninetyfive_mm"

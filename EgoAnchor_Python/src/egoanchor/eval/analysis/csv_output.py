@@ -47,6 +47,7 @@ _TABLE_GROUPS = {
     "numbers": "paper",
     "tables": "paper",
 }
+_ALLOWED_SCOPES = frozenset(_TABLE_GROUPS.values())
 """固定 CSV 表到 Stage 2 目录的映射。"""
 
 
@@ -74,6 +75,8 @@ def _split_table_key(table_key: str) -> tuple[str, str | None]:
         return table_key, None
     prefix, logical_name = table_key.rsplit("/", 1)
     if not prefix or not logical_name:
+        raise ValueError(f"CSV 表作用域非法：{table_key}")
+    if prefix not in _ALLOWED_SCOPES:
         raise ValueError(f"CSV 表作用域非法：{table_key}")
     return logical_name, prefix
 
@@ -254,7 +257,14 @@ def write_csv_tables(
             logical_name, scope = _split_table_key(table_key)
             if scope is not None:
                 scoped_keys.setdefault(logical_name, []).append(table_key)
-        for contract in CSV_TABLE_CONTRACTS:
+        # plot_catalog 必须最后写入，因为其 data_sha256 指向已经落盘的 plot CSV。
+        ordered_contracts = [
+            contract for contract in CSV_TABLE_CONTRACTS if contract.name != "plot_catalog"
+        ]
+        ordered_contracts.extend(
+            contract for contract in CSV_TABLE_CONTRACTS if contract.name == "plot_catalog"
+        )
+        for contract in ordered_contracts:
             table_name = contract.name
             table_keys = scoped_keys.get(table_name, [table_name])
             for table_key in table_keys:
@@ -262,8 +272,30 @@ def write_csv_tables(
                 group = scope or _TABLE_GROUPS[table_name]
                 path = temporary / group / f"{table_name}.csv"
                 path.parent.mkdir(parents=True, exist_ok=True)
-                _write_table(path, table_name, rows_by_table.get(table_key, ()))
+                rows = rows_by_table.get(table_key, ())
+                if table_name == "plot_catalog":
+                    adjusted: list[dict[str, Any]] = []
+                    for row in rows:
+                        adjusted_row = dict(row)
+                        source_csv = str(adjusted_row.get("source_csv") or "")
+                        source_path = (temporary / source_csv).resolve()
+                        if not source_path.is_file() or not source_path.is_relative_to(temporary.resolve()):
+                            raise ValueError(
+                                f"plot catalog source CSV 不存在或越过发布目录：{source_csv}"
+                            )
+                        adjusted_row["data_sha256"] = _table_sha256(source_path)
+                        adjusted.append(adjusted_row)
+                    rows = tuple(adjusted)
+                _write_table(path, table_name, rows)
                 table_hashes[table_key] = _table_sha256(path)
+        # 原子替换前回读每个已写表，确保表头、行编码和 hash 可重建。
+        for table_key, expected_hash in table_hashes.items():
+            table_name, scope = _split_table_key(table_key)
+            group = scope or _TABLE_GROUPS[table_name]
+            path = temporary / group / f"{table_name}.csv"
+            read_csv_table(path, table_key)
+            if _table_sha256(path) != expected_hash:
+                raise ValueError(f"CSV 回读 hash 不一致：{table_key}")
         backup: Path | None = None
         if destination.exists():
             backup = destination.with_name(f".{destination.name}.previous")

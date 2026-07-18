@@ -147,6 +147,7 @@ from .preprocess import (
     variant_config_hash,
     write_task_workbook,
 )
+from .publishing import FigurePublishResult, publish_figures
 
 __all__ = [
     "AnalysisParameters",
@@ -281,6 +282,8 @@ __all__ = [
     "variant_config_hash",
     "validate_exp2_variant_definitions",
     "write_task_workbook",
+    "FigurePublishResult",
+    "publish_figures",
     "visible_response_ms",
     "workbook_sha256",
     "write_csv_tables",

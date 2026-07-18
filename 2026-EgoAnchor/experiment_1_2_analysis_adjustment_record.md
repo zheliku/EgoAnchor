@@ -23,6 +23,24 @@
 - Stage 2 仍只读取 Stage 1 XLSX；Task 7 代码不包含 JSON/JSONL、原始 task 路径或 `schema_v2` reader 依赖。
 - 实验一仍只投影 Arrival-Hold、Capture-Hold、One-Euro Anchor 和 EgoAnchor，不混入实验二消融。
 - 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
+
+## 2026-07-18：Task 10 CSV 图表发布
+
+### 发现
+
+1. 五个 plot CSV 的冻结主键不含 session/trial；多 session event_id 会碰撞，必须在 plot 行中使用稳定的 session/trial/event 复合键。
+2. Stage 3 的 source CSV 必须限制在 `plots/`，并在发布前校验 catalog 行数、源 hash、数值列和 PDF/PNG lineage。
+
+### 调整
+
+1. 新增固定样式、实验一三图、实验二双图和 CSV-only 原子发布 API；空事件数据明确标注为 `No event rows`，不伪造统计值。
+2. Stage 2 plot catalog 在所有 plot CSV 写出后回填对应实际 CSV SHA-256；Stage 2 写入后逐表回读契约表头和 hash。
+3. `publish` CLI 输出到 `figures/generated`（可用 `--out` 覆盖），禁止输出目录位于 CSV 输入根内；发布 manifest 保留 catalog 与五个源 CSV hash。
+
+### 边界影响
+
+- Stage 3 不打开 XLSX、JSON 或 JSONL；图表只消费 Stage 2 CSV。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
 - 不改变 Task 8 的实验二配对和 VCD 风险覆盖职责，也不提前实现 Task 9 的文件发布。
 
 ### 验证依据

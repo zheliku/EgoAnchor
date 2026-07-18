@@ -56,6 +56,15 @@ class CsvOutputTests(unittest.TestCase):
                 write_csv_tables(output, {"unknown": []}, input_workbooks=())
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
 
+    def test_scoped_table_cannot_escape_publish_directory(self) -> None:
+        """作用域前缀不得使用父目录或任意新目录。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "results"
+            with self.assertRaisesRegex(ValueError, "作用域非法"):
+                write_csv_tables(output, {"../outside/event_metrics": []})
+            self.assertFalse((Path(tmp) / "outside").exists())
+
     def test_scoped_metric_tables_share_contract_but_publish_to_both_experiments(self) -> None:
         """exp1/exp2 同名长表必须各自落盘并分别写 lineage。"""
 
