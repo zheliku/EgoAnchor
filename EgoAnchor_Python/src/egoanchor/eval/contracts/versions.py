@@ -47,8 +47,8 @@ class ContractChange:
 CONTRACT_VERSIONS = (
     ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
     ContractVersion("csv", 1, "Stage 2 指标与论文数据 CSV 契约"),
-    ContractVersion("metrics", 1, "实验一/二指标定义契约"),
-    ContractVersion("analysis_params", 1, "冻结分析参数契约"),
+    ContractVersion("metrics", 2, "实验一/二指标定义契约"),
+    ContractVersion("analysis_params", 2, "冻结分析参数契约"),
 )
 """当前冻结的契约版本目录。"""
 
@@ -61,6 +61,16 @@ CONTRACT_CHANGELOG = (
     ),
     ContractChange("csv-v1", "固定 event/trial/session、plot 和 paper 长表。", True),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),
+    ContractChange(
+        "metrics-v2",
+        "冻结 Task 6 科学公式、jump P99、同域时延和 workbook-v2 物理来源列。",
+        True,
+    ),
+    ContractChange(
+        "analysis_params-v2",
+        "冻结滤波、运动切窗、响应、沉降、lag、恢复、gap 和单调时钟参数。",
+        True,
+    ),
 )
 """当前仓库已确认的契约变更记录。"""
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import re
 import tomllib
@@ -264,10 +265,41 @@ class ContractTests(unittest.TestCase):
             },
         )
         self.assertTrue(METRIC_DEFINITIONS)
+        metric_keys = [metric.key for metric in METRIC_DEFINITIONS]
+        tex_suffixes = [metric.tex_suffix for metric in METRIC_DEFINITIONS]
+        self.assertEqual(len(metric_keys), len(set(metric_keys)))
+        self.assertEqual(len(tex_suffixes), len(set(tex_suffixes)))
+        self.assertIn("jump_pninetynine_mm", metric_keys)
+        self.assertIn("jump_pninetynine_deg", metric_keys)
         for metric in METRIC_DEFINITIONS:
             self.assertRegex(metric.tex_suffix, r"^[A-Za-z][A-Za-z]*$")
             self.assertTrue(set(metric.scenarios).issubset(set(SCENARIO_ORDER)), metric.key)
         self.assertEqual(len(metric_catalog()), len(METRIC_DEFINITIONS))
+
+        with self.assertRaisesRegex(ValueError, "TeX 后缀"):
+            replace(METRIC_DEFINITIONS[0], tex_suffix="中文后缀")
+
+    def test_metric_source_columns_exist_in_workbook_v2(self) -> None:
+        """每个指标来源必须是 ``sheet.column`` 且真实存在于 workbook-v2。"""
+
+        for metric in METRIC_DEFINITIONS:
+            self.assertTrue(metric.source_columns, metric.key)
+            for source in metric.source_columns:
+                self.assertRegex(source, r"^[a-z_]+\.[a-z0-9_]+$", f"{metric.key}: {source}")
+                sheet_name, column_name = source.split(".", 1)
+                columns = {column.name for column in get_sheet_contract(sheet_name).columns}
+                self.assertIn(column_name, columns, f"{metric.key}: {source}")
+
+    def test_task6_contract_versions_and_breaking_changes_are_recorded(self) -> None:
+        """metrics 和 analysis_params v2 必须与 breaking changelog 同步。"""
+
+        versions = {item.name: item.version for item in CONTRACT_VERSIONS}
+        changes = {item.version: item for item in CONTRACT_CHANGELOG}
+
+        self.assertEqual(versions["metrics"], 2)
+        self.assertEqual(versions["analysis_params"], 2)
+        self.assertTrue(changes["metrics-v2"].breaking)
+        self.assertTrue(changes["analysis_params-v2"].breaking)
 
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""
@@ -276,6 +308,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("contract", config)
         self.assertIn("metrics", config)
         self.assertIn("thresholds", config)
+        self.assertEqual(config["contract"]["version"], 2)
 
         assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
         for line in CONFIG_PATH.read_text(encoding="utf-8").splitlines():

@@ -1,26 +1,74 @@
-# EgoAnchor 离线分析冻结参数；修改任何参数都必须递增 analysis_params 契约版本。
+# EgoAnchor 实验一/二离线分析的唯一冻结参数入口。任何数值或语义变更都必须递增契约版本，并重新生成 Stage 2 及其后续产物。
 
 [contract]
-version = 1 # 分析参数契约版本。
-unit_system = "metric" # 所有距离使用米或毫米，角度使用度，时间使用毫秒。
-statistics_unit = "event_segment" # 统计单位固定为 event/segment，不是 frame。
+version = 2 # 分析参数契约版本；v2 冻结 Task 6 的滤波、窗口、运动检测、lag、恢复和单调时钟语义。
+unit_system = "metric" # 距离输入使用米、结果按指标转换为毫米，角度使用度，时间使用毫秒。
+statistics_unit = "event_segment" # 统计单位固定为 event/segment；frame 只用于 event 内计算，不作为独立样本。
+quantile_method = "linear" # 所有经验分位数统一使用 NumPy linear 插值，避免不同默认算法改变 P95/P99。
+invalid_sample_policy = "exclude_non_finite_and_invalid_pose" # 仅排除非有限值或显式无效 pose，不对缺失样本做零值填充。
+event_summary = "median_iqr" # event/segment 指标先独立计算，再以中位数和四分位距汇总。
 
 [metrics]
-p95_quantile = 0.95 # event/segment 内部使用的 P95 分位点。
-p99_quantile = 0.99 # jump 尾部诊断使用的 P99 分位点。
-hp_rms_cutoff_hz = 1.0 # 位置 HP-RMS 的低通分界频率，单位 Hz。
-minimum_event_samples = 2 # 计算 event 指标所需的最少有效样本数。
+p95_quantile = 0.95 # event/segment 内 P95 的分位点；不得先跨 event 混池 frame 再计算。
+p99_quantile = 0.99 # jump 尾部诊断的 P99 分位点；与 P95 使用同一有效样本和插值规则。
+minimum_event_samples = 2 # 普通 event 指标所需的最少有效样本数；不足时必须显式失败或记为不可计算。
+maximum_gap_factor = 3.0 # 相邻时间间隔超过 event 中位采样间隔的 3 倍时视为断点，不跨断点计算 jump、持续状态或插值。
+drift_window_ms = 1000.0 # 漂移使用参考相对误差向量最初和最后各 1 秒的均值之差，单位毫秒。
+
+[hp_rms]
+filter_type = "butterworth" # 位置 HP-RMS 固定使用 Butterworth 高通滤波器，不允许运行时替换滤波器族。
+filter_order = 2 # Butterworth 高通滤波器阶数；二阶用于抑制慢漂移并限制短 event 的边界损失。
+cutoff_hz = 1.0 # 高通截止频率为 1 Hz；该参数是高通截止频率，不是低通分界频率。
+zero_phase = true # 使用前向后向零相位滤波，避免离线 HP-RMS 引入额外相位延迟。
+resample_method = "median_valid_interval" # 每个连续 event 片段按其有效采样间隔中位数重采样，不跨大间隙插值。
+minimum_samples = 20 # 每个可滤波连续片段至少需要 20 个样本，避免短片段的滤波边界主导 RMS。
+
+[reference_motion]
+linear_speed_m_s = 0.05 # 起停 6DoF 的参考平移运动阈值，平台参考线速度达到 0.05 m/s 即视为运动证据。
+angular_speed_deg_s = 22.0 # 起停 6DoF 的参考旋转运动阈值，平台参考角速度达到 22 deg/s 即视为运动证据。
+speed_median_frames = 7 # 参考线速度和角速度先分别做 7 帧居中中值滤波；该操作只用于切窗，不改变统计单位。
+minimum_duration_ms = 100.0 # 候选运动 bout 必须持续至少 100 ms，排除单帧速度尖峰。
+minimum_translation_excursion_mm = 5.0 # 运动 bout 至少产生 5 mm 平移或满足旋转位移门槛，避免把噪声识别为动作。
+minimum_rotation_excursion_deg = 5.0 # 运动 bout 至少产生 5 deg 旋转或满足平移位移门槛，适配 6DoF 动作。
+
+[visible_response]
+baseline_ms = 500.0 # display 响应相对参考运动开始前 500 ms 的基线 pose 计算。
+position_threshold_mm = 5.0 # display 相对基线平移超过 5 mm 时构成位置响应证据。
+rotation_threshold_deg = 3.0 # display 相对基线旋转超过 3 deg 时构成旋转响应证据。
+duration_ms = 100.0 # 平移或旋转响应证据必须连续保持 100 ms，首次满足窗口的起点定义为响应时刻。
+
+[lag]
+minimum_ms = 0.0 # effective lag 只搜索非负系统滞后，搜索下界为 0 ms。
+maximum_ms = 500.0 # effective lag 搜索上界为 500 ms，覆盖冻结系统的感知和合成延迟范围。
+step_ms = 5.0 # lag 候选网格步长为 5 ms；所有变体和场景使用同一网格。
+interpolation = "linear_position_slerp_rotation" # 平移使用逐轴线性插值，旋转使用相邻四元数的最短弧球面插值。
+objective = "rmse" # 每个 lag 以重叠区间的平移或角度 RMSE 作为优化目标。
+tie_break = "smallest_lag" # 多个候选目标值数值并列时选择最小 lag，避免人为偏向更慢系统。
+minimum_overlap_samples = 20 # lag 候选至少需要 20 个有效重叠样本，否则该候选不可用。
+minimum_overlap_fraction = 0.5 # lag 候选重叠样本还必须达到原 event 有效样本的 50%，防止边界小片段给出虚假最优值。
 
 [thresholds]
-pose_quaternion_norm_tolerance = 0.000001 # 四元数归一化允许的数值误差。
-vcd_score_minimum = 0.0 # VCD 合法分数下界。
-vcd_score_maximum = 1.0 # VCD 合法分数上界。
-recovery_position_tolerance_mm = 20.0 # 持久恢复判定的位置误差阈值，单位毫米。
-recovery_duration_ms = 250.0 # 持久恢复窗口长度，单位毫秒。
-settling_position_tolerance_mm = 20.0 # 沉降判定的位置误差阈值，单位毫米。
-settling_duration_ms = 250.0 # 沉降判定需要持续满足的时间，单位毫秒。
+pose_quaternion_norm_tolerance = 0.000001 # 四元数零范数与归一化数值检查使用的容差；合法四元数在计算前统一归一化。
+vcd_score_minimum = 0.0 # VCD 合法分数下界，包含端点。
+vcd_score_maximum = 1.0 # VCD 合法分数上界，包含端点。
+recovery_position_tolerance_mm = 20.0 # 恢复后 display 平移误差必须不高于 20 mm。
+recovery_duration_ms = 250.0 # 恢复误差条件必须连续保持 250 ms，且不得跨大时间间隙。
+settling_position_tolerance_mm = 20.0 # 平台参考实际停止后，display 平移误差必须不高于 20 mm 才视为 settled。
+settling_duration_ms = 250.0 # settling 误差条件必须连续保持 250 ms，首次满足窗口的起点定义为沉降时刻。
+
+[recovery]
+start_role = "target_visible" # 恢复计时从 target_visible marker 开始，不把此前遮挡持续时间计入恢复时间。
+requires_fresh_output = true # durable recovery 必须先出现遮挡后新鲜 output，held display 不能单独宣告恢复。
+freshness_field = "source_capture_mono_ms" # 新鲜 output 通过 source_capture_mono_ms 不早于 target_visible 来判定。
+freshness_clock = "unity_monotonic" # target_visible mono_ms 与 source_capture_mono_ms 均属于 Unity 单调时钟，允许直接比较。
+
+[latency]
+candidate_arrival_clock = "unity_monotonic" # candidate arrival 只计算 unity_pose_handle_mono_ms 减 source_capture_mono_ms。
+python_processing_clock = "python_monotonic" # Python processing 只计算 server_publish_mono_ms 减 server_receive_mono_ms。
+cross_clock_policy = "reject" # Unity 与 Python 单调时钟严禁相减；跨域请求必须抛出契约错误。
+negative_duration_policy = "reject" # 同域结束时间早于开始时间视为非法数据，不取绝对值也不截断为零。
 
 [vcd]
-coverage_group_tie = "include_all" # 并列 VCD 分数按同一阈值整组纳入。
-risk_unit = "mm" # VCD risk 使用同帧平台参考的平移误差，单位毫米。
-alignment_source = "capture_time_aligned_raw" # 风险只使用采集时刻对齐的 raw pose。
+coverage_group_tie = "include_all" # risk-coverage 中并列 VCD 分数按同一阈值整组纳入，禁止任意拆分。
+risk_unit = "mm" # VCD risk 使用同帧平台参考下的 capture-time aligned raw 平移误差，单位毫米。
+alignment_source = "capture_time_aligned_raw" # risk 只使用采集时刻对齐的 raw candidate，不用 display 输出或 VCD 分量代替。
