@@ -154,6 +154,8 @@ schema-v2 task directory
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本；本地可重建的 `data/analysis/` 不进入 Git。
 - 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
+- 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
+- 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。中文主稿表格使用读者可读的中文场景与列标签，不以机器字段替代论文标签。
 
 ## Python 关键约束
