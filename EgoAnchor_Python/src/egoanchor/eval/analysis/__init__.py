@@ -62,6 +62,7 @@ from .params import (
     load_analysis_parameters,
 )
 from .pose import normalize_quaternion, rotation_error_deg, translation_error_mm
+from .paper import PaperRows, build_paper_rows
 from .windows import (
     EventMarker,
     EventWindow,
@@ -115,6 +116,7 @@ __all__ = [
     "OcclusionWindow",
     "PairedDeltaRow",
     "PairedDeltaSummaryRow",
+    "PaperRows",
     "SummaryStats",
     "ScenarioSummaryRow",
     "VCD_FULL_VARIANT_ID",
@@ -135,6 +137,7 @@ __all__ = [
     "analyze_trial_events",
     "analyze_vcd",
     "build_event_windows",
+    "build_paper_rows",
     "candidate_arrival_ms",
     "analysis_parameters_sha256",
     "detect_reference_motion",

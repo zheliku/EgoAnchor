@@ -1,7 +1,7 @@
 """EgoAnchor 离线评估包级入口。
 
 运行时与离线工具只从这里获取公开类型和函数。当前显式导出 schema-v2、
-Stage 1 工作簿处理、公共指标和 Task 7/8 实验分析；不加载已删除的旧实验实现。
+Stage 1--3 工作簿、分析与发布接口；不加载已删除的旧实验实现。
 """
 
 from .contracts import (
@@ -46,6 +46,7 @@ from .analysis import (
     OcclusionWindow,
     PairedDeltaRow,
     PairedDeltaSummaryRow,
+    PaperRows,
     SummaryStats,
     ScenarioSummaryRow,
     VCD_FULL_VARIANT_ID,
@@ -67,6 +68,7 @@ from .analysis import (
     analyze_vcd,
     analysis_parameters_sha256,
     build_event_windows,
+    build_paper_rows,
     candidate_arrival_ms,
     detect_reference_motion,
     durable_recovery_time_ms,
@@ -147,7 +149,14 @@ from .preprocess import (
     variant_config_hash,
     write_task_workbook,
 )
-from .publishing import FigurePublishResult, publish_figures
+from .publishing import (
+    ArtifactPublishResult,
+    FigurePublishResult,
+    LatexPublishResult,
+    publish_artifacts,
+    publish_figures,
+    publish_latex,
+)
 
 __all__ = [
     "AnalysisParameters",
@@ -195,6 +204,7 @@ __all__ = [
     "OcclusionWindow",
     "PairedDeltaRow",
     "PairedDeltaSummaryRow",
+    "PaperRows",
     "PythonCandidateRow",
     "QcIssue",
     "REQUIRED_FILE_NAMES",
@@ -237,6 +247,7 @@ __all__ = [
     "analyze_trial_events",
     "analyze_vcd",
     "build_event_windows",
+    "build_paper_rows",
     "candidate_arrival_ms",
     "collect_source_files",
     "contract_catalog",
@@ -282,8 +293,12 @@ __all__ = [
     "variant_config_hash",
     "validate_exp2_variant_definitions",
     "write_task_workbook",
+    "ArtifactPublishResult",
     "FigurePublishResult",
+    "LatexPublishResult",
     "publish_figures",
+    "publish_artifacts",
+    "publish_latex",
     "visible_response_ms",
     "workbook_sha256",
     "write_csv_tables",

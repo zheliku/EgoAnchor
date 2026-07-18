@@ -15,13 +15,14 @@ from .analysis import (
     analyze_exp1,
     analyze_exp2,
     analysis_parameters_sha256,
+    build_paper_rows,
     input_workbook_set_sha256,
     load_analysis_parameters,
     load_workbook_batch,
     write_csv_tables,
 )
 from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
-from .publishing import publish_figures
+from .publishing import publish_artifacts
 
 
 EXIT_OK = 0
@@ -105,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="论文根目录，默认从包位置解析",
                 )
                 child.add_argument("--out", type=Path, default=None, help="覆盖图表输出目录")
+                child.add_argument("--tex-out", type=Path, default=None, help="覆盖 TeX 输出目录")
                 child.set_defaults(handler=_run_publish)
                 continue
             child.set_defaults(handler=_run_skeleton_command)
@@ -147,15 +149,21 @@ def _run_publish(args: argparse.Namespace) -> int:
 
     paper_root = args.paper_root.expanduser() if args.paper_root is not None else _default_paper_root()
     output = args.out.expanduser() if args.out is not None else paper_root / "figures" / "generated"
-    result = publish_figures(args.csv_root, output)
+    tex_output = args.tex_out.expanduser() if args.tex_out is not None else paper_root / "generated"
+    published = publish_artifacts(args.csv_root, output, tex_output)
+    figure_result = published.figures
+    latex_result = published.latex
     print(
         json.dumps(
             {
                 "passed": True,
-                "output_root": str(result.output_root),
-                "plot_count": result.plot_count,
-                "input_csv_sha256": dict(result.input_csv_sha256),
-                "figure_sha256": {name: dict(value) for name, value in result.figure_hashes.items()},
+                "figure_output_root": str(figure_result.output_root),
+                "tex_output_root": str(latex_result.output_root),
+                "plot_count": figure_result.plot_count,
+                "figure_input_csv_sha256": dict(figure_result.input_csv_sha256),
+                "tex_input_csv_sha256": dict(latex_result.input_csv_sha256),
+                "figure_sha256": {name: dict(value) for name, value in figure_result.figure_hashes.items()},
+                "tex_sha256": dict(latex_result.tex_sha256),
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -298,29 +306,9 @@ def _run_analyze(args: argparse.Namespace) -> int:
             ),
         )
     ]
-    tables["numbers"] = [
-        {
-            "experiment": row.experiment_id,
-            "macro_name": f"{row.scenario_id}_{row.variant_id}_{row.metric_key}",
-            "value": row.metric_value,
-            "source_csv": "exp1/scenario_summary.csv",
-            "source_sha256": row.input_workbook_sha256,
-        }
-        for row in exp1.scenario_summary
-        if row.metric_value is not None
-    ]
-    tables["tables"] = [
-        {
-            "experiment": row.experiment_id,
-            "table_name": "exp2_component_deltas",
-            "row_key": f"{row.component_id}:{row.metric_key}",
-            "column_key": "median_iqr",
-            "display_value": f"{row.median} [{row.q1}, {row.q3}]" if row.median is not None else "",
-            "source_csv": "exp2/paired_summary.csv",
-            "source_sha256": row.input_workbook_sha256,
-        }
-        for row in exp2.components.paired_summary
-    ]
+    paper_rows = build_paper_rows(batch.trials, exp1, exp2)
+    tables["numbers"] = list(paper_rows.numbers)
+    tables["tables"] = list(paper_rows.tables)
     published = write_csv_tables(
         args.out,
         tables,

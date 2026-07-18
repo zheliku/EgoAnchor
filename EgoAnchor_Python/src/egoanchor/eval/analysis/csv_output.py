@@ -286,6 +286,19 @@ def write_csv_tables(
                         adjusted_row["data_sha256"] = _table_sha256(source_path)
                         adjusted.append(adjusted_row)
                     rows = tuple(adjusted)
+                if table_name in {"numbers", "tables"}:
+                    adjusted = []
+                    for row in rows:
+                        adjusted_row = dict(row)
+                        source_csv = str(adjusted_row.get("source_csv") or "")
+                        source_path = (temporary / source_csv).resolve()
+                        if not source_path.is_file() or not source_path.is_relative_to(temporary.resolve()):
+                            raise ValueError(
+                                f"paper source CSV 不存在或越过发布目录：{source_csv}"
+                            )
+                        adjusted_row["source_sha256"] = _table_sha256(source_path)
+                        adjusted.append(adjusted_row)
+                    rows = tuple(adjusted)
                 _write_table(path, table_name, rows)
                 table_hashes[table_key] = _table_sha256(path)
         # 原子替换前回读每个已写表，确保表头、行编码和 hash 可重建。

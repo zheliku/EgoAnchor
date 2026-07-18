@@ -1,0 +1,35 @@
+{
+  "figure_sha256": {
+    "exp1_motion_events": {
+      "pdf": "68e7f0c954793101f946d8476a8d00bd6782fc07d8a5192ec5324d1b5bc8332c",
+      "png": "d5ee270301e3ed3c7e68763a2b5c3152bf3d3d52e1eedfe39f3a5718fae5f7fd"
+    },
+    "exp1_occlusion_events": {
+      "pdf": "b66cef41b8aa57c244d1b0f402ce6bf028c9ffd50d48e6fa1ecd4aafaacde2ce",
+      "png": "7a54eb1fca519e83edb4cfafe812e07259b2c6a89f71fac13a409ae47b4c4429"
+    },
+    "exp1_static_timeline": {
+      "pdf": "dafe62691785563670596276743342f19195e74c31761936f6de94fa16bdf08e",
+      "png": "2a876f42ebb472e21e57a1eb4089c168f34a2c41544e09a27041f60f901e6802"
+    },
+    "exp2_component_deltas": {
+      "pdf": "62aa8de1ed5a38d72d03bd6ab2d194225370f36d857a82f01fed1730936daac8",
+      "png": "226f8f9a1ad28dd1627406de485f27619bb7b3f4f509351a25598eae8fb1b036"
+    },
+    "exp2_vcd_curve": {
+      "pdf": "051429a4bd521275fef48d6c5efda466738d0b3dbf716f25cef8f477e1751f40",
+      "png": "5c3cce2d4b43e44471ee010f24fb4e8dbefac59195f0b264bbf07368cc715048"
+    }
+  },
+  "generator": "egoanchor.eval.publishing",
+  "input_csv_sha256": {
+    "plots/exp1_motion_events.csv": "34d6449efd8eaf8a98a70ddf69379913129e8122084b4aca7cf3c1f73349c822",
+    "plots/exp1_occlusion_events.csv": "6bfd4c54b7c6e97e036e01597f2b509484daef7e1c8195974b395db139580e7b",
+    "plots/exp1_static_timeline.csv": "34186baff9b6881e016e12f65135dc848469c3529828c7680dffbcaa28161bd3",
+    "plots/exp2_component_deltas.csv": "01c07e558028749db95f7d284efc8a5bbb750dac2ed307904bbae74f59de1500",
+    "plots/exp2_vcd_curve.csv": "c091d4c7d86b1c5202a3a7f86d80ed5038a957ded2a94c2688fad590eba5b93b",
+    "plots/plot_catalog.csv": "3ab26d52cec27f2a6ee3325f54f0f6dddb9f1e5747ad9376d84621debd36aca0"
+  },
+  "plot_count": 5,
+  "stage": "publish"
+}

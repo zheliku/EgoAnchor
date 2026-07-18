@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -94,6 +95,42 @@ class CsvOutputTests(unittest.TestCase):
             lineage = (output / "audit" / "lineage.csv").read_text(encoding="utf-8")
             self.assertIn("exp1/event_metrics.csv", lineage)
             self.assertIn("exp2/event_metrics.csv", lineage)
+
+    def test_paper_source_hash_is_backfilled_from_published_csv(self) -> None:
+        """paper 行的 source_sha256 必须是其 source_csv 二进制 hash。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "results"
+            write_csv_tables(
+                output,
+                {
+                    "analysis_qc": [
+                        {
+                            "check_id": "paper-source",
+                            "status": "passed",
+                            "observed": 1,
+                            "expected": 1,
+                            "details": "source",
+                        }
+                    ],
+                    "numbers": [
+                        {
+                            "experiment": "exp1_system_characterization",
+                            "macro_name": "SessionCount",
+                            "value": 1,
+                            "source_csv": "audit/analysis_qc.csv",
+                            "source_sha256": "a" * 64,
+                        }
+                    ],
+                },
+            )
+            source = output / "audit" / "analysis_qc.csv"
+            expected = hashlib.sha256(source.read_bytes()).hexdigest()
+            with (output / "paper" / "numbers.csv").open(
+                "r", encoding="utf-8", newline=""
+            ) as handle:
+                row = next(csv.DictReader(handle))
+            self.assertEqual(row["source_sha256"], expected)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,26 @@
 
 - Stage 3 不打开 XLSX、JSON 或 JSONL；图表只消费 Stage 2 CSV。
 - 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
+
+## 2026-07-18：Task 11 TeX 中间产物发布
+
+### 发现
+
+1. 原 `paper/numbers.csv` 只有实验一场景指标，缺少计数和实验二宏；`paper/tables.csv` 只有实验二单列差值，无法生成四个完整 TeX。
+2. paper 行的 `source_csv` 已指向 Stage 2 上游 CSV，但原 `source_sha256` 仍是 workbook hash；必须在 CSV writer 已写出上游文件后回填实际二进制 hash。
+3. figures 与 TeX 分别替换会在第二侧失败时留下半套 Stage 3 产物，且相同/嵌套输出路径会互相覆盖。
+
+### 调整
+
+1. Stage 2 新增 paper 行投影：实验一固定五场景、每场景两个主指标、四系统矩阵；实验二四组件各保留主效应与 guardrail，并输出配对、VCD AURC 和适用场景 session 计数宏。
+2. numbers 宏后缀在 Stage 2 固定为 ASCII 纯字母；Stage 3 保留 CSV 数字文本，转义 display-ready 表格，并对四个 TeX 做文件集合、内容和控制序列回读。
+3. `publish` 先在两个 staging 目录完成五张图和四个 TeX，再联合替换正式目录；任一构建失败保留两侧旧产物，并拒绝 CSV 输入、图表输出和 TeX 输出之间的相同或祖先/子孙路径。
+
+### 边界影响
+
+- TeX 生成器只打开 `paper/numbers.csv` 和 `paper/tables.csv`；没有读取 plot CSV、XLSX、JSON 或 JSONL。
+- Stage 2 paper 投影不重算 P95、median、IQR、配对差值或 AURC，只格式化已冻结科学结果。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
 - 不改变 Task 8 的实验二配对和 VCD 风险覆盖职责，也不提前实现 Task 9 的文件发布。
 
 ### 验证依据

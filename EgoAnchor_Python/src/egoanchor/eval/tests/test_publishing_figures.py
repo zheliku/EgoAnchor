@@ -214,7 +214,7 @@ class FigurePublishingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             csv_root = Path(tmp) / "csv"
             _write_fixture(csv_root)
-            with self.assertRaisesRegex(ValueError, "不得位于"):
+            with self.assertRaisesRegex(ValueError, "重叠"):
                 publish_figures(csv_root, csv_root / "figures")
 
 

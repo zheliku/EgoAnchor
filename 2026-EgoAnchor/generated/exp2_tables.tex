@@ -1,11 +1,12 @@
-% Auto-generated experiment-two table. Do not edit manually.
-\begin{tabular}{lllrr}
+% Source: paper/tables.csv; SHA-256: ba2daed1bcb0a2e7d5c91710917fa9b17033915969ccd683e1072087f1e592df; generator: egoanchor.eval.publishing.latex-v1
+% Table: exp2\_component\_deltas
+\begin{tabular}{llllllll}
 \toprule
-Ablation & Source scenario & Outcome & Paired $n$ & Median delta \\
+Result & Ablation & Scenario & Main metric & Main delta [IQR] & Guardrail & Guardrail delta [IQR] & Paired n (main/guardrail) \\
 \midrule
-EgoAnchor w/o capture-time alignment & Static target + head motion & Display translation median (mm) & 5 & 0.5256 \\
-EgoAnchor w/o VCD & Occlusion + recovery & Display translation median (mm) & 15 & -1.78e-06 \\
-EgoAnchor w/o temporal synthesis & Start-stop 6DoF & Visible response time (ms) & 1 & -21.47 \\
-EgoAnchor w/o StaticLock & Static target + head motion & Static position HP-RMS (mm) & 5 & 1.102 \\
+Capture-time alignment & EgoAnchor w/o capture-time alignment & Static target + head motion & 平移误差 event-P95 & 5.58465 [0.600495, 13.9592] mm & 旋转误差 event-P95 & 0.409792 [0.21585, 0.812543] deg & 4/4 \\
+VCD admission & EgoAnchor w/o VCD & Occlusion recovery & 遮挡窗平移 P95 & 21.8572 [5.1583e-07, 46.2543] mm & 持久恢复时间 & 0 [0, 0] ms & 7/7 \\
+Temporal synthesis & EgoAnchor w/o temporal synthesis & Start-stop 6DoF & 平移跳变 P95 & -1.73575 [-2.71958, -0.540267] mm & 可见响应时间 & 0 [0, 0] ms & 5/5 \\
+StaticLock & EgoAnchor w/o StaticLock & Static target + head motion & 位置 HP-RMS & 1.59239 [0.959353, 2.20481] mm & 绝对平移误差中位数 & 1.19651 [1.06255, 1.49069] mm & 4/4 \\
 \bottomrule
 \end{tabular}

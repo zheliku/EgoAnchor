@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
 from .figures_exp1 import publish_exp1
 from .figures_exp2 import publish_exp2
+from ._atomic import atomic_publish_directories, validate_output_boundary
+from .latex import LatexPublishResult, _LatexBuild, _build_latex, publish_latex
 from .style import PlotSpec, configure_matplotlib, csv_sha256, read_plot_catalog
 
 
@@ -44,8 +43,35 @@ class FigurePublishResult:
     """已发布图板数量。"""
 
 
+@dataclass(frozen=True, slots=True)
+class ArtifactPublishResult:
+    """保存 Stage 3 联合发布的图表与 TeX 结果。"""
+
+    figures: FigurePublishResult
+    """五张图和图输入 lineage。"""
+
+    latex: LatexPublishResult
+    """四个 TeX 和 paper CSV lineage。"""
+
+
+@dataclass(frozen=True, slots=True)
+class _FigureBuild:
+    """保存 staging 目录内完成回读的图表结果。"""
+
+    figure_hashes: Mapping[str, Mapping[str, str]]
+    """五张 staging 图的 PDF/PNG SHA-256。"""
+
+    input_csv_sha256: Mapping[str, str]
+    """plot catalog 和五个 plot CSV 的 SHA-256。"""
+
+
 def _input_hashes(csv_root: Path, specs: tuple[PlotSpec, ...]) -> dict[str, str]:
-    """返回 catalog 和声明源 CSV 的相对路径 hash。"""
+    """返回 catalog 和声明源 CSV 的相对路径 hash。
+
+    参数：
+        csv_root: Stage 2 CSV 根目录。
+        specs: 已验证的五个 plot catalog 规格。
+    """
 
     root = csv_root.expanduser().resolve()
     catalog = root / "plots" / "plot_catalog.csv"
@@ -61,7 +87,13 @@ def _write_manifest(
     input_hashes: Mapping[str, str],
     figure_hashes: Mapping[str, Mapping[str, str]],
 ) -> None:
-    """写入稳定 JSON manifest，记录 Stage 3 输入和输出 lineage。"""
+    """写入稳定 JSON manifest，记录 Stage 3 输入和输出 lineage。
+
+    参数：
+        path: staging 目录中的 manifest 路径。
+        input_hashes: catalog 与 plot CSV hash。
+        figure_hashes: 五张图的 PDF/PNG hash。
+    """
 
     payload = {
         "stage": "publish",
@@ -73,8 +105,13 @@ def _write_manifest(
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def publish_figures(csv_root: Path, output_root: Path) -> FigurePublishResult:
-    """只读取 Stage 2 CSV，原子发布五张 PDF/PNG 和审计 manifest。"""
+def _build_figures(csv_root: Path, output_root: Path) -> _FigureBuild:
+    """在 staging 目录生成五张图和 manifest。
+
+    参数：
+        csv_root: Stage 2 CSV 根目录。
+        output_root: 本次调用独占的 staging 目录。
+    """
 
     root = csv_root.expanduser().resolve()
     specs = read_plot_catalog(root)
@@ -84,42 +121,107 @@ def publish_figures(csv_root: Path, output_root: Path) -> FigurePublishResult:
         extra = sorted(set(by_name) - _REQUIRED_PLOTS)
         raise ValueError(f"plot catalog 图名不符合冻结集合：missing={missing}, extra={extra}")
 
-    destination = output_root.expanduser()
-    if destination.resolve() == root or destination.resolve().is_relative_to(root):
-        raise ValueError("图表输出目录不得位于 CSV 输入目录内")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
-    try:
-        configure_matplotlib()
-        hashes: dict[str, Mapping[str, str]] = {}
-        hashes.update({name: {"pdf": value[0], "png": value[1]} for name, value in publish_exp1(by_name, temporary).items()})
-        hashes.update({name: {"pdf": value[0], "png": value[1]} for name, value in publish_exp2(by_name, temporary).items()})
-        input_hashes = _input_hashes(root, specs)
-        _write_manifest(temporary / "figure_manifest.json", input_hashes=input_hashes, figure_hashes=hashes)
-        backup: Path | None = None
-        if destination.exists():
-            backup = destination.with_name(f".{destination.name}.previous")
-            if backup.exists():
-                shutil.rmtree(backup)
-            os.replace(destination, backup)
-        try:
-            os.replace(temporary, destination)
-        except Exception:
-            if destination.exists():
-                shutil.rmtree(destination)
-            if backup is not None:
-                os.replace(backup, destination)
-            raise
-        if backup is not None and backup.exists():
-            shutil.rmtree(backup)
-        return FigurePublishResult(destination, hashes, input_hashes, len(hashes))
-    except Exception:
-        if temporary.exists():
-            try:
-                shutil.rmtree(temporary)
-            except OSError:
-                pass
-        raise
+    destination = output_root.expanduser().resolve()
+    configure_matplotlib()
+    hashes: dict[str, Mapping[str, str]] = {}
+    hashes.update(
+        {
+            name: {"pdf": value[0], "png": value[1]}
+            for name, value in publish_exp1(by_name, destination).items()
+        }
+    )
+    hashes.update(
+        {
+            name: {"pdf": value[0], "png": value[1]}
+            for name, value in publish_exp2(by_name, destination).items()
+        }
+    )
+    input_hashes = _input_hashes(root, specs)
+    _write_manifest(
+        destination / "figure_manifest.json",
+        input_hashes=input_hashes,
+        figure_hashes=hashes,
+    )
+    expected = {
+        *(f"{name}.pdf" for name in _REQUIRED_PLOTS),
+        *(f"{name}.png" for name in _REQUIRED_PLOTS),
+        "figure_manifest.json",
+    }
+    actual = {path.name for path in destination.iterdir() if path.is_file()}
+    if actual != expected:
+        raise ValueError("图表 staging 文件集合不完整")
+    return _FigureBuild(hashes, input_hashes)
 
 
-__all__ = ["FigurePublishResult", "PlotSpec", "publish_figures", "read_plot_catalog"]
+def publish_figures(csv_root: Path, output_root: Path) -> FigurePublishResult:
+    """只读取 Stage 2 CSV，原子发布五张 PDF/PNG 和审计 manifest。
+
+    参数：
+        csv_root: Stage 2 CSV 根目录。
+        output_root: 图表正式输出目录。
+    """
+
+    root = csv_root.expanduser().resolve()
+    destination = validate_output_boundary(root, output_root, "图表")
+    build = atomic_publish_directories(
+        (destination,),
+        (lambda stage: _build_figures(root, stage),),
+    )[0]
+    return FigurePublishResult(
+        destination,
+        build.figure_hashes,
+        build.input_csv_sha256,
+        len(build.figure_hashes),
+    )
+
+
+def publish_artifacts(
+    csv_root: Path,
+    figure_output_root: Path,
+    tex_output_root: Path,
+) -> ArtifactPublishResult:
+    """联合原子发布五张图和四个 TeX，任一构建失败均保留旧产物。
+
+    参数：
+        csv_root: Stage 2 CSV 根目录。
+        figure_output_root: 图表正式输出目录。
+        tex_output_root: TeX 正式输出目录。
+    """
+
+    root = csv_root.expanduser().resolve()
+    figure_destination = validate_output_boundary(root, figure_output_root, "图表")
+    tex_destination = validate_output_boundary(root, tex_output_root, "TeX ")
+    figure_build, latex_build = atomic_publish_directories(
+        (figure_destination, tex_destination),
+        (
+            lambda stage: _build_figures(root, stage),
+            lambda stage: _build_latex(root, stage),
+        ),
+    )
+    if not isinstance(figure_build, _FigureBuild) or not isinstance(latex_build, _LatexBuild):
+        raise TypeError("Stage 3 联合发布返回了错误的 staging 结果")
+    return ArtifactPublishResult(
+        FigurePublishResult(
+            figure_destination,
+            figure_build.figure_hashes,
+            figure_build.input_csv_sha256,
+            len(figure_build.figure_hashes),
+        ),
+        LatexPublishResult(
+            tex_destination,
+            latex_build.tex_sha256,
+            latex_build.input_csv_sha256,
+        ),
+    )
+
+
+__all__ = [
+    "ArtifactPublishResult",
+    "FigurePublishResult",
+    "LatexPublishResult",
+    "PlotSpec",
+    "publish_figures",
+    "publish_artifacts",
+    "publish_latex",
+    "read_plot_catalog",
+]
