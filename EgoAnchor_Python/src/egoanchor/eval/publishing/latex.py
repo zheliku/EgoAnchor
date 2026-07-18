@@ -237,7 +237,7 @@ def _render_tables(
         lines.append(f"% Table: {_escape_tex(table_name)}")
         lines.append(f"\\begin{{tabular}}{{{'l' * (len(column_keys) + 1)}}}")
         lines.append(r"\toprule")
-        header = "Result & " + " & ".join(_escape_tex(value) for value in column_keys) + r" \\"
+        header = "结果 & " + " & ".join(_escape_tex(value) for value in column_keys) + r" \\"
         lines.append(header)
         lines.append(r"\midrule")
         for row_key in row_keys:

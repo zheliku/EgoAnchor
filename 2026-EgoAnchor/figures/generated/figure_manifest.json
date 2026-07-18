@@ -1,34 +1,34 @@
 {
   "figure_sha256": {
     "exp1_motion_events": {
-      "pdf": "68e7f0c954793101f946d8476a8d00bd6782fc07d8a5192ec5324d1b5bc8332c",
-      "png": "d5ee270301e3ed3c7e68763a2b5c3152bf3d3d52e1eedfe39f3a5718fae5f7fd"
+      "pdf": "ec0bf1acc6abb95311fa4e56f65bfd7a989218cb88c7bd7867ffd90ca6a0d35b",
+      "png": "000dfb09322639e3ec826b270f0d5b879455379ba11f3fbe60c49963fed2f2d8"
     },
     "exp1_occlusion_events": {
-      "pdf": "b66cef41b8aa57c244d1b0f402ce6bf028c9ffd50d48e6fa1ecd4aafaacde2ce",
-      "png": "7a54eb1fca519e83edb4cfafe812e07259b2c6a89f71fac13a409ae47b4c4429"
+      "pdf": "1ee5b07159df0deb1b27875b07f2cf423cbbb9a2254c3a6cae2494070cccdae2",
+      "png": "ee291cc40dbc2127791061344450644e39aa41ce04c3cf0c57fa4785e5ece4da"
     },
     "exp1_static_timeline": {
-      "pdf": "dafe62691785563670596276743342f19195e74c31761936f6de94fa16bdf08e",
-      "png": "2a876f42ebb472e21e57a1eb4089c168f34a2c41544e09a27041f60f901e6802"
+      "pdf": "4d3cb54f8b1195e043f5fbecc2c6654df0ace9244eb659b830b62120c71e2daa",
+      "png": "a6c44e3058d85b095c01a162991237b3dac0d1c2307dc9fbb4513cee277a37c0"
     },
     "exp2_component_deltas": {
-      "pdf": "62aa8de1ed5a38d72d03bd6ab2d194225370f36d857a82f01fed1730936daac8",
-      "png": "226f8f9a1ad28dd1627406de485f27619bb7b3f4f509351a25598eae8fb1b036"
+      "pdf": "eea3f9f6c7ffd8db056b4166f8b05feb0d27c010f2524312fdfb4dd459c2a555",
+      "png": "5184338f34aec928c4b12389470e6b927e4ec0374965d6dacd4bc76ab8235383"
     },
     "exp2_vcd_curve": {
-      "pdf": "051429a4bd521275fef48d6c5efda466738d0b3dbf716f25cef8f477e1751f40",
-      "png": "5c3cce2d4b43e44471ee010f24fb4e8dbefac59195f0b264bbf07368cc715048"
+      "pdf": "a9703ccf01b6fe4f79f54807c839a0fb7d268cac68178bfe0edd73fc6d5ff645",
+      "png": "6fae1d33a08a3e0df05e80bc299afd09d6b09d5a17ed3b61f623b804418b12b0"
     }
   },
   "generator": "egoanchor.eval.publishing",
   "input_csv_sha256": {
-    "plots/exp1_motion_events.csv": "34d6449efd8eaf8a98a70ddf69379913129e8122084b4aca7cf3c1f73349c822",
-    "plots/exp1_occlusion_events.csv": "6bfd4c54b7c6e97e036e01597f2b509484daef7e1c8195974b395db139580e7b",
+    "plots/exp1_motion_events.csv": "e0f64993f7243d6e21774f918f859176ca650b52ca00a17a48d7ddce2d41a520",
+    "plots/exp1_occlusion_events.csv": "11edf6a029da36ae4e43c1420cee5e0856ca3d5e83c0de19c74c73648f17d5fd",
     "plots/exp1_static_timeline.csv": "34186baff9b6881e016e12f65135dc848469c3529828c7680dffbcaa28161bd3",
     "plots/exp2_component_deltas.csv": "01c07e558028749db95f7d284efc8a5bbb750dac2ed307904bbae74f59de1500",
-    "plots/exp2_vcd_curve.csv": "c091d4c7d86b1c5202a3a7f86d80ed5038a957ded2a94c2688fad590eba5b93b",
-    "plots/plot_catalog.csv": "3ab26d52cec27f2a6ee3325f54f0f6dddb9f1e5747ad9376d84621debd36aca0"
+    "plots/exp2_vcd_curve.csv": "1527525ee12b5589daf843c24719456869b7dc24f5df9c46d7d71fe9eed1d387",
+    "plots/plot_catalog.csv": "426a4cfcb4504762433efa3a1063dbf0a453d0fdf1669f2ea893be1c689020ae"
   },
   "plot_count": 5,
   "stage": "publish"

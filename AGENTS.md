@@ -139,9 +139,12 @@ schema-v2 task directory
 - Stage 2 当前实现由 `egoanchor.eval.analysis.loader` 和 `csv_output` 提供：loader 仅打开完整 XLSX，CSV 发布保留输入 workbook SHA-256，并以原子目录写出完整表契约与 `audit/lineage.csv`。
 - **Stage 3（`publish`）** 只读取 Stage 2 发布的 CSV（包括 `plots/` 与 `paper/`），生成 PDF、PNG 和 TeX；禁止回读 XLSX 或 JSON/JSONL，也不得重新连接 reference、切事件窗或计算科学指标。
 - **Stage 4（`materialize-paper`）** 只读取 Stage 3 发布的 TeX 中间产物，将内容写入主稿受控区块；禁止直接读取 CSV、XLSX 或 JSON/JSONL。
+- Stage 4 的实现固定只读取 `exp1_numbers.tex`、`exp2_numbers.tex`、`exp1_tables.tex` 和 `exp2_tables.tex`，验证其直接 CSV hash、Task 11 生成器版本和实验归属后，原子替换主稿三个唯一受控区块。主稿不得保留这四个 TeX 的 `\input` 或 `\IfFileExists` 依赖，重复物化必须保持字节和 hash 不变。
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`；QC 或分析契约失败时返回退出码 2，禁止生成后续正式产物。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
+- 实验一固定图只使用静止头动的平移 event-P95、起停 6DoF 的运动窗平移 P95 和遮挡窗平移 P95，并要求每个 event 的四系统矩阵完整。VCD 正式 risk-coverage 图只发布候选级 `tail_pninetyfive` 的 VCD/random 两条曲线；mean-risk 只用于 AURC。
+- 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布，双联实验二图按每 panel 88 mm × 44 mm 发布；图内最小字号固定为 7 pt。实验一图例位于数据轴外，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
 - `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v3，指标契约为 breaking v4，参数契约为 breaking v3；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
 - `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v3 在 v2 的 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump 和 recovery 基础上，冻结 VCD cohort、coverage 分母、精确 tie、右阶梯 AURC、P95 tail、精确随机参考和 cohort 敏感性。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v4 冻结 VCD mean-risk AURC、P95 tail-risk 曲线和 cohort 敏感性；CSV v3 保存组件配对键、空值状态、VCD 排除原因和曲线维度。
 - Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
@@ -151,6 +154,7 @@ schema-v2 task directory
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本；本地可重建的 `data/analysis/` 不进入 Git。
 - 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
+- `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。中文主稿表格使用读者可读的中文场景与列标签，不以机器字段替代论文标签。
 
 ## Python 关键约束
 

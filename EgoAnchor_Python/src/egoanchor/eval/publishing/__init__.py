@@ -11,6 +11,7 @@ from .figures_exp1 import publish_exp1
 from .figures_exp2 import publish_exp2
 from ._atomic import atomic_publish_directories, validate_output_boundary
 from .latex import LatexPublishResult, _LatexBuild, _build_latex, publish_latex
+from .materialize import MaterializeResult, materialize_paper
 from .style import PlotSpec, configure_matplotlib, csv_sha256, read_plot_catalog
 
 
@@ -219,9 +220,11 @@ __all__ = [
     "ArtifactPublishResult",
     "FigurePublishResult",
     "LatexPublishResult",
+    "MaterializeResult",
     "PlotSpec",
     "publish_figures",
     "publish_artifacts",
     "publish_latex",
+    "materialize_paper",
     "read_plot_catalog",
 ]

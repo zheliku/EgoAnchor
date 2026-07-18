@@ -63,6 +63,7 @@ from .params import (
 )
 from .pose import normalize_quaternion, rotation_error_deg, translation_error_mm
 from .paper import PaperRows, build_paper_rows
+from .plot_rows import Exp1PlotRows, build_exp1_plot_rows, build_vcd_plot_rows
 from .windows import (
     EventMarker,
     EventWindow,
@@ -104,6 +105,7 @@ __all__ = [
     "Exp1AnalysisResult",
     "Exp1RenderSeries",
     "Exp1Trial",
+    "Exp1PlotRows",
     "Exp2AnalysisResult",
     "Exp2ComponentDefinition",
     "Exp2ComponentResult",
@@ -137,6 +139,8 @@ __all__ = [
     "analyze_trial_events",
     "analyze_vcd",
     "build_event_windows",
+    "build_exp1_plot_rows",
+    "build_vcd_plot_rows",
     "build_paper_rows",
     "candidate_arrival_ms",
     "analysis_parameters_sha256",

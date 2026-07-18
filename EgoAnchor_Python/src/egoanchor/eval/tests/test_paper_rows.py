@@ -70,7 +70,7 @@ class PaperRowsTests(unittest.TestCase):
         )
         exp1 = SimpleNamespace(
             scenario_summary=tuple(
-                _summary(scenario, variant, metric, 10.0 + index, unit)
+                _summary(scenario, variant, metric, 10.123456 + index, unit)
                 for scenario, metrics in scenarios.items()
                 for metric, unit in metrics
                 for index, variant in enumerate(variants)
@@ -143,6 +143,13 @@ class PaperRowsTests(unittest.TestCase):
         self.assertIn("CaptureTimeAlignmentTranslationEventPNinetyFiveMmDeltaMedian", names)
         self.assertIn("VcdMeanRiskAurcMm", names)
         self.assertTrue(all(name.isascii() and name.isalpha() for name in names))
+        formatted_number = next(
+            row
+            for row in result.numbers
+            if row["macro_name"]
+            == "EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm"
+        )
+        self.assertEqual(formatted_number["value"], "13.123")
         exp2_session = next(
             row
             for row in result.numbers
@@ -159,7 +166,24 @@ class PaperRowsTests(unittest.TestCase):
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
         self.assertEqual(len(exp1_cells), 40)
         self.assertEqual(len(exp2_cells), 28)
-        self.assertIn("Guardrail delta [IQR]", {row["column_key"] for row in exp2_cells})
+        self.assertIn("护栏差值 [IQR]", {row["column_key"] for row in exp2_cells})
+        self.assertIn("静止头动", {row["row_key"].split(" / ")[0] for row in exp1_cells})
+        ablation_values = {
+            row["display_value"]
+            for row in exp2_cells
+            if row["column_key"] == "消融配置"
+        }
+        self.assertEqual(
+            ablation_values,
+            {"关闭采集时刻对齐", "关闭 VCD", "关闭时序合成", "关闭 StaticLock"},
+        )
+        formatted_cell = next(
+            row
+            for row in exp1_cells
+            if row["row_key"].endswith("平移误差 event-P95")
+            and row["column_key"] == "EgoAnchor"
+        )
+        self.assertEqual(formatted_cell["display_value"], "13.123 [12.123, 14.123] mm")
         with self.assertRaisesRegex(ValueError, "主指标缺失"):
             build_paper_rows(
                 trials,

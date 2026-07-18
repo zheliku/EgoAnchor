@@ -118,3 +118,28 @@
 - Stage 2 loader 只打开完整 XLSX，按 `sheet_index` 读取物理分片，并在 typed trial/candidate 上保留输入 workbook SHA-256；没有 raw task 或 JSONL 路径依赖。
 - CSV writer 固定写 UTF-8、空字段和小写布尔值，先在临时目录完成全部表与 lineage，再原子替换正式目录。
 - 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
+
+## 2026-07-18：Task 12 主稿数据物化
+
+### 发现
+
+1. 原实验一运动图误取持续平移行，遮挡图误取静止指标，导致起停图场景错误、遮挡图为空。
+2. 原 VCD plot CSV 同时包含 mean 与 P95 risk，但 Stage 3 只按 `reference_kind` 分组；同一 coverage 的两种 risk 被交替连线，生成的曲线没有科学含义。
+3. 主稿仍依赖四个生成 TeX，且结果段保留旧的 lag、StaticLock 和 VCD 口径。数字宏直接展开完整浮点，也造成虚假精度和表格过度缩放。
+4. Stage 4 初版只检查 TeX header 格式，没有验证固定 CSV、生成器、实验归属和旧 include 变体；Windows CRLF 主稿还可能在区块外发生换行转换。
+
+### 调整
+
+1. Stage 2 固定三张实验一图的场景和指标，并对每个 event 验证 Arrival-Hold、Capture-Hold、One-Euro Anchor、EgoAnchor 四系统精确矩阵。
+2. VCD 正式图只发布 `tail_pninetyfive`，每个 tie-group coverage 必须同时存在 VCD 与 random 参考。mean-risk 继续保留在完整 VCD CSV，并只用于 AURC。
+3. `paper/numbers.csv` 和 `paper/tables.csv` 统一为最多三位小数的显示值，使用中文场景和列标签；上游科学 CSV 保留完整精度。主稿结果段同步改为 event/segment 统计、候选级 VCD 诊断和 effective lag 的真实定义，并同时报告时序合成 P95/P99 的混合方向。
+4. `materialize-paper` 不接收 CSV 根目录，只读取四个固定 TeX。它验证 Task 11 CSV lineage、生成器和实验归属，拒绝带或不带 `.tex` 的旧 include、拒绝把主稿写入 TeX 输入树，并保留受控区块外原始字节。
+5. 三个受控区块在 BEGIN 后第一行记录直接 CSV hash、Stage 3 TeX hash、生成器版本和文件名。主稿移走四个 TeX 后仍可编译，重复物化得到相同 SHA-256。
+6. 图表按主稿最终插入宽度发布：实验一三联图单 panel 为 58 mm × 50 mm，实验二双联图单 panel 为 88 mm × 44 mm，最小字号 7 pt。长 event ID 不进入轴刻度，实验一图例移到数据轴外，避免遮挡点线。
+
+### 边界影响
+
+- Stage 2 仍只读取 Stage 1 XLSX；plot 与 paper 投影不回读 raw JSON/JSONL。
+- Stage 3 仍只读取 Stage 2 CSV；P95 tail-risk 筛选在 Stage 2 完成，绘图层不重算科学指标。
+- Stage 4 仍只读取 Stage 3 TeX；主稿物化不读取 CSV、XLSX 或 JSON/JSONL。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。

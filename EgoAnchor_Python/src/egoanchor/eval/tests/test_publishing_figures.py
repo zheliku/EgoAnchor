@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import io
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -138,6 +139,12 @@ class FigurePublishingTests(unittest.TestCase):
             for name in _PLOT_NAMES:
                 self.assertTrue((output / f"{name}.pdf").is_file())
                 self.assertTrue((output / f"{name}.png").is_file())
+            widths = {}
+            for name in _PLOT_NAMES:
+                encoded = (output / f"{name}.png").read_bytes()
+                widths[name] = struct.unpack(">I", encoded[16:20])[0]
+            self.assertTrue(all(widths[name] < 1000 for name in _PLOT_NAMES[:3]))
+            self.assertTrue(all(widths[name] < 1400 for name in _PLOT_NAMES[3:]))
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["plot_count"], 5)
             self.assertEqual(len(manifest["input_csv_sha256"]), 6)

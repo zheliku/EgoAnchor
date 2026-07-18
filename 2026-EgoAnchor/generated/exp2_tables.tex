@@ -1,12 +1,12 @@
-% Source: paper/tables.csv; SHA-256: ba2daed1bcb0a2e7d5c91710917fa9b17033915969ccd683e1072087f1e592df; generator: egoanchor.eval.publishing.latex-v1
+% Source: paper/tables.csv; SHA-256: 72e6c5aeb73570727cf5b2d175400e6e4c029c545f79aa46aea181a376c1c9c1; generator: egoanchor.eval.publishing.latex-v1
 % Table: exp2\_component\_deltas
 \begin{tabular}{llllllll}
 \toprule
-Result & Ablation & Scenario & Main metric & Main delta [IQR] & Guardrail & Guardrail delta [IQR] & Paired n (main/guardrail) \\
+结果 & 消融配置 & 场景 & 主指标 & 主差值 [IQR] & 护栏指标 & 护栏差值 [IQR] & 配对数 \\
 \midrule
-Capture-time alignment & EgoAnchor w/o capture-time alignment & Static target + head motion & 平移误差 event-P95 & 5.58465 [0.600495, 13.9592] mm & 旋转误差 event-P95 & 0.409792 [0.21585, 0.812543] deg & 4/4 \\
-VCD admission & EgoAnchor w/o VCD & Occlusion recovery & 遮挡窗平移 P95 & 21.8572 [5.1583e-07, 46.2543] mm & 持久恢复时间 & 0 [0, 0] ms & 7/7 \\
-Temporal synthesis & EgoAnchor w/o temporal synthesis & Start-stop 6DoF & 平移跳变 P95 & -1.73575 [-2.71958, -0.540267] mm & 可见响应时间 & 0 [0, 0] ms & 5/5 \\
-StaticLock & EgoAnchor w/o StaticLock & Static target + head motion & 位置 HP-RMS & 1.59239 [0.959353, 2.20481] mm & 绝对平移误差中位数 & 1.19651 [1.06255, 1.49069] mm & 4/4 \\
+采集时刻对齐 & 关闭采集时刻对齐 & 静止头动 & 平移误差 event-P95 & 5.585 [0.6, 13.959] mm & 旋转误差 event-P95 & 0.41 [0.216, 0.813] deg & 4/4 \\
+VCD 接纳 & 关闭 VCD & 遮挡恢复 & 遮挡窗平移 P95 & 21.857 [0, 46.254] mm & 持久恢复时间 & 0 [0, 0] ms & 7/7 \\
+时序合成 & 关闭时序合成 & 起停 6DoF & 平移跳变 P95 & -1.736 [-2.72, -0.54] mm & 可见响应时间 & 0 [0, 0] ms & 5/5 \\
+StaticLock & 关闭 StaticLock & 静止头动 & 位置 HP-RMS & 1.592 [0.959, 2.205] mm & 绝对平移误差中位数 & 1.197 [1.063, 1.491] mm & 4/4 \\
 \bottomrule
 \end{tabular}

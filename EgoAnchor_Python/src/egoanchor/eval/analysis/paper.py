@@ -21,11 +21,11 @@ _SCENARIO_TOKENS = {
 """场景机器键到纯字母宏 token 的冻结映射。"""
 
 _SCENARIO_LABELS = {
-    "static_head_motion": "Static target + head motion",
-    "start_stop_6dof": "Start-stop 6DoF",
-    "continuous_translation": "Continuous translation",
-    "continuous_rotation": "Continuous rotation",
-    "occlusion_recovery": "Occlusion recovery",
+    "static_head_motion": "静止头动",
+    "start_stop_6dof": "起停 6DoF",
+    "continuous_translation": "持续平移",
+    "continuous_rotation": "持续旋转",
+    "occlusion_recovery": "遮挡恢复",
 }
 """场景机器键到论文表格标签的映射。"""
 
@@ -46,12 +46,20 @@ _COMPONENT_TOKENS = {
 """实验二组件到纯字母宏 token 的映射。"""
 
 _COMPONENT_LABELS = {
-    "capture_time_alignment": "Capture-time alignment",
-    "vcd_admission": "VCD admission",
-    "temporal_synthesis": "Temporal synthesis",
+    "capture_time_alignment": "采集时刻对齐",
+    "vcd_admission": "VCD 接纳",
+    "temporal_synthesis": "时序合成",
     "static_lock": "StaticLock",
 }
 """实验二组件到论文表格标签的映射。"""
+
+_ABLATION_LABELS = {
+    "capture_time_alignment": "关闭采集时刻对齐",
+    "vcd_admission": "关闭 VCD",
+    "temporal_synthesis": "关闭时序合成",
+    "static_lock": "关闭 StaticLock",
+}
+"""实验二组件到论文表格短消融名的映射。"""
 
 _EXP1_TABLE_METRICS = {
     "static_head_motion": ("position_hp_rms_mm", "translation_event_pninetyfive_mm"),
@@ -98,13 +106,14 @@ class PaperRows:
 
 
 def _display_number(value: float) -> str:
-    """以论文表格可审计精度格式化有限数值。
+    """以最多三位小数格式化论文显示值，并消除数值负零。
 
     参数：
         value: 已由科学计算层验证的有限数值。
     """
 
-    return format(value, ".6g")
+    text = format(value, ".3f").rstrip("0").rstrip(".")
+    return "0" if text in {"", "-0"} else text
 
 
 def _metric_value(value: float, unit: str, tex_suffix: str) -> tuple[float, str, str]:
@@ -140,10 +149,11 @@ def _number_row(
 
     if not macro_name.isascii() or not macro_name.isalpha():
         raise ValueError(f"paper macro 后缀必须只含 ASCII 字母：{macro_name}")
+    display_value = _display_number(value) if isinstance(value, float) else value
     return {
         "experiment": experiment,
         "macro_name": macro_name,
-        "value": value,
+        "value": display_value,
         "source_csv": source_csv,
         "source_sha256": source_sha256,
     }
@@ -355,13 +365,13 @@ def _exp2_rows(
             )
 
         values = {
-            "Ablation": component.ablation_variant_id,
-            "Scenario": _SCENARIO_LABELS[component.scenario_id],
-            "Main metric": get_metric_definition(main_key).label,
-            "Main delta [IQR]": delta_text(main),
-            "Guardrail": get_metric_definition(guardrail_key).label,
-            "Guardrail delta [IQR]": delta_text(guardrail),
-            "Paired n (main/guardrail)": f"{main.sample_count}/{guardrail.sample_count}",
+            "消融配置": _ABLATION_LABELS[component.component_id],
+            "场景": _SCENARIO_LABELS[component.scenario_id],
+            "主指标": get_metric_definition(main_key).label,
+            "主差值 [IQR]": delta_text(main),
+            "护栏指标": get_metric_definition(guardrail_key).label,
+            "护栏差值 [IQR]": delta_text(guardrail),
+            "配对数": f"{main.sample_count}/{guardrail.sample_count}",
         }
         for column_key, display_value in values.items():
             table_cells.append(

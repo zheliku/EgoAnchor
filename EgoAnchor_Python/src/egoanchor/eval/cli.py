@@ -8,21 +8,22 @@ import re
 import sys
 from dataclasses import asdict
 from collections.abc import Sequence
-from typing import Any
 from pathlib import Path
 
 from .analysis import (
     analyze_exp1,
     analyze_exp2,
     analysis_parameters_sha256,
+    build_exp1_plot_rows,
     build_paper_rows,
+    build_vcd_plot_rows,
     input_workbook_set_sha256,
     load_analysis_parameters,
     load_workbook_batch,
     write_csv_tables,
 )
 from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
-from .publishing import publish_artifacts
+from .publishing import materialize_paper, publish_artifacts
 
 
 EXIT_OK = 0
@@ -109,6 +110,17 @@ def build_parser() -> argparse.ArgumentParser:
                 child.add_argument("--tex-out", type=Path, default=None, help="覆盖 TeX 输出目录")
                 child.set_defaults(handler=_run_publish)
                 continue
+            if command == "materialize-paper":
+                child.add_argument(
+                    "--paper-root",
+                    type=Path,
+                    default=None,
+                    help="论文根目录，默认从包位置解析",
+                )
+                child.add_argument("--tex-root", type=Path, default=None, help="覆盖四个 TeX 源目录")
+                child.add_argument("--manuscript", type=Path, default=None, help="覆盖中文主稿路径")
+                child.set_defaults(handler=_run_materialize_paper)
+                continue
             child.set_defaults(handler=_run_skeleton_command)
     return parser
 
@@ -164,6 +176,38 @@ def _run_publish(args: argparse.Namespace) -> int:
                 "tex_input_csv_sha256": dict(latex_result.input_csv_sha256),
                 "figure_sha256": {name: dict(value) for name, value in figure_result.figure_hashes.items()},
                 "tex_sha256": dict(latex_result.tex_sha256),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK
+
+
+def _run_materialize_paper(args: argparse.Namespace) -> int:
+    """只从四个 Stage 3 TeX 物化中文主稿受控区块。
+
+    参数：
+        args: 命令行解析后的论文根目录、TeX 根目录和主稿路径。
+    """
+
+    paper_root = args.paper_root.expanduser() if args.paper_root is not None else _default_paper_root()
+    tex_root = args.tex_root.expanduser() if args.tex_root is not None else paper_root / "generated"
+    manuscript = (
+        args.manuscript.expanduser()
+        if args.manuscript is not None
+        else paper_root / "egoanchor_cn_v6.tex"
+    )
+    result = materialize_paper(tex_root, manuscript)
+    print(
+        json.dumps(
+            {
+                "passed": True,
+                "manuscript": str(result.manuscript_path),
+                "manuscript_sha256": result.manuscript_sha256,
+                "source_tex_sha256": dict(result.source_tex_sha256),
+                "source_csv_sha256": dict(result.source_csv_sha256),
+                "block_count": result.block_count,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -243,43 +287,15 @@ def _run_analyze(args: argparse.Namespace) -> int:
             {"check_id": "completed_trial_count", "status": "passed", "observed": len(batch.trials), "expected": len(batch.trials), "details": "final trial 投影完成"},
         ],
     }
-    def plot_row(row: Any, plot_id: str) -> dict[str, object]:
-        """为冻结 plot 主键加入 session/trial，避免跨任务 event_id 碰撞。"""
-
-        values = asdict(row)
-        values["event_id"] = f"{values['session_id']}:{values['trial_id']}:{values['event_id']}"
-        values["plot_id"] = plot_id
-        values["panel_id"] = values["scenario_id"]
-        return values
-
-    tables["exp1_static_timeline"] = [
-        plot_row(row, "exp1_static_timeline")
-        for row in exp1.event_metrics
-        if row.scenario_id == "static_head_motion"
-        and row.metric_key == "translation_event_pninetyfive_mm"
-    ]
-    tables["exp1_motion_events"] = [
-        plot_row(row, "exp1_motion_events")
-        for row in exp1.event_metrics
-        if (
-            (row.scenario_id == "start_stop_6dof" and row.metric_key == "translation_event_pninetyfive_mm")
-            or (row.scenario_id == "continuous_translation" and row.metric_key == "translation_event_pninetyfive_mm_continuous")
-        )
-    ]
-    tables["exp1_occlusion_events"] = [
-        plot_row(row, "exp1_occlusion_events")
-        for row in exp1.event_metrics
-        if row.scenario_id == "occlusion_recovery"
-        and row.metric_key == "translation_event_pninetyfive_mm"
-    ]
+    exp1_plots = build_exp1_plot_rows(exp1.event_metrics)
+    tables["exp1_static_timeline"] = list(exp1_plots.static_timeline)
+    tables["exp1_motion_events"] = list(exp1_plots.motion_events)
+    tables["exp1_occlusion_events"] = list(exp1_plots.occlusion_events)
     tables["exp2_component_deltas"] = [
         {**asdict(row), "plot_id": "exp2_component_deltas", "panel_id": row.component_id}
         for row in exp2.components.paired_deltas
     ]
-    tables["exp2_vcd_curve"] = [
-        {**asdict(row), "plot_id": "exp2_vcd_curve", "panel_id": row.reference_kind}
-        for row in exp2.vcd.curve
-    ]
+    tables["exp2_vcd_curve"] = list(build_vcd_plot_rows(exp2.vcd.curve))
     input_set_hash = input_workbook_set_sha256(item.sha256 for item in batch.inputs)
     tables["plot_catalog"] = [
         {

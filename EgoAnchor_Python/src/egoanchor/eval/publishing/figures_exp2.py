@@ -8,7 +8,7 @@ from typing import Mapping
 
 import matplotlib.pyplot as plt
 
-from .style import ABLATION_COLOR, DOUBLE_COLUMN_SIZE, PlotSpec, display_label, finite_rows, save_figure_pair
+from .style import ABLATION_COLOR, HALF_PANEL_SIZE, PlotSpec, display_label, finite_rows, save_figure_pair
 
 
 def _plot_component_deltas(spec: PlotSpec) -> plt.Figure:
@@ -18,14 +18,14 @@ def _plot_component_deltas(spec: PlotSpec) -> plt.Figure:
     for index, value, row in finite_rows(spec.rows, spec.y):
         grouped[str(row.get(spec.hue) or "unknown")].append((index, value, row))
     names = sorted(grouped)
-    figure, axis = plt.subplots(figsize=DOUBLE_COLUMN_SIZE)
+    figure, axis = plt.subplots(figsize=HALF_PANEL_SIZE)
     for position, name in enumerate(names):
         values = [item[1] for item in grouped[name]]
         x = [position + 1 + (index - (len(values) - 1) / 2) * 0.08 for index in range(len(values))]
-        axis.scatter(x, values, color=ABLATION_COLOR, s=24, label="Ablation delta" if position == 0 else None)
+        axis.scatter(x, values, color=ABLATION_COLOR, s=24, label="Delta" if position == 0 else None)
     axis.axhline(0.0, color="#333333", linewidth=0.7)
     axis.set_xticks(range(1, len(names) + 1), [display_label(name) for name in names], rotation=20, ha="right")
-    axis.set_title("Component ablation paired deltas")
+    axis.set_title("Paired ablation deltas")
     axis.set_xlabel("Component")
     axis.set_ylabel(display_label(spec.y))
     axis.grid(axis="y", color="#DDDDDD", linewidth=0.45)
@@ -47,7 +47,7 @@ def _plot_vcd_curve(spec: PlotSpec) -> plt.Figure:
         if not (math.isfinite(coverage) and math.isfinite(risk)):
             raise ValueError("VCD plot 的 coverage 或 risk 不是有限数字")
         grouped[str(row.get(spec.hue) or "unknown")].append((coverage, risk, row))
-    figure, axis = plt.subplots(figsize=DOUBLE_COLUMN_SIZE)
+    figure, axis = plt.subplots(figsize=HALF_PANEL_SIZE)
     for name in sorted(grouped):
         points = sorted(grouped[name], key=lambda item: item[0])
         axis.plot(

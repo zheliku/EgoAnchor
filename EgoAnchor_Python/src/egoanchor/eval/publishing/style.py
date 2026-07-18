@@ -52,11 +52,11 @@ SYSTEM_ORDER = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
 DISPLAY_LABELS = {
     "translation_event_pninetyfive_mm": "Translation error (P95, mm)",
     "translation_event_pninetyfive_mm_continuous": "Continuous translation error (P95, mm)",
-    "delta": "Ablation minus full (native unit)",
+    "delta": "Ablation - full",
     "risk_mm": "Translation risk (mm)",
-    "capture_time_alignment": "Capture-time alignment",
-    "vcd_admission": "VCD admission",
-    "temporal_synthesis": "Temporal synthesis",
+    "capture_time_alignment": "Capture alignment",
+    "vcd_admission": "VCD",
+    "temporal_synthesis": "Synthesis",
     "static_lock": "StaticLock",
 }
 """内部 metric/component 键到论文读者标签的映射。"""
@@ -69,6 +69,12 @@ SINGLE_COLUMN_SIZE = (88.0 * MM_TO_INCH, 62.0 * MM_TO_INCH)
 
 DOUBLE_COLUMN_SIZE = (180.0 * MM_TO_INCH, 76.0 * MM_TO_INCH)
 """跨栏图的物理尺寸。"""
+
+THIRD_PANEL_SIZE = (58.0 * MM_TO_INCH, 50.0 * MM_TO_INCH)
+"""三联跨栏图中单个 panel 的最终物理尺寸，含轴外图例空间。"""
+
+HALF_PANEL_SIZE = (88.0 * MM_TO_INCH, 44.0 * MM_TO_INCH)
+"""双联跨栏图中单个 panel 的最终物理尺寸。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,12 +222,12 @@ def configure_matplotlib() -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 7.0,
+            "font.size": 7.5,
             "axes.labelsize": 8.0,
             "axes.titlesize": 8.0,
-            "legend.fontsize": 6.5,
-            "xtick.labelsize": 6.5,
-            "ytick.labelsize": 6.5,
+            "legend.fontsize": 7.0,
+            "xtick.labelsize": 7.0,
+            "ytick.labelsize": 7.0,
             "axes.linewidth": 0.6,
             "lines.linewidth": 1.1,
             "savefig.bbox": "tight",
@@ -279,11 +285,13 @@ __all__ = [
     "ABLATION_COLOR",
     "COLORS",
     "DOUBLE_COLUMN_SIZE",
+    "HALF_PANEL_SIZE",
     "LINE_STYLES",
     "MARKERS",
     "PlotSpec",
     "SINGLE_COLUMN_SIZE",
     "SYSTEM_ORDER",
+    "THIRD_PANEL_SIZE",
     "configure_matplotlib",
     "csv_sha256",
     "display_label",
