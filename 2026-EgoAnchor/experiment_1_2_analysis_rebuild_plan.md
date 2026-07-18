@@ -877,6 +877,12 @@ Task 6: 实现公共指标原语与窗口提取
 - 低n时保留全部配对点和范围
 - P95先在event内计算，再对event-level P95做median[IQR]
 
+### 执行调整（2026-07-18）
+
+正式数据和既有契约检查表明，原计划的 `scenario_summary` 无法区分“没有尝试”和“尝试但指标未成功定义”，也没有完整覆盖主稿所需的旋转、峰值、unlock/relock、lag residual 和恢复诊断。Task 7 因此冻结 `csv-v2` 与 `metrics-v3`：场景汇总增加 `attempt_count`、`sample_count`、`success_rate` 及完整分布字段，未成功定义的事件保留为空值，不再静默丢弃。
+
+聚合顺序明确为 event → trial → session，避免 marker 数较多的 trial 获得额外权重。起停场景只分析 `transition_started`，其他 marker 仅用于确定窗口边界；遮挡恢复继续使用成对的 `occlusion_started` / `target_visible`。Task 7 仍只实现类型化纯分析，XLSX 批次加载和 CSV 发布保留在 Task 9，四阶段边界不变。详细依据见 `experiment_1_2_analysis_adjustment_record.md`。
+
 ### 提交信息
 
 Task 7: 实现实验一分析

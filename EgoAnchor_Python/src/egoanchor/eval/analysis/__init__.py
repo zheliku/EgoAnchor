@@ -1,5 +1,16 @@
 """Stage 2 只读取 Stage 1 XLSX 的公共指标分析入口。"""
 
+from .exp1 import (
+    EXP1_ID,
+    EXP1_VARIANTS,
+    Exp1Admission,
+    Exp1AnalysisResult,
+    Exp1RenderSeries,
+    Exp1Trial,
+    MetricRow,
+    ScenarioSummaryRow,
+    analyze_exp1,
+)
 from .latency import (
     ClockDomain,
     MonotonicTimestamp,
@@ -47,12 +58,21 @@ __all__ = [
     "DEFAULT_ANALYSIS_PARAMS_PATH",
     "EventMarker",
     "EventWindow",
+    "EXP1_ID",
+    "EXP1_VARIANTS",
+    "Exp1Admission",
+    "Exp1AnalysisResult",
+    "Exp1RenderSeries",
+    "Exp1Trial",
     "JumpQuantiles",
     "LagEstimate",
     "MonotonicTimestamp",
     "MotionInterval",
+    "MetricRow",
     "OcclusionWindow",
     "SummaryStats",
+    "ScenarioSummaryRow",
+    "analyze_exp1",
     "build_event_windows",
     "candidate_arrival_ms",
     "analysis_parameters_sha256",

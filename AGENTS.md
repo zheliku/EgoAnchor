@@ -141,8 +141,9 @@ schema-v2 task directory
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`；QC 或分析契约失败时返回退出码 2，禁止生成后续正式产物。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
-- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV、指标和参数契约仍按冻结目录执行，参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
-- metrics 和 analysis_params 当前均为 breaking v2。`analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。v2 固定 linear 分位数、二阶 1 Hz Butterworth 零相位 HP-RMS、首尾 1 秒 drift、参考运动检测、visible response、settling、0--500 ms lag、相邻 tick jump 和 target-visible recovery；所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。
+- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v2，指标契约为 breaking v3，参数契约为 breaking v2；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
+- `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v2 固定 linear 分位数、二阶 1 Hz Butterworth 零相位 HP-RMS、首尾 1 秒 drift、参考运动检测、visible response、settling、0--500 ms lag、相邻 tick jump 和 target-visible recovery；所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v3 补齐实验一旋转、峰值、unlock/relock、lag residual、恢复更新数和 fresh output 指标；场景汇总同时记录尝试数、成功样本数和成功率，失败事件不得被静默丢弃。
+- Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
 - 起停 6DoF 的 marker 只限定搜索窗，实际运动起止由平台参考速度、持续时间和位移门槛确定。durable recovery 从 `target_visible` 起算，且必须先出现 `has_source_capture_timing=true`、采集时间不早于 marker 的新鲜 output。candidate arrival 只在 Unity 单调时钟内相减，Python processing 只在 Python 单调时钟内相减。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本；本地可重建的 `data/analysis/` 不进入 Git。

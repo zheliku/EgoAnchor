@@ -12,6 +12,7 @@ from pathlib import Path
 from egoanchor.eval import (
     CONTRACT_CHANGELOG,
     CONTRACT_VERSIONS,
+    CSV_TABLE_CONTRACTS,
     CSV_TABLE_NAMES,
     METRIC_DEFINITIONS,
     SCENARIO_ORDER,
@@ -88,6 +89,40 @@ class ContractTests(unittest.TestCase):
             "tables",
         ):
             self.assertIn(name, CSV_TABLE_NAMES)
+
+    def test_scenario_summary_keeps_low_sample_statistics(self) -> None:
+        """场景汇总必须显式保存低样本量报告所需的完整统计量。"""
+
+        contract = next(table for table in CSV_TABLE_CONTRACTS if table.name == "scenario_summary")
+        self.assertEqual(
+            {
+                "attempt_count",
+                "sample_count",
+                "success_rate",
+                "median",
+                "q1",
+                "q3",
+                "iqr",
+                "minimum",
+                "maximum",
+            },
+            {
+                column.name
+                for column in contract.columns
+                if column.name
+                in {
+                    "attempt_count",
+                    "sample_count",
+                    "success_rate",
+                    "median",
+                    "q1",
+                    "q3",
+                    "iqr",
+                    "minimum",
+                    "maximum",
+                }
+            },
+        )
 
     def test_workbook_contract_is_breaking_version_two(self) -> None:
         """无损 Stage 1 工作簿使用明确递增的 breaking v2 契约。"""
@@ -296,10 +331,36 @@ class ContractTests(unittest.TestCase):
         versions = {item.name: item.version for item in CONTRACT_VERSIONS}
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
 
-        self.assertEqual(versions["metrics"], 2)
+        self.assertGreaterEqual(versions["metrics"], 2)
         self.assertEqual(versions["analysis_params"], 2)
         self.assertTrue(changes["metrics-v2"].breaking)
         self.assertTrue(changes["analysis_params-v2"].breaking)
+
+    def test_task7_contract_versions_and_guardrails_are_recorded(self) -> None:
+        """Task 7 修订后的 CSV 与指标 breaking 版本必须完整记录。"""
+
+        versions = {item.name: item.version for item in CONTRACT_VERSIONS}
+        changes = {item.version: item for item in CONTRACT_CHANGELOG}
+        metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
+
+        self.assertEqual(versions["csv"], 2)
+        self.assertEqual(versions["metrics"], 3)
+        self.assertTrue(changes["csv-v2"].breaking)
+        self.assertTrue(changes["metrics-v3"].breaking)
+        expected_scenarios = {
+            "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
+            "motion_translation_peak_mm": "start_stop_6dof",
+            "unlock_time_ms": "start_stop_6dof",
+            "relock_time_ms": "start_stop_6dof",
+            "translation_lag_residual_mm": "continuous_translation",
+            "angular_lag_residual_deg": "continuous_rotation",
+            "occlusion_rotation_pninetyfive_deg": "occlusion_recovery",
+            "occlusion_error_update_count": "occlusion_recovery",
+            "fresh_output_time_ms": "occlusion_recovery",
+        }
+        for metric_key, scenario_id in expected_scenarios.items():
+            self.assertIn(metric_key, metric_by_key)
+            self.assertEqual(metric_by_key[metric_key].scenarios, (scenario_id,))
 
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""

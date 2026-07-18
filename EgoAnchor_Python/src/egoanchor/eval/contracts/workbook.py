@@ -806,6 +806,20 @@ _RESULT_COLUMNS = (
 """Stage 2 指标结果表共享列。"""
 
 
+_SCENARIO_SUMMARY_COLUMNS = _RESULT_COLUMNS + (
+    _column("attempt_count", "int", description="进入该指标汇总的全部 event/segment 或 session 尝试数量。"),
+    _column("sample_count", "int", description="尝试中得到有限指标值的 event/segment 或 session 数量。"),
+    _column("success_rate", "float", description="有限指标值数量除以全部尝试数量；不替代指标自身的成功率语义。"),
+    _column("median", "float", description="有限指标值的中位数；存在有限值时必须等于 metric_value。"),
+    _column("q1", "float", description="有限指标值的第一四分位数。"),
+    _column("q3", "float", description="有限指标值的第三四分位数。"),
+    _column("iqr", "float", description="有限指标值第三四分位数与第一四分位数之差。"),
+    _column("minimum", "float", description="有限指标值的最小值。"),
+    _column("maximum", "float", description="有限指标值的最大值。"),
+)
+"""场景级低样本量报告必须显式保存的尝试、成功率和完整分布统计。"""
+
+
 CSV_TABLE_CONTRACTS = (
     CsvTableContract("analysis_run", "analysis invocation", ("analysis_run_id",), (_column("analysis_run_id"), _column("created_at_utc", "datetime"), _column("code_version"), _column("parameter_set_id"), _column("status"), _column("input_count", "int"), _column("output_root"))),
     CsvTableContract("inputs", "analysis input workbook", ("input_workbook_sha256",), (_column("input_workbook"), _column("input_workbook_sha256"), _column("session_id"), _column("qc_status"), _column("row_count", "int"))),
@@ -820,7 +834,12 @@ CSV_TABLE_CONTRACTS = (
     CsvTableContract("event_metrics", "event plus variant plus metric", ("session_id", "scenario_id", "trial_id", "event_id", "variant_id", "metric_key"), _RESULT_COLUMNS),
     CsvTableContract("trial_metrics", "trial plus variant plus metric", ("session_id", "scenario_id", "trial_id", "variant_id", "metric_key"), _RESULT_COLUMNS),
     CsvTableContract("session_metrics", "session plus variant plus metric", ("session_id", "scenario_id", "variant_id", "metric_key"), _RESULT_COLUMNS),
-    CsvTableContract("scenario_summary", "scenario plus variant plus metric", ("scenario_id", "variant_id", "metric_key"), _RESULT_COLUMNS),
+    CsvTableContract(
+        "scenario_summary",
+        "scenario plus variant plus metric",
+        ("scenario_id", "variant_id", "metric_key"),
+        _SCENARIO_SUMMARY_COLUMNS,
+    ),
     CsvTableContract("paired_deltas", "paired event delta", ("session_id", "scenario_id", "trial_id", "event_id", "metric_key"), _RESULT_COLUMNS + (_column("full_value", "float"), _column("ablation_value", "float"), _column("delta", "float"))),
     CsvTableContract("vcd_risk_points", "candidate risk point", ("session_id", "candidate_id"), _RESULT_COLUMNS + (_column("risk_mm", "float", unit="mm"), _column("vcd_score", "float"), _column("eligible", "bool"))),
     CsvTableContract("vcd_curve", "coverage threshold point", ("scenario_id", "coverage"), (_column("scenario_id"), _column("coverage", "float"), _column("risk_mm", "float", unit="mm"), _column("threshold", "float"), _column("input_workbook_sha256"))),
