@@ -28,6 +28,13 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 #endif
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
 
 
 namespace VFolders
@@ -67,9 +74,9 @@ namespace VFolders
 
                 if (treeViewAnimatesExpansion)
                     if (animatingItemTragetExpanded_fromTreeViewExpandAnimator == true)
-                        expandedIdsHashset.UnionWith(new HashSet<int>() { animatingItemId_fromTreeViewExpandAnimator });
+                        expandedIdsHashset.UnionWith(new HashSet<ObjectID>() { animatingItemId_fromTreeViewExpandAnimator });
                     else
-                        expandedIdsHashset.ExceptWith(new HashSet<int>() { animatingItemId_fromTreeViewExpandAnimator });
+                        expandedIdsHashset.ExceptWith(new HashSet<ObjectID>() { animatingItemId_fromTreeViewExpandAnimator });
 
 
 
@@ -77,9 +84,9 @@ namespace VFolders
                 {
                     foreach (var r in controller.expandQueue_toAnimate)
                         if (r.expand)
-                            expandedIdsHashset.UnionWith(new HashSet<int>() { r.id });
+                            expandedIdsHashset.UnionWith(new HashSet<ObjectID>() { r.id });
                         else
-                            expandedIdsHashset.ExceptWith(new HashSet<int>() { r.id });
+                            expandedIdsHashset.ExceptWith(new HashSet<ObjectID>() { r.id });
 
                     expandedIdsHashset.ExceptWith(controller.expandQueue_toCollapseAfterAnimation.ToHashSet());
                 }
@@ -229,7 +236,7 @@ namespace VFolders
 
             currentScrollPos = treeViewControllerState?.scrollPos.y ?? 0;
 
-            expandedIds = treeViewControllerState?.expandedIDs?.ToInts() ?? new();
+            expandedIds = treeViewControllerState?.expandedIDs ?? new();
 
 
 
@@ -241,9 +248,9 @@ namespace VFolders
             treeViewAnimatesExpansion = treeViewAnimator?.GetMemberValue<bool>("isAnimating") ?? false;
             animatingItemTragetExpanded_fromTreeViewExpandAnimator = treeViewAnimatorSetup?.GetMemberValue<bool>("expanding") ?? false;
 #if UNITY_6000_3_OR_NEWER
-            animatingItemId_fromTreeViewExpandAnimator = treeViewAnimatorSetup?.GetMemberValue("item").GetMemberValue<EntityId>("id") ?? 0;
+            animatingItemId_fromTreeViewExpandAnimator = treeViewAnimatorSetup?.GetMemberValue("item").GetMemberValue<EntityId>("id") ?? default;
 #else
-            animatingItemId_fromTreeViewExpandAnimator = treeViewAnimatorSetup?.GetMemberValue("item").GetMemberValue<int>("id") ?? 0;
+            animatingItemId_fromTreeViewExpandAnimator = treeViewAnimatorSetup?.GetMemberValue("item").GetMemberValue<int>("id") ?? default;
 #endif
 
         }
@@ -255,13 +262,13 @@ namespace VFolders
 
         public float currentScrollPos;
 
-        public List<int> expandedIds = new();
+        public List<ObjectID> expandedIds = new();
 
         public bool treeViewAnimatesScroll;
 
         public bool treeViewAnimatesExpansion;
         public bool animatingItemTragetExpanded_fromTreeViewExpandAnimator;
-        public int animatingItemId_fromTreeViewExpandAnimator;
+        public ObjectID animatingItemId_fromTreeViewExpandAnimator;
 
 
 
@@ -340,7 +347,7 @@ namespace VFolders
             }
             else
             {
-                window.InvokeMethod("ShowFolderContents", AssetDatabase.LoadAssetAtPath<DefaultAsset>(prevPath).GetInstanceID(), true);
+                window.InvokeMethod("ShowFolderContents", AssetDatabase.LoadAssetAtPath<DefaultAsset>(prevPath).GetObjectID(), true);
             }
 
         }
@@ -360,7 +367,7 @@ namespace VFolders
             }
             else
             {
-                window.InvokeMethod("ShowFolderContents", AssetDatabase.LoadAssetAtPath<DefaultAsset>(nextPath).GetInstanceID(), true);
+                window.InvokeMethod("ShowFolderContents", AssetDatabase.LoadAssetAtPath<DefaultAsset>(nextPath).GetObjectID(), true);
             }
 
         }
@@ -383,7 +390,7 @@ namespace VFolders
         [System.Serializable]
         public class TreeState
         {
-            public List<int> expandedIds = new();
+            public List<ObjectID> expandedIds = new();
 
             public float scrollPos;
 

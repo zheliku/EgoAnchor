@@ -15,6 +15,20 @@ using static VFavorites.Libs.VGUI;
 using static VFavorites.VFavoritesData;
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
+
+
+
+
+
+
 namespace VFavorites
 {
     public static class VFavorites
@@ -1008,18 +1022,18 @@ namespace VFavorites
 
                 if (browser.GetFieldValue<int>("m_ViewMode") == 1)
 #if UNITY_6000_3_OR_NEWER
-                    browser.InvokeMethod("SetFolderSelection", new[] { (EntityId)folderAsset.GetInstanceID() }, false);
+                    browser.InvokeMethod("SetFolderSelection", new[] { (EntityId)folderAsset.GetObjectID() }, false);
 #else
-                    browser.InvokeMethod("SetFolderSelection", new[] { folderAsset.GetInstanceID() }, false);
+                    browser.InvokeMethod("SetFolderSelection", new[] { folderAsset.GetObjectID() }, false);
 #endif
                 else
                 {
                     Selection.activeObject = folderAsset;
 
 #if UNITY_6000_3_OR_NEWER
-                    browser.GetMemberValue("m_AssetTree")?.GetPropertyValue("data")?.InvokeMethod("SetExpanded", (EntityId)folderAsset.GetInstanceID(), true);
+                    browser.GetMemberValue("m_AssetTree")?.GetPropertyValue("data")?.InvokeMethod("SetExpanded", (EntityId)folderAsset.GetObjectID(), true);
 #else
-                    browser.GetMemberValue("m_AssetTree")?.GetPropertyValue("data")?.InvokeMethod("SetExpanded", folderAsset.GetInstanceID(), true);
+                    browser.GetMemberValue("m_AssetTree")?.GetPropertyValue("data")?.InvokeMethod("SetExpanded", folderAsset.GetObjectID(), true);
 #endif
 
                 }
@@ -1784,7 +1798,7 @@ namespace VFavorites
                 lockedBrowser = wrappedBrowser;
 
                 EditorPrefsCached.SetInt("vFavorites-lockedBrowserHash", lockedBrowser.GetHashCode());
-                EditorPrefsCached.SetInt("vFavorites-lockedBrowserDockAreaInstanceId", lockedBrowser.GetMemberValue<Object>("m_Parent").GetInstanceID());
+                EditorPrefsCached.SetInt("vFavorites-lockedBrowserDockAreaInstanceId", lockedBrowser.GetMemberValue<Object>("m_Parent").GetObjectID().GetHashCode());
 
                 curEvent.Use();
 
@@ -1844,7 +1858,7 @@ namespace VFavorites
 
 
 
-                var window = _EditorUtility_InstanceIDToObject(lockedBrowserInstanceId) as EditorWindow;
+                var window = _EditorUtility_ObjectIDToObject(lockedBrowserInstanceId) as EditorWindow;
 
                 if (window && window.GetType() == t_BrowserWindow) // prevents iid collisions
                     _lockedBrowser = window;
@@ -1878,7 +1892,7 @@ namespace VFavorites
                 }
                 else
                 {
-                    EditorPrefsCached.SetInt("vFavorites-lockedBrowserInstanceId", value.GetInstanceID());
+                    EditorPrefsCached.SetInt("vFavorites-lockedBrowserInstanceId", value.GetObjectID().GetHashCode());
 
                     MarkAsLocked(value);
 
@@ -2034,7 +2048,7 @@ namespace VFavorites
 
 
 
-        const string version = "2.0.14";
+        const string version = "2.0.16";
 
     }
 }

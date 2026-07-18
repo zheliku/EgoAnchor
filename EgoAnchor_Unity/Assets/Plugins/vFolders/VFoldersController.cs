@@ -28,6 +28,12 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 #endif
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
 
 
 namespace VFolders
@@ -67,9 +73,9 @@ namespace VFolders
         }
 
         public List<ExpandQueueEntry> expandQueue_toAnimate = new();
-        public List<int> expandQueue_toCollapseAfterAnimation = new();
+        public List<ObjectID> expandQueue_toCollapseAfterAnimation = new();
 
-        public struct ExpandQueueEntry { public int id; public bool expand; }
+        public struct ExpandQueueEntry { public ObjectID id; public bool expand; }
 
         public bool animatingExpansion => expandQueue_toAnimate.Any() || expandQueue_toCollapseAfterAnimation.Any();
 
@@ -161,7 +167,7 @@ namespace VFolders
 
             currentScrollPos = treeViewState?.scrollPos.y ?? 0;
 
-            expandedIds = treeViewState?.expandedIDs?.ToInts() ?? new();
+            expandedIds = treeViewState?.expandedIDs ?? new();
 
 
 
@@ -181,14 +187,14 @@ namespace VFolders
 
         public float currentScrollPos;
 
-        public List<int> expandedIds = new();
+        public List<ObjectID> expandedIds = new();
 
         public bool treeViewAnimatesScroll;
         public bool treeViewAnimatesExpansion;
 
-        public int GetRowIndex(int instanceId)
+        public int GetRowIndex(ObjectID id)
         {
-            return treeViewControllerData.InvokeMethod<int>("GetRow", instanceId.ToIdType());
+            return treeViewControllerData.InvokeMethod<int>("GetRow", id);
         }
 
 
@@ -217,12 +223,12 @@ namespace VFolders
         public void CollapseAll()
         {
 
-            var idsToCollapse_roots = expandedIds.Where(id => _EditorUtility_InstanceIDToObject(id).GetPath() is string path &&
+            var idsToCollapse_roots = expandedIds.Where(id => _EditorUtility_ObjectIDToObject(id).GetPath() is string path &&
                                                                    path.HasParentPath() &&
                                                                   (path.GetParentPath() == "Assets" || path.GetParentPath() == "Packages"));
 
 
-            var idsToCollapse_children = expandedIds.Where(id => _EditorUtility_InstanceIDToObject(id).GetPath() is string path &&
+            var idsToCollapse_children = expandedIds.Where(id => _EditorUtility_ObjectIDToObject(id).GetPath() is string path &&
                                                                      !path.IsNullOrEmpty() &&
                                                                       path != "Assets" &&
                                                                       path != "Packages" &&
@@ -289,7 +295,7 @@ namespace VFolders
 
 
 
-        public void StartExpandAnimation(List<int> targetExpandedIds)
+        public void StartExpandAnimation(List<ObjectID> targetExpandedIds)
         {
 
             var toExpand = targetExpandedIds.Except(expandedIds).ToHashSet();
@@ -299,9 +305,9 @@ namespace VFolders
 
             // hanlde non-animated expansions/collapses
 
-            bool hasParentToCollapse(int id)
+            bool hasParentToCollapse(ObjectID id)
             {
-                var o = _EditorUtility_InstanceIDToObject(id);
+                var o = _EditorUtility_ObjectIDToObject(id);
 
                 if (!o) return false;
 
@@ -317,15 +323,15 @@ namespace VFolders
                 if (!parentAsset) return false; // packages item
 
 
-                var parentId = parentAsset.GetInstanceID();
+                var parentId = parentAsset.GetObjectID();
 
                 return toCollapse.Contains(parentId)
                     || hasParentToCollapse(parentId);
 
             }
-            bool areAllParentsExpanded(int id)
+            bool areAllParentsExpanded(ObjectID id)
             {
-                var o = _EditorUtility_InstanceIDToObject(id);
+                var o = _EditorUtility_ObjectIDToObject(id);
 
                 if (!o) return true;
 
@@ -341,7 +347,7 @@ namespace VFolders
                 if (!parentAsset) return true; // packages item
 
 
-                var parentId = parentAsset.GetInstanceID();
+                var parentId = parentAsset.GetObjectID();
 
                 return expandedIds.Contains(parentId)
                          && areAllParentsExpanded(parentId);
@@ -373,17 +379,17 @@ namespace VFolders
 
         }
 
-        public void SetExpandedIds(List<int> targetExpandedIds)
+        public void SetExpandedIds(List<ObjectID> targetExpandedIds)
         {
             treeViewControllerData.InvokeMethod("SetExpandedIDs", targetExpandedIds.ToArray()); // won't work on 6.3 but it's unused anyway
         }
-        public void SetExpanded_withAnimation(int instanceId, bool expanded)
+        public void SetExpanded_withAnimation(ObjectID id, bool expanded)
         {
-            treeViewController.InvokeMethod("ChangeFoldingForSingleItem", instanceId.ToIdType(), expanded);
+            treeViewController.InvokeMethod("ChangeFoldingForSingleItem", id, expanded);
         }
-        public void SetExpanded_withoutAnimation(int instanceId, bool expanded)
+        public void SetExpanded_withoutAnimation(ObjectID id, bool expanded)
         {
-            treeViewControllerData.InvokeMethod("SetExpanded", instanceId.ToIdType(), expanded);
+            treeViewControllerData.InvokeMethod("SetExpanded", id, expanded);
         }
 
 
@@ -409,11 +415,14 @@ namespace VFolders
         public void RevealFolder(string path, bool expand, bool highlight, bool snapToTopMargin)
         {
 
-            // int getId(string path) => AssetDatabase.LoadAssetAtPath<DefaultAsset>(path).GetInstanceID();
-            int getId(string path) => typeof(AssetDatabase).InvokeMethod<int>("GetMainAssetOrInProgressProxyInstanceID", path);
+#if UNITY_6000_3_OR_NEWER
+            ObjectID getId(string path) => typeof(AssetDatabase).InvokeMethod<ObjectID>("GetMainAssetOrInProgressProxyEntityId", path);
+#else
+            ObjectID getId(string path) => typeof(AssetDatabase).InvokeMethod<int>("GetMainAssetOrInProgressProxyInstanceID", path);
+#endif
 
 
-            var idsToExpand = new List<int>();
+            var idsToExpand = new List<ObjectID>();
 
             if (expand)
                 idsToExpand.Add(getId(path));
@@ -439,7 +448,7 @@ namespace VFolders
             var rowCount = treeViewControllerData.GetMemberValue<ICollection>("m_Rows").Count;
             var maxScrollPos = rowCount * 16 - window.position.height + (isOneColumn ? 49.9f : 45.9f);
 
-            var rowIndex = treeViewControllerData.InvokeMethod<int>("GetRow", getId(path).ToIdType());
+            var rowIndex = treeViewControllerData.InvokeMethod<int>("GetRow", getId(path));
             var rowPos = rowIndex * 16f + (isOneColumn ? 11 : 23);
 
             var scrollAreaHeight = window.GetMemberValue<Rect>("m_TreeViewRect").height;
@@ -487,17 +496,19 @@ namespace VFolders
 
 
             // update folder tree
-            window.GetMemberValue("m_FolderTree").InvokeMethod("SetSelection", new[] { AssetDatabase.LoadAssetAtPath<DefaultAsset>(path).GetInstanceID().ToIdType() }, false);
+            window.GetMemberValue("m_FolderTree").InvokeMethod("SetSelection", new[] { AssetDatabase.LoadAssetAtPath<DefaultAsset>(path).GetObjectID() }, false);
 
 
             // update list area
             var listAreaRect = window.GetMemberValue("m_ListAreaRect");
             var searchFilter = window.GetMemberValue("m_SearchFilter");
             var checkThumbnails = false;
+#if UNITY_6000_4_OR_NEWER
+            var assetToInstanceId = (System.Func<string, EntityId>)((s) => typeof(AssetDatabase).InvokeMethod<EntityId>("GetMainAssetEntityID", s));
+#else
             var assetToInstanceId = (System.Func<string, int>)((s) => typeof(AssetDatabase).InvokeMethod<int>("GetMainAssetInstanceID", s));
-
+#endif
             window.GetMemberValue("m_ListArea")?.InvokeMethod("InitForSearch", listAreaRect, HierarchyType.Assets, searchFilter, checkThumbnails, assetToInstanceId);
-
 
             // updat breadcrumbs
             window.GetMemberValue<IList>("m_BreadCrumbs").Clear();

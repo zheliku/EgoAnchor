@@ -19,6 +19,15 @@ using static VHierarchy.VHierarchyData;
 using static VHierarchy.VHierarchy;
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
+
 
 namespace VHierarchy
 {
@@ -131,7 +140,7 @@ namespace VHierarchy
 
                 var sceneHierarchy = window.GetMemberValue("m_SceneHierarchy");
                 var m_CustomParentForNewGameObjects = window.GetMemberValue("m_SceneHierarchy").GetMemberValue<Transform>("m_CustomParentForNewGameObjects");
-                var targetSceneHandle = m_CustomParentForNewGameObjects != null ? (int)m_CustomParentForNewGameObjects.gameObject.scene.handle : 0;
+                var targetSceneHandle = m_CustomParentForNewGameObjects != null ? m_CustomParentForNewGameObjects.gameObject.scene.GetObjectID() : default;
 
 
                 var menu = new GenericMenu();

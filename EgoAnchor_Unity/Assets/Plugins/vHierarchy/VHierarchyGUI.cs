@@ -29,6 +29,18 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
+
+
+
+
 
 
 namespace VHierarchy
@@ -57,7 +69,7 @@ namespace VHierarchy
                     var dragging = dragSelectionList != null
                                 && dragSelectionList.Any();
 
-                    isRowSelected = dragging ? (dragSelectionList.Contains(go.GetInstanceID())) : Selection.Contains(go);
+                    isRowSelected = dragging ? (dragSelectionList.Contains(go.GetObjectID())) : Selection.Contains(go);
 
                 }
                 void set_lastVisibleSelectedRowRect()
@@ -229,12 +241,12 @@ namespace VHierarchy
 
                     var triangleRect = rowRect.MoveX(-15.5f).SetWidth(16).Resize(1.5f);
 
-                    GUI.DrawTexture(triangleRect, EditorIcons.GetIcon(controller.expandedIds.Contains(go.GetInstanceID()) ? "IN_foldout_on" : "IN_foldout"));
+                    GUI.DrawTexture(triangleRect, EditorIcons.GetIcon(controller.expandedIds.Contains(go.GetObjectID()) ? "IN_foldout_on" : "IN_foldout"));
 
 
                     if (!makeTriangleBrighter) return;
 
-                    GUI.DrawTexture(triangleRect, EditorIcons.GetIcon(controller.expandedIds.Contains(go.GetInstanceID()) ? "IN_foldout_on" : "IN_foldout"));
+                    GUI.DrawTexture(triangleRect, EditorIcons.GetIcon(controller.expandedIds.Contains(go.GetObjectID()) ? "IN_foldout_on" : "IN_foldout"));
 
                 }
                 void name()
@@ -811,7 +823,7 @@ namespace VHierarchy
                     {
                         if (scene.rootCount == 0) return;
 
-                        var isSceneExpanded = controller.expandedIds.Contains(scene.handle);
+                        var isSceneExpanded = controller.expandedIds.Contains(scene.GetObjectID());
 
                         GUI.DrawTexture(rowRect.SetWidth(16).MoveX(-15.5f).SetSizeFromMid(13), EditorIcons.GetIcon(isSceneExpanded ? "IN_foldout_on" : "IN_foldout"));
                     }
@@ -936,9 +948,9 @@ namespace VHierarchy
                         var treeViewController = sceneHierarchy.GetFieldValue("m_TreeView");
                         var treeViewControllerData = treeViewController.GetMemberValue("data");
 
-                        var item = treeViewControllerData.InvokeMethod<TreeViewItem>("FindItem", scene.handle);
+                        var item = treeViewControllerData.InvokeMethod<TreeViewItem>("FindItem", scene.GetObjectID());
 
-                        treeViewController.GetMemberValue("dragging").InvokeMethod("StartDrag", item, new List<int>());
+                        treeViewController.GetMemberValue("dragging").InvokeMethod("StartDrag", item, new List<ObjectID>());
 
                     }
 
@@ -995,7 +1007,7 @@ namespace VHierarchy
 
 
 #if UNITY_2021_1_OR_NEWER
-            dragSelectionList = treeViewController?.GetFieldValue("m_DragSelection")?.GetIdList("m_List") ?? new();
+            dragSelectionList = treeViewController?.GetFieldValue("m_DragSelection")?.GetMemberValue<List<ObjectID>>("m_List") ?? new();
 #else
             dragSelectionList = treeViewController?.GetFieldValue<List<int>>("m_DragSelection");
 #endif
@@ -1009,7 +1021,7 @@ namespace VHierarchy
         public bool isTreeFocused;
         public bool renamingRow;
 
-        public List<int> dragSelectionList = new();
+        public List<ObjectID> dragSelectionList = new();
 
         GameObject defaultParent;
 

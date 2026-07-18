@@ -27,6 +27,14 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 #endif
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
 
 
 namespace VFolders
@@ -315,7 +323,8 @@ namespace VFolders
         }
 
         static void ProjectWindowItemOnGUI(string _, Rect __) => OnSomeGUI();
-        static void HierarchyWindowItemOnGUI(int _, Rect __) => OnSomeGUI();
+        static void HierarchyWindowItemOnGUI(ObjectID _, Rect __) => OnSomeGUI();
+        static void HierarchyWindowItemOnGUI_6000_3(int _, Rect __) => OnSomeGUI();
 
         static System.Action toCallInGUI;
 
@@ -343,7 +352,7 @@ namespace VFolders
 
 
 
-        static void ItemGUI(Rect itemRect, string guid, int instanceId)
+        static void ItemGUI(Rect itemRect, string guid, ObjectID id)
         {
             EditorWindow window;
 
@@ -390,9 +399,9 @@ namespace VFolders
                 var gui = guis_byWindow[window];
 
                 if (itemRect.height == 16)
-                    gui.RowGUI(itemRect, guid, instanceId);
+                    gui.RowGUI(itemRect, guid, id);
                 else
-                    gui.CellGUI(itemRect, guid, instanceId);
+                    gui.CellGUI(itemRect, guid, id);
 
             }
 
@@ -405,18 +414,22 @@ namespace VFolders
 
         static void ItemGUI_2021_3_and_older(string guid, Rect itemRect)
         {
-            var instanceId = typeof(AssetDatabase).InvokeMethod<int>("GetMainAssetOrInProgressProxyInstanceID", guid.ToPath());
+            var instanceId = typeof(AssetDatabase).InvokeMethod<ObjectID>("GetMainAssetOrInProgressProxyInstanceID", guid.ToPath()); // 
 
             ItemGUI(itemRect, guid, instanceId);
 
         }
-        static void ItemGUI_2022_1_and_newer(int instanceId, Rect itemRect)
+        static void ItemGUI_2022_1_and_newer(ObjectID id, Rect itemRect)
         {
-            var guid = _AssetDatabase_GetAssetPath(instanceId).ToGuid();
+            var guid = _AssetDatabase_GetAssetPath(id).ToGuid();
 
-            ItemGUI(itemRect, guid, instanceId);
+            ItemGUI(itemRect, guid, id);
 
         }
+#if UNITY_6000_3
+        static void ItemGUI_6000_3(int id, Rect itemRect) => ItemGUI_2022_1_and_newer(id, itemRect);
+#endif
+
 
         static bool lastEventWasLayout;
         static bool lastEventWasRepaint;
@@ -1430,7 +1443,13 @@ namespace VFolders
 
                 // gui
 
-#if UNITY_2022_1_OR_NEWER
+#if UNITY_6000_4_OR_NEWER
+                EditorApplication.projectWindowItemByEntityIdOnGUI -= ItemGUI_2022_1_and_newer;
+                EditorApplication.projectWindowItemByEntityIdOnGUI = ItemGUI_2022_1_and_newer + EditorApplication.projectWindowItemByEntityIdOnGUI;
+#elif UNITY_6000_3
+                EditorApplication.projectWindowItemInstanceOnGUI -= ItemGUI_6000_3;
+                EditorApplication.projectWindowItemInstanceOnGUI = ItemGUI_6000_3 + EditorApplication.projectWindowItemInstanceOnGUI;
+#elif UNITY_2022_1_OR_NEWER
                 EditorApplication.projectWindowItemInstanceOnGUI -= ItemGUI_2022_1_and_newer;
                 EditorApplication.projectWindowItemInstanceOnGUI = ItemGUI_2022_1_and_newer + EditorApplication.projectWindowItemInstanceOnGUI;
 #else
@@ -1445,8 +1464,17 @@ namespace VFolders
                 EditorApplication.projectWindowItemOnGUI -= ProjectWindowItemOnGUI;
                 EditorApplication.projectWindowItemOnGUI += ProjectWindowItemOnGUI;
 
+
+#if UNITY_6000_4_OR_NEWER
+                EditorApplication.hierarchyWindowItemByEntityIdOnGUI -= HierarchyWindowItemOnGUI;
+                EditorApplication.hierarchyWindowItemByEntityIdOnGUI += HierarchyWindowItemOnGUI;
+#elif UNITY_6000_3
+                EditorApplication.hierarchyWindowItemOnGUI -= HierarchyWindowItemOnGUI_6000_3;
+                EditorApplication.hierarchyWindowItemOnGUI += HierarchyWindowItemOnGUI_6000_3;
+#else
                 EditorApplication.hierarchyWindowItemOnGUI -= HierarchyWindowItemOnGUI;
                 EditorApplication.hierarchyWindowItemOnGUI += HierarchyWindowItemOnGUI;
+#endif
 
                 EditorApplication.delayCall -= DelayCallLoop;
                 EditorApplication.delayCall += DelayCallLoop;
@@ -1658,15 +1686,6 @@ namespace VFolders
 
 
 
-#if UNITY_6000_3_OR_NEWER
-        public static EntityId ToIdType(this int id) => id;
-        public static List<int> ToInts(this List<EntityId> ids) => ids.Select(r => (int)r).ToList();
-        public static List<int> GetIdList(this object o, string listName) => o.GetMemberValue<List<EntityId>>(listName)?.ToInts();
-#else
-        public static int ToIdType(this int id) => id;
-        public static List<int> ToInts(this List<int> ids) => ids;
-        public static List<int> GetIdList(this object o, string listName) => o.GetMemberValue<List<int>>(listName);
-#endif
 
 
 
@@ -1674,7 +1693,7 @@ namespace VFolders
 
 
 
-        const string version = "2.1.13";
+        const string version = "2.1.15";
 
     }
 

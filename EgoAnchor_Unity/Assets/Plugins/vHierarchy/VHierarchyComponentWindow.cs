@@ -16,6 +16,17 @@ using static VHierarchy.Libs.VGUI;
 // using static VTools.VDebug;
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
+
+
+
 namespace VHierarchy
 {
     public class VHierarchyComponentWindow : EditorWindow
@@ -23,7 +34,7 @@ namespace VHierarchy
 
         void OnGUI()
         {
-            if (!component) component = _EditorUtility_InstanceIDToObject(componentIid) as Component;
+            if (!component) component = _EditorUtility_ObjectIDToObject(componentIid) as Component;
             if (!component) { Close(); return; }
 
             if (!editor) Init(component);
@@ -544,7 +555,7 @@ namespace VHierarchy
                 editor.DestroyImmediate();
 
             this.component = component;
-            this.componentIid = component.GetInstanceID();
+            this.componentIid = component.GetObjectID();
             this.editor = Editor.CreateEditor(component);
 
         }
@@ -563,7 +574,7 @@ namespace VHierarchy
         public Component component;
         public Editor editor;
 
-        public int componentIid;
+        public ObjectID componentIid;
 
 
 

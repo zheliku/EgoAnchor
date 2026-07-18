@@ -28,6 +28,12 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 #endif
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
 
 
 namespace VHierarchy
@@ -58,7 +64,7 @@ namespace VHierarchy
 
 
 
-            var itemIndex = treeViewControllerData.InvokeMethod<int>("GetRow", id.ToIdType());
+            var itemIndex = treeViewControllerData.InvokeMethod<int>("GetRow", id);
             var items = treeViewControllerData.GetMemberValue<List<TreeViewItem>>("m_Rows");
 
             var stuckCollapsing = itemIndex != -1 && items[itemIndex].id != id; // happens when collapsing long hierarchies due to a bug in TreeViewController
@@ -82,9 +88,9 @@ namespace VHierarchy
         }
 
         public List<ExpandQueueEntry> expandQueue_toAnimate = new();
-        public List<int> expandQueue_toCollapseAfterAnimation = new();
+        public List<ObjectID> expandQueue_toCollapseAfterAnimation = new();
 
-        public struct ExpandQueueEntry { public int id; public bool expand; }
+        public struct ExpandQueueEntry { public ObjectID id; public bool expand; }
 
         public bool animatingExpansion => expandQueue_toAnimate.Any() || expandQueue_toCollapseAfterAnimation.Any();
 
@@ -176,7 +182,7 @@ namespace VHierarchy
 
             currentScrollPos = treeViewControllerState?.scrollPos.y ?? 0;
 
-            expandedIds = treeViewControllerState?.expandedIDs.ToInts() ?? new();
+            expandedIds = treeViewControllerState?.expandedIDs ?? new();
 
 
 
@@ -194,14 +200,14 @@ namespace VHierarchy
 
         public float currentScrollPos;
 
-        public List<int> expandedIds = new();
+        public List<ObjectID> expandedIds = new();
 
         public bool treeViewAnimatesScroll;
         public bool treeViewAnimatesExpansion;
 
-        public int GetRowIndex(int instanceId)
+        public int GetRowIndex(ObjectID id)
         {
-            return treeViewControllerData.InvokeMethod<int>("GetRow", instanceId.ToIdType());
+            return treeViewControllerData.InvokeMethod<int>("GetRow", id);
         }
 
 
@@ -219,7 +225,7 @@ namespace VHierarchy
 
 
 
-        public void ToggleExpanded(int id)
+        public void ToggleExpanded(ObjectID id)
         {
             SetExpanded_withAnimation(id, !expandedIds.Contains(id));
 
@@ -233,7 +239,7 @@ namespace VHierarchy
             var expandedChildren = new List<GameObject>();
 
             foreach (var iid in expandedIds)
-                if (_EditorUtility_InstanceIDToObject(iid) is GameObject expandedGo)
+                if (_EditorUtility_ObjectIDToObject(iid) is GameObject expandedGo)
                     if (expandedGo.transform.parent)
                         expandedChildren.Add(expandedGo);
                     else
@@ -241,9 +247,9 @@ namespace VHierarchy
 
 
 
-            expandQueue_toCollapseAfterAnimation = expandedChildren.Select(r => r.GetInstanceID()).ToList();
+            expandQueue_toCollapseAfterAnimation = expandedChildren.Select(r => r.GetObjectID()).ToList();
 
-            expandQueue_toAnimate = expandedRoots.Select(r => new ExpandQueueEntry { id = r.GetInstanceID(), expand = false })
+            expandQueue_toAnimate = expandedRoots.Select(r => new ExpandQueueEntry { id = r.GetObjectID(), expand = false })
                                                 .OrderBy(r => GetRowIndex(r.id)).ToList();
 
             StartScrollAnimation(targetScrollPos: 0);
@@ -253,20 +259,20 @@ namespace VHierarchy
 
         }
 
-        public void Isolate(int targetId)
+        public void Isolate(ObjectID targetId)
         {
 
-            List<int> getParents(int id)
+            List<ObjectID> getParents(ObjectID id)
             {
-                var parentIds = new List<int>();
+                var parentIds = new List<ObjectID>();
 
-                if (_EditorUtility_InstanceIDToObject(id) is not GameObject go) return parentIds;
+                if (_EditorUtility_ObjectIDToObject(id) is not GameObject go) return parentIds;
 
 
                 while (go.transform.parent)
-                    parentIds.Add((go = go.transform.parent.gameObject).GetInstanceID());
+                    parentIds.Add((go = go.transform.parent.gameObject).GetObjectID());
 
-                parentIds.Add(go.scene.handle);
+                parentIds.Add(go.scene.GetObjectID());
 
 
                 return parentIds;
@@ -283,8 +289,8 @@ namespace VHierarchy
             itemsToCollapse.RemoveAll(r => targetItemParents.Contains(r));
             itemsToCollapse.RemoveAll(r => itemsToCollapse.Intersect(getParents(r)).Any());
 
-            if (_EditorUtility_InstanceIDToObject(targetId) is GameObject)
-                itemsToCollapse.RemoveAll(r => _EditorUtility_InstanceIDToObject(r) is not GameObject); // won't collapse scenes
+            if (_EditorUtility_ObjectIDToObject(targetId) is GameObject)
+                itemsToCollapse.RemoveAll(r => _EditorUtility_ObjectIDToObject(r) is not GameObject); // won't collapse scenes
 
 
 
@@ -302,7 +308,7 @@ namespace VHierarchy
 
 
 
-        public void StartExpandAnimation(List<int> targetExpandedIds)
+        public void StartExpandAnimation(List<ObjectID> targetExpandedIds)
         {
 
             var toExpand = targetExpandedIds.Except(expandedIds).ToHashSet();
@@ -313,10 +319,10 @@ namespace VHierarchy
 
             // hanlde destroyed objects
 
-            var sceneIds = Enumerable.Range(0, EditorSceneManager.sceneCount).Select(i => EditorSceneManager.GetSceneAt(i).handle).ToHashSet();
+            var sceneIds = Enumerable.Range(0, EditorSceneManager.sceneCount).Select(i => EditorSceneManager.GetSceneAt(i).GetObjectID()).ToHashSet();
 
-            var toExpand_destroyed = toExpand.Where(id => !sceneIds.Contains(id) && _EditorUtility_InstanceIDToObject(id) as GameObject == null).ToHashSet();
-            var toCollapse_destroyed = toCollapse.Where(id => !sceneIds.Contains(id) && _EditorUtility_InstanceIDToObject(id) as GameObject == null).ToHashSet();
+            var toExpand_destroyed = toExpand.Where(id => !sceneIds.Contains(id) && _EditorUtility_ObjectIDToObject(id) as GameObject == null).ToHashSet();
+            var toCollapse_destroyed = toCollapse.Where(id => !sceneIds.Contains(id) && _EditorUtility_ObjectIDToObject(id) as GameObject == null).ToHashSet();
 
 
             foreach (var id in toExpand_destroyed)
@@ -336,29 +342,29 @@ namespace VHierarchy
 
             // hanlde non-animated expansions/collapses
 
-            bool hasParentToCollapse(int id)
+            bool hasParentToCollapse(ObjectID id)
             {
-                var go = _EditorUtility_InstanceIDToObject(id) as GameObject;
+                var go = _EditorUtility_ObjectIDToObject(id) as GameObject;
 
                 if (!go) return false;
                 if (!go.transform.parent) return false;
 
 
-                var parentId = go.transform.parent.gameObject.GetInstanceID();
+                var parentId = go.transform.parent.gameObject.GetObjectID();
 
                 return toCollapse.Contains(parentId)
                     || hasParentToCollapse(parentId);
 
             }
-            bool areAllParentsExpanded(int id)
+            bool areAllParentsExpanded(ObjectID id)
             {
-                var go = _EditorUtility_InstanceIDToObject(id) as GameObject;
+                var go = _EditorUtility_ObjectIDToObject(id) as GameObject;
 
                 if (!go) return true;
                 if (!go.transform.parent) return true;
 
 
-                var parentId = go.transform.parent.gameObject.GetInstanceID();
+                var parentId = go.transform.parent.gameObject.GetObjectID();
 
                 return expandedIds.Contains(parentId)
                          && areAllParentsExpanded(parentId);
@@ -392,17 +398,17 @@ namespace VHierarchy
 
         }
 
-        public void SetExpandedIds(List<int> targetExpandedIds)
+        public void SetExpandedIds(List<ObjectID> targetExpandedIds)
         {
             treeViewControllerData.InvokeMethod("SetExpandedIDs", targetExpandedIds.ToArray()); // won't work on 6.3 but it's unused anyway
         }
-        public void SetExpanded_withAnimation(int instanceId, bool expanded)
+        public void SetExpanded_withAnimation(ObjectID id, bool expanded)
         {
-            treeViewController.InvokeMethod("ChangeFoldingForSingleItem", instanceId.ToIdType(), expanded);
+            treeViewController.InvokeMethod("ChangeFoldingForSingleItem", id, expanded);
         }
-        public void SetExpanded_withoutAnimation(int instanceId, bool expanded)
+        public void SetExpanded_withoutAnimation(ObjectID id, bool expanded)
         {
-            treeViewControllerData.InvokeMethod("SetExpanded", instanceId.ToIdType(), expanded);
+            treeViewControllerData.InvokeMethod("SetExpanded", id, expanded);
         }
 
 
@@ -427,16 +433,16 @@ namespace VHierarchy
         public void RevealObject(GameObject go, bool expand, bool highlight, bool snapToTopMargin)
         {
 
-            var idsToExpand = new List<int>();
+            var idsToExpand = new List<ObjectID>();
 
             if (expand && go.transform.childCount > 0)
-                idsToExpand.Add(go.GetInstanceID());
+                idsToExpand.Add(go.GetObjectID());
 
             var cur = go.transform;
             while (cur = cur.parent)
-                idsToExpand.Add(cur.gameObject.GetInstanceID());
+                idsToExpand.Add(cur.gameObject.GetObjectID());
 
-            idsToExpand.Add(go.scene.handle);
+            idsToExpand.Add(go.scene.GetObjectID());
 
             idsToExpand.RemoveAll(r => expandedIds.Contains(r));
 
@@ -455,7 +461,7 @@ namespace VHierarchy
             var rowCount = treeViewControllerData.GetMemberValue<ICollection>("m_Rows").Count;
             var maxScrollPos = rowCount * 16 - window.position.height + 26.9f;
 
-            var rowIndex = treeViewControllerData.InvokeMethod<int>("GetRow", go.GetInstanceID().ToIdType());
+            var rowIndex = treeViewControllerData.InvokeMethod<int>("GetRow", go.GetObjectID());
             var rowPos = rowIndex * 16f + 8;
 
             var scrollAreaHeight = window.GetMemberValue<Rect>("treeViewRect").height;

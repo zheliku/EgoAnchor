@@ -29,13 +29,22 @@ using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
 
 
 
+#if UNITY_6000_3_OR_NEWER
+using ObjectID = UnityEngine.EntityId;
+#else
+using ObjectID = System.Int32;
+#endif
+
+
+
+
 
 namespace VFolders
 {
     public class VFoldersGUI
     {
 
-        public void RowGUI(Rect rowRect, string guid, int instanceId)
+        public void RowGUI(Rect rowRect, string guid, ObjectID id)
         {
             var fullRowRect = rowRect.AddWidthFromRight(rowRect.x);
 
@@ -43,7 +52,7 @@ namespace VFolders
 
             var isFolder = AssetDatabase.IsValidFolder(guid.ToPath());
             var isAsset = !isFolder && !guid.IsNullOrEmpty();
-            var isSubasset = isAsset && typeof(AssetDatabase).InvokeMethod<bool>("IsSubAsset", instanceId);
+            var isSubasset = isAsset && typeof(AssetDatabase).InvokeMethod<bool>("IsSubAsset", id);
             var isFavorite = !isFolder && !isAsset && rowRect.x != 16;
 
             var isFavoritesRoot = rowRect.x == 16 && !isFolder && rowRect.y == 0;
@@ -98,7 +107,7 @@ namespace VFolders
                     if (treeItem != null) return;
                     if (isFavorite || isFavoritesRoot) return;
 
-                    treeItem = treeViewController?.InvokeMethod<TreeViewItem>("FindItem", instanceId.ToIdType());
+                    treeItem = treeViewController?.InvokeMethod<TreeViewItem>("FindItem", id);
 
                 }
 
@@ -678,7 +687,7 @@ namespace VFolders
                                         Selection.objects.Where(r => r is DefaultAsset).Select(r => r.GetPath().ToGuid())
                                         :
 #if UNITY_2021_1_OR_NEWER
-                                        treeViewController.GetFieldValue("m_CachedSelection").GetIdList("m_List")
+                                        treeViewController.GetFieldValue("m_CachedSelection").GetMemberValue<List<ObjectID>>("m_List")
 #else
                                         treeViewController?.GetMemberValue("state").GetMemberValue<List<int>>("selectedIDs")
 #endif
@@ -748,7 +757,7 @@ namespace VFolders
 
 
 
-        public void CellGUI(Rect cellRect, string guid, int instanceId)
+        public void CellGUI(Rect cellRect, string guid, ObjectID instanceId)
         {
             var isFolder = AssetDatabase.IsValidFolder(guid.ToPath());
 
@@ -808,7 +817,7 @@ namespace VFolders
 
 
                     var isSelected = listArea_dragSelectionList.Any() ? listArea_dragSelectionList.Contains(instanceId)
-                                                                      : _Selection_instanceIDs.Contains(instanceId);
+                                                                      : _Selection_IDs.Contains(instanceId);
 
                     var isCellBeingRenamed = isSelected && renamingCell;
 
@@ -1188,7 +1197,7 @@ namespace VFolders
 
             var treeViewState = treeViewController?.GetPropertyValue<TreeViewState>("state");
 
-            expandedIds = treeViewState?.expandedIDs?.ToInts() ?? new();
+            expandedIds = treeViewState?.expandedIDs ?? new();
 
 
 
@@ -1217,9 +1226,9 @@ namespace VFolders
 
 
 
-            listArea_dragSelectionList = listArea?.GetMemberValue("m_LocalAssets")?.GetIdList("m_DragSelection") ?? new();
-            treeView_dragSelectionList = treeViewController?.GetFieldValue("m_DragSelection")?.GetIdList("m_List") ?? new();
-            treeView_normalSelectionList = isTwoColumns ? treeViewController?.GetFieldValue("m_CachedSelection")?.GetIdList("m_List") ?? new() : null;
+            listArea_dragSelectionList = listArea?.GetMemberValue("m_LocalAssets")?.GetMemberValue<List<ObjectID>>("m_DragSelection") ?? new();
+            treeView_dragSelectionList = treeViewController?.GetFieldValue("m_DragSelection")?.GetMemberValue<List<ObjectID>>("m_List") ?? new();
+            treeView_normalSelectionList = isTwoColumns ? treeViewController?.GetFieldValue("m_CachedSelection")?.GetMemberValue<List<ObjectID>>("m_List") ?? new() : null;
 
 
 
@@ -1243,7 +1252,7 @@ namespace VFolders
 
         public IList<TreeViewItem> rows;
 
-        public List<int> expandedIds = new();
+        public List<ObjectID> expandedIds = new();
 
         bool isTreeFocused;
         bool isListAreaFocused;
@@ -1254,9 +1263,9 @@ namespace VFolders
         float gridVerticalSpacing;
         float gridHorizontalSpacing;
 
-        List<int> listArea_dragSelectionList = new();
-        List<int> treeView_dragSelectionList = new();
-        List<int> treeView_normalSelectionList = new();
+        List<ObjectID> listArea_dragSelectionList = new();
+        List<ObjectID> treeView_dragSelectionList = new();
+        List<ObjectID> treeView_normalSelectionList = new();
 
         bool isVersionControlEnabled;
 
