@@ -8,6 +8,14 @@ from .qc import (
     run_task_qc,
     variant_config_hash,
 )
+from .provenance import (
+    SourceFileRecord,
+    collect_source_files,
+    file_sha256,
+    reproducible_generated_at,
+    source_set_sha256,
+    stable_workbook_id,
+)
 from .reader import (
     EXPECTED_EVENTS,
     JSON_DOCUMENT_FILES,
@@ -24,9 +32,23 @@ from .reader import (
     read_task,
     source_file_info,
 )
+from .workbook import (
+    EMPTY_TEXT_MARKER,
+    EXCEL_MAX_CELL_CHARS,
+    EXCEL_MAX_DATA_ROWS,
+    WorkbookArtifact,
+    WorkbookValidationError,
+    WorkbookVerification,
+    decode_workbook_text,
+    verify_task_workbook,
+    write_task_workbook,
+)
 
 __all__ = [
+    "EMPTY_TEXT_MARKER",
     "EXPECTED_EVENTS",
+    "EXCEL_MAX_CELL_CHARS",
+    "EXCEL_MAX_DATA_ROWS",
     "JSON_DOCUMENT_FILES",
     "FORMAL_VARIANTS",
     "JSONL_TABLE_FILES",
@@ -35,15 +57,27 @@ __all__ = [
     "NormalizedValue",
     "QcIssue",
     "SourceFileInfo",
+    "SourceFileRecord",
     "SourceRow",
     "StageOneQcReport",
     "TaskDataset",
+    "WorkbookArtifact",
+    "WorkbookValidationError",
+    "WorkbookVerification",
     "aggregate_config_hash",
+    "collect_source_files",
+    "decode_workbook_text",
+    "file_sha256",
     "flatten_json",
     "iter_jsonl",
     "read_json_document",
     "read_task",
+    "reproducible_generated_at",
     "run_task_qc",
     "source_file_info",
+    "source_set_sha256",
+    "stable_workbook_id",
+    "verify_task_workbook",
     "variant_config_hash",
+    "write_task_workbook",
 ]

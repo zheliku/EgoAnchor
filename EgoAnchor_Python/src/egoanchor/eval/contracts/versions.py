@@ -45,7 +45,7 @@ class ContractChange:
 
 
 CONTRACT_VERSIONS = (
-    ContractVersion("workbook", 1, "Stage 1 完整 XLSX 工作簿契约"),
+    ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
     ContractVersion("csv", 1, "Stage 2 指标与论文数据 CSV 契约"),
     ContractVersion("metrics", 1, "实验一/二指标定义契约"),
     ContractVersion("analysis_params", 1, "冻结分析参数契约"),
@@ -54,6 +54,11 @@ CONTRACT_VERSIONS = (
 
 CONTRACT_CHANGELOG = (
     ContractChange("workbook-v1", "建立完整事实 sheet、来源追踪和 QC sheet。", True),
+    ContractChange(
+        "workbook-v2",
+        "补齐科学分析字段、标量 pose、外键、未知字段和超长值分片。",
+        True,
+    ),
     ContractChange("csv-v1", "固定 event/trial/session、plot 和 paper 长表。", True),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),
 )
