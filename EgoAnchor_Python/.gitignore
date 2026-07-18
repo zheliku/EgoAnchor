@@ -41,6 +41,7 @@
 !/data/debug/detection_depth.png
 !/data/debug/detection_mask.png
 /data/eval/
+/data/analysis/
 /data/online/*/output/
 /data/runtime_logs/
 /data/research/

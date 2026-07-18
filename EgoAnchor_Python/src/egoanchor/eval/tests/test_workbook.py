@@ -109,6 +109,24 @@ class WorkbookWriterTests(unittest.TestCase):
             self.assertFalse(any(cell.data_type == "f" for worksheet in workbook for cells in worksheet for cell in cells))
             workbook.close()
 
+    def test_workbook_sheets_freeze_headers_and_define_readable_column_widths(self) -> None:
+        """每个物理 sheet 都必须冻结表头，并为所有契约列写入稳定列宽。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            output = Path(tmp) / "formatted.xlsx"
+            write_task_workbook(root, output, code_version="test-version")
+
+            workbook = load_workbook(output, read_only=False, data_only=False)
+            for worksheet in workbook.worksheets:
+                self.assertEqual(worksheet.freeze_panes, "A2", worksheet.title)
+                for cell in worksheet[1]:
+                    column_letter = cell.column_letter
+                    self.assertIn(column_letter, worksheet.column_dimensions, worksheet.title)
+                    width = worksheet.column_dimensions[column_letter].width
+                    self.assertGreaterEqual(width, len(str(cell.value)) + 2, worksheet.title)
+            workbook.close()
+
     def test_qc_failure_never_replaces_existing_output(self) -> None:
         """硬 QC 失败时不得留下临时文件，也不得替换已有正式文件。"""
 
@@ -373,6 +391,57 @@ class WorkbookWriterTests(unittest.TestCase):
                     write_task_workbook(root, output, code_version="test-version")
 
             self.assertFalse(output.exists())
+
+    def test_temporary_raw_archive_delete_retries_after_windows_file_lock(self) -> None:
+        """刚关闭的临时 ZIP 首次被 Windows 锁定时，writer 应短暂重试并发布。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            output = Path(tmp) / "retry.xlsx"
+            original_unlink = Path.unlink
+            raw_delete_attempts = 0
+
+            def intermittent_unlink(path: Path, *, missing_ok: bool = False) -> None:
+                """仅让 raw XLSX 的第一次删除模拟短暂的系统文件锁。"""
+
+                nonlocal raw_delete_attempts
+                if path.name.endswith(".raw.xlsx"):
+                    raw_delete_attempts += 1
+                    if raw_delete_attempts == 1:
+                        raise PermissionError(32, "sharing violation", str(path))
+                original_unlink(path, missing_ok=missing_ok)
+
+            with patch.object(Path, "unlink", new=intermittent_unlink):
+                artifact = write_task_workbook(root, output, code_version="test-version")
+
+            self.assertTrue(artifact.path.is_file())
+            self.assertGreaterEqual(raw_delete_attempts, 2)
+
+    def test_atomic_replace_retries_after_windows_file_lock(self) -> None:
+        """正式 XLSX 首次被 Windows 锁定时，writer 应重试原子替换。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            output = Path(tmp) / "replace-retry.xlsx"
+            output.write_bytes(b"previous-workbook")
+            original_replace = workbook_module.os.replace
+            replace_attempts = 0
+
+            def intermittent_replace(source: Path, destination: Path) -> None:
+                """仅让正式目标的第一次替换模拟短暂的系统文件锁。"""
+
+                nonlocal replace_attempts
+                replace_attempts += 1
+                if replace_attempts == 1:
+                    raise PermissionError(5, "access denied", str(destination))
+                original_replace(source, destination)
+
+            with patch.object(workbook_module.os, "replace", side_effect=intermittent_replace):
+                artifact = write_task_workbook(root, output, code_version="test-version")
+
+            self.assertTrue(artifact.path.is_file())
+            self.assertGreaterEqual(replace_attempts, 2)
+            self.assertTrue(verify_task_workbook(output).passed)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import time
 import uuid
 import zipfile
 import xml.etree.ElementTree as ET
@@ -18,6 +19,7 @@ from typing import Any, Iterable, Iterator, Mapping
 from openpyxl import Workbook, load_workbook  # type: ignore[import-untyped]
 from openpyxl.cell import WriteOnlyCell  # type: ignore[import-untyped]
 from openpyxl.styles import Font  # type: ignore[import-untyped]
+from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from ..contracts import SHEET_CONTRACTS, SHEET_NAMES, SheetContract
 from .provenance import (
@@ -49,6 +51,12 @@ LITERAL_TEXT_MARKER = "@literal-text:"
 
 _LITERAL_TEXT_COLUMNS_KEY = "@literal_text_columns"
 """回读时记录经过字面量转义的列，避免把原始文本误判为内部 marker。"""
+
+_WINDOWS_FILE_RETRY_ATTEMPTS = 12
+"""Windows XLSX 文件操作遇到短暂共享锁时允许的最大尝试次数。"""
+
+_WINDOWS_FILE_RETRY_DELAY_SECONDS = 0.25
+"""Windows XLSX 文件操作每次重试前的基础等待秒数。"""
 
 
 class WorkbookValidationError(ValueError):
@@ -209,18 +217,18 @@ def write_task_workbook(
     try:
         _write_workbook(raw_path, factory, max_data_rows)
         _normalize_xlsx_archive(raw_path, normalized_path)
-        raw_path.unlink(missing_ok=True)
+        _unlink_temporary_file(raw_path)
         verification = verify_task_workbook(normalized_path, max_data_rows=max_data_rows, max_cell_chars=max_cell_chars)
         current_source_files = collect_source_files(dataset.root)
         if current_source_files != source_files or source_set_sha256(current_source_files) != source_digest:
             raise WorkbookValidationError("来源文件在 QC/hash 与发布之间发生变化，禁止发布混合版本工作簿。")
         _fsync_file(normalized_path)
-        os.replace(normalized_path, destination)
+        _replace_file(normalized_path, destination)
         verification = replace(verification, path=destination)
         return WorkbookArtifact(destination, file_sha256(destination), source_digest, verification)
     except Exception:
-        raw_path.unlink(missing_ok=True)
-        normalized_path.unlink(missing_ok=True)
+        _unlink_temporary_file(raw_path)
+        _unlink_temporary_file(normalized_path)
         raise
 
 
@@ -896,7 +904,7 @@ def _write_logical_sheet(
 
     header_hash = _header_sha256(contract)
     partition_index = 1
-    worksheet = workbook.create_sheet(contract.name)
+    worksheet = _create_worksheet(workbook, contract.name, contract)
     _append_header(worksheet, contract)
     partitions = [_Partition(contract.name, contract.name, 1, 0, len(contract.columns), header_hash)]
     for logical_row_index, row in enumerate(rows, start=1):
@@ -907,7 +915,7 @@ def _write_logical_sheet(
                 partitions[0].physical_sheet = first_name
             partition_index += 1
             physical_name = f"{contract.name}_{partition_index:03d}"
-            worksheet = workbook.create_sheet(physical_name)
+            worksheet = _create_worksheet(workbook, physical_name, contract)
             _append_header(worksheet, contract)
             partitions.append(
                 _Partition(contract.name, physical_name, partition_index, 0, len(contract.columns), header_hash)
@@ -927,6 +935,39 @@ def _write_logical_sheet(
         worksheet.append(cells)
         partitions[-1].row_count += 1
     return partitions
+
+
+def _create_worksheet(workbook: Workbook, name: str, contract: SheetContract) -> Any:
+    """创建可滚动审计的物理 sheet，并写入冻结窗格与稳定列宽。"""
+
+    worksheet = workbook.create_sheet(name)
+    worksheet.freeze_panes = "A2"
+    for index, column in enumerate(contract.columns, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = _column_width(column)
+    return worksheet
+
+
+def _column_width(column: Any) -> float:
+    """按列名和逻辑类型返回稳定、可读的 Excel 列宽。"""
+
+    name = str(column.name)
+    if "sha256" in name or name.endswith("_hash"):
+        preferred = 68
+    elif name in {"content", "description", "details", "source_directory"}:
+        preferred = 72
+    elif "json_path" in name or name.endswith("_path") or name.endswith("_file"):
+        preferred = 48
+    elif name.endswith("_id"):
+        preferred = 30
+    elif column.dtype == "datetime":
+        preferred = 24
+    elif column.dtype in {"int", "float"}:
+        preferred = 18
+    elif column.dtype == "bool":
+        preferred = 12
+    else:
+        preferred = 24
+    return float(max(len(name) + 2, preferred))
 
 
 def _append_header(worksheet: Any, contract: SheetContract) -> None:
@@ -1020,6 +1061,32 @@ def _header_sha256(contract: SheetContract) -> str:
 
     encoded = _canonical_json(list(contract.column_names())).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _unlink_temporary_file(path: Path) -> None:
+    """删除临时 XLSX；只对 Windows 短暂共享锁做有界重试。"""
+
+    for attempt in range(_WINDOWS_FILE_RETRY_ATTEMPTS):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if attempt + 1 == _WINDOWS_FILE_RETRY_ATTEMPTS:
+                raise
+            time.sleep(_WINDOWS_FILE_RETRY_DELAY_SECONDS * (attempt + 1))
+
+
+def _replace_file(source: Path, destination: Path) -> None:
+    """原子替换正式 XLSX；Windows 短暂共享锁期间保留旧文件并有界重试。"""
+
+    for attempt in range(_WINDOWS_FILE_RETRY_ATTEMPTS):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if attempt + 1 == _WINDOWS_FILE_RETRY_ATTEMPTS:
+                raise
+            time.sleep(_WINDOWS_FILE_RETRY_DELAY_SECONDS * (attempt + 1))
 
 
 def _normalize_xlsx_archive(source: Path, destination: Path) -> None:
