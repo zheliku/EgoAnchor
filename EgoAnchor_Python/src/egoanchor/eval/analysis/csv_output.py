@@ -7,13 +7,13 @@ import hashlib
 import json
 import math
 import os
-import shutil
-import tempfile
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, date, datetime
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from .._filesystem import create_inherited_temp_directory, remove_tree_with_retry
 from ..contracts import CSV_TABLE_CONTRACTS, METRIC_DEFINITIONS
 from .lineage import input_workbook_set_sha256
 
@@ -49,6 +49,55 @@ _TABLE_GROUPS = {
 }
 _ALLOWED_SCOPES = frozenset(_TABLE_GROUPS.values())
 """固定 CSV 表到 Stage 2 目录的映射。"""
+
+_LINEAGE_SOURCE_SHEETS = {
+    "analysis_run": "provenance",
+    "inputs": "provenance",
+    "metric_catalog": "@config/analysis_params.toml",
+    "filter_catalog": "completed_trials;events;event_payload",
+    "analysis_qc": "qc_checks;completed_trials",
+    "sensitivity": "python_candidates;unity_admission;unity_reference;completed_trials",
+    "trial_windows": "events;event_payload;completed_trials",
+    "frame_metrics": "unity_render",
+    "candidate_metrics": "unity_admission",
+    "event_metrics": "unity_render;events;event_payload;completed_trials",
+    "trial_metrics": "unity_render;events;event_payload;completed_trials",
+    "session_metrics": "unity_render;events;event_payload;completed_trials",
+    "scenario_summary": "unity_render;events;event_payload;completed_trials",
+    "paired_deltas": "unity_render;events;event_payload;completed_trials",
+    "paired_summary": "unity_render;events;event_payload;completed_trials",
+    "vcd_risk_points": "python_candidates;unity_admission;unity_reference;completed_trials",
+    "vcd_curve": "python_candidates;unity_admission;unity_reference;completed_trials",
+    "vcd_aurc": "python_candidates;unity_admission;unity_reference;completed_trials",
+    "plot_catalog": "@stage2/plots",
+    "exp1_static_timeline": "@stage2/exp1/event_metrics.csv",
+    "exp1_motion_events": "@stage2/exp1/event_metrics.csv",
+    "exp1_occlusion_events": "@stage2/exp1/event_metrics.csv",
+    "exp2_component_deltas": "@stage2/exp2/paired_deltas.csv",
+    "exp2_vcd_curve": "@stage2/exp2/vcd_curve.csv",
+    "numbers": "@stage2/paper-source",
+    "tables": "@stage2/paper-source",
+}
+"""每类结果实际依赖的 Stage 1 sheet 或 Stage 2 直接上游。"""
+
+_LINEAGE_KEY_FIELDS = (
+    "source_csv",
+    "session_id",
+    "experiment_id",
+    "scenario_id",
+    "trial_id",
+    "event_id",
+    "condition_id",
+    "variant_id",
+    "candidate_id",
+    "frame_id",
+    "component_id",
+    "metric_key",
+    "reference_kind",
+    "risk_kind",
+    "point_index",
+)
+"""可从来源表筛选出结果依赖行的稳定复合键顺序。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +164,12 @@ def _table_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _remove_tree(path: Path) -> None:
+    """删除已验证的发布临时目录或备份目录。"""
+
+    remove_tree_with_retry(path)
+
+
 def _input_rows(input_workbooks: Iterable[Any]) -> list[dict[str, Any]]:
     """将 loader 输入摘要转换为 audit/inputs 行。"""
 
@@ -159,7 +214,13 @@ def _lineage_rows(
         if input_workbooks
         else ""
     )
-    default_path = ";".join(str(item.path) for item in input_workbooks)
+    paths_by_hash: dict[str, str] = {
+        item.sha256: str(item.path) for item in input_workbooks
+    }
+    for size in range(2, len(input_workbooks) + 1):
+        for contributors in combinations(input_workbooks, size):
+            source_hash = input_workbook_set_sha256(item.sha256 for item in contributors)
+            paths_by_hash[source_hash] = ";".join(str(item.path) for item in contributors)
     rows: list[dict[str, Any]] = []
     for table_key, table_rows in rows_by_table.items():
         logical_name, scope = _split_table_key(table_key)
@@ -168,18 +229,32 @@ def _lineage_rows(
         group = scope or _TABLE_GROUPS[logical_name]
         for index, row in enumerate(table_rows):
             source_hash = str(row.get("input_workbook_sha256") or default_hash)
-            source_key = ":".join(
-                str(row.get(key))
-                for key in _contracts()[logical_name].primary_key
-                if row.get(key) is not None
+            source_path = paths_by_hash.get(source_hash, "")
+            if input_workbooks and not source_path:
+                raise ValueError(f"lineage 来源 hash 无法匹配输入 workbook：{source_hash}")
+            source_key = ";".join(
+                f"{key}={_scalar(row[key])}"
+                for key in _LINEAGE_KEY_FIELDS
+                if row.get(key) not in (None, "")
             )
+            if not source_key:
+                source_key = ";".join(
+                    f"{key}={_scalar(row[key])}"
+                    for key in _contracts()[logical_name].primary_key
+                    if row.get(key) not in (None, "")
+                )
+            source_sheet = _LINEAGE_SOURCE_SHEETS[logical_name]
+            if logical_name in {"numbers", "tables"} and row.get("source_csv"):
+                source_sheet = f"@stage2/{row['source_csv']}"
+            elif logical_name == "plot_catalog" and row.get("source_csv"):
+                source_sheet = f"@stage2/{row['source_csv']}"
             rows.append(
                 {
                     "output_path": f"{group}/{logical_name}.csv",
                     "output_row_id": index,
-                    "input_workbook": default_path,
+                    "input_workbook": source_path,
                     "input_workbook_sha256": source_hash,
-                    "source_sheet": logical_name,
+                    "source_sheet": source_sheet,
                     "source_row_key": source_key,
                     "metric_key": row.get("metric_key"),
                 }
@@ -249,7 +324,10 @@ def write_csv_tables(
 
     destination = output_root.expanduser()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
+    temporary = create_inherited_temp_directory(
+        destination.parent,
+        f".{destination.name}-stage-",
+    )
     try:
         table_hashes: dict[str, str] = {}
         scoped_keys: dict[str, list[str]] = {}
@@ -313,7 +391,7 @@ def write_csv_tables(
         if destination.exists():
             backup = destination.with_name(f".{destination.name}.previous")
             if backup.exists():
-                shutil.rmtree(backup)
+                _remove_tree(backup)
             os.replace(destination, backup)
         try:
             os.replace(temporary, destination)
@@ -322,12 +400,16 @@ def write_csv_tables(
                 os.replace(backup, destination)
             raise
         if backup is not None and backup.exists():
-            shutil.rmtree(backup)
+            try:
+                _remove_tree(backup)
+            except OSError:
+                # 新目录已经提交；遗留 backup 在下一次提交前必须成功清理。
+                pass
         return CsvPublishResult(destination, table_hashes)
     except Exception:
         if temporary.exists():
             try:
-                shutil.rmtree(temporary)
+                _remove_tree(temporary)
             except OSError:
                 # Windows 防病毒或索引器短暂占用临时文件时不覆盖原始异常。
                 pass

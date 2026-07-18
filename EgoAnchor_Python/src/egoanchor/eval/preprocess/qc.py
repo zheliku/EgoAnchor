@@ -620,18 +620,16 @@ def _check_variant_row(
         if row.get(field) != expected_value:
             state.error("variant_row_config", f"{expected.variant_id} 的 {field} 与 manifest 不一致。", source_row)
     if admission:
-        alignment, capture, vcd, temporal, static, _, _ = (
-            expected.world_alignment_mode,
-            *expected.flags,
-        )
-        for field, expected_value in (
+        alignment = expected.world_alignment_mode
+        capture, vcd, temporal, static, _, _ = expected.flags
+        for field, matrix_value in (
             ("world_alignment_mode", alignment),
             ("uses_capture_time_alignment", capture),
             ("uses_vcd_admission", vcd),
             ("uses_temporal_synthesis", temporal),
             ("uses_static_lock", static),
         ):
-            if row.get(field) != expected_value:
+            if row.get(field) != matrix_value:
                 state.error("variant_row_matrix", f"{expected.variant_id} 的 {field} 与冻结矩阵不一致。", source_row)
 
 
@@ -646,21 +644,21 @@ def _check_render_reference_warmup(
     if not unknown_rows:
         return
     if not reference_frames or not reference_times:
-        for row in unknown_rows:
-            state.error("render_reference_fk", "render source_frame_id 没有 reference。", row)
+        for unknown_row in unknown_rows:
+            state.error("render_reference_fk", "render source_frame_id 没有 reference。", unknown_row)
         return
     first_frame = min(reference_frames)
     first_capture = reference_times.get(first_frame, min(reference_times.values()))
     for source_row in unknown_rows:
-        row = source_row.data
-        frame_id = _integer(row.get("source_frame_id"))
-        capture = _finite_float(row.get("source_capture_mono_ms"))
+        source_data = source_row.data
+        frame_id = _integer(source_data.get("source_frame_id"))
+        capture = _finite_float(source_data.get("source_capture_mono_ms"))
         allowed = (
             frame_id is not None
             and frame_id < first_frame
             and capture is not None
             and capture < first_capture
-            and bool(row.get("reference_pose_valid"))
+            and bool(source_data.get("reference_pose_valid"))
         )
         if not allowed:
             state.error("render_reference_fk", f"render source_frame_id 没有 reference：{frame_id}", source_row)

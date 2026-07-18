@@ -238,6 +238,23 @@ class LatexPublishingTests(unittest.TestCase):
             ]
             self.assertEqual(residual, [])
 
+    def test_atomic_publish_directories_do_not_use_restrictive_mkdtemp_acl(self) -> None:
+        """图表和 TeX 正式目录必须从父目录继承 ACL。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_root = Path(tmp) / "csv"
+            figure_output = Path(tmp) / "figures"
+            tex_output = Path(tmp) / "generated"
+            _write_plot_fixture(csv_root)
+            _write_fixture(csv_root)
+            with mock.patch(
+                "tempfile.mkdtemp",
+                side_effect=AssertionError("mkdtemp must not create publish directories"),
+            ):
+                publish_artifacts(csv_root, figure_output, tex_output)
+            self.assertTrue((figure_output / "figure_manifest.json").is_file())
+            self.assertTrue((tex_output / "exp1_numbers.tex").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

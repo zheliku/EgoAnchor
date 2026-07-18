@@ -1,4 +1,4 @@
-"""Python eval session naming contract tests."""
+"""Python 评估 session 命名契约测试。"""
 
 from __future__ import annotations
 
@@ -6,13 +6,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from egoanchor.runtime.eval_session import create_eval_session
+from egoanchor.runtime import create_eval_session
 
 
 class EvalSessionTest(unittest.TestCase):
-    """Verify session metadata cannot create schema-v2 filename collisions."""
+    """验证 session 元数据不能制造 schema-v2 文件名冲突。"""
 
     def test_default_schema_v2_filenames_are_distinct(self) -> None:
+        """默认候选和事件日志必须使用不同的冻结文件名。"""
+
         with tempfile.TemporaryDirectory() as tmp:
             paths = create_eval_session(Path(tmp), "controller_right")
 
@@ -23,6 +25,8 @@ class EvalSessionTest(unittest.TestCase):
             self.assertIn('"python_events_log_filename": "python_events.jsonl"', metadata)
 
     def test_events_filename_cannot_be_used_for_candidates(self) -> None:
+        """候选日志不得复用正式事件文件名。"""
+
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "python_candidates.jsonl"):
                 create_eval_session(Path(tmp), "controller_right", python_log_filename="events.jsonl")

@@ -23,12 +23,12 @@
   },
   "generator": "egoanchor.eval.publishing",
   "input_csv_sha256": {
-    "plots/exp1_motion_events.csv": "e0f64993f7243d6e21774f918f859176ca650b52ca00a17a48d7ddce2d41a520",
-    "plots/exp1_occlusion_events.csv": "11edf6a029da36ae4e43c1420cee5e0856ca3d5e83c0de19c74c73648f17d5fd",
-    "plots/exp1_static_timeline.csv": "34186baff9b6881e016e12f65135dc848469c3529828c7680dffbcaa28161bd3",
-    "plots/exp2_component_deltas.csv": "01c07e558028749db95f7d284efc8a5bbb750dac2ed307904bbae74f59de1500",
-    "plots/exp2_vcd_curve.csv": "1527525ee12b5589daf843c24719456869b7dc24f5df9c46d7d71fe9eed1d387",
-    "plots/plot_catalog.csv": "426a4cfcb4504762433efa3a1063dbf0a453d0fdf1669f2ea893be1c689020ae"
+    "plots/exp1_motion_events.csv": "82bfe8a03a60190c1a9f8fa0df50a7ad43f61e5a40939a4027a775cd625662ea",
+    "plots/exp1_occlusion_events.csv": "1140e74dc1644c7a5311d2925dbec13172d922a5a55fa03806fc9c2ae3689f26",
+    "plots/exp1_static_timeline.csv": "4a269837cb38b60070630b4f001666e54f6099a80412794b58789e4c3b5de0db",
+    "plots/exp2_component_deltas.csv": "46478e22a1b3d2dd1e484d511c7e52aa9df676f52470d278ea302e434c737c56",
+    "plots/exp2_vcd_curve.csv": "781b59286c489d6ecc5609d5786aa6c525cafc64b777eb09985ae5d9dc125e1c",
+    "plots/plot_catalog.csv": "a856eae87b4cccf30e032055caf83d821163d0799fd292f5e7d3fca9fdfbd431"
   },
   "plot_count": 5,
   "stage": "publish"

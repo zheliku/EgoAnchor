@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import shutil
-import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TypeVar
+
+from .._filesystem import create_inherited_temp_directory, remove_tree_with_retry
 
 
 _Result = TypeVar("_Result")
@@ -56,7 +56,7 @@ def _cleanup(path: Path | None) -> None:
     if path is None or not path.exists():
         return
     try:
-        shutil.rmtree(path)
+        remove_tree_with_retry(path)
     except OSError:
         # Windows 索引器短暂占用已废弃 backup 时，正式提交仍视为成功。
         pass
@@ -88,11 +88,9 @@ def atomic_publish_directories(
     results: list[_Result] = []
     try:
         for destination, builder in zip(normalized, builders, strict=True):
-            stage_parent = Path(
-                tempfile.mkdtemp(
-                    prefix=f".{destination.name}-stage-",
-                    dir=destination.parent,
-                )
+            stage_parent = create_inherited_temp_directory(
+                destination.parent,
+                f".{destination.name}-stage-",
             )
             stage = stage_parent / "payload"
             stage.mkdir()
@@ -111,11 +109,9 @@ def atomic_publish_directories(
         for index, destination in enumerate(normalized):
             if not destination.exists():
                 continue
-            backup_parent = Path(
-                tempfile.mkdtemp(
-                    prefix=f".{destination.name}-backup-",
-                    dir=destination.parent,
-                )
+            backup_parent = create_inherited_temp_directory(
+                destination.parent,
+                f".{destination.name}-backup-",
             )
             backup = backup_parent / "payload"
             backup_parents[index] = backup_parent

@@ -7,7 +7,6 @@ import json
 import math
 import types
 from dataclasses import asdict, dataclass, fields
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Union, get_args, get_origin, get_type_hints
 
@@ -37,6 +36,9 @@ JSONL_TABLE_FILES = {
     "events": "events.jsonl",
 }
 """逻辑事实表到固定 JSONL 文件名的映射。"""
+
+_ROW_CONTRACT_CACHE: dict[type[Any], tuple[tuple[str, Any], ...]] = {}
+"""dataclass 类型到字段契约的进程内缓存。"""
 
 EXPECTED_EVENTS = {
     "python_candidates": "python_candidate",
@@ -321,12 +323,16 @@ def _validate_row_contract(row: Mapping[str, Any], row_type: type[Any]) -> None:
             )
 
 
-@lru_cache(maxsize=None)
 def _row_contract(row_type: type[Any]) -> tuple[tuple[str, Any], ...]:
     """缓存 dataclass 字段和解析后的类型提示，避免逐行重复反射。"""
 
+    cached = _ROW_CONTRACT_CACHE.get(row_type)
+    if cached is not None:
+        return cached
     type_hints = get_type_hints(row_type)
-    return tuple((field.name, type_hints.get(field.name, Any)) for field in fields(row_type))
+    contract = tuple((field.name, type_hints.get(field.name, Any)) for field in fields(row_type))
+    _ROW_CONTRACT_CACHE[row_type] = contract
+    return contract
 
 
 def _matches_annotation(value: Any, annotation: Any) -> bool:

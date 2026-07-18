@@ -508,7 +508,12 @@ def load_workbook(path: Path) -> tuple[WorkbookInput, LoadedBatch]:
 def load_workbook_batch(paths: Iterable[Path]) -> LoadedBatch:
     """读取 XLSX 批次并拒绝重复 session 或不一致 runtime 定义。"""
 
-    normalized_paths = tuple(Path(path) for path in paths)
+    normalized_paths = tuple(
+        sorted(
+            (Path(path) for path in paths),
+            key=lambda path: str(path.expanduser().resolve()).casefold(),
+        )
+    )
     if not normalized_paths:
         raise ValueError("Stage 2 workbook 批次不能为空")
     loaded_batches = [load_workbook(path) for path in normalized_paths]

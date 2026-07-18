@@ -294,6 +294,9 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 - Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制五张 PDF/PNG，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
 - Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
 - Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。
+- Stage 2 先按规范绝对路径稳定排序 workbook；`lineage.csv` 记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用可筛选的 session/trial/event/variant/candidate/metric 复合键，禁止把输出表名冒充来源。
+- Stage 2/3 的原子 staging 和 backup 目录必须用普通 `mkdir` 从已验证父目录继承 ACL，不得用可能在 Windows 产生限制 ACL 的 `tempfile.mkdtemp`；旧备份清理对短暂共享锁做有界重试。
+- 四阶段复现、退出码、PowerShell 命令、指标/图表扩展和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md`。`audit/analysis_run.csv` 的执行时间不属于科学结果 hash 门禁。
 
 ## AGENTS.md 维护规则
 

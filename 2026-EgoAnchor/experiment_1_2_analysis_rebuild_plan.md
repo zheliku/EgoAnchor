@@ -261,7 +261,11 @@ pixi run python -m egoanchor.eval.cli preprocess \
 
 # Stage 2: 批次分析
 pixi run python -m egoanchor.eval.cli analyze \
-  data/analysis/complete/task_*.xlsx \
+  data/analysis/complete/task_1_complete.xlsx \
+  data/analysis/complete/task_2_complete.xlsx \
+  data/analysis/complete/task_3_complete.xlsx \
+  data/analysis/complete/task_4_complete.xlsx \
+  data/analysis/complete/task_5_complete.xlsx \
   --out data/analysis/results
 
 # Stage 3: 发布论文产物
@@ -271,7 +275,6 @@ pixi run python -m egoanchor.eval.cli publish \
 
 # Stage 4: 物化到主稿
 pixi run python -m egoanchor.eval.cli materialize-paper \
-  data/analysis/results \
   --paper-root ../2026-EgoAnchor
 
 # 独立QC（不生成XLSX）
@@ -1130,8 +1133,23 @@ Task 12: 实现主稿数据物化
 
 ### 端到端验证命令
 
-```bash
+```powershell
 cd EgoAnchor_Python
+$codeVersion = "task13-e2e"
+$taskDirs = @(
+  "data/eval/task_1_20260717_203329_controller_right"
+  "data/eval/task_2_20260717_203749_controller_right"
+  "data/eval/task_3_20260717_204156_controller_right"
+  "data/eval/task_4_20260717_204943_controller_right"
+  "data/eval/task_5_20260717_205539_controller_right"
+)
+$workbooks = @(
+  "data/analysis/complete/task_1_complete.xlsx"
+  "data/analysis/complete/task_2_complete.xlsx"
+  "data/analysis/complete/task_3_complete.xlsx"
+  "data/analysis/complete/task_4_complete.xlsx"
+  "data/analysis/complete/task_5_complete.xlsx"
+)
 
 # 编译检查
 pixi run python -m compileall src
@@ -1140,24 +1158,16 @@ pixi run python -m compileall src
 pixi run python -m unittest discover -s src -p "test_*.py" -t src
 
 # Stage 1: 预处理
-pixi run python -m egoanchor.eval.cli preprocess \
-  data/eval/task_*_controller_right \
-  --out data/analysis/complete
+pixi run python -m egoanchor.eval.cli preprocess $taskDirs --out data/analysis/complete --code-version $codeVersion
 
 # Stage 2: 分析
-pixi run python -m egoanchor.eval.cli analyze \
-  data/analysis/complete/*.xlsx \
-  --out data/analysis/results
+pixi run python -m egoanchor.eval.cli analyze $workbooks --out data/analysis/results --code-version $codeVersion
 
 # Stage 3: 发布
-pixi run python -m egoanchor.eval.cli publish \
-  data/analysis/results \
-  --paper-root ../2026-EgoAnchor
+pixi run python -m egoanchor.eval.cli publish data/analysis/results --paper-root ../2026-EgoAnchor
 
 # Stage 4: 物化
-pixi run python -m egoanchor.eval.cli materialize-paper \
-  data/analysis/results \
-  --paper-root ../2026-EgoAnchor
+pixi run python -m egoanchor.eval.cli materialize-paper --paper-root ../2026-EgoAnchor
 
 # 论文编译
 cd ../2026-EgoAnchor
@@ -1200,6 +1210,14 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 - 所有单元测试通过
 - Code Simplifier审查无重大问题
 - 使用文档完整
+
+### 执行调整（2026-07-19）
+
+Task 13 实测确认，PowerShell 调用原生命令时不会展开传给 Python 的 `task_*` 或 `*.xlsx`，且 Stage 4 的冻结接口没有 CSV 位置参数。端到端命令因此改为 PowerShell 数组显式传入五个 task 和五个 workbook；`materialize-paper` 只接收论文根、TeX 根和主稿覆盖参数，实验数据仍只来自四个 Stage 3 TeX。
+
+Code Simplifier 与契约审查还发现三项必须在最终复现前修正的问题：Stage 2 输入顺序未规范化；lineage 把输出表名和输出主键误写为来源；Windows 上 `tempfile.mkdtemp` 创建的原子发布目录可能带限制 ACL，使后续 PowerShell 或 XeLaTeX 无法读取。Task 13 增加了稳定输入排序、真实上游 sheet/复合筛选键、共享父目录 ACL 的随机 staging 目录，以及 Windows 备份清理有界重试；科学指标和参数不变。
+
+修复后的同代码双跑中，五个 workbook 二进制 SHA-256、23 个科学/绘图/论文 CSV、五组 PDF/PNG、四个 TeX 和三个主稿受控区块均保持一致。正式主稿和临时移走四个审计 TeX 的主稿都由 XeLaTeX 编译为 9 页；PDF 渲染检查未发现空图、裁切或重叠。完整命令、退出码、扩展步骤和故障排查见 `EgoAnchor_Python/docs/analysis_pipeline.md`。
 
 ### 提交信息
 

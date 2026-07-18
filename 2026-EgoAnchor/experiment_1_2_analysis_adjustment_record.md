@@ -143,3 +143,26 @@
 - Stage 3 仍只读取 Stage 2 CSV；P95 tail-risk 筛选在 Stage 2 完成，绘图层不重算科学指标。
 - Stage 4 仍只读取 Stage 3 TeX；主稿物化不读取 CSV、XLSX 或 JSON/JSONL。
 - 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
+
+## 2026-07-19：Task 13 端到端复现与审查
+
+### 发现
+
+1. PowerShell 不会替原生 Python 命令展开计划中的 `task_*` 和 `*.xlsx`；Stage 4 示例还传入了冻结 CLI 不接受的 CSV 位置参数。
+2. Stage 2 批次按调用者参数顺序拼接结果，同一 workbook 集合改变顺序时会改变 CSV 行序。`lineage.csv` 还把输出表名和输出主键误写成来源 sheet 和来源行键。
+3. Stage 2 第二轮发布时，Windows 短暂共享锁可能让旧备份清理失败。Stage 2/3 使用 `tempfile.mkdtemp` 创建的 staging 目录还可能带限制 ACL，导致 PowerShell 或 XeLaTeX 无法读取已发布目录。
+4. 预处理 reader/QC 有六个生产代码 mypy 错误，两个测试方法缺少中文说明，运维文档尚未建立。
+
+### 调整
+
+1. 运维命令改用 PowerShell 数组显式传入五个 task 和五个 workbook；Stage 4 去除 CSV 位置参数，并在 `docs/analysis_pipeline.md` 固定四阶段边界、退出码、复现口径、扩展流程和故障排查。
+2. Stage 2 先按规范绝对路径稳定排序 workbook；lineage 改为记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用 session、trial、event、variant、candidate 和 metric 等复合筛选键。
+3. 新增共享文件系统助手，在已验证父目录下用随机名称和普通 `mkdir` 创建 staging/backup 目录，使 ACL 从父目录继承；目录清理对 Windows 短暂共享锁做有界重试。
+4. 以行为不变的显式局部变量和进程内 dataclass 契约缓存修复 mypy；补齐中文测试说明和包级导入。
+
+### 验证
+
+- 同一代码、参数、输入和输出路径连续重建后，五个 XLSX 二进制 hash 与 23 个科学/绘图/论文 CSV hash 逐项一致。
+- Stage 3 两次发布的五组 PDF/PNG 与四个 TeX hash 一致；Stage 4 两次物化得到相同主稿 hash。
+- 正式主稿编译为 9 页；临时移走四个生成 TeX 后仍可独立编译。关键页面与五张图的 PNG 渲染没有空白、裁切或重叠。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`，四阶段数据读取边界不变。

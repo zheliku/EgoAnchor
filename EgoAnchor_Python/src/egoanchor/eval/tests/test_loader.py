@@ -55,6 +55,37 @@ class LoaderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "重复 session_id"):
                 load_workbook_batch((Path("one.xlsx"), Path("two.xlsx")))
 
+    def test_loader_orders_same_workbook_set_independently_of_argument_order(self) -> None:
+        """相同 workbook 集合的加载和输出顺序不得受命令行参数顺序影响。"""
+
+        def loaded(path: Path) -> tuple[WorkbookInput, LoadedBatch]:
+            """为路径构造具有一致批次签名的最小加载结果。"""
+
+            session_id = path.stem
+            source = WorkbookInput(
+                path,
+                ("a" if session_id == "a" else "b") * 64,
+                session_id,
+                1,
+                "object",
+                "formal",
+                "v1",
+                "config",
+                "params",
+                "model",
+            )
+            return source, LoadedBatch((source,), (), (), (), (), (), ())
+
+        with patch("egoanchor.eval.analysis.loader.load_workbook", side_effect=loaded):
+            forward = load_workbook_batch((Path("a.xlsx"), Path("b.xlsx")))
+            reverse = load_workbook_batch((Path("b.xlsx"), Path("a.xlsx")))
+
+        self.assertEqual(
+            tuple(item.session_id for item in forward.inputs),
+            tuple(item.session_id for item in reverse.inputs),
+        )
+        self.assertEqual(tuple(item.session_id for item in forward.inputs), ("a", "b"))
+
 
 if __name__ == "__main__":
     unittest.main()
