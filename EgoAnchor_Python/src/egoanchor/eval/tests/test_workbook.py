@@ -52,8 +52,9 @@ class WorkbookWriterTests(unittest.TestCase):
             root = _write_valid_task(Path(tmp))
             candidate_path = root / "python_candidates.jsonl"
             candidates = _read_jsonl(candidate_path)
+            literal_large_marker = f"@large:{'a' * 64}"
             candidates[0]["failure_reason"] = ""
-            candidates[0]["pose_source"] = "@large:value"
+            candidates[0]["pose_source"] = literal_large_marker
             _write_jsonl(candidate_path, candidates)
             output = Path(tmp) / "text-roundtrip.xlsx"
             write_task_workbook(root, output, code_version="test-version")
@@ -67,7 +68,7 @@ class WorkbookWriterTests(unittest.TestCase):
 
             self.assertIsInstance(encoded_empty, str)
             self.assertEqual(decode_workbook_text(encoded_empty), "")
-            self.assertEqual(decode_workbook_text(encoded_reserved), "@large:value")
+            self.assertEqual(decode_workbook_text(encoded_reserved), literal_large_marker)
 
     def test_workbook_roundtrip_preserves_rows_types_hashes_and_is_deterministic(self) -> None:
         """合法 fixture 写出后通过独立回读，文本类型和二进制摘要保持稳定。"""
@@ -304,6 +305,48 @@ class WorkbookWriterTests(unittest.TestCase):
             second_value = sheet.cell(row=large_rows[1], column=value_column).value
             self.assertNotEqual(first_value, second_value)
             sheet.cell(row=large_rows[0], column=value_column, value=second_value)
+            workbook.save(output)
+            workbook.close()
+
+            with self.assertRaises(WorkbookValidationError):
+                verify_task_workbook(output, max_cell_chars=64)
+
+    def test_typed_large_marker_requires_exact_source_group(self) -> None:
+        """typed sheet 的内部 marker 缺少精确来源分片时必须硬失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            candidate_path = root / "python_candidates.jsonl"
+            candidates = _read_jsonl(candidate_path)
+            candidates[0]["failure_reason"] = "x" * 200
+            _write_jsonl(candidate_path, candidates)
+            output = Path(tmp) / "missing-large-source.xlsx"
+            write_task_workbook(root, output, code_version="test-version", max_cell_chars=64)
+
+            workbook = load_workbook(output)
+            large_sheet = workbook["large_values"]
+            large_header = [cell.value for cell in large_sheet[1]]
+            table_column = large_header.index("source_table") + 1
+            path_column = large_header.index("json_path") + 1
+            deleted_rows = [
+                row_index
+                for row_index in range(2, large_sheet.max_row + 1)
+                if large_sheet.cell(row=row_index, column=table_column).value == "python_candidates"
+                and large_sheet.cell(row=row_index, column=path_column).value == "failure_reason"
+            ]
+            self.assertTrue(deleted_rows)
+            for row_index in reversed(deleted_rows):
+                large_sheet.delete_rows(row_index, 1)
+
+            index_sheet = workbook["sheet_index"]
+            index_header = [cell.value for cell in index_sheet[1]]
+            physical_column = index_header.index("physical_sheet") + 1
+            count_column = index_header.index("row_count") + 1
+            for row_index in range(2, index_sheet.max_row + 1):
+                if index_sheet.cell(row=row_index, column=physical_column).value == "large_values":
+                    old_count = int(index_sheet.cell(row=row_index, column=count_column).value)
+                    index_sheet.cell(row=row_index, column=count_column, value=old_count - len(deleted_rows))
+                    break
             workbook.save(output)
             workbook.close()
 

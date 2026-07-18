@@ -47,6 +47,9 @@ EMPTY_TEXT_MARKER = "@empty-text"
 LITERAL_TEXT_MARKER = "@literal-text:"
 """原始文本与内部标记前缀冲突时使用的转义前缀。"""
 
+_LITERAL_TEXT_COLUMNS_KEY = "@literal_text_columns"
+"""回读时记录经过字面量转义的列，避免把原始文本误判为内部 marker。"""
+
 
 class WorkbookValidationError(ValueError):
     """工作簿输入、输出或回读契约不满足时抛出的错误。"""
@@ -1150,11 +1153,16 @@ def _iter_logical_rows(
             raise WorkbookValidationError(f"{physical_name} 表头与 {contract.name} 契约不一致。")
         for cells in iterator:
             row: dict[str, Any] = {}
+            literal_text_columns: set[str] = set()
             for index, column in enumerate(contract.columns):
                 cell = cells[index] if index < len(cells) else None
                 _verify_cell(contract.name, column, cell, max_cell_chars)
                 value = cell.value if cell is not None else None
+                if column.dtype == "text" and isinstance(value, str) and value.startswith(LITERAL_TEXT_MARKER):
+                    literal_text_columns.add(column.name)
                 row[column.name] = decode_workbook_text(value) if column.dtype == "text" and isinstance(value, str) else value
+            if literal_text_columns:
+                row[_LITERAL_TEXT_COLUMNS_KEY] = frozenset(literal_text_columns)
             yield row
 
 
@@ -1294,6 +1302,7 @@ def _verify_large_values(
         for fallback_row_index, row in enumerate(rows, start=1):
             raw_logical_index = row.get("@logical_row_index")
             row_index = raw_logical_index if type(raw_logical_index) is int else fallback_row_index
+            literal_text_columns = row.get(_LITERAL_TEXT_COLUMNS_KEY, ())
             for column_name, value in row.items():
                 if column_name not in columns:
                     continue
@@ -1302,11 +1311,13 @@ def _verify_large_values(
                 digest = value[len(LARGE_VALUE_MARKER) :]
                 if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
                     continue
+                if column_name in literal_text_columns:
+                    continue
                 source_file = str(row.get("source_file") or f"@workbook/{sheet_name}")
                 raw_line = row.get("source_line")
                 source_line = raw_line if type(raw_line) is int else row_index
                 key = (sheet_name, source_file, source_line, columns[column_name].source_path)
-                if key in group_digests and group_digests[key] != digest:
+                if group_digests.get(key) != digest:
                     raise WorkbookValidationError(f"{sheet_name} 大值 marker 与来源分片不一致：{key}")
 
 
