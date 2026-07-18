@@ -90,6 +90,16 @@ class TaskOneSkeletonTests(unittest.TestCase):
         self.assertEqual(result, eval_cli.EXIT_OK)
         self.assertIn("materialize-paper", output.getvalue())
 
+    def test_analyze_help_declares_csv_and_review_workbook(self) -> None:
+        """Stage 2 帮助应明确 CSV 是下游契约，XLSX 仅供人工审阅。"""
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as raised:
+                eval_cli.main(["analyze", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("CSV 与审阅 XLSX", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

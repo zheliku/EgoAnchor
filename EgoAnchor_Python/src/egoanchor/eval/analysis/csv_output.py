@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping
 
 from .._filesystem import create_inherited_temp_directory, remove_tree_with_retry
 from ..contracts import CSV_TABLE_CONTRACTS, METRIC_DEFINITIONS
+from .analysis_workbook import write_analysis_workbooks
 from .lineage import input_workbook_set_sha256
 
 
@@ -39,9 +40,10 @@ _TABLE_GROUPS = {
     "vcd_curve": "exp2",
     "vcd_aurc": "exp2",
     "plot_catalog": "plots",
-    "exp1_static_timeline": "plots",
-    "exp1_motion_events": "plots",
-    "exp1_occlusion_events": "plots",
+    "exp1_head_motion_trace": "plots",
+    "exp1_start_stop_trace": "plots",
+    "exp1_lag_tradeoff": "plots",
+    "exp1_occlusion_trace": "plots",
     "exp2_component_deltas": "plots",
     "exp2_vcd_curve": "plots",
     "numbers": "paper",
@@ -70,9 +72,10 @@ _LINEAGE_SOURCE_SHEETS = {
     "vcd_curve": "python_candidates;unity_admission;unity_reference;completed_trials",
     "vcd_aurc": "python_candidates;unity_admission;unity_reference;completed_trials",
     "plot_catalog": "@stage2/plots",
-    "exp1_static_timeline": "@stage2/exp1/event_metrics.csv",
-    "exp1_motion_events": "@stage2/exp1/event_metrics.csv",
-    "exp1_occlusion_events": "@stage2/exp1/event_metrics.csv",
+    "exp1_head_motion_trace": "unity_render;events;event_payload;completed_trials",
+    "exp1_start_stop_trace": "unity_render;events;event_payload;completed_trials",
+    "exp1_lag_tradeoff": "@stage2/exp1/event_metrics.csv;exp1/scenario_summary.csv",
+    "exp1_occlusion_trace": "unity_render;events;event_payload;completed_trials",
     "exp2_component_deltas": "@stage2/exp2/paired_deltas.csv",
     "exp2_vcd_curve": "@stage2/exp2/vcd_curve.csv",
     "numbers": "@stage2/paper-source",
@@ -101,14 +104,17 @@ _LINEAGE_KEY_FIELDS = (
 
 
 @dataclass(frozen=True, slots=True)
-class CsvPublishResult:
-    """保存一次 CSV 发布的目录和表级 hash。"""
+class AnalysisPublishResult:
+    """保存一次 Stage 2 CSV/XLSX 联合发布结果。"""
 
     output_root: Path
     """原子替换后的正式结果目录。"""
 
-    table_sha256: Mapping[str, str]
+    csv_sha256: Mapping[str, str]
     """每个 CSV 文件的二进制 SHA-256。"""
+
+    workbook_sha256: Mapping[str, str]
+    """每个审阅 XLSX 的二进制 SHA-256。"""
 
 
 def _contracts() -> dict[str, Any]:
@@ -232,11 +238,18 @@ def _lineage_rows(
             source_path = paths_by_hash.get(source_hash, "")
             if input_workbooks and not source_path:
                 raise ValueError(f"lineage 来源 hash 无法匹配输入 workbook：{source_hash}")
-            source_key = ";".join(
-                f"{key}={_scalar(row[key])}"
-                for key in _LINEAGE_KEY_FIELDS
-                if row.get(key) not in (None, "")
-            )
+            if logical_name in {"numbers", "tables"}:
+                source_key = ";".join(
+                    f"{key}={_scalar(row[key])}"
+                    for key in _contracts()[logical_name].primary_key
+                    if row.get(key) not in (None, "")
+                )
+            else:
+                source_key = ";".join(
+                    f"{key}={_scalar(row[key])}"
+                    for key in _LINEAGE_KEY_FIELDS
+                    if row.get(key) not in (None, "")
+                )
             if not source_key:
                 source_key = ";".join(
                     f"{key}={_scalar(row[key])}"
@@ -280,7 +293,7 @@ def _write_table(path: Path, table_name: str, rows: tuple[dict[str, Any], ...]) 
             writer.writerow({column: _scalar(row[column]) for column in columns})
 
 
-def write_csv_tables(
+def publish_analysis_outputs(
     output_root: Path,
     tables: Mapping[str, Iterable[Any]],
     *,
@@ -288,8 +301,8 @@ def write_csv_tables(
     analysis_run_id: str = "analysis-run",
     code_version: str = "unknown",
     parameter_set_id: str = "unknown",
-) -> CsvPublishResult:
-    """原子发布完整 Stage 2 CSV 目录，失败时保留既有目录不变。"""
+) -> AnalysisPublishResult:
+    """原子发布完整 Stage 2 CSV 与审阅 XLSX，失败时保留旧目录。"""
 
     contracts = _contracts()
     unknown = sorted(
@@ -330,6 +343,7 @@ def write_csv_tables(
     )
     try:
         table_hashes: dict[str, str] = {}
+        finalized_rows: dict[str, tuple[dict[str, str], ...]] = {}
         scoped_keys: dict[str, list[str]] = {}
         for table_key in rows_by_table:
             logical_name, scope = _split_table_key(table_key)
@@ -377,6 +391,13 @@ def write_csv_tables(
                         adjusted_row["source_sha256"] = _table_sha256(source_path)
                         adjusted.append(adjusted_row)
                     rows = tuple(adjusted)
+                finalized_rows[table_key] = tuple(
+                    {
+                        column: _scalar(row.get(column))
+                        for column in contracts[table_name].column_names()
+                    }
+                    for row in rows
+                )
                 _write_table(path, table_name, rows)
                 table_hashes[table_key] = _table_sha256(path)
         # 原子替换前回读每个已写表，确保表头、行编码和 hash 可重建。
@@ -387,6 +408,13 @@ def write_csv_tables(
             read_csv_table(path, table_key)
             if _table_sha256(path) != expected_hash:
                 raise ValueError(f"CSV 回读 hash 不一致：{table_key}")
+        workbook_hashes = write_analysis_workbooks(
+            temporary,
+            table_hashes,
+            finalized_rows,
+            code_version=code_version,
+            parameter_set_id=parameter_set_id,
+        )
         backup: Path | None = None
         if destination.exists():
             backup = destination.with_name(f".{destination.name}.previous")
@@ -405,7 +433,7 @@ def write_csv_tables(
             except OSError:
                 # 新目录已经提交；遗留 backup 在下一次提交前必须成功清理。
                 pass
-        return CsvPublishResult(destination, table_hashes)
+        return AnalysisPublishResult(destination, table_hashes, workbook_hashes)
     except Exception:
         if temporary.exists():
             try:
@@ -430,4 +458,4 @@ def read_csv_table(path: Path, table_name: str) -> list[dict[str, str]]:
         return list(reader)
 
 
-__all__ = ["CsvPublishResult", "read_csv_table", "write_csv_tables"]
+__all__ = ["AnalysisPublishResult", "publish_analysis_outputs", "read_csv_table"]

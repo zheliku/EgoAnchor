@@ -44,6 +44,17 @@ class AnalyzeCliTests(unittest.TestCase):
             self.assertEqual(code, eval_cli.EXIT_DATA_ERROR)
             self.assertFalse(output_root.exists())
 
+    def test_output_directory_cannot_contain_input_workbook(self) -> None:
+        """Stage 2 输出目录不得覆盖或包含任何 Stage 1 输入 XLSX。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "complete"
+            root.mkdir()
+            source = root / "task_1_complete.xlsx"
+            source.touch()
+            with self.assertRaisesRegex(ValueError, "包含输入 XLSX"):
+                eval_cli._validate_analyze_output((source,), root)
+
 
 if __name__ == "__main__":
     unittest.main()

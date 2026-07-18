@@ -1,16 +1,8 @@
 {
   "figure_sha256": {
-    "exp1_motion_events": {
-      "pdf": "ec0bf1acc6abb95311fa4e56f65bfd7a989218cb88c7bd7867ffd90ca6a0d35b",
-      "png": "000dfb09322639e3ec826b270f0d5b879455379ba11f3fbe60c49963fed2f2d8"
-    },
-    "exp1_occlusion_events": {
-      "pdf": "1ee5b07159df0deb1b27875b07f2cf423cbbb9a2254c3a6cae2494070cccdae2",
-      "png": "ee291cc40dbc2127791061344450644e39aa41ce04c3cf0c57fa4785e5ece4da"
-    },
-    "exp1_static_timeline": {
-      "pdf": "4d3cb54f8b1195e043f5fbecc2c6654df0ace9244eb659b830b62120c71e2daa",
-      "png": "a6c44e3058d85b095c01a162991237b3dac0d1c2307dc9fbb4513cee277a37c0"
+    "exp1_behavior_overview": {
+      "pdf": "892ab898882cfd4000348705a47978f177e237263253d56d0458d2e8a9559a37",
+      "png": "903ee82f59c4805f10117ad459b6aad80584979bfc97a836027a5f697c003621"
     },
     "exp2_component_deltas": {
       "pdf": "eea3f9f6c7ffd8db056b4166f8b05feb0d27c010f2524312fdfb4dd459c2a555",
@@ -23,13 +15,14 @@
   },
   "generator": "egoanchor.eval.publishing",
   "input_csv_sha256": {
-    "plots/exp1_motion_events.csv": "82bfe8a03a60190c1a9f8fa0df50a7ad43f61e5a40939a4027a775cd625662ea",
-    "plots/exp1_occlusion_events.csv": "1140e74dc1644c7a5311d2925dbec13172d922a5a55fa03806fc9c2ae3689f26",
-    "plots/exp1_static_timeline.csv": "4a269837cb38b60070630b4f001666e54f6099a80412794b58789e4c3b5de0db",
+    "plots/exp1_head_motion_trace.csv": "dca2ac8274412c1c76e552036125177206c0045be4cd6b6e1e05d802412a3985",
+    "plots/exp1_lag_tradeoff.csv": "b47c7395f08e77a963e6eede0825c38289300e3b73e93a48d6921022b4ce5d39",
+    "plots/exp1_occlusion_trace.csv": "4693197ef6e2aba300703e1c9e8a708e01ae059ea4276a1909112d4d0e857b6d",
+    "plots/exp1_start_stop_trace.csv": "46bca25c4236136eb648beb79eab7bce3f5e5f2469791f305a1cf1c4d9c96253",
     "plots/exp2_component_deltas.csv": "46478e22a1b3d2dd1e484d511c7e52aa9df676f52470d278ea302e434c737c56",
     "plots/exp2_vcd_curve.csv": "781b59286c489d6ecc5609d5786aa6c525cafc64b777eb09985ae5d9dc125e1c",
-    "plots/plot_catalog.csv": "a856eae87b4cccf30e032055caf83d821163d0799fd292f5e7d3fca9fdfbd431"
+    "plots/plot_catalog.csv": "21c8fef11a46437366c4499fe5510ad3e390ec04c45d046f8de94549edcf7e9f"
   },
-  "plot_count": 5,
+  "plot_count": 3,
   "stage": "publish"
 }

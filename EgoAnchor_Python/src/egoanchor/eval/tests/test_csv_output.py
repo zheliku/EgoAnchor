@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from egoanchor.eval import input_workbook_set_sha256, write_csv_tables
+from egoanchor.eval import input_workbook_set_sha256, publish_analysis_outputs
 
 
 class CsvOutputTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class CsvOutputTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            result = write_csv_tables(
+            result = publish_analysis_outputs(
                 output,
                 {
                     "analysis_qc": [
@@ -57,7 +57,7 @@ class CsvOutputTests(unittest.TestCase):
             sentinel = output / "sentinel.txt"
             sentinel.write_text("keep", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "未知 CSV 表"):
-                write_csv_tables(output, {"unknown": []}, input_workbooks=())
+                publish_analysis_outputs(output, {"unknown": []}, input_workbooks=())
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
 
     def test_backup_cleanup_retries_after_windows_file_lock(self) -> None:
@@ -65,7 +65,7 @@ class CsvOutputTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(output, {"analysis_qc": []})
+            publish_analysis_outputs(output, {"analysis_qc": []})
             real_rmtree = shutil.rmtree
             backup_failures = 0
 
@@ -82,7 +82,7 @@ class CsvOutputTests(unittest.TestCase):
                 "shutil.rmtree",
                 side_effect=intermittent_rmtree,
             ):
-                write_csv_tables(output, {"analysis_qc": []})
+                publish_analysis_outputs(output, {"analysis_qc": []})
 
             self.assertEqual(backup_failures, 1)
             self.assertTrue(output.is_dir())
@@ -97,7 +97,7 @@ class CsvOutputTests(unittest.TestCase):
                 "tempfile.mkdtemp",
                 side_effect=AssertionError("mkdtemp must not create publish directories"),
             ):
-                write_csv_tables(output, {"analysis_qc": []})
+                publish_analysis_outputs(output, {"analysis_qc": []})
             self.assertTrue((output / "audit" / "analysis_qc.csv").is_file())
 
     def test_committed_publish_ignores_exhausted_backup_cleanup(self) -> None:
@@ -105,12 +105,12 @@ class CsvOutputTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(output, {"analysis_qc": []})
+            publish_analysis_outputs(output, {"analysis_qc": []})
             with patch(
                 "egoanchor.eval.analysis.csv_output._remove_tree",
                 side_effect=OSError("persistent Windows file lock"),
             ):
-                result = write_csv_tables(output, {"analysis_qc": []})
+                result = publish_analysis_outputs(output, {"analysis_qc": []})
 
             self.assertEqual(result.output_root, output)
             self.assertTrue((output / "audit" / "analysis_qc.csv").is_file())
@@ -122,7 +122,7 @@ class CsvOutputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
             with self.assertRaisesRegex(ValueError, "作用域非法"):
-                write_csv_tables(output, {"../outside/event_metrics": []})
+                publish_analysis_outputs(output, {"../outside/event_metrics": []})
             self.assertFalse((Path(tmp) / "outside").exists())
 
     def test_scoped_metric_tables_share_contract_but_publish_to_both_experiments(self) -> None:
@@ -144,7 +144,7 @@ class CsvOutputTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(
+            publish_analysis_outputs(
                 output,
                 {"exp1/event_metrics": [row], "exp2/event_metrics": [row]},
                 input_workbooks=(),
@@ -174,7 +174,7 @@ class CsvOutputTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(output, {"exp1/event_metrics": [row]})
+            publish_analysis_outputs(output, {"exp1/event_metrics": [row]})
             with (output / "audit" / "lineage.csv").open(
                 "r", encoding="utf-8", newline=""
             ) as handle:
@@ -224,7 +224,7 @@ class CsvOutputTests(unittest.TestCase):
         batch_row = {**row, "session_id": "", "input_workbook_sha256": input_workbook_set_sha256((first.sha256, second.sha256))}
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(
+            publish_analysis_outputs(
                 output,
                 {"exp1/event_metrics": [row], "exp1/scenario_summary": [batch_row]},
                 input_workbooks=(first, second),
@@ -245,7 +245,7 @@ class CsvOutputTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "results"
-            write_csv_tables(
+            publish_analysis_outputs(
                 output,
                 {
                     "analysis_qc": [

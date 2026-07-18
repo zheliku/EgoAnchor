@@ -61,23 +61,15 @@ _ABLATION_LABELS = {
 }
 """实验二组件到论文表格短消融名的映射。"""
 
-_EXP1_TABLE_METRICS = {
-    "static_head_motion": ("position_hp_rms_mm", "translation_event_pninetyfive_mm"),
-    "start_stop_6dof": ("visible_response_ms", "motion_translation_pninetyfive_mm"),
-    "continuous_translation": (
-        "effective_translation_lag_ms",
-        "translation_event_pninetyfive_mm_continuous",
-    ),
-    "continuous_rotation": (
-        "effective_angular_lag_ms",
-        "rotation_event_pninetyfive_deg_continuous",
-    ),
-    "occlusion_recovery": (
-        "occlusion_translation_pninetyfive_mm",
-        "durable_recovery_time_ms",
-    ),
-}
-"""实验一汇总表每场景最多两个冻结正文主指标。"""
+_EXP1_TABLE_ROWS = (
+    ("世界一致性", "static_head_motion", "translation_event_pninetyfive_mm"),
+    ("静止稳定性", "static_head_motion", "position_hp_rms_mm"),
+    ("起停转换", "start_stop_6dof", "visible_response_ms"),
+    ("平移保真度", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
+    ("旋转保真度", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
+    ("失效约束", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
+)
+"""实验一属性导向主表的六个冻结正文行。"""
 
 _EXP2_TABLE_METRICS = {
     "capture_time_alignment": (
@@ -243,49 +235,82 @@ def _exp1_rows(
         )
 
     table_cells: list[dict[str, object]] = []
-    for scenario_id, metric_keys in _EXP1_TABLE_METRICS.items():
-        for metric_key in metric_keys:
-            definition = get_metric_definition(metric_key)
-            for variant_id in EXP1_VARIANTS:
-                key = (scenario_id, variant_id, metric_key)
-                selected_summary = summary_by_key.get(key)
-                if (
-                    selected_summary is None
-                    or selected_summary.median is None
-                    or selected_summary.q1 is None
-                    or selected_summary.q3 is None
-                ):
-                    raise ValueError(f"实验一论文主指标缺失或未定义：{key}")
-                median, _, display_unit = _metric_value(
-                    selected_summary.median,
-                    selected_summary.metric_unit,
-                    definition.tex_suffix,
+    for property_label, scenario_id, metric_key in _EXP1_TABLE_ROWS:
+        definition = get_metric_definition(metric_key)
+        selected_by_variant = {
+            variant_id: summary_by_key.get((scenario_id, variant_id, metric_key))
+            for variant_id in EXP1_VARIANTS
+        }
+        if any(summary is None for summary in selected_by_variant.values()):
+            raise ValueError(f"实验一论文主指标缺失或未定义：{scenario_id}/{metric_key}")
+        selected = tuple(summary for summary in selected_by_variant.values() if summary is not None)
+        sample_counts = {summary.sample_count for summary in selected}
+        if len(sample_counts) != 1:
+            raise ValueError(f"实验一论文主指标的系统事件数不一致：{scenario_id}/{metric_key}")
+        source_sha256 = selected[0].input_workbook_sha256
+        table_cells.extend(
+            (
+                _table_cell(
+                    EXP1_ID,
+                    "exp1_scenario_summary",
+                    property_label,
+                    "场景",
+                    _SCENARIO_LABELS[scenario_id],
+                    "exp1/scenario_summary.csv",
+                    source_sha256,
+                ),
+                _table_cell(
+                    EXP1_ID,
+                    "exp1_scenario_summary",
+                    property_label,
+                    "指标",
+                    f"{definition.label} (n={next(iter(sample_counts))})",
+                    "exp1/scenario_summary.csv",
+                    source_sha256,
+                ),
+            )
+        )
+        for variant_id in EXP1_VARIANTS:
+            selected_summary = selected_by_variant[variant_id]
+            if (
+                selected_summary is None
+                or selected_summary.median is None
+                or selected_summary.q1 is None
+                or selected_summary.q3 is None
+            ):
+                raise ValueError(
+                    f"实验一论文主指标缺失或未定义：{scenario_id}/{variant_id}/{metric_key}"
                 )
-                q1, _, _ = _metric_value(
-                    selected_summary.q1,
-                    selected_summary.metric_unit,
-                    definition.tex_suffix,
+            median, _, display_unit = _metric_value(
+                selected_summary.median,
+                selected_summary.metric_unit,
+                definition.tex_suffix,
+            )
+            q1, _, _ = _metric_value(
+                selected_summary.q1,
+                selected_summary.metric_unit,
+                definition.tex_suffix,
+            )
+            q3, _, _ = _metric_value(
+                selected_summary.q3,
+                selected_summary.metric_unit,
+                definition.tex_suffix,
+            )
+            display = (
+                f"{_display_number(median)} "
+                f"[{_display_number(q1)}, {_display_number(q3)}] {display_unit}"
+            )
+            table_cells.append(
+                _table_cell(
+                    EXP1_ID,
+                    "exp1_scenario_summary",
+                    property_label,
+                    variant_id,
+                    display,
+                    "exp1/scenario_summary.csv",
+                    selected_summary.input_workbook_sha256,
                 )
-                q3, _, _ = _metric_value(
-                    selected_summary.q3,
-                    selected_summary.metric_unit,
-                    definition.tex_suffix,
-                )
-                display = (
-                    f"{_display_number(median)} "
-                    f"[{_display_number(q1)}, {_display_number(q3)}] {display_unit}"
-                )
-                table_cells.append(
-                    _table_cell(
-                        EXP1_ID,
-                        "exp1_scenario_summary",
-                        f"{_SCENARIO_LABELS[scenario_id]} / {definition.label}",
-                        variant_id,
-                        display,
-                        "exp1/scenario_summary.csv",
-                        selected_summary.input_workbook_sha256,
-                    )
-                )
+            )
     return numbers, table_cells
 
 

@@ -16,10 +16,17 @@ from egoanchor.eval import CSV_TABLE_CONTRACTS, publish_figures
 from egoanchor.eval import cli as eval_cli
 
 
-_PLOT_NAMES = (
-    "exp1_static_timeline",
-    "exp1_motion_events",
-    "exp1_occlusion_events",
+_PLOT_SPEC_NAMES = (
+    "exp1_head_motion_trace",
+    "exp1_start_stop_trace",
+    "exp1_lag_tradeoff",
+    "exp1_occlusion_trace",
+    "exp2_component_deltas",
+    "exp2_vcd_curve",
+)
+
+_FIGURE_NAMES = (
+    "exp1_behavior_overview",
     "exp2_component_deltas",
     "exp2_vcd_curve",
 )
@@ -45,7 +52,7 @@ def _write_table(root: Path, name: str, rows: list[dict[str, object]]) -> Path:
 
 
 def _write_fixture(root: Path) -> None:
-    """写入五张最小但可绘图的 plot CSV 和 catalog。"""
+    """写入六个最小 plot-ready CSV 和 catalog。"""
 
     result = {
         "session_id": "s",
@@ -62,9 +69,90 @@ def _write_fixture(root: Path) -> None:
         "input_workbook_sha256": "a" * 64,
     }
     rows: dict[str, list[dict[str, object]]] = {
-        "exp1_static_timeline": [{**result, "plot_id": "exp1_static_timeline", "panel_id": "static"}],
-        "exp1_motion_events": [{**result, "plot_id": "exp1_motion_events", "panel_id": "motion", "scenario_id": "start_stop_6dof"}],
-        "exp1_occlusion_events": [{**result, "plot_id": "exp1_occlusion_events", "panel_id": "occlusion", "scenario_id": "occlusion_recovery"}],
+        "exp1_head_motion_trace": [
+            {
+                "plot_id": "exp1_head_motion_trace",
+                "panel_id": "head_motion",
+                "session_id": "s",
+                "scenario_id": "static_head_motion",
+                "trial_id": "t",
+                "event_id": "e",
+                "variant_id": variant,
+                "sample_index": index,
+                "time_ms": index * 20.0,
+                "head_angular_speed_deg_s": index * 10.0,
+                "translation_error_mm": 10.0 + index,
+                "selection_rule": "egoanchor_metric_nearest_event_median",
+                "input_workbook_sha256": "a" * 64,
+            }
+            for variant in ("Arrival-Hold", "Capture-Hold", "EgoAnchor")
+            for index in range(2)
+        ],
+        "exp1_start_stop_trace": [
+            {
+                "plot_id": "exp1_start_stop_trace",
+                "panel_id": "start_stop",
+                "session_id": "s",
+                "scenario_id": "start_stop_6dof",
+                "trial_id": "t",
+                "event_id": "e",
+                "variant_id": variant,
+                "sample_index": index,
+                "time_ms": index * 20.0,
+                "reference_displacement_mm": index * 5.0,
+                "display_displacement_mm": index * 4.0,
+                "translation_error_mm": 2.0,
+                "phase": "motion" if index == 0 else "post_stop",
+                "has_output_pose": True,
+                "latest_static_locked": False,
+                "selection_rule": "egoanchor_metric_nearest_event_median",
+                "input_workbook_sha256": "a" * 64,
+            }
+            for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+            for index in range(2)
+        ],
+        "exp1_lag_tradeoff": [
+            {
+                "plot_id": "exp1_lag_tradeoff",
+                "panel_id": "lag_tradeoff",
+                "session_id": "s" if point_kind == "event" else "",
+                "scenario_id": "continuous_translation",
+                "trial_id": "t" if point_kind == "event" else "",
+                "event_id": "e" if point_kind == "event" else "summary",
+                "variant_id": variant,
+                "point_kind": point_kind,
+                "effective_lag_ms": 200.0,
+                "p95_residual_mm": 10.0,
+                "lag_q1_ms": 190.0 if point_kind == "summary" else "",
+                "lag_q3_ms": 210.0 if point_kind == "summary" else "",
+                "residual_q1_mm": 9.0 if point_kind == "summary" else "",
+                "residual_q3_mm": 11.0 if point_kind == "summary" else "",
+                "input_workbook_sha256": "a" * 64,
+            }
+            for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+            for point_kind in ("event", "summary")
+        ],
+        "exp1_occlusion_trace": [
+            {
+                "plot_id": "exp1_occlusion_trace",
+                "panel_id": "occlusion",
+                "session_id": "s",
+                "scenario_id": "occlusion_recovery",
+                "trial_id": "t",
+                "event_id": "e",
+                "variant_id": variant,
+                "sample_index": index,
+                "time_ms": index * 20.0,
+                "translation_error_mm": 5.0 + index,
+                "occluded": index == 0,
+                "has_output_pose": index == 1,
+                "has_display_pose": True,
+                "selection_rule": "egoanchor_metric_nearest_event_median",
+                "input_workbook_sha256": "a" * 64,
+            }
+            for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+            for index in range(2)
+        ],
         "exp2_component_deltas": [
             {
                 **result,
@@ -99,16 +187,25 @@ def _write_fixture(root: Path) -> None:
         ],
     }
     catalog_rows: list[dict[str, object]] = []
-    for order, name in enumerate(_PLOT_NAMES):
+    axes = {
+        "exp1_head_motion_trace": ("time_ms", "translation_error_mm", "variant_id"),
+        "exp1_start_stop_trace": ("time_ms", "display_displacement_mm", "variant_id"),
+        "exp1_lag_tradeoff": ("effective_lag_ms", "p95_residual_mm", "variant_id"),
+        "exp1_occlusion_trace": ("time_ms", "translation_error_mm", "variant_id"),
+        "exp2_component_deltas": ("event_id", "delta", "component_id"),
+        "exp2_vcd_curve": ("coverage", "risk_mm", "reference_kind"),
+    }
+    for order, name in enumerate(_PLOT_SPEC_NAMES):
         path = _write_table(root, name, rows[name])
+        x_axis, y_axis, hue = axes[name]
         catalog_rows.append(
             {
                 "plot_id": name,
                 "panel_id": "panel",
                 "source_csv": f"plots/{name}.csv",
-                "x": "event_id" if name != "exp2_vcd_curve" else "coverage",
-                "y": "metric_value" if name != "exp2_vcd_curve" else "risk_mm",
-                "hue": "reference_kind" if name == "exp2_vcd_curve" else "variant_id",
+                "x": x_axis,
+                "y": y_axis,
+                "hue": hue,
                 "filter_rule_id": "completed_formal_trials",
                 "order": order,
                 "unit": "mm",
@@ -127,27 +224,27 @@ def _write_fixture(root: Path) -> None:
 class FigurePublishingTests(unittest.TestCase):
     """验证 Task 10 图表发布的输入边界和输出完整性。"""
 
-    def test_publish_creates_all_five_pdf_png_and_manifest(self) -> None:
-        """五个图名、两种格式和输入 hash manifest 必须完整。"""
+    def test_publish_creates_composite_exp1_and_two_exp2_figures(self) -> None:
+        """实验一组合图、两张实验二图和输入 hash manifest 必须完整。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_root = Path(tmp) / "csv"
             output = Path(tmp) / "figures"
             _write_fixture(csv_root)
             result = publish_figures(csv_root, output)
-            self.assertEqual(set(result.figure_hashes), set(_PLOT_NAMES))
-            for name in _PLOT_NAMES:
+            self.assertEqual(set(result.figure_hashes), set(_FIGURE_NAMES))
+            for name in _FIGURE_NAMES:
                 self.assertTrue((output / f"{name}.pdf").is_file())
                 self.assertTrue((output / f"{name}.png").is_file())
             widths = {}
-            for name in _PLOT_NAMES:
+            for name in _FIGURE_NAMES:
                 encoded = (output / f"{name}.png").read_bytes()
                 widths[name] = struct.unpack(">I", encoded[16:20])[0]
-            self.assertTrue(all(widths[name] < 1000 for name in _PLOT_NAMES[:3]))
-            self.assertTrue(all(widths[name] < 1400 for name in _PLOT_NAMES[3:]))
+            self.assertLess(widths["exp1_behavior_overview"], 2200)
+            self.assertTrue(all(widths[name] < 1400 for name in _FIGURE_NAMES[1:]))
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["plot_count"], 5)
-            self.assertEqual(len(manifest["input_csv_sha256"]), 6)
+            self.assertEqual(manifest["plot_count"], 3)
+            self.assertEqual(len(manifest["input_csv_sha256"]), 7)
 
     def test_changing_declared_plot_csv_changes_input_lineage(self) -> None:
         """修改 plot CSV 后 manifest 中对应 hash 必须变化。"""
@@ -158,12 +255,12 @@ class FigurePublishingTests(unittest.TestCase):
             second = Path(tmp) / "figures_2"
             _write_fixture(csv_root)
             publish_figures(csv_root, first)
-            target = csv_root / "plots" / "exp1_static_timeline.csv"
+            target = csv_root / "plots" / "exp1_head_motion_trace.csv"
             target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
             catalog = csv_root / "plots" / "plot_catalog.csv"
             with catalog.open("r", encoding="utf-8", newline="") as handle:
                 rows = list(csv.DictReader(handle))
-            next(row for row in rows if row["plot_id"] == "exp1_static_timeline")["data_sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+            next(row for row in rows if row["plot_id"] == "exp1_head_motion_trace")["data_sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
             with catalog.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=_contract("plot_catalog").column_names())
                 writer.writeheader()

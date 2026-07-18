@@ -25,8 +25,10 @@ from egoanchor.eval import (
     estimate_translation_lag,
     load_analysis_parameters,
     median_iqr,
+    motion_hold_ratio,
     normalize_quaternion,
     pair_occlusion_windows,
+    post_stop_position_jitter_rms_mm,
     parse_event_markers,
     position_drift_mm,
     position_hp_rms_mm,
@@ -47,7 +49,7 @@ class AnalysisParameterTests(unittest.TestCase):
 
         params = load_analysis_parameters()
 
-        self.assertEqual(params.contract_version, 3)
+        self.assertEqual(params.contract_version, 4)
         self.assertEqual(params.statistics_unit, "event_segment")
         self.assertEqual(params.quantile_method, "linear")
         self.assertEqual(params.hp_filter_type, "butterworth")
@@ -71,6 +73,11 @@ class AnalysisParameterTests(unittest.TestCase):
         self.assertEqual(params.lag_interpolation, "linear_position_slerp_rotation")
         self.assertEqual(params.settling_position_mm, 20.0)
         self.assertEqual(params.settling_duration_ms, 250.0)
+        self.assertEqual(params.post_stop_guard_ms, 1000.0)
+        self.assertEqual(params.post_stop_window_ms, 3000.0)
+        self.assertEqual(params.hold_position_tolerance_mm, 0.001)
+        self.assertEqual(params.hold_rotation_tolerance_deg, 0.001)
+        self.assertEqual(params.reappearance_window_ms, 1000.0)
         self.assertEqual(params.recovery_position_mm, 20.0)
         self.assertEqual(params.recovery_duration_ms, 250.0)
         self.assertTrue(params.recovery_requires_fresh_output)
@@ -435,6 +442,58 @@ class AggregateMetricTests(unittest.TestCase):
 
         self.assertEqual(recovery, 60.0)
 
+    def test_post_stop_jitter_uses_fixed_common_window_and_centers_error(self) -> None:
+        """停止后 jitter 必须使用参考时刻公共窗，并排除固定位置偏差。"""
+
+        times = np.arange(0.0, 5001.0, 50.0)
+        errors_m = np.tile([0.100, 0.0, 0.0], (len(times), 1))
+        window = (times >= 1500.0) & (times <= 4500.0)
+        errors_m[window, 0] += np.where(np.arange(np.count_nonzero(window)) % 2 == 0, -0.001, 0.001)
+
+        jitter = post_stop_position_jitter_rms_mm(
+            times,
+            errors_m,
+            np.ones(len(times), dtype=np.bool_),
+            reference_stop_ms=500.0,
+            params=load_analysis_parameters(),
+        )
+
+        self.assertAlmostEqual(jitter, 1.0, places=6)
+
+    def test_post_stop_jitter_is_missing_when_fixed_window_is_truncated(self) -> None:
+        """event 在公共窗结束前终止时不得改用更短窗口凑出 jitter。"""
+
+        times = np.arange(0.0, 3000.0, 50.0)
+        result = post_stop_position_jitter_rms_mm(
+            times,
+            np.zeros((len(times), 3)),
+            np.ones(len(times), dtype=np.bool_),
+            reference_stop_ms=500.0,
+            params=load_analysis_parameters(),
+        )
+
+        self.assertIsNone(result)
+
+    def test_motion_hold_ratio_counts_only_continuous_valid_pose_pairs(self) -> None:
+        """hold ratio 必须在 event 内按合法连续 pair 汇总，而不是把 frame 当样本。"""
+
+        times = np.arange(0.0, 60.0, 10.0)
+        positions_m = np.asarray(
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.001, 0.0, 0.0],
+             [0.001, 0.0, 0.0], [0.002, 0.0, 0.0], [0.002, 0.0, 0.0]],
+        )
+        rotations = np.tile([0.0, 0.0, 0.0, 1.0], (len(times), 1))
+
+        ratio = motion_hold_ratio(
+            times,
+            positions_m,
+            rotations,
+            np.ones(len(times), dtype=np.bool_),
+            load_analysis_parameters(),
+        )
+
+        self.assertAlmostEqual(ratio, 3.0 / 5.0)
+
 
 class LagAndLatencyTests(unittest.TestCase):
     """验证轨迹 lag 和严格单调时钟约束。"""
@@ -463,6 +522,8 @@ class LagAndLatencyTests(unittest.TestCase):
         self.assertEqual(angular.lag_ms, 100.0)
         self.assertLess(translation.residual, 1e-9)
         self.assertLess(angular.residual, 1e-7)
+        self.assertLess(translation.pninetyfive_residual, 1e-9)
+        self.assertLess(angular.pninetyfive_residual, 1e-7)
 
     def test_translation_lag_does_not_interpolate_across_large_gap(self) -> None:
         """lag 搜索不得利用大间隙两侧样本做跨断点线性插值。"""

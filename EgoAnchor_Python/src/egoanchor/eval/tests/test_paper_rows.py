@@ -27,6 +27,7 @@ def _summary(
         median=value,
         q1=value - 1.0,
         q3=value + 1.0,
+        sample_count=4,
         input_workbook_sha256="a" * 64,
     )
 
@@ -50,10 +51,12 @@ class PaperRowsTests(unittest.TestCase):
             "continuous_translation": (
                 ("effective_translation_lag_ms", "ms"),
                 ("translation_event_pninetyfive_mm_continuous", "mm"),
+                ("translation_lag_pninetyfive_residual_mm", "mm"),
             ),
             "continuous_rotation": (
                 ("effective_angular_lag_ms", "ms"),
                 ("rotation_event_pninetyfive_deg_continuous", "deg"),
+                ("angular_lag_pninetyfive_residual_deg", "deg"),
             ),
             "occlusion_recovery": (
                 ("occlusion_translation_pninetyfive_mm", "mm"),
@@ -164,10 +167,17 @@ class PaperRowsTests(unittest.TestCase):
         )
         exp1_cells = [row for row in result.tables if row["experiment"] == "exp1_system_characterization"]
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
-        self.assertEqual(len(exp1_cells), 40)
+        self.assertEqual(len(exp1_cells), 36)
         self.assertEqual(len(exp2_cells), 28)
         self.assertIn("护栏差值 [IQR]", {row["column_key"] for row in exp2_cells})
-        self.assertIn("静止头动", {row["row_key"].split(" / ")[0] for row in exp1_cells})
+        self.assertEqual(
+            {row["row_key"] for row in exp1_cells},
+            {"世界一致性", "静止稳定性", "起停转换", "平移保真度", "旋转保真度", "失效约束"},
+        )
+        self.assertEqual(
+            {row["column_key"] for row in exp1_cells},
+            {"场景", "指标", *variants},
+        )
         ablation_values = {
             row["display_value"]
             for row in exp2_cells
@@ -180,14 +190,24 @@ class PaperRowsTests(unittest.TestCase):
         formatted_cell = next(
             row
             for row in exp1_cells
-            if row["row_key"].endswith("平移误差 event-P95")
+            if row["row_key"] == "世界一致性"
             and row["column_key"] == "EgoAnchor"
         )
         self.assertEqual(formatted_cell["display_value"], "13.123 [12.123, 14.123] mm")
         with self.assertRaisesRegex(ValueError, "主指标缺失"):
             build_paper_rows(
                 trials,
-                SimpleNamespace(scenario_summary=exp1.scenario_summary[:-1]),
+                SimpleNamespace(
+                    scenario_summary=tuple(
+                        row
+                        for row in exp1.scenario_summary
+                        if not (
+                            row.scenario_id == "occlusion_recovery"
+                            and row.variant_id == "EgoAnchor"
+                            and row.metric_key == "occlusion_translation_pninetyfive_mm"
+                        )
+                    )
+                ),
                 exp2,
             )
         with self.assertRaisesRegex(ValueError, "VCD/random"):

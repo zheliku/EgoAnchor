@@ -224,12 +224,12 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始 `data/eval/<session_id>` 目录名、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；历史入口和对应 Pixi 别名均不保留。
-- `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从 XLSX 发布完整 CSV；`publish` 只从 CSV 发布固定 TeX 到 `2026-EgoAnchor/generated/` 和固定 PDF 到 `2026-EgoAnchor/figures/generated/`；`materialize-paper` 将 TeX 中间产物写入主稿的受控区块。默认论文根目录从模块位置解析，测试和外部调用可用 `--paper-root` 覆盖。
+- `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从 Stage 1 XLSX 发布完整 CSV，并可在同一 Stage 2 目录生成只重排该批 CSV 的人工审阅 XLSX；`publish` 的正式输入仍只有 CSV，并发布固定 TeX 到 `2026-EgoAnchor/generated/`、固定 PDF 到 `2026-EgoAnchor/figures/generated/`；`materialize-paper` 将 TeX 中间产物写入主稿的受控区块。默认论文根目录从模块位置解析，测试和外部调用可用 `--paper-root` 覆盖。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
-- 中文主稿中的实验宏和表格由 `materialize-paper` 写入稳定自动生成区块，不再通过 `\IfFileExists` 或 `\input` 依赖 `generated/exp{1,2}_*.tex`；图仍从 `figures/generated/` 加载固定 PDF。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿中的实验宏和表格由 `materialize-paper` 写入稳定自动生成区块，不再通过 `\IfFileExists` 或 `\input` 依赖 `generated/exp{1,2}_*.tex`；图只从 `figures/generated/` 加载固定 PDF，不再使用 `figs/`。正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
 
@@ -293,7 +293,9 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制五张 PDF/PNG，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制一张实验一四面板系统行为图和两张实验二图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 2 当前发布 `exp1_analysis.xlsx` 作为实验一人工审阅入口；该工作簿只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
+- 实验一属性表固定报告世界一致性、静止稳定性、起停转换、平移保真度、旋转保真度和失效约束。lag 补偿 P95 使用 RMSE 选定时延后的同一重叠窗；停止后抖动使用 1 s guard 加固定 3 s 窗；重新可见误差使用固定 1 s 窗。结果必须同时陈述动态响应、旋转保真度和遮挡 output coverage 的代价，不得只挑有利指标。
 - Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
 - Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。
 - Stage 2 先按规范绝对路径稳定排序 workbook；`lineage.csv` 记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用可筛选的 session/trial/event/variant/candidate/metric 复合键，禁止把输出表名冒充来源。

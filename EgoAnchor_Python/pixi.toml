@@ -87,7 +87,7 @@ scikit-learn = ">=1.8.0, <2" # 使用 PyPI wheel，避免 conda OpenMP runtime �
 # Windows 下 torch/torchvision 使用 PyTorch 官方 PyPI cu130 wheel。Pillow 走 conda
 # py314 构建，sitecustomize.py 会在 torchvision 之前预加载 PIL.Image 以规避 DLL 顺序问题。
 matplotlib = ">=3.11, <4"
-openpyxl = ">=3.1.5, <4" # 评估分析导出多 sheet Excel（逐帧+汇总）的引擎，供 pandas.to_excel 使用。
+openpyxl = ">=3.1.5, <4" # 评估分析直接构建确定性多 sheet XLSX 的引擎；工作簿只供人工审阅，不作为 Stage 3 输入。
 imageio = ">=2.37.0, <3"
 scikit-image = "*"
 # 项目和 ultralytics 都需要 cv2.imshow 等 GUI API；当前 opencv-python 5.0.0.93

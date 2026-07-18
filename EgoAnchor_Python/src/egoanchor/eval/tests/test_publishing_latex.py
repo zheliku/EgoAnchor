@@ -142,7 +142,7 @@ class LatexPublishingTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_cli_publish_creates_figures_and_tex(self) -> None:
-        """统一 publish 命令必须同时发布五张图和四个 TeX。"""
+        """统一 publish 命令必须同时发布三张当前图和四个 TeX。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_root = Path(tmp) / "csv"
@@ -163,7 +163,7 @@ class LatexPublishingTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, eval_cli.EXIT_OK)
-            self.assertEqual(len(list(figure_output.glob("*.pdf"))), 5)
+            self.assertEqual(len(list(figure_output.glob("*.pdf"))), 3)
             self.assertEqual(len(list(tex_output.glob("*.tex"))), 4)
 
     def test_joint_publish_failure_preserves_both_old_directories(self) -> None:

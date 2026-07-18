@@ -288,6 +288,8 @@ def _render_series(
                 variant_id=variant_id,
                 render_tick_ids=np.asarray([_int(row, "render_tick_id", required=True) for row in group], dtype=np.int64),
                 times_ms=np.asarray([_float(row, "render_mono_ms", required=True) for row in group]),
+                head_positions_m=_array(group, ("head_pos_x_m", "head_pos_y_m", "head_pos_z_m")),
+                head_rotations=_array(group, ("head_rot_x", "head_rot_y", "head_rot_z", "head_rot_w")),
                 reference_pose_valid=np.asarray([_bool(row, "reference_pose_valid") for row in group], dtype=np.bool_),
                 reference_positions_m=_array(group, ("reference_pos_x_m", "reference_pos_y_m", "reference_pos_z_m")),
                 reference_rotations=_array(group, ("reference_rot_x", "reference_rot_y", "reference_rot_z", "reference_rot_w")),

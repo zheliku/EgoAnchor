@@ -20,7 +20,7 @@ from .analysis import (
     input_workbook_set_sha256,
     load_analysis_parameters,
     load_workbook_batch,
-    write_csv_tables,
+    publish_analysis_outputs,
 )
 from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
 from .publishing import materialize_paper, publish_artifacts
@@ -93,7 +93,12 @@ def build_parser() -> argparse.ArgumentParser:
                     type=Path,
                     help="一个或多个 Stage 1 完整 XLSX",
                 )
-                child.add_argument("--out", required=True, type=Path, help="CSV 结果目录")
+                child.add_argument(
+                    "--out",
+                    required=True,
+                    type=Path,
+                    help="CSV 与审阅 XLSX 的联合结果目录；下游阶段只读取 CSV",
+                )
                 child.add_argument("--params", type=Path, help="覆盖默认分析 TOML")
                 child.add_argument("--code-version", default="unknown", help="审计版本标识")
                 child.set_defaults(handler=_run_analyze)
@@ -235,10 +240,27 @@ def _base_result_row(row: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _run_analyze(args: argparse.Namespace) -> int:
-    """只从 Stage 1 XLSX 计算实验一/二并原子发布 CSV。"""
+def _validate_analyze_output(workbooks: tuple[Path, ...], output_root: Path) -> None:
+    """拒绝会覆盖或包含 Stage 1 输入 XLSX 的 Stage 2 输出目录。
 
-    batch = load_workbook_batch(args.workbooks)
+    参数：
+        workbooks: analyze 命令声明的 Stage 1 工作簿路径。
+        output_root: Stage 2 CSV 与分析 XLSX 的联合发布目录。
+    """
+
+    destination = output_root.expanduser().resolve()
+    for workbook in workbooks:
+        source = workbook.expanduser().resolve()
+        if source == destination or source.is_relative_to(destination) or destination.is_relative_to(source):
+            raise ValueError(f"Stage 2 输出目录不得包含输入 XLSX：{source}")
+
+
+def _run_analyze(args: argparse.Namespace) -> int:
+    """只从 Stage 1 XLSX 计算并原子发布 CSV 与审阅 XLSX。"""
+
+    workbooks = tuple(args.workbooks)
+    _validate_analyze_output(workbooks, args.out)
+    batch = load_workbook_batch(workbooks)
     params = load_analysis_parameters(args.params)
     exp1 = analyze_exp1(batch.trials, params)
     exp2 = analyze_exp2(batch.trials, batch.variant_definitions, batch.vcd_candidates, params)
@@ -287,10 +309,11 @@ def _run_analyze(args: argparse.Namespace) -> int:
             {"check_id": "completed_trial_count", "status": "passed", "observed": len(batch.trials), "expected": len(batch.trials), "details": "final trial 投影完成"},
         ],
     }
-    exp1_plots = build_exp1_plot_rows(exp1.event_metrics)
-    tables["exp1_static_timeline"] = list(exp1_plots.static_timeline)
-    tables["exp1_motion_events"] = list(exp1_plots.motion_events)
-    tables["exp1_occlusion_events"] = list(exp1_plots.occlusion_events)
+    exp1_plots = build_exp1_plot_rows(exp1, batch.trials, params)
+    tables["exp1_head_motion_trace"] = list(exp1_plots.head_motion_trace)
+    tables["exp1_start_stop_trace"] = list(exp1_plots.start_stop_trace)
+    tables["exp1_lag_tradeoff"] = list(exp1_plots.lag_tradeoff)
+    tables["exp1_occlusion_trace"] = list(exp1_plots.occlusion_trace)
     tables["exp2_component_deltas"] = [
         {**asdict(row), "plot_id": "exp2_component_deltas", "panel_id": row.component_id}
         for row in exp2.components.paired_deltas
@@ -314,9 +337,10 @@ def _run_analyze(args: argparse.Namespace) -> int:
         }
         for order, (plot_id, panel_id, source_csv, x_axis, y_axis, hue, unit, expected_rows) in enumerate(
             (
-                ("exp1_static_timeline", "static_head_motion", "plots/exp1_static_timeline.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_static_timeline"])),
-                ("exp1_motion_events", "motion", "plots/exp1_motion_events.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_motion_events"])),
-                ("exp1_occlusion_events", "occlusion_recovery", "plots/exp1_occlusion_events.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_occlusion_events"])),
+                ("exp1_head_motion_trace", "head_motion", "plots/exp1_head_motion_trace.csv", "time_ms", "translation_error_mm", "variant_id", "mm", len(tables["exp1_head_motion_trace"])),
+                ("exp1_start_stop_trace", "start_stop", "plots/exp1_start_stop_trace.csv", "time_ms", "display_displacement_mm", "variant_id", "mm", len(tables["exp1_start_stop_trace"])),
+                ("exp1_lag_tradeoff", "lag_tradeoff", "plots/exp1_lag_tradeoff.csv", "effective_lag_ms", "p95_residual_mm", "variant_id", "mm", len(tables["exp1_lag_tradeoff"])),
+                ("exp1_occlusion_trace", "occlusion", "plots/exp1_occlusion_trace.csv", "time_ms", "translation_error_mm", "variant_id", "mm", len(tables["exp1_occlusion_trace"])),
                 ("exp2_component_deltas", "components", "plots/exp2_component_deltas.csv", "event_id", "delta", "component_id", "mixed", len(tables["exp2_component_deltas"])),
                 ("exp2_vcd_curve", "risk_coverage", "plots/exp2_vcd_curve.csv", "coverage", "risk_mm", "reference_kind", "mm", len(tables["exp2_vcd_curve"])),
             ),
@@ -325,7 +349,7 @@ def _run_analyze(args: argparse.Namespace) -> int:
     paper_rows = build_paper_rows(batch.trials, exp1, exp2)
     tables["numbers"] = list(paper_rows.numbers)
     tables["tables"] = list(paper_rows.tables)
-    published = write_csv_tables(
+    published = publish_analysis_outputs(
         args.out,
         tables,
         input_workbooks=batch.inputs,
@@ -338,7 +362,8 @@ def _run_analyze(args: argparse.Namespace) -> int:
                 "passed": True,
                 "output_root": str(published.output_root),
                 "input_workbooks": [str(item.path) for item in batch.inputs],
-                "table_count": len(published.table_sha256),
+                "table_count": len(published.csv_sha256),
+                "analysis_workbooks": dict(published.workbook_sha256),
                 "trial_count": len(batch.trials),
                 "input_sha256": [item.sha256 for item in batch.inputs],
             },

@@ -19,7 +19,7 @@ from .contracts import (
 )
 from .analysis import (
     AnalysisParameters,
-    CsvPublishResult,
+    AnalysisPublishResult,
     ClockDomain,
     DEFAULT_ANALYSIS_PARAMS_PATH,
     EXP1_ID,
@@ -81,6 +81,7 @@ from .analysis import (
     event_quantiles,
     load_analysis_parameters,
     median_iqr,
+    motion_hold_ratio,
     normalize_quaternion,
     pair_occlusion_windows,
     pair_component_metrics,
@@ -88,6 +89,7 @@ from .analysis import (
     pose_jump_quantiles,
     position_drift_mm,
     position_hp_rms_mm,
+    post_stop_position_jitter_rms_mm,
     python_processing_ms,
     rotation_error_deg,
     settling_time_ms,
@@ -100,7 +102,7 @@ from .analysis import (
     validate_exp2_variant_definitions,
     visible_response_ms,
     workbook_sha256,
-    write_csv_tables,
+    publish_analysis_outputs,
 )
 from .schema_v2 import (
     EventRow,
@@ -165,7 +167,7 @@ from .publishing import (
 
 __all__ = [
     "AnalysisParameters",
-    "CsvPublishResult",
+    "AnalysisPublishResult",
     "ClockDomain",
     "EMPTY_TEXT_MARKER",
     "CONTRACT_CHANGELOG",
@@ -276,6 +278,7 @@ __all__ = [
     "iter_jsonl",
     "load_analysis_parameters",
     "median_iqr",
+    "motion_hold_ratio",
     "metric_catalog",
     "normalize_quaternion",
     "pair_occlusion_windows",
@@ -284,6 +287,7 @@ __all__ = [
     "pose_jump_quantiles",
     "position_drift_mm",
     "position_hp_rms_mm",
+    "post_stop_position_jitter_rms_mm",
     "python_processing_ms",
     "read_json_document",
     "read_task",
@@ -311,5 +315,5 @@ __all__ = [
     "materialize_paper",
     "visible_response_ms",
     "workbook_sha256",
-    "write_csv_tables",
+    "publish_analysis_outputs",
 ]

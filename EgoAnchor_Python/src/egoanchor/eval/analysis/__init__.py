@@ -38,7 +38,7 @@ from .latency import (
     python_processing_ms,
 )
 from .lineage import input_workbook_set_sha256
-from .csv_output import CsvPublishResult, read_csv_table, write_csv_tables
+from .csv_output import AnalysisPublishResult, publish_analysis_outputs, read_csv_table
 from .loader import LoadedBatch, WorkbookInput, load_workbook, load_workbook_batch, workbook_sha256
 from .metrics import (
     JumpQuantiles,
@@ -49,9 +49,11 @@ from .metrics import (
     estimate_translation_lag,
     event_quantiles,
     median_iqr,
+    motion_hold_ratio,
     pose_jump_quantiles,
     position_drift_mm,
     position_hp_rms_mm,
+    post_stop_position_jitter_rms_mm,
     settling_time_ms,
     visible_response_ms,
 )
@@ -90,7 +92,7 @@ from .vcd import (
 
 __all__ = [
     "AnalysisParameters",
-    "CsvPublishResult",
+    "AnalysisPublishResult",
     "ClockDomain",
     "DEFAULT_ANALYSIS_PARAMS_PATH",
     "EventMarker",
@@ -152,6 +154,7 @@ __all__ = [
     "event_quantiles",
     "load_analysis_parameters",
     "median_iqr",
+    "motion_hold_ratio",
     "normalize_quaternion",
     "pair_occlusion_windows",
     "parse_event_markers",
@@ -159,6 +162,7 @@ __all__ = [
     "pose_jump_quantiles",
     "position_drift_mm",
     "position_hp_rms_mm",
+    "post_stop_position_jitter_rms_mm",
     "python_processing_ms",
     "rotation_error_deg",
     "settling_time_ms",
@@ -168,7 +172,7 @@ __all__ = [
     "read_csv_table",
     "translation_error_mm",
     "workbook_sha256",
-    "write_csv_tables",
+    "publish_analysis_outputs",
     "summarize_paired_deltas",
     "validate_exp2_variant_definitions",
     "visible_response_ms",

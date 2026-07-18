@@ -919,6 +919,65 @@ _SENSITIVITY_COLUMNS = (
 )
 """同一敏感性参数可保存多个替代 cohort 的稳定长表列。"""
 
+_EXP1_PLOT_CONTEXT_COLUMNS = (
+    _column("plot_id"),
+    _column("panel_id"),
+    _column("session_id"),
+    _column("scenario_id"),
+    _column("trial_id"),
+    _column("event_id"),
+    _column("variant_id"),
+)
+"""实验一四面板 plot-ready 表共享的稳定上下文列。"""
+
+_EXP1_HEAD_TRACE_COLUMNS = _EXP1_PLOT_CONTEXT_COLUMNS + (
+    _column("sample_index", "int"),
+    _column("time_ms", "float", unit="ms"),
+    _column("head_angular_speed_deg_s", "float", unit="deg/s"),
+    _column("translation_error_mm", "float", unit="mm"),
+    _column("selection_rule"),
+    _column("input_workbook_sha256"),
+)
+"""静止头动代表事件的头动速度和显示误差时间线。"""
+
+_EXP1_START_STOP_TRACE_COLUMNS = _EXP1_PLOT_CONTEXT_COLUMNS + (
+    _column("sample_index", "int"),
+    _column("time_ms", "float", unit="ms"),
+    _column("reference_displacement_mm", "float", unit="mm"),
+    _column("display_displacement_mm", "float", unit="mm"),
+    _column("translation_error_mm", "float", unit="mm"),
+    _column("phase"),
+    _column("has_output_pose", "bool"),
+    _column("latest_static_locked", "bool"),
+    _column("selection_rule"),
+    _column("input_workbook_sha256"),
+)
+"""起停代表事件的参考、显示、误差和状态时间线。"""
+
+_EXP1_LAG_TRADEOFF_COLUMNS = _EXP1_PLOT_CONTEXT_COLUMNS + (
+    _column("point_kind"),
+    _column("effective_lag_ms", "float", unit="ms"),
+    _column("p95_residual_mm", "float", unit="mm"),
+    _column("lag_q1_ms", "float", unit="ms"),
+    _column("lag_q3_ms", "float", unit="ms"),
+    _column("residual_q1_mm", "float", unit="mm"),
+    _column("residual_q3_mm", "float", unit="mm"),
+    _column("input_workbook_sha256"),
+)
+"""持续平移 event 点和系统 median/IQR 的 lag--fidelity 表。"""
+
+_EXP1_OCCLUSION_TRACE_COLUMNS = _EXP1_PLOT_CONTEXT_COLUMNS + (
+    _column("sample_index", "int"),
+    _column("time_ms", "float", unit="ms"),
+    _column("translation_error_mm", "float", unit="mm"),
+    _column("occluded", "bool"),
+    _column("has_output_pose", "bool"),
+    _column("has_display_pose", "bool"),
+    _column("selection_rule"),
+    _column("input_workbook_sha256"),
+)
+"""遮挡代表事件的显示误差与 output/display 状态时间线。"""
+
 
 CSV_TABLE_CONTRACTS = (
     CsvTableContract("analysis_run", "analysis invocation", ("analysis_run_id",), (_column("analysis_run_id"), _column("created_at_utc", "datetime"), _column("code_version"), _column("parameter_set_id"), _column("status"), _column("input_count", "int"), _column("output_root"))),
@@ -946,9 +1005,10 @@ CSV_TABLE_CONTRACTS = (
     CsvTableContract("vcd_curve", "coverage threshold point", ("scenario_id", "reference_kind", "risk_kind", "point_index"), _VCD_CURVE_COLUMNS),
     CsvTableContract("vcd_aurc", "scenario mean-risk AURC summary", ("scenario_id", "reference_kind", "risk_kind"), _VCD_AURC_COLUMNS),
     CsvTableContract("plot_catalog", "plot panel", ("plot_id", "panel_id"), (_column("plot_id"), _column("panel_id"), _column("source_csv"), _column("x"), _column("y"), _column("hue"), _column("filter_rule_id"), _column("order", "int"), _column("unit"), _column("target_width"), _column("expected_rows", "int"), _column("data_sha256"))),
-    CsvTableContract("exp1_static_timeline", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
-    CsvTableContract("exp1_motion_events", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
-    CsvTableContract("exp1_occlusion_events", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
+    CsvTableContract("exp1_head_motion_trace", "representative render trace", ("plot_id", "panel_id", "session_id", "trial_id", "event_id", "variant_id", "sample_index"), _EXP1_HEAD_TRACE_COLUMNS),
+    CsvTableContract("exp1_start_stop_trace", "representative render trace", ("plot_id", "panel_id", "session_id", "trial_id", "event_id", "variant_id", "sample_index"), _EXP1_START_STOP_TRACE_COLUMNS),
+    CsvTableContract("exp1_lag_tradeoff", "event plus summary plot point", ("plot_id", "panel_id", "point_kind", "session_id", "trial_id", "event_id", "variant_id"), _EXP1_LAG_TRADEOFF_COLUMNS),
+    CsvTableContract("exp1_occlusion_trace", "representative render trace", ("plot_id", "panel_id", "session_id", "trial_id", "event_id", "variant_id", "sample_index"), _EXP1_OCCLUSION_TRACE_COLUMNS),
     CsvTableContract("exp2_component_deltas", "plot row", ("plot_id", "panel_id", "session_id", "scenario_id", "trial_id", "event_id", "component_id", "metric_key"), _PAIRED_DELTA_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("exp2_vcd_curve", "plot row", ("plot_id", "panel_id", "reference_kind", "risk_kind", "point_index"), _VCD_CURVE_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("numbers", "paper number", ("experiment", "macro_name"), (_column("experiment"), _column("macro_name"), _column("value"), _column("source_csv"), _column("source_sha256"))),

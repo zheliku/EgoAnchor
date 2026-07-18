@@ -21,6 +21,9 @@ _PARAMETER_KEYS = {
     "reference_motion": {"linear_speed_m_s", "angular_speed_deg_s", "speed_median_frames", "minimum_duration_ms", "minimum_translation_excursion_mm", "minimum_rotation_excursion_deg"},
     "visible_response": {"baseline_ms", "position_threshold_mm", "rotation_threshold_deg", "duration_ms"},
     "lag": {"minimum_ms", "maximum_ms", "step_ms", "interpolation", "objective", "tie_break", "minimum_overlap_samples", "minimum_overlap_fraction"},
+    "post_stop": {"guard_ms", "window_ms"},
+    "hold": {"position_tolerance_mm", "rotation_tolerance_deg"},
+    "reappearance": {"window_ms"},
     "thresholds": {"pose_quaternion_norm_tolerance", "vcd_score_minimum", "vcd_score_maximum", "recovery_position_tolerance_mm", "recovery_duration_ms", "settling_position_tolerance_mm", "settling_duration_ms"},
     "recovery": {"start_role", "requires_fresh_output", "freshness_field", "freshness_clock"},
     "latency": {"candidate_arrival_clock", "python_processing_clock", "cross_clock_policy", "negative_duration_policy"},
@@ -213,6 +216,21 @@ class AnalysisParameters:
     settling_duration_ms: float
     """settling 持续时间。"""
 
+    post_stop_guard_ms: float
+    """参考停止后排除瞬态的固定等待时间。"""
+
+    post_stop_window_ms: float
+    """停止后位置 jitter 的固定公共窗口长度。"""
+
+    hold_position_tolerance_mm: float
+    """近零保持判定的位置增量容差。"""
+
+    hold_rotation_tolerance_deg: float
+    """近零保持判定的旋转增量容差。"""
+
+    reappearance_window_ms: float
+    """重新可见误差的固定公共窗口长度。"""
+
     recovery_start_role: str
     """恢复计时起点的事件角色。"""
 
@@ -342,8 +360,8 @@ def _validate_contract(params: AnalysisParameters) -> None:
         params: 已完成字段映射的冻结参数。
     """
 
-    if params.contract_version != 3:
-        raise ValueError("Task 8 只接受 analysis_params v3")
+    if params.contract_version != 4:
+        raise ValueError("增强分析只接受 analysis_params v4")
     if params.unit_system != "metric" or params.statistics_unit != "event_segment":
         raise ValueError("单位系统或统计单位不符合冻结契约")
     if params.quantile_method != "linear" or params.event_summary != "median_iqr":
@@ -420,6 +438,11 @@ def _validate_ranges(params: AnalysisParameters) -> None:
         ("recovery_duration_ms", params.recovery_duration_ms, False),
         ("settling_position_mm", params.settling_position_mm, False),
         ("settling_duration_ms", params.settling_duration_ms, False),
+        ("post_stop_guard_ms", params.post_stop_guard_ms, True),
+        ("post_stop_window_ms", params.post_stop_window_ms, False),
+        ("hold_position_tolerance_mm", params.hold_position_tolerance_mm, False),
+        ("hold_rotation_tolerance_deg", params.hold_rotation_tolerance_deg, False),
+        ("reappearance_window_ms", params.reappearance_window_ms, False),
         ("vcd_tail_quantile", params.vcd_tail_quantile, False),
     ):
         _require_positive(value, name, allow_zero=allow_zero)
@@ -497,6 +520,9 @@ def load_analysis_parameters(path: Path | None = None) -> AnalysisParameters:
     motion = _section(config, "reference_motion")
     response = _section(config, "visible_response")
     lag = _section(config, "lag")
+    post_stop = _section(config, "post_stop")
+    hold = _section(config, "hold")
+    reappearance = _section(config, "reappearance")
     thresholds = _section(config, "thresholds")
     recovery = _section(config, "recovery")
     latency = _section(config, "latency")
@@ -544,6 +570,11 @@ def load_analysis_parameters(path: Path | None = None) -> AnalysisParameters:
         recovery_duration_ms=float(thresholds["recovery_duration_ms"]),
         settling_position_mm=float(thresholds["settling_position_tolerance_mm"]),
         settling_duration_ms=float(thresholds["settling_duration_ms"]),
+        post_stop_guard_ms=float(post_stop["guard_ms"]),
+        post_stop_window_ms=float(post_stop["window_ms"]),
+        hold_position_tolerance_mm=float(hold["position_tolerance_mm"]),
+        hold_rotation_tolerance_deg=float(hold["rotation_tolerance_deg"]),
+        reappearance_window_ms=float(reappearance["window_ms"]),
         recovery_start_role=str(recovery["start_role"]),
         recovery_requires_fresh_output=bool(recovery["requires_fresh_output"]),
         recovery_freshness_field=str(recovery["freshness_field"]),

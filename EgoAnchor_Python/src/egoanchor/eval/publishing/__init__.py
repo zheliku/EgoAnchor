@@ -17,9 +17,10 @@ from .style import PlotSpec, configure_matplotlib, csv_sha256, read_plot_catalog
 
 _REQUIRED_PLOTS = frozenset(
     {
-        "exp1_static_timeline",
-        "exp1_motion_events",
-        "exp1_occlusion_events",
+        "exp1_head_motion_trace",
+        "exp1_start_stop_trace",
+        "exp1_lag_tradeoff",
+        "exp1_occlusion_trace",
         "exp2_component_deltas",
         "exp2_vcd_curve",
     }
@@ -49,7 +50,7 @@ class ArtifactPublishResult:
     """保存 Stage 3 联合发布的图表与 TeX 结果。"""
 
     figures: FigurePublishResult
-    """五张图和图输入 lineage。"""
+    """当前正式图和图输入 lineage。"""
 
     latex: LatexPublishResult
     """四个 TeX 和 paper CSV lineage。"""
@@ -60,7 +61,7 @@ class _FigureBuild:
     """保存 staging 目录内完成回读的图表结果。"""
 
     figure_hashes: Mapping[str, Mapping[str, str]]
-    """五张 staging 图的 PDF/PNG SHA-256。"""
+    """staging 图的 PDF/PNG SHA-256。"""
 
     input_csv_sha256: Mapping[str, str]
     """plot catalog 和五个 plot CSV 的 SHA-256。"""
@@ -71,7 +72,7 @@ def _input_hashes(csv_root: Path, specs: tuple[PlotSpec, ...]) -> dict[str, str]
 
     参数：
         csv_root: Stage 2 CSV 根目录。
-        specs: 已验证的五个 plot catalog 规格。
+        specs: 已验证的 plot catalog 规格。
     """
 
     root = csv_root.expanduser().resolve()
@@ -107,7 +108,7 @@ def _write_manifest(
 
 
 def _build_figures(csv_root: Path, output_root: Path) -> _FigureBuild:
-    """在 staging 目录生成五张图和 manifest。
+    """在 staging 目录生成正式图和 manifest。
 
     参数：
         csv_root: Stage 2 CSV 根目录。
@@ -144,8 +145,8 @@ def _build_figures(csv_root: Path, output_root: Path) -> _FigureBuild:
         figure_hashes=hashes,
     )
     expected = {
-        *(f"{name}.pdf" for name in _REQUIRED_PLOTS),
-        *(f"{name}.png" for name in _REQUIRED_PLOTS),
+        *(f"{name}.pdf" for name in hashes),
+        *(f"{name}.png" for name in hashes),
         "figure_manifest.json",
     }
     actual = {path.name for path in destination.iterdir() if path.is_file()}
@@ -155,7 +156,7 @@ def _build_figures(csv_root: Path, output_root: Path) -> _FigureBuild:
 
 
 def publish_figures(csv_root: Path, output_root: Path) -> FigurePublishResult:
-    """只读取 Stage 2 CSV，原子发布五张 PDF/PNG 和审计 manifest。
+    """只读取 Stage 2 CSV，原子发布正式 PDF/PNG 和审计 manifest。
 
     参数：
         csv_root: Stage 2 CSV 根目录。

@@ -17,9 +17,11 @@ from .metrics import (
     estimate_translation_lag,
     event_quantiles,
     median_iqr,
+    motion_hold_ratio,
     pose_jump_quantiles,
     position_drift_mm,
     position_hp_rms_mm,
+    post_stop_position_jitter_rms_mm,
     settling_time_ms,
     visible_response_ms,
 )
@@ -95,6 +97,12 @@ class Exp1RenderSeries:
     times_ms: FloatArray
     """Unity render 单调时间，单位毫秒。"""
 
+    head_positions_m: FloatArray
+    """头显世界位置，形状为 ``(N,3)``，单位米。"""
+
+    head_rotations: FloatArray
+    """头显世界 xyzw 四元数，形状为 ``(N,4)``。"""
+
     reference_pose_valid: BoolArray
     """同 tick 平台参考 pose 是否有效。"""
 
@@ -150,6 +158,8 @@ class Exp1RenderSeries:
 
         count = len(times)
         vector_fields = {
+            "head_positions_m": (self.head_positions_m, 3),
+            "head_rotations": (self.head_rotations, 4),
             "reference_positions_m": (self.reference_positions_m, 3),
             "reference_rotations": (self.reference_rotations, 4),
             "display_positions_m": (self.display_positions_m, 3),
@@ -706,6 +716,7 @@ def _start_stop_rows(
     indices = _window_indices(series, window.start_ms, window.end_ms)
     motion_indices, onset_ms, stop_ms = _motion_indices(series, indices, params)
     translation, rotation, valid = _pose_errors(series, params)
+    errors_m = series.display_positions_m - series.reference_positions_m
     values: dict[str, float | None] = {
         "visible_response_ms": visible_response_ms(
             series.times_ms[indices],
@@ -721,6 +732,20 @@ def _start_stop_rows(
             valid[indices],
             reference_stop_ms=stop_ms,
             params=params,
+        ),
+        "post_stop_position_jitter_rms_mm": post_stop_position_jitter_rms_mm(
+            series.times_ms[indices],
+            errors_m[indices],
+            valid[indices],
+            reference_stop_ms=stop_ms,
+            params=params,
+        ),
+        "motion_hold_ratio": motion_hold_ratio(
+            series.times_ms[motion_indices],
+            series.display_positions_m[motion_indices],
+            series.display_rotations[motion_indices],
+            series.has_display_pose[motion_indices],
+            params,
         ),
         "motion_translation_pninetyfive_mm": _quantile(translation[motion_indices], params),
         "start_stop_rotation_pninetyfive_deg": _quantile(rotation[motion_indices], params),
@@ -774,6 +799,7 @@ def _translation_rows(
         "translation_event_pninetyfive_mm_continuous": _quantile(translation[indices], params),
         "effective_translation_lag_ms": lag.lag_ms,
         "translation_lag_residual_mm": lag.residual,
+        "translation_lag_pninetyfive_residual_mm": lag.pninetyfive_residual,
     }
     rows = [_metric_row(trial, series.variant_id, window.marker.event_id, key, value) for key, value in values.items()]
     rows.extend(_common_event_rows(trial, series, window.marker.event_id, indices, params))
@@ -808,6 +834,7 @@ def _rotation_rows(
         "rotation_event_pninetyfive_deg_continuous": _quantile(rotation[indices], params),
         "effective_angular_lag_ms": lag.lag_ms,
         "angular_lag_residual_deg": lag.residual,
+        "angular_lag_pninetyfive_residual_deg": lag.pninetyfive_residual,
     }
     rows = [_metric_row(trial, series.variant_id, window.marker.event_id, key, value) for key, value in values.items()]
     rows.extend(_common_event_rows(trial, series, window.marker.event_id, indices, params))
@@ -879,6 +906,14 @@ def _occlusion_rows(
     full_indices = _window_indices(series, window.occlusion_start_ms, window.end_ms)
     hidden_indices = _window_indices(series, window.occlusion_start_ms, window.visible_start_ms)
     recovery_indices = _window_indices(series, window.visible_start_ms, window.end_ms)
+    reappearance_end_ms = window.visible_start_ms + params.reappearance_window_ms
+    reappearance_indices = None
+    if window.end_ms >= reappearance_end_ms:
+        reappearance_indices = _window_indices(
+            series,
+            window.visible_start_ms,
+            reappearance_end_ms,
+        )
     translation, rotation, valid = _pose_errors(series, params)
     recovery_time = durable_recovery_time_ms(
         series.times_ms[recovery_indices],
@@ -893,6 +928,12 @@ def _occlusion_rows(
     values: dict[str, float | None] = {
         "occlusion_translation_pninetyfive_mm": _quantile(translation[hidden_indices], params),
         "occlusion_rotation_pninetyfive_deg": _quantile(rotation[hidden_indices], params),
+        "occlusion_output_coverage": float(np.mean(series.has_output_pose[hidden_indices])),
+        "reappearance_translation_pninetyfive_mm": (
+            None
+            if reappearance_indices is None
+            else _quantile(translation[reappearance_indices], params)
+        ),
         "durable_recovery_time_ms": recovery_time,
         "durable_recovery_success": 0.0 if recovery_time is None else 1.0,
         "fresh_output_time_ms": _fresh_output_time_ms(series, recovery_indices, window.visible_start_ms),

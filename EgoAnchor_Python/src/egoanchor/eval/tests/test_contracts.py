@@ -344,19 +344,31 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 3)
-        self.assertEqual(versions["metrics"], 4)
+        self.assertEqual(versions["csv"], 4)
+        self.assertEqual(versions["metrics"], 5)
+        self.assertEqual(versions["analysis_params"], 4)
+        self.assertEqual(versions["analysis_workbook"], 1)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
         self.assertTrue(changes["csv-v3"].breaking)
         self.assertTrue(changes["metrics-v4"].breaking)
+        self.assertTrue(changes["metrics-v5"].breaking)
+        self.assertTrue(changes["analysis_params-v4"].breaking)
+        self.assertEqual(versions["csv"], 4)
+        self.assertTrue(changes["csv-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
             "motion_translation_peak_mm": "start_stop_6dof",
             "unlock_time_ms": "start_stop_6dof",
             "relock_time_ms": "start_stop_6dof",
             "translation_lag_residual_mm": "continuous_translation",
+            "translation_lag_pninetyfive_residual_mm": "continuous_translation",
             "angular_lag_residual_deg": "continuous_rotation",
+            "angular_lag_pninetyfive_residual_deg": "continuous_rotation",
+            "post_stop_position_jitter_rms_mm": "start_stop_6dof",
+            "motion_hold_ratio": "start_stop_6dof",
+            "occlusion_output_coverage": "occlusion_recovery",
+            "reappearance_translation_pninetyfive_mm": "occlusion_recovery",
             "occlusion_rotation_pninetyfive_deg": "occlusion_recovery",
             "occlusion_error_update_count": "occlusion_recovery",
             "fresh_output_time_ms": "occlusion_recovery",
@@ -391,6 +403,23 @@ class ContractTests(unittest.TestCase):
             {"reference_kind", "risk_kind", "point_index"}.issubset(curve_plot.primary_key)
         )
 
+    def test_exp1_behavior_plot_contracts_replace_old_event_plot_tables(self) -> None:
+        """实验一四面板必须使用专用 plot-ready 表，不保留旧三图契约。"""
+
+        contracts = {table.name: table for table in CSV_TABLE_CONTRACTS}
+        for table_name in (
+            "exp1_head_motion_trace",
+            "exp1_start_stop_trace",
+            "exp1_lag_tradeoff",
+            "exp1_occlusion_trace",
+        ):
+            self.assertIn(table_name, contracts)
+            self.assertIn("plot_id", contracts[table_name].primary_key)
+            self.assertIn("panel_id", contracts[table_name].primary_key)
+        self.assertNotIn("exp1_static_timeline", contracts)
+        self.assertNotIn("exp1_motion_events", contracts)
+        self.assertNotIn("exp1_occlusion_events", contracts)
+
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""
 
@@ -398,7 +427,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("contract", config)
         self.assertIn("metrics", config)
         self.assertIn("thresholds", config)
-        self.assertEqual(config["contract"]["version"], 3)
+        self.assertEqual(config["contract"]["version"], 4)
 
         assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
         for line in CONFIG_PATH.read_text(encoding="utf-8").splitlines():

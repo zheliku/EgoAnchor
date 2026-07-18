@@ -64,6 +64,9 @@ class LagEstimate:
     residual: float
     """最优 lag 下的平移毫米 RMSE 或旋转角度 RMSE。"""
 
+    pninetyfive_residual: float
+    """同一最优 lag 和重叠样本上的平移毫米或旋转角度 P95。"""
+
     overlap_samples: int
     """最优 lag 使用的重叠样本数。"""
 
@@ -489,6 +492,92 @@ def durable_recovery_time_ms(
     return None if start is None else start - target_visible_ms
 
 
+def post_stop_position_jitter_rms_mm(
+    times_ms: ArrayLike,
+    error_vectors_m: ArrayLike,
+    valid_mask: ArrayLike,
+    *,
+    reference_stop_ms: float,
+    params: AnalysisParameters,
+) -> float | None:
+    """计算参考停止后固定公共窗口内的去中心位置 jitter RMS。
+
+    参数：
+        times_ms: transition event 内严格递增的 render 时间。
+        error_vectors_m: ``display-reference`` 三轴误差，单位米。
+        valid_mask: display 与平台参考联合有效性掩码。
+        reference_stop_ms: 由平台参考运动检测得到的实际停止时间。
+        params: 唯一 TOML 解析得到的冻结参数对象。
+    """
+
+    times = _strict_times(times_ms, "post-stop jitter")
+    errors = np.asarray(error_vectors_m, dtype=np.float64)
+    if errors.shape != (len(times), 3):
+        raise ValueError("post-stop jitter 误差必须是 (N,3)")
+    if not _time_near_window(reference_stop_ms, times, params.maximum_gap_factor):
+        raise ValueError("reference_stop_ms 必须是 transition event 窗内有限时间")
+    valid = _required_valid_mask(valid_mask, len(times), "post-stop jitter")
+    start = reference_stop_ms + params.post_stop_guard_ms
+    end = start + params.post_stop_window_ms
+    nominal = float(np.median(np.diff(times)))
+    if times[-1] < end - params.maximum_gap_factor * nominal:
+        return None
+    selected = (
+        valid
+        & (times >= start)
+        & (times < end)
+        & np.all(np.isfinite(errors), axis=1)
+    )
+    values_mm = errors[selected] * 1000.0
+    if len(values_mm) < params.minimum_event_samples:
+        return None
+    centered = values_mm - np.median(values_mm, axis=0)
+    return float(np.sqrt(np.mean(np.sum(np.square(centered), axis=1))))
+
+
+def motion_hold_ratio(
+    times_ms: ArrayLike,
+    display_positions_m: ArrayLike,
+    display_rotations: ArrayLike,
+    valid_mask: ArrayLike,
+    params: AnalysisParameters,
+) -> float:
+    """计算参考运动窗口内近零 display pose 增量的相邻 pair 比例。
+
+    参数：
+        times_ms: 已切为同一参考运动窗口的 render 时间。
+        display_positions_m: display 世界位置，单位米。
+        display_rotations: display xyzw 四元数。
+        valid_mask: ``has_display_pose`` 的显式有效性掩码。
+        params: 唯一 TOML 解析得到的冻结参数对象。
+    """
+
+    times = _strict_times(times_ms, "motion hold")
+    positions = np.asarray(display_positions_m, dtype=np.float64)
+    rotations = np.asarray(display_rotations, dtype=np.float64)
+    if positions.shape != (len(times), 3) or rotations.shape != (len(times), 4):
+        raise ValueError("motion hold 输入形状必须是 (N,3) 和 (N,4)")
+    valid = _required_valid_mask(valid_mask, len(times), "motion hold")
+    valid &= np.all(np.isfinite(positions), axis=1) & np.all(np.isfinite(rotations), axis=1)
+    intervals = np.diff(times)
+    nominal = float(np.median(intervals))
+    adjacent = valid[:-1] & valid[1:] & (intervals <= params.maximum_gap_factor * nominal)
+    indices = np.flatnonzero(adjacent)
+    if len(indices) < params.minimum_event_samples - 1:
+        raise ValueError("motion hold 合法相邻样本对不足")
+    translation_mm = translation_error_mm(positions[indices + 1], positions[indices])
+    rotation_deg = rotation_error_deg(
+        rotations[indices + 1],
+        rotations[indices],
+        params.quaternion_norm_tolerance,
+    )
+    held = (
+        (translation_mm <= params.hold_position_tolerance_mm)
+        & (rotation_deg <= params.hold_rotation_tolerance_deg)
+    )
+    return float(np.count_nonzero(held) / len(indices))
+
+
 def pose_jump_quantiles(
     times_ms: ArrayLike,
     display_positions_m: ArrayLike,
@@ -633,7 +722,12 @@ def estimate_translation_lag(
         residuals_mm = np.concatenate(residual_parts)
         residual = float(np.sqrt(np.mean(np.square(residuals_mm))))
         if best is None or residual < best.residual - 1e-12:
-            best = LagEstimate(float(lag), residual, count)
+            best = LagEstimate(
+                float(lag),
+                residual,
+                _quantile(residuals_mm, params.p95_quantile, params),
+                count,
+            )
     if best is None:
         raise ValueError("translation lag 没有满足重叠契约的候选")
     return best
@@ -692,7 +786,12 @@ def estimate_angular_lag(
         residuals_deg = np.concatenate(residual_parts)
         residual = float(np.sqrt(np.mean(np.square(residuals_deg))))
         if best is None or residual < best.residual - 1e-12:
-            best = LagEstimate(float(lag), residual, count)
+            best = LagEstimate(
+                float(lag),
+                residual,
+                _quantile(residuals_deg, params.p95_quantile, params),
+                count,
+            )
     if best is None:
         raise ValueError("angular lag 没有满足重叠契约的候选")
     return best
@@ -707,6 +806,8 @@ __all__ = [
     "estimate_translation_lag",
     "event_quantiles",
     "median_iqr",
+    "motion_hold_ratio",
+    "post_stop_position_jitter_rms_mm",
     "pose_jump_quantiles",
     "position_drift_mm",
     "position_hp_rms_mm",

@@ -1,7 +1,7 @@
 # EgoAnchor 实验一/二离线分析的唯一冻结参数入口。任何数值或语义变更都必须递增契约版本，并重新生成 Stage 2 及其后续产物。
 
 [contract]
-version = 3 # 分析参数契约版本；v3 在 v2 基础上冻结实验二配对、VCD 曲线、精确随机参考和敏感性 cohort 语义。
+version = 4 # 分析参数契约版本；v4 冻结停止后稳定窗、近零保持容差、重新可见窗和 lag 补偿 P95 语义。
 unit_system = "metric" # 距离输入使用米、结果按指标转换为毫米，角度使用度，时间使用毫秒。
 statistics_unit = "event_segment" # 统计单位固定为 event/segment；frame 只用于 event 内计算，不作为独立样本。
 quantile_method = "linear" # 所有经验分位数统一使用 NumPy linear 插值，避免不同默认算法改变 P95/P99。
@@ -46,6 +46,17 @@ objective = "rmse" # 每个 lag 以重叠区间的平移或角度 RMSE 作为优
 tie_break = "smallest_lag" # 多个候选目标值数值并列时选择最小 lag，避免人为偏向更慢系统。
 minimum_overlap_samples = 20 # lag 候选至少需要 20 个有效重叠样本，否则该候选不可用。
 minimum_overlap_fraction = 0.5 # lag 候选重叠样本还必须达到原 event 有效样本的 50%，防止边界小片段给出虚假最优值。
+
+[post_stop]
+guard_ms = 1000.0 # 参考实际停止后先跳过 1000 ms，避免把停止瞬态混入后续静止 jitter。
+window_ms = 3000.0 # 所有系统共用随后固定 3000 ms 窗口计算去中心位置 jitter RMS。
+
+[hold]
+position_tolerance_mm = 0.001 # 相邻 display 位置增量不高于 0.001 mm 时满足近零位置增量条件。
+rotation_tolerance_deg = 0.001 # 相邻 display 旋转增量不高于 0.001 deg 时满足近零旋转增量条件。
+
+[reappearance]
+window_ms = 1000.0 # target_visible 后使用固定 1000 ms 公共窗口计算重新可见平移误差 P95。
 
 [thresholds]
 pose_quaternion_norm_tolerance = 0.000001 # 四元数零范数与归一化数值检查使用的容差；合法四元数在计算前统一归一化。

@@ -272,6 +272,24 @@ class MaterializeTests(unittest.TestCase):
                     eval_cli.EXIT_DATA_ERROR,
                 )
 
+    def test_active_manuscript_uses_exp1_composite_figure(self) -> None:
+        """正式主稿只引用实验一组合图，不再依赖已删除的三张旧图。"""
+
+        repository_root = Path(__file__).resolve().parents[5]
+        manuscript = (
+            repository_root / "2026-EgoAnchor" / "egoanchor_cn_v6.tex"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "figures/generated/exp1_behavior_overview.pdf",
+            manuscript,
+        )
+        for legacy_name in (
+            "exp1_static_timeline.pdf",
+            "exp1_motion_events.pdf",
+            "exp1_occlusion_events.pdf",
+        ):
+            self.assertNotIn(legacy_name, manuscript)
+
 
 if __name__ == "__main__":
     unittest.main()
