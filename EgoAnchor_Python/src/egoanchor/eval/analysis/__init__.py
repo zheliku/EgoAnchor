@@ -38,6 +38,8 @@ from .latency import (
     python_processing_ms,
 )
 from .lineage import input_workbook_set_sha256
+from .csv_output import CsvPublishResult, read_csv_table, write_csv_tables
+from .loader import LoadedBatch, WorkbookInput, load_workbook, load_workbook_batch, workbook_sha256
 from .metrics import (
     JumpQuantiles,
     LagEstimate,
@@ -86,6 +88,7 @@ from .vcd import (
 
 __all__ = [
     "AnalysisParameters",
+    "CsvPublishResult",
     "ClockDomain",
     "DEFAULT_ANALYSIS_PARAMS_PATH",
     "EventMarker",
@@ -123,6 +126,8 @@ __all__ = [
     "VcdRiskPoint",
     "VcdSensitivityRow",
     "VcdTrialContext",
+    "LoadedBatch",
+    "WorkbookInput",
     "aggregate_metric_rows",
     "analyze_exp2",
     "analyze_exp2_components",
@@ -151,7 +156,12 @@ __all__ = [
     "rotation_error_deg",
     "settling_time_ms",
     "input_workbook_set_sha256",
+    "load_workbook",
+    "load_workbook_batch",
+    "read_csv_table",
     "translation_error_mm",
+    "workbook_sha256",
+    "write_csv_tables",
     "summarize_paired_deltas",
     "validate_exp2_variant_definitions",
     "visible_response_ms",

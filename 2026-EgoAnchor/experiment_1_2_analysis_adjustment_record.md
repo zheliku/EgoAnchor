@@ -60,3 +60,23 @@
 - 四组件结果包含 156 条 event 指标、31 条 trial 指标、31 条 session 指标、72 个 event 配对和 14 条配对汇总；所有冻结主指标都有有限配对。
 - 遮挡 trial 有 787 个实际到达 Unity 的完整 EgoAnchor candidate。211 个因无 aligned raw 排除，2 个因缺同 frame reference 排除，coverage 分母为 574。
 - 574 个 eligible candidate 形成 542 个精确分数 tie group。VCD mean-risk AURC 为 2.3843 mm，精确随机参考为 4.0806 mm；最终 coverage 为 1。
+
+## 2026-07-18：Task 9 XLSX loader 与 CSV 发布
+
+### 发现
+
+1. 正式 render sheet 同时包含实验一四配置和实验二四消融；实验一 trial 类型必须保留完整八 runtime，以便后续实验二复用，但实验一指标投影只能选择四个冻结系统。
+2. 同一 candidate 会被八个 runtime 各写一条 admission。科学层 VCD 只使用完整 EgoAnchor，common candidate 窄表的主键则要求每个 session/candidate 一行。
+3. 实验二组件只适用于静止头动、遮挡恢复和起停 6DoF；连续平移/旋转 trial 必须保留在实验一批次而不能进入组件映射。
+
+### 调整
+
+1. loader 保留所有八条 render 序列和 admission 审计，`Exp1Trial` 只硬要求四个实验一配置存在；analyze 层通过 `EXP2_VARIANT_ORDER` 和组件场景投影消融。
+2. `candidate_metrics.csv` 发布时按 `(session_id, candidate_id)` 去重并优先完整 EgoAnchor 行；`candidate_rows` 内存审计仍保留所有 runtime admission，VCD risk points 不受此窄表去重影响。
+3. `analyze_exp2_components` 在完整五场景批次中仅投影组件定义声明的场景，连续平移/旋转只进入实验一结果。
+
+### 边界影响
+
+- Stage 2 loader 只打开完整 XLSX，按 `sheet_index` 读取物理分片，并在 typed trial/candidate 上保留输入 workbook SHA-256；没有 raw task 或 JSONL 路径依赖。
+- CSV writer 固定写 UTF-8、空字段和小写布尔值，先在临时目录完成全部表与 lineage，再原子替换正式目录。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。

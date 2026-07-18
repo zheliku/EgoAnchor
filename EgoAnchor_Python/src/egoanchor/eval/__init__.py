@@ -19,6 +19,7 @@ from .contracts import (
 )
 from .analysis import (
     AnalysisParameters,
+    CsvPublishResult,
     ClockDomain,
     DEFAULT_ANALYSIS_PARAMS_PATH,
     EXP1_ID,
@@ -56,6 +57,8 @@ from .analysis import (
     VcdRiskPoint,
     VcdSensitivityRow,
     VcdTrialContext,
+    LoadedBatch,
+    WorkbookInput,
     aggregate_metric_rows,
     analyze_exp2,
     analyze_exp2_components,
@@ -84,10 +87,15 @@ from .analysis import (
     rotation_error_deg,
     settling_time_ms,
     input_workbook_set_sha256,
+    load_workbook,
+    load_workbook_batch,
+    read_csv_table,
     translation_error_mm,
     summarize_paired_deltas,
     validate_exp2_variant_definitions,
     visible_response_ms,
+    workbook_sha256,
+    write_csv_tables,
 )
 from .schema_v2 import (
     EventRow,
@@ -142,6 +150,7 @@ from .preprocess import (
 
 __all__ = [
     "AnalysisParameters",
+    "CsvPublishResult",
     "ClockDomain",
     "EMPTY_TEXT_MARKER",
     "CONTRACT_CHANGELOG",
@@ -209,6 +218,8 @@ __all__ = [
     "VcdRiskPoint",
     "VcdSensitivityRow",
     "VcdTrialContext",
+    "LoadedBatch",
+    "WorkbookInput",
     "TaskDataset",
     "WorkbookArtifact",
     "WorkbookValidationError",
@@ -238,6 +249,9 @@ __all__ = [
     "file_sha256",
     "flatten_json",
     "input_workbook_set_sha256",
+    "load_workbook",
+    "load_workbook_batch",
+    "read_csv_table",
     "get_sheet_contract",
     "iter_jsonl",
     "load_analysis_parameters",
@@ -268,4 +282,6 @@ __all__ = [
     "validate_exp2_variant_definitions",
     "write_task_workbook",
     "visible_response_ms",
+    "workbook_sha256",
+    "write_csv_tables",
 ]

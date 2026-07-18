@@ -644,7 +644,7 @@ def analyze_exp2_components(
 
     event_rows: list[MetricRow] = []
     for trial in materialized:
-        if trial.scenario_id not in required_scenarios:
+        if trial.scenario_id not in variants_by_scenario:
             continue
         calculated = analyze_trial_events(
             trial,

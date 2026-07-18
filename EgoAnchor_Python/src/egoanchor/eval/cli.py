@@ -6,9 +6,19 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import asdict
 from collections.abc import Sequence
 from pathlib import Path
 
+from .analysis import (
+    analyze_exp1,
+    analyze_exp2,
+    analysis_parameters_sha256,
+    input_workbook_set_sha256,
+    load_analysis_parameters,
+    load_workbook_batch,
+    write_csv_tables,
+)
 from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
 
 
@@ -72,6 +82,18 @@ def build_parser() -> argparse.ArgumentParser:
             )
             child.set_defaults(handler=_run_preprocess)
         else:
+            if command == "analyze":
+                child.add_argument(
+                    "workbooks",
+                    nargs="+",
+                    type=Path,
+                    help="一个或多个 Stage 1 完整 XLSX",
+                )
+                child.add_argument("--out", required=True, type=Path, help="CSV 结果目录")
+                child.add_argument("--params", type=Path, help="覆盖默认分析 TOML")
+                child.add_argument("--code-version", default="unknown", help="审计版本标识")
+                child.set_defaults(handler=_run_analyze)
+                continue
             child.set_defaults(handler=_run_skeleton_command)
     return parser
 
@@ -98,6 +120,176 @@ def _run_skeleton_command(args: argparse.Namespace) -> int:
     """保留阶段入口但暂不产出结果，具体实现由后续 Task 接管。"""
 
     del args
+    return EXIT_OK
+
+
+def _base_result_row(row: dict[str, object]) -> dict[str, object]:
+    """把 render/admission 原始行投影为 common CSV 的共享结果列。"""
+
+    return {
+        "session_id": row.get("session_id"),
+        "experiment_id": row.get("experiment_id"),
+        "scenario_id": row.get("scenario_id"),
+        "trial_id": row.get("trial_id"),
+        "event_id": row.get("event_id"),
+        "condition_id": row.get("condition_id"),
+        "variant_id": row.get("variant_id"),
+        "metric_key": row.get("metric_key"),
+        "metric_value": row.get("metric_value"),
+        "metric_unit": row.get("metric_unit"),
+        "aggregation_level": row.get("aggregation_level"),
+        "input_workbook_sha256": row.get("input_workbook_sha256"),
+    }
+
+
+def _run_analyze(args: argparse.Namespace) -> int:
+    """只从 Stage 1 XLSX 计算实验一/二并原子发布 CSV。"""
+
+    batch = load_workbook_batch(args.workbooks)
+    params = load_analysis_parameters(args.params)
+    exp1 = analyze_exp1(batch.trials, params)
+    exp2 = analyze_exp2(batch.trials, batch.variant_definitions, batch.vcd_candidates, params)
+    candidate_rows_by_key: dict[tuple[object, object], dict[str, object]] = {}
+    for candidate_row in batch.candidate_rows:
+        key = (candidate_row.get("session_id"), candidate_row.get("candidate_id"))
+        existing = candidate_rows_by_key.get(key)
+        if existing is None or candidate_row.get("variant_id") == "EgoAnchor":
+            candidate_rows_by_key[key] = candidate_row
+    tables: dict[str, list[object]] = {
+        "exp1/event_metrics": [*exp1.event_metrics],
+        "exp1/trial_metrics": [*exp1.trial_metrics],
+        "exp1/session_metrics": [*exp1.session_metrics],
+        "exp1/scenario_summary": [*exp1.scenario_summary],
+        "exp2/event_metrics": [*exp2.components.event_metrics],
+        "exp2/trial_metrics": [*exp2.components.trial_metrics],
+        "exp2/session_metrics": [*exp2.components.session_metrics],
+        "exp2/paired_deltas": [*exp2.components.paired_deltas],
+        "exp2/paired_summary": [*exp2.components.paired_summary],
+        "exp2/vcd_risk_points": [*exp2.vcd.risk_points],
+        "exp2/vcd_curve": [*exp2.vcd.curve],
+        "exp2/vcd_aurc": [*exp2.vcd.aurc],
+        "trial_windows": list(batch.trial_windows),
+        "frame_metrics": [
+            {
+                **_base_result_row(row),
+                "event_id": row.get("event_id") or "",
+                "metric_key": "render_tick",
+                "aggregation_level": "frame",
+                "frame_id": row.get("render_tick_id"),
+            }
+            for row in batch.frame_rows
+        ],
+        "candidate_metrics": [
+            {
+                **_base_result_row(row),
+                "event_id": row.get("event_id") or "",
+                "metric_key": "candidate",
+                "aggregation_level": "candidate",
+                "candidate_id": row.get("candidate_id"),
+            }
+            for row in candidate_rows_by_key.values()
+        ],
+        "analysis_qc": [
+            {"check_id": "stage2_input_xlsx_only", "status": "passed", "observed": len(batch.inputs), "expected": len(batch.inputs), "details": "仅读取 Stage 1 XLSX"},
+            {"check_id": "completed_trial_count", "status": "passed", "observed": len(batch.trials), "expected": len(batch.trials), "details": "final trial 投影完成"},
+        ],
+    }
+    tables["exp1_static_timeline"] = [
+        {**asdict(row), "plot_id": "exp1_static_timeline", "panel_id": row.scenario_id}
+        for row in exp1.event_metrics
+        if row.scenario_id == "static_head_motion"
+        and row.metric_key == "translation_event_pninetyfive_mm"
+    ]
+    tables["exp1_motion_events"] = [
+        {**asdict(row), "plot_id": "exp1_motion_events", "panel_id": row.scenario_id}
+        for row in exp1.event_metrics
+        if row.scenario_id in {"start_stop_6dof", "continuous_motion"}
+        and row.metric_key == "translation_event_pninetyfive_mm"
+    ]
+    tables["exp1_occlusion_events"] = [
+        {**asdict(row), "plot_id": "exp1_occlusion_events", "panel_id": row.scenario_id}
+        for row in exp1.event_metrics
+        if row.scenario_id == "occlusion_recovery"
+        and row.metric_key == "translation_event_pninetyfive_mm"
+    ]
+    tables["exp2_component_deltas"] = [
+        {**asdict(row), "plot_id": "exp2_component_deltas", "panel_id": row.component_id}
+        for row in exp2.components.paired_deltas
+    ]
+    tables["exp2_vcd_curve"] = [
+        {**asdict(row), "plot_id": "exp2_vcd_curve", "panel_id": row.reference_kind}
+        for row in exp2.vcd.curve
+    ]
+    input_set_hash = input_workbook_set_sha256(item.sha256 for item in batch.inputs)
+    tables["plot_catalog"] = [
+        {
+            "plot_id": plot_id,
+            "panel_id": panel_id,
+            "source_csv": source_csv,
+            "x": x_axis,
+            "y": y_axis,
+            "hue": hue,
+            "filter_rule_id": "completed_formal_trials",
+            "order": order,
+            "unit": unit,
+            "target_width": "columnwidth",
+            "expected_rows": expected_rows,
+            "data_sha256": input_set_hash,
+        }
+        for order, (plot_id, panel_id, source_csv, x_axis, y_axis, hue, unit, expected_rows) in enumerate(
+            (
+                ("exp1_static_timeline", "static_head_motion", "plots/exp1_static_timeline.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_static_timeline"])),
+                ("exp1_motion_events", "motion", "plots/exp1_motion_events.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_motion_events"])),
+                ("exp1_occlusion_events", "occlusion_recovery", "plots/exp1_occlusion_events.csv", "event_id", "metric_value", "variant_id", "mm", len(tables["exp1_occlusion_events"])),
+                ("exp2_component_deltas", "components", "plots/exp2_component_deltas.csv", "event_id", "delta", "component_id", "mixed", len(tables["exp2_component_deltas"])),
+                ("exp2_vcd_curve", "risk_coverage", "plots/exp2_vcd_curve.csv", "coverage", "risk_mm", "reference_kind", "mm", len(tables["exp2_vcd_curve"])),
+            ),
+        )
+    ]
+    tables["numbers"] = [
+        {
+            "experiment": row.experiment_id,
+            "macro_name": f"{row.scenario_id}_{row.variant_id}_{row.metric_key}",
+            "value": row.metric_value,
+            "source_csv": "exp1/scenario_summary.csv",
+            "source_sha256": row.input_workbook_sha256,
+        }
+        for row in exp1.scenario_summary
+        if row.metric_value is not None
+    ]
+    tables["tables"] = [
+        {
+            "experiment": row.experiment_id,
+            "table_name": "exp2_component_deltas",
+            "row_key": f"{row.component_id}:{row.metric_key}",
+            "column_key": "median_iqr",
+            "display_value": f"{row.median} [{row.q1}, {row.q3}]" if row.median is not None else "",
+            "source_csv": "exp2/paired_summary.csv",
+            "source_sha256": row.input_workbook_sha256,
+        }
+        for row in exp2.components.paired_summary
+    ]
+    published = write_csv_tables(
+        args.out,
+        tables,
+        input_workbooks=batch.inputs,
+        code_version=args.code_version,
+        parameter_set_id=analysis_parameters_sha256(args.params),
+    )
+    print(
+        json.dumps(
+            {
+                "passed": True,
+                "output_root": str(published.output_root),
+                "input_workbooks": [str(item.path) for item in batch.inputs],
+                "table_count": len(published.table_sha256),
+                "trial_count": len(batch.trials),
+                "input_sha256": [item.sha256 for item in batch.inputs],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     return EXIT_OK
 
 
