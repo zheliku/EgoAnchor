@@ -6,6 +6,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -416,6 +417,20 @@ class WorkbookWriterTests(unittest.TestCase):
 
             self.assertTrue(artifact.path.is_file())
             self.assertGreaterEqual(raw_delete_attempts, 2)
+
+    def test_readme_freezes_header_and_declares_column_widths(self) -> None:
+        """每个新工作簿的 README 都冻结首行，并携带稳定的列宽定义。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            output = Path(tmp) / "readme-layout.xlsx"
+            write_task_workbook(root, output, code_version="test-version")
+
+            with zipfile.ZipFile(output) as archive:
+                readme_xml = archive.read("xl/worksheets/sheet1.xml")
+
+            self.assertIn(b'topLeftCell="A2"', readme_xml)
+            self.assertIn(b"<cols>", readme_xml)
 
     def test_atomic_replace_retries_after_windows_file_lock(self) -> None:
         """正式 XLSX 首次被 Windows 锁定时，writer 应重试原子替换。"""
