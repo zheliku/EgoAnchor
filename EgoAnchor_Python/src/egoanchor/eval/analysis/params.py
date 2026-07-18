@@ -24,7 +24,18 @@ _PARAMETER_KEYS = {
     "thresholds": {"pose_quaternion_norm_tolerance", "vcd_score_minimum", "vcd_score_maximum", "recovery_position_tolerance_mm", "recovery_duration_ms", "settling_position_tolerance_mm", "settling_duration_ms"},
     "recovery": {"start_role", "requires_fresh_output", "freshness_field", "freshness_clock"},
     "latency": {"candidate_arrival_clock", "python_processing_clock", "cross_clock_policy", "negative_duration_policy"},
-    "vcd": {"coverage_group_tie", "risk_unit", "alignment_source"},
+    "vcd": {
+        "coverage_group_tie",
+        "risk_unit",
+        "alignment_source",
+        "coverage_denominator",
+        "score_equality",
+        "mean_risk",
+        "tail_quantile",
+        "aurc_integration",
+        "random_reference",
+        "sensitivity_cohorts",
+    },
 }
 """分析参数各 section 允许出现的完整键集合。"""
 
@@ -62,13 +73,19 @@ _STRING_PARAMETERS = {
     ("vcd", "coverage_group_tie"),
     ("vcd", "risk_unit"),
     ("vcd", "alignment_source"),
+    ("vcd", "coverage_denominator"),
+    ("vcd", "score_equality"),
+    ("vcd", "mean_risk"),
+    ("vcd", "aurc_integration"),
+    ("vcd", "random_reference"),
+    ("vcd", "sensitivity_cohorts"),
 }
 """必须使用 TOML 文本类型的参数。"""
 
 
 @dataclass(frozen=True, slots=True)
 class AnalysisParameters:
-    """保存 Task 6 公共指标使用的冻结参数。"""
+    """保存 Task 6 公共指标和 Task 8 VCD 分析使用的冻结参数。"""
 
     contract_version: int
     """分析参数契约版本。"""
@@ -229,6 +246,27 @@ class AnalysisParameters:
     vcd_alignment_source: str
     """VCD risk 位姿来源。"""
 
+    vcd_coverage_denominator: str
+    """VCD coverage 分母语义。"""
+
+    vcd_score_equality: str
+    """VCD 分数并列判断方法。"""
+
+    vcd_mean_risk: str
+    """VCD 主 risk 的汇总方法。"""
+
+    vcd_tail_quantile: float
+    """VCD tail-risk 曲线的分位点。"""
+
+    vcd_aurc_integration: str
+    """VCD AURC 的积分规则。"""
+
+    vcd_random_reference: str
+    """VCD 随机参考的可复现算法。"""
+
+    vcd_sensitivity_cohorts: str
+    """VCD 敏感性分析使用的候选 cohort 集合。"""
+
 
 def _section(config: Mapping[str, Any], name: str) -> Mapping[str, Any]:
     """返回必需 TOML section，缺失或类型错误时立即失败。
@@ -304,8 +342,8 @@ def _validate_contract(params: AnalysisParameters) -> None:
         params: 已完成字段映射的冻结参数。
     """
 
-    if params.contract_version != 2:
-        raise ValueError("Task 6 只接受 analysis_params v2")
+    if params.contract_version != 3:
+        raise ValueError("Task 8 只接受 analysis_params v3")
     if params.unit_system != "metric" or params.statistics_unit != "event_segment":
         raise ValueError("单位系统或统计单位不符合冻结契约")
     if params.quantile_method != "linear" or params.event_summary != "median_iqr":
@@ -382,6 +420,7 @@ def _validate_ranges(params: AnalysisParameters) -> None:
         ("recovery_duration_ms", params.recovery_duration_ms, False),
         ("settling_position_mm", params.settling_position_mm, False),
         ("settling_duration_ms", params.settling_duration_ms, False),
+        ("vcd_tail_quantile", params.vcd_tail_quantile, False),
     ):
         _require_positive(value, name, allow_zero=allow_zero)
 
@@ -411,6 +450,20 @@ def _validate_lineage(params: AnalysisParameters) -> None:
         raise ValueError("VCD 并列分数组必须整体纳入")
     if params.vcd_risk_unit != "mm" or params.vcd_alignment_source != "capture_time_aligned_raw":
         raise ValueError("VCD risk 单位或位姿来源不符合冻结契约")
+    if params.vcd_coverage_denominator != "eligible_received_candidates":
+        raise ValueError("VCD coverage 分母必须是 eligible received candidates")
+    if params.vcd_score_equality != "exact_float":
+        raise ValueError("VCD 分数并列必须使用 exact float")
+    if params.vcd_mean_risk != "arithmetic_mean":
+        raise ValueError("VCD mean risk 必须使用算术平均")
+    if not 0.0 < params.vcd_tail_quantile < 1.0:
+        raise ValueError("VCD tail quantile 必须位于 (0, 1)")
+    if params.vcd_aurc_integration != "right_step":
+        raise ValueError("VCD AURC 必须使用 right-step 积分")
+    if params.vcd_random_reference != "exact_without_replacement_expectation":
+        raise ValueError("VCD 随机参考必须使用精确无放回期望")
+    if params.vcd_sensitivity_cohorts != "completed_trial_marker_covered_occlusion_only":
+        raise ValueError("VCD sensitivity cohort 语义未冻结")
 
 
 def _validate(params: AnalysisParameters) -> None:
@@ -502,6 +555,13 @@ def load_analysis_parameters(path: Path | None = None) -> AnalysisParameters:
         vcd_coverage_group_tie=str(vcd["coverage_group_tie"]),
         vcd_risk_unit=str(vcd["risk_unit"]),
         vcd_alignment_source=str(vcd["alignment_source"]),
+        vcd_coverage_denominator=str(vcd["coverage_denominator"]),
+        vcd_score_equality=str(vcd["score_equality"]),
+        vcd_mean_risk=str(vcd["mean_risk"]),
+        vcd_tail_quantile=float(vcd["tail_quantile"]),
+        vcd_aurc_integration=str(vcd["aurc_integration"]),
+        vcd_random_reference=str(vcd["random_reference"]),
+        vcd_sensitivity_cohorts=str(vcd["sensitivity_cohorts"]),
     )
     _validate(params)
     return params

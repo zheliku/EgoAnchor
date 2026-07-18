@@ -46,9 +46,9 @@ class ContractChange:
 
 CONTRACT_VERSIONS = (
     ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
-    ContractVersion("csv", 2, "Stage 2 指标与论文数据 CSV 契约"),
-    ContractVersion("metrics", 3, "实验一/二指标定义契约"),
-    ContractVersion("analysis_params", 2, "冻结分析参数契约"),
+    ContractVersion("csv", 3, "Stage 2 指标与论文数据 CSV 契约"),
+    ContractVersion("metrics", 4, "实验一/二指标定义契约"),
+    ContractVersion("analysis_params", 3, "冻结分析参数契约"),
 )
 """当前冻结的契约版本目录。"""
 
@@ -61,6 +61,7 @@ CONTRACT_CHANGELOG = (
     ),
     ContractChange("csv-v1", "固定 event/trial/session、plot 和 paper 长表。", True),
     ContractChange("csv-v2", "场景汇总显式保存尝试数、成功率、样本数和完整分布。", True),
+    ContractChange("csv-v3", "补齐组件配对键、空值状态、VCD 曲线维度与敏感性审计列。", True),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),
     ContractChange(
         "metrics-v2",
@@ -73,8 +74,18 @@ CONTRACT_CHANGELOG = (
         True,
     ),
     ContractChange(
+        "metrics-v4",
+        "冻结 VCD mean-risk 右阶梯 AURC、P95 tail-risk 曲线与 cohort 敏感性。",
+        True,
+    ),
+    ContractChange(
         "analysis_params-v2",
         "冻结滤波、运动切窗、响应、沉降、lag、恢复、gap 和单调时钟参数。",
+        True,
+    ),
+    ContractChange(
+        "analysis_params-v3",
+        "冻结 VCD cohort、coverage、tie、AURC、精确随机参考和敏感性语义。",
         True,
     ),
 )

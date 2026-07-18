@@ -819,6 +819,106 @@ _SCENARIO_SUMMARY_COLUMNS = _RESULT_COLUMNS + (
 )
 """场景级低样本量报告必须显式保存的尝试、成功率和完整分布统计。"""
 
+_PAIRED_DELTA_COLUMNS = _RESULT_COLUMNS + (
+    _column("component_id", description="实验二归因组件的稳定标识。"),
+    _column("full_variant_id", description="配对完整系统，固定为 EgoAnchor。"),
+    _column("ablation_variant_id", description="与完整系统配对的单组件消融配置。"),
+    _column("full_value", "float", description="完整 EgoAnchor 在同 event 的指标值。"),
+    _column("ablation_value", "float", description="单组件消融在同 event 的指标值。"),
+    _column("delta", "float", description="消融值减完整系统值；任一侧为空时保持为空。"),
+    _column("pair_status", description="complete 或 value_missing；缺行不允许进入结果。"),
+)
+"""实验二 event-level 配对差值的完整审计列。"""
+
+_PAIRED_SUMMARY_COLUMNS = (
+    _column("experiment_id"),
+    _column("scenario_id"),
+    _column("component_id"),
+    _column("full_variant_id"),
+    _column("ablation_variant_id"),
+    _column("metric_key"),
+    _column("metric_unit"),
+    _column("attempt_count", "int"),
+    _column("sample_count", "int"),
+    _column("median", "float"),
+    _column("q1", "float"),
+    _column("q3", "float"),
+    _column("iqr", "float"),
+    _column("minimum", "float"),
+    _column("maximum", "float"),
+    _column("positive_count", "int"),
+    _column("zero_count", "int"),
+    _column("negative_count", "int"),
+    _column("input_workbook_sha256"),
+)
+"""实验二配对 delta 的低样本量汇总与方向计数列。"""
+
+_VCD_RISK_POINT_COLUMNS = (
+    _column("session_id"),
+    _column("experiment_id"),
+    _column("scenario_id"),
+    _column("trial_id"),
+    _column("candidate_id"),
+    _column("frame_id", "int"),
+    _column("source_capture_mono_ms", "float", unit="ms"),
+    _column("variant_id"),
+    _column("vcd_score", "float"),
+    _column("risk_mm", "float", unit="mm"),
+    _column("eligible", "bool"),
+    _column("exclusion_reason"),
+    _column("has_aligned_raw", "bool"),
+    _column("reference_pose_valid", "bool"),
+    _column("reference_session_id"),
+    _column("reference_frame_id", "int"),
+    _column("input_workbook_sha256"),
+)
+"""实际到达 Unity 的完整 EgoAnchor candidate risk 与排除原因。"""
+
+_VCD_CURVE_COLUMNS = (
+    _column("scenario_id"),
+    _column("reference_kind"),
+    _column("risk_kind"),
+    _column("point_index", "int"),
+    _column("threshold", "float"),
+    _column("coverage", "float"),
+    _column("risk_mm", "float", unit="mm"),
+    _column("group_count", "int"),
+    _column("cumulative_count", "int"),
+    _column("coverage_denominator", "int"),
+    _column("input_workbook_sha256"),
+)
+"""VCD 与精确随机参考的 mean/tail risk-coverage 长表列。"""
+
+_VCD_AURC_COLUMNS = (
+    _column("scenario_id"),
+    _column("reference_kind"),
+    _column("risk_kind"),
+    _column("aurc_mm", "float", unit="mm"),
+    _column("candidate_count", "int"),
+    _column("coverage_denominator", "int"),
+    _column("arrived_count", "int"),
+    _column("excluded_no_aligned_count", "int"),
+    _column("excluded_missing_reference_count", "int"),
+    _column("excluded_invalid_reference_count", "int"),
+    _column("excluded_non_finite_pose_count", "int"),
+    _column("input_workbook_sha256"),
+)
+"""mean-risk 右阶梯 AURC 与候选 cohort 审计列。"""
+
+_SENSITIVITY_COLUMNS = (
+    _column("scenario_id"),
+    _column("metric_key"),
+    _column("parameter_name"),
+    _column("alternative_id"),
+    _column("base_setting"),
+    _column("alternative_setting"),
+    _column("base_value", "float"),
+    _column("alternative_value", "float"),
+    _column("delta", "float"),
+    _column("input_workbook_sha256"),
+)
+"""同一敏感性参数可保存多个替代 cohort 的稳定长表列。"""
+
 
 CSV_TABLE_CONTRACTS = (
     CsvTableContract("analysis_run", "analysis invocation", ("analysis_run_id",), (_column("analysis_run_id"), _column("created_at_utc", "datetime"), _column("code_version"), _column("parameter_set_id"), _column("status"), _column("input_count", "int"), _column("output_root"))),
@@ -827,7 +927,7 @@ CSV_TABLE_CONTRACTS = (
     CsvTableContract("filter_catalog", "filter definition", ("filter_rule_id",), (_column("filter_rule_id"), _column("description"), _column("included_trials"), _column("excluded_trials"), _column("reason"))),
     CsvTableContract("analysis_qc", "analysis QC check", ("check_id",), (_column("check_id"), _column("status"), _column("observed"), _column("expected"), _column("details"))),
     CsvTableContract("lineage", "result lineage", ("output_path", "output_row_id"), (_column("output_path"), _column("output_row_id"), _column("input_workbook"), _column("input_workbook_sha256"), _column("source_sheet"), _column("source_row_key"), _column("metric_key"))),
-    CsvTableContract("sensitivity", "parameter sensitivity", ("scenario_id", "metric_key", "parameter_name"), (_column("scenario_id"), _column("metric_key"), _column("parameter_name"), _column("base_value", "float"), _column("alternative_value", "float"), _column("delta", "float"), _column("input_workbook_sha256"))),
+    CsvTableContract("sensitivity", "parameter sensitivity", ("scenario_id", "metric_key", "parameter_name", "alternative_id"), _SENSITIVITY_COLUMNS),
     CsvTableContract("trial_windows", "trial plus event window", ("session_id", "trial_id", "event_id"), _RESULT_COLUMNS),
     CsvTableContract("frame_metrics", "render frame", ("session_id", "trial_id", "event_id", "variant_id", "frame_id"), _RESULT_COLUMNS + (_column("frame_id", "int"),)),
     CsvTableContract("candidate_metrics", "candidate", ("session_id", "candidate_id"), _RESULT_COLUMNS + (_column("candidate_id"),)),
@@ -840,16 +940,17 @@ CSV_TABLE_CONTRACTS = (
         ("scenario_id", "variant_id", "metric_key"),
         _SCENARIO_SUMMARY_COLUMNS,
     ),
-    CsvTableContract("paired_deltas", "paired event delta", ("session_id", "scenario_id", "trial_id", "event_id", "metric_key"), _RESULT_COLUMNS + (_column("full_value", "float"), _column("ablation_value", "float"), _column("delta", "float"))),
-    CsvTableContract("vcd_risk_points", "candidate risk point", ("session_id", "candidate_id"), _RESULT_COLUMNS + (_column("risk_mm", "float", unit="mm"), _column("vcd_score", "float"), _column("eligible", "bool"))),
-    CsvTableContract("vcd_curve", "coverage threshold point", ("scenario_id", "coverage"), (_column("scenario_id"), _column("coverage", "float"), _column("risk_mm", "float", unit="mm"), _column("threshold", "float"), _column("input_workbook_sha256"))),
-    CsvTableContract("vcd_aurc", "scenario AURC summary", ("scenario_id",), (_column("scenario_id"), _column("aurc_mm", "float", unit="mm"), _column("candidate_count", "int"), _column("coverage_denominator", "int"), _column("input_workbook_sha256"))),
+    CsvTableContract("paired_deltas", "paired event delta", ("session_id", "scenario_id", "trial_id", "event_id", "component_id", "metric_key"), _PAIRED_DELTA_COLUMNS),
+    CsvTableContract("paired_summary", "component plus metric paired delta summary", ("scenario_id", "component_id", "metric_key"), _PAIRED_SUMMARY_COLUMNS),
+    CsvTableContract("vcd_risk_points", "received candidate risk point", ("session_id", "candidate_id"), _VCD_RISK_POINT_COLUMNS),
+    CsvTableContract("vcd_curve", "coverage threshold point", ("scenario_id", "reference_kind", "risk_kind", "point_index"), _VCD_CURVE_COLUMNS),
+    CsvTableContract("vcd_aurc", "scenario mean-risk AURC summary", ("scenario_id", "reference_kind", "risk_kind"), _VCD_AURC_COLUMNS),
     CsvTableContract("plot_catalog", "plot panel", ("plot_id", "panel_id"), (_column("plot_id"), _column("panel_id"), _column("source_csv"), _column("x"), _column("y"), _column("hue"), _column("filter_rule_id"), _column("order", "int"), _column("unit"), _column("target_width"), _column("expected_rows", "int"), _column("data_sha256"))),
     CsvTableContract("exp1_static_timeline", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("exp1_motion_events", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("exp1_occlusion_events", "plot row", ("plot_id", "panel_id", "event_id", "variant_id"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
-    CsvTableContract("exp2_component_deltas", "plot row", ("plot_id", "panel_id", "event_id", "metric_key"), _RESULT_COLUMNS + (_column("plot_id"), _column("panel_id"))),
-    CsvTableContract("exp2_vcd_curve", "plot row", ("plot_id", "panel_id", "coverage"), (_column("plot_id"), _column("panel_id"), _column("scenario_id"), _column("coverage", "float"), _column("risk_mm", "float", unit="mm"))),
+    CsvTableContract("exp2_component_deltas", "plot row", ("plot_id", "panel_id", "session_id", "scenario_id", "trial_id", "event_id", "component_id", "metric_key"), _PAIRED_DELTA_COLUMNS + (_column("plot_id"), _column("panel_id"))),
+    CsvTableContract("exp2_vcd_curve", "plot row", ("plot_id", "panel_id", "reference_kind", "risk_kind", "point_index"), _VCD_CURVE_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("numbers", "paper number", ("experiment", "macro_name"), (_column("experiment"), _column("macro_name"), _column("value"), _column("source_csv"), _column("source_sha256"))),
     CsvTableContract("tables", "paper table cell", ("experiment", "table_name", "row_key", "column_key"), (_column("experiment"), _column("table_name"), _column("row_key"), _column("column_key"), _column("display_value"), _column("source_csv"), _column("source_sha256"))),
 )

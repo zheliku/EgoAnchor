@@ -926,6 +926,14 @@ Task 7: 实现实验一分析
 - risk来自aligned raw同帧平台参考
 - 未到达Unity candidate不伪造admission
 
+### 执行调整（2026-07-18）
+
+现有 `paired_deltas` 主键无法区分静止场景中的两个消融，VCD CSV 也没有 mean/P95、VCD/random 等曲线维度。原参数文件还未规定 coverage 分母、AURC 积分、随机参考和敏感性 cohort。Task 8 因此升级到 `csv-v3`、`metrics-v4` 和 `analysis_params-v3`。配对键加入 `component_id`，并增加 `pair_status` 与独立 `paired_summary`；VCD 表保存 eligibility、排除原因、曲线类型、参考类型和稳定点序号。
+
+VCD 主 cohort 是最终完成遮挡 trial 中实际到达 Unity 的完整 EgoAnchor 候选，coverage 分母只含 aligned raw 与同 frame 有效 reference 均可用的候选。tie 使用解析后浮点值精确分组；mean-risk AURC 采用从 coverage 0 起算的右阶梯积分，P95 只作 tail-risk 曲线。随机参考使用无放回排序的有限总体精确期望，不需要随机 seed。敏感性固定比较 completed-trial、marker-covered 和 occlusion-only cohort。
+
+组件主指标和 guardrail 只取现有指标目录可定义的量。原组件表中的“HMD 速度条件效应”和“额外 lag”没有冻结公式，Task 7 类型也未保留相应 head pose 序列，本任务不自行补公式。XLSX loader、reference 联接、CSV lineage 和原子发布仍由 Task 9 实现。调整依据和正式工作簿核对结果见 `experiment_1_2_analysis_adjustment_record.md`。
+
 ### 提交信息
 
 Task 8: 实现实验二分析与VCD诊断
@@ -948,7 +956,7 @@ data/analysis/results/
 ├── audit/ (analysis_run, inputs, metric_catalog, filter_catalog, lineage, sensitivity)
 ├── common/ (trial_windows, frame_metrics, candidate_metrics)
 ├── exp1/ (event_metrics, trial_metrics, session_metrics, scenario_summary)
-├── exp2/ (event_metrics, trial_metrics, paired_deltas, vcd_risk_points, vcd_curve, vcd_aurc)
+├── exp2/ (event_metrics, trial_metrics, session_metrics, paired_deltas, paired_summary, vcd_risk_points, vcd_curve, vcd_aurc)
 ├── plots/ (plot_catalog, exp1_*.csv, exp2_*.csv)
 └── paper/ (numbers.csv, tables.csv)
 ```

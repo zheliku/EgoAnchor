@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 import re
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ from .metrics import (
     settling_time_ms,
     visible_response_ms,
 )
+from .lineage import input_workbook_set_sha256
 from .params import AnalysisParameters
 from .pose import rotation_error_deg, translation_error_mm
 from .windows import (
@@ -903,22 +903,32 @@ def _occlusion_rows(
     return rows
 
 
-def _trial_event_rows(trial: Exp1Trial, params: AnalysisParameters) -> list[MetricRow]:
-    """投影四系统并计算一个 trial 的全部 event 指标。
+def analyze_trial_events(
+    trial: Exp1Trial,
+    params: AnalysisParameters,
+    variant_ids: Sequence[str] = EXP1_VARIANTS,
+) -> tuple[MetricRow, ...]:
+    """为指定 runtime 配置计算一个 trial 的全部 event 指标。
 
     参数：
         trial: 已联接且通过输入校验的实验一 trial。
         params: 唯一冻结分析参数。
+        variant_ids: 需要计算的 runtime 配置；实验一默认使用四系统。
     """
 
     by_variant = {series.variant_id: series for series in trial.render_series}
+    if not variant_ids or len(variant_ids) != len(set(variant_ids)):
+        raise ValueError("event 指标投影的 variant 列表必须非空且唯一")
+    missing_variants = set(variant_ids) - set(by_variant)
+    if missing_variants:
+        raise ValueError(f"trial 缺少请求的 runtime 配置：{sorted(missing_variants)}")
     rows: list[MetricRow] = []
     if trial.scenario_id == "occlusion_recovery":
         occlusion_windows = pair_occlusion_windows(trial.markers, trial.trial_end_ms)
         for occlusion_window in occlusion_windows:
-            for variant_id in EXP1_VARIANTS:
+            for variant_id in variant_ids:
                 rows.extend(_occlusion_rows(trial, by_variant[variant_id], occlusion_window, params))
-        return rows
+        return tuple(rows)
 
     event_windows = build_event_windows(trial.markers, trial.trial_end_ms)
     calculators: dict[
@@ -936,9 +946,9 @@ def _trial_event_rows(trial: Exp1Trial, params: AnalysisParameters) -> list[Metr
     if not selected_windows:
         raise ValueError(f"场景 {trial.scenario_id} 缺少必需事件角色 {expected_role}")
     for event_window in selected_windows:
-        for variant_id in EXP1_VARIANTS:
+        for variant_id in variant_ids:
             rows.extend(calculator(trial, by_variant[variant_id], event_window, params))
-    return rows
+    return tuple(rows)
 
 
 def _aggregate_value(rows: Sequence[MetricRow], source_level: str) -> tuple[float | None, str]:
@@ -960,16 +970,23 @@ def _aggregate_value(rows: Sequence[MetricRow], source_level: str) -> tuple[floa
     return float(np.median(values)), f"{source_level}_median"
 
 
-def _aggregate_rows(source_rows: Sequence[MetricRow], level: str) -> tuple[MetricRow, ...]:
+def aggregate_metric_rows(
+    source_rows: Sequence[MetricRow],
+    level: str,
+    variant_order: Sequence[str] = EXP1_VARIANTS,
+) -> tuple[MetricRow, ...]:
     """从相邻下层结果生成 trial 或 session 长表。
 
     参数：
         source_rows: trial 聚合使用 event 行，session 聚合使用 trial 行。
         level: 只能是 ``trial`` 或 ``session``。
+        variant_order: 当前分析允许的稳定 runtime 报告顺序。
     """
 
     if level not in {"trial", "session"}:
         raise ValueError("实验一聚合层级只能是 trial 或 session")
+    if not variant_order or len(variant_order) != len(set(variant_order)):
+        raise ValueError("指标聚合的 variant 顺序必须非空且唯一")
     source_level = "event" if level == "trial" else "trial"
     groups: dict[tuple[str, ...], list[MetricRow]] = {}
     for row in source_rows:
@@ -1002,23 +1019,7 @@ def _aggregate_rows(source_rows: Sequence[MetricRow], level: str) -> tuple[Metri
                 input_workbook_sha256=first.input_workbook_sha256,
             ),
         )
-    return tuple(sorted(aggregated, key=_metric_sort_key))
-
-
-def _source_set_digest(hashes: Iterable[str]) -> str:
-    """返回一个来源 hash，多个工作簿时返回其排序集合摘要。
-
-    参数：
-        hashes: 直接贡献结果的一个或多个工作簿 SHA-256。
-    """
-
-    unique = sorted(set(hashes))
-    if not unique or any(not _SHA256_PATTERN.fullmatch(value) for value in unique):
-        raise ValueError("场景汇总来源 hash 集合非法")
-    if len(unique) == 1:
-        return unique[0]
-    payload = "workbook-sha256-set-v1\n" + "\n".join(unique)
-    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+    return tuple(sorted(aggregated, key=lambda row: _metric_sort_key(row, variant_order)))
 
 
 def _scenario_rows(
@@ -1062,7 +1063,9 @@ def _scenario_rows(
                     if metric_key == "durable_recovery_success"
                     else "scenario_event_median_iqr"
                 ),
-                input_workbook_sha256=_source_set_digest(row.input_workbook_sha256 for row in rows),
+                input_workbook_sha256=input_workbook_set_sha256(
+                    row.input_workbook_sha256 for row in rows
+                ),
                 attempt_count=len(rows),
                 sample_count=len(values),
                 success_rate=len(values) / len(rows),
@@ -1077,11 +1080,15 @@ def _scenario_rows(
     return tuple(sorted(summaries, key=_summary_sort_key))
 
 
-def _metric_sort_key(row: MetricRow) -> tuple[object, ...]:
+def _metric_sort_key(
+    row: MetricRow,
+    variant_order: Sequence[str] = EXP1_VARIANTS,
+) -> tuple[object, ...]:
     """返回 event/trial/session 长表的稳定排序键。
 
     参数：
         row: 待排序指标行。
+        variant_order: 当前结果允许的稳定 runtime 报告顺序。
     """
 
     return (
@@ -1089,7 +1096,7 @@ def _metric_sort_key(row: MetricRow) -> tuple[object, ...]:
         row.session_id,
         row.trial_id,
         row.event_id,
-        EXP1_VARIANTS.index(row.variant_id),
+        variant_order.index(row.variant_id),
         row.metric_key,
     )
 
@@ -1133,12 +1140,12 @@ def analyze_exp1(
 
     event_rows = tuple(
         sorted(
-            (row for trial in materialized for row in _trial_event_rows(trial, params)),
+            (row for trial in materialized for row in analyze_trial_events(trial, params)),
             key=_metric_sort_key,
         ),
     )
-    trial_rows = _aggregate_rows(event_rows, "trial")
-    session_rows = _aggregate_rows(trial_rows, "session")
+    trial_rows = aggregate_metric_rows(event_rows, "trial")
+    session_rows = aggregate_metric_rows(trial_rows, "session")
     return Exp1AnalysisResult(
         event_metrics=event_rows,
         trial_metrics=trial_rows,
@@ -1156,5 +1163,7 @@ __all__ = [
     "Exp1Trial",
     "MetricRow",
     "ScenarioSummaryRow",
+    "aggregate_metric_rows",
     "analyze_exp1",
+    "analyze_trial_events",
 ]

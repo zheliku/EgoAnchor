@@ -1,7 +1,7 @@
 # EgoAnchor 实验一/二离线分析的唯一冻结参数入口。任何数值或语义变更都必须递增契约版本，并重新生成 Stage 2 及其后续产物。
 
 [contract]
-version = 2 # 分析参数契约版本；v2 冻结 Task 6 的滤波、窗口、运动检测、lag、恢复和单调时钟语义。
+version = 3 # 分析参数契约版本；v3 在 v2 基础上冻结实验二配对、VCD 曲线、精确随机参考和敏感性 cohort 语义。
 unit_system = "metric" # 距离输入使用米、结果按指标转换为毫米，角度使用度，时间使用毫秒。
 statistics_unit = "event_segment" # 统计单位固定为 event/segment；frame 只用于 event 内计算，不作为独立样本。
 quantile_method = "linear" # 所有经验分位数统一使用 NumPy linear 插值，避免不同默认算法改变 P95/P99。
@@ -72,3 +72,10 @@ negative_duration_policy = "reject" # 同域结束时间早于开始时间视为
 coverage_group_tie = "include_all" # risk-coverage 中并列 VCD 分数按同一阈值整组纳入，禁止任意拆分。
 risk_unit = "mm" # VCD risk 使用同帧平台参考下的 capture-time aligned raw 平移误差，单位毫米。
 alignment_source = "capture_time_aligned_raw" # risk 只使用采集时刻对齐的 raw candidate，不用 display 输出或 VCD 分量代替。
+coverage_denominator = "eligible_received_candidates" # coverage 分母是实际到达 Unity 且 risk 可计算的完整 EgoAnchor 候选数，不包含未到达候选。
+score_equality = "exact_float" # VCD 分数使用解析后的有限浮点值精确相等分组，不四舍五入或使用 epsilon 拆组。
+mean_risk = "arithmetic_mean" # 主 risk-coverage 曲线对纳入候选的毫米 risk 取算术平均。
+tail_quantile = 0.95 # tail-risk 曲线在每个累计 coverage 内使用 linear P95。
+aurc_integration = "right_step" # AURC 使用右连续经验阶梯积分，首个非零 coverage 区间从零覆盖起计入。
+random_reference = "exact_without_replacement_expectation" # 随机参考按无放回随机排序的精确有限总体期望计算，不使用 Monte Carlo。
+sensitivity_cohorts = "completed_trial_marker_covered_occlusion_only" # 敏感性比较完整 trial、首个 marker 后和显式遮挡窗三个候选 cohort。

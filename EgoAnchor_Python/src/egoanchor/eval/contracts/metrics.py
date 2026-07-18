@@ -132,6 +132,22 @@ _MOTION_COLUMNS = (
 )
 """平台参考运动起止检测使用的物理列。"""
 
+_VCD_RISK_COLUMNS = (
+    "unity_admission.candidate_id",
+    "unity_admission.frame_id",
+    "unity_admission.has_aligned_raw",
+    "unity_admission.aligned_raw_pos_x_m",
+    "unity_admission.aligned_raw_pos_y_m",
+    "unity_admission.aligned_raw_pos_z_m",
+    "unity_admission.vcd_score",
+    "unity_reference.frame_id",
+    "unity_reference.reference_pose_valid",
+    "unity_reference.reference_pos_x_m",
+    "unity_reference.reference_pos_y_m",
+    "unity_reference.reference_pos_z_m",
+)
+"""VCD candidate risk 与同 frame 平台参考联接使用的物理列。"""
+
 
 METRIC_DEFINITIONS = (
     MetricDefinition("translation_event_pninetyfive_mm", "平移误差 event-P95", "每个静止头动 event 内对有效 display-reference 平移误差取 linear P95", "mm", "lower_is_better", _STATIC, "render -> event -> session median IQR", "TranslationEventPNinetyFiveMm", _POSITION_ERROR_COLUMNS, True),
@@ -166,7 +182,7 @@ METRIC_DEFINITIONS = (
     MetricDefinition("output_coverage", "输出覆盖率", "event 内 has_output_pose 为真的 render tick 数除以全部 render tick 数", "proportion", "higher_is_better", SCENARIO_ORDER, "render -> event -> session median IQR", "OutputCoverage", (*_EVENT_WINDOW_COLUMNS, *_RENDER_TIME_COLUMNS, "unity_render.has_output_pose")),
     MetricDefinition("candidate_arrival_median_ms", "候选到达时延中位数", "同一 candidate 的 unity_pose_handle_mono_ms 减 source_capture_mono_ms，仅使用 Unity 单调时钟", "ms", "descriptive", SCENARIO_ORDER, "candidate -> event -> session median IQR", "CandidateArrivalMedianMs", ("unity_admission.candidate_id", "unity_admission.source_capture_mono_ms", "unity_admission.unity_pose_handle_mono_ms")),
     MetricDefinition("python_processing_median_ms", "Python 处理时延中位数", "server_publish_mono_ms 减 server_receive_mono_ms，仅使用 Python 单调时钟", "ms", "descriptive", SCENARIO_ORDER, "candidate -> event -> session median IQR", "PythonProcessingMedianMs", ("python_candidates.candidate_id", "python_candidates.server_receive_mono_ms", "python_candidates.server_publish_mono_ms", "unity_admission.candidate_id", "unity_admission.event_id")),
-    MetricDefinition("vcd_aurc_mm", "VCD AURC", "完整 EgoAnchor 候选按 VCD 分数组阈值纳入，以 capture-time aligned raw 同帧平台参考平移误差为 risk 的 risk-coverage 面积", "mm", "lower_is_better", _OCCLUSION, "candidate score groups -> scenario AURC", "VcdAurcMm", ("unity_admission.candidate_id", "unity_admission.frame_id", "unity_admission.has_aligned_raw", "unity_admission.aligned_raw_pos_x_m", "unity_admission.aligned_raw_pos_y_m", "unity_admission.aligned_raw_pos_z_m", "unity_admission.vcd_score", "unity_reference.frame_id", "unity_reference.reference_pose_valid", "unity_reference.reference_pos_x_m", "unity_reference.reference_pos_y_m", "unity_reference.reference_pos_z_m")),
+    MetricDefinition("vcd_mean_risk_aurc_mm", "VCD mean-risk AURC", "完整 EgoAnchor 候选按 VCD 分数 tie group 降序纳入，以 capture-time aligned raw 同帧平台参考平移误差的累计算术平均构成曲线，并从 coverage 0 使用右连续经验阶梯积分", "mm", "lower_is_better", _OCCLUSION, "eligible received candidate score groups -> scenario right-step AURC", "VcdMeanRiskAurcMm", _VCD_RISK_COLUMNS),
 )
 """五场景主指标、guardrail、时延和 VCD 诊断指标目录。"""
 

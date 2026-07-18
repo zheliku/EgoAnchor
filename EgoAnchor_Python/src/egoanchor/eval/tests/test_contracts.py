@@ -82,6 +82,7 @@ class ContractTests(unittest.TestCase):
             "session_metrics",
             "scenario_summary",
             "paired_deltas",
+            "paired_summary",
             "vcd_risk_points",
             "vcd_curve",
             "vcd_aurc",
@@ -332,21 +333,23 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
 
         self.assertGreaterEqual(versions["metrics"], 2)
-        self.assertEqual(versions["analysis_params"], 2)
+        self.assertGreaterEqual(versions["analysis_params"], 2)
         self.assertTrue(changes["metrics-v2"].breaking)
         self.assertTrue(changes["analysis_params-v2"].breaking)
 
     def test_task7_contract_versions_and_guardrails_are_recorded(self) -> None:
-        """Task 7 修订后的 CSV 与指标 breaking 版本必须完整记录。"""
+        """Task 7 与 Task 8 修订后的 CSV、指标 breaking 版本必须完整记录。"""
 
         versions = {item.name: item.version for item in CONTRACT_VERSIONS}
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 2)
-        self.assertEqual(versions["metrics"], 3)
+        self.assertEqual(versions["csv"], 3)
+        self.assertEqual(versions["metrics"], 4)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
+        self.assertTrue(changes["csv-v3"].breaking)
+        self.assertTrue(changes["metrics-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
             "motion_translation_peak_mm": "start_stop_6dof",
@@ -362,6 +365,32 @@ class ContractTests(unittest.TestCase):
             self.assertIn(metric_key, metric_by_key)
             self.assertEqual(metric_by_key[metric_key].scenarios, (scenario_id,))
 
+    def test_task8_csv_keys_cover_components_vcd_dimensions_and_sensitivity(self) -> None:
+        """Task 8 长表主键必须容纳双静止消融、曲线维度和多个敏感性替代项。"""
+
+        contracts = {table.name: table for table in CSV_TABLE_CONTRACTS}
+        self.assertIn("component_id", contracts["paired_deltas"].primary_key)
+        self.assertEqual(
+            contracts["vcd_curve"].primary_key,
+            ("scenario_id", "reference_kind", "risk_kind", "point_index"),
+        )
+        self.assertIn("alternative_id", contracts["sensitivity"].primary_key)
+        risk_columns = {column.name for column in contracts["vcd_risk_points"].columns}
+        self.assertTrue({"eligible", "exclusion_reason", "has_aligned_raw", "reference_pose_valid"}.issubset(risk_columns))
+        metric_keys = {metric.key for metric in METRIC_DEFINITIONS}
+        self.assertIn("vcd_mean_risk_aurc_mm", metric_keys)
+        self.assertNotIn("vcd_tail_risk_aurc_mm", metric_keys)
+        component_plot = contracts["exp2_component_deltas"]
+        self.assertTrue(
+            {"session_id", "scenario_id", "trial_id", "component_id"}.issubset(
+                component_plot.primary_key
+            )
+        )
+        curve_plot = contracts["exp2_vcd_curve"]
+        self.assertTrue(
+            {"reference_kind", "risk_kind", "point_index"}.issubset(curve_plot.primary_key)
+        )
+
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""
 
@@ -369,7 +398,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("contract", config)
         self.assertIn("metrics", config)
         self.assertIn("thresholds", config)
-        self.assertEqual(config["contract"]["version"], 2)
+        self.assertEqual(config["contract"]["version"], 3)
 
         assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
         for line in CONFIG_PATH.read_text(encoding="utf-8").splitlines():

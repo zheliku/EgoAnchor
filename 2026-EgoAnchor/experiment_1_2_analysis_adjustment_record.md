@@ -29,3 +29,34 @@
 
 - 单元测试覆盖五场景、四系统投影、event-first P95、低样本范围、失败尝试保留、trial 等权 session 汇总和显式事件角色。
 - 五个正式 Stage 1 工作簿的只读烟雾测试用于核对真实字段、窗口和汇总规模；该测试不访问原始 JSON/JSONL，也不写后续产物。
+
+## 2026-07-18：Task 8 实验二分析与 VCD 诊断
+
+### 发现
+
+1. `paired_deltas` 原主键没有 component。静止头动同时用于 capture-time alignment 和 StaticLock，两个消融共享部分指标时会发生主键冲突。
+2. 原 VCD 曲线和 AURC 表只能保存一个 risk 值，无法同时表示 mean/P95 和 VCD/random。risk point 也没有排除原因，不能审计无 aligned raw 或缺 reference 的候选。
+3. `analysis_params-v2` 没有定义 coverage 分母、tie 相等规则、AURC 积分、随机参考和敏感性 cohort。把这些规则写死在函数里会破坏唯一参数入口。
+4. 原组件表提到 HMD 速度条件效应和额外 lag，但现有指标目录没有公式，Task 7 类型也不含 head pose 序列。
+
+### 调整
+
+1. CSV 契约升级为 breaking `csv-v3`。配对主键加入 `component_id`，结果保存 `pair_status`，并增加 `paired_summary`。VCD risk point、曲线、AURC 和 sensitivity 表补齐审计列与稳定主键。
+2. 指标目录升级为 breaking `metrics-v4`，冻结 VCD mean-risk AURC、P95 tail-risk 曲线和 cohort 敏感性。参数契约升级为 breaking `analysis_params-v3`。
+3. 组件配对使用双边 exact join。缺行、重复行或 event 错配立即失败；两侧行都存在但数值未定义时保留尝试，delta 写空。差值始终是 `ablation - full`。
+4. VCD 只取完整 EgoAnchor 且实际到达 Unity 的 admission，不根据 accepted/rejected 过滤。risk 使用 aligned raw 与同 session、同 frame reference 的平移距离。无 aligned raw、缺 reference、无效 reference 和非有限 pose 分原因排除；未到 Unity 的候选不生成 risk row。
+5. tie 按解析后的有限浮点分数精确分组。mean-risk AURC 使用右连续经验阶梯积分，首个非零 coverage 区间从零起计。P95 使用 linear 分位数，只作为 tail-risk 曲线。
+6. 随机参考使用无放回随机排序的有限总体精确期望。敏感性比较 completed-trial 主 cohort 与 marker-covered、occlusion-only 两个替代 cohort。
+7. 没有公式和输入类型支持的 HMD 速度条件效应、额外 lag 不进入 Task 8；后续若需要，必须先升级前置工作簿和指标契约。
+
+### 边界影响
+
+- Task 8 是纯计算层，不打开 XLSX、JSON 或 JSONL。Task 9 负责从 Stage 1 XLSX 构造类型化 trial、variant 和 VCD candidate/reference 联接。
+- 没有修改 `schema_v2/rows.py`、`schema_v2/writers.py` 或 `schema_v2/paths.py`。
+- Task 9 只序列化 Task 8 已计算的 event、trial、paired、curve、AURC 和 sensitivity 结果，不重新切窗或计算科学指标。
+
+### 正式工作簿核对
+
+- 四组件结果包含 156 条 event 指标、31 条 trial 指标、31 条 session 指标、72 个 event 配对和 14 条配对汇总；所有冻结主指标都有有限配对。
+- 遮挡 trial 有 787 个实际到达 Unity 的完整 EgoAnchor candidate。211 个因无 aligned raw 排除，2 个因缺同 frame reference 排除，coverage 分母为 574。
+- 574 个 eligible candidate 形成 542 个精确分数 tie group。VCD mean-risk AURC 为 2.3843 mm，精确随机参考为 4.0806 mm；最终 coverage 为 1。

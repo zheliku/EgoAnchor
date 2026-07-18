@@ -47,7 +47,7 @@ class AnalysisParameterTests(unittest.TestCase):
 
         params = load_analysis_parameters()
 
-        self.assertEqual(params.contract_version, 2)
+        self.assertEqual(params.contract_version, 3)
         self.assertEqual(params.statistics_unit, "event_segment")
         self.assertEqual(params.quantile_method, "linear")
         self.assertEqual(params.hp_filter_type, "butterworth")
