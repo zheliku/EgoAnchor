@@ -27,6 +27,35 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _CONTROL_DIGIT_PATTERN = re.compile(r"\\[A-Za-z]*[0-9]")
 """非法含数字 LaTeX 控制序列扫描规则。"""
 
+_TABLE_LAYOUTS = {
+    "exp1_scenario_summary": (
+        "属性 / 场景",
+        ("指标", "Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor"),
+        (
+            r"@{}>{\raggedright\arraybackslash}p{0.14\textwidth}"
+            r">{\raggedright\arraybackslash}p{0.16\textwidth}"
+            r"*{4}{>{\raggedleft\arraybackslash}X}@{}"
+        ),
+    ),
+    "exp2_mechanism_attribution": (
+        "机制 / 场景",
+        (
+            "主指标",
+            "Full median [IQR]",
+            "Ablated median [IQR]",
+            "Delta [IQR]（+/0/-）",
+            "护栏 Delta [IQR]",
+        ),
+        (
+            r"@{}>{\raggedright\arraybackslash}p{0.14\textwidth}"
+            r">{\raggedright\arraybackslash}p{0.13\textwidth}"
+            r"*{3}{>{\raggedleft\arraybackslash}X}"
+            r">{\raggedleft\arraybackslash}p{0.19\textwidth}@{}"
+        ),
+    ),
+}
+"""论文表机器名到首列表头、冻结列和 tabularx 列布局的映射。"""
+
 
 @dataclass(frozen=True, slots=True)
 class LatexPublishResult:
@@ -234,10 +263,22 @@ def _render_tables(
         ]
         if missing:
             raise ValueError(f"paper table 不是完整矩形：{table_name}")
+        try:
+            row_header, expected_columns, column_spec = _TABLE_LAYOUTS[table_name]
+        except KeyError as exc:
+            raise ValueError(f"paper table 缺少固定排版：{table_name}") from exc
+        if tuple(column_keys) != expected_columns:
+            raise ValueError(f"paper table 列顺序不符合固定排版：{table_name}")
         lines.append(f"% Table: {_escape_tex(table_name)}")
-        lines.append(f"\\begin{{tabular}}{{{'l' * (len(column_keys) + 1)}}}")
+        lines.append(r"\begingroup")
+        lines.append(r"\scriptsize")
+        lines.append(r"\setlength{\tabcolsep}{3pt}")
+        lines.append(r"\renewcommand{\arraystretch}{1.08}")
+        lines.append(rf"\begin{{tabularx}}{{\textwidth}}{{{column_spec}}}")
         lines.append(r"\toprule")
-        header = "结果 & " + " & ".join(_escape_tex(value) for value in column_keys) + r" \\"
+        header = _escape_tex(row_header) + " & " + " & ".join(
+            _escape_tex(value) for value in column_keys
+        ) + r" \\"
         lines.append(header)
         lines.append(r"\midrule")
         for row_key in row_keys:
@@ -246,7 +287,8 @@ def _render_tables(
             )
             lines.append(f"{_escape_tex(row_key)} & {values_text} " + r"\\")
         lines.append(r"\bottomrule")
-        lines.append(r"\end{tabular}")
+        lines.append(r"\end{tabularx}")
+        lines.append(r"\endgroup")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

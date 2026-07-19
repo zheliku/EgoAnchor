@@ -145,8 +145,8 @@ schema-v2 task directory
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一固定图只使用静止头动的平移 event-P95、起停 6DoF 的运动窗平移 P95 和遮挡窗平移 P95，并要求每个 event 的四系统矩阵完整。VCD 正式 risk-coverage 图只发布候选级 `tail_pninetyfive` 的 VCD/random 两条曲线；mean-risk 只用于 AURC。
 - 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布，双联实验二图按每 panel 88 mm × 44 mm 发布；图内最小字号固定为 7 pt。实验一图例位于数据轴外，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
-- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v3，指标契约为 breaking v4，参数契约为 breaking v3；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
-- `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v3 在 v2 的 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump 和 recovery 基础上，冻结 VCD cohort、coverage 分母、精确 tie、右阶梯 AURC、P95 tail、精确随机参考和 cohort 敏感性。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v4 冻结 VCD mean-risk AURC、P95 tail-risk 曲线和 cohort 敏感性；CSV v3 保存组件配对键、空值状态、VCD 排除原因和曲线维度。
+- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v6，指标契约为 breaking v5，参数契约为 breaking v4，审阅工作簿契约为 v1；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
+- `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v4 在 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump、recovery 和 VCD risk--coverage 语义基础上，进一步冻结停止后公共窗、近零保持容差和重新可见公共窗。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v5 增加 lag 补偿 P95、停止后 jitter、运动 hold 和固定重新可见窗口；CSV v6 冻结当前行为图、组件配对和论文显示表契约。
 - Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
 - Task 8 实验二分析复用 Task 7 的 event 科学指标，只在组件适用场景内对完整 EgoAnchor 与对应消融做双边 exact join。配对键包含 component，差值固定为 `ablation - full`；缺一侧或重复行硬失败，两侧行存在但数值未定义时保留 `value_missing` 尝试。配对汇总保存 median[IQR]、范围和正/零/负方向计数。
 - VCD risk-coverage 只使用最终完成遮挡 trial 中实际到达 Unity 的完整 EgoAnchor admission，不按运行时 admission decision 预筛。risk 是 capture-time aligned raw 相对同 session、同 `frame_id` 平台参考的平移误差；coverage 分母只含 risk 可计算的已到达候选。并列分数按解析后浮点值精确整组纳入，mean-risk AURC 从 coverage 0 使用右连续经验阶梯积分，P95 仅作为 tail-risk 曲线。随机参考是有限总体无放回随机排序的精确期望，不使用 Monte Carlo；敏感性比较 completed-trial、marker-covered 和 occlusion-only cohort。
@@ -157,10 +157,10 @@ schema-v2 task directory
 - 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
 - Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
-- Stage 3 当前发布一张实验一四面板系统行为总览和一张实验二四面板组件归因图。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，VCD 插图使用日志中的实际 admission decision 标出 eligible candidate operating point，不把它表述为未记录的数值阈值。
+- Stage 3 当前发布一张实验一四面板系统行为总览和一张实验二四面板组件归因图；两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，VCD 插图使用日志中的实际 admission decision 标出 eligible candidate operating point，不把它表述为未记录的数值阈值。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
 - 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；时序合成主归因使用起停场景的 `motion_hold_ratio`，持续平移仍作为实验一的完整系统 lag--fidelity 证据。
-- `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。中文主稿表格使用读者可读的中文场景与列标签，不以机器字段替代论文标签。
+- `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位有效数字且不超过三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。实验一表按属性/场景组织四系统结果，实验二表同行报告 Full、Ablated、配对差值与护栏，不以机器字段替代论文标签。
 
 ## Python 关键约束
 
@@ -297,8 +297,8 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制一张实验一四面板系统行为图和两张实验二图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
-- Stage 2 当前发布 `exp1_analysis.xlsx` 作为实验一人工审阅入口；该工作簿只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
+- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制一张实验一四面板系统行为图和一张实验二四面板机制归因图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 2 当前发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个实验人工审阅入口；二者只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
 - 实验一属性表固定报告世界一致性、静止稳定性、起停转换、平移保真度、旋转保真度和失效约束。lag 补偿 P95 使用 RMSE 选定时延后的同一重叠窗；停止后抖动使用 1 s guard 加固定 3 s 窗；重新可见误差使用固定 1 s 窗。结果必须同时陈述动态响应、旋转保真度和遮挡 output coverage 的代价，不得只挑有利指标。
 - Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
 - Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -53,14 +54,6 @@ _COMPONENT_LABELS = {
 }
 """实验二组件到论文表格标签的映射。"""
 
-_ABLATION_LABELS = {
-    "capture_time_alignment": "关闭采集时刻对齐",
-    "vcd_admission": "关闭 VCD",
-    "temporal_synthesis": "关闭时序合成",
-    "static_lock": "关闭 StaticLock",
-}
-"""实验二组件到论文表格短消融名的映射。"""
-
 _EXP1_TABLE_ROWS = (
     ("世界一致性", "static_head_motion", "translation_event_pninetyfive_mm"),
     ("静止稳定性", "static_head_motion", "position_hp_rms_mm"),
@@ -98,13 +91,19 @@ class PaperRows:
 
 
 def _display_number(value: float) -> str:
-    """以最多三位小数格式化论文显示值，并消除数值负零。
+    """以最多三位有效数字和三位小数格式化论文显示值。
 
     参数：
         value: 已由科学计算层验证的有限数值。
     """
 
-    text = format(value, ".3f").rstrip("0").rstrip(".")
+    if value == 0.0:
+        return "0"
+    magnitude = math.floor(math.log10(abs(value)))
+    decimal_places = min(3, max(0, 2 - magnitude))
+    text = format(value, f".{decimal_places}f")
+    if decimal_places > 0:
+        text = text.rstrip("0").rstrip(".")
     return "0" if text in {"", "-0"} else text
 
 
@@ -250,6 +249,7 @@ def _exp1_rows(
 
     table_cells: list[dict[str, object]] = []
     for property_label, scenario_id, metric_key in _EXP1_TABLE_ROWS:
+        row_label = f"{property_label}（{_SCENARIO_LABELS[scenario_id]}）"
         definition = get_metric_definition(metric_key)
         selected_by_variant = {
             variant_id: summary_by_key.get((scenario_id, variant_id, metric_key))
@@ -262,26 +262,15 @@ def _exp1_rows(
         if len(sample_counts) != 1:
             raise ValueError(f"实验一论文主指标的系统事件数不一致：{scenario_id}/{metric_key}")
         source_sha256 = selected[0].input_workbook_sha256
-        table_cells.extend(
-            (
-                _table_cell(
-                    EXP1_ID,
-                    "exp1_scenario_summary",
-                    property_label,
-                    "场景",
-                    _SCENARIO_LABELS[scenario_id],
-                    "exp1/scenario_summary.csv",
-                    source_sha256,
-                ),
-                _table_cell(
-                    EXP1_ID,
-                    "exp1_scenario_summary",
-                    property_label,
-                    "指标",
-                    f"{definition.label} (n={next(iter(sample_counts))})",
-                    "exp1/scenario_summary.csv",
-                    source_sha256,
-                ),
+        table_cells.append(
+            _table_cell(
+                EXP1_ID,
+                "exp1_scenario_summary",
+                row_label,
+                "指标",
+                f"{definition.label} (n={next(iter(sample_counts))})",
+                "exp1/scenario_summary.csv",
+                source_sha256,
             )
         )
         for variant_id in EXP1_VARIANTS:
@@ -318,7 +307,7 @@ def _exp1_rows(
                 _table_cell(
                     EXP1_ID,
                     "exp1_scenario_summary",
-                    property_label,
+                    row_label,
                     variant_id,
                     display,
                     "exp1/scenario_summary.csv",
@@ -442,23 +431,28 @@ def _exp2_rows(
             q3_value, _, _ = _metric_value(q3, summary.metric_unit, definition.tex_suffix)
             return f"{_display_number(median_value)} [{_display_number(q1_value)}, {_display_number(q3_value)}] {unit}"
 
+        row_label = (
+            f"{_COMPONENT_LABELS[component.component_id]}"
+            f"（{_SCENARIO_LABELS[component.scenario_id]}）"
+        )
         values = {
-            "消融配置": _ABLATION_LABELS[component.component_id],
-            "场景": _SCENARIO_LABELS[component.scenario_id],
             "主指标": get_metric_definition(main_key).label,
             "Full median [IQR]": distribution_text(main, "full"),
             "Ablated median [IQR]": distribution_text(main, "ablation"),
-            "Delta median [IQR]": delta_text(main),
-            "方向计数": f"+{main.positive_count} / {main.zero_count} / {main.negative_count}",
-            "护栏指标": get_metric_definition(guardrail_key).label,
-            "护栏 Delta [IQR]": delta_text(guardrail),
+            "Delta [IQR]（+/0/-）": (
+                f"{delta_text(main)}; "
+                f"{main.positive_count}/{main.zero_count}/{main.negative_count}"
+            ),
+            "护栏 Delta [IQR]": (
+                f"{get_metric_definition(guardrail_key).label}: {delta_text(guardrail)}"
+            ),
         }
         for column_key, display_value in values.items():
             table_cells.append(
                 _table_cell(
                     EXP2_ID,
                     "exp2_mechanism_attribution",
-                    _COMPONENT_LABELS[component.component_id],
+                    row_label,
                     column_key,
                     display_value,
                     source_csv,

@@ -228,8 +228,11 @@ def _validate_manuscript(text: str, sources: Mapping[str, _TexSource]) -> None:
         if len(re.findall(rf"\\newcommand\{{\\{command}\}}", text)) != 1:
             raise ValueError(f"主稿实验宏未唯一物化：{command}")
     for file_name in ("exp1_tables.tex", "exp2_tables.tex"):
-        if r"\begin{tabular}" not in sources[file_name].body:
-            raise ValueError(f"表格 TeX 缺少 tabular：{file_name}")
+        if not any(
+            environment in sources[file_name].body
+            for environment in (r"\begin{tabular}", r"\begin{tabularx}")
+        ):
+            raise ValueError(f"表格 TeX 缺少 tabular/tabularx：{file_name}")
 
 
 def materialize_paper(tex_root: Path, manuscript_path: Path) -> MaterializeResult:

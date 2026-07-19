@@ -224,8 +224,8 @@ def _write_fixture(root: Path) -> None:
 class FigurePublishingTests(unittest.TestCase):
     """验证 Task 10 图表发布的输入边界和输出完整性。"""
 
-    def test_publish_creates_composite_exp1_and_two_exp2_figures(self) -> None:
-        """实验一组合图、两张实验二图和输入 hash manifest 必须完整。"""
+    def test_publish_creates_two_double_column_figures_at_final_width(self) -> None:
+        """两张组合图必须按最终双栏宽度生成，避免插入论文后缩小字号。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_root = Path(tmp) / "csv"
@@ -240,8 +240,9 @@ class FigurePublishingTests(unittest.TestCase):
             for name in _FIGURE_NAMES:
                 encoded = (output / f"{name}.png").read_bytes()
                 widths[name] = struct.unpack(">I", encoded[16:20])[0]
-            self.assertLess(widths["exp1_behavior_overview"], 2200)
-            self.assertLess(widths["exp2_mechanism_attribution"], 3600)
+            for width in widths.values():
+                self.assertGreaterEqual(width, 1950)
+                self.assertLessEqual(width, 2200)
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["plot_count"], 2)
             self.assertEqual(len(manifest["input_csv_sha256"]), 7)

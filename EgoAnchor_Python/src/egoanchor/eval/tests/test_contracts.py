@@ -344,19 +344,20 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 5)
+        self.assertEqual(versions["csv"], 6)
         self.assertEqual(versions["metrics"], 5)
         self.assertEqual(versions["analysis_params"], 4)
         self.assertEqual(versions["analysis_workbook"], 1)
-        self.assertEqual(versions["csv"], 5)
+        self.assertEqual(versions["csv"], 6)
         self.assertTrue(changes["csv-v5"].breaking)
+        self.assertTrue(changes["csv-v6"].breaking)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
         self.assertTrue(changes["csv-v3"].breaking)
         self.assertTrue(changes["metrics-v4"].breaking)
         self.assertTrue(changes["metrics-v5"].breaking)
         self.assertTrue(changes["analysis_params-v4"].breaking)
-        self.assertEqual(versions["csv"], 5)
+        self.assertEqual(versions["csv"], 6)
         self.assertTrue(changes["csv-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",

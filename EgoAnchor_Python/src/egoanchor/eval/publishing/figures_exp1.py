@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 import math
-from typing import Mapping
+from typing import Any, Mapping, cast
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 
 from .style import COLORS, LINE_STYLES, MARKERS, PlotSpec, SYSTEM_ORDER, save_figure_pair
@@ -14,6 +15,21 @@ from .style import COLORS, LINE_STYLES, MARKERS, PlotSpec, SYSTEM_ORDER, save_fi
 
 _FIGURE_SIZE = (7.1, 4.8)
 """IEEE VR 双栏四面板图的英寸尺寸。"""
+
+_UNAVAILABLE_COLOR = "#A23B3B"
+"""遮挡期间完整系统输出不可用的状态色。"""
+
+
+def _line_properties(name: str) -> dict[str, float | int]:
+    """返回系统曲线的视觉层级，突出完整 EgoAnchor。
+
+    参数：
+        name: 冻结系统配置名。
+    """
+
+    if name == "EgoAnchor":
+        return {"linewidth": 1.45, "alpha": 1.0, "zorder": 4}
+    return {"linewidth": 0.85, "alpha": 0.82, "zorder": 2}
 
 
 def _number(row: Mapping[str, str], key: str) -> float | None:
@@ -65,19 +81,26 @@ def _plot_head_motion(axis, spec: PlotSpec) -> None:
         rows = grouped[name]
         x = [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in rows]
         y = [_number(row, "translation_error_mm") for row in rows]
-        axis.plot(x, y, color=COLORS[name], linestyle=LINE_STYLES[name], label=name)
+        axis.plot(
+            x,
+            y,
+            color=COLORS[name],
+            linestyle=LINE_STYLES[name],
+            label=name,
+            **_line_properties(name),
+        )
     ego_rows = grouped.get("EgoAnchor", [])
     secondary = axis.twinx()
     secondary.plot(
         [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in ego_rows],
         [_number(row, "head_angular_speed_deg_s") for row in ego_rows],
-        color="#9A9A9A",
-        linewidth=0.7,
-        alpha=0.75,
+        color="#B8B8B8",
+        linewidth=0.65,
+        alpha=0.62,
     )
     secondary.set_ylabel("Head speed (deg/s)", color="#666666")
     secondary.tick_params(axis="y", colors="#666666")
-    axis.set_title("(A) Head motion: alignment limits error")
+    axis.set_title("(A) Head motion: world consistency")
     axis.set_xlabel("Time (s)")
     axis.set_ylabel("Translation error (mm)")
 
@@ -102,6 +125,16 @@ def _plot_start_stop(axis, spec: PlotSpec) -> None:
         linewidth=1.0,
         label="Reference",
     )
+    if x_reference:
+        reference_values = [_number(row, "reference_displacement_mm") for row in ego_rows]
+        axis.annotate(
+            "Reference",
+            (x_reference[-1], reference_values[-1]),
+            xytext=(-4, -7),
+            textcoords="offset points",
+            ha="right",
+            color="#222222",
+        )
     for name in _system_order(grouped):
         rows = grouped[name]
         axis.plot(
@@ -110,13 +143,30 @@ def _plot_start_stop(axis, spec: PlotSpec) -> None:
             color=COLORS[name],
             linestyle=LINE_STYLES[name],
             label=name,
+            **_line_properties(name),
         )
     motion = _phase_bounds(ego_rows, "motion")
     post_stop = _phase_bounds(ego_rows, "post_stop")
     if motion is not None:
         axis.axvspan(*motion, color="#D9EAF7", alpha=0.55, linewidth=0.0)
+        axis.text(
+            sum(motion) / 2.0,
+            0.04,
+            "motion",
+            transform=axis.get_xaxis_transform(),
+            ha="center",
+            color="#47677C",
+        )
     if post_stop is not None:
         axis.axvspan(*post_stop, color="#E2F0E9", alpha=0.6, linewidth=0.0)
+        axis.text(
+            sum(post_stop) / 2.0,
+            0.04,
+            "post-stop",
+            transform=axis.get_xaxis_transform(),
+            ha="center",
+            color="#47705B",
+        )
     axis.set_title("(B) Start-stop: response and rest")
     axis.set_xlabel("Time (s)")
     axis.set_ylabel("Displacement (mm)")
@@ -185,6 +235,7 @@ def _plot_occlusion(axis, spec: PlotSpec) -> None:
             color=COLORS[name],
             linestyle=LINE_STYLES[name],
             label=name,
+            **_line_properties(name),
         )
     ego_rows = grouped.get("EgoAnchor", [])
     hidden_times = [
@@ -194,6 +245,15 @@ def _plot_occlusion(axis, spec: PlotSpec) -> None:
     ]
     if hidden_times:
         axis.axvspan(min(hidden_times), max(hidden_times), color="#EFE5D5", alpha=0.7, linewidth=0.0)
+        axis.text(
+            (min(hidden_times) + max(hidden_times)) / 2.0,
+            0.95,
+            "occluded",
+            transform=axis.get_xaxis_transform(),
+            ha="center",
+            va="top",
+            color="#6B5A42",
+        )
     unavailable = [
         float(_number(row, "time_ms") or 0.0) / 1000.0
         for row in ego_rows
@@ -203,38 +263,54 @@ def _plot_occlusion(axis, spec: PlotSpec) -> None:
         axis.scatter(
             unavailable,
             np.zeros(len(unavailable)),
-            color="#D55E00",
+            color=_UNAVAILABLE_COLOR,
             marker="|",
             s=13,
             linewidths=0.6,
             label="Ego output unavailable",
         )
-    axis.set_title("(D) Occlusion: harmful updates contained")
+        axis.text(
+            0.97,
+            0.03,
+            "output unavailable",
+            transform=axis.transAxes,
+            ha="right",
+            va="bottom",
+            color=_UNAVAILABLE_COLOR,
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.82, "pad": 0.6},
+        )
+    axis.set_title("(D) Occlusion: failure containment")
     axis.set_xlabel("Time (s)")
     axis.set_ylabel("Translation error (mm)")
 
 
-def _shared_legend(figure, axes) -> None:
-    """为四面板图建立去重的底部共享图例。"""
+def _shared_legend(figure) -> None:
+    """按冻结系统顺序建立四项底部图例。"""
 
-    handles: list[object] = []
-    labels: list[str] = []
-    for axis in axes:
-        for handle, label in zip(*axis.get_legend_handles_labels()):
-            if label not in labels:
-                handles.append(handle)
-                labels.append(label)
-    if handles:
-        figure.legend(
-            handles,
-            labels,
-            loc="lower center",
-            ncol=6,
-            frameon=False,
-            bbox_to_anchor=(0.5, 0.0),
-            columnspacing=1.0,
-            handlelength=1.5,
+    handles: list[Line2D] = []
+    for name in SYSTEM_ORDER:
+        properties = _line_properties(name)
+        handles.append(
+            Line2D(
+                (0,),
+                (0,),
+                color=COLORS[name],
+                linestyle=cast(Any, LINE_STYLES[name]),
+                label=name,
+                linewidth=float(properties["linewidth"]),
+                alpha=float(properties["alpha"]),
+                zorder=int(properties["zorder"]),
+            )
         )
+    figure.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=4,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.0),
+        columnspacing=1.15,
+        handlelength=1.7,
+    )
 
 
 def publish_exp1(specs: Mapping[str, PlotSpec], output_root) -> dict[str, tuple[str, str]]:
@@ -248,8 +324,8 @@ def publish_exp1(specs: Mapping[str, PlotSpec], output_root) -> dict[str, tuple[
     _plot_occlusion(axes[3], specs["exp1_occlusion_trace"])
     for axis in axes:
         axis.grid(axis="y", color="#DDDDDD", linewidth=0.45)
-    _shared_legend(figure, axes)
-    figure.tight_layout(rect=(0.0, 0.08, 1.0, 1.0), h_pad=1.4, w_pad=1.2)
+    _shared_legend(figure)
+    figure.tight_layout(rect=(0.0, 0.065, 1.0, 1.0), h_pad=1.35, w_pad=1.15)
     return {
         "exp1_behavior_overview": save_figure_pair(
             figure,

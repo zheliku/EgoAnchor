@@ -173,7 +173,7 @@ class PaperRowsTests(unittest.TestCase):
             if row["macro_name"]
             == "EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm"
         )
-        self.assertEqual(formatted_number["value"], "13.123")
+        self.assertEqual(formatted_number["value"], "13.1")
         exp2_session = next(
             row
             for row in result.numbers
@@ -188,47 +188,55 @@ class PaperRowsTests(unittest.TestCase):
         )
         exp1_cells = [row for row in result.tables if row["experiment"] == "exp1_system_characterization"]
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
-        self.assertEqual(len(exp1_cells), 36)
-        self.assertEqual(len(exp2_cells), 36)
-        self.assertIn("Full median [IQR]", {row["column_key"] for row in exp2_cells})
-        self.assertIn("Ablated median [IQR]", {row["column_key"] for row in exp2_cells})
-        self.assertIn("方向计数", {row["column_key"] for row in exp2_cells})
+        self.assertEqual(len(exp1_cells), 30)
+        self.assertEqual(len(exp2_cells), 20)
+        self.assertEqual(
+            {row["column_key"] for row in exp2_cells},
+            {"主指标", "Full median [IQR]", "Ablated median [IQR]", "Delta [IQR]（+/0/-）", "护栏 Delta [IQR]"},
+        )
         hold_cell = next(
             row
             for row in exp2_cells
-            if row["row_key"] == "时序合成" and row["column_key"] == "Full median [IQR]"
+            if row["row_key"] == "时序合成（起停 6DoF）" and row["column_key"] == "Full median [IQR]"
         )
         self.assertEqual(hold_cell["display_value"], "1000 [900, 1100] %")
         hold_delta = next(
             row
             for row in exp2_cells
-            if row["row_key"] == "时序合成" and row["column_key"] == "Delta median [IQR]"
+            if row["row_key"] == "时序合成（起停 6DoF）" and row["column_key"] == "Delta [IQR]（+/0/-）"
         )
-        self.assertEqual(hold_delta["display_value"], "200 [100, 300] pp")
+        self.assertEqual(hold_delta["display_value"], "200 [100, 300] pp; 3/1/0")
         self.assertEqual(
             {row["row_key"] for row in exp1_cells},
-            {"世界一致性", "静止稳定性", "起停转换", "平移保真度", "旋转保真度", "失效约束"},
+            {
+                "世界一致性（静止头动）",
+                "静止稳定性（静止头动）",
+                "起停转换（起停 6DoF）",
+                "平移保真度（持续平移）",
+                "旋转保真度（持续旋转）",
+                "失效约束（遮挡恢复）",
+            },
         )
         self.assertEqual(
             {row["column_key"] for row in exp1_cells},
-            {"场景", "指标", *variants},
+            {"指标", *variants},
         )
-        ablation_values = {
-            row["display_value"]
-            for row in exp2_cells
-            if row["column_key"] == "消融配置"
-        }
         self.assertEqual(
-            ablation_values,
-            {"关闭采集时刻对齐", "关闭 VCD", "关闭时序合成", "关闭 StaticLock"},
+            {row["row_key"] for row in exp2_cells},
+            {
+                "采集时刻对齐（静止头动）",
+                "VCD 接纳（遮挡恢复）",
+                "时序合成（起停 6DoF）",
+                "StaticLock（静止头动）",
+            },
         )
         formatted_cell = next(
             row
             for row in exp1_cells
-            if row["row_key"] == "世界一致性"
+            if row["row_key"] == "世界一致性（静止头动）"
             and row["column_key"] == "EgoAnchor"
         )
-        self.assertEqual(formatted_cell["display_value"], "13.123 [12.123, 14.123] mm")
+        self.assertEqual(formatted_cell["display_value"], "13.1 [12.1, 14.1] mm")
         with self.assertRaisesRegex(ValueError, "主指标缺失"):
             build_paper_rows(
                 trials,
