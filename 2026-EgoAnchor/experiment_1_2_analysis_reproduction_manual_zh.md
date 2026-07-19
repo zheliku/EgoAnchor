@@ -248,13 +248,13 @@ Get-ChildItem -LiteralPath $resultDir -File -Recurse |
 
 ## 常见失败处理
 
-| 现象 | 处理 |
-|---|---|
-| `qc` 返回 2 | 查看输出中的 `source_file`、`source_line` 和错误说明；修复采集日志，不要绕过 QC。 |
-| `preprocess` 没有生成完整 XLSX | 确认五个目录和固定文件集合完整；任一 task 失败时整批不会发布。 |
-| `analyze` 返回 2 | 确认传入的是五个完整 XLSX，不能传 raw 目录；检查 session、配置 hash、runtime 矩阵和关键事件是否一致。 |
-| `publish` 返回 1 | 检查 `data/analysis/results/` 是否完整，尤其是 `plots/plot_catalog.csv`、plot CSV 和两个 paper CSV。 |
-| `materialize-paper` 返回 2 | 确认四个 TeX 都来自当前 Stage 3，且主稿三个受控区块边界未被手工改写。 |
-| PDF 页数或图片不对 | 先看 `pdf/egoanchor_cn_v6.log` 的首个错误，再确认图位于 `figures/generated/`。 |
+| 现象                             | 处理                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `qc` 返回 2                    | 查看输出中的`source_file`、`source_line` 和错误说明；修复采集日志，不要绕过 QC。                    |
+| `preprocess` 没有生成完整 XLSX | 确认五个目录和固定文件集合完整；任一 task 失败时整批不会发布。                                          |
+| `analyze` 返回 2               | 确认传入的是五个完整 XLSX，不能传 raw 目录；检查 session、配置 hash、runtime 矩阵和关键事件是否一致。   |
+| `publish` 返回 1               | 检查`data/analysis/results/` 是否完整，尤其是 `plots/plot_catalog.csv`、plot CSV 和两个 paper CSV。 |
+| `materialize-paper` 返回 2     | 确认四个 TeX 都来自当前 Stage 3，且主稿三个受控区块边界未被手工改写。                                   |
+| PDF 页数或图片不对               | 先看`pdf/egoanchor_cn_v6.log` 的首个错误，再确认图位于 `figures/generated/`。                       |
 
 任何阶段失败都应停在当前阶段。不要让 Stage 2 回读 raw、让 Stage 3 回读 XLSX，或从旧结果目录补一张缺失图；修复当前输入后重新执行该阶段。

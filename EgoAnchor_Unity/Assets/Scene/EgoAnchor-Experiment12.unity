@@ -2818,7 +2818,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05
-  enterAngSpeedDps: 35
+  enterAngSpeedDps: 22
   dwellSeconds: 0.35
   minScore: 0.25
   deadbandMeters: 0.008
@@ -2826,7 +2826,7 @@ MonoBehaviour:
   unlockEvidenceMeters: 0.08
   unlockEvidenceDegrees: 20
   unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
+  unlockDriftDegrees: 12
   evidenceHalfLifeSeconds: 0.27
   creepHalfLifeSeconds: 2.7
   relockSuppressSeconds: 1

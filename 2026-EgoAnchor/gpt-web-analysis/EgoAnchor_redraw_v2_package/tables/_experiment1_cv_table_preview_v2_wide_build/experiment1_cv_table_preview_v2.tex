@@ -1,0 +1,40 @@
+
+\documentclass{article}
+\usepackage[paperwidth=25.0cm,paperheight=6.0cm,margin=0.45cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\pagestyle{empty}
+\begin{document}
+\noindent
+\setlength{\tabcolsep}{4.2pt}
+\renewcommand{\arraystretch}{1.10}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrr}
+\toprule
+& \multicolumn{2}{c}{Static head motion}
+& \multicolumn{1}{c}{Start-stop}
+& \multicolumn{2}{c}{Translation}
+& \multicolumn{2}{c}{Rotation}
+& \multicolumn{1}{c}{Occlusion} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+Method
+& Trans. P95 $\downarrow$
+& HP-RMS $\downarrow$
+& Response $\downarrow$
+& Lag $\downarrow$
+& Aligned RMSE $\downarrow$
+& Lag $\downarrow$
+& Aligned RMSE $\downarrow$
+& Trans. P95 $\downarrow$ \\
+& (mm) & (mm) & (ms) & (ms) & (mm) & (ms) & (deg) & (mm) \\
+\midrule
+Arrival-Hold & 22.237 & 3.404 & \textbf{126.3} & \textbf{182.5} & 10.568 & \textbf{265.0} & 2.917 & 35.303 \\
+Capture-Hold & 8.573 & 2.199 & 250.3 & 255.0 & 10.729 & \textbf{265.0} & \textbf{2.909} & 34.095 \\
+One-Euro & 8.273 & 0.812 & 333.3 & 387.5 & 10.726 & 370.0 & 7.858 & 12.999 \\
+EgoAnchor & \textbf{3.679} & \textbf{0.030} & 751.1 & 325.0 & \textbf{5.697} & 350.0 & 3.620 & \textbf{1.822} \\
+\bottomrule
+\end{tabular}%
+}
+
+\end{document}
