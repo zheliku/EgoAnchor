@@ -109,6 +109,7 @@ _EXP1_SHEETS = (
     AnalysisSheetSpec("start_stop_trace", "plots/exp1_start_stop_trace.csv", "exp1_start_stop_trace"),
     AnalysisSheetSpec("lag_tradeoff", "plots/exp1_lag_tradeoff.csv", "exp1_lag_tradeoff"),
     AnalysisSheetSpec("occlusion_trace", "plots/exp1_occlusion_trace.csv", "exp1_occlusion_trace"),
+    AnalysisSheetSpec("summary_plot", "plots/exp1_summary.csv", "exp1_summary"),
     AnalysisSheetSpec("paper_numbers", "paper/numbers.csv", "numbers", _is_exp1),
     AnalysisSheetSpec("paper_tables", "paper/tables.csv", "tables", _is_exp1),
     AnalysisSheetSpec("lineage", "audit/lineage.csv", "lineage", _is_exp1_lineage),

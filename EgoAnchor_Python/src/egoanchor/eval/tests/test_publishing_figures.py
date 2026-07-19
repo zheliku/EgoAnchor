@@ -21,6 +21,7 @@ _PLOT_SPEC_NAMES = (
     "exp1_start_stop_trace",
     "exp1_lag_tradeoff",
     "exp1_occlusion_trace",
+    "exp1_summary",
     "exp2_mechanism_attribution",
     "exp2_vcd_curve",
 )
@@ -152,21 +153,52 @@ def _write_fixture(root: Path) -> None:
             for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
             for index in range(2)
         ],
+        "exp1_summary": [
+            {
+                "plot_id": "exp1_summary",
+                "panel_id": panel,
+                "scenario_id": scenario,
+                "variant_id": variant,
+                "metric_key": metric,
+                "metric_label": "Translation P95",
+                "metric_unit": "mm",
+                "median": 10.0,
+                "q1": 8.0,
+                "q3": 12.0,
+                "sample_count": 4,
+                "input_workbook_sha256": "a" * 64,
+            }
+            for panel, scenario, metric in (
+                ("world_consistency", "static_head_motion", "translation_event_pninetyfive_mm"),
+                ("failure_containment", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
+            )
+            for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+        ],
         "exp2_mechanism_attribution": [
             {
                 **result,
                 "plot_id": "exp2_mechanism_attribution",
-                "panel_id": "vcd_admission",
+                "panel_id": component,
                 "experiment_id": "exp2_design_attribution",
-                "component_id": "vcd_admission",
+                "component_id": component,
                 "full_variant_id": "EgoAnchor",
-                "ablation_variant_id": "EgoAnchor w/o VCD",
+                "ablation_variant_id": f"EgoAnchor w/o {label}",
+                "metric_key": metric,
+                "metric_unit": unit,
                 "full_value": 1.0,
                 "ablation_value": 2.0,
-                "delta": 1.0,
-                "delta_median": 1.0,
+                "delta": delta,
+                "delta_q1": delta - 0.2,
+                "delta_q3": delta + 0.3,
+                "delta_median": delta,
                 "pair_status": "complete",
             }
+            for component, label, metric, unit, delta in (
+                ("capture_time_alignment", "alignment", "translation_event_pninetyfive_mm", "mm", 1.0),
+                ("vcd_admission", "VCD", "occlusion_translation_pninetyfive_mm", "mm", 2.0),
+                ("temporal_synthesis", "temporal", "motion_hold_ratio", "proportion", 0.2),
+                ("static_lock", "StaticLock", "position_hp_rms_mm", "mm", 1.5),
+            )
         ],
         "exp2_vcd_curve": [
             {
@@ -192,6 +224,7 @@ def _write_fixture(root: Path) -> None:
         "exp1_start_stop_trace": ("time_ms", "display_displacement_mm", "variant_id"),
         "exp1_lag_tradeoff": ("effective_lag_ms", "p95_residual_mm", "variant_id"),
         "exp1_occlusion_trace": ("time_ms", "translation_error_mm", "variant_id"),
+        "exp1_summary": ("median", "metric_key", "variant_id"),
         "exp2_mechanism_attribution": ("event_id", "delta", "component_id"),
         "exp2_vcd_curve": ("coverage", "risk_mm", "reference_kind"),
     }
@@ -245,7 +278,7 @@ class FigurePublishingTests(unittest.TestCase):
                 self.assertLessEqual(width, 2200)
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["plot_count"], 2)
-            self.assertEqual(len(manifest["input_csv_sha256"]), 7)
+            self.assertEqual(len(manifest["input_csv_sha256"]), 8)
 
     def test_changing_declared_plot_csv_changes_input_lineage(self) -> None:
         """修改 plot CSV 后 manifest 中对应 hash 必须变化。"""

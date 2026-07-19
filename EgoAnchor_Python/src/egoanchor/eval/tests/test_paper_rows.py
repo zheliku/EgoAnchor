@@ -188,7 +188,7 @@ class PaperRowsTests(unittest.TestCase):
         )
         exp1_cells = [row for row in result.tables if row["experiment"] == "exp1_system_characterization"]
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
-        self.assertEqual(len(exp1_cells), 30)
+        self.assertEqual(len(exp1_cells), 24)
         self.assertEqual(len(exp2_cells), 20)
         self.assertEqual(
             {row["column_key"] for row in exp2_cells},
@@ -209,17 +209,22 @@ class PaperRowsTests(unittest.TestCase):
         self.assertEqual(
             {row["row_key"] for row in exp1_cells},
             {
-                "世界一致性（静止头动）",
-                "静止稳定性（静止头动）",
-                "起停转换（起停 6DoF）",
-                "平移保真度（持续平移）",
-                "旋转保真度（持续旋转）",
-                "失效约束（遮挡恢复）",
+                "Arrival-Hold",
+                "Capture-Hold",
+                "One-Euro Anchor",
+                "EgoAnchor",
             },
         )
         self.assertEqual(
             {row["column_key"] for row in exp1_cells},
-            {"指标", *variants},
+            {
+                "World P95 ↓",
+                "HP--RMS ↓",
+                "Response ↓",
+                "Trans. residual ↓",
+                "Rot. residual ↓",
+                "Occlusion P95 ↓",
+            },
         )
         self.assertEqual(
             {row["row_key"] for row in exp2_cells},
@@ -233,8 +238,8 @@ class PaperRowsTests(unittest.TestCase):
         formatted_cell = next(
             row
             for row in exp1_cells
-            if row["row_key"] == "世界一致性（静止头动）"
-            and row["column_key"] == "EgoAnchor"
+            if row["row_key"] == "EgoAnchor"
+            and row["column_key"] == "World P95 ↓"
         )
         self.assertEqual(formatted_cell["display_value"], "13.1 [12.1, 14.1] mm")
         with self.assertRaisesRegex(ValueError, "主指标缺失"):

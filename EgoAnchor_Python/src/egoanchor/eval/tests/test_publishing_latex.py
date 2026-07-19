@@ -67,18 +67,21 @@ def _write_fixture(root: Path, *, invalid_macro: bool = False) -> None:
                 {
                     "experiment": "exp1_system_characterization",
                     "table_name": "exp1_scenario_summary",
-                    "row_key": "World consistency / static head motion",
+                    "row_key": row_key,
                     "column_key": column,
                     "display_value": value,
                     "source_csv": "exp1/scenario_summary.csv",
                     "source_sha256": upstream_hash,
                 }
-                for column, value in (
-                    ("指标", "Translation P95 (n=4)"),
-                    ("Arrival-Hold", "33.6 [30.0, 35.0] mm"),
-                    ("Capture-Hold", "12.0 [10.0, 13.0] mm"),
-                    ("One-Euro Anchor", "10.0 [9.0, 11.0] mm"),
-                    ("EgoAnchor", "4.0 [3.0, 5.0] mm"),
+                for row_key, values in {
+                    "Arrival-Hold": ("33.6 [30.0, 35.0] mm", "7.2 [6.0, 8.0] mm", "110 [90, 130] ms", "9.1 [8.0, 10.0] mm", "4.1 [3.5, 5.0] deg", "12.2 [10.0, 15.0] mm"),
+                    "Capture-Hold": ("12.0 [10.0, 13.0] mm", "5.0 [4.0, 6.0] mm", "100 [80, 120] ms", "7.5 [6.0, 9.0] mm", "3.8 [3.0, 4.5] deg", "10.0 [8.0, 12.0] mm"),
+                    "One-Euro Anchor": ("10.0 [9.0, 11.0] mm", "4.0 [3.0, 5.0] mm", "90 [70, 110] ms", "6.4 [5.0, 8.0] mm", "3.2 [2.5, 4.0] deg", "8.0 [6.0, 10.0] mm"),
+                    "EgoAnchor": ("[BEST]4.0 [3.0, 5.0] mm", "[BEST]3.0 [2.0, 4.0] mm", "[BEST]80 [60, 100] ms", "[BEST]5.0 [4.0, 6.0] mm", "[BEST]2.8 [2.0, 3.5] deg", "[BEST]6.0 [4.0, 8.0] mm"),
+                }.items()
+                for column, value in zip(
+                    ("World P95 ↓", "HP--RMS ↓", "Response ↓", "Trans. residual ↓", "Rot. residual ↓", "Occlusion P95 ↓"),
+                    values,
                 )
             ),
             *(
@@ -119,11 +122,13 @@ class LatexPublishingTests(unittest.TestCase):
                 {"exp1_numbers.tex", "exp1_tables.tex", "exp2_numbers.tex", "exp2_tables.tex"},
             )
             exp1_numbers = (output / "exp1_numbers.tex").read_text(encoding="utf-8")
+            exp1_table = (output / "exp1_tables.tex").read_text(encoding="utf-8")
             self.assertIn(r"\newcommand{\EAExpOneSessionCount}{5}", exp1_numbers)
             self.assertIn(result.input_csv_sha256["paper/numbers.csv"], exp1_numbers)
             exp2_table = (output / "exp2_tables.tex").read_text(encoding="utf-8")
             self.assertIn(r"Delta [IQR]（+/0/-）", exp2_table)
             self.assertIn("1.25 [0.5, 2.0] mm", exp2_table)
+            self.assertIn(r"\textbf{4.0 [3.0, 5.0] mm}", exp1_table)
             self.assertIn(r"\begin{tabularx}{\textwidth}", exp2_table)
             self.assertIn(r"\scriptsize", exp2_table)
             self.assertIn("机制 / 场景", exp2_table)
@@ -163,7 +168,7 @@ class LatexPublishingTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_cli_publish_creates_figures_and_tex(self) -> None:
-        """统一 publish 命令必须同时发布三张当前图和四个 TeX。"""
+        """统一 publish 命令必须同时发布两张当前组合图和四个 TeX。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_root = Path(tmp) / "csv"

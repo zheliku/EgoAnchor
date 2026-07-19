@@ -1,39 +1,45 @@
-"""实验一四面板系统行为图的 CSV-only 绘制函数。"""
+"""实验一 GPT 风格三联图的 CSV-only 绘制函数。"""
 
 from __future__ import annotations
 
 from collections import defaultdict
 import math
-from typing import Any, Mapping, cast
+from typing import Mapping
 
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
 
-from .style import COLORS, LINE_STYLES, MARKERS, PlotSpec, SYSTEM_ORDER, save_figure_pair
+from .style import PlotSpec, save_figure_pair
 
 
-_FIGURE_SIZE = (7.1, 4.8)
-"""IEEE VR 双栏四面板图的英寸尺寸。"""
+_FIGURE_SIZE = (7.15, 2.25)
+"""跨双栏三联图尺寸，接近 GPT 版的宽屏构图。"""
 
-_UNAVAILABLE_COLOR = "#A23B3B"
-"""遮挡期间完整系统输出不可用的状态色。"""
+_SYSTEM_ORDER = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+"""实验一系统显示顺序。"""
+
+_COLORS = {
+    "Arrival-Hold": "#2878B5",
+    "Capture-Hold": "#F58518",
+    "One-Euro Anchor": "#2CA02C",
+    "EgoAnchor": "#D62728",
+}
+"""迁移 GPT 版的高对比、灰度可区分色板。"""
+
+_MARKERS = {
+    "Arrival-Hold": "s",
+    "Capture-Hold": "o",
+    "One-Euro Anchor": "^",
+    "EgoAnchor": "D",
+}
+"""四个系统的形状编码。"""
+
+_SUMMARY_COLOR = "#2878B5"
+"""GPT 摘要栏使用的统一蓝色。"""
 
 
-def _line_properties(name: str) -> dict[str, float | int]:
-    """返回系统曲线的视觉层级，突出完整 EgoAnchor。
-
-    参数：
-        name: 冻结系统配置名。
-    """
-
-    if name == "EgoAnchor":
-        return {"linewidth": 1.45, "alpha": 1.0, "zorder": 4}
-    return {"linewidth": 0.85, "alpha": 0.82, "zorder": 2}
-
-
-def _number(row: Mapping[str, str], key: str) -> float | None:
-    """读取有限绘图数值，空单元格返回 ``None``。"""
+def _finite(row: Mapping[str, str], key: str) -> float | None:
+    """读取有限 CSV 浮点值，空值返回 ``None``。"""
 
     raw = str(row.get(key) or "").strip()
     if not raw:
@@ -47,291 +53,141 @@ def _number(row: Mapping[str, str], key: str) -> float | None:
     return value
 
 
-def _bool(row: Mapping[str, str], key: str) -> bool:
-    """读取冻结 CSV 小写布尔值。"""
+def _summary_rows(spec: PlotSpec, panel_id: str) -> dict[str, Mapping[str, str]]:
+    """按系统整理 Stage 2 已计算的摘要行。"""
 
-    value = str(row.get(key) or "").strip().lower()
-    if value not in {"true", "false"}:
-        raise ValueError(f"实验一 plot 列 {key} 不是布尔值")
-    return value == "true"
-
-
-def _group_by_variant(spec: PlotSpec) -> dict[str, list[Mapping[str, str]]]:
-    """按固定系统顺序前的 variant 字段分组并按样本排序。"""
-
-    grouped: dict[str, list[Mapping[str, str]]] = defaultdict(list)
-    for row in spec.rows:
-        grouped[str(row.get("variant_id") or "unknown")].append(row)
-    for rows in grouped.values():
-        rows.sort(key=lambda row: int(str(row.get("sample_index") or "0")))
-    return grouped
+    rows: dict[str, Mapping[str, str]] = {
+        str(row.get("variant_id") or ""): row
+        for row in spec.rows
+        if row.get("panel_id") == panel_id
+    }
+    if tuple(rows) != tuple(name for name in _SYSTEM_ORDER if name in rows):
+        raise ValueError(f"实验一摘要系统顺序或内容不完整：{panel_id}")
+    return rows
 
 
-def _system_order(grouped: Mapping[str, object]) -> tuple[str, ...]:
-    """返回已出现系统的冻结论文顺序。"""
+def _plot_summary(axis, spec: PlotSpec, panel_id: str, title: str, ylabel: str) -> None:
+    """绘制 GPT 风格的四系统 median/IQR 摘要点。"""
 
-    return tuple(name for name in SYSTEM_ORDER if name in grouped)
-
-
-def _plot_head_motion(axis, spec: PlotSpec) -> None:
-    """绘制头动角速度与三系统平移误差时间线。"""
-
-    grouped = _group_by_variant(spec)
-    for name in _system_order(grouped):
-        rows = grouped[name]
-        x = [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in rows]
-        y = [_number(row, "translation_error_mm") for row in rows]
-        axis.plot(
-            x,
-            y,
-            color=COLORS[name],
-            linestyle=LINE_STYLES[name],
-            label=name,
-            **_line_properties(name),
+    grouped = _summary_rows(spec, panel_id)
+    x = np.arange(len(_SYSTEM_ORDER), dtype=float)
+    for index, name in enumerate(_SYSTEM_ORDER):
+        row = grouped[name]
+        median = _finite(row, "median")
+        q1 = _finite(row, "q1")
+        q3 = _finite(row, "q3")
+        if median is None or q1 is None or q3 is None:
+            raise ValueError(f"实验一摘要图统计量不完整：{panel_id}/{name}")
+        axis.errorbar(
+            x[index],
+            median,
+            yerr=np.asarray([[median - q1], [q3 - median]]),
+            color=_SUMMARY_COLOR,
+            marker="o",
+            markersize=7.0,
+            capsize=3.0,
+            linewidth=1.35,
+            markeredgecolor="white",
+            markeredgewidth=0.45,
+            zorder=3,
         )
-    ego_rows = grouped.get("EgoAnchor", [])
-    secondary = axis.twinx()
-    secondary.plot(
-        [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in ego_rows],
-        [_number(row, "head_angular_speed_deg_s") for row in ego_rows],
-        color="#B8B8B8",
-        linewidth=0.65,
-        alpha=0.62,
-    )
-    secondary.set_ylabel("Head speed (deg/s)", color="#666666")
-    secondary.tick_params(axis="y", colors="#666666")
-    axis.set_title("(A) Head motion: world consistency")
-    axis.set_xlabel("Time (s)")
-    axis.set_ylabel("Translation error (mm)")
-
-
-def _phase_bounds(rows: list[Mapping[str, str]], phase: str) -> tuple[float, float] | None:
-    """返回指定 phase 的秒制时间范围。"""
-
-    values = [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in rows if row.get("phase") == phase]
-    return None if not values else (min(values), max(values))
-
-
-def _plot_start_stop(axis, spec: PlotSpec) -> None:
-    """绘制参考与四系统起停位移轨迹。"""
-
-    grouped = _group_by_variant(spec)
-    ego_rows = grouped.get("EgoAnchor", [])
-    x_reference = [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in ego_rows]
-    axis.plot(
-        x_reference,
-        [_number(row, "reference_displacement_mm") for row in ego_rows],
-        color="#222222",
-        linewidth=1.0,
-        label="Reference",
-    )
-    if x_reference:
-        reference_values = [_number(row, "reference_displacement_mm") for row in ego_rows]
-        axis.annotate(
-            "Reference",
-            (x_reference[-1], reference_values[-1]),
-            xytext=(-4, -7),
-            textcoords="offset points",
-            ha="right",
-            color="#222222",
-        )
-    for name in _system_order(grouped):
-        rows = grouped[name]
-        axis.plot(
-            [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in rows],
-            [_number(row, "display_displacement_mm") for row in rows],
-            color=COLORS[name],
-            linestyle=LINE_STYLES[name],
-            label=name,
-            **_line_properties(name),
-        )
-    motion = _phase_bounds(ego_rows, "motion")
-    post_stop = _phase_bounds(ego_rows, "post_stop")
-    if motion is not None:
-        axis.axvspan(*motion, color="#D9EAF7", alpha=0.55, linewidth=0.0)
-        axis.text(
-            sum(motion) / 2.0,
-            0.04,
-            "motion",
-            transform=axis.get_xaxis_transform(),
-            ha="center",
-            color="#47677C",
-        )
-    if post_stop is not None:
-        axis.axvspan(*post_stop, color="#E2F0E9", alpha=0.6, linewidth=0.0)
-        axis.text(
-            sum(post_stop) / 2.0,
-            0.04,
-            "post-stop",
-            transform=axis.get_xaxis_transform(),
-            ha="center",
-            color="#47705B",
-        )
-    axis.set_title("(B) Start-stop: response and rest")
-    axis.set_xlabel("Time (s)")
-    axis.set_ylabel("Displacement (mm)")
+    axis.set_xticks(x, ("Arrival", "Capture", "One-Euro", "EgoAnchor"), rotation=12, ha="right")
+    axis.set_title(title, fontsize=9.5, pad=5)
+    axis.set_ylabel(ylabel)
+    axis.grid(axis="y", color="#D9D9D9", linewidth=0.45)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
 
 
 def _plot_lag_tradeoff(axis, spec: PlotSpec) -> None:
-    """绘制全部 event 点和 Stage 2 预计算的系统 median/IQR。"""
+    """绘制全部持续平移 event 点与 Stage 2 median/IQR。"""
 
-    event_groups: dict[str, list[Mapping[str, str]]] = defaultdict(list)
+    event_rows: dict[str, list[Mapping[str, str]]] = defaultdict(list)
     summaries: dict[str, Mapping[str, str]] = {}
     for row in spec.rows:
-        name = str(row.get("variant_id") or "unknown")
+        name = str(row.get("variant_id") or "")
         if row.get("point_kind") == "event":
-            event_groups[name].append(row)
+            event_rows[name].append(row)
         elif row.get("point_kind") == "summary":
             summaries[name] = row
-        else:
-            raise ValueError("lag trade-off point_kind 非法")
-    for name in _system_order(event_groups):
-        rows = event_groups[name]
+    if set(event_rows) != set(_SYSTEM_ORDER) or set(summaries) != set(_SYSTEM_ORDER):
+        raise ValueError("lag--fidelity 图缺少完整四系统 event/summary")
+    for name in _SYSTEM_ORDER:
+        rows = event_rows[name]
         axis.scatter(
-            [_number(row, "effective_lag_ms") for row in rows],
-            [_number(row, "p95_residual_mm") for row in rows],
-            color=COLORS[name],
-            marker=MARKERS[name],
-            s=9,
-            alpha=0.28,
+            [_finite(row, "effective_lag_ms") for row in rows],
+            [_finite(row, "p95_residual_mm") for row in rows],
+            color=_COLORS[name],
+            marker=_MARKERS[name],
+            s=12,
+            alpha=0.22,
             linewidths=0.0,
+            zorder=1,
         )
-        summary = summaries.get(name)
-        if summary is None:
-            raise ValueError(f"lag trade-off 缺少系统 summary：{name}")
-        x = float(_number(summary, "effective_lag_ms") or 0.0)
-        y = float(_number(summary, "p95_residual_mm") or 0.0)
-        x_q1 = float(_number(summary, "lag_q1_ms") or x)
-        x_q3 = float(_number(summary, "lag_q3_ms") or x)
-        y_q1 = float(_number(summary, "residual_q1_mm") or y)
-        y_q3 = float(_number(summary, "residual_q3_mm") or y)
+        summary = summaries[name]
+        lag = _finite(summary, "effective_lag_ms")
+        residual = _finite(summary, "p95_residual_mm")
+        lag_q1 = _finite(summary, "lag_q1_ms")
+        lag_q3 = _finite(summary, "lag_q3_ms")
+        residual_q1 = _finite(summary, "residual_q1_mm")
+        residual_q3 = _finite(summary, "residual_q3_mm")
+        if None in {lag, residual, lag_q1, lag_q3, residual_q1, residual_q3}:
+            raise ValueError(f"lag--fidelity 摘要不完整：{name}")
+        assert lag is not None and residual is not None
+        assert lag_q1 is not None and lag_q3 is not None
+        assert residual_q1 is not None and residual_q3 is not None
         axis.errorbar(
-            x,
-            y,
-            xerr=np.asarray([[x - x_q1], [x_q3 - x]]),
-            yerr=np.asarray([[y - y_q1], [y_q3 - y]]),
-            color=COLORS[name],
-            marker=MARKERS[name],
-            markersize=5.0,
-            capsize=2.0,
-            linewidth=1.0,
+            lag,
+            residual,
+            xerr=np.asarray([[lag - lag_q1], [lag_q3 - lag]]),
+            yerr=np.asarray([[residual - residual_q1], [residual_q3 - residual]]),
+            color=_COLORS[name],
+            marker=_MARKERS[name],
+            markersize=7.0,
+            capsize=2.5,
+            linewidth=1.25,
             label=name,
+            zorder=3,
         )
-    axis.text(0.03, 0.95, "lower-left is better", transform=axis.transAxes, va="top", color="#555555")
-    axis.set_title("(C) Translation: lag-fidelity trade-off")
+    axis.text(0.04, 0.04, "lower-left is better", transform=axis.transAxes, va="bottom", color="#555555")
+    axis.set_title("Translation trade-off", fontsize=9.5, pad=5)
     axis.set_xlabel("Effective lag (ms)")
-    axis.set_ylabel("Lag-compensated P95 (mm)")
+    axis.set_ylabel("Lag-aligned residual (mm)")
+    axis.grid(axis="y", color="#D9D9D9", linewidth=0.45)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
 
 
-def _plot_occlusion(axis, spec: PlotSpec) -> None:
-    """绘制遮挡误差时间线、遮挡区间和 EgoAnchor output 缺失标记。"""
+def _legend(figure) -> None:
+    """在 lag 面板内建立 GPT 风格短图例。"""
 
-    grouped = _group_by_variant(spec)
-    for name in _system_order(grouped):
-        rows = grouped[name]
-        axis.plot(
-            [float(_number(row, "time_ms") or 0.0) / 1000.0 for row in rows],
-            [_number(row, "translation_error_mm") for row in rows],
-            color=COLORS[name],
-            linestyle=LINE_STYLES[name],
-            label=name,
-            **_line_properties(name),
+    handles = [
+        plt.Line2D(
+            (0,),
+            (0,),
+            marker=_MARKERS[name],
+            color=_COLORS[name],
+            linestyle="",
+            markersize=5.8,
+            label=name.replace("-Hold", ""),
         )
-    ego_rows = grouped.get("EgoAnchor", [])
-    hidden_times = [
-        float(_number(row, "time_ms") or 0.0) / 1000.0
-        for row in ego_rows
-        if _bool(row, "occluded")
+        for name in _SYSTEM_ORDER
     ]
-    if hidden_times:
-        axis.axvspan(min(hidden_times), max(hidden_times), color="#EFE5D5", alpha=0.7, linewidth=0.0)
-        axis.text(
-            (min(hidden_times) + max(hidden_times)) / 2.0,
-            0.95,
-            "occluded",
-            transform=axis.get_xaxis_transform(),
-            ha="center",
-            va="top",
-            color="#6B5A42",
-        )
-    unavailable = [
-        float(_number(row, "time_ms") or 0.0) / 1000.0
-        for row in ego_rows
-        if not _bool(row, "has_output_pose")
-    ]
-    if unavailable:
-        axis.scatter(
-            unavailable,
-            np.zeros(len(unavailable)),
-            color=_UNAVAILABLE_COLOR,
-            marker="|",
-            s=13,
-            linewidths=0.6,
-            label="Ego output unavailable",
-        )
-        axis.text(
-            0.97,
-            0.03,
-            "output unavailable",
-            transform=axis.transAxes,
-            ha="right",
-            va="bottom",
-            color=_UNAVAILABLE_COLOR,
-            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.82, "pad": 0.6},
-        )
-    axis.set_title("(D) Occlusion: failure containment")
-    axis.set_xlabel("Time (s)")
-    axis.set_ylabel("Translation error (mm)")
-
-
-def _shared_legend(figure) -> None:
-    """按冻结系统顺序建立四项底部图例。"""
-
-    handles: list[Line2D] = []
-    for name in SYSTEM_ORDER:
-        properties = _line_properties(name)
-        handles.append(
-            Line2D(
-                (0,),
-                (0,),
-                color=COLORS[name],
-                linestyle=cast(Any, LINE_STYLES[name]),
-                label=name,
-                linewidth=float(properties["linewidth"]),
-                alpha=float(properties["alpha"]),
-                zorder=int(properties["zorder"]),
-            )
-        )
-    figure.legend(
-        handles=handles,
-        loc="lower center",
-        ncol=4,
-        frameon=False,
-        bbox_to_anchor=(0.5, 0.0),
-        columnspacing=1.15,
-        handlelength=1.7,
-    )
+    figure.axes[1].legend(handles=handles, loc="upper left", frameon=False, fontsize=7.0, handletextpad=0.35)
 
 
 def publish_exp1(specs: Mapping[str, PlotSpec], output_root) -> dict[str, tuple[str, str]]:
-    """绘制实验一四面板组合图并返回 PDF/PNG hash。"""
+    """绘制 GPT 风格实验一三联图并返回 PDF/PNG hash。"""
 
-    figure, grid = plt.subplots(2, 2, figsize=_FIGURE_SIZE)
-    axes = tuple(grid.flat)
-    _plot_head_motion(axes[0], specs["exp1_head_motion_trace"])
-    _plot_start_stop(axes[1], specs["exp1_start_stop_trace"])
-    _plot_lag_tradeoff(axes[2], specs["exp1_lag_tradeoff"])
-    _plot_occlusion(axes[3], specs["exp1_occlusion_trace"])
-    for axis in axes:
-        axis.grid(axis="y", color="#DDDDDD", linewidth=0.45)
-    _shared_legend(figure)
-    figure.tight_layout(rect=(0.0, 0.065, 1.0, 1.0), h_pad=1.35, w_pad=1.15)
+    figure, axes = plt.subplots(1, 3, figsize=_FIGURE_SIZE, gridspec_kw={"width_ratios": (1.0, 1.1, 1.0)})
+    _plot_summary(axes[0], specs["exp1_summary"], "world_consistency", "(a) World consistency", "Translation P95 (mm)")
+    _plot_lag_tradeoff(axes[1], specs["exp1_lag_tradeoff"])
+    axes[1].set_title("(b) Translation trade-off", fontsize=9.5, pad=5)
+    _plot_summary(axes[2], specs["exp1_summary"], "failure_containment", "(c) Failure containment", "Occlusion-window P95 (mm)")
+    figure.subplots_adjust(left=0.055, right=0.995, bottom=0.23, top=0.88, wspace=0.35)
+    _legend(figure)
     return {
-        "exp1_behavior_overview": save_figure_pair(
-            figure,
-            output_root,
-            "exp1_behavior_overview",
-        )
+        "exp1_behavior_overview": save_figure_pair(figure, output_root, "exp1_behavior_overview")
     }
 
 

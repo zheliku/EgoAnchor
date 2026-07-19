@@ -1,12 +1,12 @@
 {
   "figure_sha256": {
     "exp1_behavior_overview": {
-      "pdf": "8a2f42d445afb463bed46933cda71706862d4c1d67f3b4449039eed670dcc46b",
-      "png": "4f90a95b803903e07e4a3389f88d86045e829a48ec0cb96aa0b30781a22c4a5c"
+      "pdf": "7f2223493c966a1f3cd56faf53c108c6fb9d66e5acdbeba4d1d831a62ba7bb88",
+      "png": "ea2adeb552e56c6e655b56d3d38121e11e075723996fdf3707af279c66bb11dc"
     },
     "exp2_mechanism_attribution": {
-      "pdf": "d11fc330e4caf2af431de94cf2cae1cebc0385bc0548f929414f5fbf2fc80c88",
-      "png": "ea70b1724610bf9f9308c6445aa05249d0fda7df8d085b891139e0e6d31c8e14"
+      "pdf": "4393274629367fd66162a3c4aa807198215588df5baebc75fc52cc6585f4c198",
+      "png": "5abe43eeec07eb2a2d07c1947f7d221e1dbe1da24367fb29eb51fa6fa7d12875"
     }
   },
   "generator": "egoanchor.eval.publishing",
@@ -15,9 +15,10 @@
     "plots/exp1_lag_tradeoff.csv": "b47c7395f08e77a963e6eede0825c38289300e3b73e93a48d6921022b4ce5d39",
     "plots/exp1_occlusion_trace.csv": "4693197ef6e2aba300703e1c9e8a708e01ae059ea4276a1909112d4d0e857b6d",
     "plots/exp1_start_stop_trace.csv": "46bca25c4236136eb648beb79eab7bce3f5e5f2469791f305a1cf1c4d9c96253",
-    "plots/exp2_mechanism_attribution.csv": "b0d1a246547f880d074b5a13c360515d73f247ffaea6b632c3c8b143413b541f",
+    "plots/exp1_summary.csv": "df66ae6851e6d3f96fdaf33805de94ae3edf3c7697413a7a453059d5ca635cc4",
+    "plots/exp2_mechanism_attribution.csv": "b3a00d2ab3dfa43adc9bc5118b8d6268bb8805f312e250d07d1012a380858c2a",
     "plots/exp2_vcd_curve.csv": "d39952bd3dc0f2d15b01de44de3c060d5681d55887eda58f33024b326d34e426",
-    "plots/plot_catalog.csv": "a3087a992cabd481549668f5f7c66d0f8eb276901ca0a72ef9ade3a89da846d9"
+    "plots/plot_catalog.csv": "c11722e978700c7d21e485831dd98f19b23d1bc8553e19bbba28f1816ac3cb8a"
   },
   "plot_count": 2,
   "stage": "publish"

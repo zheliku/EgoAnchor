@@ -53,7 +53,7 @@ EgoAnchor 的评价对象是“可被 MR 应用持续消费的对象锚点”，
 
 ## 实验二主图
 
-`exp2_mechanism_attribution` 使用四个独立单位的小面板。灰线连接同一 event 的 Full/Ablated 值，面板内显示 Stage 2 已计算的差值中位数；不得把不同单位重新放到同一纵轴。VCD 面板右侧保留 candidate-level P95 tail-risk 曲线，并以星标表示日志中实际 `admission_decision=accepted` 的 eligible 子集。
+`exp2_mechanism_attribution` 使用四个独立单位的小面板。灰线连接同一 event 的 Full/Ablated 值，面板内显示 Stage 2 已计算的差值中位数；不得把不同单位重新放到同一纵轴。VCD 的 candidate-level risk--coverage 曲线保留在 Stage 2 审计 CSV/XLSX，不与组件差值混入主图，避免把两种统计粒度叠在同一面板。
 
 这个星标是 operating point 描述，不是运行时数值阈值。正式日志没有保存可重建的数值阈值时，不能从接纳样本的最低 VCD 分数反推阈值。
 

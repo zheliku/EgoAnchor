@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from ..contracts import get_metric_definition
 from .exp1 import (
     EXP1_VARIANTS,
     Exp1AnalysisResult,
@@ -26,7 +27,10 @@ from .windows import EventWindow, OcclusionWindow, build_event_windows, detect_r
 
 @dataclass(frozen=True, slots=True)
 class Exp1PlotRows:
-    """保存实验一四面板行为图的 display-ready CSV 行。"""
+    """保存实验一三面板行为图的 display-ready CSV 行。"""
+
+    summary: tuple[dict[str, object], ...]
+    """保存 GPT 风格摘要面板的 median/IQR 与方法元数据。"""
 
     head_motion_trace: tuple[dict[str, object], ...]
     """代表静止头动事件的头动速度与三系统误差时间线。"""
@@ -39,6 +43,46 @@ class Exp1PlotRows:
 
     occlusion_trace: tuple[dict[str, object], ...]
     """代表遮挡事件的四系统误差与 output 状态时间线。"""
+
+
+_EXP1_FIGURE_SUMMARIES = (
+    ("world_consistency", "static_head_motion", "translation_event_pninetyfive_mm"),
+    ("failure_containment", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
+)
+"""实验一 GPT 风格摘要图的两个面板与冻结主指标。"""
+
+
+def _summary_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], ...]:
+    """把 Stage 2 已计算的摘要统计投影成图表输入，不在 Stage 3 重算。"""
+
+    by_key = {
+        (row.scenario_id, row.variant_id, row.metric_key): row
+        for row in result.scenario_summary
+    }
+    rows: list[dict[str, object]] = []
+    for panel_id, scenario_id, metric_key in _EXP1_FIGURE_SUMMARIES:
+        definition = get_metric_definition(metric_key)
+        for variant_id in EXP1_VARIANTS:
+            summary = by_key.get((scenario_id, variant_id, metric_key))
+            if summary is None or summary.median is None or summary.q1 is None or summary.q3 is None:
+                raise ValueError(f"实验一摘要图缺少统计量：{scenario_id}/{variant_id}/{metric_key}")
+            rows.append(
+                {
+                    "plot_id": "exp1_summary",
+                    "panel_id": panel_id,
+                    "scenario_id": scenario_id,
+                    "variant_id": variant_id,
+                    "metric_key": metric_key,
+                    "metric_label": definition.label,
+                    "metric_unit": summary.metric_unit,
+                    "median": summary.median,
+                    "q1": summary.q1,
+                    "q3": summary.q3,
+                    "sample_count": summary.sample_count,
+                    "input_workbook_sha256": summary.input_workbook_sha256,
+                }
+            )
+    return tuple(rows)
 
 
 def _representative_event(
@@ -460,6 +504,7 @@ def build_exp1_plot_rows(
 
     materialized = tuple(trials)
     return Exp1PlotRows(
+        _summary_rows(result),
         _head_motion_rows(result, materialized, params),
         _start_stop_rows(result, materialized, params),
         _lag_tradeoff_rows(result),
@@ -529,7 +574,7 @@ def build_exp2_mechanism_plot_rows(
     result = []
     for row in selected:
         summary = summary_by_key.get((row.component_id, row.metric_key))
-        if summary is None or summary.median is None:
+        if summary is None or summary.median is None or summary.q1 is None or summary.q3 is None:
             raise ValueError(
                 f"实验二机制归因图缺少 Stage 2 差值中位数：{row.component_id}/{row.metric_key}"
             )
@@ -537,6 +582,8 @@ def build_exp2_mechanism_plot_rows(
             {
                 **asdict(row),
                 "delta_median": summary.median,
+                "delta_q1": summary.q1,
+                "delta_q3": summary.q3,
                 "plot_id": "exp2_mechanism_attribution",
                 "panel_id": row.component_id,
             }

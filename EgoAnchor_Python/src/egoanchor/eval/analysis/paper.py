@@ -54,16 +54,6 @@ _COMPONENT_LABELS = {
 }
 """实验二组件到论文表格标签的映射。"""
 
-_EXP1_TABLE_ROWS = (
-    ("世界一致性", "static_head_motion", "translation_event_pninetyfive_mm"),
-    ("静止稳定性", "static_head_motion", "position_hp_rms_mm"),
-    ("起停转换", "start_stop_6dof", "visible_response_ms"),
-    ("平移保真度", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
-    ("旋转保真度", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
-    ("失效约束", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
-)
-"""实验一属性导向主表的六个冻结正文行。"""
-
 _EXP2_TABLE_METRICS = {
     "capture_time_alignment": (
         "translation_event_pninetyfive_mm",
@@ -119,6 +109,17 @@ def _metric_value(value: float, unit: str, tex_suffix: str) -> tuple[float, str,
     if unit == "proportion":
         return value * 100.0, f"{tex_suffix}Pct", "%"
     return value, tex_suffix, unit
+
+
+def _direction_arrow(metric_key: str) -> str:
+    """返回 CV 风格表头使用的指标优劣方向箭头。"""
+
+    direction = get_metric_definition(metric_key).direction
+    if direction == "lower_is_better":
+        return "↓"
+    if direction == "higher_is_better":
+        return "↑"
+    return "↕"
 
 
 def _delta_metric_value(value: float, unit: str, tex_suffix: str) -> tuple[float, str, str]:
@@ -248,8 +249,16 @@ def _exp1_rows(
         )
 
     table_cells: list[dict[str, object]] = []
-    for property_label, scenario_id, metric_key in _EXP1_TABLE_ROWS:
-        row_label = f"{property_label}（{_SCENARIO_LABELS[scenario_id]}）"
+    table_metrics = (
+        ("World P95 ↓", "static_head_motion", "translation_event_pninetyfive_mm"),
+        ("HP--RMS ↓", "static_head_motion", "position_hp_rms_mm"),
+        ("Response ↓", "start_stop_6dof", "visible_response_ms"),
+        ("Trans. residual ↓", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
+        ("Rot. residual ↓", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
+        ("Occlusion P95 ↓", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
+    )
+    formatted: dict[tuple[str, str], tuple[str, float, str]] = {}
+    for column_key, scenario_id, metric_key in table_metrics:
         definition = get_metric_definition(metric_key)
         selected_by_variant = {
             variant_id: summary_by_key.get((scenario_id, variant_id, metric_key))
@@ -257,61 +266,41 @@ def _exp1_rows(
         }
         if any(summary is None for summary in selected_by_variant.values()):
             raise ValueError(f"实验一论文主指标缺失或未定义：{scenario_id}/{metric_key}")
-        selected = tuple(summary for summary in selected_by_variant.values() if summary is not None)
-        sample_counts = {summary.sample_count for summary in selected}
-        if len(sample_counts) != 1:
-            raise ValueError(f"实验一论文主指标的系统事件数不一致：{scenario_id}/{metric_key}")
-        source_sha256 = selected[0].input_workbook_sha256
-        table_cells.append(
-            _table_cell(
-                EXP1_ID,
-                "exp1_scenario_summary",
-                row_label,
-                "指标",
-                f"{definition.label} (n={next(iter(sample_counts))})",
-                "exp1/scenario_summary.csv",
-                source_sha256,
+        medians: dict[str, float] = {}
+        for variant_id, selected_summary in selected_by_variant.items():
+            assert selected_summary is not None
+            if selected_summary.median is None or selected_summary.q1 is None or selected_summary.q3 is None:
+                raise ValueError(f"实验一论文主指标统计量不完整：{scenario_id}/{variant_id}/{metric_key}")
+            median, _, unit = _metric_value(selected_summary.median, selected_summary.metric_unit, definition.tex_suffix)
+            q1, _, _ = _metric_value(selected_summary.q1, selected_summary.metric_unit, definition.tex_suffix)
+            q3, _, _ = _metric_value(selected_summary.q3, selected_summary.metric_unit, definition.tex_suffix)
+            formatted[(variant_id, column_key)] = (
+                f"{_display_number(median)} [{_display_number(q1)}, {_display_number(q3)}] {unit}",
+                median,
+                selected_summary.input_workbook_sha256,
             )
+            medians[variant_id] = median
+        best = (
+            min(medians.values())
+            if definition.direction == "lower_is_better"
+            else max(medians.values())
         )
-        for variant_id in EXP1_VARIANTS:
-            selected_summary = selected_by_variant[variant_id]
-            if (
-                selected_summary is None
-                or selected_summary.median is None
-                or selected_summary.q1 is None
-                or selected_summary.q3 is None
-            ):
-                raise ValueError(
-                    f"实验一论文主指标缺失或未定义：{scenario_id}/{variant_id}/{metric_key}"
-                )
-            median, _, display_unit = _metric_value(
-                selected_summary.median,
-                selected_summary.metric_unit,
-                definition.tex_suffix,
-            )
-            q1, _, _ = _metric_value(
-                selected_summary.q1,
-                selected_summary.metric_unit,
-                definition.tex_suffix,
-            )
-            q3, _, _ = _metric_value(
-                selected_summary.q3,
-                selected_summary.metric_unit,
-                definition.tex_suffix,
-            )
-            display = (
-                f"{_display_number(median)} "
-                f"[{_display_number(q1)}, {_display_number(q3)}] {display_unit}"
-            )
+        for variant_id, median in medians.items():
+            display_text, _, source_hash = formatted[(variant_id, column_key)]
+            if math.isclose(median, best, rel_tol=0.0, abs_tol=1e-12):
+                formatted[(variant_id, column_key)] = (f"[BEST]{display_text}", median, source_hash)
+    for variant_id in EXP1_VARIANTS:
+        for column_key, _, _ in table_metrics:
+            display_text, _, source_hash = formatted[(variant_id, column_key)]
             table_cells.append(
                 _table_cell(
                     EXP1_ID,
                     "exp1_scenario_summary",
-                    row_label,
                     variant_id,
-                    display,
+                    column_key,
+                    display_text,
                     "exp1/scenario_summary.csv",
-                    selected_summary.input_workbook_sha256,
+                    source_hash,
                 )
             )
     return numbers, table_cells
@@ -436,7 +425,7 @@ def _exp2_rows(
             f"（{_SCENARIO_LABELS[component.scenario_id]}）"
         )
         values = {
-            "主指标": get_metric_definition(main_key).label,
+            "主指标": f"{get_metric_definition(main_key).label} {_direction_arrow(main_key)}",
             "Full median [IQR]": distribution_text(main, "full"),
             "Ablated median [IQR]": distribution_text(main, "ablation"),
             "Delta [IQR]（+/0/-）": (
@@ -444,7 +433,7 @@ def _exp2_rows(
                 f"{main.positive_count}/{main.zero_count}/{main.negative_count}"
             ),
             "护栏 Delta [IQR]": (
-                f"{get_metric_definition(guardrail_key).label}: {delta_text(guardrail)}"
+                f"{get_metric_definition(guardrail_key).label} {_direction_arrow(guardrail_key)}: {delta_text(guardrail)}"
             ),
         }
         for column_key, display_value in values.items():

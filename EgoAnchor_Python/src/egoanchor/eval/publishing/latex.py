@@ -29,12 +29,18 @@ _CONTROL_DIGIT_PATTERN = re.compile(r"\\[A-Za-z]*[0-9]")
 
 _TABLE_LAYOUTS = {
     "exp1_scenario_summary": (
-        "属性 / 场景",
-        ("指标", "Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor"),
+        "System",
         (
-            r"@{}>{\raggedright\arraybackslash}p{0.14\textwidth}"
-            r">{\raggedright\arraybackslash}p{0.16\textwidth}"
-            r"*{4}{>{\raggedleft\arraybackslash}X}@{}"
+            "World P95 ↓",
+            "HP--RMS ↓",
+            "Response ↓",
+            "Trans. residual ↓",
+            "Rot. residual ↓",
+            "Occlusion P95 ↓",
+        ),
+        (
+            r"@{}>{\raggedright\arraybackslash}p{0.16\textwidth}"
+            r"*{6}{>{\raggedleft\arraybackslash}X}@{}"
         ),
     ),
     "exp2_mechanism_attribution": (
@@ -171,6 +177,15 @@ def _escape_tex(value: str) -> str:
     return "".join(replacements.get(character, character) for character in value)
 
 
+def _render_cell(value: str) -> str:
+    """渲染表格单元格，并支持 Stage 2 标记的最佳值加粗。"""
+
+    marker = "[BEST]"
+    if value.startswith(marker):
+        return rf"\textbf{{{_escape_tex(value[len(marker):].lstrip())}}}"
+    return _escape_tex(value)
+
+
 def _source_header(relative_path: str, source_hash: str) -> str:
     """生成 TeX 中间产物的固定 lineage 头。
 
@@ -283,7 +298,7 @@ def _render_tables(
         lines.append(r"\midrule")
         for row_key in row_keys:
             values_text = " & ".join(
-                _escape_tex(values[(row_key, column_key)]) for column_key in column_keys
+                _render_cell(values[(row_key, column_key)]) for column_key in column_keys
             )
             lines.append(f"{_escape_tex(row_key)} & {values_text} " + r"\\")
         lines.append(r"\bottomrule")

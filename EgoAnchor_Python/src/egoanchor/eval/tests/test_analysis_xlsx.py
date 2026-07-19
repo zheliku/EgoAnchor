@@ -102,6 +102,7 @@ class AnalysisWorkbookTests(unittest.TestCase):
                         "start_stop_trace",
                         "lag_tradeoff",
                         "occlusion_trace",
+                        "summary_plot",
                         "paper_numbers",
                         "paper_tables",
                         "lineage",

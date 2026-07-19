@@ -202,7 +202,7 @@ if ($LASTEXITCODE -ne 0) { throw "publish 失败，停止后续阶段。退出�
 2026-EgoAnchor/generated/exp2_tables.tex
 ```
 
-`plots/exp2_vcd_curve.csv` 是实验二图中的 VCD 曲线和实际接纳工作点的 Stage 2 输入，不再对应一张独立的旧 PDF。
+`plots/exp2_vcd_curve.csv` 是实验二 VCD risk--coverage 与实际接纳工作点的 Stage 2 审计输入；当前主图只展示四个组件的 `Ablated - Full` 差值，不再对应一张独立的 VCD PDF。
 
 ### 5. 只从 TeX 物化主稿并编译
 

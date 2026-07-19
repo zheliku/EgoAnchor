@@ -985,6 +985,22 @@ _EXP1_OCCLUSION_TRACE_COLUMNS = _EXP1_PLOT_CONTEXT_COLUMNS + (
 )
 """遮挡代表事件的显示误差与 output/display 状态时间线。"""
 
+_EXP1_SUMMARY_COLUMNS = (
+    _column("plot_id"),
+    _column("panel_id"),
+    _column("scenario_id"),
+    _column("variant_id"),
+    _column("metric_key"),
+    _column("metric_label"),
+    _column("metric_unit"),
+    _column("median", "float"),
+    _column("q1", "float"),
+    _column("q3", "float"),
+    _column("sample_count", "int"),
+    _column("input_workbook_sha256"),
+)
+"""实验一 GPT 风格摘要面板的 Stage 2 统计行。"""
+
 
 CSV_TABLE_CONTRACTS = (
     CsvTableContract("analysis_run", "analysis invocation", ("analysis_run_id",), (_column("analysis_run_id"), _column("created_at_utc", "datetime"), _column("code_version"), _column("parameter_set_id"), _column("status"), _column("input_count", "int"), _column("output_root"))),
@@ -1016,7 +1032,8 @@ CSV_TABLE_CONTRACTS = (
     CsvTableContract("exp1_start_stop_trace", "representative render trace", ("plot_id", "panel_id", "session_id", "trial_id", "event_id", "variant_id", "sample_index"), _EXP1_START_STOP_TRACE_COLUMNS),
     CsvTableContract("exp1_lag_tradeoff", "event plus summary plot point", ("plot_id", "panel_id", "point_kind", "session_id", "trial_id", "event_id", "variant_id"), _EXP1_LAG_TRADEOFF_COLUMNS),
     CsvTableContract("exp1_occlusion_trace", "representative render trace", ("plot_id", "panel_id", "session_id", "trial_id", "event_id", "variant_id", "sample_index"), _EXP1_OCCLUSION_TRACE_COLUMNS),
-    CsvTableContract("exp2_mechanism_attribution", "component attribution plot row", ("plot_id", "panel_id", "session_id", "scenario_id", "trial_id", "event_id", "component_id", "metric_key"), _PAIRED_DELTA_COLUMNS + (_column("delta_median", "float"), _column("plot_id"), _column("panel_id"))),
+    CsvTableContract("exp1_summary", "summary plot point", ("plot_id", "panel_id", "scenario_id", "variant_id", "metric_key"), _EXP1_SUMMARY_COLUMNS),
+    CsvTableContract("exp2_mechanism_attribution", "component attribution plot row", ("plot_id", "panel_id", "session_id", "scenario_id", "trial_id", "event_id", "component_id", "metric_key"), _PAIRED_DELTA_COLUMNS + (_column("delta_median", "float"), _column("delta_q1", "float"), _column("delta_q3", "float"), _column("plot_id"), _column("panel_id"))),
     CsvTableContract("exp2_vcd_curve", "plot row", ("plot_id", "panel_id", "reference_kind", "risk_kind", "point_index"), _VCD_CURVE_COLUMNS + (_column("plot_id"), _column("panel_id"))),
     CsvTableContract("numbers", "paper number", ("experiment", "macro_name"), (_column("experiment"), _column("macro_name"), _column("value"), _column("source_csv"), _column("source_sha256"))),
     CsvTableContract("tables", "paper table cell", ("experiment", "table_name", "row_key", "column_key"), (_column("experiment"), _column("table_name"), _column("row_key"), _column("column_key"), _column("display_value"), _column("source_csv"), _column("source_sha256"))),

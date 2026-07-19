@@ -157,7 +157,7 @@ schema-v2 task directory
 - 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
 - Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
-- Stage 3 当前发布一张实验一四面板系统行为总览和一张实验二四面板组件归因图；两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，VCD 插图使用日志中的实际 admission decision 标出 eligible candidate operating point，不把它表述为未记录的数值阈值。
+- Stage 3 当前发布一张实验一三面板系统行为总览和一张实验二四面板组件归因图；实验一中间面板保留全部持续平移 event 散点并叠加 median[IQR]，实验二主图只显示各组件 `Ablated - Full` 差值，VCD risk--coverage 曲线保留在 Stage 2 审计 CSV/XLSX，不与差值面板混排。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
 - 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；时序合成主归因使用起停场景的 `motion_hold_ratio`，持续平移仍作为实验一的完整系统 lag--fidelity 证据。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位有效数字且不超过三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。实验一表按属性/场景组织四系统结果，实验二表同行报告 Full、Ablated、配对差值与护栏，不以机器字段替代论文标签。
@@ -297,10 +297,11 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定色板绘制一张实验一四面板系统行为图和一张实验二四面板机制归因图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定样式绘制一张实验一三面板系统行为图和一张实验二四面板差值归因图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
 - Stage 2 当前发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个实验人工审阅入口；二者只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
 - 实验一属性表固定报告世界一致性、静止稳定性、起停转换、平移保真度、旋转保真度和失效约束。lag 补偿 P95 使用 RMSE 选定时延后的同一重叠窗；停止后抖动使用 1 s guard 加固定 3 s 窗；重新可见误差使用固定 1 s 窗。结果必须同时陈述动态响应、旋转保真度和遮挡 output coverage 的代价，不得只挑有利指标。
 - Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
+- Stage 2 论文表采用 CV 风格的“系统为行、指标为列”布局；实验一主指标列带优劣箭头并对每列最优 median [IQR] 加粗，实验二表保留 Full/Ablated/Delta/护栏四类比较列。
 - Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。
 - Stage 2 先按规范绝对路径稳定排序 workbook；`lineage.csv` 记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用可筛选的 session/trial/event/variant/candidate/metric 复合键，禁止把输出表名冒充来源。
 - Stage 2/3 的原子 staging 和 backup 目录必须用普通 `mkdir` 从已验证父目录继承 ACL，不得用可能在 Windows 产生限制 ACL 的 `tempfile.mkdtemp`；旧备份清理对短暂共享锁做有界重试。

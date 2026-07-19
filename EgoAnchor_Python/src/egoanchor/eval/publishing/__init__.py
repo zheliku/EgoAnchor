@@ -21,6 +21,7 @@ _REQUIRED_PLOTS = frozenset(
         "exp1_start_stop_trace",
         "exp1_lag_tradeoff",
         "exp1_occlusion_trace",
+        "exp1_summary",
         "exp2_mechanism_attribution",
         "exp2_vcd_curve",
     }
