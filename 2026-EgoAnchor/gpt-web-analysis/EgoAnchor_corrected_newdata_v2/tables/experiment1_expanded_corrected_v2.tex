@@ -1,0 +1,22 @@
+\begin{table*}[t]
+\centering
+\caption{新采集数据上的完整系统表征。数值为重复动作片段或遮挡过程的 median。粗体仅标记各能力块的主指标最优值；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
+\label{tab:exp1-final}
+\scriptsize
+\setlength{\tabcolsep}{2.8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
+\midrule
+Arrival-Hold & 20.690 & 21.341 & 3.760 & 182.5 / 10.087 & 260.0 / 3.335 & 25.553 & 2/9 & 167.5 \\
+Capture-Hold & 10.833 & 13.257 & 2.380 & 250.0 / 9.584 & 260.0 / 3.281 & 25.479 & 2/9 & 208.8 \\
+One-Euro Anchor & 8.329 & 12.407 & 1.065 & 385.0 / 9.559 & 370.0 / 3.389 & 11.710 & \textbf{0/9} & 284.4 \\
+EgoAnchor & \textbf{1.631} & \textbf{6.894} & \textbf{0.098} & 320.0 / \textbf{4.960} & 372.5 / 4.691 & \textbf{1.980} & \textbf{0/9} & 591.1 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}

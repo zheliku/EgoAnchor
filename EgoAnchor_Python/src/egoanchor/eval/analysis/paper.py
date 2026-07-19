@@ -56,15 +56,15 @@ _COMPONENT_LABELS = {
 
 _EXP2_TABLE_METRICS = {
     "capture_time_alignment": (
-        "translation_event_pninetyfive_mm",
-        "rotation_event_pninetyfive_deg",
+        "capture_alignment_raw_translation_pninetyfive_mm",
+        "capture_alignment_raw_rotation_pninetyfive_deg",
     ),
     "vcd_admission": (
         "occlusion_translation_pninetyfive_mm",
-        "durable_recovery_time_ms",
+        "occlusion_catastrophic_failure_rate",
     ),
     "temporal_synthesis": ("translation_lag_residual_mm", "effective_translation_lag_ms"),
-    "static_lock": ("position_hp_rms_mm", "absolute_translation_median_mm"),
+    "static_lock": ("centered_translation_pninetyfive_mm", "jump_pninetyfive_mm"),
 }
 """实验二四行表的主效应与代价/guardrail 指标。"""
 
@@ -266,7 +266,7 @@ def _exp1_rows(
 
     table_cells: list[dict[str, object]] = []
     scalar_columns = (
-        ("平移 P95 (mm)", "static_head_motion", "translation_event_pninetyfive_mm", True),
+        ("中心化波动 P95 (mm)", "static_head_motion", "centered_translation_pninetyfive_mm", True),
         ("HP--RMS (mm)", "static_head_motion", "position_hp_rms_mm", True),
         ("遮挡窗 P95 (mm)", "occlusion_recovery", "occlusion_translation_pninetyfive_mm", True),
         ("Start-transition (ms)", "start_stop_6dof", "visible_response_ms", False),
@@ -450,6 +450,25 @@ def _exp2_rows(
         else:
             effect_display = delta_text(main)
             guardrail_display = f"{get_metric_definition(guardrail_key).label}: {delta_text(guardrail)}"
+        if component.component_id == "vcd_admission":
+            catastrophic_pairs = tuple(
+                row
+                for row in result.components.paired_deltas
+                if row.component_id == component.component_id
+                and row.metric_key == "occlusion_catastrophic_failure_rate"
+                and row.pair_status == "complete"
+                and row.full_value is not None
+                and row.ablation_value is not None
+            )
+            if not catastrophic_pairs:
+                raise ValueError("VCD 缺少完整灾难性失败率配对")
+            full_failures = sum(float(row.full_value) >= 1.0 for row in catastrophic_pairs)
+            ablation_failures = sum(float(row.ablation_value) >= 1.0 for row in catastrophic_pairs)
+            total = len(catastrophic_pairs)
+            guardrail_display = (
+                f"灾难性失败率：Full {full_failures}/{total} ({_display_number(100.0 * full_failures / total)}%)，"
+                f"Disabled {ablation_failures}/{total} ({_display_number(100.0 * ablation_failures / total)}%)"
+            )
         values = {
             "对应系统行为": _COMPONENT_BEHAVIORS[component.component_id],
             "Full EgoAnchor": full_display,

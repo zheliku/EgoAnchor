@@ -201,7 +201,7 @@ def _write_fixture(root: Path) -> None:
                 "pair_status": "complete",
             }
             for component, label, metric, unit, delta in (
-                ("capture_time_alignment", "alignment", "translation_event_pninetyfive_mm", "mm", 1.0),
+                ("capture_time_alignment", "alignment", "capture_alignment_raw_translation_pninetyfive_mm", "mm", 1.0),
                 ("vcd_admission", "VCD", "occlusion_translation_pninetyfive_mm", "mm", 2.0),
                 ("temporal_synthesis", "temporal", "effective_translation_lag_ms", "ms", -70.0),
                 ("temporal_synthesis", "temporal", "translation_lag_residual_mm", "mm", 5.0),

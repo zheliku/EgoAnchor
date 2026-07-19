@@ -266,7 +266,7 @@ class Exp2ComponentTests(unittest.TestCase):
             row
             for row in paired
             if row.component_id == "capture_time_alignment"
-            and row.metric_key == "translation_event_pninetyfive_mm"
+            and row.metric_key == "capture_alignment_raw_translation_pninetyfive_mm"
         )
         first = replace(
             target,
@@ -288,7 +288,7 @@ class Exp2ComponentTests(unittest.TestCase):
             row
             for row in paired
             if row.component_id != "capture_time_alignment"
-            or row.metric_key != "translation_event_pninetyfive_mm"
+            or row.metric_key != "capture_alignment_raw_translation_pninetyfive_mm"
         )
         rows = (first, second, *selected)
         summaries = summarize_paired_deltas(rows, load_analysis_parameters())
@@ -298,6 +298,13 @@ class Exp2ComponentTests(unittest.TestCase):
         ]
         self.assertEqual(len(capture_rows), 2)
         self.assertTrue(all(row["delta_median"] == 5.0 for row in capture_rows))
+        vcd_rows = [row for row in plot_rows if row["component_id"] == "vcd_admission"]
+        self.assertEqual({row["metric_key"] for row in vcd_rows}, {"occlusion_translation_pninetyfive_mm"})
+        temporal_rows = [row for row in plot_rows if row["component_id"] == "temporal_synthesis"]
+        self.assertEqual(
+            {row["metric_key"] for row in temporal_rows},
+            {"effective_translation_lag_ms", "translation_lag_residual_mm"},
+        )
 
     def test_shared_trial_aggregation_accepts_exp2_variant_order(self) -> None:
         """公共 trial 聚合不得把实验一四系统顺序硬编码到消融分析。"""

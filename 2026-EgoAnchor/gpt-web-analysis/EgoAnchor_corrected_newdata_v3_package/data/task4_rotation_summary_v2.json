@@ -1,0 +1,38 @@
+{
+  "Arrival-Hold": {
+    "lag_median_ms": 260.0,
+    "lag_q1_ms": 256.25,
+    "lag_q3_ms": 263.75,
+    "residual_median_deg": 3.3354458374754223,
+    "residual_q1_deg": 3.0844703415483328,
+    "residual_q3_deg": 3.590405713389899,
+    "n_segments": 10
+  },
+  "Capture-Hold": {
+    "lag_median_ms": 260.0,
+    "lag_q1_ms": 256.25,
+    "lag_q3_ms": 263.75,
+    "residual_median_deg": 3.2809843818041653,
+    "residual_q1_deg": 3.1155946997384536,
+    "residual_q3_deg": 3.5683295602537846,
+    "n_segments": 10
+  },
+  "One-Euro Anchor": {
+    "lag_median_ms": 370.0,
+    "lag_q1_ms": 365.0,
+    "lag_q3_ms": 373.75,
+    "residual_median_deg": 3.388963249775912,
+    "residual_q1_deg": 3.1605780875581906,
+    "residual_q3_deg": 3.725282298877386,
+    "n_segments": 10
+  },
+  "EgoAnchor": {
+    "lag_median_ms": 372.5,
+    "lag_q1_ms": 350.0,
+    "lag_q3_ms": 383.75,
+    "residual_median_deg": 4.690806132040107,
+    "residual_q1_deg": 3.940985613778966,
+    "residual_q3_deg": 5.476344812009185,
+    "n_segments": 10
+  }
+}

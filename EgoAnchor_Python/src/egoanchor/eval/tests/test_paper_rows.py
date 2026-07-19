@@ -42,6 +42,7 @@ class PaperRowsTests(unittest.TestCase):
         scenarios = {
             "static_head_motion": (
                 ("position_hp_rms_mm", "mm"),
+                ("centered_translation_pninetyfive_mm", "mm"),
                 ("translation_event_pninetyfive_mm", "mm"),
             ),
             "start_stop_6dof": (
@@ -83,12 +84,12 @@ class PaperRowsTests(unittest.TestCase):
             "capture_time_alignment": (
                 "static_head_motion",
                 "EgoAnchor w/o capture-time alignment",
-                (("translation_event_pninetyfive_mm", "mm"), ("rotation_event_pninetyfive_deg", "deg")),
+                (("capture_alignment_raw_translation_pninetyfive_mm", "mm"), ("capture_alignment_raw_rotation_pninetyfive_deg", "deg")),
             ),
             "vcd_admission": (
                 "occlusion_recovery",
                 "EgoAnchor w/o VCD",
-                (("occlusion_translation_pninetyfive_mm", "mm"), ("durable_recovery_time_ms", "ms")),
+                (("occlusion_translation_pninetyfive_mm", "mm"), ("occlusion_catastrophic_failure_rate", "proportion")),
             ),
             "temporal_synthesis": (
                 "continuous_translation",
@@ -98,7 +99,7 @@ class PaperRowsTests(unittest.TestCase):
             "static_lock": (
                 "static_head_motion",
                 "EgoAnchor w/o StaticLock",
-                (("position_hp_rms_mm", "mm"), ("absolute_translation_median_mm", "mm")),
+                (("centered_translation_pninetyfive_mm", "mm"), ("jump_pninetyfive_mm", "mm")),
             ),
         }
         paired_rows = tuple(
@@ -156,7 +157,7 @@ class PaperRowsTests(unittest.TestCase):
         names = {str(row["macro_name"]) for row in result.numbers}
         self.assertIn("SessionCount", names)
         self.assertIn("EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm", names)
-        self.assertIn("CaptureTimeAlignmentTranslationEventPNinetyFiveMmDeltaMedian", names)
+        self.assertIn("CaptureTimeAlignmentCaptureAlignmentRawTranslationPNinetyFiveMmDeltaMedian", names)
         self.assertIn("TemporalSynthesisTranslationLagResidualMmDeltaMedian", names)
         self.assertIn("TemporalSynthesisTranslationLagResidualMmPositiveCount", names)
         self.assertIn("VcdMeanRiskAurcMm", names)
@@ -218,7 +219,7 @@ class PaperRowsTests(unittest.TestCase):
         self.assertEqual(
             {row["column_key"] for row in exp1_cells},
             {
-                "平移 P95 (mm)",
+                "中心化波动 P95 (mm)",
                 "HP--RMS (mm)",
                 "Lag / aligned RMSE (ms / mm)",
                 "遮挡窗 P95 (mm)",
@@ -238,7 +239,7 @@ class PaperRowsTests(unittest.TestCase):
             row
             for row in exp1_cells
             if row["row_key"] == "EgoAnchor"
-            and row["column_key"] == "平移 P95 (mm)"
+            and row["column_key"] == "中心化波动 P95 (mm)"
         )
         self.assertIn("13.1", formatted_cell["display_value"])
         with self.assertRaisesRegex(ValueError, "主指标缺失"):

@@ -85,6 +85,74 @@ class Exp1Admission:
 
 
 @dataclass(frozen=True, slots=True)
+class Exp1AlignmentObservation:
+    """保存 admission 层采集时刻/到达时刻 raw pose 与同帧参考的联接。"""
+
+    candidate_id: str
+    """跨 runtime 共用的候选标识。"""
+
+    variant_id: str
+    """产生该 raw pose 的 runtime 配置。"""
+
+    frame_id: int
+    """候选对应的 Unity frame 标识。"""
+
+    source_capture_mono_ms: float
+    """候选来源帧的采集时间代理，单位毫秒。"""
+
+    uses_capture_time_alignment: bool
+    """该 variant 是否使用采集时刻世界对齐。"""
+
+    has_aligned_raw: bool
+    """采集时刻 raw pose 是否有效。"""
+
+    aligned_raw_position_m: tuple[float, float, float]
+    """采集时刻 raw 世界位置，单位米。"""
+
+    aligned_raw_rotation: tuple[float, float, float, float]
+    """采集时刻 raw 世界旋转，xyzw 四元数。"""
+
+    has_arrival_time_raw: bool
+    """到达时刻 raw pose 是否有效。"""
+
+    arrival_time_raw_position_m: tuple[float, float, float]
+    """到达时刻 raw 世界位置，单位米。"""
+
+    arrival_time_raw_rotation: tuple[float, float, float, float]
+    """到达时刻 raw 世界旋转，xyzw 四元数。"""
+
+    reference_pose_valid: bool
+    """同 frame 平台参考 pose 是否有效。"""
+
+    reference_position_m: tuple[float, float, float]
+    """同 frame 平台参考世界位置，单位米。"""
+
+    reference_rotation: tuple[float, float, float, float]
+    """同 frame 平台参考世界旋转，xyzw 四元数。"""
+
+    admission_decision: str
+    """该候选在 runtime 中记录的 admission 决策；raw 对齐指标不按此筛选。"""
+
+    def __post_init__(self) -> None:
+        """校验 raw 联接的标识、时间、frame 和 pose 维度。"""
+
+        if not self.candidate_id or not self.variant_id or not self.admission_decision:
+            raise ValueError("alignment observation 的标识和决策不能为空")
+        if self.frame_id < 0 or not math.isfinite(self.source_capture_mono_ms):
+            raise ValueError("alignment observation 的 frame/time 非法")
+        for name, value, width in (
+            ("aligned_raw_position_m", self.aligned_raw_position_m, 3),
+            ("aligned_raw_rotation", self.aligned_raw_rotation, 4),
+            ("arrival_time_raw_position_m", self.arrival_time_raw_position_m, 3),
+            ("arrival_time_raw_rotation", self.arrival_time_raw_rotation, 4),
+            ("reference_position_m", self.reference_position_m, 3),
+            ("reference_rotation", self.reference_rotation, 4),
+        ):
+            if len(value) != width:
+                raise ValueError(f"{name} 维度错误")
+
+
+@dataclass(frozen=True, slots=True)
 class Exp1RenderSeries:
     """保存同一 trial 与 variant 的时间对齐 render 序列。"""
 
@@ -232,6 +300,9 @@ class Exp1Trial:
 
     admissions: tuple[Exp1Admission, ...] = ()
     """当前 trial 的 admission 记录，遮挡错误更新指标使用。"""
+
+    alignment_observations: tuple[Exp1AlignmentObservation, ...] = ()
+    """当前 trial 的 admission raw pose 与同帧参考联接，供组件归因使用。"""
 
     def __post_init__(self) -> None:
         """校验 trial 上下文、来源 hash、marker 和四系统矩阵。"""
@@ -518,6 +589,94 @@ def _quantile(values: ArrayLike, params: AnalysisParameters) -> float:
     return event_quantiles({"event": finite}, params.p95_quantile, params)["event"]
 
 
+def _capture_alignment_raw_rows(
+    trial: Exp1Trial,
+    variant_id: str,
+    window: EventWindow,
+    params: AnalysisParameters,
+) -> list[MetricRow]:
+    """按 v1 语义计算 admission raw 对齐误差，而不是最终 display 误差。
+
+    参数：
+        trial: 已联接 workbook 的静止头动 trial。
+        variant_id: 当前 runtime 配置。
+        window: 当前 marker 定义的 event 窗口。
+        params: 唯一冻结分析参数。
+
+    说明：采集时刻对齐发生在 VCD、StaticLock 和时序合成之前，因此该组件
+    必须比较 admission raw pose 与同 frame 平台参考。最终 display P95 仍由
+    ``translation_event_pninetyfive_mm`` 保留为下游状态护栏，不能替代这里的
+    组件近端测量。raw 指标不按 admission decision 筛选，以保持两 variant 的
+    同候选比较和 v1 的阶段统计语义。
+    """
+
+    observations = tuple(
+        observation
+        for observation in trial.alignment_observations
+        if observation.variant_id == variant_id
+        and window.start_ms <= observation.source_capture_mono_ms < window.end_ms
+    )
+    if not observations:
+        return []
+    translation_values: list[float] = []
+    rotation_values: list[float] = []
+    for observation in observations:
+        if not observation.reference_pose_valid:
+            continue
+        if observation.uses_capture_time_alignment:
+            if not observation.has_aligned_raw:
+                continue
+            raw_position = observation.aligned_raw_position_m
+            raw_rotation = observation.aligned_raw_rotation
+        else:
+            if not observation.has_arrival_time_raw:
+                continue
+            raw_position = observation.arrival_time_raw_position_m
+            raw_rotation = observation.arrival_time_raw_rotation
+        if not np.all(
+            np.isfinite(
+                np.asarray(
+                    (*raw_position, *raw_rotation, *observation.reference_position_m, *observation.reference_rotation),
+                    dtype=np.float64,
+                )
+            )
+        ):
+            continue
+        translation_values.append(
+            float(
+                translation_error_mm(
+                    np.asarray(raw_position, dtype=np.float64),
+                    np.asarray(observation.reference_position_m, dtype=np.float64),
+                )
+            )
+        )
+        rotation_values.append(
+            float(
+                rotation_error_deg(
+                    np.asarray(raw_rotation, dtype=np.float64),
+                    np.asarray(observation.reference_rotation, dtype=np.float64),
+                    params.quaternion_norm_tolerance,
+                )
+            )
+        )
+    return [
+        _metric_row(
+            trial,
+            variant_id,
+            window.marker.event_id,
+            "capture_alignment_raw_translation_pninetyfive_mm",
+            _quantile(translation_values, params) if translation_values else None,
+        ),
+        _metric_row(
+            trial,
+            variant_id,
+            window.marker.event_id,
+            "capture_alignment_raw_rotation_pninetyfive_deg",
+            _quantile(rotation_values, params) if rotation_values else None,
+        ),
+    ]
+
+
 def _metric_row(
     trial: Exp1Trial,
     variant_id: str,
@@ -611,8 +770,12 @@ def _static_rows(
     indices = _window_indices(series, window.start_ms, window.end_ms)
     translation, rotation, valid = _pose_errors(series, params)
     errors_m = series.display_positions_m - series.reference_positions_m
+    valid_errors = errors_m[indices][valid[indices]]
+    centered_errors_m = valid_errors - np.median(valid_errors, axis=0)
+    centered_translation = 1000.0 * np.linalg.norm(centered_errors_m, axis=1)
     values = {
         "translation_event_pninetyfive_mm": _quantile(translation[indices], params),
+        "centered_translation_pninetyfive_mm": _quantile(centered_translation, params),
         "position_hp_rms_mm": position_hp_rms_mm(
             series.times_ms[indices],
             errors_m[indices],
@@ -629,6 +792,7 @@ def _static_rows(
         ),
     }
     rows = [_metric_row(trial, series.variant_id, window.marker.event_id, key, value) for key, value in values.items()]
+    rows.extend(_capture_alignment_raw_rows(trial, series.variant_id, window, params))
     rows.extend(_common_event_rows(trial, series, window.marker.event_id, indices, params))
     return rows
 
@@ -925,8 +1089,12 @@ def _occlusion_rows(
         target_visible_ms=window.visible_start_ms,
         params=params,
     )
+    occlusion_translation_p95 = _quantile(translation[hidden_indices], params)
     values: dict[str, float | None] = {
-        "occlusion_translation_pninetyfive_mm": _quantile(translation[hidden_indices], params),
+        "occlusion_translation_pninetyfive_mm": occlusion_translation_p95,
+        "occlusion_catastrophic_failure_rate": float(
+            occlusion_translation_p95 > params.occlusion_catastrophic_threshold_mm
+        ),
         "occlusion_rotation_pninetyfive_deg": _quantile(rotation[hidden_indices], params),
         "occlusion_output_coverage": float(np.mean(series.has_output_pose[hidden_indices])),
         "reappearance_translation_pninetyfive_mm": (
@@ -1006,7 +1174,7 @@ def _aggregate_value(rows: Sequence[MetricRow], source_level: str) -> tuple[floa
     )
     if not len(values):
         return None, f"{source_level}_missing"
-    if rows[0].metric_key == "durable_recovery_success":
+    if rows[0].metric_key in {"durable_recovery_success", "occlusion_catastrophic_failure_rate"}:
         return float(np.mean(values)), f"{source_level}_proportion"
     return float(np.median(values)), f"{source_level}_median"
 
@@ -1199,6 +1367,7 @@ __all__ = [
     "EXP1_ID",
     "EXP1_VARIANTS",
     "Exp1Admission",
+    "Exp1AlignmentObservation",
     "Exp1AnalysisResult",
     "Exp1RenderSeries",
     "Exp1Trial",

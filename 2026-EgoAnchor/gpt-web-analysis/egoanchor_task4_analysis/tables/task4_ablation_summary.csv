@@ -1,3 +1,0 @@
-component,diagnostic_metric,full_value,ablated_value,benefit_pct,secondary_benefit_metric,secondary_full_value,secondary_ablated_value,cost_metric,full_cost_value,ablated_cost_value,cost_delta,additional_effective_lag_ms
-Temporal synthesis,Rotation jump P99 (deg),2.335772467288707,8.01757229579198,70.86683623028087,Lag-compensated residual (deg),2.479338891489594,2.752193672417839,Raw rotation median (deg),13.246986090770084,10.67382507734434,2.5731610134257448,75.0
-Capture-time alignment,Rotation median (deg),13.246986090770084,17.68857729323964,25.10994032384435,Effective rotation lag (ms),340.0,485.0,Lag-compensated residual (deg),2.479338891489594,2.445894735879994,0.033444155609600124,

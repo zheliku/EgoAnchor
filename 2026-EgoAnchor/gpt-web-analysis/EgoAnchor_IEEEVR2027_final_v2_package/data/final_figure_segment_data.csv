@@ -1,0 +1,183 @@
+figure,panel,method_or_variant,segment_id,x,y,unit_x,unit_y
+Fig3,world_consistency,Arrival-Hold,head_motion_01,,33.599648605837345,,mm
+Fig3,world_consistency,Arrival-Hold,head_motion_02,,27.769686005632845,,mm
+Fig3,world_consistency,Arrival-Hold,head_motion_03,,16.53965049599361,,mm
+Fig3,world_consistency,Arrival-Hold,head_motion_04,,16.70448425213161,,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_01,180.0,7.270567922838936,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_02,170.0,10.17187103619588,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_03,175.0,9.881215686669194,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_04,205.0,8.643184613047248,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_05,185.0,10.139282286052063,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_06,185.0,10.488759274267913,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_07,170.0,13.869482267758341,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_08,175.0,9.510522496558703,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_09,200.0,11.16740716182547,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_10,165.0,11.846348130419365,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_11,200.0,15.22171179824024,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_12,180.0,11.71051174508999,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_13,190.0,10.646666128838223,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_14,185.0,17.413231635464765,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_15,170.0,9.0860738005222,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_16,200.0,13.809438529733848,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_17,200.0,14.08458342022057,ms,mm
+Fig3,translation_tradeoff,Arrival-Hold,translation_18,180.0,9.715276940340194,ms,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_01,,50.10605297651233,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_02,,21.114158949611177,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_03,,51.871120127383165,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_04,,13.247592728972359,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_05,,15.259479379294238,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_06,,39.662924144293044,,mm
+Fig3,failure_containment,Arrival-Hold,occlusion_07,,35.30324051221481,,mm
+Fig3,world_consistency,Capture-Hold,head_motion_01,,10.052475153085574,,mm
+Fig3,world_consistency,Capture-Hold,head_motion_02,,6.936400010806706,,mm
+Fig3,world_consistency,Capture-Hold,head_motion_03,,8.821429824936237,,mm
+Fig3,world_consistency,Capture-Hold,head_motion_04,,8.3254431312421,,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_01,250.0,7.2834649047477065,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_02,245.0,7.833109678006626,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_03,260.0,10.919797295747182,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_04,265.0,7.736422741629174,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_05,250.0,10.537908519282027,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_06,270.0,11.104237632496615,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_07,265.0,12.481192110119395,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_08,250.0,10.122634474035623,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_09,245.0,8.809188709980232,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_10,255.0,12.4252208153601,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_11,265.0,11.359421568374579,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_12,260.0,12.149237286224569,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_13,235.0,9.453972920421393,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_14,255.0,13.220452361251143,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_15,250.0,9.618168849769768,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_16,245.0,12.236129396068938,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_17,255.0,11.353969703828314,ms,mm
+Fig3,translation_tradeoff,Capture-Hold,translation_18,260.0,9.285352854713633,ms,mm
+Fig3,failure_containment,Capture-Hold,occlusion_01,,49.1451330156033,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_02,,20.97719785773211,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_03,,51.51156417441765,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_04,,12.170710020494496,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_05,,13.685441047201,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_06,,38.0216068410751,,mm
+Fig3,failure_containment,Capture-Hold,occlusion_07,,34.095464413685136,,mm
+Fig3,world_consistency,One-Euro Anchor,head_motion_01,,9.121869916051907,,mm
+Fig3,world_consistency,One-Euro Anchor,head_motion_02,,6.30712385934321,,mm
+Fig3,world_consistency,One-Euro Anchor,head_motion_03,,8.54397055077234,,mm
+Fig3,world_consistency,One-Euro Anchor,head_motion_04,,8.00154288166211,,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_01,380.0,6.691852562677884,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_02,380.0,7.6018747644057285,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_03,400.0,10.94693584087607,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_04,410.0,8.148570449909462,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_05,385.0,10.339894767118963,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_06,410.0,10.865137116321193,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_07,405.0,13.22333682077185,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_08,380.0,10.824405883266472,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_09,385.0,8.928082374999441,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_10,390.0,11.469375093114312,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_11,410.0,10.940367722047915,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_12,390.0,12.34710434618008,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_13,375.0,9.416884761878881,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_14,385.0,12.229149018573377,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_15,380.0,10.628149028590427,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_16,380.0,11.991509840629037,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_17,390.0,10.271065928740974,ms,mm
+Fig3,translation_tradeoff,One-Euro Anchor,translation_18,390.0,8.867432969392096,ms,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_01,,22.75280427048391,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_02,,7.950437061995775,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_03,,21.486461338255992,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_04,,5.855182152858392,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_05,,4.576179164462765,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_06,,17.769619698694324,,mm
+Fig3,failure_containment,One-Euro Anchor,occlusion_07,,12.99903137241404,,mm
+Fig3,world_consistency,EgoAnchor,head_motion_01,,6.460055436376781,,mm
+Fig3,world_consistency,EgoAnchor,head_motion_02,,2.7938745440506105,,mm
+Fig3,world_consistency,EgoAnchor,head_motion_03,,3.496730951704157,,mm
+Fig3,world_consistency,EgoAnchor,head_motion_04,,3.8615412850934416,,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_01,350.0,16.593576935426377,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_02,310.0,4.33269021993392,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_03,330.0,7.321042331773767,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_04,340.0,3.0342439943468476,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_05,320.0,4.693800875757199,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_06,345.0,6.6299169907414495,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_07,335.0,4.947626284647788,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_08,315.0,4.042835872464696,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_09,315.0,4.750950340781628,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_10,320.0,7.930255718414254,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_11,340.0,6.454242012139736,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_12,335.0,5.115716205276574,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_13,300.0,3.6238112626606194,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_14,325.0,7.06590337564863,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_15,315.0,4.326975615784684,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_16,315.0,6.278278630698201,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_17,325.0,9.340916067811216,ms,mm
+Fig3,translation_tradeoff,EgoAnchor,translation_18,330.0,9.244782897688113,ms,mm
+Fig3,failure_containment,EgoAnchor,occlusion_01,,2.431439800865689,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_02,,2.5150531061038746,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_03,,1.8216604043864253,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_04,,1.6007467040306471,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_05,,2.1130416336693347,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_06,,1.5954779512367425,,mm
+Fig3,failure_containment,EgoAnchor,occlusion_07,,1.1634793853783079,,mm
+Fig4,capture_alignment,full,head_motion_01,,6.460055436376781,,mm
+Fig4,capture_alignment,full,head_motion_02,,2.79387454405061,,mm
+Fig4,capture_alignment,full,head_motion_03,,3.496730951704157,,mm
+Fig4,capture_alignment,full,head_motion_04,,3.8615412850934416,,mm
+Fig4,capture_alignment,disabled,head_motion_01,,31.55222748774338,,mm
+Fig4,capture_alignment,disabled,head_motion_02,,13.042149931954972,,mm
+Fig4,capture_alignment,disabled,head_motion_03,,4.417747489290183,,mm
+Fig4,capture_alignment,disabled,head_motion_04,,3.5004697427778484,,mm
+Fig4,static_lock,full,head_motion_01,,3.688212567319855,,mm
+Fig4,static_lock,full,head_motion_02,,2.3326785439579365,,mm
+Fig4,static_lock,full,head_motion_03,,2.801479306630504,,mm
+Fig4,static_lock,full,head_motion_04,,3.220359187487808,,mm
+Fig4,static_lock,disabled,head_motion_01,,5.008727755291428,,mm
+Fig4,static_lock,disabled,head_motion_02,,4.333896195701541,,mm
+Fig4,static_lock,disabled,head_motion_03,,3.834194876555744,,mm
+Fig4,static_lock,disabled,head_motion_04,,4.292855033114795,,mm
+Fig4,vcd,full,occlusion_01,,2.431439800865689,,mm
+Fig4,vcd,full,occlusion_02,,2.5150531061038746,,mm
+Fig4,vcd,full,occlusion_03,,1.8216604043864253,,mm
+Fig4,vcd,full,occlusion_04,,1.6007467040306471,,mm
+Fig4,vcd,full,occlusion_05,,2.1130416336693347,,mm
+Fig4,vcd,full,occlusion_06,,1.5954779512367425,,mm
+Fig4,vcd,full,occlusion_07,,1.1634793853783079,,mm
+Fig4,vcd,disabled,occlusion_01,,77.47163166467737,,mm
+Fig4,vcd,disabled,occlusion_02,,35.937554101066254,,mm
+Fig4,vcd,disabled,occlusion_03,,1.8216643582947571,,mm
+Fig4,vcd,disabled,occlusion_04,,1.600743781782126,,mm
+Fig4,vcd,disabled,occlusion_05,,23.970231433036943,,mm
+Fig4,vcd,disabled,occlusion_06,,60.68165435083287,,mm
+Fig4,vcd,disabled,occlusion_07,,1.1634757217325133,,mm
+Fig4,synthesis,full,translation_01,350.0,16.593576935426377,ms,mm
+Fig4,synthesis,full,translation_02,310.0,4.33269021993392,ms,mm
+Fig4,synthesis,full,translation_03,330.0,7.321042331773767,ms,mm
+Fig4,synthesis,full,translation_04,340.0,3.0342439943468476,ms,mm
+Fig4,synthesis,full,translation_05,320.0,4.693800875757199,ms,mm
+Fig4,synthesis,full,translation_06,345.0,6.6299169907414495,ms,mm
+Fig4,synthesis,full,translation_07,335.0,4.947626284647788,ms,mm
+Fig4,synthesis,full,translation_08,315.0,4.042835872464696,ms,mm
+Fig4,synthesis,full,translation_09,315.0,4.750950340781628,ms,mm
+Fig4,synthesis,full,translation_10,320.0,7.930255718414254,ms,mm
+Fig4,synthesis,full,translation_11,340.0,6.454242012139736,ms,mm
+Fig4,synthesis,full,translation_12,335.0,5.115716205276574,ms,mm
+Fig4,synthesis,full,translation_13,300.0,3.6238112626606194,ms,mm
+Fig4,synthesis,full,translation_14,325.0,7.06590337564863,ms,mm
+Fig4,synthesis,full,translation_15,315.0,4.326975615784684,ms,mm
+Fig4,synthesis,full,translation_16,315.0,6.278278630698201,ms,mm
+Fig4,synthesis,full,translation_17,325.0,9.340916067811216,ms,mm
+Fig4,synthesis,full,translation_18,330.0,9.244782897688113,ms,mm
+Fig4,synthesis,disabled,translation_01,290.0,21.504249174066125,ms,mm
+Fig4,synthesis,disabled,translation_02,245.0,7.833109678006626,ms,mm
+Fig4,synthesis,disabled,translation_03,260.0,10.919797295747182,ms,mm
+Fig4,synthesis,disabled,translation_04,265.0,7.736422741629174,ms,mm
+Fig4,synthesis,disabled,translation_05,250.0,10.537908519282027,ms,mm
+Fig4,synthesis,disabled,translation_06,270.0,11.104237632496615,ms,mm
+Fig4,synthesis,disabled,translation_07,265.0,12.481192110119395,ms,mm
+Fig4,synthesis,disabled,translation_08,250.0,10.122634474035623,ms,mm
+Fig4,synthesis,disabled,translation_09,245.0,8.809188709980232,ms,mm
+Fig4,synthesis,disabled,translation_10,255.0,12.4252208153601,ms,mm
+Fig4,synthesis,disabled,translation_11,265.0,11.359421568374579,ms,mm
+Fig4,synthesis,disabled,translation_12,260.0,12.149237286224569,ms,mm
+Fig4,synthesis,disabled,translation_13,235.0,9.453972920421393,ms,mm
+Fig4,synthesis,disabled,translation_14,255.0,13.220452361251143,ms,mm
+Fig4,synthesis,disabled,translation_15,250.0,9.618168849769768,ms,mm
+Fig4,synthesis,disabled,translation_16,245.0,12.236129396068938,ms,mm
+Fig4,synthesis,disabled,translation_17,255.0,11.353969703828314,ms,mm
+Fig4,synthesis,disabled,translation_18,260.0,10.759306129509962,ms,mm

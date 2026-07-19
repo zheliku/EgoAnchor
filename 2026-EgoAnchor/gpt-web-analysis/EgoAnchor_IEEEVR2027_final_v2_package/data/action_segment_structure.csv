@@ -1,0 +1,6 @@
+task,scenario_id,continuous_trial_count,repeated_segment_or_episode_count,analysis_unit
+1,static_head_motion,1,4,head-motion action segment
+2,start_stop_6dof,1,5,start-stop action segment
+3,continuous_translation,1,18,continuous-motion segment
+4,continuous_rotation,1,3,continuous-motion segment
+5,occlusion_recovery,1,7,occlusion-reappearance episode

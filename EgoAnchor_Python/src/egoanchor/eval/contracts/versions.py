@@ -46,9 +46,9 @@ class ContractChange:
 
 CONTRACT_VERSIONS = (
     ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
-    ContractVersion("csv", 7, "Stage 2 GPT final v2 图表与论文数据 CSV 契约"),
-    ContractVersion("metrics", 5, "实验一增强行为指标定义契约"),
-    ContractVersion("analysis_params", 4, "实验一增强冻结分析参数契约"),
+    ContractVersion("csv", 8, "Stage 2 GPT final v2 图表与论文数据 CSV 契约"),
+    ContractVersion("metrics", 6, "实验一/二组件近端 raw 对齐指标契约"),
+    ContractVersion("analysis_params", 5, "实验一/二静止波动与遮挡尾部参数契约"),
     ContractVersion("analysis_workbook", 1, "Stage 2 实验审阅 XLSX 契约"),
 )
 """当前冻结的契约版本目录。"""
@@ -75,6 +75,11 @@ CONTRACT_CHANGELOG = (
         "按 GPT final v2 呈现增加 segment 散点、lag 对齐 RMSE 与 Full/Disabled 组件摘要。",
         True,
     ),
+    ContractChange(
+        "csv-v8",
+        "实验二 capture-time alignment 主表改用 admission raw 对齐误差，并固定图表按主指标过滤。",
+        True,
+    ),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),
     ContractChange(
         "metrics-v2",
@@ -97,6 +102,11 @@ CONTRACT_CHANGELOG = (
         True,
     ),
     ContractChange(
+        "metrics-v6",
+        "增加 capture-time/arrival-time admission raw 平移和旋转 P95，用于组件近端归因。",
+        True,
+    ),
+    ContractChange(
         "analysis_params-v2",
         "冻结滤波、运动切窗、响应、沉降、lag、恢复、gap 和单调时钟参数。",
         True,
@@ -109,6 +119,11 @@ CONTRACT_CHANGELOG = (
     ContractChange(
         "analysis_params-v4",
         "冻结停止后公共窗、近零保持容差和重新可见公共窗。",
+        True,
+    ),
+    ContractChange(
+        "analysis_params-v5",
+        "冻结静止中心化波动和遮挡灾难性失败阈值。",
         True,
     ),
     ContractChange(

@@ -12,7 +12,13 @@ import numpy as np
 from openpyxl import load_workbook as load_xlsx  # type: ignore[import-untyped]
 
 from ..contracts import SHEET_NAMES
-from .exp1 import EXP1_VARIANTS, Exp1Admission, Exp1RenderSeries, Exp1Trial
+from .exp1 import (
+    EXP1_VARIANTS,
+    Exp1Admission,
+    Exp1AlignmentObservation,
+    Exp1RenderSeries,
+    Exp1Trial,
+)
 from .exp2 import Exp2VariantDefinition, validate_exp2_variant_definitions
 from .vcd import VCD_FULL_VARIANT_ID, VCD_SCENARIO_ID, VcdCandidate
 from .windows import EventMarker, parse_event_markers
@@ -214,6 +220,12 @@ def _vector3(row: Mapping[str, Any], names: tuple[str, str, str]) -> tuple[float
     return (_float(row, names[0]), _float(row, names[1]), _float(row, names[2]))
 
 
+def _vector4(row: Mapping[str, Any], names: tuple[str, str, str, str]) -> tuple[float, float, float, float]:
+    """读取四维 xyzw 数组，供 raw 旋转和参考联接使用。"""
+
+    return (_float(row, names[0]), _float(row, names[1]), _float(row, names[2]), _float(row, names[3]))
+
+
 def _marker_groups(
     events: Iterable[Mapping[str, Any]],
     payload: Iterable[Mapping[str, Any]],
@@ -373,6 +385,34 @@ def load_workbook(path: Path) -> tuple[WorkbookInput, LoadedBatch]:
                     _text(row, "trial_id", required=False),
                 ) == key
             ]
+            alignment_observations: list[Exp1AlignmentObservation] = []
+            for row in trial_admissions:
+                candidate_id = _text(row, "candidate_id", required=False)
+                if not candidate_id:
+                    continue
+                frame_id = _int(row, "frame_id", required=True)
+                if frame_id is None:
+                    raise ValueError(f"admission 缺少 frame_id：{candidate_id}")
+                reference = reference_by_frame.get((session, frame_id))
+                alignment_observations.append(
+                    Exp1AlignmentObservation(
+                        candidate_id=candidate_id,
+                        variant_id=_text(row, "variant_id"),
+                        frame_id=frame_id,
+                        source_capture_mono_ms=_float(row, "source_capture_mono_ms", required=True),
+                        uses_capture_time_alignment=_bool(row, "uses_capture_time_alignment"),
+                        has_aligned_raw=_bool(row, "has_aligned_raw"),
+                        aligned_raw_position_m=_vector3(row, ("aligned_raw_pos_x_m", "aligned_raw_pos_y_m", "aligned_raw_pos_z_m")),
+                        aligned_raw_rotation=_vector4(row, ("aligned_raw_rot_x", "aligned_raw_rot_y", "aligned_raw_rot_z", "aligned_raw_rot_w")),
+                        has_arrival_time_raw=_bool(row, "has_arrival_time_raw"),
+                        arrival_time_raw_position_m=_vector3(row, ("arrival_time_raw_pos_x_m", "arrival_time_raw_pos_y_m", "arrival_time_raw_pos_z_m")),
+                        arrival_time_raw_rotation=_vector4(row, ("arrival_time_raw_rot_x", "arrival_time_raw_rot_y", "arrival_time_raw_rot_z", "arrival_time_raw_rot_w")),
+                        reference_pose_valid=_bool(reference, "reference_pose_valid") if reference is not None else False,
+                        reference_position_m=_vector3(reference, ("reference_pos_x_m", "reference_pos_y_m", "reference_pos_z_m")) if reference is not None else (float("nan"),) * 3,
+                        reference_rotation=_vector4(reference, ("reference_rot_x", "reference_rot_y", "reference_rot_z", "reference_rot_w")) if reference is not None else (float("nan"),) * 4,
+                        admission_decision=_text(row, "admission_decision"),
+                    )
+                )
             trials.append(
                 Exp1Trial(
                     session_id=session,
@@ -394,6 +434,7 @@ def load_workbook(path: Path) -> tuple[WorkbookInput, LoadedBatch]:
                         for row in trial_admissions
                         if _text(row, "candidate_id", required=False)
                     ),
+                    alignment_observations=tuple(alignment_observations),
                 )
             )
             for marker in markers:

@@ -24,7 +24,7 @@ _PARAMETER_KEYS = {
     "post_stop": {"guard_ms", "window_ms"},
     "hold": {"position_tolerance_mm", "rotation_tolerance_deg"},
     "reappearance": {"window_ms"},
-    "thresholds": {"pose_quaternion_norm_tolerance", "vcd_score_minimum", "vcd_score_maximum", "recovery_position_tolerance_mm", "recovery_duration_ms", "settling_position_tolerance_mm", "settling_duration_ms"},
+    "thresholds": {"pose_quaternion_norm_tolerance", "vcd_score_minimum", "vcd_score_maximum", "recovery_position_tolerance_mm", "recovery_duration_ms", "settling_position_tolerance_mm", "settling_duration_ms", "occlusion_catastrophic_threshold_mm"},
     "recovery": {"start_role", "requires_fresh_output", "freshness_field", "freshness_clock"},
     "latency": {"candidate_arrival_clock", "python_processing_clock", "cross_clock_policy", "negative_duration_policy"},
     "vcd": {
@@ -216,6 +216,9 @@ class AnalysisParameters:
     settling_duration_ms: float
     """settling 持续时间。"""
 
+    occlusion_catastrophic_threshold_mm: float
+    """遮挡 P95 被视为灾难性失败的固定阈值。"""
+
     post_stop_guard_ms: float
     """参考停止后排除瞬态的固定等待时间。"""
 
@@ -360,8 +363,8 @@ def _validate_contract(params: AnalysisParameters) -> None:
         params: 已完成字段映射的冻结参数。
     """
 
-    if params.contract_version != 4:
-        raise ValueError("增强分析只接受 analysis_params v4")
+    if params.contract_version != 5:
+        raise ValueError("增强分析只接受 analysis_params v5")
     if params.unit_system != "metric" or params.statistics_unit != "event_segment":
         raise ValueError("单位系统或统计单位不符合冻结契约")
     if params.quantile_method != "linear" or params.event_summary != "median_iqr":
@@ -438,6 +441,7 @@ def _validate_ranges(params: AnalysisParameters) -> None:
         ("recovery_duration_ms", params.recovery_duration_ms, False),
         ("settling_position_mm", params.settling_position_mm, False),
         ("settling_duration_ms", params.settling_duration_ms, False),
+        ("occlusion_catastrophic_threshold_mm", params.occlusion_catastrophic_threshold_mm, False),
         ("post_stop_guard_ms", params.post_stop_guard_ms, True),
         ("post_stop_window_ms", params.post_stop_window_ms, False),
         ("hold_position_tolerance_mm", params.hold_position_tolerance_mm, False),
@@ -570,6 +574,7 @@ def load_analysis_parameters(path: Path | None = None) -> AnalysisParameters:
         recovery_duration_ms=float(thresholds["recovery_duration_ms"]),
         settling_position_mm=float(thresholds["settling_position_tolerance_mm"]),
         settling_duration_ms=float(thresholds["settling_duration_ms"]),
+        occlusion_catastrophic_threshold_mm=float(thresholds["occlusion_catastrophic_threshold_mm"]),
         post_stop_guard_ms=float(post_stop["guard_ms"]),
         post_stop_window_ms=float(post_stop["window_ms"]),
         hold_position_tolerance_mm=float(hold["position_tolerance_mm"]),

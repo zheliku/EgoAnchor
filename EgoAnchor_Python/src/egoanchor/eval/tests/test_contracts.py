@@ -307,6 +307,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(len(tex_suffixes), len(set(tex_suffixes)))
         self.assertIn("jump_pninetynine_mm", metric_keys)
         self.assertIn("jump_pninetynine_deg", metric_keys)
+        self.assertIn("capture_alignment_raw_translation_pninetyfive_mm", metric_keys)
+        self.assertIn("capture_alignment_raw_rotation_pninetyfive_deg", metric_keys)
         for metric in METRIC_DEFINITIONS:
             self.assertRegex(metric.tex_suffix, r"^[A-Za-z][A-Za-z]*$")
             self.assertTrue(set(metric.scenarios).issubset(set(SCENARIO_ORDER)), metric.key)
@@ -344,21 +346,24 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 7)
-        self.assertEqual(versions["metrics"], 5)
-        self.assertEqual(versions["analysis_params"], 4)
+        self.assertEqual(versions["csv"], 8)
+        self.assertEqual(versions["metrics"], 6)
+        self.assertEqual(versions["analysis_params"], 5)
         self.assertEqual(versions["analysis_workbook"], 1)
-        self.assertEqual(versions["csv"], 7)
+        self.assertEqual(versions["csv"], 8)
         self.assertTrue(changes["csv-v5"].breaking)
         self.assertTrue(changes["csv-v6"].breaking)
         self.assertTrue(changes["csv-v7"].breaking)
+        self.assertTrue(changes["csv-v8"].breaking)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
         self.assertTrue(changes["csv-v3"].breaking)
         self.assertTrue(changes["metrics-v4"].breaking)
         self.assertTrue(changes["metrics-v5"].breaking)
+        self.assertTrue(changes["metrics-v6"].breaking)
         self.assertTrue(changes["analysis_params-v4"].breaking)
-        self.assertEqual(versions["csv"], 7)
+        self.assertTrue(changes["analysis_params-v5"].breaking)
+        self.assertEqual(versions["csv"], 8)
         self.assertTrue(changes["csv-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
@@ -439,7 +444,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("contract", config)
         self.assertIn("metrics", config)
         self.assertIn("thresholds", config)
-        self.assertEqual(config["contract"]["version"], 4)
+        self.assertEqual(config["contract"]["version"], 5)
 
         assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
         for line in CONFIG_PATH.read_text(encoding="utf-8").splitlines():

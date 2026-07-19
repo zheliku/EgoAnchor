@@ -12,6 +12,7 @@ from egoanchor.eval import (
     EXP1_VARIANTS,
     EventMarker,
     Exp1Admission,
+    Exp1AlignmentObservation,
     Exp1RenderSeries,
     Exp1Trial,
     analyze_trial_events,
@@ -252,6 +253,64 @@ class Exp1AnalysisTests(unittest.TestCase):
             ("occlusion_recovery", "reappearance_translation_pninetyfive_mm"),
         ):
             self.assertIn(expected, primary_keys)
+
+    def test_capture_alignment_uses_admission_raw_pose_before_display_policy(self) -> None:
+        """采集时刻对齐主指标必须比较 admission raw，而非被 StaticLock 掩盖的 display。"""
+
+        source = self.trials[0]
+        observations: list[Exp1AlignmentObservation] = []
+        for event_index, start_ms in enumerate((0.0, 2500.0)):
+            for sample_index in range(3):
+                reference = (0.0, 0.0, 0.0)
+                aligned = (0.001 * sample_index, 0.0, 0.0)
+                arrival = (0.011 + 0.001 * sample_index, 0.0, 0.0)
+                for variant_id, capture in (
+                    ("EgoAnchor", True),
+                    ("EgoAnchor w/o capture-time alignment", False),
+                ):
+                    observations.append(
+                        Exp1AlignmentObservation(
+                            candidate_id=f"{event_index}-{sample_index}-{variant_id}",
+                            variant_id=variant_id,
+                            frame_id=event_index * 10 + sample_index,
+                            source_capture_mono_ms=start_ms + 100.0 + sample_index,
+                            uses_capture_time_alignment=capture,
+                            has_aligned_raw=True,
+                            aligned_raw_position_m=aligned,
+                            aligned_raw_rotation=(0.0, 0.0, 0.0, 1.0),
+                            has_arrival_time_raw=True,
+                            arrival_time_raw_position_m=arrival,
+                            arrival_time_raw_rotation=(0.0, 0.0, 0.0, 1.0),
+                            reference_pose_valid=True,
+                            reference_position_m=reference,
+                            reference_rotation=(0.0, 0.0, 0.0, 1.0),
+                            admission_decision="accepted",
+                        )
+                    )
+        trial = replace(
+            source,
+            render_series=source.render_series + (_series("EgoAnchor w/o capture-time alignment", "static_head_motion"),),
+            alignment_observations=tuple(observations),
+        )
+        rows = analyze_trial_events(
+            trial,
+            self.params,
+            ("EgoAnchor", "EgoAnchor w/o capture-time alignment"),
+        )
+        full = [
+            row
+            for row in rows
+            if row.variant_id == "EgoAnchor"
+            and row.metric_key == "capture_alignment_raw_translation_pninetyfive_mm"
+        ]
+        ablation = [
+            row
+            for row in rows
+            if row.variant_id == "EgoAnchor w/o capture-time alignment"
+            and row.metric_key == "capture_alignment_raw_translation_pninetyfive_mm"
+        ]
+        self.assertEqual([round(float(row.metric_value), 6) for row in full], [1.9, 1.9])
+        self.assertEqual([round(float(row.metric_value), 6) for row in ablation], [12.9, 12.9])
 
     def test_reappearance_window_is_not_silently_truncated(self) -> None:
         """固定重新可见窗口不完整时应保留空值，而不是计算短窗 P95。"""

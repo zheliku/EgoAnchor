@@ -1,0 +1,35 @@
+\documentclass[9pt,landscape]{article}
+\usepackage[letterpaper,margin=0.45in]{geometry}
+\usepackage{fontspec}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{caption}
+\setmainfont{Liberation Serif}
+\pagestyle{empty}
+\begin{document}
+\begin{table}[t]
+\centering
+\caption*{Supplementary Table S1. Between-segment distribution summary. Each continuous cell reports P5 / median / P95 across repeated action segments or occlusion episodes. Metrics whose names contain P95 are first computed within each segment over render frames. For $n=4$, P5 and P95 are interpolated near the observed endpoints and should be interpreted descriptively.}
+\scriptsize
+\setlength{\tabcolsep}{4.5pt}
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{p{3.2in}cc>{\centering\arraybackslash}p{1.55in}>{\centering\arraybackslash}p{1.55in}>{\centering\arraybackslash}p{1.55in}>{\centering\arraybackslash}p{1.55in}}
+\toprule
+Metric & Unit & $n$ & Arrival-Hold & Capture-Hold & One-Euro Anchor & EgoAnchor \\
+\midrule
+Head-motion leakage P95 & mm & 4 & 17.438 / 20.690 / 29.433 & 8.561 / 10.833 / 20.804 & 7.637 / 8.329 / 10.329 & 1.267 / 1.631 / 4.184 \\
+Absolute registration P95 & mm & 4 & 15.085 / 21.341 / 27.524 & 12.300 / 13.257 / 18.370 & 11.950 / 12.407 / 14.311 & 6.773 / 6.894 / 8.663 \\
+Stationary frame-increment P95 & mm & 4 & 2.374 / 3.760 / 5.738 & 1.269 / 2.380 / 3.479 & 0.655 / 1.065 / 1.771 & 0.081 / 0.098 / 0.112 \\
+Translation effective lag & ms & 30 & 165.0 / 182.5 / 207.8 & 242.2 / 250.0 / 257.8 & 375.0 / 385.0 / 392.8 & 305.0 / 320.0 / 341.0 \\
+Translation lag-aligned RMSE & mm & 30 & 7.539 / 10.087 / 11.415 & 7.304 / 9.584 / 11.257 & 7.165 / 9.559 / 11.899 & 2.880 / 4.960 / 9.111 \\
+Rotation effective lag & ms & 10 & 252.2 / 260.0 / 270.5 & 252.2 / 260.0 / 265.0 & 365.0 / 370.0 / 375.0 & 345.0 / 372.5 / 393.2 \\
+Rotation lag-aligned RMSE & deg & 10 & 2.650 / 3.335 / 3.976 & 2.650 / 3.281 / 3.981 & 2.753 / 3.389 / 3.984 & 3.408 / 4.691 / 5.974 \\
+Occlusion episode P95 & mm & 9 & 10.963 / 25.553 / 58.004 & 9.828 / 25.479 / 57.740 & 4.702 / 11.710 / 26.601 & 1.659 / 1.980 / 2.985 \\
+Start-transition response & ms & 9 & 25.1 / 167.5 / 321.7 & 159.1 / 208.8 / 355.0 & 175.9 / 284.4 / 371.6 & 470.8 / 591.1 / 749.1 \\
+\midrule
+Catastrophic occlusion failures ($>40$ mm) & count & 9 & 2/9 (max 61.245) & 2/9 (max 60.975) & 0/9 (max 27.922) & 0/9 (max 3.252) \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

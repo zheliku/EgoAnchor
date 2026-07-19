@@ -1,0 +1,104 @@
+\subsection{实验一：应用侧锚点行为}
+
+实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{failure containment} 衡量遮挡和坏观测是否破坏已建立锚点；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。静止头动场景中，绝对 display--reference 误差还包含一次 session 特有的固定注册偏置，因此我们将每个重复动作片段的误差向量减去该片段的中位误差向量，并以中心化残差 P95 作为头动泄漏主指标；绝对注册 P95 仅作为护栏报告。
+
+\begin{table*}[t]
+\centering
+\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体仅标记各能力块的主指标最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。片段间 P5 / median / P95 见补充表~S1。}
+\label{tab:exp1-final}
+\scriptsize
+\setlength{\tabcolsep}{2.1pt}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
+& $n=4$ & $n=4$ & $n=4$ & $n=30$ & $n=10$ & $n=9$ & $k/9$ & $n=9$ \\
+\midrule
+Arrival-Hold & \shortstack{20.690\\{\tiny [17.566, 25.429]}} & \shortstack{21.341\\{\tiny [17.968, 24.692]}} & \shortstack{3.760\\{\tiny [3.174, 4.520]}} & \shortstack{182.5 / 10.087\\{\tiny [171.2, 195.0] / [8.773, 10.749]}} & \shortstack{260.0 / 3.335\\{\tiny [256.2, 263.8] / [3.084, 3.590]}} & \shortstack{25.553\\{\tiny [14.788, 31.261]}} & 2/9 & \shortstack{167.5\\{\tiny [124.2, 181.1]}} \\
+Capture-Hold & \shortstack{10.833\\{\tiny [9.130, 14.800]}} & \shortstack{13.257\\{\tiny [12.678, 15.058]}} & \shortstack{2.380\\{\tiny [2.013, 2.744]}} & \shortstack{250.0 / 9.584\\{\tiny [246.2, 255.0] / [8.243, 10.085]}} & \shortstack{260.0 / 3.281\\{\tiny [256.2, 263.8] / [3.116, 3.568]}} & \shortstack{25.479\\{\tiny [14.329, 30.709]}} & 2/9 & \shortstack{208.8\\{\tiny [181.1, 270.9]}} \\
+One-Euro Anchor & \shortstack{8.329\\{\tiny [7.930, 9.113]}} & \shortstack{12.407\\{\tiny [12.175, 13.065]}} & \shortstack{1.065\\{\tiny [0.941, 1.275]}} & \shortstack{385.0 / 9.559\\{\tiny [380.0, 390.0] / [8.647, 10.171]}} & \shortstack{370.0 / 3.389\\{\tiny [365.0, 373.8] / [3.161, 3.725]}} & \shortstack{11.710\\{\tiny [6.519, 14.314]}} & \textbf{0/9} & \shortstack{284.4\\{\tiny [257.0, 292.0]}} \\
+EgoAnchor & \shortstack{\textbf{1.631}\\{\tiny [1.493, 2.413]}} & \shortstack{\textbf{6.894}\\{\tiny [6.792, 7.481]}} & \shortstack{\textbf{0.098}\\{\tiny [0.084, 0.111]}} & \shortstack{320.0 / \textbf{4.960}\\{\tiny [310.0, 325.0] / [4.346, 5.681]}} & \shortstack{372.5 / 4.691\\{\tiny [350.0, 383.8] / [3.941, 5.476]}} & \shortstack{\textbf{1.980}\\{\tiny [1.798, 2.362]}} & \textbf{0/9} & \shortstack{591.1\\{\tiny [570.5, 658.7]}} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\textbf{头动下的世界一致性与静止稳定性。}
+移除每个动作片段的固定注册偏置后，EgoAnchor 的中心化平移 P95 为 1.631~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 20.690、10.833 与 8.329~mm。相对 Arrival-Hold，头动泄漏降低 92.1\%；相对 One-Euro Anchor 降低 80.4\%。EgoAnchor 的绝对注册 P95 亦为四种方法最低的 6.894~mm。静止显示的帧间位置增量 P95 为 0.098~mm，低于 Arrival-Hold 的 3.760~mm、Capture-Hold 的 2.380~mm 和 One-Euro Anchor 的 1.065~mm。头动泄漏和帧间增量分别刻画低频世界坐标泄漏与逐帧显示抖动，不能由同一个绝对误差指标替代。
+
+\textbf{持续运动中的时延--轨迹质量权衡。}
+持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 320~ms / 4.960~mm；Arrival-Hold 为 182.5~ms / 10.087~mm，One-Euro Anchor 为 385~ms / 9.559~mm。相对 Arrival-Hold，EgoAnchor 付出额外拟合时延，但 residual 降低 50.8\%；相对 One-Euro Anchor，它同时减少 65~ms 的拟合时延并将 residual 降低 48.1\%。因此，平移结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
+
+该优势没有一致延伸至旋转。Capture-Hold 的有效角时延 / lag-aligned angular RMSE 为 260~ms / 3.281$^\circ$，EgoAnchor 为 372.5~ms / 4.691$^\circ$。因此，表~\ref{tab:exp1-final} 将旋转作为动态护栏保留，而不宣称当前旋转速度估计与对数空间合成优于保持式基线。
+
+\textbf{遮挡期间的失效控制。}
+九次遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 1.980~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 25.553、25.479 与 11.710~mm。Arrival-Hold 与 Capture-Hold 各有 2/9 次过程超过 40~mm，One-Euro Anchor 与 EgoAnchor 均为 0/9；但 EgoAnchor 的最大 episode P95 仅为 3.252~mm，显著低于 One-Euro Anchor 的 27.922~mm。中位数、阈值超限率和最大值共同表明完整运行时不仅改善典型遮挡行为，也压缩了上尾风险。
+
+\textbf{起停转换代价。}
+我们将 Start-transition response 定义为：相对于各动作片段前 250~ms 的基线，参考物体与显示锚点首次持续 100~ms 超过 5~mm 位移阈值的时刻差。Arrival-Hold、Capture-Hold、One-Euro Anchor 与 EgoAnchor 的片段中位数分别为 167.5、208.8、284.4 与 591.1~ms。该量包含 StaticLock 解锁证据、候选更新和延迟合成时间线，不是网络或视觉推理的原始时延；它诚实刻画了静止稳定性收益所伴随的启动成本。
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.99\textwidth]{../figures/generated/experiment1_corrected_newdata.pdf}
+  \caption{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，大标记与误差棒表示 median--IQR。左：在每个片段内移除固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡，越靠左下越好；右：遮挡期间的 episode-level P95。静止帧间抖动、旋转护栏、灾难性失效率与起停转换代价在表~\ref{tab:exp1-final} 中完整报告。}
+  \label{fig:exp1-final}
+\end{figure*}
+
+\subsection{实验二：组件归因}
+
+实验二仍复用相同候选流与参考轨迹，但针对每个组件采用与其设计目标直接对应的指标。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差，避免下游 Kalman、StaticLock 与时序合成掩盖其作用；StaticLock 使用中心化静止波动与逐帧增量；VCD 使用灾难性尾部失效率而非容易掩盖稀疏失效的中位数；时序合成继续以 lag / aligned residual 成对报告。
+
+\begin{table*}[t]
+\centering
+\caption{新数据上的目标化组件归因。每个组件只使用直接对应其设计目标的指标。VCD 以超过 40~mm 的灾难性遮挡过程计数和最大值描述尾部失效。}
+\label{tab:exp2-final}
+\small
+\setlength{\tabcolsep}{4.8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllll}
+\toprule
+组件 & 直接指标 & 启用 & 关闭 / 替代 & 效应 \\
+\midrule
+采集时刻对齐 & 同一候选的复合 P95 & 13.240 [12.656, 15.042]~mm & 21.311 [17.967, 24.717]~mm & $+7.862$ [5.311, 9.467]~mm；4/4 变差 \\
+StaticLock & 中心化静止 P95 & 1.631 [1.493, 2.413]~mm & 9.876 [8.922, 12.481]~mm & $+7.966$ [6.346, 10.872]~mm \\
+VCD 接纳 & 遮挡 P95 $>40$~mm & 0/9；max 3.252~mm & 4/9；max 91.714~mm & 消除本批次观测到的灾难性失效 \\
+时序合成 & Lag / aligned RMSE & 320.0 / 4.960 & 250.0 / 9.791 & $-70.0$~ms / $+4.831$~mm \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.99\textwidth]{../figures/generated/experiment2_corrected_newdata.pdf}
+  \caption{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD：采集时刻对齐比较同一原始候选的两种世界复合；StaticLock 比较中心化静止波动；VCD 面板使用对数坐标并标出 40~mm 灾难性阈值。右侧显示时序合成的 fitted-lag--aligned-residual 权衡。}
+  \label{fig:exp2-final}
+\end{figure*}
+
+\textbf{采集时刻对齐。}
+对同一批原始候选直接应用两种世界复合后，片段级 candidate P95 由 arrival-time 的 21.311~mm 降至 capture-time 的 13.240~mm；四个头动片段全部改善，配对中位降幅为 7.862~mm。将所有 733 个候选合并后，P95 由 22.702 降至 13.268~mm（降低 41.6\%）。这说明此前完整系统最终显示误差中较小的 Full--Ablated 差异来自下游组件补偿，而不是采集时刻对齐失效。
+
+\textbf{StaticLock。}
+关闭 StaticLock 后，中心化静止 P95 从 1.631 增至 9.876~mm（增加约 6 倍）。作为护栏，逐帧位置增量 P95 的片段中位数同时由 0.098 墣至 1.453~mm。该结果表明 StaticLock 同时限制慢速静止漂移与逐帧抖动。
+
+\textbf{VCD 接纳。}
+VCD 的收益集中在稀疏但严重的尾部失效。启用 VCD 时，九次遮挡过程均未超过 40~mm，最大 episode P95 为 3.252~mm；关闭 VCD 后，4/9 次遮挡超过 40~mm，最大值达到 91.714~mm。仅比较中位数会掩盖这一重尾行为，因此本文以阈值超限率与上尾统计作为该组件的主证据。
+
+\textbf{时序合成。}
+关闭时序合成后，拟合时延由 320 降至 250~ms，但 lag-aligned RMSE 由 4.960 增至 9.791~mm（增加 97.4\%）。因此，该组件的作用是以显式历史时间线换取连续且更忠实的渲染轨迹，而不是最小化显示时延。
+\FloatBarrier
+
+\subsection{评价指标与汇总契约}
+
+所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。
+
+持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
+
+本文以 median [Q1, Q3] 和同一动作片段内的配对差值为主，不进行渲染帧级显著性推断；补充表~S1 报告片段间 P5 / median / P95，但不将其解释为总体置信区间。所有参数、动作片段边界和指标契约在正式数据分析前冻结；完整片段级表、图源数据和流式解析脚本随分析包提供。
+
+
+% Axis-alignment revision: the dynamic-translation and temporal-synthesis trade-off panels both use x=[150,400] ms and y=[0,21] mm.

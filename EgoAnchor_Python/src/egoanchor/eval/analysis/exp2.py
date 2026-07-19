@@ -76,8 +76,13 @@ EXP2_COMPONENTS = (
         "capture_time_alignment",
         "static_head_motion",
         "EgoAnchor w/o capture-time alignment",
-        ("translation_event_pninetyfive_mm", "rotation_event_pninetyfive_deg"),
-        ("translation_event_pninetyfive_mm",),
+        (
+            "capture_alignment_raw_translation_pninetyfive_mm",
+            "capture_alignment_raw_rotation_pninetyfive_deg",
+            "translation_event_pninetyfive_mm",
+            "rotation_event_pninetyfive_deg",
+        ),
+        ("capture_alignment_raw_translation_pninetyfive_mm",),
     ),
     Exp2ComponentDefinition(
         "vcd_admission",
@@ -86,10 +91,11 @@ EXP2_COMPONENTS = (
         (
             "occlusion_translation_pninetyfive_mm",
             "jump_pninetyfive_mm",
+            "occlusion_catastrophic_failure_rate",
             "durable_recovery_time_ms",
             "durable_recovery_success",
         ),
-        ("occlusion_translation_pninetyfive_mm", "jump_pninetyfive_mm"),
+        ("occlusion_translation_pninetyfive_mm",),
     ),
     Exp2ComponentDefinition(
         "temporal_synthesis",
@@ -107,11 +113,13 @@ EXP2_COMPONENTS = (
         "EgoAnchor w/o StaticLock",
         (
             "position_hp_rms_mm",
+            "centered_translation_pninetyfive_mm",
             "translation_event_pninetyfive_mm",
+            "jump_pninetyfive_mm",
             "absolute_translation_median_mm",
             "position_drift_mm",
         ),
-        ("position_hp_rms_mm",),
+        ("centered_translation_pninetyfive_mm",),
     ),
 )
 """四个单组件消融的冻结适用场景、主指标与 guardrail。"""

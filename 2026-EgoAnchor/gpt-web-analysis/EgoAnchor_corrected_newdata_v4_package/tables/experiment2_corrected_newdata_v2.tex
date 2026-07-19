@@ -1,0 +1,17 @@
+\begin{table*}[t]
+\centering
+\caption{Corrected targeted component attribution. Each component is evaluated with the metric that directly matches its design objective; VCD is summarized by tail failures rather than a median that hides rare catastrophic corruption.}
+\label{tab:exp2-corrected-new}
+\small
+\setlength{\tabcolsep}{4.8pt}
+\begin{tabular}{lllll}
+\toprule
+Component & Direct metric & Enabled & Disabled / alternative & Effect \\
+\midrule
+Capture-time alignment & Candidate composition P95 & 13.240 [12.656, 15.042] mm & 21.311 [17.967, 24.717] mm & +7.862 [5.311, 9.467] mm; 4/4 worse \\
+StaticLock & Centered stationary P95 & 1.631 [1.493, 2.413] mm & 9.876 [8.922, 12.481] mm & +7.966 [6.346, 10.872] mm \\
+VCD admission & Episodes above 40 mm & 0 / 9; max 3.252 mm & 4 / 9; max 91.714 mm & eliminates observed catastrophic failures \\
+Temporal synthesis & Lag / aligned RMSE & 320.0 / 4.960 & 250.0 / 9.791 & -70.0 ms / +4.831 mm \\
+\bottomrule
+\end{tabular}
+\end{table*}

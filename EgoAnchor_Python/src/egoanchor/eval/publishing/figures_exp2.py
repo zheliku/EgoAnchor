@@ -16,11 +16,18 @@ _COMPONENT_ORDER = ("capture_time_alignment", "static_lock", "vcd_admission")
 """GPT 左侧三个目标组件顺序。"""
 
 _COMPONENT_LABELS = {
-    "capture_time_alignment": ("Capture alignment", "prevents head-motion leakage", "Segment P95 (mm)"),
+    "capture_time_alignment": ("Capture alignment", "prevents head-motion leakage", "Raw candidate P95 (mm)"),
     "static_lock": ("StaticLock", "stabilizes the resting anchor", "Stationary median (mm)"),
     "vcd_admission": ("VCD admission", "rejects harmful occlusion updates", "Occlusion P95 (mm)"),
 }
 """组件标题、副标题和纵轴标签。"""
+
+_COMPONENT_PLOT_METRICS = {
+    "capture_time_alignment": "capture_alignment_raw_translation_pninetyfive_mm",
+    "static_lock": "position_hp_rms_mm",
+    "vcd_admission": "occlusion_translation_pninetyfive_mm",
+}
+"""每个左侧面板唯一允许绘制的主指标，防止 guardrail 混入同一坐标轴。"""
 
 
 def _finite(value: object) -> float | None:
@@ -36,8 +43,10 @@ def _finite(value: object) -> float | None:
 def _paired_small(axis, rows: list[Mapping[str, str]], component: str) -> None:
     """绘制单组件 Full/Disabled 配对 segment 线和中位数粗线。"""
 
+    metric_key = _COMPONENT_PLOT_METRICS[component]
+    rows = [row for row in rows if str(row.get("metric_key") or "") == metric_key]
     if not rows:
-        raise ValueError(f"实验二缺少组件行：{component}")
+        raise ValueError(f"实验二缺少组件主指标行：{component}/{metric_key}")
     full = [value for value in (_finite(row.get("full_value")) for row in rows) if value is not None]
     disabled = [value for value in (_finite(row.get("ablation_value")) for row in rows) if value is not None]
     if len(full) != len(disabled) or not full:
@@ -52,6 +61,29 @@ def _paired_small(axis, rows: list[Mapping[str, str]], component: str) -> None:
     axis.set_ylabel(ylabel)
     axis.set_title(title, fontweight="bold", pad=17, fontsize=10.8)
     axis.text(0.5, 1.01, subtitle, transform=axis.transAxes, ha="center", va="bottom", fontsize=7.9)
+    delta_median = float(np.median(disabled) - np.median(full))
+    axis.text(
+        0.5,
+        0.92,
+        f"Disabled - Full = {delta_median:.3g} mm",
+        transform=axis.transAxes,
+        ha="center",
+        va="top",
+        fontsize=7.5,
+    )
+    if component == "vcd_admission":
+        full_tail = sum(value > 40.0 for value in full)
+        disabled_tail = sum(value > 40.0 for value in disabled)
+        axis.text(
+            0.5,
+            0.84,
+            f">40 mm: {full_tail}/{len(full)} vs {disabled_tail}/{len(disabled)}",
+            transform=axis.transAxes,
+            ha="center",
+            va="top",
+            fontsize=7.5,
+            color="#555555",
+        )
     axis.grid(axis="y", linestyle=":", linewidth=0.75, alpha=0.35)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)

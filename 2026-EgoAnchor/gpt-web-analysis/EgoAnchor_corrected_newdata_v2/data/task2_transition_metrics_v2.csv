@@ -1,0 +1,37 @@
+method,segment_id,start_transition_response_ms
+Arrival-Hold,event_001,124.21249999987776
+Arrival-Hold,event_002,166.08270000004995
+Arrival-Hold,event_003,174.63439999984257
+Arrival-Hold,event_004,181.06699999998818
+Arrival-Hold,event_005,42.20130000022618
+Arrival-Hold,event_006,167.54959999979474
+Arrival-Hold,event_007,13.683699999994133
+Arrival-Hold,event_008,208.7830999998987
+Arrival-Hold,event_009,397.00389999960316
+Capture-Hold,event_001,208.15159999983734
+Capture-Hold,event_002,166.08270000004995
+Capture-Hold,event_003,292.0371000000232
+Capture-Hold,event_004,181.06699999998818
+Capture-Hold,event_005,154.37870000005933
+Capture-Hold,event_006,270.8988999997964
+Capture-Hold,event_007,222.1274999997113
+Capture-Hold,event_008,208.7830999998987
+Capture-Hold,event_009,397.00389999960316
+One-Euro Anchor,event_001,208.15159999983734
+One-Euro Anchor,event_002,256.98260000035225
+One-Euro Anchor,event_003,292.0371000000232
+One-Euro Anchor,event_004,284.355300000243
+One-Euro Anchor,event_005,154.37870000005933
+One-Euro Anchor,event_006,270.8988999997964
+One-Euro Anchor,event_007,333.4332999998005
+One-Euro Anchor,event_008,291.9864000000525
+One-Euro Anchor,event_009,397.00389999960316
+EgoAnchor,event_001,658.6579999998285
+EgoAnchor,event_002,581.9372999999323
+EgoAnchor,event_003,729.1430999998702
+EgoAnchor,event_004,617.391900000257
+EgoAnchor,event_005,570.4528999999602
+EgoAnchor,event_006,591.1270999999833
+EgoAnchor,event_007,762.3346999998757
+EgoAnchor,event_008,423.63909999995667
+EgoAnchor,event_009,541.5183999998553

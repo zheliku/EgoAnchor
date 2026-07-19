@@ -1070,7 +1070,7 @@ MonoBehaviour:
     ip: 172.24.247.32
   - label: RTX5080 - Laptop
     ip: 192.168.3.9
-  selected: 3
+  selected: 2
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222

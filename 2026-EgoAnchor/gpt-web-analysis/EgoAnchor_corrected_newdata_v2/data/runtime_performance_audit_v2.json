@@ -1,0 +1,14 @@
+{
+  "all_candidate_total_ms_median": 72.69889998133294,
+  "all_candidate_total_ms_p95": 88.63405000593048,
+  "track_total_ms_median": 75.25529999111313,
+  "track_total_ms_p95": 90.06839998619398,
+  "track_n": 3980,
+  "register_total_ms_median": 756.5090999996755,
+  "register_total_ms_p95": 1032.3417199979303,
+  "register_n": 23,
+  "pose_publish_interval_ms_median": 104.52629999816418,
+  "pose_publish_interval_ms_p95": 124.10363499522208,
+  "pose_publish_rate_hz_from_median": 9.566970226799985,
+  "pose_publish_interval_n": 3998
+}

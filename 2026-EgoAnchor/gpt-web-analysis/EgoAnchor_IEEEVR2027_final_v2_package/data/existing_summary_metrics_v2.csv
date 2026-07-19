@@ -1,0 +1,33 @@
+scenario,metric,unit,variant,median,q1,q3
+static_head_motion,translation_segment_p95,mm,Arrival-Hold,22.237,16.663,29.227
+static_head_motion,translation_segment_p95,mm,Capture-Hold,8.573,7.978,9.129
+static_head_motion,translation_segment_p95,mm,One-Euro Anchor,8.273,7.578,8.688
+static_head_motion,translation_segment_p95,mm,EgoAnchor,3.679,3.321,4.511
+static_head_motion,position_hp_rms,mm,Arrival-Hold,3.404,3.044,3.914
+static_head_motion,position_hp_rms,mm,Capture-Hold,2.199,1.255,3.276
+static_head_motion,position_hp_rms,mm,One-Euro Anchor,0.812,0.516,1.17
+static_head_motion,position_hp_rms,mm,EgoAnchor,0.03,0.028,0.349
+start_stop_6dof,visible_response,ms,Arrival-Hold,126.344,102.415,131.654
+start_stop_6dof,visible_response,ms,Capture-Hold,250.29,167.84,291.354
+start_stop_6dof,visible_response,ms,One-Euro Anchor,333.325,250.29,382.728
+start_stop_6dof,visible_response,ms,EgoAnchor,751.053,689.61,791.083
+continuous_translation,effective_lag,ms,Arrival-Hold,182.5,175,197.5
+continuous_translation,effective_lag,ms,Capture-Hold,255,250,260
+continuous_translation,effective_lag,ms,One-Euro Anchor,387.5,380,397.5
+continuous_translation,effective_lag,ms,EgoAnchor,325,315,335
+continuous_rotation,effective_lag,ms,Arrival-Hold,265,265,265
+continuous_rotation,effective_lag,ms,Capture-Hold,265,265,265
+continuous_rotation,effective_lag,ms,One-Euro Anchor,370,355,375
+continuous_rotation,effective_lag,ms,EgoAnchor,350,350,357.5
+occlusion_recovery,occlusion_translation_p95,mm,Arrival-Hold,35.303,18.187,44.884
+occlusion_recovery,occlusion_translation_p95,mm,Capture-Hold,34.095,17.331,43.583
+occlusion_recovery,occlusion_translation_p95,mm,One-Euro Anchor,12.999,6.903,19.628
+occlusion_recovery,occlusion_translation_p95,mm,EgoAnchor,1.822,1.598,2.272
+continuous_translation,lag_aligned_residual,mm,Arrival-Hold,10.568,,
+continuous_rotation,lag_aligned_residual,deg,Arrival-Hold,2.917,,
+continuous_translation,lag_aligned_residual,mm,Capture-Hold,10.729,,
+continuous_rotation,lag_aligned_residual,deg,Capture-Hold,2.909,,
+continuous_translation,lag_aligned_residual,mm,One-Euro Anchor,10.726,,
+continuous_rotation,lag_aligned_residual,deg,One-Euro Anchor,7.858,,
+continuous_translation,lag_aligned_residual,mm,EgoAnchor,5.697,,
+continuous_rotation,lag_aligned_residual,deg,EgoAnchor,3.62,,

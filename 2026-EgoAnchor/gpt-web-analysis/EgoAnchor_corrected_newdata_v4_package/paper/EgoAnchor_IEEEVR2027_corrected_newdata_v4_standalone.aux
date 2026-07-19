@@ -1,0 +1,125 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\citation{appleObjectAnchor}
+\citation{azureObjectAnchors}
+\citation{vuforiaModelTargets}
+\citation{metaDynamicObjectTracker}
+\citation{posecnn2017}
+\citation{densefusion2019}
+\citation{cosypose2020}
+\citation{megapose2022}
+\citation{foundationpose2023}
+\citation{yoloe2025}
+\citation{cutie2024}
+\citation{foundationstereo2025}
+\citation{foundationpose2023}
+\citation{appleObjectAnchor}
+\citation{azureObjectAnchors}
+\citation{metaDynamicObjectTracker}
+\HyPL@Entry{0<</S/D>>}
+\@writefile{toc}{\contentsline {section}{\numberline {1}引言}{1}{section.1}\protected@file@percent }
+\newlabel{sec:introduction}{{1}{1}{引言}{section.1}{}}
+\citation{kato1999artoolkit}
+\citation{olson2011apriltag}
+\citation{garridojurado2014aruco}
+\citation{googleArcoreAugmentedImages}
+\citation{azuma1994improving}
+\citation{diluca2010latency}
+\citation{vanwaveren2016atw}
+\@writefile{toc}{\contentsline {section}{\numberline {2}相关工作}{2}{section.2}\protected@file@percent }
+\newlabel{sec:related-work}{{2}{2}{相关工作}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}平台级真实物体锚定}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}6DoF 物体位姿估计与跟踪}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}XR 时延补偿与时间一致性}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}EgoAnchor 系统}{2}{section.3}\protected@file@percent }
+\newlabel{sec:pipeline}{{3}{2}{EgoAnchor 系统}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}设计目标与系统概览}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}对象感知}{2}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:perception}{{3.2}{2}{对象感知}{subsection.3.2}{}}
+\newlabel{eq:observation}{{1}{2}{对象感知}{equation.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}零样本视觉推理}{2}{subsubsection.3.2.1}\protected@file@percent }
+\newlabel{sec:pipeline-detail}{{3.2.1}{2}{零样本视觉推理}{subsubsection.3.2.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces EgoAnchor 分层架构。对象感知后端持续输出相机坐标系下的异步位姿流与可靠性评分；对象锚定运行时基于采集时刻的设备轨迹执行时空对齐，并通过双轴状态管理与多维稳定化策略合成世界坐标系下稳定、连续的对象锚点。}}{3}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:arch}{{1}{3}{EgoAnchor 分层架构。对象感知后端持续输出相机坐标系下的异步位姿流与可靠性评分；对象锚定运行时基于采集时刻的设备轨迹执行时空对齐，并通过双轴状态管理与多维稳定化策略合成世界坐标系下稳定、连续的对象锚点。}{figure.caption.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}可靠性评分}{3}{subsubsection.3.2.2}\protected@file@percent }
+\newlabel{sec:reliability}{{3.2.2}{3}{可靠性评分}{subsubsection.3.2.2}{}}
+\newlabel{eq:reliability}{{2}{3}{可靠性评分}{equation.2}{}}
+\newlabel{eq:visibility}{{3}{3}{可靠性评分}{equation.3}{}}
+\newlabel{eq:cd-consistency}{{4}{3}{可靠性评分}{equation.4}{}}
+\newlabel{eq:zncc}{{5}{3}{可靠性评分}{equation.5}{}}
+\citation{kalman1960new}
+\newlabel{eq:color-sim}{{6}{4}{可靠性评分}{equation.6}{}}
+\newlabel{eq:depth-joint}{{7}{4}{可靠性评分}{equation.7}{}}
+\newlabel{eq:depth-thresh}{{8}{4}{可靠性评分}{equation.8}{}}
+\newlabel{eq:depth-abs}{{9}{4}{可靠性评分}{equation.9}{}}
+\newlabel{eq:depth-stats}{{11}{4}{可靠性评分}{equation.11}{}}
+\newlabel{eq:depth-alpha}{{12}{4}{可靠性评分}{equation.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}对象锚定}{4}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:anchoring}{{3.3}{4}{对象锚定}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}时空对齐}{4}{subsubsection.3.3.1}\protected@file@percent }
+\newlabel{sec:alignment}{{3.3.1}{4}{时空对齐}{subsubsection.3.3.1}{}}
+\newlabel{eq:world-transform}{{13}{4}{时空对齐}{equation.13}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}运动估计与平滑}{4}{subsubsection.3.3.2}\protected@file@percent }
+\newlabel{sec:smoothing}{{3.3.2}{4}{运动估计与平滑}{subsubsection.3.3.2}{}}
+\newlabel{eq:adaptive-delay}{{14}{4}{运动估计与平滑}{equation.14}{}}
+\newlabel{eq:tangent-clamp}{{15}{4}{运动估计与平滑}{equation.15}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}静止锚定}{4}{subsubsection.3.3.3}\protected@file@percent }
+\newlabel{sec:staticlock}{{3.3.3}{4}{静止锚定}{subsubsection.3.3.3}{}}
+\newlabel{eq:lock-condition}{{16}{4}{静止锚定}{equation.16}{}}
+\newlabel{eq:cusum}{{17}{5}{静止锚定}{equation.17}{}}
+\newlabel{eq:distance-adaptive}{{18}{5}{静止锚定}{equation.18}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.4}生命周期管理}{5}{subsubsection.3.3.4}\protected@file@percent }
+\newlabel{sec:lifecycle}{{3.3.4}{5}{生命周期管理}{subsubsection.3.3.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}系统实现}{5}{section.4}\protected@file@percent }
+\newlabel{sec:impl}{{4}{5}{系统实现}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}视觉感知后端}{5}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}对象锚定运行时}{5}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}跨端通信}{5}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}系统评估}{5}{section.5}\protected@file@percent }
+\newlabel{sec:eval}{{5}{5}{系统评估}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}实验设计、装置与统计单位}{6}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}系统配置}{6}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}实验一：应用侧锚点行为}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}实验二：组件归因}{6}{subsection.5.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces 新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体仅标记各能力块的主指标最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。片段间 P5 / median / P95 见补充表~S1。}}{7}{table.caption.2}\protected@file@percent }
+\newlabel{tab:exp1-final}{{1}{7}{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体仅标记各能力块的主指标最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。片段间 P5 / median / P95 见补充表~S1。}{table.caption.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces 新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，大标记与误差棒表示 median--IQR。左：在每个片段内移除固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡，越靠左下越好；该面板与图~\ref {fig:exp2-final} 右侧统一采用 150--400~ms 与 0--21~mm 的坐标范围。右：遮挡期间的 episode-level P95。静止帧间抖动、旋转护栏、灾难性失效率与起停转换代价在表~\ref {tab:exp1-final} 中完整报告。}}{7}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:exp1-final}{{2}{7}{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，大标记与误差棒表示 median--IQR。左：在每个片段内移除固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡，越靠左下越好；该面板与图~\ref {fig:exp2-final} 右侧统一采用 150--400~ms 与 0--21~mm 的坐标范围。右：遮挡期间的 episode-level P95。静止帧间抖动、旋转护栏、灾难性失效率与起停转换代价在表~\ref {tab:exp1-final} 中完整报告。}{figure.caption.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces 新数据上的目标化组件归因。每个组件只使用直接对应其设计目标的指标。VCD 以超过 40~mm 的灾难性遮挡过程计数和最大值描述尾部失效。}}{7}{table.caption.4}\protected@file@percent }
+\newlabel{tab:exp2-final}{{2}{7}{新数据上的目标化组件归因。每个组件只使用直接对应其设计目标的指标。VCD 以超过 40~mm 的灾难性遮挡过程计数和最大值描述尾部失效。}{table.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces 目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD：采集时刻对齐比较同一原始候选的两种世界复合；StaticLock 比较中心化静止波动；VCD 面板使用对数坐标并标出 40~mm 灾难性阈值。右侧显示时序合成的 fitted-lag--aligned-residual 权衡，并与图~\ref {fig:exp1-final} 中间面板统一采用 150--400~ms 与 0--21~mm 的坐标范围，以支持直接视觉比较。}}{7}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:exp2-final}{{3}{7}{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD：采集时刻对齐比较同一原始候选的两种世界复合；StaticLock 比较中心化静止波动；VCD 面板使用对数坐标并标出 40~mm 灾难性阈值。右侧显示时序合成的 fitted-lag--aligned-residual 权衡，并与图~\ref {fig:exp1-final} 中间面板统一采用 150--400~ms 与 0--21~mm 的坐标范围，以支持直接视觉比较。}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}评价指标与汇总契约}{8}{subsection.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}实验三：跨对象用户研究计划}{8}{subsection.5.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}讨论与局限}{8}{section.6}\protected@file@percent }
+\newlabel{sec:discussion}{{6}{8}{讨论与局限}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}设计启示}{8}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}平台定位与可比性}{8}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}局限与未来工作}{8}{subsection.6.3}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{egoanchor_cn_refs}
+\bibcite{appleObjectAnchor}{1}
+\bibcite{azureObjectAnchors}{2}
+\bibcite{vuforiaModelTargets}{3}
+\bibcite{metaDynamicObjectTracker}{4}
+\bibcite{posecnn2017}{5}
+\bibcite{densefusion2019}{6}
+\bibcite{cosypose2020}{7}
+\bibcite{megapose2022}{8}
+\bibcite{foundationpose2023}{9}
+\bibcite{yoloe2025}{10}
+\bibcite{cutie2024}{11}
+\bibcite{foundationstereo2025}{12}
+\bibcite{kato1999artoolkit}{13}
+\bibcite{olson2011apriltag}{14}
+\bibcite{garridojurado2014aruco}{15}
+\bibcite{googleArcoreAugmentedImages}{16}
+\bibcite{azuma1994improving}{17}
+\bibcite{diluca2010latency}{18}
+\bibcite{vanwaveren2016atw}{19}
+\bibcite{kalman1960new}{20}
+\@writefile{toc}{\contentsline {section}{\numberline {7}结论}{9}{section.7}\protected@file@percent }
+\newlabel{sec:conclusion}{{7}{9}{结论}{section.7}{}}
+\gdef \@abspage@last{9}

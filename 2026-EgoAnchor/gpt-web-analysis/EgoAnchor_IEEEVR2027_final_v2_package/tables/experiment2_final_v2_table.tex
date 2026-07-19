@@ -1,0 +1,19 @@
+\begin{table*}[t]
+\centering
+\caption{实验二的单组件归因。Full 列给出完整 EgoAnchor 的主指标；“关闭后的效应”是消融减完整系统的片段级 median [IQR]。正值表示关闭组件后误差增大。时序合成以 lag / residual 配对表达，不将更低 lag 单独解释为净收益。}
+\label{tab:exp2-final}
+\small
+\setlength{\tabcolsep}{5.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllll}
+\toprule
+组件 & 对应系统行为 & Full EgoAnchor & 关闭后的效应 & 护栏 / 解释 \\
+\midrule
+采集时刻对齐 & 防止头动泄漏 & \textbf{3.679~mm} & $+5.585$ [0.600, 13.959]~mm & 所有重复头动片段均变差 \\
+StaticLock & 抑制静止抖动 & \textbf{0.030~mm} & $+1.592$ [0.959, 2.205]~mm & 绝对平移中位数同时 $+1.197$~mm \\
+VCD 接纳 & 遮挡期限制有害更新 & \textbf{1.822~mm} & $+21.857$ [0, 46.254]~mm & 持久恢复时间变化为 0~ms \\
+时序合成 & 连续平移轨迹质量 & \textbf{325 / 5.697}~ms/mm & $-70.0$~ms / $+5.315$~mm & 关闭后 residual 增加 93.3\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}

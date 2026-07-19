@@ -46,7 +46,7 @@ class Exp1PlotRows:
 
 
 _EXP1_FIGURE_SUMMARIES = (
-    ("world_consistency", "static_head_motion", "translation_event_pninetyfive_mm"),
+    ("world_consistency", "static_head_motion", "centered_translation_pninetyfive_mm"),
     ("failure_containment", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
 )
 """实验一 GPT 风格摘要图的两个面板与冻结主指标。"""
@@ -600,7 +600,11 @@ def build_exp2_mechanism_plot_rows(
     """
 
     primary_metrics = {
-        component.component_id: frozenset(component.primary_metric_keys)
+        component.component_id: (
+            frozenset(component.primary_metric_keys)
+            if component.component_id == "temporal_synthesis"
+            else frozenset((component.primary_metric_keys[0],))
+        )
         for component in EXP2_COMPONENTS
     }
     selected = [

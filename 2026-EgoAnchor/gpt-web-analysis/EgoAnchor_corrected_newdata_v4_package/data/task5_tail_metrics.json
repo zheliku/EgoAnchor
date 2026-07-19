@@ -1,0 +1,386 @@
+{
+  "Arrival-Hold": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 20.753813077422286
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 11.346989215035407
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 25.553102114208286
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 31.26112278626391
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 14.788429558719598
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 28.24935881069527
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 61.245459244075136
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 53.14167676167276
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 10.707338652958557
+      }
+    ],
+    "median_mm": 25.553102114208286,
+    "q1_mm": 14.788429558719598,
+    "q3_mm": 31.26112278626391,
+    "p90_mm": 54.76243325815324,
+    "max_mm": 61.245459244075136,
+    "catastrophic_gt40_count": 2,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.2222222222222222
+  },
+  "Capture-Hold": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 15.196482477119327
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 10.709687693776731
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 25.479266187905342
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 30.708574932224757
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 14.32915358426238
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 27.420437456481295
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 60.975416741277336
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 52.88700971441715
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 9.239844486422648
+      }
+    ],
+    "median_mm": 25.479266187905342,
+    "q1_mm": 14.32915358426238,
+    "q3_mm": 30.708574932224757,
+    "p90_mm": 54.504691119789186,
+    "max_mm": 60.975416741277336,
+    "catastrophic_gt40_count": 2,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.2222222222222222
+  },
+  "EgoAnchor": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 3.251792176676946
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 2.584537429208417
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 2.362469440381384
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 2.1592731689272795
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 1.9564437892710642
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 1.980049024632295
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 1.7078553360394002
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 1.7976957578013664
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 1.6265223713588925
+      }
+    ],
+    "median_mm": 1.980049024632295,
+    "q1_mm": 1.7976957578013664,
+    "q3_mm": 2.362469440381384,
+    "p90_mm": 2.7179883787021226,
+    "max_mm": 3.251792176676946,
+    "catastrophic_gt40_count": 0,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.0
+  },
+  "EgoAnchor w/o StaticLock": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 4.685108714770155
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 17.332053637025968
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 5.530712417099876
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 13.391018808202867
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 2.239711591807376
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 19.4760591832397
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 17.530695828375762
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 3.4869826868211033
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 4.391449428715497
+      }
+    ],
+    "median_mm": 5.530712417099876,
+    "q1_mm": 4.391449428715497,
+    "q3_mm": 17.332053637025968,
+    "p90_mm": 17.91976849934855,
+    "max_mm": 19.4760591832397,
+    "catastrophic_gt40_count": 0,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.0
+  },
+  "EgoAnchor w/o VCD": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 3.251791418599007
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 2.5845329511670694
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 43.09993908430191
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 49.913017251439236
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 1.9564437892710642
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 44.208710095231496
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 1.7078553360394002
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 91.71427095798545
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 1.6265267861622192
+      }
+    ],
+    "median_mm": 3.251791418599007,
+    "q1_mm": 1.9564437892710642,
+    "q3_mm": 44.208710095231496,
+    "p90_mm": 58.27326799274849,
+    "max_mm": 91.71427095798545,
+    "catastrophic_gt40_count": 4,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.4444444444444444
+  },
+  "EgoAnchor w/o capture-time alignment": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 8.072762946291537
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 6.043644050414161
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 5.562502676413039
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 3.214305523825957
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 2.620907692129379
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 5.010044184104896
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 4.281196204212222
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 8.201705926379544
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 4.283145679125131
+      }
+    ],
+    "median_mm": 5.010044184104896,
+    "q1_mm": 4.281196204212222,
+    "q3_mm": 6.043644050414161,
+    "p90_mm": 8.098551542309139,
+    "max_mm": 8.201705926379544,
+    "catastrophic_gt40_count": 0,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.0
+  },
+  "EgoAnchor w/o temporal synthesis": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 3.253045969204008
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 2.7038327893745975
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 2.4247044823001205
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 2.125563376081304
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 1.9596749376714029
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 1.9786760350578507
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 1.738740922472301
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 1.8158064063392443
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 1.6998649662680068
+      }
+    ],
+    "median_mm": 1.9786760350578507,
+    "q1_mm": 1.8158064063392443,
+    "q3_mm": 2.4247044823001205,
+    "p90_mm": 2.8136754253404797,
+    "max_mm": 3.253045969204008,
+    "catastrophic_gt40_count": 0,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.0
+  },
+  "One-Euro Anchor": {
+    "episodes": [
+      {
+        "episode_id": "event_001",
+        "translation_p95_mm": 6.51902695660526
+      },
+      {
+        "episode_id": "event_003",
+        "translation_p95_mm": 6.410561086728999
+      },
+      {
+        "episode_id": "event_005",
+        "translation_p95_mm": 11.70987742889795
+      },
+      {
+        "episode_id": "event_007",
+        "translation_p95_mm": 14.31412188524044
+      },
+      {
+        "episode_id": "event_009",
+        "translation_p95_mm": 6.540320313311676
+      },
+      {
+        "episode_id": "event_011",
+        "translation_p95_mm": 11.949642645385884
+      },
+      {
+        "episode_id": "event_013",
+        "translation_p95_mm": 27.922378074421708
+      },
+      {
+        "episode_id": "event_015",
+        "translation_p95_mm": 24.618770069775408
+      },
+      {
+        "episode_id": "event_017",
+        "translation_p95_mm": 3.5623908969194447
+      }
+    ],
+    "median_mm": 11.70987742889795,
+    "q1_mm": 6.51902695660526,
+    "q3_mm": 14.31412188524044,
+    "p90_mm": 25.27949167070467,
+    "max_mm": 27.922378074421708,
+    "catastrophic_gt40_count": 0,
+    "episode_count": 9,
+    "catastrophic_gt40_rate": 0.0
+  }
+}

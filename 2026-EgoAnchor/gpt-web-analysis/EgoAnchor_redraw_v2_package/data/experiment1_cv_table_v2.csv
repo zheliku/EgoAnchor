@@ -1,5 +1,0 @@
-Method,Static Trans. P95 (mm),Static HP-RMS (mm),Response (ms),Trans. Lag (ms),Trans. RMSE (mm),Rot. Lag (ms),Rot. RMSE (deg),Occlusion P95 (mm)
-Arrival-Hold,22.237,3.404,126.344,182.5,10.568,265.0,2.917,35.303
-Capture-Hold,8.573,2.199,250.29,255.0,10.729,265.0,2.909,34.095
-One-Euro Anchor,8.273,0.812,333.325,387.5,10.726,370.0,7.858,12.999
-EgoAnchor,3.679,0.03,751.053,325.0,5.697,350.0,3.62,1.822

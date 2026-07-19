@@ -174,7 +174,7 @@ def publish_exp1(specs: Mapping[str, PlotSpec], output_root) -> dict[str, tuple[
     """发布 GPT final v2 风格实验一三联图。"""
 
     figure, axes = plt.subplots(1, 3, figsize=(13.9, 3.58), gridspec_kw={"width_ratios": (1.0, 1.06, 1.0)})
-    _plot_summary(axes[0], specs["exp1_summary"], "world_consistency", "(a) World consistency", "Head motion should not move a static anchor", "Segment-wise translation P95 (mm)")
+    _plot_summary(axes[0], specs["exp1_summary"], "world_consistency", "(a) World consistency", "Head-motion leakage after baseline correction", "Centered translation P95 (mm)")
     _plot_lag_tradeoff(axes[1], specs["exp1_lag_tradeoff"])
     _plot_summary(axes[2], specs["exp1_summary"], "failure_containment", "(c) Failure containment", "Low-quality updates should not corrupt the anchor", "Occlusion-episode translation P95 (mm)")
     figure.subplots_adjust(left=0.045, right=0.995, bottom=0.22, top=0.82, wspace=0.38)

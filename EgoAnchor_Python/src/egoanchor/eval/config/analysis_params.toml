@@ -1,7 +1,7 @@
 # EgoAnchor 实验一/二离线分析的唯一冻结参数入口。任何数值或语义变更都必须递增契约版本，并重新生成 Stage 2 及其后续产物。
 
 [contract]
-version = 4 # 分析参数契约版本；v4 冻结停止后稳定窗、近零保持容差、重新可见窗和 lag 补偿 P95 语义。
+version = 5 # 分析参数契约版本；v5 进一步冻结静止中心化波动和遮挡灾难性失败阈值。
 unit_system = "metric" # 距离输入使用米、结果按指标转换为毫米，角度使用度，时间使用毫秒。
 statistics_unit = "event_segment" # 统计单位固定为 event/segment；frame 只用于 event 内计算，不作为独立样本。
 quantile_method = "linear" # 所有经验分位数统一使用 NumPy linear 插值，避免不同默认算法改变 P95/P99。
@@ -66,6 +66,7 @@ recovery_position_tolerance_mm = 20.0 # 恢复后 display 平移误差必须不�
 recovery_duration_ms = 250.0 # 恢复误差条件必须连续保持 250 ms，且不得跨大时间间隙。
 settling_position_tolerance_mm = 20.0 # 平台参考实际停止后，display 平移误差必须不高于 20 mm 才视为 settled。
 settling_duration_ms = 250.0 # settling 误差条件必须连续保持 250 ms，首次满足窗口的起点定义为沉降时刻。
+occlusion_catastrophic_threshold_mm = 40.0 # 遮挡事件内 P95 超过该阈值即记为一次灾难性失败，单位毫米。
 
 [recovery]
 start_role = "target_visible" # 恢复计时从 target_visible marker 开始，不把此前遮挡持续时间计入恢复时间。

@@ -1,0 +1,58 @@
+\subsection{实验一：应用侧锚点行为}
+
+实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{failure containment} 衡量遮挡和坏观测是否破坏已建立锚点；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。静止头动场景中，绝对 display--reference 误差还包含一次 session 特有的固定注册偏置，因此我们将每个重复动作片段的误差向量减去该片段的中位误差向量，并以中心化残差 P95 作为头动泄漏主指标；绝对注册 P95 仅作为护栏报告。
+
+\begin{table*}[t]
+\centering
+\caption{新采集数据上的完整系统表征。数值为重复动作片段或遮挡过程的 median。粗体仅标记各能力块的主指标最优值；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
+\label{tab:exp1-final}
+\scriptsize
+\setlength{\tabcolsep}{2.8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
+\midrule
+Arrival-Hold & 20.690 & 21.341 & 3.760 & 182.5 / 10.087 & 260.0 / 3.335 & 25.553 & 2/9 & 167.5 \\
+Capture-Hold & 10.833 & 13.257 & 2.380 & 250.0 / 9.584 & 260.0 / 3.281 & 25.479 & 2/9 & 208.8 \\
+One-Euro Anchor & 8.329 & 12.407 & 1.065 & 385.0 / 9.559 & 370.0 / 3.389 & 11.710 & \textbf{0/9} & 284.4 \\
+EgoAnchor & \textbf{1.631} & \textbf{6.894} & \textbf{0.098} & 320.0 / \textbf{4.960} & 372.5 / 4.691 & \textbf{1.980} & \textbf{0/9} & 591.1 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\textbf{头动下的世界一致性与静止稳定性。}
+移除每个动作片段的固定注册偏置后，EgoAnchor 的中心化平移 P95 为 1.631~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 20.690、10.833 与 8.329~mm。相对 Arrival-Hold，头动泄漏降低 92.1\%；相对 One-Euro Anchor 降低 80.4\%。EgoAnchor 的绝对注册 P95 亦为四种方法最低的 6.894~mm。静止显示的帧间位置增量 P95 为 0.098~mm，低于 Arrival-Hold 的 3.760~mm、Capture-Hold 的 2.380~mm 和 One-Euro Anchor 的 1.065~mm。头动泄漏和帧间增量分别刻画低频世界坐标泄漏与逐帧显示抖动，不能由同一个绝对误差指标替代。
+
+\textbf{持续运动中的时延--轨迹质量权衡。}
+持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 320~ms / 4.960~mm；Arrival-Hold 为 182.5~ms / 10.087~mm，One-Euro Anchor 为 385~ms / 9.559~mm。相对 Arrival-Hold，EgoAnchor 付出额外拟合时延，但 residual 降低 50.8\%；相对 One-Euro Anchor，它同时减少 65~ms 的拟合时延并将 residual 降低 48.1\%。因此，平移结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
+
+该优势没有一致延伸至旋转。Capture-Hold 的有效角时延 / lag-aligned angular RMSE 为 260~ms / 3.281$^\circ$，EgoAnchor 为 372.5~ms / 4.691$^\circ$。因此，表~\ref{tab:exp1-final} 将旋转作为动态护栏保留，而不宣称当前旋转速度估计与对数空间合成优于保持式基线。
+
+\textbf{遮挡期间的失效控制。}
+九次遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 1.980~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 25.553、25.479 与 11.710~mm。Arrival-Hold 与 Capture-Hold 各有 2/9 次过程超过 40~mm，One-Euro Anchor 与 EgoAnchor 均为 0/9；但 EgoAnchor 的最大 episode P95 仅为 3.252~mm，显著低于 One-Euro Anchor 的 27.922~mm。中位数、阈值超限率和最大值共同表明完整运行时不仅改善典型遮挡行为，也压缩了上尾风险。
+
+\textbf{起停转换代价。}
+我们将 Start-transition response 定义为：相对于各动作片段前 250~ms 的基线，参考物体与显示锚点首次持续 100~ms 超过 5~mm 位移阈值的时刻差。Arrival-Hold、Capture-Hold、One-Euro Anchor 与 EgoAnchor 的片段中位数分别为 167.5、208.8、284.4 与 591.1~ms。该量包含 StaticLock 解锁证据、候选更新和延迟合成时间线，不是网络或视觉推理的原始时延；它诚实刻画了静止稳定性收益所伴随的启动成本。
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.99\textwidth]{../figures/generated/experiment1_corrected_newdata.pdf}
+  \caption{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，大标记与误差棒表示 median--IQR。左：在每个片段内移除固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡，越靠左下越好；右：遮挡期间的 episode-level P95。静止帧间抖动、旋转护栏、灾难性失效率与起停转换代价在表~\ref{tab:exp1-final} 中完整报告。}
+  \label{fig:exp1-final}
+\end{figure*}
+
+
+% Experiment 2 remains the corrected targeted-attribution block in the full paper.
+
+\subsection{评价指标与汇总契约}
+
+所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。
+
+持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
+
+本文以 median [IQR] 和同一动作片段内的配对差值为主，不进行渲染帧级显著性推断。所有参数、动作片段边界和指标契约在正式数据分析前冻结；完整片段级表、图源数据和流式解析脚本随分析包提供。

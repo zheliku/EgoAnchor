@@ -148,9 +148,46 @@ _VCD_RISK_COLUMNS = (
 )
 """VCD candidate risk 与同 frame 平台参考联接使用的物理列。"""
 
+_CAPTURE_ALIGNMENT_RAW_COLUMNS = (
+    "unity_admission.candidate_id",
+    "unity_admission.variant_id",
+    "unity_admission.frame_id",
+    "unity_admission.source_capture_mono_ms",
+    "unity_admission.uses_capture_time_alignment",
+    "unity_admission.has_aligned_raw",
+    "unity_admission.aligned_raw_pos_x_m",
+    "unity_admission.aligned_raw_pos_y_m",
+    "unity_admission.aligned_raw_pos_z_m",
+    "unity_admission.aligned_raw_rot_x",
+    "unity_admission.aligned_raw_rot_y",
+    "unity_admission.aligned_raw_rot_z",
+    "unity_admission.aligned_raw_rot_w",
+    "unity_admission.has_arrival_time_raw",
+    "unity_admission.arrival_time_raw_pos_x_m",
+    "unity_admission.arrival_time_raw_pos_y_m",
+    "unity_admission.arrival_time_raw_pos_z_m",
+    "unity_admission.arrival_time_raw_rot_x",
+    "unity_admission.arrival_time_raw_rot_y",
+    "unity_admission.arrival_time_raw_rot_z",
+    "unity_admission.arrival_time_raw_rot_w",
+    "unity_reference.frame_id",
+    "unity_reference.reference_pose_valid",
+    "unity_reference.reference_pos_x_m",
+    "unity_reference.reference_pos_y_m",
+    "unity_reference.reference_pos_z_m",
+    "unity_reference.reference_rot_x",
+    "unity_reference.reference_rot_y",
+    "unity_reference.reference_rot_z",
+    "unity_reference.reference_rot_w",
+)
+"""capture-time/arrival-time raw pose 与同 frame 参考的组件近端来源列。"""
+
 
 METRIC_DEFINITIONS = (
     MetricDefinition("translation_event_pninetyfive_mm", "平移误差 event-P95", "每个静止头动 event 内对有效 display-reference 平移误差取 linear P95", "mm", "lower_is_better", _STATIC, "render -> event -> session median IQR", "TranslationEventPNinetyFiveMm", _POSITION_ERROR_COLUMNS, True),
+    MetricDefinition("centered_translation_pninetyfive_mm", "中心化平移波动 P95", "每个静止头动 event 内先从 display-reference 误差向量减去该 event 的三轴中位偏置，再对模长取 linear P95", "mm", "lower_is_better", _STATIC, "render -> event -> session median IQR", "CenteredTranslationPNinetyFiveMm", _POSITION_ERROR_COLUMNS, True),
+    MetricDefinition("capture_alignment_raw_translation_pninetyfive_mm", "采集时刻对齐 raw 平移 P95", "每个静止头动 event 内对 admission raw pose 与同 frame 平台参考的平移误差取 linear P95；按 variant 的 CaptureTime/ArrivalTime raw 语义选择输入", "mm", "lower_is_better", _STATIC, "admission raw -> event -> session median IQR", "CaptureAlignmentRawTranslationPNinetyFiveMm", _CAPTURE_ALIGNMENT_RAW_COLUMNS),
+    MetricDefinition("capture_alignment_raw_rotation_pninetyfive_deg", "采集时刻对齐 raw 旋转 P95", "每个静止头动 event 内对 admission raw pose 与同 frame 平台参考的最短弧旋转误差取 linear P95，作为采集时刻对齐的旋转护栏", "deg", "lower_is_better", _STATIC, "admission raw -> event -> session median IQR", "CaptureAlignmentRawRotationPNinetyFiveDeg", _CAPTURE_ALIGNMENT_RAW_COLUMNS),
     MetricDefinition("position_hp_rms_mm", "位置 HP-RMS", "三轴参考相对误差按连续片段重采样，二阶 1 Hz Butterworth 零相位高通后计算向量 RMS", "mm", "lower_is_better", _STATIC, "render -> event -> session median IQR", "PositionHpRmsMm", _POSITION_ERROR_COLUMNS, True),
     MetricDefinition("rotation_event_pninetyfive_deg", "旋转误差 event-P95", "每个静止头动 event 内对四元数最短弧误差取 linear P95", "deg", "lower_is_better", _STATIC, "render -> event -> session median IQR", "RotationEventPNinetyFiveDeg", _ROTATION_ERROR_COLUMNS),
     MetricDefinition("absolute_translation_median_mm", "绝对平移误差中位数", "每个静止头动 event 内有效 display-reference 平移误差中位数", "mm", "lower_is_better", _STATIC, "render -> event -> session median IQR", "AbsoluteTranslationMedianMm", _POSITION_ERROR_COLUMNS),
@@ -173,6 +210,7 @@ METRIC_DEFINITIONS = (
     MetricDefinition("angular_lag_pninetyfive_residual_deg", "角 lag 补偿 P95", "按 RMSE 选择有效角时延后，在同一重叠样本上对 display 与 reference(t-lag) 最短弧角残差取 linear P95", "deg", "lower_is_better", _ROTATION, "render -> marker segment -> session median IQR", "AngularLagPNinetyFiveResidualDeg", _ROTATION_ERROR_COLUMNS, True),
     MetricDefinition("rotation_event_pninetyfive_deg_continuous", "持续旋转 event-P95", "每个 marker 旋转 segment 内有效四元数最短弧误差的 linear P95", "deg", "lower_is_better", _ROTATION, "render -> marker segment -> session median IQR", "ContinuousRotationPNinetyFiveDeg", _ROTATION_ERROR_COLUMNS, True),
     MetricDefinition("occlusion_translation_pninetyfive_mm", "遮挡窗平移 P95", "每个 occlusion_started 到 target_visible 窗口内有效 display-reference 平移误差的 linear P95", "mm", "lower_is_better", _OCCLUSION, "render -> occlusion event -> session median IQR", "OcclusionTranslationPNinetyFiveMm", _POSITION_ERROR_COLUMNS, True),
+    MetricDefinition("occlusion_catastrophic_failure_rate", "遮挡灾难性失败率", "每个遮挡 event 的平移 P95 超过 analysis_params.toml 固定阈值时记为 1，否则记为 0；跨 event 取比例", "proportion", "lower_is_better", _OCCLUSION, "occlusion event indicator -> session proportion", "OcclusionCatastrophicFailureRate", _POSITION_ERROR_COLUMNS),
     MetricDefinition("occlusion_rotation_pninetyfive_deg", "遮挡窗旋转 P95", "每个 occlusion_started 到 target_visible 窗口内有效 display-reference 最短弧旋转误差的 linear P95", "deg", "lower_is_better", _OCCLUSION, "render -> occlusion event -> session median IQR", "OcclusionRotationPNinetyFiveDeg", _ROTATION_ERROR_COLUMNS),
     MetricDefinition("occlusion_output_coverage", "遮挡窗输出覆盖率", "每个 occlusion_started 到 target_visible 窗口内 has_output_pose 为真的 render tick 比例", "proportion", "higher_is_better", _OCCLUSION, "render -> occlusion event -> session median IQR", "OcclusionOutputCoverage", (*_EVENT_WINDOW_COLUMNS, *_RENDER_TIME_COLUMNS, "unity_render.has_output_pose")),
     MetricDefinition("reappearance_translation_pninetyfive_mm", "重新可见平移 P95", "target_visible 后固定 1000 ms 公共窗口内有效 display-reference 平移误差的 linear P95", "mm", "lower_is_better", _OCCLUSION, "render -> occlusion event -> session median IQR", "ReappearanceTranslationPNinetyFiveMm", _POSITION_ERROR_COLUMNS),

@@ -1,0 +1,22 @@
+\begin{table*}[t]
+\centering
+\caption{实验一的片段级系统表征，数值为重复动作片段或遮挡过程的 median。粗体仅标记各应用能力的主指标最优值；动态平移中的有效时延与 lag-aligned residual 必须联合解释，其中仅突出 residual。最右列是稳定优先策略的\emph{转换代价}，不参与主收益排名。完整 IQR 与片段分布见图~\ref{fig:exp1-final}。}
+\label{tab:exp1-final}
+\scriptsize
+\setlength{\tabcolsep}{4.2pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+& \multicolumn{2}{c}{静止锚定主收益} & 动态平移 & 失效控制 & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}
+方法 & 平移 P95 $\downarrow$ & HP--RMS $\downarrow$ & Lag / aligned RMSE $\downarrow$ & 遮挡窗 P95 $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (ms / mm) & (mm) & (ms) \\
+\midrule
+Arrival-Hold & 22.237 & 3.404 & 182.5 / 10.568 & 35.303 & 126.344 \\
+Capture-Hold & 8.573 & 2.199 & 255.0 / 10.729 & 34.095 & 250.290 \\
+One-Euro Anchor & 8.273 & 0.812 & 387.5 / 10.726 & 12.999 & 333.325 \\
+EgoAnchor & \textbf{3.679} & \textbf{0.030} & 325.0 / \textbf{5.697} & \textbf{1.822} & 751.053 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
