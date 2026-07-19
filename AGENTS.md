@@ -144,7 +144,7 @@ schema-v2 task directory
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一固定图只使用静止头动的平移 event-P95、起停 6DoF 的运动窗平移 P95 和遮挡窗平移 P95，并要求每个 event 的四系统矩阵完整。VCD 正式 risk-coverage 图只发布候选级 `tail_pninetyfive` 的 VCD/random 两条曲线；mean-risk 只用于 AURC。
-- 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布，双联实验二图按每 panel 88 mm × 44 mm 发布；图内最小字号固定为 7 pt。实验一图例位于数据轴外，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
+- 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布；实验二采用 GPT 风格四联全宽图，画布按双栏宽度发布并由四个独立单位面板均分；图内最小字号固定为 7 pt。实验一图例位于中间数据轴内的空白区，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
 - `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v6，指标契约为 breaking v5，参数契约为 breaking v4，审阅工作簿契约为 v1；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
 - `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v4 在 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump、recovery 和 VCD risk--coverage 语义基础上，进一步冻结停止后公共窗、近零保持容差和重新可见公共窗。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v5 增加 lag 补偿 P95、停止后 jitter、运动 hold 和固定重新可见窗口；CSV v6 冻结当前行为图、组件配对和论文显示表契约。
 - Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
