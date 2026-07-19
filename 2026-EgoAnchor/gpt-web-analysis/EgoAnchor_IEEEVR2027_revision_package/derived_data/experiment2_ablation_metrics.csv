@@ -1,0 +1,5 @@
+component,ablation,scenario,primary_metric,primary_unit,delta_median,delta_q1,delta_q3,guardrail_metric,guardrail_unit,guardrail_delta_median,guardrail_delta_q1,guardrail_delta_q3,pair_count
+capture_time_alignment,disabled,static_head_motion,translation_event_p95,mm,5.585,0.600,13.959,rotation_event_p95,deg,0.410,0.216,0.813,4
+vcd_admission,disabled,occlusion_recovery,occlusion_translation_p95,mm,21.857,0.000,46.254,durable_recovery_time,ms,0.000,0.000,0.000,7
+temporal_synthesis,disabled,start_stop_6dof,translation_jump_p95,mm,-1.736,-2.720,-0.540,translation_jump_p99,mm,10.582,10.078,11.825,5
+static_lock,disabled,static_head_motion,position_hp_rms,mm,1.592,0.959,2.205,absolute_translation_median,mm,1.197,1.063,1.491,4
