@@ -122,46 +122,32 @@ PoseResult candidate
 
 ## Run 2 离线分析架构
 
-实验一/二正式数据采集已经完成。Run 2 当前执行入口为 `2026-EgoAnchor/experiment_1_2_analysis_rebuild_plan.md`，离线分析固定为四阶段：
+实验一/二正式数据采集已经完成。当前离线分析以 GPT corrected-newdata-v4 包为呈现基线，执行入口固定为 `egoanchor.eval.cli` 的 `qc`、`preprocess` 和 `build-paper`：
 
 ```text
 schema-v2 task directory
-  -> per-task complete XLSX with full QC
-  -> trial/event/session metrics and plot-ready CSV
-  -> PDF figures and auditable TeX intermediates
-  -> generated experiment data materialized into egoanchor_cn_v6.tex
+  -> qc / preprocess -> 五本完整 XLSX
+  -> build-paper -> GPT v4 指标、图、表和 egoanchor_cn_v6.tex
 ```
 
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`preprocess`）** 只读取原始 task 目录的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；不得把 XLSX 之前的任何中间文件作为后续输入。
 - Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 检查八 runtime 矩阵、主外键、生命周期、事件合并、warmup reference 和两端 writer 停止态统计，未消费 candidate 仅作为 latest-only 警告。
-- **Stage 2（`analyze`）** 只读取 Stage 1 发布的完整 XLSX，计算 event/trial/session 指标并发布 CSV；禁止访问原始 task 目录或 JSON/JSONL。
-- Stage 2 当前实现由 `egoanchor.eval.analysis.loader` 和 `csv_output` 提供：loader 仅打开完整 XLSX，CSV 发布保留输入 workbook SHA-256，并以原子目录写出完整表契约与 `audit/lineage.csv`。
-- **Stage 3（`publish`）** 只读取 Stage 2 发布的 CSV（包括 `plots/` 与 `paper/`），生成 PDF、PNG 和 TeX；禁止回读 XLSX 或 JSON/JSONL，也不得重新连接 reference、切事件窗或计算科学指标。
-- **Stage 4（`materialize-paper`）** 只读取 Stage 3 发布的 TeX 中间产物，将内容写入主稿受控区块；禁止直接读取 CSV、XLSX 或 JSON/JSONL。
-- Stage 4 的实现固定只读取 `exp1_numbers.tex`、`exp2_numbers.tex`、`exp1_tables.tex` 和 `exp2_tables.tex`，验证其直接 CSV hash、Task 11 生成器版本和实验归属后，原子替换主稿三个唯一受控区块。主稿不得保留这四个 TeX 的 `\input` 或 `\IfFileExists` 依赖，重复物化必须保持字节和 hash 不变。
-- 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`；QC 或分析契约失败时返回退出码 2，禁止生成后续正式产物。
+- `build-paper` 只读取五本 Stage 1 完整 XLSX，计算 GPT v4 指标并直接发布两张 PDF/PNG、两张 TeX 表和中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
+- 旧 Stage 2/3 分析与发布源码已删除；GPT v4 代码位于 `egoanchor.eval.gpt_v4`，不保留旧入口兼容层。
+- 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`；QC 或论文输入契约失败时返回退出码 2，禁止生成正式论文产物。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
-- 实验一固定图只使用静止头动的平移 event-P95、起停 6DoF 的运动窗平移 P95 和遮挡窗平移 P95，并要求每个 event 的四系统矩阵完整。VCD 正式 risk-coverage 图只发布候选级 `tail_pninetyfive` 的 VCD/random 两条曲线；mean-risk 只用于 AURC。
-- 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布；实验二采用 GPT 风格四联全宽图，画布按双栏宽度发布并由四个独立单位面板均分；图内最小字号固定为 7 pt。实验一图例位于中间数据轴内的空白区，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
-- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v7，指标契约为 breaking v5，参数契约为 breaking v4，审阅工作簿契约为 v1；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。v7 将实验一持续平移 plot 行固定为 segment-level lag--residual 点，并将实验二组件表显式保存 Full/Disabled 汇总字段。
-- `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v4 在 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump、recovery 和 VCD risk--coverage 语义基础上，进一步冻结停止后公共窗、近零保持容差和重新可见公共窗。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v5 增加 lag 补偿 P95、停止后 jitter、运动 hold 和固定重新可见窗口；CSV v6 冻结当前行为图、组件配对和论文显示表契约。
-- Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
-- Task 8 实验二分析复用 Task 7 的 event 科学指标，只在组件适用场景内对完整 EgoAnchor 与对应消融做双边 exact join。配对键包含 component，差值固定为 `ablation - full`；缺一侧或重复行硬失败，两侧行存在但数值未定义时保留 `value_missing` 尝试。配对汇总保存 median[IQR]、范围和正/零/负方向计数。
-- VCD risk-coverage 只使用最终完成遮挡 trial 中实际到达 Unity 的完整 EgoAnchor admission，不按运行时 admission decision 预筛。risk 是 capture-time aligned raw 相对同 session、同 `frame_id` 平台参考的平移误差；coverage 分母只含 risk 可计算的已到达候选。并列分数按解析后浮点值精确整组纳入，mean-risk AURC 从 coverage 0 使用右连续经验阶梯积分，P95 仅作为 tail-risk 曲线。随机参考是有限总体无放回随机排序的精确期望，不使用 Monte Carlo；敏感性比较 completed-trial、marker-covered 和 occlusion-only cohort。
-- 起停 6DoF 的 marker 只限定搜索窗，实际运动起止由平台参考速度、持续时间和位移门槛确定。durable recovery 从 `target_visible` 起算，且必须先出现 `has_source_capture_timing=true`、采集时间不早于 marker 的新鲜 output。candidate arrival 只在 Unity 单调时钟内相减，Python processing 只在 Python 单调时钟内相减。
+- 实验一发布 `experiment1_corrected_newdata` 三面板图，实验二发布 `experiment2_corrected_newdata` 左三右一归因图；图表样式直接复刻 GPT v4，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
+- `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；GPT v4 参数唯一入口是 `egoanchor/eval/config/gpt_v4.toml`，每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本；本地可重建的 `data/analysis/` 不进入 Git。
-- 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
-- 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
+- 主稿由 `build-paper` 从 GPT v4 模板和当前 XLSX 指标完整写出；表格内容内联，PDF 图保持外部依赖。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
-- Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
-- Stage 3 当前发布 `exp1_final_v2` 实验一三面板系统行为图和 `exp2_merged_final_v2` 实验二四面板组件归因图；两图沿用 GPT final v2 的统一配色、标记、标题和误差表达。实验一持续平移面板保留全部 segment lag--residual 点并叠加 median[IQR]，实验二左侧显示 Full/Disabled 配对差值，右侧显示持续平移 lag--residual 归因；事件点和 VCD risk--coverage 曲线保留在 Stage 2 审计 CSV/XLSX。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Disabled 与 `Disabled - Full` 的 median[IQR]。
-- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
+- `build-paper` 的审计产物固定写入 `data/analysis/gpt_v4/`，包括输入 workbook SHA-256、实验一汇总 CSV、capture alignment CSV 和运行性能 JSON；这些派生文件不进入 Git。
+- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
-- 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；当前 GPT final v2 叙事将时序合成归因放在持续平移的 effective lag 与 lag--residual trade-off，起停相关 hold/jump 指标只保留在分析审计层。
-- `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位有效数字且不超过三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。实验一表按属性/场景组织四系统结果，实验二表同行报告 Full、Ablated、配对差值与护栏，不以机器字段替代论文标签。
+- GPT v4 reader-facing 表格最多保留三位小数，完整精度保存在 `data/analysis/gpt_v4/data/`；实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
 
 ## Python 关键约束
 
@@ -228,13 +214,13 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 实验二复用实验一任务 1--5 的同一批 8-runtime schema-v2 session，再按组件适用的物理场景投影完整 *EgoAnchor* 与对应消融：采集时刻对齐和 StaticLock 使用静止头动任务，VCD 使用遮挡恢复任务，时序合成使用起停 6DoF 任务；批次仍要求五项物理任务全部覆盖，使同一组输入目录能够同时生成实验一和实验二产物。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始 `data/eval/<session_id>` 目录名、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
-- 统一分析 CLI 只提供 `qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`。成功返回 0，文件系统或论文发布缺源返回 1，schema/QC/分析契约失败返回 2；历史入口和对应 Pixi 别名均不保留。
-- `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从 Stage 1 XLSX 发布完整 CSV，并可在同一 Stage 2 目录生成只重排该批 CSV 的人工审阅 XLSX；`publish` 的正式输入仍只有 CSV，并发布固定 TeX 到 `2026-EgoAnchor/generated/`、固定 PDF 到 `2026-EgoAnchor/figures/generated/`；`materialize-paper` 将 TeX 中间产物写入主稿的受控区块。默认论文根目录从模块位置解析，测试和外部调用可用 `--paper-root` 覆盖。
+- 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`。成功返回 0，文件系统或输入缺源返回 1，schema/QC/论文输入契约失败返回 2；历史入口和对应 Pixi 别名均不保留。
+- `preprocess` 将每个 task 原子发布为完整 XLSX；`build-paper` 只从五本 Stage 1 XLSX 计算 GPT v4 指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、固定 PDF/PNG 到 `2026-EgoAnchor/figures/generated/`，同时写出 `egoanchor_cn_v6.tex`。默认论文根目录从命令参数指定。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
-- 中文主稿中的实验宏和表格由 `materialize-paper` 写入稳定自动生成区块，不再通过 `\IfFileExists` 或 `\input` 依赖 `generated/exp{1,2}_*.tex`；图只从 `figures/generated/` 加载固定 PDF，不再使用 `figs/`。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿由 `build-paper` 从 GPT v4 模板和当前 XLSX 指标完整写出；图只从 `figures/generated/` 加载固定 PDF，不再使用 `figs/`。正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
 
@@ -298,15 +284,13 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过 GPT final v2 固定样式绘制 `exp1_final_v2` 和 `exp2_merged_final_v2`，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
-- Stage 2 当前发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个实验人工审阅入口；二者只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
-- 实验一属性表固定报告世界一致性、静止稳定性、起停转换、平移保真度、旋转保真度和失效约束。lag 补偿 P95 使用 RMSE 选定时延后的同一重叠窗；停止后抖动使用 1 s guard 加固定 3 s 窗；重新可见误差使用固定 1 s 窗。结果必须同时陈述动态响应、旋转保真度和遮挡 output coverage 的代价，不得只挑有利指标。
-- Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
-- Stage 2 论文表采用 GPT final v2 的简洁布局：实验一按场景行为属性报告五个指标列，实验二按组件报告对应系统行为、Full EgoAnchor、Disabled 效应和护栏/解释四列；完整事件点仍在审计 CSV/XLSX。
-- Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。
-- Stage 2 先按规范绝对路径稳定排序 workbook；`lineage.csv` 记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用可筛选的 session/trial/event/variant/candidate/metric 复合键，禁止把输出表名冒充来源。
-- Stage 2/3 的原子 staging 和 backup 目录必须用普通 `mkdir` 从已验证父目录继承 ACL，不得用可能在 Windows 产生限制 ACL 的 `tempfile.mkdtemp`；旧备份清理对短暂共享锁做有界重试。
-- 四阶段复现、退出码、PowerShell 命令、指标/图表扩展和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md`。`audit/analysis_run.csv` 的执行时间不属于科学结果 hash 门禁。
+- Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是 GPT v4 分析的唯一正式输入。
+- GPT v4 只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图。
+- 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
+- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
+- GPT 参考包只提供绘图样式、表格布局和论文文字结构，不作为正式数字输入；正式数字必须由当前五本 Stage 1 XLSX 计算。
+- 复现命令、退出码和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md` 与中文复现手册。
 
 ## AGENTS.md 维护规则
 

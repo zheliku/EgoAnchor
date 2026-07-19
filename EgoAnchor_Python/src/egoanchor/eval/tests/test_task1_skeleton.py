@@ -18,11 +18,9 @@ EVAL_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_COMMANDS = {
     "qc",
     "preprocess",
-    "analyze",
-    "publish",
-    "materialize-paper",
+    "build-paper",
 }
-"""Task 1 冻结的统一 CLI 子命令集合。"""
+"""当前离线入口的三个命令。"""
 
 
 class TaskOneSkeletonTests(unittest.TestCase):
@@ -38,9 +36,11 @@ class TaskOneSkeletonTests(unittest.TestCase):
         """旧离线分析目录和单文件入口不得继续存在。"""
 
         for relative_path in (
+            "analysis",
             "experiments",
             "metrics",
             "paper",
+            "publishing",
             "figure_style.py",
             "excel.py",
         ):
@@ -54,6 +54,8 @@ class TaskOneSkeletonTests(unittest.TestCase):
             "egoanchor.eval.experiments",
             "egoanchor.eval.metrics",
             "egoanchor.eval.paper",
+            "egoanchor.eval.analysis",
+            "egoanchor.eval.publishing",
         ):
             try:
                 spec = importlib.util.find_spec(module_name)
@@ -88,17 +90,17 @@ class TaskOneSkeletonTests(unittest.TestCase):
             result = eval_cli.main([])
 
         self.assertEqual(result, eval_cli.EXIT_OK)
-        self.assertIn("materialize-paper", output.getvalue())
+        self.assertIn("build-paper", output.getvalue())
 
-    def test_analyze_help_declares_csv_and_review_workbook(self) -> None:
-        """Stage 2 帮助应明确 CSV 是下游契约，XLSX 仅供人工审阅。"""
+    def test_build_paper_help_declares_immutable_xlsx_input(self) -> None:
+        """GPT 论文入口应明确只读取初始 XLSX。"""
 
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             with self.assertRaises(SystemExit) as raised:
-                eval_cli.main(["analyze", "--help"])
+                eval_cli.main(["build-paper", "--help"])
         self.assertEqual(raised.exception.code, 0)
-        self.assertIn("CSV 与审阅 XLSX", output.getvalue())
+        self.assertIn("五本初始 XLSX", output.getvalue())
 
 
 if __name__ == "__main__":

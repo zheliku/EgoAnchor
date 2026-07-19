@@ -1,0 +1,24 @@
+\begin{table*}[t]
+\centering
+\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体仅标记各能力块的主指标最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
+\label{tab:exp1-final}
+\scriptsize
+\setlength{\tabcolsep}{2.1pt}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
+& $n=4$ & $n=4$ & $n=4$ & $n=30$ & $n=10$ & $n=9$ & $k/9$ & $n=9$ \\
+\midrule
+Arrival-Hold & 20.69 [17.566, 25.429] & 21.341 [17.968, 24.692] & 3.76 [3.174, 4.52] & 182.5 / 10.087 & 260 / 3.335 & 25.553 [14.788, 31.261] & 2/9 & 167.5 [124.2, 181.1] \\
+Capture-Hold & 10.833 [9.13, 14.8] & 13.257 [12.678, 15.058] & 2.38 [2.013, 2.744] & 250 / 9.584 & 260 / 3.281 & 25.479 [14.329, 30.709] & 2/9 & 208.8 [181.1, 270.9] \\
+One-Euro Anchor & 8.329 [7.93, 9.113] & 12.407 [12.175, 13.065] & 1.065 [0.941, 1.275] & 385 / 9.559 & 370 / 3.389 & 11.71 [6.519, 14.314] & \textbf{0/9} & 284.4 [257, 292] \\
+EgoAnchor & \textbf{1.631} & \textbf{6.894} & \textbf{0.098} & 320 / \textbf{4.96} & 372.5 / 4.691 & \textbf{1.98} & \textbf{0/9} & 591.1 [570.5, 658.7] \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
