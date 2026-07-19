@@ -15,7 +15,9 @@ from .analysis import (
     analyze_exp2,
     analysis_parameters_sha256,
     build_exp1_plot_rows,
+    build_exp2_mechanism_plot_rows,
     build_paper_rows,
+    build_vcd_operating_plot_row,
     build_vcd_plot_rows,
     input_workbook_set_sha256,
     load_analysis_parameters,
@@ -314,11 +316,16 @@ def _run_analyze(args: argparse.Namespace) -> int:
     tables["exp1_start_stop_trace"] = list(exp1_plots.start_stop_trace)
     tables["exp1_lag_tradeoff"] = list(exp1_plots.lag_tradeoff)
     tables["exp1_occlusion_trace"] = list(exp1_plots.occlusion_trace)
-    tables["exp2_component_deltas"] = [
-        {**asdict(row), "plot_id": "exp2_component_deltas", "panel_id": row.component_id}
-        for row in exp2.components.paired_deltas
-    ]
+    tables["exp2_mechanism_attribution"] = list(
+        build_exp2_mechanism_plot_rows(
+            exp2.components.paired_deltas,
+            exp2.components.paired_summary,
+        )
+    )
     tables["exp2_vcd_curve"] = list(build_vcd_plot_rows(exp2.vcd.curve))
+    operating_row = build_vcd_operating_plot_row(exp2.vcd)
+    if operating_row is not None:
+        tables["exp2_vcd_curve"].append(operating_row)
     input_set_hash = input_workbook_set_sha256(item.sha256 for item in batch.inputs)
     tables["plot_catalog"] = [
         {
@@ -341,7 +348,7 @@ def _run_analyze(args: argparse.Namespace) -> int:
                 ("exp1_start_stop_trace", "start_stop", "plots/exp1_start_stop_trace.csv", "time_ms", "display_displacement_mm", "variant_id", "mm", len(tables["exp1_start_stop_trace"])),
                 ("exp1_lag_tradeoff", "lag_tradeoff", "plots/exp1_lag_tradeoff.csv", "effective_lag_ms", "p95_residual_mm", "variant_id", "mm", len(tables["exp1_lag_tradeoff"])),
                 ("exp1_occlusion_trace", "occlusion", "plots/exp1_occlusion_trace.csv", "time_ms", "translation_error_mm", "variant_id", "mm", len(tables["exp1_occlusion_trace"])),
-                ("exp2_component_deltas", "components", "plots/exp2_component_deltas.csv", "event_id", "delta", "component_id", "mixed", len(tables["exp2_component_deltas"])),
+                ("exp2_mechanism_attribution", "mechanism", "plots/exp2_mechanism_attribution.csv", "event_id", "delta", "component_id", "mixed", len(tables["exp2_mechanism_attribution"])),
                 ("exp2_vcd_curve", "risk_coverage", "plots/exp2_vcd_curve.csv", "coverage", "risk_mm", "reference_kind", "mm", len(tables["exp2_vcd_curve"])),
             ),
         )

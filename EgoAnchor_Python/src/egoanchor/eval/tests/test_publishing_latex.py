@@ -74,7 +74,7 @@ def _write_fixture(root: Path, *, invalid_macro: bool = False) -> None:
             },
             {
                 "experiment": "exp2_design_attribution",
-                "table_name": "exp2_component_deltas",
+                "table_name": "exp2_mechanism_attribution",
                 "row_key": "VCD admission",
                 "column_key": "Median delta & IQR",
                 "display_value": "1.25 [0.5, 2.0] mm",
@@ -163,7 +163,7 @@ class LatexPublishingTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, eval_cli.EXIT_OK)
-            self.assertEqual(len(list(figure_output.glob("*.pdf"))), 3)
+            self.assertEqual(len(list(figure_output.glob("*.pdf"))), 2)
             self.assertEqual(len(list(tex_output.glob("*.tex"))), 4)
 
     def test_joint_publish_failure_preserves_both_old_directories(self) -> None:

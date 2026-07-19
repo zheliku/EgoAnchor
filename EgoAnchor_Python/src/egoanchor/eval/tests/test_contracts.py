@@ -344,17 +344,19 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 4)
+        self.assertEqual(versions["csv"], 5)
         self.assertEqual(versions["metrics"], 5)
         self.assertEqual(versions["analysis_params"], 4)
         self.assertEqual(versions["analysis_workbook"], 1)
+        self.assertEqual(versions["csv"], 5)
+        self.assertTrue(changes["csv-v5"].breaking)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
         self.assertTrue(changes["csv-v3"].breaking)
         self.assertTrue(changes["metrics-v4"].breaking)
         self.assertTrue(changes["metrics-v5"].breaking)
         self.assertTrue(changes["analysis_params-v4"].breaking)
-        self.assertEqual(versions["csv"], 4)
+        self.assertEqual(versions["csv"], 5)
         self.assertTrue(changes["csv-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
@@ -392,7 +394,8 @@ class ContractTests(unittest.TestCase):
         metric_keys = {metric.key for metric in METRIC_DEFINITIONS}
         self.assertIn("vcd_mean_risk_aurc_mm", metric_keys)
         self.assertNotIn("vcd_tail_risk_aurc_mm", metric_keys)
-        component_plot = contracts["exp2_component_deltas"]
+        component_plot = contracts["exp2_mechanism_attribution"]
+        self.assertIn("delta_median", component_plot.column_names())
         self.assertTrue(
             {"session_id", "scenario_id", "trial_id", "component_id"}.issubset(
                 component_plot.primary_key
@@ -419,6 +422,7 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("exp1_static_timeline", contracts)
         self.assertNotIn("exp1_motion_events", contracts)
         self.assertNotIn("exp1_occlusion_events", contracts)
+        self.assertIn("exp2_mechanism_attribution", contracts)
 
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""

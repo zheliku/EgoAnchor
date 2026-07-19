@@ -31,7 +31,7 @@ _SOURCE_CONTENT = {
     "exp1_numbers.tex": "EAExpOne",
     "exp2_numbers.tex": "EAExpTwo",
     "exp1_tables.tex": r"% Table: exp1\_scenario\_summary",
-    "exp2_tables.tex": r"% Table: exp2\_component\_deltas",
+    "exp2_tables.tex": r"% Table: exp2\_mechanism\_attribution",
 }
 """四个 TeX 的实验归属标识。"""
 

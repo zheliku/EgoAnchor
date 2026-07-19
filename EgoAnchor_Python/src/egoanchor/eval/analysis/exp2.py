@@ -313,6 +313,24 @@ class PairedDeltaSummaryRow:
     metric_unit: str
     """冻结指标单位。"""
 
+    full_median: float | None
+    """完整 EgoAnchor event 指标的中位数。"""
+
+    full_q1: float | None
+    """完整 EgoAnchor event 指标的第一四分位数。"""
+
+    full_q3: float | None
+    """完整 EgoAnchor event 指标的第三四分位数。"""
+
+    ablation_median: float | None
+    """单组件消融 event 指标的中位数。"""
+
+    ablation_q1: float | None
+    """单组件消融 event 指标的第一四分位数。"""
+
+    ablation_q3: float | None
+    """单组件消融 event 指标的第三四分位数。"""
+
     attempt_count: int
     """进入汇总的全部 event 配对尝试数。"""
 
@@ -564,6 +582,10 @@ def summarize_paired_deltas(
     for (scenario_id, component_id, metric_key), rows in groups.items():
         values = [row.delta for row in rows if row.delta is not None]
         stats = median_iqr(values, params) if values else None
+        full_values = [row.full_value for row in rows if row.full_value is not None]
+        ablation_values = [row.ablation_value for row in rows if row.ablation_value is not None]
+        full_stats = median_iqr(full_values, params) if full_values else None
+        ablation_stats = median_iqr(ablation_values, params) if ablation_values else None
         first = rows[0]
         summaries.append(
             PairedDeltaSummaryRow(
@@ -574,6 +596,12 @@ def summarize_paired_deltas(
                 ablation_variant_id=first.ablation_variant_id,
                 metric_key=metric_key,
                 metric_unit=first.metric_unit,
+                full_median=full_stats.median if full_stats is not None else None,
+                full_q1=full_stats.q1 if full_stats is not None else None,
+                full_q3=full_stats.q3 if full_stats is not None else None,
+                ablation_median=ablation_stats.median if ablation_stats is not None else None,
+                ablation_q1=ablation_stats.q1 if ablation_stats is not None else None,
+                ablation_q3=ablation_stats.q3 if ablation_stats is not None else None,
                 attempt_count=len(rows),
                 sample_count=len(values),
                 median=stats.median if stats is not None else None,

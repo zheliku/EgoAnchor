@@ -44,7 +44,7 @@ def _write_sources(root: Path) -> None:
     )
     (root / "exp2_tables.tex").write_text(
         tables_header
-        + "% Table: exp2\\_component\\_deltas\n"
+        + "% Table: exp2\\_mechanism\\_attribution\n"
         + "\\begin{tabular}{ll}\nC & D \\\\\n\\end{tabular}\n",
         encoding="utf-8",
     )
@@ -200,7 +200,7 @@ class MaterializeTests(unittest.TestCase):
             table = tex_root / "exp2_tables.tex"
             table.write_text(
                 table.read_text(encoding="utf-8").replace(
-                    "exp2\\_component\\_deltas",
+                    "exp2\\_mechanism\\_attribution",
                     "exp1\\_scenario\\_summary",
                 ),
                 encoding="utf-8",

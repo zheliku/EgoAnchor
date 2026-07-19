@@ -4,13 +4,9 @@
       "pdf": "892ab898882cfd4000348705a47978f177e237263253d56d0458d2e8a9559a37",
       "png": "903ee82f59c4805f10117ad459b6aad80584979bfc97a836027a5f697c003621"
     },
-    "exp2_component_deltas": {
-      "pdf": "eea3f9f6c7ffd8db056b4166f8b05feb0d27c010f2524312fdfb4dd459c2a555",
-      "png": "5184338f34aec928c4b12389470e6b927e4ec0374965d6dacd4bc76ab8235383"
-    },
-    "exp2_vcd_curve": {
-      "pdf": "a9703ccf01b6fe4f79f54807c839a0fb7d268cac68178bfe0edd73fc6d5ff645",
-      "png": "6fae1d33a08a3e0df05e80bc299afd09d6b09d5a17ed3b61f623b804418b12b0"
+    "exp2_mechanism_attribution": {
+      "pdf": "2ca0316fd1be18d7bc4e8dcbebcc20a171afe896db7e1e4fb814eb9cb0666546",
+      "png": "a1be4780427fb5d86c6051bbce8686f47faa8d0b904252c76936bcfff0121b3d"
     }
   },
   "generator": "egoanchor.eval.publishing",
@@ -19,10 +15,10 @@
     "plots/exp1_lag_tradeoff.csv": "b47c7395f08e77a963e6eede0825c38289300e3b73e93a48d6921022b4ce5d39",
     "plots/exp1_occlusion_trace.csv": "4693197ef6e2aba300703e1c9e8a708e01ae059ea4276a1909112d4d0e857b6d",
     "plots/exp1_start_stop_trace.csv": "46bca25c4236136eb648beb79eab7bce3f5e5f2469791f305a1cf1c4d9c96253",
-    "plots/exp2_component_deltas.csv": "46478e22a1b3d2dd1e484d511c7e52aa9df676f52470d278ea302e434c737c56",
-    "plots/exp2_vcd_curve.csv": "781b59286c489d6ecc5609d5786aa6c525cafc64b777eb09985ae5d9dc125e1c",
-    "plots/plot_catalog.csv": "21c8fef11a46437366c4499fe5510ad3e390ec04c45d046f8de94549edcf7e9f"
+    "plots/exp2_mechanism_attribution.csv": "7acf1f9dedd5660ecd8ef7d54218ec3f20755d0a02138186126bc54ef15f4158",
+    "plots/exp2_vcd_curve.csv": "d39952bd3dc0f2d15b01de44de3c060d5681d55887eda58f33024b326d34e426",
+    "plots/plot_catalog.csv": "d6747d5e5eed49c09ec189638a3f89dd414f860735b7e6d7853a541d547525d2"
   },
-  "plot_count": 3,
+  "plot_count": 2,
   "stage": "publish"
 }

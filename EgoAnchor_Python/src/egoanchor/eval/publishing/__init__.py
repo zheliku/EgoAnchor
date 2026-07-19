@@ -21,11 +21,11 @@ _REQUIRED_PLOTS = frozenset(
         "exp1_start_stop_trace",
         "exp1_lag_tradeoff",
         "exp1_occlusion_trace",
-        "exp2_component_deltas",
+        "exp2_mechanism_attribution",
         "exp2_vcd_curve",
     }
 )
-"""Stage 3 固定发布的五个图名。"""
+"""Stage 3 固定发布的六个 plot-ready 数据源。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +94,7 @@ def _write_manifest(
     参数：
         path: staging 目录中的 manifest 路径。
         input_hashes: catalog 与 plot CSV hash。
-        figure_hashes: 五张图的 PDF/PNG hash。
+        figure_hashes: 当前正式图的 PDF/PNG hash。
     """
 
     payload = {
@@ -182,7 +182,7 @@ def publish_artifacts(
     figure_output_root: Path,
     tex_output_root: Path,
 ) -> ArtifactPublishResult:
-    """联合原子发布五张图和四个 TeX，任一构建失败均保留旧产物。
+    """联合原子发布实验一、实验二图和四个 TeX，任一构建失败均保留旧产物。
 
     参数：
         csv_root: Stage 2 CSV 根目录。

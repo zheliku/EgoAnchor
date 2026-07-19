@@ -13,10 +13,10 @@ raw JSON/JSONL
 ```
 
 - Stage 1 `preprocess` 只读 raw task 目录。任一 task 的 QC 失败时返回 2，整批不发布 XLSX。
-- Stage 2 `analyze` 只读 Stage 1 XLSX，不得打开 raw JSON 或 JSONL。它同时发布正式 CSV 和便于人工检查的 `exp1_analysis.xlsx`；审阅工作簿只重排同批 staging CSV，不增加科学计算层。
+- Stage 2 `analyze` 只读 Stage 1 XLSX，不得打开 raw JSON 或 JSONL。它同时发布正式 CSV 和便于人工检查的 `exp1_analysis.xlsx`、`exp2_analysis.xlsx`；审阅工作簿只重排同批已定稿行，不增加科学计算层，也不作为 Stage 3 输入。
 - Stage 3 `publish` 只读 Stage 2 CSV，不重新联接 reference、切事件窗或计算科学指标。
 - Stage 4 `materialize-paper` 的实验数据只来自 Stage 3 的四个固定 TeX，同时读取主稿作为写入目标；它不读取 CSV、XLSX 或 JSON/JSONL，也不接受 CSV 根目录。
-- 主稿已内联数字和表格，不依赖四个生成 TeX 才能编译；五个正式 PDF 图仍是外部论文资源。
+- 主稿已内联数字和表格，不依赖四个生成 TeX 才能编译；实验一行为总览和实验二机制归因两张正式 PDF 图仍是外部论文资源。
 
 统计单位是 event/segment，不是 frame。系统指标先在 event 内计算，再按 trial、session 汇总；VCD risk-coverage 保持 candidate-level，独立于 event 汇总。所有结果按场景分别报告，不计算跨场景总分或总排名。
 
@@ -127,7 +127,7 @@ Get-ChildItem data/analysis/complete -File -Recurse |
 
 ### `publish` 返回 1 或 2
 
-确认 `data/analysis/results/plots/plot_catalog.csv`、五个 plot CSV 和 `paper/` 两个 CSV 都存在，且 catalog 中的行数与 SHA-256 没有被手改。输出目录不得位于 CSV 输入目录内，也不得让图目录和 TeX 目录互相嵌套。
+确认 `data/analysis/results/plots/plot_catalog.csv`、其中声明的 plot CSV 和 `paper/` 两个 CSV 都存在，且 catalog 中的行数与 SHA-256 没有被手改。输出目录不得位于 CSV 输入目录内，也不得让图目录和 TeX 目录互相嵌套。
 
 ### `materialize-paper` 返回 1 或 2
 
@@ -135,4 +135,4 @@ Get-ChildItem data/analysis/complete -File -Recurse |
 
 ### LaTeX 编译失败
 
-先查看 `pdf/egoanchor_cn_v6.log` 中的首个错误，确认字体、模板、图片和受控区块语法，再确认五个 PDF 位于 `2026-EgoAnchor/figures/generated/`。从 `2026-EgoAnchor` 目录运行 XeLaTeX；四个生成 TeX 只是审计中间产物，移走后主稿仍应编译。若扫描发现主稿重新引入 `generated/exp*.tex`，才说明出现了外部数字依赖。
+先查看 `pdf/egoanchor_cn_v6.log` 中的首个错误，确认字体、模板、图片和受控区块语法，再确认两张正式 PDF 位于 `2026-EgoAnchor/figures/generated/`。从 `2026-EgoAnchor` 目录运行 XeLaTeX；四个生成 TeX 只是审计中间产物，移走后主稿仍应编译。若扫描发现主稿重新引入 `generated/exp*.tex`，才说明出现了外部数字依赖。

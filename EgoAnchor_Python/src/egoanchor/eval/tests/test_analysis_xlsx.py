@@ -161,6 +161,32 @@ class AnalysisWorkbookTests(unittest.TestCase):
                     publish_analysis_outputs(output, {"analysis_qc": []})
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
 
+    def test_exp2_workbook_is_published_when_exp2_rows_exist(self) -> None:
+        """实验二有数据时必须同时发布独立审阅工作簿。"""
+
+        input_workbook = SimpleNamespace(
+            path=Path("task_1_complete.xlsx"),
+            sha256="a" * 64,
+            session_id="session",
+            row_count=10,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "results"
+            publish_analysis_outputs(
+                output,
+                {"exp2/event_metrics": [_metric_row()]},
+                input_workbooks=(input_workbook,),
+                code_version="test-version",
+                parameter_set_id="b" * 64,
+            )
+            workbook = load_workbook(output / "exp2_analysis.xlsx", read_only=True, data_only=False)
+            try:
+                self.assertIn("paired_summary", workbook.sheetnames)
+                self.assertIn("mechanism_attribution", workbook.sheetnames)
+                self.assertIn("paper_tables", workbook.sheetnames)
+            finally:
+                workbook.close()
+
     def test_raw_workbook_cleanup_retries_windows_file_lock(self) -> None:
         """OpenPyXL 临时文件被短暂占用时应重试删除并完成发布。"""
 

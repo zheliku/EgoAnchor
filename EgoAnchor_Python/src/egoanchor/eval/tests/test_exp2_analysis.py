@@ -25,6 +25,9 @@ from egoanchor.eval import (
     Exp2VariantDefinition,
     Exp2ComponentResult,
     analyze_exp2_components,
+    build_exp2_mechanism_plot_rows,
+    build_vcd_operating_plot_row,
+    input_workbook_set_sha256,
 )
 
 
@@ -228,6 +231,64 @@ class Exp2ComponentTests(unittest.TestCase):
         item = next(row for row in summary if row.component_id == "vcd_admission" and row.metric_key == "jump_pninetyfive_mm")
         self.assertEqual(item.attempt_count, 1)
         self.assertEqual(item.sample_count, 0)
+        self.assertEqual(item.full_median, 2.0)
+        self.assertIsNone(item.ablation_median)
+
+    def test_summary_preserves_full_ablation_and_delta_distributions(self) -> None:
+        """实验二汇总必须同时保存完整系统、消融和差值的 event 分布。"""
+
+        summary = summarize_paired_deltas(pair_component_metrics(_component_rows()), load_analysis_parameters())
+        item = next(
+            row
+            for row in summary
+            if row.component_id == "vcd_admission"
+            and row.metric_key == "occlusion_translation_pninetyfive_mm"
+        )
+        self.assertEqual(item.full_median, 1.0)
+        self.assertEqual(item.ablation_median, 11.0)
+        self.assertEqual(item.median, 10.0)
+        self.assertEqual((item.positive_count, item.zero_count, item.negative_count), (1, 0, 0))
+
+    def test_mechanism_plot_rows_use_stage2_linear_delta_median(self) -> None:
+        """机制图注必须复用 Stage 2 linear median，不得由绘图层取下中位数。"""
+
+        paired = pair_component_metrics(_component_rows())
+        target = next(
+            row
+            for row in paired
+            if row.component_id == "capture_time_alignment"
+            and row.metric_key == "translation_event_pninetyfive_mm"
+        )
+        first = replace(
+            target,
+            full_value=1.0,
+            ablation_value=1.0,
+            delta=0.0,
+            metric_value=0.0,
+        )
+        second = replace(
+            target,
+            trial_id="trial-static-2",
+            event_id="event-static-2",
+            full_value=1.0,
+            ablation_value=11.0,
+            delta=10.0,
+            metric_value=10.0,
+        )
+        selected = tuple(
+            row
+            for row in paired
+            if row.component_id != "capture_time_alignment"
+            or row.metric_key != "translation_event_pninetyfive_mm"
+        )
+        rows = (first, second, *selected)
+        summaries = summarize_paired_deltas(rows, load_analysis_parameters())
+        plot_rows = build_exp2_mechanism_plot_rows(rows, summaries)
+        capture_rows = [
+            row for row in plot_rows if row["component_id"] == "capture_time_alignment"
+        ]
+        self.assertEqual(len(capture_rows), 2)
+        self.assertTrue(all(row["delta_median"] == 5.0 for row in capture_rows))
 
     def test_shared_trial_aggregation_accepts_exp2_variant_order(self) -> None:
         """公共 trial 聚合不得把实验一四系统顺序硬编码到消融分析。"""
@@ -331,6 +392,29 @@ class VcdTests(unittest.TestCase):
             [(row.coverage, row.risk_mm) for row in baseline.curve if row.reference_kind == "vcd" and row.risk_kind == "mean"],
             [(row.coverage, row.risk_mm) for row in analyze_vcd(self.candidates, (self.context,), self.params).curve if row.reference_kind == "vcd" and row.risk_kind == "mean"],
         )
+
+    def test_operating_point_reuses_analysis_result_and_set_lineage(self) -> None:
+        """实际接纳工作点必须复用分析结果并记录全部 eligible 工作簿 hash。"""
+
+        first_hash = "a" * 64
+        second_hash = "b" * 64
+        candidates = tuple(
+            replace(
+                candidate,
+                admission_decision="rejected" if index == 3 else "accepted",
+                input_workbook_sha256=first_hash if index < 2 else second_hash,
+            )
+            for index, candidate in enumerate(self.candidates)
+        )
+        result = analyze_vcd(candidates, (self.context,), self.params)
+        row = build_vcd_operating_plot_row(result)
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertAlmostEqual(float(row["coverage"]), 0.75)
+        self.assertEqual(row["risk_mm"], result.operating_tail_risk_mm)
+        expected_hash = input_workbook_set_sha256((first_hash, second_hash))
+        self.assertEqual(result.operating_input_workbook_sha256, expected_hash)
+        self.assertEqual(row["input_workbook_sha256"], expected_hash)
 
     def test_non_full_variant_reference_mismatch_and_zero_eligible_are_hard_failures(self) -> None:
         """VCD 不得混入消融、跨 frame reference 或空 cohort。"""

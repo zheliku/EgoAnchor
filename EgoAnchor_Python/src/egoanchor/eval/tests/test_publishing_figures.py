@@ -21,14 +21,13 @@ _PLOT_SPEC_NAMES = (
     "exp1_start_stop_trace",
     "exp1_lag_tradeoff",
     "exp1_occlusion_trace",
-    "exp2_component_deltas",
+    "exp2_mechanism_attribution",
     "exp2_vcd_curve",
 )
 
 _FIGURE_NAMES = (
     "exp1_behavior_overview",
-    "exp2_component_deltas",
-    "exp2_vcd_curve",
+    "exp2_mechanism_attribution",
 )
 
 
@@ -153,11 +152,11 @@ def _write_fixture(root: Path) -> None:
             for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
             for index in range(2)
         ],
-        "exp2_component_deltas": [
+        "exp2_mechanism_attribution": [
             {
                 **result,
-                "plot_id": "exp2_component_deltas",
-                "panel_id": "components",
+                "plot_id": "exp2_mechanism_attribution",
+                "panel_id": "vcd_admission",
                 "experiment_id": "exp2_design_attribution",
                 "component_id": "vcd_admission",
                 "full_variant_id": "EgoAnchor",
@@ -165,6 +164,7 @@ def _write_fixture(root: Path) -> None:
                 "full_value": 1.0,
                 "ablation_value": 2.0,
                 "delta": 1.0,
+                "delta_median": 1.0,
                 "pair_status": "complete",
             }
         ],
@@ -192,7 +192,7 @@ def _write_fixture(root: Path) -> None:
         "exp1_start_stop_trace": ("time_ms", "display_displacement_mm", "variant_id"),
         "exp1_lag_tradeoff": ("effective_lag_ms", "p95_residual_mm", "variant_id"),
         "exp1_occlusion_trace": ("time_ms", "translation_error_mm", "variant_id"),
-        "exp2_component_deltas": ("event_id", "delta", "component_id"),
+        "exp2_mechanism_attribution": ("event_id", "delta", "component_id"),
         "exp2_vcd_curve": ("coverage", "risk_mm", "reference_kind"),
     }
     for order, name in enumerate(_PLOT_SPEC_NAMES):
@@ -241,9 +241,9 @@ class FigurePublishingTests(unittest.TestCase):
                 encoded = (output / f"{name}.png").read_bytes()
                 widths[name] = struct.unpack(">I", encoded[16:20])[0]
             self.assertLess(widths["exp1_behavior_overview"], 2200)
-            self.assertTrue(all(widths[name] < 1400 for name in _FIGURE_NAMES[1:]))
+            self.assertLess(widths["exp2_mechanism_attribution"], 3600)
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["plot_count"], 3)
+            self.assertEqual(manifest["plot_count"], 2)
             self.assertEqual(len(manifest["input_csv_sha256"]), 7)
 
     def test_changing_declared_plot_csv_changes_input_lineage(self) -> None:

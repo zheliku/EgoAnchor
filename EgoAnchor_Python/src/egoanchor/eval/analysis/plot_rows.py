@@ -17,9 +17,10 @@ from .exp1 import (
     MetricRow,
     ScenarioSummaryRow,
 )
+from .exp2 import EXP2_COMPONENTS, PairedDeltaRow, PairedDeltaSummaryRow
 from .params import AnalysisParameters
 from .pose import rotation_error_deg
-from .vcd import VcdCurvePoint
+from .vcd import VcdAnalysisResult, VcdCurvePoint
 from .windows import EventWindow, OcclusionWindow, build_event_windows, detect_reference_motion, pair_occlusion_windows
 
 
@@ -499,4 +500,86 @@ def build_vcd_plot_rows(rows: Iterable[VcdCurvePoint]) -> tuple[dict[str, object
     )
 
 
-__all__ = ["Exp1PlotRows", "build_exp1_plot_rows", "build_vcd_plot_rows"]
+def build_exp2_mechanism_plot_rows(
+    rows: Iterable[PairedDeltaRow],
+    summaries: Iterable[PairedDeltaSummaryRow],
+) -> tuple[dict[str, object], ...]:
+    """投影实验二四组件主指标的 Full/Ablated/Delta 配对绘图行。
+
+    参数：
+        rows: Stage 2 已完成 exact join 的 paired event 行。
+        summaries: Stage 2 已按冻结分位数规则汇总的 paired summary 行。
+    """
+
+    primary_metrics = {
+        component.component_id: component.primary_metric_keys[0]
+        for component in EXP2_COMPONENTS
+    }
+    selected = [
+        row
+        for row in rows
+        if row.metric_key == primary_metrics.get(row.component_id)
+    ]
+    if not selected:
+        raise ValueError("实验二机制归因图缺少主指标配对行")
+    summary_by_key = {
+        (row.component_id, row.metric_key): row
+        for row in summaries
+    }
+    result = []
+    for row in selected:
+        summary = summary_by_key.get((row.component_id, row.metric_key))
+        if summary is None or summary.median is None:
+            raise ValueError(
+                f"实验二机制归因图缺少 Stage 2 差值中位数：{row.component_id}/{row.metric_key}"
+            )
+        result.append(
+            {
+                **asdict(row),
+                "delta_median": summary.median,
+                "plot_id": "exp2_mechanism_attribution",
+                "panel_id": row.component_id,
+            }
+        )
+    return tuple(result)
+
+
+def build_vcd_operating_plot_row(
+    result: VcdAnalysisResult,
+) -> dict[str, object] | None:
+    """把 VCD 分析已经冻结的实际接纳工作点序列化为绘图行。
+
+    参数：
+        result: 已计算 actual admitted 统计与集合 lineage 的 VCD 结果。
+    """
+
+    if (
+        result.operating_eligible_count <= 0
+        or result.operating_accepted_count <= 0
+        or result.operating_tail_risk_mm is None
+    ):
+        return None
+    return {
+        "scenario_id": "occlusion_recovery",
+        "reference_kind": "actual_admitted",
+        "risk_kind": "operating_pninetyfive",
+        "point_index": 0,
+        "threshold": None,
+        "coverage": result.operating_coverage,
+        "risk_mm": result.operating_tail_risk_mm,
+        "group_count": result.operating_accepted_count,
+        "cumulative_count": result.operating_accepted_count,
+        "coverage_denominator": result.operating_eligible_count,
+        "input_workbook_sha256": result.operating_input_workbook_sha256,
+        "plot_id": "exp2_vcd_curve",
+        "panel_id": "actual_operating",
+    }
+
+
+__all__ = [
+    "Exp1PlotRows",
+    "build_exp1_plot_rows",
+    "build_exp2_mechanism_plot_rows",
+    "build_vcd_operating_plot_row",
+    "build_vcd_plot_rows",
+]

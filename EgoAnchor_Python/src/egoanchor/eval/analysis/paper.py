@@ -358,6 +358,13 @@ def _exp2_rows(
         numbers.append(
             _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}PairCount", summary.sample_count, source_csv, summary.input_workbook_sha256)
         )
+        numbers.extend(
+            (
+                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}PositiveCount", summary.positive_count, source_csv, summary.input_workbook_sha256),
+                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}ZeroCount", summary.zero_count, source_csv, summary.input_workbook_sha256),
+                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}NegativeCount", summary.negative_count, source_csv, summary.input_workbook_sha256),
+            )
+        )
 
     table_cells: list[dict[str, object]] = []
     for component in EXP2_COMPONENTS:
@@ -389,20 +396,48 @@ def _exp2_rows(
                 f"{summary.metric_unit}"
             )
 
+        if any(
+            value is None
+            for value in (
+                main.full_median,
+                main.full_q1,
+                main.full_q3,
+                main.ablation_median,
+                main.ablation_q1,
+                main.ablation_q3,
+            )
+        ):
+            raise ValueError(f"实验二论文主指标缺少 Full/Ablated 汇总：{component.component_id}")
+
+        def distribution_text(summary: PairedDeltaSummaryRow, prefix: str) -> str:
+            """格式化 Full 或 Ablated 的 event median [IQR]。"""
+
+            median = getattr(summary, f"{prefix}_median")
+            q1 = getattr(summary, f"{prefix}_q1")
+            q3 = getattr(summary, f"{prefix}_q3")
+            assert median is not None and q1 is not None and q3 is not None
+            return (
+                f"{_display_number(median)} "
+                f"[{_display_number(q1)}, {_display_number(q3)}] "
+                f"{summary.metric_unit}"
+            )
+
         values = {
             "消融配置": _ABLATION_LABELS[component.component_id],
             "场景": _SCENARIO_LABELS[component.scenario_id],
             "主指标": get_metric_definition(main_key).label,
-            "主差值 [IQR]": delta_text(main),
+            "Full median [IQR]": distribution_text(main, "full"),
+            "Ablated median [IQR]": distribution_text(main, "ablation"),
+            "Delta median [IQR]": delta_text(main),
+            "方向计数": f"+{main.positive_count} / {main.zero_count} / -{main.negative_count}",
             "护栏指标": get_metric_definition(guardrail_key).label,
-            "护栏差值 [IQR]": delta_text(guardrail),
-            "配对数": f"{main.sample_count}/{guardrail.sample_count}",
+            "护栏 Delta [IQR]": delta_text(guardrail),
         }
         for column_key, display_value in values.items():
             table_cells.append(
                 _table_cell(
                     EXP2_ID,
-                    "exp2_component_deltas",
+                    "exp2_mechanism_attribution",
                     _COMPONENT_LABELS[component.component_id],
                     column_key,
                     display_value,
@@ -429,6 +464,16 @@ def _exp2_rows(
                 _number_row(EXP2_ID, f"{reference}MeanRiskCandidateCount", aurc_row.candidate_count, source_csv, aurc_row.input_workbook_sha256),
             )
         )
+    operating_source = "plots/exp2_vcd_curve.csv"
+    operating_values = (
+        ("ActualAdmittedCoveragePct", result.vcd.operating_coverage * 100.0),
+        ("ActualAdmittedTailRiskMm", result.vcd.operating_tail_risk_mm),
+        ("ActualAdmittedCandidateCount", result.vcd.operating_accepted_count),
+        ("EligibleCandidateCount", result.vcd.operating_eligible_count),
+    )
+    for macro_name, value in operating_values:
+        if value is not None:
+            numbers.append(_number_row(EXP2_ID, macro_name, value, operating_source, source_hash))
     return numbers, table_cells
 
 

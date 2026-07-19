@@ -156,6 +156,8 @@ schema-v2 task directory
 - 主稿最终不依赖生成的实验 `.tex` 文件才能编译；宏定义和表格内容写入带稳定边界标记的自动生成区块。生成 `.tex` 仍保留为审计中间产物，PDF 图文件保持外部依赖。
 - 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
+- Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
+- Stage 3 当前发布一张实验一四面板系统行为总览和一张实验二四面板组件归因图。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，VCD 插图使用日志中的实际 admission decision 标出 eligible candidate operating point，不把它表述为未记录的数值阈值。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。中文主稿表格使用读者可读的中文场景与列标签，不以机器字段替代论文标签。
 
 ## Python 关键约束

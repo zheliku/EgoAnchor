@@ -113,6 +113,15 @@ class PaperRowsTests(unittest.TestCase):
                 median=2.0,
                 q1=1.0,
                 q3=3.0,
+                full_median=10.0,
+                full_q1=9.0,
+                full_q3=11.0,
+                ablation_median=12.0,
+                ablation_q1=11.0,
+                ablation_q3=13.0,
+                positive_count=3,
+                zero_count=1,
+                negative_count=0,
                 input_workbook_sha256="a" * 64,
             )
             for component, (scenario, ablation, metrics) in component_metrics.items()
@@ -121,6 +130,10 @@ class PaperRowsTests(unittest.TestCase):
         exp2 = SimpleNamespace(
             components=SimpleNamespace(paired_summary=paired_rows),
             vcd=SimpleNamespace(
+                operating_coverage=0.75,
+                operating_tail_risk_mm=8.5,
+                operating_accepted_count=9,
+                operating_eligible_count=12,
                 aurc=(
                     SimpleNamespace(
                         reference_kind="vcd",
@@ -145,6 +158,12 @@ class PaperRowsTests(unittest.TestCase):
         self.assertIn("EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm", names)
         self.assertIn("CaptureTimeAlignmentTranslationEventPNinetyFiveMmDeltaMedian", names)
         self.assertIn("VcdMeanRiskAurcMm", names)
+        operating = next(
+            row
+            for row in result.numbers
+            if row["macro_name"] == "ActualAdmittedCoveragePct"
+        )
+        self.assertEqual(operating["source_csv"], "plots/exp2_vcd_curve.csv")
         self.assertTrue(all(name.isascii() and name.isalpha() for name in names))
         formatted_number = next(
             row
@@ -168,8 +187,10 @@ class PaperRowsTests(unittest.TestCase):
         exp1_cells = [row for row in result.tables if row["experiment"] == "exp1_system_characterization"]
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
         self.assertEqual(len(exp1_cells), 36)
-        self.assertEqual(len(exp2_cells), 28)
-        self.assertIn("护栏差值 [IQR]", {row["column_key"] for row in exp2_cells})
+        self.assertEqual(len(exp2_cells), 36)
+        self.assertIn("Full median [IQR]", {row["column_key"] for row in exp2_cells})
+        self.assertIn("Ablated median [IQR]", {row["column_key"] for row in exp2_cells})
+        self.assertIn("方向计数", {row["column_key"] for row in exp2_cells})
         self.assertEqual(
             {row["row_key"] for row in exp1_cells},
             {"世界一致性", "静止稳定性", "起停转换", "平移保真度", "旋转保真度", "失效约束"},

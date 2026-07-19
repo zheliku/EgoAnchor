@@ -46,7 +46,7 @@ class ContractChange:
 
 CONTRACT_VERSIONS = (
     ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
-    ContractVersion("csv", 4, "Stage 2 实验一行为图与论文数据 CSV 契约"),
+    ContractVersion("csv", 5, "Stage 2 实验一/二行为图与论文数据 CSV 契约"),
     ContractVersion("metrics", 5, "实验一增强行为指标定义契约"),
     ContractVersion("analysis_params", 4, "实验一增强冻结分析参数契约"),
     ContractVersion("analysis_workbook", 1, "Stage 2 实验审阅 XLSX 契约"),
@@ -64,6 +64,7 @@ CONTRACT_CHANGELOG = (
     ContractChange("csv-v2", "场景汇总显式保存尝试数、成功率、样本数和完整分布。", True),
     ContractChange("csv-v3", "补齐组件配对键、空值状态、VCD 曲线维度与敏感性审计列。", True),
     ContractChange("csv-v4", "以四张专用 plot-ready 表替换实验一旧 event 图表。", True),
+    ContractChange("csv-v5", "增加实验二 Full/Ablated/Delta 机制归因图与审阅工作簿表。", True),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),
     ContractChange(
         "metrics-v2",

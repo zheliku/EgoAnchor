@@ -166,6 +166,9 @@ class VcdRiskPoint:
     variant_id: str
     """候选 runtime，固定为完整 EgoAnchor。"""
 
+    admission_decision: str
+    """候选在 Unity runtime 的实际 admission 文本。"""
+
     vcd_score: float
     """合法的有限 VCD 分数。"""
 
@@ -362,6 +365,21 @@ class VcdAnalysisResult:
     sensitivity: tuple[VcdSensitivityRow, ...]
     """marker-covered 与 occlusion-only cohort 敏感性。"""
 
+    operating_accepted_count: int
+    """实际 admission=accepted 且 risk eligible 的候选数。"""
+
+    operating_eligible_count: int
+    """全部 risk eligible 到达候选数。"""
+
+    operating_coverage: float
+    """实际接纳 eligible 子集占 eligible 候选的比例。"""
+
+    operating_tail_risk_mm: float | None
+    """实际接纳 eligible 子集的 candidate-level P95 risk。"""
+
+    operating_input_workbook_sha256: str
+    """全部 operating-point eligible 输入工作簿的集合 hash。"""
+
 
 def _risk_point(candidate: VcdCandidate, params: AnalysisParameters) -> VcdRiskPoint:
     """计算一个已到达候选的 risk 或稳定排除原因。
@@ -406,6 +424,7 @@ def _risk_point(candidate: VcdCandidate, params: AnalysisParameters) -> VcdRiskP
         frame_id=candidate.frame_id,
         source_capture_mono_ms=candidate.source_capture_mono_ms,
         variant_id=candidate.variant_id,
+        admission_decision=candidate.admission_decision,
         vcd_score=float(candidate.vcd_score),
         risk_mm=risk_mm,
         eligible=reason == "eligible",
@@ -734,11 +753,31 @@ def analyze_vcd(
         for reference_kind in ("vcd", "random")
     )
     base_aurc = next(row.aurc_mm for row in aurc if row.reference_kind == "vcd")
+    accepted = tuple(
+        point
+        for point in eligible
+        if point.admission_decision.strip().lower() == "accepted"
+    )
+    accepted_risks = np.asarray(
+        [point.risk_mm for point in accepted if point.risk_mm is not None],
+        dtype=np.float64,
+    )
     return VcdAnalysisResult(
         risk_points=points,
         curve=curve,
         aurc=aurc,
         sensitivity=_sensitivity_rows(points, contexts, base_aurc, params),
+        operating_accepted_count=len(accepted),
+        operating_eligible_count=len(eligible),
+        operating_coverage=(len(accepted) / len(eligible)) if eligible else 0.0,
+        operating_tail_risk_mm=(
+            float(np.quantile(accepted_risks, params.vcd_tail_quantile, method="linear"))
+            if len(accepted_risks)
+            else None
+        ),
+        operating_input_workbook_sha256=input_workbook_set_sha256(
+            point.input_workbook_sha256 for point in eligible
+        ),
     )
 
 

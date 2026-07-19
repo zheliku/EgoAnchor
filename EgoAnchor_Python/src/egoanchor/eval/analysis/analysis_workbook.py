@@ -64,6 +64,12 @@ def _is_exp1(row: Mapping[str, str]) -> bool:
     return row.get("experiment") == "exp1_system_characterization"
 
 
+def _is_exp2(row: Mapping[str, str]) -> bool:
+    """判断 paper 行是否属于实验二。"""
+
+    return row.get("experiment") == "exp2_design_attribution"
+
+
 def _is_exp1_lineage(row: Mapping[str, str]) -> bool:
     """保留实验一、共享窗口和实验一 paper 行的 lineage。"""
 
@@ -74,6 +80,19 @@ def _is_exp1_lineage(row: Mapping[str, str]) -> bool:
         or output.startswith("plots/exp1_")
         or output == "common/trial_windows.csv"
         or (output.startswith("paper/") and "experiment=exp1_system_characterization" in key)
+    )
+
+
+def _is_exp2_lineage(row: Mapping[str, str]) -> bool:
+    """保留实验二、共享窗口和实验二 paper 行的 lineage。"""
+
+    output = str(row.get("output_path") or "")
+    key = str(row.get("source_row_key") or "")
+    return (
+        output.startswith("exp2/")
+        or output.startswith("plots/exp2_")
+        or output == "common/trial_windows.csv"
+        or (output.startswith("paper/") and "experiment=exp2_design_attribution" in key)
     )
 
 
@@ -95,6 +114,27 @@ _EXP1_SHEETS = (
     AnalysisSheetSpec("lineage", "audit/lineage.csv", "lineage", _is_exp1_lineage),
 )
 """实验一审阅工作簿的稳定 sheet 顺序和 CSV 来源。"""
+
+_EXP2_SHEETS = (
+    AnalysisSheetSpec("inputs", "audit/inputs.csv", "inputs"),
+    AnalysisSheetSpec("analysis_qc", "audit/analysis_qc.csv", "analysis_qc"),
+    AnalysisSheetSpec("metric_catalog", "audit/metric_catalog.csv", "metric_catalog"),
+    AnalysisSheetSpec("trial_windows", "common/trial_windows.csv", "trial_windows"),
+    AnalysisSheetSpec("event_metrics", "exp2/event_metrics.csv", "event_metrics"),
+    AnalysisSheetSpec("trial_metrics", "exp2/trial_metrics.csv", "trial_metrics"),
+    AnalysisSheetSpec("session_metrics", "exp2/session_metrics.csv", "session_metrics"),
+    AnalysisSheetSpec("paired_deltas", "exp2/paired_deltas.csv", "paired_deltas"),
+    AnalysisSheetSpec("paired_summary", "exp2/paired_summary.csv", "paired_summary"),
+    AnalysisSheetSpec("vcd_risk_points", "exp2/vcd_risk_points.csv", "vcd_risk_points"),
+    AnalysisSheetSpec("vcd_curve", "exp2/vcd_curve.csv", "vcd_curve"),
+    AnalysisSheetSpec("vcd_aurc", "exp2/vcd_aurc.csv", "vcd_aurc"),
+    AnalysisSheetSpec("mechanism_attribution", "plots/exp2_mechanism_attribution.csv", "exp2_mechanism_attribution"),
+    AnalysisSheetSpec("vcd_plot", "plots/exp2_vcd_curve.csv", "exp2_vcd_curve"),
+    AnalysisSheetSpec("paper_numbers", "paper/numbers.csv", "numbers", _is_exp2),
+    AnalysisSheetSpec("paper_tables", "paper/tables.csv", "tables", _is_exp2),
+    AnalysisSheetSpec("lineage", "audit/lineage.csv", "lineage", _is_exp2_lineage),
+)
+"""实验二审阅工作簿的稳定 sheet 顺序和 CSV 来源。"""
 
 
 def _contracts() -> dict[str, CsvTableContract]:
@@ -280,15 +320,18 @@ def _validate_workbook(
         workbook.close()
 
 
-def _write_exp1_workbook(
+def _write_analysis_workbook(
     root: Path,
     csv_sha256: Mapping[str, str],
     finalized_rows: Mapping[str, Sequence[Mapping[str, str]]],
     *,
+    specs: Sequence[AnalysisSheetSpec],
+    experiment_id: str,
+    output_name: str,
     code_version: str,
     parameter_set_id: str,
 ) -> Path:
-    """从 staging CSV 构建确定性实验一审阅工作簿。"""
+    """从 finalized rows 构建一个确定性的实验审阅工作簿。"""
 
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -296,7 +339,7 @@ def _write_exp1_workbook(
     workbook.properties.created = _FIXED_DATETIME
     workbook.properties.modified = _FIXED_DATETIME
     source_data: list[tuple[AnalysisSheetSpec, tuple[str, ...], list[dict[str, str]], str]] = []
-    for spec in _EXP1_SHEETS:
+    for spec in specs:
         source_key = spec.source_csv.removesuffix(".csv")
         logical_name = Path(source_key).name
         raw_rows = finalized_rows.get(source_key)
@@ -322,7 +365,7 @@ def _write_exp1_workbook(
         "workbook_info",
         ("key", "value"),
         (
-            ("experiment_id", "exp1_system_characterization"),
+            ("experiment_id", experiment_id),
             ("contract", "analysis_workbook-v1"),
             ("code_version", code_version),
             ("parameter_set_id", parameter_set_id),
@@ -340,8 +383,9 @@ def _write_exp1_workbook(
     )
     for spec, header, rows, _ in source_data:
         _write_table_sheet(workbook, spec, header, rows)
-    raw = root / ".exp1_analysis.raw.xlsx"
-    destination = root / "exp1_analysis.xlsx"
+    stem = Path(output_name).stem
+    raw = root / f".{stem}.raw.xlsx"
+    destination = root / output_name
     try:
         workbook.save(raw)
     finally:
@@ -350,7 +394,7 @@ def _write_exp1_workbook(
     _unlink_with_retry(raw)
     _validate_workbook(
         destination,
-        _EXP1_SHEETS,
+        specs,
         {spec.sheet_name: len(rows) for spec, _, rows, _ in source_data},
         {spec.sheet_name: rows for spec, _, rows, _ in source_data},
     )
@@ -367,14 +411,37 @@ def write_analysis_workbooks(
 ) -> dict[str, str]:
     """在 Stage 2 staging 根目录写入并回读当前实验审阅工作簿。"""
 
-    path = _write_exp1_workbook(
-        root,
-        csv_sha256,
-        finalized_rows,
-        code_version=code_version,
-        parameter_set_id=parameter_set_id,
-    )
-    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest()}
+    paths = {}
+    exp1_keys = ("exp1/event_metrics", "exp1/scenario_summary")
+    exp2_keys = ("exp2/event_metrics", "exp2/paired_deltas", "exp2/paired_summary")
+    has_exp2 = any(finalized_rows.get(key) for key in exp2_keys)
+    if any(finalized_rows.get(key) for key in exp1_keys) or not has_exp2:
+        exp1_path = _write_analysis_workbook(
+            root,
+            csv_sha256,
+            finalized_rows,
+            specs=_EXP1_SHEETS,
+            experiment_id="exp1_system_characterization",
+            output_name="exp1_analysis.xlsx",
+            code_version=code_version,
+            parameter_set_id=parameter_set_id,
+        )
+        paths[exp1_path.name] = hashlib.sha256(exp1_path.read_bytes()).hexdigest()
+    if has_exp2:
+        exp2_path = _write_analysis_workbook(
+            root,
+            csv_sha256,
+            finalized_rows,
+            specs=_EXP2_SHEETS,
+            experiment_id="exp2_design_attribution",
+            output_name="exp2_analysis.xlsx",
+            code_version=code_version,
+            parameter_set_id=parameter_set_id,
+        )
+        paths[exp2_path.name] = hashlib.sha256(exp2_path.read_bytes()).hexdigest()
+    if not paths:
+        raise ValueError("Stage 2 没有可发布的实验审阅工作簿")
+    return paths
 
 
 __all__ = ["AnalysisSheetSpec", "write_analysis_workbooks"]

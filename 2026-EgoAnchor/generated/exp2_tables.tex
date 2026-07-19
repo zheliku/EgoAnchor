@@ -1,12 +1,12 @@
-% Source: paper/tables.csv; SHA-256: e2bb93e962910429f25a977ff2c53abe7f893b306dad52d4296a5054e9b0d2d2; generator: egoanchor.eval.publishing.latex-v1
-% Table: exp2\_component\_deltas
-\begin{tabular}{llllllll}
+% Source: paper/tables.csv; SHA-256: acf4220aea56325dad31021ac501d9531321142b047875296f6d44e09310baef; generator: egoanchor.eval.publishing.latex-v1
+% Table: exp2\_mechanism\_attribution
+\begin{tabular}{llllllllll}
 \toprule
-结果 & 消融配置 & 场景 & 主指标 & 主差值 [IQR] & 护栏指标 & 护栏差值 [IQR] & 配对数 \\
+结果 & 消融配置 & 场景 & 主指标 & Full median [IQR] & Ablated median [IQR] & Delta median [IQR] & 方向计数 & 护栏指标 & 护栏 Delta [IQR] \\
 \midrule
-采集时刻对齐 & 关闭采集时刻对齐 & 静止头动 & 平移误差 event-P95 & 5.585 [0.6, 13.959] mm & 旋转误差 event-P95 & 0.41 [0.216, 0.813] deg & 4/4 \\
-VCD 接纳 & 关闭 VCD & 遮挡恢复 & 遮挡窗平移 P95 & 21.857 [0, 46.254] mm & 持久恢复时间 & 0 [0, 0] ms & 7/7 \\
-时序合成 & 关闭时序合成 & 起停 6DoF & 平移跳变 P95 & -1.736 [-2.72, -0.54] mm & 可见响应时间 & 0 [0, 0] ms & 5/5 \\
-StaticLock & 关闭 StaticLock & 静止头动 & 位置 HP-RMS & 1.592 [0.959, 2.205] mm & 绝对平移误差中位数 & 1.197 [1.063, 1.491] mm & 4/4 \\
+采集时刻对齐 & 关闭采集时刻对齐 & 静止头动 & 平移误差 event-P95 & 3.679 [3.321, 4.511] mm & 8.73 [4.188, 17.67] mm & 5.585 [0.6, 13.959] mm & +3 / 0 / -1 & 旋转误差 event-P95 & 0.41 [0.216, 0.813] deg \\
+VCD 接纳 & 关闭 VCD & 遮挡恢复 & 遮挡窗平移 P95 & 1.822 [1.598, 2.272] mm & 23.97 [1.711, 48.31] mm & 21.857 [0, 46.254] mm & +5 / 0 / -2 & 持久恢复时间 & 0 [0, 0] ms \\
+时序合成 & 关闭时序合成 & 起停 6DoF & 平移跳变 P95 & 3.205 [3.017, 3.346] mm & 1.282 [1.25, 1.376] mm & -1.736 [-2.72, -0.54] mm & +1 / 0 / -4 & 可见响应时间 & 0 [0, 0] ms \\
+StaticLock & 关闭 StaticLock & 静止头动 & 位置 HP-RMS & 0.03 [0.028, 0.349] mm & 1.768 [0.989, 2.698] mm & 1.592 [0.959, 2.205] mm & +4 / 0 / -0 & 绝对平移误差中位数 & 1.197 [1.063, 1.491] mm \\
 \bottomrule
 \end{tabular}
