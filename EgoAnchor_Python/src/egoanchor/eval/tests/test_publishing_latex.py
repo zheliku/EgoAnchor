@@ -80,7 +80,7 @@ def _write_fixture(root: Path, *, invalid_macro: bool = False) -> None:
                     "EgoAnchor": ("[BEST]4.0 [3.0, 5.0] mm", "[BEST]3.0 [2.0, 4.0] mm", "[BEST]80 [60, 100] ms", "[BEST]5.0 [4.0, 6.0] mm", "[BEST]2.8 [2.0, 3.5] deg", "[BEST]6.0 [4.0, 8.0] mm"),
                 }.items()
                 for column, value in zip(
-                    ("World P95 ↓", "HP--RMS ↓", "Response ↓", "Trans. residual ↓", "Rot. residual ↓", "Occlusion P95 ↓"),
+                    ("World P95 ↓", "HP--RMS ↓", "Response ↓", "Trans. residual P95 ↓", "Rot. residual P95 ↓", "Occlusion P95 ↓"),
                     values,
                 )
             ),

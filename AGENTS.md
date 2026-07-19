@@ -157,7 +157,7 @@ schema-v2 task directory
 - 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
 - Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
-- Stage 3 当前发布一张实验一三面板系统行为总览和一张实验二四面板组件归因图；实验一中间面板保留全部持续平移 event 散点并叠加 median[IQR]，实验二主图只显示各组件 `Ablated - Full` 差值，VCD risk--coverage 曲线保留在 Stage 2 审计 CSV/XLSX，不与差值面板混排。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]。
+- Stage 3 当前发布一张实验一三面板系统行为总览和一张实验二四面板组件归因图；实验一中间面板保留全部持续平移 event 散点并叠加 median[IQR]，实验二主图沿用 GPT 风格只显示各组件 `Ablated - Full` 的 median[IQR]、零基线和方向计数，事件点保留在 Stage 2 审计 CSV/XLSX，VCD risk--coverage 曲线也保留在审计层，不与差值面板混排。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，其中当前方向下的最优 Full/Ablated 值加粗。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
 - 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；时序合成主归因使用起停场景的 `motion_hold_ratio`，持续平移仍作为实验一的完整系统 lag--fidelity 证据。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位有效数字且不超过三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。实验一表按属性/场景组织四系统结果，实验二表同行报告 Full、Ablated、配对差值与护栏，不以机器字段替代论文标签。

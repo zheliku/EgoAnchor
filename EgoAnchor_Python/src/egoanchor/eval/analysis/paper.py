@@ -253,8 +253,8 @@ def _exp1_rows(
         ("World P95 ↓", "static_head_motion", "translation_event_pninetyfive_mm"),
         ("HP--RMS ↓", "static_head_motion", "position_hp_rms_mm"),
         ("Response ↓", "start_stop_6dof", "visible_response_ms"),
-        ("Trans. residual ↓", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
-        ("Rot. residual ↓", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
+        ("Trans. residual P95 ↓", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
+        ("Rot. residual P95 ↓", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
         ("Occlusion P95 ↓", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
     )
     formatted: dict[tuple[str, str], tuple[str, float, str]] = {}
@@ -424,10 +424,27 @@ def _exp2_rows(
             f"{_COMPONENT_LABELS[component.component_id]}"
             f"（{_SCENARIO_LABELS[component.scenario_id]}）"
         )
+        full_display = distribution_text(main, "full")
+        ablation_display = distribution_text(main, "ablation")
+        if main.full_median is None or main.ablation_median is None:
+            raise ValueError(f"实验二 Full/Ablated 中位数缺失：{component.component_id}")
+        direction = get_metric_definition(main_key).direction
+        if direction == "lower_is_better":
+            if main.full_median <= main.ablation_median:
+                full_display = f"[BEST]{full_display}"
+            if main.ablation_median <= main.full_median:
+                ablation_display = f"[BEST]{ablation_display}"
+        elif direction == "higher_is_better":
+            if main.full_median >= main.ablation_median:
+                full_display = f"[BEST]{full_display}"
+            if main.ablation_median >= main.full_median:
+                ablation_display = f"[BEST]{ablation_display}"
+        else:
+            raise ValueError(f"实验二主指标方向未定义：{main_key}")
         values = {
             "主指标": f"{get_metric_definition(main_key).label} {_direction_arrow(main_key)}",
-            "Full median [IQR]": distribution_text(main, "full"),
-            "Ablated median [IQR]": distribution_text(main, "ablation"),
+            "Full median [IQR]": full_display,
+            "Ablated median [IQR]": ablation_display,
             "Delta [IQR]（+/0/-）": (
                 f"{delta_text(main)}; "
                 f"{main.positive_count}/{main.zero_count}/{main.negative_count}"

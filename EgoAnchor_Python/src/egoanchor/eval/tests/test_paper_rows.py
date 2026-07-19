@@ -199,7 +199,7 @@ class PaperRowsTests(unittest.TestCase):
             for row in exp2_cells
             if row["row_key"] == "时序合成（起停 6DoF）" and row["column_key"] == "Full median [IQR]"
         )
-        self.assertEqual(hold_cell["display_value"], "1000 [900, 1100] %")
+        self.assertEqual(hold_cell["display_value"], "[BEST]1000 [900, 1100] %")
         hold_delta = next(
             row
             for row in exp2_cells
@@ -221,8 +221,8 @@ class PaperRowsTests(unittest.TestCase):
                 "World P95 ↓",
                 "HP--RMS ↓",
                 "Response ↓",
-                "Trans. residual ↓",
-                "Rot. residual ↓",
+                "Trans. residual P95 ↓",
+                "Rot. residual P95 ↓",
                 "Occlusion P95 ↓",
             },
         )

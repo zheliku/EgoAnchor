@@ -34,8 +34,8 @@ _TABLE_LAYOUTS = {
             "World P95 ↓",
             "HP--RMS ↓",
             "Response ↓",
-            "Trans. residual ↓",
-            "Rot. residual ↓",
+            "Trans. residual P95 ↓",
+            "Rot. residual P95 ↓",
             "Occlusion P95 ↓",
         ),
         (

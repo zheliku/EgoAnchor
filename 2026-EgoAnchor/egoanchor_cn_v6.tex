@@ -804,7 +804,7 @@ EgoAnchor 的对象接口不绑定预定义类别。给定可用三维模型，�
   \caption{实验一的场景内系统行为。单元格为 event/segment-level median [IQR]，$n$ 为事件或片段数；各指标均为越低越好。}
   \label{tab:exp1-generated-summary}
 % EGOANCHOR-EXP-ONE-TABLE:BEGIN
-% Source CSV SHA-256: 096e4717edf0adcceb09e919df40ea8bb059939d7499f7942fd5f0f06413556c; Stage 3 TeX SHA-256: d15486f14b9787897c7211dc7cfa44c94508e19e84774a2e5d143cbd04340506; generator: egoanchor.eval.materialize-v1; file: exp1_tables.tex
+% Source CSV SHA-256: 82faed992a729312533f189ff9716b4092736ea5d91720b3a6197ef1c4881762; Stage 3 TeX SHA-256: f4bd077e587c1108e0326d9f3f4585d28a11b457e9b6ae73945994bc38449143; generator: egoanchor.eval.materialize-v1; file: exp1_tables.tex
 % 由 egoanchor.eval 自动生成，请勿手工修改本区块。
 % Table: exp1\_scenario\_summary
 \begingroup
@@ -813,7 +813,7 @@ EgoAnchor 的对象接口不绑定预定义类别。给定可用三维模型，�
 \renewcommand{\arraystretch}{1.08}
 \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.16\textwidth}*{6}{>{\raggedleft\arraybackslash}X}@{}}
 \toprule
-System & World P95 ↓ & HP--RMS ↓ & Response ↓ & Trans. residual ↓ & Rot. residual ↓ & Occlusion P95 ↓ \\
+System & World P95 ↓ & HP--RMS ↓ & Response ↓ & Trans. residual P95 ↓ & Rot. residual P95 ↓ & Occlusion P95 ↓ \\
 \midrule
 Arrival-Hold & 22.2 [16.7, 29.2] mm & 3.4 [3.04, 3.91] mm & \textbf{126 [102, 132] ms} & 18.3 [16.9, 20.5] mm & 5.16 [4.97, 5.29] deg & 35.3 [18.2, 44.9] mm \\
 Capture-Hold & 8.57 [7.98, 9.13] mm & 2.2 [1.25, 3.28] mm & 250 [168, 291] ms & 18.3 [16.2, 19] mm & \textbf{5.13 [4.96, 5.24] deg} & 34.1 [17.3, 43.6] mm \\
@@ -851,7 +851,7 @@ EgoAnchor & \textbf{3.68 [3.32, 4.51] mm} & \textbf{0.03 [0.028, 0.349] mm} & 75
   \caption{实验二的同 event 组件归因。$\Delta=\mathrm{Ablated}-\mathrm{Full}$，方向计数为正/零/负；护栏列报告同一配对的代价。}
   \label{tab:exp2-generated-summary}
 % EGOANCHOR-EXP-TWO-TABLE:BEGIN
-% Source CSV SHA-256: 096e4717edf0adcceb09e919df40ea8bb059939d7499f7942fd5f0f06413556c; Stage 3 TeX SHA-256: 8f4716b76523cae239150c5228fd8d0fdbb8b9a7d73aeebc81c6088295bcc8a8; generator: egoanchor.eval.materialize-v1; file: exp2_tables.tex
+% Source CSV SHA-256: 82faed992a729312533f189ff9716b4092736ea5d91720b3a6197ef1c4881762; Stage 3 TeX SHA-256: 088a41b668d46e9180a9fa7decb45437d6873f8e6d3a12fcade8d32aca4caf28; generator: egoanchor.eval.materialize-v1; file: exp2_tables.tex
 % 由 egoanchor.eval 自动生成，请勿手工修改本区块。
 % Table: exp2\_mechanism\_attribution
 \begingroup
@@ -862,10 +862,10 @@ EgoAnchor & \textbf{3.68 [3.32, 4.51] mm} & \textbf{0.03 [0.028, 0.349] mm} & 75
 \toprule
 机制 / 场景 & 主指标 & Full median [IQR] & Ablated median [IQR] & Delta [IQR]（+/0/-） & 护栏 Delta [IQR] \\
 \midrule
-采集时刻对齐（静止头动） & 平移误差 event-P95 ↓ & 3.68 [3.32, 4.51] mm & 8.73 [4.19, 17.7] mm & 5.58 [0.6, 14] mm; 3/0/1 & 旋转误差 event-P95 ↓: 0.41 [0.216, 0.813] deg \\
-VCD 接纳（遮挡恢复） & 遮挡窗平移 P95 ↓ & 1.82 [1.6, 2.27] mm & 24 [1.71, 48.3] mm & 21.9 [0, 46.3] mm; 5/0/2 & 持久恢复时间 ↓: 0 [0, 0] ms \\
-时序合成（起停 6DoF） & 运动窗近零保持比例 ↓ & 30.2 [24.3, 36.1] \% & 64.1 [53.5, 71.3] \% & 28.9 [23, 39.8] pp; 5/0/0 & 运动窗平移 P95 ↓: -8.54 [-9.04, 0.501] mm \\
-StaticLock（静止头动） & 位置 HP-RMS ↓ & 0.03 [0.028, 0.349] mm & 1.77 [0.989, 2.7] mm & 1.59 [0.959, 2.2] mm; 4/0/0 & 绝对平移误差中位数 ↓: 1.2 [1.06, 1.49] mm \\
+采集时刻对齐（静止头动） & 平移误差 event-P95 ↓ & \textbf{3.68 [3.32, 4.51] mm} & 8.73 [4.19, 17.7] mm & 5.58 [0.6, 14] mm; 3/0/1 & 旋转误差 event-P95 ↓: 0.41 [0.216, 0.813] deg \\
+VCD 接纳（遮挡恢复） & 遮挡窗平移 P95 ↓ & \textbf{1.82 [1.6, 2.27] mm} & 24 [1.71, 48.3] mm & 21.9 [0, 46.3] mm; 5/0/2 & 持久恢复时间 ↓: 0 [0, 0] ms \\
+时序合成（起停 6DoF） & 运动窗近零保持比例 ↓ & \textbf{30.2 [24.3, 36.1] \%} & 64.1 [53.5, 71.3] \% & 28.9 [23, 39.8] pp; 5/0/0 & 运动窗平移 P95 ↓: -8.54 [-9.04, 0.501] mm \\
+StaticLock（静止头动） & 位置 HP-RMS ↓ & \textbf{0.03 [0.028, 0.349] mm} & 1.77 [0.989, 2.7] mm & 1.59 [0.959, 2.2] mm; 4/0/0 & 绝对平移误差中位数 ↓: 1.2 [1.06, 1.49] mm \\
 \bottomrule
 \end{tabularx}
 \endgroup

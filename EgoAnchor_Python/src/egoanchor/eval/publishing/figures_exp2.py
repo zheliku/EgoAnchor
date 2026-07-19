@@ -62,7 +62,11 @@ def _finite(value: object) -> float | None:
 
 
 def _plot_delta_axis(axis, component: str, rows: list[Mapping[str, str]]) -> None:
-    """绘制单组件 Ablated - Full median/IQR 与 event 散点。"""
+    """绘制单组件 Ablated - Full median/IQR 摘要。
+
+    事件级配对点保留在 Stage 2 CSV/XLSX 中供审计；主图沿用 GPT 参考版的
+    极简摘要样式，只显示中位数、IQR、零基线和配对方向计数。
+    """
 
     metric_key = _PRIMARY_METRICS[component]
     selected = [row for row in rows if row.get("metric_key") == metric_key]
@@ -86,16 +90,6 @@ def _plot_delta_axis(axis, component: str, rows: list[Mapping[str, str]]) -> Non
         raise ValueError(f"实验二主归因 IQR 缺失：{component}")
     q1 = finite_q1 * scale
     q3 = finite_q3 * scale
-    jitter = np.linspace(-0.035, 0.035, len(values)) if len(values) > 1 else np.asarray([0.0])
-    axis.scatter(
-        jitter,
-        values,
-        s=11,
-        color="#8CB6D9",
-        alpha=0.7,
-        edgecolors="none",
-        zorder=1,
-    )
     axis.axhline(0.0, color="#777777", linewidth=0.75, zorder=0)
     axis.errorbar(
         0.0,
