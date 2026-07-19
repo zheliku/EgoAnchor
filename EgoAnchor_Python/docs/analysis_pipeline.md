@@ -2,6 +2,8 @@
 
 本文说明如何从五个只读 schema-v2 task 目录重建实验一/二结果。正式入口只有 `egoanchor.eval.cli`，科学参数的唯一入口是 `src/egoanchor/eval/config/analysis_params.toml`。
 
+面向采集新数据的逐步操作手册见 [`2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`](../../2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md)。本文保留阶段契约、开发者验收和扩展说明。
+
 ## 数据流与边界
 
 ```text
@@ -22,7 +24,7 @@ raw JSON/JSONL
 
 ## 完整重建
 
-以下命令在仓库的 `EgoAnchor_Python` 目录运行。PowerShell 不会替 Python 展开 `task_*` 或 `*.xlsx`，因此正式命令显式列出五个输入。
+以下命令在仓库的 `EgoAnchor_Python` 目录运行。复现新批次时优先使用中文操作手册中的动态 task 目录收集片段；这里仍列出当前五个正式目录，便于审计和 CI 复现。
 
 ```powershell
 $codeVersion = (git rev-parse HEAD).Trim()
