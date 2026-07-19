@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -10,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from ..schema_v2 import SCHEMA_VERSION, SchemaV2Error, validate_schema_mapping
+from .events import merged_event_text
 from .reader import SourceRow, TaskDataset, read_task
 
 
@@ -747,25 +747,7 @@ def _check_event_merge(
 ) -> None:
     """按冻结全序重建事件文本并与现有 events.jsonl 逐字节比较。"""
 
-    def sort_key(item: tuple[int, Mapping[str, Any]]) -> tuple[float, int, float, str, str, str]:
-        """为跨进程事件提供不依赖单调时钟比较的稳定全序。"""
-
-        source_rank, row = item
-        canonical = json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return (
-            float(row.get("created_unix_ms", 0.0)),
-            source_rank,
-            float(row.get("mono_ms", 0.0)),
-            _text(row.get("event_type") or row.get("event")),
-            _text(row.get("event_id")),
-            canonical,
-        )
-
-    ordered = sorted(fragment_events, key=sort_key)
-    expected = "".join(
-        json.dumps(row, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
-        for _, row in ordered
-    )
+    expected = merged_event_text(fragment_events)
     try:
         actual = (dataset.root / "events.jsonl").read_text(encoding="utf-8")
     except OSError as exc:

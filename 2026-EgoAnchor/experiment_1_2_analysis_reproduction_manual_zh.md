@@ -34,7 +34,7 @@ pixi run python -m egoanchor.eval.cli --help
 
 需要看到且只使用这五个命令：`qc`、`preprocess`、`analyze`、`publish`、`materialize-paper`。分析参数唯一来源是 `src/egoanchor/eval/config/analysis_params.toml`；正式结果不要临时修改参数。
 
-每个 raw task 目录应位于 `data/eval/` 下，目录名符合 `task_1_...` 到 `task_5_...`。目录内必须保留以下固定文件：
+每个 raw task 目录应位于 `data/eval/` 下，目录名符合 `task_1_...` 到 `task_5_...`。运行 QC 前必须有以下采集文件和跨端分片：
 
 ```text
 manifest.json
@@ -42,11 +42,12 @@ python_session.json
 python_candidates.jsonl
 python_events.jsonl
 unity_events.jsonl
-events.jsonl
 unity_reference.jsonl
 unity_admission.jsonl
 unity_render.jsonl
 ```
+
+`events.jsonl` 是本机派生文件，不要求采集端预先写出。QC 在它缺失时核对两个事件分片和停止态统计后原子生成；已有文件只验证，不覆盖。
 
 `manifest.session_id`、日志中的主键和跨端 session 配对信息必须来自同一次正式采集。不要把不同 session 的文件拼到同一目录，也不要为了通过检查而补写行数或时间戳。
 

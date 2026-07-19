@@ -1,5 +1,7 @@
 """Stage 1 原始 schema-v2 日志解析与硬 QC 的包级入口。"""
 
+from .events import finalize_task_events
+
 from .qc import (
     FORMAL_VARIANTS,
     QcIssue,
@@ -17,6 +19,7 @@ from .provenance import (
     stable_workbook_id,
 )
 from .reader import (
+    DERIVED_FILE_NAMES,
     EXPECTED_EVENTS,
     JSON_DOCUMENT_FILES,
     JSONL_TABLE_FILES,
@@ -26,6 +29,7 @@ from .reader import (
     SourceFileInfo,
     SourceRow,
     TaskDataset,
+    TASK_SOURCE_FILE_NAMES,
     flatten_json,
     iter_jsonl,
     read_json_document,
@@ -46,6 +50,7 @@ from .workbook import (
 
 __all__ = [
     "EMPTY_TEXT_MARKER",
+    "DERIVED_FILE_NAMES",
     "EXPECTED_EVENTS",
     "EXCEL_MAX_CELL_CHARS",
     "EXCEL_MAX_DATA_ROWS",
@@ -61,6 +66,7 @@ __all__ = [
     "SourceRow",
     "StageOneQcReport",
     "TaskDataset",
+    "TASK_SOURCE_FILE_NAMES",
     "WorkbookArtifact",
     "WorkbookValidationError",
     "WorkbookVerification",
@@ -68,6 +74,7 @@ __all__ = [
     "collect_source_files",
     "decode_workbook_text",
     "file_sha256",
+    "finalize_task_events",
     "flatten_json",
     "iter_jsonl",
     "read_json_document",

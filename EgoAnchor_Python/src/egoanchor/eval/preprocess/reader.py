@@ -37,6 +37,14 @@ JSONL_TABLE_FILES = {
 }
 """逻辑事实表到固定 JSONL 文件名的映射。"""
 
+TASK_SOURCE_FILE_NAMES = JSON_DOCUMENT_FILES + tuple(
+    filename for table, filename in JSONL_TABLE_FILES.items() if table != "events"
+)
+"""采集与同步必须提供的原始文档和事实分片。"""
+
+DERIVED_FILE_NAMES = (JSONL_TABLE_FILES["events"],)
+"""由本机安全物化、随后作为完整 task 契约读取的派生文件。"""
+
 _ROW_CONTRACT_CACHE: dict[type[Any], tuple[tuple[str, Any], ...]] = {}
 """dataclass 类型到字段契约的进程内缓存。"""
 
@@ -59,7 +67,7 @@ ROW_TYPES = {
 }
 """各事实表使用的 schema-v2 dataclass 行契约。"""
 
-REQUIRED_FILE_NAMES = JSON_DOCUMENT_FILES + tuple(JSONL_TABLE_FILES.values())
+REQUIRED_FILE_NAMES = TASK_SOURCE_FILE_NAMES + DERIVED_FILE_NAMES
 """一个完整 schema-v2 task 的固定文件集合。"""
 
 
@@ -370,8 +378,10 @@ def _matches_annotation(value: Any, annotation: Any) -> bool:
 
 __all__ = [
     "EXPECTED_EVENTS",
+    "DERIVED_FILE_NAMES",
     "JSONL_TABLE_FILES",
     "ROW_TYPES",
+    "TASK_SOURCE_FILE_NAMES",
     "REQUIRED_FILE_NAMES",
     "NormalizedValue",
     "SourceFileInfo",

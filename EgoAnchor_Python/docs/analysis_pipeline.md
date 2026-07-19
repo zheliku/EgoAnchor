@@ -8,13 +8,14 @@
 
 ```text
 raw JSON/JSONL
+  -> qc -> 确定性 events.jsonl
   -> preprocess -> 每个 task 一个完整 XLSX
   -> analyze -> 审计、指标、绘图和论文 CSV + 实验审阅 XLSX
   -> publish -> PDF/PNG 与四个 TeX 审计文件
   -> materialize-paper -> egoanchor_cn_v6.tex 受控区块
 ```
 
-- Stage 1 `preprocess` 只读 raw task 目录。任一 task 的 QC 失败时返回 2，整批不发布 XLSX。
+- Stage 1 只从 raw task 读取采集文件。唯一允许写回 raw 目录的派生文件是 `events.jsonl`：`qc` 和 `preprocess` 在它缺失时先核对 Python/Unity 事件分片与停止态统计，再原子生成；已有文件只验证，不覆盖。任一 task 的 QC 失败时返回 2，整批不发布 XLSX。
 - Stage 2 `analyze` 只读 Stage 1 XLSX，不得打开 raw JSON 或 JSONL。它同时发布正式 CSV 和便于人工检查的 `exp1_analysis.xlsx`、`exp2_analysis.xlsx`；审阅工作簿只重排同批已定稿行，不增加科学计算层，也不作为 Stage 3 输入。
 - Stage 3 `publish` 只读 Stage 2 CSV，不重新联接 reference、切事件窗或计算科学指标。
 - Stage 4 `materialize-paper` 的实验数据只来自 Stage 3 的四个固定 TeX，同时读取主稿作为写入目标；它不读取 CSV、XLSX 或 JSON/JSONL，也不接受 CSV 根目录。

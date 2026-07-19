@@ -24,7 +24,13 @@ from .analysis import (
     load_workbook_batch,
     publish_analysis_outputs,
 )
-from .preprocess import REQUIRED_FILE_NAMES, run_task_qc, write_task_workbook
+from .preprocess import (
+    REQUIRED_FILE_NAMES,
+    TASK_SOURCE_FILE_NAMES,
+    finalize_task_events,
+    run_task_qc,
+    write_task_workbook,
+)
 from .publishing import materialize_paper, publish_artifacts
 
 
@@ -384,9 +390,10 @@ def _run_analyze(args: argparse.Namespace) -> int:
 
 
 def _run_qc(args: argparse.Namespace) -> int:
-    """只读检查一个或多个 task，打印稳定 JSON 并返回统一退出码。"""
+    """物化缺失事件总表，再只读检查 task 并返回统一退出码。"""
 
-    _require_task_sources(args.task_dirs)
+    _require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
+    _finalize_task_events(args.task_dirs)
     reports = [run_task_qc(path) for path in args.task_dirs]
     if len(reports) == 1:
         payload: object = reports[0].to_dict()
@@ -402,8 +409,9 @@ def _run_qc(args: argparse.Namespace) -> int:
 def _run_preprocess(args: argparse.Namespace) -> int:
     """先对完整批次执行只读 QC，再逐 task 原子发布 workbook-v2。"""
 
-    _require_task_sources(args.task_dirs)
+    _require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
     destinations = _preprocess_destinations(args.task_dirs, args.out)
+    _finalize_task_events(args.task_dirs)
     reports = [(task_dir, run_task_qc(task_dir)) for task_dir in args.task_dirs]
     if not all(report.passed for _, report in reports):
         print(
@@ -458,14 +466,22 @@ def _run_preprocess(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _require_task_sources(task_dirs: Sequence[Path]) -> None:
+def _finalize_task_events(task_dirs: Sequence[Path]) -> None:
+    """逐 task 物化缺失事件总表，再确认完整文件集合。"""
+
+    for task_dir in task_dirs:
+        finalize_task_events(task_dir)
+    _require_task_sources(task_dirs, REQUIRED_FILE_NAMES)
+
+
+def _require_task_sources(task_dirs: Sequence[Path], file_names: Sequence[str]) -> None:
     """确认 task 目录和固定源文件存在；缺源统一交给退出码一处理。"""
 
     for task_dir in task_dirs:
         root = task_dir.expanduser()
         if not root.is_dir():
             raise FileNotFoundError(f"schema-v2 task 目录不存在：{root}")
-        missing = [name for name in REQUIRED_FILE_NAMES if not (root / name).is_file()]
+        missing = [name for name in file_names if not (root / name).is_file()]
         if missing:
             raise FileNotFoundError(f"schema-v2 task 缺少固定文件：{', '.join(missing)}")
 
@@ -494,7 +510,7 @@ def _command_help(command: str) -> str:
     """返回阶段命令的简短中文说明。"""
 
     descriptions = {
-        "qc": "执行 schema-v2 基础质量检查",
+        "qc": "物化跨端事件总表并执行 schema-v2 基础质量检查",
         "preprocess": "将原始 task 目录预处理为完整 XLSX",
         "analyze": "只从 XLSX 计算实验指标并发布 CSV",
         "publish": "只从 CSV 发布图表和 TeX",

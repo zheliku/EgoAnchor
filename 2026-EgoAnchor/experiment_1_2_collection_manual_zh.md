@@ -233,7 +233,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 2. **先停止 5090 上的 Python**，按 `q`、`Esc` 或正常终止服务，并在远端确认 `python_session.json` 的 `state` 已变为 `python_stopped`。
 3. 立即回到 Unity，保持 Play Mode，按 `F` 或长按右手 B 1.5 秒停止 session。若有活动 trial，它会自动写入 `trial_rejected`，已经完成的 `[OK]` 任务不受影响。
 4. 等 Unity 控制台显示 manifest 已写入，再退出 Play Mode。
-5. 等 Mutagen 的 `logs-5090` 回到 `Watching for changes`，确认没有 conflict，然后运行 QC。QC 会在两个事件分片完整时原子生成最终 `events.jsonl`。
+5. 等 Mutagen 的 `logs-5090` 回到 `Watching for changes`，确认没有 conflict，然后运行 QC。若 `events.jsonl` 尚不存在，QC 会先核对两个事件分片与停止态 writer 统计，再原子生成该文件；已有文件只验证，不会被覆盖。
 
 不要在 Python 仍持续发布 PoseResult 时先结束 Unity session。QC 会统计跨端未消费的 Python candidate；实际进入 Unity 的 candidate 仍必须完整覆盖 8 个 runtime。
 
@@ -252,7 +252,7 @@ events.jsonl
 audit_samples/
 ```
 
-`python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会合并生成 `events.jsonl`。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。
+`python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会在缺少总表时生成 `events.jsonl`；如果任一分片未停止、行数不符、存在丢行或写入失败，QC 返回 2，且不会留下临时或部分总表。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。
 
 ## 九、运行 QC 和分析
 

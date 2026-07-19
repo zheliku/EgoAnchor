@@ -99,8 +99,8 @@ class PreprocessCliTests(unittest.TestCase):
             self.assertFalse(output_root.exists())
             self.assertIn("task 目录不存在", output.getvalue())
 
-    def test_preprocess_missing_required_file_returns_io_error(self) -> None:
-        """固定输入文件缺失属于缺源错误，必须返回退出码一。"""
+    def test_preprocess_materializes_missing_derived_events(self) -> None:
+        """事件总表缺失时先安全物化，再发布完整工作簿。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_valid_task(Path(tmp))
@@ -108,12 +108,30 @@ class PreprocessCliTests(unittest.TestCase):
             output_root = Path(tmp) / "complete"
             output = io.StringIO()
 
+            with contextlib.redirect_stdout(output):
+                exit_code = eval_cli.main(["preprocess", str(root), "--out", str(output_root)])
+
+            self.assertEqual(exit_code, eval_cli.EXIT_OK)
+            self.assertTrue((root / "events.jsonl").is_file())
+            self.assertTrue((output_root / "task_1_complete.xlsx").is_file())
+
+    def test_preprocess_missing_event_fragment_returns_io_error(self) -> None:
+        """原始事件分片缺失属于缺源错误，且不得生成事件总表。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            (root / "events.jsonl").unlink()
+            (root / "unity_events.jsonl").unlink()
+            output_root = Path(tmp) / "complete"
+            output = io.StringIO()
+
             with contextlib.redirect_stderr(output):
                 exit_code = eval_cli.main(["preprocess", str(root), "--out", str(output_root)])
 
             self.assertEqual(exit_code, eval_cli.EXIT_IO_ERROR)
+            self.assertFalse((root / "events.jsonl").exists())
             self.assertFalse(output_root.exists())
-            self.assertIn("缺少固定文件", output.getvalue())
+            self.assertIn("unity_events.jsonl", output.getvalue())
 
     def test_preprocess_invalid_schema_returns_data_error(self) -> None:
         """文件齐全但 schema 非法时仍属于数据契约错误，必须返回退出码二。"""
@@ -176,6 +194,7 @@ class PreprocessCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_valid_task(Path(tmp))
+            (root / "events.jsonl").unlink()
             output = io.StringIO()
 
             with contextlib.redirect_stderr(output):
@@ -183,6 +202,7 @@ class PreprocessCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, eval_cli.EXIT_DATA_ERROR)
             self.assertFalse((root / "derived").exists())
+            self.assertFalse((root / "events.jsonl").exists())
             self.assertIn("禁止在只读 task 目录内发布工作簿", output.getvalue())
 
 
