@@ -280,7 +280,7 @@ class MaterializeTests(unittest.TestCase):
             repository_root / "2026-EgoAnchor" / "egoanchor_cn_v6.tex"
         ).read_text(encoding="utf-8")
         self.assertIn(
-            "figures/generated/exp1_behavior_overview.pdf",
+            "figures/generated/exp1_final_v2.pdf",
             manuscript,
         )
         for legacy_name in (

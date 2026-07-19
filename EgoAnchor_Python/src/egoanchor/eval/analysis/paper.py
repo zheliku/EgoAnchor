@@ -63,10 +63,18 @@ _EXP2_TABLE_METRICS = {
         "occlusion_translation_pninetyfive_mm",
         "durable_recovery_time_ms",
     ),
-    "temporal_synthesis": ("motion_hold_ratio", "motion_translation_pninetyfive_mm"),
+    "temporal_synthesis": ("translation_lag_residual_mm", "effective_translation_lag_ms"),
     "static_lock": ("position_hp_rms_mm", "absolute_translation_median_mm"),
 }
 """实验二四行表的主效应与代价/guardrail 指标。"""
+
+_COMPONENT_BEHAVIORS = {
+    "capture_time_alignment": "防止头动泄漏",
+    "static_lock": "抑制静止抖动",
+    "vcd_admission": "遮挡期限制有害更新",
+    "temporal_synthesis": "连续平移轨迹质量",
+}
+"""GPT final v2 表中组件对应的系统行为。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,61 +256,49 @@ def _exp1_rows(
             )
         )
 
+    def summary_value(variant_id: str, scenario_id: str, metric_key: str) -> tuple[float, str]:
+        """读取表格所需的有限中位数和来源 hash。"""
+
+        summary = summary_by_key.get((scenario_id, variant_id, metric_key))
+        if summary is None or summary.median is None:
+            raise ValueError(f"实验一论文主指标缺失：{scenario_id}/{variant_id}/{metric_key}")
+        return float(summary.median), summary.input_workbook_sha256
+
     table_cells: list[dict[str, object]] = []
-    table_metrics = (
-        ("World P95 ↓", "static_head_motion", "translation_event_pninetyfive_mm"),
-        ("HP--RMS ↓", "static_head_motion", "position_hp_rms_mm"),
-        ("Response ↓", "start_stop_6dof", "visible_response_ms"),
-        ("Trans. residual P95 ↓", "continuous_translation", "translation_lag_pninetyfive_residual_mm"),
-        ("Rot. residual P95 ↓", "continuous_rotation", "angular_lag_pninetyfive_residual_deg"),
-        ("Occlusion P95 ↓", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
+    scalar_columns = (
+        ("平移 P95 (mm)", "static_head_motion", "translation_event_pninetyfive_mm", True),
+        ("HP--RMS (mm)", "static_head_motion", "position_hp_rms_mm", True),
+        ("遮挡窗 P95 (mm)", "occlusion_recovery", "occlusion_translation_pninetyfive_mm", True),
+        ("Start-transition (ms)", "start_stop_6dof", "visible_response_ms", False),
     )
-    formatted: dict[tuple[str, str], tuple[str, float, str]] = {}
-    for column_key, scenario_id, metric_key in table_metrics:
-        definition = get_metric_definition(metric_key)
-        selected_by_variant = {
-            variant_id: summary_by_key.get((scenario_id, variant_id, metric_key))
-            for variant_id in EXP1_VARIANTS
-        }
-        if any(summary is None for summary in selected_by_variant.values()):
-            raise ValueError(f"实验一论文主指标缺失或未定义：{scenario_id}/{metric_key}")
-        medians: dict[str, float] = {}
-        for variant_id, selected_summary in selected_by_variant.items():
-            assert selected_summary is not None
-            if selected_summary.median is None or selected_summary.q1 is None or selected_summary.q3 is None:
-                raise ValueError(f"实验一论文主指标统计量不完整：{scenario_id}/{variant_id}/{metric_key}")
-            median, _, unit = _metric_value(selected_summary.median, selected_summary.metric_unit, definition.tex_suffix)
-            q1, _, _ = _metric_value(selected_summary.q1, selected_summary.metric_unit, definition.tex_suffix)
-            q3, _, _ = _metric_value(selected_summary.q3, selected_summary.metric_unit, definition.tex_suffix)
-            formatted[(variant_id, column_key)] = (
-                f"{_display_number(median)} [{_display_number(q1)}, {_display_number(q3)}] {unit}",
-                median,
-                selected_summary.input_workbook_sha256,
-            )
-            medians[variant_id] = median
-        best = (
-            min(medians.values())
-            if definition.direction == "lower_is_better"
-            else max(medians.values())
-        )
-        for variant_id, median in medians.items():
-            display_text, _, source_hash = formatted[(variant_id, column_key)]
-            if math.isclose(median, best, rel_tol=0.0, abs_tol=1e-12):
-                formatted[(variant_id, column_key)] = (f"[BEST]{display_text}", median, source_hash)
+    scalar_values: dict[tuple[str, str], tuple[float, str, bool]] = {}
+    for column_key, scenario_id, metric_key, ranked in scalar_columns:
+        medians = {variant: summary_value(variant, scenario_id, metric_key) for variant in EXP1_VARIANTS}
+        best = min(value for value, _ in medians.values()) if ranked else math.nan
+        for variant, (value, row_hash) in medians.items():
+            scalar_values[(variant, column_key)] = (value, row_hash, ranked and math.isclose(value, best, abs_tol=1e-12))
+    lag_values = {variant: summary_value(variant, "continuous_translation", "effective_translation_lag_ms") for variant in EXP1_VARIANTS}
+    residual_values = {variant: summary_value(variant, "continuous_translation", "translation_lag_residual_mm") for variant in EXP1_VARIANTS}
+    best_residual = min(value for value, _ in residual_values.values())
     for variant_id in EXP1_VARIANTS:
-        for column_key, _, _ in table_metrics:
-            display_text, _, source_hash = formatted[(variant_id, column_key)]
-            table_cells.append(
-                _table_cell(
-                    EXP1_ID,
-                    "exp1_scenario_summary",
-                    variant_id,
-                    column_key,
-                    display_text,
-                    "exp1/scenario_summary.csv",
-                    source_hash,
-                )
-            )
+        for column_key, _, _, _ in scalar_columns[:2]:
+            value, row_hash, is_best = scalar_values[(variant_id, column_key)]
+            display = f"{_display_number(value)}"
+            if is_best:
+                display = f"[BEST]{display}"
+            table_cells.append(_table_cell(EXP1_ID, "exp1_scenario_summary", variant_id, column_key, display, "exp1/scenario_summary.csv", row_hash))
+        lag, lag_hash = lag_values[variant_id]
+        residual, _ = residual_values[variant_id]
+        tradeoff = f"{_display_number(lag)} / {_display_number(residual)}"
+        if math.isclose(residual, best_residual, abs_tol=1e-12):
+            tradeoff = f"[BEST]{tradeoff}"
+        table_cells.append(_table_cell(EXP1_ID, "exp1_scenario_summary", variant_id, "Lag / aligned RMSE (ms / mm)", tradeoff, "exp1/scenario_summary.csv", lag_hash))
+        for column_key, _, _, _ in scalar_columns[2:]:
+            value, row_hash, is_best = scalar_values[(variant_id, column_key)]
+            display = f"{_display_number(value)}"
+            if is_best:
+                display = f"[BEST]{display}"
+            table_cells.append(_table_cell(EXP1_ID, "exp1_scenario_summary", variant_id, column_key, display, "exp1/scenario_summary.csv", row_hash))
     return numbers, table_cells
 
 
@@ -420,10 +416,7 @@ def _exp2_rows(
             q3_value, _, _ = _metric_value(q3, summary.metric_unit, definition.tex_suffix)
             return f"{_display_number(median_value)} [{_display_number(q1_value)}, {_display_number(q3_value)}] {unit}"
 
-        row_label = (
-            f"{_COMPONENT_LABELS[component.component_id]}"
-            f"（{_SCENARIO_LABELS[component.scenario_id]}）"
-        )
+        row_label = _COMPONENT_LABELS[component.component_id]
         full_display = distribution_text(main, "full")
         ablation_display = distribution_text(main, "ablation")
         if main.full_median is None or main.ablation_median is None:
@@ -441,17 +434,27 @@ def _exp2_rows(
                 ablation_display = f"[BEST]{ablation_display}"
         else:
             raise ValueError(f"实验二主指标方向未定义：{main_key}")
+        if component.component_id == "temporal_synthesis":
+            assert guardrail.full_median is not None
+            assert main.median is not None
+            assert guardrail.median is not None
+            full_display = (
+                f"[BEST]{_display_number(guardrail.full_median)} / "
+                f"{_display_number(main.full_median)} ms/mm"
+            )
+            effect_display = (
+                f"{_display_number(guardrail.median)} ms / "
+                f"{_display_number(main.median)} mm"
+            )
+            guardrail_display = "时延与残差必须联合解释"
+        else:
+            effect_display = delta_text(main)
+            guardrail_display = f"{get_metric_definition(guardrail_key).label}: {delta_text(guardrail)}"
         values = {
-            "主指标": f"{get_metric_definition(main_key).label} {_direction_arrow(main_key)}",
-            "Full median [IQR]": full_display,
-            "Ablated median [IQR]": ablation_display,
-            "Delta [IQR]（+/0/-）": (
-                f"{delta_text(main)}; "
-                f"{main.positive_count}/{main.zero_count}/{main.negative_count}"
-            ),
-            "护栏 Delta [IQR]": (
-                f"{get_metric_definition(guardrail_key).label} {_direction_arrow(guardrail_key)}: {delta_text(guardrail)}"
-            ),
+            "对应系统行为": _COMPONENT_BEHAVIORS[component.component_id],
+            "Full EgoAnchor": full_display,
+            "关闭后的效应": effect_display,
+            "护栏 / 解释": guardrail_display,
         }
         for column_key, display_value in values.items():
             table_cells.append(

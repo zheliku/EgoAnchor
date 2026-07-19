@@ -1,4 +1,4 @@
-"""实验一 GPT 风格三联图的 CSV-only 绘制函数。"""
+"""按 GPT final v2 规范绘制实验一三联图。"""
 
 from __future__ import annotations
 
@@ -12,11 +12,16 @@ import numpy as np
 from .style import PlotSpec, save_figure_pair
 
 
-_FIGURE_SIZE = (7.15, 2.25)
-"""跨双栏三联图尺寸，接近 GPT 版的宽屏构图。"""
-
 _SYSTEM_ORDER = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
-"""实验一系统显示顺序。"""
+"""实验一四系统固定显示顺序。"""
+
+_SHORT_LABELS = {
+    "Arrival-Hold": "Arrival",
+    "Capture-Hold": "Capture",
+    "One-Euro Anchor": "One-Euro",
+    "EgoAnchor": "EgoAnchor",
+}
+"""图内短标签。"""
 
 _COLORS = {
     "Arrival-Hold": "#2878B5",
@@ -24,115 +29,121 @@ _COLORS = {
     "One-Euro Anchor": "#2CA02C",
     "EgoAnchor": "#D62728",
 }
-"""迁移 GPT 版的高对比、灰度可区分色板。"""
+"""GPT final v2 四系统色板。"""
 
-_MARKERS = {
-    "Arrival-Hold": "s",
-    "Capture-Hold": "o",
-    "One-Euro Anchor": "^",
-    "EgoAnchor": "D",
-}
-"""四个系统的形状编码。"""
-
-_SUMMARY_COLOR = "#2878B5"
-"""GPT 摘要栏使用的统一蓝色。"""
+_MARKERS = {"Arrival-Hold": "s", "Capture-Hold": "o", "One-Euro Anchor": "^", "EgoAnchor": "D"}
+"""GPT final v2 四系统 marker。"""
 
 
 def _finite(row: Mapping[str, str], key: str) -> float | None:
-    """读取有限 CSV 浮点值，空值返回 ``None``。"""
+    """读取有限 CSV 数值，空字符串返回空值。"""
 
     raw = str(row.get(key) or "").strip()
     if not raw:
         return None
-    try:
-        value = float(raw)
-    except ValueError as exc:
-        raise ValueError(f"实验一 plot 列 {key} 不是数字") from exc
+    value = float(raw)
     if not math.isfinite(value):
-        raise ValueError(f"实验一 plot 列 {key} 不是有限值")
+        raise ValueError(f"实验一 plot 列 {key} 不是有限数值")
     return value
 
 
-def _summary_rows(spec: PlotSpec, panel_id: str) -> dict[str, Mapping[str, str]]:
-    """按系统整理 Stage 2 已计算的摘要行。"""
+def _summary_groups(spec: PlotSpec, panel_id: str) -> tuple[dict[str, list[Mapping[str, str]]], dict[str, Mapping[str, str]]]:
+    """分离 segment 点和 Stage 2 summary 行。"""
 
-    rows: dict[str, Mapping[str, str]] = {
-        str(row.get("variant_id") or ""): row
-        for row in spec.rows
-        if row.get("panel_id") == panel_id
-    }
-    if tuple(rows) != tuple(name for name in _SYSTEM_ORDER if name in rows):
-        raise ValueError(f"实验一摘要系统顺序或内容不完整：{panel_id}")
-    return rows
+    segments: dict[str, list[Mapping[str, str]]] = defaultdict(list)
+    summaries: dict[str, Mapping[str, str]] = {}
+    for row in spec.rows:
+        if row.get("panel_id") != panel_id:
+            continue
+        variant = str(row.get("variant_id") or "")
+        if row.get("point_kind") == "segment":
+            segments[variant].append(row)
+        elif row.get("point_kind") == "summary":
+            summaries[variant] = row
+    if set(segments) != set(_SYSTEM_ORDER) or set(summaries) != set(_SYSTEM_ORDER):
+        raise ValueError(f"实验一 {panel_id} 缺少完整四系统 segment/summary")
+    return segments, summaries
 
 
-def _plot_summary(axis, spec: PlotSpec, panel_id: str, title: str, ylabel: str) -> None:
-    """绘制 GPT 风格的四系统 median/IQR 摘要点。"""
+def _plot_summary(axis, spec: PlotSpec, panel_id: str, title: str, subtitle: str, ylabel: str) -> None:
+    """绘制所有 segment 散点和每系统 median/IQR。"""
 
-    grouped = _summary_rows(spec, panel_id)
+    segments, summaries = _summary_groups(spec, panel_id)
     x = np.arange(len(_SYSTEM_ORDER), dtype=float)
     for index, name in enumerate(_SYSTEM_ORDER):
-        row = grouped[name]
-        median = _finite(row, "median")
-        q1 = _finite(row, "q1")
-        q3 = _finite(row, "q3")
+        values = np.asarray([_finite(row, "value") for row in segments[name]], dtype=float)
+        offsets = np.linspace(-0.11, 0.11, len(values)) if len(values) > 1 else np.asarray([0.0])
+        axis.scatter(
+            x[index] + offsets,
+            values,
+            color=_COLORS[name],
+            marker=_MARKERS[name],
+            s=24,
+            alpha=0.42,
+            linewidths=0.0,
+            zorder=1,
+        )
+        summary = summaries[name]
+        median = _finite(summary, "median")
+        q1 = _finite(summary, "q1")
+        q3 = _finite(summary, "q3")
         if median is None or q1 is None or q3 is None:
-            raise ValueError(f"实验一摘要图统计量不完整：{panel_id}/{name}")
+            raise ValueError(f"实验一 {panel_id}/{name} summary 不完整")
         axis.errorbar(
             x[index],
             median,
             yerr=np.asarray([[median - q1], [q3 - median]]),
-            color=_SUMMARY_COLOR,
-            marker="o",
-            markersize=7.0,
-            capsize=3.0,
-            linewidth=1.35,
-            markeredgecolor="white",
-            markeredgewidth=0.45,
+            color=_COLORS[name],
+            marker=_MARKERS[name],
+            markersize=7.5,
+            capsize=4,
+            linewidth=1.7,
             zorder=3,
         )
-    axis.set_xticks(x, ("Arrival", "Capture", "One-Euro", "EgoAnchor"), rotation=12, ha="right")
-    axis.set_title(title, fontsize=9.5, pad=5)
+    axis.set_xticks(x, [_SHORT_LABELS[name] for name in _SYSTEM_ORDER], rotation=16, ha="right")
+    axis.set_title(title, loc="left", fontweight="bold", pad=15)
+    axis.text(0.0, 1.01, subtitle, transform=axis.transAxes, ha="left", va="bottom", fontsize=8.8)
     axis.set_ylabel(ylabel)
-    axis.grid(axis="y", color="#D9D9D9", linewidth=0.45)
+    axis.set_ylim(bottom=0)
+    axis.grid(axis="y", linestyle=":", linewidth=0.75, alpha=0.35)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
 
 
 def _plot_lag_tradeoff(axis, spec: PlotSpec) -> None:
-    """绘制全部持续平移 event 点与 Stage 2 median/IQR。"""
+    """绘制持续平移全部 segment 的 lag--RMSE 散点和摘要误差棒。"""
 
     event_rows: dict[str, list[Mapping[str, str]]] = defaultdict(list)
     summaries: dict[str, Mapping[str, str]] = {}
     for row in spec.rows:
-        name = str(row.get("variant_id") or "")
-        if row.get("point_kind") == "event":
-            event_rows[name].append(row)
+        variant = str(row.get("variant_id") or "")
+        if row.get("point_kind") == "segment":
+            event_rows[variant].append(row)
         elif row.get("point_kind") == "summary":
-            summaries[name] = row
+            summaries[variant] = row
     if set(event_rows) != set(_SYSTEM_ORDER) or set(summaries) != set(_SYSTEM_ORDER):
-        raise ValueError("lag--fidelity 图缺少完整四系统 event/summary")
+        raise ValueError("lag--RMSE 图缺少完整四系统 segment/summary")
     for name in _SYSTEM_ORDER:
         rows = event_rows[name]
         axis.scatter(
             [_finite(row, "effective_lag_ms") for row in rows],
-            [_finite(row, "p95_residual_mm") for row in rows],
+            [_finite(row, "lag_residual_mm") for row in rows],
             color=_COLORS[name],
             marker=_MARKERS[name],
-            s=12,
-            alpha=0.22,
+            s=24,
+            alpha=0.28,
+            label=_SHORT_LABELS[name],
             linewidths=0.0,
-            zorder=1,
         )
         summary = summaries[name]
         lag = _finite(summary, "effective_lag_ms")
-        residual = _finite(summary, "p95_residual_mm")
+        residual = _finite(summary, "lag_residual_mm")
         lag_q1 = _finite(summary, "lag_q1_ms")
         lag_q3 = _finite(summary, "lag_q3_ms")
         residual_q1 = _finite(summary, "residual_q1_mm")
         residual_q3 = _finite(summary, "residual_q3_mm")
         if None in {lag, residual, lag_q1, lag_q3, residual_q1, residual_q3}:
-            raise ValueError(f"lag--fidelity 摘要不完整：{name}")
+            raise ValueError(f"lag--RMSE 摘要不完整：{name}")
         assert lag is not None and residual is not None
         assert lag_q1 is not None and lag_q3 is not None
         assert residual_q1 is not None and residual_q3 is not None
@@ -143,52 +154,31 @@ def _plot_lag_tradeoff(axis, spec: PlotSpec) -> None:
             yerr=np.asarray([[residual - residual_q1], [residual_q3 - residual]]),
             color=_COLORS[name],
             marker=_MARKERS[name],
-            markersize=7.0,
-            capsize=2.5,
-            linewidth=1.25,
-            label=name,
+            markersize=8,
+            capsize=3.5,
+            linewidth=1.7,
             zorder=3,
         )
-    axis.text(0.04, 0.04, "lower-left is better", transform=axis.transAxes, va="bottom", color="#555555")
-    axis.set_title("Translation trade-off", fontsize=9.5, pad=5)
     axis.set_xlabel("Effective lag (ms)")
-    axis.set_ylabel("Lag-aligned residual (mm)")
-    axis.grid(axis="y", color="#D9D9D9", linewidth=0.45)
+    axis.set_ylabel("Lag-aligned translation RMSE (mm)")
+    axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=15)
+    axis.text(0.0, 1.01, "Lag and residual form a paired trade-off", transform=axis.transAxes, ha="left", va="bottom", fontsize=8.8)
+    axis.annotate("better", xy=(0.07, 0.08), xytext=(0.26, 0.24), xycoords="axes fraction", textcoords="axes fraction", arrowprops={"arrowstyle": "->", "linewidth": 0.9})
+    axis.grid(axis="both", linestyle=":", linewidth=0.75, alpha=0.35)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
-
-
-def _legend(figure) -> None:
-    """在 lag 面板内建立 GPT 风格短图例。"""
-
-    handles = [
-        plt.Line2D(
-            (0,),
-            (0,),
-            marker=_MARKERS[name],
-            color=_COLORS[name],
-            linestyle="",
-            markersize=5.8,
-            label=name.replace("-Hold", ""),
-        )
-        for name in _SYSTEM_ORDER
-    ]
-    figure.axes[1].legend(handles=handles, loc="upper left", frameon=False, fontsize=7.0, handletextpad=0.35)
+    axis.legend(frameon=False, ncol=2, loc="upper center")
 
 
 def publish_exp1(specs: Mapping[str, PlotSpec], output_root) -> dict[str, tuple[str, str]]:
-    """绘制 GPT 风格实验一三联图并返回 PDF/PNG hash。"""
+    """发布 GPT final v2 风格实验一三联图。"""
 
-    figure, axes = plt.subplots(1, 3, figsize=_FIGURE_SIZE, gridspec_kw={"width_ratios": (1.0, 1.1, 1.0)})
-    _plot_summary(axes[0], specs["exp1_summary"], "world_consistency", "(a) World consistency", "Translation P95 (mm)")
+    figure, axes = plt.subplots(1, 3, figsize=(13.9, 3.58), gridspec_kw={"width_ratios": (1.0, 1.06, 1.0)})
+    _plot_summary(axes[0], specs["exp1_summary"], "world_consistency", "(a) World consistency", "Head motion should not move a static anchor", "Segment-wise translation P95 (mm)")
     _plot_lag_tradeoff(axes[1], specs["exp1_lag_tradeoff"])
-    axes[1].set_title("(b) Translation trade-off", fontsize=9.5, pad=5)
-    _plot_summary(axes[2], specs["exp1_summary"], "failure_containment", "(c) Failure containment", "Occlusion-window P95 (mm)")
-    figure.subplots_adjust(left=0.055, right=0.995, bottom=0.23, top=0.88, wspace=0.35)
-    _legend(figure)
-    return {
-        "exp1_behavior_overview": save_figure_pair(figure, output_root, "exp1_behavior_overview")
-    }
+    _plot_summary(axes[2], specs["exp1_summary"], "failure_containment", "(c) Failure containment", "Low-quality updates should not corrupt the anchor", "Occlusion-episode translation P95 (mm)")
+    figure.subplots_adjust(left=0.045, right=0.995, bottom=0.22, top=0.82, wspace=0.38)
+    return {"exp1_final_v2": save_figure_pair(figure, output_root, "exp1_final_v2")}
 
 
 __all__ = ["publish_exp1"]

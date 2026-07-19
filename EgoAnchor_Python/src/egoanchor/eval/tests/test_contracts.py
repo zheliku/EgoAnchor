@@ -344,20 +344,21 @@ class ContractTests(unittest.TestCase):
         changes = {item.version: item for item in CONTRACT_CHANGELOG}
         metric_by_key = {metric.key: metric for metric in METRIC_DEFINITIONS}
 
-        self.assertEqual(versions["csv"], 6)
+        self.assertEqual(versions["csv"], 7)
         self.assertEqual(versions["metrics"], 5)
         self.assertEqual(versions["analysis_params"], 4)
         self.assertEqual(versions["analysis_workbook"], 1)
-        self.assertEqual(versions["csv"], 6)
+        self.assertEqual(versions["csv"], 7)
         self.assertTrue(changes["csv-v5"].breaking)
         self.assertTrue(changes["csv-v6"].breaking)
+        self.assertTrue(changes["csv-v7"].breaking)
         self.assertTrue(changes["csv-v2"].breaking)
         self.assertTrue(changes["metrics-v3"].breaking)
         self.assertTrue(changes["csv-v3"].breaking)
         self.assertTrue(changes["metrics-v4"].breaking)
         self.assertTrue(changes["metrics-v5"].breaking)
         self.assertTrue(changes["analysis_params-v4"].breaking)
-        self.assertEqual(versions["csv"], 6)
+        self.assertEqual(versions["csv"], 7)
         self.assertTrue(changes["csv-v4"].breaking)
         expected_scenarios = {
             "start_stop_rotation_pninetyfive_deg": "start_stop_6dof",
@@ -424,6 +425,12 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("exp1_motion_events", contracts)
         self.assertNotIn("exp1_occlusion_events", contracts)
         self.assertIn("exp2_mechanism_attribution", contracts)
+
+    def test_gpt_v2_lag_plot_contract_exposes_rmse(self) -> None:
+        """GPT v2 动态图必须直接声明 lag 对齐 RMSE，而不是只暴露 P95。"""
+
+        contract = next(item for item in CSV_TABLE_CONTRACTS if item.name == "exp1_lag_tradeoff")
+        self.assertIn("lag_residual_mm", contract.column_names())
 
     def test_analysis_params_are_valid_and_parameter_lines_have_comments(self) -> None:
         """TOML 可解析，且每个参数赋值行都有中文同行注释。"""

@@ -46,7 +46,7 @@ class ContractChange:
 
 CONTRACT_VERSIONS = (
     ContractVersion("workbook", 2, "Stage 1 无损 XLSX 工作簿契约"),
-    ContractVersion("csv", 6, "Stage 2 实验一/二行为图与论文数据 CSV 契约"),
+    ContractVersion("csv", 7, "Stage 2 GPT final v2 图表与论文数据 CSV 契约"),
     ContractVersion("metrics", 5, "实验一增强行为指标定义契约"),
     ContractVersion("analysis_params", 4, "实验一增强冻结分析参数契约"),
     ContractVersion("analysis_workbook", 1, "Stage 2 实验审阅 XLSX 契约"),
@@ -68,6 +68,11 @@ CONTRACT_CHANGELOG = (
     ContractChange(
         "csv-v6",
         "压缩论文显示表的重复语义列，冻结配对方向同行显示和三位有效数字投影。",
+        True,
+    ),
+    ContractChange(
+        "csv-v7",
+        "按 GPT final v2 呈现增加 segment 散点、lag 对齐 RMSE 与 Full/Disabled 组件摘要。",
         True,
     ),
     ContractChange("metrics-v1", "固定五场景指标、单位、方向和 TeX 命名。", True),

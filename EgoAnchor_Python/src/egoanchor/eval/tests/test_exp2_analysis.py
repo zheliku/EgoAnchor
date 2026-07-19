@@ -192,10 +192,11 @@ class Exp2ComponentTests(unittest.TestCase):
         temporal = next(
             component for component in EXP2_COMPONENTS if component.component_id == "temporal_synthesis"
         )
-        self.assertEqual(temporal.primary_metric_keys, ("motion_hold_ratio",))
-        self.assertIn("jump_pninetyfive_mm", temporal.metric_keys)
-        self.assertIn("jump_pninetynine_mm", temporal.metric_keys)
-        self.assertIn("post_stop_position_jitter_rms_mm", temporal.metric_keys)
+        self.assertEqual(temporal.scenario_id, "continuous_translation")
+        self.assertEqual(
+            temporal.primary_metric_keys,
+            ("effective_translation_lag_ms", "translation_lag_residual_mm"),
+        )
 
     def test_pair_delta_uses_ablation_minus_full_and_component_key(self) -> None:
         """静止两个消融共享 metric 时仍必须有不同 component 主键。"""

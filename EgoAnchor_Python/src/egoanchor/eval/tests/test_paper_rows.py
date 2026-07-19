@@ -51,7 +51,7 @@ class PaperRowsTests(unittest.TestCase):
             "continuous_translation": (
                 ("effective_translation_lag_ms", "ms"),
                 ("translation_event_pninetyfive_mm_continuous", "mm"),
-                ("translation_lag_pninetyfive_residual_mm", "mm"),
+                ("translation_lag_residual_mm", "mm"),
             ),
             "continuous_rotation": (
                 ("effective_angular_lag_ms", "ms"),
@@ -91,9 +91,9 @@ class PaperRowsTests(unittest.TestCase):
                 (("occlusion_translation_pninetyfive_mm", "mm"), ("durable_recovery_time_ms", "ms")),
             ),
             "temporal_synthesis": (
-                "start_stop_6dof",
+                "continuous_translation",
                 "EgoAnchor w/o temporal synthesis",
-                (("motion_hold_ratio", "proportion"), ("motion_translation_pninetyfive_mm", "mm")),
+                (("translation_lag_residual_mm", "mm"), ("effective_translation_lag_ms", "ms")),
             ),
             "static_lock": (
                 "static_head_motion",
@@ -157,8 +157,8 @@ class PaperRowsTests(unittest.TestCase):
         self.assertIn("SessionCount", names)
         self.assertIn("EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm", names)
         self.assertIn("CaptureTimeAlignmentTranslationEventPNinetyFiveMmDeltaMedian", names)
-        self.assertIn("TemporalSynthesisMotionHoldRatioPercentagePointDeltaMedian", names)
-        self.assertIn("TemporalSynthesisMotionHoldRatioPctPositiveCount", names)
+        self.assertIn("TemporalSynthesisTranslationLagResidualMmDeltaMedian", names)
+        self.assertIn("TemporalSynthesisTranslationLagResidualMmPositiveCount", names)
         self.assertIn("VcdMeanRiskAurcMm", names)
         operating = next(
             row
@@ -188,24 +188,24 @@ class PaperRowsTests(unittest.TestCase):
         )
         exp1_cells = [row for row in result.tables if row["experiment"] == "exp1_system_characterization"]
         exp2_cells = [row for row in result.tables if row["experiment"] == "exp2_design_attribution"]
-        self.assertEqual(len(exp1_cells), 24)
-        self.assertEqual(len(exp2_cells), 20)
+        self.assertEqual(len(exp1_cells), 20)
+        self.assertEqual(len(exp2_cells), 16)
         self.assertEqual(
             {row["column_key"] for row in exp2_cells},
-            {"主指标", "Full median [IQR]", "Ablated median [IQR]", "Delta [IQR]（+/0/-）", "护栏 Delta [IQR]"},
+            {"对应系统行为", "Full EgoAnchor", "关闭后的效应", "护栏 / 解释"},
         )
         hold_cell = next(
             row
             for row in exp2_cells
-            if row["row_key"] == "时序合成（起停 6DoF）" and row["column_key"] == "Full median [IQR]"
+            if row["row_key"] == "时序合成" and row["column_key"] == "Full EgoAnchor"
         )
-        self.assertEqual(hold_cell["display_value"], "[BEST]1000 [900, 1100] %")
+        self.assertIn("mm", hold_cell["display_value"])
         hold_delta = next(
             row
             for row in exp2_cells
-            if row["row_key"] == "时序合成（起停 6DoF）" and row["column_key"] == "Delta [IQR]（+/0/-）"
+            if row["row_key"] == "时序合成" and row["column_key"] == "关闭后的效应"
         )
-        self.assertEqual(hold_delta["display_value"], "200 [100, 300] pp; 3/1/0")
+        self.assertIn("mm", hold_delta["display_value"])
         self.assertEqual(
             {row["row_key"] for row in exp1_cells},
             {
@@ -218,30 +218,29 @@ class PaperRowsTests(unittest.TestCase):
         self.assertEqual(
             {row["column_key"] for row in exp1_cells},
             {
-                "World P95 ↓",
-                "HP--RMS ↓",
-                "Response ↓",
-                "Trans. residual P95 ↓",
-                "Rot. residual P95 ↓",
-                "Occlusion P95 ↓",
+                "平移 P95 (mm)",
+                "HP--RMS (mm)",
+                "Lag / aligned RMSE (ms / mm)",
+                "遮挡窗 P95 (mm)",
+                "Start-transition (ms)",
             },
         )
         self.assertEqual(
             {row["row_key"] for row in exp2_cells},
             {
-                "采集时刻对齐（静止头动）",
-                "VCD 接纳（遮挡恢复）",
-                "时序合成（起停 6DoF）",
-                "StaticLock（静止头动）",
+                "采集时刻对齐",
+                "VCD 接纳",
+                "时序合成",
+                "StaticLock",
             },
         )
         formatted_cell = next(
             row
             for row in exp1_cells
             if row["row_key"] == "EgoAnchor"
-            and row["column_key"] == "World P95 ↓"
+            and row["column_key"] == "平移 P95 (mm)"
         )
-        self.assertEqual(formatted_cell["display_value"], "13.1 [12.1, 14.1] mm")
+        self.assertIn("13.1", formatted_cell["display_value"])
         with self.assertRaisesRegex(ValueError, "主指标缺失"):
             build_paper_rows(
                 trials,

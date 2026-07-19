@@ -27,8 +27,8 @@ _PLOT_SPEC_NAMES = (
 )
 
 _FIGURE_NAMES = (
-    "exp1_behavior_overview",
-    "exp2_mechanism_attribution",
+    "exp1_final_v2",
+    "exp2_merged_final_v2",
 )
 
 
@@ -115,14 +115,15 @@ def _write_fixture(root: Path) -> None:
             {
                 "plot_id": "exp1_lag_tradeoff",
                 "panel_id": "lag_tradeoff",
-                "session_id": "s" if point_kind == "event" else "",
+                "session_id": "s" if point_kind == "segment" else "",
                 "scenario_id": "continuous_translation",
-                "trial_id": "t" if point_kind == "event" else "",
-                "event_id": "e" if point_kind == "event" else "summary",
+                "trial_id": "t" if point_kind == "segment" else "",
+                "event_id": "e" if point_kind == "segment" else "summary",
                 "variant_id": variant,
                 "point_kind": point_kind,
                 "effective_lag_ms": 200.0,
                 "p95_residual_mm": 10.0,
+                "lag_residual_mm": 8.0 if point_kind == "segment" else 10.0,
                 "lag_q1_ms": 190.0 if point_kind == "summary" else "",
                 "lag_q3_ms": 210.0 if point_kind == "summary" else "",
                 "residual_q1_mm": 9.0 if point_kind == "summary" else "",
@@ -130,7 +131,7 @@ def _write_fixture(root: Path) -> None:
                 "input_workbook_sha256": "a" * 64,
             }
             for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
-            for point_kind in ("event", "summary")
+            for point_kind in ("segment", "summary")
         ],
         "exp1_occlusion_trace": [
             {
@@ -157,14 +158,19 @@ def _write_fixture(root: Path) -> None:
             {
                 "plot_id": "exp1_summary",
                 "panel_id": panel,
+                "point_kind": point_kind,
+                "session_id": "s" if point_kind == "segment" else "",
                 "scenario_id": scenario,
+                "trial_id": "t" if point_kind == "segment" else "",
+                "segment_id": "segment_01" if point_kind == "segment" else "summary",
                 "variant_id": variant,
                 "metric_key": metric,
                 "metric_label": "Translation P95",
                 "metric_unit": "mm",
-                "median": 10.0,
-                "q1": 8.0,
-                "q3": 12.0,
+                "value": 10.0 if point_kind == "segment" else "",
+                "median": 10.0 if point_kind == "summary" else "",
+                "q1": 8.0 if point_kind == "summary" else "",
+                "q3": 12.0 if point_kind == "summary" else "",
                 "sample_count": 4,
                 "input_workbook_sha256": "a" * 64,
             }
@@ -173,6 +179,7 @@ def _write_fixture(root: Path) -> None:
                 ("failure_containment", "occlusion_recovery", "occlusion_translation_pninetyfive_mm"),
             )
             for variant in ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+            for point_kind in ("segment", "summary")
         ],
         "exp2_mechanism_attribution": [
             {
@@ -196,7 +203,8 @@ def _write_fixture(root: Path) -> None:
             for component, label, metric, unit, delta in (
                 ("capture_time_alignment", "alignment", "translation_event_pninetyfive_mm", "mm", 1.0),
                 ("vcd_admission", "VCD", "occlusion_translation_pninetyfive_mm", "mm", 2.0),
-                ("temporal_synthesis", "temporal", "motion_hold_ratio", "proportion", 0.2),
+                ("temporal_synthesis", "temporal", "effective_translation_lag_ms", "ms", -70.0),
+                ("temporal_synthesis", "temporal", "translation_lag_residual_mm", "mm", 5.0),
                 ("static_lock", "StaticLock", "position_hp_rms_mm", "mm", 1.5),
             )
         ],
@@ -222,7 +230,7 @@ def _write_fixture(root: Path) -> None:
     axes = {
         "exp1_head_motion_trace": ("time_ms", "translation_error_mm", "variant_id"),
         "exp1_start_stop_trace": ("time_ms", "display_displacement_mm", "variant_id"),
-        "exp1_lag_tradeoff": ("effective_lag_ms", "p95_residual_mm", "variant_id"),
+        "exp1_lag_tradeoff": ("effective_lag_ms", "lag_residual_mm", "variant_id"),
         "exp1_occlusion_trace": ("time_ms", "translation_error_mm", "variant_id"),
         "exp1_summary": ("median", "metric_key", "variant_id"),
         "exp2_mechanism_attribution": ("event_id", "delta", "component_id"),
@@ -273,9 +281,10 @@ class FigurePublishingTests(unittest.TestCase):
             for name in _FIGURE_NAMES:
                 encoded = (output / f"{name}.png").read_bytes()
                 widths[name] = struct.unpack(">I", encoded[16:20])[0]
-            for width in widths.values():
-                self.assertGreaterEqual(width, 1950)
-                self.assertLessEqual(width, 2200)
+            self.assertGreaterEqual(widths["exp1_final_v2"], 3900)
+            self.assertLessEqual(widths["exp1_final_v2"], 4300)
+            self.assertGreaterEqual(widths["exp2_merged_final_v2"], 3300)
+            self.assertLessEqual(widths["exp2_merged_final_v2"], 3800)
             manifest = json.loads((output / "figure_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["plot_count"], 2)
             self.assertEqual(len(manifest["input_csv_sha256"]), 8)

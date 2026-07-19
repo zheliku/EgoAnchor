@@ -145,7 +145,7 @@ schema-v2 task directory
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一固定图只使用静止头动的平移 event-P95、起停 6DoF 的运动窗平移 P95 和遮挡窗平移 P95，并要求每个 event 的四系统矩阵完整。VCD 正式 risk-coverage 图只发布候选级 `tail_pninetyfive` 的 VCD/random 两条曲线；mean-risk 只用于 AURC。
 - 三联实验一图按每 panel 58 mm × 50 mm 的最终物理尺寸发布；实验二采用 GPT 风格四联全宽图，画布按双栏宽度发布并由四个独立单位面板均分；图内最小字号固定为 7 pt。实验一图例位于中间数据轴内的空白区，长 event ID 只保留在 CSV，论文图使用稳定 event 序号。
-- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v6，指标契约为 breaking v5，参数契约为 breaking v4，审阅工作簿契约为 v1；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。
+- `egoanchor.eval.contracts` 的 workbook 契约当前为 breaking v2，完整保留 Stage 2 所需的对齐原始位姿、时间、reference、render 和事件字段；pose 数组按标量列写出，显式声明主外键。CSV 契约当前为 breaking v7，指标契约为 breaking v5，参数契约为 breaking v4，审阅工作簿契约为 v1；参数入口固定为 `egoanchor/eval/config/analysis_params.toml`。v7 将实验一持续平移 plot 行固定为 segment-level lag--residual 点，并将实验二组件表显式保存 Full/Disabled 汇总字段。
 - `analysis_params.toml` 是唯一科学参数入口，Stage 2 使用该文件原始字节的 SHA-256 作为参数集标识。参数 v4 在 linear 分位数、HP-RMS、drift、运动检测、响应、沉降、lag、jump、recovery 和 VCD risk--coverage 语义基础上，进一步冻结停止后公共窗、近零保持容差和重新可见公共窗。所有 display/reference 指标必须显式使用 pose 有效掩码，lag 和持续条件不得跨大时间间隙。指标 v5 增加 lag 补偿 P95、停止后 jitter、运动 hold 和固定重新可见窗口；CSV v6 冻结当前行为图、组件配对和论文显示表契约。
 - Task 7 实验一分析只接受 Stage 1 工作簿已经解码出的类型化 trial，不直接打开文件。分析严格投影四个实验一系统，按显式事件角色切窗，先生成 event 指标，再等权汇总到 trial 和 session；场景汇总保留全部尝试、成功率、median[IQR] 和范围，不跨场景混池。XLSX 批次加载和 CSV 原子发布仍属于 Task 9。
 - Task 8 实验二分析复用 Task 7 的 event 科学指标，只在组件适用场景内对完整 EgoAnchor 与对应消融做双边 exact join。配对键包含 component，差值固定为 `ablation - full`；缺一侧或重复行硬失败，两侧行存在但数值未定义时保留 `value_missing` 尝试。配对汇总保存 median[IQR]、范围和正/零/负方向计数。
@@ -157,9 +157,10 @@ schema-v2 task directory
 - 四阶段基线完成后，实验一/二结果呈现增强按 `2026-EgoAnchor/experiment_1_2_analysis_enhancement_implementation_plan.md` 执行。实验一和实验二分别实现、验证、提交和推送；新增分析工作簿只能作为 Stage 2 的审阅输出，Stage 3 仍只读取 CSV。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
 - Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
-- Stage 3 当前发布一张实验一三面板系统行为总览和一张实验二四面板组件归因图；实验一中间面板保留全部持续平移 event 散点并叠加 median[IQR]，实验二主图沿用 GPT 风格只显示各组件 `Ablated - Full` 的 median[IQR]、零基线和方向计数，事件点保留在 Stage 2 审计 CSV/XLSX，VCD risk--coverage 曲线也保留在审计层，不与差值面板混排。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，其中当前方向下的最优 Full/Ablated 值加粗。
+- Stage 3 当前发布 `exp1_final_v2` 实验一三面板系统行为图和 `exp2_merged_final_v2` 实验二四面板组件归因图；两图沿用 GPT final v2 的统一配色、标记、标题和误差表达。实验一持续平移面板保留全部 segment lag--residual 点并叠加 median[IQR]，实验二左侧显示 Full/Disabled 配对差值，右侧显示持续平移 lag--residual 归因；事件点和 VCD risk--coverage 曲线保留在 Stage 2 审计 CSV/XLSX。两图均按最终双栏物理宽度生成，图内最小字号不低于 7 pt。实验二正文表固定同时报告 Full、Disabled 与 `Disabled - Full` 的 median[IQR]。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
-- 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；时序合成主归因使用起停场景的 `motion_hold_ratio`，持续平移仍作为实验一的完整系统 lag--fidelity 证据。
+- 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
+- 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；当前 GPT final v2 叙事将时序合成归因放在持续平移的 effective lag 与 lag--residual trade-off，起停相关 hold/jump 指标只保留在分析审计层。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位有效数字且不超过三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。实验一表按属性/场景组织四系统结果，实验二表同行报告 Full、Ablated、配对差值与护栏，不以机器字段替代论文标签。
 
 ## Python 关键约束
@@ -297,11 +298,11 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过固定样式绘制一张实验一三面板系统行为图和一张实验二四面板差值归因图，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
+- Stage 3 `publish` 只读取 `plots/plot_catalog.csv` 及其声明的 `plots/*.csv`，通过 GPT final v2 固定样式绘制 `exp1_final_v2` 和 `exp2_merged_final_v2`，并在原子输出目录写入输入 CSV 与图文件 SHA-256 manifest。
 - Stage 2 当前发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个实验人工审阅入口；二者只从同次 staging CSV 复制 typed、formula-free 表格并完成独立回读，不参与 Stage 3 或 Stage 4，也不改变 CSV 的正式下游契约。
 - 实验一属性表固定报告世界一致性、静止稳定性、起停转换、平移保真度、旋转保真度和失效约束。lag 补偿 P95 使用 RMSE 选定时延后的同一重叠窗；停止后抖动使用 1 s guard 加固定 3 s 窗；重新可见误差使用固定 1 s 窗。结果必须同时陈述动态响应、旋转保真度和遮挡 output coverage 的代价，不得只挑有利指标。
 - Stage 2 plot CSV 的图表行使用 session/trial/event 复合事件键，避免多 session 批次违反冻结 plot 主键；CSV 写入在目录替换前执行契约回读和 hash 验证。
-- Stage 2 论文表采用 CV 风格的“系统为行、指标为列”布局；实验一主指标列带优劣箭头并对每列最优 median [IQR] 加粗，实验二表保留 Full/Ablated/Delta/护栏四类比较列。
+- Stage 2 论文表采用 GPT final v2 的简洁布局：实验一按场景行为属性报告五个指标列，实验二按组件报告对应系统行为、Full EgoAnchor、Disabled 效应和护栏/解释四列；完整事件点仍在审计 CSV/XLSX。
 - Stage 2 的 `paper/numbers.csv` 与 `paper/tables.csv` 只投影既有汇总、计数和 display-ready 单元格；writer 在上游 CSV 落盘后回填其实际 SHA-256。Stage 3 只从这两个 paper CSV 生成四个 TeX，并与五张图联合原子发布。
 - Stage 2 先按规范绝对路径稳定排序 workbook；`lineage.csv` 记录真实 Stage 1 sheet 或直接 Stage 2 上游，并使用可筛选的 session/trial/event/variant/candidate/metric 复合键，禁止把输出表名冒充来源。
 - Stage 2/3 的原子 staging 和 backup 目录必须用普通 `mkdir` 从已验证父目录继承 ACL，不得用可能在 Windows 产生限制 ACL 的 `tempfile.mkdtemp`；旧备份清理对短暂共享锁做有界重试。

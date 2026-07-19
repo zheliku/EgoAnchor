@@ -74,13 +74,13 @@ def _write_fixture(root: Path, *, invalid_macro: bool = False) -> None:
                     "source_sha256": upstream_hash,
                 }
                 for row_key, values in {
-                    "Arrival-Hold": ("33.6 [30.0, 35.0] mm", "7.2 [6.0, 8.0] mm", "110 [90, 130] ms", "9.1 [8.0, 10.0] mm", "4.1 [3.5, 5.0] deg", "12.2 [10.0, 15.0] mm"),
-                    "Capture-Hold": ("12.0 [10.0, 13.0] mm", "5.0 [4.0, 6.0] mm", "100 [80, 120] ms", "7.5 [6.0, 9.0] mm", "3.8 [3.0, 4.5] deg", "10.0 [8.0, 12.0] mm"),
-                    "One-Euro Anchor": ("10.0 [9.0, 11.0] mm", "4.0 [3.0, 5.0] mm", "90 [70, 110] ms", "6.4 [5.0, 8.0] mm", "3.2 [2.5, 4.0] deg", "8.0 [6.0, 10.0] mm"),
-                    "EgoAnchor": ("[BEST]4.0 [3.0, 5.0] mm", "[BEST]3.0 [2.0, 4.0] mm", "[BEST]80 [60, 100] ms", "[BEST]5.0 [4.0, 6.0] mm", "[BEST]2.8 [2.0, 3.5] deg", "[BEST]6.0 [4.0, 8.0] mm"),
+                    "Arrival-Hold": ("33.6", "7.2", "110 / 9.1", "12.2", "126"),
+                    "Capture-Hold": ("12.0", "5.0", "100 / 7.5", "10.0", "250"),
+                    "One-Euro Anchor": ("10.0", "4.0", "90 / 6.4", "8.0", "333"),
+                    "EgoAnchor": ("[BEST]4.0", "[BEST]3.0", "[BEST]80 / 5.0", "[BEST]6.0", "751"),
                 }.items()
                 for column, value in zip(
-                    ("World P95 ↓", "HP--RMS ↓", "Response ↓", "Trans. residual P95 ↓", "Rot. residual P95 ↓", "Occlusion P95 ↓"),
+                    ("平移 P95 (mm)", "HP--RMS (mm)", "Lag / aligned RMSE (ms / mm)", "遮挡窗 P95 (mm)", "Start-transition (ms)"),
                     values,
                 )
             ),
@@ -95,11 +95,10 @@ def _write_fixture(root: Path, *, invalid_macro: bool = False) -> None:
                     "source_sha256": upstream_hash,
                 }
                 for column, value in (
-                    ("主指标", "Occlusion P95"),
-                    ("Full median [IQR]", "1.0 [0.8, 1.2] mm"),
-                    ("Ablated median [IQR]", "2.25 [1.3, 3.2] mm"),
-                    ("Delta [IQR]（+/0/-）", "1.25 [0.5, 2.0] mm; 3/0/1"),
-                    ("护栏 Delta [IQR]", "Recovery: 0 [0, 0] ms"),
+                    ("对应系统行为", "遮挡期限制有害更新"),
+                    ("Full EgoAnchor", "1.0 [0.8, 1.2] mm"),
+                    ("关闭后的效应", "1.25 [0.5, 2.0] mm; 3/0/1"),
+                    ("护栏 / 解释", "Recovery: 0 [0, 0] ms"),
                 )
             ),
         ],
@@ -126,12 +125,12 @@ class LatexPublishingTests(unittest.TestCase):
             self.assertIn(r"\newcommand{\EAExpOneSessionCount}{5}", exp1_numbers)
             self.assertIn(result.input_csv_sha256["paper/numbers.csv"], exp1_numbers)
             exp2_table = (output / "exp2_tables.tex").read_text(encoding="utf-8")
-            self.assertIn(r"Delta [IQR]（+/0/-）", exp2_table)
+            self.assertIn(r"关闭后的效应", exp2_table)
             self.assertIn("1.25 [0.5, 2.0] mm", exp2_table)
-            self.assertIn(r"\textbf{4.0 [3.0, 5.0] mm}", exp1_table)
+            self.assertIn(r"\textbf{4.0}", exp1_table)
             self.assertIn(r"\begin{tabularx}{\textwidth}", exp2_table)
             self.assertIn(r"\scriptsize", exp2_table)
-            self.assertIn("机制 / 场景", exp2_table)
+            self.assertIn("组件", exp2_table)
 
     def test_generated_control_sequences_contain_no_digits(self) -> None:
         """所有自动生成控制序列必须只含 ASCII 字母。"""

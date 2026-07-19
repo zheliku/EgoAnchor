@@ -1,17 +1,17 @@
-% Source: paper/tables.csv; SHA-256: 82faed992a729312533f189ff9716b4092736ea5d91720b3a6197ef1c4881762; generator: egoanchor.eval.publishing.latex-v1
+% Source: paper/tables.csv; SHA-256: 0b85326619bcb332d79e82445eb9aabd4da608ed7f3dbe9ea991200a631a7be1; generator: egoanchor.eval.publishing.latex-v1
 % Table: exp1\_scenario\_summary
 \begingroup
 \scriptsize
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.08}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.16\textwidth}*{6}{>{\raggedleft\arraybackslash}X}@{}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.16\textwidth}*{5}{>{\raggedleft\arraybackslash}X}@{}}
 \toprule
-System & World P95 ↓ & HP--RMS ↓ & Response ↓ & Trans. residual P95 ↓ & Rot. residual P95 ↓ & Occlusion P95 ↓ \\
+方法 & 平移 P95 (mm) & HP--RMS (mm) & Lag / aligned RMSE (ms / mm) & 遮挡窗 P95 (mm) & Start-transition (ms) \\
 \midrule
-Arrival-Hold & 22.2 [16.7, 29.2] mm & 3.4 [3.04, 3.91] mm & \textbf{126 [102, 132] ms} & 18.3 [16.9, 20.5] mm & 5.16 [4.97, 5.29] deg & 35.3 [18.2, 44.9] mm \\
-Capture-Hold & 8.57 [7.98, 9.13] mm & 2.2 [1.25, 3.28] mm & 250 [168, 291] ms & 18.3 [16.2, 19] mm & \textbf{5.13 [4.96, 5.24] deg} & 34.1 [17.3, 43.6] mm \\
-One-Euro Anchor & 8.27 [7.58, 8.69] mm & 0.812 [0.516, 1.17] mm & 333 [250, 383] ms & 18.7 [16.5, 19.9] mm & 5.72 [5.45, 6.13] deg & 13 [6.9, 19.6] mm \\
-EgoAnchor & \textbf{3.68 [3.32, 4.51] mm} & \textbf{0.03 [0.028, 0.349] mm} & 751 [690, 791] ms & \textbf{8.38 [6.22, 10.1] mm} & 6.36 [6.25, 7.2] deg & \textbf{1.82 [1.6, 2.27] mm} \\
+Arrival-Hold & 21.3 & 4.06 & 182 / 10.1 & 25.6 & 209 \\
+Capture-Hold & 13.3 & 3.6 & 250 / 9.58 & 25.5 & 250 \\
+One-Euro Anchor & 12.4 & 1.22 & 385 / 9.56 & 11.7 & 313 \\
+EgoAnchor & \textbf{6.89} & \textbf{0.037} & \textbf{320 / 4.96} & \textbf{1.98} & 646 \\
 \bottomrule
 \end{tabularx}
 \endgroup

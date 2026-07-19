@@ -353,7 +353,7 @@ def _run_analyze(args: argparse.Namespace) -> int:
             (
                 ("exp1_head_motion_trace", "head_motion", "plots/exp1_head_motion_trace.csv", "time_ms", "translation_error_mm", "variant_id", "mm", len(tables["exp1_head_motion_trace"])),
                 ("exp1_start_stop_trace", "start_stop", "plots/exp1_start_stop_trace.csv", "time_ms", "display_displacement_mm", "variant_id", "mm", len(tables["exp1_start_stop_trace"])),
-                ("exp1_lag_tradeoff", "lag_tradeoff", "plots/exp1_lag_tradeoff.csv", "effective_lag_ms", "p95_residual_mm", "variant_id", "mm", len(tables["exp1_lag_tradeoff"])),
+                ("exp1_lag_tradeoff", "lag_tradeoff", "plots/exp1_lag_tradeoff.csv", "effective_lag_ms", "lag_residual_mm", "variant_id", "mm", len(tables["exp1_lag_tradeoff"])),
                 ("exp1_occlusion_trace", "occlusion", "plots/exp1_occlusion_trace.csv", "time_ms", "translation_error_mm", "variant_id", "mm", len(tables["exp1_occlusion_trace"])),
                 ("exp1_summary", "summary", "plots/exp1_summary.csv", "median", "metric_key", "variant_id", "mixed", len(tables["exp1_summary"])),
                 ("exp2_mechanism_attribution", "mechanism", "plots/exp2_mechanism_attribution.csv", "event_id", "delta", "component_id", "mixed", len(tables["exp2_mechanism_attribution"])),

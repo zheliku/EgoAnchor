@@ -1,24 +1,24 @@
 {
   "figure_sha256": {
-    "exp1_behavior_overview": {
-      "pdf": "7f2223493c966a1f3cd56faf53c108c6fb9d66e5acdbeba4d1d831a62ba7bb88",
-      "png": "ea2adeb552e56c6e655b56d3d38121e11e075723996fdf3707af279c66bb11dc"
+    "exp1_final_v2": {
+      "pdf": "1e17f2301f73217ee13fb67d6436c600888551ad883d58377d9054de8d2c102b",
+      "png": "195b262edac846e5bd5107314e5c9808013efaeab2ff898696357e7959e27965"
     },
-    "exp2_mechanism_attribution": {
-      "pdf": "371f5d0d5b709b83f72048731d90c310ac5a969f359b6a04391b9b04e012a243",
-      "png": "cef20071c9706e164b2567da179aec1bf62cf98893e566d6f71fd061504a87a7"
+    "exp2_merged_final_v2": {
+      "pdf": "6a315b547f1cb921ff6c0189d7aef9b83e598fbd092a7219e5a556e0bf95aac6",
+      "png": "c8de630a8018d4d59ae4811dfbf326ee9f4412f802c2cb540c8530e8f5a127b3"
     }
   },
   "generator": "egoanchor.eval.publishing",
   "input_csv_sha256": {
-    "plots/exp1_head_motion_trace.csv": "dca2ac8274412c1c76e552036125177206c0045be4cd6b6e1e05d802412a3985",
-    "plots/exp1_lag_tradeoff.csv": "b47c7395f08e77a963e6eede0825c38289300e3b73e93a48d6921022b4ce5d39",
-    "plots/exp1_occlusion_trace.csv": "4693197ef6e2aba300703e1c9e8a708e01ae059ea4276a1909112d4d0e857b6d",
-    "plots/exp1_start_stop_trace.csv": "46bca25c4236136eb648beb79eab7bce3f5e5f2469791f305a1cf1c4d9c96253",
-    "plots/exp1_summary.csv": "df66ae6851e6d3f96fdaf33805de94ae3edf3c7697413a7a453059d5ca635cc4",
-    "plots/exp2_mechanism_attribution.csv": "b3a00d2ab3dfa43adc9bc5118b8d6268bb8805f312e250d07d1012a380858c2a",
-    "plots/exp2_vcd_curve.csv": "d39952bd3dc0f2d15b01de44de3c060d5681d55887eda58f33024b326d34e426",
-    "plots/plot_catalog.csv": "c11722e978700c7d21e485831dd98f19b23d1bc8553e19bbba28f1816ac3cb8a"
+    "plots/exp1_head_motion_trace.csv": "0aa96bb0bda4672a0d328797f2c98faacb90ee6ca9511b17d27a605ee2b866d5",
+    "plots/exp1_lag_tradeoff.csv": "70dda3e463ebba1572059b1ed41928b536eb9d85f68c8bb47b291b5c46d5ce4f",
+    "plots/exp1_occlusion_trace.csv": "e266a93c6b611014e6af67c51a53e82fdfec0f0815d7017d5cba235472c34797",
+    "plots/exp1_start_stop_trace.csv": "257fc86bec63f91f56ca56c291aaea9e811bc528a2b00a162a0989695641ec1d",
+    "plots/exp1_summary.csv": "5d1b35c95e78839766c48d6b9041eb73e4afc242da0b4c376c3cdfc149fce291",
+    "plots/exp2_mechanism_attribution.csv": "7707a88f820f1f0f50da71d81922356632a4098407ed7e0e3ff45c6f6c4ae31d",
+    "plots/exp2_vcd_curve.csv": "7f4dd581d64e2749ad5f4aa78a829bb84c85508000fd896135b61e6832078a38",
+    "plots/plot_catalog.csv": "d71fd14658adca858853dd40f4d22469fcca88e086555c0f24050c38ce752c77"
   },
   "plot_count": 2,
   "stage": "publish"

@@ -1,17 +1,17 @@
-% Source: paper/tables.csv; SHA-256: 82faed992a729312533f189ff9716b4092736ea5d91720b3a6197ef1c4881762; generator: egoanchor.eval.publishing.latex-v1
+% Source: paper/tables.csv; SHA-256: 0b85326619bcb332d79e82445eb9aabd4da608ed7f3dbe9ea991200a631a7be1; generator: egoanchor.eval.publishing.latex-v1
 % Table: exp2\_mechanism\_attribution
 \begingroup
 \scriptsize
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.08}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.14\textwidth}>{\raggedright\arraybackslash}p{0.13\textwidth}*{3}{>{\raggedleft\arraybackslash}X}>{\raggedleft\arraybackslash}p{0.19\textwidth}@{}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.13\textwidth}>{\raggedright\arraybackslash}p{0.21\textwidth}>{\raggedleft\arraybackslash}p{0.16\textwidth}>{\raggedleft\arraybackslash}p{0.21\textwidth}>{\raggedleft\arraybackslash}p{0.23\textwidth}@{}}
 \toprule
-机制 / 场景 & 主指标 & Full median [IQR] & Ablated median [IQR] & Delta [IQR]（+/0/-） & 护栏 Delta [IQR] \\
+组件 & 对应系统行为 & Full EgoAnchor & 关闭后的效应 & 护栏 / 解释 \\
 \midrule
-采集时刻对齐（静止头动） & 平移误差 event-P95 ↓ & \textbf{3.68 [3.32, 4.51] mm} & 8.73 [4.19, 17.7] mm & 5.58 [0.6, 14] mm; 3/0/1 & 旋转误差 event-P95 ↓: 0.41 [0.216, 0.813] deg \\
-VCD 接纳（遮挡恢复） & 遮挡窗平移 P95 ↓ & \textbf{1.82 [1.6, 2.27] mm} & 24 [1.71, 48.3] mm & 21.9 [0, 46.3] mm; 5/0/2 & 持久恢复时间 ↓: 0 [0, 0] ms \\
-时序合成（起停 6DoF） & 运动窗近零保持比例 ↓ & \textbf{30.2 [24.3, 36.1] \%} & 64.1 [53.5, 71.3] \% & 28.9 [23, 39.8] pp; 5/0/0 & 运动窗平移 P95 ↓: -8.54 [-9.04, 0.501] mm \\
-StaticLock（静止头动） & 位置 HP-RMS ↓ & \textbf{0.03 [0.028, 0.349] mm} & 1.77 [0.989, 2.7] mm & 1.59 [0.959, 2.2] mm; 4/0/0 & 绝对平移误差中位数 ↓: 1.2 [1.06, 1.49] mm \\
+采集时刻对齐 & 防止头动泄漏 & \textbf{6.89 [6.79, 7.48] mm} & 0.191 [0.064, 0.288] mm & 旋转误差 event-P95: -0.074 [-0.136, -0.036] deg \\
+VCD 接纳 & 遮挡期限制有害更新 & \textbf{1.98 [1.8, 2.36] mm} & 0 [0, 42.2] mm & 持久恢复时间: 0 [0, 0] ms \\
+时序合成 & 连续平移轨迹质量 & \textbf{320 / 4.96 ms/mm} & -65 ms / 4.56 mm & 时延与残差必须联合解释 \\
+StaticLock & 抑制静止抖动 & \textbf{0.037 [0.033, 0.041] mm} & 2.48 [1.82, 3.37] mm & 绝对平移误差中位数: 0.713 [0.33, 1.22] mm \\
 \bottomrule
 \end{tabularx}
 \endgroup

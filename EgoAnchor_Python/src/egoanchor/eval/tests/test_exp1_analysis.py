@@ -287,7 +287,12 @@ class Exp1AnalysisTests(unittest.TestCase):
         )
         self.assertEqual(
             {row["point_kind"] for row in plots.lag_tradeoff},
-            {"event", "summary"},
+            {"segment", "summary"},
+        )
+        self.assertTrue(all("lag_residual_mm" in row for row in plots.lag_tradeoff))
+        self.assertEqual(
+            {row["point_kind"] for row in plots.summary},
+            {"segment", "summary"},
         )
         self.assertEqual(
             {row["variant_id"] for row in plots.occlusion_trace},

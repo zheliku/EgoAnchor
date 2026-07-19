@@ -53,7 +53,7 @@ _EXP1_FIGURE_SUMMARIES = (
 
 
 def _summary_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], ...]:
-    """把 Stage 2 已计算的摘要统计投影成图表输入，不在 Stage 3 重算。"""
+    """把 segment 点和 Stage 2 摘要投影成 GPT 图输入。"""
 
     by_key = {
         (row.scenario_id, row.variant_id, row.metric_key): row
@@ -63,6 +63,39 @@ def _summary_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], ...]:
     for panel_id, scenario_id, metric_key in _EXP1_FIGURE_SUMMARIES:
         definition = get_metric_definition(metric_key)
         for variant_id in EXP1_VARIANTS:
+            segment_rows = tuple(
+                row
+                for row in result.event_metrics
+                if row.scenario_id == scenario_id
+                and row.variant_id == variant_id
+                and row.metric_key == metric_key
+                and row.metric_value is not None
+                and math.isfinite(row.metric_value)
+            )
+            if not segment_rows:
+                raise ValueError(f"实验一摘要图缺少 segment 点：{scenario_id}/{variant_id}/{metric_key}")
+            rows.extend(
+                {
+                    "plot_id": "exp1_summary",
+                    "panel_id": panel_id,
+                    "point_kind": "segment",
+                    "session_id": row.session_id,
+                    "scenario_id": scenario_id,
+                    "trial_id": row.trial_id,
+                    "segment_id": row.event_id,
+                    "variant_id": variant_id,
+                    "metric_key": metric_key,
+                    "metric_label": definition.label,
+                    "metric_unit": row.metric_unit,
+                    "value": row.metric_value,
+                    "median": None,
+                    "q1": None,
+                    "q3": None,
+                    "sample_count": len(segment_rows),
+                    "input_workbook_sha256": row.input_workbook_sha256,
+                }
+                for row in segment_rows
+            )
             summary = by_key.get((scenario_id, variant_id, metric_key))
             if summary is None or summary.median is None or summary.q1 is None or summary.q3 is None:
                 raise ValueError(f"实验一摘要图缺少统计量：{scenario_id}/{variant_id}/{metric_key}")
@@ -70,11 +103,16 @@ def _summary_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], ...]:
                 {
                     "plot_id": "exp1_summary",
                     "panel_id": panel_id,
+                    "point_kind": "summary",
+                    "session_id": "",
                     "scenario_id": scenario_id,
+                    "trial_id": "",
+                    "segment_id": "summary",
                     "variant_id": variant_id,
                     "metric_key": metric_key,
                     "metric_label": definition.label,
                     "metric_unit": summary.metric_unit,
+                    "value": None,
                     "median": summary.median,
                     "q1": summary.q1,
                     "q3": summary.q3,
@@ -386,20 +424,22 @@ def _lag_tradeoff_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], .
     """生成持续平移全部事件点和系统 median/IQR。"""
 
     lag_key = "effective_translation_lag_ms"
-    residual_key = "translation_lag_pninetyfive_residual_mm"
+    residual_key = "translation_lag_residual_mm"
+    p95_key = "translation_lag_pninetyfive_residual_mm"
     event_groups: dict[tuple[str, str, str, str], dict[str, MetricRow]] = {}
     for event_row in result.event_metrics:
-        if event_row.scenario_id == "continuous_translation" and event_row.metric_key in {lag_key, residual_key}:
+        if event_row.scenario_id == "continuous_translation" and event_row.metric_key in {lag_key, residual_key, p95_key}:
             event_groups.setdefault(
                 (event_row.session_id, event_row.trial_id, event_row.event_id, event_row.variant_id),
                 {},
             )[event_row.metric_key] = event_row
     rows: list[dict[str, object]] = []
     for key, event_metrics in sorted(event_groups.items()):
-        if set(event_metrics) != {lag_key, residual_key}:
+        if set(event_metrics) != {lag_key, residual_key, p95_key}:
             raise ValueError(f"lag--fidelity event 指标不完整：{key}")
         lag = event_metrics[lag_key]
         residual = event_metrics[residual_key]
+        p95 = event_metrics[p95_key]
         rows.append(
             {
                 "plot_id": "exp1_lag_tradeoff",
@@ -409,9 +449,10 @@ def _lag_tradeoff_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], .
                 "trial_id": lag.trial_id,
                 "event_id": lag.event_id,
                 "variant_id": lag.variant_id,
-                "point_kind": "event",
+                "point_kind": "segment",
                 "effective_lag_ms": lag.metric_value,
-                "p95_residual_mm": residual.metric_value,
+                "lag_residual_mm": residual.metric_value,
+                "p95_residual_mm": p95.metric_value,
                 "lag_q1_ms": None,
                 "lag_q3_ms": None,
                 "residual_q1_mm": None,
@@ -421,14 +462,15 @@ def _lag_tradeoff_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], .
         )
     summary_groups: dict[str, dict[str, ScenarioSummaryRow]] = {}
     for summary_row in result.scenario_summary:
-        if summary_row.scenario_id == "continuous_translation" and summary_row.metric_key in {lag_key, residual_key}:
+        if summary_row.scenario_id == "continuous_translation" and summary_row.metric_key in {lag_key, residual_key, p95_key}:
             summary_groups.setdefault(summary_row.variant_id, {})[summary_row.metric_key] = summary_row
     for variant_id in EXP1_VARIANTS:
         summary_metrics = summary_groups.get(variant_id, {})
-        if set(summary_metrics) != {lag_key, residual_key}:
+        if set(summary_metrics) != {lag_key, residual_key, p95_key}:
             raise ValueError(f"lag--fidelity summary 指标不完整：{variant_id}")
         lag_summary = summary_metrics[lag_key]
         residual_summary = summary_metrics[residual_key]
+        p95_summary = summary_metrics[p95_key]
         rows.append(
             {
                 "plot_id": "exp1_lag_tradeoff",
@@ -440,7 +482,8 @@ def _lag_tradeoff_rows(result: Exp1AnalysisResult) -> tuple[dict[str, object], .
                 "variant_id": variant_id,
                 "point_kind": "summary",
                 "effective_lag_ms": lag_summary.median,
-                "p95_residual_mm": residual_summary.median,
+                "lag_residual_mm": residual_summary.median,
+                "p95_residual_mm": p95_summary.median,
                 "lag_q1_ms": lag_summary.q1,
                 "lag_q3_ms": lag_summary.q3,
                 "residual_q1_mm": residual_summary.q1,
@@ -557,13 +600,13 @@ def build_exp2_mechanism_plot_rows(
     """
 
     primary_metrics = {
-        component.component_id: component.primary_metric_keys[0]
+        component.component_id: frozenset(component.primary_metric_keys)
         for component in EXP2_COMPONENTS
     }
     selected = [
         row
         for row in rows
-        if row.metric_key == primary_metrics.get(row.component_id)
+        if row.metric_key in primary_metrics.get(row.component_id, frozenset())
     ]
     if not selected:
         raise ValueError("实验二机制归因图缺少主指标配对行")
@@ -584,6 +627,12 @@ def build_exp2_mechanism_plot_rows(
                 "delta_median": summary.median,
                 "delta_q1": summary.q1,
                 "delta_q3": summary.q3,
+                "full_median": summary.full_median,
+                "full_q1": summary.full_q1,
+                "full_q3": summary.full_q3,
+                "ablation_median": summary.ablation_median,
+                "ablation_q1": summary.ablation_q1,
+                "ablation_q3": summary.ablation_q3,
                 "plot_id": "exp2_mechanism_attribution",
                 "panel_id": row.component_id,
             }

@@ -29,34 +29,33 @@ _CONTROL_DIGIT_PATTERN = re.compile(r"\\[A-Za-z]*[0-9]")
 
 _TABLE_LAYOUTS = {
     "exp1_scenario_summary": (
-        "System",
+        "方法",
         (
-            "World P95 ↓",
-            "HP--RMS ↓",
-            "Response ↓",
-            "Trans. residual P95 ↓",
-            "Rot. residual P95 ↓",
-            "Occlusion P95 ↓",
+            "平移 P95 (mm)",
+            "HP--RMS (mm)",
+            "Lag / aligned RMSE (ms / mm)",
+            "遮挡窗 P95 (mm)",
+            "Start-transition (ms)",
         ),
         (
             r"@{}>{\raggedright\arraybackslash}p{0.16\textwidth}"
-            r"*{6}{>{\raggedleft\arraybackslash}X}@{}"
+            r"*{5}{>{\raggedleft\arraybackslash}X}@{}"
         ),
     ),
     "exp2_mechanism_attribution": (
-        "机制 / 场景",
+        "组件",
         (
-            "主指标",
-            "Full median [IQR]",
-            "Ablated median [IQR]",
-            "Delta [IQR]（+/0/-）",
-            "护栏 Delta [IQR]",
+            "对应系统行为",
+            "Full EgoAnchor",
+            "关闭后的效应",
+            "护栏 / 解释",
         ),
         (
-            r"@{}>{\raggedright\arraybackslash}p{0.14\textwidth}"
-            r">{\raggedright\arraybackslash}p{0.13\textwidth}"
-            r"*{3}{>{\raggedleft\arraybackslash}X}"
-            r">{\raggedleft\arraybackslash}p{0.19\textwidth}@{}"
+            r"@{}>{\raggedright\arraybackslash}p{0.13\textwidth}"
+            r">{\raggedright\arraybackslash}p{0.21\textwidth}"
+            r">{\raggedleft\arraybackslash}p{0.16\textwidth}"
+            r">{\raggedleft\arraybackslash}p{0.21\textwidth}"
+            r">{\raggedleft\arraybackslash}p{0.23\textwidth}@{}"
         ),
     ),
 }
