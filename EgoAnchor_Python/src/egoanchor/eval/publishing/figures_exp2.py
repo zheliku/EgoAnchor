@@ -7,6 +7,7 @@ import math
 from typing import Mapping
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 
 from .style import PlotSpec, save_figure_pair
 
@@ -35,6 +36,19 @@ def _finite(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _delta_annotation(median_delta: float, metric_unit: str) -> str:
+    """按面板单位格式化 Stage 2 差值中位数注释。
+
+    参数：
+        median_delta: Stage 2 已计算的消融减完整系统中位差。
+        metric_unit: 冻结指标单位；比例使用百分点显示。
+    """
+
+    if metric_unit == "proportion":
+        return f"Delta median={median_delta * 100.0:.3g} pp"
+    return f"Delta median={median_delta:.3g}"
 
 
 def _plot_mechanism_attribution(
@@ -74,18 +88,23 @@ def _plot_mechanism_attribution(
             )
         axis.scatter([0] * len(full), full, color="#0072B2", s=24, label="Full", zorder=2)
         axis.scatter([1] * len(ablation), ablation, color="#D55E00", s=24, label="Ablated", zorder=2)
+        metric_unit = str(rows[0].get("metric_unit") or "value")
         median_delta = _finite(rows[0].get("delta_median"))
         if median_delta is not None:
             axis.text(
                 0.04,
                 0.94,
-                f"Delta median={median_delta:.3g}",
+                _delta_annotation(median_delta, metric_unit),
                 transform=axis.transAxes,
                 va="top",
                 fontsize=8,
             )
         axis.set_xticks((0, 1), ("Full", "Ablated"))
-        axis.set_ylabel(str(rows[0].get("metric_unit") or "value"))
+        if metric_unit == "proportion":
+            axis.yaxis.set_major_formatter(PercentFormatter(1.0))
+            axis.set_ylabel("Hold ratio")
+        else:
+            axis.set_ylabel(metric_unit)
         axis.set_title(_COMPONENT_LABELS[component])
         axis.grid(axis="y", color="#DDDDDD", linewidth=0.45)
         if component == "capture_time_alignment":

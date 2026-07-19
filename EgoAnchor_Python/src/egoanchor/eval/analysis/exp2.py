@@ -96,12 +96,14 @@ EXP2_COMPONENTS = (
         "start_stop_6dof",
         "EgoAnchor w/o temporal synthesis",
         (
+            "motion_hold_ratio",
             "jump_pninetyfive_mm",
             "jump_pninetynine_mm",
             "visible_response_ms",
             "motion_translation_pninetyfive_mm",
+            "post_stop_position_jitter_rms_mm",
         ),
-        ("jump_pninetyfive_mm", "jump_pninetynine_mm"),
+        ("motion_hold_ratio",),
     ),
     Exp2ComponentDefinition(
         "static_lock",

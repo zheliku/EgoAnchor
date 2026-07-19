@@ -80,7 +80,7 @@ _EXP2_TABLE_METRICS = {
         "occlusion_translation_pninetyfive_mm",
         "durable_recovery_time_ms",
     ),
-    "temporal_synthesis": ("jump_pninetyfive_mm", "visible_response_ms"),
+    "temporal_synthesis": ("motion_hold_ratio", "motion_translation_pninetyfive_mm"),
     "static_lock": ("position_hp_rms_mm", "absolute_translation_median_mm"),
 }
 """实验二四行表的主效应与代价/guardrail 指标。"""
@@ -119,6 +119,20 @@ def _metric_value(value: float, unit: str, tex_suffix: str) -> tuple[float, str,
 
     if unit == "proportion":
         return value * 100.0, f"{tex_suffix}Pct", "%"
+    return value, tex_suffix, unit
+
+
+def _delta_metric_value(value: float, unit: str, tex_suffix: str) -> tuple[float, str, str]:
+    """将指标差值转换为论文单位，比例差使用百分点。
+
+    参数：
+        value: 消融减完整系统的科学结果差值。
+        unit: 冻结指标单位。
+        tex_suffix: 指标目录的纯字母 TeX 后缀。
+    """
+
+    if unit == "proportion":
+        return value * 100.0, f"{tex_suffix}PercentagePoint", "pp"
     return value, tex_suffix, unit
 
 
@@ -347,12 +361,18 @@ def _exp2_rows(
         definition = get_metric_definition(summary.metric_key)
         component_token = _COMPONENT_TOKENS[summary.component_id]
         source_csv = "exp2/paired_summary.csv"
+        display_suffix = _metric_value(0.0, summary.metric_unit, definition.tex_suffix)[1]
         if summary.median is not None and summary.q1 is not None and summary.q3 is not None:
+            value, suffix, _ = _delta_metric_value(
+                summary.median,
+                summary.metric_unit,
+                definition.tex_suffix,
+            )
             numbers.extend(
                 (
-                    _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}DeltaMedian", summary.median, source_csv, summary.input_workbook_sha256),
-                    _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}DeltaQOne", summary.q1, source_csv, summary.input_workbook_sha256),
-                    _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}DeltaQThree", summary.q3, source_csv, summary.input_workbook_sha256),
+                    _number_row(EXP2_ID, f"{component_token}{suffix}DeltaMedian", value, source_csv, summary.input_workbook_sha256),
+                    _number_row(EXP2_ID, f"{component_token}{suffix}DeltaQOne", _delta_metric_value(summary.q1, summary.metric_unit, definition.tex_suffix)[0], source_csv, summary.input_workbook_sha256),
+                    _number_row(EXP2_ID, f"{component_token}{suffix}DeltaQThree", _delta_metric_value(summary.q3, summary.metric_unit, definition.tex_suffix)[0], source_csv, summary.input_workbook_sha256),
                 )
             )
         numbers.append(
@@ -360,9 +380,9 @@ def _exp2_rows(
         )
         numbers.extend(
             (
-                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}PositiveCount", summary.positive_count, source_csv, summary.input_workbook_sha256),
-                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}ZeroCount", summary.zero_count, source_csv, summary.input_workbook_sha256),
-                _number_row(EXP2_ID, f"{component_token}{definition.tex_suffix}NegativeCount", summary.negative_count, source_csv, summary.input_workbook_sha256),
+                _number_row(EXP2_ID, f"{component_token}{display_suffix}PositiveCount", summary.positive_count, source_csv, summary.input_workbook_sha256),
+                _number_row(EXP2_ID, f"{component_token}{display_suffix}ZeroCount", summary.zero_count, source_csv, summary.input_workbook_sha256),
+                _number_row(EXP2_ID, f"{component_token}{display_suffix}NegativeCount", summary.negative_count, source_csv, summary.input_workbook_sha256),
             )
         )
 
@@ -390,11 +410,11 @@ def _exp2_rows(
             """
 
             assert summary.median is not None and summary.q1 is not None and summary.q3 is not None
-            return (
-                f"{_display_number(summary.median)} "
-                f"[{_display_number(summary.q1)}, {_display_number(summary.q3)}] "
-                f"{summary.metric_unit}"
-            )
+            definition = get_metric_definition(summary.metric_key)
+            median, _, unit = _delta_metric_value(summary.median, summary.metric_unit, definition.tex_suffix)
+            q1, _, _ = _delta_metric_value(summary.q1, summary.metric_unit, definition.tex_suffix)
+            q3, _, _ = _delta_metric_value(summary.q3, summary.metric_unit, definition.tex_suffix)
+            return f"{_display_number(median)} [{_display_number(q1)}, {_display_number(q3)}] {unit}"
 
         if any(
             value is None
@@ -416,11 +436,11 @@ def _exp2_rows(
             q1 = getattr(summary, f"{prefix}_q1")
             q3 = getattr(summary, f"{prefix}_q3")
             assert median is not None and q1 is not None and q3 is not None
-            return (
-                f"{_display_number(median)} "
-                f"[{_display_number(q1)}, {_display_number(q3)}] "
-                f"{summary.metric_unit}"
-            )
+            definition = get_metric_definition(summary.metric_key)
+            median_value, _, unit = _metric_value(median, summary.metric_unit, definition.tex_suffix)
+            q1_value, _, _ = _metric_value(q1, summary.metric_unit, definition.tex_suffix)
+            q3_value, _, _ = _metric_value(q3, summary.metric_unit, definition.tex_suffix)
+            return f"{_display_number(median_value)} [{_display_number(q1_value)}, {_display_number(q3_value)}] {unit}"
 
         values = {
             "消融配置": _ABLATION_LABELS[component.component_id],
@@ -429,7 +449,7 @@ def _exp2_rows(
             "Full median [IQR]": distribution_text(main, "full"),
             "Ablated median [IQR]": distribution_text(main, "ablation"),
             "Delta median [IQR]": delta_text(main),
-            "方向计数": f"+{main.positive_count} / {main.zero_count} / -{main.negative_count}",
+            "方向计数": f"+{main.positive_count} / {main.zero_count} / {main.negative_count}",
             "护栏指标": get_metric_definition(guardrail_key).label,
             "护栏 Delta [IQR]": delta_text(guardrail),
         }
@@ -471,9 +491,9 @@ def _exp2_rows(
         ("ActualAdmittedCandidateCount", result.vcd.operating_accepted_count),
         ("EligibleCandidateCount", result.vcd.operating_eligible_count),
     )
-    for macro_name, value in operating_values:
-        if value is not None:
-            numbers.append(_number_row(EXP2_ID, macro_name, value, operating_source, source_hash))
+    for macro_name, operating_value in operating_values:
+        if operating_value is not None:
+            numbers.append(_number_row(EXP2_ID, macro_name, operating_value, operating_source, source_hash))
     return numbers, table_cells
 
 

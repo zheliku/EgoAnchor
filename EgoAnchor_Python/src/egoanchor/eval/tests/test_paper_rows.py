@@ -93,7 +93,7 @@ class PaperRowsTests(unittest.TestCase):
             "temporal_synthesis": (
                 "start_stop_6dof",
                 "EgoAnchor w/o temporal synthesis",
-                (("jump_pninetyfive_mm", "mm"), ("visible_response_ms", "ms")),
+                (("motion_hold_ratio", "proportion"), ("motion_translation_pninetyfive_mm", "mm")),
             ),
             "static_lock": (
                 "static_head_motion",
@@ -157,6 +157,8 @@ class PaperRowsTests(unittest.TestCase):
         self.assertIn("SessionCount", names)
         self.assertIn("EgoAnchorStaticHeadMotionTranslationEventPNinetyFiveMm", names)
         self.assertIn("CaptureTimeAlignmentTranslationEventPNinetyFiveMmDeltaMedian", names)
+        self.assertIn("TemporalSynthesisMotionHoldRatioPercentagePointDeltaMedian", names)
+        self.assertIn("TemporalSynthesisMotionHoldRatioPctPositiveCount", names)
         self.assertIn("VcdMeanRiskAurcMm", names)
         operating = next(
             row
@@ -191,6 +193,18 @@ class PaperRowsTests(unittest.TestCase):
         self.assertIn("Full median [IQR]", {row["column_key"] for row in exp2_cells})
         self.assertIn("Ablated median [IQR]", {row["column_key"] for row in exp2_cells})
         self.assertIn("方向计数", {row["column_key"] for row in exp2_cells})
+        hold_cell = next(
+            row
+            for row in exp2_cells
+            if row["row_key"] == "时序合成" and row["column_key"] == "Full median [IQR]"
+        )
+        self.assertEqual(hold_cell["display_value"], "1000 [900, 1100] %")
+        hold_delta = next(
+            row
+            for row in exp2_cells
+            if row["row_key"] == "时序合成" and row["column_key"] == "Delta median [IQR]"
+        )
+        self.assertEqual(hold_delta["display_value"], "200 [100, 300] pp")
         self.assertEqual(
             {row["row_key"] for row in exp1_cells},
             {"世界一致性", "静止稳定性", "起停转换", "平移保真度", "旋转保真度", "失效约束"},

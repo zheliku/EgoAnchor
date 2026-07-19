@@ -5,8 +5,8 @@
       "png": "903ee82f59c4805f10117ad459b6aad80584979bfc97a836027a5f697c003621"
     },
     "exp2_mechanism_attribution": {
-      "pdf": "2ca0316fd1be18d7bc4e8dcbebcc20a171afe896db7e1e4fb814eb9cb0666546",
-      "png": "a1be4780427fb5d86c6051bbce8686f47faa8d0b904252c76936bcfff0121b3d"
+      "pdf": "482b35874f291d453cd0d1e93e206508db690486b1e041a9286c48abed022d6b",
+      "png": "fe2cdbe2e2ec4d8dddcd2c61f884c525c13a020f2ce943bfc509f6f6ce944135"
     }
   },
   "generator": "egoanchor.eval.publishing",
@@ -15,9 +15,9 @@
     "plots/exp1_lag_tradeoff.csv": "b47c7395f08e77a963e6eede0825c38289300e3b73e93a48d6921022b4ce5d39",
     "plots/exp1_occlusion_trace.csv": "4693197ef6e2aba300703e1c9e8a708e01ae059ea4276a1909112d4d0e857b6d",
     "plots/exp1_start_stop_trace.csv": "46bca25c4236136eb648beb79eab7bce3f5e5f2469791f305a1cf1c4d9c96253",
-    "plots/exp2_mechanism_attribution.csv": "7acf1f9dedd5660ecd8ef7d54218ec3f20755d0a02138186126bc54ef15f4158",
+    "plots/exp2_mechanism_attribution.csv": "b0d1a246547f880d074b5a13c360515d73f247ffaea6b632c3c8b143413b541f",
     "plots/exp2_vcd_curve.csv": "d39952bd3dc0f2d15b01de44de3c060d5681d55887eda58f33024b326d34e426",
-    "plots/plot_catalog.csv": "d6747d5e5eed49c09ec189638a3f89dd414f860735b7e6d7853a541d547525d2"
+    "plots/plot_catalog.csv": "a3087a992cabd481549668f5f7c66d0f8eb276901ca0a72ef9ade3a89da846d9"
   },
   "plot_count": 2,
   "stage": "publish"

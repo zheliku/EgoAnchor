@@ -159,6 +159,7 @@ schema-v2 task directory
 - Stage 2 当前同时发布 `exp1_analysis.xlsx` 与 `exp2_analysis.xlsx` 两个确定性审阅工作簿；二者只重排同批已定稿分析行并记录 lineage，不得被 Stage 3 消费。
 - Stage 3 当前发布一张实验一四面板系统行为总览和一张实验二四面板组件归因图。实验二正文表固定同时报告 Full、Ablated 与 `ablation - full` 的 median[IQR]，VCD 插图使用日志中的实际 admission decision 标出 eligible candidate operating point，不把它表述为未记录的数值阈值。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc` 重新执行到 XeLaTeX，并明确 Stage 1 XLSX、Stage 2 两个审阅 XLSX、Stage 3 图/TeX 和复现 hash 验收。
+- 实验一/二的主文指标取舍、图表叙事、统计措辞和发布前检查固定记录在 `2026-EgoAnchor/experiment_1_2_paper_presentation_guide_zh.md`；时序合成主归因使用起停场景的 `motion_hold_ratio`，持续平移仍作为实验一的完整系统 lag--fidelity 证据。
 - `paper/numbers.csv` 和 `paper/tables.csv` 是 reader-facing 显示层，数值最多保留三位小数；科学结果的完整精度继续保存在 event/trial/session、配对和 VCD CSV 中。中文主稿表格使用读者可读的中文场景与列标签，不以机器字段替代论文标签。
 
 ## Python 关键约束
