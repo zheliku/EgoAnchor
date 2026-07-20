@@ -286,7 +286,7 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 - Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是 GPT v4 分析的唯一正式输入。
 - GPT v4 只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图。实验一分类面板使用不透明箱线/须线/误差棒与半透明片段点；持续平移面板仅在散点层按每个方法的 1.5x IQR 隐藏视觉异常点，median/IQR、表格和完整审计数据仍包含全部片段。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - GPT 参考包只提供绘图样式、表格布局和论文文字结构，不作为正式数字输入；正式数字必须由当前五本 Stage 1 XLSX 计算。

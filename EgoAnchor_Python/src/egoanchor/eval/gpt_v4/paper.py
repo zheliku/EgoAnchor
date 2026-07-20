@@ -46,13 +46,26 @@ def _cell(summary: tuple[float, float, float], digits: int = 3) -> str:
     return f"{_fmt(median, digits)} [{_fmt(q1, digits)}, {_fmt(q3, digits)}]"
 
 
+def _bold_median(cell: str) -> str:
+    """只加粗 median，保留同一单元格中的四分位区间。"""
+
+    median, interval = cell.split(" ", 1)
+    return rf"\textbf{{{median}}} {interval}"
+
+
+def _bold_value(value: str) -> str:
+    """加粗不带区间的标量表格值。"""
+
+    return rf"\textbf{{{value}}}"
+
+
 def _exp1_table(results: GptV4Results) -> str:
     """生成 GPT v4 实验一八指标表。"""
 
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体仅标记各能力块的主指标最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}",
+        r"\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}",
         r"\label{tab:exp1-final}",
         r"\scriptsize",
         r"\setlength{\tabcolsep}{2.1pt}",
@@ -67,6 +80,19 @@ def _exp1_table(results: GptV4Results) -> str:
         "& $n=4$ & $n=4$ & $n=4$ & $n=30$ & $n=10$ & $n=9$ & $k/9$ & $n=9$ \\\\",
         r"\midrule",
     ]
+    medians: dict[str, dict[str, float]] = {
+        "centered": {method: _summary(results.static_segments[method], "centered_p95_mm")[0] for method in METHODS},
+        "absolute": {method: _summary(results.static_segments[method], "absolute_p95_mm")[0] for method in METHODS},
+        "increment": {method: _summary(results.static_segments[method], "frame_increment_p95_mm")[0] for method in METHODS},
+        "translation_lag": {method: _summary(results.translation_segments[method], "effective_lag_ms")[0] for method in METHODS},
+        "translation_rmse": {method: _summary(results.translation_segments[method], "aligned_rmse_mm")[0] for method in METHODS},
+        "rotation_lag": {method: _summary(results.rotation_segments[method], "effective_lag_ms")[0] for method in METHODS},
+        "rotation_rmse": {method: _summary(results.rotation_segments[method], "aligned_rmse_deg")[0] for method in METHODS},
+        "occlusion": {method: _summary(results.occlusion_episodes[method], "translation_p95_mm")[0] for method in METHODS},
+        "failures": {method: sum(bool(row["catastrophic_gt40"]) for row in results.occlusion_episodes[method]) for method in METHODS},
+        "start": {method: _summary(results.transition_segments[method], "response_ms")[0] for method in METHODS},
+    }
+    best: dict[str, float] = {key: min(values.values()) for key, values in medians.items()}
     for method in METHODS:
         static = results.static_segments[method]
         translation = results.translation_segments[method]
@@ -82,15 +108,32 @@ def _exp1_table(results: GptV4Results) -> str:
         occlusion_p95 = _cell(_summary(occlusion, "translation_p95_mm"))
         failures = sum(bool(row["catastrophic_gt40"]) for row in occlusion)
         start = _cell(_summary(transition, "response_ms"), 1)
-        if method == FULL_VARIANT:
-            centered = rf"\textbf{{{centered.split(' ')[0]}}}"
-            absolute = rf"\textbf{{{absolute.split(' ')[0]}}}"
-            increment = rf"\textbf{{{increment.split(' ')[0]}}}"
-            residual = rf"\textbf{{{residual}}}"
-            occlusion_p95 = rf"\textbf{{{occlusion_p95.split(' ')[0]}}}"
-        failure_text = rf"\textbf{{{failures}/{len(occlusion)}}}" if failures == 0 else f"{failures}/{len(occlusion)}"
+        if np.isclose(medians["centered"][method], best["centered"]):
+            centered = _bold_median(centered)
+        if np.isclose(medians["absolute"][method], best["absolute"]):
+            absolute = _bold_median(absolute)
+        if np.isclose(medians["increment"][method], best["increment"]):
+            increment = _bold_median(increment)
+        lag_text = _fmt(lag, 1)
+        if np.isclose(medians["translation_lag"][method], best["translation_lag"]):
+            lag_text = _bold_value(lag_text)
+        if np.isclose(medians["translation_rmse"][method], best["translation_rmse"]):
+            residual = _bold_value(residual)
+        rotation_lag_text = _fmt(rotation_lag, 1)
+        if np.isclose(medians["rotation_lag"][method], best["rotation_lag"]):
+            rotation_lag_text = _bold_value(rotation_lag_text)
+        rotation_residual_text = _fmt(rotation_residual)
+        if np.isclose(medians["rotation_rmse"][method], best["rotation_rmse"]):
+            rotation_residual_text = _bold_value(rotation_residual_text)
+        if np.isclose(medians["occlusion"][method], best["occlusion"]):
+            occlusion_p95 = _bold_median(occlusion_p95)
+        failure_text = f"{failures}/{len(occlusion)}"
+        if np.isclose(medians["failures"][method], best["failures"]):
+            failure_text = _bold_value(failure_text)
+        if np.isclose(medians["start"][method], best["start"]):
+            start = _bold_median(start)
         lines.append(
-            f"{method} & {centered} & {absolute} & {increment} & {_fmt(lag, 1)} / {residual} & {_fmt(rotation_lag, 1)} / {_fmt(rotation_residual)} & {occlusion_p95} & {failure_text} & {start} " + r"\\"
+            f"{method} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {failure_text} & {start} " + r"\\"
         )
     lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
     return "\n".join(lines)
@@ -196,7 +239,7 @@ def _exp1_text(results: GptV4Results) -> str:
 \\begin{{figure*}}[t]
   \\centering
   \\includegraphics[width=0.99\\textwidth]{{figures/generated/experiment1_corrected_newdata.pdf}}
-  \\caption{{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，大标记与误差棒表示 median--IQR。左：移除片段固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡；右：遮挡期间的 episode-level P95。}}
+  \\caption{{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，箱线表示完整分布的中位数、四分位区间和全范围，实心标记表示中位数。中间面板的 1.5x IQR 异常点仅从散点显示层移除，所有片段仍保留在表格和汇总统计中。左：移除片段固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡；右：遮挡期间的 episode-level P95。}}
   \\label{{fig:exp1-final}}
 \\end{{figure*}}
 """

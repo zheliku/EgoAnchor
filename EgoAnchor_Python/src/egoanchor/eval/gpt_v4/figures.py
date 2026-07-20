@@ -135,7 +135,7 @@ def _point_panel(
     subtitle: str,
     ylabel: str,
 ) -> Any:
-    """绘制四系统片段散点与 median--IQR。"""
+    """绘制四系统片段散点与箱线分布。"""
 
     figure, axis = plt.subplots(figsize=(4.55, 3.65))
     positions = np.arange(len(METHODS))
@@ -146,21 +146,36 @@ def _point_panel(
             positions[index] + offsets,
             values,
             s=25,
-            alpha=0.46,
+            alpha=0.26,
             marker=_MARKERS[index],
+            zorder=2,
         )
         color = scatter.get_facecolor()[0]
-        median = float(np.median(values))
-        q1, q3 = np.quantile(values, (0.25, 0.75))
-        axis.errorbar(
+        box = axis.boxplot(
+            [values],
+            positions=[positions[index]],
+            widths=0.22,
+            whis=(0, 100),
+            showfliers=False,
+            patch_artist=True,
+            zorder=3,
+            boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.45},
+            whiskerprops={"color": color, "linewidth": 1.45},
+            capprops={"color": color, "linewidth": 1.45},
+            medianprops={"color": color, "linewidth": 2.1},
+        )
+        for patch in box["boxes"]:
+            patch.set_alpha(0.72)
+        axis.plot(
             positions[index],
-            median,
-            yerr=[[median - q1], [q3 - median]],
-            fmt=_MARKERS[index],
+            float(np.median(values)),
+            marker=_MARKERS[index],
             markersize=7.5,
-            capsize=4,
-            linewidth=1.8,
-            color=color,
+            markerfacecolor=color,
+            markeredgecolor="white",
+            markeredgewidth=0.8,
+            linestyle="none",
+            zorder=4,
         )
     axis.set_xticks(positions, [_SHORT_LABELS[method] for method in METHODS], rotation=16, ha="right")
     axis.set_ylabel(ylabel)
@@ -170,6 +185,19 @@ def _point_panel(
     _clean_axis(axis)
     figure.tight_layout()
     return figure
+
+
+def _translation_inlier_mask(points: np.ndarray) -> np.ndarray:
+    """返回仅用于散点显示的逐方法 1.5x IQR 内点掩码。"""
+
+    mask = np.ones(points.shape[0], dtype=bool)
+    for dimension in range(points.shape[1]):
+        q1, q3 = np.quantile(points[:, dimension], (0.25, 0.75))
+        iqr = q3 - q1
+        if iqr <= 0:
+            continue
+        mask &= (points[:, dimension] >= q1 - 1.5 * iqr) & (points[:, dimension] <= q3 + 1.5 * iqr)
+    return mask
 
 
 def _translation_panel(results: GptV4Results) -> Any:
@@ -185,9 +213,12 @@ def _translation_panel(results: GptV4Results) -> Any:
         points = points[np.isfinite(points).all(axis=1)]
         if points.size == 0:
             raise ValueError(f"GPT v4 图缺少 {method} 持续平移片段")
+        visible = points[_translation_inlier_mask(points)]
+        if visible.size == 0:
+            visible = points
         scatter = axis.scatter(
-            points[:, 0],
-            points[:, 1],
+            visible[:, 0],
+            visible[:, 1],
             s=24,
             alpha=0.28,
             marker=_MARKERS[index],
@@ -207,11 +238,12 @@ def _translation_panel(results: GptV4Results) -> Any:
             capsize=3.5,
             linewidth=1.7,
             color=color,
+            alpha=1.0,
         )
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=15)
-    axis.text(0, 1.01, "Lag and residual are interpreted jointly", transform=axis.transAxes, ha="left", va="bottom", fontsize=9.1)
+    axis.text(0, 1.01, "Lag and residual jointly; 1.5x IQR visual outliers omitted", transform=axis.transAxes, ha="left", va="bottom", fontsize=8.6)
     axis.set_xlim(*_DYNAMIC_X_LIMITS)
     axis.set_ylim(*_DYNAMIC_Y_LIMITS)
     axis.set_xticks(_DYNAMIC_X_TICKS)
