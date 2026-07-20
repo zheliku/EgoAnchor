@@ -32,9 +32,11 @@ _SHORT_LABELS = {
 }
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
-_DYNAMIC_Y_LIMITS = (0.0, 21.0)
 _DYNAMIC_X_TICKS = (150, 200, 250, 300, 350, 400)
-_DYNAMIC_Y_TICKS = (0, 5, 10, 15, 20)
+_EXP1_DYNAMIC_Y_LIMITS = (0.0, 15.0)
+_EXP1_DYNAMIC_Y_TICKS = (0, 5, 10, 15)
+_EXP2_TEMPORAL_Y_LIMITS = (0.0, 15.0)
+_EXP2_TEMPORAL_Y_TICKS = (0, 5, 10, 15)
 
 
 def _configure() -> None:
@@ -132,7 +134,6 @@ def _values(rows: Mapping[str, tuple[Mapping[str, Any], ...]], variant: str, key
 def _point_panel(
     data: Mapping[str, np.ndarray],
     title: str,
-    subtitle: str,
     ylabel: str,
 ) -> Any:
     """绘制四系统片段散点与箱线分布。"""
@@ -180,7 +181,6 @@ def _point_panel(
     axis.set_xticks(positions, [_SHORT_LABELS[method] for method in METHODS], rotation=16, ha="right")
     axis.set_ylabel(ylabel)
     axis.set_title(title, loc="left", fontweight="bold", pad=15)
-    axis.text(0, 1.01, subtitle, transform=axis.transAxes, ha="left", va="bottom", fontsize=9.1)
     axis.set_ylim(bottom=0)
     _clean_axis(axis)
     figure.tight_layout()
@@ -243,14 +243,21 @@ def _translation_panel(results: GptV4Results) -> Any:
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=15)
-    axis.text(0, 1.01, "Lag and residual jointly; 1.5x IQR visual outliers omitted", transform=axis.transAxes, ha="left", va="bottom", fontsize=8.6)
     axis.set_xlim(*_DYNAMIC_X_LIMITS)
-    axis.set_ylim(*_DYNAMIC_Y_LIMITS)
+    axis.set_ylim(*_EXP1_DYNAMIC_Y_LIMITS)
     axis.set_xticks(_DYNAMIC_X_TICKS)
-    axis.set_yticks(_DYNAMIC_Y_TICKS)
+    axis.set_yticks(_EXP1_DYNAMIC_Y_TICKS)
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
-    axis.legend(frameon=False, ncol=2, loc="upper center")
+    axis.legend(
+        frameon=False,
+        ncol=4,
+        loc="lower right",
+        bbox_to_anchor=(1.0, 1.0),
+        borderaxespad=0.0,
+        handletextpad=0.9,
+        columnspacing=1.9,
+    )
     figure.tight_layout()
     return figure
 
@@ -287,7 +294,6 @@ def _paired_axis(
     full: np.ndarray,
     disabled: np.ndarray,
     title: str,
-    subtitle: str,
     ylabel: str,
     labels: tuple[str, str] = ("Enabled", "Disabled"),
     logarithmic: bool = False,
@@ -311,8 +317,85 @@ def _paired_axis(
     else:
         axis.set_ylim(bottom=0)
     axis.set_title(title, fontweight="bold", pad=17, fontsize=10.8)
-    axis.text(0.5, 1.01, subtitle, transform=axis.transAxes, ha="center", va="bottom", fontsize=7.9)
     _clean_axis(axis)
+
+
+def _paired_panel(
+    full: np.ndarray,
+    disabled: np.ndarray,
+    title: str,
+    ylabel: str,
+    labels: tuple[str, str] = ("Enabled", "Disabled"),
+    logarithmic: bool = False,
+) -> Any:
+    """创建可直接放入 LaTeX 子图的单个配对面板。"""
+
+    figure, axis = plt.subplots(figsize=(3.3, 3.25))
+    _paired_axis(axis, full, disabled, title, ylabel, labels, logarithmic)
+    figure.tight_layout()
+    return figure
+
+
+def _plot_temporal_axis(axis: Any, full_points: np.ndarray, disabled_points: np.ndarray) -> None:
+    """绘制时序合成 lag--residual 面板，异常点只从显示层隐藏。"""
+
+    visible_pair = _translation_inlier_mask(full_points) & _translation_inlier_mask(disabled_points)
+    if not visible_pair.any():
+        visible_pair = np.ones(full_points.shape[0], dtype=bool)
+    for full_point, disabled_point in zip(full_points[visible_pair], disabled_points[visible_pair], strict=True):
+        axis.plot(
+            (full_point[0], disabled_point[0]),
+            (full_point[1], disabled_point[1]),
+            linewidth=0.82,
+            alpha=0.26,
+        )
+    axis.scatter(
+        full_points[visible_pair, 0],
+        full_points[visible_pair, 1],
+        marker="D",
+        s=27,
+        alpha=0.42,
+        label="Full",
+    )
+    axis.scatter(
+        disabled_points[visible_pair, 0],
+        disabled_points[visible_pair, 1],
+        marker="X",
+        s=34,
+        alpha=0.42,
+        label="Synthesis disabled",
+    )
+    full_median = np.median(full_points, axis=0)
+    disabled_median = np.median(disabled_points, axis=0)
+    axis.scatter(float(full_median[0]), float(full_median[1]), marker="D", s=95)
+    axis.scatter(float(disabled_median[0]), float(disabled_median[1]), marker="X", s=110)
+    axis.set_xlabel("Effective lag (ms)")
+    axis.set_ylabel("Lag-aligned translation RMSE (mm)")
+    axis.set_title("(d) Temporal synthesis trade-off", loc="left", fontweight="bold", pad=17)
+    axis.set_xlim(*_DYNAMIC_X_LIMITS)
+    axis.set_ylim(*_EXP2_TEMPORAL_Y_LIMITS)
+    axis.set_xticks(_DYNAMIC_X_TICKS)
+    axis.set_yticks(_EXP2_TEMPORAL_Y_TICKS)
+    axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
+    _clean_axis(axis, "both")
+    axis.legend(
+        frameon=False,
+        ncol=2,
+        loc="lower right",
+        bbox_to_anchor=(1.0, 1.0),
+        borderaxespad=0.0,
+        handletextpad=1.0,
+        columnspacing=1.9,
+    )
+
+
+def _temporal_panel(full_points: np.ndarray, disabled_points: np.ndarray) -> Any:
+    """创建可直接放入 LaTeX 子图的时序合成面板。"""
+
+    figure, axis = plt.subplots(figsize=(4.7, 3.65))
+    _plot_temporal_axis(axis, full_points, disabled_points)
+    figure.tight_layout()
+    return figure
 
 
 def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Path]:
@@ -331,7 +414,6 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         _point_panel(
             world,
             "(a) Head-motion leakage",
-            "Fixed registration offset removed per segment",
             "Centered translation P95 (mm)",
         ),
         panels,
@@ -348,7 +430,6 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         _point_panel(
             occlusion,
             "(c) Failure containment",
-            "Episode-level P95 during visual occlusion",
             "Occlusion translation P95 (mm)",
         ),
         panels,
@@ -372,7 +453,6 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         capture,
         arrival,
         "Capture-time alignment",
-        "same raw candidates, all segments paired",
         "Candidate P95 (mm)",
         ("Capture time", "Arrival time"),
     )
@@ -387,7 +467,6 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         full_static,
         no_lock,
         "StaticLock",
-        "removes stationary output fluctuation",
         "Centered P95 (mm)",
     )
     full_vcd, no_vcd = _paired_rows(
@@ -402,14 +481,9 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         full_vcd,
         no_vcd,
         "VCD admission",
-        "tail failures during occlusion",
         "Occlusion P95 (mm)",
         logarithmic=True,
     )
-    vcd_axis.axhline(40.0, linestyle="--", linewidth=1)
-    vcd_axis.text(0.02, 42.0, "40-mm failure threshold", fontsize=7.5, va="bottom")
-
-    temporal_axis = figure.add_subplot(outer[0, 1])
     full_lag, no_temporal_lag = _paired_rows(
         results.translation_segments,
         FULL_VARIANT,
@@ -424,38 +498,56 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
     )
     full_points = np.column_stack((full_lag, full_residual))
     disabled_points = np.column_stack((no_temporal_lag, no_temporal_residual))
-    for full_point, disabled_point in zip(full_points, disabled_points, strict=True):
-        temporal_axis.plot(
-            (full_point[0], disabled_point[0]),
-            (full_point[1], disabled_point[1]),
-            linewidth=0.82,
-            alpha=0.26,
-        )
-    temporal_axis.scatter(full_points[:, 0], full_points[:, 1], marker="D", s=27, alpha=0.42, label="Full")
-    temporal_axis.scatter(disabled_points[:, 0], disabled_points[:, 1], marker="X", s=34, alpha=0.42, label="Synthesis disabled")
-    full_median = np.median(full_points, axis=0)
-    disabled_median = np.median(disabled_points, axis=0)
-    temporal_axis.scatter(float(full_median[0]), float(full_median[1]), marker="D", s=95)
-    temporal_axis.scatter(float(disabled_median[0]), float(disabled_median[1]), marker="X", s=110)
-    temporal_axis.set_xlabel("Effective lag (ms)")
-    temporal_axis.set_ylabel("Lag-aligned translation RMSE (mm)")
-    temporal_axis.set_title("(b) Temporal synthesis trade-off", loc="left", fontweight="bold", pad=17)
-    temporal_axis.text(0, 1.01, "less delay without synthesis, but larger residual", transform=temporal_axis.transAxes, ha="left", va="bottom", fontsize=8.5)
-    temporal_axis.set_xlim(*_DYNAMIC_X_LIMITS)
-    temporal_axis.set_ylim(*_DYNAMIC_Y_LIMITS)
-    temporal_axis.set_xticks(_DYNAMIC_X_TICKS)
-    temporal_axis.set_yticks(_DYNAMIC_Y_TICKS)
-    temporal_axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
-    _clean_axis(temporal_axis, "both")
-    temporal_axis.legend(frameon=False, loc="upper right")
+    temporal_axis = figure.add_subplot(outer[0, 1])
+    _plot_temporal_axis(temporal_axis, full_points, disabled_points)
     figure.text(0.012, 0.985, "(a) Targeted component effects", ha="left", va="top", fontweight="bold", fontsize=12.5)
     figure.subplots_adjust(left=0.055, right=0.99, top=0.80, bottom=0.20)
     exp2_png, exp2_pdf = _save_pair(figure, generated, "experiment2_corrected_newdata")
+    exp2a_pair = _save_pair(
+        _paired_panel(
+            capture,
+            arrival,
+            "(a) Capture-time alignment",
+            "Candidate P95 (mm)",
+            ("Capture time", "Arrival time"),
+        ),
+        panels,
+        "exp2a_capture_alignment",
+    )
+    exp2b_pair = _save_pair(
+        _paired_panel(full_static, no_lock, "(b) StaticLock", "Centered P95 (mm)"),
+        panels,
+        "exp2b_staticlock",
+    )
+    exp2c_pair = _save_pair(
+        _paired_panel(
+            full_vcd,
+            no_vcd,
+            "(c) VCD admission",
+            "Occlusion P95 (mm)",
+            logarithmic=True,
+        ),
+        panels,
+        "exp2c_vcd_admission",
+    )
+    exp2d_pair = _save_pair(
+        _temporal_panel(full_points, disabled_points),
+        panels,
+        "exp2d_temporal_synthesis",
+    )
     return {
         "experiment1_pdf": exp1_pdf,
         "experiment1_png": exp1_png,
         "experiment2_pdf": exp2_pdf,
         "experiment2_png": exp2_png,
+        "experiment2a_pdf": exp2a_pair[1],
+        "experiment2a_png": exp2a_pair[0],
+        "experiment2b_pdf": exp2b_pair[1],
+        "experiment2b_png": exp2b_pair[0],
+        "experiment2c_pdf": exp2c_pair[1],
+        "experiment2c_png": exp2c_pair[0],
+        "experiment2d_pdf": exp2d_pair[1],
+        "experiment2d_png": exp2d_pair[0],
     }
 
 

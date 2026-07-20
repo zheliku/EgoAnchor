@@ -238,7 +238,18 @@ def _exp1_text(results: GptV4Results) -> str:
 
 \\begin{{figure*}}[t]
   \\centering
-  \\includegraphics[width=0.99\\textwidth]{{figures/generated/experiment1_corrected_newdata.pdf}}
+  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp1a_head_motion_leakage.pdf}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp1b_dynamic_translation.pdf}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp1c_failure_containment.pdf}}
+  \\end{{subfigure}}
   \\caption{{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，箱线表示完整分布的中位数、四分位区间和全范围，实心标记表示中位数。中间面板的 1.5x IQR 异常点仅从散点显示层移除，所有片段仍保留在表格和汇总统计中。左：移除片段固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡；右：遮挡期间的 episode-level P95。}}
   \\label{{fig:exp1-final}}
 \\end{{figure*}}
@@ -263,8 +274,23 @@ def _exp2_text(results: GptV4Results) -> str:
 
 \\begin{{figure*}}[t]
   \\centering
-  \\includegraphics[width=0.99\\textwidth]{{figures/generated/experiment2_corrected_newdata.pdf}}
-  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示时序合成的 fitted-lag--aligned-residual 权衡，并与图~\\ref{{fig:exp1-final}} 中间面板统一采用 150--400~ms 与 0--21~mm 的坐标范围。}}
+  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp2a_capture_alignment.pdf}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp2b_staticlock.pdf}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp2c_vcd_admission.pdf}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.27\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp2d_temporal_synthesis.pdf}}
+  \\end{{subfigure}}
+  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示时序合成的 fitted-lag--aligned-residual 权衡。动态面板横轴使用 150--400~ms，纵轴范围均为 0--15~mm；图 3(d) 的异常点仅从显示层移除，完整配对数据仍保留在统计结果中。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 
@@ -350,6 +376,7 @@ def write_paper(results: GptV4Results, paper_root: Path, output_root: Path) -> M
     text = template.read_text(encoding="utf-8")
     text = text.replace(r"\graphicspath{{../figures/}{figures/}{pictures/}{images/}{./}}", r"\graphicspath{{figures/}{pictures/}{images/}{./}}")
     text = text.replace("../figures/", "figures/")
+    text = text.replace(r"\usepackage{placeins}", r"\usepackage{placeins}" + "\n\\usepackage{subcaption}")
     text = _replace_block(text, r"\subsection{实验一：应用侧锚点行为}", r"\subsection{实验二：组件归因}", _exp1_text(results))
     text = _replace_block(text, r"\subsection{实验二：组件归因}", r"\subsection{评价指标与汇总契约}", _exp2_text(results))
     provenance = "% GPT v4 reproduced from immutable Stage 1 XLSX; input SHA-256: " + ", ".join(f"{Path(path).name}={digest}" for path, digest in sorted(results.workbook_sha256.items())) + "\n"
