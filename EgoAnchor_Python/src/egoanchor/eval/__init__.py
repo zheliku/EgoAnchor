@@ -1,19 +1,9 @@
-"""EgoAnchor 离线评估的包级入口。
+"""EgoAnchor 运行时评估基础设施的包级入口。
 
-Stage 1 的 schema-v2/QC/XLSX 桥梁与新的 GPT v4 论文复刻管线都从这里显式导出。
-旧的 Stage 2/3 分析和发布实现不再作为包级 API 暴露。
+这里仅导出 schema-v2、QC 和 Stage 1 workbook 桥梁。GPT v4 论文分析从
+``egoanchor.eval.gpt_v4`` 或 ``egoanchor.eval.cli`` 显式进入，避免运行时服务
+初始化时加载绘图、PDF 和 XLSX 分析依赖。
 """
-
-from .gpt_v4 import (
-    GptV4Results,
-    analyze_workbooks,
-    build_paper,
-    iter_rows,
-    load_settings,
-    publish_figures,
-    workbook_sha256,
-    write_paper,
-)
 from .preprocess import (
     DERIVED_FILE_NAMES,
     EMPTY_TEXT_MARKER,
@@ -77,7 +67,6 @@ __all__ = [
     "EventRow",
     "EvalV2Paths",
     "FORMAL_VARIANTS",
-    "GptV4Results",
     "JSON_DOCUMENT_FILES",
     "JSONL_TABLE_FILES",
     "JsonlTableWriter",
@@ -102,17 +91,12 @@ __all__ = [
     "WorkbookValidationError",
     "WorkbookVerification",
     "aggregate_config_hash",
-    "analyze_workbooks",
-    "build_paper",
     "collect_source_files",
     "decode_workbook_text",
     "file_sha256",
     "finalize_task_events",
     "flatten_json",
     "iter_jsonl",
-    "iter_rows",
-    "load_settings",
-    "publish_figures",
     "read_json_document",
     "read_task",
     "reproducible_generated_at",
@@ -123,7 +107,5 @@ __all__ = [
     "validate_schema_mapping",
     "variant_config_hash",
     "verify_task_workbook",
-    "workbook_sha256",
-    "write_paper",
     "write_task_workbook",
 ]

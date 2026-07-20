@@ -165,7 +165,10 @@ namespace EgoAnchor.Policy
         /// <summary>运动模型名 (CV / Kalman / OneEuro)。写入 eval 的 motion_model 字段。</summary>
         public string MotionModelName => motionModel != null ? motionModel.ModelName : "";
 
-        /// <summary>平滑策略名 (Blend / DelayedInterp / RawPassthrough)。写入 eval 的 smoothing_strategy 字段。</summary>
+        /// <summary>运动模型参数指纹，参与 variant 配置哈希。</summary>
+        public string MotionModelConfiguration => motionModel != null ? motionModel.ConfigurationFingerprint : "";
+
+        /// <summary>平滑策略名 (RawPassthrough / PredictivePassthrough / Blend / DelayedInterp)。写入 eval 的 smoothing_strategy 字段。</summary>
         public string SmoothingStrategyName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
 
         /// <summary>质量评估门控模式，写入 eval 的 quality_gate 字段。</summary>

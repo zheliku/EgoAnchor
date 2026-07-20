@@ -169,6 +169,42 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>预测透传策略必须调用模型预测并报告当前渲染时刻。</summary>
+        [Test]
+        public void PredictivePassthroughUsesRenderTimePrediction()
+        {
+            GameObject go = new GameObject("PredictivePassthroughTests");
+            try
+            {
+                OneEuroModel model = go.AddComponent<OneEuroModel>();
+                PredictivePassthroughStrategy smoothing = go.AddComponent<PredictivePassthroughStrategy>();
+                AnchorObservation first = AnchorObservation.FromAlignedPose(
+                    frameId: 1,
+                    worldPose: Pose.identity,
+                    sampleTimeSeconds: 10.0,
+                    reliabilityScore: 1.0f,
+                    captureTimeSeconds: 10.0);
+                AnchorObservation second = AnchorObservation.FromAlignedPose(
+                    frameId: 2,
+                    worldPose: new Pose(Vector3.right, Quaternion.identity),
+                    sampleTimeSeconds: 11.0,
+                    reliabilityScore: 1.0f,
+                    captureTimeSeconds: 11.0);
+                model.Snap(first);
+                model.UpdateState(second);
+                smoothing.OnObservation(model, second);
+
+                Pose predicted = smoothing.Output(model, 11.5);
+
+                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(11.5).Within(1e-6));
+                Assert.That(predicted.position.x, Is.GreaterThan(model.LatestControlPoint.Pose.position.x));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
         /// <summary>
         /// runtime 输出与显示 Transform 必须分别记录，不能因同帧采样而混用字段。
         /// </summary>

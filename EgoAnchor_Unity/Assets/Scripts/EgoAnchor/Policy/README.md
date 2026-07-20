@@ -1,6 +1,6 @@
 # EgoAnchor Unity 锚定管线（重构版）
 
-把低频 (~5fps) 的观测 pose 实时升采样成每渲染帧 (72/90fps) 连续平滑的 anchor pose。
+把低频 (~10Hz) 的观测 pose 实时升采样成每渲染帧 (72/90fps) 连续平滑的 anchor pose。
 重构自离线仿真 `EgoAnchor_Tools3`，根治了旧实现"断断续续 / 阶梯跳变"的问题。
 
 ## 为什么旧的不平滑（已修复）
@@ -11,7 +11,7 @@
 
 ---
 
-## 架构：两个可自由组合的模块（3×3）
+## 架构：两个可自由组合的模块
 
 一个 anchor runtime = **1 个运动模型 (MotionModel) + 1 个平滑策略 (SmoothingStrategy)**，
 挂在同一个 GameObject 上，由 `AnchorPolicyHost` 引用。两个维度正交，自由组合：
@@ -20,22 +20,25 @@
 运动模型 MotionModel (模块 A，去噪+估速+外推)      平滑策略 SmoothingStrategy (模块 B，低频→高频)
 ├─ ConstantVelocityModel   (CV，差分速度，不去噪)   ├─ RawPassthroughStrategy (raw：零阶保持)
 ├─ KalmanModel             (Kalman 去噪+速度估计)   ├─ BlendStrategy          (B路：零延迟，外推+误差融合)
-└─ OneEuroModel            (One Euro 自适应去噪)     └─ DelayedInterpStrategy  (C路：延迟插值)
+└─ OneEuroModel            (One Euro 自适应去噪)     ├─ DelayedInterpStrategy  (C路：延迟插值)
+                                                    └─ PredictivePassthroughStrategy (逐帧模型预测)
 ```
 
-**3×3 = 9 种组合**。论文实验通常不需要全跑，优先选 raw、Kalman/OneEuro baseline 和 EgoAnchor 方法组合：
+Raw、Blend、DelayedInterp 和 PredictivePassthrough 是可独立选择的策略。论文实验通常不需要全跑，优先选 raw、OneEuro predictive baseline 和 EgoAnchor 方法组合：
 
-| | RawPassthroughStrategy | BlendStrategy | DelayedInterpStrategy |
-|---|---|---|---|
-| **ConstantVelocityModel** | raw / zoh | cv + blend | cv + interp |
-| **KalmanModel** | kalman zoh | kalman + blend | kalman + interp |
-| **OneEuroModel** | oneeuro zoh | oneeuro + blend | oneeuro + interp |
+| | RawPassthroughStrategy | PredictivePassthroughStrategy | BlendStrategy | DelayedInterpStrategy |
+|---|---|---|---|---|
+| **ConstantVelocityModel** | raw / zoh | cv + predictive | cv + blend | cv + interp |
+| **KalmanModel** | kalman zoh | kalman + predictive | kalman + blend | kalman + interp |
+| **OneEuroModel** | oneeuro zoh | oneeuro + predictive | oneeuro + blend | oneeuro + interp |
 
 **正交的第三维：静止锚定。** `EgoAnchorStaticLockModule` 与上面组合正交叠加：
 挂上模块并启用 `lockEnabled` = 在该 baseline 之上加 EgoAnchor 静止锚定层；不挂或关闭 = 纯 baseline。
 **EgoAnchor 主方法 = 选定 baseline + `EgoAnchorStaticLockModule`**。当前常用起点是 `kalman + blend` 或 `kalman + interp`。
 
 `raw`（什么都不做的参照）= `ConstantVelocityModel + RawPassthroughStrategy`。不要用 BlendStrategy 调 decay 来假装 raw。
+
+`PredictivePassthroughStrategy` 每个渲染帧直接调用 `MotionModel.PredictAt(now)`，不做保持、插值、残差融合或预测限幅。正式场景中的 `One-Euro Anchor` 使用 `OneEuroModel + PredictivePassthroughStrategy`；Arrival-Hold、Capture-Hold 和时序合成消融仍使用 `RawPassthroughStrategy` 或各自原有策略。
 
 模块通过数据契约解耦：MotionModel 提供 `PredictAt(t)`（给 B 路外推）和 `LatestControlPoint`
 （给 C 路缓冲插值）。host 每帧调 `strategy.Output(model, now)`。

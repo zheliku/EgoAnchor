@@ -50,6 +50,9 @@ namespace EgoAnchor.Policy
         /// <summary>日志/eval 用的模型名。</summary>
         public abstract string ModelName { get; }
 
+        /// <summary>写入配置哈希的模型参数指纹；无额外参数的模型返回空字符串。</summary>
+        public virtual string ConfigurationFingerprint => string.Empty;
+
         /// <summary>是否已有可输出状态 (至少一帧观测)。</summary>
         public abstract bool HasState { get; }
 

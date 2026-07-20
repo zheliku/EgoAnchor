@@ -1,3 +1,4 @@
+using System.Globalization;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
@@ -11,17 +12,31 @@ namespace EgoAnchor.Policy
     /// </summary>
     public sealed class OneEuroModel : MotionModel
     {
-        /// <summary>最小截止频率，单位 Hz；越小越平滑、滞后越大。</summary>
-        [Tooltip("最小截止频率 (Hz)；越小越平滑、滞后越大。默认 1。")]
-        [SerializeField] private float minCutoff = 1.0f;
+        /// <summary>位置通道最小截止频率，单位 Hz。</summary>
+        [Header("Position / 平移参数")]
+        [Tooltip("位置通道最小截止频率 (Hz)；单位为米。默认 0.8。")]
+        [SerializeField] private float positionMinCutoff = 0.8f;
 
-        /// <summary>速度自适应系数 beta；越大快速运动时越跟手 (减滞后)。</summary>
-        [Tooltip("速度自适应系数 beta；越大快速运动时越跟手、滞后越小。默认 0.25。")]
-        [SerializeField] private float beta = 0.25f;
+        /// <summary>位置通道速度自适应系数，单位 Hz/(m/s)。</summary>
+        [Tooltip("位置通道速度自适应系数 beta，单位 Hz/(m/s)。默认 6。")]
+        [SerializeField] private float positionBeta = 6.0f;
 
-        /// <summary>导数 (速度) 低通截止频率，单位 Hz。</summary>
-        [Tooltip("导数 (速度) 低通截止频率 (Hz)；一般保持 1。")]
-        [SerializeField] private float derivativeCutoff = 1.0f;
+        /// <summary>位置通道导数低通截止频率，单位 Hz。</summary>
+        [Tooltip("位置通道导数低通截止频率 (Hz)。默认 2。")]
+        [SerializeField] private float positionDerivativeCutoff = 2.0f;
+
+        /// <summary>旋转通道最小截止频率，单位 Hz。</summary>
+        [Header("Rotation / 旋转参数")]
+        [Tooltip("旋转通道最小截止频率 (Hz)；角速度单位为弧度/秒。默认 1。")]
+        [SerializeField] private float rotationMinCutoff = 1.0f;
+
+        /// <summary>旋转通道速度自适应系数，单位 Hz/(rad/s)。</summary>
+        [Tooltip("旋转通道速度自适应系数 beta，单位 Hz/(rad/s)。默认 1。")]
+        [SerializeField] private float rotationBeta = 1.0f;
+
+        /// <summary>旋转通道导数低通截止频率，单位 Hz。</summary>
+        [Tooltip("旋转通道导数低通截止频率 (Hz)。默认 2。")]
+        [SerializeField] private float rotationDerivativeCutoff = 2.0f;
 
         private ScalarOneEuro px;
         private ScalarOneEuro py;
@@ -34,6 +49,15 @@ namespace EgoAnchor.Policy
         private bool hasState;
 
         public override string ModelName => "oneeuro";
+        public override string ConfigurationFingerprint => string.Format(
+            CultureInfo.InvariantCulture,
+            "pos:{0:R},{1:R},{2:R}|rot:{3:R},{4:R},{5:R}",
+            positionMinCutoff,
+            positionBeta,
+            positionDerivativeCutoff,
+            rotationMinCutoff,
+            rotationBeta,
+            rotationDerivativeCutoff);
         public override bool HasState => hasState;
         public override double LastObservationTimeSeconds => lastTimeSeconds;
 
@@ -80,6 +104,10 @@ namespace EgoAnchor.Policy
 
             Vector3 p = observation.WorldPose.position;
             double t = observation.MeasurementTimeSeconds;
+            if (t <= lastTimeSeconds)
+            {
+                return;
+            }
             px.Update(p.x, t);
             py.Update(p.y, t);
             pz.Update(p.z, t);
@@ -121,12 +149,12 @@ namespace EgoAnchor.Policy
 
         private void ConfigureFilters()
         {
-            px.Configure(minCutoff, beta, derivativeCutoff);
-            py.Configure(minCutoff, beta, derivativeCutoff);
-            pz.Configure(minCutoff, beta, derivativeCutoff);
-            rxFilter.Configure(minCutoff, beta, derivativeCutoff);
-            ryFilter.Configure(minCutoff, beta, derivativeCutoff);
-            rzFilter.Configure(minCutoff, beta, derivativeCutoff);
+            px.Configure(positionMinCutoff, positionBeta, positionDerivativeCutoff);
+            py.Configure(positionMinCutoff, positionBeta, positionDerivativeCutoff);
+            pz.Configure(positionMinCutoff, positionBeta, positionDerivativeCutoff);
+            rxFilter.Configure(rotationMinCutoff, rotationBeta, rotationDerivativeCutoff);
+            ryFilter.Configure(rotationMinCutoff, rotationBeta, rotationDerivativeCutoff);
+            rzFilter.Configure(rotationMinCutoff, rotationBeta, rotationDerivativeCutoff);
         }
 
         private Vector3 CurrentPosition() => new Vector3(px.Value, py.Value, pz.Value);

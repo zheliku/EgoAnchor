@@ -21,6 +21,7 @@ namespace EgoAnchor.Policy
 
         private float xHat;
         private float dxHat;
+        private float previousRawValue;
         private double lastTimeSeconds;
         private bool initialized;
 
@@ -43,6 +44,7 @@ namespace EgoAnchor.Policy
         {
             xHat = 0.0f;
             dxHat = 0.0f;
+            previousRawValue = 0.0f;
             lastTimeSeconds = 0.0;
             initialized = false;
         }
@@ -52,6 +54,7 @@ namespace EgoAnchor.Policy
         {
             xHat = value;
             dxHat = 0.0f;
+            previousRawValue = value;
             lastTimeSeconds = timeSeconds;
             initialized = true;
             return xHat;
@@ -65,10 +68,17 @@ namespace EgoAnchor.Policy
                 return Snap(value, timeSeconds);
             }
 
-            float dt = Mathf.Max((float)(timeSeconds - lastTimeSeconds), 1e-5f);
+            double deltaSeconds = timeSeconds - lastTimeSeconds;
+            if (deltaSeconds <= 0.0)
+            {
+                return xHat;
+            }
+
+            float dt = (float)deltaSeconds;
             lastTimeSeconds = timeSeconds;
 
-            float dxRaw = (value - xHat) / dt;
+            float dxRaw = (value - previousRawValue) / dt;
+            previousRawValue = value;
             float aD = Alpha(dt, dCutoff);
             dxHat += aD * (dxRaw - dxHat);
 

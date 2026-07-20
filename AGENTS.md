@@ -54,7 +54,7 @@ VCD 的三个语义层次不得混淆：
 
 - *Arrival-Hold*：到达时刻复合、接受全部合法候选、零阶保持。
 - *Capture-Hold*：采集时刻世界复合、接受全部合法候选、零阶保持，用于隔离 frame alignment。
-- *One-Euro Anchor*：采集时刻世界复合、基本有效性检查、One Euro 自适应滤波与保持。
+- *One-Euro Anchor*：采集时刻世界复合、基本有效性检查、OneEuroModel 自适应滤波与基于平滑速度的逐渲染帧外推。
 - *EgoAnchor*：采集时刻世界复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
 - 组件消融使用 `EgoAnchor w/o <component>` 风格命名，不再恢复旧 RQ 命名或旧 CLI 兼容层。
 
@@ -115,7 +115,9 @@ PoseResult candidate
 
 - *Arrival-Hold* 用到达时刻复合和零阶保持，作为直接消费异步视觉位姿的朴素系统基线。
 - *Capture-Hold* 用采集时刻复合和零阶保持，作为 Arrival-Hold 与 One-Euro Anchor 之间的时间对齐桥接配置。
-- *One-Euro Anchor* 用采集时刻复合、基本有效性检查和 One Euro 自适应滤波，作为标准滤波锚定基线。
+- *One-Euro Anchor* 用采集时刻复合、基本有效性检查、OneEuroModel 与 PredictivePassthroughStrategy，作为逐帧预测的标准滤波锚定基线。
+- 当前正式场景的 One-Euro 参数按米制位置与约 10 Hz 候选重新标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`；既有 formal 数据若仍来自旧 RawPassthrough 配置，不得与新配置混合分析。
+- OneEuroModel Inspector 将平移与旋转参数分为独立 Header；预测透传的候选到达回拉仍属于无残差融合策略的预期行为，不应仅通过提高 cutoff 消除。
 - *EgoAnchor* 用采集时刻复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
 - 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
 - 模型相关 per-variant jump gate 不进入正式比较。
@@ -160,6 +162,7 @@ schema-v2 task directory
 - 深度评分保留绝对与结构分量 `D = (1-alpha) D_abs + alpha D_struct`；Run 1 日志必须暴露消融所需分量。
 - Python 评估模式的 `RuntimeLogWriter` 已将候选行映射为严格 `PythonCandidateRow`，颜色不可用写入 `null` 并保留解释 flag；runtime 事件与候选行分写固定 schema-v2 文件。
 - Python candidate ID 使用 `session_id:frame_id:frame_local_seq`；`RuntimeLogWriter` 关闭时把 candidate/event 的真实 `rows_written`、`dropped_rows` 和 `log_write_failures` 写回 `python_session.json`，供最终 manifest 汇总，Unity 不得伪造 Python 丢行统计。
+- `egoanchor.eval` 包级入口只导出 schema-v2、QC 和 Stage 1 workbook 基础设施；GPT v4 论文分析必须从 `egoanchor.eval.gpt_v4` 或离线 CLI 显式进入，运行时服务不得因论文绘图依赖加载失败。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
@@ -286,7 +289,7 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 - Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是 GPT v4 分析的唯一正式输入。
 - GPT v4 只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图。实验一分类面板使用不透明箱线/须线/误差棒与半透明片段点；持续平移面板仅在散点层按每个方法的 1.5x IQR 隐藏视觉异常点，median/IQR、表格和完整审计数据仍包含全部片段。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图，主稿使用 LaTeX 子图分别排版这些 panel。实验一分类面板使用不透明箱线/须线/误差棒与半透明片段点；持续平移和时序合成面板仅在散点层按每个方法的 1.5x IQR 隐藏视觉异常点，median/IQR、表格和完整审计数据仍包含全部片段；两动态面板纵轴均固定为 0--15 mm。图 2 仅在动态面板放置一套共享方法图例，图 3 仅在时序面板放置 Full/Disabled 图例，图例间距保持可读。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - GPT 参考包只提供绘图样式、表格布局和论文文字结构，不作为正式数字输入；正式数字必须由当前五本 Stage 1 XLSX 计算。

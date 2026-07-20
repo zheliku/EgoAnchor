@@ -39,7 +39,7 @@
   - `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Alignment/FramePoseHistory.cs`
 - Unity policy 模块可直接组成新系统配置：
   - 零阶保持：`ConstantVelocityModel` + `RawPassthroughStrategy`
-  - One Euro：`OneEuroModel` + `RawPassthroughStrategy`
+  - One Euro：`OneEuroModel` + `PredictivePassthroughStrategy`
   - EgoAnchor temporal synthesis：`KalmanModel` + `DelayedInterpStrategy`，`DelayedInterpStrategy` 使用 Hermite 样条时对应 Kalman--Hermite
   - StaticLock：`EgoAnchorStaticLockModule`
 - Python runtime 主干可复用：
@@ -184,7 +184,7 @@ Python 侧旧 RQ 代码和旧 schema：
 | ------------------- | -------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `Arrival-Hold`    | 到达时刻复合，用`FramePoseHistory.TryGetLatest` 的最新 camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
 | `Capture-Hold`    | 采集时刻复合，用`frame_id` 回查 image-time proxy camera pose       | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
-| `One-Euro Anchor` | 采集时刻复合                                                         | 基本有效性检查               | `OneEuroModel` + `RawPassthroughStrategy`，滤波后保持        | 短时保持，超时后重新初始化；禁用 VCD gate 与 StaticLock |
+| `One-Euro Anchor` | 采集时刻复合                                                         | 基本有效性检查               | `OneEuroModel` + `PredictivePassthroughStrategy`，平滑速度逐渲染帧外推 | 短时保持，超时后重新初始化；禁用 VCD gate 与 StaticLock |
 | `EgoAnchor`       | 采集时刻复合                                                         | VCD admission                | `KalmanModel` + `DelayedInterpStrategy(Hermite)`             | 启用 StaticLock、分级退化、重获取 fan-in                |
 
 关键实现点：

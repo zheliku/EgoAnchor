@@ -1424,7 +1424,7 @@ namespace EgoAnchor.Tests
 
             AssertVariantConfig(yaml, "Arrival-Hold", 1, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
-            AssertVariantConfig(yaml, "One-Euro Anchor", 0, 0, "OneEuroModel", "RawPassthroughStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "One-Euro Anchor", 0, 0, "OneEuroModel", "PredictivePassthroughStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "DelayedInterpStrategy", true, 0, 1);

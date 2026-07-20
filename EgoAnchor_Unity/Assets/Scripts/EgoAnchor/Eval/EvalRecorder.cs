@@ -1073,6 +1073,7 @@ namespace EgoAnchor.Eval
             PoseToAnchorRuntime rt = ev.runtime;
             AnchorPolicyHost policy = rt != null ? rt.PolicyHost : null;
             string motionModel    = policy != null ? policy.MotionModelName    : (rt != null ? rt.MotionModelName    : string.Empty);
+            string motionConfig   = policy != null ? policy.MotionModelConfiguration : string.Empty;
             string smoothing      = policy != null ? policy.SmoothingStrategyName : (rt != null ? rt.SmoothingStrategyName : string.Empty);
             string qualityGate    = rt != null ? rt.QualityGateMode : string.Empty;
             string worldAlignment = rt != null ? rt.WorldAlignmentModeName : string.Empty;
@@ -1084,6 +1085,7 @@ namespace EgoAnchor.Eval
             bool usesServer       = policy != null && policy.UsesServerReacquire;
             string hash = ComputeHash(
                 label, motionModel, smoothing, qualityGate, worldAlignment,
+                motionConfig,
                 usesCaptureTime, usesVcd, usesTemporal, usesStaticLock, usesLowScore, usesServer);
             return new EvalVariantConfig(
                 label,
@@ -1107,6 +1109,7 @@ namespace EgoAnchor.Eval
             string smoothing,
             string qualityGate,
             string worldAlignment,
+            string motionConfig,
             bool usesCaptureTime,
             bool usesVcd,
             bool usesTemporal,
@@ -1121,6 +1124,7 @@ namespace EgoAnchor.Eval
                 smoothing,
                 qualityGate,
                 worldAlignment,
+                motionConfig,
                 usesCaptureTime ? "1" : "0",
                 usesVcd ? "1" : "0",
                 usesTemporal ? "1" : "0",
