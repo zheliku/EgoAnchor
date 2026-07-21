@@ -15,14 +15,14 @@ from egoanchor.eval import cli as eval_cli
 
 
 VARIANT_SPECS = (
-    ("Arrival-Hold", "cv", "raw_passthrough", "disabled", "ArrivalTime", False, False, False, False, False, False),
-    ("Capture-Hold", "cv", "raw_passthrough", "disabled", "CaptureTime", True, False, False, False, False, False),
-    ("One-Euro Anchor", "oneeuro", "raw_passthrough", "disabled", "CaptureTime", True, False, False, False, False, False),
-    ("EgoAnchor", "kalman", "interp_hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor w/o capture-time alignment", "kalman", "interp_hermite", "enabled", "ArrivalTime", False, True, True, True, True, True),
-    ("EgoAnchor w/o VCD", "kalman", "interp_hermite", "disabled", "CaptureTime", True, False, True, True, False, True),
-    ("EgoAnchor w/o temporal synthesis", "cv", "raw_passthrough", "enabled", "CaptureTime", True, True, False, True, True, True),
-    ("EgoAnchor w/o StaticLock", "kalman", "interp_hermite", "enabled", "CaptureTime", True, True, True, False, True, True),
+    ("Arrival-Hold", "cv", "hold", "disabled", "ArrivalTime", False, False, False, False, False, False),
+    ("Capture-Hold", "cv", "hold", "disabled", "CaptureTime", True, False, False, False, False, False),
+    ("One-Euro Anchor", "oneeuro", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
+    ("EgoAnchor", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
+    ("EgoAnchor w/o capture-time alignment", "kalman", "hermite", "enabled", "ArrivalTime", False, True, True, True, True, True),
+    ("EgoAnchor w/o VCD", "kalman", "hermite", "disabled", "CaptureTime", True, False, True, True, False, True),
+    ("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", True, True, False, True, True, True),
+    ("EgoAnchor w/o StaticLock", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, False, True, True),
 )
 """与正式采集冻结矩阵一致的八个测试 variant。"""
 
@@ -131,6 +131,21 @@ class ReaderQcTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("event_name_mismatch", {issue.code for issue in report.errors})
 
+    def test_parameter_fingerprint_is_required_and_hash_bound(self) -> None:
+        """数值参数指纹缺失或脱离 config_hash 修改时必须硬失败。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["variant_configs"][0]["configuration_fingerprint"] = "changed-without-rehash"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("variant_config_hash", {issue.code for issue in report.errors})
+
 
 def _write_valid_task(
     parent: Path,
@@ -149,13 +164,15 @@ def _write_valid_task(
     renders: list[dict[str, object]] = []
     for spec in VARIANT_SPECS:
         label, motion, smoothing, gate, alignment, capture, vcd, temporal, static, low_score, server = spec
-        config_hash = _variant_hash(spec)
+        configuration_fingerprint = f"fixture:{label}"
+        config_hash = _variant_hash(spec, configuration_fingerprint)
         variant_configs.append(
             {
                 "label": label,
                 "motion_model": motion,
                 "smoothing_strategy": smoothing,
                 "quality_gate": gate,
+                "configuration_fingerprint": configuration_fingerprint,
                 "config_hash": config_hash,
             }
         )
@@ -478,10 +495,12 @@ def _event(
     }
 
 
-def _variant_hash(spec: tuple[object, ...]) -> str:
+def _variant_hash(spec: tuple[object, ...], configuration_fingerprint: str) -> str:
     """按 Unity FNV-1a 规则计算测试 variant 配置哈希。"""
 
-    values = [str(value) for value in spec[:5]] + ["1" if bool(value) else "0" for value in spec[5:]]
+    values = [str(value) for value in spec[:5]]
+    values.append(configuration_fingerprint)
+    values.extend("1" if bool(value) else "0" for value in spec[5:])
     return _fnv1a("|".join(values).encode("utf-8"))
 
 

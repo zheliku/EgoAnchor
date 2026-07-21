@@ -5,17 +5,31 @@ from .metrics import GptV4Results, analyze_workbooks
 from .paper import write_paper
 from .pipeline import build_paper
 from .settings import GptV4Settings, load_settings
+from .temporal_replay import (
+    DELAYED_HERMITE,
+    PREDICT_TO_NOW,
+    TemporalReplaySettings,
+    publish_temporal_replay_figure,
+    run_temporal_replay,
+    temporal_replay_summary,
+)
 from .xlsx import iter_rows, workbook_sha256
 
 
 __all__ = [
     "GptV4Results",
     "GptV4Settings",
+    "DELAYED_HERMITE",
+    "PREDICT_TO_NOW",
+    "TemporalReplaySettings",
     "analyze_workbooks",
     "build_paper",
     "iter_rows",
     "load_settings",
     "publish_figures",
+    "publish_temporal_replay_figure",
+    "run_temporal_replay",
+    "temporal_replay_summary",
     "workbook_sha256",
     "write_paper",
 ]

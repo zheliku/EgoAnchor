@@ -15,10 +15,14 @@ from .metrics import (
     FULL_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
-    NO_TEMPORAL_SYNTHESIS,
     NO_VCD,
     GptV4Results,
 )
+from .temporal_replay import DELAYED_HERMITE, PREDICT_TO_NOW
+
+
+TemporalReplaySummary = Mapping[str, Mapping[str, float]]
+"""时序反事实重放的策略级汇总。"""
 
 
 def _fmt(value: float, digits: int = 3) -> str:
@@ -160,7 +164,19 @@ def _key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     return str(row["session_id"]), str(row["trial_id"]), str(row["segment_id"])
 
 
-def _exp2_table(results: GptV4Results) -> str:
+def _replay_value(summary: TemporalReplaySummary, strategy: str, key: str) -> float:
+    """读取时序 replay 汇总并拒绝缺失或非有限值。"""
+
+    try:
+        value = float(summary[strategy][key])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"论文缺少时序 replay 指标：{strategy}/{key}") from error
+    if not np.isfinite(value):
+        raise ValueError(f"论文时序 replay 指标非有限：{strategy}/{key}")
+    return value
+
+
+def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     """生成 GPT v4 目标化四组件归因表。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
@@ -170,9 +186,12 @@ def _exp2_table(results: GptV4Results) -> str:
     reduction = arrival - capture
     capture_effect = f"+{_fmt(float(np.median(reduction)))} [{_fmt(float(np.quantile(reduction, .25)))}, {_fmt(float(np.quantile(reduction, .75)))}]~mm; {int(np.sum(reduction > 0))}/{len(reduction)} 改善"
     full_static, disabled_static, static_delta, static_positive = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    full_vcd, disabled_vcd, _, _ = _paired_summary(results.occlusion_episodes, NO_VCD, "translation_p95_mm")
-    full_lag, disabled_lag, lag_delta, _ = _paired_summary(results.translation_segments, NO_TEMPORAL_SYNTHESIS, "effective_lag_ms")
-    full_rmse, disabled_rmse, rmse_delta, _ = _paired_summary(results.translation_segments, NO_TEMPORAL_SYNTHESIS, "aligned_rmse_mm")
+    delayed_lag = _replay_value(replay, DELAYED_HERMITE, "effective_lag_ms")
+    delayed_rmse = _replay_value(replay, DELAYED_HERMITE, "lag_aligned_rmse_mm")
+    delayed_increment = _replay_value(replay, DELAYED_HERMITE, "post_stop_increment_p95_mm")
+    predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
+    predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
+    predict_increment = _replay_value(replay, PREDICT_TO_NOW, "post_stop_increment_p95_mm")
     vcd_full = results.occlusion_episodes[FULL_VARIANT]
     vcd_disabled = results.occlusion_episodes[NO_VCD]
     full_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_full)
@@ -192,7 +211,7 @@ def _exp2_table(results: GptV4Results) -> str:
         f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
         f"VCD 接纳 & 遮挡 P95 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
-        f"时序合成 & Lag / aligned RMSE & {_fmt(full_lag, 1)} / {_fmt(full_rmse)} & {_fmt(disabled_lag, 1)} / {_fmt(disabled_rmse)} & {_fmt(lag_delta, 1)}~ms / +{_fmt(rmse_delta)}~mm \\\\",
+        f"时序合成（离线重放） & fitted lag / aligned RMSE & {_fmt(delayed_lag, 1)} / {_fmt(delayed_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(predict_lag - delayed_lag, 1)}~ms / +{_fmt(predict_rmse - delayed_rmse)}~mm \\\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",
@@ -218,6 +237,12 @@ def _exp1_text(results: GptV4Results) -> str:
         "arrival_rmse": _summary(results.translation_segments["Arrival-Hold"], "aligned_rmse_mm")[0],
         "one_euro_lag": _summary(results.translation_segments["One-Euro Anchor"], "effective_lag_ms")[0],
         "one_euro_rmse": _summary(results.translation_segments["One-Euro Anchor"], "aligned_rmse_mm")[0],
+        "ego_rotation_lag": _summary(results.rotation_segments[FULL_VARIANT], "effective_lag_ms")[0],
+        "ego_rotation_rmse": _summary(results.rotation_segments[FULL_VARIANT], "aligned_rmse_deg")[0],
+        "one_euro_rotation_lag": _summary(results.rotation_segments["One-Euro Anchor"], "effective_lag_ms")[0],
+        "one_euro_rotation_rmse": _summary(results.rotation_segments["One-Euro Anchor"], "aligned_rmse_deg")[0],
+        "no_lock_rotation_lag": _summary(results.rotation_segments[NO_STATIC_LOCK], "effective_lag_ms")[0],
+        "no_lock_rotation_rmse": _summary(results.rotation_segments[NO_STATIC_LOCK], "aligned_rmse_deg")[0],
         "ego_occ": _summary(results.occlusion_episodes[FULL_VARIANT], "translation_p95_mm")[0],
         "one_euro_occ": _summary(results.occlusion_episodes["One-Euro Anchor"], "translation_p95_mm")[0],
         "ego_start": _summary(results.transition_segments[FULL_VARIANT], "response_ms")[0],
@@ -231,6 +256,8 @@ def _exp1_text(results: GptV4Results) -> str:
 \\textbf{{头动下的世界一致性与静止稳定性。}} 移除每个动作片段的固定注册偏置后，EgoAnchor 的中心化平移 P95 为 {_fmt(values['ego_centered'])}~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 {_fmt(values['arrival_centered'])}、{_fmt(values['capture_centered'])} 与 {_fmt(values['one_euro_centered'])}~mm。EgoAnchor 的绝对注册 P95 为 {_fmt(values['ego_absolute'])}~mm；其静止帧间位置增量 P95 为 {_fmt(values['ego_increment'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_increment'])}~mm。
 
 \\textbf{{持续运动中的时延--轨迹质量权衡。}} 持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 {_fmt(values['ego_lag'], 1)}~ms / {_fmt(values['ego_rmse'])}~mm；Arrival-Hold 为 {_fmt(values['arrival_lag'], 1)}~ms / {_fmt(values['arrival_rmse'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_lag'], 1)}~ms / {_fmt(values['one_euro_rmse'])}~mm。结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
+
+\\textbf{{旋转负结果。}} 持续旋转中，EgoAnchor 的有效时延 / 对齐角 RMSE 为 {_fmt(values['ego_rotation_lag'], 1)}~ms / {_fmt(values['ego_rotation_rmse'])}$^\\circ$，One-Euro Anchor 为 {_fmt(values['one_euro_rotation_lag'], 1)}~ms / {_fmt(values['one_euro_rotation_rmse'])}$^\\circ$；完整系统没有取得旋转优势。历史消融中，关闭 StaticLock 后该值为 {_fmt(values['no_lock_rotation_lag'], 1)}~ms / {_fmt(values['no_lock_rotation_rmse'])}$^\\circ$。这说明 v2 的主要代价来自低角速度阶段的姿态冻结及随后解锁，而不是平移通道所反映的轨迹平滑收益。该诊断是下一轮重采必须复核的假设，不把旋转结果解释为已解决。
 
 \\textbf{{遮挡期间的失效控制。}} 遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 {_fmt(values['ego_occ'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_occ'])}~mm。完整分布、40~mm 阈值超限率和最大值共同保留在图和审阅表中。
 
@@ -256,21 +283,26 @@ def _exp1_text(results: GptV4Results) -> str:
 """
 
 
-def _exp2_text(results: GptV4Results) -> str:
+def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     """生成实验二正文、表格和 GPT v4 四面板图。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
     arrival = np.asarray([float(row["arrival_p95_mm"]) for row in results.capture_alignment])
     reduction = arrival - capture
     full_static, disabled_static, static_delta, _ = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    full_rmse, disabled_rmse, rmse_delta, _ = _paired_summary(results.translation_segments, NO_TEMPORAL_SYNTHESIS, "aligned_rmse_mm")
     full_vcd = results.occlusion_episodes[FULL_VARIANT]
     disabled_vcd = results.occlusion_episodes[NO_VCD]
+    delayed_lag = _replay_value(replay, DELAYED_HERMITE, "effective_lag_ms")
+    delayed_rmse = _replay_value(replay, DELAYED_HERMITE, "lag_aligned_rmse_mm")
+    delayed_increment = _replay_value(replay, DELAYED_HERMITE, "post_stop_increment_p95_mm")
+    predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
+    predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
+    predict_increment = _replay_value(replay, PREDICT_TO_NOW, "post_stop_increment_p95_mm")
     return f"""\\subsection{{实验二：组件归因}}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率；时序合成以 lag / aligned residual 成对报告。
+实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 KF Predict-to-Now 或延迟 Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
 
-{_exp2_table(results)}
+{_exp2_table(results, replay)}
 
 \\begin{{figure*}}[t]
   \\centering
@@ -288,9 +320,9 @@ def _exp2_text(results: GptV4Results) -> str:
   \\end{{subfigure}}\\hfill
   \\begin{{subfigure}}[t]{{0.27\\textwidth}}
     \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/exp2d_temporal_synthesis.pdf}}
+    \\includegraphics[width=\\linewidth]{{figures/panels/exp2d_temporal_replay.pdf}}
   \\end{{subfigure}}
-  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示时序合成的 fitted-lag--aligned-residual 权衡。动态面板横轴使用 150--400~ms，纵轴范围均为 0--15~mm；图 3(d) 的异常点仅从显示层移除，完整配对数据仍保留在统计结果中。}}
+  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Delayed Hermite Interpolation 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 
@@ -300,7 +332,7 @@ def _exp2_text(results: GptV4Results) -> str:
 
 \\textbf{{VCD 接纳。}} 启用 VCD 时，{sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm；关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}。该组件的主证据是尾部失效率，不是单独的中位数。
 
-\\textbf{{时序合成。}} 关闭时序合成后，lag-aligned RMSE 由 {_fmt(full_rmse)} 增至 {_fmt(disabled_rmse)}~mm（增加 +{_fmt(rmse_delta)}~mm）。因此，该组件以显式历史时间线换取连续且更忠实的渲染轨迹。
+\\textbf{{时序反事实重放。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，Kalman Delayed Hermite Interpolation 为 {_fmt(delayed_lag, 1)}~ms / {_fmt(delayed_rmse)}~mm；停止后的帧间增量 P95 分别为 {_fmt(predict_increment)}~mm 与 {_fmt(delayed_increment)}~mm。后者以约 {_fmt(delayed_lag - predict_lag, 1)}~ms 的额外 lag 换取约 {_fmt(predict_rmse - delayed_rmse)}~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
 
 \\FloatBarrier
 """
@@ -316,7 +348,12 @@ def _replace_block(text: str, start: str, end: str, replacement: str) -> str:
     return updated
 
 
-def write_paper(results: GptV4Results, paper_root: Path, output_root: Path) -> Mapping[str, Path]:
+def write_paper(
+    results: GptV4Results,
+    paper_root: Path,
+    output_root: Path,
+    temporal_replay: TemporalReplaySummary | None = None,
+) -> Mapping[str, Path]:
     """写出 GPT v4 CSV、表格、主稿和 provenance manifest。"""
 
     data_root = output_root / "data"
@@ -365,8 +402,9 @@ def write_paper(results: GptV4Results, paper_root: Path, output_root: Path) -> M
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     table_root = paper_root / "tables"
     table_root.mkdir(parents=True, exist_ok=True)
+    replay = temporal_replay or {}
     exp1_table = _exp1_table(results)
-    exp2_table = _exp2_table(results)
+    exp2_table = _exp2_table(results, replay)
     exp1_table_path = table_root / "experiment1_corrected_newdata_v4.tex"
     exp2_table_path = table_root / "experiment2_corrected_newdata_v4.tex"
     exp1_table_path.write_text(exp1_table, encoding="utf-8")
@@ -378,7 +416,12 @@ def write_paper(results: GptV4Results, paper_root: Path, output_root: Path) -> M
     text = text.replace("../figures/", "figures/")
     text = text.replace(r"\usepackage{placeins}", r"\usepackage{placeins}" + "\n\\usepackage{subcaption}")
     text = _replace_block(text, r"\subsection{实验一：应用侧锚点行为}", r"\subsection{实验二：组件归因}", _exp1_text(results))
-    text = _replace_block(text, r"\subsection{实验二：组件归因}", r"\subsection{评价指标与汇总契约}", _exp2_text(results))
+    text = _replace_block(
+        text,
+        r"\subsection{实验二：组件归因}",
+        r"\subsection{评价指标与汇总契约}",
+        _exp2_text(results, replay),
+    )
     provenance = "% GPT v4 reproduced from immutable Stage 1 XLSX; input SHA-256: " + ", ".join(f"{Path(path).name}={digest}" for path, digest in sorted(results.workbook_sha256.items())) + "\n"
     text = text.replace(r"\begin{document}", provenance + r"\begin{document}", 1)
     manuscript = paper_root / "egoanchor_cn_v6.tex"

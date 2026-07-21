@@ -16,7 +16,7 @@ from .reader import SourceRow, TaskDataset, read_task
 FORMAL_VARIANTS = {
     "Arrival-Hold": ("ArrivalTime", False, False, False, False, False, False),
     "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
-    "One-Euro Anchor": ("CaptureTime", True, False, False, False, False, False),
+    "One-Euro Anchor": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
     "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
     "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
@@ -24,6 +24,18 @@ FORMAL_VARIANTS = {
     "EgoAnchor w/o StaticLock": ("CaptureTime", True, True, True, False, True, True),
 }
 """八个正式 runtime 的对齐和组件开关矩阵。"""
+
+FORMAL_METHODS = {
+    "Arrival-Hold": ("cv", "hold", "disabled"),
+    "Capture-Hold": ("cv", "hold", "disabled"),
+    "One-Euro Anchor": ("oneeuro", "linear_slerp", "enabled"),
+    "EgoAnchor": ("kalman", "hermite", "enabled"),
+    "EgoAnchor w/o capture-time alignment": ("kalman", "hermite", "enabled"),
+    "EgoAnchor w/o VCD": ("kalman", "hermite", "disabled"),
+    "EgoAnchor w/o temporal synthesis": ("kalman", "predict_to_now", "enabled"),
+    "EgoAnchor w/o StaticLock": ("kalman", "hermite", "enabled"),
+}
+"""下一轮正式采集冻结的运动模型、时序策略和质量门控组合。"""
 
 SCORE_FIELDS = (
     "vcd_score",
@@ -178,6 +190,9 @@ class _VariantRecord:
 
     config_hash: str
     """Unity FNV-1a variant 配置哈希。"""
+
+    configuration_fingerprint: str
+    """全部生效数值参数和模块配置的稳定指纹。"""
 
 
 def run_task_qc(task: TaskDataset | str | Path) -> StageOneQcReport:
@@ -364,8 +379,9 @@ def variant_config_hash(
     quality_gate: str,
     world_alignment_mode: str,
     flags: Iterable[bool],
+    configuration_fingerprint: str,
 ) -> str:
-    """按 Unity EvalRecorder 的 FNV-1a 字段顺序计算 variant 配置哈希。"""
+    """按 Unity EvalRecorder 的 FNV-1a 字段顺序计算完整 variant 配置哈希。"""
 
     raw = "|".join(
         (
@@ -374,6 +390,7 @@ def variant_config_hash(
             smoothing_strategy,
             quality_gate,
             world_alignment_mode,
+            configuration_fingerprint,
             *("1" if flag else "0" for flag in flags),
         )
     )
@@ -488,13 +505,22 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
         flags = tuple(value if type(value) is bool else False for value in raw_flags)
         if _text(item.get("world_alignment_mode")) != alignment or flags != tuple(expected_flags):
             state.error("variant_matrix", f"variant 开关矩阵与冻结定义不符：{variant_id}")
-        computed = variant_config_hash(
-            variant_id,
+        method = (
             _text(config.get("motion_model")),
             _text(config.get("smoothing_strategy")),
             _text(config.get("quality_gate")),
+        )
+        if method != FORMAL_METHODS[variant_id]:
+            state.error("variant_method", f"variant 模型、时序策略或门控与冻结定义不符：{variant_id}")
+        configuration_fingerprint = _text(config.get("configuration_fingerprint"))
+        if not configuration_fingerprint:
+            state.error("variant_fingerprint", f"variant 缺少完整参数指纹：{variant_id}")
+        computed = variant_config_hash(
+            variant_id,
+            *method,
             _text(item.get("world_alignment_mode")),
             flags,
+            configuration_fingerprint,
         )
         declared = _text(item.get("config_hash"))
         if declared != computed or _text(config.get("config_hash")) != computed:
@@ -509,6 +535,7 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
             _text(item.get("world_alignment_mode")),
             flags,
             declared,
+            configuration_fingerprint,
         )
 
     if set(records) != set(FORMAL_VARIANTS):

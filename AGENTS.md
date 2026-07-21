@@ -54,7 +54,7 @@ VCD 的三个语义层次不得混淆：
 
 - *Arrival-Hold*：到达时刻复合、接受全部合法候选、零阶保持。
 - *Capture-Hold*：采集时刻世界复合、接受全部合法候选、零阶保持，用于隔离 frame alignment。
-- *One-Euro Anchor*：采集时刻世界复合、基本有效性检查、OneEuroModel 自适应滤波与基于平滑速度的逐渲染帧外推。
+- *One-Euro Anchor* 是 schema 中保留的稳定 variant ID；新重采的场景显示名为 *One-Euro Interpolation*，使用采集时刻世界复合、VCD 接纳、OneEuroModel、自适应历史目标时刻、位置 Linear / 旋转 SLERP、与完整系统相同的生命周期和逐渲染帧输出，但不使用 StaticLock。
 - *EgoAnchor*：采集时刻世界复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
 - 组件消融使用 `EgoAnchor w/o <component>` 风格命名，不再恢复旧 RQ 命名或旧 CLI 兼容层。
 
@@ -115,9 +115,9 @@ PoseResult candidate
 
 - *Arrival-Hold* 用到达时刻复合和零阶保持，作为直接消费异步视觉位姿的朴素系统基线。
 - *Capture-Hold* 用采集时刻复合和零阶保持，作为 Arrival-Hold 与 One-Euro Anchor 之间的时间对齐桥接配置。
-- *One-Euro Anchor* 用采集时刻复合、基本有效性检查、OneEuroModel 与 PredictivePassthroughStrategy，作为逐帧预测的标准滤波锚定基线。
+- *One-Euro Anchor* 的新重采配置使用采集时刻世界复合、VCD 接纳、OneEuroModel 与 `LinearSlerpStrategy`；目标时刻与完整系统采用相同的自适应历史延迟，生命周期和重获取开关与完整系统一致，仅关闭 StaticLock。
 - 当前正式场景的 One-Euro 参数按米制位置与约 10 Hz 候选重新标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`；既有 formal 数据若仍来自旧 RawPassthrough 配置，不得与新配置混合分析。
-- OneEuroModel Inspector 将平移与旋转参数分为独立 Header；预测透传的候选到达回拉仍属于无残差融合策略的预期行为，不应仅通过提高 cutoff 消除。
+- 正式逐帧输出策略统一使用 `Strategy` 后缀：`HoldStrategy`、`PredictToNowStrategy`、`LinearSlerpStrategy` 和 `HermiteStrategy`；运动状态估计统一使用 `Model` 后缀。正式日志字符串分别为 `hold`、`predict_to_now`、`linear_slerp` 和 `hermite`，不得恢复旧 Passthrough/DelayedInterp 类名。
 - *EgoAnchor* 用采集时刻复合、VCD 接纳、Kalman-Hermite 合成、显式静止锚定和生命周期管理。
 - 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
 - 模型相关 per-variant jump gate 不进入正式比较。
@@ -150,6 +150,12 @@ schema-v2 task directory
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - GPT v4 reader-facing 表格最多保留三位小数，完整精度保存在 `data/analysis/gpt_v4/data/`；实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
+- v2 正式数据没有独立采集 `Kalman Predict-to-Now` runtime；当前时序策略对比只能从完整 EgoAnchor 已接纳候选、采集时刻世界位姿和渲染时间线做离线反事实重放，并在论文、图表和数据包中明确标记 `offline replay`，不得冒充真实采集消融或 bit-exact runtime 复现。当前推荐名称为 `Kalman Predict-to-Now` 与 `Kalman Delayed Hermite Interpolation`；实现延迟是自适应的，不称 `Fixed-Lag Hermite`。
+- v2 的 `EgoAnchor w/o temporal synthesis` 同时使用历史 `ConstantVelocityModel + RawPassthroughStrategy`，不能改名为 Kalman Predict-to-Now；其数值只作为历史完整消融审计，不作为纯时序策略归因。v2 的 One-Euro runtime 是历史 `OneEuroModel + RawPassthroughStrategy`，分析和论文必须按该批次 provenance 描述，不得与新重采的 `OneEuroModel + LinearSlerpStrategy` 配置混合。
+- 新重采的 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `HermiteStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。两者均通过场景契约测试冻结模型、策略和组件开关。
+- 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
+- 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。v2 持续旋转中完整系统的负结果与 StaticLock 占用/解锁有关，下一轮必须重采复核，不能用平移收益替代旋转证据。
+- 当前 KalmanModel 的 position/rotation measurement noise 是冻结序列化参数，VCD 只控制 admission；论文不得声称测量噪声随 VCD 分数在线自适应。
 
 ## Python 关键约束
 
@@ -180,7 +186,7 @@ schema-v2 task directory
 - `EvalLog` 使用有界后台队列；正式 session 的所有日志 `dropped_rows` 必须为 0。
 - Unity `EvalSession`/`EvalRecorder` 已固定写入 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl` 和本机独占的 `unity_events.jsonl`；render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生。Python 远端独占写入 `python_events.jsonl`。Mutagen 同步完成后，`qc`/`preprocess` 的 Stage 1 事件物化入口在总表缺失时确定性发布 `events.jsonl`；已有总表只验证，不覆盖。两端不再通过跨机器 `.lock` 共同追加同名文件。
 - Unity admission 与 event 行已覆盖 schema-v2 必填时间、策略、上下文和 payload 字段；candidate ID 使用 `session_id:frame_id:frame_local_seq`，同一 `PoseResult` 的多 runtime 回调共用标识。
-- Unity manifest 将 `run_kind` 固定写为 `formal`，不再暴露运行类型选择；同时写出自动配置哈希、对象、版本、无时长上下界的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计。`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
+- Unity manifest 将 `run_kind` 固定写为 `formal`，不再暴露运行类型选择；同时写出自动配置哈希、对象、版本、无时长上下界的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计。每个 variant 还必须写出非空 `configuration_fingerprint`，覆盖坐标补偿、运动模型、输出策略、接纳/生命周期/重获取及 StaticLock 的全部生效数值；`config_hash` 必须绑定该指纹，Python QC 同时核对模型、策略、门控、开关和 FNV-1a 哈希。`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
 - Unity 采集场景维护五项可任意选择的共享物理任务；每项任务同时记录四个实验一系统配置和四个实验二组件消融，不再重复采集任务 6--9。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆与键盘方向键共用 3×3 九宫格导航，主键盘数字行与小键盘 `1`--`5` 只负责直接选中任务，A/主键盘 Enter/小键盘 Enter 开始，右扳机/小键盘 `+`/`M` 标记，快速短按 B/小键盘 `0`/`E` 结束任务，摇杆按下/`Space` 只作废当前或选中任务，长按 B 1.5 秒/`F` 可随时停止 session。小键盘主流程固定为 `1`--`5` 选任务、`Enter` 开始、`+` 标记、`0` 结束。进入场景后保持未录制的任务选择状态并默认选中任务 1；方向键、右手摇杆或数字键只改变选中项。正式与开发场景的 `EvalSession.autoStart` 固定关闭；A、主 Enter 或小键盘 Enter 的一次新按下必须在同一回调内启动 session 与当前选中 trial，不得要求第二次确认，启动失败时保留选择且不得写 `trial_started`。右手 B 的结束绑定固定为 `Tap(duration=0.5)`，停止绑定固定为 `Hold(duration=1.5)`，防止长按停止前先误结束 trial。停止 session 时活动 trial 先写 `trial_rejected`，已经完成的任务保持不变。数字行路径必须写 `<Keyboard>/1`--`5`，小键盘路径写 `<Keyboard>/numpad1`--`numpad5`，marker 与结束路径分别写 `<Keyboard>/numpadPlus` 和 `<Keyboard>/numpad0`；不得使用无法解析的 `<Keyboard>/digitN`。运行中禁止切场；任务和 session 均无持续时间门禁，实际 trial 时长只记录不判定成败。已完成任务选中后可按开始动作重录，旧 trial 先写 `trial_rejected`；单独作废仍只影响选中任务。状态板只显示 `NEXT`、九宫格、`CURRENT`、直白 `STATE`、单一实际 trial 计时和固定按键图例，不暴露分析内部的 phase/event role；未录制时任务 1 保持黄色选中，一次显式开始动作后才显示绿色运行并启动 trial 计时；蓝色表示完成、灰色表示待执行，已完成任务被选中时保持蓝色并以箭头和粗体区分；Canvas 保持场景根节点静止。
 - 头显状态板运行时文本统一使用英文 ASCII，因为当前 TextMesh Pro 字体资产不保证 CJK 字形；中文只用于代码注释、Inspector Tooltip、控制台日志和采集手册，不得把中文动态状态字符串传给 `ExperimentStatusUI`。
 - 正式与开发采集场景的根 Canvas 固定包含两个同级面板：左侧任务状态板和右侧 `EvalLiveStats` 实时诊断板。实时板以 10 Hz 显示 HMD/佩戴/VR focus/输入 focus、output/display/reference、相对平台控制器的位姿差异、观测年龄、同 Unity 时钟 E2E arrival、Python server processing、smoothing delay、pose rate、VCD、残差、frame step 与锚点状态。平台参考差异不是外部真值，实时板不得用于挑选低误差起始时刻；正式指标仍由 schema-v2 离线分析产生。
@@ -289,7 +295,7 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 - Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是 GPT v4 分析的唯一正式输入。
 - GPT v4 只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图，主稿使用 LaTeX 子图分别排版这些 panel。实验一分类面板使用不透明箱线/须线/误差棒与半透明片段点；持续平移和时序合成面板仅在散点层按每个方法的 1.5x IQR 隐藏视觉异常点，median/IQR、表格和完整审计数据仍包含全部片段；两动态面板纵轴均固定为 0--15 mm。图 2 仅在动态面板放置一套共享方法图例，图 3 仅在时序面板放置 Full/Disabled 图例，图例间距保持可读。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 左三右一图，主稿使用 LaTeX 子图分别排版这些 panel。所有 episode 均显示，不做 IQR 可视层删除；细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，缺失或重复键必须拒绝绘图。方法颜色、端点颜色、字体、网格和中位数标记在实验一/二统一，动态坐标范围可以向外扩展但不得裁掉异常 episode。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - GPT 参考包只提供绘图样式、表格布局和论文文字结构，不作为正式数字输入；正式数字必须由当前五本 Stage 1 XLSX 计算。

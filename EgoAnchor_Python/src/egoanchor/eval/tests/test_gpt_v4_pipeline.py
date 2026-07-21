@@ -10,6 +10,8 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.gpt_v4 import iter_rows
+from egoanchor.eval.gpt_v4.figures import _paired_method_matrix
+from egoanchor.eval.gpt_v4.metrics import METHODS
 
 
 class GptV4PipelineTests(unittest.TestCase):
@@ -63,6 +65,35 @@ class GptV4PipelineTests(unittest.TestCase):
 
             self.assertEqual(code, eval_cli.EXIT_DATA_ERROR)
             self.assertFalse(output.exists())
+
+    def test_figure_pairing_uses_event_identity_instead_of_row_position(self) -> None:
+        """实验一折线必须按稳定片段键配对，即使各方法行顺序不同。"""
+
+        rows = {}
+        for method_index, method in enumerate(METHODS):
+            method_rows = [
+                {"session_id": "s", "trial_id": "t", "segment_id": "b", "value": method_index + 10.0},
+                {"session_id": "s", "trial_id": "t", "segment_id": "a", "value": method_index + 1.0},
+            ]
+            if method_index % 2:
+                method_rows.reverse()
+            rows[method] = tuple(method_rows)
+
+        matrix = _paired_method_matrix(rows, ("value",))
+
+        self.assertEqual(matrix[:, :, 0].tolist(), [[1.0, 2.0, 3.0, 4.0], [10.0, 11.0, 12.0, 13.0]])
+
+    def test_figure_pairing_rejects_missing_method_episode(self) -> None:
+        """任一方法缺失 episode 时禁止生成看似配对的趋势线。"""
+
+        rows = {
+            method: ({"session_id": "s", "trial_id": "t", "segment_id": "a", "value": 1.0},)
+            for method in METHODS
+        }
+        rows[METHODS[-1]] = ()
+
+        with self.assertRaisesRegex(ValueError, "配对不完整"):
+            _paired_method_matrix(rows, ("value",))
 
 
 if __name__ == "__main__":

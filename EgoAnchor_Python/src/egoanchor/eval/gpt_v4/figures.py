@@ -30,6 +30,15 @@ _SHORT_LABELS = {
     "One-Euro Anchor": "One-Euro",
     "EgoAnchor": "EgoAnchor",
 }
+_METHOD_COLORS = {
+    "Arrival-Hold": "#4C78A8",
+    "Capture-Hold": "#59A14F",
+    "One-Euro Anchor": "#F28E2B",
+    "EgoAnchor": "#E15759",
+}
+_PAIR_COLOR = "#7F8790"
+_FULL_COLOR = _METHOD_COLORS["EgoAnchor"]
+_DISABLED_COLOR = "#B07AA1"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
 _DYNAMIC_X_TICKS = (150, 200, 250, 300, 350, 400)
@@ -135,23 +144,34 @@ def _point_panel(
     data: Mapping[str, np.ndarray],
     title: str,
     ylabel: str,
+    paired_values: np.ndarray,
 ) -> Any:
     """绘制四系统片段散点与箱线分布。"""
 
     figure, axis = plt.subplots(figsize=(4.55, 3.65))
     positions = np.arange(len(METHODS))
+    for values in paired_values:
+        axis.plot(
+            positions,
+            values,
+            color=_PAIR_COLOR,
+            linewidth=0.75,
+            alpha=0.24,
+            zorder=1,
+        )
     for index, method in enumerate(METHODS):
         values = data[method]
         offsets = np.linspace(-0.11, 0.11, len(values))
-        scatter = axis.scatter(
+        color = _METHOD_COLORS[method]
+        axis.scatter(
             positions[index] + offsets,
             values,
             s=25,
             alpha=0.26,
             marker=_MARKERS[index],
+            color=color,
             zorder=2,
         )
-        color = scatter.get_facecolor()[0]
         box = axis.boxplot(
             [values],
             positions=[positions[index]],
@@ -187,44 +207,63 @@ def _point_panel(
     return figure
 
 
-def _translation_inlier_mask(points: np.ndarray) -> np.ndarray:
-    """返回仅用于散点显示的逐方法 1.5x IQR 内点掩码。"""
+def _paired_method_matrix(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    keys: Sequence[str],
+) -> np.ndarray:
+    """按严格事件身份组成 episode×method×metric 矩阵，禁止按数组位置连接。"""
 
-    mask = np.ones(points.shape[0], dtype=bool)
-    for dimension in range(points.shape[1]):
-        q1, q3 = np.quantile(points[:, dimension], (0.25, 0.75))
-        iqr = q3 - q1
-        if iqr <= 0:
-            continue
-        mask &= (points[:, dimension] >= q1 - 1.5 * iqr) & (points[:, dimension] <= q3 + 1.5 * iqr)
-    return mask
+    per_method: dict[str, dict[tuple[str, str, str], tuple[float, ...]]] = {}
+    for method in METHODS:
+        values: dict[tuple[str, str, str], tuple[float, ...]] = {}
+        for row in rows.get(method, ()):
+            identity = _identity(row)
+            if identity in values:
+                raise ValueError(f"GPT v4 方法片段键重复：{method}/{identity}")
+            metrics = tuple(float(row[key]) for key in keys)
+            if all(np.isfinite(metrics)):
+                values[identity] = metrics
+        per_method[method] = values
+    expected = set(per_method[METHODS[0]])
+    if not expected or any(set(per_method[method]) != expected for method in METHODS[1:]):
+        counts = ", ".join(f"{method}={len(per_method[method])}" for method in METHODS)
+        raise ValueError(f"GPT v4 实验一方法配对不完整：{counts}")
+    return np.asarray(
+        [[per_method[method][identity] for method in METHODS] for identity in sorted(expected)],
+        dtype=float,
+    )
 
 
 def _translation_panel(results: GptV4Results) -> Any:
     """绘制实验一持续平移 lag--residual 散点与 IQR。"""
 
     figure, axis = plt.subplots(figsize=(4.7, 3.65))
-    for index, method in enumerate(METHODS):
-        rows = results.translation_segments.get(method, ())
-        points = np.asarray(
-            [(float(row["effective_lag_ms"]), float(row["aligned_rmse_mm"])) for row in rows],
-            dtype=float,
+    paired = _paired_method_matrix(
+        results.translation_segments,
+        ("effective_lag_ms", "aligned_rmse_mm"),
+    )
+    for episode in paired:
+        axis.plot(
+            episode[:, 0],
+            episode[:, 1],
+            color=_PAIR_COLOR,
+            linewidth=0.75,
+            alpha=0.24,
+            zorder=1,
         )
-        points = points[np.isfinite(points).all(axis=1)]
-        if points.size == 0:
-            raise ValueError(f"GPT v4 图缺少 {method} 持续平移片段")
-        visible = points[_translation_inlier_mask(points)]
-        if visible.size == 0:
-            visible = points
-        scatter = axis.scatter(
-            visible[:, 0],
-            visible[:, 1],
+    for index, method in enumerate(METHODS):
+        points = paired[:, index, :]
+        color = _METHOD_COLORS[method]
+        axis.scatter(
+            points[:, 0],
+            points[:, 1],
             s=24,
             alpha=0.28,
             marker=_MARKERS[index],
+            color=color,
             label=_SHORT_LABELS[method],
+            zorder=2,
         )
-        color = scatter.get_facecolor()[0]
         median_x, median_y = np.median(points, axis=0)
         q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
         q1_y, q3_y = np.quantile(points[:, 1], (0.25, 0.75))
@@ -243,10 +282,11 @@ def _translation_panel(results: GptV4Results) -> Any:
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=15)
-    axis.set_xlim(*_DYNAMIC_X_LIMITS)
-    axis.set_ylim(*_EXP1_DYNAMIC_Y_LIMITS)
-    axis.set_xticks(_DYNAMIC_X_TICKS)
-    axis.set_yticks(_EXP1_DYNAMIC_Y_TICKS)
+    axis.set_xlim(
+        min(_DYNAMIC_X_LIMITS[0], float(np.min(paired[:, :, 0])) * 0.96),
+        max(_DYNAMIC_X_LIMITS[1], float(np.max(paired[:, :, 0])) * 1.04),
+    )
+    axis.set_ylim(_EXP1_DYNAMIC_Y_LIMITS[0], max(_EXP1_DYNAMIC_Y_LIMITS[1], float(np.max(paired[:, :, 1])) * 1.08))
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
@@ -297,18 +337,30 @@ def _paired_axis(
     ylabel: str,
     labels: tuple[str, str] = ("Enabled", "Disabled"),
     logarithmic: bool = False,
+    endpoint_colors: tuple[str, str] = (_FULL_COLOR, _DISABLED_COLOR),
 ) -> None:
     """绘制 GPT v4 的逐片段配对线与中位数粗线。"""
 
     for full_value, disabled_value in zip(full, disabled, strict=True):
-        axis.plot([0, 1], [full_value, disabled_value], marker="o", linewidth=0.9, alpha=0.40, markersize=3.5)
+        axis.plot(
+            [0, 1],
+            [full_value, disabled_value],
+            color=_PAIR_COLOR,
+            linewidth=0.8,
+            alpha=0.35,
+            zorder=1,
+        )
+    axis.scatter(np.zeros_like(full), full, color=endpoint_colors[0], s=18, alpha=0.38, zorder=2)
+    axis.scatter(np.ones_like(disabled), disabled, color=endpoint_colors[1], s=18, alpha=0.38, zorder=2)
     axis.plot(
         [0, 1],
         [np.median(full), np.median(disabled)],
-        marker="D",
+        color=_PAIR_COLOR,
         linewidth=2.35,
-        markersize=6.5,
+        zorder=3,
     )
+    axis.scatter(0, np.median(full), marker="D", color=endpoint_colors[0], s=72, zorder=4)
+    axis.scatter(1, np.median(disabled), marker="D", color=endpoint_colors[1], s=72, zorder=4)
     axis.set_xticks((0, 1), labels)
     axis.set_xlim(-0.20, 1.20)
     axis.set_ylabel(ylabel)
@@ -327,55 +379,58 @@ def _paired_panel(
     ylabel: str,
     labels: tuple[str, str] = ("Enabled", "Disabled"),
     logarithmic: bool = False,
+    endpoint_colors: tuple[str, str] = (_FULL_COLOR, _DISABLED_COLOR),
 ) -> Any:
     """创建可直接放入 LaTeX 子图的单个配对面板。"""
 
     figure, axis = plt.subplots(figsize=(3.3, 3.25))
-    _paired_axis(axis, full, disabled, title, ylabel, labels, logarithmic)
+    _paired_axis(axis, full, disabled, title, ylabel, labels, logarithmic, endpoint_colors)
     figure.tight_layout()
     return figure
 
 
 def _plot_temporal_axis(axis: Any, full_points: np.ndarray, disabled_points: np.ndarray) -> None:
-    """绘制时序合成 lag--residual 面板，异常点只从显示层隐藏。"""
+    """绘制时序合成 lag--residual 面板，保留全部严格配对 episode。"""
 
-    visible_pair = _translation_inlier_mask(full_points) & _translation_inlier_mask(disabled_points)
-    if not visible_pair.any():
-        visible_pair = np.ones(full_points.shape[0], dtype=bool)
-    for full_point, disabled_point in zip(full_points[visible_pair], disabled_points[visible_pair], strict=True):
+    for full_point, disabled_point in zip(full_points, disabled_points, strict=True):
         axis.plot(
             (full_point[0], disabled_point[0]),
             (full_point[1], disabled_point[1]),
+            color=_PAIR_COLOR,
             linewidth=0.82,
             alpha=0.26,
         )
     axis.scatter(
-        full_points[visible_pair, 0],
-        full_points[visible_pair, 1],
+        full_points[:, 0],
+        full_points[:, 1],
         marker="D",
+        color=_FULL_COLOR,
         s=27,
         alpha=0.42,
         label="Full",
     )
     axis.scatter(
-        disabled_points[visible_pair, 0],
-        disabled_points[visible_pair, 1],
+        disabled_points[:, 0],
+        disabled_points[:, 1],
         marker="X",
+        color=_DISABLED_COLOR,
         s=34,
         alpha=0.42,
         label="Synthesis disabled",
     )
     full_median = np.median(full_points, axis=0)
     disabled_median = np.median(disabled_points, axis=0)
-    axis.scatter(float(full_median[0]), float(full_median[1]), marker="D", s=95)
-    axis.scatter(float(disabled_median[0]), float(disabled_median[1]), marker="X", s=110)
+    axis.scatter(float(full_median[0]), float(full_median[1]), marker="D", color=_FULL_COLOR, s=95)
+    axis.scatter(float(disabled_median[0]), float(disabled_median[1]), marker="X", color=_DISABLED_COLOR, s=110)
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     axis.set_title("(d) Temporal synthesis trade-off", loc="left", fontweight="bold", pad=17)
-    axis.set_xlim(*_DYNAMIC_X_LIMITS)
-    axis.set_ylim(*_EXP2_TEMPORAL_Y_LIMITS)
-    axis.set_xticks(_DYNAMIC_X_TICKS)
-    axis.set_yticks(_EXP2_TEMPORAL_Y_TICKS)
+    all_points = np.vstack((full_points, disabled_points))
+    axis.set_xlim(
+        min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
+        max(_DYNAMIC_X_LIMITS[1], float(np.max(all_points[:, 0])) * 1.04),
+    )
+    axis.set_ylim(_EXP2_TEMPORAL_Y_LIMITS[0], max(_EXP2_TEMPORAL_Y_LIMITS[1], float(np.max(all_points[:, 1])) * 1.08))
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
@@ -410,11 +465,13 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         method: _values(results.static_segments, method, "centered_p95_mm")
         for method in METHODS
     }
+    world_paired = _paired_method_matrix(results.static_segments, ("centered_p95_mm",))[:, :, 0]
     world_pair = _save_pair(
         _point_panel(
             world,
             "(a) Head-motion leakage",
             "Centered translation P95 (mm)",
+            world_paired,
         ),
         panels,
         "exp1a_head_motion_leakage",
@@ -426,11 +483,13 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         method: _values(results.occlusion_episodes, method, "translation_p95_mm")
         for method in METHODS
     }
+    occlusion_paired = _paired_method_matrix(results.occlusion_episodes, ("translation_p95_mm",))[:, :, 0]
     occlusion_pair = _save_pair(
         _point_panel(
             occlusion,
             "(c) Failure containment",
             "Occlusion translation P95 (mm)",
+            occlusion_paired,
         ),
         panels,
         "exp1c_failure_containment",
@@ -455,6 +514,7 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         "Capture-time alignment",
         "Candidate P95 (mm)",
         ("Capture time", "Arrival time"),
+        endpoint_colors=(_METHOD_COLORS["Capture-Hold"], _METHOD_COLORS["Arrival-Hold"]),
     )
     full_static, no_lock = _paired_rows(
         results.static_segments,
@@ -510,6 +570,7 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
             "(a) Capture-time alignment",
             "Candidate P95 (mm)",
             ("Capture time", "Arrival time"),
+            endpoint_colors=(_METHOD_COLORS["Capture-Hold"], _METHOD_COLORS["Arrival-Hold"]),
         ),
         panels,
         "exp2a_capture_alignment",
