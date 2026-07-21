@@ -5,6 +5,9 @@ namespace EgoAnchor.Eval
     /// <summary>schema-v2 session 的固定文件名契约。</summary>
     public static class EvalV2Manifest
     {
+        /// <summary>当前正式场景的九路 runtime 矩阵标识；用于阻止新 session 缺失策略候选。</summary>
+        public const string VariantMatrixId = "exp12_9_strategy_v1";
+
         /// <summary>会话元数据文件名。</summary>
         public const string ManifestFileName = "manifest.json";
 

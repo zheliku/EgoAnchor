@@ -371,6 +371,7 @@ namespace EgoAnchor.Eval
             sb.Append($"\"unity_render\":{JStr(EvalV2Manifest.UnityRenderFileName)},");
             sb.Append($"\"events\":{JStr(EvalV2Manifest.EventsFileName)}}},");
             sb.Append($"\"notes\":{JStr(metadata.Notes)},");
+            sb.Append($"\"variant_matrix_id\":{JStr(EvalV2Manifest.VariantMatrixId)},");
 
             // variant_labels 数组
             sb.Append("\"variant_labels\":[");

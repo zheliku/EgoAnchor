@@ -2,7 +2,7 @@
 
 正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置和四个实验二组件消融。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Linear/SLERP` 配对策略候选。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
 
 推荐在同一个 session 中依次完成任务 1--5。确需中断时，也可以拆成多个 session；只要它们使用完全相同的冻结配置，并且合起来覆盖任务 1--5 即可。
 
@@ -215,7 +215,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-任务 1--5 运行期间，场景中的 8 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。操作者不需要为实验二再重复一遍动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
+任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。新增的 `EgoAnchor Linear/SLERP` 与完整系统使用相同的 Kalman、VCD、StaticLock、生命周期和自适应目标时刻，只把 Hermite 换成位置 Linear 与旋转 SLERP，用于之后做配对策略判断，当前不会自动混入既有论文图表。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
 
 ## 七、做错了怎么处理
 
@@ -235,7 +235,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 4. 等 Unity 控制台显示 manifest 已写入，再退出 Play Mode。
 5. 等 Mutagen 的 `logs-5090` 回到 `Watching for changes`，确认没有 conflict，然后运行 QC。若 `events.jsonl` 尚不存在，QC 会先核对两个事件分片与停止态 writer 统计，再原子生成该文件；已有文件只验证，不会被覆盖。
 
-不要在 Python 仍持续发布 PoseResult 时先结束 Unity session。QC 会统计跨端未消费的 Python candidate；实际进入 Unity 的 candidate 仍必须完整覆盖 8 个 runtime。
+不要在 Python 仍持续发布 PoseResult 时先结束 Unity session。QC 会统计跨端未消费的 Python candidate；实际进入 Unity 的 candidate 仍必须完整覆盖 9 个 runtime。
 
 目录应包含：
 
@@ -261,7 +261,7 @@ cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，五个任务都有 marker，任务 2 至少有一个 `transition_started`，任务 5 的遮挡/重新可见 marker 成对闭合，每个被 Unity 消费的 candidate 有 8 个 admission，每个 render tick 有 8 个 runtime。分析还会检查四个消融是否都产生了对应关键指标；缺少任一项时不会发布正式 CSV、PDF 或 TeX。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，五个任务都有 marker，任务 2 至少有一个 `transition_started`，任务 5 的遮挡/重新可见 marker 成对闭合，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。分析还会检查四个消融是否都产生了对应关键指标；缺少任一项时不会发布正式 CSV、PDF 或 TeX。
 
 实验一和实验二使用同一组输入目录，批次都必须合计覆盖任务 1--5：
 

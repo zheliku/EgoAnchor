@@ -18,24 +18,59 @@ FORMAL_VARIANTS = {
     "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
     "One-Euro Anchor": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
+    "EgoAnchor Linear/SLERP": ("CaptureTime", True, True, True, True, True, True),
     "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
     "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
     "EgoAnchor w/o temporal synthesis": ("CaptureTime", True, True, False, True, True, True),
     "EgoAnchor w/o StaticLock": ("CaptureTime", True, True, True, False, True, True),
 }
-"""八个正式 runtime 的对齐和组件开关矩阵。"""
+"""当前九路正式采集冻结的 variant 定义。"""
 
 FORMAL_METHODS = {
     "Arrival-Hold": ("cv", "hold", "disabled"),
     "Capture-Hold": ("cv", "hold", "disabled"),
     "One-Euro Anchor": ("oneeuro", "linear_slerp", "enabled"),
     "EgoAnchor": ("kalman", "hermite", "enabled"),
+    "EgoAnchor Linear/SLERP": ("kalman", "linear_slerp", "enabled"),
     "EgoAnchor w/o capture-time alignment": ("kalman", "hermite", "enabled"),
     "EgoAnchor w/o VCD": ("kalman", "hermite", "disabled"),
     "EgoAnchor w/o temporal synthesis": ("kalman", "predict_to_now", "enabled"),
     "EgoAnchor w/o StaticLock": ("kalman", "hermite", "enabled"),
 }
 """下一轮正式采集冻结的运动模型、时序策略和质量门控组合。"""
+
+ARCHIVED_V2_FORMAL_VARIANTS = {
+    "Arrival-Hold": ("ArrivalTime", False, False, False, False, False, False),
+    "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
+    "One-Euro Anchor": ("CaptureTime", True, False, False, False, False, False),
+    "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
+    "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
+    "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
+    "EgoAnchor w/o temporal synthesis": ("CaptureTime", True, True, False, True, True, True),
+    "EgoAnchor w/o StaticLock": ("CaptureTime", True, True, True, False, True, True),
+}
+"""已发布 v2 八路归档的组件开关，严格保留其采集 provenance。"""
+
+ARCHIVED_V2_FORMAL_METHODS = {
+    "Arrival-Hold": ("cv", "raw_passthrough", "disabled"),
+    "Capture-Hold": ("cv", "raw_passthrough", "disabled"),
+    "One-Euro Anchor": ("oneeuro", "raw_passthrough", "disabled"),
+    "EgoAnchor": ("kalman", "interp_hermite", "enabled"),
+    "EgoAnchor w/o capture-time alignment": ("kalman", "interp_hermite", "enabled"),
+    "EgoAnchor w/o VCD": ("kalman", "interp_hermite", "disabled"),
+    "EgoAnchor w/o temporal synthesis": ("cv", "raw_passthrough", "enabled"),
+    "EgoAnchor w/o StaticLock": ("kalman", "interp_hermite", "enabled"),
+}
+"""已发布 v2 八路归档的模型、策略和门控字符串。"""
+
+CURRENT_FORMAL_VARIANT_IDS = frozenset(FORMAL_VARIANTS)
+"""当前 Unity 正式场景必须完整记录的九路 variant。"""
+
+ARCHIVED_V2_VARIANT_IDS = frozenset(ARCHIVED_V2_FORMAL_VARIANTS)
+"""已发布 v2 原始归档使用的八路 variant；保留其可复现 QC。"""
+
+CURRENT_VARIANT_MATRIX_ID = "exp12_9_strategy_v1"
+"""当前 Unity manifest 写入的九路矩阵标识。"""
 
 SCORE_FIELDS = (
     "vcd_score",
@@ -397,6 +432,29 @@ def variant_config_hash(
     return _fnv1a(raw.encode("utf-8"))
 
 
+def _archived_v2_variant_config_hash(
+    label: str,
+    motion_model: str,
+    smoothing_strategy: str,
+    quality_gate: str,
+    world_alignment_mode: str,
+    flags: Iterable[bool],
+) -> str:
+    """按 v2 采集时使用的旧字段顺序重算归档配置哈希。"""
+
+    raw = "|".join(
+        (
+            label,
+            motion_model,
+            smoothing_strategy,
+            quality_gate,
+            world_alignment_mode,
+            *("1" if flag else "0" for flag in flags),
+        )
+    )
+    return _fnv1a(raw.encode("utf-8"))
+
+
 def aggregate_config_hash(config_hashes: Iterable[str]) -> str:
     """按 manifest variant 顺序计算整体 FNV-1a 配置哈希。"""
 
@@ -458,15 +516,19 @@ def _check_documents(dataset: TaskDataset, state: _QcState) -> None:
 
 
 def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _VariantRecord]:
-    """检查八 variant 矩阵、单项消融和两级 FNV 配置哈希。"""
+    """检查完整八/九路矩阵、单项消融和两级 FNV 配置哈希。"""
 
     raw_configs = manifest.get("variant_configs")
     raw_definitions = manifest.get("variant_definitions")
     if not isinstance(raw_configs, list) or not isinstance(raw_definitions, list):
         state.error("variant_manifest", "manifest 必须包含 variant_configs 和 variant_definitions 数组。")
         return {}
-    if len(raw_configs) != len(FORMAL_VARIANTS) or len(raw_definitions) != len(FORMAL_VARIANTS):
-        state.error("variant_count", "variant_configs 和 variant_definitions 必须各有八项。")
+    matrix_id = _text(manifest.get("variant_matrix_id"))
+    if matrix_id and matrix_id != CURRENT_VARIANT_MATRIX_ID:
+        state.error("variant_matrix_id", f"未知 variant_matrix_id：{matrix_id}")
+    is_current_matrix = bool(matrix_id)
+    expected_variants = FORMAL_VARIANTS if is_current_matrix else ARCHIVED_V2_FORMAL_VARIANTS
+    expected_methods = FORMAL_METHODS if is_current_matrix else ARCHIVED_V2_FORMAL_METHODS
     configs: dict[str, Mapping[str, Any]] = {}
     for item in raw_configs:
         if not isinstance(item, Mapping):
@@ -479,14 +541,18 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
         if label in configs:
             state.error("variant_config", f"variant config label 重复：{label}")
         configs[label] = item
+    definition_ids: set[str] = set()
     records: dict[str, _VariantRecord] = {}
     for item in raw_definitions:
         if not isinstance(item, Mapping):
             state.error("variant_definition", "variant_definitions 每项必须是对象。")
             continue
         variant_id = _text(item.get("variant_id"))
+        if variant_id in definition_ids:
+            state.error("variant_primary_key", f"variant_id 重复：{variant_id}")
+        definition_ids.add(variant_id)
         config = configs.get(variant_id)
-        expected = FORMAL_VARIANTS.get(variant_id)
+        expected = expected_variants.get(variant_id)
         if not variant_id or config is None or expected is None:
             state.error("variant_definition", f"未知或不完整 variant 定义：{variant_id!r}")
             continue
@@ -510,23 +576,29 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
             _text(config.get("smoothing_strategy")),
             _text(config.get("quality_gate")),
         )
-        if method != FORMAL_METHODS[variant_id]:
+        if method != expected_methods[variant_id]:
             state.error("variant_method", f"variant 模型、时序策略或门控与冻结定义不符：{variant_id}")
         configuration_fingerprint = _text(config.get("configuration_fingerprint"))
-        if not configuration_fingerprint:
-            state.error("variant_fingerprint", f"variant 缺少完整参数指纹：{variant_id}")
-        computed = variant_config_hash(
-            variant_id,
-            *method,
-            _text(item.get("world_alignment_mode")),
-            flags,
-            configuration_fingerprint,
-        )
+        if is_current_matrix:
+            if not configuration_fingerprint:
+                state.error("variant_fingerprint", f"variant 缺少完整参数指纹：{variant_id}")
+            computed = variant_config_hash(
+                variant_id,
+                *method,
+                _text(item.get("world_alignment_mode")),
+                flags,
+                configuration_fingerprint,
+            )
+        else:
+            computed = _archived_v2_variant_config_hash(
+                variant_id,
+                *method,
+                _text(item.get("world_alignment_mode")),
+                flags,
+            )
         declared = _text(item.get("config_hash"))
         if declared != computed or _text(config.get("config_hash")) != computed:
             state.error("variant_config_hash", f"variant config_hash 无法重算：{variant_id}")
-        if variant_id in records:
-            state.error("variant_primary_key", f"variant_id 重复：{variant_id}")
         records[variant_id] = _VariantRecord(
             variant_id,
             _text(config.get("motion_model")),
@@ -538,8 +610,18 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
             configuration_fingerprint,
         )
 
-    if set(records) != set(FORMAL_VARIANTS):
-        state.error("variant_count", f"正式 session 必须恰有八个冻结 variant：{sorted(records)}")
+    config_ids = frozenset(configs)
+    declared_definition_ids = frozenset(definition_ids)
+    if config_ids != declared_definition_ids:
+        state.error("variant_count", "variant_configs 与 variant_definitions 的 variant 集合不一致。")
+    expected_ids = CURRENT_FORMAL_VARIANT_IDS if is_current_matrix else ARCHIVED_V2_VARIANT_IDS
+    if config_ids != expected_ids or declared_definition_ids != expected_ids:
+        state.error(
+            "variant_count",
+            "带当前矩阵标识的 session 必须完整记录九路；无标识的 v2 归档必须完整记录八路。",
+        )
+    if set(records) != set(configs):
+        state.error("variant_count", f"存在未知或不完整的 variant：{sorted(set(configs) - set(records))}")
     config_hashes = [_text(item.get("config_hash")) for item in raw_configs if isinstance(item, Mapping)]
     if aggregate_config_hash(config_hashes) != manifest.get("config_hash"):
         state.error("aggregate_config_hash", "整体 config_hash 与 Unity FNV-1a 重算值不一致。")

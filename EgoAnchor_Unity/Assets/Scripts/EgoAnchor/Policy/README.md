@@ -34,7 +34,7 @@ MotionModel                          SmoothingStrategy
 
 ### LinearSlerpStrategy
 
-缓存 One-Euro 滤波后的控制点，目标时刻为：
+缓存运动模型输出的控制点，目标时刻为：
 
 ```text
 t_target = t_render - delay(t)
@@ -58,6 +58,7 @@ t_target = t_render - delay(t)
 | Capture-Hold | Capture time | 合法性 | ConstantVelocity | Hold | 关 | 基线 |
 | One-Euro Anchor | Capture time | VCD | OneEuro | LinearSlerp | 关 | 与完整系统相同 |
 | EgoAnchor | Capture time | VCD | Kalman | Hermite | 开 | 完整 |
+| EgoAnchor Linear/SLERP | Capture time | VCD | Kalman | LinearSlerp | 开 | 完整；配对策略候选 |
 | EgoAnchor w/o capture-time alignment | Arrival time | VCD | Kalman | Hermite | 开 | 完整 |
 | EgoAnchor w/o VCD | Capture time | 合法性 | Kalman | Hermite | 开 | 仅关闭 VCD 相关低分重获取 |
 | EgoAnchor w/o temporal synthesis | Capture time | VCD | Kalman | PredictToNow | 开 | 完整 |
@@ -91,7 +92,7 @@ t_target = t_render - delay(t)
 
 ### StaticLock
 
-正式场景中，完整 EgoAnchor 以及保留 StaticLock 的三个消融必须使用同一组序列化参数。当前旋转相关冻结值包括：
+正式场景中，完整 EgoAnchor、Linear/SLERP 配对候选以及保留 StaticLock 的三个消融必须使用同一组序列化参数。当前旋转相关冻结值包括：
 
 - `enterAngSpeedDps=22`
 - `unlockDriftDegrees=12`
@@ -103,7 +104,7 @@ t_target = t_render - delay(t)
 
 ## 场景与日志
 
-正式场景 `EgoAnchor-Experiment12.unity` 使用八个唯一 runtime，由一个 `AnchorRuntimeHub` 分发同一候选流。实验一和实验二共享完整 EgoAnchor runtime，避免同一方法出现两套内部状态。
+正式场景 `EgoAnchor-Experiment12.unity` 使用九个唯一 runtime，由一个 `AnchorRuntimeHub` 分发同一候选流：四个实验一配置、四个实验二单组件消融，以及一个 `EgoAnchor Linear/SLERP` 配对策略候选。实验一和实验二共享完整 EgoAnchor runtime，避免同一方法出现两套内部状态。
 
 每个 variant 的 manifest 配置必须包含：
 
@@ -112,7 +113,7 @@ t_target = t_render - delay(t)
 - 覆盖坐标补偿、模型、策略、生命周期和 StaticLock 数值的 `configuration_fingerprint`
 - 绑定完整指纹的 per-variant `config_hash`
 
-Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希，并验证八 runtime 的组件矩阵。缺失指纹、字符串布尔值、名称与组件错配或单项消融改变多个模块都会阻止正式发布。
+Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景验证带 `variant_matrix_id=exp12_9_strategy_v1` 的九路组件矩阵，并强制完整参数指纹；无该标识的已发布 v2 八路归档按其历史方法字符串和旧哈希字段顺序复现。当前数据缺失指纹、字符串布尔值、名称与组件错配或任意缺项都会阻止正式发布。
 
 ## 验证
 
@@ -121,4 +122,4 @@ dotnet build EgoAnchor_Unity/EgoAnchor.Tests.csproj --no-restore
 dotnet build EgoAnchor_Unity/Assembly-CSharp.csproj --no-restore
 ```
 
-Unity Editor 还必须运行 `EgoAnchor.Tests` EditMode 测试。场景契约测试会读取 YAML，核对八 runtime、层级、模型、策略、门控、重获取和 StaticLock 绑定。
+Unity Editor 还必须运行 `EgoAnchor.Tests` EditMode 测试。场景契约测试会读取 YAML，核对九个 runtime、层级、模型、策略、门控、重获取和 StaticLock 绑定。

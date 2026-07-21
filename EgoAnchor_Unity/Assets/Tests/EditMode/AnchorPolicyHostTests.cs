@@ -953,7 +953,7 @@ namespace EgoAnchor.Tests
                 Is.EqualTo(expected));
         }
 
-        /// <summary>同一 PoseResult 的八个回调共用 ID，同 frame 的下一候选序号递增。</summary>
+        /// <summary>同一 PoseResult 的所有 runtime 回调共用 ID，同 frame 的下一候选序号递增。</summary>
         [Test]
         public void RecorderCandidateIdUsesResultIdentityAndFrameLocalSequence()
         {

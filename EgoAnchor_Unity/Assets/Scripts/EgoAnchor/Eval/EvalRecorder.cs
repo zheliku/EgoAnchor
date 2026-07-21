@@ -241,7 +241,7 @@ namespace EgoAnchor.Eval
         /// <summary>按 source frame 缓存 Unity 侧候选序号；同一帧的多变体共用一个 candidate_id。</summary>
         private readonly Dictionary<long, int> _candidateSequencesByFrame = new Dictionary<long, int>();
 
-        /// <summary>按 PoseResult 对象缓存 candidate_id，确保八个 runtime 回调复用同一标识。</summary>
+        /// <summary>按 PoseResult 对象缓存 candidate_id，确保所有 runtime 回调复用同一标识。</summary>
         private ConditionalWeakTable<PoseResult, CandidateIdHolder> _candidateIdsByResult =
             new ConditionalWeakTable<PoseResult, CandidateIdHolder>();
 

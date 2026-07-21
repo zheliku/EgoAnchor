@@ -36,7 +36,7 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用 VCD 观测接纳门控。</summary>
         [Header("Quality Gate (optional)")]
-        [Tooltip("是否启用 VCD 观测接纳门控：拒绝低可靠分的观测。Arrival-Hold、Capture-Hold 和 One-Euro Anchor 应关闭；完整 EgoAnchor 与其组件消融按实验定义配置。默认关闭。")]
+        [Tooltip("是否启用 VCD 观测接纳门控：拒绝低可靠分的观测。Arrival-Hold 与 Capture-Hold 关闭；One-Euro Anchor、完整 EgoAnchor 和策略候选开启；组件消融按实验定义配置。默认关闭。")]
         [SerializeField] private bool enableQualityGate = false;
 
         /// <summary>接受观测所需的最低可靠性分数。</summary>

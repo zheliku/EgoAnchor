@@ -448,6 +448,7 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"status\":\"pending_python_fragment_merge\"", manifest);
             StringAssert.Contains("\"peak_queue_depth\":1", manifest);
             StringAssert.Contains("\"run_kind\":\"formal\"", manifest);
+            StringAssert.Contains($"\"variant_matrix_id\":\"{EvalV2Manifest.VariantMatrixId}\"", manifest);
             Match configHash = Regex.Match(manifest, "\\\"config_hash\\\":\\\"(?<hash>[0-9a-f]{16})\\\"");
             Assert.That(configHash.Success, Is.True);
             StringAssert.Contains(
@@ -459,7 +460,7 @@ namespace EgoAnchor.Tests
                 "session_id", "object_id", "run_kind", "experiment_ids", "operator_id", "created_unix_ms",
                 "unity_run_mode", "python_host", "unity_version", "python_version", "egoanchor_git_commit",
                 "protocol_version", "config_hash", "frozen_parameter_set_id", "object_model_id",
-                "platform_reference", "variant_definitions", "completed_tasks", "trial_plan",
+                "platform_reference", "variant_matrix_id", "variant_definitions", "completed_tasks", "trial_plan",
                 "log_files", "log_writer_stats",
             })
                 StringAssert.Contains($"\"{field}\":", manifest);
@@ -1025,13 +1026,14 @@ namespace EgoAnchor.Tests
     /// <summary>正式实验一/二场景和 policy capability 的契约测试。</summary>
     public sealed class ExperimentSceneContractTests
     {
-        /// <summary>正式场景中必须出现的八个唯一 runtime 标签。</summary>
+        /// <summary>正式场景中必须出现的九个唯一 runtime 标签。</summary>
         private static readonly string[] RequiredLabels =
         {
             "Arrival-Hold",
             "Capture-Hold",
             "One-Euro Anchor",
             "EgoAnchor",
+            "EgoAnchor Linear/SLERP",
             "EgoAnchor w/o capture-time alignment",
             "EgoAnchor w/o VCD",
             "EgoAnchor w/o temporal synthesis",
@@ -1426,6 +1428,7 @@ namespace EgoAnchor.Tests
             AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "One-Euro Anchor", 0, 1, "OneEuroModel", "LinearSlerpStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor Linear/SLERP", 0, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "HermiteStrategy", true, 0, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "KalmanModel", "PredictToNowStrategy", true, 1, 1);
@@ -1442,7 +1445,7 @@ namespace EgoAnchor.Tests
             string experiment1Transform = ReadFirstComponentReference(GetSectionContaining(
                 yaml, "m_Name: Experiment 1 - System Characterization"));
             string experiment2Transform = ReadFirstComponentReference(GetSectionContaining(
-                yaml, "m_Name: Experiment 2 - Design Attribution (Ablations)"));
+                yaml, "m_Name: Experiment 2 - Design Attribution"));
             string experiment1Section = GetSection(yaml, experiment1Transform);
             string experiment2Section = GetSection(yaml, experiment2Transform);
 
@@ -1450,6 +1453,7 @@ namespace EgoAnchor.Tests
             AssertVariantParent(yaml, "Capture-Hold", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "One-Euro Anchor", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "EgoAnchor", experiment1Transform, experiment1Section);
+            AssertVariantParent(yaml, "EgoAnchor Linear/SLERP", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o capture-time alignment", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o VCD", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o temporal synthesis", experiment2Transform, experiment2Section);

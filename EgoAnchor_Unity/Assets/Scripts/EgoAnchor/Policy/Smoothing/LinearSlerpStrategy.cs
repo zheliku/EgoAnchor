@@ -5,10 +5,10 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// One-Euro 公平基线使用的自适应历史缓冲策略。
+    /// 不依赖速度切线的自适应历史缓冲策略。
     ///
     /// 目标时刻与 EgoAnchor 的延迟插值一致，均取 render time 减去自适应缓冲延迟；
-    /// 对 One-Euro 滤波后的相邻控制点只做位置线性插值和旋转 SLERP，不使用模型导数，
+    /// 对运动模型输出的相邻控制点只做位置线性插值和旋转 SLERP，不使用模型导数，
     /// 因而不会额外引入 Hermite 切线假设或起停过冲参数。
     /// </summary>
     public sealed class LinearSlerpStrategy : SmoothingStrategy

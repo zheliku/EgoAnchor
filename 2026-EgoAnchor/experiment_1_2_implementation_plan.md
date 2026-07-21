@@ -38,9 +38,10 @@
   - `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Alignment/CameraPoseFrameAligner.cs`
   - `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Alignment/FramePoseHistory.cs`
 - Unity policy 模块可直接组成新系统配置：
-  - 零阶保持：`ConstantVelocityModel` + `RawPassthroughStrategy`
-  - One Euro：`OneEuroModel` + `PredictivePassthroughStrategy`
-  - EgoAnchor temporal synthesis：`KalmanModel` + `DelayedInterpStrategy`，`DelayedInterpStrategy` 使用 Hermite 样条时对应 Kalman--Hermite
+  - 零阶保持：`ConstantVelocityModel` + `HoldStrategy`
+  - One Euro：`OneEuroModel` + `LinearSlerpStrategy`
+  - EgoAnchor temporal synthesis：`KalmanModel` + `HermiteStrategy`
+  - 时序策略配对：`KalmanModel` + `LinearSlerpStrategy`
   - StaticLock：`EgoAnchorStaticLockModule`
 - Python runtime 主干可复用：
   - `EgoAnchor_Python/src/run_server.py`
@@ -182,17 +183,17 @@ Python 侧旧 RQ 代码和旧 schema：
 
 | 配置                | World alignment                                                      | Admission                    | Temporal output                                                  | Lifecycle / loss                                        |
 | ------------------- | -------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
-| `Arrival-Hold`    | 到达时刻复合，用`FramePoseHistory.TryGetLatest` 的最新 camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
-| `Capture-Hold`    | 采集时刻复合，用`frame_id` 回查 image-time proxy camera pose       | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `RawPassthroughStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
-| `One-Euro Anchor` | 采集时刻复合                                                         | 基本有效性检查               | `OneEuroModel` + `PredictivePassthroughStrategy`，平滑速度逐渲染帧外推 | 短时保持，超时后重新初始化；禁用 VCD gate 与 StaticLock |
-| `EgoAnchor`       | 采集时刻复合                                                         | VCD admission                | `KalmanModel` + `DelayedInterpStrategy(Hermite)`             | 启用 StaticLock、分级退化、重获取 fan-in                |
+| `Arrival-Hold`    | 到达时刻复合，用`FramePoseHistory.TryGetLatest` 的最新 camera pose | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `HoldStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
+| `Capture-Hold`    | 采集时刻复合，用`frame_id` 回查 image-time proxy camera pose       | 只做有限矩阵和基础合法性检查 | `ConstantVelocityModel` + `HoldStrategy`，零阶保持 | 保持最后有效位姿，禁用 VCD gate、StaticLock、低分重获取 |
+| `One-Euro Anchor` | 采集时刻复合                                                         | VCD admission                | `OneEuroModel` + `LinearSlerpStrategy`，自适应历史目标时刻 | 与完整系统相同的生命周期和重获取；禁用 StaticLock |
+| `EgoAnchor`       | 采集时刻复合                                                         | VCD admission                | `KalmanModel` + `HermiteStrategy`，自适应历史目标时刻 | 启用 StaticLock、分级退化、重获取 fan-in                |
 
 关键实现点：
 
 - `Arrival-Hold` 必须实际驱动 anchor transform，不能只把 arrival-time raw 写进日志。
 - `Arrival-Hold` 的 observation measurement time 使用 PoseResult 到达/处理时刻；`Capture-Hold`、`One-Euro Anchor` 和 `EgoAnchor` 使用 source frame 的 capture time。
 - `Capture-Hold` 与 `Arrival-Hold` 除 world composition time 和 measurement time 外，其余配置保持相同。
-- `One-Euro Anchor` 是基线，不启用 VCD admission 和 StaticLock。
+- `One-Euro Anchor` 启用 VCD admission，与完整系统共享目标时刻、生命周期和重获取开关，只关闭 StaticLock。
 - `EgoAnchor` 是完整系统，不与 Python 共享 mutable per-variant 状态；Python 感知流只采集一次。
 
 ### 2.2 实验二组件归因配置
@@ -202,14 +203,16 @@ Python 侧旧 RQ 代码和旧 schema：
 | `EgoAnchor`                            | 完整系统：capture-time alignment + VCD admission + Kalman--Hermite + StaticLock + lifecycle                                                                   |
 | `EgoAnchor w/o capture-time alignment` | world alignment mode 改为 arrival-time；其余 VCD、Kalman--Hermite、StaticLock、lifecycle 保持完整                                                             |
 | `EgoAnchor w/o VCD`                    | admission mode 改为 basic-validity；禁用 quality gate、trackingScoreFloor、low-score reacquire；其余 capture-time alignment、Kalman--Hermite、StaticLock 保持 |
-| `EgoAnchor w/o temporal synthesis`     | temporal output 改为`ConstantVelocityModel` + `RawPassthroughStrategy`；其余 capture-time alignment、VCD admission、StaticLock、lifecycle 保持            |
+| `EgoAnchor w/o temporal synthesis`     | temporal output 改为`KalmanModel` + `PredictToNowStrategy`；其余 capture-time alignment、VCD admission、StaticLock、lifecycle 保持            |
 | `EgoAnchor w/o StaticLock`             | `staticLockModule` 为空或 disabled；其余 capture-time alignment、VCD admission、Kalman--Hermite、lifecycle 保持                                             |
+| `EgoAnchor Linear/SLERP`               | 配对策略候选：保留完整系统的 Kalman、VCD、StaticLock、lifecycle 和自适应目标时刻，只把 Hermite 换为位置 Linear 与旋转 SLERP                         |
 
 关键实现点：
 
 - 每个 ablation 只能关闭一个机制；manifest 必须记录每个开关，QC 必须验证。
 - `w/o VCD` 不等于低分继续触发 lifecycle；禁用 VCD 时不得由低分触发 Lost 或 server reacquire。
-- `w/o temporal synthesis` 不是 One Euro；它是完整系统中只移除 Kalman--Hermite，保留 VCD 与 StaticLock 的零阶保持消融。
+- `w/o temporal synthesis` 不是 One Euro；它保留完整系统的 Kalman、VCD 与 StaticLock，只将历史插值改为预测到当前时刻。
+- `EgoAnchor Linear/SLERP` 不是组件消融。它与完整系统做配对策略诊断，采集后再决定正文采用哪一种时序合成。
 - `w/o capture-time alignment` 不复用 `Arrival-Hold` 作为 label，因为它仍带 VCD、Kalman--Hermite、StaticLock。
 
 ---
@@ -770,7 +773,7 @@ schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分�
 
   Selector 独立维护五项共享物理任务的 selected、running 和 completed 状态，不直接写文件。场景可任意顺序完成；
   活动或已完成 trial 可写 `trial_rejected` 后只重做该项。session 可随时停止，不要求已有完成任务；
-  活动 trial 在停止前先记为 rejected，不强制一次跑完五项。同一 trial 同时记录四个实验一配置与四个实验二消融。
+  活动 trial 在停止前先记为 rejected，不强制一次跑完五项。同一 trial 同时记录四个实验一配置、四个实验二消融与一个配对策略候选。
 - [ ] **Step 3: 实现 status UI**
 
   UI 显示五任务状态板、当前选择、直白操作状态、实际 trial 计时和下一合法动作。实际时长只记录，
@@ -791,7 +794,7 @@ schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分�
 **Files:**
 
 - Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/AnchorPolicyHost.cs`
-- Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Smoothing/RawPassthroughStrategy.cs`
+- Modify: `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Policy/Smoothing/LinearSlerpStrategy.cs`
 - Create/Modify: `EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`
 - Test: `EgoAnchor_Unity/Assets/Tests/EditMode/EvalUiTests.cs`
 
@@ -801,7 +804,7 @@ schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分�
 
 - [ ] **Step 1: 移除 RQ tooltip 和 summary 文案**
 
-  `AnchorPolicyHost`、`RawPassthroughStrategy` 等注释和 Tooltip 中的 RQ2 文案改成系统配置文案。
+  `AnchorPolicyHost`、各输出策略的注释和 Tooltip 使用系统配置文案，不保留旧 RQ2 语义。
 - [ ] **Step 2: 增加 component flags**
 
   `AnchorPolicyHost` 暴露：
@@ -813,7 +816,7 @@ schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分�
   - `UsesServerReacquire`
 - [ ] **Step 3: 创建正式实验场景**
 
-  `EgoAnchor-Experiment12.unity` 配置八个唯一 runtime 变体；完整 `EgoAnchor` 由两个实验共享：
+  `EgoAnchor-Experiment12.unity` 配置九个唯一 runtime 变体；完整 `EgoAnchor` 由两个实验共享：
 
   实验一：
 
@@ -828,6 +831,10 @@ schema-v2 reader 只在 `python_session.json.state=python_stopped` 且两端分�
   - `EgoAnchor w/o VCD`
   - `EgoAnchor w/o temporal synthesis`
   - `EgoAnchor w/o StaticLock`
+
+  配对策略候选：
+
+  - `EgoAnchor Linear/SLERP`
 
   其中完整 `EgoAnchor` 可被实验一和实验二共享同一个 runtime，manifest 中以 variant_id 区分实验用途。
 - [ ] **Step 4: 场景契约测试**
@@ -1304,7 +1311,7 @@ Run 1 结束时必须满足：
 
 1. Unity 和 Python 正式代码不再依赖旧 RQ1/RQ2 包、场景、selector、schema 字段或 CLI。
 2. Python runtime 能写 `python_candidates.jsonl`、`python_events.jsonl` 和停止态 `python_session.json`。
-3. Unity runtime 能同步驱动四个实验一配置和四个实验二消融配置。
+3. Unity runtime 能同步驱动四个实验一配置、四个实验二消融配置和一个配对策略候选。
 4. `Arrival-Hold` 是真实 runtime 输出，而不是诊断字段。
 5. Unity session 输出 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`；manifest 的 `completed_tasks` 与最终未作废 trial 一致；reader 在同步完成后确定性生成 `events.jsonl`。
 6. Python reader 只接受 schema-v2，遇到旧 schema 报错。

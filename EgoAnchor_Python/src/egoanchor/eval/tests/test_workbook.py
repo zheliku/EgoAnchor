@@ -96,8 +96,8 @@ class WorkbookWriterTests(unittest.TestCase):
             self.assertEqual(first_result.sha256, second_result.sha256)
             self.assertEqual(first_result.sha256, hashlib.sha256(first.read_bytes()).hexdigest())
             self.assertEqual(verification.logical_row_counts["python_candidates"], 1)
-            self.assertEqual(verification.logical_row_counts["unity_admission"], 8)
-            self.assertEqual(verification.logical_row_counts["unity_render"], 8)
+            self.assertEqual(verification.logical_row_counts["unity_admission"], 9)
+            self.assertEqual(verification.logical_row_counts["unity_render"], 9)
 
             workbook = load_workbook(first, read_only=True, data_only=False)
             sheet = workbook["python_candidates"]
@@ -200,7 +200,7 @@ class WorkbookWriterTests(unittest.TestCase):
             )
             verification = verify_task_workbook(output, max_data_rows=2)
 
-            self.assertEqual(verification.logical_row_counts["unity_admission"], 8)
+            self.assertEqual(verification.logical_row_counts["unity_admission"], 9)
             self.assertEqual(
                 verification.physical_sheets["unity_admission"],
                 (
@@ -208,6 +208,7 @@ class WorkbookWriterTests(unittest.TestCase):
                     "unity_admission_002",
                     "unity_admission_003",
                     "unity_admission_004",
+                    "unity_admission_005",
                 ),
             )
 
