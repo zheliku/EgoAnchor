@@ -150,9 +150,10 @@ schema-v2 task directory
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - GPT v4 reader-facing 表格最多保留三位小数，完整精度保存在 `data/analysis/gpt_v4/data/`；实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
-- v2 正式数据没有独立采集 `Kalman Predict-to-Now` runtime；当前时序策略对比只能从完整 EgoAnchor 已接纳候选、采集时刻世界位姿和渲染时间线做离线反事实重放，并在论文、图表和数据包中明确标记 `offline replay`，不得冒充真实采集消融或 bit-exact runtime 复现。当前推荐名称为 `Kalman Predict-to-Now` 与 `Kalman Delayed Hermite Interpolation`；实现延迟是自适应的，不称 `Fixed-Lag Hermite`。
+- v2 正式数据没有独立采集 `Kalman Predict-to-Now` runtime；当前时序策略对比只能从完整 EgoAnchor 已接纳候选、采集时刻世界位姿和渲染时间线做离线反事实重放，并在论文、图表和数据包中明确标记 `offline replay`，不得冒充真实采集消融或 bit-exact runtime 复现。当前推荐名称为 `Kalman Predict-to-Now` 与 `Kalman Hermite`；实现延迟是自适应的，不使用 `Fixed-Lag` 或 `Delayed` 命名。
 - v2 的 `EgoAnchor w/o temporal synthesis` 同时使用历史 `ConstantVelocityModel + RawPassthroughStrategy`，不能改名为 Kalman Predict-to-Now；其数值只作为历史完整消融审计，不作为纯时序策略归因。v2 的 One-Euro runtime 是历史 `OneEuroModel + RawPassthroughStrategy`，分析和论文必须按该批次 provenance 描述，不得与新重采的 `OneEuroModel + LinearSlerpStrategy` 配置混合。
 - 新重采的 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `HermiteStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。两者均通过场景契约测试冻结模型、策略和组件开关。
+- 同一批五项物理任务同时驱动实验一四配置和实验二四消融；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。v2 持续旋转中完整系统的负结果与 StaticLock 占用/解锁有关，下一轮必须重采复核，不能用平移收益替代旋转证据。
 - 当前 KalmanModel 的 position/rotation measurement noise 是冻结序列化参数，VCD 只控制 admission；论文不得声称测量噪声随 VCD 分数在线自适应。

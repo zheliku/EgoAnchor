@@ -215,7 +215,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-任务 1--5 运行期间，场景中的 8 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。操作者不需要为实验二再重复一遍动作。
+任务 1--5 运行期间，场景中的 8 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。操作者不需要为实验二再重复一遍动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
 
 ## 七、做错了怎么处理
 

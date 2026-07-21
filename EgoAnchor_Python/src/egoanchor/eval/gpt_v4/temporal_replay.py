@@ -1,6 +1,6 @@
-"""从 Stage 1 workbook 重放 Kalman 的两种时序输出策略。
+"""从 Stage 1 workbook 重放 Kalman 的两种平移时序输出策略。
 
-该模块只用于反事实离线诊断。原始 session 没有记录 Kalman 内部协方差、
+该模块只用于反事实离线诊断，当前结果只报告平移通道。原始 session 没有记录 Kalman 内部协方差、
 延迟估计 EMA 和 StaticLock 内部状态，因此这里的结果不能当作新采集 runtime。
 """
 
@@ -27,8 +27,8 @@ FULL_VARIANT = "EgoAnchor"
 PREDICT_TO_NOW = "Kalman Predict-to-Now (offline replay)"
 """把 Kalman 状态直接预测到当前渲染时刻的反事实策略。"""
 
-DELAYED_HERMITE = "Kalman Delayed Hermite Interpolation (offline replay)"
-"""在带意图延迟的历史控制点之间进行 Hermite 插值的反事实策略。"""
+HERMITE = "Kalman Hermite (offline replay)"
+"""在自适应历史目标时刻执行 Hermite 插值的反事实策略。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,10 +42,10 @@ class TemporalReplaySettings:
     """位置测量噪声，单位 m²。"""
 
     rotation_process_noise: float = 0.40
-    """旋转过程噪声，单位 rad²/s。"""
+    """仅用于维持内部姿态状态；当前 replay 不发布旋转指标。"""
 
     rotation_measurement_noise: float = 0.0025
-    """旋转测量噪声，单位 rad²。"""
+    """仅用于维持内部姿态状态；当前 replay 不发布旋转指标。"""
 
     tangent_chord_ratio: float = 3.0
     """Hermite 端点速度相对控制点弦长的限幅倍数。"""
@@ -222,8 +222,8 @@ def _clamp_vector(value: np.ndarray, maximum: float) -> np.ndarray:
     return value * (maximum / norm)
 
 
-def _delayed_pose(points: Sequence[_ControlPoint], target_ms: float, settings: TemporalReplaySettings) -> tuple[np.ndarray, np.ndarray]:
-    """在控制点之间执行 Delayed Hermite 插值。"""
+def _hermite_pose(points: Sequence[_ControlPoint], target_ms: float, settings: TemporalReplaySettings) -> tuple[np.ndarray, np.ndarray]:
+    """在控制点之间执行 Hermite 插值。"""
 
     if not points:
         raise ValueError("Hermite 重放缺少控制点")
@@ -375,10 +375,10 @@ def _replay_event(
         delay_seconds += float(np.clip(target_delay - delay_seconds, -max_delta, max_delta))
         previous_render_ms = render_time
         target_ms = render_time - delay_seconds * 1000.0
-        delayed_position, delayed_rotation = _delayed_pose(points, target_ms, settings)
+        hermite_position, hermite_rotation = _hermite_pose(points, target_ms, settings)
         for strategy, position, rotation in (
             (PREDICT_TO_NOW, predict_position, predict_rotation),
-            (DELAYED_HERMITE, delayed_position, delayed_rotation),
+            (HERMITE, hermite_position, hermite_rotation),
         ):
             replay_rows.append(
                 {
@@ -388,7 +388,7 @@ def _replay_event(
                     "event_id": str(render.get("event_id", "")),
                     "render_mono_ms": render_time,
                     "strategy": strategy,
-                    "effective_lag_ms": render_time - target_ms if strategy == DELAYED_HERMITE else 0.0,
+                    "effective_lag_ms": render_time - target_ms if strategy == HERMITE else 0.0,
                     "position": position,
                     "rotation": rotation,
                     "reference_position": reference,
@@ -456,7 +456,6 @@ def run_temporal_replay(
         "session_id", "scenario_id", "trial_id", "event_id", "variant_id", "render_mono_ms",
         "reference_pose_valid", "reference_pos", "reference_rot", "reference_pos_x_m", "reference_pos_y_m",
         "reference_pos_z_m", "reference_rot_x", "reference_rot_y", "reference_rot_z", "reference_rot_w",
-        "policy_output_target_mono_ms", "smoothing_delay_ms",
     )
     admissions = [
         row for row in _scenario_rows(workbooks, "unity_admission", admission_columns, scenario)
@@ -515,8 +514,6 @@ def run_temporal_replay(
         writer.writerows([
             {"parameter": "position_process_noise", "value": replay_settings.position_process_noise, "note": "复刻 Unity KalmanModel"},
             {"parameter": "position_measurement_noise", "value": replay_settings.position_measurement_noise, "note": "复刻 Unity KalmanModel"},
-            {"parameter": "rotation_process_noise", "value": replay_settings.rotation_process_noise, "note": "复刻 Unity KalmanModel"},
-            {"parameter": "rotation_measurement_noise", "value": replay_settings.rotation_measurement_noise, "note": "复刻 Unity KalmanModel"},
             {"parameter": "tangent_chord_ratio", "value": replay_settings.tangent_chord_ratio, "note": "复刻 HermiteStrategy"},
             {"parameter": "scenario", "value": scenario, "note": "离线反事实诊断场景"},
         ])
@@ -532,20 +529,20 @@ def publish_temporal_replay_figure(metrics_path: Path, pdf_path: Path, png_path:
     for row in rows:
         grouped.setdefault(row["event_id"], []).append(row)
     _configure()
-    colors = {PREDICT_TO_NOW: "#B07AA1", DELAYED_HERMITE: "#E15759"}
-    labels = {PREDICT_TO_NOW: "Predict-to-Now", DELAYED_HERMITE: "Delayed Hermite"}
+    colors = {PREDICT_TO_NOW: "#B07AA1", HERMITE: "#E15759"}
+    labels = {PREDICT_TO_NOW: "Predict-to-Now", HERMITE: "Hermite"}
     figure, axis = plt.subplots(figsize=(4.7, 3.1), dpi=180)
     for event_id, event_rows in sorted(grouped.items()):
         points = {
             row["strategy"]: (float(row["effective_lag_ms"]), float(row["lag_aligned_rmse_mm"]))
             for row in event_rows
         }
-        if PREDICT_TO_NOW not in points or DELAYED_HERMITE not in points:
+        if PREDICT_TO_NOW not in points or HERMITE not in points:
             continue
         predict = points[PREDICT_TO_NOW]
-        delayed = points[DELAYED_HERMITE]
-        axis.plot([predict[0], delayed[0]], [predict[1], delayed[1]], color="#7F8790", linewidth=0.75, alpha=0.35)
-        for strategy, point in ((PREDICT_TO_NOW, predict), (DELAYED_HERMITE, delayed)):
+        hermite = points[HERMITE]
+        axis.plot([predict[0], hermite[0]], [predict[1], hermite[1]], color="#7F8790", linewidth=0.75, alpha=0.35)
+        for strategy, point in ((PREDICT_TO_NOW, predict), (HERMITE, hermite)):
             axis.scatter(point[0], point[1], s=24, color=colors[strategy], edgecolor="white", linewidth=0.4,
                           label=labels[strategy] if event_id == sorted(grouped)[0] else None, zorder=3)
     axis.set_xlabel("Fitted effective lag (ms)")
@@ -568,7 +565,7 @@ def temporal_replay_summary(metrics_path: Path) -> Mapping[str, Mapping[str, flo
     with metrics_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     summary: dict[str, Mapping[str, float]] = {}
-    for strategy in (DELAYED_HERMITE, PREDICT_TO_NOW):
+    for strategy in (HERMITE, PREDICT_TO_NOW):
         selected = [row for row in rows if row["strategy"] == strategy]
         summary[strategy] = {
             "event_count": float(len(selected)),
@@ -580,7 +577,7 @@ def temporal_replay_summary(metrics_path: Path) -> Mapping[str, Mapping[str, flo
 
 
 __all__ = [
-    "DELAYED_HERMITE",
+    "HERMITE",
     "FULL_VARIANT",
     "PREDICT_TO_NOW",
     "TemporalReplaySettings",

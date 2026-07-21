@@ -460,7 +460,7 @@ EgoAnchor & \textbf{1.631} [1.493, 2.413] & \textbf{6.894} [6.792, 7.481] & \tex
 
 \subsection{实验二：组件归因}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 KF Predict-to-Now 或延迟 Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
+实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 Kalman Predict-to-Now 或 Kalman Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
 
 \begin{table*}[t]
 \centering
@@ -500,7 +500,7 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & 0/9；max 3.252~mm & 4/9；max 91.714~mm & �
     \centering
     \includegraphics[width=\linewidth]{figures/panels/exp2d_temporal_replay.pdf}
   \end{subfigure}
-  \caption{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Delayed Hermite Interpolation 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}
+  \caption{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Hermite 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}
   \label{fig:exp2-final}
 \end{figure*}
 
@@ -510,7 +510,7 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & 0/9；max 3.252~mm & 4/9；max 91.714~mm & �
 
 \textbf{VCD 接纳。} 启用 VCD 时，0/9 次遮挡过程超过 40~mm；关闭后为 4/9。该组件的主证据是尾部失效率，不是单独的中位数。
 
-\textbf{时序反事实重放。} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 175~ms / 13.397~mm，Kalman Delayed Hermite Interpolation 为 315~ms / 4.986~mm；停止后的帧间增量 P95 分别为 0.666~mm 与 0.177~mm。后者以约 140~ms 的额外 lag 换取约 8.411~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
+\textbf{时序反事实重放。} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 175~ms / 13.397~mm，Kalman Hermite 为 315~ms / 4.986~mm；停止后的帧间增量 P95 分别为 0.666~mm 与 0.177~mm。后者以约 140~ms 的额外 lag 换取约 8.411~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
 
 \FloatBarrier
 

@@ -6,7 +6,7 @@ from .paper import write_paper
 from .pipeline import build_paper
 from .settings import GptV4Settings, load_settings
 from .temporal_replay import (
-    DELAYED_HERMITE,
+    HERMITE,
     PREDICT_TO_NOW,
     TemporalReplaySettings,
     publish_temporal_replay_figure,
@@ -19,7 +19,7 @@ from .xlsx import iter_rows, workbook_sha256
 __all__ = [
     "GptV4Results",
     "GptV4Settings",
-    "DELAYED_HERMITE",
+    "HERMITE",
     "PREDICT_TO_NOW",
     "TemporalReplaySettings",
     "analyze_workbooks",

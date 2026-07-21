@@ -18,7 +18,7 @@ from .metrics import (
     NO_VCD,
     GptV4Results,
 )
-from .temporal_replay import DELAYED_HERMITE, PREDICT_TO_NOW
+from .temporal_replay import HERMITE, PREDICT_TO_NOW
 
 
 TemporalReplaySummary = Mapping[str, Mapping[str, float]]
@@ -186,12 +186,10 @@ def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     reduction = arrival - capture
     capture_effect = f"+{_fmt(float(np.median(reduction)))} [{_fmt(float(np.quantile(reduction, .25)))}, {_fmt(float(np.quantile(reduction, .75)))}]~mm; {int(np.sum(reduction > 0))}/{len(reduction)} 改善"
     full_static, disabled_static, static_delta, static_positive = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    delayed_lag = _replay_value(replay, DELAYED_HERMITE, "effective_lag_ms")
-    delayed_rmse = _replay_value(replay, DELAYED_HERMITE, "lag_aligned_rmse_mm")
-    delayed_increment = _replay_value(replay, DELAYED_HERMITE, "post_stop_increment_p95_mm")
+    hermite_lag = _replay_value(replay, HERMITE, "effective_lag_ms")
+    hermite_rmse = _replay_value(replay, HERMITE, "lag_aligned_rmse_mm")
     predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
     predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
-    predict_increment = _replay_value(replay, PREDICT_TO_NOW, "post_stop_increment_p95_mm")
     vcd_full = results.occlusion_episodes[FULL_VARIANT]
     vcd_disabled = results.occlusion_episodes[NO_VCD]
     full_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_full)
@@ -211,7 +209,7 @@ def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
         f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
         f"VCD 接纳 & 遮挡 P95 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
-        f"时序合成（离线重放） & fitted lag / aligned RMSE & {_fmt(delayed_lag, 1)} / {_fmt(delayed_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(predict_lag - delayed_lag, 1)}~ms / +{_fmt(predict_rmse - delayed_rmse)}~mm \\\\",
+        f"时序合成（离线重放） & fitted lag / aligned RMSE & {_fmt(hermite_lag, 1)} / {_fmt(hermite_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(predict_lag - hermite_lag, 1)}~ms / +{_fmt(predict_rmse - hermite_rmse)}~mm \\\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",
@@ -292,15 +290,15 @@ def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     full_static, disabled_static, static_delta, _ = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
     full_vcd = results.occlusion_episodes[FULL_VARIANT]
     disabled_vcd = results.occlusion_episodes[NO_VCD]
-    delayed_lag = _replay_value(replay, DELAYED_HERMITE, "effective_lag_ms")
-    delayed_rmse = _replay_value(replay, DELAYED_HERMITE, "lag_aligned_rmse_mm")
-    delayed_increment = _replay_value(replay, DELAYED_HERMITE, "post_stop_increment_p95_mm")
+    hermite_lag = _replay_value(replay, HERMITE, "effective_lag_ms")
+    hermite_rmse = _replay_value(replay, HERMITE, "lag_aligned_rmse_mm")
+    hermite_increment = _replay_value(replay, HERMITE, "post_stop_increment_p95_mm")
     predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
     predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
     predict_increment = _replay_value(replay, PREDICT_TO_NOW, "post_stop_increment_p95_mm")
     return f"""\\subsection{{实验二：组件归因}}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 KF Predict-to-Now 或延迟 Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
+实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 Kalman Predict-to-Now 或 Kalman Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
 
 {_exp2_table(results, replay)}
 
@@ -322,7 +320,7 @@ def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     \\centering
     \\includegraphics[width=\\linewidth]{{figures/panels/exp2d_temporal_replay.pdf}}
   \\end{{subfigure}}
-  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Delayed Hermite Interpolation 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}}
+  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Hermite 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 
@@ -332,7 +330,7 @@ def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
 
 \\textbf{{VCD 接纳。}} 启用 VCD 时，{sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm；关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}。该组件的主证据是尾部失效率，不是单独的中位数。
 
-\\textbf{{时序反事实重放。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，Kalman Delayed Hermite Interpolation 为 {_fmt(delayed_lag, 1)}~ms / {_fmt(delayed_rmse)}~mm；停止后的帧间增量 P95 分别为 {_fmt(predict_increment)}~mm 与 {_fmt(delayed_increment)}~mm。后者以约 {_fmt(delayed_lag - predict_lag, 1)}~ms 的额外 lag 换取约 {_fmt(predict_rmse - delayed_rmse)}~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
+\\textbf{{时序反事实重放。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，Kalman Hermite 为 {_fmt(hermite_lag, 1)}~ms / {_fmt(hermite_rmse)}~mm；停止后的帧间增量 P95 分别为 {_fmt(predict_increment)}~mm 与 {_fmt(hermite_increment)}~mm。后者以约 {_fmt(hermite_lag - predict_lag, 1)}~ms 的额外 lag 换取约 {_fmt(predict_rmse - hermite_rmse)}~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
 
 \\FloatBarrier
 """
