@@ -1083,9 +1083,15 @@ namespace EgoAnchor.Eval
             bool usesStaticLock   = policy != null && policy.UsesStaticLock;
             bool usesLowScore     = policy != null && policy.UsesLowScoreReacquire;
             bool usesServer       = policy != null && policy.UsesServerReacquire;
+            string configurationFingerprint = string.Join(
+                "|",
+                rt != null ? rt.AlignmentConfigurationFingerprint : string.Empty,
+                motionConfig,
+                policy != null ? policy.SmoothingStrategyConfiguration : string.Empty,
+                policy != null ? policy.ConfigurationFingerprint : string.Empty);
             string hash = ComputeHash(
                 label, motionModel, smoothing, qualityGate, worldAlignment,
-                motionConfig,
+                configurationFingerprint,
                 usesCaptureTime, usesVcd, usesTemporal, usesStaticLock, usesLowScore, usesServer);
             return new EvalVariantConfig(
                 label,
@@ -1099,7 +1105,8 @@ namespace EgoAnchor.Eval
                 usesTemporal,
                 usesStaticLock,
                 usesLowScore,
-                usesServer);
+                usesServer,
+                configurationFingerprint);
         }
 
         /// <summary>FNV-1a 配置摘要，确保相同配置产生相同 hash。</summary>
@@ -1109,7 +1116,7 @@ namespace EgoAnchor.Eval
             string smoothing,
             string qualityGate,
             string worldAlignment,
-            string motionConfig,
+            string configurationFingerprint,
             bool usesCaptureTime,
             bool usesVcd,
             bool usesTemporal,
@@ -1124,7 +1131,7 @@ namespace EgoAnchor.Eval
                 smoothing,
                 qualityGate,
                 worldAlignment,
-                motionConfig,
+                configurationFingerprint,
                 usesCaptureTime ? "1" : "0",
                 usesVcd ? "1" : "0",
                 usesTemporal ? "1" : "0",

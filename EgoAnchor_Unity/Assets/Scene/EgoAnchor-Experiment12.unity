@@ -189,7 +189,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4725344443095769517, guid: 26e2966fddf88ce43a58ab70b3cbcb5f, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -362,7 +362,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2518c50cb3fc6a6458d4b743c2f69c7d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.PointableCanvasModule
   m_SendPointerHoverToParent: 1
   _useInitialPressPositionForDrag: 1
@@ -1598,7 +1598,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &348229804
 Transform:
   m_ObjectHideFlags: 0
@@ -1956,6 +1956,10 @@ PrefabInstance:
     - target: {fileID: 4725344443095769517, guid: 26e2966fddf88ce43a58ab70b3cbcb5f, type: 3}
       propertyPath: m_Name
       value: Axis3D
+      objectReference: {fileID: 0}
+    - target: {fileID: 4725344443095769517, guid: 26e2966fddf88ce43a58ab70b3cbcb5f, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3305,7 +3309,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &722913590
 Transform:
   m_ObjectHideFlags: 0
@@ -4425,7 +4429,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
@@ -5713,7 +5717,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HoldStrategy
 --- !u!1 &1521914293
 GameObject:
   m_ObjectHideFlags: 0
@@ -7596,7 +7600,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HoldStrategy
 --- !u!1 &7100000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -7609,7 +7613,7 @@ GameObject:
   - component: {fileID: 7100000002}
   - component: {fileID: 7100000001}
   m_Layer: 0
-  m_Name: AnchorObject - One-Euro Anchor
+  m_Name: AnchorObject - One-Euro Interpolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7690,7 +7694,7 @@ GameObject:
   - component: {fileID: 7100000013}
   - component: {fileID: 7100000014}
   m_Layer: 0
-  m_Name: Policy - One-Euro Anchor
+  m_Name: Policy - One-Euro Interpolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7725,18 +7729,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7100000013}
   smoothingStrategy: {fileID: 7100000014}
-  strategyLabel: one_euro_anchor
-  enableQualityGate: 0
+  strategyLabel: one_euro_interpolation
+  enableQualityGate: 1
   minQualityScore: 0.2
   staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
-  trackingScoreFloor: 0
+  trackingScoreFloor: 0.5
   lostTimeoutSeconds: 1
   staticSpeedThresholdMps: 0.015
   staticAngularSpeedThresholdDps: 1.5
   enableLostReacquire: 1
-  enableLowScoreReacquire: 0
-  emitServerReacquire: 0
+  enableLowScoreReacquire: 1
+  emitServerReacquire: 1
   lowScoreReacquireThreshold: 0.45
   lowScoreReacquireSeconds: 0.6
   lowScoreReacquireCooldownSeconds: 3
@@ -7770,13 +7774,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 7100000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
 --- !u!1 &7200000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -7949,7 +7951,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
@@ -7968,7 +7970,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05
-  enterAngSpeedDps: 35
+  enterAngSpeedDps: 22
   dwellSeconds: 0.35
   minScore: 0.25
   deadbandMeters: 0.008
@@ -7976,7 +7978,7 @@ MonoBehaviour:
   unlockEvidenceMeters: 0.08
   unlockEvidenceDegrees: 20
   unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
+  unlockDriftDegrees: 12
   evidenceHalfLifeSeconds: 0.27
   creepHalfLifeSeconds: 2.7
   relockSuppressSeconds: 1
@@ -8165,7 +8167,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
@@ -8184,7 +8186,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05
-  enterAngSpeedDps: 35
+  enterAngSpeedDps: 22
   dwellSeconds: 0.35
   minScore: 0.25
   deadbandMeters: 0.008
@@ -8192,7 +8194,7 @@ MonoBehaviour:
   unlockEvidenceMeters: 0.08
   unlockEvidenceDegrees: 20
   unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
+  unlockDriftDegrees: 12
   evidenceHalfLifeSeconds: 0.27
   creepHalfLifeSeconds: 2.7
   relockSuppressSeconds: 1
@@ -8298,7 +8300,7 @@ GameObject:
   - component: {fileID: 7400000011}
   - component: {fileID: 7400000012}
   - component: {fileID: 7400000013}
-  - component: {fileID: 7400000014}
+  - component: {fileID: 7400000016}
   - component: {fileID: 7400000015}
   m_Layer: 0
   m_Name: Policy - EgoAnchor w-o temporal synthesis
@@ -8335,7 +8337,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7400000013}
-  smoothingStrategy: {fileID: 7400000014}
+  smoothingStrategy: {fileID: 7400000016}
   strategyLabel: egoanchor_without_temporal_synthesis
   enableQualityGate: 1
   minQualityScore: 0.2
@@ -8363,21 +8365,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7400000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d4309c83c00ae0248ba7e159e97fbacf, type: 3}
+  m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.ConstantVelocityModel
---- !u!114 &7400000014
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7400000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
+  positionProcessNoise: 0.2
+  positionMeasurementNoise: 0.0004
+  rotationProcessNoise: 0.4
+  rotationMeasurementNoise: 0.0025
 --- !u!114 &7400000015
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8392,7 +8386,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05
-  enterAngSpeedDps: 35
+  enterAngSpeedDps: 22
   dwellSeconds: 0.35
   minScore: 0.25
   deadbandMeters: 0.008
@@ -8400,7 +8394,7 @@ MonoBehaviour:
   unlockEvidenceMeters: 0.08
   unlockEvidenceDegrees: 20
   unlockDriftMeters: 0.015
-  unlockDriftDegrees: 5
+  unlockDriftDegrees: 12
   evidenceHalfLifeSeconds: 0.27
   creepHalfLifeSeconds: 2.7
   relockSuppressSeconds: 1
@@ -8417,6 +8411,18 @@ MonoBehaviour:
   posToleranceMaxFactor: 3
   lowScoreReleaseScore: 0.3
   lowScoreReleaseSeconds: 0.6
+--- !u!114 &7400000016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7400000010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f4c6b8fcb214d75823f5c477c6d9c11, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PredictToNowStrategy
 --- !u!1 &7500000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -8588,7 +8594,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0

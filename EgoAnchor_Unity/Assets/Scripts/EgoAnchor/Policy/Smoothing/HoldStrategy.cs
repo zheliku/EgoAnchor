@@ -11,13 +11,13 @@ namespace EgoAnchor.Policy
     ///
     /// 它读取 model.LatestControlPoint.Pose，而不是 PredictAt(now)，因此保持严格阶梯输出且不外推。
     /// </summary>
-    public sealed class RawPassthroughStrategy : SmoothingStrategy
+    public sealed class HoldStrategy : SmoothingStrategy
     {
         private bool hasPose;
         private Pose lastPose;
         private double lastPoseTimeSeconds;
 
-        public override string StrategyName => "raw_passthrough";
+        public override string StrategyName => "hold";
 
         public override void ResetStrategy()
         {

@@ -6,10 +6,11 @@ namespace EgoAnchor.Policy
     /// 模块 B：平滑策略。每渲染帧调用运动模型，产出最终高频平滑 pose。
     ///
     /// 四个子类是四条不同的设计哲学：
-    ///   - RawPassthroughStrategy：零阶保持，作为异步候选的原始基线；
-    ///   - PredictivePassthroughStrategy：逐渲染帧直接调用运动模型预测，仅用于观察模型外推；
+    ///   - HoldStrategy：零阶保持，作为异步候选的原始基线；
+    ///   - PredictToNowStrategy：逐渲染帧直接调用运动模型预测；
     ///   - BlendStrategy (B 路)：零延迟。调 model.PredictAt(now) 外推 + 残差融合消跳变。
-    ///   - DelayedInterpStrategy (C 路)：牺牲 ~一周期延迟。缓冲 model 的控制点，输出 now-Δ 处的插值。
+    ///   - LinearSlerpStrategy：缓冲控制点，在 now-Δ 做 Linear/SLERP；
+    ///   - HermiteStrategy：缓冲控制点，在 now-Δ 做位置/四元数 Hermite。
     ///
     /// 继承 MonoBehaviour 的抽象基类，Inspector 只能挂它的子类，与 MotionModel 自由组合 (3×4)。
     /// 策略不持有运动模型——每帧由 host 把当前 model 传进来 (OnObservation / Output)，实现解耦。
@@ -18,6 +19,9 @@ namespace EgoAnchor.Policy
     {
         /// <summary>日志/eval 用的策略名。</summary>
         public abstract string StrategyName { get; }
+
+        /// <summary>写入正式配置哈希的策略参数指纹；无数值参数的策略返回空字符串。</summary>
+        public virtual string ConfigurationFingerprint => string.Empty;
 
         /// <summary>本策略引入的固有延迟，单位秒 (B 路=0，C 路≈一个观测周期)，仅供诊断。</summary>
         public virtual float NominalLatencySeconds => 0.0f;

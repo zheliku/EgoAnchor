@@ -130,6 +130,50 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
+        /// 用 SO(3) 右雅可比把旋转向量导数转换为 body-local 角速度。
+        /// 若 <c>R(t)=R0*Exp(phi(t))</c>，则 <c>omega_body=Jr(phi)*phi_dot</c>。
+        /// </summary>
+        public static Vector3 ApplyRightJacobian(Vector3 rotationVector, Vector3 rotationVectorRate)
+        {
+            float angle = rotationVector.magnitude;
+            if (angle <= 1e-4f)
+            {
+                Vector3 cross = Vector3.Cross(rotationVector, rotationVectorRate);
+                return rotationVectorRate - 0.5f * cross
+                    + (1.0f / 6.0f) * Vector3.Cross(rotationVector, cross);
+            }
+
+            float angleSquared = angle * angle;
+            float a = (1.0f - Mathf.Cos(angle)) / angleSquared;
+            float b = (angle - Mathf.Sin(angle)) / (angleSquared * angle);
+            Vector3 firstCross = Vector3.Cross(rotationVector, rotationVectorRate);
+            return rotationVectorRate - a * firstCross
+                + b * Vector3.Cross(rotationVector, firstCross);
+        }
+
+        /// <summary>
+        /// 用 SO(3) 右雅可比逆把 body-local 角速度转换为旋转向量导数。
+        /// Hermite 在 Log 切空间插值时，端点切线必须使用这个量。
+        /// </summary>
+        public static Vector3 ApplyRightJacobianInverse(Vector3 rotationVector, Vector3 angularVelocityBody)
+        {
+            float angle = rotationVector.magnitude;
+            Vector3 firstCross = Vector3.Cross(rotationVector, angularVelocityBody);
+            if (angle <= 1e-4f)
+            {
+                return angularVelocityBody + 0.5f * firstCross
+                    + (1.0f / 12.0f) * Vector3.Cross(rotationVector, firstCross);
+            }
+
+            float angleSquared = angle * angle;
+            float halfAngle = 0.5f * angle;
+            float cotHalf = Mathf.Cos(halfAngle) / Mathf.Max(Mathf.Sin(halfAngle), Epsilon);
+            float coefficient = (1.0f - halfAngle * cotHalf) / angleSquared;
+            return angularVelocityBody + 0.5f * firstCross
+                + coefficient * Vector3.Cross(rotationVector, firstCross);
+        }
+
+        /// <summary>
         /// 单边自适应 EMA：观测值高于当前估计时快速跟随 (followUp)，低于时缓慢回落 (followDown)。
         /// 用于跟踪采集-渲染延迟的峰值水平 (快升慢降)，避免延迟低估导致外推/插值退化。
         /// </summary>

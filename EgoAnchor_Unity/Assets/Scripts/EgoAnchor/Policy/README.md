@@ -1,226 +1,124 @@
-# EgoAnchor Unity 锚定管线（重构版）
+# EgoAnchor Unity 锚定策略
 
-把低频 (~10Hz) 的观测 pose 实时升采样成每渲染帧 (72/90fps) 连续平滑的 anchor pose。
-重构自离线仿真 `EgoAnchor_Tools3`，根治了旧实现"断断续续 / 阶梯跳变"的问题。
+本目录把低频、异步的世界系位姿观测转换为逐渲染帧对象锚点。运行时由运动状态估计、逐帧输出策略、观测接纳、生命周期和可选 StaticLock 组成；这些模块的时间语义不能混用。
 
-## 为什么旧的不平滑（已修复）
+## 模块边界
 
-旧 estimator 的 `PredictAt` 把外推时长 `Clamp(now - lastObs, 0, maxPredictAhead≈0.16s)`。
-观测每 ~0.2s 才来一次，一旦间隔超过 0.16s，pose 就**冻结**，下一帧观测再**snap** 跳过去
-= 阶梯跳变。且完全没有"误差平滑过渡"。新架构：**外推不限幅 + 误差融合/延迟插值**，每帧都有连续输出。
+一个 `AnchorPolicyHost` 绑定一个 `MotionModel` 和一个 `SmoothingStrategy`：
 
----
-
-## 架构：两个可自由组合的模块
-
-一个 anchor runtime = **1 个运动模型 (MotionModel) + 1 个平滑策略 (SmoothingStrategy)**，
-挂在同一个 GameObject 上，由 `AnchorPolicyHost` 引用。两个维度正交，自由组合：
-
-```
-运动模型 MotionModel (模块 A，去噪+估速+外推)      平滑策略 SmoothingStrategy (模块 B，低频→高频)
-├─ ConstantVelocityModel   (CV，差分速度，不去噪)   ├─ RawPassthroughStrategy (raw：零阶保持)
-├─ KalmanModel             (Kalman 去噪+速度估计)   ├─ BlendStrategy          (B路：零延迟，外推+误差融合)
-└─ OneEuroModel            (One Euro 自适应去噪)     ├─ DelayedInterpStrategy  (C路：延迟插值)
-                                                    └─ PredictivePassthroughStrategy (逐帧模型预测)
+```text
+MotionModel                          SmoothingStrategy
+|- ConstantVelocityModel            |- HoldStrategy
+|- OneEuroModel                     |- PredictToNowStrategy
+`- KalmanModel                      |- LinearSlerpStrategy
+                                    `- HermiteStrategy
 ```
 
-Raw、Blend、DelayedInterp 和 PredictivePassthrough 是可独立选择的策略。论文实验通常不需要全跑，优先选 raw、OneEuro predictive baseline 和 EgoAnchor 方法组合：
+- `MotionModel` 负责状态、线速度和 body-local 角速度估计。
+- `SmoothingStrategy` 负责输出所对应的目标时刻和逐渲染帧合成。
+- `AnchorPolicyHost` 负责 VCD admission、生命周期、重获取和模块顺序。
+- `EgoAnchorStaticLockModule` 只负责静止锚定、解锁证据和接缝恢复。
+- `PoseToAnchorRuntime` 负责 `frame_id` 采集时刻对齐和坐标补偿，不参与滤波调参。
 
-| | RawPassthroughStrategy | PredictivePassthroughStrategy | BlendStrategy | DelayedInterpStrategy |
-|---|---|---|---|---|
-| **ConstantVelocityModel** | raw / zoh | cv + predictive | cv + blend | cv + interp |
-| **KalmanModel** | kalman zoh | kalman + predictive | kalman + blend | kalman + interp |
-| **OneEuroModel** | oneeuro zoh | oneeuro + predictive | oneeuro + blend | oneeuro + interp |
+正式策略统一使用 `Strategy` 后缀，状态估计统一使用 `Model` 后缀。日志名固定为 `hold`、`predict_to_now`、`linear_slerp` 和 `hermite`。
 
-**正交的第三维：静止锚定。** `EgoAnchorStaticLockModule` 与上面组合正交叠加：
-挂上模块并启用 `lockEnabled` = 在该 baseline 之上加 EgoAnchor 静止锚定层；不挂或关闭 = 纯 baseline。
-**EgoAnchor 主方法 = 选定 baseline + `EgoAnchorStaticLockModule`**。当前常用起点是 `kalman + blend` 或 `kalman + interp`。
+## 四种输出策略
 
-`raw`（什么都不做的参照）= `ConstantVelocityModel + RawPassthroughStrategy`。不要用 BlendStrategy 调 decay 来假装 raw。
+### HoldStrategy
 
-`PredictivePassthroughStrategy` 每个渲染帧直接调用 `MotionModel.PredictAt(now)`，不做保持、插值、残差融合或预测限幅。正式场景中的 `One-Euro Anchor` 使用 `OneEuroModel + PredictivePassthroughStrategy`；Arrival-Hold、Capture-Hold 和时序合成消融仍使用 `RawPassthroughStrategy` 或各自原有策略。
+锁存最近控制点并执行零阶保持，不外推、不插值。Arrival-Hold 和 Capture-Hold 都使用该策略，两者只改变世界系复合时刻。
 
-模块通过数据契约解耦：MotionModel 提供 `PredictAt(t)`（给 B 路外推）和 `LatestControlPoint`
-（给 C 路缓冲插值）。host 每帧调 `strategy.Output(model, now)`。
+### PredictToNowStrategy
 
----
+每个渲染帧调用 `MotionModel.PredictAt(now)`，输出语义时刻等于当前渲染时刻。新重采的 `EgoAnchor w/o temporal synthesis` 使用 `KalmanModel + PredictToNowStrategy`，只关闭历史时序合成，不更换状态估计器。
 
-## 场景挂载（真机对比多方法）
+### LinearSlerpStrategy
 
-沿用 `AnchorRuntimeHub` 一个 pose 流分发给 N 个 runtime，一次跑同时对比所有方法。
+缓存 One-Euro 滤波后的控制点，目标时刻为：
 
-**每个对比变体 = 一个 GameObject，挂 4 个组件：**
+```text
+t_target = t_render - delay(t)
+```
 
-1. `PoseToAnchorRuntime` —— 帧对齐 + 喂 host（拖入 `framePoseHistory`、`policyHost`）
-2. `AnchorPolicyHost` —— 拖入下面两个模块 + 可选静止锁模块
-3. **一个 MotionModel 子类**（`KalmanModel` / `OneEuroModel` / `ConstantVelocityModel`）
-4. **一个 SmoothingStrategy 子类**（`BlendStrategy` / `DelayedInterpStrategy`）
-5. 可选 `EgoAnchorStaticLockModule` —— EgoAnchor 静止锚定层，拖入 host 的 `staticLockModule`
-6. `DynamicObjectAnchor` —— 把 host 输出的 pose 应用到要显示的 Transform
+`delay(t)` 由采集至渲染观测年龄的非对称 EMA、自适应安全系数和延迟下限决定，并限制每秒变化速度。相邻控制点之间的位置使用 Linear，旋转使用最短弧 SLERP；不使用 One-Euro 内部导数作为样条切线。
 
-然后把所有变体的 `PoseToAnchorRuntime` 拖进场景里 `AnchorRuntimeHub.runtimes` 列表。
-`AnchorEvalRecorder` 也拖入这些 runtime → 一次录制拿到所有方法的对比数据。
+新重采的场景显示名为 One-Euro Interpolation，schema 中稳定 variant ID 仍为 `One-Euro Anchor`。该配置开启采集时刻对齐和 VCD，使用与完整系统相同的生命周期与重获取开关，只关闭 StaticLock。
 
-> 提示：正式实验先建 raw、Kalman/OneEuro baseline 和 EgoAnchor 方法，不必把 9 种组合全部塞进同一场景。
+### HermiteStrategy
 
----
+使用与 Linear/SLERP 相同的自适应历史目标时间。位置在相邻 Kalman 控制点之间做 Hermite；旋转在 `Log(q1^-1 q)` 切空间做 Quaternion Hermite。端点切线按弦长限制，避免急停时速度滞后造成过冲。
 
-## 参数详解与推荐配置
+`AngularVelocityRad` 始终表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 重置旋转切空间时使用 SO(3) 右雅可比保存物理角速度；Hermite 在第二端使用右雅可比逆把 body 角速度转换为 Log 向量导数。不得直接混用不同参考姿态下的旋转向量导数。
 
-### AnchorPolicyHost（每个变体都有）
+## 正式实验组合
 
-| 参数 | 含义 | 推荐 |
-|---|---|---|
-| `motionModel` | 拖入运动模型子类 | 见上矩阵 |
-| `smoothingStrategy` | 拖入平滑策略子类 | 见上矩阵 |
-| `strategyLabel` | eval 用的名字，空则自动 `<model>_<strategy>` | 留空 |
-| **VCD 观测接纳（可选）** | | |
-| `enableQualityGate` | 是否拒绝低可靠分观测。三类实验一基线关闭，完整 EgoAnchor 开启 | baseline `false` |
-| `minQualityScore` | 接受观测的最低可靠分 (0..1)，低于则拒绝 | `0.2` |
-| **Lifecycle** | | |
-| `trackingScoreFloor` | reliability 总分低于该值时不刷新可靠观测时间戳；baseline 通常保持 0，EgoAnchor 真机显示可设 `0.5` 作为低质提示 | `0.0` |
-| `coastTimeoutSeconds` | 短时无观测仍继续外推/插值的时长 | `0.45` |
-| `lostTimeoutSeconds` | 多久无观测后判 Lost 停输出（须 > coast） | `2.0` |
-| `staticSpeedThresholdMps` | 运动/静止判定线速度阈值（仅诊断） | `0.015` |
-| `staticAngularSpeedThresholdDps` | 运动/静止判定角速度阈值（仅诊断） | `1.5` |
-| **Low-Score Reacquire** | | |
-| `enableLowScoreReacquire` | 持续低总分时本地进入 Relocalizing；服务器请求由 `emitServerReacquire` 控制 | `true` |
-| `emitServerReacquire` | 是否把本地 Lost/低分重获取上报给 hub；被动 shadow baseline 设为 `false` | `true` |
-| `lowScoreReacquireThreshold` | 不高于该总分开始累计重获取证据；应低于 `trackingScoreFloor`，避免一低于 0.5 就频繁 register | `0.45` |
-| `lowScoreReacquireSeconds` | 低分需连续持续的时间 | `0.6` |
-| `lowScoreReacquireCooldownSeconds` | 两次自动重获取之间的冷却时间 | `3.0` |
-| `reacquireGeometryFloor` | 低分重获取原因诊断阈值：低于它标记为 track_lost，几何仍好则标记为 low_score | `0.5` |
-| `reacquireReprojWeight` | 低分重获取原因诊断中的颜色重投影权重 | `0.2` |
-| `reacquireDepthWeight` | 低分重获取原因诊断中的深度对齐权重 | `0.8` |
-### EgoAnchorStaticLockModule（EgoAnchor 核心方法，仅 EgoAnchor 变体挂载）
+| Variant | Alignment | Admission | Model | Strategy | StaticLock | Lifecycle / reacquire |
+|---|---|---|---|---|---|---|
+| Arrival-Hold | Arrival time | 合法性 | ConstantVelocity | Hold | 关 | 基线 |
+| Capture-Hold | Capture time | 合法性 | ConstantVelocity | Hold | 关 | 基线 |
+| One-Euro Anchor | Capture time | VCD | OneEuro | LinearSlerp | 关 | 与完整系统相同 |
+| EgoAnchor | Capture time | VCD | Kalman | Hermite | 开 | 完整 |
+| EgoAnchor w/o capture-time alignment | Arrival time | VCD | Kalman | Hermite | 开 | 完整 |
+| EgoAnchor w/o VCD | Capture time | 合法性 | Kalman | Hermite | 开 | 仅关闭 VCD 相关低分重获取 |
+| EgoAnchor w/o temporal synthesis | Capture time | VCD | Kalman | PredictToNow | 开 | 完整 |
+| EgoAnchor w/o StaticLock | Capture time | VCD | Kalman | Hermite | 关 | 完整 |
 
-| 参数 | 含义 | 默认 |
-|---|---|---|
-| `lockEnabled` | 是否启用静止锚定稳定器。关闭后透传 baseline 输出 | `true` |
-| `enterSpeedMps` | 进入静止判定的观测线速度阈值 (m/s) | `0.05` |
-| `enterAngSpeedDps` | 进入静止判定的角速度阈值 (deg/s)，设为噪声地板的 1.5 倍以平衡抑制噪声与快速锁定 | `22` |
-| `dwellSeconds` | 进入锁定需连续静止+高分的时间 | `0.35` |
-| `minScore` | 进入/维持锁定的最低可靠分 | `0.25` |
-| `deadbandMeters` | 锁定时位置死区，小于此视为噪声 | `0.008` |
-| `deadbandDegrees` | 锁定时旋转死区 | `3` |
-| `unlockEvidenceMeters` | CUSUM 位置解锁证据阈值，越大越粘 | `0.08` |
-| `unlockEvidenceDegrees` | CUSUM 旋转解锁证据阈值，越大越粘 | `20` |
-| `unlockDriftMeters` | 相对锁定原点的平移租绳阈值 | `0.015` |
-| `unlockDriftDegrees` | 相对锁定原点的旋转租绳阈值 | `5` |
-| `evidenceHalfLifeSeconds` | 解锁证据漏积分半衰期，偶发噪声会衰减掉 | `0.27` |
-| `creepHalfLifeSeconds` | 锁定时锁点缓慢贴近高分小位移观测的半衰期 | `2.7` |
-| `relockSuppressSeconds` | 解锁后禁止再锁的时间，防频繁翻转 | `1.0` |
-| `unlockSpeedFactor` | 速度逃逸倍数，观测速度明显大于静止阈值时触发解锁证据 | `2.5` |
-| `unlockMovingSeconds` | 速度逃逸需要连续成立的时间 | `0.4` |
-| `seamDecayPerFrame` | 解锁后从锁点回到 smoothing 输出的接缝残差衰减 | `0.85` |
-| `refObsIntervalSeconds` | CUSUM 证据累积的观测周期归一基准 | `0.2` |
-| `headRotForFullToleranceDps` | 头部角速度达到该值时，头动容忍因子吃满 | `60` |
-| `headLinForFullToleranceMps` | 头部线速度达到该值时，头动容忍因子吃满 | `0.3` |
-| `headMaxToleranceFactor` | 头动时死区、租绳、速度逃逸阈值最大放大倍数 | `4` |
-| `headSettleSeconds` | 头停后冻结解锁判定的沉降时长 | `0.6` |
-| `posToleranceRefDistanceMeters` | 距离自适应位置容忍的参考距离，此距离内不放大 | `0.4` |
-| `posToleranceDistanceSlope` | 距离超过参考值后，位置容忍随距离增大的斜率 | `1.0` |
-| `posToleranceMaxFactor` | 远距离位置容忍放大上限 | `3` |
-| `lowScoreReleaseScore` | 锁定时持续低于该分数则释放锁点 | `0.3` |
-| `lowScoreReleaseSeconds` | 低分释放需持续的时间 | `0.6` |
+历史 v2 的 One-Euro 是 `OneEuroModel + RawPassthroughStrategy`，历史 w/o temporal synthesis 是 `ConstantVelocityModel + RawPassthroughStrategy`。旧名只用于解释既有数据 provenance，不得恢复为当前 Unity 类，也不得与新重采数据混合。
 
-这些参数都参与当前控制逻辑，必须保留 Inspector 调参入口。不要用 `[HideInInspector]` 解决参数过多的问题；后续若要收纳，应做自定义 Inspector foldout、profile 或进一步拆分参数宿主。
-
-### KalmanModel
-
-| 参数 | 含义 | 推荐 |
-|---|---|---|
-| `positionProcessNoise` | 位置过程噪声 (m²/s)。大→跟得紧但抖，小→平滑但滞后 | `0.2` |
-| `positionMeasurementNoise` | 位置测量噪声 (m²)。**小→信任观测、接近过点** | `0.0004` |
-| `rotationProcessNoise` | 旋转过程噪声 (rad²/s) | `0.4` |
-| `rotationMeasurementNoise` | 旋转测量噪声 (rad²) | `0.0025` |
-
-> 调参口诀：物体抖→调大 measurementNoise（更信滤波）；物体跟不上/滞后→调大 processNoise（更信观测的快速变化）。
+## 冻结参数
 
 ### OneEuroModel
 
-| 参数 | 含义 | 推荐 |
-|---|---|---|
-| `minCutoff` | 最小截止频率 (Hz)。小→更平滑但滞后大 | `1.0` |
-| `beta` | 速度自适应系数。大→快动时更跟手、滞后小 | `0.25` |
-| `derivativeCutoff` | 速度低通截止 (Hz)，一般不动 | `1.0` |
+| 通道 | minCutoff | beta | derivativeCutoff |
+|---|---:|---:|---:|
+| 位置 | 0.8 Hz | 6 | 2 Hz |
+| 旋转 | 1 Hz | 1 | 2 Hz |
 
-> 静止抖→调小 minCutoff；快动拖影→调大 beta。
+### KalmanModel
 
-### ConstantVelocityModel
-无参数（差分估速）。
+| 参数 | 值 |
+|---|---:|
+| `positionProcessNoise` | 0.2 |
+| `positionMeasurementNoise` | 0.0004 |
+| `rotationProcessNoise` | 0.4 |
+| `rotationMeasurementNoise` | 0.0025 |
 
-### BlendStrategy（B路·零延迟）
+测量噪声是冻结参数。VCD 只控制 admission，不根据分数在线修改 Kalman 噪声。
 
-| 参数 | 含义 | 推荐 |
-|---|---|---|
-| `decayPerFrame` | 每帧残差保留比例（60fps 基准）。**0.9 = 每帧还 10% 的债** | `0.9` |
-| `extrapolationLatencyMultiplier` | **外推上限 = 此倍数 × 实测采集-渲染延迟**。自适应、不绑 fps：换快显卡延迟变小，上限自动变小。1.0=只补偿当前延迟 | `1.0` |
-| `maxExtrapolationSecondsHardCap` | 外推绝对上限(秒)，与自适应值取小，丢观测时兜底硬保护 | `0.3` |
+### 历史目标时刻
 
-> `decayPerFrame` 是平滑度关键旋钮（时间常数 ≈158ms）：调大(0.95)更平滑但纠正慢、滞后久；调小(0.7)纠正快但接近闪现。
-> `extrapolationLatencyMultiplier` 防止"急停冲过头/飞出去"：真机采集-渲染延迟可达 300ms，外推那么远会过头。
-> 设 1.0 = 只外推到刚好补偿当前延迟。物体急停还冲过头→调小到 0.7；觉得跟手不够→调大。**已自适应,换显卡不用改。**
+`LinearSlerpStrategy` 与 `HermiteStrategy` 都使用 `latencySafetyMargin=1.15`、`minDelaySeconds=0.25`，延迟变化上限为每秒 50 ms。两种方法的公平性来自相同接纳候选、相同目标时间和相同渲染时间线，不要求 One-Euro 使用 Hermite 端点速度。
 
-### DelayedInterpStrategy（C路·延迟插值）
+### StaticLock
 
-| 参数 | 含义 | 推荐 |
-|---|---|---|
-| `latencySafetyMargin` | **延迟 = 此系数 × 实测采集-渲染延迟**。必须 >1 保证插值不退化成外推(否则锯齿跳变)。自适应、不绑 fps | `1.15` |
-| `minDelaySeconds` | 手动延迟下限(秒)，实测未稳定前兜底 | `0.25` |
-| `spline` | `Hermite`(用速度切线，配 Kalman/OneEuro 更稳) / `CentripetalCatmullRom`(用相邻点，配原始点直观) | `Hermite` |
+正式场景中，完整 EgoAnchor 以及保留 StaticLock 的三个消融必须使用同一组序列化参数。当前旋转相关冻结值包括：
 
-> 关键修复（2026-06-16）：延迟必须 = **实测采集-渲染延迟**（推理+传输+陈旧，真机 ~300ms），
-> 不是观测周期(~200ms)。否则插值目标 `now-Δ` 比最新控制点还新 → 退化成外推 → **锯齿抖动**（旧版 bug）。
-> 现已改为每帧实测延迟自适应。C 路严格过点、无 overshoot，但有 ~一个延迟周期的滞后。
-> VR 实时场景慎用（延迟敏感），适合回放/录制。**换快显卡后延迟自动变小，不用调参。**
+- `enterAngSpeedDps=22`
+- `unlockDriftDegrees=12`
+- `deadbandDegrees=3`
+- `unlockEvidenceDegrees=20`
+- `headSettleSeconds=0.6`
 
-### RawPassthroughStrategy（纯 raw 参照·不升采样）
+头动只影响头停后的沉降窗和位置容忍；真实物体运动证据不能在头动期间被冻结。距离自适应只放大位置通道，旋转阈值保持不变。
 
-无参数。零阶保持(ZOH)：渲染时永远输出最近一帧观测，不外推不插值，下一帧观测到才跳变。
-配 `ConstantVelocityModel` = **真正的"原样保持原始观测帧率"对照通道**（5fps 卡顿感），
-用来对比升采样到底带来多少改善。**注意：之前录的 `raw` 其实是 cv+blend，不是真 raw——用这个才是真 raw。**
+## 场景与日志
 
----
+正式场景 `EgoAnchor-Experiment12.unity` 使用八个唯一 runtime，由一个 `AnchorRuntimeHub` 分发同一候选流。实验一和实验二共享完整 EgoAnchor runtime，避免同一方法出现两套内部状态。
 
-## 推荐起步配置
+每个 variant 的 manifest 配置必须包含：
 
-**先验证平滑（主推）**：`KalmanModel`(默认参数) + `BlendStrategy`(decay=0.9)，门控关。
-这是离线仿真里效果最好的组合，零延迟、零跳变、跟手。
+- `motion_model`、`smoothing_strategy` 和 `quality_gate`
+- alignment、VCD、temporal synthesis、StaticLock 和重获取开关
+- 覆盖坐标补偿、模型、策略、生命周期和 StaticLock 数值的 `configuration_fingerprint`
+- 绑定完整指纹的 per-variant `config_hash`
 
-**做消融对比**：raw、Kalman/OneEuro baseline、EgoAnchor 方法各建一个 GameObject，全拖进 `AnchorRuntimeHub`，
-一次录制用 `AnchorEvalRecorder` 拿全部数据，离线 `eval/` 出指标对比图。
+Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希，并验证八 runtime 的组件矩阵。缺失指纹、字符串布尔值、名称与组件错配或单项消融改变多个模块都会阻止正式发布。
 
-**EgoAnchor 方法**：`KalmanModel` + `DelayedInterpStrategy`(你满意的 interp) +
-挂 `EgoAnchorStaticLockModule` 且 `lockEnabled=true`（核心）；完整 EgoAnchor 开启 `enableQualityGate=true`。
+## 验证
 
-> **EgoAnchor 不是"又一个滤波器"，而是建立在任意 baseline (model×strategy) 之上的可靠性约束静止锚定控制层。**
-> 被锚定的真实物体绝大多数时间静止（动的是头显，噪的是观测）。所有 baseline 都是 motion-agnostic 滤波器，
-> 静止时残留抖动；EgoAnchor 用静止锁定把小抖动当噪声吸收 → 抖动≈0（"看上去一动不动"），运动时交回 interp。
-> 同一 `Kalman+interp` 组合，挂/关 `EgoAnchorStaticLockModule` = baseline ↔ EgoAnchor，这是最干净的消融。
-> 离线仿真验证（EgoAnchor_Tools3）：静止段 P50 位置步长 0.115mm→0.000mm、冻结帧 9%→63%，运动跟踪不退化
-> （lag 不变），代价是运动起始响应中位 +~110ms。
-
----
-
-## 代码结构
-
-```
-Assets/Scripts/EgoAnchor/Policy/
-├─ AnchorPolicyHost.cs          # 持两模块 + 生命周期 + 可选质量评估门控 + 每帧输出
-├─ EgoAnchorStaticLockModule.cs # 静止锚定 MonoBehaviour 参数宿主
-├─ StaticLockController.cs      # 静止锚定纯 C# 控制器
-├─ Contracts/                   # 模块接缝数据契约：AnchorObservation / AnchorPolicyDecision / AnchorPolicyOutput / QualityGateDecision
-├─ Lifecycle/                   # AnchorStateMachine + AnchorPolicyTypes (状态/运动状态/生命周期事件枚举)
-├─ Math/                        # AnchorMath (四元数/向量基元) + ConstVelocityKalman / ScalarOneEuro / Spline
-├─ Models/                      # MotionModel 基类 + CV / Kalman / OneEuro
-└─ Smoothing/                   # SmoothingStrategy 基类 + Blend / DelayedInterp / RawPassthrough
+```powershell
+dotnet build EgoAnchor_Unity/EgoAnchor.Tests.csproj --no-restore
+dotnet build EgoAnchor_Unity/Assembly-CSharp.csproj --no-restore
 ```
 
-运行时链路（都在 LateUpdate，执行序正确）：
-`Hub.Publish → PoseToAnchorRuntime.AcceptPoseResult`(帧对齐)`→ host.AcceptPose`(喂模型) ；
-`PoseToAnchorRuntime.LateUpdate(-50) → host.Advance(now) → strategy.Output → output pose`；
-`DynamicObjectAnchor.LateUpdate(0) → runtime.TryGetOutputPose → 应用 Transform`。
-
-时间戳：观测的 `CaptureTimeSeconds` 和渲染 `now` 都用 `Time.realtimeSinceStartupAsDouble`
-（同一单调时钟，见 StereoFrameSource），所以外推/插值的时间差是真实物理时间，平滑正确。
+Unity Editor 还必须运行 `EgoAnchor.Tests` EditMode 测试。场景契约测试会读取 YAML，核对八 runtime、层级、模型、策略、门控、重获取和 StaticLock 绑定。

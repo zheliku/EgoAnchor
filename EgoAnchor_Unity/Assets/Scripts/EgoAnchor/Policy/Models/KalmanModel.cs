@@ -1,3 +1,4 @@
+using System.Globalization;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
@@ -5,8 +6,9 @@ namespace EgoAnchor.Policy
     /// <summary>
     /// 常速度 Kalman 运动模型 (去噪 + 最优速度估计)。
     ///
-    /// 位置 x/y/z 三路一维 CV Kalman；旋转在最新姿态参考的切空间里三路 CV Kalman
-    /// (估计姿态 + 角速度)。复用 ConstVelocityKalman struct。
+    /// 位置 x/y/z 三路一维 CV Kalman；旋转在最新估计姿态的局部切空间里三路 CV Kalman
+    /// (估计姿态 + body angular velocity)。每次校正后重置切空间原点，避免固定首帧
+    /// 参考在大角度、多轴旋转时产生 Log 分支跳变和角速度坐标基错配。
     ///
     /// 估计部分是经典 CV Kalman，但**没有 maxPredictAhead 限幅**——
     /// 外推不人为截断 (限幅正是旧版"平段+跳变"的根源)，平滑交给 SmoothingStrategy。
@@ -40,6 +42,13 @@ namespace EgoAnchor.Policy
         private bool hasState;
 
         public override string ModelName => "kalman";
+        public override string ConfigurationFingerprint => string.Format(
+            CultureInfo.InvariantCulture,
+            "pos:{0:R},{1:R}|rot:{2:R},{3:R}",
+            positionProcessNoise,
+            positionMeasurementNoise,
+            rotationProcessNoise,
+            rotationMeasurementNoise);
         public override bool HasState => hasState;
         public override double LastObservationTimeSeconds => lastTimeSeconds;
         public override Vector3 LinearVelocity => new Vector3(x.Velocity, y.Velocity, z.Velocity);
@@ -101,6 +110,7 @@ namespace EgoAnchor.Policy
             rx.Correct(err.x, rotationMeasurementNoise);
             ry.Correct(err.y, rotationMeasurementNoise);
             rz.Correct(err.z, rotationMeasurementNoise);
+            RecenterRotationState();
         }
 
         public override Pose PredictAt(double timeSeconds)
@@ -112,8 +122,9 @@ namespace EgoAnchor.Policy
 
             float ahead = (float)(timeSeconds - lastTimeSeconds); // 不限幅
             Vector3 position = CurrentPosition() + LinearVelocity * ahead;
-            Vector3 rotVec = CurrentRotationVector() + AngularVelocityRad * ahead;
-            Quaternion rotation = AnchorMath.Multiply(rotationReference, AnchorMath.Exp(rotVec));
+            Quaternion rotation = AnchorMath.Multiply(
+                CurrentRotation(),
+                AnchorMath.Exp(AngularVelocityRad * ahead));
             return new Pose(position, rotation);
         }
 
@@ -137,6 +148,25 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(CurrentRotationVector()));
+        }
+
+        /// <summary>
+        /// 把旋转误差状态吸收到参考姿态，并将角速度搬运到新的 body-local 切空间。
+        ///
+        /// 三个标量 Kalman 的协方差保持不变；旋转噪声配置在三轴上相同，因此这里只需
+        /// 旋转速度向量并把位置状态归零，不引入新的轴向调参。
+        /// </summary>
+        private void RecenterRotationState()
+        {
+            Vector3 rotationVector = CurrentRotationVector();
+            Quaternion rotationDelta = AnchorMath.Exp(rotationVector);
+            Vector3 rotationVectorRate = new Vector3(rx.Velocity, ry.Velocity, rz.Velocity);
+            Vector3 localVelocity = AnchorMath.ApplyRightJacobian(rotationVector, rotationVectorRate);
+
+            rotationReference = AnchorMath.Multiply(rotationReference, rotationDelta);
+            rx.Rebase(0.0f, localVelocity.x);
+            ry.Rebase(0.0f, localVelocity.y);
+            rz.Rebase(0.0f, localVelocity.z);
         }
     }
 }

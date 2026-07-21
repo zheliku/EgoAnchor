@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
@@ -22,7 +23,7 @@ namespace EgoAnchor.Policy
     /// 控制点来自任意 MotionModel.LatestControlPoint (CV=原始点 / Kalman / OneEuro=去噪点)，
     /// 与运动模型自由组合。位置用样条；旋转在相对 P1 姿态的切空间向量上用同一套样条再 Exp 回。
     /// </summary>
-    public sealed class DelayedInterpStrategy : SmoothingStrategy
+    public sealed class HermiteStrategy : SmoothingStrategy
     {
         /// <summary>
         /// 延迟安全系数 × 实测"采集→渲染延迟" = 实际延迟。
@@ -57,11 +58,19 @@ namespace EgoAnchor.Policy
 
         private readonly List<ControlPoint> points = new List<ControlPoint>(64);
         private float delaySeconds = 0.25f;
-        private float latencyEstimateSeconds; // 实测 now - 最新控制点时间 的 EMA
-        private double lastOutputTimeSeconds; // 上次输出时间，用于计算帧间隔
+        private float latencyEstimateSeconds; // 实测 now - 最新控制点时间的 EMA
+        private double lastOutputTimeSeconds; // 上次输出时间，用于限制延迟变化率
         private const float MaxDelayChangePerSecond = 0.05f; // 延迟变化率限制: 最多每秒变化50ms，防突变
 
-        public override string StrategyName => spline == SplineKind.CentripetalCatmullRom ? "interp_catmull" : "interp_hermite";
+        public override string StrategyName =>
+            spline == SplineKind.CentripetalCatmullRom ? "catmull" : "hermite";
+        public override string ConfigurationFingerprint => string.Format(
+            CultureInfo.InvariantCulture,
+            "margin:{0:R}|min:{1:R}|spline:{2}|tangent:{3:R}",
+            latencySafetyMargin,
+            minDelaySeconds,
+            spline,
+            hermiteTangentChordRatio);
 
         public override float NominalLatencySeconds => delaySeconds;
 
@@ -172,10 +181,17 @@ namespace EgoAnchor.Policy
             Vector3 pos = Spline.Hermite(p1.Pose.position, v1, p2.Pose.position, v2, u, span);
 
             // 旋转：在 p1 切空间里对 (0 -> log(p1^-1 p2)) 做 Hermite，切线用角速度 (同样按旋转弦长限幅)
-            Vector3 logEnd = AnchorMath.RelativeRotationLog(p1.Pose.rotation, p2.Pose.rotation);
+            Quaternion alignedP2 = AnchorMath.AlignHemisphere(p1.Pose.rotation, p2.Pose.rotation);
+            Quaternion p1ToP2 = AnchorMath.Multiply(
+                AnchorMath.Inverse(p1.Pose.rotation),
+                alignedP2);
+            Vector3 logEnd = AnchorMath.Log(p1ToP2);
             float rotCap = k * logEnd.magnitude / span; // 角速度上限 (rad/s)
             Vector3 w1 = ClampMagnitude(p1.AngularVelocityRad, rotCap);
-            Vector3 w2 = ClampMagnitude(p2.AngularVelocityRad, rotCap);
+            // 控制点存的是 body-local 角速度，而 Hermite 插值变量是 Log(p1^-1*p)。
+            // 在 p2 端必须用 SO(3) 右雅可比逆换成 Log 向量导数，不能直接混用两者。
+            Vector3 w2LogRate = AnchorMath.ApplyRightJacobianInverse(logEnd, p2.AngularVelocityRad);
+            Vector3 w2 = ClampMagnitude(w2LogRate, rotCap);
             Vector3 rotVec = Spline.Hermite(Vector3.zero, w1, logEnd, w2, u, span);
             Quaternion rot = AnchorMath.Multiply(p1.Pose.rotation, AnchorMath.Exp(rotVec));
             return new Pose(pos, rot);

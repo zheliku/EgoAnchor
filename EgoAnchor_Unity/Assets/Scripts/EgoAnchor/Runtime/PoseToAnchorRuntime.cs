@@ -162,6 +162,9 @@ namespace EgoAnchor.Runtime
         /// <summary>是否使用采集时刻相机姿态。</summary>
         public bool UsesCaptureTimeAlignment => worldAlignmentMode == WorldAlignmentMode.CaptureTime;
 
+        /// <summary>相机参考、轴变换和三类位姿补偿的完整配置指纹。</summary>
+        public string AlignmentConfigurationFingerprint => FormattableString.Invariant($"camera:{alignmentReference}|mode:{worldAlignmentMode}|flip:{poseTransform.FlipX},{poseTransform.FlipY},{poseTransform.FlipZ}|camera-pos:{poseTransform.CameraLocalPositionOffset.x:R},{poseTransform.CameraLocalPositionOffset.y:R},{poseTransform.CameraLocalPositionOffset.z:R}|anchor-pos:{poseTransform.AnchorLocalPositionOffset.x:R},{poseTransform.AnchorLocalPositionOffset.y:R},{poseTransform.AnchorLocalPositionOffset.z:R}|world-pos:{poseTransform.WorldPositionOffset.x:R},{poseTransform.WorldPositionOffset.y:R},{poseTransform.WorldPositionOffset.z:R}|camera-rot:{poseTransform.CameraLocalRotationOffsetEuler.x:R},{poseTransform.CameraLocalRotationOffsetEuler.y:R},{poseTransform.CameraLocalRotationOffsetEuler.z:R}|anchor-rot:{poseTransform.AnchorLocalRotationOffsetEuler.x:R},{poseTransform.AnchorLocalRotationOffsetEuler.y:R},{poseTransform.AnchorLocalRotationOffsetEuler.z:R}|world-rot:{poseTransform.WorldRotationOffsetEuler.x:R},{poseTransform.WorldRotationOffsetEuler.y:R},{poseTransform.WorldRotationOffsetEuler.z:R}");
+
         /// <summary>当前质量评估门控模式。</summary>
         public string QualityGateMode => policyHost != null ? policyHost.QualityGateMode : "";
 

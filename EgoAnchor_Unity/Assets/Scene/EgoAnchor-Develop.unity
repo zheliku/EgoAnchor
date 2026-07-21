@@ -3551,7 +3551,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.DelayedInterpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
   spline: 0
@@ -4405,7 +4405,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9f324891384fc95438a4c52de245d50f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.RawPassthroughStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HoldStrategy
 --- !u!1 &1521914293
 GameObject:
   m_ObjectHideFlags: 0

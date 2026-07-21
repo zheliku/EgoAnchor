@@ -6,7 +6,7 @@ namespace EgoAnchor.Policy
     /// <summary>
     /// One Euro 运动模型 (自适应低通去噪 + 平滑速度)。
     ///
-    /// 位置 x/y/z 各一路标量 One Euro；旋转在最新姿态参考的切空间里三路 One Euro。
+    /// 位置 x/y/z 各一路标量 One Euro；旋转在最新平滑姿态的局部切空间里三路 One Euro。
     /// 提供平滑值 (当作去噪 pose) 和平滑速度 (当作外推切线)。
     /// 同样不限幅外推，平滑交给 SmoothingStrategy。
     /// </summary>
@@ -117,6 +117,7 @@ namespace EgoAnchor.Policy
             rxFilter.Update(err.x, t);
             ryFilter.Update(err.y, t);
             rzFilter.Update(err.z, t);
+            RecenterRotationState(measured);
             lastTimeSeconds = t;
         }
 
@@ -129,8 +130,9 @@ namespace EgoAnchor.Policy
 
             float ahead = (float)(timeSeconds - lastTimeSeconds); // 不限幅
             Vector3 position = CurrentPosition() + LinearVelocity * ahead;
-            Vector3 rotVec = CurrentRotationVector() + AngularVelocityRad * ahead;
-            Quaternion rotation = AnchorMath.Multiply(rotationReference, AnchorMath.Exp(rotVec));
+            Quaternion rotation = AnchorMath.Multiply(
+                CurrentRotation(),
+                AnchorMath.Exp(AngularVelocityRad * ahead));
             return new Pose(position, rotation);
         }
 
@@ -164,6 +166,29 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(CurrentRotationVector()));
+        }
+
+        /// <summary>
+        /// 把平滑旋转吸收到参考姿态，并保留搬运后的 body-local 角速度与原始测量残差。
+        /// 这样 One-Euro 预测与 Hermite 控制点共享同一角速度坐标约定。
+        /// </summary>
+        /// <param name="measured">本次已经完成半球对齐的测量姿态。</param>
+        private void RecenterRotationState(Quaternion measured)
+        {
+            Vector3 rotationVector = CurrentRotationVector();
+            Quaternion rotationDelta = AnchorMath.Exp(rotationVector);
+            Quaternion nextReference = AnchorMath.Multiply(rotationReference, rotationDelta);
+            Vector3 rotationVectorRate = new Vector3(
+                rxFilter.Velocity,
+                ryFilter.Velocity,
+                rzFilter.Velocity);
+            Vector3 localVelocity = AnchorMath.ApplyRightJacobian(rotationVector, rotationVectorRate);
+            Vector3 rawResidual = AnchorMath.RelativeRotationLog(nextReference, measured);
+
+            rotationReference = nextReference;
+            rxFilter.Rebase(0.0f, rawResidual.x, localVelocity.x);
+            ryFilter.Rebase(0.0f, rawResidual.y, localVelocity.y);
+            rzFilter.Rebase(0.0f, rawResidual.z, localVelocity.z);
         }
     }
 }

@@ -18,7 +18,11 @@ namespace EgoAnchor.Policy
         /// <summary>线速度，单位 m/s。</summary>
         public readonly Vector3 LinearVelocity;
 
-        /// <summary>角速度，单位 rad/s (完整角轴向量口径，配 AnchorMath.Exp)。</summary>
+        /// <summary>
+        /// 控制点姿态局部坐标系中的 body angular velocity，单位 rad/s。
+        /// 调用方用 <c>Pose.rotation * Exp(omega * dt)</c> 积分；不同控制点之间使用前
+        /// 必须先搬运到同一切空间。
+        /// </summary>
         public readonly Vector3 AngularVelocityRad;
 
         /// <summary>是否有效。</summary>
@@ -37,7 +41,7 @@ namespace EgoAnchor.Policy
     /// <summary>
     /// 模块 A：运动模型。吃观测，维护"去噪后的状态点 + 速度"，对外提供：
     ///   - PredictAt(t)：在 t 时刻外推的 pose (给 B 路 BlendStrategy 用)；
-    ///   - LatestControlPoint：最新去噪控制点 (给 C 路 DelayedInterpStrategy 用)。
+    ///   - LatestControlPoint：最新去噪控制点，供两类历史插值策略使用。
     ///
     /// 继承 MonoBehaviour 的抽象基类，这样 Inspector 只能挂它的子类 (CV / Kalman / OneEuro)，
     /// 而不是任意 Mono。每个子类把自己的参数用 [SerializeField] 暴露在 Inspector。
@@ -62,7 +66,7 @@ namespace EgoAnchor.Policy
         /// <summary>当前估计线速度，单位 m/s。</summary>
         public abstract Vector3 LinearVelocity { get; }
 
-        /// <summary>当前估计角速度，单位 rad/s。</summary>
+        /// <summary>当前估计角速度，单位 rad/s，坐标系为最新控制点姿态的局部切空间。</summary>
         public abstract Vector3 AngularVelocityRad { get; }
 
         /// <summary>最近一次去噪控制点 (= 最新观测时刻的去噪 pose + 速度)。</summary>

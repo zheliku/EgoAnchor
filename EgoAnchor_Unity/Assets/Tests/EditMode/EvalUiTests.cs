@@ -370,7 +370,7 @@ namespace EgoAnchor.Tests
                 5, Runtime.WorldAlignmentMode.CaptureTime, true, 1000, 3,
                 true, Pose.identity, false, Pose.identity, double.NaN,
                 true, 0.8f, "aligned", "accepted", "quality_ok", "Tracking",
-                "enabled", "kalman", "interp_hermite", true, true, "cfg"));
+                "enabled", "kalman", "hermite", true, true, "cfg"));
             EvalVariantSnapshot variant = new EvalVariantSnapshot(
                 "egoanchor", true, 7, true, Pose.identity, true, Pose.identity, "transform",
                 true, 1000, 3, 20, 1010, 10, 1040, "Tracking", "accepted", "quality_ok",
@@ -396,7 +396,7 @@ namespace EgoAnchor.Tests
                 new[]
                 {
                     new EvalVariantConfig(
-                        "EgoAnchor", "kalman", "interp_hermite", "enabled", "cfg",
+                        "EgoAnchor", "kalman", "hermite", "enabled", "cfg",
                         "CaptureTime", true, true, true, true, true, true),
                 },
                 new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2),
@@ -1046,7 +1046,7 @@ namespace EgoAnchor.Tests
             try
             {
                 KalmanModel model = owner.AddComponent<KalmanModel>();
-                DelayedInterpStrategy smoothing = owner.AddComponent<DelayedInterpStrategy>();
+                HermiteStrategy smoothing = owner.AddComponent<HermiteStrategy>();
                 EgoAnchorStaticLockModule staticLock = owner.AddComponent<EgoAnchorStaticLockModule>();
                 AnchorPolicyHost host = owner.AddComponent<AnchorPolicyHost>();
                 SetPrivateField(host, "motionModel", model);
@@ -1422,14 +1422,14 @@ namespace EgoAnchor.Tests
             string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
             string yaml = File.ReadAllText(path);
 
-            AssertVariantConfig(yaml, "Arrival-Hold", 1, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
-            AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "RawPassthroughStrategy", false, 0, 0);
-            AssertVariantConfig(yaml, "One-Euro Anchor", 0, 0, "OneEuroModel", "PredictivePassthroughStrategy", false, 0, 0);
-            AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "DelayedInterpStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "DelayedInterpStrategy", true, 0, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "ConstantVelocityModel", "RawPassthroughStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "DelayedInterpStrategy", false, 1, 1);
+            AssertVariantConfig(yaml, "Arrival-Hold", 1, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
+            AssertVariantConfig(yaml, "One-Euro Anchor", 0, 1, "OneEuroModel", "LinearSlerpStrategy", false, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "HermiteStrategy", true, 0, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "KalmanModel", "PredictToNowStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "HermiteStrategy", false, 1, 1);
         }
 
         /// <summary>Hub 层级必须按实验一与实验二分组，完整 EgoAnchor 只保留一个共享 runtime。</summary>
@@ -1522,10 +1522,10 @@ namespace EgoAnchor.Tests
             StringAssert.Contains($"- {{fileID: {anchorTransform}}}", parentSection);
         }
 
-        /// <summary>三类实验一基线不得请求共享 Python pipeline 重获取。</summary>
+        /// <summary>只有直接消费候选的 Hold 基线不得请求共享 Python pipeline 重获取。</summary>
         private static bool IsShadowBaseline(string label)
         {
-            return label == "Arrival-Hold" || label == "Capture-Hold" || label == "One-Euro Anchor";
+            return label == "Arrival-Hold" || label == "Capture-Hold";
         }
 
         /// <summary>读取包含指定标记的完整 Unity YAML 对象段。</summary>

@@ -68,13 +68,13 @@ namespace EgoAnchor.Tests
         /// 延迟插值策略必须报告 pose 实际对应的语义时刻，而不是一律报告当前渲染时刻。
         /// </summary>
         [Test]
-        public void DelayedInterpReportsActualOutputTargetTime()
+        public void HermiteReportsActualOutputTargetTime()
         {
-            GameObject go = new GameObject("DelayedInterpOutputTargetTests");
+            GameObject go = new GameObject("HermiteOutputTargetTests");
             try
             {
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                DelayedInterpStrategy smoothing = go.AddComponent<DelayedInterpStrategy>();
+                HermiteStrategy smoothing = go.AddComponent<HermiteStrategy>();
                 smoothing.ResetStrategy();
 
                 smoothing.Output(model, 5.0);
@@ -104,6 +104,42 @@ namespace EgoAnchor.Tests
                 SetPrivateField(smoothing, "lastOutputTimeSeconds", 30.0);
                 smoothing.Output(model, 30.0);
                 Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(30.0).Within(1e-6), "最新点之后外推应报告外推目标时间。");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>One-Euro 缓冲基线必须在同一历史目标时刻执行位置 Linear 与旋转 SLERP。</summary>
+        [Test]
+        public void LinearSlerpInterpolatesFilteredControlPointsAtHistoricalTarget()
+        {
+            GameObject go = new GameObject("LinearSlerpTests");
+            try
+            {
+                ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
+                LinearSlerpStrategy smoothing = go.AddComponent<LinearSlerpStrategy>();
+                smoothing.ResetStrategy();
+                List<ControlPoint> points = GetPrivateField<List<ControlPoint>>(smoothing, "points");
+                points.Add(new ControlPoint(
+                    10.0,
+                    new Pose(Vector3.zero, Quaternion.identity),
+                    Vector3.zero,
+                    Vector3.zero));
+                points.Add(new ControlPoint(
+                    20.0,
+                    new Pose(Vector3.right * 10f, Quaternion.Euler(0f, 90f, 0f)),
+                    Vector3.zero,
+                    Vector3.zero));
+                SetPrivateField(smoothing, "delaySeconds", 5.0f);
+                SetPrivateField(smoothing, "lastOutputTimeSeconds", 20.0);
+
+                Pose output = smoothing.Output(model, 20.0);
+
+                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(15.0).Within(1e-6));
+                Assert.That(output.position.x, Is.EqualTo(5.0f).Within(1e-5f));
+                Assert.That(AnchorMath.AngleDegrees(Quaternion.identity, output.rotation), Is.EqualTo(45.0f).Within(1e-3f));
             }
             finally
             {
@@ -149,7 +185,7 @@ namespace EgoAnchor.Tests
             try
             {
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
                 AnchorObservation observation = AnchorObservation.FromAlignedPose(
                     frameId: 1,
                     worldPose: Pose.identity,
@@ -171,13 +207,13 @@ namespace EgoAnchor.Tests
 
         /// <summary>预测透传策略必须调用模型预测并报告当前渲染时刻。</summary>
         [Test]
-        public void PredictivePassthroughUsesRenderTimePrediction()
+        public void PredictToNowUsesRenderTimePrediction()
         {
-            GameObject go = new GameObject("PredictivePassthroughTests");
+            GameObject go = new GameObject("PredictToNowTests");
             try
             {
                 OneEuroModel model = go.AddComponent<OneEuroModel>();
-                PredictivePassthroughStrategy smoothing = go.AddComponent<PredictivePassthroughStrategy>();
+                PredictToNowStrategy smoothing = go.AddComponent<PredictToNowStrategy>();
                 AnchorObservation first = AnchorObservation.FromAlignedPose(
                     frameId: 1,
                     worldPose: Pose.identity,
@@ -205,6 +241,52 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>SO(3) 右雅可比及其逆在多轴大角度下必须互为逆变换。</summary>
+        [Test]
+        public void RotationRightJacobianRoundTripsMultiAxisVelocity()
+        {
+            Vector3 rotationVector = new Vector3(0.9f, -0.6f, 0.7f);
+            Vector3 bodyAngularVelocity = new Vector3(1.2f, 0.4f, -0.8f);
+
+            Vector3 logRate = AnchorMath.ApplyRightJacobianInverse(rotationVector, bodyAngularVelocity);
+            Vector3 restored = AnchorMath.ApplyRightJacobian(rotationVector, logRate);
+
+            Assert.That(Vector3.Distance(restored, bodyAngularVelocity), Is.LessThan(1e-5f));
+        }
+
+        /// <summary>
+        /// Kalman 连续接收多轴旋转后，重置切空间不能引入分支跳变，预测也必须沿最新运动方向前进。
+        /// </summary>
+        [Test]
+        public void KalmanRecenteringKeepsContinuousMultiAxisRotation()
+        {
+            GameObject go = new GameObject("KalmanRotationRecenteringTests");
+            try
+            {
+                KalmanModel model = go.AddComponent<KalmanModel>();
+                Quaternion first = Quaternion.identity;
+                Quaternion second = Quaternion.Euler(25f, 35f, 15f);
+                Quaternion third = Quaternion.Euler(50f, 70f, 30f);
+                model.Snap(AnchorObservation.FromAlignedPose(
+                    1, new Pose(Vector3.zero, first), 1.0, 1.0f, captureTimeSeconds: 1.0));
+                model.UpdateState(AnchorObservation.FromAlignedPose(
+                    2, new Pose(Vector3.zero, second), 1.1, 1.0f, captureTimeSeconds: 1.1));
+                model.UpdateState(AnchorObservation.FromAlignedPose(
+                    3, new Pose(Vector3.zero, third), 1.2, 1.0f, captureTimeSeconds: 1.2));
+
+                Pose current = model.LatestControlPoint.Pose;
+                Pose predicted = model.PredictAt(1.3);
+
+                Assert.That(AnchorMath.AngleDegrees(current.rotation, third), Is.LessThan(35f));
+                Assert.That(AnchorMath.AngleDegrees(current.rotation, predicted.rotation), Is.InRange(0.01f, 90f));
+                Assert.That(model.AngularVelocityRad.sqrMagnitude, Is.GreaterThan(1e-6f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
         /// <summary>
         /// runtime 输出与显示 Transform 必须分别记录，不能因同帧采样而混用字段。
         /// </summary>
@@ -219,7 +301,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = recorderGo.AddComponent<EvalRecorder>();
                 AnchorPolicyHost host = runtimeGo.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = runtimeGo.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = runtimeGo.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = runtimeGo.AddComponent<HoldStrategy>();
                 PoseToAnchorRuntime runtime = runtimeGo.AddComponent<PoseToAnchorRuntime>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
@@ -330,7 +412,7 @@ namespace EgoAnchor.Tests
             {
                 AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
                 EgoAnchorStaticLockModule module = go.AddComponent<EgoAnchorStaticLockModule>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
@@ -577,7 +659,7 @@ namespace EgoAnchor.Tests
                 EvalRecorder recorder = recorderGo.AddComponent<EvalRecorder>();
                 AnchorPolicyHost host = runtimeGo.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = runtimeGo.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = runtimeGo.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = runtimeGo.AddComponent<HoldStrategy>();
                 PoseToAnchorRuntime runtime = runtimeGo.AddComponent<PoseToAnchorRuntime>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
@@ -612,7 +694,7 @@ namespace EgoAnchor.Tests
                 Assert.That(labels, Is.EqualTo(new[] { "ZOH" }));
                 Assert.That(configs, Has.Count.EqualTo(1));
                 Assert.That(configs[0].MotionModel, Is.EqualTo("cv"));
-                Assert.That(configs[0].SmoothingStrategy, Is.EqualTo("raw_passthrough"));
+                Assert.That(configs[0].SmoothingStrategy, Is.EqualTo("hold"));
                 Assert.That(configs[0].QualityGate, Is.EqualTo("enabled"));
                 Assert.That(configs[0].UsesVcdAdmission, Is.True);
                 Assert.That(configs[0].ConfigHash, Is.EqualTo(expectedConfigHash));
@@ -932,7 +1014,7 @@ namespace EgoAnchor.Tests
             {
                 AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
 
@@ -969,7 +1051,7 @@ namespace EgoAnchor.Tests
             {
                 AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
 
@@ -1027,7 +1109,7 @@ namespace EgoAnchor.Tests
             {
                 AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                RawPassthroughStrategy smoothing = go.AddComponent<RawPassthroughStrategy>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
                 SetPrivateField(host, "motionModel", model);
                 SetPrivateField(host, "smoothingStrategy", smoothing);
                 SetPrivateField(host, "emitServerReacquire", emitServerReacquire);
@@ -1222,7 +1304,7 @@ namespace EgoAnchor.Tests
                 unityPoseHandleMonoMs: 1500.0,
                 anchorState: "Tracking", policyAction: "Accept", policyReason: "accept",
                 latestPhase: "TRACK", latestFailure: string.Empty, motionState: "Static", predictAheadMs: 120.0,
-                strategyLabel: "test", qualityGate: "disabled", motionModel: "constant_velocity", smoothingStrategy: "raw_passthrough",
+                strategyLabel: "test", qualityGate: "disabled", motionModel: "constant_velocity", smoothingStrategy: "hold",
                 configHash: "hash", residualMeters: float.NaN, residualDegrees: float.NaN, acceptedScore: 1.0f, staticLocked: false,
                 hasAlignedRaw: true, alignedRawPose: Pose.identity,
                 hasArrivalTimeRaw: false, arrivalTimeRawPose: Pose.identity,

@@ -397,6 +397,7 @@ namespace EgoAnchor.Eval
                     sb.Append($"\"motion_model\":{JStr(c.MotionModel)},");
                     sb.Append($"\"smoothing_strategy\":{JStr(c.SmoothingStrategy)},");
                     sb.Append($"\"quality_gate\":{JStr(c.QualityGate)},");
+                    sb.Append($"\"configuration_fingerprint\":{JStr(c.ConfigurationFingerprint)},");
                     sb.Append($"\"config_hash\":{JStr(c.ConfigHash)}");
                     sb.Append('}');
                 }
@@ -866,6 +867,9 @@ namespace EgoAnchor.Eval
         /// <summary>观测接纳门控模式。</summary>
         public readonly string QualityGate;
 
+        /// <summary>所有有效数值参数和模块指纹，供 manifest 审计。</summary>
+        public readonly string ConfigurationFingerprint;
+
         /// <summary>该变体全部生效组件的配置摘要。</summary>
         public readonly string ConfigHash;
 
@@ -903,13 +907,15 @@ namespace EgoAnchor.Eval
             bool usesTemporalSynthesis = false,
             bool usesStaticLock = false,
             bool usesLowScoreReacquire = false,
-            bool usesServerReacquire = false)
+            bool usesServerReacquire = false,
+            string configurationFingerprint = "")
         {
             Label = label ?? string.Empty;
             MotionModel = motionModel ?? string.Empty;
             SmoothingStrategy = smoothingStrategy ?? string.Empty;
             QualityGate = qualityGate ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
+            ConfigurationFingerprint = configurationFingerprint ?? string.Empty;
             WorldAlignmentMode = worldAlignmentMode ?? string.Empty;
             UsesCaptureTimeAlignment = usesCaptureTimeAlignment;
             UsesVcdAdmission = usesVcdAdmission;

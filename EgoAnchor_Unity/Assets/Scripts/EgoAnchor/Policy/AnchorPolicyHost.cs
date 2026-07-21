@@ -1,3 +1,4 @@
+using System;
 using EgoAnchor.Diagnostics;
 using EgoAnchor.Runtime;
 using UnityEngine;
@@ -25,8 +26,8 @@ namespace EgoAnchor.Policy
         [Tooltip("运动模型模块：只能挂 MotionModel 子类 (ConstantVelocityModel / KalmanModel / OneEuroModel)。负责去噪 + 估计速度 + 外推。")]
         [SerializeField] private MotionModel motionModel;
 
-        /// <summary>平滑策略模块 (Blend / DelayedInterp)。</summary>
-        [Tooltip("平滑策略模块：只能挂 SmoothingStrategy 子类 (BlendStrategy=零延迟外推+残差融合 / DelayedInterpStrategy=延迟一周期+插值)。负责把低频 pose 变高频平滑。")]
+        /// <summary>逐帧输出策略模块。</summary>
+        [Tooltip("输出策略模块：只能挂 SmoothingStrategy 子类；正式链路使用 Hold、PredictToNow、LinearSlerp 或 Hermite。")]
         [SerializeField] private SmoothingStrategy smoothingStrategy;
 
         /// <summary>策略 label；为空时用 "model+strategy" 自动拼。</summary>
@@ -168,7 +169,14 @@ namespace EgoAnchor.Policy
         /// <summary>运动模型参数指纹，参与 variant 配置哈希。</summary>
         public string MotionModelConfiguration => motionModel != null ? motionModel.ConfigurationFingerprint : "";
 
-        /// <summary>平滑策略名 (RawPassthrough / PredictivePassthrough / Blend / DelayedInterp)。写入 eval 的 smoothing_strategy 字段。</summary>
+        /// <summary>平滑策略参数指纹，参与 variant 配置哈希。</summary>
+        public string SmoothingStrategyConfiguration =>
+            smoothingStrategy != null ? smoothingStrategy.ConfigurationFingerprint : "";
+
+        /// <summary>host、生命周期、接纳、重获取和 StaticLock 的完整配置指纹。</summary>
+        public string ConfigurationFingerprint => FormattableString.Invariant($"quality:{enableQualityGate},{minQualityScore:R}|lifecycle:{coastTimeoutSeconds:R},{trackingScoreFloor:R},{lostTimeoutSeconds:R}|motion-state:{staticSpeedThresholdMps:R},{staticAngularSpeedThresholdDps:R}|reacquire:{enableLostReacquire},{enableLowScoreReacquire},{emitServerReacquire},{lowScoreReacquireThreshold:R},{lowScoreReacquireSeconds:R},{lowScoreReacquireCooldownSeconds:R},{reacquireGeometryFloor:R},{reacquireReprojWeight:R},{reacquireDepthWeight:R}|static:{(staticLockModule != null ? staticLockModule.ConfigurationFingerprint : "none")}");
+
+        /// <summary>输出策略名，写入 eval 的 smoothing_strategy 字段。</summary>
         public string SmoothingStrategyName => smoothingStrategy != null ? smoothingStrategy.StrategyName : "";
 
         /// <summary>质量评估门控模式，写入 eval 的 quality_gate 字段。</summary>
@@ -177,8 +185,9 @@ namespace EgoAnchor.Policy
         /// <summary>是否启用 VCD 观测接纳。</summary>
         public bool UsesVcdAdmission => enableQualityGate;
 
-        /// <summary>是否启用时序合成；延迟 Hermite 插值属于完整系统的时序合成。</summary>
-        public bool UsesTemporalSynthesis => smoothingStrategy is DelayedInterpStrategy;
+        /// <summary>是否启用逐渲染帧历史缓冲合成，包括 Linear/SLERP 与 Hermite 两种策略。</summary>
+        public bool UsesTemporalSynthesis =>
+            smoothingStrategy is HermiteStrategy || smoothingStrategy is LinearSlerpStrategy;
 
         /// <summary>是否启用显式静止锚定模块。</summary>
         public bool UsesStaticLock => staticLockModule != null && staticLockModule.Enabled;

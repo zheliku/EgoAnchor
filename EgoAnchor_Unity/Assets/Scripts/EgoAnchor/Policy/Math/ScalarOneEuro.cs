@@ -88,6 +88,24 @@ namespace EgoAnchor.Policy
             return xHat;
         }
 
+        /// <summary>
+        /// 把已初始化的滤波器搬到新的局部坐标系，同时保留时间与滤波历史。
+        /// </summary>
+        /// <param name="filteredValue">新坐标系中的平滑值。</param>
+        /// <param name="rawValue">上一测量在新坐标系中的原始值。</param>
+        /// <param name="velocity">新坐标系中的平滑速度。</param>
+        public void Rebase(float filteredValue, float rawValue, float velocity)
+        {
+            if (!initialized)
+            {
+                return;
+            }
+
+            xHat = filteredValue;
+            previousRawValue = rawValue;
+            dxHat = velocity;
+        }
+
         private static float Alpha(float dt, float cutoff)
         {
             float tau = 1.0f / (2.0f * Mathf.PI * Mathf.Max(cutoff, 1e-4f));

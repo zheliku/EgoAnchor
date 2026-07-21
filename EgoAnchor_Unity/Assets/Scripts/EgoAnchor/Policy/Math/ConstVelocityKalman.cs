@@ -118,5 +118,24 @@ namespace EgoAnchor.Policy
             P11 = nextP11;
         }
 
+        /// <summary>
+        /// 在不改变协方差的前提下重表达状态坐标。
+        ///
+        /// 旋转 Kalman 每次校正后会把切空间原点搬到当前姿态；此时位置和速度需要
+        /// 写入新的局部坐标，但滤波器已经积累的置信度不能被重置。
+        /// </summary>
+        /// <param name="position">新坐标系中的位置状态。</param>
+        /// <param name="velocity">新坐标系中的速度状态。</param>
+        public void Rebase(float position, float velocity)
+        {
+            if (!HasState)
+            {
+                return;
+            }
+
+            Position = position;
+            Velocity = velocity;
+        }
+
     }
 }

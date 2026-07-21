@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace EgoAnchor.Policy
@@ -139,6 +140,9 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用静止锚定。</summary>
         public bool Enabled => lockEnabled;
+
+        /// <summary>写入正式配置哈希的完整 StaticLock 数值指纹。</summary>
+        public string ConfigurationFingerprint => FormattableString.Invariant($"enabled:{lockEnabled}|enter:{enterSpeedMps:R},{enterAngSpeedDps:R},{dwellSeconds:R},{minScore:R}|deadband:{deadbandMeters:R},{deadbandDegrees:R}|evidence:{unlockEvidenceMeters:R},{unlockEvidenceDegrees:R}|drift:{unlockDriftMeters:R},{unlockDriftDegrees:R}|half:{evidenceHalfLifeSeconds:R},{creepHalfLifeSeconds:R}|relock:{relockSuppressSeconds:R}|escape:{unlockSpeedFactor:R},{unlockMovingSeconds:R}|seam:{seamDecayPerFrame:R}|obs:{refObsIntervalSeconds:R}|head:{headRotForFullToleranceDps:R},{headLinForFullToleranceMps:R},{headMaxToleranceFactor:R},{headSettleSeconds:R}|distance:{posToleranceRefDistanceMeters:R},{posToleranceDistanceSlope:R},{posToleranceMaxFactor:R}|low:{lowScoreReleaseScore:R},{lowScoreReleaseSeconds:R}");
 
         /// <summary>当前是否锁定 (供 eval 的 latest_static_locked)。</summary>
         public bool IsLocked => lockEnabled && staticLock.IsLocked;

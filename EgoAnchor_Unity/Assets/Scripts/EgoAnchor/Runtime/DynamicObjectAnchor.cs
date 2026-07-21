@@ -11,7 +11,7 @@ namespace EgoAnchor.Runtime
     /// - 不订阅网络，不解码 Protobuf，不做平滑或状态机。
     ///
     /// 论文/实验对照由多个 PoseToAnchorRuntime + AnchorPolicyHost module 组合表达；
-    /// RawPassthroughStrategy（ZOH 零阶保持）也是 policy 输出的一种，不在 Transform 应用层选择双路模式。
+    /// HoldStrategy（ZOH 零阶保持）也是 policy 输出的一种，不在 Transform 应用层选择双路模式。
     /// </summary>
     [DefaultExecutionOrder(0)]
     public sealed class DynamicObjectAnchor : MonoBehaviour
