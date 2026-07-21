@@ -33,20 +33,13 @@
 \author{作者待定}
 \authorfooter{}
 
-\teaser{
-  \centering
-  \includegraphics[width=0.93\linewidth]{figures/pipeline.png}
-  \par\vspace{1pt}
-  {\footnotesize\textbf{Figure 1:} EgoAnchor 将异步视觉候选转换为可持续消费的世界系对象锚点：采集时刻对齐、VCD 接纳、时序合成、静止锚定与生命周期管理共同定义逐帧显示行为。}
-}
-
 \abstract{%
 以真实物体为中心的混合现实应用需要能够随物体运动持续更新的对象级空间参考。然而，异步视觉后端输出的六自由度位姿对应历史图像采集时刻，候选质量随遮挡与几何条件波动，且低频、含噪的位姿流不能直接满足逐帧渲染对稳定性、连续性与生命周期管理的要求。本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。系统仅依赖头戴显示器双目图像和目标物体的可用三维模型，无需物理标记、物体侧追踪硬件或逐物体训练。EgoAnchor 通过采集时刻世界对齐恢复异步观测的时间语义，以可视度门控的颜色--深度一致性评分限制有害更新，并通过 Kalman 状态估计、Linear/SLERP 时序合成、显式静止锚定与生命周期管理生成应用可持续消费的世界系对象锚点。我们在 Meta Quest 3 上实现系统，并在同一视觉候选流、渲染时间线和平台参考下进行配对系统表征。静止头动时，移除片段固定注册偏置后的 EgoAnchor 平移 P95 为 1.069~mm，而 Arrival-Hold 为 22.026~mm；其静止帧间增量 P95 为 0.072~mm，而 One-Euro Anchor 为 0.431~mm。持续平移时，其有效时延为 320~ms，lag-aligned residual 为 5.409~mm，低于 Arrival-Hold 的 11.670~mm；遮挡窗内，其 episode-level 平移 P95 为 4.645~mm。上述收益伴随 452.7~ms 的起停转换响应，呈现了稳定性与响应性的明确权衡。上述数值描述同一设备与时间线下相对于平台参考的系统行为，并非外部物理真值。
 }
 
 \keywords{透视混合现实, 动态对象锚定, 6DoF 位姿估计, 动态物体追踪, 6D 物体定位}
 
-% GPT v4 reproduced from immutable Stage 1 XLSX; input SHA-256: task_1_complete.xlsx=14ac485e397100972f82182039f42f1b9b408db1602cbb3a01b1b4dde4ce8066, task_2_complete.xlsx=3ea23d35c3b5ae4bfee6b1e3abfac3d3b71c2769e3ebac1dab144a35c62db351, task_3_complete.xlsx=f4e997cf8567badfb0c83ab4c2553a19ad80cb7b2de0b5a171ee8525b2a4eaff, task_4_complete.xlsx=08e9ef5767cbc18466afc93811d7903c72b81dceb80da0a0e994166cc2ad8e45, task_5_complete.xlsx=ad06bbff9cc17e00dc9816cb221e198ba519ee39b900689476204b4b9d562c02
+% Paper analysis from immutable Stage 1 XLSX; input SHA-256: task_1_complete.xlsx=37d87c8001f76184f2c3de25d7370d8c91229f49540485838cbbed7ec82ed72e, task_2_complete.xlsx=b108389138375e1b071a18d8bdb61c655ea469ed68d1fdbe2f96bd08b807d55f, task_3_complete.xlsx=5a93f681a2fb6d254887f95e0f963d0acf7c6c62c5b42bc8eae22bdba9d55235, task_4_complete.xlsx=6cd71acc392ee56d8c4691a4f2259f2b6283e5c622b9d9dd9dafaec1c0a0895a, task_5_complete.xlsx=f5398dbef0782774f4b89e7672506f7272c9f1c0fe51792f9ad8a66aa9d19101
 \begin{document}
 
 \firstsection{引言}\label{sec:introduction}
@@ -432,20 +425,25 @@ EgoAnchor & \textbf{1.069} [0.811, 1.148] & \textbf{4.169} [3.993, 4.906] & \tex
 
 \begin{figure*}[t]
   \centering
-  \begin{subfigure}[t]{0.48\textwidth}
+  \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/exp1a_head_motion_leakage.pdf}
+    \includegraphics[width=\linewidth]{figures/panels/figure2a_head_motion.pdf}
+    \caption{头动下的中心化误差}
+    \label{fig:exp1-head-motion}
   \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.48\textwidth}
+  \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/exp1b_dynamic_translation.pdf}
-  \end{subfigure}
-  \par\medskip
-  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{figures/panels/figure2b_translation.pdf}
+    \caption{持续平移的时延与残差}
+    \label{fig:exp1-translation}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/exp1c_failure_containment.pdf}
+    \includegraphics[width=\linewidth]{figures/panels/figure2c_occlusion.pdf}
+    \caption{遮挡期间的平移误差}
+    \label{fig:exp1-occlusion}
   \end{subfigure}
-  \caption{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，箱线表示完整分布的中位数、四分位区间和全范围，实心标记表示中位数。细线连接同一片段在不同方法下的严格配对结果，用于显示升降方向；每个子图使用独立图例。上左：移除片段固定注册偏置后的头动泄漏；上右：持续平移的 fitted-lag--aligned-residual 联合权衡；下：遮挡期间的 episode-level P95。}
+  \caption{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，避免跨方法顺序造成视觉混淆。}
   \label{fig:exp1-final}
 \end{figure*}
 
@@ -476,8 +474,31 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & 0/12；max 5.102~mm & 6/12；max 121.515~mm &
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/generated/experiment2_corrected_newdata.pdf}
-  \caption{目标化组件归因。四个子图在同一行依次显示采集时刻复合、StaticLock、VCD，以及本批次同步运行的 Kalman Predict-to-Now、Kalman Hermite 与 Kalman Linear/SLERP 的 fitted-lag--aligned-residual 分布。细线连接同一事件或片段的严格配对结果，显示配置切换时的方向。}
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3a_capture_alignment.pdf}
+    \caption{采集时刻对齐}
+    \label{fig:exp2-alignment}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3b_static_lock.pdf}
+    \caption{StaticLock}
+    \label{fig:exp2-static-lock}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3c_vcd.pdf}
+    \caption{VCD 接纳}
+    \label{fig:exp2-vcd}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.40\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3d_temporal_strategies.pdf}
+    \caption{时序策略}
+    \label{fig:exp2-temporal}
+  \end{subfigure}
+  \caption{实验二的组件归因与插值器比较。图~(a)--(c) 分别比较采集时刻复合、StaticLock 和 VCD；图~(d) 比较本批次同步运行的 Kalman Predict-to-Now、Kalman Hermite 与 Kalman Linear/SLERP。细线只连接同一事件或片段的严格配对结果。}
   \label{fig:exp2-final}
 \end{figure*}
 

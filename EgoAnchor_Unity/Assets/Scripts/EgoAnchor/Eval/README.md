@@ -42,6 +42,9 @@ events.jsonl
 
 writer 会记录 `rows_written` 与 `dropped_rows`。正式分析前必须确认所有必需文件存在、写入丢弃数为零，并通过 reader/QC 的字段、时间线和变体覆盖检查。
 
+`data/eval/` 只用于新采集暂存。同步停止且 QC 通过后，五项正式任务归档到
+`data/experiments/experiment_1_2/raw/`；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。
+
 ## 实验一与实验二
 
 实验一比较四个完整系统配置，覆盖静止观察、主动头动、起停 6DoF、持续运动和遮挡恢复。五项任务可以拆到

@@ -1,49 +1,28 @@
-EgoAnchor 中文论文 LaTeX 工程
-============================
+EgoAnchor 中文论文工程
+======================
 
-本目录是 EgoAnchor 论文的当前主工作区。中文稿 v1-v6 已从
-`../2026-EgoAnchor-Typst/` 迁移到 LaTeX，当前主稿为
-`egoanchor_cn_v6.tex`。Typst 文件保留作迁移审计，不再作为后续写作入口。
+当前主稿为 egoanchor_cn_v6.tex，使用 IEEE VR / VGTC 模板和 XeLaTeX 编译。历史 v1--v5
+稿件已删除，不再作为写作或编译入口。
 
-版式
-====
+目录
+----
 
-- `template.tex` 是用户指定的 IEEE VR / VGTC 会议模板参考，保持原样。
-- 六个中文版本均使用 `\documentclass[review]{vgtc}` 和模板规定的
-  `\firstsection`、双栏、字号、标题、图注及行距设置。
-- 中文只通过 XeLaTeX、`xeCJK` 和系统中文字体补齐字形；稿件没有使用
-  `setspace`、`linespread`、自定义标题字号或表格整体缩放。
-- `figs/` 保留 Typst 稿使用的相对目录结构。`figures/` 是原 VGTC 模板
-  及早期 LaTeX 稿的历史资源目录。
-
-文件
-====
-
-- `egoanchor_cn_v1.tex` 至 `egoanchor_cn_v6.tex`：六个中文历史版本。
-- `egoanchor_cn_v6.tex`：当前中文主稿。
-- `egoanchor_cn.bib`：从 Typst 工作区迁移的同名参考文献文件。
-- `tools/convert_typst_to_latex.py`：本次迁移使用的可复现转换工具。
-- `pdf/`：XeLaTeX 编译产物，默认不纳入 Git。
+- egoanchor_cn_v6.tex：中文主稿。
+- egoanchor_cn_refs.bib：主稿参考文献。
+- figures/pipeline.png：系统架构图。
+- figures/panels/：由论文分析生成的图 2、图 3 独立面板。
+- tables/：由论文分析生成的两张 LaTeX 表。
+- pdf/：本机 XeLaTeX 输出，不作为源文件。
+- plan.md：当前论文路线和实验边界。
+- experiment_1_2_collection_manual_zh.md：正式采集手册。
+- experiment_1_2_analysis_reproduction_manual_zh.md：实验一/二复现手册。
 
 编译
-====
+----
 
 在本目录运行：
 
-  latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
+    latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
 
-编译全部版本：
-
-  make
-
-也可以在 PowerShell 中运行：
-
-  1..6 | ForEach-Object { latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf "egoanchor_cn_v$_.tex" }
-
-迁移复核
-========
-
-转换工具会核对每版的标题、公式和标签数量。仅在需要重新核对历史 Typst
-来源时运行；迁移完成后的正式修改直接写入 LaTeX 主稿。
-
-  python tools/convert_typst_to_latex.py --source-dir ../2026-EgoAnchor-Typst --target-dir . --versions 1 2 3 4 5 6
+分析生成的图 2 和图 3 由 LaTeX subfigure 排成一行。图内小标题不在 matplotlib 面板中
+重复绘制；图 2(b) 不绘制跨方法连接线，图 3(d) 保留三种时序策略的严格配对线。

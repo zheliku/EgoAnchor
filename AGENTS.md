@@ -78,9 +78,9 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 | `EgoAnchor_Python/src` | 图像接收、感知、VCD、通信、评估分析 |
 | `EgoAnchor_Unity/Assets/Scripts/EgoAnchor` | Quest 采集、时空对齐、公共 admission、四时序策略、显示与录制 |
 | `EgoAnchor_Protocol` | Proto 与 subject 唯一来源 |
-| `2026-EgoAnchor` | 中文主稿、VGTC 模板、图表与权威重构计划 |
+| `2026-EgoAnchor` | 中文主稿、VGTC 模板、图表、采集手册与当前论文路线 |
 
-旧 RQ1/RQ2 Unity 脚本、场景和 Python 分析包已删除，不得恢复；`EgoAnchor_Tools3` 仍属于 Run 1 删除范围，不再扩展。正式评估入口只使用实验一/二命名。
+旧 RQ1/RQ2 Unity 脚本、场景、Python 分析包和 `EgoAnchor_Tools3` 已删除，不得恢复。正式评估入口只使用实验一/二命名。
 
 ## 不可破坏的系统约束
 
@@ -101,9 +101,9 @@ IEEE VR 2027 正文、图和表最多 9 页，参考文献最多另占 2 页。R
 - 重获取只有一个中央 owner；四个时序变体不得分别改写共享 Python 感知状态。
 - Unity 的正式 session 配对可从 Python `PoseResult`、状态或持续 `ServerHeartbeat` 的 header 获取 `session_id`，不得等待首个 pose；两套采集场景的 NATS 初次连接重试必须开启，使 Python 与 Unity 的启动先后无关。
 
-## Run 1 目标架构
+## 当前运行时架构
 
-Run 1 目标是完成实验一/二采集前工程与分析骨架。详细工程实现计划见 `2026-EgoAnchor/experiment_1_2_implementation_plan.md`，该计划是当前实验一/二实现的执行入口。正式链路：
+正式采集链路：
 
 ```text
 PoseResult candidate
@@ -116,47 +116,45 @@ PoseResult candidate
 - *Arrival-Hold* 用到达时刻复合和零阶保持，作为直接消费异步视觉位姿的朴素系统基线。
 - *Capture-Hold* 用采集时刻复合和零阶保持，作为 Arrival-Hold 与 One-Euro Anchor 之间的时间对齐桥接配置。
 - *One-Euro Anchor* 的新重采配置使用采集时刻世界复合、VCD 接纳、OneEuroModel 与 `LinearSlerpStrategy`；目标时刻与完整系统采用相同的自适应历史延迟，生命周期和重获取开关与完整系统一致，仅关闭 StaticLock。
-- 当前正式场景的 One-Euro 参数按米制位置与约 10 Hz 候选重新标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`；既有 formal 数据若仍来自旧 RawPassthrough 配置，不得与新配置混合分析。
+- 当前正式场景的 One-Euro 参数按米制位置与约 10 Hz 候选标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`。
 - 正式逐帧输出策略统一使用 `Strategy` 后缀：`HoldStrategy`、`PredictToNowStrategy`、`LinearSlerpStrategy` 和 `HermiteStrategy`；运动状态估计统一使用 `Model` 后缀。正式日志字符串分别为 `hold`、`predict_to_now`、`linear_slerp` 和 `hermite`，不得恢复旧 Passthrough/DelayedInterp 类名。
 - *EgoAnchor* 用采集时刻复合、VCD 接纳、Kalman + `LinearSlerpStrategy`、显式静止锚定和生命周期管理。
 - *EgoAnchor Hermite* 是额外的配对插值器对照：除将 `LinearSlerpStrategy` 替换为 `HermiteStrategy` 外，与完整系统共享 Kalman、VCD、StaticLock、生命周期、重获取和自适应历史目标时刻；它不属于四个单组件消融。
 - 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
 - 模型相关 per-variant jump gate 不进入正式比较。
 
-## Run 2 离线分析架构
+## 当前离线分析架构
 
-实验一/二正式数据采集已经完成。当前离线分析以 GPT corrected-newdata-v4 包为呈现基线，执行入口固定为 `egoanchor.eval.cli` 的 `qc`、`preprocess` 和 `build-paper`：
+实验一/二正式数据采集已经完成。执行入口固定为 `egoanchor.eval.cli` 的 `qc`、`preprocess` 和 `build-paper`：
 
 ```text
 schema-v2 task directory
   -> qc / preprocess -> 五本完整 XLSX
-  -> build-paper -> GPT v4 指标、图、表和 egoanchor_cn_v6.tex
+  -> build-paper -> 指标、绘图 XLSX、图、表和 egoanchor_cn_v6.tex
 ```
 
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`preprocess`）** 只读取原始 task 目录的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；不得把 XLSX 之前的任何中间文件作为后续输入。
-- Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 依据 manifest 的 `variant_matrix_id` 检查当前九 runtime 矩阵，同时保留无该标识的 v2 八 runtime 归档复现能力，并检查主外键、生命周期、事件合并、warmup reference 和两端 writer 停止态统计；未消费 candidate 仅作为 latest-only 警告。
-- `build-paper` 只读取五本 Stage 1 完整 XLSX，计算 GPT v4 指标并直接发布两张 PDF/PNG、两张 TeX 表和中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
-- 旧 Stage 2/3 分析与发布源码已删除；GPT v4 代码位于 `egoanchor.eval.gpt_v4`，不保留旧入口兼容层。
+- Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 只接受 `variant_matrix_id=exp12_9_linear_v2` 的当前九 runtime 矩阵，并检查主外键、生命周期、事件合并、warmup reference 和两端 writer 停止态统计；未消费 candidate 仅作为 latest-only 警告。
+- `build-paper` 只读取五本 Stage 1 完整 XLSX，计算指标并发布七个独立 PDF/PNG 面板、两张 TeX 表和中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
+- 旧 Stage 2/3、v2 replay 与历史分析包已删除；当前代码位于 `egoanchor.eval.paper_analysis`，不保留旧入口兼容层。
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`；QC 或论文输入契约失败时返回退出码 2，禁止生成正式论文产物。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
-- 实验一发布 `experiment1_corrected_newdata` 三面板图，实验二发布 `experiment2_corrected_newdata` 同一行四子图归因图；图表样式直接复刻 GPT v4，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
-- `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；GPT v4 参数唯一入口是 `egoanchor/eval/config/gpt_v4.toml`，每个参数同行保留中文注释。
+- 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
+- `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
-- `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本；本地可重建的 `data/analysis/` 不进入 Git。
-- 主稿由 `build-paper` 从 GPT v4 模板和当前 XLSX 指标完整写出；表格内容内联，PDF 图保持外部依赖。
+- `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本。
+- 主稿由 `build-paper` 从当前 XLSX 指标完整写出；表格内容内联，PDF 面板保持外部依赖。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
-- `build-paper` 的审计产物固定写入 `data/analysis/gpt_v4/`，包括输入 workbook SHA-256、实验一汇总 CSV、capture alignment CSV 和运行性能 JSON；这些派生文件不进入 Git。
+- 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。旧 `data/eval/` 与 `data/analysis/` 重复归档已删除，不得恢复为论文输入路径。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
-- GPT v4 reader-facing 表格最多保留三位小数，完整精度保存在 `data/analysis/gpt_v4/data/`；实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
-- v2 正式数据没有独立采集 `Kalman Predict-to-Now` runtime；当前时序策略对比只能从完整 EgoAnchor 已接纳候选、采集时刻世界位姿和渲染时间线做离线反事实重放，并在论文、图表和数据包中明确标记 `offline replay`，不得冒充真实采集消融或 bit-exact runtime 复现。当前推荐名称为 `Kalman Predict-to-Now` 与 `Kalman Hermite`；实现延迟是自适应的，不使用 `Fixed-Lag` 或 `Delayed` 命名。
-- v2 的 `EgoAnchor w/o temporal synthesis` 同时使用历史 `ConstantVelocityModel + RawPassthroughStrategy`，不能改名为 Kalman Predict-to-Now；其数值只作为历史完整消融审计，不作为纯时序策略归因。v2 的 One-Euro runtime 是历史 `OneEuroModel + RawPassthroughStrategy`，分析和论文必须按该批次 provenance 描述，不得与新重采的 `OneEuroModel + LinearSlerpStrategy` 配置混合。
+- 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
 - 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；Hermite 只用于独立插值器对照。
 - 同一批五项物理任务同时驱动实验一四配置和实验二四消融；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
-- 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。v2 持续旋转中完整系统的负结果与 StaticLock 占用/解锁有关，下一轮必须重采复核，不能用平移收益替代旋转证据。
+- 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
 - 当前 KalmanModel 的 position/rotation measurement noise 是冻结序列化参数，VCD 只控制 admission；论文不得声称测量噪声随 VCD 分数在线自适应。
 
 ## Python 关键约束
@@ -170,7 +168,7 @@ schema-v2 task directory
 - 深度评分保留绝对与结构分量 `D = (1-alpha) D_abs + alpha D_struct`；Run 1 日志必须暴露消融所需分量。
 - Python 评估模式的 `RuntimeLogWriter` 已将候选行映射为严格 `PythonCandidateRow`，颜色不可用写入 `null` 并保留解释 flag；runtime 事件与候选行分写固定 schema-v2 文件。
 - Python candidate ID 使用 `session_id:frame_id:frame_local_seq`；`RuntimeLogWriter` 关闭时把 candidate/event 的真实 `rows_written`、`dropped_rows` 和 `log_write_failures` 写回 `python_session.json`，供最终 manifest 汇总，Unity 不得伪造 Python 丢行统计。
-- `egoanchor.eval` 包级入口只导出 schema-v2、QC 和 Stage 1 workbook 基础设施；GPT v4 论文分析必须从 `egoanchor.eval.gpt_v4` 或离线 CLI 显式进入，运行时服务不得因论文绘图依赖加载失败。
+- `egoanchor.eval` 包级入口只导出 schema-v2、QC 和 Stage 1 workbook 基础设施；论文分析必须从 `egoanchor.eval.paper_analysis` 或离线 CLI 显式进入，运行时服务不得因论文绘图依赖加载失败。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
@@ -212,7 +210,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 - schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest。CLI 事件物化入口只有在 `python_stopped`、两个事件分片 schema 合法、实际行数分别匹配 writer 统计且无丢行/写入失败时，才用冻结全序原子发布可重建的 `events.jsonl`；已有文件交给只读 QC 逐字节验证。半同步、pending、错配或非法 fragment 不得留下部分派生文件，也不得进入正式分析；Mutagen 完成同步后允许对同一目录直接重试。
-- schema-v2 QC 对当前 Formal session 依据 `variant_matrix_id=exp12_9_linear_v2` 固定要求 9 个唯一 runtime，并冻结完整系统及三个组件对照的 Linear/SLERP 策略；无该字段的已发布 v2 归档仍固定要求原八路矩阵、历史方法字符串和旧 FNV-1a 字段顺序。v2 采集时尚未记录 `configuration_fingerprint`，只按其已声明字段复算旧 per-variant 与整体哈希；当前九路必须记录完整参数指纹并绑定新版哈希。未知矩阵标识、任意缺项或新旧方法混用均硬失败。QC 还检查 writer 行数/丢行/失败、candidate/reference 主键、Unity 已消费 candidate×variant 与 tick×variant 矩阵及递归旧字段。NATS PoseResult 使用 latest-only 消费，Python 已发布但未进入 Unity 的 candidate 只能统计并警告，分析按 admission 投影排除，禁止为未收到的消息伪造 admission；Unity admission 指向未知 Python candidate 仍是硬错误。
+- schema-v2 QC 依据 `variant_matrix_id=exp12_9_linear_v2` 固定要求 9 个唯一 runtime，并冻结完整系统及三个组件对照的 Linear/SLERP 策略。缺少矩阵标识、配置指纹、任意 variant 或出现名称/方法错配均硬失败；不再接受历史八路数据。QC 还检查 writer 行数/丢行/失败、candidate/reference 主键、Unity 已消费 candidate×variant 与 tick×variant 矩阵及递归旧字段。NATS PoseResult 使用 latest-only 消费，Python 已发布但未进入 Unity 的 candidate 只能统计并警告，分析按 admission 投影排除，禁止为未收到的消息伪造 admission；Unity admission 指向未知 Python candidate 仍是硬错误。
 - Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial；开始/结束事件必须唯一且顺序合法。实际持续时间作为描述性审计指标记录，不设上下界，也不决定 QC 成败。
 - 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
@@ -226,12 +224,12 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始 `data/eval/<session_id>` 目录名、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`。成功返回 0，文件系统或输入缺源返回 1，schema/QC/论文输入契约失败返回 2；历史入口和对应 Pixi 别名均不保留。
-- `preprocess` 将每个 task 原子发布为完整 XLSX；`build-paper` 只从五本 Stage 1 XLSX 计算 GPT v4 指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、固定 PDF/PNG 到 `2026-EgoAnchor/figures/generated/`，同时写出 `egoanchor_cn_v6.tex`。默认论文根目录从命令参数指定。
+- `preprocess` 将每个 task 原子发布为完整 XLSX；`build-paper` 只从五本 Stage 1 XLSX 计算指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、七个独立 PDF/PNG 面板到 `2026-EgoAnchor/figures/panels/`，同时写出 `egoanchor_cn_v6.tex`。默认论文根目录从命令参数指定。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
-- 中文主稿由 `build-paper` 从 GPT v4 模板和当前 XLSX 指标完整写出；图只从 `figures/generated/` 加载固定 PDF，不再使用 `figs/`。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿由 `build-paper` 从当前 XLSX 指标完整写出；图只从 `figures/panels/` 加载独立 PDF，并由 LaTeX subfigure 排版。正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
 
@@ -295,12 +293,12 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 ## 当前离线分析事实
 
-- Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是 GPT v4 分析的唯一正式输入。
-- GPT v4 只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三面板；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个子图同占一行，其中时序面板保留 Predict-to-Now、Hermite 与 Linear/SLERP 三路对比。所有 episode 均显示，不做 IQR 可视层删除；细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，缺失或重复键必须拒绝绘图。方法颜色、端点颜色、字体、网格和中位数标记在实验一/二统一，动态坐标范围可以向外扩展但不得裁掉异常 episode。图二、图三的可见点分别导出为 `figure2_plot_data.csv` 和 `figure3_plot_data.csv`。
+- Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
+- `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板保留 Predict-to-Now、Hermite 与 Linear/SLERP 三路对比。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最小字号为 7 pt。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
-- GPT 参考包只提供绘图样式、表格布局和论文文字结构，不作为正式数字输入；正式数字必须由当前五本 Stage 1 XLSX 计算。
+- 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
 - 复现命令、退出码和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md` 与中文复现手册。
 
 ## AGENTS.md 维护规则

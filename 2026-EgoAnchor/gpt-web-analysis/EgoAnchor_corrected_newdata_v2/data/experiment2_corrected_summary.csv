@@ -1,6 +1,0 @@
-component,metric,enabled,disabled_or_alternative,effect
-capture_time_alignment,segment median candidate P95 mm,13.240484410628998,21.31081511564851,7.862251610211944
-static_lock,segment median centered stationary P95 mm,1.631104654881553,9.876316209495442,7.9663504224202795
-static_lock_guardrail,segment median frame increment P95 mm,0.09825015444369316,1.4526563273902182,1.354406172946525
-vcd_admission,catastrophic episodes >40 mm,0/9,4/9,eliminated in this batch
-temporal_synthesis,lag ms / aligned RMSE mm,320.0/4.960,250.0/9.791,-70.0/+4.831

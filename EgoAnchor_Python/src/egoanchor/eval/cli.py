@@ -1,4 +1,4 @@
-"""EgoAnchor Stage 1 预处理与 GPT v4 论文重建命令行。"""
+"""EgoAnchor Stage 1 预处理与论文重建命令行。"""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .gpt_v4.pipeline import build_paper
-from .gpt_v4.settings import DEFAULT_SETTINGS_PATH
+from .paper_analysis.pipeline import build_paper
+from .paper_analysis.settings import DEFAULT_SETTINGS_PATH
 from .preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
@@ -36,9 +36,9 @@ _TASK_DIRECTORY_PATTERN = re.compile(r"^task_(?P<task_number>[1-9][0-9]*)_")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """构造 qc、preprocess 和 GPT v4 build-paper 参数解析器。"""
+    """构造 qc、preprocess 和 build-paper 参数解析器。"""
 
-    parser = argparse.ArgumentParser(prog="python -m egoanchor.eval.cli", description="EgoAnchor GPT v4 离线论文重建")
+    parser = argparse.ArgumentParser(prog="python -m egoanchor.eval.cli", description="EgoAnchor 离线论文重建")
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
     qc = subparsers.add_parser("qc", help="物化跨端事件总表并执行 schema-v2 检查")
     qc.add_argument("task_dirs", nargs="+", type=Path)
@@ -50,11 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
     preprocess.set_defaults(handler=_run_preprocess)
     build = subparsers.add_parser(
         "build-paper",
-        help="从五本初始 XLSX 复刻 GPT v4 论文",
-        description="只读取 task_1 到 task_5 五本初始 XLSX，生成 GPT v4 图表和中文主稿。",
+        help="从五本 Stage 1 XLSX 重建论文",
+        description="只读取 task_1 到 task_5 五本 Stage 1 XLSX，生成图表、表格和中文主稿。",
     )
     build.add_argument("workbooks", nargs="+", type=Path, help="五本初始 XLSX")
-    build.add_argument("--out", required=True, type=Path, help="GPT v4 派生数据和 provenance 目录")
+    build.add_argument("--out", required=True, type=Path, help="论文指标、绘图数据和 provenance 目录")
     build.add_argument("--paper-root", required=True, type=Path, help="论文根目录")
     build.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     build.set_defaults(handler=_run_build_paper)
@@ -135,7 +135,7 @@ def _run_preprocess(args: argparse.Namespace) -> int:
 
 
 def _run_build_paper(args: argparse.Namespace) -> int:
-    """运行 GPT v4 单入口；失败时不把错误结果标成成功。"""
+    """运行论文分析单入口；失败时不把错误结果标成成功。"""
 
     payload = build_paper(tuple(args.workbooks), args.out, args.paper_root, args.settings)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))

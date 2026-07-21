@@ -1,5 +1,0 @@
-quantity,count,interpretation
-scenario_sessions,5,continuous scenario-specific sessions
-unique_render_timestamps,29316,unique display timeline samples before configuration replay
-visual_pose_candidates,6838,visual-backend pose candidates
-configuration_frame_records,234528,"29,316 timestamps replayed through 8 runtime configurations"

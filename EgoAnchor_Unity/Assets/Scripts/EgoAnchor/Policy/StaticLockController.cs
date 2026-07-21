@@ -95,9 +95,7 @@ namespace EgoAnchor.Policy
     /// baseline 都是 motion-agnostic 滤波器, 静止时残留抖动; 本控制器显式锁定静止 pose, 把
     /// 小幅抖动当噪声吸收 → 抖动 ≈ 0 ("看上去一动不动"), 运动时交回 smoothing 输出。
     ///
-    /// 设计已在离线仿真 (EgoAnchor_Tools3 EgoAnchorStabilizerPredictor) 验证: 静止段
-    /// P50 位置步长 0.115mm→0.000mm, 冻结帧 9%→63%; 运动跟踪不退化 (lag 不变), 代价是
-    /// 运动起始响应 +~110ms 中位延迟。关键机制:
+    /// 当前正式实验通过同批候选上的单组件关闭归因该控制器的收益与转换代价。关键机制:
     ///   1. 死区 (deadband): 锁定时位移在死区内 → 忽略 (噪声地板, 杀静止抖动的核心);
     ///   2. score 加权 CUSUM: E += score·max(0,|Δ|−deadband), 每观测衰减。高分持续位移 → 解锁;
     ///      低分远跳 → 权重小被压住 (软 score 门, 不是硬阈值);

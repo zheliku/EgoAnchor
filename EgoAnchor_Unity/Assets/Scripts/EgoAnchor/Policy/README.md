@@ -64,8 +64,6 @@ t_target = t_render - delay(t)
 | EgoAnchor w/o temporal synthesis | Capture time | VCD | Kalman | PredictToNow | 开 | 完整 |
 | EgoAnchor w/o StaticLock | Capture time | VCD | Kalman | LinearSlerp | 关 | 完整 |
 
-历史 v2 的 One-Euro 是 `OneEuroModel + RawPassthroughStrategy`，历史 w/o temporal synthesis 是 `ConstantVelocityModel + RawPassthroughStrategy`。旧名只用于解释既有数据 provenance，不得恢复为当前 Unity 类，也不得与新重采数据混合。
-
 ## 冻结参数
 
 ### OneEuroModel
@@ -113,7 +111,7 @@ t_target = t_render - delay(t)
 - 覆盖坐标补偿、模型、策略、生命周期和 StaticLock 数值的 `configuration_fingerprint`
 - 绑定完整指纹的 per-variant `config_hash`
 
-Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景和完成策略身份统一的 v3 批次都使用 `variant_matrix_id=exp12_9_linear_v2`：完整系统及三个组件对照采用 Linear/SLERP，Hermite 只保留为独立插值器对照。无矩阵标识的已发布 v2 八路归档继续按历史方法字符串和旧哈希字段顺序复现。配置缺失指纹、字符串布尔值、名称与组件错配或任意缺项都会阻止正式发布。
+Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景和正式批次都使用 `variant_matrix_id=exp12_9_linear_v2`：完整系统及三个组件对照采用 Linear/SLERP，Hermite 只保留为独立插值器对照。配置缺失指纹、字符串布尔值、名称与组件错配或任意缺项都会阻止正式发布。
 
 ## 验证
 

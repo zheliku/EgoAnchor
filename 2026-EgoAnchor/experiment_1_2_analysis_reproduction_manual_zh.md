@@ -1,139 +1,81 @@
-# 实验一/二离线分析复现手册
+# 实验一/二分析复现手册
 
-本手册从五个 schema-v2 task 目录重建 GPT corrected-newdata-v4 论文结果。完成数据身份确认后，原始 task 目录保持只读；Stage 1 完整 XLSX 是固定、不可变的分析桥梁。
+本手册从五项正式 raw task 重建 Stage 1 工作簿、论文指标、图表和中文主稿。当前数据目录
+说明见 EgoAnchor_Python/docs/data_layout.md，分析代码说明见
+EgoAnchor_Python/docs/analysis_pipeline.md。
 
-## 固定链路
+## 1. 固定输入
 
-```text
-raw task 目录
-  -> qc（必要时物化 events.jsonl）
-  -> preprocess（五本完整 XLSX）
-  -> build-paper（GPT v4 图、表、主稿）
-  -> XeLaTeX
-```
+~~~text
+EgoAnchor_Python/data/experiments/experiment_1_2/raw/
+├─ task_1_static_head_motion/
+├─ task_2_start_stop_6dof/
+├─ task_3_continuous_translation/
+├─ task_4_continuous_rotation/
+└─ task_5_occlusion_recovery/
+~~~
 
-`qc` 与 `preprocess` 可读取 raw JSON/JSONL。`build-paper` 只读取 `task_N_complete.xlsx`，不会回读 raw，也不会改写 XLSX。渲染帧只用于形成动作片段轨迹；论文统计单位是片段或遮挡 episode。
+每项任务都必须包含 manifest、python_session、七个固定 JSONL 和已物化的 events.jsonl。
+五个 manifest 使用同一个配置 hash 和 variant_matrix_id=exp12_9_linear_v2。正式
+EgoAnchor 采用 Kalman Linear/SLERP；EgoAnchor Hermite 只作为图 3(d) 的插值器对照。
 
-## 前置检查
+## 2. QC 与 Stage 1
 
-```powershell
+~~~powershell
 Set-Location P:\VSCode-Project\EgoAnchor\EgoAnchor_Python
-pixi run python -m egoanchor.eval.cli --help
-```
 
-当前只应看到三个命令：`qc`、`preprocess`、`build-paper`。GPT v4 参数唯一来源是 `src/egoanchor/eval/config/gpt_v4.toml`。
+$rawRoot = (Resolve-Path "data/experiments/experiment_1_2/raw").Path
+$taskDirs = @(
+    "task_1_static_head_motion"
+    "task_2_start_stop_6dof"
+    "task_3_continuous_translation"
+    "task_4_continuous_rotation"
+    "task_5_occlusion_recovery"
+) | ForEach-Object { Join-Path $rawRoot $_ }
 
-当前 Linear/SLERP 主系统批次使用 `variant_matrix_id=exp12_9_linear_v2`。稳定配置 ID `EgoAnchor` 和三个组件 baseline 必须对应 `KalmanModel + LinearSlerpStrategy`；配对插值器对照使用 `EgoAnchor Hermite`。不得在分析层临时重定向这些身份。
-
-每个 raw task 目录必须包含：
-
-```text
-manifest.json
-python_session.json
-python_candidates.jsonl
-python_events.jsonl
-unity_events.jsonl
-unity_reference.jsonl
-unity_admission.jsonl
-unity_render.jsonl
-```
-
-`events.jsonl` 是本机派生文件，不要求采集端预先写出。缺失时 `qc` 会检查两端 fragment、停止态和 writer 统计，然后原子生成；已有文件只验证，不覆盖。
-
-## 替换新数据
-
-1. 停止 Python、Unity 和 Mutagen 的写入，确认五个 session 正常停止。
-2. 备份当前 `data/eval/`，再用新 task 目录替换对应的 `task_1_...` 到 `task_5_...`。
-3. 不要修改 `session_id`、`candidate_id`、`frame_id`、固定文件名或事件来源行号。
-4. 不要只替换单个场景后沿用旧 XLSX；五个 task 必须作为一个批次完整重建。
-
-可用下面的代码动态收集五个目录：
-
-```powershell
-$evalRoot = (Resolve-Path "data/eval").Path
-$taskDirs = @(Get-ChildItem -LiteralPath $evalRoot -Directory |
-    Where-Object { $_.Name -match '^task_[1-5]_' } |
-    Sort-Object { [int]([regex]::Match($_.Name, '^task_(\d+)_').Groups[1].Value) } |
-    ForEach-Object { $_.FullName })
-if ($taskDirs.Count -ne 5) { throw "需要恰好五个 task_1 到 task_5 目录。" }
-```
-
-## 运行 Stage 1
-
-```powershell
-$codeVersion = (git rev-parse --short HEAD).Trim()
 pixi run python -m egoanchor.eval.cli qc @taskDirs
-if ($LASTEXITCODE -ne 0) { throw "QC 失败，停止后续步骤。" }
+if ($LASTEXITCODE -ne 0) { throw "QC 失败，停止重建。" }
 
-pixi run python -m egoanchor.eval.cli preprocess @taskDirs `
-    --out data/analysis/complete `
-    --code-version $codeVersion
-if ($LASTEXITCODE -ne 0) { throw "preprocess 失败，停止后续步骤。" }
-```
+$codeVersion = (git rev-parse --short HEAD).Trim()
+pixi run python -m egoanchor.eval.cli preprocess @taskDirs --out data/experiments/experiment_1_2/workbooks --code-version $codeVersion
+if ($LASTEXITCODE -ne 0) { throw "preprocess 失败，停止重建。" }
+~~~
 
-必须得到：
+必须得到 task_1_complete.xlsx 到 task_5_complete.xlsx。工作簿是后续唯一输入；可以只读
+查看，不能在 Excel 中保存。
 
-```text
-data/analysis/complete/task_1_complete.xlsx
-data/analysis/complete/task_2_complete.xlsx
-data/analysis/complete/task_3_complete.xlsx
-data/analysis/complete/task_4_complete.xlsx
-data/analysis/complete/task_5_complete.xlsx
-```
+## 3. 论文分析
 
-这些文件是后续唯一输入。只读审阅可以使用 `load_workbook(..., read_only=True)`；不要在 Excel 中保存。
+~~~powershell
+$workbookRoot = (Resolve-Path "data/experiments/experiment_1_2/workbooks").Path
+$workbooks = 1..5 | ForEach-Object {
+    Join-Path $workbookRoot ("task_{0}_complete.xlsx" -f $_)
+}
 
-## 运行 GPT v4 重建
+pixi run python -m egoanchor.eval.cli build-paper @workbooks --out data/experiments/experiment_1_2/analysis --paper-root ..\2026-EgoAnchor
+if ($LASTEXITCODE -ne 0) { throw "build-paper 失败，停止编译。" }
+~~~
 
-```powershell
-$completeDir = (Resolve-Path "data/analysis/complete").Path
-$workbooks = @(1..5 | ForEach-Object {
-    Join-Path $completeDir ("task_{0}_complete.xlsx" -f $_)
-})
+绘图数据统一写入
+data/experiments/experiment_1_2/analysis/plots/figure_plot_data.xlsx。Figure2 sheet 有图 2
+的三个面板，Figure3 sheet 有图 3 的四个面板；同一 session_id、trial_id 和 segment_id
+表示严格配对。完整精度指标位于 analysis/metrics/。
 
-pixi run python -m egoanchor.eval.cli build-paper @workbooks `
-    --out data/analysis/gpt_v4 `
-    --paper-root ..\2026-EgoAnchor
-if ($LASTEXITCODE -ne 0) { throw "GPT v4 重建失败，停止编译。" }
-```
+## 4. XeLaTeX
 
-该命令只读 XLSX，计算 GPT v4 的三联实验一和组件归因实验二，并写出：
-
-```text
-2026-EgoAnchor/figures/generated/experiment1_corrected_newdata.pdf
-2026-EgoAnchor/figures/generated/experiment2_corrected_newdata.pdf
-2026-EgoAnchor/tables/experiment1_corrected_newdata_v4.tex
-2026-EgoAnchor/tables/experiment2_corrected_newdata_v4.tex
-2026-EgoAnchor/egoanchor_cn_v6.tex
-```
-
-同时在 `data/analysis/gpt_v4/` 保存输入 hash、表格 CSV 和性能审计。图中每个可见数据点分别保存在 `data/figure2_plot_data.csv` 与 `data/figure3_plot_data.csv`；Linear/SLERP 与 Hermite 的片段级配对值保存在 `data/strategy_candidate_paired_metrics.csv`，汇总保存在 `data/strategy_candidate_summary.csv`。GPT 参考包不作为正式数字输入。
-
-## 编译与视觉验收
-
-```powershell
+~~~powershell
 Set-Location ..\2026-EgoAnchor
 latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
 if ($LASTEXITCODE -ne 0) { throw "XeLaTeX 编译失败。" }
-```
+~~~
 
-检查 PDF 页数、实验页面和图表：
+最终检查：
 
-- 表格中的 RMSE、P95 和毫秒数应为短格式，不出现十几位小数；
-- 图 2 为三面板：头动泄漏、动态平移 lag/RMSE、遮挡 P95；
-- 图 3 为同一行四面板：capture-time、StaticLock、VCD 和三种 runtime temporal strategy；
-- 细线只连接同一事件或片段的严格配对点，用于显示配置切换时的变化方向；
-- VCD 只统计 `occlusion_started` episode，40 mm 阈值和 `0/9 vs 4/9` 必须与表格一致；
-- 主稿不应出现旧的 `exp1_final_v2`、`exp2_merged_final_v2` 或旧 CLI 名称。
+1. 图 1 只出现一次，架构文字在双栏全宽下可读。
+2. 图 2 是一行三个 LaTeX 子图，小标题来自 subcaption；图 2(b) 没有跨方法折线。
+3. 图 3 是一行四个 LaTeX 子图，图 3(d) 保留 Predict-to-Now、Hermite 和 Linear/SLERP。
+4. 图内 tick、坐标轴和图例不小于约 7 pt，没有裁切或重叠。
+5. 表格与正文数字来自当前五本工作簿，主稿不含旧结果包、旧 CLI 或旧文件名。
 
-用 `pdftoppm` 渲染第 6--8 页检查裁切、重叠和字号；临时 PNG 放在 `2026-EgoAnchor/tmp/pdfs/`，验收后删除。
-
-## 失败处理
-
-- `qc` 返回 `1`：检查 task 目录或固定文件是否缺失。
-- `qc` 或 `preprocess` 返回 `2`：修复 schema、生命周期、writer 统计或矩阵问题，不要手工补行。
-- `build-paper` 返回 `1`：检查五本 XLSX 是否可读以及输出目录权限。
-- `build-paper` 返回 `2`：检查 XLSX 命名、五个 task 是否齐全、事件角色和组件配对是否完整。
-- XeLaTeX 失败：先查看 `pdf/egoanchor_cn_v6.log` 的首个错误，并确认两张正式 PDF 位于 `figures/generated/`。
-
-任何阶段失败都应停在当前阶段。不要从 GPT 包复制数字、不要把 raw 目录传给 `build-paper`，也不要从旧结果目录补数据。
+任一阶段失败都停在该阶段。不要手工补行、从历史目录复制数字，或把不同批次的场景拼成
+同一份论文结果。

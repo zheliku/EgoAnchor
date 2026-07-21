@@ -254,7 +254,7 @@ audit_samples/
 
 `python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会在缺少总表时生成 `events.jsonl`；如果任一分片未停止、行数不符、存在丢行或写入失败，QC 返回 2，且不会留下临时或部分总表。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。
 
-## 九、运行 QC 和分析
+## 九、运行 QC 并归档
 
 ```powershell
 cd EgoAnchor_Python
@@ -263,19 +263,12 @@ pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 
 返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，五个任务都有 marker，任务 2 至少有一个 `transition_started`，任务 5 的遮挡/重新可见 marker 成对闭合，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。分析还会检查四个消融是否都产生了对应关键指标；缺少任一项时不会发布正式 CSV、PDF 或 TeX。
 
-实验一和实验二使用同一组输入目录，批次都必须合计覆盖任务 1--5：
+实验一和实验二使用同一组五项任务。QC 通过后，先停止 Mutagen，再把最终 task 复制到
+`data/experiments/experiment_1_2/raw/` 的固定任务目录。不要直接把裸 session 当作长期归档，
+也不要删除仍未完成同步的 `data/eval/<session_id>`。
 
-```powershell
-pixi run python -m egoanchor.eval.cli analyze-exp1 `
-  .\data\eval\<session_a> `
-  .\data\eval\<session_b> `
-  --out .\data\analysis\exp1
-
-pixi run python -m egoanchor.eval.cli analyze-exp2 `
-  .\data\eval\<session_a> `
-  .\data\eval\<session_b> `
-  --out .\data\analysis\exp2
-```
+工作簿和论文结果统一通过 `qc`、`preprocess`、`build-paper` 三个命令重建，完整命令见
+`experiment_1_2_analysis_reproduction_manual_zh.md`。
 
 ## 十、Inspector 改绑与正式采集前自检
 

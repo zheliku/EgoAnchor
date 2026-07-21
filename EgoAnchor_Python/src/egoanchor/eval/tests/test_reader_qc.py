@@ -1,4 +1,4 @@
-"""Task 3 schema-v2 流式 reader 与 Stage 1 QC 测试。"""
+"""schema-v2 流式 reader 与 Stage 1 QC 测试。"""
 
 from __future__ import annotations
 
@@ -26,19 +26,6 @@ VARIANT_SPECS = (
     ("EgoAnchor w/o StaticLock", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
 )
 """与当前正式采集冻结矩阵一致的九个测试 variant。"""
-
-ARCHIVED_V2_VARIANT_SPECS = (
-    ("Arrival-Hold", "cv", "raw_passthrough", "disabled", "ArrivalTime", False, False, False, False, False, False),
-    ("Capture-Hold", "cv", "raw_passthrough", "disabled", "CaptureTime", True, False, False, False, False, False),
-    ("One-Euro Anchor", "oneeuro", "raw_passthrough", "disabled", "CaptureTime", True, False, False, False, False, False),
-    ("EgoAnchor", "kalman", "interp_hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor w/o capture-time alignment", "kalman", "interp_hermite", "enabled", "ArrivalTime", False, True, True, True, True, True),
-    ("EgoAnchor w/o VCD", "kalman", "interp_hermite", "disabled", "CaptureTime", True, False, True, True, False, True),
-    ("EgoAnchor w/o temporal synthesis", "cv", "raw_passthrough", "enabled", "CaptureTime", True, True, False, True, True, True),
-    ("EgoAnchor w/o StaticLock", "kalman", "interp_hermite", "enabled", "CaptureTime", True, True, True, False, True, True),
-)
-"""与真实 v2 manifest 一致的八个归档测试 variant。"""
-
 
 class ReaderQcTests(unittest.TestCase):
     """验证 reader 来源追踪与 Stage 1 硬 QC。"""
@@ -71,17 +58,6 @@ class ReaderQcTests(unittest.TestCase):
             self.assertEqual(_file_snapshot(root), before)
             self.assertEqual(report.metrics["variant_count"], 9)
 
-    def test_archived_v2_eight_variant_task_remains_rebuildable(self) -> None:
-        """已发布 v2 八路归档仍须通过同一只读 QC，保证论文可以复现。"""
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _write_valid_task(Path(tmp), archived_v2=True)
-
-            report = run_task_qc(root)
-
-            self.assertTrue(report.passed, report.to_dict())
-            self.assertEqual(report.metrics["variant_count"], 8)
-
     def test_current_matrix_id_rejects_missing_hermite_control_variant(self) -> None:
         """新 session 即使其余八路完整，也不得缺少 Hermite 对照策略。"""
 
@@ -96,6 +72,21 @@ class ReaderQcTests(unittest.TestCase):
 
             self.assertFalse(report.passed)
             self.assertIn("variant_count", {issue.code for issue in report.errors})
+
+    def test_missing_variant_matrix_id_is_not_treated_as_archive(self) -> None:
+        """正式 QC 不再为无矩阵标识的旧八路数据保留兼容分支。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.pop("variant_matrix_id")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("variant_matrix_id", {issue.code for issue in report.errors})
 
     def test_unknown_admission_candidate_is_hard_error(self) -> None:
         """Unity admission 指向未知 Python candidate 时必须失败。"""
@@ -192,9 +183,8 @@ def _write_valid_task(
     scenario_id: str = "static_head_motion",
     marker_roles: tuple[str, ...] = ("generic_marker",),
     include_hermite_control: bool = True,
-    archived_v2: bool = False,
 ) -> Path:
-    """写出一个包含当前九路或归档八路 variant 的最小合法 task。"""
+    """写出一个包含当前九路 variant 的最小合法 task。"""
 
     root = parent / "task_1_s01_controller_right"
     root.mkdir()
@@ -203,24 +193,22 @@ def _write_valid_task(
     variant_definitions: list[dict[str, object]] = []
     admissions: list[dict[str, object]] = []
     renders: list[dict[str, object]] = []
-    source_specs = ARCHIVED_V2_VARIANT_SPECS if archived_v2 else VARIANT_SPECS
     variant_specs = tuple(
-        spec for spec in source_specs
+        spec for spec in VARIANT_SPECS
         if include_hermite_control or spec[0] != "EgoAnchor Hermite"
     )
     for spec in variant_specs:
         label, motion, smoothing, gate, alignment, capture, vcd, temporal, static, low_score, server = spec
-        configuration_fingerprint = "" if archived_v2 else f"fixture:{label}"
-        config_hash = _variant_hash(spec, configuration_fingerprint, archived_v2=archived_v2)
+        configuration_fingerprint = f"fixture:{label}"
+        config_hash = _variant_hash(spec, configuration_fingerprint)
         variant_config = {
             "label": label,
             "motion_model": motion,
             "smoothing_strategy": smoothing,
             "quality_gate": gate,
+            "configuration_fingerprint": configuration_fingerprint,
             "config_hash": config_hash,
         }
-        if not archived_v2:
-            variant_config["configuration_fingerprint"] = configuration_fingerprint
         variant_configs.append(variant_config)
         variant_definitions.append(
             {
@@ -409,8 +397,7 @@ def _write_valid_task(
             },
         },
     }
-    if include_hermite_control and not archived_v2:
-        manifest["variant_matrix_id"] = "exp12_9_linear_v2"
+    manifest["variant_matrix_id"] = "exp12_9_linear_v2"
     python_session = {
         "schema_version": 2,
         "session_id": session_id,
@@ -546,14 +533,11 @@ def _event(
 def _variant_hash(
     spec: tuple[object, ...],
     configuration_fingerprint: str,
-    *,
-    archived_v2: bool = False,
 ) -> str:
     """按 Unity FNV-1a 规则计算测试 variant 配置哈希。"""
 
     values = [str(value) for value in spec[:5]]
-    if not archived_v2:
-        values.append(configuration_fingerprint)
+    values.append(configuration_fingerprint)
     values.extend("1" if bool(value) else "0" for value in spec[5:])
     return _fnv1a("|".join(values).encode("utf-8"))
 

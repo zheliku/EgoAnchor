@@ -1,91 +1,106 @@
 # 实验一/二离线分析
 
-当前离线分析以 GPT corrected-newdata-v4 论文包为唯一呈现基线。Stage 1 生成的完整 XLSX 是不可变桥梁；新的 GPT v4 管线只读这五本 XLSX，不回读 raw JSONL，也不修改工作簿。
+正式链路只有 qc、preprocess 和 build-paper 三个命令。数据目录及各层职责见
+docs/data_layout.md。
 
-## 数据流
+~~~text
+raw task
+  -> qc
+  -> preprocess
+  -> task_1_complete.xlsx ... task_5_complete.xlsx
+  -> build-paper
+  -> 指标、绘图 XLSX、LaTeX 表格、面板图和中文主稿
+~~~
 
-```text
-raw schema-v2 task
-  -> qc -> events.jsonl（缺失时安全物化）
-  -> preprocess -> task_1..5_complete.xlsx（固定桥梁）
-  -> build-paper -> GPT v4 指标、图、表和 egoanchor_cn_v6.tex
-```
+qc 和 preprocess 可以读取 raw JSON/JSONL。build-paper 只读取五本 Stage 1 XLSX，
+不回读 raw，也不修改工作簿。统计单位是动作片段或遮挡 episode，渲染帧不作为独立样本。
 
-- `qc` 和 `preprocess` 可以读取 raw task；`events.jsonl` 是两端停止后的本机派生文件，已有总表只验证、不覆盖。
-- `preprocess` 在整批 QC 通过后原子发布 `task_N_complete.xlsx`。这些文件是后续唯一输入，不能手工打开后保存。
-- `build-paper` 只接受恰好五本 `task_1_complete.xlsx` 到 `task_5_complete.xlsx`，通过只读 XLSX XML reader 计算 GPT v4 指标、写出图表和主稿。
-- 统计单位是动作片段或遮挡 episode；渲染帧只用于形成轨迹，不能作为独立样本。
+## 当前输入
 
-GPT v4 的指标语义固定为：静止头动的中心化泄漏、绝对注册和帧间增量；持续平移/旋转的 fitted lag 与对齐残差；遮挡 `occlusion_started` episode 的平移 P95、40 mm 尾部失败；起停的 250 ms 基线、5 mm 位移和 100 ms 持续响应；组件归因分别使用 raw capture/arrival、中心化 StaticLock、遮挡尾部和持续平移 lag/RMSE。
+~~~powershell
+Set-Location P:\VSCode-Project\EgoAnchor\EgoAnchor_Python
 
-## 命令
+$rawRoot = (Resolve-Path "data/experiments/experiment_1_2/raw").Path
+$taskDirs = @(
+    "task_1_static_head_motion"
+    "task_2_start_stop_6dof"
+    "task_3_continuous_translation"
+    "task_4_continuous_rotation"
+    "task_5_occlusion_recovery"
+) | ForEach-Object { Join-Path $rawRoot $_ }
+~~~
 
-在 `EgoAnchor_Python` 目录运行：
+五个 task 必须使用 variant_matrix_id=exp12_9_linear_v2，并完整记录九个 runtime。QC 不再
+接受缺少矩阵标识的历史八路数据。
 
-```powershell
-pixi run python -m compileall src
-pixi run python -m unittest discover -s src -p "test_*.py" -t src
+## 从 raw 重建
 
-$workbooks = @(
-    "data/analysis/complete/task_1_complete.xlsx"
-    "data/analysis/complete/task_2_complete.xlsx"
-    "data/analysis/complete/task_3_complete.xlsx"
-    "data/analysis/complete/task_4_complete.xlsx"
-    "data/analysis/complete/task_5_complete.xlsx"
-)
-
-pixi run python -m egoanchor.eval.cli build-paper @workbooks `
-    --out data/analysis/gpt_v4 `
-    --paper-root ../2026-EgoAnchor
-if ($LASTEXITCODE -ne 0) { throw "GPT v4 重建失败，退出码：$LASTEXITCODE" }
-```
-
-若从新 raw task 开始，先执行：
-
-```powershell
+~~~powershell
+$codeVersion = (git rev-parse --short HEAD).Trim()
 pixi run python -m egoanchor.eval.cli qc @taskDirs
-pixi run python -m egoanchor.eval.cli preprocess @taskDirs `
-    --out data/analysis/complete `
-    --code-version (git rev-parse --short HEAD)
-```
+if ($LASTEXITCODE -ne 0) { throw "QC 失败。" }
 
-`qc` 或 `preprocess` 失败时不要运行 `build-paper`。退出码 `1` 表示输入或文件系统错误，退出码 `2` 表示 schema/QC/分析契约错误。
+pixi run python -m egoanchor.eval.cli preprocess @taskDirs --out data/experiments/experiment_1_2/workbooks --code-version $codeVersion
+if ($LASTEXITCODE -ne 0) { throw "preprocess 失败。" }
+~~~
+
+preprocess 必须原子生成 task_1_complete.xlsx 到 task_5_complete.xlsx。任一 task 的硬 QC
+失败时，整批不开始发布。
+
+## 重建论文
+
+~~~powershell
+$workbookRoot = (Resolve-Path "data/experiments/experiment_1_2/workbooks").Path
+$workbooks = 1..5 | ForEach-Object {
+    Join-Path $workbookRoot ("task_{0}_complete.xlsx" -f $_)
+}
+
+pixi run python -m egoanchor.eval.cli build-paper @workbooks --out data/experiments/experiment_1_2/analysis --paper-root ..\2026-EgoAnchor
+if ($LASTEXITCODE -ne 0) { throw "论文分析失败。" }
+~~~
+
+冻结科学参数位于 src/egoanchor/eval/config/paper.toml。分析代码位于
+egoanchor.eval.paper_analysis，不保留旧分析包或 CLI 兼容入口。
 
 ## 输出
 
-`build-paper` 的可审计输出位于 `data/analysis/gpt_v4/`：
+本地分析目录：
 
-- `gpt_v4_manifest.json`：五本输入 XLSX 的 SHA-256 与参数文件名；
-- `data/experiment1_expanded_summary_v4.csv`：四系统完整表征；
-- `data/capture_alignment_candidate_metrics.csv`：同一候选的 capture/arrival 对齐比较；
-- `data/runtime_performance_audit_v4.json`：视觉后端性能审计。
+~~~text
+data/experiments/experiment_1_2/analysis/
+├─ metrics/
+│  ├─ experiment1_summary.csv
+│  ├─ capture_alignment.csv
+│  ├─ runtime_performance.json
+│  ├─ strategy_comparison_segments.csv
+│  └─ strategy_comparison_summary.csv
+├─ plots/
+│  └─ figure_plot_data.xlsx
+└─ provenance/
+   ├─ analysis_manifest.json
+   └─ build_result.json
+~~~
 
-论文目录固定写出：
+论文目录：
 
-- `figures/generated/experiment1_corrected_newdata.pdf/.png`；
-- `figures/generated/experiment2_corrected_newdata.pdf/.png`；
-- `tables/experiment1_corrected_newdata_v4.tex`；
-- `tables/experiment2_corrected_newdata_v4.tex`；
-- `egoanchor_cn_v6.tex`。
+~~~text
+2026-EgoAnchor/figures/panels/figure2a_...pdf 到 figure3d_...pdf
+2026-EgoAnchor/tables/experiment1_system_characterization.tex
+2026-EgoAnchor/tables/experiment2_design_attribution.tex
+2026-EgoAnchor/egoanchor_cn_v6.tex
+~~~
 
-GPT 参考包保留在 `2026-EgoAnchor/gpt-web-analysis/EgoAnchor_corrected_newdata_v4_package/`，只作为绘图和论文样式的审计参照，不作为正式数字输入。正式数字始终来自当前五本 XLSX。
+图 2 和图 3 都由 LaTeX subfigure 排成一行。图内不重复小标题；图 2(b) 不连接跨方法折线。
 
-## 复现与验收
+## 验证
 
-重建前后比较五本 XLSX 的 SHA-256；它们必须保持不变。重复运行 `build-paper` 时，CSV、表格、PNG/PDF 和主稿应保持科学内容一致；`gpt_v4_manifest.json` 中的输入 hash 必须相同。
+~~~powershell
+pixi run python -m compileall src
+pixi run python -m unittest discover -s src -p "test_*.py" -t src
 
-论文编译命令：
-
-```powershell
-Set-Location ../2026-EgoAnchor
+Set-Location ..\2026-EgoAnchor
 latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
-```
+~~~
 
-用 Poppler 渲染 PDF 第 6--8 页检查实验段落、表格、图注和图形；图中不能出现裁切、重叠、旧文件名或未格式化的长小数。主稿不依赖 `generated/exp*.tex`，移走分析输出后仍应能编译。
-
-## 边界
-
-- 初始 XLSX 是 Stage 1 事实桥梁，不能被 GPT 脚本改写或替换为 GPT 包里的汇总 XLSX。
-- 新管线不保留旧 `eval/analysis`、`eval/publishing` 或旧 `analyze/publish/materialize-paper` 入口；不要恢复兼容层。
-- 新增科学参数只能写入 `src/egoanchor/eval/config/gpt_v4.toml`，每行保留中文注释。
-- 论文正文使用 median [Q1, Q3] 和明确的样本数；不同场景不混成一个全局排名。
+重建前后应核对五本 Stage 1 XLSX 的 SHA-256。图表、CSV 和主稿可以重建，但 raw、
+工作簿与 strategy_label_migration.json 不能由分析阶段改写。

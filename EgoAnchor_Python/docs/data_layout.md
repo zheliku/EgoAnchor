@@ -1,0 +1,54 @@
+# 实验数据目录
+
+实验一/二的数据固定放在 EgoAnchor_Python/data/experiments/experiment_1_2/。目录不再带
+v1、v2、v3 或分析实现版本号；数据身份由 manifest、工作簿 SHA-256 和 provenance
+文件确定。
+
+~~~text
+data/
+├─ eval/                              # 新采集 session 的暂存区
+└─ experiments/
+   └─ experiment_1_2/
+      ├─ raw/
+      │  ├─ task_1_static_head_motion/
+      │  ├─ task_2_start_stop_6dof/
+      │  ├─ task_3_continuous_translation/
+      │  ├─ task_4_continuous_rotation/
+      │  └─ task_5_occlusion_recovery/
+      ├─ workbooks/
+      │  ├─ task_1_complete.xlsx
+      │  ├─ ...
+      │  └─ task_5_complete.xlsx
+      ├─ analysis/
+      │  ├─ metrics/                  # 完整精度 CSV/JSON
+      │  ├─ plots/
+      │  │  └─ figure_plot_data.xlsx # 图 2、图 3 的逐点数据
+      │  └─ provenance/               # 输入 hash 与构建结果
+      └─ provenance/
+         └─ strategy_label_migration.json
+~~~
+
+## 各层职责
+
+data/eval/ 只接收 Unity/Python 新生成的 session 目录。Mutagen 同步、两端停止和 QC
+完成前，不移动或重命名其中的 session。
+
+raw/ 是当前论文数据的只读归档。五个目录按物理任务命名，内部仍保留原始 session_id、
+来源行号和固定 JSON/JSONL 文件名。替换正式批次时必须一次替换五项任务，不能按场景挑选
+不同批次。
+
+workbooks/ 是 Stage 1 输出，也是 build-paper 的唯一输入。工作簿完整保留 raw 行、来源
+SHA-256 和 QC 结果。可以只读查看，不能在 Excel 中保存后继续用于正式分析。
+
+analysis/metrics/ 保存完整精度指标，供审计和复算使用。analysis/plots/figure_plot_data.xlsx
+只整理图中实际显示的数据点，含 README、Figure2 和 Figure3 三个 sheet；它不是新的统计
+输入。
+
+provenance/strategy_label_migration.json 保存当前批次完成策略身份统一时的文件摘要。该文件
+属于数据来源记录，不能作为可删除的普通中间产物处理。
+
+## 发布边界
+
+论文图和表发布到 2026-EgoAnchor/figures/panels/ 与 2026-EgoAnchor/tables/。这些文件由
+分析代码生成，不从历史结果包复制。原始数据、Stage 1 工作簿和本地分析目录均由
+.gitignore 排除；Git 只跟踪代码、目录说明、论文源稿和正式图表。

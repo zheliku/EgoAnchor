@@ -1,6 +1,0 @@
-session_id,unit_count,candidate_count,aurc_mm_median,aurc_mm_iqr,baseline_admission_count,eligible_candidate_count,excluded_candidate_count,excluded_no_pose_count,excluded_no_aligned_raw_count,excluded_invalid_reference_count,excluded_incomplete_context_count
-20260717_203329_controller_right,4,709,4.443106611508615,0.27047634606669924,864,709,155,0,0,2,155
-20260717_203749_controller_right,5,797,9.71848367341062,1.7805386909041747,886,797,89,0,0,2,89
-20260717_204156_controller_right,18,388,19.755295370972817,5.9212273555135155,699,388,311,123,123,2,311
-20260717_204943_controller_right,3,628,4.896604745026698,0.8926792619535195,767,628,139,0,0,2,139
-20260717_205539_controller_right,14,353,1.6481166603530388,0.7772758391884165,787,353,434,211,211,2,253

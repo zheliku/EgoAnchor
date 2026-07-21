@@ -1,7 +1,7 @@
 """EgoAnchor 运行时评估基础设施的包级入口。
 
-这里仅导出 schema-v2、QC 和 Stage 1 workbook 桥梁。GPT v4 论文分析从
-``egoanchor.eval.gpt_v4`` 或 ``egoanchor.eval.cli`` 显式进入，避免运行时服务
+这里仅导出 schema-v2、QC 和 Stage 1 workbook 桥梁。论文分析从
+``egoanchor.eval.paper_analysis`` 或 ``egoanchor.eval.cli`` 显式进入，避免运行时服务
 初始化时加载绘图、PDF 和 XLSX 分析依赖。
 """
 from .preprocess import (

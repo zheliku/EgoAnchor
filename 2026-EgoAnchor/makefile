@@ -1,4 +1,4 @@
-VERSIONS := 1 2 3 4 5 6
+VERSIONS := 6
 OUTDIR := pdf
 TEXFILES := $(addprefix egoanchor_cn_v,$(addsuffix .tex,$(VERSIONS)))
 PDFFILES := $(addprefix $(OUTDIR)/egoanchor_cn_v,$(addsuffix .pdf,$(VERSIONS)))
