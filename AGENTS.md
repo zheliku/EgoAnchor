@@ -146,7 +146,7 @@ schema-v2 task directory
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本。
 - 主稿由 `build-paper` 从当前 XLSX 指标完整写出；表格内容内联，PDF 面板保持外部依赖。
-- 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖。
+- 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。`data/eval/` 只作为新采集暂存入口，不保存已归档 session；旧 `data/eval/` 与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
@@ -295,7 +295,7 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 
 - Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板保留 Predict-to-Now、Hermite 与 Linear/SLERP 三路对比。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板保留 Predict-to-Now、Hermite 与 Linear/SLERP 三路对比。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。

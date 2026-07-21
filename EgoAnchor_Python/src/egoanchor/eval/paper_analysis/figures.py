@@ -80,7 +80,12 @@ def _save_pair(figure: Any, root: Path, stem: str) -> tuple[Path, Path]:
     png = root / f"{stem}.png"
     pdf = root / f"{stem}.pdf"
     figure.savefig(png, bbox_inches="tight", pad_inches=0.06)
-    figure.savefig(pdf, bbox_inches="tight", pad_inches=0.06)
+    figure.savefig(
+        pdf,
+        bbox_inches="tight",
+        pad_inches=0.06,
+        metadata={"CreationDate": None, "ModDate": None},
+    )
     plt.close(figure)
     return png, pdf
 
@@ -255,7 +260,7 @@ def _paired_axis(
     full: np.ndarray,
     disabled: np.ndarray,
     ylabel: str,
-    labels: tuple[str, str] = ("Enabled", "Disabled"),
+    labels: tuple[str, str] = ("On", "Off"),
     logarithmic: bool = False,
     endpoint_colors: tuple[str, str] = (_FULL_COLOR, _DISABLED_COLOR),
 ) -> None:
@@ -295,7 +300,7 @@ def _paired_panel(
     full: np.ndarray,
     disabled: np.ndarray,
     ylabel: str,
-    labels: tuple[str, str] = ("Enabled", "Disabled"),
+    labels: tuple[str, str] = ("On", "Off"),
     logarithmic: bool = False,
     endpoint_colors: tuple[str, str] = (_FULL_COLOR, _DISABLED_COLOR),
 ) -> Any:
