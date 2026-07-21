@@ -15,7 +15,7 @@ EgoAnchor_Python/data/experiments/experiment_1_2/raw/
 └─ task_5_occlusion_recovery/
 ~~~
 
-每项任务都必须包含 manifest、python_session、七个固定 JSONL 和已物化的 events.jsonl。
+每项任务都必须包含 manifest、python_session、六个源 JSONL 和已物化的 events.jsonl。
 五个 manifest 使用同一个配置 hash 和 variant_matrix_id=exp12_9_linear_v2。正式
 EgoAnchor 采用 Kalman Linear/SLERP；EgoAnchor Hermite 只作为图 3(d) 的插值器对照。
 

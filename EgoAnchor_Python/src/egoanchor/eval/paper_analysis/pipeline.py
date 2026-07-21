@@ -10,7 +10,7 @@ from typing import Any
 from .figures import publish_figures
 from .metrics import analyze_workbooks
 from .paper import write_paper
-from .settings import load_settings
+from .settings import load_settings, settings_sha256
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")
@@ -42,12 +42,11 @@ def build_paper(
     workbooks: tuple[Path, ...],
     output_root: Path,
     paper_root: Path,
-    settings_path: Path | None = None,
 ) -> dict[str, Any]:
     """只读取五本 Stage 1 XLSX，发布图、表和中文主稿。"""
 
     normalized = _validate_inputs(workbooks, output_root)
-    settings = load_settings(settings_path)
+    settings = load_settings()
     results = analyze_workbooks(normalized, settings)
     figure_paths = publish_figures(results, paper_root.expanduser().resolve())
     paper_paths = write_paper(
@@ -59,6 +58,7 @@ def build_paper(
         "passed": True,
         "input_workbooks": [str(path) for path in normalized],
         "input_sha256": dict(results.workbook_sha256),
+        "parameters_sha256": settings_sha256(),
         "figure_paths": {key: str(value) for key, value in figure_paths.items()},
         "paper_paths": {key: str(value) for key, value in paper_paths.items()},
         "performance": dict(results.performance),

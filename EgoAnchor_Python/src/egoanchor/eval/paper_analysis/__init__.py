@@ -10,7 +10,7 @@ from .metrics import (
 )
 from .paper import write_paper
 from .pipeline import build_paper
-from .settings import PaperSettings, load_settings
+from .settings import PaperSettings, load_settings, settings_sha256
 from .xlsx import iter_rows, workbook_sha256
 
 
@@ -27,6 +27,7 @@ __all__ = [
     "load_settings",
     "paired_metric_matrix",
     "publish_figures",
+    "settings_sha256",
     "workbook_sha256",
     "write_paper",
 ]

@@ -301,7 +301,8 @@ def _paired_panel(
 ) -> Any:
     """创建可直接放入 LaTeX 子图的单个配对面板。"""
 
-    figure, axis = plt.subplots(figsize=(1.52, 2.18))
+    # LaTeX 以 0.18\textwidth 放置前三个图三面板；原生宽度与目标宽度一致可避免字体缩小。
+    figure, axis = plt.subplots(figsize=(1.26, 2.18))
     _paired_axis(axis, full, disabled, ylabel, labels, logarithmic, endpoint_colors)
     figure.tight_layout()
     return figure
@@ -310,7 +311,6 @@ def _paired_panel(
 def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
     """绘制三个真实运行时时序策略的 lag--residual 分布。"""
 
-    variants = (NO_TEMPORAL_SYNTHESIS, HERMITE_VARIANT, FULL_VARIANT)
     labels = ("Predict-to-Now", "Hermite", "Linear/SLERP")
     colors = (_DISABLED_COLOR, _HERMITE_COLOR, _FULL_COLOR)
     markers = ("X", "D", "o")
@@ -323,8 +323,8 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
             alpha=0.20,
             zorder=1,
         )
-    for index, (variant, label, color, marker) in enumerate(
-        zip(variants, labels, colors, markers, strict=True)
+    for index, (label, color, marker) in enumerate(
+        zip(labels, colors, markers, strict=True)
     ):
         points = paired_points[:, index, :]
         axis.scatter(

@@ -9,8 +9,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .paper_analysis.pipeline import build_paper
-from .paper_analysis.settings import DEFAULT_SETTINGS_PATH
+from .paper_analysis import build_paper
 from .preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
@@ -30,7 +29,7 @@ EXIT_DATA_ERROR = 2
 """schema、QC 或论文输入契约失败。"""
 
 STAGE_COMMANDS = ("qc", "preprocess", "build-paper")
-"""保留 Stage 1 桥梁并替换旧 Stage 2/3 的唯一命令集合。"""
+"""正式离线分析允许使用的唯一命令集合。"""
 
 _TASK_DIRECTORY_PATTERN = re.compile(r"^task_(?P<task_number>[1-9][0-9]*)_")
 
@@ -56,7 +55,6 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("workbooks", nargs="+", type=Path, help="五本初始 XLSX")
     build.add_argument("--out", required=True, type=Path, help="论文指标、绘图数据和 provenance 目录")
     build.add_argument("--paper-root", required=True, type=Path, help="论文根目录")
-    build.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     build.set_defaults(handler=_run_build_paper)
     return parser
 
@@ -137,7 +135,7 @@ def _run_preprocess(args: argparse.Namespace) -> int:
 def _run_build_paper(args: argparse.Namespace) -> int:
     """运行论文分析单入口；失败时不把错误结果标成成功。"""
 
-    payload = build_paper(tuple(args.workbooks), args.out, args.paper_root, args.settings)
+    payload = build_paper(tuple(args.workbooks), args.out, args.paper_root)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return EXIT_OK
 

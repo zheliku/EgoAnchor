@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,10 +43,16 @@ class PaperSettings:
     """遮挡灾难性失效阈值。"""
 
 
-def load_settings(path: Path | None = None) -> PaperSettings:
-    """读取并校验论文分析 TOML 参数。"""
+def settings_sha256() -> str:
+    """返回冻结论文参数文件的 SHA-256。"""
 
-    source = (path or DEFAULT_SETTINGS_PATH).expanduser().resolve()
+    return hashlib.sha256(DEFAULT_SETTINGS_PATH.read_bytes()).hexdigest()
+
+
+def load_settings() -> PaperSettings:
+    """从唯一入口读取并校验论文分析 TOML 参数。"""
+
+    source = DEFAULT_SETTINGS_PATH.resolve()
     with source.open("rb") as handle:
         document = tomllib.load(handle)
     contract = document["contract"]
@@ -72,4 +79,4 @@ def load_settings(path: Path | None = None) -> PaperSettings:
     return settings
 
 
-__all__ = ["DEFAULT_SETTINGS_PATH", "PaperSettings", "load_settings"]
+__all__ = ["DEFAULT_SETTINGS_PATH", "PaperSettings", "load_settings", "settings_sha256"]

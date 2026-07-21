@@ -1,4 +1,4 @@
-"""Stage 1 workbook 与 Stage 2 CSV 的结构化数据契约。"""
+"""Stage 1 workbook 的结构化数据契约。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ DATA_TYPES = ("text", "int", "float", "bool", "datetime", "json")
 
 @dataclass(frozen=True, slots=True)
 class ColumnContract:
-    """描述一个 sheet 或 CSV 表的列语义。"""
+    """描述一个 sheet 的列语义。"""
 
     name: str
     """稳定机器列名。"""
@@ -48,13 +48,13 @@ class ColumnContract:
 
 @dataclass(frozen=True, slots=True)
 class ForeignKeyContract:
-    """描述一个跨 sheet 或跨 CSV 表的稳定外键。"""
+    """描述一个跨 sheet 的稳定外键。"""
 
     columns: tuple[str, ...]
     """当前表参与连接的列。"""
 
     ref_sheet: str
-    """被引用的 sheet 或 CSV 表名。"""
+    """被引用的 sheet 名。"""
 
     ref_columns: tuple[str, ...]
     """被引用表的主键列。"""

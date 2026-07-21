@@ -25,6 +25,7 @@ from .metrics import (
     paired_metric_matrix,
     segment_identity,
 )
+from .settings import DEFAULT_SETTINGS_PATH, settings_sha256
 
 
 def _fmt(value: float, digits: int = 3) -> str:
@@ -861,7 +862,8 @@ def write_paper(
         json.dumps(
             {
                 "inputs": dict(results.workbook_sha256),
-                "parameters": "paper.toml",
+                "parameters": DEFAULT_SETTINGS_PATH.name,
+                "parameters_sha256": settings_sha256(),
                 "temporal_evidence": "actual_runtime",
                 "output_strategy": "linear_slerp",
             },

@@ -20,7 +20,7 @@ FULL_VARIANT = "EgoAnchor"
 """正式论文中完整 Linear/SLERP 系统的 variant ID。"""
 
 HERMITE_VARIANT = "EgoAnchor Hermite"
-"""v3 中保留的 Hermite 对照 variant ID。"""
+"""当前正式批次保留的 Hermite 对照 variant ID。"""
 
 METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 """实验一正式比较的四种系统配置。"""

@@ -17,6 +17,7 @@ from egoanchor.eval.paper_analysis import (
     build_translation_panel,
     iter_rows,
     paired_metric_matrix,
+    settings_sha256,
 )
 
 
@@ -27,6 +28,16 @@ class PaperPipelineTests(unittest.TestCase):
         """旧 analyze/publish/materialize 命令不得作为兼容层保留。"""
 
         self.assertEqual(eval_cli.STAGE_COMMANDS, ("qc", "preprocess", "build-paper"))
+
+    def test_formal_cli_does_not_allow_parameter_overrides(self) -> None:
+        """正式论文入口只能读取冻结的 paper.toml。"""
+
+        arguments = eval_cli.build_parser().parse_args(
+            ["build-paper", "task_1_complete.xlsx", "--out", "analysis", "--paper-root", "paper"]
+        )
+
+        self.assertFalse(hasattr(arguments, "settings"))
+        self.assertEqual(len(settings_sha256()), 64)
 
     def test_xlsx_reader_streams_selected_columns_from_stage_one_sheet(self) -> None:
         """新分析 reader 直接消费 Stage 1 sheet，不改写原始 workbook。"""
