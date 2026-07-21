@@ -57,12 +57,12 @@ t_target = t_render - delay(t)
 | Arrival-Hold | Arrival time | 合法性 | ConstantVelocity | Hold | 关 | 基线 |
 | Capture-Hold | Capture time | 合法性 | ConstantVelocity | Hold | 关 | 基线 |
 | One-Euro Anchor | Capture time | VCD | OneEuro | LinearSlerp | 关 | 与完整系统相同 |
-| EgoAnchor | Capture time | VCD | Kalman | Hermite | 开 | 完整 |
-| EgoAnchor Linear/SLERP | Capture time | VCD | Kalman | LinearSlerp | 开 | 完整；配对策略候选 |
-| EgoAnchor w/o capture-time alignment | Arrival time | VCD | Kalman | Hermite | 开 | 完整 |
-| EgoAnchor w/o VCD | Capture time | 合法性 | Kalman | Hermite | 开 | 仅关闭 VCD 相关低分重获取 |
+| EgoAnchor | Capture time | VCD | Kalman | LinearSlerp | 开 | 完整 |
+| EgoAnchor Hermite | Capture time | VCD | Kalman | Hermite | 开 | 插值器配对对照 |
+| EgoAnchor w/o capture-time alignment | Arrival time | VCD | Kalman | LinearSlerp | 开 | 完整 |
+| EgoAnchor w/o VCD | Capture time | 合法性 | Kalman | LinearSlerp | 开 | 仅关闭 VCD 相关低分重获取 |
 | EgoAnchor w/o temporal synthesis | Capture time | VCD | Kalman | PredictToNow | 开 | 完整 |
-| EgoAnchor w/o StaticLock | Capture time | VCD | Kalman | Hermite | 关 | 完整 |
+| EgoAnchor w/o StaticLock | Capture time | VCD | Kalman | LinearSlerp | 关 | 完整 |
 
 历史 v2 的 One-Euro 是 `OneEuroModel + RawPassthroughStrategy`，历史 w/o temporal synthesis 是 `ConstantVelocityModel + RawPassthroughStrategy`。旧名只用于解释既有数据 provenance，不得恢复为当前 Unity 类，也不得与新重采数据混合。
 
@@ -92,7 +92,7 @@ t_target = t_render - delay(t)
 
 ### StaticLock
 
-正式场景中，完整 EgoAnchor、Linear/SLERP 配对候选以及保留 StaticLock 的三个消融必须使用同一组序列化参数。当前旋转相关冻结值包括：
+正式场景中，完整 EgoAnchor、Hermite 配对对照以及保留 StaticLock 的三个消融必须使用同一组序列化参数。当前旋转相关冻结值包括：
 
 - `enterAngSpeedDps=22`
 - `unlockDriftDegrees=12`
@@ -104,7 +104,7 @@ t_target = t_render - delay(t)
 
 ## 场景与日志
 
-正式场景 `EgoAnchor-Experiment12.unity` 使用九个唯一 runtime，由一个 `AnchorRuntimeHub` 分发同一候选流：四个实验一配置、四个实验二单组件消融，以及一个 `EgoAnchor Linear/SLERP` 配对策略候选。实验一和实验二共享完整 EgoAnchor runtime，避免同一方法出现两套内部状态。
+正式场景 `EgoAnchor-Experiment12.unity` 使用九个唯一 runtime，由一个 `AnchorRuntimeHub` 分发同一候选流：四个实验一配置、四个实验二单组件消融，以及一个 `EgoAnchor Hermite` 配对策略对照。实验一和实验二共享采用 Linear/SLERP 的完整 EgoAnchor runtime，避免同一方法出现两套内部状态。
 
 每个 variant 的 manifest 配置必须包含：
 
@@ -113,7 +113,7 @@ t_target = t_render - delay(t)
 - 覆盖坐标补偿、模型、策略、生命周期和 StaticLock 数值的 `configuration_fingerprint`
 - 绑定完整指纹的 per-variant `config_hash`
 
-Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景验证带 `variant_matrix_id=exp12_9_strategy_v1` 的九路组件矩阵，并强制完整参数指纹；无该标识的已发布 v2 八路归档按其历史方法字符串和旧哈希字段顺序复现。当前数据缺失指纹、字符串布尔值、名称与组件错配或任意缺项都会阻止正式发布。
+Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景和完成策略身份统一的 v3 批次都使用 `variant_matrix_id=exp12_9_linear_v2`：完整系统及三个组件对照采用 Linear/SLERP，Hermite 只保留为独立插值器对照。无矩阵标识的已发布 v2 八路归档继续按历史方法字符串和旧哈希字段顺序复现。配置缺失指纹、字符串布尔值、名称与组件错配或任意缺项都会阻止正式发布。
 
 ## 验证
 

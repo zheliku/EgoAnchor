@@ -18,7 +18,7 @@ FORMAL_VARIANTS = {
     "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
     "One-Euro Anchor": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
-    "EgoAnchor Linear/SLERP": ("CaptureTime", True, True, True, True, True, True),
+    "EgoAnchor Hermite": ("CaptureTime", True, True, True, True, True, True),
     "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
     "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
     "EgoAnchor w/o temporal synthesis": ("CaptureTime", True, True, False, True, True, True),
@@ -30,12 +30,12 @@ FORMAL_METHODS = {
     "Arrival-Hold": ("cv", "hold", "disabled"),
     "Capture-Hold": ("cv", "hold", "disabled"),
     "One-Euro Anchor": ("oneeuro", "linear_slerp", "enabled"),
-    "EgoAnchor": ("kalman", "hermite", "enabled"),
-    "EgoAnchor Linear/SLERP": ("kalman", "linear_slerp", "enabled"),
-    "EgoAnchor w/o capture-time alignment": ("kalman", "hermite", "enabled"),
-    "EgoAnchor w/o VCD": ("kalman", "hermite", "disabled"),
+    "EgoAnchor": ("kalman", "linear_slerp", "enabled"),
+    "EgoAnchor Hermite": ("kalman", "hermite", "enabled"),
+    "EgoAnchor w/o capture-time alignment": ("kalman", "linear_slerp", "enabled"),
+    "EgoAnchor w/o VCD": ("kalman", "linear_slerp", "disabled"),
     "EgoAnchor w/o temporal synthesis": ("kalman", "predict_to_now", "enabled"),
-    "EgoAnchor w/o StaticLock": ("kalman", "hermite", "enabled"),
+    "EgoAnchor w/o StaticLock": ("kalman", "linear_slerp", "enabled"),
 }
 """下一轮正式采集冻结的运动模型、时序策略和质量门控组合。"""
 
@@ -69,8 +69,8 @@ CURRENT_FORMAL_VARIANT_IDS = frozenset(FORMAL_VARIANTS)
 ARCHIVED_V2_VARIANT_IDS = frozenset(ARCHIVED_V2_FORMAL_VARIANTS)
 """已发布 v2 原始归档使用的八路 variant；保留其可复现 QC。"""
 
-CURRENT_VARIANT_MATRIX_ID = "exp12_9_strategy_v1"
-"""当前 Unity manifest 写入的九路矩阵标识。"""
+CURRENT_VARIANT_MATRIX_ID = "exp12_9_linear_v2"
+"""当前 Unity manifest 写入的严格 Linear/SLERP 单组件消融九路矩阵标识。"""
 
 SCORE_FIELDS = (
     "vcd_score",
@@ -524,11 +524,12 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
         state.error("variant_manifest", "manifest 必须包含 variant_configs 和 variant_definitions 数组。")
         return {}
     matrix_id = _text(manifest.get("variant_matrix_id"))
-    if matrix_id and matrix_id != CURRENT_VARIANT_MATRIX_ID:
+    known_nine_matrix = matrix_id == CURRENT_VARIANT_MATRIX_ID
+    if matrix_id and not known_nine_matrix:
         state.error("variant_matrix_id", f"未知 variant_matrix_id：{matrix_id}")
-    is_current_matrix = bool(matrix_id)
-    expected_variants = FORMAL_VARIANTS if is_current_matrix else ARCHIVED_V2_FORMAL_VARIANTS
-    expected_methods = FORMAL_METHODS if is_current_matrix else ARCHIVED_V2_FORMAL_METHODS
+    is_nine_matrix = bool(matrix_id)
+    expected_variants = FORMAL_VARIANTS if is_nine_matrix else ARCHIVED_V2_FORMAL_VARIANTS
+    expected_methods = FORMAL_METHODS if is_nine_matrix else ARCHIVED_V2_FORMAL_METHODS
     configs: dict[str, Mapping[str, Any]] = {}
     for item in raw_configs:
         if not isinstance(item, Mapping):
@@ -579,7 +580,7 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
         if method != expected_methods[variant_id]:
             state.error("variant_method", f"variant 模型、时序策略或门控与冻结定义不符：{variant_id}")
         configuration_fingerprint = _text(config.get("configuration_fingerprint"))
-        if is_current_matrix:
+        if is_nine_matrix:
             if not configuration_fingerprint:
                 state.error("variant_fingerprint", f"variant 缺少完整参数指纹：{variant_id}")
             computed = variant_config_hash(
@@ -614,7 +615,7 @@ def _check_variants(manifest: Mapping[str, Any], state: _QcState) -> dict[str, _
     declared_definition_ids = frozenset(definition_ids)
     if config_ids != declared_definition_ids:
         state.error("variant_count", "variant_configs 与 variant_definitions 的 variant 集合不一致。")
-    expected_ids = CURRENT_FORMAL_VARIANT_IDS if is_current_matrix else ARCHIVED_V2_VARIANT_IDS
+    expected_ids = CURRENT_FORMAL_VARIANT_IDS if is_nine_matrix else ARCHIVED_V2_VARIANT_IDS
     if config_ids != expected_ids or declared_definition_ids != expected_ids:
         state.error(
             "variant_count",

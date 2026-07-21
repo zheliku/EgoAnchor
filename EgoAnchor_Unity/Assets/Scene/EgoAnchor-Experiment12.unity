@@ -362,7 +362,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2518c50cb3fc6a6458d4b743c2f69c7d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.PointableCanvasModule
   m_SendPointerHoverToParent: 1
   _useInitialPressPositionForDrag: 1
@@ -2834,7 +2834,7 @@ MonoBehaviour:
     anchorTransform: {fileID: 7500000003}
     anchorPresenter: {fileID: 7500000002}
     isPrimary: 0
-  - label: EgoAnchor Linear/SLERP
+  - label: EgoAnchor Hermite
     runtime: {fileID: 7600000001}
     anchorTransform: {fileID: 7600000003}
     anchorPresenter: {fileID: 7600000002}
@@ -4406,7 +4406,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 1039886368}
   smoothingStrategy: {fileID: 1039886367}
-  strategyLabel: 
+  strategyLabel: kalman_linear_slerp
   enableQualityGate: 1
   minQualityScore: 0.2
   staticLockModule: {fileID: 1039886369}
@@ -4433,13 +4433,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 1039886364}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
 --- !u!114 &1039886368
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7956,13 +7954,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 7200000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
 --- !u!114 &7200000015
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8172,13 +8168,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 7300000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
 --- !u!114 &7300000015
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8428,7 +8422,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6f4c6b8fcb214d75823f5c477c6d9c11, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PredictToNowStrategy
 --- !u!1 &7500000000
 GameObject:
@@ -8599,13 +8593,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 7500000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
+  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
-  spline: 0
-  hermiteTangentChordRatio: 3
 --- !u!1 &7600000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -8618,7 +8610,7 @@ GameObject:
   - component: {fileID: 7600000002}
   - component: {fileID: 7600000001}
   m_Layer: 0
-  m_Name: AnchorObject - EgoAnchor Linear-SLERP
+  m_Name: AnchorObject - EgoAnchor Hermite
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8698,7 +8690,7 @@ GameObject:
   - component: {fileID: 7600000014}
   - component: {fileID: 7600000015}
   m_Layer: 0
-  m_Name: Policy - EgoAnchor Linear-SLERP
+  m_Name: Policy - EgoAnchor Hermite
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8733,7 +8725,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7600000013}
   smoothingStrategy: {fileID: 7600000014}
-  strategyLabel: kalman_linear_slerp
+  strategyLabel: kalman_hermite
   enableQualityGate: 1
   minQualityScore: 0.2
   staticLockModule: {fileID: 7600000015}
@@ -8776,11 +8768,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7600000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c31ba73ae4134e49b42eca7c3840eada, type: 3}
+  m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
   m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.LinearSlerpStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
+  spline: 0
+  hermiteTangentChordRatio: 3
 --- !u!114 &7600000015
 MonoBehaviour:
   m_ObjectHideFlags: 0

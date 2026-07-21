@@ -1033,7 +1033,7 @@ namespace EgoAnchor.Tests
             "Capture-Hold",
             "One-Euro Anchor",
             "EgoAnchor",
-            "EgoAnchor Linear/SLERP",
+            "EgoAnchor Hermite",
             "EgoAnchor w/o capture-time alignment",
             "EgoAnchor w/o VCD",
             "EgoAnchor w/o temporal synthesis",
@@ -1048,7 +1048,7 @@ namespace EgoAnchor.Tests
             try
             {
                 KalmanModel model = owner.AddComponent<KalmanModel>();
-                HermiteStrategy smoothing = owner.AddComponent<HermiteStrategy>();
+                LinearSlerpStrategy smoothing = owner.AddComponent<LinearSlerpStrategy>();
                 EgoAnchorStaticLockModule staticLock = owner.AddComponent<EgoAnchorStaticLockModule>();
                 AnchorPolicyHost host = owner.AddComponent<AnchorPolicyHost>();
                 SetPrivateField(host, "motionModel", model);
@@ -1427,12 +1427,12 @@ namespace EgoAnchor.Tests
             AssertVariantConfig(yaml, "Arrival-Hold", 1, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "One-Euro Anchor", 0, 1, "OneEuroModel", "LinearSlerpStrategy", false, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor Linear/SLERP", 0, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "HermiteStrategy", true, 0, 1);
+            AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor Hermite", 0, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "LinearSlerpStrategy", true, 0, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "KalmanModel", "PredictToNowStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "HermiteStrategy", false, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "LinearSlerpStrategy", false, 1, 1);
         }
 
         /// <summary>Hub 层级必须按实验一与实验二分组，完整 EgoAnchor 只保留一个共享 runtime。</summary>
@@ -1453,7 +1453,7 @@ namespace EgoAnchor.Tests
             AssertVariantParent(yaml, "Capture-Hold", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "One-Euro Anchor", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "EgoAnchor", experiment1Transform, experiment1Section);
-            AssertVariantParent(yaml, "EgoAnchor Linear/SLERP", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "EgoAnchor Hermite", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o capture-time alignment", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o VCD", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o temporal synthesis", experiment2Transform, experiment2Section);

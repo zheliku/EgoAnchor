@@ -11,11 +11,6 @@ from .figures import publish_figures
 from .metrics import analyze_workbooks
 from .paper import write_paper
 from .settings import load_settings
-from .temporal_replay import (
-    publish_temporal_replay_figure,
-    run_temporal_replay,
-    temporal_replay_summary,
-)
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")
@@ -54,23 +49,11 @@ def build_paper(
     normalized = _validate_inputs(workbooks, output_root)
     settings = load_settings(settings_path)
     results = analyze_workbooks(normalized, settings)
-    replay_paths = run_temporal_replay(
-        normalized,
-        output_root.expanduser().resolve() / "temporal_replay",
-        scenario="start_stop_6dof",
-    )
-    replay_summary = temporal_replay_summary(replay_paths["metrics"])
     figure_paths = publish_figures(results, paper_root.expanduser().resolve())
-    replay_figure_paths = publish_temporal_replay_figure(
-        replay_paths["metrics"],
-        paper_root.expanduser().resolve() / "figures" / "panels" / "exp2d_temporal_replay.pdf",
-        paper_root.expanduser().resolve() / "figures" / "panels" / "exp2d_temporal_replay.png",
-    )
     paper_paths = write_paper(
         results,
         paper_root.expanduser().resolve(),
         output_root.expanduser().resolve(),
-        replay_summary,
     )
     payload = {
         "passed": True,
@@ -78,8 +61,6 @@ def build_paper(
         "input_sha256": dict(results.workbook_sha256),
         "figure_paths": {key: str(value) for key, value in figure_paths.items()},
         "paper_paths": {key: str(value) for key, value in paper_paths.items()},
-        "temporal_replay_paths": {key: str(value) for key, value in replay_paths.items()},
-        "temporal_replay_figure_paths": {key: str(value) for key, value in replay_figure_paths.items()},
         "performance": dict(results.performance),
     }
     output_root.mkdir(parents=True, exist_ok=True)

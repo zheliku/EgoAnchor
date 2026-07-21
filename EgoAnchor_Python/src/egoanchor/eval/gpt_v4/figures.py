@@ -16,11 +16,14 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from .metrics import (
     FULL_VARIANT,
+    HERMITE_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
     NO_TEMPORAL_SYNTHESIS,
     NO_VCD,
     GptV4Results,
+    paired_metric_matrix,
+    segment_identity,
 )
 
 
@@ -28,17 +31,18 @@ _SHORT_LABELS = {
     "Arrival-Hold": "Arrival",
     "Capture-Hold": "Capture",
     "One-Euro Anchor": "One-Euro",
-    "EgoAnchor": "EgoAnchor",
+    FULL_VARIANT: "EgoAnchor",
 }
 _METHOD_COLORS = {
     "Arrival-Hold": "#4C78A8",
     "Capture-Hold": "#59A14F",
     "One-Euro Anchor": "#F28E2B",
-    "EgoAnchor": "#E15759",
+    FULL_VARIANT: "#E15759",
 }
 _PAIR_COLOR = "#7F8790"
-_FULL_COLOR = _METHOD_COLORS["EgoAnchor"]
+_FULL_COLOR = _METHOD_COLORS[FULL_VARIANT]
 _DISABLED_COLOR = "#B07AA1"
+_HERMITE_COLOR = "#2A9D8F"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
 _DYNAMIC_X_TICKS = (150, 200, 250, 300, 350, 400)
@@ -54,12 +58,12 @@ def _configure() -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 10.2,
-            "axes.titlesize": 12.5,
-            "axes.labelsize": 10.6,
-            "xtick.labelsize": 9.0,
-            "ytick.labelsize": 9.0,
-            "legend.fontsize": 8.8,
+            "font.size": 8.2,
+            "axes.titlesize": 9.4,
+            "axes.labelsize": 8.2,
+            "xtick.labelsize": 7.2,
+            "ytick.labelsize": 7.2,
+            "legend.fontsize": 7.0,
             "axes.linewidth": 0.9,
             "savefig.dpi": 260,
         }
@@ -140,7 +144,7 @@ def _values(rows: Mapping[str, tuple[Mapping[str, Any], ...]], variant: str, key
     return values
 
 
-def _point_panel(
+def build_point_panel(
     data: Mapping[str, np.ndarray],
     title: str,
     ylabel: str,
@@ -148,7 +152,7 @@ def _point_panel(
 ) -> Any:
     """绘制四系统片段散点与箱线分布。"""
 
-    figure, axis = plt.subplots(figsize=(4.55, 3.65))
+    figure, axis = plt.subplots(figsize=(3.5, 2.45))
     positions = np.arange(len(METHODS))
     for values in paired_values:
         axis.plot(
@@ -170,6 +174,7 @@ def _point_panel(
             alpha=0.26,
             marker=_MARKERS[index],
             color=color,
+            label=_SHORT_LABELS[method],
             zorder=2,
         )
         box = axis.boxplot(
@@ -200,46 +205,29 @@ def _point_panel(
         )
     axis.set_xticks(positions, [_SHORT_LABELS[method] for method in METHODS], rotation=16, ha="right")
     axis.set_ylabel(ylabel)
-    axis.set_title(title, loc="left", fontweight="bold", pad=15)
+    axis.set_title(title, loc="left", fontweight="bold", pad=34)
     axis.set_ylim(bottom=0)
     _clean_axis(axis)
+    axis.legend(
+        frameon=False,
+        ncol=2,
+        loc="lower right",
+        bbox_to_anchor=(1.0, 1.0),
+        borderaxespad=0.0,
+        handletextpad=0.5,
+        columnspacing=1.1,
+    )
     figure.tight_layout()
     return figure
 
 
-def _paired_method_matrix(
-    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
-    keys: Sequence[str],
-) -> np.ndarray:
-    """按严格事件身份组成 episode×method×metric 矩阵，禁止按数组位置连接。"""
-
-    per_method: dict[str, dict[tuple[str, str, str], tuple[float, ...]]] = {}
-    for method in METHODS:
-        values: dict[tuple[str, str, str], tuple[float, ...]] = {}
-        for row in rows.get(method, ()):
-            identity = _identity(row)
-            if identity in values:
-                raise ValueError(f"GPT v4 方法片段键重复：{method}/{identity}")
-            metrics = tuple(float(row[key]) for key in keys)
-            if all(np.isfinite(metrics)):
-                values[identity] = metrics
-        per_method[method] = values
-    expected = set(per_method[METHODS[0]])
-    if not expected or any(set(per_method[method]) != expected for method in METHODS[1:]):
-        counts = ", ".join(f"{method}={len(per_method[method])}" for method in METHODS)
-        raise ValueError(f"GPT v4 实验一方法配对不完整：{counts}")
-    return np.asarray(
-        [[per_method[method][identity] for method in METHODS] for identity in sorted(expected)],
-        dtype=float,
-    )
-
-
-def _translation_panel(results: GptV4Results) -> Any:
+def build_translation_panel(results: GptV4Results) -> Any:
     """绘制实验一持续平移 lag--residual 散点与 IQR。"""
 
-    figure, axis = plt.subplots(figsize=(4.7, 3.65))
-    paired = _paired_method_matrix(
+    figure, axis = plt.subplots(figsize=(3.5, 2.45))
+    paired = paired_metric_matrix(
         results.translation_segments,
+        METHODS,
         ("effective_lag_ms", "aligned_rmse_mm"),
     )
     for episode in paired:
@@ -247,8 +235,8 @@ def _translation_panel(results: GptV4Results) -> Any:
             episode[:, 0],
             episode[:, 1],
             color=_PAIR_COLOR,
-            linewidth=0.75,
-            alpha=0.24,
+            linewidth=0.65,
+            alpha=0.20,
             zorder=1,
         )
     for index, method in enumerate(METHODS):
@@ -281,7 +269,7 @@ def _translation_panel(results: GptV4Results) -> Any:
         )
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
-    axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=15)
+    axis.set_title("(b) Dynamic translation", loc="left", fontweight="bold", pad=34)
     axis.set_xlim(
         min(_DYNAMIC_X_LIMITS[0], float(np.min(paired[:, :, 0])) * 0.96),
         max(_DYNAMIC_X_LIMITS[1], float(np.max(paired[:, :, 0])) * 1.04),
@@ -291,21 +279,15 @@ def _translation_panel(results: GptV4Results) -> Any:
     _clean_axis(axis, "both")
     axis.legend(
         frameon=False,
-        ncol=4,
+        ncol=2,
         loc="lower right",
         bbox_to_anchor=(1.0, 1.0),
         borderaxespad=0.0,
-        handletextpad=0.9,
-        columnspacing=1.9,
+        handletextpad=0.5,
+        columnspacing=1.1,
     )
     figure.tight_layout()
     return figure
-
-
-def _identity(row: Mapping[str, Any]) -> tuple[str, str, str]:
-    """返回 Full/Disabled 严格连接使用的片段键。"""
-
-    return str(row["session_id"]), str(row["trial_id"]), str(row["segment_id"])
 
 
 def _paired_rows(
@@ -316,8 +298,8 @@ def _paired_rows(
 ) -> tuple[np.ndarray, np.ndarray]:
     """按同 session/trial/segment 精确配对，禁止位置式 zip 掩盖缺失。"""
 
-    full = {_identity(row): float(row[value_key]) for row in rows.get(full_variant, ())}
-    disabled = {_identity(row): float(row[value_key]) for row in rows.get(disabled_variant, ())}
+    full = {segment_identity(row): float(row[value_key]) for row in rows.get(full_variant, ())}
+    disabled = {segment_identity(row): float(row[value_key]) for row in rows.get(disabled_variant, ())}
     if set(full) != set(disabled):
         raise ValueError(
             f"GPT v4 组件配对不完整：{full_variant}={len(full)}, {disabled_variant}={len(disabled)}"
@@ -368,7 +350,7 @@ def _paired_axis(
         axis.set_yscale("log")
     else:
         axis.set_ylim(bottom=0)
-    axis.set_title(title, fontweight="bold", pad=17, fontsize=10.8)
+    axis.set_title(title, fontweight="bold", pad=11, fontsize=8.0)
     _clean_axis(axis)
 
 
@@ -389,43 +371,53 @@ def _paired_panel(
     return figure
 
 
-def _plot_temporal_axis(axis: Any, full_points: np.ndarray, disabled_points: np.ndarray) -> None:
-    """绘制时序合成 lag--residual 面板，保留全部严格配对 episode。"""
+def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
+    """绘制三个真实运行时时序策略的 lag--residual 分布。"""
 
-    for full_point, disabled_point in zip(full_points, disabled_points, strict=True):
+    variants = (NO_TEMPORAL_SYNTHESIS, HERMITE_VARIANT, FULL_VARIANT)
+    labels = ("Predict-to-Now", "Hermite", "Linear/SLERP")
+    colors = (_DISABLED_COLOR, _HERMITE_COLOR, _FULL_COLOR)
+    markers = ("X", "D", "o")
+    for episode in paired_points:
         axis.plot(
-            (full_point[0], disabled_point[0]),
-            (full_point[1], disabled_point[1]),
+            episode[:, 0],
+            episode[:, 1],
             color=_PAIR_COLOR,
-            linewidth=0.82,
-            alpha=0.26,
+            linewidth=0.65,
+            alpha=0.20,
+            zorder=1,
         )
-    axis.scatter(
-        full_points[:, 0],
-        full_points[:, 1],
-        marker="D",
-        color=_FULL_COLOR,
-        s=27,
-        alpha=0.42,
-        label="Full",
-    )
-    axis.scatter(
-        disabled_points[:, 0],
-        disabled_points[:, 1],
-        marker="X",
-        color=_DISABLED_COLOR,
-        s=34,
-        alpha=0.42,
-        label="Synthesis disabled",
-    )
-    full_median = np.median(full_points, axis=0)
-    disabled_median = np.median(disabled_points, axis=0)
-    axis.scatter(float(full_median[0]), float(full_median[1]), marker="D", color=_FULL_COLOR, s=95)
-    axis.scatter(float(disabled_median[0]), float(disabled_median[1]), marker="X", color=_DISABLED_COLOR, s=110)
+    for index, (variant, label, color, marker) in enumerate(
+        zip(variants, labels, colors, markers, strict=True)
+    ):
+        points = paired_points[:, index, :]
+        axis.scatter(
+            points[:, 0],
+            points[:, 1],
+            marker=marker,
+            color=color,
+            s=27,
+            alpha=0.38,
+            label=label,
+        )
+        median_x, median_y = np.median(points, axis=0)
+        q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
+        q1_y, q3_y = np.quantile(points[:, 1], (0.25, 0.75))
+        axis.errorbar(
+            median_x,
+            median_y,
+            xerr=[[median_x - q1_x], [q3_x - median_x]],
+            yerr=[[median_y - q1_y], [q3_y - median_y]],
+            fmt=marker,
+            markersize=8,
+            capsize=3.5,
+            linewidth=1.7,
+            color=color,
+        )
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
-    axis.set_title("(d) Temporal synthesis trade-off", loc="left", fontweight="bold", pad=17)
-    all_points = np.vstack((full_points, disabled_points))
+    axis.set_title("(d) Runtime temporal strategies", loc="left", fontweight="bold", pad=17)
+    all_points = paired_points.reshape(-1, paired_points.shape[-1])
     axis.set_xlim(
         min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
         max(_DYNAMIC_X_LIMITS[1], float(np.max(all_points[:, 0])) * 1.04),
@@ -435,20 +427,18 @@ def _plot_temporal_axis(axis: Any, full_points: np.ndarray, disabled_points: np.
     _clean_axis(axis, "both")
     axis.legend(
         frameon=False,
-        ncol=2,
-        loc="lower right",
-        bbox_to_anchor=(1.0, 1.0),
-        borderaxespad=0.0,
-        handletextpad=1.0,
-        columnspacing=1.9,
+        ncol=1,
+        loc="upper right",
+        borderaxespad=0.3,
+        handletextpad=0.4,
     )
 
 
-def _temporal_panel(full_points: np.ndarray, disabled_points: np.ndarray) -> Any:
+def _temporal_panel(paired_points: np.ndarray) -> Any:
     """创建可直接放入 LaTeX 子图的时序合成面板。"""
 
     figure, axis = plt.subplots(figsize=(4.7, 3.65))
-    _plot_temporal_axis(axis, full_points, disabled_points)
+    _plot_temporal_axis(axis, paired_points)
     figure.tight_layout()
     return figure
 
@@ -465,9 +455,13 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         method: _values(results.static_segments, method, "centered_p95_mm")
         for method in METHODS
     }
-    world_paired = _paired_method_matrix(results.static_segments, ("centered_p95_mm",))[:, :, 0]
+    world_paired = paired_metric_matrix(
+        results.static_segments,
+        METHODS,
+        ("centered_p95_mm",),
+    )[:, :, 0]
     world_pair = _save_pair(
-        _point_panel(
+        build_point_panel(
             world,
             "(a) Head-motion leakage",
             "Centered translation P95 (mm)",
@@ -477,15 +471,19 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         "exp1a_head_motion_leakage",
     )
     translation_pair = _save_pair(
-        _translation_panel(results), panels, "exp1b_dynamic_translation"
+        build_translation_panel(results), panels, "exp1b_dynamic_translation"
     )
     occlusion = {
         method: _values(results.occlusion_episodes, method, "translation_p95_mm")
         for method in METHODS
     }
-    occlusion_paired = _paired_method_matrix(results.occlusion_episodes, ("translation_p95_mm",))[:, :, 0]
+    occlusion_paired = paired_metric_matrix(
+        results.occlusion_episodes,
+        METHODS,
+        ("translation_p95_mm",),
+    )[:, :, 0]
     occlusion_pair = _save_pair(
-        _point_panel(
+        build_point_panel(
             occlusion,
             "(c) Failure containment",
             "Occlusion translation P95 (mm)",
@@ -497,10 +495,10 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
     exp1_pdf = generated / "experiment1_corrected_newdata.pdf"
     exp1_png = generated / "experiment1_corrected_newdata.png"
     generated.mkdir(parents=True, exist_ok=True)
-    _combine_pdf((world_pair[1], translation_pair[1], occlusion_pair[1]), exp1_pdf, 3)
+    _combine_pdf((world_pair[1], translation_pair[1], occlusion_pair[1]), exp1_pdf, 2)
     _render_pdf(exp1_pdf, exp1_png)
 
-    figure = plt.figure(figsize=(12.3, 3.9))
+    figure = plt.figure(figsize=(7.1, 2.5))
     outer = figure.add_gridspec(1, 2, width_ratios=(1.78, 1.0), wspace=0.28)
     left = outer[0].subgridspec(1, 3, wspace=0.42)
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
@@ -511,7 +509,7 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         figure.add_subplot(left[0, 0]),
         capture,
         arrival,
-        "Capture-time alignment",
+        "(a) Capture-time alignment",
         "Candidate P95 (mm)",
         ("Capture time", "Arrival time"),
         endpoint_colors=(_METHOD_COLORS["Capture-Hold"], _METHOD_COLORS["Arrival-Hold"]),
@@ -526,7 +524,7 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         figure.add_subplot(left[0, 1]),
         full_static,
         no_lock,
-        "StaticLock",
+        "(b) StaticLock",
         "Centered P95 (mm)",
     )
     full_vcd, no_vcd = _paired_rows(
@@ -540,28 +538,18 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         vcd_axis,
         full_vcd,
         no_vcd,
-        "VCD admission",
+        "(c) VCD admission",
         "Occlusion P95 (mm)",
         logarithmic=True,
     )
-    full_lag, no_temporal_lag = _paired_rows(
+    temporal_points = paired_metric_matrix(
         results.translation_segments,
-        FULL_VARIANT,
-        NO_TEMPORAL_SYNTHESIS,
-        "effective_lag_ms",
+        (NO_TEMPORAL_SYNTHESIS, HERMITE_VARIANT, FULL_VARIANT),
+        ("effective_lag_ms", "aligned_rmse_mm"),
     )
-    full_residual, no_temporal_residual = _paired_rows(
-        results.translation_segments,
-        FULL_VARIANT,
-        NO_TEMPORAL_SYNTHESIS,
-        "aligned_rmse_mm",
-    )
-    full_points = np.column_stack((full_lag, full_residual))
-    disabled_points = np.column_stack((no_temporal_lag, no_temporal_residual))
     temporal_axis = figure.add_subplot(outer[0, 1])
-    _plot_temporal_axis(temporal_axis, full_points, disabled_points)
-    figure.text(0.012, 0.985, "(a) Targeted component effects", ha="left", va="top", fontweight="bold", fontsize=12.5)
-    figure.subplots_adjust(left=0.055, right=0.99, top=0.80, bottom=0.20)
+    _plot_temporal_axis(temporal_axis, temporal_points)
+    figure.subplots_adjust(left=0.07, right=0.995, top=0.79, bottom=0.23)
     exp2_png, exp2_pdf = _save_pair(figure, generated, "experiment2_corrected_newdata")
     exp2a_pair = _save_pair(
         _paired_panel(
@@ -592,7 +580,7 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
         "exp2c_vcd_admission",
     )
     exp2d_pair = _save_pair(
-        _temporal_panel(full_points, disabled_points),
+        _temporal_panel(temporal_points),
         panels,
         "exp2d_temporal_synthesis",
     )
@@ -612,4 +600,4 @@ def publish_figures(results: GptV4Results, paper_root: Path) -> Mapping[str, Pat
     }
 
 
-__all__ = ["publish_figures"]
+__all__ = ["build_point_panel", "build_translation_panel", "publish_figures"]

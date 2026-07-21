@@ -2,7 +2,7 @@
 
 正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Linear/SLERP` 配对策略候选。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Hermite` 插值器对照。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
 
 推荐在同一个 session 中依次完成任务 1--5。确需中断时，也可以拆成多个 session；只要它们使用完全相同的冻结配置，并且合起来覆盖任务 1--5 即可。
 
@@ -215,7 +215,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。新增的 `EgoAnchor Linear/SLERP` 与完整系统使用相同的 Kalman、VCD、StaticLock、生命周期和自适应目标时刻，只把 Hermite 换成位置 Linear 与旋转 SLERP，用于之后做配对策略判断，当前不会自动混入既有论文图表。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
+任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和采用 Linear/SLERP 的完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。采集时刻对齐、VCD 和 StaticLock 三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；`EgoAnchor Hermite` 仅替换插值器，用于图 3(d) 的配对策略判断。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
 
 ## 七、做错了怎么处理
 

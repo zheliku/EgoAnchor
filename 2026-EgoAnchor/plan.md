@@ -267,7 +267,7 @@ EgoAnchor 与它非常相似：
 
 ### 4.5 Regime-aware anchor synthesis
 
-介绍 Kalman-Hermite、StaticLock、unlock 和 rendering output。
+介绍 Kalman 状态估计、Linear/SLERP 自适应历史合成、StaticLock、unlock 和 rendering output；Hermite 仅作为配对插值器对照。
 
 ### 4.6 Lifecycle and recovery
 
@@ -358,7 +358,7 @@ frame alignment、VCD、temporal runtime 和 StaticLock 的消融。
 
 * capture-time alignment；
 * VCD admission；
-* Kalman-Hermite synthesis；
+* Kalman Linear/SLERP synthesis；
 * StaticLock；
 * lifecycle and recovery。
 
@@ -371,7 +371,7 @@ frame alignment、VCD、temporal runtime 和 StaticLock 的消融。
 * EgoAnchor w/o capture-time alignment；
 * EgoAnchor w/o VCD；
 * EgoAnchor w/o StaticLock；
-* EgoAnchor w/o Hermite/delay synthesis。
+* EgoAnchor w/o temporal synthesis（Kalman Predict-to-Now）。
 
 这样既能体现系统，又能证明技术设计。
 

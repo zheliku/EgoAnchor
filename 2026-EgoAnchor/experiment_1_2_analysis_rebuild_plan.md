@@ -446,8 +446,8 @@ rotation_error_deg = 2 * acos(clamp(abs(dot(q_display_norm, q_reference_norm)), 
 
 1. **Arrival-Hold**：到达时刻复合、接受全部合法候选、零阶保持
 2. **Capture-Hold**：采集时刻世界复合、接受全部合法候选、零阶保持
-3. **One-Euro Anchor**：采集时刻世界复合、基本有效性检查、One Euro自适应滤波
-4. **EgoAnchor**：采集时刻世界复合、VCD接纳、Kalman-Hermite合成、显式静止锚定
+3. **One-Euro Anchor**：采集时刻世界复合、VCD 接纳、One Euro 自适应滤波与 Linear/SLERP 合成
+4. **EgoAnchor**：采集时刻世界复合、VCD 接纳、Kalman Linear/SLERP 合成、显式静止锚定
 
 **场景与主指标**：
 

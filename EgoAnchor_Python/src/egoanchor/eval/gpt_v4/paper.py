@@ -13,16 +13,15 @@ import numpy as np
 
 from .metrics import (
     FULL_VARIANT,
+    HERMITE_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
+    NO_TEMPORAL_SYNTHESIS,
     NO_VCD,
     GptV4Results,
+    paired_metric_matrix,
+    segment_identity,
 )
-from .temporal_replay import HERMITE, PREDICT_TO_NOW
-
-
-TemporalReplaySummary = Mapping[str, Mapping[str, float]]
-"""时序反事实重放的策略级汇总。"""
 
 
 def _fmt(value: float, digits: int = 3) -> str:
@@ -63,6 +62,22 @@ def _bold_value(value: str) -> str:
     return rf"\textbf{{{value}}}"
 
 
+def _sample_label(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    key: str,
+    variants: tuple[str, ...] = METHODS,
+) -> str:
+    """生成不掩盖配置间缺失差异的样本量标签。"""
+
+    counts = [
+        sum(np.isfinite(float(row[key])) for row in rows.get(variant, ()))
+        for variant in variants
+    ]
+    if min(counts) == max(counts):
+        return f"n={counts[0]}"
+    return f"n={min(counts)}--{max(counts)}"
+
+
 def _exp1_table(results: GptV4Results) -> str:
     """生成 GPT v4 实验一八指标表。"""
 
@@ -81,7 +96,7 @@ def _exp1_table(results: GptV4Results) -> str:
         r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}",
         "方法 & 头动泄漏 P95 $\\downarrow$ & 绝对注册 P95 $\\downarrow$ & 帧间增量 P95 $\\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\\downarrow$ & $>40$~mm $\\downarrow$ & Start-transition $\\downarrow$ \\\\",
         "& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\\\",
-        "& $n=4$ & $n=4$ & $n=4$ & $n=30$ & $n=10$ & $n=9$ & $k/9$ & $n=9$ \\\\",
+        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ & $k/{len(results.occlusion_episodes[METHODS[0]])}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ \\\\",
         r"\midrule",
     ]
     medians: dict[str, dict[str, float]] = {
@@ -150,33 +165,19 @@ def _paired_summary(
 ) -> tuple[float, float, float, float]:
     """返回 Full、Disabled 和配对差值的中位数，以及差值方向一致数。"""
 
-    full = {_key(row): float(row[key]) for row in rows[FULL_VARIANT]}
-    disabled = {_key(row): float(row[key]) for row in rows[disabled_variant]}
-    if set(full) != set(disabled):
-        raise ValueError(f"实验二配对不完整：{disabled_variant}")
-    deltas = np.asarray([disabled[key] - full[key] for key in sorted(full)], dtype=float)
-    return float(np.median(np.asarray(list(full.values())))), float(np.median(np.asarray(list(disabled.values())))), float(np.median(deltas)), float(np.sum(deltas > 0))
+    matrix = paired_metric_matrix(rows, (FULL_VARIANT, disabled_variant), (key,))[:, :, 0]
+    full = matrix[:, 0]
+    disabled = matrix[:, 1]
+    deltas = disabled - full
+    return (
+        float(np.median(full)),
+        float(np.median(disabled)),
+        float(np.median(deltas)),
+        float(np.sum(deltas > 0)),
+    )
 
 
-def _key(row: Mapping[str, Any]) -> tuple[str, str, str]:
-    """返回可审计的片段配对键。"""
-
-    return str(row["session_id"]), str(row["trial_id"]), str(row["segment_id"])
-
-
-def _replay_value(summary: TemporalReplaySummary, strategy: str, key: str) -> float:
-    """读取时序 replay 汇总并拒绝缺失或非有限值。"""
-
-    try:
-        value = float(summary[strategy][key])
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError(f"论文缺少时序 replay 指标：{strategy}/{key}") from error
-    if not np.isfinite(value):
-        raise ValueError(f"论文时序 replay 指标非有限：{strategy}/{key}")
-    return value
-
-
-def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
+def _exp2_table(results: GptV4Results) -> str:
     """生成 GPT v4 目标化四组件归因表。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
@@ -186,10 +187,26 @@ def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     reduction = arrival - capture
     capture_effect = f"+{_fmt(float(np.median(reduction)))} [{_fmt(float(np.quantile(reduction, .25)))}, {_fmt(float(np.quantile(reduction, .75)))}]~mm; {int(np.sum(reduction > 0))}/{len(reduction)} 改善"
     full_static, disabled_static, static_delta, static_positive = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    hermite_lag = _replay_value(replay, HERMITE, "effective_lag_ms")
-    hermite_rmse = _replay_value(replay, HERMITE, "lag_aligned_rmse_mm")
-    predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
-    predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
+    linear_lag, predict_lag, lag_delta, _ = _paired_summary(
+        results.translation_segments,
+        NO_TEMPORAL_SYNTHESIS,
+        "effective_lag_ms",
+    )
+    linear_rmse, predict_rmse, rmse_delta, _ = _paired_summary(
+        results.translation_segments,
+        NO_TEMPORAL_SYNTHESIS,
+        "aligned_rmse_mm",
+    )
+    linear_translation, hermite_translation, hermite_translation_delta, linear_translation_better = _paired_summary(
+        results.translation_segments,
+        HERMITE_VARIANT,
+        "aligned_rmse_mm",
+    )
+    linear_rotation, hermite_rotation, hermite_rotation_delta, linear_rotation_better = _paired_summary(
+        results.rotation_segments,
+        HERMITE_VARIANT,
+        "aligned_rmse_deg",
+    )
     vcd_full = results.occlusion_episodes[FULL_VARIANT]
     vcd_disabled = results.occlusion_episodes[NO_VCD]
     full_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_full)
@@ -197,7 +214,7 @@ def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新数据上的目标化组件归因。每个组件只使用直接对应其设计目标的指标；关闭效应为 Disabled--Full。}",
+        r"\caption{新数据上的目标化组件比较与插值器选择。稳定配置 ID EgoAnchor 及三个组件对照均采用 Kalman Linear/SLERP；效应为替代配置减完整系统。Hermite 仅作为相同状态估计与目标时间下的插值器对照。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{4.8pt}",
@@ -209,7 +226,8 @@ def _exp2_table(results: GptV4Results, replay: TemporalReplaySummary) -> str:
         f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
         f"VCD 接纳 & 遮挡 P95 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_p95_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
-        f"时序合成（离线重放） & fitted lag / aligned RMSE & {_fmt(hermite_lag, 1)} / {_fmt(hermite_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(predict_lag - hermite_lag, 1)}~ms / +{_fmt(predict_rmse - hermite_rmse)}~mm \\\\",
+        f"时序合成（实际 runtime） & fitted lag / aligned RMSE & {_fmt(linear_lag, 1)} / {_fmt(linear_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(lag_delta, 1)}~ms / +{_fmt(rmse_delta)}~mm \\\\",
+        f"插值器选择 & 平移 / 旋转 aligned RMSE & {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & Hermite--Linear: +{_fmt(hermite_translation_delta)}~mm / +{_fmt(hermite_rotation_delta)}$^\\circ$；{int(linear_translation_better)}/{len(results.translation_segments[FULL_VARIANT])}、{int(linear_rotation_better)}/{len(results.rotation_segments[FULL_VARIANT])} 个片段 Linear 更低 \\\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",
@@ -239,8 +257,6 @@ def _exp1_text(results: GptV4Results) -> str:
         "ego_rotation_rmse": _summary(results.rotation_segments[FULL_VARIANT], "aligned_rmse_deg")[0],
         "one_euro_rotation_lag": _summary(results.rotation_segments["One-Euro Anchor"], "effective_lag_ms")[0],
         "one_euro_rotation_rmse": _summary(results.rotation_segments["One-Euro Anchor"], "aligned_rmse_deg")[0],
-        "no_lock_rotation_lag": _summary(results.rotation_segments[NO_STATIC_LOCK], "effective_lag_ms")[0],
-        "no_lock_rotation_rmse": _summary(results.rotation_segments[NO_STATIC_LOCK], "aligned_rmse_deg")[0],
         "ego_occ": _summary(results.occlusion_episodes[FULL_VARIANT], "translation_p95_mm")[0],
         "one_euro_occ": _summary(results.occlusion_episodes["One-Euro Anchor"], "translation_p95_mm")[0],
         "ego_start": _summary(results.transition_segments[FULL_VARIANT], "response_ms")[0],
@@ -255,7 +271,7 @@ def _exp1_text(results: GptV4Results) -> str:
 
 \\textbf{{持续运动中的时延--轨迹质量权衡。}} 持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 {_fmt(values['ego_lag'], 1)}~ms / {_fmt(values['ego_rmse'])}~mm；Arrival-Hold 为 {_fmt(values['arrival_lag'], 1)}~ms / {_fmt(values['arrival_rmse'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_lag'], 1)}~ms / {_fmt(values['one_euro_rmse'])}~mm。结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
 
-\\textbf{{旋转负结果。}} 持续旋转中，EgoAnchor 的有效时延 / 对齐角 RMSE 为 {_fmt(values['ego_rotation_lag'], 1)}~ms / {_fmt(values['ego_rotation_rmse'])}$^\\circ$，One-Euro Anchor 为 {_fmt(values['one_euro_rotation_lag'], 1)}~ms / {_fmt(values['one_euro_rotation_rmse'])}$^\\circ$；完整系统没有取得旋转优势。历史消融中，关闭 StaticLock 后该值为 {_fmt(values['no_lock_rotation_lag'], 1)}~ms / {_fmt(values['no_lock_rotation_rmse'])}$^\\circ$。这说明 v2 的主要代价来自低角速度阶段的姿态冻结及随后解锁，而不是平移通道所反映的轨迹平滑收益。该诊断是下一轮重采必须复核的假设，不把旋转结果解释为已解决。
+\\textbf{{持续旋转。}} EgoAnchor 的有效时延 / 对齐角 RMSE 为 {_fmt(values['ego_rotation_lag'], 1)}~ms / {_fmt(values['ego_rotation_rmse'])}$^\\circ$，One-Euro Anchor 为 {_fmt(values['one_euro_rotation_lag'], 1)}~ms / {_fmt(values['one_euro_rotation_rmse'])}$^\\circ$。旋转结果与平移结果分开报告，避免用位置通道的收益替代姿态通道证据；Hermite 与 Linear/SLERP 的直接比较在实验二的候选筛选中报告。
 
 \\textbf{{遮挡期间的失效控制。}} 遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 {_fmt(values['ego_occ'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_occ'])}~mm。完整分布、40~mm 阈值超限率和最大值共同保留在图和审阅表中。
 
@@ -263,25 +279,26 @@ def _exp1_text(results: GptV4Results) -> str:
 
 \\begin{{figure*}}[t]
   \\centering
-  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.48\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{figures/panels/exp1a_head_motion_leakage.pdf}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.48\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{figures/panels/exp1b_dynamic_translation.pdf}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.31\\textwidth}}
+  \\end{{subfigure}}
+  \\par\\medskip
+  \\begin{{subfigure}}[t]{{0.48\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{figures/panels/exp1c_failure_containment.pdf}}
   \\end{{subfigure}}
-  \\caption{{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，箱线表示完整分布的中位数、四分位区间和全范围，实心标记表示中位数。中间面板的 1.5x IQR 异常点仅从散点显示层移除，所有片段仍保留在表格和汇总统计中。左：移除片段固定注册偏置后的头动泄漏；中：持续平移的 fitted-lag--aligned-residual 联合权衡；右：遮挡期间的 episode-level P95。}}
+  \\caption{{新数据上的三项核心分布性结果。小标记表示重复动作片段或遮挡过程，箱线表示完整分布的中位数、四分位区间和全范围，实心标记表示中位数。细线连接同一片段在不同方法下的严格配对结果，用于显示升降方向；每个子图使用独立图例。上左：移除片段固定注册偏置后的头动泄漏；上右：持续平移的 fitted-lag--aligned-residual 联合权衡；下：遮挡期间的 episode-level P95。}}
   \\label{{fig:exp1-final}}
 \\end{{figure*}}
 """
 
 
-def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
+def _exp2_text(results: GptV4Results) -> str:
     """生成实验二正文、表格和 GPT v4 四面板图。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
@@ -290,37 +307,51 @@ def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
     full_static, disabled_static, static_delta, _ = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
     full_vcd = results.occlusion_episodes[FULL_VARIANT]
     disabled_vcd = results.occlusion_episodes[NO_VCD]
-    hermite_lag = _replay_value(replay, HERMITE, "effective_lag_ms")
-    hermite_rmse = _replay_value(replay, HERMITE, "lag_aligned_rmse_mm")
-    hermite_increment = _replay_value(replay, HERMITE, "post_stop_increment_p95_mm")
-    predict_lag = _replay_value(replay, PREDICT_TO_NOW, "effective_lag_ms")
-    predict_rmse = _replay_value(replay, PREDICT_TO_NOW, "lag_aligned_rmse_mm")
-    predict_increment = _replay_value(replay, PREDICT_TO_NOW, "post_stop_increment_p95_mm")
+    linear_lag, predict_lag, lag_delta, _ = _paired_summary(
+        results.translation_segments,
+        NO_TEMPORAL_SYNTHESIS,
+        "effective_lag_ms",
+    )
+    linear_rmse, predict_rmse, rmse_delta, _ = _paired_summary(
+        results.translation_segments,
+        NO_TEMPORAL_SYNTHESIS,
+        "aligned_rmse_mm",
+    )
+    linear_translation, hermite_translation, hermite_translation_delta, linear_translation_better = _paired_summary(
+        results.translation_segments,
+        HERMITE_VARIANT,
+        "aligned_rmse_mm",
+    )
+    linear_rotation, hermite_rotation, hermite_rotation_delta, linear_rotation_better = _paired_summary(
+        results.rotation_segments,
+        HERMITE_VARIANT,
+        "aligned_rmse_deg",
+    )
+    _, _, candidate_lag_delta, _ = _paired_summary(
+        results.translation_segments,
+        HERMITE_VARIANT,
+        "effective_lag_ms",
+    )
+    _, _, candidate_increment_delta, _ = _paired_summary(
+        results.static_segments,
+        HERMITE_VARIANT,
+        "frame_increment_p95_mm",
+    )
+    _, _, candidate_response_delta, _ = _paired_summary(
+        results.transition_segments,
+        HERMITE_VARIANT,
+        "response_ms",
+    )
     return f"""\\subsection{{实验二：组件归因}}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线，在冻结适用场景内逐片段配对完整 EgoAnchor 与单组件消融。采集时刻对齐直接比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率。v2 数据没有独立采集的 Kalman Predict-to-Now 或 Kalman Hermite runtime，因此时序行使用同一候选日志上的确定性离线反事实重放，不把它解释为新 runtime 的采集证据。
+实验二复用实验一的候选、参考轨迹和渲染时间线。原始日志完成策略身份统一后，稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；原完整 Hermite runtime 明确标记为 EgoAnchor Hermite，只用于插值器选择。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率；时序合成比较 Kalman Linear/SLERP 与 Kalman Predict-to-Now runtime。
 
-{_exp2_table(results, replay)}
+{_exp2_table(results)}
 
 \\begin{{figure*}}[t]
   \\centering
-  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/exp2a_capture_alignment.pdf}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/exp2b_staticlock.pdf}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.23\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/exp2c_vcd_admission.pdf}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.27\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/exp2d_temporal_replay.pdf}}
-  \\end{{subfigure}}
-  \\caption{{目标化组件归因。左侧依次直接隔离采集时刻复合、StaticLock 与 VCD；右侧显示同一 v2 候选日志上的时序反事实重放：Kalman Predict-to-Now 与 Kalman Hermite 的 fitted-lag--aligned-residual 配对权衡。细线连接同一事件的严格配对结果，所有 episode 均显示。}}
+  \\includegraphics[width=\\textwidth]{{figures/generated/experiment2_corrected_newdata.pdf}}
+  \\caption{{目标化组件归因。四个子图在同一行依次显示采集时刻复合、StaticLock、VCD，以及本批次同步运行的 Kalman Predict-to-Now、Kalman Hermite 与 Kalman Linear/SLERP 的 fitted-lag--aligned-residual 分布。细线连接同一事件或片段的严格配对结果，显示配置切换时的方向。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 
@@ -330,9 +361,10 @@ def _exp2_text(results: GptV4Results, replay: TemporalReplaySummary) -> str:
 
 \\textbf{{VCD 接纳。}} 启用 VCD 时，{sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm；关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}。该组件的主证据是尾部失效率，不是单独的中位数。
 
-\\textbf{{时序反事实重放。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，Kalman Hermite 为 {_fmt(hermite_lag, 1)}~ms / {_fmt(hermite_rmse)}~mm；停止后的帧间增量 P95 分别为 {_fmt(predict_increment)}~mm 与 {_fmt(hermite_increment)}~mm。后者以约 {_fmt(hermite_lag - predict_lag, 1)}~ms 的额外 lag 换取约 {_fmt(predict_rmse - hermite_rmse)}~mm 的对齐残差下降；这些数值是可复算的离线反事实，不是独立 runtime 的显著性证据。
+\\textbf{{时序合成。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，正式 Kalman Linear/SLERP 为 {_fmt(linear_lag, 1)}~ms / {_fmt(linear_rmse)}~mm。Predict-to-Now 的配对时延变化为 {_fmt(lag_delta, 1)}~ms，但对齐残差增加 {_fmt(rmse_delta)}~mm；这表明自适应历史目标时刻主要用于换取轨迹保真度，而不是降低显示延迟。Hermite 作为相同模型、接纳、目标时间与生命周期下的插值器对照单独报告。
 
-\\FloatBarrier
+\\textbf{{插值器选择。}} 在模型、VCD、StaticLock、自适应目标时间和生命周期均相同的条件下，Linear/SLERP 的平移 aligned RMSE 为 {_fmt(linear_translation)}~mm，Hermite 为 {_fmt(hermite_translation)}~mm，Hermite--Linear 配对中位差为 +{_fmt(hermite_translation_delta)}~mm，{int(linear_translation_better)}/{len(results.translation_segments[FULL_VARIANT])} 个片段中 Linear 更低；两者的旋转 aligned RMSE 分别为 {_fmt(linear_rotation)}$^\\circ$ 与 {_fmt(hermite_rotation)}$^\\circ$，差值为 +{_fmt(hermite_rotation_delta)}$^\\circ$，{int(linear_rotation_better)}/{len(results.rotation_segments[FULL_VARIANT])} 个片段中 Linear 更低。Hermite 相对 Linear 的平移时延、静止帧间增量和起停响应配对中位变化分别为 {_fmt(candidate_lag_delta, 1)}~ms、{_fmt(candidate_increment_delta)}~mm 和 {_fmt(candidate_response_delta, 1)}~ms。二者在这些护栏上没有可见差异，而 Linear/SLERP 的残差略低，因此本文将 Linear/SLERP 冻结为 EgoAnchor 的正式输出策略。
+
 """
 
 
@@ -346,11 +378,260 @@ def _replace_block(text: str, start: str, end: str, replacement: str) -> str:
     return updated
 
 
+def _write_strategy_candidate_data(
+    results: GptV4Results,
+    data_root: Path,
+) -> tuple[Path, Path]:
+    """写出 Hermite 与 Linear/SLERP 的片段级配对数据和汇总。"""
+
+    specifications = (
+        ("static", results.static_segments, "centered_p95_mm", "mm"),
+        ("static", results.static_segments, "frame_increment_p95_mm", "mm"),
+        ("translation", results.translation_segments, "effective_lag_ms", "ms"),
+        ("translation", results.translation_segments, "aligned_rmse_mm", "mm"),
+        ("rotation", results.rotation_segments, "effective_lag_ms", "ms"),
+        ("rotation", results.rotation_segments, "aligned_rmse_deg", "deg"),
+        ("occlusion", results.occlusion_episodes, "translation_p95_mm", "mm"),
+        ("transition", results.transition_segments, "response_ms", "ms"),
+    )
+    metrics_path = data_root / "strategy_candidate_paired_metrics.csv"
+    summary_path = data_root / "strategy_candidate_summary.csv"
+    metric_fields = (
+        "family",
+        "metric",
+        "unit",
+        "session_id",
+        "trial_id",
+        "segment_id",
+        "hermite",
+        "linear_slerp",
+        "linear_minus_hermite",
+        "linear_lower",
+    )
+    summary_fields = (
+        "family",
+        "metric",
+        "unit",
+        "n",
+        "hermite_median",
+        "hermite_q1",
+        "hermite_q3",
+        "linear_slerp_median",
+        "linear_slerp_q1",
+        "linear_slerp_q3",
+        "paired_delta_median",
+        "paired_delta_q1",
+        "paired_delta_q3",
+        "linear_lower_count",
+    )
+    summaries: list[dict[str, Any]] = []
+    with metrics_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=metric_fields)
+        writer.writeheader()
+        for family, rows, metric, unit in specifications:
+            matrix = paired_metric_matrix(
+                rows,
+                (HERMITE_VARIANT, FULL_VARIANT),
+                (metric,),
+            )[:, :, 0]
+            identities = sorted(
+                segment_identity(row)
+                for row in rows[HERMITE_VARIANT]
+                if np.isfinite(float(row[metric]))
+            )
+            if len(identities) != matrix.shape[0]:
+                raise ValueError(f"插值器候选身份与配对矩阵不一致：{family}/{metric}")
+            deltas = matrix[:, 1] - matrix[:, 0]
+            for identity, values, delta in zip(identities, matrix, deltas, strict=True):
+                writer.writerow(
+                    {
+                        "family": family,
+                        "metric": metric,
+                        "unit": unit,
+                        "session_id": identity[0],
+                        "trial_id": identity[1],
+                        "segment_id": identity[2],
+                        "hermite": values[0],
+                        "linear_slerp": values[1],
+                        "linear_minus_hermite": delta,
+                        "linear_lower": bool(delta < 0),
+                    }
+                )
+            hermite_quantiles = np.quantile(matrix[:, 0], (0.5, 0.25, 0.75))
+            linear_quantiles = np.quantile(matrix[:, 1], (0.5, 0.25, 0.75))
+            delta_quantiles = np.quantile(deltas, (0.5, 0.25, 0.75))
+            summaries.append(
+                {
+                    "family": family,
+                    "metric": metric,
+                    "unit": unit,
+                    "n": matrix.shape[0],
+                    "hermite_median": hermite_quantiles[0],
+                    "hermite_q1": hermite_quantiles[1],
+                    "hermite_q3": hermite_quantiles[2],
+                    "linear_slerp_median": linear_quantiles[0],
+                    "linear_slerp_q1": linear_quantiles[1],
+                    "linear_slerp_q3": linear_quantiles[2],
+                    "paired_delta_median": delta_quantiles[0],
+                    "paired_delta_q1": delta_quantiles[1],
+                    "paired_delta_q3": delta_quantiles[2],
+                    "linear_lower_count": int(np.sum(deltas < 0)),
+                }
+            )
+    with summary_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=summary_fields)
+        writer.writeheader()
+        writer.writerows(summaries)
+    return metrics_path, summary_path
+
+
+def _write_figure_source_data(
+    results: GptV4Results,
+    data_root: Path,
+) -> tuple[Path, Path]:
+    """写出图二和图三每个可见数据点对应的长表。"""
+
+    fields = (
+        "figure",
+        "panel",
+        "series",
+        "variant_id",
+        "session_id",
+        "trial_id",
+        "segment_id",
+        "x_metric",
+        "x_value",
+        "y_metric",
+        "y_value",
+    )
+
+    def append_metric_rows(
+        destination: list[dict[str, Any]],
+        *,
+        figure: str,
+        panel: str,
+        rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+        variants: tuple[str, ...],
+        x_key: str | None,
+        y_key: str,
+    ) -> None:
+        """把一个面板的各配置片段追加到统一长表。"""
+
+        for index, variant in enumerate(variants):
+            for row in sorted(rows[variant], key=segment_identity):
+                y_value = float(row[y_key])
+                x_value = float(row[x_key]) if x_key is not None else float(index)
+                if not np.isfinite((x_value, y_value)).all():
+                    continue
+                identity = segment_identity(row)
+                destination.append(
+                    {
+                        "figure": figure,
+                        "panel": panel,
+                        "series": variant,
+                        "variant_id": variant,
+                        "session_id": identity[0],
+                        "trial_id": identity[1],
+                        "segment_id": identity[2],
+                        "x_metric": x_key or "category_index",
+                        "x_value": x_value,
+                        "y_metric": y_key,
+                        "y_value": y_value,
+                    }
+                )
+
+    figure2_rows: list[dict[str, Any]] = []
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(a) Head-motion leakage",
+        rows=results.static_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="centered_p95_mm",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(b) Dynamic translation",
+        rows=results.translation_segments,
+        variants=METHODS,
+        x_key="effective_lag_ms",
+        y_key="aligned_rmse_mm",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(c) Failure containment",
+        rows=results.occlusion_episodes,
+        variants=METHODS,
+        x_key=None,
+        y_key="translation_p95_mm",
+    )
+
+    figure3_rows: list[dict[str, Any]] = []
+    for row in sorted(results.capture_alignment, key=segment_identity):
+        identity = segment_identity(row)
+        for index, (series, key) in enumerate(
+            (("Capture time", "capture_p95_mm"), ("Arrival time", "arrival_p95_mm"))
+        ):
+            figure3_rows.append(
+                {
+                    "figure": "Figure 3",
+                    "panel": "(a) Capture-time alignment",
+                    "series": series,
+                    "variant_id": "",
+                    "session_id": identity[0],
+                    "trial_id": identity[1],
+                    "segment_id": identity[2],
+                    "x_metric": "condition_index",
+                    "x_value": index,
+                    "y_metric": key,
+                    "y_value": float(row[key]),
+                }
+            )
+    append_metric_rows(
+        figure3_rows,
+        figure="Figure 3",
+        panel="(b) StaticLock",
+        rows=results.static_segments,
+        variants=(FULL_VARIANT, NO_STATIC_LOCK),
+        x_key=None,
+        y_key="centered_p95_mm",
+    )
+    append_metric_rows(
+        figure3_rows,
+        figure="Figure 3",
+        panel="(c) VCD admission",
+        rows=results.occlusion_episodes,
+        variants=(FULL_VARIANT, NO_VCD),
+        x_key=None,
+        y_key="translation_p95_mm",
+    )
+    append_metric_rows(
+        figure3_rows,
+        figure="Figure 3",
+        panel="(d) Runtime temporal strategies",
+        rows=results.translation_segments,
+        variants=(NO_TEMPORAL_SYNTHESIS, HERMITE_VARIANT, FULL_VARIANT),
+        x_key="effective_lag_ms",
+        y_key="aligned_rmse_mm",
+    )
+
+    figure2_path = data_root / "figure2_plot_data.csv"
+    figure3_path = data_root / "figure3_plot_data.csv"
+    for path, rows in ((figure2_path, figure2_rows), (figure3_path, figure3_rows)):
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+    return figure2_path, figure3_path
+
+
 def write_paper(
     results: GptV4Results,
     paper_root: Path,
     output_root: Path,
-    temporal_replay: TemporalReplaySummary | None = None,
 ) -> Mapping[str, Path]:
     """写出 GPT v4 CSV、表格、主稿和 provenance manifest。"""
 
@@ -359,6 +640,7 @@ def write_paper(
     summary_path = data_root / "experiment1_expanded_summary_v4.csv"
     fields = (
         "method",
+        "variant_id",
         "head_motion_leakage_p95_mm",
         "absolute_registration_p95_mm",
         "stationary_frame_increment_p95_mm",
@@ -378,6 +660,7 @@ def write_paper(
             writer.writerow(
                 {
                     "method": method,
+                    "variant_id": method,
                     "head_motion_leakage_p95_mm": _summary(results.static_segments[method], "centered_p95_mm")[0],
                     "absolute_registration_p95_mm": _summary(results.static_segments[method], "absolute_p95_mm")[0],
                     "stationary_frame_increment_p95_mm": _summary(results.static_segments[method], "frame_increment_p95_mm")[0],
@@ -398,34 +681,46 @@ def write_paper(
         writer.writerows(results.capture_alignment)
     performance_path = data_root / "runtime_performance_audit_v4.json"
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, data_root)
+    figure2_data_path, figure3_data_path = _write_figure_source_data(results, data_root)
     table_root = paper_root / "tables"
     table_root.mkdir(parents=True, exist_ok=True)
-    replay = temporal_replay or {}
     exp1_table = _exp1_table(results)
-    exp2_table = _exp2_table(results, replay)
+    exp2_table = _exp2_table(results)
     exp1_table_path = table_root / "experiment1_corrected_newdata_v4.tex"
     exp2_table_path = table_root / "experiment2_corrected_newdata_v4.tex"
     exp1_table_path.write_text(exp1_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
 
-    template = Path(__file__).resolve().parents[5] / "2026-EgoAnchor" / "gpt-web-analysis" / "EgoAnchor_corrected_newdata_v4_package" / "paper" / "EgoAnchor_IEEEVR2027_corrected_newdata_v4_vgtc.tex"
-    text = template.read_text(encoding="utf-8")
-    text = text.replace(r"\graphicspath{{../figures/}{figures/}{pictures/}{images/}{./}}", r"\graphicspath{{figures/}{pictures/}{images/}{./}}")
-    text = text.replace("../figures/", "figures/")
-    text = text.replace(r"\usepackage{placeins}", r"\usepackage{placeins}" + "\n\\usepackage{subcaption}")
+    manuscript = paper_root / "egoanchor_cn_v6.tex"
+    text = manuscript.read_text(encoding="utf-8")
     text = _replace_block(text, r"\subsection{实验一：应用侧锚点行为}", r"\subsection{实验二：组件归因}", _exp1_text(results))
     text = _replace_block(
         text,
         r"\subsection{实验二：组件归因}",
         r"\subsection{评价指标与汇总契约}",
-        _exp2_text(results, replay),
+        _exp2_text(results),
     )
     provenance = "% GPT v4 reproduced from immutable Stage 1 XLSX; input SHA-256: " + ", ".join(f"{Path(path).name}={digest}" for path, digest in sorted(results.workbook_sha256.items())) + "\n"
+    text = re.sub(r"^% GPT v4 reproduced from immutable Stage 1 XLSX; input SHA-256:.*\n", "", text, flags=re.M)
     text = text.replace(r"\begin{document}", provenance + r"\begin{document}", 1)
-    manuscript = paper_root / "egoanchor_cn_v6.tex"
     manuscript.write_text(text, encoding="utf-8")
     manifest = output_root / "gpt_v4_manifest.json"
-    manifest.write_text(json.dumps({"inputs": dict(results.workbook_sha256), "parameters": "gpt_v4.toml"}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    manifest.write_text(
+        json.dumps(
+            {
+                "inputs": dict(results.workbook_sha256),
+                "parameters": "gpt_v4.toml",
+                "temporal_evidence": "actual_runtime",
+                "output_strategy": "linear_slerp",
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return {
         "manuscript": manuscript,
         "exp1_table": exp1_table_path,
@@ -433,6 +728,10 @@ def write_paper(
         "summary": summary_path,
         "capture": capture_path,
         "performance": performance_path,
+        "figure2_data": figure2_data_path,
+        "figure3_data": figure3_data_path,
+        "strategy_metrics": strategy_metrics_path,
+        "strategy_summary": strategy_summary_path,
         "manifest": manifest,
     }
 

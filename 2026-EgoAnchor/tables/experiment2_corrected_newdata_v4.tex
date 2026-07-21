@@ -1,6 +1,6 @@
 \begin{table*}[t]
 \centering
-\caption{新数据上的目标化组件归因。每个组件只使用直接对应其设计目标的指标；关闭效应为 Disabled--Full。}
+\caption{新数据上的目标化组件比较与插值器选择。稳定配置 ID EgoAnchor 及三个组件对照均采用 Kalman Linear/SLERP；效应为替代配置减完整系统。Hermite 仅作为相同状态估计与目标时间下的插值器对照。}
 \label{tab:exp2-final}
 \small
 \setlength{\tabcolsep}{4.8pt}
@@ -9,10 +9,11 @@
 \toprule
 组件 & 直接指标 & 启用 & 关闭 / 替代 & 效应 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & 13.24 [12.656, 15.042]~mm & 21.311 [17.967, 24.717]~mm & +7.862 [5.311, 9.467]~mm; 4/4 改善 \\
-StaticLock & 中心化静止 P95 & 1.631~mm & 9.876~mm & +7.966~mm；4/4 片段变差 \\
-VCD 接纳 & 遮挡 P95 $>40$~mm & 0/9；max 3.252~mm & 4/9；max 91.714~mm & 消除本批次观测到的灾难性失效 \\
-时序合成（离线重放） & fitted lag / aligned RMSE & 315 / 4.986 & 175 / 13.397 & -140~ms / +8.411~mm \\
+采集时刻对齐 & 同一候选的复合 P95 & 9.457 [9.182, 11.098]~mm & 22.933 [21.69, 26.233]~mm & +12.228 [11.03, 15.747]~mm; 11/11 改善 \\
+StaticLock & 中心化静止 P95 & 1.069~mm & 7.782~mm & +6.428~mm；11/11 片段变差 \\
+VCD 接纳 & 遮挡 P95 $>40$~mm & 0/12；max 5.102~mm & 6/12；max 121.515~mm & 消除本批次观测到的灾难性失效 \\
+时序合成（实际 runtime） & fitted lag / aligned RMSE & 320 / 5.409 & 170 / 32.569 & -147.5~ms / +27.674~mm \\
+插值器选择 & 平移 / 旋转 aligned RMSE & 5.409~mm / 3.81$^\circ$ & 5.735~mm / 3.859$^\circ$ & Hermite--Linear: +0.359~mm / +0.054$^\circ$；29/30、10/14 个片段 Linear 更低 \\
 \bottomrule
 \end{tabular}%
 }

@@ -5,13 +5,19 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 from openpyxl import Workbook  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
-from egoanchor.eval.gpt_v4 import iter_rows
-from egoanchor.eval.gpt_v4.figures import _paired_method_matrix
-from egoanchor.eval.gpt_v4.metrics import METHODS
+from egoanchor.eval.gpt_v4 import (
+    METHODS,
+    build_point_panel,
+    build_translation_panel,
+    iter_rows,
+    paired_metric_matrix,
+)
 
 
 class GptV4PipelineTests(unittest.TestCase):
@@ -79,7 +85,7 @@ class GptV4PipelineTests(unittest.TestCase):
                 method_rows.reverse()
             rows[method] = tuple(method_rows)
 
-        matrix = _paired_method_matrix(rows, ("value",))
+        matrix = paired_metric_matrix(rows, METHODS, ("value",))
 
         self.assertEqual(matrix[:, :, 0].tolist(), [[1.0, 2.0, 3.0, 4.0], [10.0, 11.0, 12.0, 13.0]])
 
@@ -93,7 +99,63 @@ class GptV4PipelineTests(unittest.TestCase):
         rows[METHODS[-1]] = ()
 
         with self.assertRaisesRegex(ValueError, "配对不完整"):
-            _paired_method_matrix(rows, ("value",))
+            paired_metric_matrix(rows, METHODS, ("value",))
+
+    def test_experiment_one_panels_have_local_legends(self) -> None:
+        """图二的三个独立子图都必须自带方法图例。"""
+
+        values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
+        point_figure = build_point_panel(
+            values,
+            "(a) Test",
+            "Metric",
+            np.asarray(((1.0, 1.1, 1.2, 1.3), (2.0, 2.1, 2.2, 2.3))),
+        )
+        rows = {
+            method: (
+                {
+                    "session_id": "s",
+                    "trial_id": "t",
+                    "segment_id": "a",
+                    "effective_lag_ms": 200.0 + index,
+                    "aligned_rmse_mm": 4.0 + index,
+                },
+                {
+                    "session_id": "s",
+                    "trial_id": "t",
+                    "segment_id": "b",
+                    "effective_lag_ms": 220.0 + index,
+                    "aligned_rmse_mm": 5.0 + index,
+                },
+            )
+            for index, method in enumerate(METHODS)
+        }
+        translation_figure = build_translation_panel(
+            SimpleNamespace(translation_segments=rows)
+        )
+
+        self.assertIsNotNone(point_figure.axes[0].get_legend())
+        self.assertIsNotNone(translation_figure.axes[0].get_legend())
+
+    def test_translation_panel_connects_paired_method_points(self) -> None:
+        """图二(b) 用轻量折线显示同一片段在四种方法间的变化方向。"""
+
+        rows = {
+            method: (
+                {
+                    "session_id": "s",
+                    "trial_id": "t",
+                    "segment_id": "a",
+                    "effective_lag_ms": 200.0 + index,
+                    "aligned_rmse_mm": 4.0 + index,
+                },
+            )
+            for index, method in enumerate(METHODS)
+        }
+        figure = build_translation_panel(SimpleNamespace(translation_segments=rows))
+
+        paired_lines = [line for line in figure.axes[0].lines if line.get_alpha() == 0.20]
+        self.assertEqual(len(paired_lines), 1)
 
 
 if __name__ == "__main__":

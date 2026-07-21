@@ -1,6 +1,6 @@
 # 实验一/二离线分析复现手册
 
-本手册从五个 schema-v2 task 目录重建 GPT corrected-newdata-v4 论文结果。原始 task 目录只读；Stage 1 完整 XLSX 是固定、不可变的分析桥梁。
+本手册从五个 schema-v2 task 目录重建 GPT corrected-newdata-v4 论文结果。完成数据身份确认后，原始 task 目录保持只读；Stage 1 完整 XLSX 是固定、不可变的分析桥梁。
 
 ## 固定链路
 
@@ -22,6 +22,8 @@ pixi run python -m egoanchor.eval.cli --help
 ```
 
 当前只应看到三个命令：`qc`、`preprocess`、`build-paper`。GPT v4 参数唯一来源是 `src/egoanchor/eval/config/gpt_v4.toml`。
+
+当前 Linear/SLERP 主系统批次使用 `variant_matrix_id=exp12_9_linear_v2`。稳定配置 ID `EgoAnchor` 和三个组件 baseline 必须对应 `KalmanModel + LinearSlerpStrategy`；配对插值器对照使用 `EgoAnchor Hermite`。不得在分析层临时重定向这些身份。
 
 每个 raw task 目录必须包含：
 
@@ -105,7 +107,7 @@ if ($LASTEXITCODE -ne 0) { throw "GPT v4 重建失败，停止编译。" }
 2026-EgoAnchor/egoanchor_cn_v6.tex
 ```
 
-同时在 `data/analysis/gpt_v4/` 保存输入 hash、表格 CSV 和性能审计。GPT 参考包不作为正式数字输入。
+同时在 `data/analysis/gpt_v4/` 保存输入 hash、表格 CSV 和性能审计。图中每个可见数据点分别保存在 `data/figure2_plot_data.csv` 与 `data/figure3_plot_data.csv`；Linear/SLERP 与 Hermite 的片段级配对值保存在 `data/strategy_candidate_paired_metrics.csv`，汇总保存在 `data/strategy_candidate_summary.csv`。GPT 参考包不作为正式数字输入。
 
 ## 编译与视觉验收
 
@@ -118,8 +120,9 @@ if ($LASTEXITCODE -ne 0) { throw "XeLaTeX 编译失败。" }
 检查 PDF 页数、实验页面和图表：
 
 - 表格中的 RMSE、P95 和毫秒数应为短格式，不出现十几位小数；
-- 图 3 为三面板：头动泄漏、动态平移 lag/RMSE、遮挡 P95；
-- 图 4 左侧为 capture-time、StaticLock、VCD，右侧为 temporal synthesis lag/RMSE；
+- 图 2 为三面板：头动泄漏、动态平移 lag/RMSE、遮挡 P95；
+- 图 3 为同一行四面板：capture-time、StaticLock、VCD 和三种 runtime temporal strategy；
+- 细线只连接同一事件或片段的严格配对点，用于显示配置切换时的变化方向；
 - VCD 只统计 `occlusion_started` episode，40 mm 阈值和 `0/9 vs 4/9` 必须与表格一致；
 - 主稿不应出现旧的 `exp1_final_v2`、`exp2_merged_final_v2` 或旧 CLI 名称。
 

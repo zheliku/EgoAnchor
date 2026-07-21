@@ -16,10 +16,15 @@ from .settings import GptV4Settings, load_settings
 from .xlsx import iter_rows, workbook_sha256
 
 
-METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", "EgoAnchor")
+FULL_VARIANT = "EgoAnchor"
+"""正式论文中完整 Linear/SLERP 系统的 variant ID。"""
+
+HERMITE_VARIANT = "EgoAnchor Hermite"
+"""v3 中保留的 Hermite 对照 variant ID。"""
+
+METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 """实验一正式比较的四种系统配置。"""
 
-FULL_VARIANT = "EgoAnchor"
 NO_STATIC_LOCK = "EgoAnchor w/o StaticLock"
 NO_VCD = "EgoAnchor w/o VCD"
 NO_TEMPORAL_SYNTHESIS = "EgoAnchor w/o temporal synthesis"
@@ -52,6 +57,45 @@ class GptV4Results:
 
     performance: Mapping[str, float | int]
     """Python 候选处理和发布间隔审计。"""
+
+
+def segment_identity(row: Mapping[str, Any]) -> tuple[str, str, str]:
+    """返回跨配置严格配对使用的片段身份。"""
+
+    return str(row["session_id"]), str(row["trial_id"]), str(row["segment_id"])
+
+
+def paired_metric_matrix(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    variants: Sequence[str],
+    keys: Sequence[str],
+) -> np.ndarray:
+    """按片段身份组成 ``episode x variant x metric`` 矩阵。"""
+
+    if not variants:
+        raise ValueError("严格配对至少需要一个配置")
+    per_variant: dict[str, dict[tuple[str, str, str], tuple[float, ...]]] = {}
+    for variant in variants:
+        values: dict[tuple[str, str, str], tuple[float, ...]] = {}
+        for row in rows.get(variant, ()):
+            identity = segment_identity(row)
+            if identity in values:
+                raise ValueError(f"片段键重复：{variant}/{identity}")
+            metrics = tuple(float(row[key]) for key in keys)
+            if all(np.isfinite(metrics)):
+                values[identity] = metrics
+        per_variant[variant] = values
+    expected = set(per_variant[variants[0]])
+    if not expected or any(set(per_variant[variant]) != expected for variant in variants[1:]):
+        counts = ", ".join(f"{variant}={len(per_variant[variant])}" for variant in variants)
+        raise ValueError(f"配置片段配对不完整：{counts}")
+    return np.asarray(
+        [
+            [per_variant[variant][identity] for variant in variants]
+            for identity in sorted(expected)
+        ],
+        dtype=float,
+    )
 
 
 def _truthy(value: Any) -> bool:
@@ -548,9 +592,12 @@ def analyze_workbooks(
 __all__ = [
     "FULL_VARIANT",
     "GptV4Results",
+    "HERMITE_VARIANT",
     "METHODS",
     "NO_STATIC_LOCK",
     "NO_TEMPORAL_SYNTHESIS",
     "NO_VCD",
     "analyze_workbooks",
+    "paired_metric_matrix",
+    "segment_identity",
 ]

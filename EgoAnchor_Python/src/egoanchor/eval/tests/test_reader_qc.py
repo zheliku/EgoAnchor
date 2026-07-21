@@ -18,12 +18,12 @@ VARIANT_SPECS = (
     ("Arrival-Hold", "cv", "hold", "disabled", "ArrivalTime", False, False, False, False, False, False),
     ("Capture-Hold", "cv", "hold", "disabled", "CaptureTime", True, False, False, False, False, False),
     ("One-Euro Anchor", "oneeuro", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
-    ("EgoAnchor", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor Linear/SLERP", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor w/o capture-time alignment", "kalman", "hermite", "enabled", "ArrivalTime", False, True, True, True, True, True),
-    ("EgoAnchor w/o VCD", "kalman", "hermite", "disabled", "CaptureTime", True, False, True, True, False, True),
+    ("EgoAnchor", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, True, True, True),
+    ("EgoAnchor Hermite", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
+    ("EgoAnchor w/o capture-time alignment", "kalman", "linear_slerp", "enabled", "ArrivalTime", False, True, True, True, True, True),
+    ("EgoAnchor w/o VCD", "kalman", "linear_slerp", "disabled", "CaptureTime", True, False, True, True, False, True),
     ("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", True, True, False, True, True, True),
-    ("EgoAnchor w/o StaticLock", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, False, True, True),
+    ("EgoAnchor w/o StaticLock", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
 )
 """与当前正式采集冻结矩阵一致的九个测试 variant。"""
 
@@ -82,14 +82,14 @@ class ReaderQcTests(unittest.TestCase):
             self.assertTrue(report.passed, report.to_dict())
             self.assertEqual(report.metrics["variant_count"], 8)
 
-    def test_current_matrix_id_rejects_missing_linear_slerp_variant(self) -> None:
-        """新 session 即使其余八路完整，也不得缺少 Linear/SLERP 策略候选。"""
+    def test_current_matrix_id_rejects_missing_hermite_control_variant(self) -> None:
+        """新 session 即使其余八路完整，也不得缺少 Hermite 对照策略。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = _write_valid_task(Path(tmp), include_linear_slerp=False)
+            root = _write_valid_task(Path(tmp), include_hermite_control=False)
             manifest_path = root / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["variant_matrix_id"] = "exp12_9_strategy_v1"
+            manifest["variant_matrix_id"] = "exp12_9_linear_v2"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             report = run_task_qc(root)
@@ -191,7 +191,7 @@ def _write_valid_task(
     *,
     scenario_id: str = "static_head_motion",
     marker_roles: tuple[str, ...] = ("generic_marker",),
-    include_linear_slerp: bool = True,
+    include_hermite_control: bool = True,
     archived_v2: bool = False,
 ) -> Path:
     """写出一个包含当前九路或归档八路 variant 的最小合法 task。"""
@@ -206,7 +206,7 @@ def _write_valid_task(
     source_specs = ARCHIVED_V2_VARIANT_SPECS if archived_v2 else VARIANT_SPECS
     variant_specs = tuple(
         spec for spec in source_specs
-        if include_linear_slerp or spec[0] != "EgoAnchor Linear/SLERP"
+        if include_hermite_control or spec[0] != "EgoAnchor Hermite"
     )
     for spec in variant_specs:
         label, motion, smoothing, gate, alignment, capture, vcd, temporal, static, low_score, server = spec
@@ -409,8 +409,8 @@ def _write_valid_task(
             },
         },
     }
-    if include_linear_slerp and not archived_v2:
-        manifest["variant_matrix_id"] = "exp12_9_strategy_v1"
+    if include_hermite_control and not archived_v2:
+        manifest["variant_matrix_id"] = "exp12_9_linear_v2"
     python_session = {
         "schema_version": 2,
         "session_id": session_id,
