@@ -153,7 +153,7 @@ schema-v2 task directory
 - 论文六行连续轨迹图使用独立 `egoanchor.qualitative_replay` 包和 `pixi run replay` 入口；它只读取 `data/replay_capture/` 下的 `egoanchor_qualitative_replay` v1 capture，不得读取或写入正式 `data/eval/`、实验一/二工作簿和 schema-v2 产物。采集方式固定为 Quest Link 串流下的 Unity Editor Play Mode，完整操作说明固定在 `EgoAnchor_Python/docs/qualitative_replay.md`。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
-- 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；Hermite 只用于独立插值器对照。
+- 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；第九路 Causal Prediction 与 `w/o StaticLock` 共享关闭 StaticLock 的配置，只替换逐帧输出策略。
 - 同一批五项物理任务同时驱动实验一四配置和实验二四消融；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
@@ -221,7 +221,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial；开始/结束事件必须唯一且顺序合法。实际持续时间作为描述性审计指标记录，不设上下界，也不决定 QC 成败。
 - 中性指标统一按 `session_id × experiment_id × scenario_id × trial_id × event_id × condition_id × variant_id` 组内计算；显示误差使用 `reference_*` 与 `display_*`，output availability 只使用 `has_output_pose`。
 - candidate arrival 使用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 使用 `server_receive_mono_ms -> server_publish_mono_ms`，不得跨进程相减单调时钟。
-- 人工事件角色写入 `events.payload.event_role`。五个正式物理任务的完成 trial 都必须至少包含一个 marker；起停 6DoF 必须包含 `transition_started`，遮挡恢复必须从 `occlusion_started` 开始，与 `target_visible` 严格交替并成对闭合。转换与恢复指标按角色切窗，不得根据场景名猜测事件含义；任一实验二消融缺少其冻结关键指标时禁止发布 CSV/PDF/TeX 正式产物。
+- 人工事件角色写入 `events.payload.event_role`。五个正式物理任务的完成 trial 都必须至少包含一个 marker；起停 6DoF 必须从 `transition_started` 开始，与 `transition_stopped` 严格交替并成对闭合；遮挡恢复必须从 `occlusion_started` 开始，与 `target_visible` 严格交替并成对闭合。转换与恢复指标按角色切窗，不得根据场景名猜测事件含义；任一实验二消融缺少其冻结关键指标时禁止发布 CSV/PDF/TeX 正式产物。
 - schema-v2 基础 QC 始终检查全部原始行；实验一/二正式 QC、指标和 VCD risk-coverage 只投影已有 `trial_ended` 且没有后续 `trial_rejected` 的 trial。被作废和未完成的尝试保留审计记录，但不得进入论文结果。
 - 历史离线分析路径和旧 schema 测试已删除；正式分析只从 `EvalSessionV2` 和后续 `egoanchor.eval.cli` 进入。
 - 旧命名扫描按语义判定：Unity/Python runtime、writer、namespace 和 CLI 不得依赖或输出旧 RQ/schema 名称；`schema_v2/readers.py`、`schema_v2/qc.py` 及其测试可保留旧文件名和字段名，仅用于显式拒绝旧输入，不得把这些 reject-only guard 当作兼容层删除。
@@ -302,7 +302,7 @@ pixi run eval latex
 
 - Stage 1 `preprocess`、workbook-v2 契约、XLSX writer 和回读验证保持不变；`task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板保留 Predict-to-Now、Hermite 与 Linear/SLERP 三路对比。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
+- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板展示 Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Direct 是保留 StaticLock 的机制消融，只有 Causal 与 Buffered 构成关闭 StaticLock 后的严格配对。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
