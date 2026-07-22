@@ -22,12 +22,12 @@ namespace EgoAnchor.Policy
         private static readonly EgoAnchorLog.Channel Log = EgoAnchorLog.For<AnchorPolicyHost>();
 
         /// <summary>运动模型模块 (CV / Kalman / OneEuro)。</summary>
-        [Header("Modules (free 3x2 combination)")]
+        [Header("Modules")]
         [Tooltip("运动模型模块：只能挂 MotionModel 子类 (ConstantVelocityModel / KalmanModel / OneEuroModel)。负责去噪 + 估计速度 + 外推。")]
         [SerializeField] private MotionModel motionModel;
 
         /// <summary>逐帧输出策略模块。</summary>
-        [Tooltip("输出策略模块：只能挂 SmoothingStrategy 子类；正式链路使用 Hold、PredictToNow、LinearSlerp 或 Hermite。")]
+        [Tooltip("输出策略模块：只能挂 SmoothingStrategy 子类；正式链路使用 Hold、PredictToNow、LinearSlerp 或 CausalPrediction。")]
         [SerializeField] private SmoothingStrategy smoothingStrategy;
 
         /// <summary>策略 label；为空时用 "model+strategy" 自动拼。</summary>
@@ -187,8 +187,7 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用跨渲染帧时序合成，包括历史缓冲或因果校正残差融合。</summary>
         public bool UsesTemporalSynthesis =>
-            smoothingStrategy is HermiteStrategy
-            || smoothingStrategy is LinearSlerpStrategy
+            smoothingStrategy is LinearSlerpStrategy
             || smoothingStrategy is CausalPredictionStrategy;
 
         /// <summary>是否启用显式静止锚定模块。</summary>
@@ -248,12 +247,6 @@ namespace EgoAnchor.Policy
 
         /// <summary>最近一次质量评估门控或 policy 原因。</summary>
         public string LatestReason => latestQualityGateDecision.Reason;
-
-        /// <summary>output stage 平移残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
-        public float LatestResidualMeters => float.NaN;
-
-        /// <summary>output stage 旋转残差 (新架构不单独整形，返回 NaN 兼容 eval)。</summary>
-        public float LatestResidualDegrees => float.NaN;
 
         /// <summary>是否静止锁定 (EgoAnchor 静止锚定稳定器当前是否冻结输出)。</summary>
         public bool LatestStaticLocked => staticLockModule != null && staticLockModule.IsLocked;
@@ -319,7 +312,7 @@ namespace EgoAnchor.Policy
             }
 
             // 运动模型和历史合成都要求严格递增的测量时间。这里统一拒绝，避免旧观测
-            // 回拨模型时钟，或向 Linear/SLERP、Hermite 与 StaticLock 注入乱序控制点。
+            // 回拨模型时钟，或向 Linear/SLERP、Causal Prediction 与 StaticLock 注入乱序控制点。
             if (ShouldRejectMeasurementTime(observation, out string timeRejectReason))
             {
                 RejectedCount++;

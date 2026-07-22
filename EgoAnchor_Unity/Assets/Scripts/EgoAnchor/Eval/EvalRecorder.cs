@@ -869,8 +869,6 @@ namespace EgoAnchor.Eval
                     rt != null ? rt.MotionModelName                  : string.Empty,
                     rt != null ? rt.SmoothingStrategyName            : string.Empty,
                     ResolveCachedConfigHash(ev, label),
-                    rt != null ? rt.LatestResidualMeters             : float.NaN,
-                    rt != null ? rt.LatestResidualDegrees            : float.NaN,
                     rt != null ? rt.LatestAcceptedScore              : float.NaN,
                     rt != null && rt.LatestStaticLocked,
                     hasRaw, rawPose,

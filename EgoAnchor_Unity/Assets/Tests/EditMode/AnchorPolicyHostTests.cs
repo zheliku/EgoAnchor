@@ -64,53 +64,6 @@ namespace EgoAnchor.Tests
             Assert.That(record.SenderUnityFrame, Is.EqualTo(12));
         }
 
-        /// <summary>
-        /// 延迟插值策略必须报告 pose 实际对应的语义时刻，而不是一律报告当前渲染时刻。
-        /// </summary>
-        [Test]
-        public void HermiteReportsActualOutputTargetTime()
-        {
-            GameObject go = new GameObject("HermiteOutputTargetTests");
-            try
-            {
-                ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                HermiteStrategy smoothing = go.AddComponent<HermiteStrategy>();
-                smoothing.ResetStrategy();
-
-                smoothing.Output(model, 5.0);
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(5.0));
-                Assert.That(GetPrivateField<double>(smoothing, "lastOutputTimeSeconds"), Is.EqualTo(5.0));
-
-                List<ControlPoint> points = GetPrivateField<List<ControlPoint>>(smoothing, "points");
-                points.Add(new ControlPoint(10.0, Pose.identity, Vector3.right, Vector3.zero));
-                smoothing.Output(model, 20.0);
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(10.0));
-                Assert.That(GetPrivateField<double>(smoothing, "lastOutputTimeSeconds"), Is.EqualTo(20.0));
-
-                points.Add(new ControlPoint(20.0, new Pose(Vector3.right * 10f, Quaternion.identity), Vector3.right, Vector3.zero));
-
-                SetPrivateField(smoothing, "delaySeconds", 20.0f);
-                SetPrivateField(smoothing, "lastOutputTimeSeconds", 20.0);
-                smoothing.Output(model, 20.0);
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(10.0), "早于最早点时应钳到最早点时间。");
-
-                SetPrivateField(smoothing, "delaySeconds", 5.0f);
-                SetPrivateField(smoothing, "lastOutputTimeSeconds", 20.0);
-                smoothing.Output(model, 20.0);
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(15.0).Within(1e-6), "插值输出应报告插值目标时间。");
-
-                SetPrivateField(smoothing, "delaySeconds", 0.0f);
-                SetPrivateField(smoothing, "minDelaySeconds", 0.0f);
-                SetPrivateField(smoothing, "lastOutputTimeSeconds", 30.0);
-                smoothing.Output(model, 30.0);
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(30.0).Within(1e-6), "最新点之后外推应报告外推目标时间。");
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
         /// <summary>One-Euro 缓冲基线必须在同一历史目标时刻执行位置 Linear 与旋转 SLERP。</summary>
         [Test]
         public void LinearSlerpInterpolatesFilteredControlPointsAtHistoricalTarget()
@@ -241,19 +194,6 @@ namespace EgoAnchor.Tests
             {
                 UnityEngine.Object.DestroyImmediate(go);
             }
-        }
-
-        /// <summary>SO(3) 右雅可比及其逆在多轴大角度下必须互为逆变换。</summary>
-        [Test]
-        public void RotationRightJacobianRoundTripsMultiAxisVelocity()
-        {
-            Vector3 rotationVector = new Vector3(0.9f, -0.6f, 0.7f);
-            Vector3 bodyAngularVelocity = new Vector3(1.2f, 0.4f, -0.8f);
-
-            Vector3 logRate = AnchorMath.ApplyRightJacobianInverse(rotationVector, bodyAngularVelocity);
-            Vector3 restored = AnchorMath.ApplyRightJacobian(rotationVector, logRate);
-
-            Assert.That(Vector3.Distance(restored, bodyAngularVelocity), Is.LessThan(1e-5f));
         }
 
         /// <summary>
@@ -740,6 +680,10 @@ namespace EgoAnchor.Tests
                 Assert.That(session.IsRecording, Is.False);
                 Assert.That(File.ReadAllText(capturePath), Is.EqualTo("capture-existing"));
                 Assert.That(File.ReadAllText(outputPath), Is.EqualTo("output-existing"));
+                Assert.That(
+                    Directory.Exists(Path.Combine(sessionDir, "audit_samples")),
+                    Is.False,
+                    "未写入审计样本时不得预创建空目录。");
             }
             finally
             {
@@ -1308,7 +1252,7 @@ namespace EgoAnchor.Tests
                 latestPhase: "TRACK", latestFailure: string.Empty, motionState: "Static", predictAheadMs: 120.0,
                 smoothingDiagnostics: SmoothingDiagnostics.Empty,
                 strategyLabel: "test", qualityGate: "disabled", motionModel: "constant_velocity", smoothingStrategy: "hold",
-                configHash: "hash", residualMeters: float.NaN, residualDegrees: float.NaN, acceptedScore: 1.0f, staticLocked: false,
+                configHash: "hash", acceptedScore: 1.0f, staticLocked: false,
                 hasAlignedRaw: true, alignedRawPose: Pose.identity,
                 hasArrivalTimeRaw: false, arrivalTimeRawPose: Pose.identity,
                 arrivalTimeRawMonoMs: double.NaN, arrivalTimeRawUnityFrame: -1, arrivalTimeCameraReference: "Left",

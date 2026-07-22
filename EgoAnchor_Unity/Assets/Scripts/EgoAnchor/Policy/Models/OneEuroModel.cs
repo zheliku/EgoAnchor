@@ -170,7 +170,7 @@ namespace EgoAnchor.Policy
 
         /// <summary>
         /// 把平滑旋转吸收到参考姿态，并保留搬运后的 body-local 角速度与原始测量残差。
-        /// 这样 One-Euro 预测与 Hermite 控制点共享同一角速度坐标约定。
+        /// 这样 One-Euro 预测与其他运动模型共享同一角速度坐标约定。
         /// </summary>
         /// <param name="measured">本次已经完成半球对齐的测量姿态。</param>
         private void RecenterRotationState(Quaternion measured)

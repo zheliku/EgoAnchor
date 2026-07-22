@@ -321,8 +321,8 @@ namespace EgoAnchor.Eval
             string serverProcessing = Number(runtime.LatestServerProcessingMs, "0", " ms");
             string smoothingDelay = Number(runtime.LatestSmoothingDelayMs, "0", " ms");
             string poseRate = Number(_latestPoseHz, "0.0", " Hz");
-            string residualPosition = Number(runtime.LatestResidualMeters * 1000.0, "0.0", " mm");
-            string residualRotation = Number(runtime.LatestResidualDegrees, "0.00", " deg");
+            string residualPosition = Number(runtime.LatestCorrectionPositionResidualMeters * 1000.0, "0.0", " mm");
+            string residualRotation = Number(runtime.LatestCorrectionRotationResidualDegrees, "0.00", " deg");
             string frameStepPosition = Number(_latestFrameStepM * 1000.0, "0.0", " mm");
             string frameStepRotation = Number(_latestFrameStepDeg, "0.00", " deg");
             string staticLock = runtime.LatestStaticLocked ? "ON" : "OFF";
@@ -345,7 +345,7 @@ namespace EgoAnchor.Eval
                 ? "--"
                 : runtime.LatestAcceptedScore.ToString("0.00");
             builder.AppendLine($"VCD  LATEST {latestScore} | ACCEPTED {acceptedScore}");
-            builder.AppendLine($"RESIDUAL  {residualPosition} / {residualRotation}");
+            builder.AppendLine($"CORRECTION  {residualPosition} / {residualRotation}");
             builder.AppendLine($"FRAME STEP  {frameStepPosition} / {frameStepRotation}");
             builder.AppendLine($"ANCHOR  {runtime.CurrentAnchorState} | MOTION  {Escape(runtime.CurrentMotionStateName)}");
             builder.AppendLine($"STATIC LOCK  {staticLock} | FRAME  {FrameText(runtime.LatestAlignedFrameId)}");

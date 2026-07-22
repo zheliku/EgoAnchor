@@ -377,7 +377,7 @@ namespace EgoAnchor.Tests
                 "TRACK", string.Empty, "static", 0,
                 new SmoothingDiagnostics(120.0f, 0.01f, 2.0f, 3L),
                 "egoanchor", "enabled", "kalman", "linear_slerp",
-                "cfg", 0, 0, 0.8f, false, false, Pose.identity, false, Pose.identity, double.NaN, -1, "Left", 0.8f);
+                "cfg", 0.8f, false, false, Pose.identity, false, Pose.identity, double.NaN, -1, "Left", 0.8f);
             string render = EvalJson.BuildRenderLine(
                 1100, 2100, 5, Pose.identity,
                 new EvalReferencePose(false, false, false, Pose.identity, double.NaN), 0, 0,
@@ -425,6 +425,8 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"correction_position_residual_m\":0.01", render);
             StringAssert.Contains("\"correction_rotation_residual_deg\":2", render);
             StringAssert.Contains("\"continuity_reset_count\":3", render);
+            StringAssert.DoesNotContain("latest_residual_meters", render);
+            StringAssert.DoesNotContain("latest_residual_degrees", render);
             foreach (string field in new[]
             {
                 "event_type", "source", "created_unix_ms", "mono_ms", "unity_frame", "severity",

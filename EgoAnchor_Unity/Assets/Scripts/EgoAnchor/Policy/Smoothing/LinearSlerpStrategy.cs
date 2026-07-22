@@ -9,17 +9,17 @@ namespace EgoAnchor.Policy
     ///
     /// 目标时刻与 EgoAnchor 的延迟插值一致，均取 render time 减去自适应缓冲延迟；
     /// 对运动模型输出的相邻控制点只做位置线性插值和旋转 SLERP，不使用模型导数，
-    /// 因而不会额外引入 Hermite 切线假设或起停过冲参数。
+    /// 因而不会引入速度切线假设或相应的起停过冲参数。
     /// </summary>
     public sealed class LinearSlerpStrategy : SmoothingStrategy
     {
         /// <summary>实测采集到渲染延迟的安全系数，与完整系统保持一致。</summary>
-        [Tooltip("自适应历史缓冲的延迟安全系数；与 EgoAnchor 的 HermiteStrategy 保持一致。默认 1.15。")]
+        [Tooltip("自适应历史缓冲的延迟安全系数；One-Euro 与完整 EgoAnchor 使用相同参数。默认 1.15。")]
         [Range(1.0f, 2.0f)]
         [SerializeField] private float latencySafetyMargin = 1.15f;
 
         /// <summary>自适应估计稳定前使用的历史缓冲下限，单位秒。</summary>
-        [Tooltip("历史缓冲延迟下限，单位秒；与 EgoAnchor 的 HermiteStrategy 保持一致。默认 0.25。")]
+        [Tooltip("历史缓冲延迟下限，单位秒；One-Euro 与完整 EgoAnchor 使用相同参数。默认 0.25。")]
         [Range(0.0f, 0.6f)]
         [SerializeField] private float minDelaySeconds = 0.25f;
 

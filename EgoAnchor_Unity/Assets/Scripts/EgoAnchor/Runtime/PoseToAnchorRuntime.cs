@@ -198,12 +198,6 @@ namespace EgoAnchor.Runtime
         /// <summary>当前平滑策略名称。</summary>
         public string SmoothingStrategyName => policyHost != null ? policyHost.SmoothingStrategyName : "";
 
-        /// <summary>最近一次 output stage 平移残差，单位米。</summary>
-        public float LatestResidualMeters => policyHost != null ? policyHost.LatestResidualMeters : float.NaN;
-
-        /// <summary>最近一次 output stage 旋转残差，单位度。</summary>
-        public float LatestResidualDegrees => policyHost != null ? policyHost.LatestResidualDegrees : float.NaN;
-
         /// <summary>最近一次被 policy 接受的可靠性分数。</summary>
         public float LatestAcceptedScore => policyHost != null ? policyHost.LatestAcceptedScore : float.NaN;
 

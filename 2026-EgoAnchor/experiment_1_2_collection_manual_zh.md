@@ -248,7 +248,7 @@ unity_admission.jsonl
 unity_render.jsonl
 unity_events.jsonl
 events.jsonl
-audit_samples/
+audit_samples/  # 仅在实际保存审计样本时出现
 ```
 
 `python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会在缺少总表时生成 `events.jsonl`；如果任一分片未停止、行数不符、存在丢行或写入失败，QC 返回 2，且不会留下临时或部分总表。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。

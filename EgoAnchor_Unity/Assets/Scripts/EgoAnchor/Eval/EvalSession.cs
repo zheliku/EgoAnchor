@@ -162,7 +162,6 @@ namespace EgoAnchor.Eval
 
             Directory.CreateDirectory(_sessionDir);
             EgoAnchorLog.For<EvalSession>().Info($"复用 Python session_id：{_sessionId}");
-            Directory.CreateDirectory(Path.Combine(_sessionDir, "audit_samples"));
 
             string referencePath = Path.Combine(_sessionDir, EvalV2Manifest.UnityReferenceFileName);
             string admissionPath = Path.Combine(_sessionDir, EvalV2Manifest.UnityAdmissionFileName);

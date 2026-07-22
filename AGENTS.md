@@ -117,7 +117,7 @@ PoseResult candidate
 - *Capture-Hold* 用采集时刻复合和零阶保持，作为 Arrival-Hold 与 One-Euro Anchor 之间的时间对齐桥接配置。
 - *One-Euro Anchor* 的新重采配置使用采集时刻世界复合、VCD 接纳、OneEuroModel 与 `LinearSlerpStrategy`；目标时刻与完整系统采用相同的自适应历史延迟，生命周期和重获取开关与完整系统一致，仅关闭 StaticLock。
 - 当前正式场景的 One-Euro 参数按米制位置与约 10 Hz 候选标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`。
-- 正式逐帧输出策略统一使用 `Strategy` 后缀：`HoldStrategy`、`PredictToNowStrategy`、`LinearSlerpStrategy` 和 `CausalPredictionStrategy`；运动状态估计统一使用 `Model` 后缀。正式日志字符串分别为 `hold`、`predict_to_now`、`linear_slerp` 和 `causal_prediction`，不得恢复旧 Passthrough/DelayedInterp/Blend 类名。`HermiteStrategy` 只保留为非正式研究实现，不进入 v4 九路矩阵。
+- 正式逐帧输出策略统一使用 `Strategy` 后缀：`HoldStrategy`、`PredictToNowStrategy`、`LinearSlerpStrategy` 和 `CausalPredictionStrategy`；运动状态估计统一使用 `Model` 后缀。正式日志字符串分别为 `hold`、`predict_to_now`、`linear_slerp` 和 `causal_prediction`，不得恢复旧 Passthrough/DelayedInterp/Blend 类名。废弃的 `HermiteStrategy`、样条数学和相关兼容分支已经删除，不得恢复。
 - *EgoAnchor* 用采集时刻复合、VCD 接纳、Kalman + `LinearSlerpStrategy`、显式静止锚定和生命周期管理。
 - *EgoAnchor Causal Prediction* 是额外的配对输出策略对照：使用修正 Kalman、VCD、有限 180 ms 的当前时刻预测和 60 ms 真实时间半衰期的校正残差融合，不使用 StaticLock；它与 *EgoAnchor w/o StaticLock* 共享候选、Kalman、VCD、生命周期、重获取和关闭 StaticLock 的设置，只替换输出策略，不属于四个单组件消融。180/60 ms 是 v4 pilot 初值，正式采集前必须冻结。
 - 组件归因通过关闭单一设计实现：w/o capture-time alignment、w/o VCD、w/o temporal synthesis、w/o StaticLock。
@@ -155,7 +155,7 @@ schema-v2 task directory
 - 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
 - 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；第九路 Causal Prediction 与 `w/o StaticLock` 共享关闭 StaticLock 的配置，只替换逐帧输出策略。
 - 同一批五项物理任务同时驱动实验一四配置和实验二四消融；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
-- 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
+- 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；不得把不同参考姿态下的旋转向量导数直接混用。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
 - 当前 `KalmanModel` 使用连续白噪声加速度 CV 模型，离散过程协方差为 `q_a [[dt^3/3, dt^2/2], [dt^2/2, dt]]`。冻结参数为位置 `q_a=0.002 m^2/s^3`、`R=0.000004 m^2`，旋转 `q_a=0.2 rad^2/s^3`、`R=0.0004 rad^2`；首帧位置/角速度方差均为 `1`，配置指纹必须包含 `q-model:cwna-v1` 及这些数值。协方差校正使用 Joseph 形式；共享 admission 入口拒绝非有限或非递增的 measurement time，不能把乱序控制点交给模型、时序合成或 StaticLock。VCD 只控制 admission，论文不得声称测量噪声随 VCD 分数在线自适应。
 - 当前五本 Stage 1 工作簿来自旧 `q*dt` 协方差运行时，只保留为 v3 归档结果和本轮只读工程诊断输入。CWNA 修正和新参数改变了正式运行时，必须用同一冻结代码完整重采五项任务后再替换活动批次；不得把 v3 数字写成新运行时的正式证据，也不得从不同批次按场景拼接。
@@ -193,7 +193,7 @@ schema-v2 task directory
 - Unity manifest 将 `run_kind` 固定写为 `formal`，不再暴露运行类型选择；同时写出自动配置哈希、对象、版本、无时长上下界的实验/场景计划、`completed_tasks` 和真实 Unity writer 统计。每个 variant 还必须写出非空 `configuration_fingerprint`，覆盖坐标补偿、运动模型、输出策略、接纳/生命周期/重获取及 StaticLock 的全部生效数值；`config_hash` 必须绑定该指纹，Python QC 同时核对模型、策略、门控、开关和 FNV-1a 哈希。`completed_tasks` 按任务编号记录本 session 最终未作废的 trial，schema-v2 QC 必须与 lifecycle events 重新推导的完成集合核对。`frozen_parameter_set_id` 自动复用整体 `config_hash`，`operator_id` 固定为匿名单操作员，run mode 与 protocol 由代码生成，Git commit 为可选审计字段。Formal 启动不要求现场填写元数据，仍严格要求 Python session 配对和非空变体配置哈希。Python candidate 及跨端 events 总统计在 Unity 停止时明确标为 pending，必须在 Python 停止并同步 `python_session.json` 后完成合并，禁止把 pending 当作 0。
 - Unity 采集场景维护五项可任意选择的共享物理任务；每项任务同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Causal Prediction` 配对输出策略对照，不再重复采集任务 6--9。Task 2 的 marker 必须按 `transition_started` / `transition_stopped` 严格交替闭合，用于停止过冲、反向回动和 settling time。`ExperimentInputHandler` 直接在 Inspector 序列化内联 `InputAction`，不使用 binding 字符串、`InputActionAsset` 或 `InputActionReference`；右手摇杆与键盘方向键共用 3×3 九宫格导航，主键盘数字行与小键盘 `1`--`5` 只负责直接选中任务，A/主键盘 Enter/小键盘 Enter 开始，右扳机/小键盘 `+`/`M` 标记，快速短按 B/小键盘 `0`/`E` 结束任务，摇杆按下/`Space` 只作废当前或选中任务，长按 B 1.5 秒/`F` 可随时停止 session。小键盘主流程固定为 `1`--`5` 选任务、`Enter` 开始、`+` 标记、`0` 结束。进入场景后保持未录制的任务选择状态并默认选中任务 1；方向键、右手摇杆或数字键只改变选中项。正式与开发场景的 `EvalSession.autoStart` 固定关闭；A、主 Enter 或小键盘 Enter 的一次新按下必须在同一回调内启动 session 与当前选中 trial，不得要求第二次确认，启动失败时保留选择且不得写 `trial_started`。右手 B 的结束绑定固定为 `Tap(duration=0.5)`，停止绑定固定为 `Hold(duration=1.5)`，防止长按停止前先误结束 trial。停止 session 时活动 trial 先写 `trial_rejected`，已经完成的任务保持不变。数字行路径必须写 `<Keyboard>/1`--`5`，小键盘路径写 `<Keyboard>/numpad1`--`numpad5`，marker 与结束路径分别写 `<Keyboard>/numpadPlus` 和 `<Keyboard>/numpad0`；不得使用无法解析的 `<Keyboard>/digitN`。运行中禁止切场；任务和 session 均无持续时间门禁，实际 trial 时长只记录不判定成败。已完成任务选中后可按开始动作重录，旧 trial 先写 `trial_rejected`；单独作废仍只影响选中任务。状态板只显示 `NEXT`、九宫格、`CURRENT`、直白 `STATE`、单一实际 trial 计时和固定按键图例，不暴露分析内部的 phase/event role；未录制时任务 1 保持黄色选中，一次显式开始动作后才显示绿色运行并启动 trial 计时；蓝色表示完成、灰色表示待执行，已完成任务被选中时保持蓝色并以箭头和粗体区分；Canvas 保持场景根节点静止。
 - 头显状态板运行时文本统一使用英文 ASCII，因为当前 TextMesh Pro 字体资产不保证 CJK 字形；中文只用于代码注释、Inspector Tooltip、控制台日志和采集手册，不得把中文动态状态字符串传给 `ExperimentStatusUI`。
-- 正式与开发采集场景的根 Canvas 固定包含两个同级面板：左侧任务状态板和右侧 `EvalLiveStats` 实时诊断板。实时板以 10 Hz 显示 HMD/佩戴/VR focus/输入 focus、output/display/reference、相对平台控制器的位姿差异、观测年龄、同 Unity 时钟 E2E arrival、Python server processing、smoothing delay、pose rate、VCD、残差、frame step 与锚点状态。平台参考差异不是外部真值，实时板不得用于挑选低误差起始时刻；正式指标仍由 schema-v2 离线分析产生。
+- 正式与开发采集场景的根 Canvas 固定包含两个同级面板：左侧任务状态板和右侧 `EvalLiveStats` 实时诊断板。实时板以 10 Hz 显示 HMD/佩戴/VR focus/输入 focus、output/display/reference、相对平台控制器的位姿差异、观测年龄、同 Unity 时钟 E2E arrival、Python server processing、smoothing delay、pose rate、VCD、因果预测校正残差、frame step 与锚点状态。非因果策略的校正残差显示为空；已废弃的通用 `latest_residual_*` 字段不得恢复。平台参考差异不是外部真值，实时板不得用于挑选低误差起始时刻；正式指标仍由 schema-v2 离线分析产生。
 - marker 成功后状态板显示 2 秒绿色 `MARKER SAVED #N` 和事件角色，非法时显示红色 `MARKER IGNORED`。反馈只属于 UI，不得额外写成实验事件；成功 marker 仍只写既有 `event_marker`。
 - `QuestStreamPublisher` 订阅 Meta VR focus：focus 丢失时暂停双目 GPU 读回和 JPEG 编码，恢复后自动继续；录制期间的 `xr_focus_lost/acquired` 写入 Unity events。出现 `HMDUnmounted`、`VrFocusLost` 或 `InputFocusLost` 的活动 trial 应作废重采。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 9 个唯一 runtime：Hub 下以两个空物体组织实验一四配置、实验二四个单组件消融和一个 Causal Prediction 配对输出策略对照，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 写入 `variant_matrix_id=exp12_9_causal_v3`，并记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
@@ -203,7 +203,7 @@ schema-v2 task directory
 
 ## Schema-v2 与评估原则
 
-Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`python_events.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`、合并后的 `events.jsonl` 和审计样本目录。旧共享事件文件格式不兼容。
+Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`python_events.jsonl`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl` 和合并后的 `events.jsonl`。`audit_samples/` 是可选目录，只能在实际写入审计样本时按需创建，不得为每个 session 预创建空目录。旧共享事件文件格式不兼容。
 
 - `capture_mono_ms` 是 image-time proxy，不得称曝光真值。
 - 平台参考轨迹用于同一 Quest、同一时间线下的配对系统行为分析，不得称外部物理真值。

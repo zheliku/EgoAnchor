@@ -324,8 +324,6 @@ namespace EgoAnchor.Eval
             b.Str("motion_model", v.MotionModel);
             b.Str("smoothing_strategy", v.SmoothingStrategy);
             b.Str("config_hash", v.ConfigHash);
-            b.Flt("latest_residual_meters", v.ResidualMeters);
-            b.Flt("latest_residual_degrees", v.ResidualDegrees);
             b.Flt("latest_accepted_score", v.AcceptedScore);
             b.Bool("latest_static_locked", v.StaticLocked);
         }
@@ -788,8 +786,6 @@ namespace EgoAnchor.Eval
         public readonly string MotionModel;
         public readonly string SmoothingStrategy;
         public readonly string ConfigHash;
-        public readonly float ResidualMeters;
-        public readonly float ResidualDegrees;
         public readonly float AcceptedScore;
         public readonly bool StaticLocked;
         // 仅主变体
@@ -813,7 +809,7 @@ namespace EgoAnchor.Eval
             string latestPhase, string latestFailure, string motionState, double predictAheadMs,
             SmoothingDiagnostics smoothingDiagnostics,
             string strategyLabel, string qualityGate, string motionModel, string smoothingStrategy,
-            string configHash, float residualMeters, float residualDegrees, float acceptedScore, bool staticLocked,
+            string configHash, float acceptedScore, bool staticLocked,
             bool hasAlignedRaw, Pose alignedRawPose,
             bool hasArrivalTimeRaw, Pose arrivalTimeRawPose,
             double arrivalTimeRawMonoMs, int arrivalTimeRawUnityFrame, string arrivalTimeCameraReference,
@@ -847,8 +843,6 @@ namespace EgoAnchor.Eval
             MotionModel = motionModel ?? string.Empty;
             SmoothingStrategy = smoothingStrategy ?? string.Empty;
             ConfigHash = configHash ?? string.Empty;
-            ResidualMeters = residualMeters;
-            ResidualDegrees = residualDegrees;
             AcceptedScore = acceptedScore;
             StaticLocked = staticLocked;
             HasAlignedRaw = hasAlignedRaw;

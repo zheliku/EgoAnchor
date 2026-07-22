@@ -640,8 +640,6 @@ SHEET_CONTRACTS = (
             _column("latest_accepted_score", "float"),
             _column("latest_phase"),
             _column("latest_failure"),
-            _column("latest_residual_meters", "float", unit="m"),
-            _column("latest_residual_degrees", "float", unit="deg"),
             _column("quality_gate"),
             _column("motion_model"),
             _column("smoothing_strategy"),

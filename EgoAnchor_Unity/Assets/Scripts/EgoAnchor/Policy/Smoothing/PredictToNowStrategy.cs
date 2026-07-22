@@ -6,7 +6,7 @@ namespace EgoAnchor.Policy
     /// 直接使用运动模型预测的逐渲染帧输出策略。
     ///
     /// 每个渲染帧调用 MotionModel.PredictAt(nowSeconds)，不做残差融合、插值或额外
-    /// 限幅。该策略用于观察 OneEuroModel 的平滑值与速度外推效果，不是零阶保持基线。
+    /// 限幅。该策略用于直接预测机制消融，可与任意 MotionModel 组合，不是零阶保持基线。
     /// </summary>
     public sealed class PredictToNowStrategy : SmoothingStrategy
     {
