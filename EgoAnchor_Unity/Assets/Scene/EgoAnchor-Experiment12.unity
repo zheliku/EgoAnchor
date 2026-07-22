@@ -1318,7 +1318,7 @@ MonoBehaviour:
   overlayPatternSoftness: 0.02
   overlayPatternRotation: 0
   outline: 1
-  outlineColor: {r: 1, g: 0, b: 0, a: 1}
+  outlineColor: {r: 0, g: 0.84276724, b: 0.011014254, a: 1}
   outlineColorStyle: 0
   outlineGradient:
     serializedVersion: 2
@@ -1691,7 +1691,7 @@ MonoBehaviour:
   overlayPatternSoftness: 0.02
   overlayPatternRotation: 0
   outline: 1
-  outlineColor: {r: 1, g: 0, b: 0, a: 1}
+  outlineColor: {r: 1, g: 0.41360176, b: 0, a: 1}
   outlineColorStyle: 0
   outlineGradient:
     serializedVersion: 2
@@ -5433,7 +5433,7 @@ MonoBehaviour:
   overlayPatternSoftness: 0.02
   overlayPatternRotation: 0
   outline: 1
-  outlineColor: {r: 1, g: 0, b: 0, a: 1}
+  outlineColor: {r: 0, g: 0.16213799, b: 1, a: 1}
   outlineColorStyle: 0
   outlineGradient:
     serializedVersion: 2
@@ -8626,7 +8626,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d17ce9b5dc748744b3ab640b1624c61, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.PoseToAnchorRuntime
   framePoseHistory: {fileID: 1764014454}
   alignmentReference: 1
@@ -8652,7 +8652,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8bfb1f42371b8d42ad54a36f903e78a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Runtime.DynamicObjectAnchor
   runtime: {fileID: 7600000001}
   targetTransform: {fileID: 7600000003}
@@ -8721,7 +8721,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69b1bb8d66234574a8ed623d497f3835, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7600000013}
   smoothingStrategy: {fileID: 7600000014}
@@ -8753,7 +8753,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
   positionProcessNoise: 0.2
   positionMeasurementNoise: 0.0004
@@ -8769,7 +8769,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6783a7c370cbb6b47975e8e72bd9a328, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25
@@ -8785,7 +8785,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
   lockEnabled: 1
   enterSpeedMps: 0.05

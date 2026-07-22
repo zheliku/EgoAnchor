@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import cv2
 import numpy as np
 
 from egoanchor.app import run_tracking_server, should_show_waiting_frame
@@ -81,6 +84,39 @@ class TrackingServerAppTest(unittest.TestCase):
 
         self.assertTrue(should_show_waiting_frame(has_debug_frame=False))
         self.assertFalse(should_show_waiting_frame(has_debug_frame=True))
+
+    def test_snapshot_key_is_case_insensitive(self) -> None:
+        """S 快照热键应同时接受大小写，且不与其他控制键混淆。"""
+
+        is_snapshot_key = run_tracking_server.__globals__["_is_snapshot_key"]
+
+        self.assertTrue(is_snapshot_key(ord("s")))
+        self.assertTrue(is_snapshot_key(ord("S")))
+        self.assertFalse(is_snapshot_key(ord("r")))
+
+    def test_debug_snapshots_are_written_at_configured_resolution(self) -> None:
+        """快照应重新生成独立高分辨率 PNG，而不是保存窗口缩放后的画面。"""
+
+        save_snapshots = run_tracking_server.__globals__["_save_debug_snapshots"]
+        output = SimpleNamespace(diagnostics=FrameDiagnostics(frame_id=42), observation=None)
+        pose_cfg = SimpleNamespace(
+            snapshot_output_dir="snapshots",
+            snapshot_pose_width=320,
+            snapshot_pose_height=180,
+            snapshot_score_width=300,
+            snapshot_score_height=240,
+        )
+        depth_cfg = SimpleNamespace(min_depth=0.1, max_depth=5.0)
+
+        with TemporaryDirectory() as temporary_dir:
+            pose_path, score_path = save_snapshots(output, pose_cfg, depth_cfg, Path(temporary_dir))
+            pose_image = cv2.imread(str(pose_path), cv2.IMREAD_COLOR)
+            score_image = cv2.imread(str(score_path), cv2.IMREAD_COLOR)
+
+        self.assertEqual(pose_path.parent.name, "snapshots")
+        self.assertIn("frame-42", pose_path.name)
+        self.assertEqual(pose_image.shape[:2], (180, 320))
+        self.assertEqual(score_image.shape[:2], (240, 300))
 
     def test_tracking_window_disabled_skips_opencv_window_calls(self) -> None:
         """关闭 tracking window 时不应调用 OpenCV 窗口 API，便于 Ubuntu headless 运行。"""

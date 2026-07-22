@@ -307,6 +307,29 @@ class DebugViewTest(unittest.TestCase):
 
         np.testing.assert_allclose(sample_bgr, np.array([220, 96, 32], dtype=np.uint8), atol=3)
 
+    def test_render_projected_depth_uses_checkerboard_outside_mask(self) -> None:
+        """渲染深度应像渲染 RGB 一样只在 mask 内显示，外部保持中性棋盘格。"""
+
+        render_mask = np.zeros((24, 24), dtype=bool)
+        render_mask[8:16, 8:16] = True
+        diagnostics = FrameDiagnostics(
+            render_quality_render_depth=np.ones((24, 24), dtype=np.float32),
+            render_quality_render_mask=render_mask,
+        )
+
+        view = make_score_debug_view(diagnostics, None, width=720, height=480)
+        banner_h = 5 * 24 + 3 * 20 + 36
+        row_h = (480 - banner_h) // 2
+        panel_image_h = row_h - 30
+        fitted_size = panel_image_h
+        image_x = 240 + (240 - fitted_size) // 2
+        panel_y = banner_h + row_h
+        outside_pixel = view[panel_y + 10, image_x + 10].astype(np.int16)
+        inside_pixel = view[panel_y + fitted_size // 2, image_x + fitted_size // 2].astype(np.int16)
+
+        self.assertLess(int(np.max(outside_pixel) - np.min(outside_pixel)), 3)
+        self.assertGreater(int(np.max(inside_pixel) - np.min(inside_pixel)), 20)
+
     def test_top_banner_long_text_is_clipped_to_window_width(self) -> None:
         """顶部横幅长文本应被截短，避免横向溢出覆盖窗口右侧内容。"""
 

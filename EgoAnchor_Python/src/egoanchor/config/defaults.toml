@@ -166,6 +166,11 @@ debug_window_max_fps = 20.0 # pose debug 主窗口最高重绘帧率；只限制
 score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
 score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡颜色/深度 2x3 诊断矩阵。
 score_window_max_fps = 6.0 # 评分调试窗口最高重绘帧率；LAB/深度残差矩阵较重，默认降频避免窗口卡顿。
+snapshot_output_dir = "data/debug/snapshots" # 按 S 保存高分辨率 PNG 的目录，相对 EgoAnchor_Python 项目根目录。
+snapshot_pose_width = 2560 # 保存的 pose dashboard 宽度，单位像素；独立于屏幕窗口尺寸，便于后续裁剪子图。
+snapshot_pose_height = 1280 # 保存的 pose dashboard 高度，单位像素；容纳顶部 HUD 和两行接近原始分辨率的面板。
+snapshot_score_width = 1920 # 保存的 VCD/score dashboard 宽度，单位像素；每列 640 像素以保留诊断源图细节。
+snapshot_score_height = 1240 # 保存的 VCD/score dashboard 高度，单位像素；容纳顶部 HUD 和两行接近原始分辨率的面板。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。
 
 # ============================================================================

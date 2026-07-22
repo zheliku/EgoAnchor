@@ -62,6 +62,11 @@ class SegmenterConfigTest(unittest.TestCase):
         self.assertEqual(cfg.demo.pose.score_window_width, 960)
         self.assertEqual(cfg.demo.pose.score_window_height, 800)
         self.assertAlmostEqual(cfg.demo.pose.debug_window_max_fps, 20.0)
+        self.assertEqual(cfg.demo.pose.snapshot_output_dir, "data/debug/snapshots")
+        self.assertEqual(cfg.demo.pose.snapshot_pose_width, 2560)
+        self.assertEqual(cfg.demo.pose.snapshot_pose_height, 1280)
+        self.assertEqual(cfg.demo.pose.snapshot_score_width, 1920)
+        self.assertEqual(cfg.demo.pose.snapshot_score_height, 1240)
         self.assertAlmostEqual(cfg.demo.pose.score_window_max_fps, 6.0)
         self.assertFalse(hasattr(cfg.demo.pose, "stereo_window_name"))
 

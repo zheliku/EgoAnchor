@@ -121,18 +121,18 @@ src/egoanchor/eval/config/paper.toml
 
 ## 三、命令总表
 
-| 命令 | 主要输入 | 主要输出或写入 | 是否改当前活动批次 |
-|---|---|---|---|
-| `pixi run eval config` | `batch.toml` | 终端 JSON | 否 |
-| `pixi run eval sessions` | `eval_root` | session 清单 JSON | 否 |
-| `pixi run eval stage <5 IDs>` | 五个新 session | `staging_root/<batch_id>/raw` 和 `workbooks` | 否 |
-| `pixi run eval promote [batch_id]` | 一个完整暂存批次 | 新 `active_root`，旧批次进入 `archive_root` | 是 |
-| `pixi run eval qc` | `active_root/raw` | QC JSON；必要时生成 `events.jsonl` | 否 |
-| `pixi run eval preprocess` | `active_root/raw` | 五本 Stage 1 XLSX | 否 |
-| `pixi run eval analyze --skip-latex` | 五本 Stage 1 XLSX | 指标、绘图数据、面板、表格、主稿回填 | 否 |
-| `pixi run eval latex` | 配置指定的 `.tex` 主稿 | 配置指定的最终 PDF | 否 |
-| `pixi run eval analyze` | 五本 Stage 1 XLSX | `analyze --skip-latex` 的全部输出，再编译 PDF | 否 |
-| `pixi run eval rebuild` | `active_root/raw` | preprocess + analyze + latex 的全部输出 | 否 |
+| 命令                                   | 主要输入                | 主要输出或写入                                   | 是否改当前活动批次 |
+| -------------------------------------- | ----------------------- | ------------------------------------------------ | ------------------ |
+| `pixi run eval config`               | `batch.toml`          | 终端 JSON                                        | 否                 |
+| `pixi run eval sessions`             | `eval_root`           | session 清单 JSON                                | 否                 |
+| `pixi run eval stage <5 IDs>`        | 五个新 session          | `staging_root/<batch_id>/raw` 和 `workbooks` | 否                 |
+| `pixi run eval promote [batch_id]`   | 一个完整暂存批次        | 新`active_root`，旧批次进入 `archive_root`   | 是                 |
+| `pixi run eval qc`                   | `active_root/raw`     | QC JSON；必要时生成`events.jsonl`              | 否                 |
+| `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
+| `pixi run eval analyze --skip-latex` | 五本 Stage 1 XLSX       | 指标、绘图数据、面板、表格、主稿回填             | 否                 |
+| `pixi run eval latex`                | 配置指定的`.tex` 主稿 | 配置指定的最终 PDF                               | 否                 |
+| `pixi run eval analyze`              | 五本 Stage 1 XLSX       | `analyze --skip-latex` 的全部输出，再编译 PDF  | 否                 |
+| `pixi run eval rebuild`              | `active_root/raw`     | preprocess + analyze + latex 的全部输出          | 否                 |
 
 只有 `promote` 会替换当前活动批次。`preprocess`、`analyze` 和 `rebuild` 会更新活动批次内的
 派生产物，但不会把另一个批次切换进来。
@@ -478,11 +478,11 @@ pixi run eval analyze
 
 ## 八、退出码和排错
 
-| 退出码 | 含义 | 处理方式 |
-|---|---|---|
-| `0` | 命令成功 | 检查返回 JSON 中的路径和摘要 |
-| `1` | 目录、固定文件、Git、latexmk 或文件系统错误 | 检查同步、路径、文件锁和工具安装 |
-| `2` | 批次、schema、QC 或论文输入契约错误 | 修复数据或配置后整阶段重跑 |
+| 退出码 | 含义                                        | 处理方式                         |
+| ------ | ------------------------------------------- | -------------------------------- |
+| `0`  | 命令成功                                    | 检查返回 JSON 中的路径和摘要     |
+| `1`  | 目录、固定文件、Git、latexmk 或文件系统错误 | 检查同步、路径、文件锁和工具安装 |
+| `2`  | 批次、schema、QC 或论文输入契约错误         | 修复数据或配置后整阶段重跑       |
 
 排错顺序：
 

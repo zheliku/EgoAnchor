@@ -51,7 +51,10 @@ def overlay_mask_contour(image_bgr: np.ndarray, mask: np.ndarray | None, color: 
         return output
     mask_u8 = (mask > 0).astype(np.uint8)
     if mask_u8.shape[:2] != output.shape[:2]:
-        mask_u8 = cv2.resize(mask_u8, (output.shape[1], output.shape[0]), interpolation=cv2.INTER_NEAREST)
+        mask_u8 = np.asarray(
+            cv2.resize(mask_u8, (output.shape[1], output.shape[0]), interpolation=cv2.INTER_NEAREST),
+            dtype=np.uint8,
+        )
     color_layer = np.zeros_like(output)
     color_layer[mask_u8 > 0] = color
     output = cv2.addWeighted(output, 1.0, color_layer, 0.35, 0)
@@ -66,7 +69,7 @@ def make_waiting_image(width: int, height: int, title: str) -> np.ndarray:
     image = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
     cv2.putText(image, title, (24, height // 2 - 36), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (230, 230, 230), 2, cv2.LINE_AA)
     cv2.putText(image, "Waiting for Quest stereo + camera_info", (24, height // 2 + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 220, 255), 1, cv2.LINE_AA)
-    cv2.putText(image, "Keys: 1/2/3/4 switch stage, r reset, q/ESC quit", (24, height // 2 + 34), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 255, 180), 1, cv2.LINE_AA)
+    cv2.putText(image, "Keys: 1/2/3/4 stage, r reset, s save PNG, q/ESC quit", (24, height // 2 + 34), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 255, 180), 1, cv2.LINE_AA)
     return image
 
 
@@ -300,12 +303,11 @@ def make_score_debug_view(
             bottom_h,
         ),
         (
-            _depth_map_panel(
+            _render_depth_projection_panel(
                 diagnostics.render_quality_render_depth,
                 diagnostics.render_quality_render_mask,
                 min_depth,
                 max_depth,
-                (0, 255, 120),
             ),
             "render projected depth",
             col_w,
@@ -451,6 +453,32 @@ def _depth_map_panel(
     return image
 
 
+def _render_depth_projection_panel(
+    depth: np.ndarray | None,
+    mask: np.ndarray | None,
+    min_depth: float,
+    max_depth: float,
+) -> np.ndarray:
+    """把渲染深度投影放在棋盘背景上，与渲染 RGB 保持相同的空域语义。"""
+
+    if depth is None:
+        return _empty_panel("no depth")
+    depth_arr = np.asarray(depth, dtype=np.float32)
+    if depth_arr.ndim != 2:
+        return _empty_panel("depth shape invalid")
+
+    depth_color = colorize_depth(depth_arr, min_depth=min_depth, max_depth=max_depth)
+    render_mask = _resize_mask_like(mask, depth_color)
+    valid_depth = np.isfinite(depth_arr) & (depth_arr > 0.0)
+    if render_mask is None:
+        render_mask = valid_depth
+
+    background = _checkerboard_background(depth_color.shape[0], depth_color.shape[1])
+    image = _composite_mask_region(depth_color, render_mask & valid_depth, background)
+    _draw_mask_contour(image, render_mask, (0, 255, 120))
+    return image
+
+
 def _depth_residual_panel(
     render_depth: np.ndarray | None,
     observed_depth: np.ndarray | None,
@@ -574,7 +602,10 @@ def _resize_mask_like(mask: np.ndarray | None, image_bgr: np.ndarray) -> np.ndar
         return None
     mask_u8 = (np.asarray(mask) > 0).astype(np.uint8)
     if mask_u8.shape[:2] != image_bgr.shape[:2]:
-        mask_u8 = cv2.resize(mask_u8, (image_bgr.shape[1], image_bgr.shape[0]), interpolation=cv2.INTER_NEAREST)
+        mask_u8 = np.asarray(
+            cv2.resize(mask_u8, (image_bgr.shape[1], image_bgr.shape[0]), interpolation=cv2.INTER_NEAREST),
+            dtype=np.uint8,
+        )
     return mask_u8 > 0
 
 

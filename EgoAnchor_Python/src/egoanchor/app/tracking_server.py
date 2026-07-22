@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
+from pathlib import Path
 import time
+from types import SimpleNamespace
 
 import cv2
+import numpy as np
 
 from egoanchor.config import load_config
 from egoanchor.diagnostics import make_pose_waiting_image, make_score_debug_view, tile_pose_depth_dashboard
+from egoanchor.perception import QuestPosePipelineOutput
 from egoanchor.protocol import SubjectRegistry
 from egoanchor.runtime import TrackingRuntime
 from egoanchor.utils import configure_logging, get_logger
@@ -29,6 +34,67 @@ def _handle_key(runtime: TrackingRuntime, key: int) -> bool:
     elif key in (ord("r"), ord("R")):
         runtime.reset_tracking_state()
     return True
+
+
+def _is_snapshot_key(key: int) -> bool:
+    """判断 OpenCV 按键是否请求保存当前两张高分辨率调试图。"""
+
+    return key in (ord("s"), ord("S"))
+
+
+def _resolve_snapshot_dir(python_root: Path, configured_dir: str) -> Path:
+    """解析 debug 快照目录；相对路径固定以 EgoAnchor_Python 根目录为基准。"""
+
+    output_dir = Path(str(configured_dir)).expanduser()
+    if output_dir.is_absolute():
+        return output_dir
+    return python_root / output_dir
+
+
+def _write_png(path: Path, image: np.ndarray) -> None:
+    """把 OpenCV 图像无损写成 PNG，并把静默写入失败转换为明确异常。"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(path), image, [cv2.IMWRITE_PNG_COMPRESSION, 3]):
+        raise OSError(f"OpenCV 无法写入 PNG: {path}")
+
+
+def _save_debug_snapshots(
+    output: QuestPosePipelineOutput,
+    pose_cfg: SimpleNamespace,
+    depth_cfg: SimpleNamespace,
+    python_root: Path,
+) -> tuple[Path, Path]:
+    """按独立高分辨率重新生成当前 pose 与 VCD dashboard，并保存为无损 PNG。"""
+
+    diagnostics = output.diagnostics
+    observation = output.observation
+    pose_image = tile_pose_depth_dashboard(
+        diagnostics,
+        observation,
+        width=int(pose_cfg.snapshot_pose_width),
+        height=int(pose_cfg.snapshot_pose_height),
+        min_depth=float(depth_cfg.min_depth),
+        max_depth=float(depth_cfg.max_depth),
+    )
+    score_image = make_score_debug_view(
+        diagnostics,
+        observation,
+        width=int(pose_cfg.snapshot_score_width),
+        height=int(pose_cfg.snapshot_score_height),
+        min_depth=float(depth_cfg.min_depth),
+        max_depth=float(depth_cfg.max_depth),
+    )
+
+    output_dir = _resolve_snapshot_dir(python_root, str(pose_cfg.snapshot_output_dir))
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    frame_id = int(getattr(diagnostics, "frame_id", -1))
+    stem = f"{timestamp}_frame-{frame_id}"
+    pose_path = output_dir / f"{stem}_pose.png"
+    score_path = output_dir / f"{stem}_vcd.png"
+    _write_png(pose_path, pose_image)
+    _write_png(score_path, score_image)
+    return pose_path, score_path
 
 
 def should_show_waiting_frame(has_debug_frame: bool) -> bool:
@@ -87,6 +153,7 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
     score_window_created = False
     last_debug_render_time: float | None = None
     last_score_render_time: float | None = None
+    latest_debug_output: QuestPosePipelineOutput | None = None
     debug_window_max_fps = float(getattr(pose_cfg, "debug_window_max_fps", 0.0))
     score_window_max_fps = float(getattr(pose_cfg, "score_window_max_fps", 0.0))
 
@@ -102,16 +169,28 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
             debug_window_created = True
             _create_fixed_window(score_window, int(getattr(pose_cfg, "score_window_width", 960)), int(getattr(pose_cfg, "score_window_height", 800)))
             score_window_created = True
+            assert waiting is not None
             cv2.imshow(debug_window, waiting)
-            LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, q/ESC quit.", runtime.endpoint)
+            LOGGER.info("listening on %s. Keys: 1/2/3/4 stage, r reset, s save PNG, q/ESC quit.", runtime.endpoint)
         else:
             LOGGER.info("listening on %s. OpenCV debug windows are disabled.", runtime.endpoint)
 
         while True:
             if show_tracking_window:
                 key = cv2.waitKey(1) & 0xFF
-                if key != 255 and not _handle_key(runtime, key):
-                    break
+                if key != 255:
+                    if _is_snapshot_key(key):
+                        if latest_debug_output is None:
+                            LOGGER.warning("尚无可保存的 debug 帧；请等待首帧处理完成后再按 S。")
+                        else:
+                            try:
+                                pose_path, score_path = _save_debug_snapshots(latest_debug_output, pose_cfg, depth_cfg, cfg.paths.python_root)
+                            except (OSError, ValueError, cv2.error) as exc:
+                                LOGGER.error("保存 debug PNG 失败: %s", exc)
+                            else:
+                                LOGGER.info("已保存高分辨率 debug PNG: pose=%s vcd=%s", pose_path, score_path)
+                    elif not _handle_key(runtime, key):
+                        break
 
             result = runtime.tick(return_debug=show_tracking_window)
             output = result.pipeline_output
@@ -138,6 +217,8 @@ def run_tracking_server(config_path: str | None = None, object_name: str | None 
 
             if not show_tracking_window:
                 continue
+
+            latest_debug_output = output
 
             # 在渲染新帧前，先把上一帧的渲染耗时写入当前帧的 diagnostics
             output.diagnostics.debug_render_ms = debug_render_ms

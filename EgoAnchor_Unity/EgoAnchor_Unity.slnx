@@ -1,7 +1,7 @@
 ﻿<Solution>
-  <Project Path="EgoAnchor.csproj" />
   <Project Path="VHierarchy.csproj" />
   <Project Path="HighlightPlus.Demo.csproj" />
+  <Project Path="EgoAnchor.csproj" />
   <Project Path="HighlightPlus.Runtime.csproj" />
   <Project Path="VTabs.csproj" />
   <Project Path="VFolders.csproj" />

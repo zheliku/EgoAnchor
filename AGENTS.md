@@ -171,6 +171,7 @@ schema-v2 task directory
 - Python candidate ID 使用 `session_id:frame_id:frame_local_seq`；`RuntimeLogWriter` 关闭时把 candidate/event 的真实 `rows_written`、`dropped_rows` 和 `log_write_failures` 写回 `python_session.json`，供最终 manifest 汇总，Unity 不得伪造 Python 丢行统计。
 - `egoanchor.eval` 包级入口只导出 schema-v2、QC 和 Stage 1 workbook 基础设施；论文分析必须从 `egoanchor.eval.paper_analysis` 或离线 CLI 显式进入，运行时服务不得因论文绘图依赖加载失败。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
+- Python OpenCV debug 窗口按 `S` 时从当前诊断数据重新生成并无损保存 pose 与 VCD 两张高分辨率 PNG，默认写入 `data/debug/snapshots/`，尺寸分别为 `2560x1280` 与 `1920x1240`；保存分辨率独立于实时窗口尺寸。VCD 的 render RGB 与 render projected depth 都只在渲染 mask 内显示数据，mask 外统一使用中性棋盘背景。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
 关键 ownership：`config/` 不导入模型/网络；`transport/` 只管传输；`routing/handlers` 不碰 GPU；`runtime/tracking_runtime.py` 是 pipeline owner；`perception/quest_pose_pipeline.py` 组合视觉模块；`reliability/` 计算 VCD；新 `eval/` 只处理 schema-v2、QC、实验一/二和论文产物。
@@ -210,6 +211,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 分析先在 `session x trial/event x variant` 内计算，再做 trial/event 配对和 session 汇总；不做 frame-level 推断。
 - 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
+- 由顺序录制的 Quest 投屏视频生成的轮廓极值叠加图，只能标为二维物体稳像后的定性示意；必须说明各方法片段并非同一候选流，不得把图像像素分离或人工挑选的极端帧写成正式配对指标，也不得替代 schema-v2 工作簿生成的定量证据。
 - schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest。CLI 事件物化入口只有在 `python_stopped`、两个事件分片 schema 合法、实际行数分别匹配 writer 统计且无丢行/写入失败时，才用冻结全序原子发布可重建的 `events.jsonl`；已有文件交给只读 QC 逐字节验证。半同步、pending、错配或非法 fragment 不得留下部分派生文件，也不得进入正式分析；Mutagen 完成同步后允许对同一目录直接重试。
 - schema-v2 QC 依据 `variant_matrix_id=exp12_9_linear_v2` 固定要求 9 个唯一 runtime，并冻结完整系统及三个组件对照的 Linear/SLERP 策略。缺少矩阵标识、配置指纹、任意 variant 或出现名称/方法错配均硬失败；不再接受历史八路数据。QC 还检查 writer 行数/丢行/失败、candidate/reference 主键、Unity 已消费 candidate×variant 与 tick×variant 矩阵及递归旧字段。NATS PoseResult 使用 latest-only 消费，Python 已发布但未进入 Unity 的 candidate 只能统计并警告，分析按 admission 投影排除，禁止为未收到的消息伪造 admission；Unity admission 指向未知 Python candidate 仍是硬错误。
 - Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial；开始/结束事件必须唯一且顺序合法。实际持续时间作为描述性审计指标记录，不设上下界，也不决定 QC 成败。
