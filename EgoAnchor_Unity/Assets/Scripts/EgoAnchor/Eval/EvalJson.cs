@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using EgoAnchor.Eval.Experiment;
+using EgoAnchor.Policy;
 using UnityEngine;
 
 namespace EgoAnchor.Eval
@@ -314,6 +315,10 @@ namespace EgoAnchor.Eval
             b.Str("latest_failure", v.LatestFailure);
             b.Str("motion_state", v.MotionState);
             b.Dbl("predict_ahead_ms", v.PredictAheadMs);
+            b.Flt("prediction_horizon_ms", v.SmoothingDiagnostics.PredictionHorizonMilliseconds);
+            b.Flt("correction_position_residual_m", v.SmoothingDiagnostics.CorrectionPositionResidualMeters);
+            b.Flt("correction_rotation_residual_deg", v.SmoothingDiagnostics.CorrectionRotationResidualDegrees);
+            b.Long("continuity_reset_count", v.SmoothingDiagnostics.ContinuityResetCount);
             b.Str("strategy_label", v.StrategyLabel);
             b.Str("quality_gate", v.QualityGate);
             b.Str("motion_model", v.MotionModel);
@@ -776,6 +781,8 @@ namespace EgoAnchor.Eval
         public readonly string LatestFailure;
         public readonly string MotionState;
         public readonly double PredictAheadMs;
+        /// <summary>本帧输出策略的独立预测、校正连续性诊断。</summary>
+        public readonly SmoothingDiagnostics SmoothingDiagnostics;
         public readonly string StrategyLabel;
         public readonly string QualityGate;
         public readonly string MotionModel;
@@ -804,6 +811,7 @@ namespace EgoAnchor.Eval
             double unityPoseHandleMonoMs,
             string anchorState, string policyAction, string policyReason,
             string latestPhase, string latestFailure, string motionState, double predictAheadMs,
+            SmoothingDiagnostics smoothingDiagnostics,
             string strategyLabel, string qualityGate, string motionModel, string smoothingStrategy,
             string configHash, float residualMeters, float residualDegrees, float acceptedScore, bool staticLocked,
             bool hasAlignedRaw, Pose alignedRawPose,
@@ -833,6 +841,7 @@ namespace EgoAnchor.Eval
             LatestFailure = latestFailure ?? string.Empty;
             MotionState = motionState ?? string.Empty;
             PredictAheadMs = predictAheadMs;
+            SmoothingDiagnostics = smoothingDiagnostics;
             StrategyLabel = strategyLabel ?? string.Empty;
             QualityGate = qualityGate ?? string.Empty;
             MotionModel = motionModel ?? string.Empty;

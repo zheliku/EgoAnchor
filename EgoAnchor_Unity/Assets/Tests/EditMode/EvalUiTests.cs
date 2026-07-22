@@ -370,11 +370,13 @@ namespace EgoAnchor.Tests
                 5, Runtime.WorldAlignmentMode.CaptureTime, true, 1000, 3,
                 true, Pose.identity, false, Pose.identity, double.NaN,
                 true, 0.8f, "aligned", "accepted", "quality_ok", "Tracking",
-                "enabled", "kalman", "hermite", true, true, "cfg"));
+                "enabled", "kalman", "linear_slerp", true, true, "cfg"));
             EvalVariantSnapshot variant = new EvalVariantSnapshot(
                 "egoanchor", true, 7, true, Pose.identity, true, Pose.identity, "transform",
                 true, 1000, 3, 20, 1010, 10, 1040, "Tracking", "accepted", "quality_ok",
-                "TRACK", string.Empty, "static", 0, "egoanchor", "enabled", "kalman", "hermite",
+                "TRACK", string.Empty, "static", 0,
+                new SmoothingDiagnostics(120.0f, 0.01f, 2.0f, 3L),
+                "egoanchor", "enabled", "kalman", "linear_slerp",
                 "cfg", 0, 0, 0.8f, false, false, Pose.identity, false, Pose.identity, double.NaN, -1, "Left", 0.8f);
             string render = EvalJson.BuildRenderLine(
                 1100, 2100, 5, Pose.identity,
@@ -396,7 +398,7 @@ namespace EgoAnchor.Tests
                 new[]
                 {
                     new EvalVariantConfig(
-                        "EgoAnchor", "kalman", "hermite", "enabled", "cfg",
+                        "EgoAnchor", "kalman", "linear_slerp", "enabled", "cfg",
                         "CaptureTime", true, true, true, true, true, true),
                 },
                 new EvalLogStats(0, 1, null, 2), new EvalLogStats(0, 1, null, 2),
@@ -419,6 +421,10 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("\"event\":\"unity_reference\"", reference);
             StringAssert.Contains("\"event\":\"unity_admission\"", admission);
             StringAssert.Contains("\"event\":\"unity_render\"", render);
+            StringAssert.Contains("\"prediction_horizon_ms\":120", render);
+            StringAssert.Contains("\"correction_position_residual_m\":0.01", render);
+            StringAssert.Contains("\"correction_rotation_residual_deg\":2", render);
+            StringAssert.Contains("\"continuity_reset_count\":3", render);
             foreach (string field in new[]
             {
                 "event_type", "source", "created_unix_ms", "mono_ms", "unity_frame", "severity",
@@ -609,6 +615,13 @@ namespace EgoAnchor.Tests
                 Assert.That(selector.MarkerFeedbackText, Is.EqualTo("MARKER SAVED #1: MOTION START"));
                 Assert.That(selector.CurrentPhaseText, Is.EqualTo("MOTION IN PROGRESS"));
                 StringAssert.DoesNotContain("RECOVERY", selector.CurrentPhaseText);
+                Assert.That(selector.HasOpenTransition, Is.True);
+                Assert.That(selector.EndTrial(), Is.False);
+                Assert.That(selector.MarkEvent(), Is.True);
+                Assert.That(selector.CurrentEventRole, Is.EqualTo(ExperimentEventRole.TransitionStopped));
+                Assert.That(selector.MarkerFeedbackText, Is.EqualTo("MARKER SAVED #2: MOTION STOP"));
+                Assert.That(selector.CurrentPhaseText, Is.EqualTo("MOTION STOPPED"));
+                Assert.That(selector.HasOpenTransition, Is.False);
                 Assert.That(selector.EndTrial(), Is.True);
 
                 Assert.That(selector.HasActiveTrial, Is.False);
@@ -967,6 +980,8 @@ namespace EgoAnchor.Tests
             Assert.That(selector.SelectTask(index), Is.True);
             Assert.That(selector.StartTrial(), Is.True);
             Assert.That(selector.MarkEvent(), Is.True);
+            if (selector.HasOpenTransition)
+                Assert.That(selector.MarkEvent(), Is.True);
             if (selector.HasOpenOcclusion)
                 Assert.That(selector.MarkEvent(), Is.True);
             Assert.That(selector.EndTrial(), Is.True);
@@ -1033,7 +1048,7 @@ namespace EgoAnchor.Tests
             "Capture-Hold",
             "One-Euro Anchor",
             "EgoAnchor",
-            "EgoAnchor Hermite",
+            "EgoAnchor Causal Prediction",
             "EgoAnchor w/o capture-time alignment",
             "EgoAnchor w/o VCD",
             "EgoAnchor w/o temporal synthesis",
@@ -1428,11 +1443,45 @@ namespace EgoAnchor.Tests
             AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "One-Euro Anchor", 0, 1, "OneEuroModel", "LinearSlerpStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor Hermite", 0, 1, "KalmanModel", "HermiteStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "EgoAnchor Causal Prediction", 0, 1, "KalmanModel", "CausalPredictionStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "LinearSlerpStrategy", true, 0, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "KalmanModel", "PredictToNowStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "LinearSlerpStrategy", false, 1, 1);
+
+            Assert.That(Regex.Matches(yaml, @"(?m)^  positionAccelerationNoise: 0\.002\r?$").Count, Is.EqualTo(6));
+            Assert.That(Regex.Matches(yaml, @"(?m)^  positionMeasurementNoise: 0\.000004\r?$").Count, Is.EqualTo(6));
+            Assert.That(Regex.Matches(yaml, @"(?m)^  rotationAccelerationNoise: 0\.2\r?$").Count, Is.EqualTo(6));
+            Assert.That(Regex.Matches(yaml, @"(?m)^  rotationMeasurementNoise: 0\.0004\r?$").Count, Is.EqualTo(6));
+            StringAssert.DoesNotContain("positionProcessNoise", yaml);
+            StringAssert.DoesNotContain("rotationProcessNoise", yaml);
+        }
+
+        /// <summary>因果预测与缓冲对照除输出策略外必须共享生命周期和重获取参数。</summary>
+        [Test]
+        public void CausalAndBufferedControlsShareNonStrategyPolicyParameters()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+            string causalPolicy = GetVariantPolicySection(yaml, "EgoAnchor Causal Prediction");
+            string bufferedPolicy = GetVariantPolicySection(yaml, "EgoAnchor w/o StaticLock");
+            foreach (string field in new[]
+            {
+                "enableQualityGate", "minQualityScore", "coastTimeoutSeconds", "trackingScoreFloor",
+                "lostTimeoutSeconds", "staticSpeedThresholdMps", "staticAngularSpeedThresholdDps",
+                "enableLostReacquire", "enableLowScoreReacquire", "emitServerReacquire",
+                "lowScoreReacquireThreshold", "lowScoreReacquireSeconds",
+                "lowScoreReacquireCooldownSeconds", "reacquireGeometryFloor",
+                "reacquireReprojWeight", "reacquireDepthWeight",
+            })
+            {
+                Assert.That(
+                    ReadScalar(causalPolicy, field),
+                    Is.EqualTo(ReadScalar(bufferedPolicy, field)),
+                    $"Causal 与 Buffered 的 {field} 不一致。");
+            }
+            Assert.That(ReadReference(causalPolicy, "staticLockModule"), Is.EqualTo("0"));
+            Assert.That(ReadReference(bufferedPolicy, "staticLockModule"), Is.EqualTo("0"));
         }
 
         /// <summary>Hub 层级必须按实验一与实验二分组，完整 EgoAnchor 只保留一个共享 runtime。</summary>
@@ -1453,7 +1502,7 @@ namespace EgoAnchor.Tests
             AssertVariantParent(yaml, "Capture-Hold", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "One-Euro Anchor", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "EgoAnchor", experiment1Transform, experiment1Section);
-            AssertVariantParent(yaml, "EgoAnchor Hermite", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "EgoAnchor Causal Prediction", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o capture-time alignment", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o VCD", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o temporal synthesis", experiment2Transform, experiment2Section);
@@ -1506,6 +1555,25 @@ namespace EgoAnchor.Tests
             {
                 Assert.That(staticLockId, Is.EqualTo("0"));
             }
+        }
+
+        /// <summary>读取 recorder 标签所指 runtime 的 policy host YAML 段。</summary>
+        private static string GetVariantPolicySection(string yaml, string label)
+        {
+            Match variant = Regex.Match(
+                yaml,
+                $@"(?m)^  - label: {Regex.Escape(label)}\r?\n    runtime: \{{fileID: (?<id>\d+)\}}");
+            Assert.That(variant.Success, Is.True, $"missing variant: {label}");
+            string runtimeSection = GetSection(yaml, variant.Groups["id"].Value);
+            return GetSection(yaml, ReadReference(runtimeSection, "policyHost"));
+        }
+
+        /// <summary>读取 YAML 组件段中的单行标量文本。</summary>
+        private static string ReadScalar(string section, string field)
+        {
+            Match match = Regex.Match(section, $@"(?m)^  {Regex.Escape(field)}: (?<value>[^\r\n]+)$");
+            Assert.That(match.Success, Is.True, $"missing scalar: {field}");
+            return match.Groups["value"].Value.Trim();
         }
 
         /// <summary>验证一个 recorder 变体对应的锚点对象直接属于指定实验分组。</summary>

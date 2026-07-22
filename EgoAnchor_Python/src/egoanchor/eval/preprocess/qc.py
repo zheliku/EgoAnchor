@@ -18,7 +18,7 @@ FORMAL_VARIANTS = {
     "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
     "One-Euro Anchor": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
-    "EgoAnchor Hermite": ("CaptureTime", True, True, True, True, True, True),
+    "EgoAnchor Causal Prediction": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
     "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
     "EgoAnchor w/o temporal synthesis": ("CaptureTime", True, True, False, True, True, True),
@@ -31,7 +31,7 @@ FORMAL_METHODS = {
     "Capture-Hold": ("cv", "hold", "disabled"),
     "One-Euro Anchor": ("oneeuro", "linear_slerp", "enabled"),
     "EgoAnchor": ("kalman", "linear_slerp", "enabled"),
-    "EgoAnchor Hermite": ("kalman", "hermite", "enabled"),
+    "EgoAnchor Causal Prediction": ("kalman", "causal_prediction", "enabled"),
     "EgoAnchor w/o capture-time alignment": ("kalman", "linear_slerp", "enabled"),
     "EgoAnchor w/o VCD": ("kalman", "linear_slerp", "disabled"),
     "EgoAnchor w/o temporal synthesis": ("kalman", "predict_to_now", "enabled"),
@@ -42,8 +42,8 @@ FORMAL_METHODS = {
 CURRENT_FORMAL_VARIANT_IDS = frozenset(FORMAL_VARIANTS)
 """当前 Unity 正式场景必须完整记录的九路 variant。"""
 
-CURRENT_VARIANT_MATRIX_ID = "exp12_9_linear_v2"
-"""当前 Unity manifest 写入的严格 Linear/SLERP 单组件消融九路矩阵标识。"""
+CURRENT_VARIANT_MATRIX_ID = "exp12_9_causal_v3"
+"""当前 Unity manifest 写入的因果预测配对对照九路矩阵标识。"""
 
 SCORE_FIELDS = (
     "vcd_score",
@@ -225,6 +225,7 @@ def run_task_qc(task: TaskDataset | str | Path) -> StageOneQcReport:
     reference_capture_times: dict[int, float] = {}
     admission_groups: dict[str, set[str]] = defaultdict(set)
     render_groups: dict[int, set[str]] = defaultdict(set)
+    continuity_reset_counts: dict[str, int] = {}
     unknown_render_frames: list[SourceRow] = []
     fragment_events: list[tuple[int, Mapping[str, Any]]] = []
     unity_events: list[SourceRow] = []
@@ -309,6 +310,12 @@ def run_task_qc(task: TaskDataset | str | Path) -> StageOneQcReport:
                 state.error("render_primary_key", f"tick×variant 重复：{tick_id} / {variant_id}", source_row)
             render_groups[tick_id].add(variant_id)
             _check_variant_row(source_row, variants.get(variant_id), state, admission=False)
+            _check_smoothing_diagnostics(
+                source_row,
+                variants.get(variant_id),
+                continuity_reset_counts,
+                state,
+            )
             source_frame_id = _integer(row.get("source_frame_id"))
             if source_frame_id is not None and source_frame_id >= 0 and source_frame_id not in reference_frames:
                 unknown_render_frames.append(source_row)
@@ -683,6 +690,63 @@ def _check_variant_row(
                 state.error("variant_row_matrix", f"{expected.variant_id} 的 {field} 与冻结矩阵不一致。", source_row)
 
 
+def _check_smoothing_diagnostics(
+    source_row: SourceRow,
+    expected: _VariantRecord | None,
+    continuity_reset_counts: dict[str, int],
+    state: _QcState,
+) -> None:
+    """检查因果预测专用诊断的空值、范围和累计计数语义。"""
+
+    if expected is None:
+        return
+    row = source_row.data
+    horizon = _finite_float(row.get("prediction_horizon_ms"))
+    position_residual = _finite_float(row.get("correction_position_residual_m"))
+    rotation_residual = _finite_float(row.get("correction_rotation_residual_deg"))
+    reset_count = _integer(row.get("continuity_reset_count"))
+    is_causal = expected.smoothing_strategy == "causal_prediction"
+
+    if is_causal:
+        configured_horizon_ms = _configured_prediction_horizon_ms(expected.configuration_fingerprint)
+        if configured_horizon_ms is None:
+            state.error("causal_prediction_config", "因果预测配置指纹缺少有效 horizon。", source_row)
+        elif horizon is None or not 0.0 <= horizon <= configured_horizon_ms + 0.001:
+            state.error(
+                "causal_prediction_horizon",
+                f"因果预测时域必须位于 [0, {configured_horizon_ms}] ms：{horizon}",
+                source_row,
+            )
+        if position_residual is None or position_residual < 0.0:
+            state.error("causal_correction_residual", "位置校正残差必须是非负有限值。", source_row)
+        if rotation_residual is None or rotation_residual < 0.0:
+            state.error("causal_correction_residual", "旋转校正残差必须是非负有限值。", source_row)
+    elif any(value is not None for value in (horizon, position_residual, rotation_residual)):
+        state.error("causal_diagnostics_scope", "非因果预测策略的专用浮点诊断必须为 null。", source_row)
+
+    if reset_count is None or reset_count < 0:
+        state.error("continuity_reset_count", "连续性异常重置计数必须是非负整数。", source_row)
+        return
+    if not is_causal and reset_count != 0:
+        state.error("causal_diagnostics_scope", "非因果预测策略的连续性异常重置计数必须为 0。", source_row)
+    previous = continuity_reset_counts.get(expected.variant_id)
+    if previous is not None and reset_count < previous:
+        state.error("continuity_reset_count", "连续性异常重置计数必须在 session 内单调不减。", source_row)
+    continuity_reset_counts[expected.variant_id] = reset_count
+
+
+def _configured_prediction_horizon_ms(configuration_fingerprint: str) -> float | None:
+    """从完整配置指纹读取因果预测时域并换算为毫秒。"""
+
+    for part in configuration_fingerprint.split("|"):
+        if not part.startswith("horizon:"):
+            continue
+        horizon_seconds = _finite_float(part.removeprefix("horizon:"))
+        if horizon_seconds is not None and horizon_seconds >= 0.0:
+            return horizon_seconds * 1000.0
+    return None
+
+
 def _check_render_reference_warmup(
     unknown_rows: list[SourceRow],
     reference_frames: set[int],
@@ -899,8 +963,13 @@ def _check_trial_lifecycle(
             state.error("marker_event_id", f"marker event_id 必须非空且 trial 内唯一：{key}")
         roles = [_text((item.data.get("payload") or {}).get("event_role")) for item in markers]
         scenario_id = key[1]
-        if scenario_id == "start_stop_6dof" and "transition_started" not in roles:
-            state.error("transition_events", f"起停 trial 缺少 transition_started：{key}")
+        if scenario_id == "start_stop_6dof":
+            expected_roles = [
+                "transition_started" if index % 2 == 0 else "transition_stopped"
+                for index in range(len(roles))
+            ]
+            if roles != expected_roles or len(roles) % 2 != 0:
+                state.error("transition_event_sequence", f"起停角色未严格交替闭合：{roles}")
         if scenario_id == "occlusion_recovery":
             expected_roles = [
                 "occlusion_started" if index % 2 == 0 else "target_visible"

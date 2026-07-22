@@ -185,9 +185,11 @@ namespace EgoAnchor.Policy
         /// <summary>是否启用 VCD 观测接纳。</summary>
         public bool UsesVcdAdmission => enableQualityGate;
 
-        /// <summary>是否启用逐渲染帧历史缓冲合成，包括 Linear/SLERP 与 Hermite 两种策略。</summary>
+        /// <summary>是否启用跨渲染帧时序合成，包括历史缓冲或因果校正残差融合。</summary>
         public bool UsesTemporalSynthesis =>
-            smoothingStrategy is HermiteStrategy || smoothingStrategy is LinearSlerpStrategy;
+            smoothingStrategy is HermiteStrategy
+            || smoothingStrategy is LinearSlerpStrategy
+            || smoothingStrategy is CausalPredictionStrategy;
 
         /// <summary>是否启用显式静止锚定模块。</summary>
         public bool UsesStaticLock => staticLockModule != null && staticLockModule.Enabled;
@@ -316,6 +318,15 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(latestQualityGateDecision.ToPolicyAction(), stateMachine.State, latestQualityGateDecision.Reason);
             }
 
+            // 运动模型和历史合成都要求严格递增的测量时间。这里统一拒绝，避免旧观测
+            // 回拨模型时钟，或向 Linear/SLERP、Hermite 与 StaticLock 注入乱序控制点。
+            if (ShouldRejectMeasurementTime(observation, out string timeRejectReason))
+            {
+                RejectedCount++;
+                latestQualityGateDecision = QualityGateDecision.Reject(timeRejectReason);
+                return new AnchorPolicyDecision(AnchorPolicyAction.Reject, stateMachine.State, timeRejectReason);
+            }
+
             // 低分重定位：已有锚定后若总分持续过低，本地重置进入 Relocalizing；
             // emitServerReacquire 决定是否同时请求上游通知 Python 重 register。
             // host 不持 client; 在 raw observation 上判定, 不受下面质量评估门控是否拒绝影响。
@@ -386,7 +397,11 @@ namespace EgoAnchor.Policy
                 outputTargetTimeSeconds = double.NaN;
                 smoothingDelaySeconds = double.NaN;
                 stateMachine.OnMissingPose(nowSeconds, double.PositiveInfinity, false, "no_estimate");
-                return AnchorPolicyOutput.None(stateMachine.State, "no_estimate");
+                return AnchorPolicyOutput.None(
+                    stateMachine.State,
+                    "no_estimate",
+                    double.NaN,
+                    smoothingStrategy.Diagnostics);
             }
 
             observationAgeSeconds = nowSeconds > motionModel.LastObservationTimeSeconds
@@ -413,7 +428,11 @@ namespace EgoAnchor.Policy
                 }
                 outputTargetTimeSeconds = double.NaN;
                 smoothingDelaySeconds = double.NaN;
-                return AnchorPolicyOutput.None(stateMachine.State, stateMachine.LastEvent.Reason, observationAgeSeconds);
+                return AnchorPolicyOutput.None(
+                    stateMachine.State,
+                    stateMachine.LastEvent.Reason,
+                    observationAgeSeconds,
+                    smoothingStrategy.Diagnostics);
             }
 
             Pose pose = smoothingStrategy.Output(motionModel, nowSeconds);
@@ -450,6 +469,7 @@ namespace EgoAnchor.Policy
                 observationAgeSeconds,
                 outputTargetTimeSeconds,
                 smoothingDelaySeconds,
+                smoothingStrategy.Diagnostics,
                 stateMachine.LastEvent.Reason);
         }
 
@@ -552,6 +572,32 @@ namespace EgoAnchor.Policy
             return true;
         }
 
+        /// <summary>
+        /// 检查运动估计时间戳。乱序输入只记为拒绝，不立即改变生命周期状态；
+        /// 生命周期仍由最近可靠观测与当前到达时钟统一推进。
+        /// </summary>
+        private bool ShouldRejectMeasurementTime(in AnchorObservation observation, out string reason)
+        {
+            double measurementTime = observation.MeasurementTimeSeconds;
+            if (double.IsNaN(measurementTime) || double.IsInfinity(measurementTime))
+            {
+                reason = "invalid_measurement_time";
+                return true;
+            }
+
+            if (motionModel != null
+                && motionModel.HasState
+                && measurementTime <= motionModel.LastObservationTimeSeconds)
+            {
+                reason = "non_monotonic_measurement_time";
+                return true;
+            }
+
+            reason = string.Empty;
+            return false;
+        }
+
+        /// <summary>按当前 VCD admission 配置判断观测是否应被拒绝。</summary>
         private bool ShouldRejectObservation(in AnchorObservation observation, out string reason)
         {
             reason = string.Empty;

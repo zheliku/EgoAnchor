@@ -857,6 +857,13 @@ namespace EgoAnchor.Eval
                     rt != null ? rt.LatestFailure                    : "missing_runtime",
                     rt != null ? rt.CurrentMotionStateName           : string.Empty,
                     rt != null ? rt.LatestPredictAheadMs             : double.NaN,
+                    rt != null
+                        ? new SmoothingDiagnostics(
+                            (float)rt.LatestPredictionHorizonMs,
+                            rt.LatestCorrectionPositionResidualMeters,
+                            rt.LatestCorrectionRotationResidualDegrees,
+                            rt.LatestContinuityResetCount)
+                        : SmoothingDiagnostics.Empty,
                     rt != null ? rt.StrategyLabel                    : string.Empty,
                     rt != null ? rt.QualityGateMode                  : string.Empty,
                     rt != null ? rt.MotionModelName                  : string.Empty,

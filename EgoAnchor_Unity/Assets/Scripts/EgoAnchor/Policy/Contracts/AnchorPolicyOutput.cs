@@ -35,6 +35,9 @@ namespace EgoAnchor.Policy
         /// <summary>当前渲染时刻相对输出语义时刻的实际平滑延迟，单位秒。</summary>
         public readonly double SmoothingDelaySeconds;
 
+        /// <summary>输出策略本帧的专用诊断；非因果预测策略返回空诊断。</summary>
+        public readonly SmoothingDiagnostics SmoothingDiagnostics;
+
         /// <summary>本帧输出的解释原因。</summary>
         public readonly string Reason;
 
@@ -49,6 +52,7 @@ namespace EgoAnchor.Policy
         /// <param name="observationAgeSeconds">当前渲染时刻距最近观测语义时刻的年龄，单位秒。</param>
         /// <param name="outputTargetTimeSeconds">本帧输出 pose 对应的 Unity 单调时钟语义时刻，单位秒。</param>
         /// <param name="smoothingDelaySeconds">当前渲染时刻相对输出语义时刻的实际平滑延迟，单位秒。</param>
+        /// <param name="smoothingDiagnostics">输出策略本帧的专用诊断。</param>
         /// <param name="reason">本帧输出的解释原因。</param>
         public AnchorPolicyOutput(
             bool hasPose,
@@ -59,6 +63,7 @@ namespace EgoAnchor.Policy
             double observationAgeSeconds,
             double outputTargetTimeSeconds,
             double smoothingDelaySeconds,
+            SmoothingDiagnostics smoothingDiagnostics,
             string reason)
         {
             HasPose = hasPose;
@@ -69,6 +74,7 @@ namespace EgoAnchor.Policy
             ObservationAgeSeconds = observationAgeSeconds;
             OutputTargetTimeSeconds = outputTargetTimeSeconds;
             SmoothingDelaySeconds = smoothingDelaySeconds;
+            SmoothingDiagnostics = smoothingDiagnostics;
             Reason = reason ?? string.Empty;
         }
 
@@ -81,6 +87,21 @@ namespace EgoAnchor.Policy
         /// <returns>HasPose=false 的输出。</returns>
         public static AnchorPolicyOutput None(AnchorState state, string reason, double observationAgeSeconds = double.NaN)
         {
+            return None(state, reason, observationAgeSeconds, SmoothingDiagnostics.Empty);
+        }
+
+        /// <summary>构造保留输出策略诊断的无 pose 输出。</summary>
+        /// <param name="state">当前 anchor 生命周期状态。</param>
+        /// <param name="reason">解释原因。</param>
+        /// <param name="observationAgeSeconds">当前观测年龄，单位秒。</param>
+        /// <param name="smoothingDiagnostics">当前输出策略诊断。</param>
+        /// <returns>HasPose=false 的输出。</returns>
+        public static AnchorPolicyOutput None(
+            AnchorState state,
+            string reason,
+            double observationAgeSeconds,
+            SmoothingDiagnostics smoothingDiagnostics)
+        {
             return new AnchorPolicyOutput(
                 false,
                 Pose.identity,
@@ -90,6 +111,7 @@ namespace EgoAnchor.Policy
                 observationAgeSeconds,
                 double.NaN,
                 double.NaN,
+                smoothingDiagnostics,
                 reason);
         }
     }

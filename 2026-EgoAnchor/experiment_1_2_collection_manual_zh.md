@@ -2,7 +2,7 @@
 
 正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Hermite` 插值器对照。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Causal Prediction` 因果预测对照。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
 
 当前离线 CLI 不会拆分多任务 session，也不会自动合并多个 session。正式批次固定为任务 1--5 各录一个独立 session，共五个 session；每个 session 只完成一个任务。五次采集必须使用完全相同的冻结配置。完成当前任务后停止 session，重新启动 Python 取得新的 session_id，再采下一项任务。不要把同一个多任务 session 复制成五个 task 目录。
 
@@ -186,9 +186,10 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 1. 控制器放在桌面，选中任务 2，再按 A 或 `Enter` 开始。
 2. 先保持静止，建立初始基线。
-3. 准备拿起时先按 marker，然后立即拿起控制器。
-4. 同时做平移和旋转，再放回桌面并等待稳定。
-5. 重复多轮，每轮拿起前都按 marker；覆盖起动、运动和停止后即可结束。
+3. 准备拿起时先按 marker，看到 `MOTION START` 后立即拿起控制器。
+4. 同时做平移和旋转，再放回桌面；确认物体已经完全停止时再次按 marker，记录 `MOTION STOP`。
+5. 重复多轮；每轮都必须按“开始前一次、完全停止后一次”成对标记，未闭合的一对不能结束任务。
+6. 覆盖起动、运动、停止过冲和稳定过程后结束。
 
 ### 任务 3：MOVE，持续平移
 
@@ -213,7 +214,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和采用 Linear/SLERP 的完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。采集时刻对齐、VCD 和 StaticLock 三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；`EgoAnchor Hermite` 仅替换插值器，用于图 3(d) 的配对策略判断。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
+任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和采用 Linear/SLERP 的完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。采集时刻对齐、VCD 和 StaticLock 三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；`EgoAnchor Causal Prediction` 与 `EgoAnchor w/o StaticLock` 都关闭 StaticLock，并共享 Kalman、VCD、生命周期和重获取配置，只比较有限时域因果预测与缓冲 Linear/SLERP。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
 
 ## 七、做错了怎么处理
 
@@ -266,7 +267,7 @@ pixi run eval sessions
 pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 至少要有一个 `transition_started`；任务 5 的遮挡/重新可见 marker 必须成对闭合。分析还会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 的 `transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 都必须严格交替并成对闭合。分析还会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
 
 实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
 使用相同配置并分别对应任务 1--5。`stage` 会把通过 QC 的副本写入

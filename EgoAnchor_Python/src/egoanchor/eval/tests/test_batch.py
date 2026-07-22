@@ -36,7 +36,7 @@ _SCENARIOS = (
 
 _MARKER_ROLES = (
     ("generic_marker",),
-    ("transition_started",),
+    ("transition_started", "transition_stopped"),
     ("generic_marker",),
     ("generic_marker",),
     ("occlusion_started", "target_visible"),

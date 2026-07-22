@@ -91,6 +91,18 @@ namespace EgoAnchor.Runtime
         /// <summary>最近一次 policy 输出相对渲染时刻的实际平滑延迟，单位毫秒。</summary>
         private double latestSmoothingDelayMs = double.NaN;
 
+        /// <summary>最近一次有限因果预测实际使用的预测时域，单位毫秒。</summary>
+        private double latestPredictionHorizonMs = double.NaN;
+
+        /// <summary>最近一次有限因果预测实际施加的位置校正残差，单位米。</summary>
+        private float latestCorrectionPositionResidualMeters = float.NaN;
+
+        /// <summary>最近一次有限因果预测实际施加的旋转校正残差，单位度。</summary>
+        private float latestCorrectionRotationResidualDegrees = float.NaN;
+
+        /// <summary>有限因果预测因异常输入放弃连续性的累计次数。</summary>
+        private long latestContinuityResetCount;
+
         /// <summary>最近成功 aligned pose 在 Unity 中处理完成的单调时钟毫秒。</summary>
         private double latestUnityPoseHandleMonoMs = double.NaN;
 
@@ -135,6 +147,18 @@ namespace EgoAnchor.Runtime
 
         /// <summary>最近一次 policy 输出相对当前渲染时刻的实际平滑延迟，单位毫秒。</summary>
         public double LatestSmoothingDelayMs => latestSmoothingDelayMs;
+
+        /// <summary>最近一次有限因果预测实际使用的预测时域，单位毫秒；其他策略为 NaN。</summary>
+        public double LatestPredictionHorizonMs => latestPredictionHorizonMs;
+
+        /// <summary>最近一次有限因果预测实际施加的位置校正残差，单位米；其他策略为 NaN。</summary>
+        public float LatestCorrectionPositionResidualMeters => latestCorrectionPositionResidualMeters;
+
+        /// <summary>最近一次有限因果预测实际施加的旋转校正残差，单位度；其他策略为 NaN。</summary>
+        public float LatestCorrectionRotationResidualDegrees => latestCorrectionRotationResidualDegrees;
+
+        /// <summary>有限因果预测因异常输入放弃连续性的累计次数。</summary>
+        public long LatestContinuityResetCount => latestContinuityResetCount;
 
         /// <summary>
         /// 最近成功 aligned pose 的 Unity 处理完成时刻，单位单调时钟毫秒。
@@ -612,6 +636,11 @@ namespace EgoAnchor.Runtime
             latestObservationAgeMs = output.ObservationAgeSeconds * 1000.0;
             latestPolicyOutputTargetMonoMs = output.OutputTargetTimeSeconds * 1000.0;
             latestSmoothingDelayMs = output.SmoothingDelaySeconds * 1000.0;
+            SmoothingDiagnostics diagnostics = output.SmoothingDiagnostics;
+            latestPredictionHorizonMs = diagnostics.PredictionHorizonMilliseconds;
+            latestCorrectionPositionResidualMeters = diagnostics.CorrectionPositionResidualMeters;
+            latestCorrectionRotationResidualDegrees = diagnostics.CorrectionRotationResidualDegrees;
+            latestContinuityResetCount = diagnostics.ContinuityResetCount;
             if (output.HasPose)
             {
                 outputPose = output.Pose;

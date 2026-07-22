@@ -78,6 +78,9 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>当前遮挡是否尚未写入 target_visible。</summary>
         private bool _hasOpenOcclusion;
 
+        /// <summary>当前起停动作是否尚未写入 transition_stopped。</summary>
+        private bool _hasOpenTransition;
+
         /// <summary>当前 trial 已记录的 marker 数量。</summary>
         private int _trialEventCount;
 
@@ -137,6 +140,9 @@ namespace EgoAnchor.Eval.Experiment
 
         /// <summary>当前是否正在等待目标重新可见 marker。</summary>
         public bool HasOpenOcclusion => _hasOpenOcclusion;
+
+        /// <summary>当前是否已标记运动开始、正在等待完全停止 marker。</summary>
+        public bool HasOpenTransition => _hasOpenTransition;
 
         /// <summary>当前是否有活动 trial。</summary>
         public bool HasActiveTrial => _activeTaskIndex >= 0;
@@ -205,8 +211,9 @@ namespace EgoAnchor.Eval.Experiment
                 if (!HasActiveTrial) return "TASK SELECTED - NOT RUNNING";
                 if (_trialEventCount == 0) return "RECORDING BASELINE";
                 if (_hasOpenOcclusion) return "TARGET OCCLUDED";
+                if (_hasOpenTransition) return "MOTION IN PROGRESS";
                 if (ExperimentEventRole.SupportsTargetVisible(CurrentScenarioId)) return "TARGET VISIBLE";
-                if (_eventRole == ExperimentEventRole.TransitionStarted) return "MOTION IN PROGRESS";
+                if (_eventRole == ExperimentEventRole.TransitionStopped) return "MOTION STOPPED";
                 return "ACTION IN PROGRESS";
             }
         }
@@ -233,6 +240,8 @@ namespace EgoAnchor.Eval.Experiment
                     return "MARK NOW: NUMPAD +";
                 if (_hasOpenOcclusion)
                     return "TARGET VISIBLE: NUMPAD +";
+                if (_hasOpenTransition)
+                    return "MARK STOP: NUMPAD +";
                 return "END: NUMPAD 0 | NEXT MARKER: NUMPAD +";
             }
         }
@@ -248,10 +257,14 @@ namespace EgoAnchor.Eval.Experiment
                     return "Numpad + / M / Trigger at action or occlusion start.";
                 if (_hasOpenOcclusion)
                     return "Numpad + / M / Trigger when the target becomes visible.";
+                if (_hasOpenTransition)
+                    return "Numpad + / M / Trigger after the object has fully stopped.";
                 if (_eventRole == ExperimentEventRole.TargetVisible)
                     return "Pair saved. Mark again at the next occlusion.";
                 if (_eventRole == ExperimentEventRole.TransitionStarted)
-                    return "Motion saved. Mark again at the next motion.";
+                    return "Motion start saved. Mark again after the object has fully stopped.";
+                if (_eventRole == ExperimentEventRole.TransitionStopped)
+                    return "Stop saved. Mark again immediately before the next motion.";
                 return "Event saved. Mark again at the next event.";
             }
         }
@@ -361,6 +374,7 @@ namespace EgoAnchor.Eval.Experiment
             _eventRole = ExperimentEventRole.None;
             _trialEventCount = 0;
             _hasOpenOcclusion = false;
+            _hasOpenTransition = false;
             _trialStartedAt = Time.realtimeSinceStartupAsDouble;
             Emit(CurrentContext, "trial_started");
             return true;
@@ -382,6 +396,13 @@ namespace EgoAnchor.Eval.Experiment
                     ? ExperimentEventRole.TargetVisible
                     : ExperimentEventRole.OcclusionStarted;
                 _hasOpenOcclusion = role == ExperimentEventRole.OcclusionStarted;
+            }
+            else if (ExperimentEventRole.SupportsTransitionStopped(CurrentScenarioId))
+            {
+                role = _hasOpenTransition
+                    ? ExperimentEventRole.TransitionStopped
+                    : ExperimentEventRole.TransitionStarted;
+                _hasOpenTransition = role == ExperimentEventRole.TransitionStarted;
             }
             else
             {
@@ -460,7 +481,7 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>结束活动 trial，并保留最后上下文用于事后作废。</summary>
         private bool FinishTrial()
         {
-            if (_trialEventCount == 0 || _hasOpenOcclusion) return false;
+            if (_trialEventCount == 0 || _hasOpenOcclusion || _hasOpenTransition) return false;
             ExperimentContext completedContext = CurrentContext;
             Emit(completedContext, "trial_ended");
             _completed[_activeTaskIndex] = true;
@@ -478,6 +499,7 @@ namespace EgoAnchor.Eval.Experiment
             _eventRole = ExperimentEventRole.None;
             _trialEventCount = 0;
             _hasOpenOcclusion = false;
+            _hasOpenTransition = false;
             _trialStartedAt = 0.0;
         }
 
@@ -509,6 +531,7 @@ namespace EgoAnchor.Eval.Experiment
             if (role == ExperimentEventRole.OcclusionStarted) return "OCCLUSION START";
             if (role == ExperimentEventRole.TargetVisible) return "TARGET VISIBLE";
             if (role == ExperimentEventRole.TransitionStarted) return "MOTION START";
+            if (role == ExperimentEventRole.TransitionStopped) return "MOTION STOP";
             return "EVENT";
         }
 

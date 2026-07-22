@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -12,6 +13,11 @@ from typing import Any
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
+from ..preprocess import (
+    CURRENT_VARIANT_MATRIX_ID,
+    FORMAL_METHODS,
+    FORMAL_VARIANTS,
+)
 from .settings import PaperSettings, load_settings
 from .xlsx import iter_rows, workbook_sha256
 
@@ -19,8 +25,8 @@ from .xlsx import iter_rows, workbook_sha256
 FULL_VARIANT = "EgoAnchor"
 """正式论文中完整 Linear/SLERP 系统的 variant ID。"""
 
-HERMITE_VARIANT = "EgoAnchor Hermite"
-"""当前正式批次保留的 Hermite 对照 variant ID。"""
+CAUSAL_PREDICTION_VARIANT = "EgoAnchor Causal Prediction"
+"""当前正式批次保留的有限时域因果预测配对 variant ID。"""
 
 METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 """实验一正式比较的四种系统配置。"""
@@ -28,6 +34,80 @@ METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 NO_STATIC_LOCK = "EgoAnchor w/o StaticLock"
 NO_VCD = "EgoAnchor w/o VCD"
 NO_TEMPORAL_SYNTHESIS = "EgoAnchor w/o temporal synthesis"
+
+TEMPORAL_STRATEGY_VARIANTS = (
+    NO_TEMPORAL_SYNTHESIS,
+    CAUSAL_PREDICTION_VARIANT,
+    NO_STATIC_LOCK,
+)
+"""图 3(d) 中 Direct、Causal 与 Buffered 的固定 runtime 顺序。"""
+
+
+def _validate_workbook_runtime_contract(workbook: Path) -> None:
+    """确认 Stage 1 工作簿来自当前九路矩阵，拒绝把 v3 归档数据写入新论文。"""
+
+    matrix_rows = [
+        row
+        for row in iter_rows(
+            workbook,
+            "metadata_kv",
+            ("document", "json_path", "value_json"),
+        )
+        if row.get("document") == "manifest.json"
+        and row.get("json_path") == "variant_matrix_id"
+    ]
+    if len(matrix_rows) != 1:
+        raise ValueError(f"Stage 1 工作簿必须包含唯一 variant_matrix_id：{workbook}")
+    try:
+        matrix_id = json.loads(str(matrix_rows[0]["value_json"]))
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Stage 1 工作簿的 variant_matrix_id 无法解析：{workbook}") from exc
+    if matrix_id != CURRENT_VARIANT_MATRIX_ID:
+        raise ValueError(
+            f"Stage 1 工作簿必须来自 {CURRENT_VARIANT_MATRIX_ID}，"
+            f"当前为 {matrix_id or '<empty>'}：{workbook}"
+        )
+
+    columns = (
+        "variant_id",
+        "variant_label",
+        "world_alignment_mode",
+        "uses_capture_time_alignment",
+        "uses_vcd_admission",
+        "uses_temporal_synthesis",
+        "uses_static_lock",
+        "uses_low_score_reacquire",
+        "uses_server_reacquire",
+        "motion_model",
+        "smoothing_strategy",
+        "quality_gate",
+    )
+    rows = list(iter_rows(workbook, "variants", columns))
+    indexed = {str(row.get("variant_id") or ""): row for row in rows}
+    if len(indexed) != len(rows) or set(indexed) != set(FORMAL_VARIANTS):
+        raise ValueError(
+            f"Stage 1 工作簿的九路 runtime 集合与 {CURRENT_VARIANT_MATRIX_ID} 不一致：{workbook}"
+        )
+    for variant_id, expected_definition in FORMAL_VARIANTS.items():
+        row = indexed[variant_id]
+        definition = (
+            str(row.get("world_alignment_mode") or ""),
+            _truthy(row.get("uses_capture_time_alignment")),
+            _truthy(row.get("uses_vcd_admission")),
+            _truthy(row.get("uses_temporal_synthesis")),
+            _truthy(row.get("uses_static_lock")),
+            _truthy(row.get("uses_low_score_reacquire")),
+            _truthy(row.get("uses_server_reacquire")),
+        )
+        method = (
+            str(row.get("motion_model") or ""),
+            str(row.get("smoothing_strategy") or ""),
+            str(row.get("quality_gate") or ""),
+        )
+        if str(row.get("variant_label") or "") != variant_id:
+            raise ValueError(f"Stage 1 工作簿的 variant label 不一致：{variant_id}: {workbook}")
+        if definition != expected_definition or method != FORMAL_METHODS[variant_id]:
+            raise ValueError(f"Stage 1 工作簿的 runtime 定义不一致：{variant_id}: {workbook}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +131,12 @@ class PaperResults:
 
     transition_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
     """起停片段的显示响应代价。"""
+
+    stop_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """停止边界后的前向过冲、反向回动与稳定时间。"""
+
+    correction_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """新候选生效边界处的显示位置与旋转步长。"""
 
     capture_alignment: tuple[Mapping[str, Any], ...]
     """同一候选 capture-time 与 arrival-time 世界复合的片段级比较。"""
@@ -238,6 +324,69 @@ def _event_roles(workbooks: Sequence[Path]) -> Mapping[tuple[str, str, str], str
     return roles
 
 
+def _collect_correction_metrics(
+    workbooks: Sequence[Path],
+) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
+    """按 source frame 切换识别候选生效边界，并计算实际显示步长。"""
+
+    columns = (
+        "session_id",
+        "trial_id",
+        "event_id",
+        "variant_id",
+        "render_mono_ms",
+        "source_frame_id",
+        "has_display_pose",
+        "display_pos_x_m",
+        "display_pos_y_m",
+        "display_pos_z_m",
+        "display_rot_x",
+        "display_rot_y",
+        "display_rot_z",
+        "display_rot_w",
+    )
+    grouped: defaultdict[tuple[str, str, str, str], list[tuple[float, int, np.ndarray, np.ndarray]]] = defaultdict(list)
+    for workbook in workbooks:
+        for row in iter_rows(workbook, "unity_render", columns):
+            if not _valid_event(row) or not _truthy(row.get("has_display_pose")):
+                continue
+            position = _finite_vector(row, "display_pos", ("x_m", "y_m", "z_m"))
+            rotation = _finite_vector(row, "display_rot", ("x", "y", "z", "w"))
+            try:
+                time_ms = float(row["render_mono_ms"])
+                source_frame_id = int(row["source_frame_id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if position is None or rotation is None:
+                continue
+            grouped[_segment_key(row)].append((time_ms, source_frame_id, position, rotation))
+
+    metrics: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for (session_id, trial_id, event_id, variant_id), rows in grouped.items():
+        ordered = sorted(rows, key=lambda item: item[0])
+        position_steps: list[float] = []
+        rotation_steps: list[float] = []
+        for previous, current in zip(ordered, ordered[1:]):
+            if previous[1] < 0 or current[1] < 0 or previous[1] == current[1]:
+                continue
+            position_steps.append(1000.0 * float(np.linalg.norm(current[2] - previous[2])))
+            relative = Rotation.from_quat(previous[3]).inv() * Rotation.from_quat(current[3])
+            rotation_steps.append(float(np.degrees(relative.magnitude())))
+        if not position_steps:
+            continue
+        metrics[variant_id].append(
+            {
+                "session_id": session_id,
+                "trial_id": trial_id,
+                "segment_id": event_id,
+                "position_step_p95_mm": _quantile(np.asarray(position_steps), 0.95),
+                "rotation_step_p95_deg": _quantile(np.asarray(rotation_steps), 0.95),
+                "boundary_count": len(position_steps),
+            }
+        )
+    return {key: tuple(value) for key, value in sorted(metrics.items())}
+
+
 def _sorted_arrays(
     rows: Iterable[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -364,6 +513,62 @@ def _transition_response(
     return max(0.0, float(times[display_index] - times[reference_index]))
 
 
+def _first_sustained_below(
+    times: np.ndarray,
+    values: np.ndarray,
+    threshold: float,
+    persistence_ms: float,
+) -> int | None:
+    """返回首次持续低于阈值的样本索引。"""
+
+    below = values <= threshold
+    for index in np.flatnonzero(below):
+        end = int(np.searchsorted(times, times[index] + persistence_ms, side="left"))
+        if end >= len(times):
+            break
+        if bool(below[index : end + 1].all()):
+            return int(index)
+    return None
+
+
+def _stop_costs(
+    times: np.ndarray,
+    display: np.ndarray,
+    incoming_direction: np.ndarray | None,
+    settings: PaperSettings,
+) -> tuple[float, float, float]:
+    """计算停止后的前向过冲、反向回动和到最终显示位置的稳定时间。"""
+
+    elapsed = times - times[0]
+    if elapsed[-1] < settings.transition_baseline_ms + settings.transition_persistence_ms:
+        return math.nan, math.nan, math.nan
+    final_window = elapsed >= max(0.0, elapsed[-1] - settings.transition_baseline_ms)
+    if not bool(final_window.any()):
+        return math.nan, math.nan, math.nan
+    final_position = np.median(display[final_window], axis=0)
+    settling_distance_mm = 1000.0 * np.linalg.norm(display - final_position, axis=1)
+    settled_index = _first_sustained_below(
+        times,
+        settling_distance_mm,
+        settings.transition_displacement_mm,
+        settings.transition_persistence_ms,
+    )
+    settling_ms = math.nan if settled_index is None else float(times[settled_index] - times[0])
+
+    if incoming_direction is None:
+        return math.nan, math.nan, settling_ms
+    norm = float(np.linalg.norm(incoming_direction))
+    if not np.isfinite(norm) or norm <= 1e-9:
+        return math.nan, math.nan, settling_ms
+    direction = incoming_direction / norm
+    projected_mm = 1000.0 * ((display - display[0]) @ direction)
+    peak_index = int(np.argmax(projected_mm))
+    peak = max(0.0, float(projected_mm[peak_index]))
+    final_projection = float(np.median(projected_mm[final_window]))
+    reverse_return = max(0.0, peak - final_projection)
+    return peak, reverse_return, settling_ms
+
+
 def _render_metrics(
     render: Mapping[tuple[str, str, str, str, str], list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]],
     event_roles: Mapping[tuple[str, str, str], str],
@@ -374,15 +579,19 @@ def _render_metrics(
     Mapping[str, tuple[Mapping[str, Any], ...]],
     Mapping[str, tuple[Mapping[str, Any], ...]],
     Mapping[str, tuple[Mapping[str, Any], ...]],
+    Mapping[str, tuple[Mapping[str, Any], ...]],
 ]:
-    """一次遍历生成五类 render 片段指标。"""
+    """一次遍历生成六类 render 片段指标。"""
 
     static: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     translation: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     rotation: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     occlusion: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     transition: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for key, rows in render.items():
+    stop: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    incoming_directions: dict[tuple[str, str, str], np.ndarray] = {}
+    ordered_render = sorted(render.items(), key=lambda item: min(row[0] for row in item[1]))
+    for key, rows in ordered_render:
         scenario, session_id, trial_id, event_id, variant_id = key
         times, display, reference, display_rotation, reference_rotation = _sorted_arrays(rows)
         identity = {"session_id": session_id, "trial_id": trial_id, "segment_id": event_id}
@@ -421,14 +630,40 @@ def _render_metrics(
                 }
             )
         elif _scenario_matches(scenario, "start_stop"):
-            transition[variant_id].append(
-                {
-                    **identity,
-                    "response_ms": _transition_response(times, display, reference, settings),
-                }
-            )
+            role = event_roles.get((session_id, trial_id, event_id))
+            direction_key = (session_id, trial_id, variant_id)
+            if role == "transition_started":
+                incoming_directions[direction_key] = reference[-1] - reference[0]
+                transition[variant_id].append(
+                    {
+                        **identity,
+                        "response_ms": _transition_response(times, display, reference, settings),
+                    }
+                )
+            elif role == "transition_stopped":
+                overshoot, reverse_return, settling = _stop_costs(
+                    times,
+                    display,
+                    incoming_directions.get(direction_key),
+                    settings,
+                )
+                stop[variant_id].append(
+                    {
+                        **identity,
+                        "forward_overshoot_mm": overshoot,
+                        "reverse_return_mm": reverse_return,
+                        "settling_time_ms": settling,
+                    }
+                )
     normalize = lambda rows: {key: tuple(value) for key, value in sorted(rows.items())}
-    return normalize(static), normalize(translation), normalize(rotation), normalize(occlusion), normalize(transition)
+    return (
+        normalize(static),
+        normalize(translation),
+        normalize(rotation),
+        normalize(occlusion),
+        normalize(transition),
+        normalize(stop),
+    )
 
 
 def _capture_alignment(workbooks: Sequence[Path]) -> tuple[Mapping[str, Any], ...]:
@@ -569,10 +804,11 @@ def analyze_workbooks(
             raise ValueError(f"论文分析只接受 Stage 1 XLSX：{path}")
         if not path.is_file():
             raise FileNotFoundError(path)
+        _validate_workbook_runtime_contract(path)
     active_settings = settings or load_settings()
     render = _collect_render(normalized)
     event_roles = _event_roles(normalized)
-    static, translation, rotation, occlusion, transition = _render_metrics(
+    static, translation, rotation, occlusion, transition, stop = _render_metrics(
         render,
         event_roles,
         active_settings,
@@ -584,6 +820,8 @@ def analyze_workbooks(
         rotation_segments=rotation,
         occlusion_episodes=occlusion,
         transition_segments=transition,
+        stop_segments=stop,
+        correction_segments=_collect_correction_metrics(normalized),
         capture_alignment=_capture_alignment(normalized),
         performance=_performance(normalized),
     )
@@ -592,11 +830,12 @@ def analyze_workbooks(
 __all__ = [
     "FULL_VARIANT",
     "PaperResults",
-    "HERMITE_VARIANT",
+    "CAUSAL_PREDICTION_VARIANT",
     "METHODS",
     "NO_STATIC_LOCK",
     "NO_TEMPORAL_SYNTHESIS",
     "NO_VCD",
+    "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
     "paired_metric_matrix",
     "segment_identity",

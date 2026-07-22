@@ -34,7 +34,7 @@
 \authorfooter{}
 
 \abstract{%
-以真实物体为中心的混合现实应用需要能够随物体运动持续更新的对象级空间参考。然而，异步视觉后端输出的六自由度位姿对应历史图像采集时刻，候选质量随遮挡与几何条件波动，且低频、含噪的位姿流不能直接满足逐帧渲染对稳定性、连续性与生命周期管理的要求。本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。系统仅依赖头戴显示器双目图像和目标物体的可用三维模型，无需物理标记、物体侧追踪硬件或逐物体训练。EgoAnchor 通过采集时刻世界对齐恢复异步观测的时间语义，以可视度门控的颜色--深度一致性评分限制有害更新，并通过 Kalman 状态估计、Linear/SLERP 时序合成、显式静止锚定与生命周期管理生成应用可持续消费的世界系对象锚点。我们在 Meta Quest 3 上实现系统，并在同一视觉候选流、渲染时间线和平台参考下进行配对系统表征。静止头动时，移除片段固定注册偏置后的 EgoAnchor 平移 P95 为 1.069~mm，而 Arrival-Hold 为 22.026~mm；其静止帧间增量 P95 为 0.072~mm，而 One-Euro Anchor 为 0.431~mm。持续平移时，其有效时延为 320~ms，lag-aligned residual 为 5.409~mm，低于 Arrival-Hold 的 11.670~mm；遮挡窗内，其 episode-level 平移 P95 为 4.645~mm。上述收益伴随 452.7~ms 的起停转换响应，呈现了稳定性与响应性的明确权衡。上述数值描述同一设备与时间线下相对于平台参考的系统行为，并非外部物理真值。
+以真实物体为中心的混合现实应用需要能够随物体运动持续更新的对象级空间参考。然而，异步视觉后端输出的六自由度位姿对应历史图像采集时刻，候选质量随遮挡与几何条件波动，且低频、含噪的位姿流不能直接满足逐帧渲染对稳定性、连续性与生命周期管理的要求。本文提出 EgoAnchor，一套面向消费级混合现实的端到端动态真实物体锚定系统。系统仅依赖头戴显示器双目图像和目标物体的可用三维模型，无需物理标记、物体侧追踪硬件或逐物体训练。EgoAnchor 通过采集时刻世界对齐恢复异步观测的时间语义，以可视度门控的颜色--深度一致性评分限制有害更新，并通过 Kalman 状态估计、Linear/SLERP 时序合成、显式静止锚定与生命周期管理生成应用可持续消费的世界系对象锚点。我们在 Meta Quest 3 上实现系统，并设计同一视觉候选流、渲染时间线和平台参考下的配对评价，覆盖静止头动、起停运动、持续平移与旋转以及遮挡恢复。当前五项数据来自修正 Kalman 前的 v3 运行时，只作工程诊断；本文的正式系统结果将在 v4 完整重采后由冻结分析管线自动回填。
 }
 
 \keywords{透视混合现实, 动态对象锚定, 6DoF 位姿估计, 动态物体追踪, 6D 物体定位}
@@ -271,7 +271,15 @@ T_o^w (f) = T_c^w (f) \circ T_o^{c_f}
 
 世界坐标系下的观测序列 ${T_o^w (f)}$ 仍受视觉位姿估计不确定性与跨端传输时延波动影响。一方面，零样本位姿估计算法在光照变化、遮挡与弱纹理等条件下产生的位姿估计存在逐帧波动；另一方面，感知后端到锚定运行时的网络传输引入的时延抖动使观测到达间隔不均匀。运行时需将这种低频、含噪且时序不规则的观测流转换为高帧率稳定轨迹。系统采用运动估计与时序平滑的两阶段策略：前者从观测中恢复状态与速度，后者将状态合成为渲染输出。
 
-运动估计采用常速度卡尔曼滤波~\cite{kalman1960new}。状态向量 $\mathbf{x} = [\mathbf{p}, \mathbf{v}]^T$ 联合编码位置 $\mathbf{p} \in \mathbb{R}^3$ 与速度 $\mathbf{v} \in \mathbb{R}^3$，通过预测-更新循环实现位置与速度的联合估计。位置通道与旋转通道分别维护独立的状态估计器，旋转通道在对数映射空间执行相同的常速度滤波；位置和旋转观测噪声协方差均为冻结配置，VCD 分数只用于候选接纳，不在线调节滤波器噪声。
+运动估计采用常速度卡尔曼滤波~\cite{kalman1960new}。平移状态 $[\mathbf{p},\mathbf{v}]^T$ 联合编码位置与速度；旋转状态在最新估计姿态的局部对数映射空间联合编码旋转误差与 body-local 角速度，并在每次校正后重置切空间。实现上将六个轴分别写成 $[p,v]^T$ 的二维滤波器，因此输入是 6DoF 位姿，内部共维护 12 个标量状态。每轴采用连续白噪声加速度模型，其离散过程协方差为
+\begin{equation}
+\mathbf{Q}(\Delta t)=q_a
+\begin{bmatrix}
+\Delta t^3/3 & \Delta t^2/2\\
+\Delta t^2/2 & \Delta t
+\end{bmatrix}.
+\end{equation}
+位置和旋转测量噪声均为冻结配置，VCD 分数只用于候选接纳，不在线调节滤波器噪声。
 
 时序平滑采用延迟插值策略。运行时以非对称指数移动平均估计最新控制点的采集至渲染时延 $\widehat{\tau}_{\mathrm{cap-render}}$，并按
 
@@ -282,6 +290,13 @@ T_o^w (f) = T_c^w (f) \circ T_o^{c_f}
 
 
 确定目标延迟，其中安全系数 $s = 1.15$，延迟下限 $\Delta_{\mathrm{min}} = 250 \mathrm{ms}$。实际延迟 $\Delta$ 以不超过 $50 \mathrm{ms}/\mathrm{s}$ 的速率趋近 $\Delta_{\mathrm{target}}$，避免时延波动直接造成输出时间轴跳变。渲染时刻 $t$ 的输出锚点对应历史目标时刻 $t - \Delta$；当该时刻落在相邻两个已到达的卡尔曼滤波控制点之间时，系统只做区间内插值，不向当前时刻外推。位置通道按控制点时间比例执行线性插值，旋转通道沿最短四元数弧执行 SLERP。该合成不依赖速度切线，避免了起停阶段的样条过冲和额外限幅参数。
+
+为比较历史合成与当前时刻预测，系统另实现有限时域因果预测（Bounded Causal Prediction）。设最新观测时刻为 $t_k$，最大预测时域为 $h_{\max}$，则渲染时刻 $t$ 的 Kalman 查询时刻为
+\begin{equation}
+t_{\mathrm{pred}}=\min(t,t_k+h_{\max}).
+\label{eq:causal-prediction-horizon}
+\end{equation}
+新观测到达时，策略保存校正前显示位姿与新 Kalman 轨迹在同一渲染时刻的位姿残差，并按真实经过时间以半衰期 $t_{1/2}$ 指数衰减。显示轨迹由有限时域预测与该残差复合，因此正常校正边界保持连续；当时钟回退或残差非有限时，策略清空残差并重新初始化。该策略严格因果，不读取未来控制点，也不使用历史目标时刻。$h_{\max}$、$t_{1/2}$ 与异常重置规则在 v4 正式采集前通过工程 pilot 冻结。
 
 \subsubsection{静止锚定}\label{sec:staticlock}
 
@@ -353,7 +368,7 @@ EgoAnchor 采用头显端与工作站分层部署：对象锚定运行时运行�
 
 视觉感知后端以 YOLOE-26 完成开放词表目标分割，并以 Cutie 传播帧间目标掩膜；SAM3 保留为可替换的分割后端，不用于本文的默认配置。双目几何由 Fast-FoundationStereo 重建，其 TensorRT 推理采用 FP16 精度与四次迭代；FoundationPose 根据目标三维模型执行零样本 6DoF 注册与追踪，注册和追踪分别采用五次与两次细化。VCD 可靠性评分借助 nvdiffrast 渲染目标模型，并比较颜色、深度与掩膜一致性。视觉后端按顺序处理单帧推理链路，同时从接收队列中选取最新可用图像，避免历史帧积压进一步放大运动滞后。
 
-正式采集日志中，TRACK 阶段候选的服务器端处理时间中位数为 75.3~ms，P95 为 90.1~ms（$n=3980$）；有效位姿候选的发布时间间隔中位数为 104.5~ms，对应约 9.6~Hz。初始 REGISTER 阶段中位数为 756.5~ms（$n=23$）。这些日志量仅覆盖服务器端候选处理或候选发布间隔，不包含图像采集、跨端网络传输、Unity 接收与显示策略，因此不应直接解释为端到端交互时延。
+v4 将分别报告 TRACK 阶段的服务器处理时间、有效候选发布时间间隔与初始 REGISTER 时间。它们只覆盖服务器端处理或候选发布间隔，不包含图像采集、跨端网络传输、Unity 接收与显示策略，不能直接解释为端到端交互时延。当前数值待正式批次自动回填。
 
 \subsection{对象锚定运行时}
 
@@ -375,13 +390,15 @@ EgoAnchor 采用头显端与工作站分层部署：对象锚定运行时运行�
 
 受控定量评价以 Quest Touch Plus 控制器作为视觉追踪目标，并以平台 SDK 输出的控制器六自由度位姿作为同步参考。正式采集前，我们标定平台控制器追踪坐标系与控制器三维模型坐标系之间的固定刚体变换。该参考与头显共享平台世界坐标系，适合在同一时间线内进行配对比较，但仍包含平台内部预测、滤波和共同漂移，因此本文报告的是\emph{平台参考下的相对系统行为}，而非外部光学系统给出的物理真值。
 
-数据由五个场景专用连续 session 构成，共记录 19,617 个唯一渲染时刻与 4,519 个视觉位姿候选。九种运行时配置在同一数据流上同步执行，共形成 176,553 条 configuration--frame records；该记录数反映配对运行规模，并不代表 176,553 次独立采集。相邻渲染帧具有强时间相关性，因此帧仅用于重建连续轨迹，不作为独立统计样本。各指标首先在预定义的重复动作片段或遮挡过程内计算，再汇总片段间的 median [Q1, Q3]；为完整展示分布，补充表~S1 另报告片段间 P5 / median / P95。由于每个场景仅有一条连续 trial，本文不进行帧级显著性检验，也不将片段间波动解释为跨环境或跨操作者的总体推断。
+v4 由五个场景专用连续 session 构成，九种运行时配置在同一数据流上同步执行。正式采集完成后，本文将自动回填唯一渲染时刻、视觉位姿候选和 configuration--frame records 的数量；这些记录只反映配对运行规模，不作为独立样本。相邻渲染帧用于重建连续轨迹，各指标先在预定义的重复动作片段或遮挡过程内计算，再汇总片段间的 median [Q1, Q3]；补充表~S1 另报告片段间 P5 / median / P95。本文不进行帧级显著性检验，也不将片段间波动解释为跨环境或跨操作者的总体推断。
 
 EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为了获得与头显同平台、同时间线的连续参考轨迹；无线鼠标、带柄杯与纯色盒体用于实验三的跨对象任务设计，不参与实验一和实验二的受控误差统计。
 
 \subsection{系统配置}
 
-所有配置消费相同的相机系位姿候选、采集时间戳、候选到达时间、相机标定、渲染时间线和平台参考轨迹。Arrival-Hold 表示直接消费异步视觉位姿的朴素方案：候选到达后以当前头显位姿完成世界坐标复合，并保持结果直至下一候选。Capture-Hold 仅将复合时刻改为图像采集时刻，以隔离时间语义的作用。One-Euro Anchor 使用采集时刻对齐、VCD 接纳、OneEuroModel、自适应历史目标时刻和 Linear/SLERP 合成，与完整系统采用相同的生命周期和逐渲染帧输出，但不使用 StaticLock。EgoAnchor 使用 VCD 接纳、KalmanModel、Linear/SLERP 时序合成、StaticLock 和分级生命周期管理。v3 还同步记录了仅将插值器换为 Hermite 的对照配置，用于策略选择。
+所有配置消费相同的相机系位姿候选、采集时间戳、候选到达时间、相机标定、渲染时间线和平台参考轨迹。Arrival-Hold 表示直接消费异步视觉位姿的朴素方案：候选到达后以当前头显位姿完成世界坐标复合，并保持结果直至下一候选。Capture-Hold 仅将复合时刻改为图像采集时刻，以隔离时间语义的作用。One-Euro Anchor 使用采集时刻对齐、VCD 接纳、OneEuroModel、自适应历史目标时刻和 Linear/SLERP 合成，与完整系统采用相同的生命周期和逐渲染帧输出，但不使用 StaticLock。EgoAnchor 使用 VCD 接纳、KalmanModel、Linear/SLERP 时序合成、StaticLock 和分级生命周期管理。
+
+实验二的四个单组件消融分别关闭采集时刻对齐、VCD、历史时序合成和 StaticLock。其中 `w/o temporal synthesis' 仍使用 Kalman Predict-to-Now，并保留完整系统的其他组件；它用于衡量移除历史时序合成的影响，不作为生产级预测策略。第九路 EgoAnchor Causal Prediction 与 `w/o StaticLock' 共享采集时刻对齐、VCD、Kalman、生命周期和关闭 StaticLock 的设置，只替换逐帧输出策略。两者构成有限时域因果预测与缓冲 Linear/SLERP 的严格配对。原 Hermite 对照不再进入 v4 配置矩阵。
 
 
 \subsection{实验一：应用侧锚点行为}
@@ -390,7 +407,7 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 \begin{table*}[t]
 \centering
-\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
+\caption{v4 完整系统表征的回填结构。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
 \label{tab:exp1-final}
 \small
 \setlength{\tabcolsep}{3.2pt}
@@ -400,57 +417,59 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 \cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
 方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
 & (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
-& $n=11$ & $n=11$ & $n=11$ & $n=30$ & $n=14$ & $n=12$ & $k/12$ & $n=12--13$ \\
+& \multicolumn{8}{c}{v4 样本数待自动回填} \\
 \midrule
-Arrival & 22.03 [20.71, 26.19] & 22.95 [21.39, 26.36] & 5.35 [4.66, 6.72] & \textbf{182.5} / 11.67 & \textbf{255} / 3.57 & 37.20 [18.53, 63.48] & 5/12 & \textbf{230.2} [174.7, 291.3] \\
-Capture & 7.89 [7.17, 9.13] & 9.55 [9.26, 11.10] & 2.66 [2.44, 3.05] & 250 / 10.76 & \textbf{255} / 3.55 & 37.58 [18.40, 63.48] & 5/12 & 269.7 [187.9, 291.3] \\
-One-Euro & 6.726 [6.61, 7.15] & 8.5 [8.09, 8.95] & 0.431 [0.38, 0.53] & 390 / 6.11 & 405 / \textbf{3.39} & 4.70 [4.33, 4.91] & \textbf{0/12} & 365.4 [354.3, 432.8] \\
-EgoAnchor & \textbf{1.069} [0.81, 1.15] & \textbf{4.17} [3.993, 4.906] & \textbf{0.072} [0.06, 0.09] & 320 / \textbf{5.41} & 342.5 / 3.81 & \textbf{4.65} [4.39, 4.77] & \textbf{0/12} & 452.7 [409, 536.1] \\
+Arrival & \multicolumn{8}{c}{待 v4 自动回填} \\
+Capture & \multicolumn{8}{c}{待 v4 自动回填} \\
+One-Euro & \multicolumn{8}{c}{待 v4 自动回填} \\
+EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 \bottomrule
 \end{tabular}%
 \end{table*}
 
-\textbf{头动下的世界一致性与静止稳定性。} 移除每个动作片段的固定注册偏置后，EgoAnchor 的中心化平移 P95 为 1.069~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 22.026、7.891 与 6.726~mm。EgoAnchor 的绝对注册 P95 为 4.169~mm；其静止帧间位置增量 P95 为 0.072~mm，One-Euro Anchor 为 0.431~mm。
+\textbf{头动下的世界一致性与静止稳定性。} v4 将报告移除每个动作片段固定注册偏置后的中心化平移 P95、绝对注册 P95 和静止帧间位置增量 P95。数值待冻结管线自动回填。
 
-\textbf{持续运动中的时延--轨迹质量权衡。} 持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 320~ms / 5.409~mm；Arrival-Hold 为 182.5~ms / 11.67~mm，One-Euro Anchor 为 390~ms / 6.111~mm。结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
+\textbf{持续运动中的时延--轨迹质量权衡。} 持续平移和旋转均成对报告有效时延与 lag-aligned residual，不以单独的低延迟或低残差作为结论。数值待 v4 自动回填。
 
-\textbf{持续旋转。} EgoAnchor 的有效时延 / 对齐角 RMSE 为 342.5~ms / 3.81$^\circ$，One-Euro Anchor 为 405~ms / 3.386$^\circ$。旋转结果与平移结果分开报告，避免用位置通道的收益替代姿态通道证据；Hermite 与 Linear/SLERP 的直接比较在实验二的候选筛选中报告。
+\textbf{持续旋转。} 旋转结果与平移结果分开报告，避免用位置通道的收益替代姿态通道证据。v4 将同时给出各方法的有效时延与 lag-aligned 角 RMSE；当前数值待正式批次自动回填。
 
-\textbf{遮挡期间的失效控制。} 遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 4.645~mm，One-Euro Anchor 为 4.695~mm。完整分布、40~mm 阈值超限率和最大值共同保留在图和审阅表中。
+\textbf{遮挡期间的失效控制。} 遮挡分析同时保留 episode-level 平移 P95、40~mm 阈值超限率和最大值，避免中位数掩盖稀疏重尾失效。数值待 v4 自动回填。
 
-\textbf{起停转换代价。} Start-transition response 使用片段前 250~ms 基线、5~mm 位移阈值和 100~ms 持续条件。EgoAnchor 的片段中位数为 452.7~ms；该量包含 StaticLock 解锁证据、候选更新和延迟合成时间线，不是网络或视觉推理的原始时延。
+\textbf{起停转换代价。} Start-transition response 使用片段前 250~ms 基线、5~mm 位移阈值和 100~ms 持续条件。该量包含 StaticLock 解锁证据、候选更新和输出策略的时间线，不是网络或视觉推理的原始时延；数值待 v4 自动回填。
 
 \begin{figure*}[t]
   \centering
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure2a_head_motion.pdf}
+    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
     \caption{头动下的中心化误差}
     \label{fig:exp1-head-motion}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure2b_translation.pdf}
+    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
     \caption{持续平移的时延与残差}
     \label{fig:exp1-translation}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure2c_occlusion.pdf}
+    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
     \caption{遮挡期间的平移误差}
     \label{fig:exp1-occlusion}
   \end{subfigure}
-  \caption{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，避免跨方法顺序造成视觉混淆。}
+  \caption{实验一的三项核心分布设计。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR。面板待 v4 自动回填。}
   \label{fig:exp1-final}
 \end{figure*}
 
 \subsection{实验二：组件归因}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线。原始日志完成策略身份统一后，稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；原完整 Hermite runtime 明确标记为 EgoAnchor Hermite，只用于插值器选择。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率；时序合成比较 Kalman Linear/SLERP 与 Kalman Predict-to-Now runtime。
+实验二复用实验一的候选、参考轨迹和渲染时间线。稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；时序合成消融改用 Kalman Predict-to-Now，但保留完整系统的其他组件。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率；时序合成比较完整 EgoAnchor 与 `w/o temporal synthesis'。
+
+第九路 EgoAnchor Causal Prediction 不属于组件消融。它与 `w/o StaticLock' 都关闭 StaticLock，并共享模型、接纳、生命周期和输入时间线，只比较 Causal Prediction 与 Buffered Linear/SLERP 两种逐帧输出策略。图~\ref{fig:exp2-temporal} 同时展示 Direct、Causal 和 Buffered 三个工作点，但严格的单因素配对只包括 Causal 与 Buffered；Direct 仍是保留 StaticLock 的组件消融，不能把三路整体解释为一个三水平策略实验。
 
 \begin{table*}[t]
 \centering
-\caption{新数据上的目标化组件比较与插值器选择。稳定配置 ID EgoAnchor 及三个组件对照均采用 Kalman Linear/SLERP；效应为替代配置减完整系统。Hermite 仅作为相同状态估计与目标时间下的插值器对照。}
+\caption{实验二的组件归因与时序策略比较设计。组件消融的效应为关闭配置减完整系统；Causal--Buffered 行只比较关闭 StaticLock 后的两种输出策略。数值待 v4 自动回填。}
 \label{tab:exp2-final}
 \small
 \setlength{\tabcolsep}{5pt}
@@ -458,11 +477,11 @@ EgoAnchor & \textbf{1.069} [0.81, 1.15] & \textbf{4.17} [3.993, 4.906] & \textbf
 \toprule
 组件 & 直接指标 & 启用 & 关闭 / 替代 & 效应 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & 9.457 [9.182, 11.098]~mm & 22.933 [21.69, 26.233]~mm & +12.228 [11.03, 15.747]~mm; 11/11 改善 \\
-StaticLock & 中心化静止 P95 & 1.069~mm & 7.782~mm & +6.428~mm；11/11 片段变差 \\
-VCD 接纳 & 遮挡 P95 $>40$~mm & 0/12；max 5.102~mm & 6/12；max 121.515~mm & 消除本批次观测到的灾难性失效 \\
-时序合成 & fitted lag / aligned RMSE & 320 / 5.409 & 170 / 32.569 & -147.5~ms / +27.674~mm \\
-插值器选择 & 平移 / 旋转 aligned RMSE & 5.409~mm / 3.81$^\circ$ & 5.735~mm / 3.859$^\circ$ & +0.359~mm / +0.054$^\circ$；29/30、10/14 个片段 Linear 更低 \\
+采集时刻对齐 & 同一候选的复合 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
+StaticLock & 中心化静止 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
+VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
+时序合成 & fitted lag / aligned RMSE & \multicolumn{3}{c}{EgoAnchor vs. Predict-to-Now；待 v4 自动回填} \\
+输出策略 & lag / residual / 起停护栏 & \multicolumn{3}{c}{Causal Prediction vs. Buffered Linear/SLERP；待 v4 自动回填} \\
 \bottomrule
 \end{tabular}%
 \end{table*}
@@ -471,47 +490,41 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & 0/12；max 5.102~mm & 6/12；max 121.515~mm &
   \centering
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure3a_capture_alignment.pdf}
+    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
     \caption{采集时刻对齐}
     \label{fig:exp2-alignment}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure3b_static_lock.pdf}
+    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
     \caption{StaticLock}
     \label{fig:exp2-static-lock}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure3c_vcd.pdf}
+    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
     \caption{VCD 接纳}
     \label{fig:exp2-vcd}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.40\textwidth}
     \centering
-    \includegraphics[width=\linewidth]{figures/panels/figure3d_temporal_strategies.pdf}
+    \fbox{\parbox[c][25mm][c]{0.95\linewidth}{\centering Direct / Causal / Buffered\\v4 待回填}}
     \caption{时序策略}
     \label{fig:exp2-temporal}
   \end{subfigure}
-  \caption{实验二的组件归因与插值器比较。图~(a)--(c) 分别比较采集时刻复合、StaticLock 和 VCD；图~(d) 比较本批次同步运行的 Kalman Predict-to-Now、Kalman Hermite 与 Kalman Linear/SLERP。细线只连接同一事件或片段的严格配对结果。}
+  \caption{实验二的组件归因与时序策略比较。图~(a)--(c) 分别比较采集时刻复合、StaticLock 和 VCD；图~(d) 展示 Kalman Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Causal 与 Buffered 共享关闭 StaticLock 的配置，细线只连接同一事件或片段的严格配对结果；Direct 单独用于时序合成消融。图和数值待 v4 自动回填。}
   \label{fig:exp2-final}
 \end{figure*}
 
-\textbf{采集时刻对齐。} 对同一批原始候选直接应用两种世界复合后，片段级 candidate P95 由 arrival-time 的 22.933~mm 降至 capture-time 的 9.457~mm；11/11 个片段改善，配对中位降幅为 12.228~mm。
+\textbf{组件归因。} 采集时刻对齐、StaticLock、VCD 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡尾部失效率；时序合成同时报告 fitted lag 与 lag-aligned residual。四项结果均待 v4 自动回填。
 
-\textbf{StaticLock。} 关闭 StaticLock 后，中心化静止 P95 从 1.069 增至 7.782~mm，配对差值为 +6.428~mm。该结果表明 StaticLock 限制慢速静止漂移，而逐帧增量仍作为表格护栏报告。
-
-\textbf{VCD 接纳。} 启用 VCD 时，0/12 次遮挡过程超过 40~mm；关闭后为 6/12。该组件的主证据是尾部失效率，不是单独的中位数。
-
-\textbf{时序合成。} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 170~ms / 32.569~mm，正式 Kalman Linear/SLERP 为 320~ms / 5.409~mm。Predict-to-Now 的配对时延变化为 -147.5~ms，但对齐残差增加 27.674~mm；这表明自适应历史目标时刻主要用于换取轨迹保真度，而不是降低显示延迟。Hermite 作为相同模型、接纳、目标时间与生命周期下的插值器对照单独报告。
-
-\textbf{插值器选择。} 在模型、VCD、StaticLock、自适应目标时间和生命周期均相同的条件下，Linear/SLERP 的平移 aligned RMSE 为 5.409~mm，Hermite 为 5.735~mm，Hermite--Linear 配对中位差为 +0.359~mm，29/30 个片段中 Linear 更低；两者的旋转 aligned RMSE 分别为 3.81$^\circ$ 与 3.859$^\circ$，差值为 +0.054$^\circ$，10/14 个片段中 Linear 更低。Hermite 相对 Linear 的平移时延、静止帧间增量和起停响应配对中位变化分别为 0~ms、0~mm 和 0~ms。二者在这些护栏上没有可见差异，而 Linear/SLERP 的残差略低，因此本文将 Linear/SLERP 冻结为 EgoAnchor 的正式输出策略。
+\textbf{Direct / Causal / Buffered。} Direct Predict-to-Now 给出关闭历史合成后的响应优先工作点。Causal Prediction 与 Buffered Linear/SLERP 的严格配对用于检验：在模型与接纳序列相同且都关闭 StaticLock 时，有限时域预测能否以可控的校正与停止代价降低显示时延。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡超限。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。该比较不使用网页回放数值，正式结论待 v4 自动回填。
 
 \subsection{评价指标与汇总契约}
 
 所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。
 
-持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
+持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Task~2 的每轮动作在拿起前记录 \texttt{transition\_started}，物体完全停止后记录 \texttt{transition\_stopped}，两类标记必须严格交替并闭合。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。停止前向过冲沿上一动作的参考位移方向计算；反向回动为达到最远点后退回最终位置的投影距离；settling time 则以片段末 250~ms 的显示位置为目标，要求误差进入 5~mm 并持续 100~ms。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
 
 本文以 median [Q1, Q3] 和同一动作片段内的配对差值为主，不进行渲染帧级显著性推断；补充表~S1 报告片段间 P5 / median / P95，但不将其解释为总体置信区间。所有参数、动作片段边界和指标契约在正式数据分析前冻结；完整片段级表、图源数据和流式解析脚本随分析包提供。
 
@@ -533,7 +546,7 @@ EgoAnchor 将异步视觉观测转换为对象锚点时，需要区分相机运�
 
 \textbf{时间一致性的边界。} 帧对齐可避免将历史相机系观测与到达时刻相机位姿错误复合，但不能恢复目标物体在采集之后的当前位姿。动态场景仍受感知处理时间、观测更新率和平滑策略引入的插值延迟共同影响。因此，动态表征以渲染时刻误差描述应用实际获得的配准质量，不把帧对齐表述为对物体运动时延的补偿。
 
-\textbf{稳定性与响应性的边界。} StaticLock 和历史时序合成在本批次描述性指标中降低了静止抖动与平移轨迹残差，但完整系统的 Start-transition response 为 452.7~ms，持续旋转 aligned RMSE 为 3.810$^\circ$，仍高于 One-Euro Anchor 的 3.386$^\circ$。这些结果限制了快速抓取和直接操控任务中的主张，也说明旋转状态估计仍需独立优化。
+\textbf{稳定性与响应性的边界。} StaticLock、历史时序合成与因果预测都可能改变静止波动、轨迹残差和起停响应。v4 将把这些量作为联合权衡报告，并单独检验停止后的前向过冲、反向回动与 settling time。正式结果产生前，本文不据网页回放或 v3 归档数字提出快速抓取和直接操控任务中的性能主张。
 
 \subsection{平台定位与可比性}
 

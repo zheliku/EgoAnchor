@@ -225,6 +225,10 @@ class UnityRenderRow(_SchemaRow):
     observation_age_ms: float | None = None
     policy_output_target_mono_ms: float | None = None
     smoothing_delay_ms: float | None = None
+    prediction_horizon_ms: float | None = None
+    correction_position_residual_m: float | None = None
+    correction_rotation_residual_deg: float | None = None
+    continuity_reset_count: int = 0
     latest_static_locked: bool = False
     latest_accepted_score: float | None = None
     quality_gate: str = ""

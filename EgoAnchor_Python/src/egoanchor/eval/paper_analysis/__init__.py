@@ -2,9 +2,10 @@
 
 from .figures import build_point_panel, build_translation_panel, publish_figures
 from .metrics import (
-    HERMITE_VARIANT,
+    CAUSAL_PREDICTION_VARIANT,
     METHODS,
     PaperResults,
+    TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
     paired_metric_matrix,
 )
@@ -17,8 +18,9 @@ from .xlsx import iter_rows, workbook_sha256
 __all__ = [
     "PaperResults",
     "PaperSettings",
-    "HERMITE_VARIANT",
+    "CAUSAL_PREDICTION_VARIANT",
     "METHODS",
+    "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
     "build_point_panel",
     "build_translation_panel",

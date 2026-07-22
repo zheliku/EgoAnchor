@@ -15,13 +15,20 @@ EgoAnchor 是动态真实物体锚定系统。中心问题不是如何再次估�
 
 1. 基于 frame_id 的采集时刻世界对齐；
 2. VCD admission；
-3. Kalman 状态估计；
+3. 使用连续白噪声加速度过程模型的 Kalman 状态估计；
 4. 自适应历史目标时刻上的位置 Linear 与旋转 SLERP；
 5. StaticLock；
 6. 与重获取协同的生命周期管理。
 
-EgoAnchor Hermite 使用相同输入、Kalman、VCD、目标时刻、StaticLock 和生命周期，只替换
-插值器。它保留为图 3(d) 的配对对照，不是正式主方法。
+第九路配置改为 EgoAnchor Causal Prediction。它与 `w/o StaticLock` 共享采集时刻对齐、
+VCD、Kalman、生命周期和关闭 StaticLock 的设置，只将 Linear/SLERP 历史合成替换为
+有限时域因果预测。该策略预测到当前渲染时刻，但将外推限制在最新观测之后的冻结时域内；
+新观测校正造成的显示残差按真实时间半衰期衰减，以免候选到达时直接跳到新的 Kalman
+轨迹。它不使用未来观测，也不属于四个单组件消融。
+
+原 EgoAnchor Hermite 不再进入新矩阵。正式主方法仍是 Kalman + Linear/SLERP +
+StaticLock；`w/o temporal synthesis` 仍是 Kalman + Predict-to-Now，不用 Causal Prediction
+替代。
 
 ## 实验组织
 
@@ -40,10 +47,30 @@ lag--fidelity、失效控制和转换代价，不跨场景汇总成单一总分�
 - w/o temporal synthesis，即 Kalman Predict-to-Now；
 - w/o StaticLock。
 
-图 3(d) 另外保留 Predict-to-Now、Hermite 和 Linear/SLERP 的实际 runtime 对比。
+图 3(d) 比较 Direct Predict-to-Now、Causal Prediction 和 Buffered Linear/SLERP。
+其中完整 EgoAnchor 与 `w/o temporal synthesis` 用于回答关闭历史时序合成的影响；
+Causal Prediction 与 `w/o StaticLock` 都关闭 StaticLock，只改变逐帧输出策略，是严格的
+因果预测与缓冲合成配对比较。Direct 条件保留 StaticLock，因此三路图不能被解释为单一因素
+的三水平实验。
 
-实验一/二当前使用五项正式 task，经 schema-v2 QC、Stage 1 XLSX 和 paper_analysis 管线
-生成论文数字。原始数据与复现步骤见 experiment_1_2_analysis_reproduction_manual_zh.md。
+Causal Prediction 的预测上限、校正残差半衰期和异常重置规则先通过工程 pilot 冻结。
+pilot 必须覆盖 72/90/120 Hz、平移与旋转起停、静止头动和遮挡恢复，并报告校正边界跳变、
+停止前向过冲、反向回动、settling time、静止帧间增量及遮挡超限。网页回放只用于选择
+初始搜索范围，不进入正式结果。
+
+候选生效边界步长按 `source_frame_id` 改变前后相邻 render pose 的差计算。它包含相邻渲染帧
+之间的真实运动，只作为 Causal 与 Buffered 的配对显示护栏，不称为 Kalman innovation。
+
+Task 2 的每轮动作使用成对 marker：拿起前记录 `transition_started`，物体完全停止后记录
+`transition_stopped`。QC 要求两者严格交替并闭合，分析只在明确的开始和停止边界上计算
+起动响应、停止过冲、反向回动与 settling time。
+
+现有五项正式 task 与 Stage 1 XLSX 属于 v3 归档批次，其中 Kalman 过程协方差仍使用旧实现，
+第九路也仍是 Hermite。
+这些数据可用于只读工程诊断，但不能证明修正后的运行时效果。当前 CWNA 模型和参数完成验证后，
+实验一/二必须完整重采五项任务，再经 schema-v2 QC、Stage 1 XLSX 和 paper_analysis 管线替换
+正式论文数字。不得按场景混用 v3 与新批次。原始数据与复现步骤见
+experiment_1_2_analysis_reproduction_manual_zh.md。
 
 ### 实验三：跨对象用户研究
 
@@ -58,10 +85,11 @@ lag--fidelity、失效控制和转换代价，不跨场景汇总成单一总分�
 
 ## 当前交付边界
 
-当前版本化中文主稿是 egoanchor_cn_v6.tex，稳定交付文件是 pdf/EgoAnchor.pdf。实验一/二图、
-表和正文由 `pixi run eval analyze` 从五本 Stage 1 工作簿重建。图 2 为一行三个 LaTeX 子图，
-图 3 为一行四个 LaTeX 子图。正文、图和表不超过
-9 页；实验三启动前不把计划性描述写成已完成证据。
+当前版本化中文主稿是 egoanchor_cn_v6.tex，稳定交付文件是 pdf/EgoAnchor.pdf。磁盘上的既有
+分析产物属于 v3 归档批次；主稿中的实验数值和面板暂以 v4 待自动回填标记代替，不能解释为
+当前运行时结果。新批次通过 `pixi run eval analyze` 从五本 Stage 1 工作簿完整重建。图 2 为
+一行三个 LaTeX 子图，图 3 为一行四个 LaTeX 子图。正文、图和表不超过 9 页；实验三启动前
+不把计划性描述写成已完成证据。
 
 ## 诚实边界
 

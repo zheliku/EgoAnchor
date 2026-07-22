@@ -3,6 +3,7 @@
     "rootNamespace": "EgoAnchor.Tests",
     "references": [
         "EgoAnchor",
+        "Google.Protobuf",
         "Unity.InputSystem",
         "Unity.InputSystem.TestFramework"
     ],

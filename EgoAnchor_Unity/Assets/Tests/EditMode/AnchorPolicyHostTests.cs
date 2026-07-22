@@ -148,16 +148,16 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
-        /// Blend 叠加跨时刻残差后没有唯一输出语义时刻，不能伪报为当前渲染时刻。
+        /// 因果预测叠加跨时刻残差后没有唯一输出语义时刻，不能伪报为当前渲染时刻。
         /// </summary>
         [Test]
-        public void BlendReportsUnknownOutputTargetWhenResidualTimeIsAmbiguous()
+        public void CausalPredictionReportsUnknownOutputTargetWhenResidualTimeIsAmbiguous()
         {
-            GameObject go = new GameObject("BlendOutputTargetTests");
+            GameObject go = new GameObject("CausalPredictionOutputTargetTests");
             try
             {
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                BlendStrategy smoothing = go.AddComponent<BlendStrategy>();
+                CausalPredictionStrategy smoothing = go.AddComponent<CausalPredictionStrategy>();
                 model.Snap(AnchorObservation.FromAlignedPose(
                     frameId: 1,
                     worldPose: Pose.identity,
@@ -168,6 +168,8 @@ namespace EgoAnchor.Tests
                 smoothing.Output(model, 12.0);
 
                 Assert.That(smoothing.OutputTargetTimeSeconds, Is.NaN);
+                Assert.That(smoothing.Diagnostics.PredictionHorizonMilliseconds, Is.EqualTo(180.0f).Within(1e-4f));
+                Assert.That(smoothing.ConfigurationFingerprint, Is.EqualTo("horizon:0.18|correction-half-life:0.06"));
             }
             finally
             {
@@ -1304,6 +1306,7 @@ namespace EgoAnchor.Tests
                 unityPoseHandleMonoMs: 1500.0,
                 anchorState: "Tracking", policyAction: "Accept", policyReason: "accept",
                 latestPhase: "TRACK", latestFailure: string.Empty, motionState: "Static", predictAheadMs: 120.0,
+                smoothingDiagnostics: SmoothingDiagnostics.Empty,
                 strategyLabel: "test", qualityGate: "disabled", motionModel: "constant_velocity", smoothingStrategy: "hold",
                 configHash: "hash", residualMeters: float.NaN, residualDegrees: float.NaN, acceptedScore: 1.0f, staticLocked: false,
                 hasAlignedRaw: true, alignedRawPose: Pose.identity,

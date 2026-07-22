@@ -9,6 +9,9 @@ namespace EgoAnchor.Eval.Experiment
         /// <summary>起停或状态转换开始，用于计算响应、解锁和重新锁定。</summary>
         public const string TransitionStarted = "transition_started";
 
+        /// <summary>操作者确认物体已经停止，用于计算停止过冲、回动与收敛时间。</summary>
+        public const string TransitionStopped = "transition_stopped";
+
         /// <summary>遮挡开始，用于确定遮挡可用性统计窗口的左边界。</summary>
         public const string OcclusionStarted = "occlusion_started";
 
@@ -36,6 +39,12 @@ namespace EgoAnchor.Eval.Experiment
         public static bool SupportsTargetVisible(string scenarioId)
         {
             return scenarioId == "occlusion_recovery";
+        }
+
+        /// <summary>判断当前场景是否使用“运动开始到完全停止”的双角色协议。</summary>
+        public static bool SupportsTransitionStopped(string scenarioId)
+        {
+            return scenarioId == "start_stop_6dof";
         }
     }
 }

@@ -16,7 +16,7 @@ VARIANT_SPECS = (
     ("Capture-Hold", "cv", "hold", "disabled", "CaptureTime", True, False, False, False, False, False),
     ("One-Euro Anchor", "oneeuro", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
     ("EgoAnchor", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor Hermite", "kalman", "hermite", "enabled", "CaptureTime", True, True, True, True, True, True),
+    ("EgoAnchor Causal Prediction", "kalman", "causal_prediction", "enabled", "CaptureTime", True, True, True, False, True, True),
     ("EgoAnchor w/o capture-time alignment", "kalman", "linear_slerp", "enabled", "ArrivalTime", False, True, True, True, True, True),
     ("EgoAnchor w/o VCD", "kalman", "linear_slerp", "disabled", "CaptureTime", True, False, True, True, False, True),
     ("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", True, True, False, True, True, True),
@@ -55,14 +55,26 @@ class ReaderQcTests(unittest.TestCase):
             self.assertEqual(_file_snapshot(root), before)
             self.assertEqual(report.metrics["variant_count"], 9)
 
-    def test_current_matrix_id_rejects_missing_hermite_control_variant(self) -> None:
-        """新 session 即使其余八路完整，也不得缺少 Hermite 对照策略。"""
+    def test_causal_pair_replaces_hermite_without_changing_direct_ablation(self) -> None:
+        """九路矩阵保留直接预测消融，并用关闭 StaticLock 的因果策略替换 Hermite。"""
+
+        specs = {str(spec[0]): spec for spec in VARIANT_SPECS}
+
+        self.assertNotIn("EgoAnchor Hermite", specs)
+        self.assertEqual(specs["EgoAnchor w/o temporal synthesis"][2], "predict_to_now")
+        self.assertFalse(bool(specs["EgoAnchor w/o temporal synthesis"][7]))
+        self.assertEqual(specs["EgoAnchor Causal Prediction"][2], "causal_prediction")
+        self.assertTrue(bool(specs["EgoAnchor Causal Prediction"][7]))
+        self.assertFalse(bool(specs["EgoAnchor Causal Prediction"][8]))
+
+    def test_current_matrix_id_rejects_missing_causal_control_variant(self) -> None:
+        """新 session 即使其余八路完整，也不得缺少因果预测配对策略。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = _write_valid_task(Path(tmp), include_hermite_control=False)
+            root = _write_valid_task(Path(tmp), include_causal_control=False)
             manifest_path = root / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["variant_matrix_id"] = "exp12_9_linear_v2"
+            manifest["variant_matrix_id"] = "exp12_9_causal_v3"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             report = run_task_qc(root)
@@ -99,6 +111,38 @@ class ReaderQcTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("admission_candidate_fk", {issue.code for issue in report.errors})
 
+    def test_causal_prediction_horizon_is_bounded(self) -> None:
+        """因果预测日志中的实际预测时域不得超过冻结的 180 ms。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            path = root / "unity_render.jsonl"
+            rows = _read_jsonl(path)
+            causal = next(row for row in rows if row["smoothing_strategy"] == "causal_prediction")
+            causal["prediction_horizon_ms"] = 180.1
+            _write_jsonl(path, rows)
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("causal_prediction_horizon", {issue.code for issue in report.errors})
+
+    def test_causal_diagnostics_do_not_leak_to_other_strategies(self) -> None:
+        """非因果策略不得写入因果预测专用的浮点诊断。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            path = root / "unity_render.jsonl"
+            rows = _read_jsonl(path)
+            non_causal = next(row for row in rows if row["smoothing_strategy"] == "linear_slerp")
+            non_causal["correction_position_residual_m"] = 0.001
+            _write_jsonl(path, rows)
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("causal_diagnostics_scope", {issue.code for issue in report.errors})
+
     def test_occlusion_roles_must_start_hidden_and_alternate(self) -> None:
         """遮挡恢复 marker 必须从 occlusion_started 开始并严格交替闭合。"""
 
@@ -109,6 +153,21 @@ class ReaderQcTests(unittest.TestCase):
 
             self.assertFalse(report.passed)
             self.assertIn("occlusion_event_sequence", {issue.code for issue in report.errors})
+
+    def test_transition_roles_must_start_motion_and_close(self) -> None:
+        """起停 marker 必须从 transition_started 开始并以 transition_stopped 闭合。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(
+                Path(tmp),
+                scenario_id="start_stop_6dof",
+                marker_roles=("transition_started",),
+            )
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("transition_event_sequence", {issue.code for issue in report.errors})
 
     def test_nonfinite_json_constant_is_rejected(self) -> None:
         """JSONL 中的 NaN/Infinity 必须转为稳定 reader_error。"""
@@ -161,7 +220,7 @@ def _write_valid_task(
     *,
     scenario_id: str = "static_head_motion",
     marker_roles: tuple[str, ...] = ("generic_marker",),
-    include_hermite_control: bool = True,
+    include_causal_control: bool = True,
 ) -> Path:
     """写出一个包含当前九路 variant 的最小合法 task。"""
 
@@ -174,11 +233,15 @@ def _write_valid_task(
     renders: list[dict[str, object]] = []
     variant_specs = tuple(
         spec for spec in VARIANT_SPECS
-        if include_hermite_control or spec[0] != "EgoAnchor Hermite"
+        if include_causal_control or spec[0] != "EgoAnchor Causal Prediction"
     )
     for spec in variant_specs:
         label, motion, smoothing, gate, alignment, capture, vcd, temporal, static, low_score, server = spec
-        configuration_fingerprint = f"fixture:{label}"
+        configuration_fingerprint = (
+            "fixture:causal|horizon:0.18|correction-half-life:0.06"
+            if smoothing == "causal_prediction"
+            else f"fixture:{label}"
+        )
         config_hash = _variant_hash(spec, configuration_fingerprint)
         variant_config = {
             "label": label,
@@ -284,6 +347,10 @@ def _write_valid_task(
                 "observation_age_ms": None,
                 "policy_output_target_mono_ms": None,
                 "smoothing_delay_ms": None,
+                "prediction_horizon_ms": 0.0 if smoothing == "causal_prediction" else None,
+                "correction_position_residual_m": 0.0 if smoothing == "causal_prediction" else None,
+                "correction_rotation_residual_deg": 0.0 if smoothing == "causal_prediction" else None,
+                "continuity_reset_count": 0,
                 "latest_static_locked": False,
                 "latest_accepted_score": None,
                 "quality_gate": gate,
@@ -376,7 +443,7 @@ def _write_valid_task(
             },
         },
     }
-    manifest["variant_matrix_id"] = "exp12_9_linear_v2"
+    manifest["variant_matrix_id"] = "exp12_9_causal_v3"
     python_session = {
         "schema_version": 2,
         "session_id": session_id,

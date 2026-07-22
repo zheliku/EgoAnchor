@@ -13,6 +13,8 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.paper_analysis import (
     METHODS,
+    TEMPORAL_STRATEGY_VARIANTS,
+    analyze_workbooks,
     build_paper,
     build_point_panel,
     build_translation_panel,
@@ -34,6 +36,18 @@ class PaperPipelineTests(unittest.TestCase):
 
         self.assertFalse(hasattr(arguments, "settings"))
         self.assertEqual(len(settings_sha256()), 64)
+
+    def test_temporal_panel_uses_direct_causal_buffered_runtime_order(self) -> None:
+        """图 3(d) 固定保留机制消融，并以无 StaticLock 的 Buffered 配对 Causal。"""
+
+        self.assertEqual(
+            TEMPORAL_STRATEGY_VARIANTS,
+            (
+                "EgoAnchor w/o temporal synthesis",
+                "EgoAnchor Causal Prediction",
+                "EgoAnchor w/o StaticLock",
+            ),
+        )
 
     def test_xlsx_reader_streams_selected_columns_from_stage_one_sheet(self) -> None:
         """新分析 reader 直接消费 Stage 1 sheet，不改写原始 workbook。"""
@@ -68,6 +82,21 @@ class PaperPipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "五本 Stage 1 XLSX"):
                 build_paper((source,), output, root / "paper", root / "paper" / "manuscript.tex")
             self.assertFalse(output.exists())
+
+    def test_v3_stage_one_workbook_is_rejected_before_analysis(self) -> None:
+        """旧 linear_v2 工作簿不得被新因果预测矩阵的论文入口接受。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "task_1_complete.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "metadata_kv"
+            sheet.append(("document", "json_path", "value_json"))
+            sheet.append(("manifest.json", "variant_matrix_id", '"exp12_9_linear_v2"'))
+            workbook.save(path)
+
+            with self.assertRaisesRegex(ValueError, "exp12_9_causal_v3"):
+                analyze_workbooks((path,))
 
     def test_figure_pairing_uses_event_identity_instead_of_row_position(self) -> None:
         """实验一折线必须按稳定片段键配对，即使各方法行顺序不同。"""

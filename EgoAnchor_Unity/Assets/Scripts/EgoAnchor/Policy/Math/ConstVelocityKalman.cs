@@ -67,8 +67,9 @@ namespace EgoAnchor.Policy
 
         /// <summary>
         /// 常速度预测：x = F x, P = F P F^T + Q。
+        /// Q 使用连续白噪声加速度模型，accelerationNoise 是加速度噪声功率谱密度。
         /// </summary>
-        public void Predict(float dt, float processNoise)
+        public void Predict(float dt, float accelerationNoise)
         {
             if (!HasState)
             {
@@ -76,15 +77,21 @@ namespace EgoAnchor.Policy
             }
 
             float safeDt = Mathf.Max(dt, 0.0f);
-            float q = Mathf.Max(processNoise, 0.0f);
+            float q = Mathf.Max(accelerationNoise, 0.0f);
+            float dt2 = safeDt * safeDt;
+            float dt3 = dt2 * safeDt;
             Position += Velocity * safeDt;
-            float nextP00 = P00 + safeDt * (P10 + P01) + safeDt * safeDt * P11 + q * safeDt;
-            float nextP01 = P01 + safeDt * P11;
-            float nextP10 = P10 + safeDt * P11;
+
+            // 连续白噪声加速度离散化：Q = q * [[dt^3/3, dt^2/2], [dt^2/2, dt]]。
+            float processPositionVariance = q * dt3 / 3.0f;
+            float processCrossCovariance = q * dt2 / 2.0f;
+            float nextP00 = P00 + safeDt * (P10 + P01) + dt2 * P11 + processPositionVariance;
+            float nextP01 = P01 + safeDt * P11 + processCrossCovariance;
+            float nextP10 = P10 + safeDt * P11 + processCrossCovariance;
             float nextP11 = P11 + q * safeDt;
             P00 = nextP00;
-            P01 = nextP01;
-            P10 = nextP10;
+            P01 = 0.5f * (nextP01 + nextP10);
+            P10 = P01;
             P11 = nextP11;
         }
 
@@ -100,22 +107,26 @@ namespace EgoAnchor.Policy
             }
 
             float r = Mathf.Max(measurementNoise, 1e-9f);
+            float priorP00 = Mathf.Max(P00, 0.0f);
+            float priorP01 = 0.5f * (P01 + P10);
+            float priorP11 = Mathf.Max(P11, 0.0f);
             float innovation = measurement - Position;
-            float s = Mathf.Max(P00 + r, 1e-12f);
-            float k0 = P00 / s;
-            float k1 = P10 / s;
+            float s = Mathf.Max(priorP00 + r, 1e-12f);
+            float k0 = priorP00 / s;
+            float k1 = priorP01 / s;
 
             Position += k0 * innovation;
             Velocity += k1 * innovation;
 
-            float nextP00 = (1.0f - k0) * P00;
-            float nextP01 = (1.0f - k0) * P01;
-            float nextP10 = P10 - k1 * P00;
-            float nextP11 = P11 - k1 * P01;
-            P00 = nextP00;
-            P01 = nextP01;
-            P10 = nextP10;
-            P11 = nextP11;
+            // Joseph 形式显式保留对称性和半正定性，避免长序列 float 计算积累负方差。
+            float oneMinusK0 = 1.0f - k0;
+            float nextP00 = oneMinusK0 * oneMinusK0 * priorP00 + k0 * k0 * r;
+            float nextP01 = oneMinusK0 * (priorP01 - k1 * priorP00) + k0 * k1 * r;
+            float nextP11 = priorP11
+                - 2.0f * k1 * priorP01
+                + k1 * k1 * priorP00
+                + k1 * k1 * r;
+            StabilizeCovariance(nextP00, nextP01, nextP11);
         }
 
         /// <summary>
@@ -135,6 +146,18 @@ namespace EgoAnchor.Policy
 
             Position = position;
             Velocity = velocity;
+        }
+
+        /// <summary>
+        /// 将二维协方差投影回数值可接受的对称半正定范围。
+        /// </summary>
+        private void StabilizeCovariance(float p00, float p01, float p11)
+        {
+            P00 = Mathf.Max(p00, 0.0f);
+            P11 = Mathf.Max(p11, 0.0f);
+            float maxCross = Mathf.Sqrt(P00 * P11);
+            P01 = Mathf.Clamp(p01, -maxCross, maxCross);
+            P10 = P01;
         }
 
     }

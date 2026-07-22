@@ -3,6 +3,8 @@
 from .events import finalize_task_events
 
 from .qc import (
+    CURRENT_VARIANT_MATRIX_ID,
+    FORMAL_METHODS,
     FORMAL_VARIANTS,
     QcIssue,
     StageOneQcReport,
@@ -56,6 +58,8 @@ __all__ = [
     "EXCEL_MAX_CELL_CHARS",
     "EXCEL_MAX_DATA_ROWS",
     "JSON_DOCUMENT_FILES",
+    "CURRENT_VARIANT_MATRIX_ID",
+    "FORMAL_METHODS",
     "FORMAL_VARIANTS",
     "JSONL_TABLE_FILES",
     "REQUIRED_FILE_NAMES",

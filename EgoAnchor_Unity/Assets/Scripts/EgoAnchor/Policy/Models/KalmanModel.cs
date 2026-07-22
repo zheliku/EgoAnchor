@@ -15,21 +15,21 @@ namespace EgoAnchor.Policy
     /// </summary>
     public sealed class KalmanModel : MotionModel
     {
-        /// <summary>位置过程噪声，单位 m^2/s；越大越允许速度快速变化。</summary>
-        [Tooltip("位置过程噪声，单位 m^2/s；越大越允许速度快速变化，跟得更紧但更抖。默认 0.2。")]
-        [SerializeField] private float positionProcessNoise = 0.20f;
+        /// <summary>位置加速度噪声功率谱密度，单位 m^2/s^3；越大越允许速度快速变化。</summary>
+        [Tooltip("位置加速度噪声功率谱密度，单位 m^2/s^3；越大越允许速度快速变化，跟得更紧但更抖。当前冻结值 0.002。")]
+        [SerializeField] private float positionAccelerationNoise = 0.002f;
 
         /// <summary>位置测量噪声，单位 m^2；越小越信任观测 (越接近过点)。</summary>
-        [Tooltip("位置测量噪声，单位 m^2；越小越信任观测、越接近过点。默认 0.0004。")]
-        [SerializeField] private float positionMeasurementNoise = 0.0004f;
+        [Tooltip("位置测量噪声，单位 m^2；越小越信任观测、越接近过点。当前冻结值 0.000004。")]
+        [SerializeField] private float positionMeasurementNoise = 0.000004f;
 
-        /// <summary>旋转过程噪声，单位 rad^2/s。</summary>
-        [Tooltip("旋转过程噪声，单位 rad^2/s；旋转在四元数切空间过滤。默认 0.4。")]
-        [SerializeField] private float rotationProcessNoise = 0.40f;
+        /// <summary>旋转加速度噪声功率谱密度，单位 rad^2/s^3。</summary>
+        [Tooltip("旋转加速度噪声功率谱密度，单位 rad^2/s^3；旋转在四元数切空间过滤。当前冻结值 0.2。")]
+        [SerializeField] private float rotationAccelerationNoise = 0.20f;
 
         /// <summary>旋转测量噪声，单位 rad^2。</summary>
-        [Tooltip("旋转测量噪声，单位 rad^2；越小越信任观测。默认 0.0025。")]
-        [SerializeField] private float rotationMeasurementNoise = 0.0025f;
+        [Tooltip("旋转测量噪声，单位 rad^2；越小越信任观测。当前冻结值 0.0004。")]
+        [SerializeField] private float rotationMeasurementNoise = 0.0004f;
 
         private ConstVelocityKalman x;
         private ConstVelocityKalman y;
@@ -41,14 +41,22 @@ namespace EgoAnchor.Policy
         private double lastTimeSeconds;
         private bool hasState;
 
+        /// <summary>首帧位置速度方差，单位 (m/s)^2；写入指纹以区分启动阶段语义。</summary>
+        private const float InitialPositionVelocityVariance = 1.0f;
+
+        /// <summary>首帧角速度方差，单位 (rad/s)^2；写入指纹以区分启动阶段语义。</summary>
+        private const float InitialRotationVelocityVariance = 1.0f;
+
         public override string ModelName => "kalman";
         public override string ConfigurationFingerprint => string.Format(
             CultureInfo.InvariantCulture,
-            "pos:{0:R},{1:R}|rot:{2:R},{3:R}",
-            positionProcessNoise,
+            "q-model:cwna-v1|pos:{0:R},{1:R},{2:R}|rot:{3:R},{4:R},{5:R}",
+            positionAccelerationNoise,
             positionMeasurementNoise,
-            rotationProcessNoise,
-            rotationMeasurementNoise);
+            InitialPositionVelocityVariance,
+            rotationAccelerationNoise,
+            rotationMeasurementNoise,
+            InitialRotationVelocityVariance);
         public override bool HasState => hasState;
         public override double LastObservationTimeSeconds => lastTimeSeconds;
         public override Vector3 LinearVelocity => new Vector3(x.Velocity, y.Velocity, z.Velocity);
@@ -70,14 +78,19 @@ namespace EgoAnchor.Policy
 
         public override void Snap(in AnchorObservation observation)
         {
+            if (!IsFinite(observation.MeasurementTimeSeconds))
+            {
+                return;
+            }
+
             Vector3 p = observation.WorldPose.position;
-            x.Reset(p.x, positionMeasurementNoise, 1.0f);
-            y.Reset(p.y, positionMeasurementNoise, 1.0f);
-            z.Reset(p.z, positionMeasurementNoise, 1.0f);
+            x.Reset(p.x, positionMeasurementNoise, InitialPositionVelocityVariance);
+            y.Reset(p.y, positionMeasurementNoise, InitialPositionVelocityVariance);
+            z.Reset(p.z, positionMeasurementNoise, InitialPositionVelocityVariance);
             rotationReference = AnchorMath.Normalize(observation.WorldPose.rotation);
-            rx.Reset(0.0f, rotationMeasurementNoise, 1.0f);
-            ry.Reset(0.0f, rotationMeasurementNoise, 1.0f);
-            rz.Reset(0.0f, rotationMeasurementNoise, 1.0f);
+            rx.Reset(0.0f, rotationMeasurementNoise, InitialRotationVelocityVariance);
+            ry.Reset(0.0f, rotationMeasurementNoise, InitialRotationVelocityVariance);
+            rz.Reset(0.0f, rotationMeasurementNoise, InitialRotationVelocityVariance);
             lastTimeSeconds = observation.MeasurementTimeSeconds;
             hasState = true;
         }
@@ -91,13 +104,18 @@ namespace EgoAnchor.Policy
             }
 
             double t = observation.MeasurementTimeSeconds;
-            float dt = Mathf.Max((float)(t - lastTimeSeconds), 0.0f);
-            x.Predict(dt, positionProcessNoise);
-            y.Predict(dt, positionProcessNoise);
-            z.Predict(dt, positionProcessNoise);
-            rx.Predict(dt, rotationProcessNoise);
-            ry.Predict(dt, rotationProcessNoise);
-            rz.Predict(dt, rotationProcessNoise);
+            if (!IsFinite(t) || t <= lastTimeSeconds)
+            {
+                return;
+            }
+
+            float dt = (float)(t - lastTimeSeconds);
+            x.Predict(dt, positionAccelerationNoise);
+            y.Predict(dt, positionAccelerationNoise);
+            z.Predict(dt, positionAccelerationNoise);
+            rx.Predict(dt, rotationAccelerationNoise);
+            ry.Predict(dt, rotationAccelerationNoise);
+            rz.Predict(dt, rotationAccelerationNoise);
             lastTimeSeconds = t;
 
             Vector3 p = observation.WorldPose.position;
@@ -148,6 +166,12 @@ namespace EgoAnchor.Policy
         private Quaternion CurrentRotation()
         {
             return AnchorMath.Multiply(rotationReference, AnchorMath.Exp(CurrentRotationVector()));
+        }
+
+        /// <summary>判断运动时间戳是否为可参与状态传播的有限值。</summary>
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         /// <summary>

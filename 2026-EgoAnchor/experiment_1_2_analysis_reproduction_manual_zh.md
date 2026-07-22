@@ -5,6 +5,16 @@
 
 以下命令都在 `EgoAnchor_Python` 目录运行。
 
+## 当前 Kalman 重采边界
+
+当前活动批次是 v3 归档数据，使用旧的 Kalman 过程协方差。它可以继续用于只读诊断和历史
+结果核对，但不能作为 CWNA 修正后运行时的正式结果。开始新采前必须确认正式场景中的六个
+`KalmanModel` 参数完全一致，配置指纹包含 `q-model:cwna-v1`，并通过 Unity EditMode 测试。
+
+新批次仍按任务 1--5 各采一个正式 session。五项数据没有全部完成并通过 `stage` 前，不切换
+活动批次，也不从 v3 单独保留某个表现更好的场景。完成整批 QC 后再使用 `promote` 原子替换，
+随后依次运行 `analyze` 和 `latex` 重建图、表、正文数字与稳定 PDF。
+
 ## 一、先弄清三类文件
 
 ### 1. 新采集 session
@@ -197,8 +207,9 @@ pixi run eval stage 20260722_120001_controller_right 20260722_120002_controller_
 检查内容：
 
 - 五个 session ID 唯一，每个 session 只完成一项任务，整批恰好覆盖任务 1--5。
-- `run_kind` 为 `formal`，九路矩阵为 `exp12_9_linear_v2`。
+- `run_kind` 为 `formal`，九路矩阵为 `exp12_9_causal_v3`。
 - 五个 session 的配置哈希、冻结参数、对象、模型和协议一致。
+- Task 2 的 `transition_started` / `transition_stopped` 严格交替闭合；因果预测的实际时域不超过配置指纹中的上限，校正残差有限，异常连续性重置计数单调不减。
 - 固定 JSON/JSONL 文件齐全，生命周期、事件、主外键和九路 admission/render 矩阵通过 QC。
 - 复制期间来源文件没有继续变化。
 
