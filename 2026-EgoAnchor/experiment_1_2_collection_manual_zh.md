@@ -4,7 +4,7 @@
 
 你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Hermite` 插值器对照。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
 
-推荐在同一个 session 中依次完成任务 1--5。确需中断时，也可以拆成多个 session；只要它们使用完全相同的冻结配置，并且合起来覆盖任务 1--5 即可。
+当前离线 CLI 不会拆分多任务 session，也不会自动合并多个 session。正式批次固定为任务 1--5 各录一个独立 session，共五个 session；每个 session 只完成一个任务。五次采集必须使用完全相同的冻结配置。完成当前任务后停止 session，重新启动 Python 取得新的 session_id，再采下一项任务。不要把同一个多任务 session 复制成五个 task 目录。
 
 任务和 session 都没有持续时间上下限。UI 的 `TIME` 只告诉你已经录了多久，不会阻止结束，也不会因为过短或过长判定失败。完成当前任务要求的动作和 marker 后即可结束；需要中止时也可以直接停止整个 session。
 
@@ -39,7 +39,7 @@ marker 按下后，状态板会保留 2 秒确认信息。绿色 `MARKER SAVED #
 2. 按 A 开始选中的任务。
 3. 需要标记事件时按右扳机。
 4. 动作和 marker 完成后短按 B 结束任务。
-5. 做错时按下右摇杆作废。f
+5. 做错时按下右摇杆作废。
 6. 需要停止整个 session 时长按 B 1.5 秒。
 
 任务正在运行时不能切换任务，防止误操作。
@@ -261,11 +261,12 @@ cd EgoAnchor_Python
 pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，五个任务都有 marker，任务 2 至少有一个 `transition_started`，任务 5 的遮挡/重新可见 marker 成对闭合，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。分析还会检查四个消融是否都产生了对应关键指标；缺少任一项时不会发布正式 CSV、PDF 或 TeX。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算当前 session 结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 至少要有一个 `transition_started`；任务 5 的遮挡/重新可见 marker 必须成对闭合。五个 session 复制到批次暂存目录后还要再运行整批 QC；分析会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
 
-实验一和实验二使用同一组五项任务。QC 通过后，先停止 Mutagen，再把最终 task 复制到
-`data/experiments/experiment_1_2/raw/` 的固定任务目录。不要直接把裸 session 当作长期归档，
-也不要删除仍未完成同步的 `data/eval/<session_id>`。
+实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
+使用相同配置并分别对应任务 1--5。QC 通过后，先停止 Mutagen，再按分析复现手册复制到
+`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录。不要直接把裸
+session 当作长期归档，也不要删除仍未完成同步的 `data/eval/<session_id>`。
 
 工作簿和论文结果统一通过 `qc`、`preprocess`、`build-paper` 三个命令重建，完整命令见
 `experiment_1_2_analysis_reproduction_manual_zh.md`。

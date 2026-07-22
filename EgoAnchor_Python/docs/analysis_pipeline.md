@@ -15,6 +15,9 @@ raw task
 qc 和 preprocess 可以读取 raw JSON/JSONL。build-paper 只读取五本 Stage 1 XLSX，
 不回读 raw，也不修改工作簿。统计单位是动作片段或遮挡 episode，渲染帧不作为独立样本。
 
+当前预处理入口要求一项任务对应一个独立 session。它不拆分多任务 session，也不合并多个
+session；五个 raw 目录必须是扁平数据根，固定 JSON/JSONL 直接位于 task 目录下。
+
 ## 当前输入
 
 ~~~powershell
@@ -84,13 +87,15 @@ data/experiments/experiment_1_2/analysis/
 论文目录：
 
 ~~~text
-2026-EgoAnchor/figures/panels/figure2a_...pdf 到 figure3d_...pdf
+2026-EgoAnchor/figures/panels/figure2a_...png/.pdf 到 figure3d_...png/.pdf
 2026-EgoAnchor/tables/experiment1_system_characterization.tex
 2026-EgoAnchor/tables/experiment2_design_attribution.tex
 2026-EgoAnchor/egoanchor_cn_v6.tex
 ~~~
 
 图 2 和图 3 都由 LaTeX subfigure 排成一行。图内不重复小标题；图 2(b) 不连接跨方法折线。
+figure_plot_data.xlsx 是与面板共享同一分析结果的审计导出，不是绘图输入。没有单独的
+plot-xlsx-to-figure 阶段；重新生成 PNG/PDF 时再次运行 build-paper。
 
 ## 验证
 

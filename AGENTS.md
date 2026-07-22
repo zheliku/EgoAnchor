@@ -299,7 +299,12 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_c
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
-- 复现命令、退出码和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md` 与中文复现手册。
+- 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式批次使用五个不同 session，
+  每个 session 只完成对应的一项任务。新批次先进入 `data/experiments/_staging/`，退出当前论文的
+  完整旧批次进入 `data/experiments/_archive/`，默认论文输入仍只有无版本后缀的活动目录。
+- `figure_plot_data.xlsx` 是与 PNG/PDF 面板共享同一分析结果的审计导出，不是绘图输入；正式流程
+  没有独立的 plot XLSX 转图片命令。
+- 复现命令、批次归档、退出码和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md` 与中文复现手册。
 
 ## AGENTS.md 维护规则
 
