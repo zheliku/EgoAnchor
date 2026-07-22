@@ -226,6 +226,37 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>正式 Kalman + 因果预测组合在新观测校正边界保持位置和旋转连续。</summary>
+        [Test]
+        public void KalmanCausalPredictionKeepsCorrectionBoundaryContinuous()
+        {
+            GameObject owner = new GameObject("KalmanCausalPredictionBoundaryTests");
+            try
+            {
+                KalmanModel model = owner.AddComponent<KalmanModel>();
+                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                strategy.ResetStrategy();
+
+                Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
+                Feed(model, strategy, Observation(2, 0.1, 0.02f, 5.0f));
+
+                const double renderTime = 0.25;
+                Pose beforeCorrection = strategy.Output(model, renderTime);
+                Feed(model, strategy, Observation(3, 0.2, 0.20f, 60.0f));
+                Pose afterCorrection = strategy.Output(model, renderTime);
+
+                Assert.That(Vector3.Distance(beforeCorrection.position, afterCorrection.position), Is.LessThan(1e-6f));
+                Assert.That(AnchorMath.AngleDegrees(beforeCorrection.rotation, afterCorrection.rotation), Is.LessThan(1e-4f));
+                Assert.That(strategy.Diagnostics.PredictionHorizonMilliseconds, Is.LessThanOrEqualTo(180.001f));
+                Assert.That(strategy.Diagnostics.CorrectionPositionResidualMeters, Is.GreaterThan(0.0f));
+                Assert.That(strategy.Diagnostics.CorrectionRotationResidualDegrees, Is.GreaterThan(0.0f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
         /// <summary>60 ms 半衰期在 72、90、120 Hz 渲染下必须产生相同输出。</summary>
         [Test]
         public void CausalPredictionHalfLifeIsIndependentOfRenderRate()

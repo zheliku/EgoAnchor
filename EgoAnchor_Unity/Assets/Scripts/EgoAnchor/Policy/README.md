@@ -119,7 +119,7 @@ Python Stage 1 QC 会按 Unity 的 FNV-1a 顺序重算哈希。当前场景和�
 
 ```powershell
 dotnet build EgoAnchor_Unity/EgoAnchor.Tests.csproj --no-restore
-dotnet build EgoAnchor_Unity/Assembly-CSharp.csproj --no-restore
+dotnet build EgoAnchor_Unity/EgoAnchor.csproj --no-restore
 ```
 
-Unity Editor 还必须运行 `EgoAnchor.Tests` EditMode 测试。场景契约测试会读取 YAML，核对九个 runtime、层级、模型、策略、门控、重获取和 StaticLock 绑定。
+Unity Editor 还必须运行 `EgoAnchor.Tests` EditMode 测试。场景契约测试会读取 `EgoAnchor-Experiment12.unity` YAML，核对九个 runtime、层级、模型、策略、门控、重获取和 StaticLock 绑定。`maxPredictionHorizonSeconds=0.18` 与 `correctionHalfLifeSeconds=0.06` 目前仍是 pilot 初值；只有通过 72/90/120 Hz、起停、遮挡和旋转检查后，才能冻结为 v4 正式参数。
