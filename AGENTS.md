@@ -264,7 +264,7 @@ Unity（仓库根目录）：
 
 ```powershell
 dotnet build "EgoAnchor_Unity\EgoAnchor.Tests.csproj" --no-restore
-dotnet build "EgoAnchor_Unity\Assembly-CSharp.csproj" --no-restore
+dotnet build "EgoAnchor_Unity\EgoAnchor.csproj" --no-restore
 ```
 
 协议生成（`EgoAnchor_Python`）：
