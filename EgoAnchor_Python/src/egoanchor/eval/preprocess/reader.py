@@ -8,7 +8,7 @@ import math
 import types
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Union, get_args, get_origin, get_type_hints
+from typing import Any, Iterator, Mapping, Sequence, Union, get_args, get_origin, get_type_hints
 
 from ..schema_v2 import (
     EventRow,
@@ -69,6 +69,18 @@ ROW_TYPES = {
 
 REQUIRED_FILE_NAMES = TASK_SOURCE_FILE_NAMES + DERIVED_FILE_NAMES
 """一个完整 schema-v2 task 的固定文件集合。"""
+
+
+def require_task_sources(task_dirs: Sequence[Path], file_names: Sequence[str]) -> None:
+    """在任何物化或发布前确认整批 task 目录及固定源文件齐全。"""
+
+    for task_dir in task_dirs:
+        root = Path(task_dir).expanduser()
+        if not root.is_dir():
+            raise FileNotFoundError(f"schema-v2 task 目录不存在：{root}")
+        missing = [name for name in file_names if not (root / name).is_file()]
+        if missing:
+            raise FileNotFoundError(f"schema-v2 task 缺少固定文件：{', '.join(missing)}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,5 +403,6 @@ __all__ = [
     "iter_jsonl",
     "read_json_document",
     "read_task",
+    "require_task_sources",
     "source_file_info",
 ]

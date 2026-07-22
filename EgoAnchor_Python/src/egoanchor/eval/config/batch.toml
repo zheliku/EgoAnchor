@@ -1,0 +1,6 @@
+[paths]
+eval_root = "data/eval" # Unity/Python 新采集 session 的本机同步暂存目录。
+staging_root = "data/experiments/_staging/experiment_1_2" # 新批次完成 QC 和工作簿发布前的临时目录。
+archive_root = "data/experiments/_archive/experiment_1_2" # 退出当前论文的完整旧批次冷归档目录。
+active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动批次目录。
+paper_root = "../2026-EgoAnchor" # 中文主稿、论文面板、表格和最终 PDF 所在目录。

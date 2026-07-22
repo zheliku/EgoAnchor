@@ -123,25 +123,23 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 
 ### 1. 启动 NATS
 
-```powershell
-nats-server
+```text
+pixi run nats-server
 ```
 
 ### 2. 在本机启动并检查 Mutagen
 
-```powershell
-cd EgoAnchor_Python
-mutagen project start
-mutagen sync list
+```text
+pixi run mutagen project start
+pixi run mutagen sync list
 ```
 
 确认 `logs-5090` 为 `Watching for changes`，且没有 conflict。建议从采集前就保持同步；如果中途未开启，只要远端 Python 日志完整落盘，停止后再开启同步仍可使用，但必须等所有分片完整回传后才能运行 QC。
 
 ### 3. 在 5090 电脑启动 Python
 
-```powershell
-cd EgoAnchor_Python
-pixi run python .\src\run_server.py --object controller_right
+```text
+pixi run python src/run_server.py --object controller_right
 ```
 
 Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen 回传到本机 `EgoAnchor_Python/data/eval/`。Unity 不应直接覆盖 Python 的日志文件。
@@ -256,19 +254,26 @@ audit_samples/
 
 ## 九、运行 QC 并归档
 
-```powershell
-cd EgoAnchor_Python
-pixi run python -m egoanchor.eval.cli qc .\data\eval\<session_id>
+五项任务采集并同步完成后，在 `EgoAnchor_Python` 目录列出 session：
+
+```text
+pixi run eval sessions
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算当前 session 结构通过。还要确认 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 至少要有一个 `transition_started`；任务 5 的遮挡/重新可见 marker 必须成对闭合。五个 session 复制到批次暂存目录后还要再运行整批 QC；分析会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
+再把五个 session ID 交给批次工具，顺序不限：
+
+```text
+pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+```
+
+返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 至少要有一个 `transition_started`；任务 5 的遮挡/重新可见 marker 必须成对闭合。分析还会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
 
 实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
-使用相同配置并分别对应任务 1--5。QC 通过后，先停止 Mutagen，再按分析复现手册复制到
-`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录。不要直接把裸
-session 当作长期归档，也不要删除仍未完成同步的 `data/eval/<session_id>`。
+使用相同配置并分别对应任务 1--5。`stage` 会把通过 QC 的副本写入
+`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录，原始 session 仍
+保留在 `data/eval`。不要直接把裸 session 当作长期归档，也不要删除仍未完成同步的 session。
 
-工作簿和论文结果统一通过 `qc`、`preprocess`、`build-paper` 三个命令重建，完整命令见
+工作簿和论文结果统一通过 `pixi run eval` 重建，完整命令见
 `experiment_1_2_analysis_reproduction_manual_zh.md`。
 
 ## 十、Inspector 改绑与正式采集前自检

@@ -34,6 +34,7 @@ from .reader import (
     iter_jsonl,
     read_json_document,
     read_task,
+    require_task_sources,
     source_file_info,
 )
 from .workbook import (
@@ -79,6 +80,7 @@ __all__ = [
     "iter_jsonl",
     "read_json_document",
     "read_task",
+    "require_task_sources",
     "reproducible_generated_at",
     "run_task_qc",
     "source_file_info",

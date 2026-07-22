@@ -1,8 +1,8 @@
 """EgoAnchor 运行时评估基础设施的包级入口。
 
-这里仅导出 schema-v2、QC 和 Stage 1 workbook 桥梁。论文分析从
-``egoanchor.eval.paper_analysis`` 或 ``egoanchor.eval.cli`` 显式进入，避免运行时服务
-初始化时加载绘图、PDF 和 XLSX 分析依赖。
+这里导出 schema-v2、QC、Stage 1 workbook 和固定路径批次工作流。论文分析从
+``egoanchor.eval.paper_analysis`` 或相应 CLI 显式进入，避免运行时服务初始化时加载绘图和
+PDF 分析依赖。
 """
 from .preprocess import (
     DERIVED_FILE_NAMES,
@@ -35,6 +35,7 @@ from .preprocess import (
     iter_jsonl,
     read_json_document,
     read_task,
+    require_task_sources,
     reproducible_generated_at,
     run_task_qc,
     source_file_info,
@@ -57,9 +58,28 @@ from .schema_v2 import (
     UnityRenderRow,
     validate_schema_mapping,
 )
+from .batch import (
+    BatchArtifact,
+    BatchPaths,
+    BatchToolError,
+    SessionSummary,
+    TaskSpec,
+    analyze_current,
+    compile_current_paper,
+    list_eval_sessions,
+    load_batch_paths,
+    preprocess_current,
+    promote_batch,
+    qc_current,
+    rebuild_current,
+    stage_batch,
+)
 
 __all__ = [
     "DERIVED_FILE_NAMES",
+    "BatchArtifact",
+    "BatchPaths",
+    "BatchToolError",
     "EMPTY_TEXT_MARKER",
     "EXPECTED_EVENTS",
     "EXCEL_MAX_CELL_CHARS",
@@ -82,8 +102,10 @@ __all__ = [
     "SourceFileRecord",
     "SourceRow",
     "StageOneQcReport",
+    "SessionSummary",
     "TASK_SOURCE_FILE_NAMES",
     "TaskDataset",
+    "TaskSpec",
     "UnityAdmissionRow",
     "UnityReferenceRow",
     "UnityRenderRow",
@@ -91,19 +113,29 @@ __all__ = [
     "WorkbookValidationError",
     "WorkbookVerification",
     "aggregate_config_hash",
+    "analyze_current",
+    "compile_current_paper",
     "collect_source_files",
     "decode_workbook_text",
     "file_sha256",
     "finalize_task_events",
     "flatten_json",
     "iter_jsonl",
+    "list_eval_sessions",
+    "load_batch_paths",
+    "preprocess_current",
     "read_json_document",
     "read_task",
+    "promote_batch",
+    "qc_current",
+    "require_task_sources",
     "reproducible_generated_at",
+    "rebuild_current",
     "run_task_qc",
     "source_file_info",
     "source_set_sha256",
     "stable_workbook_id",
+    "stage_batch",
     "validate_schema_mapping",
     "variant_config_hash",
     "verify_task_workbook",

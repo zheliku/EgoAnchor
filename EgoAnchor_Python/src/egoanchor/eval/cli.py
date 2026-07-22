@@ -14,6 +14,7 @@ from .preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
     finalize_task_events,
+    require_task_sources,
     run_task_qc,
     write_task_workbook,
 )
@@ -80,10 +81,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run_qc(args: argparse.Namespace) -> int:
     """物化缺失事件总表，再只读检查 task。"""
 
-    _require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
+    require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
     for task_dir in args.task_dirs:
         finalize_task_events(task_dir)
-    _require_task_sources(args.task_dirs, REQUIRED_FILE_NAMES)
+    require_task_sources(args.task_dirs, REQUIRED_FILE_NAMES)
     reports = [run_task_qc(path) for path in args.task_dirs]
     payload: object = reports[0].to_dict() if len(reports) == 1 else {
         "passed": all(report.passed for report in reports),
@@ -96,11 +97,11 @@ def _run_qc(args: argparse.Namespace) -> int:
 def _run_preprocess(args: argparse.Namespace) -> int:
     """先整批 QC，再原子发布不变的 Stage 1 完整 XLSX。"""
 
-    _require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
+    require_task_sources(args.task_dirs, TASK_SOURCE_FILE_NAMES)
     destinations = _preprocess_destinations(args.task_dirs, args.out)
     for task_dir in args.task_dirs:
         finalize_task_events(task_dir)
-    _require_task_sources(args.task_dirs, REQUIRED_FILE_NAMES)
+    require_task_sources(args.task_dirs, REQUIRED_FILE_NAMES)
     reports = [(task_dir, run_task_qc(task_dir)) for task_dir in args.task_dirs]
     if not all(report.passed for _, report in reports):
         print(json.dumps({"passed": False, "tasks": [report.to_dict() for _, report in reports]}, ensure_ascii=False, sort_keys=True))
@@ -138,18 +139,6 @@ def _run_build_paper(args: argparse.Namespace) -> int:
     payload = build_paper(tuple(args.workbooks), args.out, args.paper_root)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return EXIT_OK
-
-
-def _require_task_sources(task_dirs: Sequence[Path], file_names: Sequence[str]) -> None:
-    """确认原始 task 目录和固定源文件存在。"""
-
-    for task_dir in task_dirs:
-        root = task_dir.expanduser()
-        if not root.is_dir():
-            raise FileNotFoundError(f"schema-v2 task 目录不存在：{root}")
-        missing = [name for name in file_names if not (root / name).is_file()]
-        if missing:
-            raise FileNotFoundError(f"schema-v2 task 缺少固定文件：{', '.join(missing)}")
 
 
 def _preprocess_destinations(task_dirs: Sequence[Path], output_root: Path) -> tuple[Path, ...]:

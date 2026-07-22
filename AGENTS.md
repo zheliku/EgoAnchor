@@ -139,6 +139,7 @@ schema-v2 task directory
 - `build-paper` 只读取五本 Stage 1 完整 XLSX，计算指标并发布七个独立 PDF/PNG 面板、两张 TeX 表和中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
 - 旧 Stage 2/3、v2 replay 与历史分析包已删除；当前代码位于 `egoanchor.eval.paper_analysis`，不保留旧入口兼容层。
 - 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`；QC 或论文输入契约失败时返回退出码 2，禁止生成正式论文产物。
+- 面向人工操作的固定路径包装入口是 `pixi run eval`。它提供 `sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`latex` 和 `rebuild`，但不得改变上述科学分析 CLI 的三命令契约。操作路径只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；论文统计参数仍只属于 `paper.toml`。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
@@ -148,7 +149,7 @@ schema-v2 task directory
 - 主稿由 `build-paper` 从当前 XLSX 指标完整写出；表格内容内联，PDF 面板保持外部依赖。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。`data/eval/` 只作为新采集暂存入口，不保存已归档 session；旧 `data/eval/` 与 `data/analysis/` 重复归档不得恢复为论文输入路径。
-- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；它要求替换五个 raw task 目录后从 `qc`、`preprocess` 执行到 `build-paper` 和 XeLaTeX。
+- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；新批次先由 `pixi run eval stage` 整批 QC、复制并生成工作簿，再用 `promote` 原子切换。当前活动批次可按 `qc`、`preprocess`、`analyze`、`latex` 逐阶段执行，或用 `rebuild` 一次重建。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
 - 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；Hermite 只用于独立插值器对照。

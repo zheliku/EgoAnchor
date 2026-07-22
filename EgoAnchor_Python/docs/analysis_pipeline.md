@@ -1,111 +1,97 @@
 # 实验一/二离线分析
 
-正式链路只有 qc、preprocess 和 build-paper 三个命令。数据目录及各层职责见
-docs/data_layout.md。
+科学分析契约仍由 `egoanchor.eval.cli` 的 `qc`、`preprocess` 和 `build-paper` 三个命令实现。
+人工操作统一通过 `pixi run eval` 的固定路径包装入口完成，不需要在命令行传五组路径。
 
-~~~text
-raw task
+```text
+raw JSON/JSONL
   -> qc
   -> preprocess
   -> task_1_complete.xlsx ... task_5_complete.xlsx
-  -> build-paper
+  -> analyze（内部调用 build-paper）
   -> 指标、绘图 XLSX、LaTeX 表格、面板图和中文主稿
-~~~
+  -> latex
+  -> egoanchor_cn_v6.pdf
+```
 
-qc 和 preprocess 可以读取 raw JSON/JSONL。build-paper 只读取五本 Stage 1 XLSX，
-不回读 raw，也不修改工作簿。统计单位是动作片段或遮挡 episode，渲染帧不作为独立样本。
+`qc` 和 `preprocess` 可以读取 raw JSON/JSONL。`analyze` 只读取五本 Stage 1 XLSX，不回读
+raw，也不修改工作簿。统计单位是动作片段或遮挡 episode，渲染帧不作为独立样本。
 
-当前预处理入口要求一项任务对应一个独立 session。它不拆分多任务 session，也不合并多个
-session；五个 raw 目录必须是扁平数据根，固定 JSON/JSONL 直接位于 task 目录下。
+## 路径配置
 
-## 当前输入
+操作路径位于 `src/egoanchor/eval/config/batch.toml`，默认指向当前仓库的数据与论文目录。
+论文统计参数位于 `src/egoanchor/eval/config/paper.toml`。路径配置不改变科学参数，正式 CLI
+也不提供统计参数覆盖入口。
 
-~~~powershell
-Set-Location P:\VSCode-Project\EgoAnchor\EgoAnchor_Python
+当前预处理要求一项任务对应一个独立 session，不拆分多任务 session，也不合并多个
+session。五项任务必须使用 `variant_matrix_id=exp12_9_linear_v2` 并完整记录九个 runtime。
 
-$rawRoot = (Resolve-Path "data/experiments/experiment_1_2/raw").Path
-$taskDirs = @(
-    "task_1_static_head_motion"
-    "task_2_start_stop_6dof"
-    "task_3_continuous_translation"
-    "task_4_continuous_rotation"
-    "task_5_occlusion_recovery"
-) | ForEach-Object { Join-Path $rawRoot $_ }
-~~~
+## 新批次归档
 
-五个 task 必须使用 variant_matrix_id=exp12_9_linear_v2，并完整记录九个 runtime。QC 不再
-接受缺少矩阵标识的历史八路数据。
+```text
+pixi run eval sessions
+pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+pixi run eval promote <stage 输出的 batch_id>
+```
 
-## 从 raw 重建
+五个 session 的输入顺序不限，程序按 `completed_tasks` 自动映射任务 1--5。`stage` 会执行
+整批 QC、复制来源和生成五本工作簿；`promote` 会复核 raw/XLSX 来源摘要，并整体归档旧批次。
 
-~~~powershell
-$codeVersion = (git rev-parse --short HEAD).Trim()
-pixi run python -m egoanchor.eval.cli qc @taskDirs
-if ($LASTEXITCODE -ne 0) { throw "QC 失败。" }
+## 逐阶段重建
 
-pixi run python -m egoanchor.eval.cli preprocess @taskDirs --out data/experiments/experiment_1_2/workbooks --code-version $codeVersion
-if ($LASTEXITCODE -ne 0) { throw "preprocess 失败。" }
-~~~
+```text
+pixi run eval qc
+pixi run eval preprocess
+pixi run eval analyze --skip-latex
+pixi run eval latex
+```
 
-preprocess 必须原子生成 task_1_complete.xlsx 到 task_5_complete.xlsx。任一 task 的硬 QC
-失败时，整批不开始发布。
+对应关系如下：
 
-## 重建论文
+| 命令 | 输入 | 主要输出 |
+|---|---|---|
+| `pixi run eval qc` | 当前 `raw/` | QC JSON，不发布论文产物 |
+| `pixi run eval preprocess` | 当前 `raw/` | `workbooks/task_1_complete.xlsx` 到 `task_5_complete.xlsx` |
+| `pixi run eval analyze --skip-latex` | 当前五本 XLSX | 指标、绘图 XLSX、PNG/PDF 面板、TeX 表和中文主稿 |
+| `pixi run eval latex` | 当前中文主稿 | `2026-EgoAnchor/pdf/egoanchor_cn_v6.pdf` |
 
-~~~powershell
-$workbookRoot = (Resolve-Path "data/experiments/experiment_1_2/workbooks").Path
-$workbooks = 1..5 | ForEach-Object {
-    Join-Path $workbookRoot ("task_{0}_complete.xlsx" -f $_)
-}
+从 raw 一次完成全部阶段使用：
 
-pixi run python -m egoanchor.eval.cli build-paper @workbooks --out data/experiments/experiment_1_2/analysis --paper-root ..\2026-EgoAnchor
-if ($LASTEXITCODE -ne 0) { throw "论文分析失败。" }
-~~~
+```text
+pixi run eval rebuild
+```
 
-冻结科学参数位于 src/egoanchor/eval/config/paper.toml。分析代码位于
-egoanchor.eval.paper_analysis，不保留旧分析包或 CLI 兼容入口。
+工作簿已经存在时，从 XLSX 开始并同时编译论文使用：
+
+```text
+pixi run eval analyze
+```
 
 ## 输出
 
-本地分析目录：
-
-~~~text
+```text
 data/experiments/experiment_1_2/analysis/
 ├─ metrics/
-│  ├─ experiment1_summary.csv
-│  ├─ capture_alignment.csv
-│  ├─ runtime_performance.json
-│  ├─ strategy_comparison_segments.csv
-│  └─ strategy_comparison_summary.csv
 ├─ plots/
 │  └─ figure_plot_data.xlsx
 └─ provenance/
-   ├─ analysis_manifest.json
-   └─ build_result.json
-~~~
 
-论文目录：
+../2026-EgoAnchor/figures/panels/figure2a_...png/.pdf 到 figure3d_...png/.pdf
+../2026-EgoAnchor/tables/experiment1_system_characterization.tex
+../2026-EgoAnchor/tables/experiment2_design_attribution.tex
+../2026-EgoAnchor/egoanchor_cn_v6.tex
+../2026-EgoAnchor/pdf/egoanchor_cn_v6.pdf
+```
 
-~~~text
-2026-EgoAnchor/figures/panels/figure2a_...png/.pdf 到 figure3d_...png/.pdf
-2026-EgoAnchor/tables/experiment1_system_characterization.tex
-2026-EgoAnchor/tables/experiment2_design_attribution.tex
-2026-EgoAnchor/egoanchor_cn_v6.tex
-~~~
+`figure_plot_data.xlsx` 与面板共享同一分析结果，只用于审计和人工查看，不是绘图输入。没有
+独立的 plot-XLSX-to-figure 阶段；重新生成 PNG/PDF 时再次运行 `pixi run eval analyze`。
 
 图 2 和图 3 都由 LaTeX subfigure 排成一行。图内不重复小标题；图 2(b) 不连接跨方法折线。
-figure_plot_data.xlsx 是与面板共享同一分析结果的审计导出，不是绘图输入。没有单独的
-plot-xlsx-to-figure 阶段；重新生成 PNG/PDF 时再次运行 build-paper。
+raw、工作簿和 `strategy_label_migration.json` 不得由分析阶段改写。
 
-## 验证
+## 代码验证
 
-~~~powershell
+```text
 pixi run python -m compileall src
 pixi run python -m unittest discover -s src -p "test_*.py" -t src
-
-Set-Location ..\2026-EgoAnchor
-latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
-~~~
-
-重建前后应核对五本 Stage 1 XLSX 的 SHA-256。图表、CSV 和主稿可以重建，但 raw、
-工作簿与 strategy_label_migration.json 不能由分析阶段改写。
+```
