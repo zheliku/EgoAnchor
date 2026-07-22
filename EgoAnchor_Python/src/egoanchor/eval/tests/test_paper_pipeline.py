@@ -13,6 +13,7 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.paper_analysis import (
     METHODS,
+    build_paper,
     build_point_panel,
     build_translation_panel,
     iter_rows,
@@ -24,16 +25,11 @@ from egoanchor.eval.paper_analysis import (
 class PaperPipelineTests(unittest.TestCase):
     """冻结新管线只读取 Stage 1 XLSX 且不恢复旧阶段命令。"""
 
-    def test_cli_replaces_old_analysis_stages_with_one_paper_build(self) -> None:
-        """旧 analyze/publish/materialize 命令不得作为兼容层保留。"""
-
-        self.assertEqual(eval_cli.STAGE_COMMANDS, ("qc", "preprocess", "build-paper"))
-
     def test_formal_cli_does_not_allow_parameter_overrides(self) -> None:
         """正式论文入口只能读取冻结的 paper.toml。"""
 
         arguments = eval_cli.build_parser().parse_args(
-            ["build-paper", "task_1_complete.xlsx", "--out", "analysis", "--paper-root", "paper"]
+            ["analyze", "--skip-latex"]
         )
 
         self.assertFalse(hasattr(arguments, "settings"))
@@ -69,18 +65,8 @@ class PaperPipelineTests(unittest.TestCase):
             source.write_text("{}", encoding="utf-8")
             output = root / "output"
 
-            code = eval_cli.main(
-                [
-                    "build-paper",
-                    str(source),
-                    "--out",
-                    str(output),
-                    "--paper-root",
-                    str(root / "paper"),
-                ]
-            )
-
-            self.assertEqual(code, eval_cli.EXIT_DATA_ERROR)
+            with self.assertRaisesRegex(ValueError, "五本 Stage 1 XLSX"):
+                build_paper((source,), output, root / "paper", root / "paper" / "manuscript.tex")
             self.assertFalse(output.exists())
 
     def test_figure_pairing_uses_event_identity_instead_of_row_position(self) -> None:

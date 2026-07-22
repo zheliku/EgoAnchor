@@ -12,7 +12,7 @@ EgoAnchor 中文论文工程
 - figures/pipeline.png：系统架构图。
 - figures/panels/：由论文分析生成的图 2、图 3 独立面板。
 - tables/：由论文分析生成的两张 LaTeX 表。
-- pdf/：本机 XeLaTeX 输出，不作为源文件。
+- pdf/EgoAnchor.pdf：由当前版本化主稿编译的稳定阅读和交付文件，不作为源文件。
 - plan.md：当前论文路线和实验边界。
 - experiment_1_2_collection_manual_zh.md：正式采集手册。
 - experiment_1_2_analysis_reproduction_manual_zh.md：实验一/二复现手册。
@@ -20,9 +20,12 @@ EgoAnchor 中文论文工程
 编译
 ----
 
-在本目录运行：
+在 `EgoAnchor_Python` 目录运行：
 
-    latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
+    pixi run eval latex
+
+主稿源文件和最终 PDF 名由 `EgoAnchor_Python/src/egoanchor/eval/config/batch.toml` 控制。
+当前输入是 `egoanchor_cn_v6.tex`，输出是 `pdf/EgoAnchor.pdf`。
 
 分析生成的图 2 和图 3 由 LaTeX subfigure 排成一行。图内小标题不在 matplotlib 面板中
 重复绘制；图 2(b) 不绘制跨方法连接线，图 3(d) 保留三种时序策略的严格配对线。

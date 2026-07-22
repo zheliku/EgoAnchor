@@ -239,7 +239,7 @@ python FoundationPose/mycpp/build_msvc.py
 ''' } # Windows 下由 FoundationPose/mycpp/build_msvc.py 刷新 VS2026/MSVC/CUDA 环境并编译 C++ 扩展。
 
 [tasks]
-eval = { cmd = "python -m egoanchor.eval.batch_cli" } # 实验一/二批次整理、当前数据重建、论文图表和 XeLaTeX 的纯 Pixi 入口。
+eval = { cmd = "python -m egoanchor.eval.cli" } # 实验一/二批次整理、当前数据重建、论文图表和 XeLaTeX 的唯一纯 Pixi 入口。
 _build-nvdiffrast = { cmd = """
 python -c "import importlib.metadata as md, os, subprocess, sys; pkg='nvdiffrast'; req='0.4.0'; url='git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0'; installed=next((dist.version for dist in md.distributions() if (dist.metadata.get('Name') or '').lower()==pkg), None); force=os.environ.get('EGOANCHOR_NVDIFRAST_FORCE')=='1'; print(f'[nvdiffrast] {pkg} {installed} already installed; skipping') if installed==req and not force else print(f'[nvdiffrast] installing {pkg} {req}'); args=[sys.executable, '-m', 'pip', 'install', '--no-build-isolation', '--no-deps'] + (['--force-reinstall'] if force else []) + [url]; sys.exit(0 if installed==req and not force else subprocess.run(args, check=False).returncode)"
 """ } # 在 pixi run 激活环境内安装 nvdiffrast；已安装 0.4.0 时跳过，设置 EGOANCHOR_NVDIFRAST_FORCE=1 可强制重装。

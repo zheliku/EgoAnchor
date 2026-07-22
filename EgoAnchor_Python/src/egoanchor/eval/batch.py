@@ -39,6 +39,9 @@ _BATCH_ID_PATTERN = re.compile(r"^batch_\d{8}_\d{6}_[0-9a-f]{8,64}$")
 _SESSION_TIME_PATTERN = re.compile(r"^(?P<date>\d{8})_(?P<time>\d{6})_")
 """正式 session ID 中用于构造稳定批次名的时间部分。"""
 
+_PAPER_JOB_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+"""latexmk jobname 允许使用的稳定 ASCII 文件名。"""
+
 _COMMON_MANIFEST_FIELDS = (
     "config_hash",
     "frozen_parameter_set_id",
@@ -140,6 +143,12 @@ class BatchPaths:
     paper_root: Path
     """中文 LaTeX 主稿及图表的根目录。"""
 
+    manuscript_path: Path
+    """当前需要分析回填和编译的版本化 LaTeX 主稿。"""
+
+    paper_pdf_path: Path
+    """不含稿件版本号、面向阅读和交付的稳定 PDF 路径。"""
+
     config_path: Path
     """本次读取的 batch.toml 绝对路径。"""
 
@@ -192,12 +201,17 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     raw_paths = document.get("paths")
     if not isinstance(raw_paths, dict):
         raise ValueError("batch.toml 必须包含 [paths]")
+    raw_paper = document.get("paper")
+    if not isinstance(raw_paper, dict):
+        raise ValueError("batch.toml 必须包含 [paper]")
 
     eval_root = _resolve_data_path(base, raw_paths, "eval_root")
     staging_root = _resolve_data_path(base, raw_paths, "staging_root")
     archive_root = _resolve_data_path(base, raw_paths, "archive_root")
     active_root = _resolve_data_path(base, raw_paths, "active_root")
     paper_root = _resolve_paper_path(base, raw_paths)
+    manuscript_path = _resolve_paper_file(paper_root, raw_paper, "manuscript", ".tex")
+    paper_pdf_path = _resolve_paper_file(paper_root, raw_paper, "output_pdf", ".pdf")
     managed = (eval_root, staging_root, archive_root, active_root)
     if len(set(managed)) != len(managed):
         raise ValueError("batch.toml 的 eval/staging/archive/active 路径必须互不相同")
@@ -214,8 +228,85 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         archive_root=archive_root,
         active_root=active_root,
         paper_root=paper_root,
+        manuscript_path=manuscript_path,
+        paper_pdf_path=paper_pdf_path,
         config_path=DEFAULT_BATCH_CONFIG_PATH,
     )
+
+
+def describe_workflow(root: Path | None = None) -> dict[str, Any]:
+    """返回当前生效配置，以及每个命令的固定输入和输出。"""
+
+    paths = load_batch_paths(root)
+    active = paths.active_root
+    return {
+        "passed": True,
+        "configuration_file": str(paths.config_path),
+        "paths": {
+            "eval_root": str(paths.eval_root),
+            "staging_root": str(paths.staging_root),
+            "archive_root": str(paths.archive_root),
+            "active_root": str(active),
+            "paper_root": str(paths.paper_root),
+            "manuscript": str(paths.manuscript_path),
+            "manuscript_exists": paths.manuscript_path.is_file(),
+            "output_pdf": str(paths.paper_pdf_path),
+            "output_pdf_exists": paths.paper_pdf_path.is_file(),
+        },
+        "stages": {
+            "config": {
+                "input": str(paths.config_path),
+                "output": "stdout JSON",
+            },
+            "sessions": {
+                "input": str(paths.eval_root),
+                "output": "stdout JSON",
+            },
+            "stage": {
+                "input": str(paths.eval_root / "<session_id>"),
+                "output": str(paths.staging_root / "<batch_id>"),
+            },
+            "promote": {
+                "input": str(paths.staging_root / "<batch_id>"),
+                "output": str(active),
+            },
+            "qc": {
+                "input": str(active / "raw"),
+                "output": "stdout JSON；events.jsonl 缺失时会在对应 raw task 内确定性生成",
+            },
+            "preprocess": {
+                "input": str(active / "raw"),
+                "output": str(active / "workbooks"),
+            },
+            "analyze": {
+                "input": str(active / "workbooks"),
+                "output": [
+                    str(active / "analysis"),
+                    str(paths.paper_root / "figures" / "panels"),
+                    str(paths.paper_root / "tables"),
+                    str(paths.manuscript_path),
+                    str(paths.paper_pdf_path),
+                ],
+                "note": "使用 --skip-latex 时不生成或更新 output_pdf",
+            },
+            "latex": {
+                "input": str(paths.manuscript_path),
+                "output": str(paths.paper_pdf_path),
+            },
+            "rebuild": {
+                "input": str(active / "raw"),
+                "output": [
+                    str(active / "workbooks"),
+                    str(active / "analysis"),
+                    str(paths.paper_root / "figures" / "panels"),
+                    str(paths.paper_root / "tables"),
+                    str(paths.manuscript_path),
+                    str(paths.paper_pdf_path),
+                ],
+                "note": "使用 --skip-latex 时不生成或更新 output_pdf",
+            },
+        },
+    }
 
 
 def list_eval_sessions(root: Path | None = None) -> list[dict[str, Any]]:
@@ -361,9 +452,9 @@ def qc_current(*, root: Path | None = None) -> dict[str, Any]:
     paths = load_batch_paths(root)
     task_dirs = _task_dirs(paths.active_root / "raw")
     summaries = _validate_task_directories(task_dirs, require_session_directory_name=False)
-    reports = _finalize_and_require_qc(task_dirs)
+    reports = _finalize_and_run_qc(task_dirs)
     return {
-        "passed": True,
+        "passed": all(report.passed for report in reports),
         "raw_root": str(paths.active_root / "raw"),
         "sessions": [summary.to_dict() for summary in summaries],
         "tasks": [report.to_dict() for report in reports],
@@ -402,10 +493,15 @@ def analyze_current(*, root: Path | None = None, compile_pdf: bool = True) -> di
     paths = load_batch_paths(root)
     active = paths.active_root
     workbooks = tuple(active / "workbooks" / f"task_{number}_complete.xlsx" for number in range(1, 6))
-    payload = build_paper(workbooks, active / "analysis", paths.paper_root)
+    payload = build_paper(
+        workbooks,
+        active / "analysis",
+        paths.paper_root,
+        paths.manuscript_path,
+    )
     pdf_path: Path | None = None
     if compile_pdf:
-        pdf_path = _compile_paper(paths.paper_root)
+        pdf_path = _compile_paper(paths)
     return {
         "passed": True,
         "analysis": payload,
@@ -417,7 +513,7 @@ def compile_current_paper(*, root: Path | None = None) -> dict[str, Any]:
     """只使用 XeLaTeX 编译当前中文主稿，不重新运行数据分析。"""
 
     paths = load_batch_paths(root)
-    pdf_path = _compile_paper(paths.paper_root)
+    pdf_path = _compile_paper(paths)
     return {"passed": True, "paper_pdf": str(pdf_path)}
 
 
@@ -453,6 +549,30 @@ def _resolve_paper_path(base: Path, raw_paths: dict[str, Any]) -> Path:
     repository_root = base.parent.resolve()
     if not resolved.is_relative_to(repository_root):
         raise ValueError(f"batch.toml paths.paper_root 必须位于 {repository_root} 内")
+    return resolved
+
+
+def _resolve_paper_file(
+    paper_root: Path,
+    raw_paper: dict[str, Any],
+    field_name: str,
+    suffix: str,
+) -> Path:
+    """解析 paper_root 内的相对文件路径，并限制预期扩展名。"""
+
+    raw_value = raw_paper.get(field_name)
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError(f"batch.toml paper.{field_name} 必须为非空字符串")
+    relative = Path(raw_value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"batch.toml paper.{field_name} 必须是 paper_root 内的相对路径")
+    resolved = (paper_root / relative).resolve()
+    if not resolved.is_relative_to(paper_root) or resolved.suffix.lower() != suffix:
+        raise ValueError(f"batch.toml paper.{field_name} 必须是 paper_root 内的 {suffix} 文件")
+    if suffix == ".pdf" and _PAPER_JOB_PATTERN.fullmatch(resolved.stem) is None:
+        raise ValueError(
+            "batch.toml paper.output_pdf 的文件名只能使用 ASCII 字母、数字、点、下划线和连字符"
+        )
     return resolved
 
 
@@ -595,14 +715,20 @@ def _nonempty_text(document: dict[str, Any], field_name: str) -> str:
     return value
 
 
-def _finalize_and_require_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, ...]:
-    """物化事件总表，要求完整硬 QC 通过并返回逐 task 报告。"""
+def _finalize_and_run_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, ...]:
+    """物化事件总表并返回逐 task 完整硬 QC 报告。"""
 
     require_task_sources(tuple(task_dirs), TASK_SOURCE_FILE_NAMES)
     for task_dir in task_dirs:
         finalize_task_events(task_dir)
     require_task_sources(tuple(task_dirs), REQUIRED_FILE_NAMES)
-    reports = tuple(run_task_qc(task_dir) for task_dir in task_dirs)
+    return tuple(run_task_qc(task_dir) for task_dir in task_dirs)
+
+
+def _finalize_and_require_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, ...]:
+    """物化事件总表，并要求每个 task 的完整硬 QC 通过。"""
+
+    reports = _finalize_and_run_qc(task_dirs)
     failed = [report for report in reports if not report.passed]
     if failed:
         details = "; ".join(
@@ -723,30 +849,33 @@ def _git_code_version(base: Path) -> str:
     return value
 
 
-def _compile_paper(paper_root: Path) -> Path:
-    """使用本机 latexmk/XeLaTeX 编译中文主稿。"""
+def _compile_paper(paths: BatchPaths) -> Path:
+    """使用本机 latexmk/XeLaTeX 把版本化主稿编译为稳定 PDF 名称。"""
 
     executable = shutil.which("latexmk")
     if executable is None:
         raise BatchToolError("找不到 latexmk，请先安装本机 LaTeX 工具链")
+    if not paths.manuscript_path.is_file():
+        raise FileNotFoundError(paths.manuscript_path)
+    paths.paper_pdf_path.parent.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
         [
             executable,
             "-xelatex",
             "-interaction=nonstopmode",
             "-halt-on-error",
-            "-outdir=pdf",
-            "egoanchor_cn_v6.tex",
+            f"-jobname={paths.paper_pdf_path.stem}",
+            f"-outdir={paths.paper_pdf_path.parent}",
+            str(paths.manuscript_path.relative_to(paths.paper_root)),
         ],
-        cwd=paper_root,
+        cwd=paths.paper_root,
         check=False,
     )
     if completed.returncode != 0:
         raise BatchToolError(f"XeLaTeX 编译失败，退出码 {completed.returncode}")
-    pdf_path = paper_root / "pdf" / "egoanchor_cn_v6.pdf"
-    if not pdf_path.is_file():
-        raise BatchToolError(f"XeLaTeX 成功返回但未生成 PDF：{pdf_path}")
-    return pdf_path
+    if not paths.paper_pdf_path.is_file():
+        raise BatchToolError(f"XeLaTeX 成功返回但未生成 PDF：{paths.paper_pdf_path}")
+    return paths.paper_pdf_path
 
 
 __all__ = [
@@ -760,6 +889,7 @@ __all__ = [
     "TaskSpec",
     "analyze_current",
     "compile_current_paper",
+    "describe_workflow",
     "list_eval_sessions",
     "load_batch_paths",
     "preprocess_current",

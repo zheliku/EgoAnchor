@@ -42,6 +42,7 @@ def build_paper(
     workbooks: tuple[Path, ...],
     output_root: Path,
     paper_root: Path,
+    manuscript_path: Path,
 ) -> dict[str, Any]:
     """只读取五本 Stage 1 XLSX，发布图、表和中文主稿。"""
 
@@ -53,6 +54,7 @@ def build_paper(
         results,
         paper_root.expanduser().resolve(),
         output_root.expanduser().resolve(),
+        manuscript_path.expanduser().resolve(),
     )
     payload = {
         "passed": True,

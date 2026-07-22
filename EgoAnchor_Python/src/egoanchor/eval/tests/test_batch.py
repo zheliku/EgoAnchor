@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from egoanchor.eval import (
+    describe_workflow,
     finalize_task_events,
     list_eval_sessions,
     load_batch_paths,
@@ -19,7 +20,7 @@ from egoanchor.eval import (
     stage_batch,
     verify_task_workbook,
 )
-from egoanchor.eval import batch_cli
+from egoanchor.eval import cli as eval_cli
 
 from .test_reader_qc import _write_valid_task
 
@@ -122,10 +123,10 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertTrue(artifact.root.is_dir())
             self.assertFalse((paths.archive_root / artifact.batch_id).exists())
 
-    def test_batch_cli_is_separate_from_frozen_scientific_cli(self) -> None:
-        """批次入口只编排数据，不改变正式 qc/preprocess/build-paper 命令集合。"""
+    def test_cli_exposes_one_fixed_path_workflow(self) -> None:
+        """唯一 CLI 只暴露固定路径的人工工作流。"""
 
-        parser = batch_cli.build_parser()
+        parser = eval_cli.build_parser()
         subparsers = next(
             action for action in parser._actions if getattr(action, "choices", None) is not None
         )
@@ -133,6 +134,7 @@ class BatchWorkflowTests(unittest.TestCase):
             set(subparsers.choices),
             {
                 "sessions",
+                "config",
                 "stage",
                 "promote",
                 "qc",
@@ -161,6 +163,31 @@ class BatchWorkflowTests(unittest.TestCase):
                 Path(preprocess_result["output_root"]),
                 load_batch_paths(root).active_root / "workbooks",
             )
+
+    def test_config_describes_every_stage_and_stable_pdf_name(self) -> None:
+        """config 输出应让用户直接看到各阶段输入、输出和稳定 PDF 名。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+
+            payload = describe_workflow(root)
+
+            self.assertEqual(
+                set(payload["stages"]),
+                {
+                    "config",
+                    "sessions",
+                    "stage",
+                    "promote",
+                    "qc",
+                    "preprocess",
+                    "analyze",
+                    "latex",
+                    "rebuild",
+                },
+            )
+            self.assertEqual(Path(payload["paths"]["manuscript"]).name, "egoanchor_cn_v6.tex")
+            self.assertEqual(Path(payload["paths"]["output_pdf"]).name, "EgoAnchor.pdf")
 
 
 def _write_project(parent: Path) -> Path:

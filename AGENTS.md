@@ -125,28 +125,28 @@ PoseResult candidate
 
 ## 当前离线分析架构
 
-实验一/二正式数据采集已经完成。执行入口固定为 `egoanchor.eval.cli` 的 `qc`、`preprocess` 和 `build-paper`：
+实验一/二正式数据采集已经完成。人工入口固定为 `pixi run eval`，不再保留要求手工传递任意路径的第二套 CLI：
 
 ```text
 schema-v2 task directory
   -> qc / preprocess -> 五本完整 XLSX
-  -> build-paper -> 指标、绘图 XLSX、图、表和 egoanchor_cn_v6.tex
+  -> analyze -> 指标、绘图 XLSX、图、表和 batch.toml 指定的版本化主稿
+  -> latex -> pdf/EgoAnchor.pdf
 ```
 
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`preprocess`）** 只读取原始 task 目录的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；不得把 XLSX 之前的任何中间文件作为后续输入。
 - Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 只接受 `variant_matrix_id=exp12_9_linear_v2` 的当前九 runtime 矩阵，并检查主外键、生命周期、事件合并、warmup reference 和两端 writer 停止态统计；未消费 candidate 仅作为 latest-only 警告。
-- `build-paper` 只读取五本 Stage 1 完整 XLSX，计算指标并发布七个独立 PDF/PNG 面板、两张 TeX 表和中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
+- `analyze` 只读取五本 Stage 1 完整 XLSX，计算指标并发布七个独立 PDF/PNG 面板、两张 TeX 表和配置指定的中文主稿；它不得回读 raw JSON/JSONL，也不得改写 XLSX。
 - 旧 Stage 2/3、v2 replay 与历史分析包已删除；当前代码位于 `egoanchor.eval.paper_analysis`，不保留旧入口兼容层。
-- 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`；QC 或论文输入契约失败时返回退出码 2，禁止生成正式论文产物。
-- 面向人工操作的固定路径包装入口是 `pixi run eval`。它提供 `sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`latex` 和 `rebuild`，但不得改变上述科学分析 CLI 的三命令契约。操作路径只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；论文统计参数仍只属于 `paper.toml`。
+- `pixi run eval` 提供 `config`、`sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`latex` 和 `rebuild`。操作路径、版本化主稿和稳定 PDF 名只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；论文统计参数仍只属于 `paper.toml`。文件系统或工具错误返回 1，批次、schema、QC 或论文输入契约失败返回 2。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
-- `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行只读 QC；任一 task 的 QC 失败时不开始发布。缺目录或缺固定源文件返回 1，schema/QC/命名和输出边界错误返回 2。正式工作簿使用 `task_N_complete.xlsx`，执行时通过 `--code-version` 写入实际分析代码版本。
-- 主稿由 `build-paper` 从当前 XLSX 指标完整写出；表格内容内联，PDF 面板保持外部依赖。
+- `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行 QC；任一 task 的 QC 失败时不开始发布。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit，不提供人工覆盖入口。
+- 配置指定的主稿由 `analyze` 从当前 XLSX 指标完整回填；表格内容内联，PDF 面板保持外部依赖。`latex` 只编译主稿，不重新分析数据；稳定交付文件默认是 `2026-EgoAnchor/pdf/EgoAnchor.pdf`，不得把当前源稿版本号当作最终论文文件名。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。`data/eval/` 只作为新采集暂存入口，不保存已归档 session；旧 `data/eval/` 与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；新批次先由 `pixi run eval stage` 整批 QC、复制并生成工作簿，再用 `promote` 原子切换。当前活动批次可按 `qc`、`preprocess`、`analyze`、`latex` 逐阶段执行，或用 `rebuild` 一次重建。
@@ -224,13 +224,13 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 实验二复用实验一任务 1--5 的同一批 schema-v2 session，再按组件适用的物理场景投影完整 *EgoAnchor* 与对应消融：采集时刻对齐和 StaticLock 使用静止头动任务，VCD 使用遮挡恢复任务，时序合成使用起停 6DoF 任务；批次仍要求五项物理任务全部覆盖，使同一组输入目录能够同时生成实验一和实验二产物。完整系统的四个归因组件必须全开，每个消融名称必须且只能关闭对应组件；字符串布尔值和名称/开关错配均不得进入分析。*EgoAnchor Hermite* 作为额外配对插值器对照保留在日志和图 3(d) 中，不计作第五个组件消融。
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始 `data/eval/<session_id>` 目录名、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
-- 统一分析 CLI 只提供 `qc`、`preprocess`、`build-paper`。成功返回 0，文件系统或输入缺源返回 1，schema/QC/论文输入契约失败返回 2；历史入口和对应 Pixi 别名均不保留。
-- `preprocess` 将每个 task 原子发布为完整 XLSX；`build-paper` 只从五本 Stage 1 XLSX 计算指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、七个独立 PDF/PNG 面板到 `2026-EgoAnchor/figures/panels/`，同时写出 `egoanchor_cn_v6.tex`。默认论文根目录从命令参数指定。
+- 人工分析只使用 `pixi run eval` 的固定路径工作流；旧任意路径 `qc`、`preprocess`、`build-paper` CLI 和 `batch_cli.py` 均已删除，不保留兼容层。
+- `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从五本 Stage 1 XLSX 计算指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、七个独立 PDF/PNG 面板到 `2026-EgoAnchor/figures/panels/`，同时回填 `batch.toml` 指定的主稿。主稿源文件和最终 PDF 路径从 `batch.toml` 读取，当前分别为 `egoanchor_cn_v6.tex` 和 `pdf/EgoAnchor.pdf`。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。
-- 中文主稿由 `build-paper` 从当前 XLSX 指标完整写出；图只从 `figures/panels/` 加载独立 PDF，并由 LaTeX subfigure 排版。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿由 `analyze` 从当前 XLSX 指标完整回填；图只从 `figures/panels/` 加载独立 PDF，并由 LaTeX subfigure 排版。正式分析产物不存在时不得写占位数字或占用图表版面。
 
 ## 协议与生成输出
 
@@ -269,8 +269,8 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 
 论文（`2026-EgoAnchor`）：
 
-```powershell
-latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v6.tex
+```text
+pixi run eval latex
 ```
 
 ## 环境与远端关键坑

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
-import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from egoanchor.eval import flatten_json, read_task, run_task_qc
-from egoanchor.eval import cli as eval_cli
 
 
 VARIANT_SPECS = (
@@ -112,24 +109,6 @@ class ReaderQcTests(unittest.TestCase):
 
             self.assertFalse(report.passed)
             self.assertIn("occlusion_event_sequence", {issue.code for issue in report.errors})
-
-    def test_bad_fixture_returns_cli_exit_code_two(self) -> None:
-        """硬 QC 失败时统一 CLI 返回退出码 2，且不生成 workbook。"""
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _write_valid_task(Path(tmp))
-            session = json.loads((root / "python_session.json").read_text(encoding="utf-8"))
-            session["state"] = "python_running"
-            (root / "python_session.json").write_text(json.dumps(session), encoding="utf-8")
-            output = io.StringIO()
-
-            with contextlib.redirect_stdout(output):
-                exit_code = eval_cli.main(["qc", str(root)])
-
-            self.assertEqual(exit_code, eval_cli.EXIT_DATA_ERROR)
-            self.assertFalse(any(root.glob("*.xlsx")))
-            payload = json.loads(output.getvalue())
-            self.assertFalse(payload["passed"])
 
     def test_nonfinite_json_constant_is_rejected(self) -> None:
         """JSONL 中的 NaN/Infinity 必须转为稳定 reader_error。"""

@@ -4,3 +4,7 @@ staging_root = "data/experiments/_staging/experiment_1_2" # 新批次完成 QC �
 archive_root = "data/experiments/_archive/experiment_1_2" # 退出当前论文的完整旧批次冷归档目录。
 active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动批次目录。
 paper_root = "../2026-EgoAnchor" # 中文主稿、论文面板、表格和最终 PDF 所在目录。
+
+[paper]
+manuscript = "egoanchor_cn_v6.tex" # 当前需要回填和编译的版本化 LaTeX 主稿，相对于 paper_root。
+output_pdf = "pdf/EgoAnchor.pdf" # 面向阅读和交付的稳定 PDF 名称，相对于 paper_root，不包含主稿版本号。

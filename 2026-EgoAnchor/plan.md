@@ -58,8 +58,9 @@ lag--fidelity、失效控制和转换代价，不跨场景汇总成单一总分�
 
 ## 当前交付边界
 
-中文主稿是 egoanchor_cn_v6.tex。实验一/二图、表和正文由 build-paper 从五本 Stage 1
-工作簿重建。图 2 为一行三个 LaTeX 子图，图 3 为一行四个 LaTeX 子图。正文、图和表不超过
+当前版本化中文主稿是 egoanchor_cn_v6.tex，稳定交付文件是 pdf/EgoAnchor.pdf。实验一/二图、
+表和正文由 `pixi run eval analyze` 从五本 Stage 1 工作簿重建。图 2 为一行三个 LaTeX 子图，
+图 3 为一行四个 LaTeX 子图。正文、图和表不超过
 9 页；实验三启动前不把计划性描述写成已完成证据。
 
 ## 诚实边界

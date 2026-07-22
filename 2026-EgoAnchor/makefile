@@ -1,21 +1,21 @@
-VERSIONS := 6
+SOURCE := egoanchor_cn_v6.tex
 OUTDIR := pdf
-TEXFILES := $(addprefix egoanchor_cn_v,$(addsuffix .tex,$(VERSIONS)))
-PDFFILES := $(addprefix $(OUTDIR)/egoanchor_cn_v,$(addsuffix .pdf,$(VERSIONS)))
+JOBNAME := EgoAnchor
+FINAL := $(OUTDIR)/$(JOBNAME).pdf
 LATEXMK := latexmk
-LATEXFLAGS := -xelatex -interaction=nonstopmode -halt-on-error -outdir=$(OUTDIR)
+LATEXFLAGS := -xelatex -interaction=nonstopmode -halt-on-error -jobname=$(JOBNAME) -outdir=$(OUTDIR)
 
 .PHONY: all latest clean
 
-all: $(PDFFILES)
+all: $(FINAL)
 
-latest: $(OUTDIR)/egoanchor_cn_v6.pdf
+latest: $(FINAL)
 
 $(OUTDIR):
 	mkdir $(OUTDIR)
 
-$(OUTDIR)/egoanchor_cn_v%.pdf: egoanchor_cn_v%.tex vgtc.cls | $(OUTDIR)
-	$(LATEXMK) $(LATEXFLAGS) $<
+$(FINAL): $(SOURCE) vgtc.cls | $(OUTDIR)
+	$(LATEXMK) $(LATEXFLAGS) $(SOURCE)
 
 clean:
-	$(LATEXMK) -C -outdir=$(OUTDIR) $(TEXFILES)
+	$(LATEXMK) -C -jobname=$(JOBNAME) -outdir=$(OUTDIR) $(SOURCE)

@@ -7,6 +7,7 @@ import importlib.util
 import io
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from egoanchor.eval import PythonCandidateRow, SchemaV2Error
 from egoanchor.eval import cli as eval_cli
@@ -16,11 +17,17 @@ EVAL_ROOT = Path(__file__).resolve().parents[1]
 """评估包根目录，用于检查旧实现是否已删除。"""
 
 EXPECTED_COMMANDS = {
+    "config",
+    "sessions",
+    "stage",
+    "promote",
     "qc",
     "preprocess",
-    "build-paper",
+    "analyze",
+    "latex",
+    "rebuild",
 }
-"""当前离线入口的三个命令。"""
+"""当前唯一人工入口的固定路径命令。"""
 
 
 class EvalBoundaryTests(unittest.TestCase):
@@ -71,8 +78,8 @@ class EvalBoundaryTests(unittest.TestCase):
                     module_name,
                 )
 
-    def test_cli_exposes_only_new_stage_commands(self) -> None:
-        """统一 CLI 只暴露三个阶段命令。"""
+    def test_cli_exposes_only_fixed_path_workflow_commands(self) -> None:
+        """统一 CLI 不再保留要求手工拼路径的旧命令。"""
 
         parser = eval_cli.build_parser()
         subparsers = next(
@@ -90,17 +97,28 @@ class EvalBoundaryTests(unittest.TestCase):
             result = eval_cli.main([])
 
         self.assertEqual(result, eval_cli.EXIT_OK)
-        self.assertIn("build-paper", output.getvalue())
+        self.assertIn("analyze", output.getvalue())
 
-    def test_build_paper_help_declares_immutable_xlsx_input(self) -> None:
-        """论文入口应明确只读取 Stage 1 XLSX。"""
+    def test_analyze_help_declares_current_workbook_input(self) -> None:
+        """论文入口应明确读取当前五本 Stage 1 XLSX。"""
 
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             with self.assertRaises(SystemExit) as raised:
-                eval_cli.main(["build-paper", "--help"])
+                eval_cli.main(["analyze", "--help"])
         self.assertEqual(raised.exception.code, 0)
-        self.assertIn("五本 Stage 1 XLSX", output.getvalue())
+        self.assertIn("当前五本 XLSX", output.getvalue())
+
+    def test_failed_qc_payload_returns_exit_code_two(self) -> None:
+        """QC 完整报告为失败时，CLI 必须保留 JSON 并返回退出码二。"""
+
+        output = io.StringIO()
+        with mock.patch.object(eval_cli, "qc_current", return_value={"passed": False, "tasks": []}):
+            with contextlib.redirect_stdout(output):
+                result = eval_cli.main(["qc"])
+
+        self.assertEqual(result, eval_cli.EXIT_DATA_ERROR)
+        self.assertIn('"passed": false', output.getvalue())
 
 
 if __name__ == "__main__":

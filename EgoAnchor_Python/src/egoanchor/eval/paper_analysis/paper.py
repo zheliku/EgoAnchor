@@ -744,7 +744,7 @@ def _write_figure_source_data(
         ("项目", "说明"),
         [
             {"项目": "用途", "说明": "图 2 和图 3 的逐点绘图数据；每行是一条实际显示的片段/episode 记录。"},
-            {"项目": "数据来源", "说明": "五本只读 Stage 1 工作簿，由 build-paper 重新计算，不回读 raw JSONL。"},
+            {"项目": "数据来源", "说明": "五本只读 Stage 1 工作簿，由论文分析重新计算，不回读 raw JSONL。"},
             {"项目": "配对语义", "说明": "session_id、trial_id、segment_id 相同的记录属于严格配对。"},
             {"项目": "图 2(b)", "说明": "只绘制散点与中位数/IQR，不连接跨方法折线。"},
             {"项目": "数值精度", "说明": "XLSX 保留计算得到的浮点值；论文表格另行格式化。"},
@@ -776,6 +776,7 @@ def write_paper(
     results: PaperResults,
     paper_root: Path,
     output_root: Path,
+    manuscript: Path,
 ) -> Mapping[str, Path]:
     """写出指标、绘图 XLSX、表格、主稿和 provenance。"""
 
@@ -839,7 +840,11 @@ def write_paper(
     exp1_table_path.write_text(exp1_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
 
-    manuscript = paper_root / "egoanchor_cn_v6.tex"
+    manuscript = manuscript.resolve()
+    if not manuscript.is_relative_to(paper_root.resolve()) or manuscript.suffix.lower() != ".tex":
+        raise ValueError("主稿必须是 paper_root 内的 .tex 文件")
+    if not manuscript.is_file():
+        raise FileNotFoundError(manuscript)
     text = manuscript.read_text(encoding="utf-8")
     text = _replace_block(text, r"\subsection{实验一：应用侧锚点行为}", r"\subsection{实验二：组件归因}", _exp1_text(results))
     text = _replace_block(
@@ -864,6 +869,7 @@ def write_paper(
                 "inputs": dict(results.workbook_sha256),
                 "parameters": DEFAULT_SETTINGS_PATH.name,
                 "parameters_sha256": settings_sha256(),
+                "manuscript": manuscript.name,
                 "temporal_evidence": "actual_runtime",
                 "output_strategy": "linear_slerp",
             },

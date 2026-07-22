@@ -47,12 +47,12 @@ raw/ 是当前论文数据的只读归档。五个目录按物理任务命名，
 _archive/ 只保存已经退出当前论文的完整旧批次，批次名使用日期和配置 hash，不使用 v1、
 v2、v3。_staging/ 与 _archive/ 都不是默认论文输入；正式发布只使用无版本后缀的活动目录。
 
-workbooks/ 是 Stage 1 输出，也是 build-paper 的唯一输入。工作簿完整保留 raw 行、来源
+workbooks/ 是 Stage 1 输出，也是 `pixi run eval analyze` 的唯一数据输入。工作簿完整保留 raw 行、来源
 SHA-256 和 QC 结果。可以只读查看，不能在 Excel 中保存后继续用于正式分析。
 
 analysis/metrics/ 保存完整精度指标，供审计和复算使用。analysis/plots/figure_plot_data.xlsx
 只整理图中实际显示的数据点，含 README、Figure2 和 Figure3 三个 sheet；它不是新的统计
-输入，也没有独立的 plot XLSX 到图片转换命令。build-paper 从五本工作簿同时生成该文件和
+输入，也没有独立的 plot XLSX 到图片转换命令。`analyze` 从五本工作簿同时生成该文件和
 PNG/PDF 面板。
 
 以上操作路径统一从 `src/egoanchor/eval/config/batch.toml` 读取。人工归档和分析使用

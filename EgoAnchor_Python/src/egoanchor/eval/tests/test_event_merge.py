@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
-import io
 import json
 import tempfile
 import unittest
@@ -12,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from egoanchor.eval import finalize_task_events, run_task_qc
-from egoanchor.eval import cli as eval_cli
 
 from .test_reader_qc import _read_jsonl, _write_jsonl, _write_valid_task
 
@@ -34,14 +31,11 @@ class EventMergeTests(unittest.TestCase):
             events_path = root / "events.jsonl"
             expected = events_path.read_text(encoding="utf-8")
             events_path.unlink()
-            output = io.StringIO()
+            finalize_task_events(root)
+            report = run_task_qc(root)
 
-            with contextlib.redirect_stdout(output):
-                exit_code = eval_cli.main(["qc", str(root)])
-
-            self.assertEqual(exit_code, eval_cli.EXIT_OK)
+            self.assertTrue(report.passed)
             self.assertEqual(events_path.read_text(encoding="utf-8"), expected)
-            self.assertTrue(json.loads(output.getvalue())["passed"])
 
     def test_finalize_is_idempotent_for_an_existing_valid_file(self) -> None:
         """重复物化不得改变已经存在的合法事件总表。"""
