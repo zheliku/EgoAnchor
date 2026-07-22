@@ -36,6 +36,7 @@ namespace EgoAnchor.Eval
             UnityReferenceFileName,
             UnityAdmissionFileName,
             UnityRenderFileName,
+            UnityEventsFileName,
             EventsFileName,
         };
     }

@@ -446,10 +446,10 @@ namespace EgoAnchor.Tests
             })
                 StringAssert.Contains($"\"{field}\":", admission);
             StringAssert.DoesNotContain("\"variants\"", render);
-            foreach (string file in new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "events.jsonl" })
+            foreach (string file in new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "unity_events.jsonl", "events.jsonl" })
                 StringAssert.Contains(file, manifest);
             CollectionAssert.AreEqual(
-                new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "events.jsonl" },
+                new[] { "python_candidates.jsonl", "unity_reference.jsonl", "unity_admission.jsonl", "unity_render.jsonl", "unity_events.jsonl", "events.jsonl" },
                 EvalV2Manifest.FixedLogFileNames);
             StringAssert.Contains("\"dropped_rows\":0", manifest);
             StringAssert.Contains("\"python_candidates.jsonl\":{\"rows_written\":null,\"dropped_rows\":null", manifest);

@@ -372,6 +372,7 @@ namespace EgoAnchor.Eval
             sb.Append($"\"unity_reference\":{JStr(EvalV2Manifest.UnityReferenceFileName)},");
             sb.Append($"\"unity_admission\":{JStr(EvalV2Manifest.UnityAdmissionFileName)},");
             sb.Append($"\"unity_render\":{JStr(EvalV2Manifest.UnityRenderFileName)},");
+            sb.Append($"\"unity_events\":{JStr(EvalV2Manifest.UnityEventsFileName)},");
             sb.Append($"\"events\":{JStr(EvalV2Manifest.EventsFileName)}}},");
             sb.Append($"\"notes\":{JStr(metadata.Notes)},");
             sb.Append($"\"variant_matrix_id\":{JStr(EvalV2Manifest.VariantMatrixId)},");
