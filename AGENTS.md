@@ -150,13 +150,15 @@ schema-v2 task directory
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。`data/eval/` 只作为新采集暂存入口，不保存已归档 session；旧 `data/eval/` 与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；新批次先由 `pixi run eval stage` 整批 QC、复制并生成工作簿，再用 `promote` 原子切换。当前活动批次可按 `qc`、`preprocess`、`analyze`、`latex` 逐阶段执行，或用 `rebuild` 一次重建。
+- 论文六行连续轨迹图使用独立 `egoanchor.qualitative_replay` 包和 `pixi run replay` 入口；它只读取 `data/replay_capture/` 下的 `egoanchor_qualitative_replay` v1 capture，不得读取或写入正式 `data/eval/`、实验一/二工作簿和 schema-v2 产物。采集方式固定为 Quest Link 串流下的 Unity Editor Play Mode，完整操作说明固定在 `EgoAnchor_Python/docs/qualitative_replay.md`。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
 - 当前 `EgoAnchor w/o temporal synthesis` 固定为 `KalmanModel + PredictToNowStrategy`，只替换完整系统的 `LinearSlerpStrategy`；One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`。另外三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；Hermite 只用于独立插值器对照。
 - 同一批五项物理任务同时驱动实验一四配置和实验二四消融；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；Hermite 端点用右雅可比逆把 body 角速度换成 Log 向量导数。不得把不同参考姿态的旋转向量导数直接作为同一 Hermite 切线。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的三个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
-- 当前 KalmanModel 的 position/rotation measurement noise 是冻结序列化参数，VCD 只控制 admission；论文不得声称测量噪声随 VCD 分数在线自适应。
+- 当前 `KalmanModel` 使用连续白噪声加速度 CV 模型，离散过程协方差为 `q_a [[dt^3/3, dt^2/2], [dt^2/2, dt]]`。冻结参数为位置 `q_a=0.002 m^2/s^3`、`R=0.000004 m^2`，旋转 `q_a=0.2 rad^2/s^3`、`R=0.0004 rad^2`；首帧位置/角速度方差均为 `1`，配置指纹必须包含 `q-model:cwna-v1` 及这些数值。协方差校正使用 Joseph 形式；共享 admission 入口拒绝非有限或非递增的 measurement time，不能把乱序控制点交给模型、时序合成或 StaticLock。VCD 只控制 admission，论文不得声称测量噪声随 VCD 分数在线自适应。
+- 当前五本 Stage 1 工作簿来自旧 `q*dt` 协方差运行时，只保留为 v3 归档结果和本轮只读工程诊断输入。CWNA 修正和新参数改变了正式运行时，必须用同一冻结代码完整重采五项任务后再替换活动批次；不得把 v3 数字写成新运行时的正式证据，也不得从不同批次按场景拼接。
 
 ## Python 关键约束
 
@@ -195,6 +197,7 @@ schema-v2 task directory
 - marker 成功后状态板显示 2 秒绿色 `MARKER SAVED #N` 和事件角色，非法时显示红色 `MARKER IGNORED`。反馈只属于 UI，不得额外写成实验事件；成功 marker 仍只写既有 `event_marker`。
 - `QuestStreamPublisher` 订阅 Meta VR focus：focus 丢失时暂停双目 GPU 读回和 JPEG 编码，恢复后自动继续；录制期间的 `xr_focus_lost/acquired` 写入 Unity events。出现 `HMDUnmounted`、`VrFocusLost` 或 `InputFocusLost` 的活动 trial 应作废重采。
 - 正式 `EgoAnchor-Experiment12.unity` 场景使用 9 个唯一 runtime：Hub 下以两个空物体组织实验一四配置、实验二四个单组件消融和一个 Hermite 配对插值器对照，完整 EgoAnchor 只保留一个共享 runtime；场景契约测试冻结组件矩阵与层级；manifest 写入 `variant_matrix_id=exp12_9_linear_v2`，并记录 VCD、时序合成、StaticLock、低分重获取、服务器重获取开关及整体 `config_hash`。
+- `EgoAnchor-ReplayCapture.unity` 是 Quest Link 定性图专用场景，只保留实验一四个 runtime 和 `ReplayCaptureRecorder`，不得挂载 `EvalSession`/`EvalRecorder` 或实验二 runtime。采集器复用 `QuestStreamPublisher` 已编码的只读左目 JPEG，不增加 GPU 读回和编码；`captureFps=0` 保存发布器产生的全部帧，按 `ImageUnityFrame` 回查左目相机、四路实际 display pose 和 Quest 官方右手柄参考，直接写入仓库电脑的 `EgoAnchor_Python/data/replay_capture/`。右手柄参考固定读取 `OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab` 的 Transform；平台追踪有效时刷新，静止失活时无限期保持最近一次有效 pose，不得写成 null 或切换另一套 pose 来源。后台队列不得阻塞追踪，完整 capture 必须记录真实丢帧、缺 pose、缺标定、参考 fresh/held 和写入失败统计。
 - Inspector 参数、坐标语义和时间语义写 XML summary 或 `[Tooltip]`；不隐藏生效参数。
 - Unity 生成协议代码和 `SubjectNames.cs` 不手改。
 
@@ -212,6 +215,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 - 由顺序录制的 Quest 投屏视频生成的轮廓极值叠加图，只能标为二维物体稳像后的定性示意；必须说明各方法片段并非同一候选流，不得把图像像素分离或人工挑选的极端帧写成正式配对指标，也不得替代 schema-v2 工作簿生成的定量证据。
+- 新定性 replay 的四种方法来自同一候选流和同一物理采集。离线图固定为 5--10 列、6 行，行顺序为原始左目 RGB、Quest 右手柄平台参考、Arrival-Hold、Capture-Hold、One-Euro Interpolation 和 EgoAnchor；列必须按连续已保存样本的固定间隔 `N` 选择，不按误差或每种方法各自的极值挑帧。每列六行共用同一背景、相机、时间点和裁剪框，跨列裁剪尺寸固定并以平台参考居中；参考的 fresh 与 held 状态都可用，图中直接标记 `LIVE`/`HELD`，sidecar JSON 同时保留来源状态。该图仍然只是二维定性示意，不得把像素偏移写成正式配对指标或替代 schema-v2 定量证据。首次使用某个对象模型时必须先用 `replay frame` 做实际像素贴合检查。
 - schema-v2 reader 按 dataclass 契约严格检查固定字段和跨表稳定键，并把 `python_session.json` 的停止态 writer 统计、Python host/version 合并到内存 manifest。CLI 事件物化入口只有在 `python_stopped`、两个事件分片 schema 合法、实际行数分别匹配 writer 统计且无丢行/写入失败时，才用冻结全序原子发布可重建的 `events.jsonl`；已有文件交给只读 QC 逐字节验证。半同步、pending、错配或非法 fragment 不得留下部分派生文件，也不得进入正式分析；Mutagen 完成同步后允许对同一目录直接重试。
 - schema-v2 QC 依据 `variant_matrix_id=exp12_9_linear_v2` 固定要求 9 个唯一 runtime，并冻结完整系统及三个组件对照的 Linear/SLERP 策略。缺少矩阵标识、配置指纹、任意 variant 或出现名称/方法错配均硬失败；不再接受历史八路数据。QC 还检查 writer 行数/丢行/失败、candidate/reference 主键、Unity 已消费 candidate×variant 与 tick×variant 矩阵及递归旧字段。NATS PoseResult 使用 latest-only 消费，Python 已发布但未进入 Unity 的 candidate 只能统计并警告，分析按 admission 投影排除，禁止为未收到的消息伪造 admission；Unity admission 指向未知 Python candidate 仍是硬错误。
 - Formal schema-v2 QC 按 `trial_started -> trial_ended` 的 Unity 单调时间核对每个最终完成 trial；开始/结束事件必须唯一且顺序合法。实际持续时间作为描述性审计指标记录，不设上下界，也不决定 QC 成败。

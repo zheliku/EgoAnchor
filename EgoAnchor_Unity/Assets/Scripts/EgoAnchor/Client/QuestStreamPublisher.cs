@@ -9,6 +9,35 @@ using UnityEngine;
 
 namespace EgoAnchor.Client
 {
+    /// <summary>发布器已经编码完成的只读左目 payload，供旁路采集复用。</summary>
+    public readonly struct EncodedLeftFrame
+    {
+        /// <summary>背景帧的稳定 frame_id。</summary>
+        public readonly long FrameId;
+
+        /// <summary>不可变左目 JPEG 字节。</summary>
+        public readonly ByteString ImageJpeg;
+
+        /// <summary>JPEG 宽度。</summary>
+        public readonly int Width;
+
+        /// <summary>JPEG 高度。</summary>
+        public readonly int Height;
+
+        /// <summary>JPEG 编码质量。</summary>
+        public readonly int JpegQuality;
+
+        /// <summary>从已编码 stereo 消息复制只读标量和 ByteString 引用。</summary>
+        public EncodedLeftFrame(long frameId, ByteString imageJpeg, int width, int height, int jpegQuality)
+        {
+            FrameId = frameId;
+            ImageJpeg = imageJpeg ?? ByteString.Empty;
+            Width = width;
+            Height = height;
+            JpegQuality = jpegQuality;
+        }
+    }
+
     /// <summary>
     /// Quest 传感器流发布组件。
     ///
@@ -106,6 +135,12 @@ namespace EgoAnchor.Client
 
         /// <summary>stereo 完成一次 ZMQ 发布尝试后触发；订阅者异常不会中断数据面。</summary>
         public event Action<FrameCaptureTiming, double, bool> StereoPublishAttempted;
+
+        /// <summary>
+        /// stereo 完成一次 ZMQ 发布尝试后触发，并暴露本次已经编码完成的只读左目 payload。
+        /// 定性 replay 采集器通过该事件复用左目 JPEG，避免第二次 GPU 读回和 JPEG 编码。
+        /// </summary>
+        public event Action<EncodedLeftFrame, FrameCaptureTiming, double, bool> StereoFrameCaptured;
 
         /// <summary>Quest Link/OpenXR 的 VR focus 状态变化后触发。</summary>
         public event Action<bool> VrFocusChanged;
@@ -228,6 +263,16 @@ namespace EgoAnchor.Client
             if (stereoSource.TryGetCaptureTiming(frame.Header.FrameId, out FrameCaptureTiming timing))
             {
                 NotifyStereoPublishAttempted(timing, publishAttemptMonoMs, sent);
+                NotifyStereoFrameCaptured(
+                    new EncodedLeftFrame(
+                        frame.Header.FrameId,
+                        frame.LeftImageJpeg,
+                        frame.LeftWidth,
+                        frame.LeftHeight,
+                        frame.JpegQuality),
+                    timing,
+                    publishAttemptMonoMs,
+                    sent);
             }
             if (sent)
             {
@@ -263,6 +308,40 @@ namespace EgoAnchor.Client
                 catch (Exception exc)
                 {
                     Log.Warning($"stereo publish diagnostic callback ignored: {exc.Message}", this);
+                }
+            }
+        }
+
+        /// <summary>隔离 replay 订阅者异常，避免定性采集功能打断实时数据面。</summary>
+        /// <param name="frame">本次已经发送尝试的只读左目 JPEG 和标量。</param>
+        /// <param name="timing">图像时间代理与 payload-ready 时间。</param>
+        /// <param name="publishAttemptMonoMs">ZMQ 发送尝试的 Unity 单调时钟毫秒。</param>
+        /// <param name="publishSucceeded">本次 ZMQ 发送是否成功。</param>
+        private void NotifyStereoFrameCaptured(
+            EncodedLeftFrame frame,
+            FrameCaptureTiming timing,
+            double publishAttemptMonoMs,
+            bool publishSucceeded)
+        {
+            Action<EncodedLeftFrame, FrameCaptureTiming, double, bool> handlers = StereoFrameCaptured;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<EncodedLeftFrame, FrameCaptureTiming, double, bool>)handler).Invoke(
+                        frame,
+                        timing,
+                        publishAttemptMonoMs,
+                        publishSucceeded);
+                }
+                catch (Exception exc)
+                {
+                    Log.Warning($"qualitative replay frame callback failed: {exc.Message}", this);
                 }
             }
         }
