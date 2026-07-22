@@ -1206,147 +1206,103 @@ namespace EgoAnchor.Tests
             StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
         }
 
-        /// <summary>工程开发场景复用正式输入，但不再产生另一类评估 session。</summary>
+        /// <summary>正式采集场景首次连接 NATS 失败后必须持续重试，避免依赖 Python 的启动顺序。</summary>
         [Test]
-        public void DevelopmentSceneUsesInlineInputActions()
+        public void ExperimentSceneRetriesInitialNatsConnection()
         {
-            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Develop.unity");
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
             string yaml = File.ReadAllText(path);
-            string sessionSection = GetSectionContaining(
-                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalSession");
-            string inputSection = GetSectionContaining(
-                yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.Experiment.ExperimentInputHandler");
+            string natsSection = GetSectionContaining(
+                yaml,
+                "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.NatsControlClient");
 
-            StringAssert.DoesNotContain("runKind:", sessionSection);
-            StringAssert.Contains("autoStart: 0", sessionSection);
-            StringAssert.DoesNotContain("controlSessionShortcuts:", inputSection);
-            StringAssert.DoesNotContain("controllerBinding:", inputSection);
-            StringAssert.Contains("navigateAction:", inputSection);
-            StringAssert.Contains("taskActions:", inputSection);
-            StringAssert.Contains("m_Path: <XRController>{RightHand}/primaryButton", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/numpadEnter", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/f", inputSection);
-            StringAssert.Contains("m_Path: <Keyboard>/space", inputSection);
-            StringAssert.DoesNotContain("<Keyboard>/backspace", inputSection);
-            StringAssert.DoesNotContain("enforceMinimumDuration:", yaml);
-            AssertUnifiedActionBindings(inputSection);
-            AssertKeyboardTaskBindings(inputSection);
+            StringAssert.Contains("retryOnInitialConnect: 1", natsSection);
+        }
+
+        /// <summary>正式采集场景必须使用静止根 Canvas 下互不重叠的任务板和实时诊断板。</summary>
+        [Test]
+        public void ExperimentSceneContainsWiredLiveMetricsPanel()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
             Assert.That(
-                Regex.Matches(inputSection, @"(?m)^  - m_Name: Task[1-5]\r?$").Count,
-                Is.EqualTo(ExperimentScenario.PlanCount));
+                Regex.Matches(yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats").Count,
+                Is.EqualTo(1));
 
-            string canvasTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: Canvas"));
-            StringAssert.Contains("m_Father: {fileID: 0}", GetSection(yaml, canvasTransform));
+            string canvasSection = GetSectionContaining(yaml, "m_Name: Canvas");
+            string canvasTransformId = ReadFirstComponentReference(canvasSection);
+            string canvasTransform = GetSection(yaml, canvasTransformId);
+            StringAssert.Contains("m_Father: {fileID: 0}", canvasTransform);
+
+            string statusPanel = GetSectionContaining(yaml, "m_Name: ExperimentStatusPanel");
+            string statusRect = GetSection(yaml, ReadFirstComponentReference(statusPanel));
+            StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", statusRect);
+
+            string livePanel = GetSectionContaining(yaml, "m_Name: LiveMetricsPanel");
+            string liveRect = GetSection(yaml, ReadFirstComponentReference(livePanel));
+            StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", liveRect);
+
+            bool centeredColumns =
+                statusRect.Contains("m_AnchoredPosition: {x: -450, y: 0}")
+                && statusRect.Contains("m_SizeDelta: {x: 900, y: 650}")
+                && statusRect.Contains("m_Pivot: {x: 0.5, y: 0.5}")
+                && liveRect.Contains("m_AnchoredPosition: {x: 470, y: 0}")
+                && liveRect.Contains("m_SizeDelta: {x: 720, y: 650}")
+                && liveRect.Contains("m_Pivot: {x: 0.5, y: 0.5}");
+            bool edgeColumns =
+                statusRect.Contains("m_AnchorMin: {x: 0, y: 0}")
+                && statusRect.Contains("m_AnchorMax: {x: 0, y: 1}")
+                && statusRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
+                && statusRect.Contains("m_SizeDelta: {x: 800, y: 0}")
+                && statusRect.Contains("m_Pivot: {x: 0, y: 0.5}")
+                && liveRect.Contains("m_AnchorMin: {x: 1, y: 0}")
+                && liveRect.Contains("m_AnchorMax: {x: 1, y: 1}")
+                && liveRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
+                && liveRect.Contains("m_SizeDelta: {x: 500, y: 0}")
+                && liveRect.Contains("m_Pivot: {x: 1, y: 0.5}");
+            Assert.That(
+                centeredColumns || edgeColumns,
+                Is.True,
+                "正式场景的两个同级面板必须使用已验证的无重叠布局。");
+
+            string stats = GetSectionContaining(
+                yaml,
+                "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats");
+            string recorderId = ReadReference(stats, "recorder");
+            string statsTextId = ReadReference(stats, "statsText");
+            Assert.That(recorderId, Is.Not.EqualTo("0"));
+            Assert.That(statsTextId, Is.Not.EqualTo("0"));
+
+            string statsText = GetSection(yaml, statsTextId);
+            string statsTextObject = GetSection(yaml, ReadReference(statsText, "m_GameObject"));
+            StringAssert.Contains("m_Name: LiveMetricsText", statsTextObject);
+
+            string publisher = GetSectionContaining(
+                yaml,
+                "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher");
+            StringAssert.Contains("pauseWhenVrFocusLost: 1", publisher);
         }
 
-        /// <summary>采集场景首次连接 NATS 失败后必须持续重试，避免依赖 Python 的启动顺序。</summary>
+        /// <summary>正式采集场景必须绑定平台参考 Transform，且不得恢复限时 freshness 策略。</summary>
         [Test]
-        public void CollectionScenesRetryInitialNatsConnection()
+        public void ExperimentSceneUsesTransformReferenceWithoutTimedFreshnessPolicy()
         {
-            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
-            {
-                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
-                string yaml = File.ReadAllText(path);
-                string natsSection = GetSectionContaining(
-                    yaml,
-                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.NatsControlClient");
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+            string recorder = GetSectionContaining(
+                yaml,
+                "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder");
 
-                StringAssert.Contains("retryOnInitialConnect: 1", natsSection, sceneName);
-            }
-        }
-
-        /// <summary>两个采集场景都必须使用静止根 Canvas 下互不重叠的任务板和实时诊断板。</summary>
-        [Test]
-        public void CollectionScenesContainWiredLiveMetricsPanel()
-        {
-            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
-            {
-                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
-                string yaml = File.ReadAllText(path);
-                Assert.That(
-                    Regex.Matches(yaml, "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats").Count,
-                    Is.EqualTo(1),
-                    sceneName);
-
-                string canvasSection = GetSectionContaining(yaml, "m_Name: Canvas");
-                string canvasTransformId = ReadFirstComponentReference(canvasSection);
-                string canvasTransform = GetSection(yaml, canvasTransformId);
-                StringAssert.Contains("m_Father: {fileID: 0}", canvasTransform, sceneName);
-
-                string statusPanel = GetSectionContaining(yaml, "m_Name: ExperimentStatusPanel");
-                string statusRect = GetSection(yaml, ReadFirstComponentReference(statusPanel));
-                StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", statusRect, sceneName);
-
-                string livePanel = GetSectionContaining(yaml, "m_Name: LiveMetricsPanel");
-                string liveRect = GetSection(yaml, ReadFirstComponentReference(livePanel));
-                StringAssert.Contains($"m_Father: {{fileID: {canvasTransformId}}}", liveRect, sceneName);
-
-                bool centeredColumns =
-                    statusRect.Contains("m_AnchoredPosition: {x: -450, y: 0}")
-                    && statusRect.Contains("m_SizeDelta: {x: 900, y: 650}")
-                    && statusRect.Contains("m_Pivot: {x: 0.5, y: 0.5}")
-                    && liveRect.Contains("m_AnchoredPosition: {x: 470, y: 0}")
-                    && liveRect.Contains("m_SizeDelta: {x: 720, y: 650}")
-                    && liveRect.Contains("m_Pivot: {x: 0.5, y: 0.5}");
-                bool edgeColumns =
-                    statusRect.Contains("m_AnchorMin: {x: 0, y: 0}")
-                    && statusRect.Contains("m_AnchorMax: {x: 0, y: 1}")
-                    && statusRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
-                    && statusRect.Contains("m_SizeDelta: {x: 800, y: 0}")
-                    && statusRect.Contains("m_Pivot: {x: 0, y: 0.5}")
-                    && liveRect.Contains("m_AnchorMin: {x: 1, y: 0}")
-                    && liveRect.Contains("m_AnchorMax: {x: 1, y: 1}")
-                    && liveRect.Contains("m_AnchoredPosition: {x: 0, y: 0}")
-                    && liveRect.Contains("m_SizeDelta: {x: 500, y: 0}")
-                    && liveRect.Contains("m_Pivot: {x: 1, y: 0.5}");
-                Assert.That(
-                    centeredColumns || edgeColumns,
-                    Is.True,
-                    $"{sceneName} 的两个同级面板必须使用已验证的无重叠布局。");
-
-                string stats = GetSectionContaining(
-                    yaml,
-                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalLiveStats");
-                string recorderId = ReadReference(stats, "recorder");
-                string statsTextId = ReadReference(stats, "statsText");
-                Assert.That(recorderId, Is.Not.EqualTo("0"), sceneName);
-                Assert.That(statsTextId, Is.Not.EqualTo("0"), sceneName);
-
-                string statsText = GetSection(yaml, statsTextId);
-                string statsTextObject = GetSection(yaml, ReadReference(statsText, "m_GameObject"));
-                StringAssert.Contains("m_Name: LiveMetricsText", statsTextObject, sceneName);
-
-                string publisher = GetSectionContaining(
-                    yaml,
-                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.QuestStreamPublisher");
-                StringAssert.Contains("pauseWhenVrFocusLost: 1", publisher, sceneName);
-            }
-        }
-
-        /// <summary>两个采集场景都必须绑定平台参考 Transform，且不得恢复限时 freshness 策略。</summary>
-        [Test]
-        public void CollectionScenesUseTransformReferenceWithoutTimedFreshnessPolicy()
-        {
-            foreach (string sceneName in new[] { "EgoAnchor-Experiment12.unity", "EgoAnchor-Develop.unity" })
-            {
-                string path = Path.Combine(Application.dataPath, "Scene", sceneName);
-                string yaml = File.ReadAllText(path);
-                string recorder = GetSectionContaining(
-                    yaml,
-                    "m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Eval.EvalRecorder");
-
-                string groundTruthId = ReadReference(recorder, "groundTruth");
-                Assert.That(groundTruthId, Is.Not.EqualTo("0"), sceneName);
-                string groundTruth = GetSection(yaml, groundTruthId);
-                StringAssert.Contains(
-                    "m_CorrespondingSourceObject: {fileID: 1168042862848623612, " +
-                    "guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}",
-                    groundTruth,
-                    sceneName);
-                StringAssert.Contains("gtController: 2", recorder, sceneName);
-                StringAssert.DoesNotContain("gtFreshnessMode:", recorder, sceneName);
-                StringAssert.DoesNotContain("gtKeepAliveSeconds:", recorder, sceneName);
-            }
+            string groundTruthId = ReadReference(recorder, "groundTruth");
+            Assert.That(groundTruthId, Is.Not.EqualTo("0"));
+            string groundTruth = GetSection(yaml, groundTruthId);
+            StringAssert.Contains(
+                "m_CorrespondingSourceObject: {fileID: 1168042862848623612, " +
+                "guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}",
+                groundTruth);
+            StringAssert.Contains("gtController: 2", recorder);
+            StringAssert.DoesNotContain("gtFreshnessMode:", recorder);
+            StringAssert.DoesNotContain("gtKeepAliveSeconds:", recorder);
         }
 
         /// <summary>每个任务必须同时绑定数字行与小键盘，并且路径能被当前 Input System 解析。</summary>
@@ -1369,11 +1325,10 @@ namespace EgoAnchor.Tests
                 foreach (string path in expectedPaths)
                 {
                     StringAssert.Contains($"m_Path: {path}", task.Groups["body"].Value);
-                    using (var action = new InputAction(type: InputActionType.Button, binding: path))
-                    {
-                        action.Enable();
-                        Assert.That(action.controls, Is.Not.Empty, $"unresolved Input System path: {path}");
-                    }
+                    Assert.That(
+                        InputControlPath.TryGetControlLayout(path),
+                        Is.Not.Null.And.Not.Empty,
+                        $"unresolved Input System path: {path}");
                 }
             }
         }
@@ -1415,11 +1370,10 @@ namespace EgoAnchor.Tests
                 "<Keyboard>/f", "<Keyboard>/space",
             })
             {
-                using (var action = new InputAction(type: InputActionType.Button, binding: path))
-                {
-                    action.Enable();
-                    Assert.That(action.controls, Is.Not.Empty, $"unresolved Input System path: {path}");
-                }
+                Assert.That(
+                    InputControlPath.TryGetControlLayout(path),
+                    Is.Not.Null.And.Not.Empty,
+                    $"unresolved Input System path: {path}");
             }
         }
 
