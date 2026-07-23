@@ -141,6 +141,12 @@ class PaperResults:
     capture_alignment: tuple[Mapping[str, Any], ...]
     """同一候选 capture-time 与 arrival-time 世界复合的片段级比较。"""
 
+    vcd_risk_coverage: tuple[Mapping[str, Any], ...]
+    """VCD 分数诱导的 event 级风险--覆盖率阶梯曲线。"""
+
+    vcd_aurc_segments: tuple[Mapping[str, Any], ...]
+    """每个遮挡 event 的 AURC、全覆盖风险和候选排除审计。"""
+
     performance: Mapping[str, float | int]
     """Python 候选处理和发布间隔审计。"""
 
@@ -206,6 +212,65 @@ def _quantile(values: np.ndarray, probability: float) -> float:
     if values.size == 0:
         return math.nan
     return float(np.quantile(values, probability, method="linear"))
+
+
+def risk_coverage_curve(
+    scores: Sequence[float],
+    risks_mm: Sequence[float],
+) -> tuple[tuple[Mapping[str, float | int], ...], float]:
+    """按分数降序计算 tie-aware 风险--覆盖率曲线及阶梯 AURC。
+
+    同分候选不可拆分；该函数以同分组整体加入后的累计平均风险覆盖该组
+    带来的 coverage 增量。VCD 分数只用于诱导顺序，不解释为正确概率。
+    """
+
+    score_array = np.asarray(scores, dtype=float)
+    risk_array = np.asarray(risks_mm, dtype=float)
+    if score_array.ndim != 1 or risk_array.ndim != 1 or score_array.size != risk_array.size:
+        raise ValueError("VCD 分数与风险必须是一一对应的一维序列")
+    if score_array.size == 0:
+        raise ValueError("risk-coverage 至少需要一个可评价候选")
+    if not np.isfinite(score_array).all() or np.any((score_array < 0.0) | (score_array > 1.0)):
+        raise ValueError("VCD 分数必须是 [0,1] 内的有限值")
+    if not np.isfinite(risk_array).all() or np.any(risk_array < 0.0):
+        raise ValueError("候选风险必须是非负有限毫米值")
+
+    order = np.argsort(-score_array, kind="stable")
+    sorted_scores = score_array[order]
+    sorted_risks = risk_array[order]
+    total = int(score_array.size)
+    retained = 0
+    cumulative_risk = 0.0
+    previous_coverage = 0.0
+    aurc_mm = 0.0
+    rows: list[Mapping[str, float | int]] = []
+    index = 0
+    while index < total:
+        threshold = float(sorted_scores[index])
+        end = index + 1
+        while end < total and float(sorted_scores[end]) == threshold:
+            end += 1
+        tie_count = end - index
+        retained += tie_count
+        cumulative_risk = math.fsum(
+            (cumulative_risk, math.fsum(float(value) for value in sorted_risks[index:end]))
+        )
+        coverage = retained / total
+        selective_risk_mm = cumulative_risk / retained
+        aurc_mm += (coverage - previous_coverage) * selective_risk_mm
+        rows.append(
+            {
+                "score_threshold": threshold,
+                "score_tie_count": tie_count,
+                "retained_candidates": retained,
+                "evaluable_candidates": total,
+                "coverage": coverage,
+                "selective_risk_mm": selective_risk_mm,
+            }
+        )
+        previous_coverage = coverage
+        index = end
+    return tuple(rows), float(aurc_mm)
 
 
 def _valid_event(row: Mapping[str, Any]) -> bool:
@@ -847,6 +912,149 @@ def _capture_alignment(
     return tuple(output)
 
 
+def _vcd_risk_coverage(
+    workbooks: Sequence[Path],
+    eligible_trials: frozenset[tuple[str, str]],
+    event_roles: Mapping[tuple[str, str, str], str],
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    """计算 VCD 连续分数的 event 级风险--覆盖率和 AURC。
+
+    风险只使用完整 EgoAnchor 的 capture-time aligned raw pose 与同 frame
+    平台参考之间的平移误差。冻结 admission 决策不参与筛选，以免只评价已被
+    阈值接纳的候选而产生选择偏差。
+    """
+
+    references: dict[tuple[str, int], np.ndarray] = {}
+    reference_columns = (
+        "session_id",
+        "frame_id",
+        "reference_pose_valid",
+        "reference_pos_x_m",
+        "reference_pos_y_m",
+        "reference_pos_z_m",
+    )
+    for workbook in workbooks:
+        for row in iter_rows(workbook, "unity_reference", reference_columns):
+            if not _truthy(row.get("reference_pose_valid")):
+                continue
+            position = _finite_vector(row, "reference_pos", ("x_m", "y_m", "z_m"))
+            try:
+                frame_id = int(row["frame_id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if position is None:
+                continue
+            key = (str(row.get("session_id") or ""), frame_id)
+            previous = references.get(key)
+            if previous is not None and not np.allclose(previous, position, rtol=0.0, atol=1e-9):
+                raise ValueError(f"同一 frame 存在冲突平台参考：{key}")
+            references[key] = position
+
+    grouped: defaultdict[tuple[str, str, str], list[tuple[float, float]]] = defaultdict(list)
+    candidate_rows: defaultdict[tuple[str, str, str], int] = defaultdict(int)
+    excluded_rows: defaultdict[tuple[str, str, str], int] = defaultdict(int)
+    seen_candidates: set[tuple[str, str, str, str]] = set()
+    admission_columns = (
+        "session_id",
+        "scenario_id",
+        "trial_id",
+        "event_id",
+        "candidate_id",
+        "variant_id",
+        "frame_id",
+        "world_alignment_mode",
+        "has_aligned_raw",
+        "aligned_raw_pos_x_m",
+        "aligned_raw_pos_y_m",
+        "aligned_raw_pos_z_m",
+        "vcd_score",
+    )
+    for workbook in workbooks:
+        for row in iter_rows(workbook, "unity_admission", admission_columns):
+            if (
+                row.get("variant_id") != FULL_VARIANT
+                or not _valid_event(row)
+                or not _trial_is_eligible(row, eligible_trials)
+                or not _scenario_matches(row.get("scenario_id"), "occlusion_recovery")
+            ):
+                continue
+            session_id = str(row.get("session_id") or "")
+            trial_id = str(row.get("trial_id") or "")
+            segment_id = str(row.get("event_id") or "")
+            segment = (session_id, trial_id, segment_id)
+            if event_roles.get(segment) != "occlusion_started":
+                continue
+            if str(row.get("world_alignment_mode") or "") != "CaptureTime":
+                raise ValueError(f"完整 EgoAnchor 的 VCD 风险候选不是 capture-time 对齐：{segment}")
+            candidate_id = str(row.get("candidate_id") or "")
+            if not candidate_id:
+                raise ValueError(f"VCD 风险候选缺少 candidate_id：{segment}")
+            candidate_key = (*segment, candidate_id)
+            if candidate_key in seen_candidates:
+                raise ValueError(f"VCD 风险候选重复：{candidate_key}")
+            seen_candidates.add(candidate_key)
+            candidate_rows[segment] += 1
+
+            aligned = (
+                _finite_vector(row, "aligned_raw_pos", ("x_m", "y_m", "z_m"))
+                if _truthy(row.get("has_aligned_raw"))
+                else None
+            )
+            try:
+                frame_id = int(row["frame_id"])
+            except (KeyError, TypeError, ValueError):
+                frame_id = -1
+            reference = references.get((session_id, frame_id))
+            if aligned is None or reference is None:
+                excluded_rows[segment] += 1
+                continue
+            try:
+                score = float(row["vcd_score"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"可评价候选缺少 VCD 分数：{candidate_key}") from exc
+            if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+                raise ValueError(f"可评价候选的 VCD 分数非法：{candidate_key}: {score}")
+            risk_mm = 1000.0 * float(np.linalg.norm(aligned - reference))
+            grouped[segment].append((score, risk_mm))
+
+    empty_segments = sorted(set(candidate_rows) - set(grouped))
+    if empty_segments:
+        raise ValueError(f"遮挡 event 没有可评价的 VCD 候选：{empty_segments[0]}")
+    if not grouped:
+        raise ValueError("五本 workbook 缺少可计算 VCD risk-coverage 的遮挡候选")
+    curve_rows: list[Mapping[str, Any]] = []
+    segment_rows: list[Mapping[str, Any]] = []
+    for segment, values in sorted(grouped.items()):
+        scores = [item[0] for item in values]
+        risks = [item[1] for item in values]
+        curve, aurc_mm = risk_coverage_curve(scores, risks)
+        for curve_point in curve:
+            curve_rows.append(
+                {
+                    "session_id": segment[0],
+                    "trial_id": segment[1],
+                    "segment_id": segment[2],
+                    **curve_point,
+                }
+            )
+        full_coverage_risk_mm = float(curve[-1]["selective_risk_mm"])
+        segment_rows.append(
+            {
+                "session_id": segment[0],
+                "trial_id": segment[1],
+                "segment_id": segment[2],
+                "candidate_rows": candidate_rows[segment],
+                "evaluable_candidates": len(values),
+                "excluded_candidates": excluded_rows[segment],
+                "score_levels": len(curve),
+                "full_coverage_risk_mm": full_coverage_risk_mm,
+                "aurc_mm": aurc_mm,
+                "risk_gain_mm": full_coverage_risk_mm - aurc_mm,
+            }
+        )
+    return tuple(curve_rows), tuple(segment_rows)
+
+
 def _performance(workbooks: Sequence[Path]) -> Mapping[str, float | int]:
     """从 Python candidate 日志汇总运行时审计数字。"""
 
@@ -911,6 +1119,11 @@ def analyze_workbooks(
         event_roles,
         active_settings,
     )
+    vcd_risk_coverage, vcd_aurc_segments = _vcd_risk_coverage(
+        normalized,
+        valid_trials,
+        event_roles,
+    )
     return PaperResults(
         workbook_sha256={str(path): workbook_sha256(path) for path in normalized},
         static_segments=static,
@@ -921,6 +1134,8 @@ def analyze_workbooks(
         stop_segments=stop,
         correction_segments=_collect_correction_metrics(normalized, valid_trials),
         capture_alignment=_capture_alignment(normalized, valid_trials),
+        vcd_risk_coverage=vcd_risk_coverage,
+        vcd_aurc_segments=vcd_aurc_segments,
         performance=_performance(normalized),
     )
 
@@ -936,5 +1151,6 @@ __all__ = [
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
     "paired_metric_matrix",
+    "risk_coverage_curve",
     "segment_identity",
 ]

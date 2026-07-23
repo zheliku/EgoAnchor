@@ -88,6 +88,22 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertEqual(len(rows), 5)
             self.assertTrue(all(row["python_state"] == "python_stopped" for row in rows))
 
+    def test_stage_does_not_publish_legacy_empty_audit_samples(self) -> None:
+        """旧采集残留的空审计目录不应污染新的 raw 暂存。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            session_ids = _write_batch_sessions(root)
+            for session_id in session_ids:
+                (root / "data" / "eval" / session_id / "audit_samples").mkdir()
+
+            artifact = stage_batch(session_ids, root=root)
+
+            for number in range(1, 6):
+                self.assertFalse(
+                    (artifact.root / "raw" / _task_directory(number) / "audit_samples").exists()
+                )
+
     def test_stage_rejects_paths_outside_eval(self) -> None:
         """session 参数只接受 data/eval 下的 basename。"""
 

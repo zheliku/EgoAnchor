@@ -463,7 +463,7 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 
 \subsection{实验二：组件归因}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线。稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；时序合成消融改用 Kalman Predict-to-Now，但保留完整系统的其他组件。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 使用超过 40~mm 的灾难性尾部失效率；时序合成比较完整 EgoAnchor 与 `w/o temporal synthesis'。
+实验二复用实验一的候选、参考轨迹和渲染时间线。稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；时序合成消融改用 Kalman Predict-to-Now，但保留完整系统的其他组件。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 分开检验连续分数的风险判别性与冻结阈值的运行时接纳效果；时序合成比较完整 EgoAnchor 与 `w/o temporal synthesis'。
 
 第九路 EgoAnchor Causal Prediction 不属于组件消融。它与 `w/o StaticLock' 都关闭 StaticLock，并共享模型、接纳、生命周期和输入时间线，只比较 Causal Prediction 与 Buffered Linear/SLERP 两种逐帧输出策略。图~\ref{fig:exp2-temporal} 同时展示 Direct、Causal 和 Buffered 三个工作点，但严格的单因素配对只包括 Causal 与 Buffered；Direct 仍是保留 StaticLock 的组件消融，不能把三路整体解释为一个三水平策略实验。
 
@@ -480,6 +480,7 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 采集时刻对齐 & 同一候选的复合 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
 StaticLock & 中心化静止 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
 VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
+VCD score & event AURC / 全覆盖风险 & \multicolumn{3}{c}{tie-aware risk--coverage；待 v4 自动回填} \\
 时序合成 & fitted lag / aligned RMSE & \multicolumn{3}{c}{EgoAnchor vs. Predict-to-Now；待 v4 自动回填} \\
 输出策略 & lag / residual / 起停护栏 & \multicolumn{3}{c}{Causal Prediction vs. Buffered Linear/SLERP；待 v4 自动回填} \\
 \bottomrule
@@ -503,7 +504,7 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
     \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
-    \caption{VCD 接纳}
+    \caption{VCD score 风险--覆盖率}
     \label{fig:exp2-vcd}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.40\textwidth}
@@ -512,17 +513,17 @@ VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
     \caption{时序策略}
     \label{fig:exp2-temporal}
   \end{subfigure}
-  \caption{实验二的组件归因与时序策略比较。图~(a)--(c) 分别比较采集时刻复合、StaticLock 和 VCD；图~(d) 展示 Kalman Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Causal 与 Buffered 共享关闭 StaticLock 的配置，细线只连接同一事件或片段的严格配对结果；Direct 单独用于时序合成消融。图和数值待 v4 自动回填。}
+  \caption{实验二的组件归因与时序策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 展示 Kalman Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Causal 与 Buffered 共享关闭 StaticLock 的配置；Direct 单独用于时序合成消融。图和数值待 v4 自动回填。}
   \label{fig:exp2-final}
 \end{figure*}
 
-\textbf{组件归因。} 采集时刻对齐、StaticLock、VCD 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡尾部失效率；时序合成同时报告 fitted lag 与 lag-aligned residual。四项结果均待 v4 自动回填。
+\textbf{组件归因。} 采集时刻对齐、StaticLock、VCD admission 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡尾部失效率；时序合成同时报告 fitted lag 与 lag-aligned residual。VCD score 另在每个最终有效的遮挡 event 内，以 capture-time raw pose 相对同 frame 平台参考的平均平移误差作为 selective risk，按分数从高到低诱导候选顺序；同分候选不可拆分，主指标为 event AURC 的 median [Q1, Q3]。VCD 分数是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法。结果均待 v4 自动回填。
 
 \textbf{Direct / Causal / Buffered。} Direct Predict-to-Now 给出关闭历史合成后的响应优先工作点。Causal Prediction 与 Buffered Linear/SLERP 的严格配对用于检验：在模型与接纳序列相同且都关闭 StaticLock 时，有限时域预测能否以可控的校正与停止代价降低显示时延。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡超限。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。该比较不使用网页回放数值，正式结论待 v4 自动回填。
 
 \subsection{评价指标与汇总契约}
 
-所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。
+所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。VCD risk--coverage 不按冻结 admission 决策过滤候选；缺少 aligned raw 或同帧有效参考的行只进入排除审计，可评价候选若缺少有限 VCD 分数则硬失败。AURC 采用同分组整体加入后的右连续阶梯积分，并先按 event 计算，禁止跨 event 混池候选进行帧级推断。
 
 持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Task~2 的每轮动作在拿起前记录 \texttt{transition\_started}，物体完全停止后记录 \texttt{transition\_stopped}，两类标记必须严格交替并闭合。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。停止前向过冲沿上一动作的参考位移方向计算；反向回动为达到最远点后退回最终位置的投影距离；settling time 则以片段末 250~ms 的显示位置为目标，要求误差进入 5~mm 并持续 100~ms。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
 

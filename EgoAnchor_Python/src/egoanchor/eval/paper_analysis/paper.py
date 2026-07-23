@@ -14,6 +14,7 @@ from openpyxl import Workbook, load_workbook  # type: ignore[import-untyped]
 from openpyxl.styles import Alignment, Font, PatternFill  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
+from .figures import summarize_risk_coverage
 from .metrics import (
     CAUSAL_PREDICTION_VARIANT,
     FULL_VARIANT,
@@ -229,12 +230,15 @@ def _exp2_table(results: PaperResults) -> str:
     )
     vcd_full = results.occlusion_episodes[FULL_VARIANT]
     vcd_disabled = results.occlusion_episodes[NO_VCD]
+    vcd_aurc = _cell(_summary(results.vcd_aurc_segments, "aurc_mm"))
+    vcd_full_risk = _cell(_summary(results.vcd_aurc_segments, "full_coverage_risk_mm"))
+    vcd_risk_gain = _cell(_summary(results.vcd_aurc_segments, "risk_gain_mm"))
     full_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_full)
     disabled_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_disabled)
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新数据上的目标化组件归因与逐帧输出策略比较。组件效应为关闭配置减完整系统；额外策略对照固定关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
+        r"\caption{新数据上的目标化组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD admission 行报告冻结阈值的运行时效果。组件效应为关闭配置减完整系统；额外策略对照固定关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{4.8pt}",
@@ -245,6 +249,7 @@ def _exp2_table(results: PaperResults) -> str:
         r"\midrule",
         f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
+        f"VCD score & event AURC（越低越好） & {vcd_aurc}~mm & 全覆盖风险 {vcd_full_risk}~mm & 相对全覆盖收益 {vcd_risk_gain}~mm \\\\",
         f"VCD 接纳 & 遮挡最大误差 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
         f"时序合成（实际 runtime） & fitted lag / aligned RMSE & {_fmt(linear_lag, 1)} / {_fmt(linear_rmse)} & {_fmt(predict_lag, 1)} / {_fmt(predict_rmse)} & {_fmt(lag_delta, 1)}~ms / +{_fmt(rmse_delta)}~mm \\\\",
         f"逐帧输出策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Buffered {_fmt(buffered_translation)}~mm / {_fmt(buffered_rotation)}$^\\circ$ & Causal {_fmt(causal_translation)}~mm / {_fmt(causal_rotation)}$^\\circ$ & Causal--Buffered: {_fmt(causal_translation_delta)}~mm / {_fmt(causal_rotation_delta)}$^\\circ$；{int(causal_translation_higher)}/{len(results.translation_segments[NO_STATIC_LOCK])}、{int(causal_rotation_higher)}/{len(results.rotation_segments[NO_STATIC_LOCK])} 个片段 Causal 较高 \\\\",
@@ -333,6 +338,9 @@ def _exp2_text(results: PaperResults) -> str:
     full_static, disabled_static, static_delta, _ = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
     full_vcd = results.occlusion_episodes[FULL_VARIANT]
     disabled_vcd = results.occlusion_episodes[NO_VCD]
+    vcd_aurc = _summary(results.vcd_aurc_segments, "aurc_mm")
+    vcd_full_risk = _summary(results.vcd_aurc_segments, "full_coverage_risk_mm")
+    vcd_risk_gain = _summary(results.vcd_aurc_segments, "risk_gain_mm")
     linear_lag, predict_lag, lag_delta, _ = _paired_summary(
         results.translation_segments,
         NO_TEMPORAL_SYNTHESIS,
@@ -419,8 +427,8 @@ def _exp2_text(results: PaperResults) -> str:
   \\end{{subfigure}}\\hfill
   \\begin{{subfigure}}[t]{{0.18\\textwidth}}
     \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure3c_vcd.pdf}}
-    \\caption{{VCD 接纳}}
+  \\includegraphics[width=\\linewidth]{{figures/panels/figure3c_vcd_risk_coverage.pdf}}
+  \\caption{{VCD score 风险--覆盖率}}
     \\label{{fig:exp2-vcd}}
   \\end{{subfigure}}\\hfill
   \\begin{{subfigure}}[t]{{0.40\\textwidth}}
@@ -429,7 +437,7 @@ def _exp2_text(results: PaperResults) -> str:
     \\caption{{时序策略}}
     \\label{{fig:exp2-temporal}}
   \\end{{subfigure}}
-  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)--(c) 分别比较采集时刻复合、StaticLock 和 VCD；图~(d) 展示 Direct Predict-to-Now、有限时域 Causal Prediction 与 Buffered Linear/SLERP。Direct 是关闭时序合成的机制消融；Causal 与 Buffered 均关闭 StaticLock，形成只替换输出策略的配对比较。细线只连接同一事件或片段的严格配对结果。}}
+  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 展示 Direct Predict-to-Now、有限时域 Causal Prediction 与 Buffered Linear/SLERP。Direct 是关闭时序合成的机制消融；Causal 与 Buffered 均关闭 StaticLock，形成只替换输出策略的配对比较。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 
@@ -437,7 +445,7 @@ def _exp2_text(results: PaperResults) -> str:
 
 \\textbf{{StaticLock。}} 关闭 StaticLock 后，中心化静止 P95 从 {_fmt(full_static)} 增至 {_fmt(disabled_static)}~mm，配对差值为 +{_fmt(static_delta)}~mm。该结果表明 StaticLock 限制慢速静止漂移，而逐帧增量仍作为表格护栏报告。
 
-\\textbf{{VCD 接纳。}} 启用 VCD 时，{sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm；关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}。该组件的主证据是尾部失效率，不是单独的中位数。
+\\textbf{{VCD score 与 admission。}} 在每个最终有效的遮挡 event 内，按连续 VCD 分数从高到低诱导候选顺序，并以 capture-time raw pose 相对同 frame 平台参考的平均平移误差定义 selective risk；同分候选不可拆分。event AURC 为 {_cell(vcd_aurc)}~mm，全覆盖风险为 {_cell(vcd_full_risk)}~mm，相对全覆盖的风险收益为 {_cell(vcd_risk_gain)}~mm。VCD 是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法；risk--coverage 只是由分数诱导的离线评价。运行时使用冻结阈值时，启用 VCD 有 {sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm，关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}；后者检验 admission 的尾部效果，不能替代 score 判别性。
 
 \\textbf{{时序合成。}} Kalman Predict-to-Now 的 fitted lag / lag-aligned RMSE 为 {_fmt(predict_lag, 1)}~ms / {_fmt(predict_rmse)}~mm，正式 Kalman Linear/SLERP 为 {_fmt(linear_lag, 1)}~ms / {_fmt(linear_rmse)}~mm。Predict-to-Now 的配对时延变化为 {_fmt(lag_delta, 1)}~ms，但对齐残差增加 {_fmt(rmse_delta)}~mm；该条件是关闭时序合成的机制消融，不作为生产级因果预测基线。
 
@@ -765,15 +773,47 @@ def _write_figure_source_data(
         x_key=None,
         y_key="centered_p95_mm",
     )
-    append_metric_rows(
-        figure3_rows,
-        figure="Figure 3",
-        panel="(c) VCD admission",
-        rows=results.occlusion_episodes,
-        variants=(FULL_VARIANT, NO_VCD),
-        x_key=None,
-        y_key="translation_p95_mm",
-    )
+    for row in sorted(
+        results.vcd_risk_coverage,
+        key=lambda item: (*segment_identity(item), float(item["coverage"])),
+    ):
+        identity = segment_identity(row)
+        figure3_rows.append(
+            {
+                "figure": "Figure 3",
+                "panel": "(c) VCD score risk-coverage",
+                "series": "Event curve",
+                "variant_id": FULL_VARIANT,
+                "session_id": identity[0],
+                "trial_id": identity[1],
+                "segment_id": identity[2],
+                "x_metric": "coverage",
+                "x_value": float(row["coverage"]),
+                "y_metric": "selective_risk_mm",
+                "y_value": float(row["selective_risk_mm"]),
+            }
+        )
+    for row in summarize_risk_coverage(results.vcd_risk_coverage):
+        for series, key in (
+            ("Median", "selective_risk_median_mm"),
+            ("IQR lower", "selective_risk_q1_mm"),
+            ("IQR upper", "selective_risk_q3_mm"),
+        ):
+            figure3_rows.append(
+                {
+                    "figure": "Figure 3",
+                    "panel": "(c) VCD score risk-coverage",
+                    "series": series,
+                    "variant_id": FULL_VARIANT,
+                    "session_id": "",
+                    "trial_id": "",
+                    "segment_id": "",
+                    "x_metric": "coverage",
+                    "x_value": float(row["coverage"]),
+                    "y_metric": key,
+                    "y_value": float(row[key]),
+                }
+            )
     append_metric_rows(
         figure3_rows,
         figure="Figure 3",
@@ -798,6 +838,7 @@ def _write_figure_source_data(
             {"项目": "数据来源", "说明": "五本只读 Stage 1 工作簿，由论文分析重新计算，不回读 raw JSONL。"},
             {"项目": "配对语义", "说明": "session_id、trial_id、segment_id 相同的记录属于严格配对。"},
             {"项目": "图 2(b)", "说明": "只绘制散点与中位数/IQR，不连接跨方法折线。"},
+            {"项目": "图 3(c)", "说明": "event 曲线不拆分同分候选；固定 coverage 汇总取第一个不小于目标 coverage 的完整同分组。"},
             {"项目": "数值精度", "说明": "XLSX 保留计算得到的浮点值；论文表格另行格式化。"},
         ],
     )
@@ -890,6 +931,39 @@ def write_paper(
         writer = csv.DictWriter(handle, fieldnames=("session_id", "trial_id", "segment_id", "capture_p95_mm", "arrival_p95_mm", "paired_reduction_mm", "n_candidates"))
         writer.writeheader()
         writer.writerows(results.capture_alignment)
+    vcd_curve_path = metrics_root / "vcd_risk_coverage.csv"
+    with vcd_curve_path.open("w", newline="", encoding="utf-8") as handle:
+        vcd_curve_fields = (
+            "session_id",
+            "trial_id",
+            "segment_id",
+            "score_threshold",
+            "score_tie_count",
+            "retained_candidates",
+            "evaluable_candidates",
+            "coverage",
+            "selective_risk_mm",
+        )
+        writer = csv.DictWriter(handle, fieldnames=vcd_curve_fields)
+        writer.writeheader()
+        writer.writerows(results.vcd_risk_coverage)
+    vcd_aurc_path = metrics_root / "vcd_aurc_segments.csv"
+    with vcd_aurc_path.open("w", newline="", encoding="utf-8") as handle:
+        vcd_aurc_fields = (
+            "session_id",
+            "trial_id",
+            "segment_id",
+            "candidate_rows",
+            "evaluable_candidates",
+            "excluded_candidates",
+            "score_levels",
+            "full_coverage_risk_mm",
+            "aurc_mm",
+            "risk_gain_mm",
+        )
+        writer = csv.DictWriter(handle, fieldnames=vcd_aurc_fields)
+        writer.writeheader()
+        writer.writerows(results.vcd_aurc_segments)
     performance_path = metrics_root / "runtime_performance.json"
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
@@ -935,6 +1009,13 @@ def write_paper(
                 "manuscript": manuscript.name,
                 "temporal_evidence": "actual_runtime",
                 "output_strategy": "temporal_strategy_comparison",
+                "vcd_score_evidence": {
+                    "risk": "capture_time_aligned_raw_translation_error_mm",
+                    "score_direction": "descending",
+                    "tie_policy": "same_score_group_is_indivisible",
+                    "auc_integration": "right_continuous_step_over_event_coverage",
+                    "unit": "occlusion_event",
+                },
             },
             ensure_ascii=False,
             indent=2,
@@ -949,6 +1030,8 @@ def write_paper(
         "exp2_table": exp2_table_path,
         "summary": summary_path,
         "capture": capture_path,
+        "vcd_risk_coverage": vcd_curve_path,
+        "vcd_aurc": vcd_aurc_path,
         "performance": performance_path,
         "plot_data": plot_data_path,
         "strategy_metrics": strategy_metrics_path,

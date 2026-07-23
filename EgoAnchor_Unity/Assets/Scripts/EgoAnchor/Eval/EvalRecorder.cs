@@ -519,6 +519,77 @@ namespace EgoAnchor.Eval
             return true;
         }
 
+        /// <summary>
+        /// 验证 Experiment12 的九路正式矩阵。
+        /// 该检查冻结顺序、策略语义和开关组合，但不提前冻结 Causal pilot 的数值参数。
+        /// </summary>
+        public bool TryValidateFormalVariantMatrix(out string error)
+        {
+            IReadOnlyList<EvalV2Manifest.FormalVariantContract> expected =
+                EvalV2Manifest.FormalVariantContracts;
+            int actualCount = variants?.Count ?? 0;
+            if (actualCount != expected.Count)
+            {
+                error = $"formalVariantCount[{actualCount}/{expected.Count}]";
+                return false;
+            }
+            if (!TryValidateCurrentVariants(out error))
+                return false;
+
+            var runtimes = new HashSet<PoseToAnchorRuntime>();
+            int primaryCount = 0;
+            for (int i = 0; i < expected.Count; i++)
+            {
+                EvalVariant actual = variants[i];
+                EvalV2Manifest.FormalVariantContract contract = expected[i];
+                string label = ResolveLabel(actual, i);
+                if (!runtimes.Add(actual.runtime))
+                {
+                    error = $"formalVariantRuntimeDuplicate[{label}]";
+                    return false;
+                }
+                if (actual.anchorTransform == null || actual.anchorPresenter == null)
+                {
+                    error = $"formalVariantDisplayBinding[{label}]";
+                    return false;
+                }
+                if (actual.isPrimary)
+                {
+                    primaryCount++;
+                    if (!string.Equals(contract.Label, "EgoAnchor", StringComparison.Ordinal))
+                    {
+                        error = $"formalPrimaryVariant[{label}]";
+                        return false;
+                    }
+                }
+
+                EvalVariantConfig config = BuildVariantConfig(actual, label);
+                if (!string.Equals(config.Label, contract.Label, StringComparison.Ordinal)
+                    || !string.Equals(config.MotionModel, contract.MotionModel, StringComparison.Ordinal)
+                    || !string.Equals(config.SmoothingStrategy, contract.SmoothingStrategy, StringComparison.Ordinal)
+                    || !string.Equals(config.QualityGate, contract.QualityGate, StringComparison.Ordinal)
+                    || !string.Equals(config.WorldAlignmentMode, contract.WorldAlignmentMode, StringComparison.Ordinal)
+                    || config.UsesCaptureTimeAlignment != contract.UsesCaptureTimeAlignment
+                    || config.UsesVcdAdmission != contract.UsesVcdAdmission
+                    || config.UsesTemporalSynthesis != contract.UsesTemporalSynthesis
+                    || config.UsesStaticLock != contract.UsesStaticLock
+                    || config.UsesLowScoreReacquire != contract.UsesLowScoreReacquire
+                    || config.UsesServerReacquire != contract.UsesServerReacquire)
+                {
+                    error = $"formalVariantContract[{i}:{contract.Label}]";
+                    return false;
+                }
+            }
+
+            if (primaryCount != 1)
+            {
+                error = "formalPrimaryVariant[EgoAnchor]";
+                return false;
+            }
+            error = string.Empty;
+            return true;
+        }
+
         /// <summary>开始写入评估日志。</summary>
         public void BeginRecording(string referencePath, string admissionPath, string renderPath, string eventsPath, string sessionId = "")
         {

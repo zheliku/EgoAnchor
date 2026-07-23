@@ -216,6 +216,15 @@ def write_task_workbook(
     normalized_path = destination.parent / f".{destination.name}.{token}.tmp"
     try:
         _write_workbook(raw_path, factory, max_data_rows)
+        # 在原始 XLSX 归一化前先检查一次，覆盖 writer 返回前发生的同步竞态。
+        written_source_files = collect_source_files(dataset.root)
+        if (
+            written_source_files != source_files
+            or source_set_sha256(written_source_files) != source_digest
+        ):
+            raise WorkbookValidationError(
+                "来源文件在 workbook 写出期间发生变化，禁止发布混合版本工作簿。"
+            )
         _normalize_xlsx_archive(raw_path, normalized_path)
         _unlink_temporary_file(raw_path)
         verification = verify_task_workbook(normalized_path, max_data_rows=max_data_rows, max_cell_chars=max_cell_chars)

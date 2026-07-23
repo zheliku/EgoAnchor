@@ -312,7 +312,11 @@ namespace EgoAnchor.Eval
             if (string.IsNullOrWhiteSpace(objectId)) missing.Add(nameof(objectId));
 
             string variantError = string.Empty;
-            if (recorder == null || !recorder.TryValidateCurrentVariants(out variantError))
+            bool variantMatrixValid = recorder != null
+                && (gameObject.scene.name == EvalV2Manifest.FormalSceneName
+                    ? recorder.TryValidateFormalVariantMatrix(out variantError)
+                    : recorder.TryValidateCurrentVariants(out variantError));
+            if (!variantMatrixValid)
                 missing.Add(string.IsNullOrWhiteSpace(variantError) ? "variantConfigs" : variantError);
             string referenceError = string.Empty;
             if (recorder == null || !recorder.TryValidatePlatformReference(objectId, out referenceError))

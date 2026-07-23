@@ -21,7 +21,9 @@ from egoanchor.eval.paper_analysis import (
     eligible_trials,
     iter_rows,
     paired_metric_matrix,
+    risk_coverage_curve,
     settings_sha256,
+    summarize_risk_coverage,
 )
 
 
@@ -49,6 +51,52 @@ class PaperPipelineTests(unittest.TestCase):
                 "EgoAnchor w/o StaticLock",
             ),
         )
+
+    def test_vcd_risk_coverage_keeps_score_ties_indivisible(self) -> None:
+        """同分候选必须整组进入曲线，AURC 不得依赖候选行顺序。"""
+
+        curve, aurc = risk_coverage_curve((0.9, 0.9, 0.2), (1.0, 9.0, 2.0))
+        reordered, reordered_aurc = risk_coverage_curve((0.9, 0.2, 0.9), (9.0, 2.0, 1.0))
+
+        self.assertEqual([row["coverage"] for row in curve], [2.0 / 3.0, 1.0])
+        self.assertEqual([row["score_tie_count"] for row in curve], [2, 1])
+        self.assertAlmostEqual(float(curve[0]["selective_risk_mm"]), 5.0)
+        self.assertAlmostEqual(aurc, 14.0 / 3.0)
+        self.assertEqual(curve, reordered)
+        self.assertAlmostEqual(aurc, reordered_aurc)
+
+    def test_vcd_risk_coverage_all_equal_scores_reduce_to_full_risk(self) -> None:
+        """所有分数相同时只有全覆盖点，AURC 等于候选平均风险。"""
+
+        curve, aurc = risk_coverage_curve((0.5, 0.5, 0.5), (1.0, 2.0, 6.0))
+
+        self.assertEqual(len(curve), 1)
+        self.assertEqual(curve[0]["coverage"], 1.0)
+        self.assertAlmostEqual(aurc, 3.0)
+
+    def test_vcd_risk_coverage_rejects_invalid_scores(self) -> None:
+        """缺失、非有限或越界分数不得静默进入论文指标。"""
+
+        for scores in ((), (float("nan"),), (-0.01,), (1.01,)):
+            with self.subTest(scores=scores), self.assertRaises(ValueError):
+                risk_coverage_curve(scores, (1.0,) if scores else ())
+
+    def test_vcd_plot_summary_uses_whole_tie_group_at_target_coverage(self) -> None:
+        """固定 coverage 汇总不得在 event 的首个完整同分组内部插值。"""
+
+        rows = (
+            {"session_id": "s", "trial_id": "t", "segment_id": "a", "coverage": 0.6, "selective_risk_mm": 2.0},
+            {"session_id": "s", "trial_id": "t", "segment_id": "a", "coverage": 1.0, "selective_risk_mm": 4.0},
+            {"session_id": "s", "trial_id": "t", "segment_id": "b", "coverage": 0.4, "selective_risk_mm": 6.0},
+            {"session_id": "s", "trial_id": "t", "segment_id": "b", "coverage": 1.0, "selective_risk_mm": 8.0},
+        )
+
+        summary = summarize_risk_coverage(rows)
+
+        self.assertEqual(len(summary), 20)
+        self.assertAlmostEqual(float(summary[0]["coverage"]), 0.05)
+        self.assertAlmostEqual(float(summary[0]["selective_risk_median_mm"]), 4.0)
+        self.assertAlmostEqual(float(summary[-1]["selective_risk_median_mm"]), 6.0)
 
     def test_xlsx_reader_streams_selected_columns_from_stage_one_sheet(self) -> None:
         """新分析 reader 直接消费 Stage 1 sheet，不改写原始 workbook。"""

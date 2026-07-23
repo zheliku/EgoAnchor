@@ -12,8 +12,10 @@ using EgoAnchor.Policy;
 using EgoAnchor.Protocol.Generated;
 using EgoAnchor.Runtime;
 using NUnit.Framework;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace EgoAnchor.Tests
 {
@@ -1411,6 +1413,102 @@ namespace EgoAnchor.Tests
             Assert.That(Regex.Matches(yaml, @"(?m)^  rotationMeasurementNoise: 0\.0004\r?$").Count, Is.EqualTo(6));
             StringAssert.DoesNotContain("positionProcessNoise", yaml);
             StringAssert.DoesNotContain("rotationProcessNoise", yaml);
+        }
+
+        /// <summary>正式场景的 EvalRecorder 顺序必须与启动门禁的九路契约完全一致。</summary>
+        [Test]
+        public void ExperimentSceneUsesStrictFormalVariantOrder()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            string yaml = File.ReadAllText(path);
+            MatchCollection matches = Regex.Matches(
+                yaml,
+                @"(?m)^  - label: (?<label>[^\r\n]+)\r?\n    runtime: \{fileID: (?<id>\d+)\}");
+            Assert.That(matches.Count, Is.EqualTo(EvalV2Manifest.FormalVariantContracts.Count));
+            for (int i = 0; i < matches.Count; i++)
+            {
+                Assert.That(
+                    matches[i].Groups["label"].Value,
+                    Is.EqualTo(EvalV2Manifest.FormalVariantContracts[i].Label),
+                    $"formal variant order mismatch at index {i}");
+            }
+        }
+
+        /// <summary>真实 Experiment12 场景必须通过 EvalRecorder 的启动前九路硬校验。</summary>
+        [Test]
+        public void ExperimentScenePassesStrictFormalVariantValidation()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            try
+            {
+                EvalRecorder recorder = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    recorder = root.GetComponentInChildren<EvalRecorder>(includeInactive: true);
+                    if (recorder != null)
+                        break;
+                }
+                Assert.That(recorder, Is.Not.Null);
+                Assert.That(recorder.TryValidateFormalVariantMatrix(out string error), Is.True, error);
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, removeScene: true);
+            }
+        }
+
+        /// <summary>严格门禁必须拒绝缺路、额外路、重排和主变体漂移。</summary>
+        [Test]
+        public void StrictFormalVariantValidationRejectsMatrixDrift()
+        {
+            string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
+            Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            try
+            {
+                EvalRecorder recorder = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    recorder = root.GetComponentInChildren<EvalRecorder>(includeInactive: true);
+                    if (recorder != null)
+                        break;
+                }
+                Assert.That(recorder, Is.Not.Null);
+                FieldInfo field = typeof(EvalRecorder).GetField(
+                    "variants",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(field, Is.Not.Null);
+                var original = new List<EvalVariant>((List<EvalVariant>)field.GetValue(recorder));
+
+                var missing = new List<EvalVariant>(original);
+                missing.RemoveAt(missing.Count - 1);
+                SetPrivateField(recorder, "variants", missing);
+                Assert.That(recorder.TryValidateFormalVariantMatrix(out string error), Is.False);
+                StringAssert.StartsWith("formalVariantCount", error);
+
+                var extra = new List<EvalVariant>(original) { original[0] };
+                SetPrivateField(recorder, "variants", extra);
+                Assert.That(recorder.TryValidateFormalVariantMatrix(out error), Is.False);
+                StringAssert.StartsWith("formalVariantCount", error);
+
+                var reordered = new List<EvalVariant>(original);
+                (reordered[0], reordered[1]) = (reordered[1], reordered[0]);
+                SetPrivateField(recorder, "variants", reordered);
+                Assert.That(recorder.TryValidateFormalVariantMatrix(out error), Is.False);
+                StringAssert.StartsWith("formalVariantContract", error);
+
+                var noPrimary = new List<EvalVariant>(original);
+                EvalVariant primary = noPrimary[3];
+                primary.isPrimary = false;
+                noPrimary[3] = primary;
+                SetPrivateField(recorder, "variants", noPrimary);
+                Assert.That(recorder.TryValidateFormalVariantMatrix(out error), Is.False);
+                Assert.That(error, Is.EqualTo("formalPrimaryVariant[EgoAnchor]"));
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, removeScene: true);
+            }
         }
 
         /// <summary>因果预测与缓冲对照除输出策略外必须共享生命周期和重获取参数。</summary>

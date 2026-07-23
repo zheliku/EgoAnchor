@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,6 @@ from .metrics import (
     FULL_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
-    NO_VCD,
     PaperResults,
     TEMPORAL_STRATEGY_VARIANTS,
     paired_metric_matrix,
@@ -382,6 +382,95 @@ def _temporal_panel(paired_points: np.ndarray) -> Any:
     return figure
 
 
+def summarize_risk_coverage(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, float | int], ...]:
+    """在固定 coverage 网格上汇总 event 曲线，且不拆分同分候选组。
+
+    每个网格点使用该 event 中第一个 coverage 不小于目标值的完整同分组，
+    再跨 event 汇总 median/IQR。这样图形不会凭空为 tied score 排序。
+    """
+
+    grouped: defaultdict[tuple[str, str, str], list[tuple[float, float]]] = defaultdict(list)
+    for row in rows:
+        identity = segment_identity(row)
+        grouped[identity].append((float(row["coverage"]), float(row["selective_risk_mm"])))
+    if not grouped:
+        raise ValueError("VCD risk-coverage 图缺少 event 曲线")
+    curves: list[tuple[np.ndarray, np.ndarray]] = []
+    for identity, points in sorted(grouped.items()):
+        ordered = sorted(points)
+        coverage = np.asarray([point[0] for point in ordered], dtype=float)
+        risk = np.asarray([point[1] for point in ordered], dtype=float)
+        if (
+            coverage.size == 0
+            or not np.isfinite(coverage).all()
+            or not np.isfinite(risk).all()
+            or np.any(np.diff(coverage) <= 0.0)
+            or not np.isclose(coverage[-1], 1.0)
+        ):
+            raise ValueError(f"VCD risk-coverage event 曲线非法：{identity}")
+        curves.append((coverage, risk))
+
+    output: list[Mapping[str, float | int]] = []
+    for target in np.linspace(0.05, 1.0, 20):
+        values = []
+        for coverage, risk in curves:
+            index = min(int(np.searchsorted(coverage, target, side="left")), len(coverage) - 1)
+            values.append(float(risk[index]))
+        quantiles = np.quantile(np.asarray(values, dtype=float), (0.5, 0.25, 0.75))
+        output.append(
+            {
+                "coverage": float(target),
+                "selective_risk_median_mm": float(quantiles[0]),
+                "selective_risk_q1_mm": float(quantiles[1]),
+                "selective_risk_q3_mm": float(quantiles[2]),
+                "event_count": len(curves),
+            }
+        )
+    return tuple(output)
+
+
+def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
+    """绘制 VCD 分数诱导的 event 曲线及跨 event median/IQR。"""
+
+    grouped: defaultdict[tuple[str, str, str], list[tuple[float, float]]] = defaultdict(list)
+    for row in results.vcd_risk_coverage:
+        grouped[segment_identity(row)].append(
+            (float(row["coverage"]), float(row["selective_risk_mm"]))
+        )
+    if not grouped:
+        raise ValueError("VCD risk-coverage 图缺少 event 曲线")
+
+    figure, axis = plt.subplots(figsize=(1.26, 2.18))
+    for points in grouped.values():
+        ordered = np.asarray(sorted(points), dtype=float)
+        axis.plot(
+            ordered[:, 0],
+            ordered[:, 1],
+            color=_PAIR_COLOR,
+            linewidth=0.65,
+            alpha=0.28,
+            drawstyle="steps-pre",
+            zorder=1,
+        )
+    summary = summarize_risk_coverage(results.vcd_risk_coverage)
+    coverage = np.asarray([float(row["coverage"]) for row in summary], dtype=float)
+    median = np.asarray([float(row["selective_risk_median_mm"]) for row in summary], dtype=float)
+    q1 = np.asarray([float(row["selective_risk_q1_mm"]) for row in summary], dtype=float)
+    q3 = np.asarray([float(row["selective_risk_q3_mm"]) for row in summary], dtype=float)
+    axis.fill_between(coverage, q1, q3, color=_FULL_COLOR, alpha=0.18, linewidth=0.0, label="IQR")
+    axis.plot(coverage, median, color=_FULL_COLOR, linewidth=1.8, label="Median", zorder=3)
+    axis.set_xlim(0.0, 1.0)
+    axis.set_ylim(bottom=0.0)
+    axis.set_xlabel("Coverage")
+    axis.set_ylabel("Selective risk (mm)")
+    _clean_axis(axis, "both")
+    axis.legend(frameon=False, loc="upper right", borderaxespad=0.25, handletextpad=0.4)
+    figure.tight_layout()
+    return figure
+
+
 def publish_figures(results: PaperResults, paper_root: Path) -> Mapping[str, Path]:
     """发布由 LaTeX 排列的图二和图三独立面板。"""
 
@@ -438,12 +527,6 @@ def publish_figures(results: PaperResults, paper_root: Path) -> Mapping[str, Pat
         NO_STATIC_LOCK,
         "centered_p95_mm",
     )
-    full_vcd, no_vcd = _paired_rows(
-        results.occlusion_episodes,
-        FULL_VARIANT,
-        NO_VCD,
-        "translation_p95_mm",
-    )
     temporal_points = paired_metric_matrix(
         results.translation_segments,
         TEMPORAL_STRATEGY_VARIANTS,
@@ -466,14 +549,9 @@ def publish_figures(results: PaperResults, paper_root: Path) -> Mapping[str, Pat
         "figure3b_static_lock",
     )
     figure3c = _save_pair(
-        _paired_panel(
-            full_vcd,
-            no_vcd,
-            "Occlusion P95 (mm)",
-            logarithmic=True,
-        ),
+        build_vcd_risk_coverage_panel(results),
         panels,
-        "figure3c_vcd",
+        "figure3c_vcd_risk_coverage",
     )
     figure3d = _save_pair(
         _temporal_panel(temporal_points),
@@ -498,4 +576,10 @@ def publish_figures(results: PaperResults, paper_root: Path) -> Mapping[str, Pat
     }
 
 
-__all__ = ["build_point_panel", "build_translation_panel", "publish_figures"]
+__all__ = [
+    "build_point_panel",
+    "build_translation_panel",
+    "build_vcd_risk_coverage_panel",
+    "publish_figures",
+    "summarize_risk_coverage",
+]

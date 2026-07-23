@@ -744,7 +744,7 @@ def _copy_task_sources(source_dirs: Sequence[Path], raw_root: Path) -> tuple[Pat
     for source, spec in zip(source_dirs, TASK_SPECS, strict=True):
         destination = raw_root / spec.directory_name
         source_digest = source_set_sha256(collect_source_files(source))
-        shutil.copytree(source, destination)
+        shutil.copytree(source, destination, ignore=_ignore_empty_audit_samples)
         source_digest_after_copy = source_set_sha256(collect_source_files(source))
         copied_digest = source_set_sha256(collect_source_files(destination))
         if source_digest_after_copy != source_digest:
@@ -753,6 +753,20 @@ def _copy_task_sources(source_dirs: Sequence[Path], raw_root: Path) -> tuple[Pat
             raise OSError(f"task {spec.number} 复制后来源 SHA-256 不一致")
         destinations.append(destination)
     return tuple(destinations)
+
+
+def _ignore_empty_audit_samples(directory: str, names: list[str]) -> set[str]:
+    """暂存时跳过遗留的空 audit_samples 目录，保留真实审计文件。"""
+
+    ignored: set[str] = set()
+    source = Path(directory)
+    for name in names:
+        if name != "audit_samples":
+            continue
+        candidate = source / name
+        if candidate.is_dir() and not any(path.is_file() for path in candidate.rglob("*")):
+            ignored.add(name)
+    return ignored
 
 
 def _write_workbooks(
