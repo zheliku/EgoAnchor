@@ -1149,7 +1149,7 @@ namespace EgoAnchor.Tests
         /// </summary>
         private static void SetPrivateField<T>(object instance, string fieldName, T value)
         {
-            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo field = FindPrivateField(instance.GetType(), fieldName);
             Assert.That(field, Is.Not.Null, $"missing field {fieldName}");
             field.SetValue(instance, value);
         }
@@ -1159,9 +1159,26 @@ namespace EgoAnchor.Tests
         /// </summary>
         private static T GetPrivateField<T>(object instance, string fieldName)
         {
-            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo field = FindPrivateField(instance.GetType(), fieldName);
             Assert.That(field, Is.Not.Null, $"missing field {fieldName}");
             return (T)field.GetValue(instance);
+        }
+
+        /// <summary>沿继承链查找声明在当前类型或基类中的私有实例字段。</summary>
+        private static FieldInfo FindPrivateField(Type type, string fieldName)
+        {
+            for (Type current = type; current != null; current = current.BaseType)
+            {
+                FieldInfo field = current.GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (field != null)
+                {
+                    return field;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>为非场景测试配置一个可通过正式启动校验的最小 runtime 与参考对象。</summary>
