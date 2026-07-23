@@ -121,6 +121,22 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertEqual([item.session_id for item in artifact.sessions], list(session_ids))
             self.assertEqual([item.task_number for item in artifact.sessions], [1, 2, 3, 4, 5])
 
+    def test_stage_replaces_matching_staged_batch(self) -> None:
+        """重复提交同一批目录时，成功重建后替换旧暂存批次。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            session_ids = _write_batch_sessions(root)
+            first = stage_batch(session_ids, root=root)
+            obsolete = first.root / "obsolete.txt"
+            obsolete.write_text("old staging", encoding="utf-8")
+            second = stage_batch(tuple(reversed(session_ids)), root=root)
+
+            self.assertEqual(second.batch_id, first.batch_id)
+            self.assertEqual(second.root, first.root)
+            self.assertFalse(obsolete.exists())
+            self.assertEqual(len(second.workbook_sha256), 5)
+
     def test_stage_rejects_paths_outside_eval(self) -> None:
         """session 参数只接受 data/eval 下的 basename。"""
 

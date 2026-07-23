@@ -364,9 +364,6 @@ def stage_batch(
     resolved_batch_id = batch_id or _batch_id(summaries)
     _require_batch_id(resolved_batch_id)
     destination = paths.staging_root / resolved_batch_id
-    if destination.exists():
-        raise FileExistsError(f"批次暂存目录已存在，拒绝合并或覆盖：{destination}")
-
     temporary = create_inherited_temp_directory(paths.staging_root, f".{resolved_batch_id}.tmp-")
     try:
         staged_dirs = _copy_task_sources(source_dirs, temporary / "raw")
@@ -379,7 +376,7 @@ def stage_batch(
             temporary / "workbooks",
             _git_code_version(base),
         )
-        temporary.rename(destination)
+        _replace_staged_batch(temporary, destination)
     except Exception:
         remove_tree_with_retry(temporary)
         raise
@@ -390,6 +387,24 @@ def stage_batch(
         sessions=summaries,
         workbook_sha256={artifact.path.name: artifact.sha256 for artifact in artifacts},
     )
+
+
+def _replace_staged_batch(temporary: Path, destination: Path) -> None:
+    """以已验证的新批次替换同名暂存批次，失败时恢复旧批次。"""
+
+    backup: Path | None = None
+    if destination.exists():
+        backup = create_inherited_temp_directory(destination.parent, f".{destination.name}.previous-")
+        backup.rmdir()
+        destination.rename(backup)
+    try:
+        temporary.rename(destination)
+    except Exception:
+        if backup is not None and backup.exists() and not destination.exists():
+            backup.rename(destination)
+        raise
+    if backup is not None:
+        remove_tree_with_retry(backup)
 
 
 def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> dict[str, Any]:

@@ -59,6 +59,8 @@ pixi run eval latex
 
 `stage` 参数是 `data/eval` 下的目录名，不要求它与 `manifest.session_id` 同名。目录可保留
 `task_1_..._v4` 这类人工标签；批次身份始终取 manifest 内不可改写的 `session_id`。
+同一批目录重复执行 `stage` 时，程序会重新构建五本 XLSX。新批次完整通过后替换同名暂存批次；
+重建失败时保留旧暂存批次。
 
 从当前 raw 一次重建：
 

@@ -240,7 +240,8 @@ staging_root/batch_YYYYMMDD_HHMMSS_<config-hash>/
 手写，避免同名覆盖和无法追溯。
 
 成功判据：返回 `"passed": true`、`batch_id`、五本工作簿 SHA-256，以及下一条
-`promote` 命令。失败时当前活动批次完全不变，修正原 session 后重新运行整条 `stage`。
+`promote` 命令。重复执行同一批目录时，程序会完整重建；新批次通过后替换同名暂存批次，
+失败时保留旧暂存批次和当前活动批次。修正原 session 后重新运行整条 `stage`。
 
 ### 阶段 3：promote，切换当前论文批次
 
