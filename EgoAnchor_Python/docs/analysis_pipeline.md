@@ -39,8 +39,7 @@ pixi run eval config
 
 ```text
 pixi run eval sessions
-pixi run eval stage <task-1-directory> <task-2-directory> <task-3-directory> <task-4-directory> <task-5-directory>
-pixi run eval promote <stage 返回的 batch_id>
+pixi run eval stage --promote <task-1-directory> <task-2-directory> <task-3-directory> <task-4-directory> <task-5-directory>
 pixi run eval analyze
 pixi run eval copy-assets
 ```

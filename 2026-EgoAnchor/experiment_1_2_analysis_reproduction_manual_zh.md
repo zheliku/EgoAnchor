@@ -126,8 +126,8 @@ src/egoanchor/eval/config/paper.toml
 | -------------------------------------- | ----------------------- | ------------------------------------------------ | ------------------ |
 | `pixi run eval config`               | `batch.toml`          | 终端 JSON                                        | 否                 |
 | `pixi run eval sessions`             | `eval_root`           | session 清单 JSON                                | 否                 |
-| `pixi run eval stage <5 IDs>`        | 五个新 session          | `staging_root/<batch_id>/raw` 和 `workbooks` | 否                 |
-| `pixi run eval promote [batch_id]`   | 一个完整暂存批次        | 新`active_root`，旧批次进入 `archive_root`   | 是                 |
+| `pixi run eval stage --promote <5 IDs>` | 五个新 session       | 暂存、五本工作簿和新`active_root`              | 是                 |
+| `pixi run eval promote [batch_id]`   | 一个已有完整暂存批次    | 新`active_root`，旧批次进入 `archive_root`   | 是，仅恢复路径     |
 | `pixi run eval qc`                   | `active_root/raw`     | QC JSON；必要时生成`events.jsonl`              | 否                 |
 | `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
 | `pixi run eval analyze`              | 五本 Stage 1 XLSX       | 活动批次本地指标、绘图数据、面板和手工引入 TeX   | 否                 |
@@ -182,13 +182,13 @@ pixi run eval sessions
 命令：
 
 ```text
-pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
+pixi run eval stage --promote <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 ```
 
 例如：
 
 ```text
-pixi run eval stage task_1_20260722_120001_controller_right_v4 task_2_20260722_120002_controller_right_v4 task_3_20260722_120003_controller_right_v4 task_4_20260722_120004_controller_right_v4 task_5_20260722_120005_controller_right_v4
+pixi run eval stage --promote task_1_20260722_120001_controller_right_v4 task_2_20260722_120002_controller_right_v4 task_3_20260722_120003_controller_right_v4 task_4_20260722_120004_controller_right_v4 task_5_20260722_120005_controller_right_v4
 ```
 
 输入：五个 `eval_root/<session-directory>` 目录。目录名可保留 `task_N_..._v4` 这类
@@ -230,9 +230,9 @@ staging_root/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-ti
 你能控制的内容：五个 session ID；暂存根目录由 `batch.toml` 控制。批次名自动由任务 1--5 的
 manifest 时间组成。日常可在 `stage` 后使用 `--promote` 自动切换活动批次，不需要手写该名称。
 
-成功判据：返回 `"passed": true`、`batch_id`、五本工作簿 SHA-256，以及下一条
-`promote` 命令。重复执行同一批目录时，程序会完整重建；新批次通过后替换同名暂存批次，
-失败时保留旧暂存批次和当前活动批次。修正原 session 后重新运行整条 `stage`。
+成功判据：返回 `"passed": true`、`active_batch` 和五本工作簿 SHA-256。`--promote` 只在整批
+QC 和工作簿发布成功后才切换活动批次；失败时保留旧暂存批次和当前活动批次。修正原 session 后
+重新运行整条 `stage --promote`。
 
 `stage`、`promote`、`preprocess` 和 `analyze` 的耗时阶段会在终端显示任务进度条和当前步骤。
 进度走 stderr，最终 JSON 结果仍走 stdout。
@@ -439,8 +439,7 @@ pixi run eval analyze
 ```text
 pixi run eval config
 pixi run eval sessions
-pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
-pixi run eval promote <batch_id>
+pixi run eval stage --promote <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 pixi run eval analyze
 pixi run eval copy-assets
 ```
