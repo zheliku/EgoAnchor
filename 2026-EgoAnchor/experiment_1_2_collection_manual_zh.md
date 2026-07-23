@@ -271,26 +271,34 @@ audit_samples/  # 仅在实际保存审计样本时出现
 
 `python_events.jsonl` 由 5090 Python 独占写入，`unity_events.jsonl` 由本机 Unity 独占写入。同步完成后，QC 会在缺少总表时生成 `events.jsonl`；如果任一分片未停止、行数不符、存在丢行或写入失败，QC 返回 2，且不会留下临时或部分总表。不要手工修改内部固定文件、manifest 的 `session_id`，也不要在仍启用 `logs-5090` 时重命名 `data/eval/<session_id>/`；原始目录保持 Python 生成的 session 名即可。
 
-## 九、运行 QC 并归档
+## 九、归档并运行 QC
 
-五项任务采集并同步完成后，在 `EgoAnchor_Python` 目录列出 session：
+五项任务采集并同步完成后，先停止两端 writer 和 Mutagen。把完整 session 从 `data/eval` 移入
+`data/experiments/task_data`，并按下面的格式命名：
+
+```text
+task_<任务号>_v<版本>_<YYYYMMDD_HHMMSS>_<物体>
+```
+
+例如 `task_1_v1_20260724_005757_controller_right`。局部重采只增加对应任务的版本。然后在
+`EgoAnchor_Python` 目录列出可供分析选择的数据：
 
 ```text
 pixi run eval sessions
 ```
 
-再把五个 session ID 交给批次工具，顺序不限：
+默认选择每项任务的最高版本并直接切换活动批次：
 
 ```text
-pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+pixi run eval stage --promote
 ```
 
 返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 的 `transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 都必须严格交替并成对闭合。分析还会检查五项任务覆盖、三个组件消融和两路时序策略的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
 
 实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
 使用相同配置并分别对应任务 1--5。`stage` 会把通过 QC 的副本写入
-`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录，原始 session 仍
-保留在 `data/eval`。不要直接把裸 session 当作长期归档，也不要删除仍未完成同步的 session。
+`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录，原始 session 保留在
+`task_data`。不要移动或删除仍未完成同步的 session。
 
 工作簿和论文结果统一通过 `pixi run eval` 重建，完整命令见
 `experiment_1_2_analysis_reproduction_manual_zh.md`。

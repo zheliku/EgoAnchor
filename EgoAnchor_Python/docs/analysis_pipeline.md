@@ -6,7 +6,9 @@
 ## 数据流
 
 ```text
-data/eval/<session_id>
+data/eval/<session_id>                         # 采集与同步中的原始 session
+  -> 两端停止后移动并重命名
+data/experiments/task_data/task_<N>_v<V>_<YYYYMMDD_HHMMSS>_<object>
   -> stage
   -> _staging/<batch_id>/{raw,workbooks}
   -> promote
@@ -28,6 +30,7 @@ pixi run eval config
 
 `batch.toml` 只控制数据目录、论文图片发布目录和 relay 资源：
 
+- `[paths].task_data_root`：归档后可供 `stage` 自动选择的任务数据目录。
 - `[paths].active_root`：唯一参与论文分析的五项任务批次。
 - `[paths].paper_root`：`copy-assets` 的图片目标根目录。
 - `[copy_assets]`：实验面板和 relay PNG/PDF 的明确来源、目标位置。
@@ -39,13 +42,33 @@ pixi run eval config
 
 ```text
 pixi run eval sessions
-pixi run eval stage --promote <task-1-directory> <task-2-directory> <task-3-directory> <task-4-directory> <task-5-directory>
+pixi run eval stage --promote
 pixi run eval analyze
 pixi run eval copy-assets
 ```
 
-`stage` 参数是 `data/eval/` 下的目录名。目录可保留 `task_1_..._v4` 这类标签；任务编号、批次身份和
-配置一致性以目录内 `manifest.json` 和固定文件集合为准。
+采集和 Mutagen 仍写入 `data/eval/<session_id>`。两端停止且同步完成后，把每个完整 session 移到
+`data/experiments/task_data/`，并按以下格式重命名：
+
+```text
+task_<任务号>_v<版本>_<YYYYMMDD_HHMMSS>_<物体>
+```
+
+例如 `task_1_v1_20260724_005757_controller_right`。时间和物体必须与内部
+`manifest.session_id`、`manifest.object_id` 一致。版本是每项任务独立维护的正整数。默认选择时，
+各任务先取最高版本，再取该版本中时间最新的目录；不按文件修改时间排序。
+
+需要复现指定版本时使用：
+
+```text
+pixi run eval stage --promote --version v1
+pixi run eval stage --promote --task-version 3=v2 --task-version 4=v3
+pixi run eval stage --promote --object controller_right
+```
+
+`--version` 统一限制五项任务，`--task-version` 只覆盖指定任务且可以重复。如果同一目录中有多个物体
+都完整覆盖任务 1--5，必须用 `--object` 指定。目录名只负责候选选择；任务身份和配置一致性仍以
+`manifest.json` 和固定文件集合为准。
 
 `stage` 会完整 QC、复制 raw 并生成五本 `task_N_complete.xlsx`。`promote` 再次复核 raw 与工作簿来源
 摘要，然后原子切换活动批次。正常流程中，`promote` 后直接运行 `analyze`，不需要 `preprocess`。
@@ -71,8 +94,8 @@ data/experiments/experiment_1_2/analysis/
 ```
 
 图 3(d) 的主比较是 *Smoothed KF Extrapolation* 与关闭 StaticLock 的 *Linear/SLERP*；
-*Hermite Interpolation* 是补充条件。图 2(b) 和图 3(d) 对超出阅读范围的点使用图顶空心上三角，
-完整数值仍保留在 `metrics/` 和 `figure_plot_data.xlsx`。
+*Hermite Interpolation* 是补充条件。图 2(b) 和图 3(d) 只绘制冻结纵轴上限内的原始点，完整数值仍
+保留在 `metrics/` 和 `figure_plot_data.xlsx`。
 
 分析主要耗时在 XLSX ZIP/XML 读取、校验与 Python 分组统计，不适合 GPU。现有流程已经避免重复的完整
 工作簿回读，并把校正步长计算合并进同一次 render 扫描。
@@ -110,10 +133,12 @@ pixi run eval rebuild
 工作簿只能只读查看，不要用 Excel 保存后继续正式分析。`figure_plot_data.xlsx` 是审计输出，手工修改它不会
 重绘图片。
 
-## 当前五项 v4 命令
+## 常用完整命令
 
 ```powershell
-pixi run eval stage --promote task_1_20260724_005757_controller_right_v4_2 task_2_20260723_215645_controller_right_v4 task_3_20260723_215941_controller_right_v4 task_4_20260723_223641_controller_right_v4_2 task_5_20260723_223421_controller_right_v4 && pixi run eval analyze && pixi run eval copy-assets
+pixi run eval stage --promote
+pixi run eval analyze
+pixi run eval copy-assets
 ```
 
 内部批次名由任务 1--5 的 manifest 时间按任务号组成。它确定地表示整组输入，局部重采任一任务都会

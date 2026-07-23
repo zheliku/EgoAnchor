@@ -109,6 +109,26 @@ class EvalBoundaryTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 0)
         self.assertIn("当前五本 XLSX", output.getvalue())
 
+    def test_stage_rejects_removed_directory_arguments(self) -> None:
+        """stage 不再接受五个长目录名，防止旧入口继续被误用。"""
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                eval_cli.build_parser().parse_args(["stage", "task_1_directory"])
+
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_stage_accepts_short_version_selectors(self) -> None:
+        """stage 接受统一版本、逐任务版本和对象筛选。"""
+
+        args = eval_cli.build_parser().parse_args(
+            ["stage", "--version", "v2", "--task-version", "3=v4", "--object", "cube"]
+        )
+
+        self.assertEqual(args.version, 2)
+        self.assertEqual(args.task_version, ["3=v4"])
+        self.assertEqual(args.object_name, "cube")
+
     def test_failed_qc_payload_returns_exit_code_two(self) -> None:
         """QC 完整报告为失败时，CLI 必须保留 JSON 并返回退出码二。"""
 

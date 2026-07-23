@@ -10,8 +10,9 @@ import subprocess
 import sys
 import tomllib
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from tqdm import tqdm
 
@@ -42,6 +43,12 @@ _BATCH_ID_PATTERN = re.compile(r"^batch_(?:\d{8}_\d{6})(?:_\d{8}_\d{6}){4}$")
 
 _SESSION_TIME_PATTERN = re.compile(r"^(?P<date>\d{8})_(?P<time>\d{6})_")
 """正式 session ID 中用于构造稳定批次名的时间部分。"""
+
+_TASK_DATA_PATTERN = re.compile(
+    r"^task_(?P<task>[1-5])_v(?P<version>[1-9]\d*)_"
+    r"(?P<date>\d{8})_(?P<time>\d{6})_(?P<object>.+)$"
+)
+"""任务数据目录名的冻结格式。"""
 
 _COMMON_MANIFEST_FIELDS = (
     "config_hash",
@@ -134,6 +141,38 @@ class SessionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskDataEntry:
+    """一个从规范目录名识别出的可选任务数据目录。"""
+
+    directory: Path
+    """位于 task_data_root 下的完整目录路径。"""
+
+    task_number: int
+    """目录名声明的任务编号。"""
+
+    version: int
+    """目录名中的数值版本；比较时不按字符串排序。"""
+
+    timestamp: str
+    """目录名中的采集时间，格式为 YYYYMMDD_HHMMSS。"""
+
+    object_name: str
+    """目录名中的对象标识。"""
+
+    def to_dict(self) -> dict[str, Any]:
+        """返回适合 CLI JSON 输出的目录摘要。"""
+
+        return {
+            "directory": self.directory.name,
+            "task_number": self.task_number,
+            "version": self.version,
+            "version_label": f"v{self.version}",
+            "timestamp": self.timestamp,
+            "object": self.object_name,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class AssetCopy:
     """一项经配置允许复制到论文目录的图片或 PDF。"""
 
@@ -151,8 +190,8 @@ class BatchPaths:
     project_root: Path
     """包含 pixi.toml 的 EgoAnchor_Python 根目录。"""
 
-    eval_root: Path
-    """新采集 session 的同步暂存目录。"""
+    task_data_root: Path
+    """人工归档并按任务、版本命名的原始日志目录。"""
 
     staging_root: Path
     """新批次通过全部检查前的临时父目录。"""
@@ -192,6 +231,9 @@ class BatchArtifact:
     workbook_sha256: dict[str, str]
     """五本 Stage 1 工作簿文件名到 SHA-256 的映射。"""
 
+    selected_task_data: tuple[str, ...]
+    """本批次自动或显式选择的五个源目录名。"""
+
     def to_dict(self) -> dict[str, Any]:
         """返回适合 CLI JSON 输出的普通字典。"""
 
@@ -200,6 +242,7 @@ class BatchArtifact:
             "batch_id": self.batch_id,
             "root": str(self.root),
             "sessions": [item.to_dict() for item in self.sessions],
+            "selected_task_data": list(self.selected_task_data),
             "workbook_sha256": dict(self.workbook_sha256),
             "next_command": f"pixi run eval promote {self.batch_id}",
         }
@@ -228,7 +271,7 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     if not isinstance(raw_copy_assets, dict):
         raise ValueError("batch.toml 必须包含 [copy_assets]")
 
-    eval_root = _resolve_data_path(base, raw_paths, "eval_root")
+    task_data_root = _resolve_data_path(base, raw_paths, "task_data_root")
     staging_root = _resolve_data_path(base, raw_paths, "staging_root")
     archive_root = _resolve_data_path(base, raw_paths, "archive_root")
     active_root = _resolve_data_path(base, raw_paths, "active_root")
@@ -240,9 +283,9 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         directory=True,
     )
     relay_assets = _resolve_relay_assets(base, paper_root, raw_copy_assets)
-    managed = (eval_root, staging_root, archive_root, active_root)
+    managed = (task_data_root, staging_root, archive_root, active_root)
     if len(set(managed)) != len(managed):
-        raise ValueError("batch.toml 的 eval/staging/archive/active 路径必须互不相同")
+        raise ValueError("batch.toml 的 task_data/staging/archive/active 路径必须互不相同")
     for index, left in enumerate(managed):
         for right in managed[index + 1:]:
             if left.is_relative_to(right) or right.is_relative_to(left):
@@ -251,7 +294,7 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         raise ValueError("paper_root 不得与任何托管数据目录重叠")
     return BatchPaths(
         project_root=base,
-        eval_root=eval_root,
+        task_data_root=task_data_root,
         staging_root=staging_root,
         archive_root=archive_root,
         active_root=active_root,
@@ -271,7 +314,7 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
         "passed": True,
         "configuration_file": str(paths.config_path),
         "paths": {
-            "eval_root": str(paths.eval_root),
+            "task_data_root": str(paths.task_data_root),
             "staging_root": str(paths.staging_root),
             "archive_root": str(paths.archive_root),
             "active_root": str(active),
@@ -288,11 +331,11 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "output": "stdout JSON",
             },
             "sessions": {
-                "input": str(paths.eval_root),
+                "input": str(paths.task_data_root),
                 "output": "stdout JSON",
             },
             "stage": {
-                "input": str(paths.eval_root / "<session_id>"),
+                "input": str(paths.task_data_root / "task_<N>_v<V>_<time>_<object>"),
                 "output": str(paths.staging_root / "<batch_id>"),
             },
             "promote": {
@@ -337,17 +380,29 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
     }
 
 
-def list_eval_sessions(root: Path | None = None) -> list[dict[str, Any]]:
-    """列出 `data/eval` 下可见 session 的任务和配置摘要。"""
+def list_task_data(root: Path | None = None) -> list[dict[str, Any]]:
+    """列出 task_data_root 的目录名解析结果和 manifest 摘要。"""
 
     paths = load_batch_paths(root)
-    if not paths.eval_root.is_dir():
+    if not paths.task_data_root.is_dir():
         return []
     rows: list[dict[str, Any]] = []
-    for session_dir in sorted(path for path in paths.eval_root.iterdir() if path.is_dir()):
+    for session_dir in sorted(path for path in paths.task_data_root.iterdir() if path.is_dir()):
+        try:
+            entry = _parse_task_data_entry(session_dir)
+        except ValueError as error:
+            rows.append({"directory": session_dir.name, "recognized_name": False, "error": str(error)})
+            continue
         manifest_path = session_dir / "manifest.json"
         if not manifest_path.is_file():
-            rows.append({"directory": session_dir.name, "valid_manifest": False, "error": "缺少 manifest.json"})
+            rows.append(
+                {
+                    **entry.to_dict(),
+                    "recognized_name": True,
+                    "valid_manifest": False,
+                    "error": "缺少 manifest.json",
+                }
+            )
             continue
         try:
             manifest = _read_json(manifest_path)
@@ -356,7 +411,8 @@ def list_eval_sessions(root: Path | None = None) -> list[dict[str, Any]]:
             completed_numbers = [item.get("task_number") for item in completed] if isinstance(completed, list) else []
             rows.append(
                 {
-                    "directory": session_dir.name,
+                    **entry.to_dict(),
+                    "recognized_name": True,
                     "valid_manifest": True,
                     "session_id": manifest.get("session_id"),
                     "completed_tasks": completed_numbers,
@@ -366,28 +422,43 @@ def list_eval_sessions(root: Path | None = None) -> list[dict[str, Any]]:
                 }
             )
         except (OSError, ValueError) as error:
-            rows.append({"directory": session_dir.name, "valid_manifest": False, "error": str(error)})
+            rows.append(
+                {
+                    **entry.to_dict(),
+                    "recognized_name": True,
+                    "valid_manifest": False,
+                    "error": str(error),
+                }
+            )
     return rows
 
 
 def stage_batch(
-    session_directories: Sequence[str],
+    version: int | None = None,
+    task_versions: Mapping[int, int] | None = None,
+    object_name: str | None = None,
     *,
     root: Path | None = None,
     batch_id: str | None = None,
 ) -> BatchArtifact:
-    """校验五个 eval session，复制到暂存区并生成五本工作簿。"""
+    """从 task_data 自动选择五项任务，复制到暂存区并生成工作簿。"""
 
     paths = load_batch_paths(root)
     base = paths.project_root
-    if len(session_directories) != len(TASK_SPECS):
-        raise ValueError("stage 必须接收覆盖任务 1--5 的五个 session 目录")
-    if len(set(session_directories)) != len(session_directories):
-        raise ValueError("五项任务必须来自五个不同 session")
+    entries = select_task_data(
+        root=root,
+        version=version,
+        task_versions=task_versions,
+        object_name=object_name,
+    )
 
+    _report_progress("stage: 已选择以下五项任务数据")
+    for entry in entries:
+        _report_progress(f"  Task {entry.task_number}: {entry.directory.name}")
+    _validate_task_data_names(entries)
+    source_dirs = tuple(entry.directory for entry in entries)
+    source_dirs, summaries = _map_eval_sessions(source_dirs)
     _report_progress("stage: 检查五个原始 session")
-    unordered_dirs = _eval_session_dirs(paths.eval_root, session_directories)
-    source_dirs, summaries = _map_eval_sessions(unordered_dirs)
     _finalize_and_require_qc(source_dirs)
 
     resolved_batch_id = batch_id or _batch_id(summaries)
@@ -419,6 +490,7 @@ def stage_batch(
         root=destination,
         sessions=summaries,
         workbook_sha256={artifact.path.name: artifact.sha256 for artifact in artifacts},
+        selected_task_data=tuple(entry.directory.name for entry in entries),
     )
 
 
@@ -711,24 +783,146 @@ def _task_dirs(raw_root: Path) -> tuple[Path, ...]:
     return tuple(raw_root / spec.directory_name for spec in TASK_SPECS)
 
 
-def _eval_session_dirs(eval_root: Path, directory_names: Sequence[str]) -> tuple[Path, ...]:
-    """把 session 目录名限制在 data/eval 内，拒绝绝对路径和目录穿越。"""
+def select_task_data(
+    *,
+    root: Path | None = None,
+    version: int | None = None,
+    task_versions: Mapping[int, int] | None = None,
+    object_name: str | None = None,
+) -> tuple[TaskDataEntry, ...]:
+    """按任务选择指定版本或最高版本中的最新采集目录。"""
 
-    normalized_root = eval_root.resolve()
-    directories: list[Path] = []
-    for directory_name in directory_names:
-        candidate_name = Path(directory_name)
-        if candidate_name.is_absolute() or candidate_name.name != directory_name or directory_name in {".", ".."}:
-            raise ValueError(f"session 参数只能是 data/eval 下的目录名：{directory_name}")
-        candidate = (normalized_root / directory_name).resolve()
-        if not candidate.is_relative_to(normalized_root):
-            raise ValueError(f"session 目录越出 data/eval：{directory_name}")
-        directories.append(candidate)
-    return tuple(directories)
+    paths = load_batch_paths(root)
+    if not paths.task_data_root.is_dir():
+        raise FileNotFoundError(f"任务数据目录不存在：{paths.task_data_root}")
+    normalized_version = _require_version(version, "version") if version is not None else None
+    normalized_task_versions = _normalize_task_versions(task_versions)
+    entries: list[TaskDataEntry] = []
+    for path in paths.task_data_root.iterdir():
+        if not path.is_dir():
+            continue
+        try:
+            entries.append(_parse_task_data_entry(path))
+        except ValueError:
+            continue
+    if not entries:
+        raise ValueError(f"task_data_root 中没有可识别的任务目录：{paths.task_data_root}")
+
+    selected_object = _select_object(
+        entries,
+        normalized_version,
+        normalized_task_versions,
+        object_name,
+    )
+    selected: list[TaskDataEntry] = []
+    for spec in TASK_SPECS:
+        candidates = [
+            entry
+            for entry in entries
+            if entry.task_number == spec.number and entry.object_name == selected_object
+        ]
+        requested_version = normalized_task_versions.get(spec.number, normalized_version)
+        if requested_version is None and candidates:
+            requested_version = max(entry.version for entry in candidates)
+        candidates = [entry for entry in candidates if entry.version == requested_version]
+        if not candidates:
+            label = f"v{requested_version}" if requested_version is not None else "任意版本"
+            raise ValueError(f"对象 {selected_object} 的任务 {spec.number} 缺少 {label} 数据")
+        selected.append(max(candidates, key=lambda entry: entry.timestamp))
+    return tuple(selected)
+
+
+def _parse_task_data_entry(directory: Path) -> TaskDataEntry:
+    """解析并验证一个 task_data 直接子目录的冻结名称。"""
+
+    resolved = directory.resolve()
+    if not resolved.is_relative_to(directory.parent.resolve()):
+        raise ValueError("任务数据目录不得通过链接指向 task_data_root 外部")
+    match = _TASK_DATA_PATTERN.fullmatch(directory.name)
+    if match is None:
+        raise ValueError(
+            "目录名必须为 task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>"
+        )
+    timestamp = f"{match.group('date')}_{match.group('time')}"
+    try:
+        datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+    except ValueError as error:
+        raise ValueError(f"目录时间无效：{timestamp}") from error
+    return TaskDataEntry(
+        directory=resolved,
+        task_number=int(match.group("task")),
+        version=int(match.group("version")),
+        timestamp=timestamp,
+        object_name=match.group("object"),
+    )
+
+
+def _select_object(
+    entries: Sequence[TaskDataEntry],
+    version: int | None,
+    task_versions: Mapping[int, int],
+    requested_object: str | None,
+) -> str:
+    """选择唯一能覆盖五项任务的对象，多个对象时要求显式指定。"""
+
+    if requested_object is not None:
+        if not requested_object.strip():
+            raise ValueError("--object 不能为空")
+        return requested_object
+    complete_objects: list[str] = []
+    for candidate_object in sorted({entry.object_name for entry in entries}):
+        covered = set()
+        for entry in entries:
+            required = task_versions.get(entry.task_number, version)
+            if entry.object_name == candidate_object and (required is None or entry.version == required):
+                covered.add(entry.task_number)
+        if covered == {spec.number for spec in TASK_SPECS}:
+            complete_objects.append(candidate_object)
+    if len(complete_objects) == 1:
+        return complete_objects[0]
+    if not complete_objects:
+        raise ValueError("没有一个对象在当前版本条件下完整覆盖任务 1--5")
+    choices = ", ".join(complete_objects)
+    raise ValueError(f"多个对象满足选择条件，请使用 --object 指定：{choices}")
+
+
+def _normalize_task_versions(task_versions: Mapping[int, int] | None) -> dict[int, int]:
+    """验证逐任务版本覆盖，并返回可安全读取的普通字典。"""
+
+    normalized: dict[int, int] = {}
+    for task_number, version in (task_versions or {}).items():
+        if isinstance(task_number, bool) or not isinstance(task_number, int) or not 1 <= task_number <= 5:
+            raise ValueError("task_versions 的任务编号必须在 1--5 内")
+        normalized[task_number] = _require_version(version, f"任务 {task_number} 版本")
+    return normalized
+
+
+def _require_version(version: int, label: str) -> int:
+    """要求版本为不带前导语义的正整数。"""
+
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise ValueError(f"{label} 必须为正整数")
+    return version
+
+
+def _validate_task_data_names(
+    entries: Sequence[TaskDataEntry],
+) -> None:
+    """确认目录标签与 manifest 的任务、时间和对象身份一致。"""
+
+    for entry in entries:
+        spec = TASK_SPECS[entry.task_number - 1]
+        summary = _session_summary(entry.directory, spec)
+        match = _SESSION_TIME_PATTERN.match(summary.session_id)
+        session_timestamp = f"{match.group('date')}_{match.group('time')}" if match else ""
+        if entry.timestamp != session_timestamp:
+            raise ValueError(f"{entry.directory.name} 的时间与 manifest.session_id 不一致")
+        if entry.object_name != summary.object_id:
+            raise ValueError(f"{entry.directory.name} 的物体与 manifest.object_id 不一致")
 
 
 def _map_eval_sessions(task_dirs: Sequence[Path]) -> tuple[tuple[Path, ...], tuple[SessionSummary, ...]]:
-    """按 completed_tasks 自动把五个 eval session 映射到任务 1--5。"""
+    """按 completed_tasks 自动把五个任务数据目录映射到任务 1--5。"""
 
     mapped: dict[int, tuple[Path, SessionSummary]] = {}
     for task_dir in task_dirs:
@@ -1051,16 +1245,18 @@ __all__ = [
     "EXPECTED_MATRIX_ID",
     "SessionSummary",
     "TASK_SPECS",
+    "TaskDataEntry",
     "TaskSpec",
     "analyze_current",
     "copy_current_assets",
     "describe_workflow",
-    "list_eval_sessions",
+    "list_task_data",
     "load_batch_paths",
     "preprocess_current",
     "project_root",
     "promote_batch",
     "qc_current",
     "rebuild_current",
+    "select_task_data",
     "stage_batch",
 ]

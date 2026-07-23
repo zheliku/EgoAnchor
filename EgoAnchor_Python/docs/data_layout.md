@@ -6,8 +6,9 @@ v1、v2、v3 或分析实现版本号；数据身份由 manifest、工作簿 SHA
 
 ~~~text
 data/
-├─ eval/                              # 新采集 session 的暂存区
+├─ eval/                              # 新采集和 Mutagen 同步中的 session
 └─ experiments/
+   ├─ task_data/                      # 按任务、版本、时间和物体命名的原始 session
    ├─ _staging/experiment_1_2/        # 新批次通过整批 QC 前的临时位置
    ├─ _archive/experiment_1_2/        # 已退出当前论文的只读冷归档
    └─ experiment_1_2/                 # 当前论文唯一活动批次
@@ -34,11 +35,19 @@ data/
 
 ## 各层职责
 
-data/eval/ 只接收 Unity/Python 新生成的 session 目录。Mutagen 同步、两端停止和 QC
-完成前，不移动或重命名其中的 session。
+data/eval/ 只接收 Unity/Python 新生成的 session。Mutagen 同步和两端写入完成前，不移动或重命名
+其中的目录。确认停止后，把完整 session 移入 `data/experiments/task_data/`，名称固定为：
+
+```text
+task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>
+```
+
+时间和物体必须对应内部 manifest。版本按任务独立递增，局部重采只需要增加对应任务的版本。
+`pixi run eval stage` 默认从每项任务的最高版本中选择时间最新的目录，也可以用 `--version`、
+`--task-version` 和 `--object` 固定选择。
 
 当前 Stage 1 不拆分多任务 session，也不合并多个 session。正式批次使用五个不同 session，
-每个 session 只完成一个 task。`pixi run eval stage` 会先执行整批 QC，再复制到
+每个 session 只完成一个 task。`pixi run eval stage` 会先自动选出五项数据并执行整批 QC，再复制到
 experiments/_staging/experiment_1_2/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-time>/raw/，并把外层副本
 命名为固定 task 名；内部 session_id 和固定文件内容不变。
 
@@ -58,8 +67,8 @@ analysis/metrics/ 保存完整精度指标，供审计和复算使用。analysis
 输入，也没有独立的 plot XLSX 到图片转换命令。`analyze` 从五本工作簿同时生成该文件和
 `analysis/figures/` 下的 PNG/PDF 面板，以及 `analysis/tex/` 下可审阅的 TeX 片段。
 
-以上操作路径统一从 `src/egoanchor/eval/config/batch.toml` 读取。人工归档和分析使用
-`pixi run eval`，不需要设置 shell 环境变量或在命令行逐项传入路径。
+以上操作路径统一从 `src/egoanchor/eval/config/batch.toml` 读取。`task_data_root` 可以改到其他
+`data/` 子目录。人工归档和分析使用 `pixi run eval`，不需要设置 shell 环境变量或输入五个长目录名。
 
 provenance/strategy_label_migration.json 保存当前批次完成策略身份统一时的文件摘要。该文件
 属于数据来源记录，不能作为可删除的普通中间产物处理。

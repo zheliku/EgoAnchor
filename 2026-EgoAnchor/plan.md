@@ -81,8 +81,7 @@ pilot 冻结参数后不再根据 v4 正式结果调参。
 依次运行：
 
 ```text
-pixi run eval stage <5 session IDs>
-pixi run eval promote <batch_id>
+pixi run eval stage --promote
 pixi run eval analyze
 ```
 

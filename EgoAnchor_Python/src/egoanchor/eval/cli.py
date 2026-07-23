@@ -12,7 +12,7 @@ from .batch import (
     analyze_current,
     copy_current_assets,
     describe_workflow,
-    list_eval_sessions,
+    list_task_data,
     preprocess_current,
     promote_batch,
     qc_current,
@@ -43,15 +43,28 @@ def build_parser() -> argparse.ArgumentParser:
     config = subparsers.add_parser("config", help="显示当前生效的数据路径和图片发布位置")
     config.set_defaults(handler=_run_config)
 
-    sessions = subparsers.add_parser("sessions", help="列出新采集暂存区中的 session")
+    sessions = subparsers.add_parser("sessions", help="列出任务数据目录中的可选 session")
     sessions.set_defaults(handler=_run_sessions)
 
-    stage = subparsers.add_parser("stage", help="暂存五个 session，执行 QC 并生成工作簿")
+    stage = subparsers.add_parser("stage", help="自动选择五项任务数据，执行 QC 并生成工作簿")
     stage.add_argument(
-        "session_directories",
-        nargs=5,
-        metavar="SESSION_DIR",
-        help="填写 data/eval 下的五个 session 目录名，程序按 completed_tasks 自动映射任务",
+        "--version",
+        type=_parse_version,
+        metavar="VERSION",
+        help="五项任务统一使用指定版本，例如 2 或 v2；省略时各任务使用最高版本",
+    )
+    stage.add_argument(
+        "--task-version",
+        action="append",
+        default=[],
+        metavar="TASK=VERSION",
+        help="覆盖单项任务版本，可重复使用，例如 --task-version 3=v2",
+    )
+    stage.add_argument(
+        "--object",
+        dest="object_name",
+        metavar="OBJECT",
+        help="限制目录名中的物体；存在多个完整物体批次时必须指定",
     )
     stage.add_argument(
         "--promote",
@@ -117,14 +130,18 @@ def _run_config(_args: argparse.Namespace) -> dict[str, object]:
 def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:
     """列出 eval session，不修改任何日志。"""
 
-    rows = list_eval_sessions()
+    rows = list_task_data()
     return {"passed": True, "count": len(rows), "sessions": rows}
 
 
 def _run_stage(args: argparse.Namespace) -> dict[str, object]:
     """暂存五个 session 并返回下一条 Pixi 命令。"""
 
-    artifact = stage_batch(args.session_directories)
+    artifact = stage_batch(
+        version=args.version,
+        task_versions=_parse_task_versions(args.task_version),
+        object_name=args.object_name,
+    )
     if not args.promote:
         return artifact.to_dict()
     promoted = promote_batch(artifact.batch_id)
@@ -168,6 +185,33 @@ def _run_rebuild(_args: argparse.Namespace) -> dict[str, object]:
     """从当前 raw 完整重建本地分析产物。"""
 
     return rebuild_current()
+
+
+def _parse_version(value: str) -> int:
+    """把命令行中的 `2` 或 `v2` 解析为正整数版本。"""
+
+    normalized = value[1:] if value.lower().startswith("v") else value
+    if not normalized.isdigit() or normalized.startswith("0"):
+        raise argparse.ArgumentTypeError("版本必须是正整数，例如 2 或 v2")
+    return int(normalized)
+
+
+def _parse_task_versions(values: Sequence[str]) -> dict[int, int]:
+    """解析可重复的 TASK=VERSION，并拒绝重复任务覆盖。"""
+
+    parsed: dict[int, int] = {}
+    for value in values:
+        task_text, separator, version_text = value.partition("=")
+        if separator != "=" or task_text not in {"1", "2", "3", "4", "5"}:
+            raise ValueError("--task-version 必须写成 TASK=VERSION，TASK 范围为 1--5")
+        task_number = int(task_text)
+        if task_number in parsed:
+            raise ValueError(f"任务 {task_number} 的版本重复指定")
+        try:
+            parsed[task_number] = _parse_version(version_text)
+        except argparse.ArgumentTypeError as error:
+            raise ValueError(f"任务 {task_number} 的{error}") from error
+    return parsed
 
 
 __all__ = [

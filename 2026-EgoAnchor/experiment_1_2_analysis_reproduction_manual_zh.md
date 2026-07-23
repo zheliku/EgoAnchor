@@ -25,8 +25,15 @@ Unity 和 Python 同步回来的原始 session 位于：
 data/eval/<session_id>/
 ```
 
-这里是新数据入口，不是论文长期归档。每个正式 session 只能完成一个任务。实验一/二的一批
-完整数据由五个不同 session 组成，并且恰好覆盖任务 1--5。
+这里是采集和同步入口，不是分析源。每个正式 session 只能完成一个任务。两端停止并完成同步后，
+把 session 移到：
+
+```text
+data/experiments/task_data/task_<任务号>_v<版本>_<YYYYMMDD_HHMMSS>_<物体>/
+```
+
+时间和物体必须与内部 manifest 一致。实验一/二的一批完整数据由五个不同 session 组成，并且
+恰好覆盖任务 1--5。
 
 ### 2. 当前活动批次
 
@@ -74,7 +81,7 @@ src/egoanchor/eval/config/batch.toml
 
 ```toml
 [paths]
-eval_root = "data/eval" # Unity/Python 新采集 session 的本机同步暂存目录。
+task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
 staging_root = "data/experiments/_staging/experiment_1_2" # 新批次完成 QC 和工作簿发布前的临时目录。
 archive_root = "data/experiments/_archive/experiment_1_2" # 退出当前论文的完整旧批次冷归档目录。
 active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动批次目录。
@@ -85,7 +92,7 @@ paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的�
 
 可以修改：
 
-- `eval_root`：新 session 同步到了其他 `data/` 子目录时修改。
+- `task_data_root`：归档后的任务数据放在其他 `data/` 子目录时修改。
 - `staging_root`、`archive_root`：需要调整暂存和冷归档位置时修改。
 - `active_root`：需要维护另一套完整实验批次时修改。
 - `paper_root`：图片发布目标根目录改变时修改。
@@ -125,8 +132,8 @@ src/egoanchor/eval/config/paper.toml
 | 命令                                   | 主要输入                | 主要输出或写入                                   | 是否改当前活动批次 |
 | -------------------------------------- | ----------------------- | ------------------------------------------------ | ------------------ |
 | `pixi run eval config`               | `batch.toml`          | 终端 JSON                                        | 否                 |
-| `pixi run eval sessions`             | `eval_root`           | session 清单 JSON                                | 否                 |
-| `pixi run eval stage --promote <5 IDs>` | 五个新 session       | 暂存、五本工作簿和新`active_root`              | 是                 |
+| `pixi run eval sessions`             | `task_data_root`      | 可识别任务目录清单 JSON                          | 否                 |
+| `pixi run eval stage --promote`      | 自动选择的五项任务数据 | 暂存、五本工作簿和新`active_root`              | 是                 |
 | `pixi run eval promote [batch_id]`   | 一个已有完整暂存批次    | 新`active_root`，旧批次进入 `archive_root`   | 是，仅恢复路径     |
 | `pixi run eval qc`                   | `active_root/raw`     | QC JSON；必要时生成`events.jsonl`              | 否                 |
 | `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
@@ -159,7 +166,16 @@ pixi run mutagen project terminate
 
 writer 或 Mutagen 仍在写入时，不要执行 `stage`，也不要移动、重命名或删除 session。
 
-### 阶段 1：sessions，只查看候选 session
+### 阶段 1：归档并查看候选 session
+
+先把已经停止同步的五个 session 从 `data/eval` 移到 `task_data_root`。目录名格式为：
+
+```text
+task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>
+```
+
+局部重采时只增加该任务的版本。例如 Task 3 的第二次正式数据可命名为
+`task_3_v2_20260724_034253_controller_right`。
 
 命令：
 
@@ -167,12 +183,12 @@ writer 或 Mutagen 仍在写入时，不要执行 `stage`，也不要移动、�
 pixi run eval sessions
 ```
 
-输入：`batch.toml` 的 `eval_root`。
+输入：`batch.toml` 的 `task_data_root`。
 
-输出：终端 JSON，包含目录名、`session_id`、`completed_tasks`、`config_hash`、
-`python_state` 和 `variant_matrix_id`。该命令不修改任何日志。
+输出：终端 JSON，包含目录解析出的任务、版本、时间、物体，以及 `session_id`、`completed_tasks`、
+`config_hash`、`python_state` 和 `variant_matrix_id`。非法名称会显示错误，不会被静默忽略。
 
-你能控制的内容：不能通过命令改路径；需要改入口目录时修改 `batch.toml` 的 `eval_root`。
+你能控制的内容：需要改入口目录时修改 `batch.toml` 的 `task_data_root`。
 
 成功判据：找得到准备归档的五个 session；每个 session 的 `python_state` 是
 `python_stopped`，五项任务编号没有重复。
@@ -182,19 +198,24 @@ pixi run eval sessions
 命令：
 
 ```text
-pixi run eval stage --promote <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
+pixi run eval stage --promote
 ```
 
-例如：
+固定全部任务使用 v2：
 
 ```text
-pixi run eval stage --promote task_1_20260722_120001_controller_right_v4 task_2_20260722_120002_controller_right_v4 task_3_20260722_120003_controller_right_v4 task_4_20260722_120004_controller_right_v4 task_5_20260722_120005_controller_right_v4
+pixi run eval stage --promote --version v2
 ```
 
-输入：五个 `eval_root/<session-directory>` 目录。目录名可保留 `task_N_..._v4` 这类
-人工标签，不要求与 manifest 的 `session_id` 相同。输入顺序不限，程序根据 manifest 的
-`completed_tasks` 自动映射任务 1--5；批次名固定按任务 1--5 manifest `session_id` 的日期时间组成，
-因此局部重采任一任务都会得到不同批次。
+只指定局部重采版本：
+
+```text
+pixi run eval stage --promote --task-version 3=v2 --task-version 4=v3
+```
+
+默认情况下，每项任务选择最高数值版本，再从该版本选择目录时间最新者。`--version` 统一限制
+五项任务，`--task-version` 覆盖指定任务。如果多个物体都完整覆盖五项任务，再加
+`--object <物体>`。批次名仍按选中任务 1--5 的 manifest `session_id` 时间组成。
 
 检查内容：
 
@@ -225,10 +246,10 @@ staging_root/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-ti
 
 需要特别注意：如果 session 中缺少派生的 `events.jsonl`，`stage` 会先根据
 `python_events.jsonl` 和 `unity_events.jsonl` 在原 session 内确定性生成它。因此
-`data/eval` 原件不会被重命名或删除，但并非绝对零写入。
+`task_data_root` 中的源目录不会被重命名或删除，但并非绝对零写入。
 
-你能控制的内容：五个 session ID；暂存根目录由 `batch.toml` 控制。批次名自动由任务 1--5 的
-manifest 时间组成。日常可在 `stage` 后使用 `--promote` 自动切换活动批次，不需要手写该名称。
+你能控制的内容：统一版本、逐任务版本和物体筛选；暂存根目录由 `batch.toml` 控制。批次名自动由
+任务 1--5 的 manifest 时间组成。日常使用 `--promote` 自动切换活动批次，不需要手写批次名。
 
 成功判据：返回 `"passed": true`、`active_batch` 和五本工作簿 SHA-256。`--promote` 只在整批
 QC 和工作簿发布成功后才切换活动批次；失败时保留旧暂存批次和当前活动批次。修正原 session 后
@@ -263,7 +284,8 @@ pixi run eval promote <batch_id>
 成功判据：返回新的 `active_root` 和旧批次 `archived_root`。新活动批次此时只有 `raw/` 和
 `workbooks/`；还要执行 `analyze` 才会得到这一批对应的本地分析结果。
 
-确认新批次的工作簿和本地分析结果都正确后，才可以清理 `data/eval` 中对应的五个 session。
+确认 `task_data_root` 中的原始 session 已完整归档并且新批次分析正确后，再清理不再需要的
+`data/eval` 同步副本。
 继续采集前重新启动同步：
 
 ```text
@@ -439,7 +461,7 @@ pixi run eval analyze
 ```text
 pixi run eval config
 pixi run eval sessions
-pixi run eval stage --promote <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
+pixi run eval stage --promote
 pixi run eval analyze
 pixi run eval copy-assets
 ```
@@ -478,5 +500,5 @@ pixi run eval copy-assets
 脚本时，使用包级入口：
 
 ```python
-from egoanchor.eval import describe_workflow, list_eval_sessions, qc_current
+from egoanchor.eval import describe_workflow, list_task_data, qc_current
 ```
