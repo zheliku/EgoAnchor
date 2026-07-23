@@ -104,6 +104,23 @@ class BatchWorkflowTests(unittest.TestCase):
                     (artifact.root / "raw" / _task_directory(number) / "audit_samples").exists()
                 )
 
+    def test_stage_accepts_labeled_eval_directories(self) -> None:
+        """目录可保留 task/v4 人工标签，数据身份仍以 manifest.session_id 为准。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            session_ids = _write_batch_sessions(root)
+            labeled_directories: list[str] = []
+            for number, session_id in enumerate(session_ids, start=1):
+                label = f"task_{number}_{session_id}_v4"
+                (root / "data" / "eval" / session_id).rename(root / "data" / "eval" / label)
+                labeled_directories.append(label)
+
+            artifact = stage_batch(tuple(labeled_directories), root=root)
+
+            self.assertEqual([item.session_id for item in artifact.sessions], list(session_ids))
+            self.assertEqual([item.task_number for item in artifact.sessions], [1, 2, 3, 4, 5])
+
     def test_stage_rejects_paths_outside_eval(self) -> None:
         """session 参数只接受 data/eval 下的 basename。"""
 
@@ -151,6 +168,29 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertTrue(paths.active_root.is_dir())
             self.assertTrue(artifact.root.is_dir())
             self.assertFalse((paths.archive_root / artifact.batch_id).exists())
+
+    def test_promote_archives_legacy_active_batch(self) -> None:
+        """切换新矩阵前允许验证并归档旧矩阵活动批次。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            session_ids = _write_batch_sessions(root)
+            paths = load_batch_paths(root)
+            for number, session_id in enumerate(session_ids, start=1):
+                source = root / "data" / "eval" / session_id
+                destination = paths.active_root / "raw" / _task_directory(number)
+                shutil.copytree(source, destination)
+                manifest_path = destination / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["variant_matrix_id"] = "exp12_9_linear_v2"
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            artifact = stage_batch(session_ids, root=root)
+            result = promote_batch(artifact.batch_id, root=root)
+
+            self.assertEqual(result["active_batch"], artifact.batch_id)
+            self.assertTrue((paths.active_root / "raw").is_dir())
+            self.assertTrue(Path(result["archived_root"]).is_dir())
 
     def test_cli_exposes_one_fixed_path_workflow(self) -> None:
         """唯一 CLI 只暴露固定路径的人工工作流。"""

@@ -48,10 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     stage = subparsers.add_parser("stage", help="暂存五个 session，执行 QC 并生成工作簿")
     stage.add_argument(
-        "session_ids",
+        "session_directories",
         nargs=5,
-        metavar="SESSION_ID",
-        help="填写五个 session ID，程序按 completed_tasks 自动映射任务",
+        metavar="SESSION_DIR",
+        help="填写 data/eval 下的五个 session 目录名，程序按 completed_tasks 自动映射任务",
     )
     stage.set_defaults(handler=_run_stage)
 
@@ -118,7 +118,7 @@ def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:
 def _run_stage(args: argparse.Namespace) -> dict[str, object]:
     """暂存五个 session 并返回下一条 Pixi 命令。"""
 
-    return stage_batch(args.session_ids).to_dict()
+    return stage_batch(args.session_directories).to_dict()
 
 
 def _run_promote(args: argparse.Namespace) -> dict[str, object]:

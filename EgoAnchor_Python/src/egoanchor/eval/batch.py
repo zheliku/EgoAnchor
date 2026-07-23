@@ -343,7 +343,7 @@ def list_eval_sessions(root: Path | None = None) -> list[dict[str, Any]]:
 
 
 def stage_batch(
-    session_ids: Sequence[str],
+    session_directories: Sequence[str],
     *,
     root: Path | None = None,
     batch_id: str | None = None,
@@ -352,12 +352,12 @@ def stage_batch(
 
     paths = load_batch_paths(root)
     base = paths.project_root
-    if len(session_ids) != len(TASK_SPECS):
-        raise ValueError("stage 必须接收覆盖任务 1--5 的五个 session ID")
-    if len(set(session_ids)) != len(session_ids):
+    if len(session_directories) != len(TASK_SPECS):
+        raise ValueError("stage 必须接收覆盖任务 1--5 的五个 session 目录")
+    if len(set(session_directories)) != len(session_directories):
         raise ValueError("五项任务必须来自五个不同 session")
 
-    unordered_dirs = _eval_session_dirs(paths.eval_root, session_ids)
+    unordered_dirs = _eval_session_dirs(paths.eval_root, session_directories)
     source_dirs, summaries = _map_eval_sessions(unordered_dirs)
     _finalize_and_require_qc(source_dirs)
 
@@ -370,7 +370,7 @@ def stage_batch(
     temporary = create_inherited_temp_directory(paths.staging_root, f".{resolved_batch_id}.tmp-")
     try:
         staged_dirs = _copy_task_sources(source_dirs, temporary / "raw")
-        copied_summaries = _validate_task_directories(staged_dirs, require_session_directory_name=False)
+        copied_summaries = _validate_task_directories(staged_dirs)
         if copied_summaries != summaries:
             raise ValueError("复制后的 manifest 批次身份与 eval 源不一致")
         _finalize_and_require_qc(staged_dirs)
@@ -407,7 +407,10 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     archive_parent = paths.archive_root
     archived: Path | None = None
     if active.exists():
-        current_summaries = _validate_task_directories(_task_dirs(active / "raw"), require_session_directory_name=False)
+        current_summaries = _validate_task_directories(
+            _task_dirs(active / "raw"),
+            require_current_matrix=False,
+        )
         archived = archive_parent / _batch_id(current_summaries)
         if archived.exists():
             raise FileExistsError(f"旧批次冷归档已存在，拒绝覆盖：{archived}")
@@ -449,7 +452,7 @@ def qc_current(*, root: Path | None = None) -> dict[str, Any]:
 
     paths = load_batch_paths(root)
     task_dirs = _task_dirs(paths.active_root / "raw")
-    summaries = _validate_task_directories(task_dirs, require_session_directory_name=False)
+    summaries = _validate_task_directories(task_dirs)
     reports = _finalize_and_run_qc(task_dirs)
     return {
         "passed": all(report.passed for report in reports),
@@ -467,7 +470,7 @@ def preprocess_current(
 
     paths = load_batch_paths(root)
     task_dirs = _task_dirs(paths.active_root / "raw")
-    _validate_task_directories(task_dirs, require_session_directory_name=False)
+    _validate_task_directories(task_dirs)
     _finalize_and_require_qc(task_dirs)
     artifacts = _write_workbooks(
         task_dirs,
@@ -579,18 +582,18 @@ def _task_dirs(raw_root: Path) -> tuple[Path, ...]:
     return tuple(raw_root / spec.directory_name for spec in TASK_SPECS)
 
 
-def _eval_session_dirs(eval_root: Path, session_ids: Sequence[str]) -> tuple[Path, ...]:
-    """把 session basename 限制在 data/eval 内，拒绝绝对路径和目录穿越。"""
+def _eval_session_dirs(eval_root: Path, directory_names: Sequence[str]) -> tuple[Path, ...]:
+    """把 session 目录名限制在 data/eval 内，拒绝绝对路径和目录穿越。"""
 
     normalized_root = eval_root.resolve()
     directories: list[Path] = []
-    for session_id in session_ids:
-        candidate_name = Path(session_id)
-        if candidate_name.is_absolute() or candidate_name.name != session_id or session_id in {".", ".."}:
-            raise ValueError(f"session 参数只能是 data/eval 下的目录名：{session_id}")
-        candidate = (normalized_root / session_id).resolve()
+    for directory_name in directory_names:
+        candidate_name = Path(directory_name)
+        if candidate_name.is_absolute() or candidate_name.name != directory_name or directory_name in {".", ".."}:
+            raise ValueError(f"session 参数只能是 data/eval 下的目录名：{directory_name}")
+        candidate = (normalized_root / directory_name).resolve()
         if not candidate.is_relative_to(normalized_root):
-            raise ValueError(f"session 目录越出 data/eval：{session_id}")
+            raise ValueError(f"session 目录越出 data/eval：{directory_name}")
         directories.append(candidate)
     return tuple(directories)
 
@@ -612,7 +615,7 @@ def _map_eval_sessions(task_dirs: Sequence[Path]) -> tuple[tuple[Path, ...], tup
         spec = TASK_SPECS[task_number - 1]
         mapped[task_number] = (
             task_dir,
-            _session_summary(task_dir, spec, require_session_directory_name=True),
+            _session_summary(task_dir, spec),
         )
     if sorted(mapped) != [1, 2, 3, 4, 5]:
         raise ValueError(f"输入 session 必须恰好覆盖任务 1--5，实际为 {sorted(mapped)}")
@@ -625,22 +628,26 @@ def _map_eval_sessions(task_dirs: Sequence[Path]) -> tuple[tuple[Path, ...], tup
 def _validate_task_directories(
     task_dirs: Sequence[Path],
     *,
-    require_session_directory_name: bool,
+    require_current_matrix: bool = True,
 ) -> tuple[SessionSummary, ...]:
-    """检查五个目录的任务映射和批次公共身份。"""
+    """检查五个目录的任务映射和批次公共身份，可放宽旧批次的矩阵版本。"""
 
     if len(task_dirs) != len(TASK_SPECS):
         raise ValueError("正式批次必须恰好包含任务 1--5 五个目录")
     summaries = tuple(
-        _session_summary(path, spec, require_session_directory_name=require_session_directory_name)
+        _session_summary(path, spec)
         for path, spec in zip(task_dirs, TASK_SPECS, strict=True)
     )
-    _validate_common_summaries(summaries)
+    _validate_common_summaries(summaries, require_current_matrix=require_current_matrix)
     return summaries
 
 
-def _validate_common_summaries(summaries: Sequence[SessionSummary]) -> None:
-    """检查 session 唯一性、正式状态和跨 task 公共批次身份。"""
+def _validate_common_summaries(
+    summaries: Sequence[SessionSummary],
+    *,
+    require_current_matrix: bool = True,
+) -> None:
+    """检查 session 唯一性、正式状态和跨 task 公共身份。"""
 
     if len({item.session_id for item in summaries}) != len(summaries):
         raise ValueError("同一批次不得包含重复 session_id")
@@ -651,15 +658,13 @@ def _validate_common_summaries(summaries: Sequence[SessionSummary]) -> None:
             raise ValueError(f"五个 session 的 {field_name} 不一致")
     if first.run_kind != "formal":
         raise ValueError("正式批次的 run_kind 必须为 formal")
-    if first.variant_matrix_id != EXPECTED_MATRIX_ID:
+    if require_current_matrix and first.variant_matrix_id != EXPECTED_MATRIX_ID:
         raise ValueError(f"variant_matrix_id 必须为 {EXPECTED_MATRIX_ID}")
 
 
 def _session_summary(
     task_dir: Path,
     spec: TaskSpec,
-    *,
-    require_session_directory_name: bool,
 ) -> SessionSummary:
     """读取一个 task manifest，并确认它只完成对应任务。"""
 
@@ -667,8 +672,6 @@ def _session_summary(
         raise FileNotFoundError(f"task/session 目录不存在：{task_dir}")
     manifest = _read_json(task_dir / "manifest.json")
     session_id = _nonempty_text(manifest, "session_id")
-    if require_session_directory_name and task_dir.name != session_id:
-        raise ValueError(f"eval 目录名与 manifest.session_id 不一致：{task_dir.name} != {session_id}")
     completed = manifest.get("completed_tasks")
     if not isinstance(completed, list) or len(completed) != 1 or not isinstance(completed[0], dict):
         raise ValueError(f"{session_id} 必须恰好有一个最终完成任务")
@@ -829,7 +832,7 @@ def _validate_complete_batch(batch_root: Path) -> None:
     """在目录切换前重新检查 raw 和五本工作簿。"""
 
     task_dirs = _task_dirs(batch_root / "raw")
-    _validate_task_directories(task_dirs, require_session_directory_name=False)
+    _validate_task_directories(task_dirs)
     _finalize_and_require_qc(task_dirs)
     workbook_root = batch_root / "workbooks"
     for number in range(1, 6):

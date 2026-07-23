@@ -44,7 +44,7 @@ data/eval/<session_id>
 
 ```text
 pixi run eval sessions
-pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 pixi run eval promote <batch_id>
 pixi run eval qc
 pixi run eval preprocess
@@ -56,6 +56,9 @@ pixi run eval latex
 活动批次。`qc` 和 `preprocess` 读取当前 raw；缺少 `events.jsonl` 时会从两个事件分片确定性
 生成。`analyze` 只读取五本 Stage 1 XLSX，但会更新指标、绘图数据、论文面板、TeX 表和配置
 指定的主稿。`latex` 只编译主稿，不重新分析数据。
+
+`stage` 参数是 `data/eval` 下的目录名，不要求它与 `manifest.session_id` 同名。目录可保留
+`task_1_..._v4` 这类人工标签；批次身份始终取 manifest 内不可改写的 `session_id`。
 
 从当前 raw 一次重建：
 

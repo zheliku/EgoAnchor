@@ -192,17 +192,18 @@ pixi run eval sessions
 命令：
 
 ```text
-pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 ```
 
 例如：
 
 ```text
-pixi run eval stage 20260722_120001_controller_right 20260722_120002_controller_right 20260722_120003_controller_right 20260722_120004_controller_right 20260722_120005_controller_right
+pixi run eval stage task_1_20260722_120001_controller_right_v4 task_2_20260722_120002_controller_right_v4 task_3_20260722_120003_controller_right_v4 task_4_20260722_120004_controller_right_v4 task_5_20260722_120005_controller_right_v4
 ```
 
-输入：五个 `eval_root/<session_id>` 目录。输入顺序不限，程序根据 manifest 的
-`completed_tasks` 自动映射任务 1--5。
+输入：五个 `eval_root/<session-directory>` 目录。目录名可保留 `task_N_..._v4` 这类
+人工标签，不要求与 manifest 的 `session_id` 相同。输入顺序不限，程序根据 manifest 的
+`completed_tasks` 自动映射任务 1--5，批次身份始终使用 manifest 的 `session_id`。
 
 检查内容：
 
@@ -468,7 +469,7 @@ pixi run eval latex
 ```text
 pixi run eval config
 pixi run eval sessions
-pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
+pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 pixi run eval promote <batch_id>
 pixi run eval analyze
 ```
