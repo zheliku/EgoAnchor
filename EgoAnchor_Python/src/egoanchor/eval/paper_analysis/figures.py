@@ -126,7 +126,7 @@ def build_point_panel(
         axis.scatter(
             positions[index] + offsets,
             values,
-            s=13,
+            s=8,
             alpha=0.25,
             marker=_MARKERS[index],
             color=color,
@@ -152,10 +152,10 @@ def build_point_panel(
             positions[index],
             float(np.median(values)),
             marker=_MARKERS[index],
-            markersize=5.5,
+            markersize=4.6,
             markerfacecolor=color,
             markeredgecolor="white",
-            markeredgewidth=0.8,
+            markeredgewidth=0.7,
             linestyle="none",
             zorder=4,
         )
@@ -163,11 +163,20 @@ def build_point_panel(
     axis.set_ylabel(ylabel)
     axis.set_ylim(bottom=0)
     _clean_axis(axis)
+    axis.legend(
+        frameon=False,
+        ncol=2,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        borderaxespad=0.0,
+        handletextpad=0.5,
+        columnspacing=1.1,
+    )
     figure.tight_layout()
     return figure
 
 
-def _scatter_with_display_limit(
+def _scatter_in_display_range(
     axis: Any,
     points: np.ndarray,
     *,
@@ -175,35 +184,24 @@ def _scatter_with_display_limit(
     marker: str,
     label: str,
     display_limit: float,
-    size: float = 22.0,
+    size: float = 13.0,
     alpha: float = 0.28,
 ) -> None:
-    """绘制散点；超出显示上限的值以顶端空心箭头保留。"""
+    """仅绘制指定纵轴范围内的点，不显示异常值的替代符号。"""
 
     visible = points[:, 1] <= display_limit
-    if np.any(visible):
-        axis.scatter(
-            points[visible, 0],
-            points[visible, 1],
-            s=size,
-            alpha=alpha,
-            marker=marker,
-            color=color,
-            label=label,
-            zorder=2,
-        )
-    if np.any(~visible):
-        axis.scatter(
-            points[~visible, 0],
-            np.full(np.count_nonzero(~visible), display_limit * 0.985),
-            s=size + 12.0,
-            marker="^",
-            facecolors="white",
-            edgecolors=color,
-            linewidths=1.1,
-            label=label if not np.any(visible) else "_nolegend_",
-            zorder=3,
-        )
+    if not np.any(visible):
+        return
+    axis.scatter(
+        points[visible, 0],
+        points[visible, 1],
+        s=size,
+        alpha=alpha,
+        marker=marker,
+        color=color,
+        label=label,
+        zorder=2,
+    )
 
 
 def build_translation_panel(results: PaperResults) -> Any:
@@ -218,7 +216,7 @@ def build_translation_panel(results: PaperResults) -> Any:
     for index, method in enumerate(METHODS):
         points = paired[:, index, :]
         color = _METHOD_COLORS[method]
-        _scatter_with_display_limit(
+        _scatter_in_display_range(
             axis,
             points,
             color=color,
@@ -235,7 +233,7 @@ def build_translation_panel(results: PaperResults) -> Any:
             xerr=[[median_x - q1_x], [q3_x - median_x]],
             yerr=[[median_y - q1_y], [q3_y - median_y]],
             fmt=_MARKERS[index],
-            markersize=8,
+            markersize=6,
             capsize=3.5,
             linewidth=1.7,
             color=color,
@@ -304,8 +302,8 @@ def _paired_axis(
             alpha=0.35,
             zorder=1,
         )
-    axis.scatter(np.zeros_like(full), full, color=endpoint_colors[0], s=18, alpha=0.38, zorder=2)
-    axis.scatter(np.ones_like(disabled), disabled, color=endpoint_colors[1], s=18, alpha=0.38, zorder=2)
+    axis.scatter(np.zeros_like(full), full, color=endpoint_colors[0], s=11, alpha=0.38, zorder=2)
+    axis.scatter(np.ones_like(disabled), disabled, color=endpoint_colors[1], s=11, alpha=0.38, zorder=2)
     axis.plot(
         [0, 1],
         [np.median(full), np.median(disabled)],
@@ -313,8 +311,8 @@ def _paired_axis(
         linewidth=2.35,
         zorder=3,
     )
-    axis.scatter(0, np.median(full), marker="D", color=endpoint_colors[0], s=72, zorder=4)
-    axis.scatter(1, np.median(disabled), marker="D", color=endpoint_colors[1], s=72, zorder=4)
+    axis.scatter(0, np.median(full), marker="D", color=endpoint_colors[0], s=42, zorder=4)
+    axis.scatter(1, np.median(disabled), marker="D", color=endpoint_colors[1], s=42, zorder=4)
     axis.set_xticks((0, 1), labels)
     axis.set_xlim(-0.20, 1.20)
     axis.set_ylabel(ylabel)
@@ -345,7 +343,7 @@ def _paired_panel(
 def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
     """绘制外推、默认 Linear/SLERP 与 Hermite 的配对 lag--residual 分布。"""
 
-    labels = ("Smoothed KF Extrapolation", "Linear/SLERP", "Hermite")
+    labels = ("Smoothed KF", "Linear/SLERP", "Hermite")
     colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR, _HERMITE_COLOR)
     markers = ("D", "s", "o")
     for episode in paired_points:
@@ -361,14 +359,14 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
         zip(labels, colors, markers, strict=True)
     ):
         points = paired_points[:, index, :]
-        _scatter_with_display_limit(
+        _scatter_in_display_range(
             axis,
             points,
             color=color,
             marker=marker,
             label=label,
             display_limit=_EXP2_TEMPORAL_Y_DISPLAY_LIMIT,
-            size=25.0 if index < 2 else 18.0,
+            size=15.0 if index < 2 else 11.0,
             alpha=0.38 if index < 2 else 0.24,
         )
         median_x, median_y = np.median(points, axis=0)
@@ -380,7 +378,7 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
             xerr=[[median_x - q1_x], [q3_x - median_x]],
             yerr=[[median_y - q1_y], [q3_y - median_y]],
             fmt=marker,
-            markersize=8,
+            markersize=6,
             capsize=3.5,
             linewidth=1.7,
             color=color,
@@ -388,19 +386,24 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     all_points = paired_points.reshape(-1, paired_points.shape[-1])
+    visible_points = all_points[all_points[:, 1] <= _EXP2_TEMPORAL_Y_DISPLAY_LIMIT]
     axis.set_xlim(
-        min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
-        max(_DYNAMIC_X_LIMITS[1], float(np.max(all_points[:, 0])) * 1.04),
+        min(_DYNAMIC_X_LIMITS[0], float(np.min(visible_points[:, 0])) * 0.96),
+        max(_DYNAMIC_X_LIMITS[1], float(np.max(visible_points[:, 0])) * 1.02),
     )
     axis.set_ylim(0.0, _EXP2_TEMPORAL_Y_DISPLAY_LIMIT)
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
-        frameon=False,
+        frameon=True,
+        facecolor="white",
+        edgecolor="none",
+        framealpha=0.92,
         ncol=1,
         loc="upper right",
-        borderaxespad=0.3,
+        borderaxespad=0.25,
         handletextpad=0.4,
+        labelspacing=0.25,
     )
 
 
@@ -474,17 +477,6 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
         raise ValueError("VCD risk-coverage 图缺少 event 曲线")
 
     figure, axis = plt.subplots(figsize=(1.26, 2.18))
-    for points in grouped.values():
-        ordered = np.asarray(sorted(points), dtype=float)
-        axis.plot(
-            ordered[:, 0],
-            ordered[:, 1],
-            color=_PAIR_COLOR,
-            linewidth=0.65,
-            alpha=0.28,
-            drawstyle="steps-pre",
-            zorder=1,
-        )
     summary = summarize_risk_coverage(results.vcd_risk_coverage)
     coverage = np.asarray([float(row["coverage"]) for row in summary], dtype=float)
     median = np.asarray([float(row["selective_risk_median_mm"]) for row in summary], dtype=float)
@@ -493,11 +485,19 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
     axis.fill_between(coverage, q1, q3, color=_FULL_COLOR, alpha=0.18, linewidth=0.0, label="IQR")
     axis.plot(coverage, median, color=_FULL_COLOR, linewidth=1.8, label="Median", zorder=3)
     axis.set_xlim(0.0, 1.0)
-    axis.set_ylim(bottom=0.0)
-    axis.set_xlabel("Coverage")
-    axis.set_ylabel("Selective risk (mm)")
+    axis.set_ylim(max(0.0, float(np.min(q1)) - 0.45), float(np.max(q3)) + 0.45)
+    axis.set_xticks((0.0, 0.5, 1.0), ("0", "50", "100"))
+    axis.set_xlabel("Retained (%)")
+    axis.set_ylabel("Mean error (mm)")
     _clean_axis(axis, "both")
-    axis.legend(frameon=False, loc="upper right", borderaxespad=0.25, handletextpad=0.4)
+    axis.legend(
+        frameon=False,
+        loc="upper left",
+        borderaxespad=0.25,
+        handlelength=1.0,
+        handletextpad=0.3,
+        labelspacing=0.2,
+    )
     figure.tight_layout()
     return figure
 

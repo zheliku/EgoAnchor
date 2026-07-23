@@ -713,7 +713,7 @@ def _figure_two_tex(figure_directory: str) -> str:
     \\caption{{遮挡期间的平移误差}}
     \\label{{fig:exp1-occlusion}}
   \\end{{subfigure}}
-  \\caption{{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，超过 25~mm 的片段以顶端空心箭头表示，完整数值保留在绘图审计表中。}}
+  \\caption{{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，并为比较可读性不显示超过 25~mm 的异常片段，完整数值保留在绘图审计表中。}}
   \\label{{fig:exp1-final}}
 \\end{{figure*}}
 """
@@ -748,7 +748,7 @@ def _figure_three_tex(figure_directory: str) -> str:
     \\caption{{时序策略}}
     \\label{{fig:exp2-temporal}}
   \\end{{subfigure}}
-  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。超过 32~mm 的片段以顶端空心箭头表示，完整数值保留在绘图审计表中。}}
+  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。为比较可读性，图~(d) 不显示超过 32~mm 的异常片段，完整数值保留在绘图审计表中。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 """

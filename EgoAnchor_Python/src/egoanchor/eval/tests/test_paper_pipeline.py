@@ -200,8 +200,8 @@ class PaperPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "配对不完整"):
             paired_metric_matrix(rows, METHODS, ("value",))
 
-    def test_experiment_one_point_panels_avoid_repeated_legends(self) -> None:
-        """图二(a)/(c) 已有横轴方法名，不再放重复图例；散点图保留图例。"""
+    def test_experiment_one_panels_use_consistent_method_legend(self) -> None:
+        """图二三个面板均保留一致的四方法图例，独立阅读时不依赖相邻子图。"""
 
         values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
         point_figure = build_point_panel(
@@ -232,8 +232,18 @@ class PaperPipelineTests(unittest.TestCase):
             SimpleNamespace(translation_segments=rows)
         )
 
-        self.assertIsNone(point_figure.axes[0].get_legend())
-        self.assertIsNotNone(translation_figure.axes[0].get_legend())
+        point_legend = point_figure.axes[0].get_legend()
+        translation_legend = translation_figure.axes[0].get_legend()
+        self.assertIsNotNone(point_legend)
+        self.assertIsNotNone(translation_legend)
+        self.assertEqual(
+            [text.get_text() for text in point_legend.get_texts()],
+            ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
+        )
+        self.assertEqual(
+            [text.get_text() for text in translation_legend.get_texts()],
+            ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
+        )
 
     def test_translation_panel_does_not_connect_methods(self) -> None:
         """图二(b) 不连接跨方法散点，避免方法顺序造成视觉混淆。"""
