@@ -405,6 +405,13 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{failure containment} 衡量遮挡和坏观测是否破坏已建立锚点；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/replay_grid.pdf}
+  \caption{xxx}
+  \label{fig:relay-grid}
+\end{figure}
+
 \begin{table*}[t]
 \centering
 \caption{v4 完整系统表征的回填结构。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}

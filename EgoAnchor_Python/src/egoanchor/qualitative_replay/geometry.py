@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -78,10 +78,85 @@ def verify_projection_matrix(
     return error
 
 
+def projection_mesh_local_matrix(variants: Sequence[Mapping[str, Any]]) -> np.ndarray:
+    """从 runtime 指纹恢复离线投影 mesh 的局部基变换。
+
+    Unity 最终显示 pose 已包含 ``anchor-pos`` 和 ``anchor-rot``，而离线加载的是
+    FoundationPose 使用的 OpenCV mesh。要用最终显示根节点重建 Unity 中真正看到的
+    几何，必须先撤销这段对象局部补偿，并在记录的轴翻转基下表达结果。
+    """
+
+    transforms = tuple(_projection_mesh_local_matrix(variant) for variant in variants)
+    if not transforms:
+        raise ValueError("replay 样本不含可解析的 runtime 配置指纹。")
+    first = transforms[0]
+    if any(not np.allclose(first, item, atol=1e-9, rtol=0.0) for item in transforms[1:]):
+        raise ValueError("四种方法的 mesh 局部坐标补偿不一致，不能共用同一投影 mesh。")
+    return first
+
+
+def _projection_mesh_local_matrix(variant: Mapping[str, Any]) -> np.ndarray:
+    """解析单个 runtime 指纹并构造 ``F @ B^-1 @ F``。"""
+
+    fingerprint = str(variant.get("runtime_configuration_fingerprint", ""))
+    fields = {
+        key: value
+        for part in fingerprint.split("|")
+        if ":" in part
+        for key, value in (part.split(":", 1),)
+    }
+    flip = _parse_fingerprint_bool3(fields.get("flip"), "flip")
+    anchor_position = _parse_fingerprint_float3(fields.get("anchor-pos"), "anchor-pos")
+    anchor_rotation = _parse_fingerprint_float3(fields.get("anchor-rot"), "anchor-rot")
+
+    signs = np.array([-1.0 if value else 1.0 for value in flip], dtype=np.float64)
+    basis = np.eye(4, dtype=np.float64)
+    basis[:3, :3] = np.diag(signs)
+    compensation = np.eye(4, dtype=np.float64)
+    compensation[:3, :3] = _unity_euler_zxy(anchor_rotation)
+    compensation[:3, 3] = np.asarray(anchor_position, dtype=np.float64)
+    return basis @ np.linalg.inv(compensation) @ basis
+
+
+def _parse_fingerprint_bool3(value: str | None, name: str) -> tuple[bool, bool, bool]:
+    """解析指纹中的三个布尔值。"""
+
+    parts = tuple(part.strip().lower() for part in (value or "").split(","))
+    if len(parts) != 3 or any(part not in {"true", "false"} for part in parts):
+        raise ValueError(f"runtime_configuration_fingerprint 缺少合法 {name}。")
+    return tuple(part == "true" for part in parts)  # type: ignore[return-value]
+
+
+def _parse_fingerprint_float3(value: str | None, name: str) -> tuple[float, float, float]:
+    """解析指纹中的三个有限浮点数。"""
+
+    try:
+        parts = tuple(float(part) for part in (value or "").split(","))
+    except ValueError as exc:
+        raise ValueError(f"runtime_configuration_fingerprint 缺少合法 {name}。") from exc
+    if len(parts) != 3 or not np.all(np.isfinite(parts)):
+        raise ValueError(f"runtime_configuration_fingerprint 缺少合法 {name}。")
+    return parts  # type: ignore[return-value]
+
+
+def _unity_euler_zxy(euler_deg: tuple[float, float, float]) -> np.ndarray:
+    """按 Unity Quaternion.Euler 的 Z-X-Y 顺序构造三维旋转矩阵。"""
+
+    x, y, z = np.radians(np.asarray(euler_deg, dtype=np.float64))
+    cx, sx = np.cos(x), np.sin(x)
+    cy, sy = np.cos(y), np.sin(y)
+    cz, sz = np.cos(z), np.sin(z)
+    rotation_x = np.array([[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]])
+    rotation_y = np.array([[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]])
+    rotation_z = np.array([[cz, -sz, 0.0], [sz, cz, 0.0], [0.0, 0.0, 1.0]])
+    return rotation_y @ rotation_x @ rotation_z
+
+
 __all__ = [
     "UNITY_TO_CV_BASIS",
     "display_world_to_cv_camera",
     "pose_to_matrix",
+    "projection_mesh_local_matrix",
     "recorded_projection_matrix",
     "verify_projection_matrix",
 ]

@@ -143,8 +143,8 @@ def load_capture(path: str | Path, *, strict: bool = True) -> ReplayCapture:
         raise ValueError("reference_invalid_samples 与 samples.jsonl 实际状态不一致。")
     if held_references != int(manifest.raw["reference_held_samples"]):
         raise ValueError("reference_held_samples 与 samples.jsonl 实际状态不一致。")
-    if strict and len(samples) == 0:
-        raise ValueError("严格模式不接受空 replay capture。")
+    if len(samples) == 0:
+        raise ValueError("replay capture 不包含任何样本。")
     return ReplayCapture(root=root, manifest=manifest, samples=tuple(samples))
 
 

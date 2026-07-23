@@ -1,0 +1,70 @@
+[contract]
+version = 1 # 定性 replay 配置契约版本。
+
+[selection]
+columns = 6 # 连续轨迹网格默认使用 5 列；命令行或自定义 TOML 可设为 2--20 列。
+frame_step = 30 # 相邻列之间的已保存样本索引差；设为 3 时中间跳过 2 个样本。
+start_sample_id = "000000365" # 默认首列的保存帧序号；留空自动寻找最早完整序列，填写如 000000761 可固定复现窗口。
+row_keys = ["passthrough", "reference", "arrival", "capture", "one-euro", "egoanchor"] # 数据源行及排列顺序，使用稳定的小写行标识；与 rows 按索引一一对应。
+rows = ["Passthrough", "Quest\nReference", "Arrival", "Capture", "One-Euro", "EgoAnchor\n(Ours)"] # 图中左侧实际显示的行标题，按原样绘制；与 row_keys 等长且同顺序。
+
+[layout]
+cell_width = 320 # 每个图像单元的输出宽度，单位像素。
+column_label = "none" # 独立列标题模式，可选 none、delta-t、sample-id 或 both；默认由时间轴显示相对时间。
+label_font_size = 40 # 左侧行名字号，单位像素；默认使用论文图中更醒目的字号。
+column_font_size = 40 # 顶部 delta-t 或 sample id 字号，单位像素。
+label_padding_px = 28 # 行名文字左右合计留白，减小标签区在整图中的宽度占比。
+label_min_width_px = 80 # 行名区域最小宽度；实际宽度仍会保证最长名称完整显示。
+gutter_px = 4 # 相邻图像单元之间的间距，单位像素。
+border_thickness_px = 1 # 每个图像单元的边框线宽，单位像素；设为 0 时不绘制边框。
+canvas_color_hex = "#FFFFFF" # 网格画布和标签区域的背景颜色。
+border_color_hex = "#D2D2D2" # 图像单元边框颜色。
+row_label_color_hex = "#202020" # 左侧行名文字颜色。
+column_label_color_hex = "#202020" # 顶部 delta-t 或 sample id 文字颜色。
+header_padding_px = 10 # 顶部标题区域在字号之外增加的高度，单位像素。
+row_label_line_spacing_px = 4 # 多行行标题的行间距，单位像素。
+
+[timeline]
+mode = "frame-sequence" # 时间轴模式，可选 none、relative-time 或 frame-sequence；后者显示可用于 --start-sample-id 的保存帧序号。
+placement = "top" # 时间轴位置，可选 top 或 bottom；默认放在第一行图像上方。
+font_size_px = 40 # 时间刻度和横轴标题字号，单位像素。
+color_hex = "#202020" # 时间轴主线、刻度、箭头和文字颜色。
+line_thickness_px = 3 # 横纵轴主线和刻度线宽，单位像素；默认稍加粗以适应论文缩放。
+tick_length_px = 10 # 时间刻度和方法行刻度的长度，单位像素。
+padding_px = 3 # 图像网格、时间轴文字与画布边缘之间的留白，单位像素。
+right_extension_px = 20 # 横轴箭头在最后一列图像右侧额外伸出的长度，单位像素。
+
+[crop]
+mode = "auto" # 裁剪模式，可选 auto 或 fixed。
+padding = 0.35 # 自动裁剪相对参考轮廓的额外留白比例。
+fixed_xywh = [] # 固定裁剪框 [x, y, width, height]；auto 模式必须留空。
+aspect_ratio = 1.3333333333 # 自动裁剪和图像单元的宽高比，默认 4:3。
+
+[overlay]
+model_alpha = 0.6 # 四种方法纹理模型的填充不透明度，范围 0--1。
+reference_alpha = 0.6 # Quest Reference 纹理模型的填充不透明度，范围 0--1。
+fill_mode = "texture" # 填充模式，可选 texture 或 color；纹理不可用时自动回退到纯色。
+texture_backend = "auto" # 纹理栅格化后端，可选 auto、nvdiffrast 或 cpu；auto 优先复用 VCD 同款 CUDA 后端并在不可用时回退 CPU。
+texture_max_size_px = 0 # CUDA 纹理预滤波后的最长边，范围 64--4096；设为 0 时保留 GLB 原始尺寸。
+minimum_component_faces = 1 # 保留不连通 mesh 组件所需的最小三角面数；默认 1 完整保留模型，提高后可隐藏部分微小装饰几何。
+texture_brightness = 1.0 # unlit base-color 纹理亮度倍率，范围 0--3。
+model_color_hex = "#D8DCE2" # fill_mode=color 或纹理不可用时的回退填充颜色。
+method_colors_hex = ["#4C78A8", "#59A14F", "#F28E2B", "#E15759"] # Arrival、Capture、One-Euro、EgoAnchor 的轮廓颜色，与论文图 2 完全一致。
+method_contour_thickness_px = 3 # 四种方法彩色轮廓的线宽，单位原图像素。
+reference_contour_color_hex = "#2D2D2D" # Quest Reference 内轮廓颜色。
+reference_contour_thickness_px = 3 # Quest Reference 内轮廓线宽，单位原图像素。
+reference_halo_color_hex = "#FFFFFF" # Quest Reference 外沿 halo 颜色。
+reference_halo_thickness_px = 6 # Quest Reference 外沿 halo 总线宽，必须不小于内轮廓线宽。
+
+[axes]
+enabled = true # 是否为参考和方法 pose 绘制局部 XYZ 坐标轴。
+length_m = 0.06 # XYZ 坐标轴长度，单位米。
+thickness_px = 2 # XYZ 坐标轴线宽，单位像素。
+label_font_size_px = 16 # XYZ 轴端标签字号，单位像素。
+colors_hex = ["#D62728", "#2CA02C", "#1F77B4"] # X、Y、Z 三根坐标轴依次使用的颜色。
+halo_color_hex = "#FFFFFF" # 坐标轴、箭头和 XYZ 文字的外沿颜色。
+halo_thickness_px = 5 # 坐标轴和文字外沿的总线宽，必须不小于轴线宽。
+tip_length = 0.20 # 箭头尖端长度占整根轴的比例，范围 0.05--0.5。
+label_offset_px = [3, -3] # XYZ 文字相对箭头端点的 [x, y] 像素偏移。
+origin_color_hex = "#232323" # XYZ 坐标轴原点圆点颜色。
+origin_radius_px = 2 # XYZ 坐标轴原点圆点半径，单位像素。

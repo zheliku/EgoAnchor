@@ -6279,10 +6279,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a055afa9c735499428fab8a25debe4e2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.KalmanModel
-  positionProcessNoise: 0.2
-  positionMeasurementNoise: 0.0004
-  rotationProcessNoise: 0.4
-  rotationMeasurementNoise: 0.0025
+  positionAccelerationNoise: 0.002
+  positionMeasurementNoise: 0.000004
+  rotationAccelerationNoise: 0.2
+  rotationMeasurementNoise: 0.0004
 --- !u!4 &1830311281
 Transform:
   m_ObjectHideFlags: 0

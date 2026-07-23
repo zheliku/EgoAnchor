@@ -189,7 +189,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4725344443095769517, guid: 26e2966fddf88ce43a58ab70b3cbcb5f, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -362,7 +362,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2518c50cb3fc6a6458d4b743c2f69c7d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.PointableCanvasModule
   m_SendPointerHoverToParent: 1
   _useInitialPressPositionForDrag: 1
@@ -1403,12 +1403,12 @@ MonoBehaviour:
   effectGroupLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  effectNameFilter:
+  effectNameFilter: 
   effectNameUseRegEx: 0
   excludeObjectsWithHighlightEffect: 0
   combineMeshes: 0
   alphaCutOff: 0
-  alphaCutOffTextureName:
+  alphaCutOffTextureName: 
   cullBackFaces: 1
   ignoreObjectVisibility: 0
   reflectionProbes: 0
@@ -1420,7 +1420,7 @@ MonoBehaviour:
   cameraDistanceFadeNear: 0
   cameraDistanceFadeFar: 1000
   useOriginalShader: 0
-  customPassName:
+  customPassName: 
   normalsOption: 0
   ignore: 0
   _highlighted: 1
@@ -1764,7 +1764,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 888380afc233049ce9e618f9f36c8ba8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: HighlightPlus.Runtime::HighlightPlus.HighlightEffect
   profile: {fileID: 0}
   profileSync: 0
@@ -1776,12 +1776,12 @@ MonoBehaviour:
   effectGroupLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  effectNameFilter:
+  effectNameFilter: 
   effectNameUseRegEx: 0
   excludeObjectsWithHighlightEffect: 0
   combineMeshes: 0
   alphaCutOff: 0
-  alphaCutOffTextureName:
+  alphaCutOffTextureName: 
   cullBackFaces: 1
   ignoreObjectVisibility: 0
   reflectionProbes: 0
@@ -1793,7 +1793,7 @@ MonoBehaviour:
   cameraDistanceFadeNear: 0
   cameraDistanceFadeFar: 1000
   useOriginalShader: 0
-  customPassName:
+  customPassName: 
   normalsOption: 0
   ignore: 0
   _highlighted: 1
@@ -3447,7 +3447,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &722913590
 Transform:
   m_ObjectHideFlags: 0
@@ -4614,7 +4614,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bcf0c42a33a8485cb98559da71e81e79, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Client.AnchorStatusReceiver
   natsClient: {fileID: 626098605}
   logStats: 1
@@ -5628,7 +5628,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4725344443095769517, guid: 26e2966fddf88ce43a58ab70b3cbcb5f, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -5722,7 +5722,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1355694872
 Transform:
   m_ObjectHideFlags: 0
@@ -5755,7 +5755,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 888380afc233049ce9e618f9f36c8ba8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: HighlightPlus.Runtime::HighlightPlus.HighlightEffect
   profile: {fileID: 0}
   profileSync: 0
@@ -5767,12 +5767,12 @@ MonoBehaviour:
   effectGroupLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  effectNameFilter:
+  effectNameFilter: 
   effectNameUseRegEx: 0
   excludeObjectsWithHighlightEffect: 0
   combineMeshes: 0
   alphaCutOff: 0
-  alphaCutOffTextureName:
+  alphaCutOffTextureName: 
   cullBackFaces: 1
   ignoreObjectVisibility: 0
   reflectionProbes: 0
@@ -5784,7 +5784,7 @@ MonoBehaviour:
   cameraDistanceFadeNear: 0
   cameraDistanceFadeFar: 1000
   useOriginalShader: 0
-  customPassName:
+  customPassName: 
   normalsOption: 0
   ignore: 0
   _highlighted: 1
@@ -9607,7 +9607,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 79e02f7ddb0d25242be61df2259271c9, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
   latencySafetyMargin: 1.15
   minDelaySeconds: 0.25

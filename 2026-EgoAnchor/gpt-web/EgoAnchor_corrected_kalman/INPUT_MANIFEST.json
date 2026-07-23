@@ -1,0 +1,50 @@
+[
+  {
+    "name": "task_1_complete.xlsx",
+    "size_bytes": 34812990,
+    "sha256": "4152e3cb4fa5cdb0c02ee5d73f1187f5c0b113792e23edb8d64a8ca9414e1efe",
+    "included_in_zip": false
+  },
+  {
+    "name": "task_2_complete.xlsx",
+    "size_bytes": 29681633,
+    "sha256": "4b8a3c4b11c520cdd9e14f4da8078a8597b4935a7f5f9c9d8169a68e6e69c4ee",
+    "included_in_zip": false
+  },
+  {
+    "name": "task_3_complete.xlsx",
+    "size_bytes": 25537989,
+    "sha256": "51d01dfbde35a35bac318c385ed99d780dcd5996895f766978405b34cc529a95",
+    "included_in_zip": false
+  },
+  {
+    "name": "task_4_complete.xlsx",
+    "size_bytes": 28489661,
+    "sha256": "e31422d7af67428ed57481043f2a34f6da9beed5ae8a922e8ff1507e0be71419",
+    "included_in_zip": false
+  },
+  {
+    "name": "task_5_complete.xlsx",
+    "size_bytes": 20411744,
+    "sha256": "40c2359e753435a00b2b169f657370434b15b177ffbee2075762e5a9ef6fbdb9",
+    "included_in_zip": false
+  },
+  {
+    "name": "KalmanModel(1).cs",
+    "size_bytes": 6036,
+    "sha256": "2045ccc26126ccf085a577a5bc2558c4f453089471bae63e32e3b26de700916e",
+    "included_in_zip": true
+  },
+  {
+    "name": "PredictivePassthroughStrategy(1).cs",
+    "size_bytes": 1439,
+    "sha256": "67e7b75d03e61413c297bb581f2fe40dd91ced8c6dcc6158a00f83e8127951ed",
+    "included_in_zip": true
+  },
+  {
+    "name": "BlendStrategy(1).cs",
+    "size_bytes": 6576,
+    "sha256": "08fb4f053692d1bb7e0e7515c49e8ed7dbeced109f489481cf831cd59d1f82c1",
+    "included_in_zip": true
+  }
+]

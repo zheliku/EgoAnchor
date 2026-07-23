@@ -1,0 +1,249 @@
+﻿episode,failure_gt40,frame_increment_p95_mm,method,occlusion_max_mm,occlusion_p95_mm,rotation_lag_ms,rotation_residual_deg,scenario,start_response_ms,static_centered_p95_mm,translation_lag_ms,translation_residual_mm
+1,,,Legacy direct,,,,,start_stop_6dof,208.15159999983734,,,
+2,,,Legacy direct,,,,,start_stop_6dof,166.08270000004995,,,
+3,,,Legacy direct,,,,,start_stop_6dof,208.39780000004976,,,
+4,,,Legacy direct,,,,,start_stop_6dof,181.06699999998818,,,
+5,,,Legacy direct,,,,,start_stop_6dof,42.20130000022618,,,
+6,,,Legacy direct,,,,,start_stop_6dof,270.8988999997964,,,
+7,,,Legacy direct,,,,,start_stop_6dof,125.1462999998621,,,
+8,,,Legacy direct,,,,,start_stop_6dof,208.7830999998987,,,
+9,,,Legacy direct,,,,,start_stop_6dof,188.22009999984584,,,
+1,,,Corrected direct,,,,,start_stop_6dof,208.15159999983734,,,
+2,,,Corrected direct,,,,,start_stop_6dof,166.08270000004995,,,
+3,,,Corrected direct,,,,,start_stop_6dof,154.68839999994088,,,
+4,,,Corrected direct,,,,,start_stop_6dof,181.06699999998818,,,
+5,,,Corrected direct,,,,,start_stop_6dof,42.20130000022618,,,
+6,,,Corrected direct,,,,,start_stop_6dof,167.54959999979474,,,
+7,,,Corrected direct,,,,,start_stop_6dof,13.683699999994133,,,
+8,,,Corrected direct,,,,,start_stop_6dof,208.7830999998987,,,
+9,,,Corrected direct,,,,,start_stop_6dof,188.22009999984584,,,
+1,,,Corrected continuous,,,,,start_stop_6dof,242.38680000008026,,,
+2,,,Corrected continuous,,,,,start_stop_6dof,207.12640000010288,,,
+3,,,Corrected continuous,,,,,start_stop_6dof,250.46289999999863,,,
+4,,,Corrected continuous,,,,,start_stop_6dof,242.53270000007615,,,
+5,,,Corrected continuous,,,,,start_stop_6dof,63.48640000033629,,,
+6,,,Corrected continuous,,,,,start_stop_6dof,270.8988999997964,,,
+7,,,Corrected continuous,,,,,start_stop_6dof,138.06189999968046,,,
+8,,,Corrected continuous,,,,,start_stop_6dof,215.83680000004824,,,
+9,,,Corrected continuous,,,,,start_stop_6dof,397.00389999960316,,,
+1,,,Buffered-Hermite,,,,,start_stop_6dof,284.6045999999551,,,
+2,,,Buffered-Hermite,,,,,start_stop_6dof,249.32100000023638,,,
+3,,,Buffered-Hermite,,,,,start_stop_6dof,272.0911000001215,,,
+4,,,Buffered-Hermite,,,,,start_stop_6dof,291.68180000033317,,,
+5,,,Buffered-Hermite,,,,,start_stop_6dof,187.473299999976,,,
+6,,,Buffered-Hermite,,,,,start_stop_6dof,333.8313999997772,,,
+7,,,Buffered-Hermite,,,,,start_stop_6dof,284.6715999999142,,,
+8,,,Buffered-Hermite,,,,,start_stop_6dof,270.43719999984023,,,
+9,,,Buffered-Hermite,,,,,start_stop_6dof,444.22259999964444,,,
+1,0,,Legacy direct,10.148236828004084,9.595864726395954,,,occlusion_recovery,,,,
+2,0,,Legacy direct,33.01251792440339,31.25724573064893,,,occlusion_recovery,,,,
+3,0,,Legacy direct,9.85020221636242,9.39539675725808,,,occlusion_recovery,,,,
+4,0,,Legacy direct,23.716176481415218,22.063040987842303,,,occlusion_recovery,,,,
+5,0,,Legacy direct,3.964201874483195,3.7511437920099855,,,occlusion_recovery,,,,
+6,0,,Legacy direct,35.721765017710126,33.71524286096885,,,occlusion_recovery,,,,
+7,0,,Legacy direct,34.00571973565544,32.13029453681972,,,occlusion_recovery,,,,
+8,0,,Legacy direct,6.68703968107485,6.3156829974803665,,,occlusion_recovery,,,,
+9,0,,Legacy direct,8.900453693444225,8.39145001842281,,,occlusion_recovery,,,,
+1,1,,Corrected direct,55.968202621059184,52.242519713235424,,,occlusion_recovery,,,,
+2,1,,Corrected direct,121.73716926692182,112.9523358458603,,,occlusion_recovery,,,,
+3,1,,Corrected direct,50.17598760104453,46.86141363578061,,,occlusion_recovery,,,,
+4,1,,Corrected direct,100.74758295176689,90.95465598613018,,,occlusion_recovery,,,,
+5,0,,Corrected direct,22.239385910299102,20.671513144805406,,,occlusion_recovery,,,,
+6,1,,Corrected direct,155.55918774141963,143.6507318182333,,,occlusion_recovery,,,,
+7,1,,Corrected direct,160.29103805088275,148.3158111961626,,,occlusion_recovery,,,,
+8,0,,Corrected direct,22.642662525255382,21.036233709701325,,,occlusion_recovery,,,,
+9,0,,Corrected direct,41.473132854141134,38.405494972826666,,,occlusion_recovery,,,,
+1,0,,Corrected continuous,5.027521374622163,5.027521374622144,,,occlusion_recovery,,,,
+2,0,,Corrected continuous,17.660635130975944,17.660635130882884,,,occlusion_recovery,,,,
+3,0,,Corrected continuous,6.6099070149164945,6.002917890583454,,,occlusion_recovery,,,,
+4,0,,Corrected continuous,13.482431931274704,13.482431930498896,,,occlusion_recovery,,,,
+5,0,,Corrected continuous,2.6929734978157107,2.4068606605229848,,,occlusion_recovery,,,,
+6,0,,Corrected continuous,20.624708912803882,20.624708905897347,,,occlusion_recovery,,,,
+7,0,,Corrected continuous,20.224776914343906,20.22477691363727,,,occlusion_recovery,,,,
+8,0,,Corrected continuous,5.9450921980208715,4.3057557644139575,,,occlusion_recovery,,,,
+9,0,,Corrected continuous,4.650905282485794,4.650905282476418,,,occlusion_recovery,,,,
+1,0,,Buffered-Hermite,4.761851270407892,4.685108714770155,,,occlusion_recovery,,,,
+2,0,,Buffered-Hermite,17.332053637025968,17.332053637025968,,,occlusion_recovery,,,,
+3,0,,Buffered-Hermite,5.530712417099877,5.530712417099877,,,occlusion_recovery,,,,
+4,0,,Buffered-Hermite,13.391018808202867,13.391018808202867,,,occlusion_recovery,,,,
+5,0,,Buffered-Hermite,2.3298012240324106,2.239711591807376,,,occlusion_recovery,,,,
+6,0,,Buffered-Hermite,19.4760591832397,19.4760591832397,,,occlusion_recovery,,,,
+7,0,,Buffered-Hermite,17.530695828375762,17.530695828375762,,,occlusion_recovery,,,,
+8,0,,Buffered-Hermite,5.145753003279044,3.486982686821104,,,occlusion_recovery,,,,
+9,0,,Buffered-Hermite,4.391449428715497,4.391449428715497,,,occlusion_recovery,,,,
+1,,,Legacy direct,,,205.0,6.20967050689725,continuous_rotation,,,,
+2,,,Legacy direct,,,205.0,5.102038783729821,continuous_rotation,,,,
+3,,,Legacy direct,,,190.0,7.047870460725642,continuous_rotation,,,,
+4,,,Legacy direct,,,205.0,5.060157478407265,continuous_rotation,,,,
+5,,,Legacy direct,,,210.0,5.899092682036982,continuous_rotation,,,,
+6,,,Legacy direct,,,185.0,6.219659663293521,continuous_rotation,,,,
+7,,,Legacy direct,,,180.0,6.194988744165318,continuous_rotation,,,,
+8,,,Legacy direct,,,195.0,7.76682507555623,continuous_rotation,,,,
+9,,,Legacy direct,,,185.0,5.6193164981436,continuous_rotation,,,,
+10,,,Legacy direct,,,205.0,6.731462394953318,continuous_rotation,,,,
+1,,,Corrected direct,,,95.0,8.218368023563329,continuous_rotation,,,,
+2,,,Corrected direct,,,95.0,5.927045154905216,continuous_rotation,,,,
+3,,,Corrected direct,,,105.0,7.261628316176454,continuous_rotation,,,,
+4,,,Corrected direct,,,95.0,5.881816346211739,continuous_rotation,,,,
+5,,,Corrected direct,,,100.0,7.6286837649967625,continuous_rotation,,,,
+6,,,Corrected direct,,,100.0,7.024242173983168,continuous_rotation,,,,
+7,,,Corrected direct,,,90.0,6.546029697246909,continuous_rotation,,,,
+8,,,Corrected direct,,,100.0,8.056817115169716,continuous_rotation,,,,
+9,,,Corrected direct,,,80.0,6.804225094849157,continuous_rotation,,,,
+10,,,Corrected direct,,,120.0,8.074355570907588,continuous_rotation,,,,
+1,,,Corrected continuous,,,205.0,6.336967709909094,continuous_rotation,,,,
+2,,,Corrected continuous,,,210.0,4.600247018888305,continuous_rotation,,,,
+3,,,Corrected continuous,,,215.0,5.959059049250072,continuous_rotation,,,,
+4,,,Corrected continuous,,,205.0,4.447843106602351,continuous_rotation,,,,
+5,,,Corrected continuous,,,215.0,5.846178421720783,continuous_rotation,,,,
+6,,,Corrected continuous,,,215.0,5.363790422348143,continuous_rotation,,,,
+7,,,Corrected continuous,,,195.0,5.2986693538964245,continuous_rotation,,,,
+8,,,Corrected continuous,,,205.0,6.924513191392788,continuous_rotation,,,,
+9,,,Corrected continuous,,,195.0,5.546511206729761,continuous_rotation,,,,
+10,,,Corrected continuous,,,225.0,6.240244285163963,continuous_rotation,,,,
+1,,,Buffered-Hermite,,,330.0,2.0988075159360045,continuous_rotation,,,,
+2,,,Buffered-Hermite,,,330.0,1.9205847123432596,continuous_rotation,,,,
+3,,,Buffered-Hermite,,,340.0,2.8475823902446455,continuous_rotation,,,,
+4,,,Buffered-Hermite,,,330.0,2.1044545014615434,continuous_rotation,,,,
+5,,,Buffered-Hermite,,,330.0,2.773730909884251,continuous_rotation,,,,
+6,,,Buffered-Hermite,,,335.0,2.545776081817092,continuous_rotation,,,,
+7,,,Buffered-Hermite,,,325.0,2.6711998273159585,continuous_rotation,,,,
+8,,,Buffered-Hermite,,,335.0,2.5354088755850883,continuous_rotation,,,,
+9,,,Buffered-Hermite,,,330.0,3.6650675184100745,continuous_rotation,,,,
+10,,,Buffered-Hermite,,,330.0,3.075957198482202,continuous_rotation,,,,
+1,,4.2700844924146315,Legacy direct,,,,,static_head_motion,,26.659161607318286,,
+2,,2.484220344462831,Legacy direct,,,,,static_head_motion,,9.575400992394457,,
+3,,2.753691097517938,Legacy direct,,,,,static_head_motion,,14.277709273155287,,
+4,,1.2184148368770311,Legacy direct,,,,,static_head_motion,,10.998844980542133,,
+1,,,Legacy direct,,,,,continuous_translation,,,170.0,12.397521848771046
+2,,,Legacy direct,,,,,continuous_translation,,,190.0,20.79431235905458
+3,,,Legacy direct,,,,,continuous_translation,,,165.0,20.711211216774934
+4,,,Legacy direct,,,,,continuous_translation,,,170.0,29.42135586264785
+5,,,Legacy direct,,,,,continuous_translation,,,175.0,26.4405585811215
+6,,,Legacy direct,,,,,continuous_translation,,,170.0,26.639385730508057
+7,,,Legacy direct,,,,,continuous_translation,,,165.0,26.974160907316264
+8,,,Legacy direct,,,,,continuous_translation,,,170.0,26.716016759441167
+9,,,Legacy direct,,,,,continuous_translation,,,195.0,29.951796739432876
+10,,,Legacy direct,,,,,continuous_translation,,,190.0,29.351560006355705
+11,,,Legacy direct,,,,,continuous_translation,,,190.0,28.610197949000714
+12,,,Legacy direct,,,,,continuous_translation,,,205.0,27.892610864273625
+13,,,Legacy direct,,,,,continuous_translation,,,170.0,31.51119135386725
+14,,,Legacy direct,,,,,continuous_translation,,,170.0,26.285941066694992
+15,,,Legacy direct,,,,,continuous_translation,,,195.0,31.54298034753951
+16,,,Legacy direct,,,,,continuous_translation,,,170.0,26.71822279622528
+17,,,Legacy direct,,,,,continuous_translation,,,210.0,26.881317947284145
+18,,,Legacy direct,,,,,continuous_translation,,,175.0,25.185769049493842
+19,,,Legacy direct,,,,,continuous_translation,,,200.0,29.431840987082587
+20,,,Legacy direct,,,,,continuous_translation,,,170.0,26.581234651400003
+21,,,Legacy direct,,,,,continuous_translation,,,170.0,29.596061904130725
+22,,,Legacy direct,,,,,continuous_translation,,,165.0,24.510324298279496
+23,,,Legacy direct,,,,,continuous_translation,,,180.0,26.35781397216287
+24,,,Legacy direct,,,,,continuous_translation,,,170.0,26.014865953713137
+25,,,Legacy direct,,,,,continuous_translation,,,185.0,25.02319050057781
+26,,,Legacy direct,,,,,continuous_translation,,,205.0,28.273991993077484
+27,,,Legacy direct,,,,,continuous_translation,,,165.0,26.57320050651846
+28,,,Legacy direct,,,,,continuous_translation,,,165.0,29.54576470248488
+29,,,Legacy direct,,,,,continuous_translation,,,165.0,30.757661015260354
+30,,,Legacy direct,,,,,continuous_translation,,,190.0,20.55225349145039
+1,,9.17916566583756,Corrected direct,,,,,static_head_motion,,44.29032653725441,,
+2,,4.5588336178247975,Corrected direct,,,,,static_head_motion,,11.934492518278285,,
+3,,4.885411565761925,Corrected direct,,,,,static_head_motion,,23.072776542361837,,
+4,,2.123428791952278,Corrected direct,,,,,static_head_motion,,11.713404016117495,,
+1,,,Corrected direct,,,,,continuous_translation,,,70.0,15.45572840531978
+2,,,Corrected direct,,,,,continuous_translation,,,75.0,14.068616426434485
+3,,,Corrected direct,,,,,continuous_translation,,,55.0,16.102192904402404
+4,,,Corrected direct,,,,,continuous_translation,,,60.0,16.82624265194988
+5,,,Corrected direct,,,,,continuous_translation,,,70.0,19.10605911938737
+6,,,Corrected direct,,,,,continuous_translation,,,65.0,17.634556566565255
+7,,,Corrected direct,,,,,continuous_translation,,,55.0,18.262378532093056
+8,,,Corrected direct,,,,,continuous_translation,,,65.0,17.30231692103765
+9,,,Corrected direct,,,,,continuous_translation,,,65.0,23.27821096597589
+10,,,Corrected direct,,,,,continuous_translation,,,60.0,19.970917778279933
+11,,,Corrected direct,,,,,continuous_translation,,,70.0,18.77844112099255
+12,,,Corrected direct,,,,,continuous_translation,,,55.0,21.645110916841546
+13,,,Corrected direct,,,,,continuous_translation,,,60.0,24.33678273864423
+14,,,Corrected direct,,,,,continuous_translation,,,50.0,17.438645961423376
+15,,,Corrected direct,,,,,continuous_translation,,,60.0,20.979621875625842
+16,,,Corrected direct,,,,,continuous_translation,,,60.0,20.540331773427134
+17,,,Corrected direct,,,,,continuous_translation,,,70.0,15.727565575935264
+18,,,Corrected direct,,,,,continuous_translation,,,50.0,17.383162163116857
+19,,,Corrected direct,,,,,continuous_translation,,,70.0,18.950752808262916
+20,,,Corrected direct,,,,,continuous_translation,,,75.0,20.625574432384553
+21,,,Corrected direct,,,,,continuous_translation,,,60.0,18.8453302028382
+22,,,Corrected direct,,,,,continuous_translation,,,65.0,16.86389899517097
+23,,,Corrected direct,,,,,continuous_translation,,,75.0,17.12014493938533
+24,,,Corrected direct,,,,,continuous_translation,,,75.0,16.817434484355477
+25,,,Corrected direct,,,,,continuous_translation,,,55.0,17.212790202507747
+26,,,Corrected direct,,,,,continuous_translation,,,70.0,21.563622489561556
+27,,,Corrected direct,,,,,continuous_translation,,,65.0,16.544120115884688
+28,,,Corrected direct,,,,,continuous_translation,,,55.0,22.064309592541015
+29,,,Corrected direct,,,,,continuous_translation,,,65.0,23.062993231057018
+30,,,Corrected direct,,,,,continuous_translation,,,65.0,12.122326079767442
+1,,4.400928553681192,Corrected continuous,,,,,static_head_motion,,25.73349795849722,,
+2,,1.3840956340571786,Corrected continuous,,,,,static_head_motion,,10.405098718616353,,
+3,,2.3991504031484254,Corrected continuous,,,,,static_head_motion,,13.132523926607329,,
+4,,0.5644682413340608,Corrected continuous,,,,,static_head_motion,,10.992251116991051,,
+1,,,Corrected continuous,,,,,continuous_translation,,,180.0,11.989408036087845
+2,,,Corrected continuous,,,,,continuous_translation,,,170.0,12.572280942676054
+3,,,Corrected continuous,,,,,continuous_translation,,,160.0,11.511633602726262
+4,,,Corrected continuous,,,,,continuous_translation,,,165.0,13.390056189899376
+5,,,Corrected continuous,,,,,continuous_translation,,,170.0,13.372187582842407
+6,,,Corrected continuous,,,,,continuous_translation,,,160.0,13.401962139477984
+7,,,Corrected continuous,,,,,continuous_translation,,,160.0,14.610908107957867
+8,,,Corrected continuous,,,,,continuous_translation,,,170.0,14.29329914003273
+9,,,Corrected continuous,,,,,continuous_translation,,,175.0,20.4293956578883
+10,,,Corrected continuous,,,,,continuous_translation,,,160.0,16.598421219020743
+11,,,Corrected continuous,,,,,continuous_translation,,,170.0,16.984031273878767
+12,,,Corrected continuous,,,,,continuous_translation,,,165.0,14.587217882256311
+13,,,Corrected continuous,,,,,continuous_translation,,,170.0,19.384250767184838
+14,,,Corrected continuous,,,,,continuous_translation,,,170.0,12.862684296834821
+15,,,Corrected continuous,,,,,continuous_translation,,,165.0,17.9739071496335
+16,,,Corrected continuous,,,,,continuous_translation,,,165.0,17.323892218335914
+17,,,Corrected continuous,,,,,continuous_translation,,,170.0,13.203520583424151
+18,,,Corrected continuous,,,,,continuous_translation,,,145.0,16.274847285438405
+19,,,Corrected continuous,,,,,continuous_translation,,,160.0,16.62634497550681
+20,,,Corrected continuous,,,,,continuous_translation,,,170.0,14.955679661654404
+21,,,Corrected continuous,,,,,continuous_translation,,,165.0,17.33962418699057
+22,,,Corrected continuous,,,,,continuous_translation,,,165.0,12.452207580788489
+23,,,Corrected continuous,,,,,continuous_translation,,,185.0,14.034321586888915
+24,,,Corrected continuous,,,,,continuous_translation,,,165.0,14.472920550434191
+25,,,Corrected continuous,,,,,continuous_translation,,,165.0,13.123894195805875
+26,,,Corrected continuous,,,,,continuous_translation,,,165.0,16.856448172562775
+27,,,Corrected continuous,,,,,continuous_translation,,,170.0,12.901638709602823
+28,,,Corrected continuous,,,,,continuous_translation,,,150.0,18.653477953567297
+29,,,Corrected continuous,,,,,continuous_translation,,,170.0,17.20145258123315
+30,,,Corrected continuous,,,,,continuous_translation,,,165.0,10.798861151118269
+1,,4.150987908839164,Buffered-Hermite,,,,,static_head_motion,,18.199500013146924,,
+2,,1.0828098033668723,Buffered-Hermite,,,,,static_head_motion,,8.155737738737136,,
+3,,1.822502851413564,Buffered-Hermite,,,,,static_head_motion,,10.57483837923763,,
+4,,0.4651620103983294,Buffered-Hermite,,,,,static_head_motion,,9.177794039753257,,
+1,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,4.0628885766517735
+2,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,3.261689310972611
+3,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,2.9470060667935365
+4,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,2.823958033906767
+5,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,4.132680121243997
+6,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,2.6402195596824756
+7,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,4.451862108654454
+8,,,Buffered-Hermite,,,,,continuous_translation,,,330.0,4.344637740355708
+9,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,5.181474542450753
+10,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,5.404691223972429
+11,,,Buffered-Hermite,,,,,continuous_translation,,,330.0,4.872909022490356
+12,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,5.203547753939574
+13,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,6.43010093140816
+14,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,5.911074228766305
+15,,,Buffered-Hermite,,,,,continuous_translation,,,305.0,5.530257949021788
+16,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,6.153681129184256
+17,,,Buffered-Hermite,,,,,continuous_translation,,,325.0,4.278427517276873
+18,,,Buffered-Hermite,,,,,continuous_translation,,,300.0,4.755037321533282
+19,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,5.046748741397055
+20,,,Buffered-Hermite,,,,,continuous_translation,,,330.0,6.105384606831346
+21,,,Buffered-Hermite,,,,,continuous_translation,,,315.0,5.40329243978885
+22,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,5.164254714934271
+23,,,Buffered-Hermite,,,,,continuous_translation,,,330.0,4.351843755453657
+24,,,Buffered-Hermite,,,,,continuous_translation,,,315.0,4.375650145067753
+25,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,3.9361330802839136
+26,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,7.702587029776116
+27,,,Buffered-Hermite,,,,,continuous_translation,,,315.0,4.632722808476098
+28,,,Buffered-Hermite,,,,,continuous_translation,,,305.0,5.7114674302798445
+29,,,Buffered-Hermite,,,,,continuous_translation,,,310.0,4.4875505522519665
+30,,,Buffered-Hermite,,,,,continuous_translation,,,320.0,5.363531936849765
