@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from .metrics import (
     FULL_VARIANT,
+    LINEAR_SLERP_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
     PaperResults,
@@ -40,10 +41,11 @@ _PAIR_COLOR = "#7F8790"
 _FULL_COLOR = _METHOD_COLORS[FULL_VARIANT]
 _DISABLED_COLOR = "#B07AA1"
 _EXTRAPOLATION_COLOR = "#2A9D8F"
+_HERMITE_COLOR = "#9C6ADE"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
-_EXP1_DYNAMIC_Y_LIMITS = (0.0, 15.0)
-_EXP2_TEMPORAL_Y_LIMITS = (0.0, 15.0)
+_EXP1_DYNAMIC_Y_DISPLAY_LIMIT = 25.0
+_EXP2_TEMPORAL_Y_DISPLAY_LIMIT = 32.0
 
 
 def _configure() -> None:
@@ -113,8 +115,8 @@ def build_point_panel(
             positions,
             values,
             color=_PAIR_COLOR,
-            linewidth=0.75,
-            alpha=0.24,
+            linewidth=0.45,
+            alpha=0.14,
             zorder=1,
         )
     for index, method in enumerate(METHODS):
@@ -124,8 +126,8 @@ def build_point_panel(
         axis.scatter(
             positions[index] + offsets,
             values,
-            s=25,
-            alpha=0.26,
+            s=13,
+            alpha=0.25,
             marker=_MARKERS[index],
             color=color,
             label=_SHORT_LABELS[method],
@@ -134,15 +136,15 @@ def build_point_panel(
         box = axis.boxplot(
             [values],
             positions=[positions[index]],
-            widths=0.22,
+            widths=0.18,
             whis=(0, 100),
             showfliers=False,
             patch_artist=True,
             zorder=3,
-            boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.45},
-            whiskerprops={"color": color, "linewidth": 1.45},
-            capprops={"color": color, "linewidth": 1.45},
-            medianprops={"color": color, "linewidth": 2.1},
+            boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.0},
+            whiskerprops={"color": color, "linewidth": 1.0},
+            capprops={"color": color, "linewidth": 1.0},
+            medianprops={"color": color, "linewidth": 1.45},
         )
         for patch in box["boxes"]:
             patch.set_alpha(0.72)
@@ -150,7 +152,7 @@ def build_point_panel(
             positions[index],
             float(np.median(values)),
             marker=_MARKERS[index],
-            markersize=7.5,
+            markersize=5.5,
             markerfacecolor=color,
             markeredgecolor="white",
             markeredgewidth=0.8,
@@ -161,17 +163,47 @@ def build_point_panel(
     axis.set_ylabel(ylabel)
     axis.set_ylim(bottom=0)
     _clean_axis(axis)
-    axis.legend(
-        frameon=False,
-        ncol=2,
-        loc="lower right",
-        bbox_to_anchor=(1.0, 1.0),
-        borderaxespad=0.0,
-        handletextpad=0.5,
-        columnspacing=1.1,
-    )
     figure.tight_layout()
     return figure
+
+
+def _scatter_with_display_limit(
+    axis: Any,
+    points: np.ndarray,
+    *,
+    color: str,
+    marker: str,
+    label: str,
+    display_limit: float,
+    size: float = 22.0,
+    alpha: float = 0.28,
+) -> None:
+    """绘制散点；超出显示上限的值以顶端空心箭头保留。"""
+
+    visible = points[:, 1] <= display_limit
+    if np.any(visible):
+        axis.scatter(
+            points[visible, 0],
+            points[visible, 1],
+            s=size,
+            alpha=alpha,
+            marker=marker,
+            color=color,
+            label=label,
+            zorder=2,
+        )
+    if np.any(~visible):
+        axis.scatter(
+            points[~visible, 0],
+            np.full(np.count_nonzero(~visible), display_limit * 0.985),
+            s=size + 12.0,
+            marker="^",
+            facecolors="white",
+            edgecolors=color,
+            linewidths=1.1,
+            label=label if not np.any(visible) else "_nolegend_",
+            zorder=3,
+        )
 
 
 def build_translation_panel(results: PaperResults) -> Any:
@@ -186,15 +218,13 @@ def build_translation_panel(results: PaperResults) -> Any:
     for index, method in enumerate(METHODS):
         points = paired[:, index, :]
         color = _METHOD_COLORS[method]
-        axis.scatter(
-            points[:, 0],
-            points[:, 1],
-            s=24,
-            alpha=0.28,
-            marker=_MARKERS[index],
+        _scatter_with_display_limit(
+            axis,
+            points,
             color=color,
+            marker=_MARKERS[index],
             label=_SHORT_LABELS[method],
-            zorder=2,
+            display_limit=_EXP1_DYNAMIC_Y_DISPLAY_LIMIT,
         )
         median_x, median_y = np.median(points, axis=0)
         q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
@@ -217,8 +247,8 @@ def build_translation_panel(results: PaperResults) -> Any:
         min(_DYNAMIC_X_LIMITS[0], float(np.min(paired[:, :, 0])) * 0.96),
         max(_DYNAMIC_X_LIMITS[1], float(np.max(paired[:, :, 0])) * 1.04),
     )
-    axis.set_ylim(_EXP1_DYNAMIC_Y_LIMITS[0], max(_EXP1_DYNAMIC_Y_LIMITS[1], float(np.max(paired[:, :, 1])) * 1.08))
-    axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
+    axis.set_ylim(0.0, _EXP1_DYNAMIC_Y_DISPLAY_LIMIT)
+    axis.annotate("better", xy=(168, 2.2), xytext=(205, 4.8), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
         frameon=False,
@@ -313,11 +343,11 @@ def _paired_panel(
 
 
 def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
-    """绘制两种配对时序策略的 lag--residual 分布。"""
+    """绘制外推、默认 Linear/SLERP 与 Hermite 的配对 lag--residual 分布。"""
 
-    labels = ("Smoothed KF Extrapolation", "Hermite Interpolation")
-    colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR)
-    markers = ("D", "o")
+    labels = ("Smoothed KF Extrapolation", "Linear/SLERP", "Hermite")
+    colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR, _HERMITE_COLOR)
+    markers = ("D", "s", "o")
     for episode in paired_points:
         axis.plot(
             episode[:, 0],
@@ -331,14 +361,15 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
         zip(labels, colors, markers, strict=True)
     ):
         points = paired_points[:, index, :]
-        axis.scatter(
-            points[:, 0],
-            points[:, 1],
-            marker=marker,
+        _scatter_with_display_limit(
+            axis,
+            points,
             color=color,
-            s=27,
-            alpha=0.38,
+            marker=marker,
             label=label,
+            display_limit=_EXP2_TEMPORAL_Y_DISPLAY_LIMIT,
+            size=25.0 if index < 2 else 18.0,
+            alpha=0.38 if index < 2 else 0.24,
         )
         median_x, median_y = np.median(points, axis=0)
         q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
@@ -361,7 +392,7 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
         min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
         max(_DYNAMIC_X_LIMITS[1], float(np.max(all_points[:, 0])) * 1.04),
     )
-    axis.set_ylim(_EXP2_TEMPORAL_Y_LIMITS[0], max(_EXP2_TEMPORAL_Y_LIMITS[1], float(np.max(all_points[:, 1])) * 1.08))
+    axis.set_ylim(0.0, _EXP2_TEMPORAL_Y_DISPLAY_LIMIT)
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
@@ -471,11 +502,11 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
     return figure
 
 
-def publish_figures(results: PaperResults, paper_root: Path) -> Mapping[str, Path]:
-    """发布由 LaTeX 排列的图二和图三独立面板。"""
+def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Path]:
+    """只在活动批次的分析目录发布图二和图三独立面板。"""
 
     _configure()
-    panels = paper_root / "figures" / "panels"
+    panels = output_root / "figures"
     panels.mkdir(parents=True, exist_ok=True)
 
     world = {

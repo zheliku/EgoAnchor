@@ -139,10 +139,10 @@ src/egoanchor/eval/config/paper.toml
 | `pixi run eval promote [batch_id]`   | 一个完整暂存批次        | 新`active_root`，旧批次进入 `archive_root`   | 是                 |
 | `pixi run eval qc`                   | `active_root/raw`     | QC JSON；必要时生成`events.jsonl`              | 否                 |
 | `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
-| `pixi run eval analyze --skip-latex` | 五本 Stage 1 XLSX       | 指标、绘图数据、面板、表格、主稿回填             | 否                 |
+| `pixi run eval analyze`              | 五本 Stage 1 XLSX       | 活动批次本地指标、绘图数据、面板和手工引入 TeX   | 否                 |
+| `pixi run eval copy-assets`          | 本地面板和显式 relay 文件 | 论文目录中的 PNG/PDF                            | 是，仅图片         |
 | `pixi run eval latex`                | 配置指定的`.tex` 主稿 | 配置指定的最终 PDF                               | 否                 |
-| `pixi run eval analyze`              | 五本 Stage 1 XLSX       | `analyze --skip-latex` 的全部输出，再编译 PDF  | 否                 |
-| `pixi run eval rebuild`              | `active_root/raw`     | preprocess + analyze + latex 的全部输出          | 否                 |
+| `pixi run eval rebuild`              | `active_root/raw`     | preprocess + analyze 的本地分析输出              | 否                 |
 
 只有 `promote` 会替换当前活动批次。`preprocess`、`analyze` 和 `rebuild` 会更新活动批次内的
 派生产物，但不会把另一个批次切换进来。
@@ -270,9 +270,9 @@ pixi run eval promote <batch_id>
 控制。命令不允许覆盖已经存在的冷归档。
 
 成功判据：返回新的 `active_root` 和旧批次 `archived_root`。新活动批次此时只有 `raw/` 和
-`workbooks/`；还要执行 `analyze` 才会得到这一批对应的图表和论文结果。
+`workbooks/`；还要执行 `analyze` 才会得到这一批对应的本地分析结果。
 
-确认新批次的工作簿、图表和 PDF 都正确后，才可以清理 `data/eval` 中对应的五个 session。
+确认新批次的工作簿和本地分析结果都正确后，才可以清理 `data/eval` 中对应的五个 session。
 继续采集前重新启动同步：
 
 ```text
@@ -337,12 +337,10 @@ active_root/workbooks/
 成功判据：返回五个 `workbook_sha256`。工作簿可以只读查看，但不要在 Excel 中保存后继续
 用于正式分析；Excel 保存会改变文件内容和摘要。
 
-### 阶段 6：analyze，从五本 XLSX 生成指标、绘图数据和论文内容
-
-只分析、不编译最终论文：
+### 阶段 6：analyze，从五本 XLSX 生成活动批次本地分析结果
 
 ```text
-pixi run eval analyze --skip-latex
+pixi run eval analyze
 ```
 
 输入：
@@ -367,46 +365,58 @@ active_root/analysis/
 │  └─ strategy_comparison_summary.csv
 ├─ plots/
 │  └─ figure_plot_data.xlsx
+├─ figures/
+│  ├─ figure2a_head_motion.png/.pdf
+│  ├─ figure2b_translation.png/.pdf
+│  ├─ figure2c_occlusion.png/.pdf
+│  ├─ figure3a_capture_alignment.png/.pdf
+│  ├─ figure3b_static_lock.png/.pdf
+│  ├─ figure3c_vcd_risk_coverage.png/.pdf
+│  └─ figure3d_temporal_strategies.png/.pdf
+├─ tex/
+│  ├─ tables/
+│  │  ├─ experiment1_system_characterization.tex
+│  │  └─ experiment2_design_attribution.tex
+│  └─ figures/
+│     ├─ figure2_experiment1.tex
+│     └─ figure3_experiment2.tex
 └─ provenance/
    ├─ analysis_manifest.json
    └─ build_result.json
-
-paper_root/figures/panels/
-├─ figure2a_head_motion.png/.pdf
-├─ figure2b_translation.png/.pdf
-├─ figure2c_occlusion.png/.pdf
-├─ figure3a_capture_alignment.png/.pdf
-├─ figure3b_static_lock.png/.pdf
-├─ figure3c_vcd.png/.pdf
-└─ figure3d_temporal_strategies.png/.pdf
-
-paper_root/tables/
-├─ experiment1_system_characterization.tex
-└─ experiment2_design_attribution.tex
-
-paper_root/<manuscript>
 ```
 
-重要写入行为：`analyze` 会原地更新 TOML 指定主稿中的实验一/二自动生成区域，并更新输入
-工作簿 provenance。它不是单纯的“画图”命令。如果你刚刚手改了实验一/二生成区，再运行
-`analyze` 会用当前数据重新覆盖这些区域。只修改普通正文、暂时不想重算结果时，应直接运行
-`latex`，不要运行 `analyze`。
+重要边界：`analyze` 不修改 `2026-EgoAnchor` 下的主稿、图、表或 PDF，也不运行 XeLaTeX。
+它只更新活动批次的 `analysis/`。图 2(b) 和图 3(d) 中超出显示上限的真实点用图顶空心上三角表示，
+完整数值仍保留在 `metrics/` 与 `figure_plot_data.xlsx`，不得因此删行或修改统计。
 
 `figure_plot_data.xlsx` 与 PNG/PDF 面板来自同一份内存分析结果。它用于核对图中可见点，不是
 后续绘图输入。手改它不会改变图片，下次分析还会覆盖它。
 
 你能控制的内容：
 
-- 输入、分析输出和论文根目录由 `batch.toml` 控制。
-- 当前被回填的主稿由 `[paper].manuscript` 控制。
+- 输入、分析输出、论文根目录和图片发布清单由 `batch.toml` 控制。
 - 指标算法参数由 `paper.toml` 控制，但正式采集后不能临时调参。
-- `--skip-latex` 只跳过最终 XeLaTeX，不跳过指标、图片、表格或主稿回填。
 
-成功判据：退出码为 0，`build_result.json` 中 `"passed": true`，七组面板、两张 TeX 表和
-配置指定的主稿都存在。分析输出不是跨全部文件的单一事务；中途失败时不要使用局部新产物，
-修复问题后重新运行完整 `analyze --skip-latex`。
+成功判据：退出码为 0，`build_result.json` 中 `"passed": true`，七组面板、两张 TeX 表和两段
+图环境 TeX 都存在。分析输出不是跨全部文件的单一事务；中途失败时不要使用局部新产物，修复问题后
+重新运行完整 `analyze`。
 
-### 阶段 7：latex，只编译当前主稿
+### 阶段 7：copy-assets，显式发布 PNG/PDF
+
+确认活动批次 `analysis/` 的数值和图形后运行：
+
+```text
+pixi run eval copy-assets
+```
+
+命令只复制当前 `analysis/figures/` 下的七组实验面板 PNG/PDF，以及 `batch.toml` 中逐项声明的
+replay/relay PNG/PDF。它不会复制 TeX，不会修改主稿，也不会编译 PDF。定性图来源不得按修改时间猜测，
+应在 `[[copy_assets.relay]]` 中显式固定。
+
+研究者从 `analysis/tex/tables/` 和 `analysis/tex/figures/` 手工复制、审阅所需片段到主稿。只有完成这步后，
+才进入 LaTeX 编译。
+
+### 阶段 8：latex，只编译当前主稿
 
 命令：
 
@@ -448,16 +458,10 @@ pixi run eval analyze
 
 它不执行 `stage` 或 `promote`，不会切换数据批次。
 
-### 当前 raw 全部分析，但暂不编译 PDF
-
-```text
-pixi run eval rebuild --skip-latex
-```
-
 ### 工作簿已经确认，只重算指标和图
 
 ```text
-pixi run eval analyze --skip-latex
+pixi run eval analyze
 ```
 
 ### 只改了普通 LaTeX 正文
@@ -466,7 +470,7 @@ pixi run eval analyze --skip-latex
 pixi run eval latex
 ```
 
-不要为了编译正文运行 `analyze`，因为它会重新回填实验一/二生成区。
+不要为了编译正文运行 `analyze`；它不会回填主稿，数据分析和论文写作应保持分开。
 
 ### 新采集五个 session 的完整顺序
 
@@ -476,9 +480,11 @@ pixi run eval sessions
 pixi run eval stage <session-dir-1> <session-dir-2> <session-dir-3> <session-dir-4> <session-dir-5>
 pixi run eval promote <batch_id>
 pixi run eval analyze
+pixi run eval copy-assets
 ```
 
-`stage` 已经为暂存批次生成工作簿，提升后通常直接 `analyze`，不必再次 preprocess。
+`stage` 已经为暂存批次生成工作簿，提升后通常直接 `analyze`，不必再次 preprocess。检查本地
+`analysis/` 后再运行 `copy-assets`；TeX 仍需手工引入主稿，最后才运行 `latex`。
 
 ## 七、哪些东西不能手工改
 
@@ -489,8 +495,8 @@ pixi run eval analyze
 - 不要在 writer 或 Mutagen 仍运行时执行归档切换。
 - 不要恢复要求手工输入五组路径的旧 Python CLI。人工入口只有 `pixi run eval`。
 
-主稿的普通正文可以手工编辑。实验一/二自动生成区域应由 `analyze` 维护；如果确需修改生成
-逻辑，应修改分析代码和模板生成函数，然后对五本工作簿完整重建。
+主稿正文、表格 TeX 和图环境由研究者手工维护。`analyze` 输出的 TeX 片段是可审阅的来源，不会自动
+覆盖主稿；若需调整统计或图形生成逻辑，应修改分析代码后对五本工作簿完整重建。
 
 ## 八、退出码和排错
 

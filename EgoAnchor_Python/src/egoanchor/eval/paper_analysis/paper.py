@@ -1,10 +1,9 @@
-"""实验一/二表格、绘图数据和中文主稿物化。"""
+"""实验一/二本地表格、绘图数据和手工引入用 TeX 片段物化。"""
 
 from __future__ import annotations
 
 import csv
 import json
-import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -17,6 +16,7 @@ from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 from .figures import summarize_risk_coverage
 from .metrics import (
     HERMITE_INTERPOLATION_VARIANT,
+    LINEAR_SLERP_VARIANT,
     SMOOTHED_EXTRAPOLATION_VARIANT,
     FULL_VARIANT,
     METHODS,
@@ -214,30 +214,32 @@ def _exp2_table(results: PaperResults) -> str:
     reduction = arrival - capture
     capture_effect = f"+{_fmt(float(np.median(reduction)))} [{_fmt(float(np.quantile(reduction, .25)))}, {_fmt(float(np.quantile(reduction, .75)))}]~mm; {int(np.sum(reduction > 0))}/{len(reduction)} 改善"
     full_static, disabled_static, static_delta, static_positive = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    hermite_translation, extrapolation_translation, extrapolation_translation_delta, extrapolation_translation_higher = _paired_summary(
+    linear_translation, extrapolation_translation, extrapolation_translation_delta, extrapolation_translation_higher = _paired_summary(
         results.translation_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "aligned_rmse_mm",
-        HERMITE_INTERPOLATION_VARIANT,
+        LINEAR_SLERP_VARIANT,
     )
-    hermite_rotation, extrapolation_rotation, extrapolation_rotation_delta, extrapolation_rotation_higher = _paired_summary(
+    linear_rotation, extrapolation_rotation, extrapolation_rotation_delta, extrapolation_rotation_higher = _paired_summary(
         results.rotation_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "aligned_rmse_deg",
-        HERMITE_INTERPOLATION_VARIANT,
+        LINEAR_SLERP_VARIANT,
     )
-    hermite_overshoot, extrapolation_overshoot, extrapolation_overshoot_delta, _ = _paired_summary(
+    linear_overshoot, extrapolation_overshoot, extrapolation_overshoot_delta, _ = _paired_summary(
         results.stop_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "forward_overshoot_mm",
-        HERMITE_INTERPOLATION_VARIANT,
+        LINEAR_SLERP_VARIANT,
     )
-    hermite_settling, extrapolation_settling, extrapolation_settling_delta, _ = _paired_summary(
+    linear_settling, extrapolation_settling, extrapolation_settling_delta, _ = _paired_summary(
         results.stop_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "settling_time_ms",
-        HERMITE_INTERPOLATION_VARIANT,
+        LINEAR_SLERP_VARIANT,
     )
+    hermite_translation = _summary(results.translation_segments[HERMITE_INTERPOLATION_VARIANT], "aligned_rmse_mm")[0]
+    hermite_rotation = _summary(results.rotation_segments[HERMITE_INTERPOLATION_VARIANT], "aligned_rmse_deg")[0]
     vcd_full = results.occlusion_episodes[FULL_VARIANT]
     vcd_disabled = results.occlusion_episodes[NO_VCD]
     vcd_aurc = _cell(_summary(results.vcd_aurc_segments, "aurc_mm"))
@@ -248,7 +250,7 @@ def _exp2_table(results: PaperResults) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD admission 行报告冻结阈值的运行时效果。Smoothed KF Extrapolation 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
+        r"\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD admission 行报告冻结阈值的运行时效果。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{4.8pt}",
@@ -261,8 +263,9 @@ def _exp2_table(results: PaperResults) -> str:
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
         f"VCD score & event AURC（越低越好） & {vcd_aurc}~mm & 全覆盖风险 {vcd_full_risk}~mm & 相对全覆盖收益 {vcd_risk_gain}~mm \\\\",
         f"VCD 接纳 & 遮挡最大误差 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
-        f"时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Hermite {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & Smoothed KF {_fmt(extrapolation_translation)}~mm / {_fmt(extrapolation_rotation)}$^\\circ$ & Extrapolation--Hermite: {_fmt(extrapolation_translation_delta)}~mm / {_fmt(extrapolation_rotation_delta)}$^\\circ$；{int(extrapolation_translation_higher)}/{len(results.translation_segments[HERMITE_INTERPOLATION_VARIANT])}、{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[HERMITE_INTERPOLATION_VARIANT])} 个片段外推较高 \\\\",
-        f"停止护栏（StaticLock off） & 前向过冲 / settling & Hermite {_fmt(hermite_overshoot)}~mm / {_fmt(hermite_settling, 1)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling, 1)}~ms & Extrapolation--Hermite: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta, 1)}~ms \\\\",
+        f"时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Smoothed KF {_fmt(extrapolation_translation)}~mm / {_fmt(extrapolation_rotation)}$^\\circ$ & Extrapolation--Linear: {_fmt(extrapolation_translation_delta)}~mm / {_fmt(extrapolation_rotation_delta)}$^\\circ$；{int(extrapolation_translation_higher)}/{len(results.translation_segments[LINEAR_SLERP_VARIANT])}、{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[LINEAR_SLERP_VARIANT])} 个片段外推较高 \\\\",
+        f"Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Hermite {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & 与 Linear/SLERP 对照见图~3(d) \\\\",
+        f"停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP {_fmt(linear_overshoot)}~mm / {_fmt(linear_settling, 1)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling, 1)}~ms & Extrapolation--Linear: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta, 1)}~ms \\\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",
@@ -271,231 +274,11 @@ def _exp2_table(results: PaperResults) -> str:
     return "\n".join(lines)
 
 
-def _exp1_text(results: PaperResults) -> str:
-    """生成实验一正文。"""
-
-    values = {
-        "ego_centered": _summary(results.static_segments[FULL_VARIANT], "centered_p95_mm")[0],
-        "arrival_centered": _summary(results.static_segments["Arrival-Hold"], "centered_p95_mm")[0],
-        "capture_centered": _summary(results.static_segments["Capture-Hold"], "centered_p95_mm")[0],
-        "one_euro_centered": _summary(results.static_segments["One-Euro Anchor"], "centered_p95_mm")[0],
-        "ego_absolute": _summary(results.static_segments[FULL_VARIANT], "absolute_p95_mm")[0],
-        "ego_increment": _summary(results.static_segments[FULL_VARIANT], "frame_increment_p95_mm")[0],
-        "one_euro_increment": _summary(results.static_segments["One-Euro Anchor"], "frame_increment_p95_mm")[0],
-        "ego_lag": _summary(results.translation_segments[FULL_VARIANT], "effective_lag_ms")[0],
-        "ego_rmse": _summary(results.translation_segments[FULL_VARIANT], "aligned_rmse_mm")[0],
-        "arrival_lag": _summary(results.translation_segments["Arrival-Hold"], "effective_lag_ms")[0],
-        "arrival_rmse": _summary(results.translation_segments["Arrival-Hold"], "aligned_rmse_mm")[0],
-        "one_euro_lag": _summary(results.translation_segments["One-Euro Anchor"], "effective_lag_ms")[0],
-        "one_euro_rmse": _summary(results.translation_segments["One-Euro Anchor"], "aligned_rmse_mm")[0],
-        "ego_rotation_lag": _summary(results.rotation_segments[FULL_VARIANT], "effective_lag_ms")[0],
-        "ego_rotation_rmse": _summary(results.rotation_segments[FULL_VARIANT], "aligned_rmse_deg")[0],
-        "one_euro_rotation_lag": _summary(results.rotation_segments["One-Euro Anchor"], "effective_lag_ms")[0],
-        "one_euro_rotation_rmse": _summary(results.rotation_segments["One-Euro Anchor"], "aligned_rmse_deg")[0],
-        "ego_occ": _summary(results.occlusion_episodes[FULL_VARIANT], "translation_p95_mm")[0],
-        "one_euro_occ": _summary(results.occlusion_episodes["One-Euro Anchor"], "translation_p95_mm")[0],
-        "ego_start": _summary(results.transition_segments[FULL_VARIANT], "response_ms")[0],
-    }
-    return f"""\\subsection{{实验一：应用侧锚点行为}}
-
-实验一围绕五项应用可感知属性组织：\\emph{{world consistency}} 衡量主动头动是否被错误写入静止物体的世界位置；\\emph{{rest stability}} 衡量静止锚点的逐帧显示抖动；\\emph{{dynamic fidelity}} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\\emph{{failure containment}} 衡量遮挡和坏观测是否破坏已建立锚点；\\emph{{transition cost}} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。
-
-{_exp1_table(results)}
-
-\\textbf{{头动下的世界一致性与静止稳定性。}} 移除每个动作片段的固定注册偏置后，EgoAnchor 的中心化平移 P95 为 {_fmt(values['ego_centered'])}~mm，而 Arrival-Hold、Capture-Hold 与 One-Euro Anchor 分别为 {_fmt(values['arrival_centered'])}、{_fmt(values['capture_centered'])} 与 {_fmt(values['one_euro_centered'])}~mm。EgoAnchor 的绝对注册 P95 为 {_fmt(values['ego_absolute'])}~mm；其静止帧间位置增量 P95 为 {_fmt(values['ego_increment'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_increment'])}~mm。
-
-\\textbf{{持续运动中的时延--轨迹质量权衡。}} 持续平移中，EgoAnchor 的有效时延 / lag-aligned RMSE 为 {_fmt(values['ego_lag'], 1)}~ms / {_fmt(values['ego_rmse'])}~mm；Arrival-Hold 为 {_fmt(values['arrival_lag'], 1)}~ms / {_fmt(values['arrival_rmse'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_lag'], 1)}~ms / {_fmt(values['one_euro_rmse'])}~mm。结果支持稳定优先的连续轨迹合成，而不是最低时延主张。
-
-\\textbf{{持续旋转。}} EgoAnchor 的有效时延 / 对齐角 RMSE 为 {_fmt(values['ego_rotation_lag'], 1)}~ms / {_fmt(values['ego_rotation_rmse'])}$^\\circ$，One-Euro Anchor 为 {_fmt(values['one_euro_rotation_lag'], 1)}~ms / {_fmt(values['one_euro_rotation_rmse'])}$^\\circ$。旋转结果与平移结果分开报告，避免用位置通道的收益替代姿态通道证据；平滑 Kalman 外推与 Hermite 插值的配对比较在实验二中单独报告。
-
-\\textbf{{遮挡期间的失效控制。}} 遮挡过程中，EgoAnchor 的 episode-level 平移 P95 中位数为 {_fmt(values['ego_occ'])}~mm，One-Euro Anchor 为 {_fmt(values['one_euro_occ'])}~mm。完整分布、40~mm 阈值超限率和最大值共同保留在图和审阅表中。
-
-\\textbf{{起停转换代价。}} Start-transition response 使用片段前 250~ms 基线、5~mm 位移阈值和 100~ms 持续条件。EgoAnchor 的片段中位数为 {_fmt(values['ego_start'], 1)}~ms；该量包含 StaticLock 解锁证据、候选更新和延迟合成时间线，不是网络或视觉推理的原始时延。
-
-\\begin{{figure*}}[t]
-  \\centering
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure2a_head_motion.pdf}}
-    \\caption{{头动下的中心化误差}}
-    \\label{{fig:exp1-head-motion}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure2b_translation.pdf}}
-    \\caption{{持续平移的时延与残差}}
-    \\label{{fig:exp1-translation}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure2c_occlusion.pdf}}
-    \\caption{{遮挡期间的平移误差}}
-    \\label{{fig:exp1-occlusion}}
-  \\end{{subfigure}}
-  \\caption{{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，避免跨方法顺序造成视觉混淆。}}
-  \\label{{fig:exp1-final}}
-\\end{{figure*}}
-"""
-
-
-def _exp2_text(results: PaperResults) -> str:
-    """生成实验二正文、表格和四面板图。"""
-
-    capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
-    arrival = np.asarray([float(row["arrival_p95_mm"]) for row in results.capture_alignment])
-    reduction = arrival - capture
-    full_static, disabled_static, static_delta, _ = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    full_vcd = results.occlusion_episodes[FULL_VARIANT]
-    disabled_vcd = results.occlusion_episodes[NO_VCD]
-    vcd_aurc = _summary(results.vcd_aurc_segments, "aurc_mm")
-    vcd_full_risk = _summary(results.vcd_aurc_segments, "full_coverage_risk_mm")
-    vcd_risk_gain = _summary(results.vcd_aurc_segments, "risk_gain_mm")
-    hermite_translation, extrapolation_translation, extrapolation_translation_delta, extrapolation_translation_higher = _paired_summary(
-        results.translation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "aligned_rmse_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_rotation, extrapolation_rotation, extrapolation_rotation_delta, extrapolation_rotation_higher = _paired_summary(
-        results.rotation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "aligned_rmse_deg",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_lag, extrapolation_lag, extrapolation_lag_delta, _ = _paired_summary(
-        results.translation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "effective_lag_ms",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_rotation_lag, extrapolation_rotation_lag, extrapolation_rotation_lag_delta, _ = _paired_summary(
-        results.rotation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "effective_lag_ms",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    _, _, extrapolation_increment_delta, _ = _paired_summary(
-        results.static_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "frame_increment_p95_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    _, _, extrapolation_response_delta, _ = _paired_summary(
-        results.transition_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "response_ms",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_overshoot, extrapolation_overshoot, extrapolation_overshoot_delta, _ = _paired_summary(
-        results.stop_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "forward_overshoot_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_return, extrapolation_return, extrapolation_return_delta, _ = _paired_summary(
-        results.stop_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "reverse_return_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_settling, extrapolation_settling, extrapolation_settling_delta, _ = _paired_summary(
-        results.stop_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "settling_time_ms",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_correction, extrapolation_correction, extrapolation_correction_delta, _ = _paired_summary(
-        results.correction_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "position_step_p95_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_rotation_correction, extrapolation_rotation_correction, extrapolation_rotation_correction_delta, _ = _paired_summary(
-        results.correction_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "rotation_step_p95_deg",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_occlusion = results.occlusion_episodes[HERMITE_INTERPOLATION_VARIANT]
-    extrapolation_occlusion = results.occlusion_episodes[SMOOTHED_EXTRAPOLATION_VARIANT]
-    hermite_occlusion_p95, extrapolation_occlusion_p95, extrapolation_occlusion_p95_delta, _ = _paired_summary(
-        results.occlusion_episodes,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "translation_p95_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_occlusion_max, extrapolation_occlusion_max, extrapolation_occlusion_max_delta, _ = _paired_summary(
-        results.occlusion_episodes,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "translation_max_mm",
-        HERMITE_INTERPOLATION_VARIANT,
-    )
-    hermite_occlusion_failures = sum(bool(row["catastrophic_gt40"]) for row in hermite_occlusion)
-    extrapolation_occlusion_failures = sum(bool(row["catastrophic_gt40"]) for row in extrapolation_occlusion)
-    return f"""\\subsection{{实验二：组件归因与时序策略比较}}
-
-实验二复用实验一的候选、参考轨迹和渲染时间线。三项单组件消融分别关闭采集时刻对齐、VCD 和 StaticLock，并以完整 EgoAnchor 为参照。另设 Smoothed KF Extrapolation 与 Hermite Interpolation 两路时序条件；二者共享 Kalman、VCD、生命周期、候选序列、渲染时间线和关闭 StaticLock 的设置，只改变逐帧输出策略。该配对比较不改变完整 EgoAnchor 仍采用 Linear/SLERP 与 StaticLock 的主方法定义。
-
-{_exp2_table(results)}
-
-\\begin{{figure*}}[t]
-  \\centering
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure3a_capture_alignment.pdf}}
-    \\caption{{采集时刻对齐}}
-    \\label{{fig:exp2-alignment}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure3b_static_lock.pdf}}
-    \\caption{{StaticLock}}
-    \\label{{fig:exp2-static-lock}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-  \\includegraphics[width=\\linewidth]{{figures/panels/figure3c_vcd_risk_coverage.pdf}}
-  \\caption{{VCD score 风险--覆盖率}}
-    \\label{{fig:exp2-vcd}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.40\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{figures/panels/figure3d_temporal_strategies.pdf}}
-    \\caption{{时序策略}}
-    \\label{{fig:exp2-temporal}}
-  \\end{{subfigure}}
-  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 配对比较 Smoothed KF Extrapolation 与 Hermite Interpolation。两路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。}}
-  \\label{{fig:exp2-final}}
-\\end{{figure*}}
-
-\\textbf{{采集时刻对齐。}} 对同一批原始候选直接应用两种世界复合后，片段级 candidate P95 由 arrival-time 的 {_fmt(float(np.median(arrival)))}~mm 降至 capture-time 的 {_fmt(float(np.median(capture)))}~mm；{int(np.sum(reduction > 0))}/{len(reduction)} 个片段改善，配对中位降幅为 {_fmt(float(np.median(reduction)))}~mm。
-
-\\textbf{{StaticLock。}} 关闭 StaticLock 后，中心化静止 P95 从 {_fmt(full_static)} 增至 {_fmt(disabled_static)}~mm，配对差值为 +{_fmt(static_delta)}~mm。该结果表明 StaticLock 限制慢速静止漂移，而逐帧增量仍作为表格护栏报告。
-
-\\textbf{{VCD score 与 admission。}} 在每个最终有效的遮挡 event 内，按连续 VCD 分数从高到低诱导候选顺序，并以 capture-time raw pose 相对同 frame 平台参考的平均平移误差定义 selective risk；同分候选不可拆分。event AURC 为 {_cell(vcd_aurc)}~mm，全覆盖风险为 {_cell(vcd_full_risk)}~mm，相对全覆盖的风险收益为 {_cell(vcd_risk_gain)}~mm。VCD 是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法；risk--coverage 只是由分数诱导的离线评价。运行时使用冻结阈值时，启用 VCD 有 {sum(bool(row['catastrophic_gt40']) for row in full_vcd)}/{len(full_vcd)} 次遮挡过程超过 40~mm，关闭后为 {sum(bool(row['catastrophic_gt40']) for row in disabled_vcd)}/{len(disabled_vcd)}；后者检验 admission 的尾部效果，不能替代 score 判别性。
-
-\\textbf{{Smoothed KF Extrapolation 与 Hermite Interpolation。}} 在 Kalman、VCD、生命周期、候选序列和 StaticLock 关闭状态一致时，Hermite 插值与平滑 Kalman 外推的平移 fitted lag / aligned RMSE 分别为 {_fmt(hermite_lag, 1)}~ms / {_fmt(hermite_translation)}~mm 和 {_fmt(extrapolation_lag, 1)}~ms / {_fmt(extrapolation_translation)}~mm；Extrapolation--Hermite 的配对中位变化为 {_fmt(extrapolation_lag_delta, 1)}~ms / {_fmt(extrapolation_translation_delta)}~mm，{int(extrapolation_translation_higher)}/{len(results.translation_segments[HERMITE_INTERPOLATION_VARIANT])} 个片段中外推的平移残差较高。旋转 fitted lag / aligned RMSE 分别为 {_fmt(hermite_rotation_lag, 1)}~ms / {_fmt(hermite_rotation)}$^\\circ$ 和 {_fmt(extrapolation_rotation_lag, 1)}~ms / {_fmt(extrapolation_rotation)}$^\\circ$；配对变化为 {_fmt(extrapolation_rotation_lag_delta, 1)}~ms / {_fmt(extrapolation_rotation_delta)}$^\\circ$，{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[HERMITE_INTERPOLATION_VARIANT])} 个片段中外推的旋转残差较高。
-
-候选生效边界的位置 / 旋转步长 P95 分别为 Hermite {_fmt(hermite_correction)}~mm / {_fmt(hermite_rotation_correction)}$^\\circ$ 和 Smoothed KF {_fmt(extrapolation_correction)}~mm / {_fmt(extrapolation_rotation_correction)}$^\\circ$；配对变化为 {_fmt(extrapolation_correction_delta)}~mm / {_fmt(extrapolation_rotation_correction_delta)}$^\\circ$。该量是 source frame 改变前后相邻 render pose 的差，包含帧间真实运动，不解释为 Kalman innovation。遮挡期间的平移 P95 / 最大误差分别为 Hermite {_fmt(hermite_occlusion_p95)} / {_fmt(hermite_occlusion_max)}~mm 和 Smoothed KF {_fmt(extrapolation_occlusion_p95)} / {_fmt(extrapolation_occlusion_max)}~mm，配对变化为 {_fmt(extrapolation_occlusion_p95_delta)} / {_fmt(extrapolation_occlusion_max_delta)}~mm；超过 40~mm 的 episode 数为 {hermite_occlusion_failures}/{len(hermite_occlusion)} 和 {extrapolation_occlusion_failures}/{len(extrapolation_occlusion)}。停止后的前向过冲、反向回动与 settling time 分别为 Hermite {_fmt(hermite_overshoot)}~mm / {_fmt(hermite_return)}~mm / {_fmt(hermite_settling, 1)}~ms，以及 Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_return)}~mm / {_fmt(extrapolation_settling, 1)}~ms；对应配对变化为 {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_return_delta)}~mm / {_fmt(extrapolation_settling_delta, 1)}~ms。静止帧间增量和起动响应的配对中位变化另为 {_fmt(extrapolation_increment_delta)}~mm 和 {_fmt(extrapolation_response_delta, 1)}~ms。
-
-"""
-
-
-def _replace_block(text: str, start: str, end: str, replacement: str) -> str:
-    """按章节边界替换主稿中的实验块。"""
-
-    pattern = re.compile(re.escape(start) + r".*?(?=" + re.escape(end) + r")", re.S)
-    updated, count = pattern.subn(lambda _match: replacement.rstrip() + "\n\n", text, count=1)
-    if count != 1:
-        raise ValueError(f"主稿缺少章节边界：{start} -> {end}")
-    return updated
-
-
 def _write_strategy_candidate_data(
     results: PaperResults,
     data_root: Path,
 ) -> tuple[Path, Path]:
-    """写出关闭 StaticLock 后平滑外推与 Hermite 插值的配对数据和汇总。"""
+    """写出关闭 StaticLock 后外推、Linear/SLERP 与 Hermite 的配对数据和汇总。"""
 
     rows_by_family = {
         "static": results.static_segments,
@@ -516,9 +299,10 @@ def _write_strategy_candidate_data(
         "trial_id",
         "segment_id",
         "smoothed_kf_extrapolation",
+        "linear_slerp_interpolation",
         "hermite_interpolation",
-        "extrapolation_minus_hermite",
-        "hermite_lower",
+        "extrapolation_minus_linear",
+        "hermite_minus_linear",
     )
     summary_fields = (
         "family",
@@ -528,13 +312,18 @@ def _write_strategy_candidate_data(
         "smoothed_kf_extrapolation_median",
         "smoothed_kf_extrapolation_q1",
         "smoothed_kf_extrapolation_q3",
+        "linear_slerp_interpolation_median",
+        "linear_slerp_interpolation_q1",
+        "linear_slerp_interpolation_q3",
         "hermite_interpolation_median",
         "hermite_interpolation_q1",
         "hermite_interpolation_q3",
-        "paired_delta_median",
-        "paired_delta_q1",
-        "paired_delta_q3",
-        "hermite_lower_count",
+        "extrapolation_minus_linear_median",
+        "extrapolation_minus_linear_q1",
+        "extrapolation_minus_linear_q3",
+        "hermite_minus_linear_median",
+        "hermite_minus_linear_q1",
+        "hermite_minus_linear_q3",
     )
     summaries: list[dict[str, Any]] = []
     with metrics_path.open("w", newline="", encoding="utf-8") as handle:
@@ -544,7 +333,7 @@ def _write_strategy_candidate_data(
             rows = rows_by_family[family]
             matrix = paired_metric_matrix(
                 rows,
-                (SMOOTHED_EXTRAPOLATION_VARIANT, HERMITE_INTERPOLATION_VARIANT),
+                TEMPORAL_STRATEGY_VARIANTS,
                 (metric,),
             )[:, :, 0]
             identities = sorted(
@@ -554,8 +343,15 @@ def _write_strategy_candidate_data(
             )
             if len(identities) != matrix.shape[0]:
                 raise ValueError(f"时序策略身份与配对矩阵不一致：{family}/{metric}")
-            deltas = matrix[:, 0] - matrix[:, 1]
-            for identity, values, delta in zip(identities, matrix, deltas, strict=True):
+            extrapolation_minus_linear = matrix[:, 0] - matrix[:, 1]
+            hermite_minus_linear = matrix[:, 2] - matrix[:, 1]
+            for identity, values, extrapolation_delta, hermite_delta in zip(
+                identities,
+                matrix,
+                extrapolation_minus_linear,
+                hermite_minus_linear,
+                strict=True,
+            ):
                 writer.writerow(
                     {
                         "family": family,
@@ -565,14 +361,17 @@ def _write_strategy_candidate_data(
                         "trial_id": identity[1],
                         "segment_id": identity[2],
                         "smoothed_kf_extrapolation": values[0],
-                        "hermite_interpolation": values[1],
-                        "extrapolation_minus_hermite": delta,
-                        "hermite_lower": bool(delta > 0),
+                        "linear_slerp_interpolation": values[1],
+                        "hermite_interpolation": values[2],
+                        "extrapolation_minus_linear": extrapolation_delta,
+                        "hermite_minus_linear": hermite_delta,
                     }
                 )
             extrapolation_quantiles = np.quantile(matrix[:, 0], (0.5, 0.25, 0.75))
-            hermite_quantiles = np.quantile(matrix[:, 1], (0.5, 0.25, 0.75))
-            delta_quantiles = np.quantile(deltas, (0.5, 0.25, 0.75))
+            linear_quantiles = np.quantile(matrix[:, 1], (0.5, 0.25, 0.75))
+            hermite_quantiles = np.quantile(matrix[:, 2], (0.5, 0.25, 0.75))
+            extrapolation_delta_quantiles = np.quantile(extrapolation_minus_linear, (0.5, 0.25, 0.75))
+            hermite_delta_quantiles = np.quantile(hermite_minus_linear, (0.5, 0.25, 0.75))
             summaries.append(
                 {
                     "family": family,
@@ -582,13 +381,18 @@ def _write_strategy_candidate_data(
                     "smoothed_kf_extrapolation_median": extrapolation_quantiles[0],
                     "smoothed_kf_extrapolation_q1": extrapolation_quantiles[1],
                     "smoothed_kf_extrapolation_q3": extrapolation_quantiles[2],
+                    "linear_slerp_interpolation_median": linear_quantiles[0],
+                    "linear_slerp_interpolation_q1": linear_quantiles[1],
+                    "linear_slerp_interpolation_q3": linear_quantiles[2],
                     "hermite_interpolation_median": hermite_quantiles[0],
                     "hermite_interpolation_q1": hermite_quantiles[1],
                     "hermite_interpolation_q3": hermite_quantiles[2],
-                    "paired_delta_median": delta_quantiles[0],
-                    "paired_delta_q1": delta_quantiles[1],
-                    "paired_delta_q3": delta_quantiles[2],
-                    "hermite_lower_count": int(np.sum(deltas > 0)),
+                    "extrapolation_minus_linear_median": extrapolation_delta_quantiles[0],
+                    "extrapolation_minus_linear_q1": extrapolation_delta_quantiles[1],
+                    "extrapolation_minus_linear_q3": extrapolation_delta_quantiles[2],
+                    "hermite_minus_linear_median": hermite_delta_quantiles[0],
+                    "hermite_minus_linear_q1": hermite_delta_quantiles[1],
+                    "hermite_minus_linear_q3": hermite_delta_quantiles[2],
                 }
             )
     with summary_path.open("w", newline="", encoding="utf-8") as handle:
@@ -886,19 +690,87 @@ def _write_figure_source_data(
     return destination
 
 
-def write_paper(
+def _figure_two_tex(figure_directory: str) -> str:
+    """生成实验一图片的手工粘贴 TeX 片段。"""
+
+    return f"""\\begin{{figure*}}[t]
+  \\centering
+  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2a_head_motion.pdf}}
+    \\caption{{头动下的中心化误差}}
+    \\label{{fig:exp1-head-motion}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2b_translation.pdf}}
+    \\caption{{持续平移的时延与残差}}
+    \\label{{fig:exp1-translation}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2c_occlusion.pdf}}
+    \\caption{{遮挡期间的平移误差}}
+    \\label{{fig:exp1-occlusion}}
+  \\end{{subfigure}}
+  \\caption{{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，超过 25~mm 的片段以顶端空心箭头表示，完整数值保留在绘图审计表中。}}
+  \\label{{fig:exp1-final}}
+\\end{{figure*}}
+"""
+
+
+def _figure_three_tex(figure_directory: str) -> str:
+    """生成实验二图片的手工粘贴 TeX 片段。"""
+
+    return f"""\\begin{{figure*}}[t]
+  \\centering
+  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3a_capture_alignment.pdf}}
+    \\caption{{采集时刻对齐}}
+    \\label{{fig:exp2-alignment}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3b_static_lock.pdf}}
+    \\caption{{StaticLock}}
+    \\label{{fig:exp2-static-lock}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3c_vcd_risk_coverage.pdf}}
+    \\caption{{VCD score 风险--覆盖率}}
+    \\label{{fig:exp2-vcd}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.40\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3d_temporal_strategies.pdf}}
+    \\caption{{时序策略}}
+    \\label{{fig:exp2-temporal}}
+  \\end{{subfigure}}
+  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。超过 32~mm 的片段以顶端空心箭头表示，完整数值保留在绘图审计表中。}}
+  \\label{{fig:exp2-final}}
+\\end{{figure*}}
+"""
+
+
+def write_analysis_artifacts(
     results: PaperResults,
-    paper_root: Path,
     output_root: Path,
-    manuscript: Path,
+    figure_tex_directory: str,
 ) -> Mapping[str, Path]:
-    """写出指标、绘图 XLSX、表格、主稿和 provenance。"""
+    """只在活动批次写出指标、绘图 XLSX、表格和手工粘贴用 TeX 片段。"""
 
     metrics_root = output_root / "metrics"
     plot_root = output_root / "plots"
     provenance_root = output_root / "provenance"
+    tex_root = output_root / "tex"
+    table_root = tex_root / "tables"
+    figure_root = tex_root / "figures"
     metrics_root.mkdir(parents=True, exist_ok=True)
     provenance_root.mkdir(parents=True, exist_ok=True)
+    table_root.mkdir(parents=True, exist_ok=True)
+    figure_root.mkdir(parents=True, exist_ok=True)
     summary_path = metrics_root / "experiment1_summary.csv"
     fields = (
         "method",
@@ -990,8 +862,6 @@ def write_paper(
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
     plot_data_path = _write_figure_source_data(results, plot_root)
-    table_root = paper_root / "tables"
-    table_root.mkdir(parents=True, exist_ok=True)
     exp1_table = _exp1_table(results)
     exp2_table = _exp2_table(results)
     exp1_table_path = table_root / "experiment1_system_characterization.tex"
@@ -999,33 +869,13 @@ def write_paper(
     exp1_table_path.write_text(exp1_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
 
-    manuscript = manuscript.resolve()
-    if not manuscript.is_relative_to(paper_root.resolve()) or manuscript.suffix.lower() != ".tex":
-        raise ValueError("主稿必须是 paper_root 内的 .tex 文件")
-    if not manuscript.is_file():
-        raise FileNotFoundError(manuscript)
-    text = manuscript.read_text(encoding="utf-8")
-    text = _replace_block(
-        text,
-        r"\subsection{实验一：应用侧锚点行为}",
-        r"\subsection{实验二：组件归因与时序策略比较}",
-        _exp1_text(results),
-    )
-    text = _replace_block(
-        text,
-        r"\subsection{实验二：组件归因与时序策略比较}",
-        r"\subsection{评价指标与汇总契约}",
-        _exp2_text(results),
-    )
-    provenance = "% Paper analysis from immutable Stage 1 XLSX; input SHA-256: " + ", ".join(f"{Path(path).name}={digest}" for path, digest in sorted(results.workbook_sha256.items())) + "\n"
-    text = re.sub(
-        r"^% Paper analysis from immutable Stage 1 XLSX; input SHA-256:.*\n",
-        "",
-        text,
-        flags=re.M,
-    )
-    text = text.replace(r"\begin{document}", provenance + r"\begin{document}", 1)
-    manuscript.write_text(text, encoding="utf-8")
+    figure_directory = figure_tex_directory.strip("/")
+    if not figure_directory or ".." in Path(figure_directory).parts:
+        raise ValueError("图片 TeX 路径必须是论文内相对目录")
+    figure2_path = figure_root / "figure2_experiment1.tex"
+    figure3_path = figure_root / "figure3_experiment2.tex"
+    figure2_path.write_text(_figure_two_tex(figure_directory), encoding="utf-8")
+    figure3_path.write_text(_figure_three_tex(figure_directory), encoding="utf-8")
     manifest = provenance_root / "analysis_manifest.json"
     manifest.write_text(
         json.dumps(
@@ -1033,7 +883,8 @@ def write_paper(
                 "inputs": dict(results.workbook_sha256),
                 "parameters": DEFAULT_SETTINGS_PATH.name,
                 "parameters_sha256": settings_sha256(),
-                "manuscript": manuscript.name,
+                "publication_boundary": "analysis_only_manual_tex_copy",
+                "figure_tex_directory": figure_directory,
                 "temporal_evidence": "actual_runtime",
                 "output_strategy": "temporal_strategy_comparison",
                 "vcd_score_evidence": {
@@ -1052,9 +903,10 @@ def write_paper(
         encoding="utf-8",
     )
     return {
-        "manuscript": manuscript,
         "exp1_table": exp1_table_path,
         "exp2_table": exp2_table_path,
+        "figure2_tex": figure2_path,
+        "figure3_tex": figure3_path,
         "summary": summary_path,
         "capture": capture_path,
         "vcd_risk_coverage": vcd_curve_path,
@@ -1067,4 +919,4 @@ def write_paper(
     }
 
 
-__all__ = ["write_paper"]
+__all__ = ["write_analysis_artifacts"]

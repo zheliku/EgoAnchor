@@ -1,4 +1,4 @@
-"""从 Stage 1 XLSX 到图表和主稿的单入口。"""
+"""从 Stage 1 XLSX 到活动批次分析产物的单入口。"""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..preprocess import verify_task_workbook
 from .figures import publish_figures
 from .metrics import analyze_workbooks
-from .paper import write_paper
+from .paper import write_analysis_artifacts
 from .settings import load_settings, settings_sha256
 from .xlsx import iter_rows
 
@@ -63,15 +62,11 @@ def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Pa
 
 
 def _validate_batch_identity(workbooks: tuple[Path, ...]) -> None:
-    """复验工作簿结构，并核对五项任务来自同一冻结配置。"""
+    """核对五项任务来自同一已提升的冻结批次。"""
 
     session_ids: set[str] = set()
     common_identity: tuple[str, ...] | None = None
     for task_number, workbook in enumerate(workbooks, start=1):
-        verification = verify_task_workbook(workbook)
-        if not verification.passed:
-            raise ValueError(f"Stage 1 工作簿完整性验证失败：{workbook}")
-
         manifest_rows = list(
             iter_rows(
                 workbook,
@@ -116,28 +111,26 @@ def _validate_batch_identity(workbooks: tuple[Path, ...]) -> None:
             )
 
 
-def build_paper(
+def build_analysis(
     workbooks: tuple[Path, ...],
     output_root: Path,
-    paper_root: Path,
-    manuscript_path: Path,
+    figure_tex_directory: str,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """只读取五本 Stage 1 XLSX，发布图、表和中文主稿。"""
+    """只读取五本 Stage 1 XLSX，发布当前批次的图、表和 TeX 片段。"""
 
     _report_progress(progress, "验证五本 XLSX")
     normalized = _validate_inputs(workbooks, output_root)
     settings = load_settings()
     _report_progress(progress, "计算实验指标")
     results = analyze_workbooks(normalized, settings)
-    _report_progress(progress, "生成论文图表")
-    figure_paths = publish_figures(results, paper_root.expanduser().resolve())
-    _report_progress(progress, "写入指标、表格和主稿")
-    paper_paths = write_paper(
+    _report_progress(progress, "生成本地论文图表")
+    figure_paths = publish_figures(results, output_root.expanduser().resolve())
+    _report_progress(progress, "写入本地指标、表格和 TeX")
+    artifact_paths = write_analysis_artifacts(
         results,
-        paper_root.expanduser().resolve(),
         output_root.expanduser().resolve(),
-        manuscript_path.expanduser().resolve(),
+        figure_tex_directory,
     )
     payload = {
         "passed": True,
@@ -145,7 +138,7 @@ def build_paper(
         "input_sha256": dict(results.workbook_sha256),
         "parameters_sha256": settings_sha256(),
         "figure_paths": {key: str(value) for key, value in figure_paths.items()},
-        "paper_paths": {key: str(value) for key, value in paper_paths.items()},
+        "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "performance": dict(results.performance),
     }
     provenance_root = output_root / "provenance"
@@ -164,4 +157,4 @@ def _report_progress(progress: Callable[[str], None] | None, message: str) -> No
         progress(message)
 
 
-__all__ = ["build_paper"]
+__all__ = ["build_analysis"]

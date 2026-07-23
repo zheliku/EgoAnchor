@@ -11,6 +11,7 @@ from .batch import (
     BatchToolError,
     analyze_current,
     compile_current_paper,
+    copy_current_assets,
     describe_workflow,
     list_eval_sessions,
     preprocess_current,
@@ -36,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="pixi run eval",
-        description="EgoAnchor 实验一/二数据整理与论文重建",
+        description="EgoAnchor 实验一/二数据整理、本地分析与图片发布",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
@@ -67,17 +68,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     analyze = subparsers.add_parser(
         "analyze",
-        help="从当前五本 XLSX 重建图表和论文内容",
-        description="只读取当前五本 XLSX，更新分析目录、论文图表、表格和配置指定的主稿。",
+        help="从当前五本 XLSX 重建本地分析图表和 TeX 片段",
+        description="只读取当前五本 XLSX，更新活动批次 analysis 目录，不修改论文图表、表格或主稿。",
     )
-    analyze.add_argument("--skip-latex", action="store_true", help="更新分析、图表和主稿，但不编译 PDF")
     analyze.set_defaults(handler=_run_analyze)
+
+    copy_assets = subparsers.add_parser(
+        "copy-assets",
+        help="将当前实验面板和配置指定 relay PNG/PDF 复制到论文目录",
+    )
+    copy_assets.set_defaults(handler=_run_copy_assets)
 
     latex = subparsers.add_parser("latex", help="只编译当前配置的 LaTeX 主稿")
     latex.set_defaults(handler=_run_latex)
 
     rebuild = subparsers.add_parser("rebuild", help="从当前 raw 开始执行 preprocess 和 analyze")
-    rebuild.add_argument("--skip-latex", action="store_true", help="完整分析并更新主稿，但不编译 PDF")
     rebuild.set_defaults(handler=_run_rebuild)
     return parser
 
@@ -139,10 +144,16 @@ def _run_preprocess(_args: argparse.Namespace) -> dict[str, object]:
     return preprocess_current()
 
 
-def _run_analyze(args: argparse.Namespace) -> dict[str, object]:
-    """从当前工作簿重建图表和论文。"""
+def _run_analyze(_args: argparse.Namespace) -> dict[str, object]:
+    """从当前工作簿重建本地分析产物。"""
 
-    return analyze_current(compile_pdf=not args.skip_latex)
+    return analyze_current()
+
+
+def _run_copy_assets(_args: argparse.Namespace) -> dict[str, object]:
+    """显式复制配置允许的论文图片资源。"""
+
+    return copy_current_assets()
 
 
 def _run_latex(_args: argparse.Namespace) -> dict[str, object]:
@@ -151,10 +162,10 @@ def _run_latex(_args: argparse.Namespace) -> dict[str, object]:
     return compile_current_paper()
 
 
-def _run_rebuild(args: argparse.Namespace) -> dict[str, object]:
-    """从当前 raw 完整重建论文。"""
+def _run_rebuild(_args: argparse.Namespace) -> dict[str, object]:
+    """从当前 raw 完整重建本地分析产物。"""
 
-    return rebuild_current(compile_pdf=not args.skip_latex)
+    return rebuild_current()
 
 
 __all__ = [

@@ -25,6 +25,8 @@ data/
       │  ├─ metrics/                  # 完整精度 CSV/JSON
       │  ├─ plots/
       │  │  └─ figure_plot_data.xlsx # 图 2、图 3 的逐点数据
+      │  ├─ figures/                  # 七个实验面板的 PNG/PDF，仅由 analyze 生成
+      │  ├─ tex/                      # 手工引入主稿的表格和图环境 TeX
       │  └─ provenance/               # 输入 hash 与构建结果
       └─ provenance/
          └─ strategy_label_migration.json
@@ -53,7 +55,7 @@ SHA-256 和 QC 结果。可以只读查看，不能在 Excel 中保存后继续�
 analysis/metrics/ 保存完整精度指标，供审计和复算使用。analysis/plots/figure_plot_data.xlsx
 只整理图中实际显示的数据点，含 README、Figure2 和 Figure3 三个 sheet；它不是新的统计
 输入，也没有独立的 plot XLSX 到图片转换命令。`analyze` 从五本工作簿同时生成该文件和
-PNG/PDF 面板。
+`analysis/figures/` 下的 PNG/PDF 面板，以及 `analysis/tex/` 下可审阅的 TeX 片段。
 
 以上操作路径统一从 `src/egoanchor/eval/config/batch.toml` 读取。人工归档和分析使用
 `pixi run eval`，不需要设置 shell 环境变量或在命令行逐项传入路径。
@@ -63,6 +65,7 @@ provenance/strategy_label_migration.json 保存当前批次完成策略身份统
 
 ## 发布边界
 
-论文图和表发布到 2026-EgoAnchor/figures/panels/ 与 2026-EgoAnchor/tables/。这些文件由
-分析代码生成，不从历史结果包复制。原始数据、Stage 1 工作簿和本地分析目录均由
-.gitignore 排除；Git 只跟踪代码、目录说明、论文源稿和正式图表。
+`analyze` 不发布任何论文目录文件。确认本地结果后，`pixi run eval copy-assets` 才把当前
+`analysis/figures/` 的实验 PNG/PDF 及 `batch.toml` 显式指定的 relay PNG/PDF 复制到
+`2026-EgoAnchor`；TeX 始终由研究者手工纳入主稿。原始数据、Stage 1 工作簿和本地分析目录
+均由 .gitignore 排除；Git 只跟踪代码、目录说明、论文源稿和正式图表。

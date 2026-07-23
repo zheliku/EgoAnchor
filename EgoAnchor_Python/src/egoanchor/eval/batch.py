@@ -1,7 +1,8 @@
-"""实验一/二批次整理、切换和论文重建工作流。"""
+"""实验一/二批次整理、切换、本地分析和图片发布工作流。"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -55,6 +56,17 @@ _COMMON_MANIFEST_FIELDS = (
     "variant_matrix_id",
 )
 """同一正式批次必须完全一致的 manifest 字段。"""
+
+_EXPERIMENT_FIGURE_STEMS = (
+    "figure2a_head_motion",
+    "figure2b_translation",
+    "figure2c_occlusion",
+    "figure3a_capture_alignment",
+    "figure3b_static_lock",
+    "figure3c_vcd_risk_coverage",
+    "figure3d_temporal_strategies",
+)
+"""实验一、二分析必须发布并可复制的七个面板。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +137,17 @@ class SessionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class AssetCopy:
+    """一项经配置允许复制到论文目录的图片或 PDF。"""
+
+    source: Path
+    """仓库内的只读源文件。"""
+
+    destination: Path
+    """论文根目录内的目标文件。"""
+
+
+@dataclass(frozen=True, slots=True)
 class BatchPaths:
     """从 batch.toml 解析出的绝对批次路径。"""
 
@@ -151,6 +174,12 @@ class BatchPaths:
 
     paper_pdf_path: Path
     """不含稿件版本号、面向阅读和交付的稳定 PDF 路径。"""
+
+    experiment_asset_destination: Path
+    """实验一、二图片复制到论文时使用的目标目录。"""
+
+    relay_assets: tuple[AssetCopy, ...]
+    """由配置显式选择的 relay 图片或 PDF。"""
 
     config_path: Path
     """本次读取的 batch.toml 绝对路径。"""
@@ -207,6 +236,9 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     raw_paper = document.get("paper")
     if not isinstance(raw_paper, dict):
         raise ValueError("batch.toml 必须包含 [paper]")
+    raw_copy_assets = document.get("copy_assets")
+    if not isinstance(raw_copy_assets, dict):
+        raise ValueError("batch.toml 必须包含 [copy_assets]")
 
     eval_root = _resolve_data_path(base, raw_paths, "eval_root")
     staging_root = _resolve_data_path(base, raw_paths, "staging_root")
@@ -215,6 +247,13 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     paper_root = _resolve_paper_path(base, raw_paths)
     manuscript_path = _resolve_paper_file(paper_root, raw_paper, "manuscript", ".tex")
     paper_pdf_path = _resolve_paper_file(paper_root, raw_paper, "output_pdf", ".pdf")
+    experiment_asset_destination = _resolve_asset_destination(
+        paper_root,
+        raw_copy_assets,
+        "experiment_destination",
+        directory=True,
+    )
+    relay_assets = _resolve_relay_assets(base, paper_root, raw_copy_assets)
     managed = (eval_root, staging_root, archive_root, active_root)
     if len(set(managed)) != len(managed):
         raise ValueError("batch.toml 的 eval/staging/archive/active 路径必须互不相同")
@@ -233,6 +272,8 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         paper_root=paper_root,
         manuscript_path=manuscript_path,
         paper_pdf_path=paper_pdf_path,
+        experiment_asset_destination=experiment_asset_destination,
+        relay_assets=relay_assets,
         config_path=DEFAULT_BATCH_CONFIG_PATH,
     )
 
@@ -251,6 +292,11 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
             "archive_root": str(paths.archive_root),
             "active_root": str(active),
             "paper_root": str(paths.paper_root),
+            "experiment_asset_destination": str(paths.experiment_asset_destination),
+            "relay_assets": [
+                {"source": str(asset.source), "destination": str(asset.destination)}
+                for asset in paths.relay_assets
+            ],
             "manuscript": str(paths.manuscript_path),
             "manuscript_exists": paths.manuscript_path.is_file(),
             "output_pdf": str(paths.paper_pdf_path),
@@ -285,12 +331,19 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "input": str(active / "workbooks"),
                 "output": [
                     str(active / "analysis"),
-                    str(paths.paper_root / "figures" / "panels"),
-                    str(paths.paper_root / "tables"),
-                    str(paths.manuscript_path),
-                    str(paths.paper_pdf_path),
                 ],
-                "note": "使用 --skip-latex 时不生成或更新 output_pdf",
+                "note": "只发布活动批次内的图、表和 TeX 片段，不修改论文目录或主稿",
+            },
+            "copy-assets": {
+                "input": [
+                    str(active / "analysis" / "figures"),
+                    *[str(asset.source) for asset in paths.relay_assets],
+                ],
+                "output": [
+                    str(paths.experiment_asset_destination),
+                    *[str(asset.destination) for asset in paths.relay_assets],
+                ],
+                "note": "只复制配置允许的 PNG/PDF；不复制 TeX，不改写主稿",
             },
             "latex": {
                 "input": str(paths.manuscript_path),
@@ -301,12 +354,8 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "output": [
                     str(active / "workbooks"),
                     str(active / "analysis"),
-                    str(paths.paper_root / "figures" / "panels"),
-                    str(paths.paper_root / "tables"),
-                    str(paths.manuscript_path),
-                    str(paths.paper_pdf_path),
                 ],
-                "note": "使用 --skip-latex 时不生成或更新 output_pdf",
+                "note": "只重建活动批次工作簿和分析产物，不编译或改写论文",
             },
         },
     }
@@ -460,17 +509,13 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     }
 
 
-def rebuild_current(
-    *,
-    root: Path | None = None,
-    compile_pdf: bool = True,
-) -> dict[str, Any]:
-    """从当前 raw 重新生成五本工作簿、论文分析产物和最终 PDF。"""
+def rebuild_current(*, root: Path | None = None) -> dict[str, Any]:
+    """从当前 raw 重新生成五本工作簿和本地分析产物。"""
 
-    _report_progress("rebuild: 从当前 raw 重建工作簿、分析和论文")
+    _report_progress("rebuild: 从当前 raw 重建工作簿和分析产物")
     paths = load_batch_paths(root)
     preprocess_result = preprocess_current(root=paths.project_root)
-    result = analyze_current(root=paths.project_root, compile_pdf=compile_pdf)
+    result = analyze_current(root=paths.project_root)
     result["workbook_sha256"] = preprocess_result["workbook_sha256"]
     return result
 
@@ -511,18 +556,19 @@ def preprocess_current(
         "passed": True,
         "output_root": str(paths.active_root / "workbooks"),
         "workbook_sha256": {artifact.path.name: artifact.sha256 for artifact in artifacts},
-        "next_command": "pixi run eval analyze --skip-latex",
+        "next_command": "pixi run eval analyze",
     }
 
 
-def analyze_current(*, root: Path | None = None, compile_pdf: bool = True) -> dict[str, Any]:
-    """从当前五本工作簿生成指标、绘图数据、图表、主稿和可选 PDF。"""
+def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
+    """从当前五本工作簿生成活动批次内的指标、图表和 TeX 片段。"""
 
-    from .paper_analysis import build_paper
+    from .paper_analysis import build_analysis
 
     paths = load_batch_paths(root)
     active = paths.active_root
     workbooks = tuple(active / "workbooks" / f"task_{number}_complete.xlsx" for number in range(1, 6))
+    figure_tex_directory = paths.experiment_asset_destination.relative_to(paths.paper_root).as_posix()
     with _stage_progress("analyze", 4, "stage") as progress:
         def update_analysis_progress(message: str) -> None:
             """更新论文分析的当前阶段。"""
@@ -530,20 +576,66 @@ def analyze_current(*, root: Path | None = None, compile_pdf: bool = True) -> di
             progress.set_postfix_str(message)
             progress.update()
 
-        payload = build_paper(
+        payload = build_analysis(
             workbooks,
             active / "analysis",
-            paths.paper_root,
-            paths.manuscript_path,
+            figure_tex_directory,
             progress=update_analysis_progress,
         )
-    pdf_path: Path | None = None
-    if compile_pdf:
-        pdf_path = _compile_paper(paths)
     return {
         "passed": True,
         "analysis": payload,
-        "paper_pdf": str(pdf_path) if pdf_path is not None else None,
+        "next_command": "pixi run eval copy-assets",
+    }
+
+
+def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
+    """将当前分析面板和配置指定 relay PNG/PDF 显式复制到论文目录。"""
+
+    paths = load_batch_paths(root)
+    figure_root = paths.active_root / "analysis" / "figures"
+    if not figure_root.is_dir():
+        raise FileNotFoundError(f"尚未生成当前批次图片，请先运行 analyze：{figure_root}")
+
+    copies: list[AssetCopy] = []
+    for stem in _EXPERIMENT_FIGURE_STEMS:
+        for suffix in (".pdf", ".png"):
+            source = figure_root / f"{stem}{suffix}"
+            if not source.is_file():
+                raise FileNotFoundError(f"当前分析缺少实验面板：{source}")
+            copies.append(AssetCopy(source=source, destination=paths.experiment_asset_destination / source.name))
+    copies.extend(paths.relay_assets)
+
+    published = [_copy_asset_file(item) for item in copies]
+    return {
+        "passed": True,
+        "experiment_source": str(figure_root),
+        "experiment_destination": str(paths.experiment_asset_destination),
+        "published": published,
+        "next_command": "手工从 analysis/tex/ 复制所需 TeX 片段，再运行 pixi run eval latex",
+    }
+
+
+def _copy_asset_file(asset: AssetCopy) -> dict[str, str]:
+    """原子覆盖一项 PNG/PDF，并返回源和目标的内容摘要。"""
+
+    if not asset.source.is_file():
+        raise FileNotFoundError(f"待复制资源不存在：{asset.source}")
+    if asset.source.suffix.lower() not in {".png", ".pdf"}:
+        raise ValueError(f"只允许复制 PNG 或 PDF：{asset.source}")
+    asset.destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = asset.destination.with_name(f".{asset.destination.name}.tmp")
+    try:
+        shutil.copyfile(asset.source, temporary)
+        temporary.replace(asset.destination)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    digest = hashlib.sha256(asset.destination.read_bytes()).hexdigest()
+    return {
+        "source": str(asset.source),
+        "destination": str(asset.destination),
+        "sha256": digest,
     }
 
 
@@ -613,6 +705,61 @@ def _resolve_paper_file(
             "batch.toml paper.output_pdf 的文件名只能使用 ASCII 字母、数字、点、下划线和连字符"
         )
     return resolved
+
+
+def _resolve_asset_destination(
+    paper_root: Path,
+    values: dict[str, Any],
+    field_name: str,
+    *,
+    directory: bool,
+) -> Path:
+    """解析论文目录内的图片发布目标，并拒绝绝对路径和越界路径。"""
+
+    raw_value = values.get(field_name)
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError(f"batch.toml copy_assets.{field_name} 必须为非空字符串")
+    relative = Path(raw_value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"batch.toml copy_assets.{field_name} 必须是 paper_root 内的相对路径")
+    resolved = (paper_root / relative).resolve()
+    if not resolved.is_relative_to(paper_root):
+        raise ValueError(f"batch.toml copy_assets.{field_name} 超出 paper_root")
+    if directory:
+        return resolved
+    if resolved.suffix.lower() not in {".png", ".pdf"}:
+        raise ValueError(f"batch.toml copy_assets.{field_name} 只能指向 PNG 或 PDF")
+    return resolved
+
+
+def _resolve_relay_assets(
+    project_root: Path,
+    paper_root: Path,
+    copy_assets: dict[str, Any],
+) -> tuple[AssetCopy, ...]:
+    """读取显式 relay 源与论文目标，避免按修改时间猜测研究选择。"""
+
+    raw_assets = copy_assets.get("relay")
+    if not isinstance(raw_assets, list) or not raw_assets:
+        raise ValueError("batch.toml copy_assets.relay 必须包含至少一项显式 relay 资源")
+    assets: list[AssetCopy] = []
+    for index, item in enumerate(raw_assets, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"batch.toml copy_assets.relay[{index}] 必须是表")
+        raw_source = item.get("source")
+        if not isinstance(raw_source, str) or not raw_source:
+            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 必须为非空字符串")
+        source_relative = Path(raw_source)
+        if source_relative.is_absolute() or ".." in source_relative.parts:
+            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 必须是项目内相对路径")
+        source = (project_root / source_relative).resolve()
+        if not source.is_relative_to(project_root) or source.suffix.lower() not in {".png", ".pdf"}:
+            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 只能指向项目内 PNG 或 PDF")
+        destination = _resolve_asset_destination(paper_root, item, "destination", directory=False)
+        assets.append(AssetCopy(source=source, destination=destination))
+    if len({item.destination for item in assets}) != len(assets):
+        raise ValueError("batch.toml copy_assets.relay 的 destination 不得重复")
+    return tuple(assets)
 
 
 def _task_dirs(raw_root: Path) -> tuple[Path, ...]:
@@ -980,6 +1127,7 @@ def _compile_paper(paths: BatchPaths) -> Path:
 
 
 __all__ = [
+    "AssetCopy",
     "BatchArtifact",
     "BatchPaths",
     "BatchToolError",
@@ -990,6 +1138,7 @@ __all__ = [
     "TaskSpec",
     "analyze_current",
     "compile_current_paper",
+    "copy_current_assets",
     "describe_workflow",
     "list_eval_sessions",
     "load_batch_paths",

@@ -9,6 +9,7 @@ from .figures import (
 )
 from .metrics import (
     HERMITE_INTERPOLATION_VARIANT,
+    LINEAR_SLERP_VARIANT,
     SMOOTHED_EXTRAPOLATION_VARIANT,
     METHODS,
     PaperResults,
@@ -18,8 +19,8 @@ from .metrics import (
     paired_metric_matrix,
     risk_coverage_curve,
 )
-from .paper import write_paper
-from .pipeline import build_paper
+from .paper import write_analysis_artifacts
+from .pipeline import build_analysis
 from .settings import PaperSettings, load_settings, settings_sha256
 from .xlsx import iter_rows, workbook_sha256
 
@@ -28,6 +29,7 @@ __all__ = [
     "PaperResults",
     "PaperSettings",
     "HERMITE_INTERPOLATION_VARIANT",
+    "LINEAR_SLERP_VARIANT",
     "SMOOTHED_EXTRAPOLATION_VARIANT",
     "METHODS",
     "TEMPORAL_STRATEGY_VARIANTS",
@@ -36,7 +38,7 @@ __all__ = [
     "build_point_panel",
     "build_translation_panel",
     "build_vcd_risk_coverage_panel",
-    "build_paper",
+    "build_analysis",
     "iter_rows",
     "load_settings",
     "paired_metric_matrix",
@@ -45,5 +47,5 @@ __all__ = [
     "settings_sha256",
     "summarize_risk_coverage",
     "workbook_sha256",
-    "write_paper",
+    "write_analysis_artifacts",
 ]

@@ -60,12 +60,14 @@ from .schema_v2 import (
 )
 from .batch import (
     BatchArtifact,
+    AssetCopy,
     BatchPaths,
     BatchToolError,
     SessionSummary,
     TaskSpec,
     analyze_current,
     compile_current_paper,
+    copy_current_assets,
     describe_workflow,
     list_eval_sessions,
     load_batch_paths,
@@ -79,6 +81,7 @@ from .batch import (
 __all__ = [
     "DERIVED_FILE_NAMES",
     "BatchArtifact",
+    "AssetCopy",
     "BatchPaths",
     "BatchToolError",
     "EMPTY_TEXT_MARKER",
@@ -116,6 +119,7 @@ __all__ = [
     "aggregate_config_hash",
     "analyze_current",
     "compile_current_paper",
+    "copy_current_assets",
     "collect_source_files",
     "decode_workbook_text",
     "describe_workflow",

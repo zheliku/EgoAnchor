@@ -10,6 +10,9 @@ from pathlib import Path
 from unittest import mock
 
 from egoanchor.eval import (
+    AssetCopy,
+    BatchPaths,
+    copy_current_assets,
     describe_workflow,
     finalize_task_events,
     list_eval_sessions,
@@ -226,6 +229,7 @@ class BatchWorkflowTests(unittest.TestCase):
                 "preprocess",
                 "rebuild",
                 "analyze",
+                "copy-assets",
                 "latex",
             },
         )
@@ -267,12 +271,59 @@ class BatchWorkflowTests(unittest.TestCase):
                     "qc",
                     "preprocess",
                     "analyze",
+                    "copy-assets",
                     "latex",
                     "rebuild",
                 },
             )
             self.assertEqual(Path(payload["paths"]["manuscript"]).name, "egoanchor_cn_v6.tex")
             self.assertEqual(Path(payload["paths"]["output_pdf"]).name, "EgoAnchor.pdf")
+
+    def test_copy_assets_only_publishes_current_panels_and_configured_relay_files(self) -> None:
+        """图片发布只复制当前分析面板和显式配置的 relay PNG/PDF，不处理 TeX。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "EgoAnchor_Python"
+            active_root = root / "data" / "experiments" / "experiment_1_2"
+            figure_root = active_root / "analysis" / "figures"
+            figure_root.mkdir(parents=True)
+            stems = (
+                "figure2a_head_motion",
+                "figure2b_translation",
+                "figure2c_occlusion",
+                "figure3a_capture_alignment",
+                "figure3b_static_lock",
+                "figure3c_vcd_risk_coverage",
+                "figure3d_temporal_strategies",
+            )
+            for stem in stems:
+                for suffix in (".pdf", ".png"):
+                    (figure_root / f"{stem}{suffix}").write_bytes(f"{stem}{suffix}".encode())
+            paper_root = root.parent / "paper"
+            relay_source = root / "data" / "replay_capture" / "replay_grid.pdf"
+            relay_source.parent.mkdir(parents=True)
+            relay_source.write_bytes(b"relay")
+            paths = BatchPaths(
+                project_root=root,
+                eval_root=root / "data" / "eval",
+                staging_root=root / "data" / "staging",
+                archive_root=root / "data" / "archive",
+                active_root=active_root,
+                paper_root=paper_root,
+                manuscript_path=paper_root / "main.tex",
+                paper_pdf_path=paper_root / "pdf" / "paper.pdf",
+                experiment_asset_destination=paper_root / "figures" / "panels",
+                relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
+                config_path=root / "batch.toml",
+            )
+            with mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths):
+                result = copy_current_assets(root=root)
+
+            self.assertTrue(result["passed"])
+            self.assertEqual(len(result["published"]), 15)
+            self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
+            self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
+            self.assertFalse((paper_root / "main.tex").exists())
 
 
 def _write_project(parent: Path) -> Path:

@@ -35,13 +35,19 @@ METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 """实验一正式比较的四种系统配置。"""
 
 NO_STATIC_LOCK = "EgoAnchor w/o StaticLock"
+"""关闭 StaticLock 的默认 Linear/SLERP 输出条件。"""
+
 NO_VCD = "EgoAnchor w/o VCD"
+
+LINEAR_SLERP_VARIANT = NO_STATIC_LOCK
+"""实验二时序比较使用的默认 Linear/SLERP 条件。"""
 
 TEMPORAL_STRATEGY_VARIANTS = (
     SMOOTHED_EXTRAPOLATION_VARIANT,
+    LINEAR_SLERP_VARIANT,
     HERMITE_INTERPOLATION_VARIANT,
 )
-"""图 3(d) 中 Smoothed KF Extrapolation 与 Hermite Interpolation 的固定顺序。"""
+"""图 3(d) 中外推、默认 Linear/SLERP 与 Hermite 的固定顺序。"""
 
 
 def _validate_workbook_runtime_contract(workbook: Path) -> None:
@@ -366,6 +372,7 @@ _RENDER_COLUMNS = (
     "event_id",
     "variant_id",
     "render_mono_ms",
+    "source_frame_id",
     "has_display_pose",
     "reference_pose_valid",
     "display_pos_x_m",
@@ -388,15 +395,19 @@ _RENDER_COLUMNS = (
 def _collect_render(
     workbooks: Sequence[Path],
     eligible_trials: frozenset[tuple[str, str]],
-) -> Mapping[
-    tuple[str, str, str, str, str],
-    list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+) -> tuple[
+    Mapping[tuple[str, str, str, str, str], list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]],
+    Mapping[tuple[str, str, str, str], list[tuple[float, int, np.ndarray, np.ndarray]]],
 ]:
-    """读取有效 display/reference 行并按动作片段分组。"""
+    """一次扫描 render，分别收集参考误差和候选生效边界数据。"""
 
     grouped: defaultdict[
         tuple[str, str, str, str, str],
         list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+    ] = defaultdict(list)
+    correction_grouped: defaultdict[
+        tuple[str, str, str, str],
+        list[tuple[float, int, np.ndarray, np.ndarray]],
     ] = defaultdict(list)
     for workbook in workbooks:
         for row in iter_rows(workbook, "unity_render", _RENDER_COLUMNS):
@@ -406,38 +417,39 @@ def _collect_render(
                 or not _truthy(row.get("has_display_pose"))
             ):
                 continue
-            if not _truthy(row.get("reference_pose_valid")):
-                continue
             display_position = _finite_vector(row, "display_pos", ("x_m", "y_m", "z_m"))
-            reference_position = _finite_vector(row, "reference_pos", ("x_m", "y_m", "z_m"))
             display_rotation = _finite_vector(row, "display_rot", ("x", "y", "z", "w"))
-            reference_rotation = _finite_vector(row, "reference_rot", ("x", "y", "z", "w"))
             try:
                 time_ms = float(row["render_mono_ms"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if any(
-                value is None
-                for value in (
-                    display_position,
-                    reference_position,
-                    display_rotation,
-                    reference_rotation,
-                )
-            ):
+            if display_position is None or display_rotation is None:
+                continue
+            try:
+                source_frame_id = int(row["source_frame_id"])
+            except (KeyError, TypeError, ValueError):
+                source_frame_id = -1
+            correction_grouped[_segment_key(row)].append(
+                (time_ms, source_frame_id, display_position, display_rotation)
+            )
+            if not _truthy(row.get("reference_pose_valid")):
+                continue
+            reference_position = _finite_vector(row, "reference_pos", ("x_m", "y_m", "z_m"))
+            reference_rotation = _finite_vector(row, "reference_rot", ("x", "y", "z", "w"))
+            if reference_position is None or reference_rotation is None:
                 continue
             key = _segment_key(row)
             scenario = str(row.get("scenario_id", ""))
             grouped[(scenario, *key)].append(
                 (
                     time_ms,
-                    display_position,  # type: ignore[arg-type]
-                    reference_position,  # type: ignore[arg-type]
-                    display_rotation,  # type: ignore[arg-type]
-                    reference_rotation,  # type: ignore[arg-type]
+                    display_position,
+                    reference_position,
+                    display_rotation,
+                    reference_rotation,
                 )
             )
-    return grouped
+    return grouped, correction_grouped
 
 
 def _event_roles(
@@ -470,50 +482,10 @@ def _event_roles(
     return roles
 
 
-def _collect_correction_metrics(
-    workbooks: Sequence[Path],
-    eligible_trials: frozenset[tuple[str, str]],
+def _correction_metrics(
+    grouped: Mapping[tuple[str, str, str, str], list[tuple[float, int, np.ndarray, np.ndarray]]],
 ) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
-    """按 source frame 切换识别候选生效边界，并计算实际显示步长。"""
-
-    columns = (
-        "session_id",
-        "trial_id",
-        "event_id",
-        "variant_id",
-        "render_mono_ms",
-        "source_frame_id",
-        "has_display_pose",
-        "display_pos_x_m",
-        "display_pos_y_m",
-        "display_pos_z_m",
-        "display_rot_x",
-        "display_rot_y",
-        "display_rot_z",
-        "display_rot_w",
-    )
-    grouped: defaultdict[
-        tuple[str, str, str, str],
-        list[tuple[float, int, np.ndarray, np.ndarray]],
-    ] = defaultdict(list)
-    for workbook in workbooks:
-        for row in iter_rows(workbook, "unity_render", columns):
-            if (
-                not _valid_event(row)
-                or not _trial_is_eligible(row, eligible_trials)
-                or not _truthy(row.get("has_display_pose"))
-            ):
-                continue
-            position = _finite_vector(row, "display_pos", ("x_m", "y_m", "z_m"))
-            rotation = _finite_vector(row, "display_rot", ("x", "y", "z", "w"))
-            try:
-                time_ms = float(row["render_mono_ms"])
-                source_frame_id = int(row["source_frame_id"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            if position is None or rotation is None:
-                continue
-            grouped[_segment_key(row)].append((time_ms, source_frame_id, position, rotation))
+    """由同一次 render 扫描得到的 source frame 切换计算实际显示步长。"""
 
     metrics: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for (session_id, trial_id, event_id, variant_id), rows in grouped.items():
@@ -1113,7 +1085,7 @@ def analyze_workbooks(
         _validate_workbook_runtime_contract(path)
     valid_trials = eligible_trials(normalized)
     active_settings = settings or load_settings()
-    render = _collect_render(normalized, valid_trials)
+    render, correction_render = _collect_render(normalized, valid_trials)
     event_roles = _event_roles(normalized, valid_trials)
     static, translation, rotation, occlusion, transition, stop = _render_metrics(
         render,
@@ -1133,7 +1105,7 @@ def analyze_workbooks(
         occlusion_episodes=occlusion,
         transition_segments=transition,
         stop_segments=stop,
-        correction_segments=_collect_correction_metrics(normalized, valid_trials),
+        correction_segments=_correction_metrics(correction_render),
         capture_alignment=_capture_alignment(normalized, valid_trials),
         vcd_risk_coverage=vcd_risk_coverage,
         vcd_aurc_segments=vcd_aurc_segments,
@@ -1145,6 +1117,7 @@ __all__ = [
     "FULL_VARIANT",
     "PaperResults",
     "HERMITE_INTERPOLATION_VARIANT",
+    "LINEAR_SLERP_VARIANT",
     "SMOOTHED_EXTRAPOLATION_VARIANT",
     "METHODS",
     "NO_STATIC_LOCK",

@@ -15,7 +15,7 @@ from egoanchor.eval.paper_analysis import (
     METHODS,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
-    build_paper,
+    build_analysis,
     build_point_panel,
     build_translation_panel,
     eligible_trials,
@@ -33,20 +33,19 @@ class PaperPipelineTests(unittest.TestCase):
     def test_formal_cli_does_not_allow_parameter_overrides(self) -> None:
         """正式论文入口只能读取冻结的 paper.toml。"""
 
-        arguments = eval_cli.build_parser().parse_args(
-            ["analyze", "--skip-latex"]
-        )
+        arguments = eval_cli.build_parser().parse_args(["analyze"])
 
         self.assertFalse(hasattr(arguments, "settings"))
         self.assertEqual(len(settings_sha256()), 64)
 
-    def test_temporal_panel_uses_extrapolation_and_hermite_order(self) -> None:
-        """图 3(d) 固定比较无 StaticLock 的平滑外推与 Hermite 插值。"""
+    def test_temporal_panel_uses_extrapolation_linear_and_hermite_order(self) -> None:
+        """图 3(d) 固定比较无 StaticLock 的外推、默认 Linear/SLERP 与 Hermite。"""
 
         self.assertEqual(
             TEMPORAL_STRATEGY_VARIANTS,
             (
                 "Smoothed KF Extrapolation",
+                "EgoAnchor w/o StaticLock",
                 "Hermite Interpolation",
             ),
         )
@@ -118,8 +117,8 @@ class PaperPipelineTests(unittest.TestCase):
             )
             self.assertEqual(path.read_bytes(), before)
 
-    def test_build_paper_rejects_non_xlsx_input_before_writing(self) -> None:
-        """论文入口拒绝 JSON/CSV，保持初始 XLSX 是唯一分析桥梁。"""
+    def test_build_analysis_rejects_non_xlsx_input_before_writing(self) -> None:
+        """分析入口拒绝 JSON/CSV，保持初始 XLSX 是唯一分析桥梁。"""
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -128,7 +127,7 @@ class PaperPipelineTests(unittest.TestCase):
             output = root / "output"
 
             with self.assertRaisesRegex(ValueError, "五本 Stage 1 XLSX"):
-                build_paper((source,), output, root / "paper", root / "paper" / "manuscript.tex")
+                build_analysis((source,), output, "figures/panels")
             self.assertFalse(output.exists())
 
     def test_v3_stage_one_workbook_is_rejected_before_analysis(self) -> None:
@@ -201,8 +200,8 @@ class PaperPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "配对不完整"):
             paired_metric_matrix(rows, METHODS, ("value",))
 
-    def test_experiment_one_panels_have_local_legends(self) -> None:
-        """图二的三个独立子图都必须自带方法图例。"""
+    def test_experiment_one_point_panels_avoid_repeated_legends(self) -> None:
+        """图二(a)/(c) 已有横轴方法名，不再放重复图例；散点图保留图例。"""
 
         values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
         point_figure = build_point_panel(
@@ -233,7 +232,7 @@ class PaperPipelineTests(unittest.TestCase):
             SimpleNamespace(translation_segments=rows)
         )
 
-        self.assertIsNotNone(point_figure.axes[0].get_legend())
+        self.assertIsNone(point_figure.axes[0].get_legend())
         self.assertIsNotNone(translation_figure.axes[0].get_legend())
 
     def test_translation_panel_does_not_connect_methods(self) -> None:
