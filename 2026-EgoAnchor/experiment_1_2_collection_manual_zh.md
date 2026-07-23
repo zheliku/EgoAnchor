@@ -8,6 +8,22 @@
 
 任务和 session 都没有持续时间上下限。UI 的 `TIME` 只告诉你已经录了多久，不会阻止结束，也不会因为过短或过长判定失败。完成当前任务要求的动作和 marker 后即可结束；需要中止时也可以直接停止整个 session。
 
+## 零、正式采集前的 pilot 与参数冻结
+
+当前 Causal Prediction 的 `maxPredictionHorizonSeconds=0.18` 和 `correctionHalfLifeSeconds=0.06` 只是 pilot 初值。pilot 用来确认运行时行为，不是论文数据。不要启动 `EvalSession`，不要把 pilot 目录复制到 `data/experiments/experiment_1_2/raw/`，也不要用 pilot 数字回填论文。
+
+pilot 至少检查以下项目：
+
+1. 新观测到达后，在同一 render 时刻比较校正前后的显示 pose。位置不能出现可见跳变，旋转也要连续；同时记录异常 continuity reset 次数。
+2. 在 72、90、120 Hz 下重复同一校正序列。以真实时间计算的 60 ms 半衰期应与刷新率无关，三种刷新率的残差衰减曲线应落在同一容差内。
+3. 人为拉长无新观测时间，确认 `prediction_horizon_ms` 永不超过 180 ms。检查日志中的实际时域，不只看 Inspector 参数。
+4. 分别测量平移和旋转的起动响应、停止前向过冲、反向回动和 settling time。停止后不能出现因校正融合造成的反向回弹。
+5. 做短时遮挡与恢复，记录遮挡期间的平移 P95、最大误差和超过 40 mm 的次数。平移和旋转结果分开保存。
+
+pilot 通过后才可以冻结两个参数，并保存当时的 Git commit、场景路径、九路矩阵 ID 和每个 runtime 的 configuration fingerprint。冻结后不得根据正式 v4 数据再调参；若 pilot 未通过，应回到代码或参数验证，不得直接开始正式采集。
+
+如果 pilot 只使用 Unity EditMode 合成测试，仍需在真实 Quest 刷新率下做一次非记录 Play Mode 检查。正式采集前必须退出 Play Mode，再确认 `EgoAnchor-Experiment12` 场景和九路矩阵没有被修改。
+
 ## 一、先弄清五个动作
 
 手柄和键盘走同一套状态机，区别只在物理按键。
