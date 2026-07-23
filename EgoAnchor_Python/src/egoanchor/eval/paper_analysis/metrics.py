@@ -622,11 +622,13 @@ def _render_metrics(
                 continue
             errors_mm = 1000.0 * np.linalg.norm(display - reference, axis=1)
             p95 = _quantile(errors_mm, 0.95)
+            maximum = float(np.max(errors_mm)) if errors_mm.size else math.nan
             occlusion[variant_id].append(
                 {
                     **identity,
                     "translation_p95_mm": p95,
-                    "catastrophic_gt40": p95 > settings.occlusion_catastrophic_mm,
+                    "translation_max_mm": maximum,
+                    "catastrophic_gt40": maximum > settings.occlusion_catastrophic_mm,
                 }
             )
         elif _scenario_matches(scenario, "start_stop"):

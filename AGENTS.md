@@ -304,7 +304,7 @@ pixi run eval latex
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；重建前后五本 XLSX 的 SHA-256 必须不变。
 - 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal synthesis 四个 LaTeX 子图同占一行，其中时序面板展示 Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Direct 是保留 StaticLock 的机制消融，只有 Causal 与 Buffered 构成关闭 StaticLock 后的严格配对。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
 - 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
-- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、40 mm 超限数和最大值；时序合成使用持续平移 lag--RMSE。
+- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、独立计算的最大值、40 mm 超限数；时序合成使用持续平移 lag--RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
 - 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式批次使用五个不同 session，
   每个 session 只完成对应的一项任务。新批次先进入 `data/experiments/_staging/`，退出当前论文的
