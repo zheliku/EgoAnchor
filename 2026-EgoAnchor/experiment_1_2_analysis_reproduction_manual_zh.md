@@ -193,7 +193,8 @@ pixi run eval stage task_1_20260722_120001_controller_right_v4 task_2_20260722_1
 
 输入：五个 `eval_root/<session-directory>` 目录。目录名可保留 `task_N_..._v4` 这类
 人工标签，不要求与 manifest 的 `session_id` 相同。输入顺序不限，程序根据 manifest 的
-`completed_tasks` 自动映射任务 1--5，批次身份始终使用 manifest 的 `session_id`。
+`completed_tasks` 自动映射任务 1--5；批次名固定按任务 1--5 manifest `session_id` 的日期时间组成，
+因此局部重采任一任务都会得到不同批次。
 
 检查内容：
 
@@ -207,7 +208,7 @@ pixi run eval stage task_1_20260722_120001_controller_right_v4 task_2_20260722_1
 写入：
 
 ```text
-staging_root/batch_YYYYMMDD_HHMMSS_<config-hash>/
+staging_root/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-time>/
 ├─ raw/
 │  ├─ task_1_static_head_motion/
 │  ├─ task_2_start_stop_6dof/
@@ -226,8 +227,8 @@ staging_root/batch_YYYYMMDD_HHMMSS_<config-hash>/
 `python_events.jsonl` 和 `unity_events.jsonl` 在原 session 内确定性生成它。因此
 `data/eval` 原件不会被重命名或删除，但并非绝对零写入。
 
-你能控制的内容：五个 session ID；暂存根目录由 `batch.toml` 控制。批次名自动生成，不能
-手写，避免同名覆盖和无法追溯。
+你能控制的内容：五个 session ID；暂存根目录由 `batch.toml` 控制。批次名自动由任务 1--5 的
+manifest 时间组成。日常可在 `stage` 后使用 `--promote` 自动切换活动批次，不需要手写该名称。
 
 成功判据：返回 `"passed": true`、`batch_id`、五本工作簿 SHA-256，以及下一条
 `promote` 命令。重复执行同一批目录时，程序会完整重建；新批次通过后替换同名暂存批次，

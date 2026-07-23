@@ -39,15 +39,16 @@ data/eval/ 只接收 Unity/Python 新生成的 session 目录。Mutagen 同步�
 
 当前 Stage 1 不拆分多任务 session，也不合并多个 session。正式批次使用五个不同 session，
 每个 session 只完成一个 task。`pixi run eval stage` 会先执行整批 QC，再复制到
-experiments/_staging/experiment_1_2/batch_YYYYMMDD_HHMMSS_<config-hash>/raw/，并把外层副本
+experiments/_staging/experiment_1_2/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-time>/raw/，并把外层副本
 命名为固定 task 名；内部 session_id 和固定文件内容不变。
 
 raw/ 是当前论文数据的只读归档。五个目录按物理任务命名，内部仍保留原始 session_id、
 来源行号和固定 JSON/JSONL 文件名。替换正式批次时必须一次替换五项任务，不能按场景挑选
 不同批次。
 
-_archive/ 只保存已经退出当前论文的完整旧批次，批次名使用日期和配置 hash，不使用 v1、
-v2、v3。_staging/ 与 _archive/ 都不是默认论文输入；正式发布只使用无版本后缀的活动目录。
+_archive/ 只保存已经退出当前论文的完整旧批次，批次名按任务 1--5 的 session 时间组成，不使用
+v1、v2、v3 或配置 hash。配置一致性由 manifest、工作簿 provenance 和 QC 单独验证。_staging/
+与 _archive/ 都不是默认论文输入；正式发布只使用无版本后缀的活动目录。
 
 workbooks/ 是 Stage 1 输出，也是 `pixi run eval analyze` 的唯一数据输入。工作簿完整保留 raw 行、来源
 SHA-256 和 QC 结果。可以只读查看，不能在 Excel 中保存后继续用于正式分析。

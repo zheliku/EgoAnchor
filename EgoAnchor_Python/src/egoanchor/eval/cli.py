@@ -53,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SESSION_DIR",
         help="填写 data/eval 下的五个 session 目录名，程序按 completed_tasks 自动映射任务",
     )
+    stage.add_argument(
+        "--promote",
+        action="store_true",
+        help="整批 QC 和工作簿发布成功后立刻切换为活动批次，无需手工输入 batch_id",
+    )
     stage.set_defaults(handler=_run_stage)
 
     promote = subparsers.add_parser("promote", help="将已验证暂存批次切换为当前活动批次")
@@ -119,7 +124,14 @@ def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:
 def _run_stage(args: argparse.Namespace) -> dict[str, object]:
     """暂存五个 session 并返回下一条 Pixi 命令。"""
 
-    return stage_batch(args.session_directories).to_dict()
+    artifact = stage_batch(args.session_directories)
+    if not args.promote:
+        return artifact.to_dict()
+    promoted = promote_batch(artifact.batch_id)
+    promoted["staged_batch"] = artifact.batch_id
+    promoted["workbook_sha256"] = artifact.workbook_sha256
+    promoted["next_command"] = "pixi run eval analyze"
+    return promoted
 
 
 def _run_promote(args: argparse.Namespace) -> dict[str, object]:

@@ -113,17 +113,12 @@ pixi run eval rebuild
 
 ## 当前五项 v4 命令
 
-```text
-pixi run eval stage task_1_20260724_005757_controller_right_v4_2 task_2_20260723_215645_controller_right_v4 task_3_20260723_215941_controller_right_v4 task_4_20260723_223641_controller_right_v4_2 task_5_20260723_223421_controller_right_v4
+```powershell
+pixi run eval stage --promote task_1_20260724_005757_controller_right_v4_2 task_2_20260723_215645_controller_right_v4 task_3_20260723_215941_controller_right_v4 task_4_20260723_223641_controller_right_v4_2 task_5_20260723_223421_controller_right_v4 && pixi run eval analyze && pixi run eval copy-assets
 ```
 
-命令返回新的 `batch_id` 后：
-
-```text
-pixi run eval promote <新的 batch_id>
-pixi run eval analyze
-pixi run eval copy-assets
-```
+内部批次名由任务 1--5 的 manifest 时间按任务号组成。它确定地表示整组输入，局部重采任一任务都会
+得到新批次名；`--promote` 会在 QC 和工作簿发布成功后自动切换活动批次，因此无需手工输入该名称。
 
 ## 验证
 

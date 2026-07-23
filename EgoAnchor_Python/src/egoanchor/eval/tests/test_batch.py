@@ -77,7 +77,10 @@ class BatchWorkflowTests(unittest.TestCase):
                 root=root,
             )
 
-            self.assertRegex(artifact.batch_id, r"^batch_20260722_120001_[0-9a-f]{16}$")
+            self.assertEqual(
+                artifact.batch_id,
+                "batch_20260722_120001_20260722_120002_20260722_120003_20260722_120004_20260722_120005",
+            )
             self.assertEqual(before, _tree_digest(root / "data" / "eval"))
             self.assertEqual([item.task_number for item in artifact.sessions], [1, 2, 3, 4, 5])
             for number in range(1, 6):
@@ -232,6 +235,31 @@ class BatchWorkflowTests(unittest.TestCase):
                 "copy-assets",
             },
         )
+
+    def test_stage_promote_switches_batch_without_manual_batch_id(self) -> None:
+        """stage --promote 使用刚生成的确定批次名，不要求用户再次输入。"""
+
+        artifact = mock.Mock(
+            batch_id="batch_20260722_120001_20260722_120002_20260722_120003_20260722_120004_20260722_120005",
+            workbook_sha256={"task_1_complete.xlsx": "digest"},
+        )
+        with (
+            mock.patch.object(eval_cli, "stage_batch", return_value=artifact),
+            mock.patch.object(
+                eval_cli,
+                "promote_batch",
+                return_value={"passed": True, "active_batch": artifact.batch_id},
+            ) as promoted,
+        ):
+            result = eval_cli._run_stage(
+                eval_cli.build_parser().parse_args(
+                    ["stage", "--promote", "task1", "task2", "task3", "task4", "task5"]
+                )
+            )
+
+        promoted.assert_called_once_with(artifact.batch_id)
+        self.assertEqual(result["staged_batch"], artifact.batch_id)
+        self.assertEqual(result["next_command"], "pixi run eval analyze")
 
     def test_current_qc_and_preprocess_use_configured_active_paths(self) -> None:
         """逐阶段命令只读取 batch.toml 指定的当前活动批次。"""

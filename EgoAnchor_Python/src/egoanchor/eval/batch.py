@@ -37,8 +37,8 @@ EXPECTED_MATRIX_ID = "exp12_9_smoothed_hermite_v4"
 DEFAULT_BATCH_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "batch.toml"
 """批次输入、输出和论文路径的唯一操作配置。"""
 
-_BATCH_ID_PATTERN = re.compile(r"^batch_\d{8}_\d{6}_[0-9a-f]{8,64}$")
-"""自动批次名的固定格式。"""
+_BATCH_ID_PATTERN = re.compile(r"^batch_(?:\d{8}_\d{6})(?:_\d{8}_\d{6}){4}$")
+"""由任务一至任务五 session 时间按固定顺序组成的批次名格式。"""
 
 _SESSION_TIME_PATTERN = re.compile(r"^(?P<date>\d{8})_(?P<time>\d{6})_")
 """正式 session ID 中用于构造稳定批次名的时间部分。"""
@@ -944,23 +944,25 @@ def _write_workbooks(
 
 
 def _batch_id(summaries: Sequence[SessionSummary]) -> str:
-    """用最早 session 时间和配置哈希构造唯一、稳定的批次名。"""
+    """用五项任务 session 时间构造确定且能区分局部重采的批次名。"""
 
-    earliest = min(item.session_id for item in summaries)
-    match = _SESSION_TIME_PATTERN.match(earliest)
-    if match is None:
-        raise ValueError(f"正式 session_id 缺少 YYYYMMDD_HHMMSS 前缀：{earliest}")
-    config_token = summaries[0].config_hash[:16]
-    if not re.fullmatch(r"[0-9a-f]{8,64}", config_token):
-        raise ValueError("config_hash 必须以至少八位小写十六进制字符开头")
-    return f"batch_{match.group('date')}_{match.group('time')}_{config_token}"
+    timestamps: list[str] = []
+    for number in range(1, 6):
+        session = next((item for item in summaries if item.task_number == number), None)
+        if session is None:
+            raise ValueError(f"正式批次缺少任务 {number} session，无法构造 batch_id")
+        match = _SESSION_TIME_PATTERN.match(session.session_id)
+        if match is None:
+            raise ValueError(f"任务 {number} session_id 缺少 YYYYMMDD_HHMMSS 前缀：{session.session_id}")
+        timestamps.append(f"{match.group('date')}_{match.group('time')}")
+    return "batch_" + "_".join(timestamps)
 
 
 def _require_batch_id(batch_id: str) -> None:
-    """拒绝 v3 等不稳定批次名和任意路径片段。"""
+    """拒绝旧格式和任意路径片段。"""
 
     if _BATCH_ID_PATTERN.fullmatch(batch_id) is None:
-        raise ValueError("batch_id 必须为 batch_YYYYMMDD_HHMMSS_<config-hash> 格式")
+        raise ValueError("batch_id 必须按任务 1--5 写为 batch_YYYYMMDD_HHMMSS_... 格式")
 
 
 def _only_staged_batch(staging_parent: Path) -> str:
