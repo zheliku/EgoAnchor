@@ -223,6 +223,8 @@ def build_translation_panel(results: PaperResults) -> Any:
             marker=_MARKERS[index],
             label=_SHORT_LABELS[method],
             display_limit=_EXP1_DYNAMIC_Y_DISPLAY_LIMIT,
+            size=8.0,
+            alpha=0.24,
         )
         median_x, median_y = np.median(points, axis=0)
         q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
@@ -233,11 +235,13 @@ def build_translation_panel(results: PaperResults) -> Any:
             xerr=[[median_x - q1_x], [q3_x - median_x]],
             yerr=[[median_y - q1_y], [q3_y - median_y]],
             fmt=_MARKERS[index],
-            markersize=6,
-            capsize=3.5,
-            linewidth=1.7,
+            markersize=4.5,
+            capsize=2.5,
+            linewidth=1.1,
             color=color,
             alpha=1.0,
+            markeredgecolor="white",
+            markeredgewidth=0.6,
         )
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")

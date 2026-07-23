@@ -145,7 +145,7 @@ schema-v2 task directory
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
-- 实验一图二三个面板均显示一致的四方法图例；图 3(c) 只显示 event median 与 IQR，横轴为按 VCD 分数从高到低保留候选的比例，纵轴按有效风险范围收紧；图 3(d) 使用 `Smoothed KF`、`Linear/SLERP`、`Hermite` 的紧凑右上图例。动态 lag--residual 面板仅绘制冻结纵轴上限内的点，不使用顶端替代三角；完整异常值仍保留在指标和表格中。
+- 实验一图二三个面板均显示一致的四方法图例；图 2(b) 的原始点、IQR 误差条与实心中位数保持由轻到重的视觉层级；图 3(c) 只显示 event median 与 IQR，横轴为按 VCD 分数从高到低保留候选的比例，纵轴按有效风险范围收紧；图 3(d) 使用 `Smoothed KF`、`Linear/SLERP`、`Hermite` 的紧凑右上图例。动态 lag--residual 面板仅绘制冻结纵轴上限内的点，不使用顶端替代三角；完整异常值仍保留在指标和表格中。
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行 QC；任一 task 的 QC 失败时不开始发布。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit，不提供人工覆盖入口。
