@@ -325,6 +325,8 @@ namespace EgoAnchor.Eval
             string residualRotation = Number(runtime.LatestCorrectionRotationResidualDegrees, "0.00", " deg");
             string frameStepPosition = Number(_latestFrameStepM * 1000.0, "0.0", " mm");
             string frameStepRotation = Number(_latestFrameStepDeg, "0.00", " deg");
+            string causalHorizon = Number(runtime.LatestPredictionHorizonMs, "0.0", " ms");
+            string continuityResets = runtime.LatestContinuityResetCount.ToString();
             string staticLock = runtime.LatestStaticLocked ? "ON" : "OFF";
 
             builder.AppendLine("<size=30><b>LIVE SYSTEM DIAGNOSTICS</b></size>");
@@ -347,6 +349,7 @@ namespace EgoAnchor.Eval
             builder.AppendLine($"VCD  LATEST {latestScore} | ACCEPTED {acceptedScore}");
             builder.AppendLine($"CORRECTION  {residualPosition} / {residualRotation}");
             builder.AppendLine($"FRAME STEP  {frameStepPosition} / {frameStepRotation}");
+            builder.AppendLine($"CAUSAL  HORIZON {causalHorizon} | RESET {continuityResets}");
             builder.AppendLine($"ANCHOR  {runtime.CurrentAnchorState} | MOTION  {Escape(runtime.CurrentMotionStateName)}");
             builder.AppendLine($"STATIC LOCK  {staticLock} | FRAME  {FrameText(runtime.LatestAlignedFrameId)}");
             builder.Append("<size=17><color=#B1BCCC>Live diagnostic only; offline paired metrics are authoritative.</color></size>");

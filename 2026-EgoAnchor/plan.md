@@ -66,7 +66,7 @@ Task 2 的每轮动作使用成对 marker：拿起前记录 `transition_started`
 起动响应、停止过冲、反向回动与 settling time。
 
 现有五项正式 task 与 Stage 1 XLSX 属于 v3 归档批次，其中 Kalman 过程协方差仍使用旧实现，
-第九路也仍是 Hermite。
+旧第九路为 Hermite。
 这些数据可用于只读工程诊断，但不能证明修正后的运行时效果。当前 CWNA 模型和参数完成验证后，
 实验一/二必须完整重采五项任务，再经 schema-v2 QC、Stage 1 XLSX 和 paper_analysis 管线替换
 正式论文数字。不得按场景混用 v3 与新批次。原始数据与复现步骤见

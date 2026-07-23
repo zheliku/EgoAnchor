@@ -142,10 +142,15 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains("SERVER  42 ms", text);
                 StringAssert.Contains("VCD  LATEST", text);
                 StringAssert.Contains("FRAME STEP  2.0 mm / 2.00 deg", text);
+                StringAssert.Contains("CAUSAL  HORIZON -- | RESET 0", text);
                 StringAssert.Contains("REF <color=#4DD6A6>ACTIVE</color>", text);
                 StringAssert.DoesNotContain("Ground Truth", text);
                 StringAssert.DoesNotContain("Latency", text);
                 AssertAscii(text);
+
+                SetPrivateField(runtime, "latestPredictionHorizonMs", 180.0);
+                SetPrivateField(runtime, "latestContinuityResetCount", 3L);
+                StringAssert.Contains("CAUSAL  HORIZON 180.0 ms | RESET 3", stats.BuildStatsText());
 
                 referenceObject.SetActive(false);
                 referenceObject.transform.SetPositionAndRotation(
