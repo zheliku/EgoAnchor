@@ -347,6 +347,26 @@ namespace EgoAnchor.Eval
             }
         }
 
+        /// <summary>按稳定变体标签读取 runtime，不改变 recorder 或策略状态。</summary>
+        /// <param name="label">manifest 与日志使用的稳定变体标签。</param>
+        /// <param name="runtime">匹配时返回对应 runtime。</param>
+        /// <returns>是否找到标签完全匹配且已绑定的 runtime。</returns>
+        public bool TryGetVariantRuntime(string label, out PoseToAnchorRuntime runtime)
+        {
+            runtime = null;
+            if (string.IsNullOrEmpty(label) || variants == null)
+                return false;
+
+            for (int i = 0; i < variants.Count; i++)
+            {
+                if (!string.Equals(ResolveLabel(variants[i], i), label, StringComparison.Ordinal))
+                    continue;
+                runtime = variants[i].runtime;
+                return runtime != null;
+            }
+            return false;
+        }
+
         /// <summary>
         /// 读取主变体当前实际显示的 pose。优先使用 presenter，以保留 hold-last 与隐藏语义；
         /// 没有 presenter 时，仅在 runtime 有 output 且 Transform 已绑定时回退。

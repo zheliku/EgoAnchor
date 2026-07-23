@@ -57,6 +57,7 @@ namespace EgoAnchor.Tests
         {
             GameObject recorderObject = new GameObject("LiveStatsTests.Recorder");
             GameObject runtimeObject = new GameObject("LiveStatsTests.Runtime");
+            GameObject causalObject = new GameObject("LiveStatsTests.CausalRuntime");
             GameObject referenceObject = new GameObject("LiveStatsTests.Reference");
             GameObject statsObject = new GameObject("LiveStatsTests.Panel");
             GameObject historyObject = new GameObject("LiveStatsTests.History");
@@ -64,6 +65,7 @@ namespace EgoAnchor.Tests
             {
                 EvalRecorder recorder = recorderObject.AddComponent<EvalRecorder>();
                 PoseToAnchorRuntime runtime = runtimeObject.AddComponent<PoseToAnchorRuntime>();
+                PoseToAnchorRuntime causalRuntime = causalObject.AddComponent<PoseToAnchorRuntime>();
                 EvalLiveStats stats = statsObject.AddComponent<EvalLiveStats>();
                 FramePoseHistory history = historyObject.AddComponent<FramePoseHistory>();
 
@@ -77,6 +79,13 @@ namespace EgoAnchor.Tests
                         runtime = runtime,
                         anchorTransform = runtimeObject.transform,
                         isPrimary = true,
+                    },
+                    new EvalVariant
+                    {
+                        label = EvalV2Manifest.CausalPredictionVariantLabel,
+                        runtime = causalRuntime,
+                        anchorTransform = causalObject.transform,
+                        isPrimary = false,
                     },
                 });
                 SetPrivateField(recorder, "framePoseHistory", history);
@@ -143,14 +152,20 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains("VCD  LATEST", text);
                 StringAssert.Contains("FRAME STEP  2.0 mm / 2.00 deg", text);
                 StringAssert.Contains("CAUSAL  HORIZON -- | RESET 0", text);
+                StringAssert.Contains("CAUSAL CORRECTION  -- / --", text);
                 StringAssert.Contains("REF <color=#4DD6A6>ACTIVE</color>", text);
                 StringAssert.DoesNotContain("Ground Truth", text);
                 StringAssert.DoesNotContain("Latency", text);
                 AssertAscii(text);
 
-                SetPrivateField(runtime, "latestPredictionHorizonMs", 180.0);
-                SetPrivateField(runtime, "latestContinuityResetCount", 3L);
+                SetPrivateField(runtime, "latestPredictionHorizonMs", 45.0);
+                SetPrivateField(runtime, "latestContinuityResetCount", 2L);
+                SetPrivateField(causalRuntime, "latestPredictionHorizonMs", 180.0);
+                SetPrivateField(causalRuntime, "latestContinuityResetCount", 3L);
+                SetPrivateField(causalRuntime, "latestCorrectionPositionResidualMeters", 0.004f);
+                SetPrivateField(causalRuntime, "latestCorrectionRotationResidualDegrees", 1.5f);
                 StringAssert.Contains("CAUSAL  HORIZON 180.0 ms | RESET 3", stats.BuildStatsText());
+                StringAssert.Contains("CAUSAL CORRECTION  4.0 mm / 1.50 deg", stats.BuildStatsText());
 
                 referenceObject.SetActive(false);
                 referenceObject.transform.SetPositionAndRotation(
@@ -169,6 +184,7 @@ namespace EgoAnchor.Tests
                 UnityEngine.Object.DestroyImmediate(statsObject);
                 UnityEngine.Object.DestroyImmediate(historyObject);
                 UnityEngine.Object.DestroyImmediate(referenceObject);
+                UnityEngine.Object.DestroyImmediate(causalObject);
                 UnityEngine.Object.DestroyImmediate(runtimeObject);
                 UnityEngine.Object.DestroyImmediate(recorderObject);
             }

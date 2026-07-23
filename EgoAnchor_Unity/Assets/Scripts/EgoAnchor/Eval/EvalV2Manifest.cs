@@ -11,6 +11,9 @@ namespace EgoAnchor.Eval
         /// <summary>正式九路场景名；只有该场景执行严格矩阵启动门禁。</summary>
         public const string FormalSceneName = "EgoAnchor-Experiment12";
 
+        /// <summary>因果预测配对变体的稳定日志标签。</summary>
+        public const string CausalPredictionVariantLabel = "EgoAnchor Causal Prediction";
+
         /// <summary>正式变体的结构语义契约，不包含 pilot 尚未冻结的数值参数。</summary>
         public readonly struct FormalVariantContract
         {
@@ -76,7 +79,7 @@ namespace EgoAnchor.Eval
             new FormalVariantContract("EgoAnchor w/o VCD", "kalman", "linear_slerp", "disabled", "CaptureTime", true, false, true, true, false, true),
             new FormalVariantContract("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", true, true, false, true, true, true),
             new FormalVariantContract("EgoAnchor w/o StaticLock", "kalman", "linear_slerp", "enabled", "CaptureTime", true, true, true, false, true, true),
-            new FormalVariantContract("EgoAnchor Causal Prediction", "kalman", "causal_prediction", "enabled", "CaptureTime", true, true, true, false, true, true),
+            new FormalVariantContract(CausalPredictionVariantLabel, "kalman", "causal_prediction", "enabled", "CaptureTime", true, true, true, false, true, true),
         };
 
         /// <summary>会话元数据文件名。</summary>
