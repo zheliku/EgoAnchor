@@ -257,6 +257,59 @@ namespace EgoAnchor.Tests
             }
         }
 
+        /// <summary>新观测的 capture time 晚于上一渲染帧时，因果输出仍应沿旧显示轨迹连续推进。</summary>
+        [Test]
+        public void CausalPredictionKeepsContinuityWhenObservationTimeIsAheadOfRender()
+        {
+            GameObject owner = new GameObject("CausalPredictionAsyncBoundaryTests");
+            try
+            {
+                ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
+                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                strategy.ResetStrategy();
+
+                Feed(model, strategy, ObservationWithSampleTime(1, 1.0, 1.0, 0.0f));
+                Pose before = strategy.Output(model, 1.05);
+                Feed(model, strategy, ObservationWithSampleTime(2, 1.1, 1.1, 0.2f));
+                Pose after = strategy.Output(model, 1.06);
+
+                Assert.That(Vector3.Distance(before.position, after.position), Is.LessThan(0.02f));
+                Assert.That(strategy.Diagnostics.ContinuityResetCount, Is.Zero);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
+        /// <summary>校正残差必须从观测到达时间开始衰减，而不是从上一渲染帧时间开始衰减。</summary>
+        [Test]
+        public void CausalPredictionResidualDecayStartsAtObservationArrival()
+        {
+            GameObject owner = new GameObject("CausalPredictionArrivalDecayTests");
+            try
+            {
+                ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
+                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SetPrivateField(strategy, "correctionHalfLifeSeconds", 1.0f);
+                strategy.ResetStrategy();
+
+                Feed(model, strategy, ObservationWithSampleTime(1, 0.0, 0.0, 0.0f));
+                strategy.Output(model, 0.80);
+                Feed(model, strategy, ObservationWithSampleTime(2, 0.70, 0.85, 0.2f));
+                Pose output = strategy.Output(model, 1.00);
+
+                float modelPosition = 0.2f + 0.2f / 0.7f * 0.18f;
+                float residualBeforeDecay = -(0.2f + 0.2f / 0.7f * 0.1f);
+                float expected = modelPosition + residualBeforeDecay * Mathf.Pow(0.5f, 0.15f);
+                Assert.That(output.position.x, Is.EqualTo(expected).Within(1e-4f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
         /// <summary>60 ms 半衰期在 72、90、120 Hz 渲染下必须产生相同输出。</summary>
         [Test]
         public void CausalPredictionHalfLifeIsIndependentOfRenderRate()
@@ -426,6 +479,21 @@ namespace EgoAnchor.Tests
                 frameId,
                 new Pose(Vector3.right * positionX, Quaternion.Euler(0.0f, angleDegrees, 0.0f)),
                 captureTime + 0.1,
+                1.0f,
+                captureTimeSeconds: captureTime);
+        }
+
+        /// <summary>构造 capture time 与 Unity 到达时间分离的异步观测。</summary>
+        private static AnchorObservation ObservationWithSampleTime(
+            long frameId,
+            double captureTime,
+            double sampleTime,
+            float positionX)
+        {
+            return AnchorObservation.FromAlignedPose(
+                frameId,
+                new Pose(Vector3.right * positionX, Quaternion.identity),
+                sampleTime,
                 1.0f,
                 captureTimeSeconds: captureTime);
         }

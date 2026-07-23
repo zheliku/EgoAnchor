@@ -164,6 +164,7 @@ def _validate_documents(
         "unity_reference": "unity_reference.jsonl",
         "unity_admission": "unity_admission.jsonl",
         "unity_render": "unity_render.jsonl",
+        "unity_events": "unity_events.jsonl",
         "events": "events.jsonl",
     }
     if manifest.get("log_files") != expected_manifest_files:

@@ -47,6 +47,20 @@ _MARKER_ROLES = (
 class BatchWorkflowTests(unittest.TestCase):
     """验证 session 映射、复制校验、工作簿发布和安全切换。"""
 
+    def setUp(self) -> None:
+        """测试临时项目没有 Git 元数据，统一模拟真实 commit 读取结果。"""
+
+        self._code_version_patch = mock.patch(
+            "egoanchor.eval.batch._git_code_version",
+            return_value="test-version",
+        )
+        self._code_version_patch.start()
+
+    def tearDown(self) -> None:
+        """恢复 Git 版本读取函数，避免影响其他测试。"""
+
+        self._code_version_patch.stop()
+
     def test_stage_maps_unordered_sessions_and_writes_verified_workbooks(self) -> None:
         """stage 按 manifest 自动映射任务，并保留五个 eval 源目录。"""
 
@@ -58,7 +72,6 @@ class BatchWorkflowTests(unittest.TestCase):
             artifact = stage_batch(
                 tuple(reversed(session_ids)),
                 root=root,
-                code_version="test-version",
             )
 
             self.assertRegex(artifact.batch_id, r"^batch_20260722_120001_[0-9a-f]{16}$")
@@ -88,7 +101,7 @@ class BatchWorkflowTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
-            artifact = stage_batch(_write_batch_sessions(root), root=root, code_version="test-version")
+            artifact = stage_batch(_write_batch_sessions(root), root=root)
             changed = artifact.root / "raw" / _task_directory(1) / "unexpected.txt"
             changed.write_text("changed", encoding="utf-8")
 
@@ -103,7 +116,7 @@ class BatchWorkflowTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
-            artifact = stage_batch(_write_batch_sessions(root), root=root, code_version="test-version")
+            artifact = stage_batch(_write_batch_sessions(root), root=root)
             paths = load_batch_paths(root)
             shutil.copytree(artifact.root, paths.active_root)
             original_rename = Path.rename
@@ -150,11 +163,11 @@ class BatchWorkflowTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
-            artifact = stage_batch(_write_batch_sessions(root), root=root, code_version="stage-version")
+            artifact = stage_batch(_write_batch_sessions(root), root=root)
             promote_batch(artifact.batch_id, root=root)
 
             qc_result = qc_current(root=root)
-            preprocess_result = preprocess_current(root=root, code_version="preprocess-version")
+            preprocess_result = preprocess_current(root=root)
 
             self.assertTrue(qc_result["passed"])
             self.assertEqual(len(qc_result["sessions"]), 5)

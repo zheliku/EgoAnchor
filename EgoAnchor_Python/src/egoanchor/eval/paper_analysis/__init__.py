@@ -7,6 +7,7 @@ from .metrics import (
     PaperResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
+    eligible_trials,
     paired_metric_matrix,
 )
 from .paper import write_paper
@@ -22,6 +23,7 @@ __all__ = [
     "METHODS",
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
+    "eligible_trials",
     "build_point_panel",
     "build_translation_panel",
     "build_paper",

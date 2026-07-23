@@ -347,7 +347,6 @@ def stage_batch(
     *,
     root: Path | None = None,
     batch_id: str | None = None,
-    code_version: str | None = None,
 ) -> BatchArtifact:
     """校验五个 eval session，复制到暂存区并生成五本工作簿。"""
 
@@ -378,7 +377,7 @@ def stage_batch(
         artifacts = _write_workbooks(
             staged_dirs,
             temporary / "workbooks",
-            code_version or _git_code_version(base),
+            _git_code_version(base),
         )
         temporary.rename(destination)
     except Exception:
@@ -434,13 +433,12 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
 def rebuild_current(
     *,
     root: Path | None = None,
-    code_version: str | None = None,
     compile_pdf: bool = True,
 ) -> dict[str, Any]:
     """从当前 raw 重新生成五本工作簿、论文分析产物和最终 PDF。"""
 
     paths = load_batch_paths(root)
-    preprocess_result = preprocess_current(root=paths.project_root, code_version=code_version)
+    preprocess_result = preprocess_current(root=paths.project_root)
     result = analyze_current(root=paths.project_root, compile_pdf=compile_pdf)
     result["workbook_sha256"] = preprocess_result["workbook_sha256"]
     return result
@@ -464,7 +462,6 @@ def qc_current(*, root: Path | None = None) -> dict[str, Any]:
 def preprocess_current(
     *,
     root: Path | None = None,
-    code_version: str | None = None,
 ) -> dict[str, Any]:
     """把当前活动批次的 raw JSON/JSONL 发布为五本完整工作簿。"""
 
@@ -475,7 +472,7 @@ def preprocess_current(
     artifacts = _write_workbooks(
         task_dirs,
         paths.active_root / "workbooks",
-        code_version or _git_code_version(paths.project_root),
+        _git_code_version(paths.project_root),
     )
     return {
         "passed": True,

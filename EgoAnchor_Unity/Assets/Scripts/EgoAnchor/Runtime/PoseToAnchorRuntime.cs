@@ -68,6 +68,7 @@ namespace EgoAnchor.Runtime
         private bool hasArrivalTimeRawPose;
 
         private long latestAlignedFrameId = -1;
+        private long latestAcceptedFrameId = -1;
         private string latestPhase = "";
         private string latestFailure = "";
         private string latestPolicyAction = "";
@@ -114,6 +115,9 @@ namespace EgoAnchor.Runtime
 
         /// <summary>最近成功对齐的 frame_id。</summary>
         public long LatestAlignedFrameId => latestAlignedFrameId;
+
+        /// <summary>最近被 policy 接受并可作为当前输出来源的 frame_id。</summary>
+        public long LatestAcceptedFrameId => latestAcceptedFrameId;
 
         /// <summary>最近一次 PoseResult phase。</summary>
         public string LatestPhase => latestPhase;
@@ -537,6 +541,10 @@ namespace EgoAnchor.Runtime
             }
 
             AnchorPolicyDecision decision = policyHost.AcceptPose(observation);
+            if (decision.Action == AnchorPolicyAction.Accept || decision.Action == AnchorPolicyAction.Snap)
+            {
+                latestAcceptedFrameId = frameId;
+            }
             ApplyPolicyDecision(decision);
             SyncPolicyState();
         }
@@ -868,6 +876,7 @@ namespace EgoAnchor.Runtime
             hasOutputPose = false;
             hasArrivalTimeRawPose = false;
             latestAlignedFrameId = -1;
+            latestAcceptedFrameId = -1;
             latestUnityPoseHandleFrameId = -1;
             latestUnityPoseHandleMonoMs = double.NaN;
             latestServerProcessingMs = double.NaN;

@@ -7,13 +7,34 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..preprocess import verify_task_workbook
 from .figures import publish_figures
 from .metrics import analyze_workbooks
 from .paper import write_paper
 from .settings import load_settings, settings_sha256
+from .xlsx import iter_rows
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")
+
+_TASK_SCENARIOS = (
+    "static_head_motion",
+    "start_stop_6dof",
+    "continuous_translation",
+    "continuous_rotation",
+    "occlusion_recovery",
+)
+"""五本正式工作簿按文件编号对应的固定物理场景。"""
+
+_COMMON_MANIFEST_FIELDS = (
+    "config_hash",
+    "frozen_parameter_set_id",
+    "object_id",
+    "object_model_id",
+    "protocol_version",
+    "run_kind",
+)
+"""五项任务必须共享的运行时和对象身份。"""
 
 
 def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Path, ...]:
@@ -35,7 +56,63 @@ def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Pa
         numbers.append(int(match.group("number")))
     if sorted(numbers) != [1, 2, 3, 4, 5]:
         raise ValueError(f"输入 task 编号必须恰好覆盖 1--5：{sorted(numbers)}")
-    return normalized
+    ordered = tuple(path for _, path in sorted(zip(numbers, normalized), key=lambda item: item[0]))
+    _validate_batch_identity(ordered)
+    return ordered
+
+
+def _validate_batch_identity(workbooks: tuple[Path, ...]) -> None:
+    """复验工作簿结构，并核对五项任务来自同一冻结配置。"""
+
+    session_ids: set[str] = set()
+    common_identity: tuple[str, ...] | None = None
+    for task_number, workbook in enumerate(workbooks, start=1):
+        verification = verify_task_workbook(workbook)
+        if not verification.passed:
+            raise ValueError(f"Stage 1 工作簿完整性验证失败：{workbook}")
+
+        manifest_rows = list(
+            iter_rows(
+                workbook,
+                "manifest",
+                ("session_id", *_COMMON_MANIFEST_FIELDS),
+            )
+        )
+        if len(manifest_rows) != 1:
+            raise ValueError(f"Stage 1 工作簿必须包含唯一 manifest 行：{workbook}")
+        manifest = manifest_rows[0]
+        session_id = str(manifest.get("session_id") or "")
+        if not session_id or session_id in session_ids:
+            raise ValueError(f"五本 Stage 1 工作簿的 session_id 必须非空且唯一：{session_id!r}")
+        session_ids.add(session_id)
+
+        identity = tuple(str(manifest.get(field) or "") for field in _COMMON_MANIFEST_FIELDS)
+        if identity[-1] != "formal":
+            raise ValueError(f"论文分析只接受 formal session：{workbook}")
+        if any(not value for value in identity):
+            raise ValueError(f"Stage 1 工作簿缺少冻结批次身份：{workbook}")
+        if common_identity is None:
+            common_identity = identity
+        elif identity != common_identity:
+            raise ValueError("五本 Stage 1 工作簿的对象、协议或冻结配置不一致")
+
+        expected_scenario = _TASK_SCENARIOS[task_number - 1]
+        completed_rows = list(
+            iter_rows(
+                workbook,
+                "completed_trials",
+                ("session_id", "scenario_id", "trial_id"),
+            )
+        )
+        if not completed_rows or any(
+            row.get("session_id") != session_id
+            or row.get("scenario_id") != expected_scenario
+            or not str(row.get("trial_id") or "")
+            for row in completed_rows
+        ):
+            raise ValueError(
+                f"task_{task_number} 必须只包含场景 {expected_scenario} 的最终完成 trial"
+            )
 
 
 def build_paper(

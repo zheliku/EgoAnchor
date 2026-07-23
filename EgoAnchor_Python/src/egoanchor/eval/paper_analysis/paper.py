@@ -934,7 +934,7 @@ def write_paper(
                 "parameters_sha256": settings_sha256(),
                 "manuscript": manuscript.name,
                 "temporal_evidence": "actual_runtime",
-                "output_strategy": "linear_slerp",
+                "output_strategy": "temporal_strategy_comparison",
             },
             ensure_ascii=False,
             indent=2,

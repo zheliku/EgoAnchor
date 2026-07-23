@@ -18,6 +18,7 @@ from egoanchor.eval.paper_analysis import (
     build_paper,
     build_point_panel,
     build_translation_panel,
+    eligible_trials,
     iter_rows,
     paired_metric_matrix,
     settings_sha256,
@@ -97,6 +98,32 @@ class PaperPipelineTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "exp12_9_causal_v3"):
                 analyze_workbooks((path,))
+
+    def test_eligible_trials_exclude_rejected_retries(self) -> None:
+        """论文指标只接受最终结束且没有后续作废的 trial。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "task_1_complete.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "events"
+            sheet.append(
+                (
+                    "session_id",
+                    "trial_id",
+                    "event",
+                    "event_type",
+                    "mono_ms",
+                    "created_unix_ms",
+                    "event_row_id",
+                )
+            )
+            sheet.append(("s", "old", "trial_ended", "trial_ended", 10.0, 10.0, "e1"))
+            sheet.append(("s", "old", "trial_rejected", "trial_rejected", 11.0, 11.0, "e2"))
+            sheet.append(("s", "new", "trial_ended", "trial_ended", 20.0, 20.0, "e3"))
+            workbook.save(path)
+
+            self.assertEqual(eligible_trials((path,)), frozenset({("s", "new")}))
 
     def test_figure_pairing_uses_event_identity_instead_of_row_position(self) -> None:
         """实验一折线必须按稳定片段键配对，即使各方法行顺序不同。"""

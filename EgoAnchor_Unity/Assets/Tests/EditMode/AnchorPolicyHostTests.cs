@@ -259,6 +259,9 @@ namespace EgoAnchor.Tests
                 Assert.That(runtime.LatestPolicyOutputTargetMonoMs, Is.Not.NaN);
                 Assert.That(runtime.LatestSmoothingDelayMs, Is.Not.NaN);
                 Assert.That(runtime.LatestUnityPoseHandleMonoMs, Is.Not.NaN);
+                // 模拟随后到达但被拒绝的候选：最新对齐帧不应覆盖当前输出来源。
+                SetPrivateField(runtime, "latestAlignedFrameId", 99L);
+                Assert.That(runtime.LatestAcceptedFrameId, Is.EqualTo(42L));
 
                 Pose expected = new Pose(new Vector3(4f, 5f, 6f), Quaternion.Euler(10f, 20f, 30f));
                 anchorGo.transform.SetPositionAndRotation(expected.position, expected.rotation);
@@ -278,6 +281,7 @@ namespace EgoAnchor.Tests
                 List<EvalVariantSnapshot> snapshots = GetPrivateField<List<EvalVariantSnapshot>>(recorder, "_snapshots");
                 Assert.That(snapshots, Has.Count.EqualTo(1));
                 Assert.That(snapshots[0].HasRuntimeOutput, Is.True);
+                Assert.That(snapshots[0].SourceFrameId, Is.EqualTo(42L));
                 Assert.That(snapshots[0].RuntimeOutputPose.position, Is.EqualTo(runtimePose.position));
                 Assert.That(Quaternion.Angle(snapshots[0].RuntimeOutputPose.rotation, runtimePose.rotation), Is.LessThan(1e-4f));
                 Assert.That(snapshots[0].DisplayPose.position, Is.EqualTo(expected.position));

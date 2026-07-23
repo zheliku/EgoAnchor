@@ -830,8 +830,8 @@ namespace EgoAnchor.Eval
                 Pose arrivalPose = Pose.identity;
                 if (rt != null && ev.isPrimary) hasArrival = rt.TryGetArrivalTimeRawPose(out arrivalPose);
 
-                long srcFrame = rt != null ? rt.LatestAlignedFrameId : -1;
-                if (srcFrame < 0 && hasDisplayPose && presenter != null)
+                long srcFrame = hasRuntimeOutput && rt != null ? rt.LatestAcceptedFrameId : -1;
+                if ((!hasRuntimeOutput || srcFrame < 0) && hasDisplayPose && presenter != null)
                 {
                     srcFrame = presenter.LastAppliedFrameId;
                 }

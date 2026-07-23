@@ -116,7 +116,7 @@ namespace EgoAnchor.Runtime
                 targetTransform.rotation = pose.rotation;
             }
 
-            lastAppliedFrameId = runtime.LatestAlignedFrameId;
+            lastAppliedFrameId = runtime.LatestAcceptedFrameId;
         }
 
         /// <summary>读取当前实际显示的 world pose；隐藏或从未应用过 pose 时返回 false。</summary>

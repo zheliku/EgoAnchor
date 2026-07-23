@@ -13,4 +13,4 @@ displacement_mm = 5.0 # 参考和显示位移被视为开始运动的阈值，�
 persistence_ms = 100.0 # 位移必须持续超过阈值的时间，单位毫秒。
 
 [occlusion]
-catastrophic_mm = 40.0 # 遮挡过程 P95 超过该值时记为灾难性失效，单位毫米。
+catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾难性失效，单位毫米。

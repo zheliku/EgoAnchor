@@ -215,6 +215,67 @@ def _valid_event(row: Mapping[str, Any]) -> bool:
     return event_id not in {None, "", "@empty-text"}
 
 
+def eligible_trials(workbooks: Sequence[Path]) -> frozenset[tuple[str, str]]:
+    """只保留最终以 trial_ended 结束、之后没有被作废的 trial。"""
+
+    grouped: defaultdict[tuple[str, str], list[tuple[float, str]]] = defaultdict(list)
+    columns = (
+        "session_id",
+        "trial_id",
+        "event",
+        "event_type",
+        "mono_ms",
+        "created_unix_ms",
+        "event_row_id",
+    )
+    row_index = 0
+    for workbook in workbooks:
+        for row in iter_rows(workbook, "events", columns):
+            row_index += 1
+            session_id = str(row.get("session_id") or "")
+            trial_id = str(row.get("trial_id") or "")
+            event_name = str(row.get("event") or row.get("event_type") or "")
+            if not session_id or not trial_id or not event_name:
+                continue
+            order = _event_order(row, row_index)
+            grouped[(session_id, trial_id)].append((order, event_name))
+
+    eligible: set[tuple[str, str]] = set()
+    for key, events in grouped.items():
+        ended = [item for item in events if item[1] == "trial_ended"]
+        if not ended:
+            continue
+        final_end = max(item[0] for item in ended)
+        if any(name == "trial_rejected" and order > final_end for order, name in events):
+            continue
+        eligible.add(key)
+    if not eligible:
+        raise ValueError("五本 workbook 没有最终完成且未被作废的 trial")
+    return frozenset(eligible)
+
+
+def _event_order(row: Mapping[str, Any], fallback: int) -> float:
+    """按 Unity 单调时钟、创建时钟和行号生成稳定事件顺序。"""
+
+    for field in ("mono_ms", "created_unix_ms"):
+        try:
+            value = float(row[field])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            return value
+    return float(fallback)
+
+
+def _trial_is_eligible(
+    row: Mapping[str, Any],
+    eligible_trials: frozenset[tuple[str, str]],
+) -> bool:
+    """判断数据行是否属于最终有效 trial。"""
+
+    return (str(row.get("session_id") or ""), str(row.get("trial_id") or "")) in eligible_trials
+
+
 def _segment_key(row: Mapping[str, Any]) -> tuple[str, str, str, str]:
     """用 session、trial、event 和 variant 保持跨 workbook 片段唯一。"""
 
@@ -260,7 +321,11 @@ _RENDER_COLUMNS = (
 
 def _collect_render(
     workbooks: Sequence[Path],
-) -> Mapping[tuple[str, str, str, str, str], list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]]:
+    eligible_trials: frozenset[tuple[str, str]],
+) -> Mapping[
+    tuple[str, str, str, str, str],
+    list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+]:
     """读取有效 display/reference 行并按动作片段分组。"""
 
     grouped: defaultdict[
@@ -269,7 +334,11 @@ def _collect_render(
     ] = defaultdict(list)
     for workbook in workbooks:
         for row in iter_rows(workbook, "unity_render", _RENDER_COLUMNS):
-            if not _valid_event(row) or not _truthy(row.get("has_display_pose")):
+            if (
+                not _valid_event(row)
+                or not _trial_is_eligible(row, eligible_trials)
+                or not _truthy(row.get("has_display_pose"))
+            ):
                 continue
             if not _truthy(row.get("reference_pose_valid")):
                 continue
@@ -281,7 +350,15 @@ def _collect_render(
                 time_ms = float(row["render_mono_ms"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if any(value is None for value in (display_position, reference_position, display_rotation, reference_rotation)):
+            if any(
+                value is None
+                for value in (
+                    display_position,
+                    reference_position,
+                    display_rotation,
+                    reference_rotation,
+                )
+            ):
                 continue
             key = _segment_key(row)
             scenario = str(row.get("scenario_id", ""))
@@ -297,7 +374,10 @@ def _collect_render(
     return grouped
 
 
-def _event_roles(workbooks: Sequence[Path]) -> Mapping[tuple[str, str, str], str]:
+def _event_roles(
+    workbooks: Sequence[Path],
+    eligible_trials: frozenset[tuple[str, str]],
+) -> Mapping[tuple[str, str, str], str]:
     """从事件总表恢复每个动作片段的人工角色。"""
 
     roles: dict[tuple[str, str, str], str] = {}
@@ -311,7 +391,7 @@ def _event_roles(workbooks: Sequence[Path]) -> Mapping[tuple[str, str, str], str
                 str(row.get("event_id", "")),
             )
             for row in iter_rows(workbook, "events", event_columns)
-            if _valid_event(row)
+            if _valid_event(row) and _trial_is_eligible(row, eligible_trials)
         }
         for row in iter_rows(workbook, "event_payload", payload_columns):
             role = str(row.get("event_role") or "")
@@ -326,6 +406,7 @@ def _event_roles(workbooks: Sequence[Path]) -> Mapping[tuple[str, str, str], str
 
 def _collect_correction_metrics(
     workbooks: Sequence[Path],
+    eligible_trials: frozenset[tuple[str, str]],
 ) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
     """按 source frame 切换识别候选生效边界，并计算实际显示步长。"""
 
@@ -345,10 +426,17 @@ def _collect_correction_metrics(
         "display_rot_z",
         "display_rot_w",
     )
-    grouped: defaultdict[tuple[str, str, str, str], list[tuple[float, int, np.ndarray, np.ndarray]]] = defaultdict(list)
+    grouped: defaultdict[
+        tuple[str, str, str, str],
+        list[tuple[float, int, np.ndarray, np.ndarray]],
+    ] = defaultdict(list)
     for workbook in workbooks:
         for row in iter_rows(workbook, "unity_render", columns):
-            if not _valid_event(row) or not _truthy(row.get("has_display_pose")):
+            if (
+                not _valid_event(row)
+                or not _trial_is_eligible(row, eligible_trials)
+                or not _truthy(row.get("has_display_pose"))
+            ):
                 continue
             position = _finite_vector(row, "display_pos", ("x_m", "y_m", "z_m"))
             rotation = _finite_vector(row, "display_rot", ("x", "y", "z", "w"))
@@ -668,7 +756,10 @@ def _render_metrics(
     )
 
 
-def _capture_alignment(workbooks: Sequence[Path]) -> tuple[Mapping[str, Any], ...]:
+def _capture_alignment(
+    workbooks: Sequence[Path],
+    eligible_trials: frozenset[tuple[str, str]],
+) -> tuple[Mapping[str, Any], ...]:
     """直接比较完整系统同一 raw candidate 的 capture/arrival 世界复合误差。"""
 
     references: dict[tuple[str, int], np.ndarray] = {}
@@ -711,7 +802,11 @@ def _capture_alignment(workbooks: Sequence[Path]) -> tuple[Mapping[str, Any], ..
     )
     for workbook in workbooks:
         for row in iter_rows(workbook, "unity_admission", admission_columns):
-            if row.get("variant_id") != FULL_VARIANT or not _valid_event(row):
+            if (
+                row.get("variant_id") != FULL_VARIANT
+                or not _valid_event(row)
+                or not _trial_is_eligible(row, eligible_trials)
+            ):
                 continue
             if not _scenario_matches(row.get("scenario_id"), "static_head_motion"):
                 continue
@@ -807,9 +902,10 @@ def analyze_workbooks(
         if not path.is_file():
             raise FileNotFoundError(path)
         _validate_workbook_runtime_contract(path)
+    valid_trials = eligible_trials(normalized)
     active_settings = settings or load_settings()
-    render = _collect_render(normalized)
-    event_roles = _event_roles(normalized)
+    render = _collect_render(normalized, valid_trials)
+    event_roles = _event_roles(normalized, valid_trials)
     static, translation, rotation, occlusion, transition, stop = _render_metrics(
         render,
         event_roles,
@@ -823,8 +919,8 @@ def analyze_workbooks(
         occlusion_episodes=occlusion,
         transition_segments=transition,
         stop_segments=stop,
-        correction_segments=_collect_correction_metrics(normalized),
-        capture_alignment=_capture_alignment(normalized),
+        correction_segments=_collect_correction_metrics(normalized, valid_trials),
+        capture_alignment=_capture_alignment(normalized, valid_trials),
         performance=_performance(normalized),
     )
 

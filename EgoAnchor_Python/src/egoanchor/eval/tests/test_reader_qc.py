@@ -143,6 +143,22 @@ class ReaderQcTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("causal_diagnostics_scope", {issue.code for issue in report.errors})
 
+    def test_empty_render_log_is_hard_error(self) -> None:
+        """writer 统计自洽也不能让零 render 的正式 task 真空通过。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp))
+            (root / "unity_render.jsonl").write_text("", encoding="utf-8")
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["log_writer_stats"]["unity_render.jsonl"]["rows_written"] = 0
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("render_coverage", {issue.code for issue in report.errors})
+
     def test_occlusion_roles_must_start_hidden_and_alternate(self) -> None:
         """遮挡恢复 marker 必须从 occlusion_started 开始并严格交替闭合。"""
 
@@ -415,6 +431,7 @@ def _write_valid_task(
             "unity_reference": "unity_reference.jsonl",
             "unity_admission": "unity_admission.jsonl",
             "unity_render": "unity_render.jsonl",
+            "unity_events": "unity_events.jsonl",
             "events": "events.jsonl",
         },
         "variant_labels": [str(item["label"]) for item in variant_configs],

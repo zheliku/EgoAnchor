@@ -361,6 +361,15 @@ def run_task_qc(task: TaskDataset | str | Path) -> StageOneQcReport:
                 f"render tick {tick_id} 的 variant 集合不完整：{sorted(observed)}",
             )
 
+    if not candidate_ids:
+        state.error("candidate_coverage", "正式 task 不得缺少 Python candidate。")
+    if not admission_groups:
+        state.error("admission_coverage", "正式 task 不得缺少 Unity admission。")
+    if not reference_frames:
+        state.error("reference_coverage", "正式 task 不得缺少平台参考位姿。")
+    if not render_groups:
+        state.error("render_coverage", "正式 task 不得缺少逐 tick 九路 render。")
+
     unconsumed = candidate_ids - set(admission_groups)
     if unconsumed:
         state.warning(
@@ -456,6 +465,7 @@ def _check_documents(dataset: TaskDataset, state: _QcState) -> None:
         "unity_reference": "unity_reference.jsonl",
         "unity_admission": "unity_admission.jsonl",
         "unity_render": "unity_render.jsonl",
+        "unity_events": "unity_events.jsonl",
         "events": "events.jsonl",
     }
     if manifest.get("log_files") != expected_manifest_files:
@@ -709,6 +719,7 @@ def _check_smoothing_diagnostics(
 
     if is_causal:
         configured_horizon_ms = _configured_prediction_horizon_ms(expected.configuration_fingerprint)
+        configured_half_life_ms = _configured_correction_half_life_ms(expected.configuration_fingerprint)
         if configured_horizon_ms is None:
             state.error("causal_prediction_config", "因果预测配置指纹缺少有效 horizon。", source_row)
         elif horizon is None or not 0.0 <= horizon <= configured_horizon_ms + 0.001:
@@ -717,6 +728,8 @@ def _check_smoothing_diagnostics(
                 f"因果预测时域必须位于 [0, {configured_horizon_ms}] ms：{horizon}",
                 source_row,
             )
+        if configured_half_life_ms is None:
+            state.error("causal_prediction_config", "因果预测配置指纹缺少有效 correction-half-life。", source_row)
         if position_residual is None or position_residual < 0.0:
             state.error("causal_correction_residual", "位置校正残差必须是非负有限值。", source_row)
         if rotation_residual is None or rotation_residual < 0.0:
@@ -744,6 +757,18 @@ def _configured_prediction_horizon_ms(configuration_fingerprint: str) -> float |
         horizon_seconds = _finite_float(part.removeprefix("horizon:"))
         if horizon_seconds is not None and horizon_seconds >= 0.0:
             return horizon_seconds * 1000.0
+    return None
+
+
+def _configured_correction_half_life_ms(configuration_fingerprint: str) -> float | None:
+    """从完整配置指纹读取因果校正残差半衰期并换算为毫秒。"""
+
+    for part in configuration_fingerprint.split("|"):
+        if not part.startswith("correction-half-life:"):
+            continue
+        half_life_seconds = _finite_float(part.removeprefix("correction-half-life:"))
+        if half_life_seconds is not None and half_life_seconds > 0.0:
+            return half_life_seconds * 1000.0
     return None
 
 

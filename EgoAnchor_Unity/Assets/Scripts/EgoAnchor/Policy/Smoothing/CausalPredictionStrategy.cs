@@ -40,6 +40,12 @@ namespace EgoAnchor.Policy
         /// <summary>最近一次显示对应的 Unity 单调时钟，单位秒。</summary>
         private double lastRenderTimeSeconds;
 
+        /// <summary>校正残差最近一次建立或衰减更新的 Unity 单调时钟，单位秒。</summary>
+        private double residualUpdatedTimeSeconds;
+
+        /// <summary>是否已有可用于真实时间衰减的残差时间戳。</summary>
+        private bool hasResidualTimestamp;
+
         /// <summary>最近一次输出实际使用的模型预测时域，单位秒。</summary>
         private float predictionHorizonSeconds;
 
@@ -94,12 +100,17 @@ namespace EgoAnchor.Policy
             {
                 posResidual = Vector3.zero;
                 rotResidual = Vector3.zero;
+                hasResidualTimestamp = false;
                 return;
             }
 
-            Pose modelAtRenderTime = model.PredictAt(ClampPredictionTime(model, lastRenderTimeSeconds));
+            Pose modelAtRenderTime = model.PredictAt(ClampToPredictionHorizon(model, lastRenderTimeSeconds));
             posResidual = lastRender.position - modelAtRenderTime.position;
             rotResidual = AnchorMath.RelativeRotationLog(modelAtRenderTime.rotation, lastRender.rotation);
+            residualUpdatedTimeSeconds = IsFinite(observation.SampleTimeSeconds)
+                ? observation.SampleTimeSeconds
+                : lastRenderTimeSeconds;
+            hasResidualTimestamp = IsFinite(residualUpdatedTimeSeconds);
             if (!IsFinite(posResidual) || !IsFinite(rotResidual))
             {
                 RegisterContinuityReset();
@@ -122,13 +133,13 @@ namespace EgoAnchor.Policy
                 return model.LatestControlPoint.Valid ? model.LatestControlPoint.Pose : Pose.identity;
             }
 
-            // 先按上一显示帧到当前帧的真实时间衰减。相同绝对时刻的累计衰减只由总时间决定，
-            // 因而 72/90/120 Hz 下得到一致结果；同一时刻 dt=0，校正边界保持连续。
+            // 残差从观测实际到达时刻开始按真实时间衰减，而不是从上一渲染帧开始计算。
+            // 这样异步观测落在两帧之间时，半衰期仍与消息到达时刻一致。
             DecayResidual(nowSeconds);
             appliedPositionResidualMeters = posResidual.magnitude;
             appliedRotationResidualDegrees = rotResidual.magnitude * Mathf.Rad2Deg;
 
-            double predictionTime = ClampPredictionTime(model, nowSeconds);
+            double predictionTime = ClampToPredictionHorizon(model, nowSeconds);
             predictionHorizonSeconds = Mathf.Max(
                 (float)(predictionTime - model.LastObservationTimeSeconds),
                 0.0f);
@@ -156,23 +167,31 @@ namespace EgoAnchor.Policy
         /// <summary>按真实时间半衰期衰减完整位置和旋转校正残差。</summary>
         private void DecayResidual(double nowSeconds)
         {
-            if (!hasRendered)
+            if (!hasRendered || !hasResidualTimestamp)
             {
+                if (IsFinite(nowSeconds))
+                {
+                    residualUpdatedTimeSeconds = nowSeconds;
+                    hasResidualTimestamp = true;
+                }
                 return;
             }
 
-            float elapsedSeconds = Mathf.Max((float)(nowSeconds - lastRenderTimeSeconds), 0.0f);
+            float elapsedSeconds = Mathf.Max((float)(nowSeconds - residualUpdatedTimeSeconds), 0.0f);
             float decay = Mathf.Pow(0.5f, elapsedSeconds / EffectiveCorrectionHalfLifeSeconds);
             posResidual *= decay;
             rotResidual *= decay;
+            residualUpdatedTimeSeconds = nowSeconds;
         }
 
-        /// <summary>把请求时刻限制在最近观测至固定预测时域上限之间。</summary>
-        private double ClampPredictionTime(MotionModel model, double requestedTime)
+        /// <summary>
+        /// 把请求时刻限制在固定预测时域上限以内。
+        /// 不把时刻下限强推到最新观测，避免异步 capture time 晚于渲染 tick 时破坏 C0 连续。
+        /// </summary>
+        private double ClampToPredictionHorizon(MotionModel model, double requestedTime)
         {
-            double observationTime = model.LastObservationTimeSeconds;
-            double horizonTime = observationTime + EffectivePredictionHorizonSeconds;
-            return System.Math.Max(observationTime, System.Math.Min(requestedTime, horizonTime));
+            double horizonTime = model.LastObservationTimeSeconds + EffectivePredictionHorizonSeconds;
+            return System.Math.Min(requestedTime, horizonTime);
         }
 
         /// <summary>记录一次异常连续性重置，并清空旧显示轨迹和残差。</summary>
@@ -193,6 +212,8 @@ namespace EgoAnchor.Policy
             hasRendered = false;
             lastRender = Pose.identity;
             lastRenderTimeSeconds = 0.0;
+            residualUpdatedTimeSeconds = 0.0;
+            hasResidualTimestamp = false;
         }
 
         /// <summary>判断时间值是否有限。</summary>
