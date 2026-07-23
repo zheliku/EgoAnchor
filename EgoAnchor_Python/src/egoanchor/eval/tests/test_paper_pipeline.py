@@ -40,15 +40,14 @@ class PaperPipelineTests(unittest.TestCase):
         self.assertFalse(hasattr(arguments, "settings"))
         self.assertEqual(len(settings_sha256()), 64)
 
-    def test_temporal_panel_uses_direct_causal_buffered_runtime_order(self) -> None:
-        """图 3(d) 固定保留机制消融，并以无 StaticLock 的 Buffered 配对 Causal。"""
+    def test_temporal_panel_uses_extrapolation_and_hermite_order(self) -> None:
+        """图 3(d) 固定比较无 StaticLock 的平滑外推与 Hermite 插值。"""
 
         self.assertEqual(
             TEMPORAL_STRATEGY_VARIANTS,
             (
-                "EgoAnchor w/o temporal synthesis",
-                "EgoAnchor Causal Prediction",
-                "EgoAnchor w/o StaticLock",
+                "Smoothed KF Extrapolation",
+                "Hermite Interpolation",
             ),
         )
 
@@ -133,7 +132,7 @@ class PaperPipelineTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_v3_stage_one_workbook_is_rejected_before_analysis(self) -> None:
-        """旧 linear_v2 工作簿不得被新因果预测矩阵的论文入口接受。"""
+        """旧 linear_v2 工作簿不得被新时序策略矩阵的论文入口接受。"""
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "task_1_complete.xlsx"
@@ -144,7 +143,7 @@ class PaperPipelineTests(unittest.TestCase):
             sheet.append(("manifest.json", "variant_matrix_id", '"exp12_9_linear_v2"'))
             workbook.save(path)
 
-            with self.assertRaisesRegex(ValueError, "exp12_9_causal_v3"):
+            with self.assertRaisesRegex(ValueError, "exp12_9_smoothed_hermite_v4"):
                 analyze_workbooks((path,))
 
     def test_eligible_trials_exclude_rejected_retries(self) -> None:

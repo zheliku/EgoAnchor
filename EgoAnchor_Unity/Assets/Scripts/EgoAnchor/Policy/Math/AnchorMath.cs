@@ -152,6 +152,28 @@ namespace EgoAnchor.Policy
         }
 
         /// <summary>
+        /// 用 SO(3) 右雅可比逆把 body-local 角速度转换为旋转向量导数。
+        /// Hermite 插值在 Log 切空间内用它统一第二个端点的切线语义。
+        /// </summary>
+        public static Vector3 ApplyRightJacobianInverse(Vector3 rotationVector, Vector3 angularVelocityBody)
+        {
+            float angle = rotationVector.magnitude;
+            Vector3 firstCross = Vector3.Cross(rotationVector, angularVelocityBody);
+            if (angle <= 1e-4f)
+            {
+                return angularVelocityBody + 0.5f * firstCross
+                    + (1.0f / 12.0f) * Vector3.Cross(rotationVector, firstCross);
+            }
+
+            float angleSquared = angle * angle;
+            float halfAngle = 0.5f * angle;
+            float cotHalfAngle = Mathf.Cos(halfAngle) / Mathf.Max(Mathf.Sin(halfAngle), Epsilon);
+            float coefficient = (1.0f - halfAngle * cotHalfAngle) / angleSquared;
+            return angularVelocityBody + 0.5f * firstCross
+                + coefficient * Vector3.Cross(rotationVector, firstCross);
+        }
+
+        /// <summary>
         /// 单边自适应 EMA：观测值高于当前估计时快速跟随 (followUp)，低于时缓慢回落 (followDown)。
         /// 用于跟踪采集-渲染延迟的峰值水平 (快升慢降)，避免延迟低估导致外推/插值退化。
         /// </summary>

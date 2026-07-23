@@ -39,7 +39,7 @@ _METHOD_COLORS = {
 _PAIR_COLOR = "#7F8790"
 _FULL_COLOR = _METHOD_COLORS[FULL_VARIANT]
 _DISABLED_COLOR = "#B07AA1"
-_CAUSAL_COLOR = "#2A9D8F"
+_EXTRAPOLATION_COLOR = "#2A9D8F"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
 _EXP1_DYNAMIC_Y_LIMITS = (0.0, 15.0)
@@ -313,11 +313,11 @@ def _paired_panel(
 
 
 def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
-    """绘制三个真实运行时时序策略的 lag--residual 分布。"""
+    """绘制两种配对时序策略的 lag--residual 分布。"""
 
-    labels = ("Direct", "Causal", "Buffered")
-    colors = (_DISABLED_COLOR, _CAUSAL_COLOR, _FULL_COLOR)
-    markers = ("X", "D", "o")
+    labels = ("Smoothed KF Extrapolation", "Hermite Interpolation")
+    colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR)
+    markers = ("D", "o")
     for episode in paired_points:
         axis.plot(
             episode[:, 0],

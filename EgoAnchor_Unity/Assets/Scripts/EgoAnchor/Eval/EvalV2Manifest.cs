@@ -5,14 +5,17 @@ namespace EgoAnchor.Eval
     /// <summary>schema-v2 session 的固定文件名契约。</summary>
     public static class EvalV2Manifest
     {
-        /// <summary>当前正式场景的九路 runtime 矩阵标识；用于阻止新 session 缺失因果预测配对对照。</summary>
-        public const string VariantMatrixId = "exp12_9_causal_v3";
+        /// <summary>当前正式场景的九路 runtime 矩阵标识。</summary>
+        public const string VariantMatrixId = "exp12_9_smoothed_hermite_v4";
 
         /// <summary>正式九路场景名；只有该场景执行严格矩阵启动门禁。</summary>
         public const string FormalSceneName = "EgoAnchor-Experiment12";
 
-        /// <summary>因果预测配对变体的稳定日志标签。</summary>
-        public const string CausalPredictionVariantLabel = "EgoAnchor Causal Prediction";
+        /// <summary>平滑 Kalman 外推变体的稳定日志标签。</summary>
+        public const string SmoothedExtrapolationVariantLabel = "Smoothed KF Extrapolation";
+
+        /// <summary>Hermite 插值变体的稳定日志标签。</summary>
+        public const string HermiteInterpolationVariantLabel = "Hermite Interpolation";
 
         /// <summary>正式变体的结构语义契约，不包含 pilot 尚未冻结的数值参数。</summary>
         public readonly struct FormalVariantContract
@@ -77,9 +80,9 @@ namespace EgoAnchor.Eval
             new FormalVariantContract("EgoAnchor", "kalman", "linear_slerp", "enabled", "CaptureTime", true, true, true, true, true, true),
             new FormalVariantContract("EgoAnchor w/o capture-time alignment", "kalman", "linear_slerp", "enabled", "ArrivalTime", false, true, true, true, true, true),
             new FormalVariantContract("EgoAnchor w/o VCD", "kalman", "linear_slerp", "disabled", "CaptureTime", true, false, true, true, false, true),
-            new FormalVariantContract("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", true, true, false, true, true, true),
+            new FormalVariantContract(SmoothedExtrapolationVariantLabel, "kalman", "smoothed_kf_extrapolation", "enabled", "CaptureTime", true, true, true, false, true, true),
             new FormalVariantContract("EgoAnchor w/o StaticLock", "kalman", "linear_slerp", "enabled", "CaptureTime", true, true, true, false, true, true),
-            new FormalVariantContract(CausalPredictionVariantLabel, "kalman", "causal_prediction", "enabled", "CaptureTime", true, true, true, false, true, true),
+            new FormalVariantContract(HermiteInterpolationVariantLabel, "kalman", "hermite_interpolation", "enabled", "CaptureTime", true, true, true, false, true, true),
         };
 
         /// <summary>会话元数据文件名。</summary>

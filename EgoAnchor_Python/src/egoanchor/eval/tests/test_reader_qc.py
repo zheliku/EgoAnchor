@@ -16,11 +16,11 @@ VARIANT_SPECS = (
     ("Capture-Hold", "cv", "hold", "disabled", "CaptureTime", True, False, False, False, False, False),
     ("One-Euro Anchor", "oneeuro", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
     ("EgoAnchor", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, True, True, True),
-    ("EgoAnchor Causal Prediction", "kalman", "causal_prediction", "enabled", "CaptureTime", True, True, True, False, True, True),
     ("EgoAnchor w/o capture-time alignment", "kalman", "linear_slerp", "enabled", "ArrivalTime", False, True, True, True, True, True),
     ("EgoAnchor w/o VCD", "kalman", "linear_slerp", "disabled", "CaptureTime", True, False, True, True, False, True),
-    ("EgoAnchor w/o temporal synthesis", "kalman", "predict_to_now", "enabled", "CaptureTime", True, True, False, True, True, True),
+    ("Smoothed KF Extrapolation", "kalman", "smoothed_kf_extrapolation", "enabled", "CaptureTime", True, True, True, False, True, True),
     ("EgoAnchor w/o StaticLock", "kalman", "linear_slerp", "enabled", "CaptureTime", True, True, True, False, True, True),
+    ("Hermite Interpolation", "kalman", "hermite_interpolation", "enabled", "CaptureTime", True, True, True, False, True, True),
 )
 """与当前正式采集冻结矩阵一致的九个测试 variant。"""
 
@@ -55,27 +55,31 @@ class ReaderQcTests(unittest.TestCase):
             self.assertEqual(_file_snapshot(root), before)
             self.assertEqual(report.metrics["variant_count"], 9)
 
-    def test_causal_pair_replaces_hermite_without_changing_direct_ablation(self) -> None:
-        """九路矩阵保留直接预测消融，并用关闭 StaticLock 的因果策略替换 Hermite。"""
+    def test_temporal_pair_uses_only_the_two_frozen_strategies(self) -> None:
+        """九路矩阵只保留平滑 Kalman 外推与 Hermite 插值两路时序条件。"""
 
         specs = {str(spec[0]): spec for spec in VARIANT_SPECS}
 
-        self.assertNotIn("EgoAnchor Hermite", specs)
-        self.assertEqual(specs["EgoAnchor w/o temporal synthesis"][2], "predict_to_now")
-        self.assertFalse(bool(specs["EgoAnchor w/o temporal synthesis"][7]))
-        self.assertEqual(specs["EgoAnchor Causal Prediction"][2], "causal_prediction")
-        self.assertTrue(bool(specs["EgoAnchor Causal Prediction"][7]))
-        self.assertFalse(bool(specs["EgoAnchor Causal Prediction"][8]))
+        self.assertEqual(specs["Smoothed KF Extrapolation"][2], "smoothed_kf_extrapolation")
+        self.assertEqual(specs["Hermite Interpolation"][2], "hermite_interpolation")
+        self.assertEqual(specs["Smoothed KF Extrapolation"][4:], specs["Hermite Interpolation"][4:])
 
-    def test_current_matrix_id_rejects_missing_causal_control_variant(self) -> None:
-        """新 session 即使其余八路完整，也不得缺少因果预测配对策略。"""
+    def test_current_matrix_id_rejects_missing_extrapolation_variant(self) -> None:
+        """新 session 即使其余八路完整，也不得缺少平滑外推策略。"""
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = _write_valid_task(Path(tmp), include_causal_control=False)
-            manifest_path = root / "manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["variant_matrix_id"] = "exp12_9_causal_v3"
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            root = _write_valid_task(Path(tmp), excluded_variant="Smoothed KF Extrapolation")
+
+            report = run_task_qc(root)
+
+            self.assertFalse(report.passed)
+            self.assertIn("variant_count", {issue.code for issue in report.errors})
+
+    def test_current_matrix_id_rejects_missing_hermite_variant(self) -> None:
+        """九路矩阵不得缺少 Hermite 插值策略。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_valid_task(Path(tmp), excluded_variant="Hermite Interpolation")
 
             report = run_task_qc(root)
 
@@ -111,37 +115,37 @@ class ReaderQcTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("admission_candidate_fk", {issue.code for issue in report.errors})
 
-    def test_causal_prediction_horizon_is_bounded(self) -> None:
-        """因果预测日志中的实际预测时域不得超过冻结的 180 ms。"""
+    def test_smoothed_extrapolation_horizon_is_bounded(self) -> None:
+        """平滑外推日志中的实际预测时域不得超过冻结的 180 ms。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_valid_task(Path(tmp))
             path = root / "unity_render.jsonl"
             rows = _read_jsonl(path)
-            causal = next(row for row in rows if row["smoothing_strategy"] == "causal_prediction")
-            causal["prediction_horizon_ms"] = 180.1
+            extrapolation = next(row for row in rows if row["smoothing_strategy"] == "smoothed_kf_extrapolation")
+            extrapolation["prediction_horizon_ms"] = 180.1
             _write_jsonl(path, rows)
 
             report = run_task_qc(root)
 
             self.assertFalse(report.passed)
-            self.assertIn("causal_prediction_horizon", {issue.code for issue in report.errors})
+            self.assertIn("smoothed_extrapolation_horizon", {issue.code for issue in report.errors})
 
-    def test_causal_diagnostics_do_not_leak_to_other_strategies(self) -> None:
-        """非因果策略不得写入因果预测专用的浮点诊断。"""
+    def test_extrapolation_diagnostics_do_not_leak_to_other_strategies(self) -> None:
+        """其他策略不得写入平滑外推专用的浮点诊断。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_valid_task(Path(tmp))
             path = root / "unity_render.jsonl"
             rows = _read_jsonl(path)
-            non_causal = next(row for row in rows if row["smoothing_strategy"] == "linear_slerp")
-            non_causal["correction_position_residual_m"] = 0.001
+            other = next(row for row in rows if row["smoothing_strategy"] == "linear_slerp")
+            other["correction_position_residual_m"] = 0.001
             _write_jsonl(path, rows)
 
             report = run_task_qc(root)
 
             self.assertFalse(report.passed)
-            self.assertIn("causal_diagnostics_scope", {issue.code for issue in report.errors})
+            self.assertIn("extrapolation_diagnostics_scope", {issue.code for issue in report.errors})
 
     def test_empty_render_log_is_hard_error(self) -> None:
         """writer 统计自洽也不能让零 render 的正式 task 真空通过。"""
@@ -236,7 +240,7 @@ def _write_valid_task(
     *,
     scenario_id: str = "static_head_motion",
     marker_roles: tuple[str, ...] = ("generic_marker",),
-    include_causal_control: bool = True,
+    excluded_variant: str | None = None,
 ) -> Path:
     """写出一个包含当前九路 variant 的最小合法 task。"""
 
@@ -247,15 +251,12 @@ def _write_valid_task(
     variant_definitions: list[dict[str, object]] = []
     admissions: list[dict[str, object]] = []
     renders: list[dict[str, object]] = []
-    variant_specs = tuple(
-        spec for spec in VARIANT_SPECS
-        if include_causal_control or spec[0] != "EgoAnchor Causal Prediction"
-    )
+    variant_specs = tuple(spec for spec in VARIANT_SPECS if spec[0] != excluded_variant)
     for spec in variant_specs:
         label, motion, smoothing, gate, alignment, capture, vcd, temporal, static, low_score, server = spec
         configuration_fingerprint = (
-            "fixture:causal|horizon:0.18|correction-half-life:0.06"
-            if smoothing == "causal_prediction"
+            "fixture:smoothed-kf|horizon:0.18|correction-half-life:0.06"
+            if smoothing == "smoothed_kf_extrapolation"
             else f"fixture:{label}"
         )
         config_hash = _variant_hash(spec, configuration_fingerprint)
@@ -363,9 +364,9 @@ def _write_valid_task(
                 "observation_age_ms": None,
                 "policy_output_target_mono_ms": None,
                 "smoothing_delay_ms": None,
-                "prediction_horizon_ms": 0.0 if smoothing == "causal_prediction" else None,
-                "correction_position_residual_m": 0.0 if smoothing == "causal_prediction" else None,
-                "correction_rotation_residual_deg": 0.0 if smoothing == "causal_prediction" else None,
+                "prediction_horizon_ms": 0.0 if smoothing == "smoothed_kf_extrapolation" else None,
+                "correction_position_residual_m": 0.0 if smoothing == "smoothed_kf_extrapolation" else None,
+                "correction_rotation_residual_deg": 0.0 if smoothing == "smoothed_kf_extrapolation" else None,
                 "continuity_reset_count": 0,
                 "latest_static_locked": False,
                 "latest_accepted_score": None,
@@ -460,7 +461,7 @@ def _write_valid_task(
             },
         },
     }
-    manifest["variant_matrix_id"] = "exp12_9_causal_v3"
+    manifest["variant_matrix_id"] = "exp12_9_smoothed_hermite_v4"
     python_session = {
         "schema_version": 2,
         "session_id": session_id,

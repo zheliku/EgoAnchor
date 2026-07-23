@@ -152,59 +152,92 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>
-        /// 新测量会让直接外推在同一渲染时刻换轨；历史 Linear/SLERP 应保持该时刻输出连续。
-        /// </summary>
+        /// <summary>Linear/SLERP 与 Hermite 必须共享完全相同的历史目标时间线。</summary>
         [Test]
-        public void LinearSlerpKeepsCorrectionBoundaryContinuous()
+        public void HistoricalStrategiesShareTargetTimeline()
         {
-            GameObject directOwner = new GameObject("KalmanDirectBoundaryTests");
-            GameObject smoothOwner = new GameObject("KalmanSmoothBoundaryTests");
+            GameObject owner = new GameObject("HistoricalTimelineTests");
             try
             {
-                KalmanModel directModel = directOwner.AddComponent<KalmanModel>();
-                PredictToNowStrategy directStrategy = directOwner.AddComponent<PredictToNowStrategy>();
-                KalmanModel smoothModel = smoothOwner.AddComponent<KalmanModel>();
-                LinearSlerpStrategy smoothStrategy = smoothOwner.AddComponent<LinearSlerpStrategy>();
-                smoothStrategy.ResetStrategy();
+                ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
+                LinearSlerpStrategy linear = owner.AddComponent<LinearSlerpStrategy>();
+                HermiteStrategy hermite = owner.AddComponent<HermiteStrategy>();
+                linear.ResetStrategy();
+                hermite.ResetStrategy();
 
                 AnchorObservation first = Observation(1, 0.0, 0.0f, 0.0f);
                 AnchorObservation second = Observation(2, 0.1, 0.02f, 5.0f);
-                AnchorObservation correction = Observation(3, 0.2, 0.20f, 60.0f);
-                Feed(directModel, directStrategy, first);
-                Feed(directModel, directStrategy, second);
-                Feed(smoothModel, smoothStrategy, first);
-                Feed(smoothModel, smoothStrategy, second);
+                model.Snap(first);
+                linear.OnObservation(model, first);
+                hermite.OnObservation(model, first);
+                model.UpdateState(second);
+                linear.OnObservation(model, second);
+                hermite.OnObservation(model, second);
 
-                const double renderTime = 0.3;
-                Pose directBefore = directStrategy.Output(directModel, renderTime);
-                Pose smoothBefore = smoothStrategy.Output(smoothModel, renderTime);
-                Feed(directModel, directStrategy, correction);
-                Feed(smoothModel, smoothStrategy, correction);
-                Pose directAfter = directStrategy.Output(directModel, renderTime);
-                Pose smoothAfter = smoothStrategy.Output(smoothModel, renderTime);
+                Pose linearPose = linear.Output(model, 0.30);
+                Pose hermitePose = hermite.Output(model, 0.30);
 
-                Assert.That(Vector3.Distance(directBefore.position, directAfter.position), Is.GreaterThan(0.05f));
-                Assert.That(AnchorMath.AngleDegrees(directBefore.rotation, directAfter.rotation), Is.GreaterThan(10.0f));
-                Assert.That(Vector3.Distance(smoothBefore.position, smoothAfter.position), Is.LessThan(1e-6f));
-                Assert.That(AnchorMath.AngleDegrees(smoothBefore.rotation, smoothAfter.rotation), Is.LessThan(1e-4f));
+                Assert.That(hermite.OutputTargetTimeSeconds, Is.EqualTo(linear.OutputTargetTimeSeconds).Within(1e-9));
+                Assert.That(IsFinite(hermitePose.position.x), Is.True);
+                Assert.That(IsFinite(hermitePose.rotation.w), Is.True);
+                Assert.That(linearPose.position.x, Is.InRange(0.0f, 0.02f));
+                Assert.That(hermitePose.position.x, Is.InRange(-0.02f, 0.04f));
             }
             finally
             {
-                UnityEngine.Object.DestroyImmediate(directOwner);
-                UnityEngine.Object.DestroyImmediate(smoothOwner);
+                UnityEngine.Object.DestroyImmediate(owner);
             }
+        }
+
+        /// <summary>历史控制点不足时 Hermite 必须保持最新控制点，不能恢复末段外推。</summary>
+        [Test]
+        public void HermiteInterpolationHoldsLatestControlPointBeyondHistory()
+        {
+            GameObject owner = new GameObject("HermiteInterpolationBoundaryTests");
+            try
+            {
+                ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
+                HermiteStrategy strategy = owner.AddComponent<HermiteStrategy>();
+                strategy.ResetStrategy();
+
+                Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
+                Feed(model, strategy, Observation(2, 0.1, 0.1f, 10.0f));
+                Pose output = strategy.Output(model, 1.0);
+
+                Assert.That(output.position.x, Is.EqualTo(model.LatestControlPoint.Pose.position.x).Within(1e-6f));
+                Assert.That(
+                    AnchorMath.AngleDegrees(output.rotation, model.LatestControlPoint.Pose.rotation),
+                    Is.LessThan(1e-4f));
+                Assert.That(strategy.OutputTargetTimeSeconds, Is.EqualTo(model.LatestControlPoint.TimeSeconds));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
+        }
+
+        /// <summary>SO(3) 右雅可比与其逆必须保持 body-local 角速度语义一致。</summary>
+        [Test]
+        public void RightJacobianInverseRoundTripsAngularVelocity()
+        {
+            Vector3 rotationVector = new Vector3(0.8f, -0.5f, 1.1f);
+            Vector3 angularVelocity = new Vector3(-0.7f, 0.4f, 0.9f);
+
+            Vector3 logRate = AnchorMath.ApplyRightJacobianInverse(rotationVector, angularVelocity);
+            Vector3 reconstructed = AnchorMath.ApplyRightJacobian(rotationVector, logRate);
+
+            Assert.That(Vector3.Distance(reconstructed, angularVelocity), Is.LessThan(1e-5f));
         }
 
         /// <summary>新观测校正后在同一渲染时刻应保持位置与旋转严格连续。</summary>
         [Test]
-        public void CausalPredictionKeepsCorrectionBoundaryContinuous()
+        public void SmoothedExtrapolationKeepsCorrectionBoundaryContinuous()
         {
-            GameObject owner = new GameObject("CausalPredictionBoundaryTests");
+            GameObject owner = new GameObject("SmoothedExtrapolationBoundaryTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
@@ -226,15 +259,15 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>正式 Kalman + 因果预测组合在新观测校正边界保持位置和旋转连续。</summary>
+        /// <summary>正式 Kalman + 平滑外推组合在新观测校正边界保持位置和旋转连续。</summary>
         [Test]
-        public void KalmanCausalPredictionKeepsCorrectionBoundaryContinuous()
+        public void KalmanSmoothedExtrapolationKeepsCorrectionBoundaryContinuous()
         {
-            GameObject owner = new GameObject("KalmanCausalPredictionBoundaryTests");
+            GameObject owner = new GameObject("KalmanSmoothedExtrapolationBoundaryTests");
             try
             {
                 KalmanModel model = owner.AddComponent<KalmanModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
@@ -259,13 +292,13 @@ namespace EgoAnchor.Tests
 
         /// <summary>新观测的 capture time 晚于上一渲染帧时，因果输出仍应沿旧显示轨迹连续推进。</summary>
         [Test]
-        public void CausalPredictionKeepsContinuityWhenObservationTimeIsAheadOfRender()
+        public void SmoothedExtrapolationKeepsContinuityWhenObservationTimeIsAheadOfRender()
         {
-            GameObject owner = new GameObject("CausalPredictionAsyncBoundaryTests");
+            GameObject owner = new GameObject("SmoothedExtrapolationAsyncBoundaryTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, ObservationWithSampleTime(1, 1.0, 1.0, 0.0f));
@@ -284,13 +317,13 @@ namespace EgoAnchor.Tests
 
         /// <summary>校正残差必须从观测到达时间开始衰减，而不是从上一渲染帧时间开始衰减。</summary>
         [Test]
-        public void CausalPredictionResidualDecayStartsAtObservationArrival()
+        public void SmoothedExtrapolationResidualDecayStartsAtObservationArrival()
         {
-            GameObject owner = new GameObject("CausalPredictionArrivalDecayTests");
+            GameObject owner = new GameObject("SmoothedExtrapolationArrivalDecayTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 SetPrivateField(strategy, "correctionHalfLifeSeconds", 1.0f);
                 strategy.ResetStrategy();
 
@@ -312,11 +345,11 @@ namespace EgoAnchor.Tests
 
         /// <summary>60 ms 半衰期在 72、90、120 Hz 渲染下必须产生相同输出。</summary>
         [Test]
-        public void CausalPredictionHalfLifeIsIndependentOfRenderRate()
+        public void SmoothedExtrapolationHalfLifeIsIndependentOfRenderRate()
         {
-            Pose at72Hz = RunCausalHalfLifeAtFrameRate(72, out SmoothingDiagnostics diagnostics72Hz);
-            Pose at90Hz = RunCausalHalfLifeAtFrameRate(90, out SmoothingDiagnostics diagnostics90Hz);
-            Pose at120Hz = RunCausalHalfLifeAtFrameRate(120, out SmoothingDiagnostics diagnostics120Hz);
+            Pose at72Hz = RunSmoothedHalfLifeAtFrameRate(72, out SmoothingDiagnostics diagnostics72Hz);
+            Pose at90Hz = RunSmoothedHalfLifeAtFrameRate(90, out SmoothingDiagnostics diagnostics90Hz);
+            Pose at120Hz = RunSmoothedHalfLifeAtFrameRate(120, out SmoothingDiagnostics diagnostics120Hz);
 
             Assert.That(at72Hz.position.x, Is.EqualTo(0.15f).Within(1e-5f));
             Assert.That(at90Hz.position.x, Is.EqualTo(at72Hz.position.x).Within(1e-5f));
@@ -332,13 +365,13 @@ namespace EgoAnchor.Tests
 
         /// <summary>长时间无观测时，实际预测时域和输出都必须停在 180 ms 上限。</summary>
         [Test]
-        public void CausalPredictionNeverExceedsConfiguredHorizon()
+        public void SmoothedExtrapolationNeverExceedsConfiguredHorizon()
         {
-            GameObject owner = new GameObject("CausalPredictionHorizonTests");
+            GameObject owner = new GameObject("SmoothedExtrapolationHorizonTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
@@ -362,13 +395,13 @@ namespace EgoAnchor.Tests
 
         /// <summary>合成起停序列应有有界响应，停止校正不得产生反向回动。</summary>
         [Test]
-        public void CausalPredictionStartStopResponseHasNoReverseRebound()
+        public void SmoothedExtrapolationStartStopResponseHasNoReverseRebound()
         {
-            GameObject owner = new GameObject("CausalPredictionStartStopTests");
+            GameObject owner = new GameObject("SmoothedExtrapolationStartStopTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
@@ -514,15 +547,15 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>在指定渲染帧率下运行一次具有位置和旋转校正残差的半衰期测试。</summary>
-        private static Pose RunCausalHalfLifeAtFrameRate(
+        private static Pose RunSmoothedHalfLifeAtFrameRate(
             int framesPerSecond,
             out SmoothingDiagnostics diagnostics)
         {
-            GameObject owner = new GameObject($"CausalHalfLife{framesPerSecond}HzTests");
+            GameObject owner = new GameObject($"SmoothedHalfLife{framesPerSecond}HzTests");
             try
             {
                 ConstantVelocityModel model = owner.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy strategy = owner.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy strategy = owner.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 strategy.ResetStrategy();
 
                 Feed(model, strategy, Observation(1, 0.0, 0.0f, 0.0f));
@@ -566,7 +599,7 @@ namespace EgoAnchor.Tests
         /// <summary>设置序列化私有字段，复用运行时真实组件组合。</summary>
         private static void SetPrivateField<T>(object instance, string fieldName, T value)
         {
-            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo field = FindPrivateField(instance.GetType(), fieldName);
             Assert.That(field, Is.Not.Null, $"找不到字段 {fieldName}");
             field.SetValue(instance, value);
         }
@@ -574,9 +607,24 @@ namespace EgoAnchor.Tests
         /// <summary>读取测试所需的私有运行时状态。</summary>
         private static T GetPrivateField<T>(object instance, string fieldName)
         {
-            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo field = FindPrivateField(instance.GetType(), fieldName);
             Assert.That(field, Is.Not.Null, $"找不到字段 {fieldName}");
             return (T)field.GetValue(instance);
+        }
+
+        /// <summary>沿继承链查找序列化私有字段，支持缓冲策略公共基类。</summary>
+        private static FieldInfo FindPrivateField(System.Type type, string fieldName)
+        {
+            for (System.Type current = type; current != null; current = current.BaseType)
+            {
+                FieldInfo field = current.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    return field;
+                }
+            }
+
+            return null;
         }
     }
 }

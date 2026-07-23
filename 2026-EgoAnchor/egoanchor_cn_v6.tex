@@ -291,10 +291,10 @@ T_o^w (f) = T_c^w (f) \circ T_o^{c_f}
 
 确定目标延迟，其中安全系数 $s = 1.15$，延迟下限 $\Delta_{\mathrm{min}} = 250 \mathrm{ms}$。实际延迟 $\Delta$ 以不超过 $50 \mathrm{ms}/\mathrm{s}$ 的速率趋近 $\Delta_{\mathrm{target}}$，避免时延波动直接造成输出时间轴跳变。渲染时刻 $t$ 的输出锚点对应历史目标时刻 $t - \Delta$；当该时刻落在相邻两个已到达的卡尔曼滤波控制点之间时，系统只做区间内插值，不向当前时刻外推。位置通道按控制点时间比例执行线性插值，旋转通道沿最短四元数弧执行 SLERP。该合成不依赖速度切线，避免了起停阶段的样条过冲和额外限幅参数。
 
-为比较历史合成与当前时刻预测，系统另实现有限时域因果预测（Bounded Causal Prediction）。设最新观测时刻为 $t_k$，最大预测时域为 $h_{\max}$，则渲染时刻 $t$ 的 Kalman 查询时刻为
+为比较历史合成与当前时刻外推，系统另实现平滑 Kalman 外推（Smoothed KF Extrapolation）。设最新观测时刻为 $t_k$，最大预测时域为 $h_{\max}$，则渲染时刻 $t$ 的 Kalman 查询时刻为
 \begin{equation}
 t_{\mathrm{pred}}=\min(t,t_k+h_{\max}).
-\label{eq:causal-prediction-horizon}
+\label{eq:smoothed-kf-extrapolation-horizon}
 \end{equation}
 新观测到达时，策略保存校正前显示位姿与新 Kalman 轨迹在同一渲染时刻的位姿残差，并按真实经过时间以半衰期 $t_{1/2}$ 指数衰减。显示轨迹由有限时域预测与该残差复合，因此正常校正边界保持连续；当时钟回退或残差非有限时，策略清空残差并重新初始化。该策略严格因果，不读取未来控制点，也不使用历史目标时刻。$h_{\max}$、$t_{1/2}$ 与异常重置规则在 v4 正式采集前通过工程 pilot 冻结。
 
@@ -398,7 +398,7 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 所有配置消费相同的相机系位姿候选、采集时间戳、候选到达时间、相机标定、渲染时间线和平台参考轨迹。Arrival-Hold 表示直接消费异步视觉位姿的朴素方案：候选到达后以当前头显位姿完成世界坐标复合，并保持结果直至下一候选。Capture-Hold 仅将复合时刻改为图像采集时刻，以隔离时间语义的作用。One-Euro Anchor 使用采集时刻对齐、VCD 接纳、OneEuroModel、自适应历史目标时刻和 Linear/SLERP 合成，与完整系统采用相同的生命周期和逐渲染帧输出，但不使用 StaticLock。EgoAnchor 使用 VCD 接纳、KalmanModel、Linear/SLERP 时序合成、StaticLock 和分级生命周期管理。
 
-实验二的四个单组件消融分别关闭采集时刻对齐、VCD、历史时序合成和 StaticLock。其中 `w/o temporal synthesis' 仍使用 Kalman Predict-to-Now，并保留完整系统的其他组件；它用于衡量移除历史时序合成的影响，不作为生产级预测策略。第九路 EgoAnchor Causal Prediction 与 `w/o StaticLock' 共享采集时刻对齐、VCD、Kalman、生命周期和关闭 StaticLock 的设置，只替换逐帧输出策略。两者构成有限时域因果预测与缓冲 Linear/SLERP 的严格配对。原 Hermite 对照不再进入 v4 配置矩阵。
+实验二包含三个单组件消融，分别关闭采集时刻对齐、VCD 和 StaticLock。另设 Smoothed KF Extrapolation 与 Hermite Interpolation 两路时序策略；二者共享采集时刻对齐、VCD、Kalman、生命周期、重获取、候选序列和关闭 StaticLock 的设置，只替换逐帧输出策略。完整 EgoAnchor 仍使用 Kalman Linear/SLERP 与 StaticLock。
 
 
 \subsection{实验一：应用侧锚点行为}
@@ -463,13 +463,13 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 
 \subsection{实验二：组件归因}
 
-实验二复用实验一的候选、参考轨迹和渲染时间线。稳定配置 ID EgoAnchor 及采集时刻对齐、VCD、StaticLock 三个组件对照均使用 Kalman Linear/SLERP；时序合成消融改用 Kalman Predict-to-Now，但保留完整系统的其他组件。采集时刻对齐比较同一原始候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 分开检验连续分数的风险判别性与冻结阈值的运行时接纳效果；时序合成比较完整 EgoAnchor 与 `w/o temporal synthesis'。
+实验二复用实验一的候选、参考轨迹和渲染时间线。完整 EgoAnchor 及三个组件对照均使用 Kalman Linear/SLERP；采集时刻对齐比较同一候选在 capture-time 与 arrival-time 世界复合下的误差；StaticLock 使用中心化静止波动；VCD 分开检验连续分数的风险判别性与冻结阈值的运行时接纳效果；逐帧输出策略比较 Smoothed KF Extrapolation 与 Hermite Interpolation。
 
-第九路 EgoAnchor Causal Prediction 不属于组件消融。它与 `w/o StaticLock' 都关闭 StaticLock，并共享模型、接纳、生命周期和输入时间线，只比较 Causal Prediction 与 Buffered Linear/SLERP 两种逐帧输出策略。图~\ref{fig:exp2-temporal} 同时展示 Direct、Causal 和 Buffered 三个工作点，但严格的单因素配对只包括 Causal 与 Buffered；Direct 仍是保留 StaticLock 的组件消融，不能把三路整体解释为一个三水平策略实验。
+两路策略都关闭 StaticLock，并共享模型、接纳、生命周期和输入时间线。图~\ref{fig:exp2-temporal} 只展示这两路输出策略，配对差异解释为平滑 Kalman 外推与 Hermite 插值的时延--稳定性权衡。
 
 \begin{table*}[t]
 \centering
-\caption{实验二的组件归因与时序策略比较设计。组件消融的效应为关闭配置减完整系统；Causal--Buffered 行只比较关闭 StaticLock 后的两种输出策略。数值待 v4 自动回填。}
+\caption{实验二的组件归因与时序策略比较设计。组件消融的效应为关闭配置减完整系统；Smoothed KF Extrapolation--Hermite Interpolation 行只比较关闭 StaticLock 后的两种输出策略。数值待 v4 自动回填。}
 \label{tab:exp2-final}
 \small
 \setlength{\tabcolsep}{5pt}
@@ -481,8 +481,8 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 StaticLock & 中心化静止 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
 VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
 VCD score & event AURC / 全覆盖风险 & \multicolumn{3}{c}{tie-aware risk--coverage；待 v4 自动回填} \\
-时序合成 & fitted lag / aligned RMSE & \multicolumn{3}{c}{EgoAnchor vs. Predict-to-Now；待 v4 自动回填} \\
-输出策略 & lag / residual / 起停护栏 & \multicolumn{3}{c}{Causal Prediction vs. Buffered Linear/SLERP；待 v4 自动回填} \\
+输出策略 & fitted lag / aligned RMSE & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
+输出策略护栏 & lag / residual / 起停护栏 & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
 \bottomrule
 \end{tabular}%
 \end{table*}
@@ -509,17 +509,17 @@ VCD score & event AURC / 全覆盖风险 & \multicolumn{3}{c}{tie-aware risk--co
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.40\textwidth}
     \centering
-    \fbox{\parbox[c][25mm][c]{0.95\linewidth}{\centering Direct / Causal / Buffered\\v4 待回填}}
+    \fbox{\parbox[c][25mm][c]{0.95\linewidth}{\centering Smoothed KF Extrapolation / Hermite Interpolation\\v4 待回填}}
     \caption{时序策略}
     \label{fig:exp2-temporal}
   \end{subfigure}
-  \caption{实验二的组件归因与时序策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 展示 Kalman Direct Predict-to-Now、Causal Prediction 与 Buffered Linear/SLERP。Causal 与 Buffered 共享关闭 StaticLock 的配置；Direct 单独用于时序合成消融。图和数值待 v4 自动回填。}
+  \caption{实验二的组件归因与时序策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 配对比较 Smoothed KF Extrapolation 与 Hermite Interpolation。两路共享关闭 StaticLock 的配置。图和数值待 v4 自动回填。}
   \label{fig:exp2-final}
 \end{figure*}
 
 \textbf{组件归因。} 采集时刻对齐、StaticLock、VCD admission 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡尾部失效率；时序合成同时报告 fitted lag 与 lag-aligned residual。VCD score 另在每个最终有效的遮挡 event 内，以 capture-time raw pose 相对同 frame 平台参考的平均平移误差作为 selective risk，按分数从高到低诱导候选顺序；同分候选不可拆分，主指标为 event AURC 的 median [Q1, Q3]。VCD 分数是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法。结果均待 v4 自动回填。
 
-\textbf{Direct / Causal / Buffered。} Direct Predict-to-Now 给出关闭历史合成后的响应优先工作点。Causal Prediction 与 Buffered Linear/SLERP 的严格配对用于检验：在模型与接纳序列相同且都关闭 StaticLock 时，有限时域预测能否以可控的校正与停止代价降低显示时延。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡超限。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。该比较不使用网页回放数值，正式结论待 v4 自动回填。
+\textbf{Smoothed KF Extrapolation / Hermite Interpolation。} 两路策略在模型、接纳序列和关闭 StaticLock 状态一致时，比较有限时域外推与历史 Hermite 插值的显示代价。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡超限。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。正式结论待 v4 自动回填。
 
 \subsection{评价指标与汇总契约}
 
@@ -547,7 +547,7 @@ EgoAnchor 将异步视觉观测转换为对象锚点时，需要区分相机运�
 
 \textbf{时间一致性的边界。} 帧对齐可避免将历史相机系观测与到达时刻相机位姿错误复合，但不能恢复目标物体在采集之后的当前位姿。动态场景仍受感知处理时间、观测更新率和平滑策略引入的插值延迟共同影响。因此，动态表征以渲染时刻误差描述应用实际获得的配准质量，不把帧对齐表述为对物体运动时延的补偿。
 
-\textbf{稳定性与响应性的边界。} StaticLock、历史时序合成与因果预测都可能改变静止波动、轨迹残差和起停响应。v4 将把这些量作为联合权衡报告，并单独检验停止后的前向过冲、反向回动与 settling time。正式结果产生前，本文不据网页回放或 v3 归档数字提出快速抓取和直接操控任务中的性能主张。
+\textbf{稳定性与响应性的边界。} StaticLock、历史时序合成与 Smoothed KF Extrapolation 都可能改变静止波动、轨迹残差和起停响应。v4 将把这些量作为联合权衡报告，并单独检验停止后的前向过冲、反向回动与 settling time。正式结果产生前，本文不据网页回放或 v3 归档数字提出性能主张。
 
 \subsection{平台定位与可比性}
 

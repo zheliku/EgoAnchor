@@ -541,7 +541,7 @@ namespace EgoAnchor.Eval
 
         /// <summary>
         /// 验证 Experiment12 的九路正式矩阵。
-        /// 该检查冻结顺序、策略语义和开关组合，但不提前冻结 Causal pilot 的数值参数。
+        /// 该检查冻结顺序、策略语义和开关组合，但不提前冻结平滑外推 pilot 的数值参数。
         /// </summary>
         public bool TryValidateFormalVariantMatrix(out string error)
         {
@@ -606,6 +606,43 @@ namespace EgoAnchor.Eval
                 error = "formalPrimaryVariant[EgoAnchor]";
                 return false;
             }
+            if (!TryValidateTemporalPair(variants[6], variants[8], out error))
+            {
+                return false;
+            }
+            error = string.Empty;
+            return true;
+        }
+
+        /// <summary>确认两路时序条件除输出策略外共享完全相同的运行配置。</summary>
+        private static bool TryValidateTemporalPair(EvalVariant extrapolation, EvalVariant hermite, out string error)
+        {
+            PoseToAnchorRuntime extrapolationRuntime = extrapolation.runtime;
+            PoseToAnchorRuntime hermiteRuntime = hermite.runtime;
+            AnchorPolicyHost extrapolationPolicy = extrapolationRuntime != null ? extrapolationRuntime.PolicyHost : null;
+            AnchorPolicyHost hermitePolicy = hermiteRuntime != null ? hermiteRuntime.PolicyHost : null;
+            bool matches = extrapolationRuntime != null
+                && hermiteRuntime != null
+                && extrapolationPolicy != null
+                && hermitePolicy != null
+                && string.Equals(
+                    extrapolationRuntime.AlignmentConfigurationFingerprint,
+                    hermiteRuntime.AlignmentConfigurationFingerprint,
+                    StringComparison.Ordinal)
+                && string.Equals(
+                    extrapolationPolicy.MotionModelConfiguration,
+                    hermitePolicy.MotionModelConfiguration,
+                    StringComparison.Ordinal)
+                && string.Equals(
+                    extrapolationPolicy.ConfigurationFingerprint,
+                    hermitePolicy.ConfigurationFingerprint,
+                    StringComparison.Ordinal);
+            if (!matches)
+            {
+                error = "formalTemporalPairConfiguration";
+                return false;
+            }
+
             error = string.Empty;
             return true;
         }

@@ -18,11 +18,11 @@ FORMAL_VARIANTS = {
     "Capture-Hold": ("CaptureTime", True, False, False, False, False, False),
     "One-Euro Anchor": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor": ("CaptureTime", True, True, True, True, True, True),
-    "EgoAnchor Causal Prediction": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor w/o capture-time alignment": ("ArrivalTime", False, True, True, True, True, True),
     "EgoAnchor w/o VCD": ("CaptureTime", True, False, True, True, False, True),
-    "EgoAnchor w/o temporal synthesis": ("CaptureTime", True, True, False, True, True, True),
+    "Smoothed KF Extrapolation": ("CaptureTime", True, True, True, False, True, True),
     "EgoAnchor w/o StaticLock": ("CaptureTime", True, True, True, False, True, True),
+    "Hermite Interpolation": ("CaptureTime", True, True, True, False, True, True),
 }
 """当前九路正式采集冻结的 variant 定义。"""
 
@@ -31,19 +31,19 @@ FORMAL_METHODS = {
     "Capture-Hold": ("cv", "hold", "disabled"),
     "One-Euro Anchor": ("oneeuro", "linear_slerp", "enabled"),
     "EgoAnchor": ("kalman", "linear_slerp", "enabled"),
-    "EgoAnchor Causal Prediction": ("kalman", "causal_prediction", "enabled"),
     "EgoAnchor w/o capture-time alignment": ("kalman", "linear_slerp", "enabled"),
     "EgoAnchor w/o VCD": ("kalman", "linear_slerp", "disabled"),
-    "EgoAnchor w/o temporal synthesis": ("kalman", "predict_to_now", "enabled"),
+    "Smoothed KF Extrapolation": ("kalman", "smoothed_kf_extrapolation", "enabled"),
     "EgoAnchor w/o StaticLock": ("kalman", "linear_slerp", "enabled"),
+    "Hermite Interpolation": ("kalman", "hermite_interpolation", "enabled"),
 }
 """下一轮正式采集冻结的运动模型、时序策略和质量门控组合。"""
 
 CURRENT_FORMAL_VARIANT_IDS = frozenset(FORMAL_VARIANTS)
 """当前 Unity 正式场景必须完整记录的九路 variant。"""
 
-CURRENT_VARIANT_MATRIX_ID = "exp12_9_causal_v3"
-"""当前 Unity manifest 写入的因果预测配对对照九路矩阵标识。"""
+CURRENT_VARIANT_MATRIX_ID = "exp12_9_smoothed_hermite_v4"
+"""当前 Unity manifest 写入的平滑外推/Hermite 九路矩阵标识。"""
 
 SCORE_FIELDS = (
     "vcd_score",
@@ -706,7 +706,7 @@ def _check_smoothing_diagnostics(
     continuity_reset_counts: dict[str, int],
     state: _QcState,
 ) -> None:
-    """检查因果预测专用诊断的空值、范围和累计计数语义。"""
+    """检查平滑 Kalman 外推专用诊断的空值、范围和累计计数语义。"""
 
     if expected is None:
         return
@@ -715,33 +715,33 @@ def _check_smoothing_diagnostics(
     position_residual = _finite_float(row.get("correction_position_residual_m"))
     rotation_residual = _finite_float(row.get("correction_rotation_residual_deg"))
     reset_count = _integer(row.get("continuity_reset_count"))
-    is_causal = expected.smoothing_strategy == "causal_prediction"
+    is_smoothed_extrapolation = expected.smoothing_strategy == "smoothed_kf_extrapolation"
 
-    if is_causal:
+    if is_smoothed_extrapolation:
         configured_horizon_ms = _configured_prediction_horizon_ms(expected.configuration_fingerprint)
         configured_half_life_ms = _configured_correction_half_life_ms(expected.configuration_fingerprint)
         if configured_horizon_ms is None:
-            state.error("causal_prediction_config", "因果预测配置指纹缺少有效 horizon。", source_row)
+            state.error("smoothed_extrapolation_config", "平滑外推配置指纹缺少有效 horizon。", source_row)
         elif horizon is None or not 0.0 <= horizon <= configured_horizon_ms + 0.001:
             state.error(
-                "causal_prediction_horizon",
-                f"因果预测时域必须位于 [0, {configured_horizon_ms}] ms：{horizon}",
+                "smoothed_extrapolation_horizon",
+                f"平滑外推时域必须位于 [0, {configured_horizon_ms}] ms：{horizon}",
                 source_row,
             )
         if configured_half_life_ms is None:
-            state.error("causal_prediction_config", "因果预测配置指纹缺少有效 correction-half-life。", source_row)
+            state.error("smoothed_extrapolation_config", "平滑外推配置指纹缺少有效 correction-half-life。", source_row)
         if position_residual is None or position_residual < 0.0:
-            state.error("causal_correction_residual", "位置校正残差必须是非负有限值。", source_row)
+            state.error("smoothed_extrapolation_residual", "位置校正残差必须是非负有限值。", source_row)
         if rotation_residual is None or rotation_residual < 0.0:
-            state.error("causal_correction_residual", "旋转校正残差必须是非负有限值。", source_row)
+            state.error("smoothed_extrapolation_residual", "旋转校正残差必须是非负有限值。", source_row)
     elif any(value is not None for value in (horizon, position_residual, rotation_residual)):
-        state.error("causal_diagnostics_scope", "非因果预测策略的专用浮点诊断必须为 null。", source_row)
+        state.error("extrapolation_diagnostics_scope", "非平滑外推策略的专用浮点诊断必须为 null。", source_row)
 
     if reset_count is None or reset_count < 0:
         state.error("continuity_reset_count", "连续性异常重置计数必须是非负整数。", source_row)
         return
-    if not is_causal and reset_count != 0:
-        state.error("causal_diagnostics_scope", "非因果预测策略的连续性异常重置计数必须为 0。", source_row)
+    if not is_smoothed_extrapolation and reset_count != 0:
+        state.error("extrapolation_diagnostics_scope", "非平滑外推策略的连续性异常重置计数必须为 0。", source_row)
     previous = continuity_reset_counts.get(expected.variant_id)
     if previous is not None and reset_count < previous:
         state.error("continuity_reset_count", "连续性异常重置计数必须在 session 内单调不减。", source_row)
@@ -749,7 +749,7 @@ def _check_smoothing_diagnostics(
 
 
 def _configured_prediction_horizon_ms(configuration_fingerprint: str) -> float | None:
-    """从完整配置指纹读取因果预测时域并换算为毫秒。"""
+    """从完整配置指纹读取平滑外推时域并换算为毫秒。"""
 
     for part in configuration_fingerprint.split("|"):
         if not part.startswith("horizon:"):
@@ -761,7 +761,7 @@ def _configured_prediction_horizon_ms(configuration_fingerprint: str) -> float |
 
 
 def _configured_correction_half_life_ms(configuration_fingerprint: str) -> float | None:
-    """从完整配置指纹读取因果校正残差半衰期并换算为毫秒。"""
+    """从完整配置指纹读取平滑外推校正残差半衰期并换算为毫秒。"""
 
     for part in configuration_fingerprint.split("|"):
         if not part.startswith("correction-half-life:"):

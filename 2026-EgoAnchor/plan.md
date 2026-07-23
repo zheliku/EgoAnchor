@@ -2,99 +2,97 @@
 
 ## 论文定位
 
-EgoAnchor 是动态真实物体锚定系统。中心问题不是如何再次估计 6DoF pose，而是如何把开放
-视觉后端输出的低频、异步、质量不均的相机系位姿，转换为混合现实应用可持续使用的世界系
-对象锚点。
+EgoAnchor 研究如何把开放视觉后端输出的低频、异步、质量不均的相机系 6DoF 位姿，
+转换为混合现实应用可持续使用的世界系对象锚点。平台能力和零样本感知只作为系统背景；
+论文主线是 observation-to-anchor runtime。
 
-论文只把平台能力和零样本感知作为系统背景。主要贡献是采集时刻世界对齐、统一候选接纳、
-逐帧时序合成、静止锚定和生命周期管理组成的 observation-to-anchor runtime。
+## 主方法
 
-## 当前方法
+完整 EgoAnchor 固定使用：
 
-正式 EgoAnchor 使用：
-
-1. 基于 frame_id 的采集时刻世界对齐；
-2. VCD admission；
-3. 使用连续白噪声加速度过程模型的 Kalman 状态估计；
-4. 自适应历史目标时刻上的位置 Linear 与旋转 SLERP；
+1. 基于 `frame_id` 的采集时刻世界对齐；
+2. VCD 接纳；
+3. 连续白噪声加速度 Kalman 状态估计；
+4. 自适应历史目标时刻上的位置 Linear / 旋转 SLERP；
 5. StaticLock；
 6. 与重获取协同的生命周期管理。
 
-第九路配置改为 EgoAnchor Causal Prediction。它与 `w/o StaticLock` 共享采集时刻对齐、
-VCD、Kalman、生命周期和关闭 StaticLock 的设置，只将 Linear/SLERP 历史合成替换为
-有限时域因果预测。该策略预测到当前渲染时刻，但将外推限制在最新观测之后的冻结时域内；
-新观测校正造成的显示残差按真实时间半衰期衰减，以免候选到达时直接跳到新的 Kalman
-轨迹。它不使用未来观测，也不属于四个单组件消融。
+实验二另比较两种关闭 StaticLock 的逐帧输出策略：
 
-原 EgoAnchor Hermite 不再进入新矩阵。正式主方法仍是 Kalman + Linear/SLERP +
-StaticLock；`w/o temporal synthesis` 仍是 Kalman + Predict-to-Now，不用 Causal Prediction
-替代。
+- `Smoothed KF Extrapolation`：有限 180 ms 外推，并以 60 ms 真实时间半衰期平滑
+  Kalman 校正残差；
+- `Hermite Interpolation`：在相同历史目标时间线上使用 Kalman 速度切线做 6DoF Hermite
+  插值，不在最新控制点之后外推。
+
+180/60 ms 与 Hermite 的 `1.15 / 0.25 / 3` 目前是 pilot 初值，正式 v4 采集前冻结。
+两路策略共享采集时刻对齐、VCD、Kalman、生命周期、重获取、候选序列、渲染时间线和关闭
+StaticLock 的配置，只改变输出策略。这个比较不改变完整 EgoAnchor 的主方法定义。
 
 ## 实验组织
 
 ### 实验一：端到端系统表征
 
-比较 Arrival-Hold、Capture-Hold、One-Euro Anchor 和 EgoAnchor。五项物理任务分别覆盖
-静止头动、起停 6DoF、持续平移、持续旋转和遮挡恢复。报告世界一致性、静止稳定性、
-lag--fidelity、失效控制和转换代价，不跨场景汇总成单一总分。
+比较 Arrival-Hold、Capture-Hold、One-Euro Anchor 和 EgoAnchor。五项任务覆盖静止头动、
+起停 6DoF、持续平移、持续旋转和遮挡恢复。每个场景分别报告世界一致性、静止稳定性、
+lag--fidelity、失效控制和转换代价，不汇总成全局排名。
 
-### 实验二：系统设计归因
+### 实验二：系统设计归因与时序策略比较
 
-在同一候选流、参考轨迹和渲染时间线上关闭单一组件：
+三个单组件消融为：
 
-- w/o capture-time alignment；
-- w/o VCD；
-- w/o temporal synthesis，即 Kalman Predict-to-Now；
-- w/o StaticLock。
+- EgoAnchor w/o capture-time alignment；
+- EgoAnchor w/o VCD；
+- EgoAnchor w/o StaticLock。
 
-图 3(d) 比较 Direct Predict-to-Now、Causal Prediction 和 Buffered Linear/SLERP。
-其中完整 EgoAnchor 与 `w/o temporal synthesis` 用于回答关闭历史时序合成的影响；
-Causal Prediction 与 `w/o StaticLock` 都关闭 StaticLock，只改变逐帧输出策略，是严格的
-因果预测与缓冲合成配对比较。Direct 条件保留 StaticLock，因此三路图不能被解释为单一因素
-的三水平实验。
+图 3(d) 和对应表格比较 `Smoothed KF Extrapolation vs. Hermite Interpolation`。
+除 lag--residual 外，还报告候选生效边界步长、静止帧间增量、起动响应、停止前向过冲、
+反向回动、settling time、旋转误差和遮挡超限。候选生效边界步长按 `source_frame_id`
+改变前后相邻 render pose 的差计算，只作为同一时间线上的配对显示护栏，不称为 Kalman
+innovation。
 
-Causal Prediction 的预测上限、校正残差半衰期和异常重置规则先通过工程 pilot 冻结。
-pilot 必须覆盖 72/90/120 Hz、平移与旋转起停、静止头动和遮挡恢复，并报告校正边界跳变、
-停止前向过冲、反向回动、settling time、静止帧间增量及遮挡超限。网页回放只用于选择
-初始搜索范围，不进入正式结果。
+Task 2 每轮使用成对 marker：拿起前记录 `transition_started`，完全停止后记录
+`transition_stopped`。QC 要求两者严格交替闭合。
 
-候选生效边界步长按 `source_frame_id` 改变前后相邻 render pose 的差计算。它包含相邻渲染帧
-之间的真实运动，只作为 Causal 与 Buffered 的配对显示护栏，不称为 Kalman innovation。
-
-Task 2 的每轮动作使用成对 marker：拿起前记录 `transition_started`，物体完全停止后记录
-`transition_stopped`。QC 要求两者严格交替并闭合，分析只在明确的开始和停止边界上计算
-起动响应、停止过冲、反向回动与 settling time。
-
-现有五项正式 task 与 Stage 1 XLSX 属于 v3 归档批次，其中 Kalman 过程协方差仍使用旧实现，
-旧第九路为 Hermite。
-这些数据可用于只读工程诊断，但不能证明修正后的运行时效果。当前 CWNA 模型和参数完成验证后，
-实验一/二必须完整重采五项任务，再经 schema-v2 QC、Stage 1 XLSX 和 paper_analysis 管线替换
-正式论文数字。不得按场景混用 v3 与新批次。原始数据与复现步骤见
-experiment_1_2_analysis_reproduction_manual_zh.md。
+旧 v3 数据来自旧 Kalman 过程协方差和旧矩阵，只用于只读工程诊断。v4 必须在同一冻结代码
+和参数下完整重采 Task 1--5，不得按场景拼接批次。
 
 ### 实验三：跨对象用户研究
 
-实验三暂不采集。后续只比较 One-Euro Interpolation 与完整 EgoAnchor，考察真实物体上的
-虚拟标签阅读和对象附着交互。正式启动前需完成：
+实验三暂不采集。后续比较 One-Euro Interpolation 与完整 EgoAnchor，正式启动前需完成伦理、
+样本量、对象与任务材料、排除规则和统计方案冻结。
 
-1. 冻结目标对象、三维模型准备流程和任务材料；
-2. 完成伦理审批、样本量与排除规则；
-3. 通过跨对象功能试验确认两种方法都能稳定运行；
-4. 冻结主客观指标、随机化与统计方案；
-5. 为正文预留不超过约 0.6 页的结果空间。
+## v4 启动条件
 
-## 当前交付边界
+正式采集前完成一次不启动 recorder 的 Quest 功能 pilot：
 
-当前版本化中文主稿是 egoanchor_cn_v6.tex，稳定交付文件是 pdf/EgoAnchor.pdf。磁盘上的既有
-分析产物属于 v3 归档批次；主稿中的实验数值和面板暂以 v4 待自动回填标记代替，不能解释为
-当前运行时结果。新批次通过 `pixi run eval analyze` 从五本 Stage 1 工作簿完整重建。图 2 为
-一行三个 LaTeX 子图，图 3 为一行四个 LaTeX 子图。正文、图和表不超过 9 页；实验三启动前
-不把计划性描述写成已完成证据。
+- 72/90/120 Hz 下残差半衰期行为一致；
+- 实际外推时域不超过配置上限；
+- 平移和旋转起停无异常跳变、持续回动或非有限输出；
+- Hermite 不在最新控制点之后外推；
+- 遮挡恢复、VCD、生命周期与九路日志正常；
+- 正式场景矩阵门禁和 EditMode 测试通过。
+
+pilot 冻结参数后不再根据 v4 正式结果调参。
+
+## 数据与论文交付
+
+现有活动工作簿仍是 v3 归档证据，新的分析契约只接受
+`variant_matrix_id=exp12_9_smoothed_hermite_v4`。五项 v4 session 完成并停止 Python 后，
+依次运行：
+
+```text
+pixi run eval stage <5 session IDs>
+pixi run eval promote <batch_id>
+pixi run eval analyze
+```
+
+中文主稿是 `egoanchor_cn_v6.tex`，稳定 PDF 为 `pdf/EgoAnchor.pdf`。分析管线从五本 Stage 1
+XLSX 回填实验一/二，不读取 raw JSON/JSONL。正文、图和表最多 9 页，实验三仍需预留空间。
 
 ## 诚实边界
 
 - 控制器 pose 是同一 Quest 平台参考，不是外部光学真值。
-- frame alignment 修正采集/到达时刻错配，不补偿采集后的物体运动。
-- 系统需要目标三维模型，纯视觉只修饰物体位姿估计链路。
-- 单操作员、多 session 的帧不是独立样本；统计单位是 event 或 segment。
-- 当前结果只描述当前对象、设备、参数和任务条件，不能外推为跨对象结论。
+- frame alignment 只修正采集/到达时刻错配，不补偿采集后的物体运动。
+- 系统需要目标三维模型；“纯视觉”只修饰物体位姿估计链路。
+- 单操作员、多 session 的帧不是独立样本，统计单位是 event 或 segment。
+- 正式结论只描述当前对象、设备、参数和任务条件。

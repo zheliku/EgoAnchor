@@ -2,27 +2,28 @@
 
 正式采集场景：`EgoAnchor_Unity/Assets/Scene/EgoAnchor-Experiment12.unity`。
 
-你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、四个实验二组件消融和一个 `EgoAnchor Causal Prediction` 因果预测对照。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
+你不需要填写操作员、运行模式、参数集、模型版本、Git commit 或协议版本。所有记录下来的 session 都是正式采集。现在只保留任务 1--5；每个任务会同时记录四个实验一系统配置、三个实验二组件消融，以及 Smoothed KF Extrapolation 与 Hermite Interpolation 两路策略。因此，同一批任务 1--5 日志会同时进入实验一和实验二，不再重复采集任务 6--9。
 
 当前离线 CLI 不会拆分多任务 session，也不会自动合并多个 session。正式批次固定为任务 1--5 各录一个独立 session，共五个 session；每个 session 只完成一个任务。五次采集必须使用完全相同的冻结配置。完成当前任务后停止 session，重新启动 Python 取得新的 session_id，再采下一项任务。不要把同一个多任务 session 复制成五个 task 目录。
 
 任务和 session 都没有持续时间上下限。UI 的 `TIME` 只告诉你已经录了多久，不会阻止结束，也不会因为过短或过长判定失败。完成当前任务要求的动作和 marker 后即可结束；需要中止时也可以直接停止整个 session。
 
-## 零、正式采集前的 pilot 与参数冻结
+## 零、正式采集前的功能自检与参数冻结
 
-当前 Causal Prediction 的 `maxPredictionHorizonSeconds=0.18` 和 `correctionHalfLifeSeconds=0.06` 只是 pilot 初值。pilot 用来确认运行时行为，不是论文数据。不要启动 `EvalSession`，不要把 pilot 目录复制到 `data/experiments/experiment_1_2/raw/`，也不要用 pilot 数字回填论文。
+当前 Smoothed KF Extrapolation 的 `maxPredictionHorizonSeconds=0.18` 和 `correctionHalfLifeSeconds=0.06`，以及 Hermite 的 `1.15 / 0.25 / 3`，只是功能自检初值。自检只确认运行时行为：不按 A 或 `Enter`，不创建 session，也不写日志。项目没有预录制或非正式 session；只要启动 recorder，产生的就是正式数据。自检面板数值不得用于论文回填。
 
-pilot 至少检查以下项目：
+EditMode 合成测试先检查以下项目：
 
 1. 新观测到达后，在同一 render 时刻比较校正前后的显示 pose。位置不能出现可见跳变，旋转也要连续；同时记录异常 continuity reset 次数。
 2. 在 72、90、120 Hz 下重复同一校正序列。以真实时间计算的 60 ms 半衰期应与刷新率无关，三种刷新率的残差衰减曲线应落在同一容差内。
-3. 人为拉长无新观测时间，确认 `prediction_horizon_ms` 永不超过 180 ms。检查日志中的实际时域，不只看 Inspector 参数。
+3. 人为拉长无新观测时间，确认实际 `prediction_horizon_ms` 永不超过 180 ms。
 4. 分别测量平移和旋转的起动响应、停止前向过冲、反向回动和 settling time。停止后不能出现因校正融合造成的反向回弹。
-5. 做短时遮挡与恢复，记录遮挡期间的平移 P95、最大误差和超过 40 mm 的次数。平移和旋转结果分开保存。
 
-pilot 通过后才可以冻结两个参数，并保存当时的 Git commit、场景路径、九路矩阵 ID 和每个 runtime 的 configuration fingerprint。冻结后不得根据正式 v4 数据再调参；若 pilot 未通过，应回到代码或参数验证，不得直接开始正式采集。
+合成测试通过后，在真实 Quest 上打开正式场景进入 Play Mode，但不要按 A 或 `Enter`。分别检查静止、起停、反向运动和短时遮挡恢复，观察是否有可见跳变、停止过冲或反向回动；同时确认右侧面板的 `KF EXTRAP HORIZON` 不超过 180 ms，`RESET` 不会无故增加。采集前自检不计算论文 P95，也不增加另一套日志；P95、最大误差和 40 mm 超限只从正式 v4 数据离线计算。
 
-如果 pilot 只使用 Unity EditMode 合成测试，仍需在真实 Quest 刷新率下做一次非记录 Play Mode 检查。正式采集前必须退出 Play Mode，再确认 `EgoAnchor-Experiment12` 场景和九路矩阵没有被修改。
+功能自检通过后才可以冻结两个参数，并保存当时的 Git commit、场景路径、九路矩阵 ID 和每个 runtime 的 configuration fingerprint。冻结后不得根据正式 v4 数据再调参；若自检未通过，应回到代码或参数验证，不得直接开始正式采集。
+
+即使 EditMode 合成测试全部通过，仍需在真实 Quest 刷新率下做一次不创建 session 的 Play Mode 自检。正式采集前必须退出 Play Mode，再确认 `EgoAnchor-Experiment12` 场景和九路矩阵没有被修改。
 
 ## 一、先弄清五个动作
 
@@ -123,8 +124,9 @@ Canvas 上有两个并排面板。左侧是任务采集状态板，右侧是实�
 | `SMOOTH`                        | 时序合成当前引入的实际输出延迟                                                                                                                                                                |
 | `POSE RATE`                     | 新 PoseResult 对应 frame_id 的实时更新率                                                                                                                                                      |
 | `VCD LATEST / ACCEPTED`         | 最新候选评分，以及最近一次被 policy 接受的评分                                                                                                                                                |
-| `RESIDUAL`                      | policy 输出阶段的平移和旋转残差                                                                                                                                                               |
+| `KF EXTRAP CORRECTION`          | Smoothed KF Extrapolation 当前的平移和旋转校正残差                                                                                                                                              |
 | `FRAME STEP`                    | 相邻 Unity 帧实际显示锚点的位姿变化，包含真实物体运动，不能直接当作抖动指标                                                                                                                   |
+| `KF EXTRAP HORIZON / RESET`     | Smoothed KF Extrapolation 的实际预测时域和 continuity reset 累计次数                                                                                                                           |
 | `ANCHOR / MOTION / STATIC LOCK` | 锚点生命周期、运动状态和静止锁定状态                                                                                                                                                          |
 
 开始任务前，先确认 `WORN YES`、`VR ACTIVE`、`INPUT ACTIVE`，并且 `OUTPUT`、`DISPLAY`、`REF` 都不是红色。再观察几秒，确认 `POSE RATE` 持续更新，`OBS AGE` 和 `E2E ARRIVAL` 没有不断上升，然后按 A 或 `Enter`。
@@ -230,7 +232,7 @@ Python 服务端日志写到远端 `data/eval/<session_id>/`，再由 Mutagen �
 
 如果 UI 仍显示 `TARGET OCCLUDED`，小键盘 `0`、B 或 `E` 都不会结束任务。先让目标重新可见并补按 marker。
 
-任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和采用 Linear/SLERP 的完整 `EgoAnchor`；实验二从同一批原始行中选择完整 `EgoAnchor` 与四个单组件消融。采集时刻对齐、VCD 和 StaticLock 三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；`EgoAnchor Causal Prediction` 与 `EgoAnchor w/o StaticLock` 都关闭 StaticLock，并共享 Kalman、VCD、生命周期和重获取配置，只比较有限时域因果预测与缓冲 Linear/SLERP。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
+任务 1--5 运行期间，场景中的 9 个 runtime 始终同时接收同一条 PoseResult 候选流并写入长表。实验一从中选择 `Arrival-Hold`、`Capture-Hold`、`One-Euro Anchor` 和完整 `EgoAnchor`；实验二从同一批原始行中选择三个组件消融，以及 Smoothed KF Extrapolation 与 Hermite Interpolation 两路策略。三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件；两路时序策略都关闭 StaticLock，并共享 Kalman、VCD、生命周期和重获取配置，只比较逐帧输出策略。操作者不需要为实验二或策略对比重复动作。原始 trial/event 上的 `experiment_id` 保留共享物理任务的 `exp1_system_characterization`，实验二由 variant/component 投影得到；分析不得按 `experiment_id == exp2_design_attribution` 排除这些消融行。
 
 ## 七、做错了怎么处理
 
@@ -283,7 +285,7 @@ pixi run eval sessions
 pixi run eval stage <session-1> <session-2> <session-3> <session-4> <session-5>
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 的 `transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 都必须严格交替并成对闭合。分析还会检查五项任务覆盖和四个消融的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 的 `transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 都必须严格交替并成对闭合。分析还会检查五项任务覆盖、三个组件消融和两路时序策略的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
 
 实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
 使用相同配置并分别对应任务 1--5。`stage` 会把通过 QC 的副本写入

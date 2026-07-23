@@ -57,7 +57,7 @@ namespace EgoAnchor.Tests
         {
             GameObject recorderObject = new GameObject("LiveStatsTests.Recorder");
             GameObject runtimeObject = new GameObject("LiveStatsTests.Runtime");
-            GameObject causalObject = new GameObject("LiveStatsTests.CausalRuntime");
+            GameObject extrapolationObject = new GameObject("LiveStatsTests.ExtrapolationRuntime");
             GameObject referenceObject = new GameObject("LiveStatsTests.Reference");
             GameObject statsObject = new GameObject("LiveStatsTests.Panel");
             GameObject historyObject = new GameObject("LiveStatsTests.History");
@@ -65,7 +65,7 @@ namespace EgoAnchor.Tests
             {
                 EvalRecorder recorder = recorderObject.AddComponent<EvalRecorder>();
                 PoseToAnchorRuntime runtime = runtimeObject.AddComponent<PoseToAnchorRuntime>();
-                PoseToAnchorRuntime causalRuntime = causalObject.AddComponent<PoseToAnchorRuntime>();
+                PoseToAnchorRuntime extrapolationRuntime = extrapolationObject.AddComponent<PoseToAnchorRuntime>();
                 EvalLiveStats stats = statsObject.AddComponent<EvalLiveStats>();
                 FramePoseHistory history = historyObject.AddComponent<FramePoseHistory>();
 
@@ -82,9 +82,9 @@ namespace EgoAnchor.Tests
                     },
                     new EvalVariant
                     {
-                        label = EvalV2Manifest.CausalPredictionVariantLabel,
-                        runtime = causalRuntime,
-                        anchorTransform = causalObject.transform,
+                        label = EvalV2Manifest.SmoothedExtrapolationVariantLabel,
+                        runtime = extrapolationRuntime,
+                        anchorTransform = extrapolationObject.transform,
                         isPrimary = false,
                     },
                 });
@@ -151,8 +151,8 @@ namespace EgoAnchor.Tests
                 StringAssert.Contains("SERVER  42 ms", text);
                 StringAssert.Contains("VCD  LATEST", text);
                 StringAssert.Contains("FRAME STEP  2.0 mm / 2.00 deg", text);
-                StringAssert.Contains("CAUSAL  HORIZON -- | RESET 0", text);
-                StringAssert.Contains("CAUSAL CORRECTION  -- / --", text);
+                StringAssert.Contains("KF EXTRAP HORIZON -- | RESET 0", text);
+                StringAssert.Contains("KF EXTRAP CORRECTION  -- / --", text);
                 StringAssert.Contains("REF <color=#4DD6A6>ACTIVE</color>", text);
                 StringAssert.DoesNotContain("Ground Truth", text);
                 StringAssert.DoesNotContain("Latency", text);
@@ -160,12 +160,12 @@ namespace EgoAnchor.Tests
 
                 SetPrivateField(runtime, "latestPredictionHorizonMs", 45.0);
                 SetPrivateField(runtime, "latestContinuityResetCount", 2L);
-                SetPrivateField(causalRuntime, "latestPredictionHorizonMs", 180.0);
-                SetPrivateField(causalRuntime, "latestContinuityResetCount", 3L);
-                SetPrivateField(causalRuntime, "latestCorrectionPositionResidualMeters", 0.004f);
-                SetPrivateField(causalRuntime, "latestCorrectionRotationResidualDegrees", 1.5f);
-                StringAssert.Contains("CAUSAL  HORIZON 180.0 ms | RESET 3", stats.BuildStatsText());
-                StringAssert.Contains("CAUSAL CORRECTION  4.0 mm / 1.50 deg", stats.BuildStatsText());
+                SetPrivateField(extrapolationRuntime, "latestPredictionHorizonMs", 180.0);
+                SetPrivateField(extrapolationRuntime, "latestContinuityResetCount", 3L);
+                SetPrivateField(extrapolationRuntime, "latestCorrectionPositionResidualMeters", 0.004f);
+                SetPrivateField(extrapolationRuntime, "latestCorrectionRotationResidualDegrees", 1.5f);
+                StringAssert.Contains("KF EXTRAP HORIZON 180.0 ms | RESET 3", stats.BuildStatsText());
+                StringAssert.Contains("KF EXTRAP CORRECTION  4.0 mm / 1.50 deg", stats.BuildStatsText());
 
                 referenceObject.SetActive(false);
                 referenceObject.transform.SetPositionAndRotation(
@@ -184,7 +184,7 @@ namespace EgoAnchor.Tests
                 UnityEngine.Object.DestroyImmediate(statsObject);
                 UnityEngine.Object.DestroyImmediate(historyObject);
                 UnityEngine.Object.DestroyImmediate(referenceObject);
-                UnityEngine.Object.DestroyImmediate(causalObject);
+                UnityEngine.Object.DestroyImmediate(extrapolationObject);
                 UnityEngine.Object.DestroyImmediate(runtimeObject);
                 UnityEngine.Object.DestroyImmediate(recorderObject);
             }
@@ -1073,11 +1073,11 @@ namespace EgoAnchor.Tests
             "Capture-Hold",
             "One-Euro Anchor",
             "EgoAnchor",
-            "EgoAnchor Causal Prediction",
             "EgoAnchor w/o capture-time alignment",
             "EgoAnchor w/o VCD",
-            "EgoAnchor w/o temporal synthesis",
+            "Smoothed KF Extrapolation",
             "EgoAnchor w/o StaticLock",
+            "Hermite Interpolation",
         };
 
         /// <summary>capability flags 必须反映实际绑定组件和生命周期开关。</summary>
@@ -1422,11 +1422,11 @@ namespace EgoAnchor.Tests
             AssertVariantConfig(yaml, "Capture-Hold", 0, 0, "ConstantVelocityModel", "HoldStrategy", false, 0, 0);
             AssertVariantConfig(yaml, "One-Euro Anchor", 0, 1, "OneEuroModel", "LinearSlerpStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor", 0, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
-            AssertVariantConfig(yaml, "EgoAnchor Causal Prediction", 0, 1, "KalmanModel", "CausalPredictionStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o capture-time alignment", 1, 1, "KalmanModel", "LinearSlerpStrategy", true, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o VCD", 0, 0, "KalmanModel", "LinearSlerpStrategy", true, 0, 1);
-            AssertVariantConfig(yaml, "EgoAnchor w/o temporal synthesis", 0, 1, "KalmanModel", "PredictToNowStrategy", true, 1, 1);
+            AssertVariantConfig(yaml, "Smoothed KF Extrapolation", 0, 1, "KalmanModel", "SmoothedKalmanExtrapolationStrategy", false, 1, 1);
             AssertVariantConfig(yaml, "EgoAnchor w/o StaticLock", 0, 1, "KalmanModel", "LinearSlerpStrategy", false, 1, 1);
+            AssertVariantConfig(yaml, "Hermite Interpolation", 0, 1, "KalmanModel", "HermiteStrategy", false, 1, 1);
 
             Assert.That(Regex.Matches(yaml, @"(?m)^  positionAccelerationNoise: 0\.002\r?$").Count, Is.EqualTo(6));
             Assert.That(Regex.Matches(yaml, @"(?m)^  positionMeasurementNoise: 0\.000004\r?$").Count, Is.EqualTo(6));
@@ -1532,14 +1532,14 @@ namespace EgoAnchor.Tests
             }
         }
 
-        /// <summary>因果预测与缓冲对照除输出策略外必须共享生命周期和重获取参数。</summary>
+        /// <summary>平滑外推与 Hermite 插值除输出策略外必须共享生命周期和重获取参数。</summary>
         [Test]
-        public void CausalAndBufferedControlsShareNonStrategyPolicyParameters()
+        public void TemporalStrategiesShareNonStrategyPolicyParameters()
         {
             string path = Path.Combine(Application.dataPath, "Scene", "EgoAnchor-Experiment12.unity");
             string yaml = File.ReadAllText(path);
-            string causalPolicy = GetVariantPolicySection(yaml, "EgoAnchor Causal Prediction");
-            string bufferedPolicy = GetVariantPolicySection(yaml, "EgoAnchor w/o StaticLock");
+            string extrapolationPolicy = GetVariantPolicySection(yaml, "Smoothed KF Extrapolation");
+            string hermitePolicy = GetVariantPolicySection(yaml, "Hermite Interpolation");
             foreach (string field in new[]
             {
                 "enableQualityGate", "minQualityScore", "coastTimeoutSeconds", "trackingScoreFloor",
@@ -1551,12 +1551,12 @@ namespace EgoAnchor.Tests
             })
             {
                 Assert.That(
-                    ReadScalar(causalPolicy, field),
-                    Is.EqualTo(ReadScalar(bufferedPolicy, field)),
-                    $"Causal 与 Buffered 的 {field} 不一致。");
+                    ReadScalar(extrapolationPolicy, field),
+                    Is.EqualTo(ReadScalar(hermitePolicy, field)),
+                    $"Smoothed KF 与 Hermite 的 {field} 不一致。");
             }
-            Assert.That(ReadReference(causalPolicy, "staticLockModule"), Is.EqualTo("0"));
-            Assert.That(ReadReference(bufferedPolicy, "staticLockModule"), Is.EqualTo("0"));
+            Assert.That(ReadReference(extrapolationPolicy, "staticLockModule"), Is.EqualTo("0"));
+            Assert.That(ReadReference(hermitePolicy, "staticLockModule"), Is.EqualTo("0"));
         }
 
         /// <summary>Hub 层级必须按实验一与实验二分组，完整 EgoAnchor 只保留一个共享 runtime。</summary>
@@ -1577,11 +1577,11 @@ namespace EgoAnchor.Tests
             AssertVariantParent(yaml, "Capture-Hold", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "One-Euro Anchor", experiment1Transform, experiment1Section);
             AssertVariantParent(yaml, "EgoAnchor", experiment1Transform, experiment1Section);
-            AssertVariantParent(yaml, "EgoAnchor Causal Prediction", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o capture-time alignment", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o VCD", experiment2Transform, experiment2Section);
-            AssertVariantParent(yaml, "EgoAnchor w/o temporal synthesis", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "Smoothed KF Extrapolation", experiment2Transform, experiment2Section);
             AssertVariantParent(yaml, "EgoAnchor w/o StaticLock", experiment2Transform, experiment2Section);
+            AssertVariantParent(yaml, "Hermite Interpolation", experiment2Transform, experiment2Section);
 
             StringAssert.Contains("AnchorObject - EgoAnchor [Shared Full System]", yaml);
             string hubTransform = ReadFirstComponentReference(GetSectionContaining(yaml, "m_Name: AnchorRuntimeHub"));

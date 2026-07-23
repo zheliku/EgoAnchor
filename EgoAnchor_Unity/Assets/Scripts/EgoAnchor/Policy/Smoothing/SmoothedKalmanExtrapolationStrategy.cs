@@ -4,7 +4,7 @@ using UnityEngine;
 namespace EgoAnchor.Policy
 {
     /// <summary>
-    /// 有限时域因果预测策略。
+    /// 平滑 Kalman 外推策略。
     ///
     /// 每个渲染帧把 Kalman 状态向当前时刻外推，但预测时域不超过固定上限。新观测校正
     /// 模型后，策略计算旧显示 pose 与新模型轨迹之间的完整位置、旋转残差；同一时刻再次
@@ -13,7 +13,7 @@ namespace EgoAnchor.Policy
     /// 该策略只使用当前及过去观测，不缓冲未来控制点。残差不做幅值截断，避免在校正边界
     /// 人为引入跳变；异常大校正由共享 admission 与 lifecycle 处理。
     /// </summary>
-    public sealed class CausalPredictionStrategy : SmoothingStrategy
+    public sealed class SmoothedKalmanExtrapolationStrategy : SmoothingStrategy
     {
         /// <summary>最近观测之后允许的最大预测时域，单位秒。</summary>
         [Tooltip("最近观测之后允许的最大预测时域，单位秒。pilot 初值为 0.18。")]
@@ -59,9 +59,9 @@ namespace EgoAnchor.Policy
         private long continuityResetCount;
 
         /// <summary>写入评估日志的稳定策略名。</summary>
-        public override string StrategyName => "causal_prediction";
+        public override string StrategyName => "smoothed_kf_extrapolation";
 
-        /// <summary>参与正式配置哈希的全部因果预测参数。</summary>
+        /// <summary>参与正式配置哈希的全部平滑外推参数。</summary>
         public override string ConfigurationFingerprint => string.Format(
             CultureInfo.InvariantCulture,
             "horizon:{0:R}|correction-half-life:{1:R}",

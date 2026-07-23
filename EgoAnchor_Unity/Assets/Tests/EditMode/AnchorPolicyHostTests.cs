@@ -101,16 +101,16 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
-        /// 因果预测叠加跨时刻残差后没有唯一输出语义时刻，不能伪报为当前渲染时刻。
+        /// 平滑外推叠加跨时刻残差后没有唯一输出语义时刻，不能伪报为当前渲染时刻。
         /// </summary>
         [Test]
-        public void CausalPredictionReportsUnknownOutputTargetWhenResidualTimeIsAmbiguous()
+        public void SmoothedExtrapolationReportsUnknownOutputTargetWhenResidualTimeIsAmbiguous()
         {
-            GameObject go = new GameObject("CausalPredictionOutputTargetTests");
+            GameObject go = new GameObject("SmoothedExtrapolationOutputTargetTests");
             try
             {
                 ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
-                CausalPredictionStrategy smoothing = go.AddComponent<CausalPredictionStrategy>();
+                SmoothedKalmanExtrapolationStrategy smoothing = go.AddComponent<SmoothedKalmanExtrapolationStrategy>();
                 model.Snap(AnchorObservation.FromAlignedPose(
                     frameId: 1,
                     worldPose: Pose.identity,
@@ -153,42 +153,6 @@ namespace EgoAnchor.Tests
                 smoothing.Output(model, 12.0);
 
                 Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(10.0));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        /// <summary>预测透传策略必须调用模型预测并报告当前渲染时刻。</summary>
-        [Test]
-        public void PredictToNowUsesRenderTimePrediction()
-        {
-            GameObject go = new GameObject("PredictToNowTests");
-            try
-            {
-                OneEuroModel model = go.AddComponent<OneEuroModel>();
-                PredictToNowStrategy smoothing = go.AddComponent<PredictToNowStrategy>();
-                AnchorObservation first = AnchorObservation.FromAlignedPose(
-                    frameId: 1,
-                    worldPose: Pose.identity,
-                    sampleTimeSeconds: 10.0,
-                    reliabilityScore: 1.0f,
-                    captureTimeSeconds: 10.0);
-                AnchorObservation second = AnchorObservation.FromAlignedPose(
-                    frameId: 2,
-                    worldPose: new Pose(Vector3.right, Quaternion.identity),
-                    sampleTimeSeconds: 11.0,
-                    reliabilityScore: 1.0f,
-                    captureTimeSeconds: 11.0);
-                model.Snap(first);
-                model.UpdateState(second);
-                smoothing.OnObservation(model, second);
-
-                Pose predicted = smoothing.Output(model, 11.5);
-
-                Assert.That(smoothing.OutputTargetTimeSeconds, Is.EqualTo(11.5).Within(1e-6));
-                Assert.That(predicted.position.x, Is.GreaterThan(model.LatestControlPoint.Pose.position.x));
             }
             finally
             {

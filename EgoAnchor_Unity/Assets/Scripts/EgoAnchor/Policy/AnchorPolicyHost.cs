@@ -27,7 +27,7 @@ namespace EgoAnchor.Policy
         [SerializeField] private MotionModel motionModel;
 
         /// <summary>逐帧输出策略模块。</summary>
-        [Tooltip("输出策略模块：只能挂 SmoothingStrategy 子类；正式链路使用 Hold、PredictToNow、LinearSlerp 或 CausalPrediction。")]
+        [Tooltip("输出策略模块：只能挂 SmoothingStrategy 子类；正式链路使用 Hold、LinearSlerp、SmoothedKalmanExtrapolation 或 Hermite。")]
         [SerializeField] private SmoothingStrategy smoothingStrategy;
 
         /// <summary>策略 label；为空时用 "model+strategy" 自动拼。</summary>
@@ -187,8 +187,8 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用跨渲染帧时序合成，包括历史缓冲或因果校正残差融合。</summary>
         public bool UsesTemporalSynthesis =>
-            smoothingStrategy is LinearSlerpStrategy
-            || smoothingStrategy is CausalPredictionStrategy;
+            smoothingStrategy is HistoricalInterpolationStrategy
+            || smoothingStrategy is SmoothedKalmanExtrapolationStrategy;
 
         /// <summary>是否启用显式静止锚定模块。</summary>
         public bool UsesStaticLock => staticLockModule != null && staticLockModule.Enabled;
@@ -312,7 +312,7 @@ namespace EgoAnchor.Policy
             }
 
             // 运动模型和历史合成都要求严格递增的测量时间。这里统一拒绝，避免旧观测
-            // 回拨模型时钟，或向 Linear/SLERP、Causal Prediction 与 StaticLock 注入乱序控制点。
+            // 回拨模型时钟，或向历史插值、平滑外推与 StaticLock 注入乱序控制点。
             if (ShouldRejectMeasurementTime(observation, out string timeRejectReason))
             {
                 RejectedCount++;

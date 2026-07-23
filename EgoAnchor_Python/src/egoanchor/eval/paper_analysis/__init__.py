@@ -8,7 +8,8 @@ from .figures import (
     summarize_risk_coverage,
 )
 from .metrics import (
-    CAUSAL_PREDICTION_VARIANT,
+    HERMITE_INTERPOLATION_VARIANT,
+    SMOOTHED_EXTRAPOLATION_VARIANT,
     METHODS,
     PaperResults,
     TEMPORAL_STRATEGY_VARIANTS,
@@ -26,7 +27,8 @@ from .xlsx import iter_rows, workbook_sha256
 __all__ = [
     "PaperResults",
     "PaperSettings",
-    "CAUSAL_PREDICTION_VARIANT",
+    "HERMITE_INTERPOLATION_VARIANT",
+    "SMOOTHED_EXTRAPOLATION_VARIANT",
     "METHODS",
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",

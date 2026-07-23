@@ -25,22 +25,23 @@ from .xlsx import iter_rows, workbook_sha256
 FULL_VARIANT = "EgoAnchor"
 """正式论文中完整 Linear/SLERP 系统的 variant ID。"""
 
-CAUSAL_PREDICTION_VARIANT = "EgoAnchor Causal Prediction"
-"""当前正式批次保留的有限时域因果预测配对 variant ID。"""
+SMOOTHED_EXTRAPOLATION_VARIANT = "Smoothed KF Extrapolation"
+"""有限时域平滑 Kalman 外推的稳定 variant ID。"""
+
+HERMITE_INTERPOLATION_VARIANT = "Hermite Interpolation"
+"""历史 Hermite 插值对照的稳定 variant ID。"""
 
 METHODS = ("Arrival-Hold", "Capture-Hold", "One-Euro Anchor", FULL_VARIANT)
 """实验一正式比较的四种系统配置。"""
 
 NO_STATIC_LOCK = "EgoAnchor w/o StaticLock"
 NO_VCD = "EgoAnchor w/o VCD"
-NO_TEMPORAL_SYNTHESIS = "EgoAnchor w/o temporal synthesis"
 
 TEMPORAL_STRATEGY_VARIANTS = (
-    NO_TEMPORAL_SYNTHESIS,
-    CAUSAL_PREDICTION_VARIANT,
-    NO_STATIC_LOCK,
+    SMOOTHED_EXTRAPOLATION_VARIANT,
+    HERMITE_INTERPOLATION_VARIANT,
 )
-"""图 3(d) 中 Direct、Causal 与 Buffered 的固定 runtime 顺序。"""
+"""图 3(d) 中 Smoothed KF Extrapolation 与 Hermite Interpolation 的固定顺序。"""
 
 
 def _validate_workbook_runtime_contract(workbook: Path) -> None:
@@ -1143,10 +1144,10 @@ def analyze_workbooks(
 __all__ = [
     "FULL_VARIANT",
     "PaperResults",
-    "CAUSAL_PREDICTION_VARIANT",
+    "HERMITE_INTERPOLATION_VARIANT",
+    "SMOOTHED_EXTRAPOLATION_VARIANT",
     "METHODS",
     "NO_STATIC_LOCK",
-    "NO_TEMPORAL_SYNTHESIS",
     "NO_VCD",
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",

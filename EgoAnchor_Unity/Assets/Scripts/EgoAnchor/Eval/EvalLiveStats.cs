@@ -314,8 +314,8 @@ namespace EgoAnchor.Eval
             if (runtime == null)
                 return "<size=30><b>LIVE SYSTEM DIAGNOSTICS</b></size>\nRuntime not configured";
             recorder.TryGetVariantRuntime(
-                EvalV2Manifest.CausalPredictionVariantLabel,
-                out PoseToAnchorRuntime causalRuntime);
+                EvalV2Manifest.SmoothedExtrapolationVariantLabel,
+                out PoseToAnchorRuntime extrapolationRuntime);
 
             var builder = new StringBuilder();
             string outputStatus = Status(_hasOutput, "VALID", "WAITING");
@@ -325,25 +325,25 @@ namespace EgoAnchor.Eval
             string smoothingDelay = Number(runtime.LatestSmoothingDelayMs, "0", " ms");
             string poseRate = Number(_latestPoseHz, "0.0", " Hz");
             string residualPosition = Number(
-                causalRuntime != null
-                    ? causalRuntime.LatestCorrectionPositionResidualMeters * 1000.0
+                extrapolationRuntime != null
+                    ? extrapolationRuntime.LatestCorrectionPositionResidualMeters * 1000.0
                     : double.NaN,
                 "0.0",
                 " mm");
             string residualRotation = Number(
-                causalRuntime != null
-                    ? causalRuntime.LatestCorrectionRotationResidualDegrees
+                extrapolationRuntime != null
+                    ? extrapolationRuntime.LatestCorrectionRotationResidualDegrees
                     : double.NaN,
                 "0.00",
                 " deg");
             string frameStepPosition = Number(_latestFrameStepM * 1000.0, "0.0", " mm");
             string frameStepRotation = Number(_latestFrameStepDeg, "0.00", " deg");
-            string causalHorizon = Number(
-                causalRuntime != null ? causalRuntime.LatestPredictionHorizonMs : double.NaN,
+            string extrapolationHorizon = Number(
+                extrapolationRuntime != null ? extrapolationRuntime.LatestPredictionHorizonMs : double.NaN,
                 "0.0",
                 " ms");
-            string continuityResets = causalRuntime != null
-                ? causalRuntime.LatestContinuityResetCount.ToString()
+            string continuityResets = extrapolationRuntime != null
+                ? extrapolationRuntime.LatestContinuityResetCount.ToString()
                 : "--";
             string staticLock = runtime.LatestStaticLocked ? "ON" : "OFF";
 
@@ -365,9 +365,9 @@ namespace EgoAnchor.Eval
                 ? "--"
                 : runtime.LatestAcceptedScore.ToString("0.00");
             builder.AppendLine($"VCD  LATEST {latestScore} | ACCEPTED {acceptedScore}");
-            builder.AppendLine($"CAUSAL CORRECTION  {residualPosition} / {residualRotation}");
+            builder.AppendLine($"KF EXTRAP CORRECTION  {residualPosition} / {residualRotation}");
             builder.AppendLine($"FRAME STEP  {frameStepPosition} / {frameStepRotation}");
-            builder.AppendLine($"CAUSAL  HORIZON {causalHorizon} | RESET {continuityResets}");
+            builder.AppendLine($"KF EXTRAP HORIZON {extrapolationHorizon} | RESET {continuityResets}");
             builder.AppendLine($"ANCHOR  {runtime.CurrentAnchorState} | MOTION  {Escape(runtime.CurrentMotionStateName)}");
             builder.AppendLine($"STATIC LOCK  {staticLock} | FRAME  {FrameText(runtime.LatestAlignedFrameId)}");
             builder.Append("<size=17><color=#B1BCCC>Live diagnostic only; offline paired metrics are authoritative.</color></size>");

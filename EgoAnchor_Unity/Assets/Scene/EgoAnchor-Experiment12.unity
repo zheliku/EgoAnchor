@@ -2956,7 +2956,7 @@ MonoBehaviour:
     anchorTransform: {fileID: 7300000003}
     anchorPresenter: {fileID: 7300000002}
     isPrimary: 0
-  - label: EgoAnchor w/o temporal synthesis
+  - label: Smoothed KF Extrapolation
     runtime: {fileID: 7400000001}
     anchorTransform: {fileID: 7400000003}
     anchorPresenter: {fileID: 7400000002}
@@ -2966,7 +2966,7 @@ MonoBehaviour:
     anchorTransform: {fileID: 7500000003}
     anchorPresenter: {fileID: 7500000002}
     isPrimary: 0
-  - label: EgoAnchor Causal Prediction
+  - label: Hermite Interpolation
     runtime: {fileID: 7600000001}
     anchorTransform: {fileID: 7600000003}
     anchorPresenter: {fileID: 7600000002}
@@ -9099,7 +9099,7 @@ GameObject:
   - component: {fileID: 7400000002}
   - component: {fileID: 7400000001}
   m_Layer: 0
-  m_Name: AnchorObject - EgoAnchor w-o temporal synthesis
+  m_Name: AnchorObject - Smoothed KF Extrapolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9178,10 +9178,9 @@ GameObject:
   - component: {fileID: 7400000011}
   - component: {fileID: 7400000012}
   - component: {fileID: 7400000013}
-  - component: {fileID: 7400000016}
-  - component: {fileID: 7400000015}
+  - component: {fileID: 7400000014}
   m_Layer: 0
-  m_Name: Policy - EgoAnchor w-o temporal synthesis
+  m_Name: Policy - Smoothed KF Extrapolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9215,11 +9214,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7400000013}
-  smoothingStrategy: {fileID: 7400000016}
-  strategyLabel: egoanchor_without_temporal_synthesis
+  smoothingStrategy: {fileID: 7400000014}
+  strategyLabel: smoothed_kf_extrapolation
   enableQualityGate: 1
   minQualityScore: 0.2
-  staticLockModule: {fileID: 7400000015}
+  staticLockModule: {fileID: 0}
   coastTimeoutSeconds: 0.45
   trackingScoreFloor: 0.5
   lostTimeoutSeconds: 1
@@ -9250,7 +9249,7 @@ MonoBehaviour:
   positionMeasurementNoise: 0.000004
   rotationAccelerationNoise: 0.2
   rotationMeasurementNoise: 0.0004
---- !u!114 &7400000015
+--- !u!114 &7400000014
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -9259,48 +9258,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 7400000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1ab328ad55b61154598813985e55a3b0, type: 3}
+  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.EgoAnchorStaticLockModule
-  lockEnabled: 1
-  enterSpeedMps: 0.05
-  enterAngSpeedDps: 22
-  dwellSeconds: 0.35
-  minScore: 0.25
-  deadbandMeters: 0.008
-  deadbandDegrees: 3
-  unlockEvidenceMeters: 0.08
-  unlockEvidenceDegrees: 20
-  unlockDriftMeters: 0.015
-  unlockDriftDegrees: 12
-  evidenceHalfLifeSeconds: 0.27
-  creepHalfLifeSeconds: 2.7
-  relockSuppressSeconds: 1
-  unlockSpeedFactor: 2.5
-  unlockMovingSeconds: 0.4
-  seamDecayPerFrame: 0.85
-  refObsIntervalSeconds: 0.2
-  headRotForFullToleranceDps: 60
-  headLinForFullToleranceMps: 0.3
-  headMaxToleranceFactor: 4
-  headSettleSeconds: 0.6
-  posToleranceRefDistanceMeters: 0.4
-  posToleranceDistanceSlope: 1
-  posToleranceMaxFactor: 3
-  lowScoreReleaseScore: 0.3
-  lowScoreReleaseSeconds: 0.6
---- !u!114 &7400000016
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7400000010}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6f4c6b8fcb214d75823f5c477c6d9c11, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.PredictToNowStrategy
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.SmoothedKalmanExtrapolationStrategy
+  maxPredictionHorizonSeconds: 0.18
+  correctionHalfLifeSeconds: 0.06
 --- !u!1 &7500000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -9487,7 +9449,7 @@ GameObject:
   - component: {fileID: 7600000002}
   - component: {fileID: 7600000001}
   m_Layer: 0
-  m_Name: AnchorObject - EgoAnchor Causal Prediction
+  m_Name: AnchorObject - Hermite Interpolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9566,7 +9528,7 @@ GameObject:
   - component: {fileID: 7600000013}
   - component: {fileID: 7600000014}
   m_Layer: 0
-  m_Name: Policy - EgoAnchor Causal Prediction
+  m_Name: Policy - Hermite Interpolation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9601,7 +9563,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.AnchorPolicyHost
   motionModel: {fileID: 7600000013}
   smoothingStrategy: {fileID: 7600000014}
-  strategyLabel: kalman_causal_prediction
+  strategyLabel: hermite_interpolation
   enableQualityGate: 1
   minQualityScore: 0.2
   staticLockModule: {fileID: 0}
@@ -9644,11 +9606,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 7600000010}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dd8d14bba35526f4886566304e026ada, type: 3}
+  m_Script: {fileID: 11500000, guid: 79e02f7ddb0d25242be61df2259271c9, type: 3}
   m_Name:
-  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.CausalPredictionStrategy
-  maxPredictionHorizonSeconds: 0.18
-  correctionHalfLifeSeconds: 0.06
+  m_EditorClassIdentifier: EgoAnchor::EgoAnchor.Policy.HermiteStrategy
+  latencySafetyMargin: 1.15
+  minDelaySeconds: 0.25
+  tangentChordRatio: 3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

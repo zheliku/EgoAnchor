@@ -40,7 +40,7 @@ namespace EgoAnchor.Policy
 
     /// <summary>
     /// 模块 A：运动模型。吃观测，维护"去噪后的状态点 + 速度"，对外提供：
-    ///   - PredictAt(t)：在 t 时刻外推的 pose (给因果预测策略使用)；
+    ///   - PredictAt(t)：在 t 时刻外推的 pose (给平滑 Kalman 外推策略使用)；
     ///   - LatestControlPoint：最新去噪控制点，供两类历史插值策略使用。
     ///
     /// 继承 MonoBehaviour 的抽象基类，这样 Inspector 只能挂它的子类 (CV / Kalman / OneEuro)，

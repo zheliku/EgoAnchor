@@ -17,8 +17,8 @@
 
 `EvalSession` 管理 session 生命周期，`ExperimentTrialSelector` 独立维护五项任务的选择、运行与完成
 状态，`EvalRecorder` 写入 Unity 采集和渲染日志。`ExperimentInputHandler` 直接在 Inspector 暴露内联
-`InputAction`，不使用 InputActionAsset。完成本次需要的任意任务子集后，在空闲状态再次按结束键即可停止
-session；零项完成时不能生成空 session。
+`InputAction`，不使用 InputActionAsset。正式批次为 Task 1--5 各录一个独立 session；完成当前唯一任务后，
+在空闲状态再次按结束键即可停止 session，零项完成时不能生成空 session。
 
 操作错误时写入 `trial_rejected` 并只重做对应任务。原始行继续保留，Python 正式分析只投影已经
 `trial_ended` 且没有被 rejected 的 trial。manifest 的 `completed_tasks` 记录本次最终保留的任务编号、场景
@@ -47,11 +47,11 @@ writer 会记录 `rows_written` 与 `dropped_rows`。正式分析前必须确认
 
 ## 实验一与实验二
 
-实验一比较四个完整系统配置，覆盖静止观察、主动头动、起停 6DoF、持续运动和遮挡恢复。五项任务可以拆到
-多个 session，Python 在分析批次层检查场景并集。
+实验一比较四个完整系统配置，覆盖静止观察、主动头动、起停 6DoF、持续运动和遮挡恢复。五项任务分别写入
+五个 session，Python 在分析批次层检查场景并集。
 
-实验二以完整系统为参照，每次只关闭一个归因组件。它不再单独采集四项任务，而是直接复用任务 1--5
-同时写出的四个消融 runtime。采集时保持同一输入流和同一参考位姿，分析阶段按
+实验二包含三个单组件消融，以及 Smoothed KF Extrapolation 与 Hermite Interpolation 两路时序策略。
+它直接复用任务 1--5 同时写出的九路 runtime；采集时保持同一输入流和同一参考位姿，分析阶段按
 `session x trial/event x variant` 配对汇总，不跨 session 拼接逐帧记录。
 
 具体动作、按键时机和失败重采规则见 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`。采集阶段

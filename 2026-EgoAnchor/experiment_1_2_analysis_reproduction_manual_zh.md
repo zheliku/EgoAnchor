@@ -207,9 +207,9 @@ pixi run eval stage 20260722_120001_controller_right 20260722_120002_controller_
 检查内容：
 
 - 五个 session ID 唯一，每个 session 只完成一项任务，整批恰好覆盖任务 1--5。
-- `run_kind` 为 `formal`，九路矩阵为 `exp12_9_causal_v3`。
+- `run_kind` 为 `formal`，九路矩阵为 `exp12_9_smoothed_hermite_v4`。
 - 五个 session 的配置哈希、冻结参数、对象、模型和协议一致。
-- Task 2 的 `transition_started` / `transition_stopped` 严格交替闭合；因果预测的实际时域不超过配置指纹中的上限，校正残差有限，异常连续性重置计数单调不减。
+- Task 2 的 `transition_started` / `transition_stopped` 严格交替闭合；Smoothed KF Extrapolation 的实际时域不超过配置指纹中的上限，校正残差有限，异常连续性重置计数单调不减。
 - 固定 JSON/JSONL 文件齐全，生命周期、事件、主外键和九路 admission/render 矩阵通过 QC。
 - 复制期间来源文件没有继续变化。
 

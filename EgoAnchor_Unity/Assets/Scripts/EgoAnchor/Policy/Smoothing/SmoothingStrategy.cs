@@ -5,7 +5,7 @@ namespace EgoAnchor.Policy
     /// <summary>输出策略最近一帧的独立诊断，不复用观测年龄或旧 output residual 字段。</summary>
     public readonly struct SmoothingDiagnostics
     {
-        /// <summary>有限因果预测实际使用的预测时域，单位毫秒。</summary>
+        /// <summary>平滑 Kalman 外推实际使用的预测时域，单位毫秒。</summary>
         public readonly float PredictionHorizonMilliseconds;
 
         /// <summary>当前帧实际施加的位置校正残差，单位米。</summary>
@@ -43,9 +43,9 @@ namespace EgoAnchor.Policy
     ///
     /// 当前实现包含四条输出路线，全部进入正式 v4 矩阵：
     ///   - HoldStrategy：零阶保持，作为异步候选的原始基线；
-    ///   - PredictToNowStrategy：逐渲染帧直接调用运动模型预测；
-    ///   - CausalPredictionStrategy：有限时域外推 + 校正残差融合；
+    ///   - SmoothedKalmanExtrapolationStrategy：有限时域外推 + 校正残差融合；
     ///   - LinearSlerpStrategy：缓冲控制点，在 now-Δ 做 Linear/SLERP。
+    ///   - HermiteStrategy：在相同历史目标时刻做 6DoF Hermite。
     ///
     /// 继承 MonoBehaviour 的抽象基类，Inspector 只能挂它的子类，并与 MotionModel 解耦组合。
     /// 策略不持有运动模型——每帧由 host 把当前 model 传进来 (OnObservation / Output)，实现解耦。

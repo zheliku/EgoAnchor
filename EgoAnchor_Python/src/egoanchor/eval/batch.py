@@ -27,7 +27,7 @@ from .preprocess import (
 )
 
 
-EXPECTED_MATRIX_ID = "exp12_9_causal_v3"
+EXPECTED_MATRIX_ID = "exp12_9_smoothed_hermite_v4"
 """正式实验一/二必须使用的九路运行时矩阵标识。"""
 
 DEFAULT_BATCH_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "batch.toml"

@@ -35,7 +35,7 @@ namespace EgoAnchor.Policy
         /// <summary>当前渲染时刻相对输出语义时刻的实际平滑延迟，单位秒。</summary>
         public readonly double SmoothingDelaySeconds;
 
-        /// <summary>输出策略本帧的专用诊断；非因果预测策略返回空诊断。</summary>
+        /// <summary>输出策略本帧的专用诊断；非平滑 Kalman 外推策略返回空诊断。</summary>
         public readonly SmoothingDiagnostics SmoothingDiagnostics;
 
         /// <summary>本帧输出的解释原因。</summary>
