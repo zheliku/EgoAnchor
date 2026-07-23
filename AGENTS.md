@@ -132,7 +132,7 @@ schema-v2 task directory
   -> qc / preprocess -> 五本完整 XLSX
   -> analyze -> 活动批次 analysis/ 下的指标、绘图 XLSX、PNG/PDF 和手工引入用 TeX
   -> copy-assets -> 论文目录中的 PNG/PDF
-  -> 人工审阅并引入 TeX -> latex -> pdf/EgoAnchor.pdf
+  -> 人工审阅并引入 TeX，并按论文工作流手工编译主稿
 ```
 
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
@@ -141,18 +141,18 @@ schema-v2 task directory
 - `analyze` 只读取五本 Stage 1 完整 XLSX，计算指标并在活动批次 `analysis/` 发布七个独立 PDF/PNG 面板、两张 TeX 表和图环境 TeX；它不得回读 raw JSON/JSONL、改写 XLSX、修改 `2026-EgoAnchor` 下的主稿、图片、表格或 PDF。
 - VCD 连续分数的风险判别性只在最终有效的 `occlusion_started` event 内计算：仅使用完整 EgoAnchor 的 capture-time aligned raw pose 与同 frame 有效平台参考，按分数降序且同分候选整组进入，以保留候选的平均平移误差为 selective risk，并用右连续阶梯积分得到 event AURC。不得按 admission 决策过滤低分候选，不得跨 event 混池候选；论文汇总 event AURC 的 median [Q1, Q3]，并与冻结阈值的 VCD admission 尾部效果分开报告。
 - 旧 Stage 2/3、v2 replay 与历史分析包已删除；当前代码位于 `egoanchor.eval.paper_analysis`，不保留旧入口兼容层。
-- `pixi run eval` 提供 `config`、`sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`copy-assets`、`latex` 和 `rebuild`。操作路径、版本化主稿、稳定 PDF 名和明确的 PNG/PDF 发布清单只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；论文统计参数仍只属于 `paper.toml`。文件系统或工具错误返回 1，批次、schema、QC 或论文输入契约失败返回 2。
+- `pixi run eval` 提供 `config`、`sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`copy-assets` 和 `rebuild`。操作路径和明确的 PNG/PDF 发布清单只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；主稿编译不属于评估 CLI，论文统计参数仍只属于 `paper.toml`。文件系统或工具错误返回 1，批次、schema、QC 或论文输入契约失败返回 2。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
 - 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 在写出前检查整批固定源文件、task 编号和输出边界，再对整批执行 QC；任一 task 的 QC 失败时不开始发布。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit，不提供人工覆盖入口。
-- `analyze` 只生成手工引入用的 TeX，不回填主稿；`copy-assets` 只按 `batch.toml` 明确清单复制当前实验面板与指定 replay/relay 的 PNG/PDF，绝不复制 TeX。研究者审阅后手工纳入 TeX，`latex` 才只编译主稿、不重新分析数据；稳定交付文件默认是 `2026-EgoAnchor/pdf/EgoAnchor.pdf`，不得把当前源稿版本号当作最终论文文件名。
+- `analyze` 只生成手工引入用的 TeX，不回填主稿；`copy-assets` 只按 `batch.toml` 明确清单复制当前实验面板与指定 replay/relay 的 PNG/PDF，绝不复制 TeX。研究者审阅后手工纳入 TeX；主稿编译不属于 `pixi run eval`，稳定交付文件仍为 `2026-EgoAnchor/pdf/EgoAnchor.pdf`。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - 当前数据固定在 `EgoAnchor_Python/data/experiments/experiment_1_2/`：`raw/` 保存五项正式任务，`workbooks/` 保存五本 Stage 1 XLSX，`analysis/` 保存 metrics、绘图 XLSX、七个 PNG/PDF 面板、手工引入用 TeX 和构建 provenance；目录规则见 `EgoAnchor_Python/docs/data_layout.md`。`data/eval/` 只作为新采集暂存入口，不保存已归档 session；旧 `data/eval/` 与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - `audit_samples/` 是可选审计样本目录：没有真实审计文件时不得在新 session 中预创建；Stage 1 暂存会跳过遗留的空目录，但一旦存在真实文件则必须完整复制并纳入来源摘要。
-- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；新批次先由 `pixi run eval stage` 整批 QC、复制并生成工作簿，再用 `promote` 原子切换，随后依次 `analyze` 和显式 `copy-assets`。`qc` 只作诊断，`preprocess` 只在明确重建当前 Stage 1 工作簿时使用；`rebuild` 用于从当前 raw 一次重建，且不发布图片、不编译 PDF。
+- 面向新采集批次的手动复现步骤固定记录在 `2026-EgoAnchor/experiment_1_2_analysis_reproduction_manual_zh.md`；新批次先由 `pixi run eval stage` 整批 QC、复制并生成工作簿，再用 `promote` 原子切换，随后依次 `analyze` 和显式 `copy-assets`。`qc` 只作诊断，`preprocess` 只在明确重建当前 Stage 1 工作簿时使用；`rebuild` 用于从当前 raw 一次重建，且不发布图片；论文 PDF 由论文工作流手工编译。
 - 论文六行连续轨迹图使用独立 `egoanchor.qualitative_replay` 包和 `pixi run replay` 入口；它只读取 `data/replay_capture/` 下的 `egoanchor_qualitative_replay` v1 capture，不得读取或写入正式 `data/eval/`、实验一/二工作簿和 schema-v2 产物。采集方式固定为 Quest Link 串流下的 Unity Editor Play Mode，完整操作说明固定在 `EgoAnchor_Python/docs/qualitative_replay.md`。离线 silhouette 必须按三角面并集生成，不能把整组重叠三角形交给 OpenCV 奇偶填充。
 - 正式论文数据不得按场景或指标从不同采集批次择优拼接。替代批次必须以同一代码和 TOML 完整重建五个任务，逐场景报告 event 数、缺失率、median[IQR] 与护栏，并确保 manifest 的配置 hash 和 Git commit 能区分全部生效数值参数；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格最多保留三位小数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告八项行为属性，实验二按组件报告启用、关闭和配对效应。
@@ -285,10 +285,10 @@ dotnet build "EgoAnchor_Unity\EgoAnchor.csproj" --no-restore
 pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 ```
 
-论文（`2026-EgoAnchor`）：
+论文（`2026-EgoAnchor`，在手工引入 TeX 后）：
 
 ```text
-pixi run eval latex
+latexmk -xelatex egoanchor_cn_v6.tex
 ```
 
 ## 环境与远端关键坑

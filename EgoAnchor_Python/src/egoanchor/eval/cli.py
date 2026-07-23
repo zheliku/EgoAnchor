@@ -10,7 +10,6 @@ from collections.abc import Sequence
 from .batch import (
     BatchToolError,
     analyze_current,
-    compile_current_paper,
     copy_current_assets,
     describe_workflow,
     list_eval_sessions,
@@ -41,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    config = subparsers.add_parser("config", help="显示当前生效的输入、输出和论文文件")
+    config = subparsers.add_parser("config", help="显示当前生效的数据路径和图片发布位置")
     config.set_defaults(handler=_run_config)
 
     sessions = subparsers.add_parser("sessions", help="列出新采集暂存区中的 session")
@@ -78,9 +77,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="将当前实验面板和配置指定 relay PNG/PDF 复制到论文目录",
     )
     copy_assets.set_defaults(handler=_run_copy_assets)
-
-    latex = subparsers.add_parser("latex", help="只编译当前配置的 LaTeX 主稿")
-    latex.set_defaults(handler=_run_latex)
 
     rebuild = subparsers.add_parser("rebuild", help="从当前 raw 开始执行 preprocess 和 analyze")
     rebuild.set_defaults(handler=_run_rebuild)
@@ -154,12 +150,6 @@ def _run_copy_assets(_args: argparse.Namespace) -> dict[str, object]:
     """显式复制配置允许的论文图片资源。"""
 
     return copy_current_assets()
-
-
-def _run_latex(_args: argparse.Namespace) -> dict[str, object]:
-    """只编译当前配置的主稿。"""
-
-    return compile_current_paper()
 
 
 def _run_rebuild(_args: argparse.Namespace) -> dict[str, object]:

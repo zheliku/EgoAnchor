@@ -230,7 +230,6 @@ class BatchWorkflowTests(unittest.TestCase):
                 "rebuild",
                 "analyze",
                 "copy-assets",
-                "latex",
             },
         )
 
@@ -253,8 +252,8 @@ class BatchWorkflowTests(unittest.TestCase):
                 load_batch_paths(root).active_root / "workbooks",
             )
 
-    def test_config_describes_every_stage_and_stable_pdf_name(self) -> None:
-        """config 输出应让用户直接看到各阶段输入、输出和稳定 PDF 名。"""
+    def test_config_describes_every_stage_without_paper_compilation(self) -> None:
+        """config 只描述数据阶段和显式图片发布，不承担论文编译。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -272,12 +271,11 @@ class BatchWorkflowTests(unittest.TestCase):
                     "preprocess",
                     "analyze",
                     "copy-assets",
-                    "latex",
                     "rebuild",
                 },
             )
-            self.assertEqual(Path(payload["paths"]["manuscript"]).name, "egoanchor_cn_v6.tex")
-            self.assertEqual(Path(payload["paths"]["output_pdf"]).name, "EgoAnchor.pdf")
+            self.assertNotIn("manuscript", payload["paths"])
+            self.assertNotIn("output_pdf", payload["paths"])
 
     def test_copy_assets_only_publishes_current_panels_and_configured_relay_files(self) -> None:
         """图片发布只复制当前分析面板和显式配置的 relay PNG/PDF，不处理 TeX。"""
@@ -310,8 +308,6 @@ class BatchWorkflowTests(unittest.TestCase):
                 archive_root=root / "data" / "archive",
                 active_root=active_root,
                 paper_root=paper_root,
-                manuscript_path=paper_root / "main.tex",
-                paper_pdf_path=paper_root / "pdf" / "paper.pdf",
                 experiment_asset_destination=paper_root / "figures" / "panels",
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
                 config_path=root / "batch.toml",

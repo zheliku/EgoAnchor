@@ -24,7 +24,7 @@ EXPECTED_COMMANDS = {
     "qc",
     "preprocess",
     "analyze",
-    "latex",
+    "copy-assets",
     "rebuild",
 }
 """当前唯一人工入口的固定路径命令。"""

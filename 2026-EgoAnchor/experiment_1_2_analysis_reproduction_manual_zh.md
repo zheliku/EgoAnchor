@@ -1,19 +1,19 @@
 # 实验一/二数据归档与分析手册
 
-本手册使用唯一入口 `pixi run eval`。命令不接收任意输入、输出路径；日常需要调整的路径、
-当前主稿和最终 PDF 名统一写在 `src/egoanchor/eval/config/batch.toml`。
+本手册使用唯一入口 `pixi run eval`。命令不接收任意输入、输出路径；数据目录和图片发布位置
+统一写在 `src/egoanchor/eval/config/batch.toml`。主稿编译不属于评估 CLI。
 
 以下命令都在 `EgoAnchor_Python` 目录运行。
 
 ## 当前 Kalman 重采边界
 
-当前活动批次是 v3 归档数据，使用旧的 Kalman 过程协方差。它可以继续用于只读诊断和历史
-结果核对，但不能作为 CWNA 修正后运行时的正式结果。开始新采前必须确认正式场景中的六个
+当前活动批次可能仍是 v3 归档数据，使用旧的 Kalman 过程协方差。它只能用于只读诊断和历史
+结果核对，不能作为 CWNA 修正后运行时的正式结果。切换新批次前必须确认正式场景中的六个
 `KalmanModel` 参数完全一致，配置指纹包含 `q-model:cwna-v1`，并通过 Unity EditMode 测试。
 
 新批次仍按任务 1--5 各采一个正式 session。五项数据没有全部完成并通过 `stage` 前，不切换
 活动批次，也不从 v3 单独保留某个表现更好的场景。完成整批 QC 后再使用 `promote` 原子替换，
-随后依次运行 `analyze` 和 `latex` 重建图、表、正文数字与稳定 PDF。
+随后运行 `analyze` 生成本地指标、图片和 TeX 片段；图片发布与主稿编译由人工确认后分别执行。
 
 ## 一、先弄清三类文件
 
@@ -36,7 +36,7 @@ data/eval/<session_id>/
 data/experiments/experiment_1_2/
 ├─ raw/          # 五项 JSON/JSONL 原始任务
 ├─ workbooks/    # 五本 Stage 1 XLSX
-└─ analysis/     # 指标、绘图数据和分析 provenance
+└─ analysis/     # 指标、绘图数据、PNG/PDF、TeX 片段和分析 provenance
 ```
 
 `raw/` 中的 JSON/JSONL 是当前批次的只读归档。`workbooks/` 是 JSONL 与论文分析之间的唯一
@@ -57,8 +57,8 @@ egoanchor_cn_v6.tex
 pdf/EgoAnchor.pdf
 ```
 
-以后主稿升级为 v7 时，只需要在 TOML 中把 `manuscript` 改为 `egoanchor_cn_v7.tex`；最终
-PDF 仍然叫 `EgoAnchor.pdf`。
+以后主稿升级为 v7 时，直接维护 `2026-EgoAnchor` 下的源稿和论文工程编译设置；评估 CLI 不读取
+主稿文件名或 PDF 输出路径。
 
 ## 二、配置文件怎么改
 
@@ -78,29 +78,20 @@ eval_root = "data/eval" # Unity/Python 新采集 session 的本机同步暂存�
 staging_root = "data/experiments/_staging/experiment_1_2" # 新批次完成 QC 和工作簿发布前的临时目录。
 archive_root = "data/experiments/_archive/experiment_1_2" # 退出当前论文的完整旧批次冷归档目录。
 active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动批次目录。
-paper_root = "../2026-EgoAnchor" # 中文主稿、论文面板、表格和最终 PDF 所在目录。
-
-[paper]
-manuscript = "egoanchor_cn_v6.tex" # 当前需要回填和编译的版本化 LaTeX 主稿，相对于 paper_root。
-output_pdf = "pdf/EgoAnchor.pdf" # 面向阅读和交付的稳定 PDF 名称，相对于 paper_root，不包含主稿版本号。
+paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的论文目录。
 ```
 
 `[paths]` 的相对路径以 `EgoAnchor_Python` 根目录为基准，不是以 TOML 所在目录为基准。
-`[paper]` 的两个路径以 `paper_root` 为基准。
 
 可以修改：
 
 - `eval_root`：新 session 同步到了其他 `data/` 子目录时修改。
 - `staging_root`、`archive_root`：需要调整暂存和冷归档位置时修改。
 - `active_root`：需要维护另一套完整实验批次时修改。
-- `paper_root`：论文工程目录改变时修改。
-- `manuscript`：主稿升级版本时修改，例如改为 `egoanchor_cn_v7.tex`。
-- `output_pdf`：修改最终交付 PDF 的路径或名称。建议保持 `pdf/EgoAnchor.pdf`。
+- `paper_root`：图片发布目标根目录改变时修改。
 
 这些路径有硬限制：四个数据目录必须位于 `EgoAnchor_Python/data/` 内，彼此不能相同或互相
-嵌套；论文目录必须位于当前仓库内；主稿和 PDF 必须位于 `paper_root` 内，扩展名分别是
-`.tex` 和 `.pdf`。最终 PDF 的文件名只使用 ASCII 字母、数字、点、下划线和连字符，避免
-latexmk 的 `jobname` 在不同系统上产生不一致结果。
+嵌套；图片发布目录必须位于当前仓库内。TeX 主稿和最终 PDF 不受该配置约束。
 
 修改 TOML 只会改变下一条命令读取和写入的位置，不会自动搬迁旧数据。改完先运行：
 
@@ -141,7 +132,6 @@ src/egoanchor/eval/config/paper.toml
 | `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
 | `pixi run eval analyze`              | 五本 Stage 1 XLSX       | 活动批次本地指标、绘图数据、面板和手工引入 TeX   | 否                 |
 | `pixi run eval copy-assets`          | 本地面板和显式 relay 文件 | 论文目录中的 PNG/PDF                            | 是，仅图片         |
-| `pixi run eval latex`                | 配置指定的`.tex` 主稿 | 配置指定的最终 PDF                               | 否                 |
 | `pixi run eval rebuild`              | `active_root/raw`     | preprocess + analyze 的本地分析输出              | 否                 |
 
 只有 `promote` 会替换当前活动批次。`preprocess`、`analyze` 和 `rebuild` 会更新活动批次内的
@@ -413,33 +403,8 @@ pixi run eval copy-assets
 replay/relay PNG/PDF。它不会复制 TeX，不会修改主稿，也不会编译 PDF。定性图来源不得按修改时间猜测，
 应在 `[[copy_assets.relay]]` 中显式固定。
 
-研究者从 `analysis/tex/tables/` 和 `analysis/tex/figures/` 手工复制、审阅所需片段到主稿。只有完成这步后，
-才进入 LaTeX 编译。
-
-### 阶段 8：latex，只编译当前主稿
-
-命令：
-
-```text
-pixi run eval latex
-```
-
-输入：`batch.toml` 的 `[paper].manuscript`，以及主稿引用的 bibliography、图和表。
-
-输出：`[paper].output_pdf`。当前配置为：
-
-```text
-2026-EgoAnchor/pdf/EgoAnchor.pdf
-```
-
-命令使用本机 `latexmk -xelatex`，通过 `jobname` 将版本化源稿编译为稳定 PDF 名。它不读取
-raw，不重新计算指标，不重画图片，也不改写主稿正文。
-
-你能控制的内容：主稿和 PDF 文件名在 `batch.toml` 中修改。切换到 v7 时改
-`manuscript = "egoanchor_cn_v7.tex"`；通常保留 `output_pdf = "pdf/EgoAnchor.pdf"`。
-
-成功判据：退出码为 0，命令返回的 `paper_pdf` 指向 `EgoAnchor.pdf`。LaTeX warning 可以单独
-评估；缺图、缺表、未定义命令或 XeLaTeX 非零退出会使命令失败。
+研究者从 `analysis/tex/tables/` 和 `analysis/tex/figures/` 手工复制、审阅所需片段到主稿。
+评估 CLI 到此结束；主稿编译继续使用论文工程已有的本机 LaTeX 工作流，不读取评估数据，也不重画图片。
 
 ## 六、组合命令怎么选
 
@@ -466,11 +431,7 @@ pixi run eval analyze
 
 ### 只改了普通 LaTeX 正文
 
-```text
-pixi run eval latex
-```
-
-不要为了编译正文运行 `analyze`；它不会回填主稿，数据分析和论文写作应保持分开。
+不要运行评估命令。直接在论文工程中使用既有的 LaTeX 编译方式；`analyze` 不会回填主稿。
 
 ### 新采集五个 session 的完整顺序
 
@@ -484,7 +445,7 @@ pixi run eval copy-assets
 ```
 
 `stage` 已经为暂存批次生成工作簿，提升后通常直接 `analyze`，不必再次 preprocess。检查本地
-`analysis/` 后再运行 `copy-assets`；TeX 仍需手工引入主稿，最后才运行 `latex`。
+`analysis/` 后再运行 `copy-assets`；TeX 仍需手工引入主稿，之后按论文工程既有方式编译。
 
 ## 七、哪些东西不能手工改
 
@@ -503,7 +464,7 @@ pixi run eval copy-assets
 | 退出码 | 含义                                        | 处理方式                         |
 | ------ | ------------------------------------------- | -------------------------------- |
 | `0`  | 命令成功                                    | 检查返回 JSON 中的路径和摘要     |
-| `1`  | 目录、固定文件、Git、latexmk 或文件系统错误 | 检查同步、路径、文件锁和工具安装 |
+| `1`  | 目录、固定文件、Git 或文件系统错误 | 检查同步、路径和文件锁 |
 | `2`  | 批次、schema、QC 或论文输入契约错误         | 修复数据或配置后整阶段重跑       |
 
 排错顺序：

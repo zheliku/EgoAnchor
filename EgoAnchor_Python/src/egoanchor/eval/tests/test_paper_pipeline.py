@@ -255,8 +255,8 @@ class PaperPipelineTests(unittest.TestCase):
         paired_lines = [line for line in figure.axes[0].lines if line.get_alpha() == 0.20]
         self.assertEqual(paired_lines, [])
 
-    def test_panel_titles_are_owned_by_latex(self) -> None:
-        """绘图代码不重复写入由 LaTeX subcaption 承担的小标题。"""
+    def test_panel_titles_are_owned_by_tex_fragment(self) -> None:
+        """绘图代码不重复写入由手工引入 TeX 子标题承担的小标题。"""
 
         values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
         figure = build_point_panel(
