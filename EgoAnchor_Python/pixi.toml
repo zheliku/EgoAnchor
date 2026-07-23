@@ -37,6 +37,7 @@ libblas = { version = "*", build = "*openblas" } # Windows 下强制 conda 数�
 eigen = ">=3.4.0,<4"
 ninja = ">=1.13.1,<2"
 psutil = ">=7.1.0,<8"
+tqdm = ">=4.67,<5" # 离线评估 CLI 的任务级进度条，输出到 stderr 而不干扰 JSON 结果。
 pybind11 = ">=3.0.1,<4"
 pythran = ">=0.18.1,<0.19" # Cython 构建 nvdiffrast 时会探测 pythran；只存在残缺 namespace 会触发 AttributeError: pythran.__version__。
 mypy = ">=1.18.2,<2"

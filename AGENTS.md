@@ -241,7 +241,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 同一分析批次不得包含重复 `session_id`，且固定 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。`analyze` 发布前重新执行完整 workbook-v2 验证，并按 task 1--5 核对完成 trial 的固定场景和上述共同身份；不能只信任文件名或矩阵标识。`stage` 接收 `data/eval` 下的目录名，目录可保留 task/v4 人工标签；批次身份只取 manifest 的不可改写 `session_id`，并继续核对跨端日志。重复 `stage` 会先完整重建，只有新批次成功后才替换同名暂存批次。没有目标实验完成任务的 session 可随同批次输入，但不参与该实验指标。Mutagen `logs-5090` 启用期间原始目录内容、内部固定文件名和 manifest `session_id` 均不得修改。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 人工分析只使用 `pixi run eval` 的固定路径工作流；旧任意路径 `qc`、`preprocess`、`build-paper` CLI 和 `batch_cli.py` 均已删除，不保留兼容层。
-- `stage`、`preprocess` 和 `rebuild` 的工作簿 `code_version` 始终自动读取当前 Git commit，不提供人工覆盖入口；论文分析的 temporal provenance 使用 `temporal_strategy_comparison`，不再写单一 Linear/SLERP 策略。
+- `stage`、`preprocess` 和 `rebuild` 的工作簿 `code_version` 始终自动读取当前 Git commit，不提供人工覆盖入口；论文分析的 temporal provenance 使用 `temporal_strategy_comparison`，不再写单一 Linear/SLERP 策略。耗时 CLI 阶段使用 `tqdm` 在 stderr 显示任务进度和阶段提示，最终 JSON 始终只写 stdout。
 - `preprocess` 将每个 task 原子发布为完整 XLSX；`analyze` 只从五本 Stage 1 XLSX 计算指标，并发布固定 TeX 到 `2026-EgoAnchor/tables/`、七个独立 PDF/PNG 面板到 `2026-EgoAnchor/figures/panels/`，同时回填 `batch.toml` 指定的主稿。主稿源文件和最终 PDF 路径从 `batch.toml` 读取，当前分别为 `egoanchor_cn_v6.tex` 和 `pdf/EgoAnchor.pdf`。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。

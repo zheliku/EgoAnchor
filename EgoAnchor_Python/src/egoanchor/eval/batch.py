@@ -6,10 +6,13 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Sequence
+
+from tqdm import tqdm
 
 from ._filesystem import create_inherited_temp_directory, remove_tree_with_retry
 from .preprocess import (
@@ -357,6 +360,7 @@ def stage_batch(
     if len(set(session_directories)) != len(session_directories):
         raise ValueError("五项任务必须来自五个不同 session")
 
+    _report_progress("stage: 检查五个原始 session")
     unordered_dirs = _eval_session_dirs(paths.eval_root, session_directories)
     source_dirs, summaries = _map_eval_sessions(unordered_dirs)
     _finalize_and_require_qc(source_dirs)
@@ -366,11 +370,14 @@ def stage_batch(
     destination = paths.staging_root / resolved_batch_id
     temporary = create_inherited_temp_directory(paths.staging_root, f".{resolved_batch_id}.tmp-")
     try:
+        _report_progress("stage: 复制五项原始日志到暂存批次")
         staged_dirs = _copy_task_sources(source_dirs, temporary / "raw")
         copied_summaries = _validate_task_directories(staged_dirs)
         if copied_summaries != summaries:
             raise ValueError("复制后的 manifest 批次身份与 eval 源不一致")
+        _report_progress("stage: 复核暂存 raw")
         _finalize_and_require_qc(staged_dirs)
+        _report_progress("stage: 发布五本 Stage 1 工作簿")
         artifacts = _write_workbooks(
             staged_dirs,
             temporary / "workbooks",
@@ -381,6 +388,7 @@ def stage_batch(
         remove_tree_with_retry(temporary)
         raise
 
+    _report_progress(f"stage: 暂存批次已就绪：{resolved_batch_id}")
     return BatchArtifact(
         batch_id=resolved_batch_id,
         root=destination,
@@ -416,6 +424,7 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     staged = paths.staging_root / resolved_batch_id
     if not staged.is_dir():
         raise FileNotFoundError(f"找不到暂存批次：{staged}")
+    _report_progress("promote: 复核暂存 raw 与五本工作簿")
     _validate_complete_batch(staged)
 
     active = paths.active_root
@@ -430,15 +439,18 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
         if archived.exists():
             raise FileExistsError(f"旧批次冷归档已存在，拒绝覆盖：{archived}")
         archive_parent.mkdir(parents=True, exist_ok=True)
+        _report_progress(f"promote: 归档旧活动批次到 {archived.name}")
         active.rename(archived)
 
     try:
+        _report_progress("promote: 切换新的活动批次")
         staged.rename(active)
     except Exception:
         if archived is not None and archived.exists() and not active.exists():
             archived.rename(active)
         raise
 
+    _report_progress("promote: 活动批次已切换")
     return {
         "passed": True,
         "active_batch": resolved_batch_id,
@@ -455,6 +467,7 @@ def rebuild_current(
 ) -> dict[str, Any]:
     """从当前 raw 重新生成五本工作簿、论文分析产物和最终 PDF。"""
 
+    _report_progress("rebuild: 从当前 raw 重建工作簿、分析和论文")
     paths = load_batch_paths(root)
     preprocess_result = preprocess_current(root=paths.project_root)
     result = analyze_current(root=paths.project_root, compile_pdf=compile_pdf)
@@ -465,6 +478,7 @@ def rebuild_current(
 def qc_current(*, root: Path | None = None) -> dict[str, Any]:
     """对当前活动批次的五个 raw task 执行完整硬 QC。"""
 
+    _report_progress("qc: 检查当前活动批次")
     paths = load_batch_paths(root)
     task_dirs = _task_dirs(paths.active_root / "raw")
     summaries = _validate_task_directories(task_dirs)
@@ -483,6 +497,7 @@ def preprocess_current(
 ) -> dict[str, Any]:
     """把当前活动批次的 raw JSON/JSONL 发布为五本完整工作簿。"""
 
+    _report_progress("preprocess: 检查当前 raw 并重建五本工作簿")
     paths = load_batch_paths(root)
     task_dirs = _task_dirs(paths.active_root / "raw")
     _validate_task_directories(task_dirs)
@@ -508,12 +523,20 @@ def analyze_current(*, root: Path | None = None, compile_pdf: bool = True) -> di
     paths = load_batch_paths(root)
     active = paths.active_root
     workbooks = tuple(active / "workbooks" / f"task_{number}_complete.xlsx" for number in range(1, 6))
-    payload = build_paper(
-        workbooks,
-        active / "analysis",
-        paths.paper_root,
-        paths.manuscript_path,
-    )
+    with _stage_progress("analyze", 4, "stage") as progress:
+        def update_analysis_progress(message: str) -> None:
+            """更新论文分析的当前阶段。"""
+
+            progress.set_postfix_str(message)
+            progress.update()
+
+        payload = build_paper(
+            workbooks,
+            active / "analysis",
+            paths.paper_root,
+            paths.manuscript_path,
+            progress=update_analysis_progress,
+        )
     pdf_path: Path | None = None
     if compile_pdf:
         pdf_path = _compile_paper(paths)
@@ -527,6 +550,7 @@ def analyze_current(*, root: Path | None = None, compile_pdf: bool = True) -> di
 def compile_current_paper(*, root: Path | None = None) -> dict[str, Any]:
     """只使用 XeLaTeX 编译当前中文主稿，不重新运行数据分析。"""
 
+    _report_progress("latex: 编译当前中文主稿")
     paths = load_batch_paths(root)
     pdf_path = _compile_paper(paths)
     return {"passed": True, "paper_pdf": str(pdf_path)}
@@ -734,10 +758,19 @@ def _finalize_and_run_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, .
     """物化事件总表并返回逐 task 完整硬 QC 报告。"""
 
     require_task_sources(tuple(task_dirs), TASK_SOURCE_FILE_NAMES)
-    for task_dir in task_dirs:
-        finalize_task_events(task_dir)
+    with _task_progress("events", task_dirs) as progress:
+        for spec, task_dir in zip(TASK_SPECS, task_dirs, strict=True):
+            progress.set_postfix_str(f"Task {spec.number}")
+            finalize_task_events(task_dir)
+            progress.update()
     require_task_sources(tuple(task_dirs), REQUIRED_FILE_NAMES)
-    return tuple(run_task_qc(task_dir) for task_dir in task_dirs)
+    reports: list[StageOneQcReport] = []
+    with _task_progress("QC", task_dirs) as progress:
+        for spec, task_dir in zip(TASK_SPECS, task_dirs, strict=True):
+            progress.set_postfix_str(f"Task {spec.number}")
+            reports.append(run_task_qc(task_dir))
+            progress.update()
+    return tuple(reports)
 
 
 def _finalize_and_require_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, ...]:
@@ -759,17 +792,20 @@ def _copy_task_sources(source_dirs: Sequence[Path], raw_root: Path) -> tuple[Pat
 
     raw_root.mkdir(parents=True, exist_ok=True)
     destinations: list[Path] = []
-    for source, spec in zip(source_dirs, TASK_SPECS, strict=True):
-        destination = raw_root / spec.directory_name
-        source_digest = source_set_sha256(collect_source_files(source))
-        shutil.copytree(source, destination, ignore=_ignore_empty_audit_samples)
-        source_digest_after_copy = source_set_sha256(collect_source_files(source))
-        copied_digest = source_set_sha256(collect_source_files(destination))
-        if source_digest_after_copy != source_digest:
-            raise OSError(f"task {spec.number} 在复制期间仍被写入，拒绝暂存半同步数据")
-        if copied_digest != source_digest:
-            raise OSError(f"task {spec.number} 复制后来源 SHA-256 不一致")
-        destinations.append(destination)
+    with _task_progress("copy", source_dirs) as progress:
+        for source, spec in zip(source_dirs, TASK_SPECS, strict=True):
+            progress.set_postfix_str(f"Task {spec.number}")
+            destination = raw_root / spec.directory_name
+            source_digest = source_set_sha256(collect_source_files(source))
+            shutil.copytree(source, destination, ignore=_ignore_empty_audit_samples)
+            source_digest_after_copy = source_set_sha256(collect_source_files(source))
+            copied_digest = source_set_sha256(collect_source_files(destination))
+            if source_digest_after_copy != source_digest:
+                raise OSError(f"task {spec.number} 在复制期间仍被写入，拒绝暂存半同步数据")
+            if copied_digest != source_digest:
+                raise OSError(f"task {spec.number} 复制后来源 SHA-256 不一致")
+            destinations.append(destination)
+            progress.update()
     return tuple(destinations)
 
 
@@ -795,19 +831,26 @@ def _write_workbooks(
     """按任务 1--5 发布完整工作簿，并独立回读确认。"""
 
     output_root.mkdir(parents=True, exist_ok=True)
-    artifacts = tuple(
-        write_task_workbook(
-            task_dir,
-            output_root / f"task_{spec.number}_complete.xlsx",
-            code_version=code_version,
-        )
-        for task_dir, spec in zip(task_dirs, TASK_SPECS, strict=True)
-    )
-    for artifact in artifacts:
-        verification = verify_task_workbook(artifact.path)
-        if not verification.passed:
-            raise ValueError(f"Stage 1 工作簿回读失败：{artifact.path}")
-    return artifacts
+    artifacts: list[WorkbookArtifact] = []
+    with _task_progress("XLSX write", task_dirs) as progress:
+        for task_dir, spec in zip(task_dirs, TASK_SPECS, strict=True):
+            progress.set_postfix_str(f"Task {spec.number}")
+            artifacts.append(
+                write_task_workbook(
+                    task_dir,
+                    output_root / f"task_{spec.number}_complete.xlsx",
+                    code_version=code_version,
+                )
+            )
+            progress.update()
+    with _task_progress("XLSX verify", task_dirs) as progress:
+        for artifact, spec in zip(artifacts, TASK_SPECS, strict=True):
+            progress.set_postfix_str(f"Task {spec.number}")
+            verification = verify_task_workbook(artifact.path)
+            if not verification.passed:
+                raise ValueError(f"Stage 1 工作簿回读失败：{artifact.path}")
+            progress.update()
+    return tuple(artifacts)
 
 
 def _batch_id(summaries: Sequence[SessionSummary]) -> str:
@@ -850,16 +893,45 @@ def _validate_complete_batch(batch_root: Path) -> None:
     _validate_task_directories(task_dirs)
     _finalize_and_require_qc(task_dirs)
     workbook_root = batch_root / "workbooks"
-    for number in range(1, 6):
-        workbook = workbook_root / f"task_{number}_complete.xlsx"
-        if not workbook.is_file():
-            raise FileNotFoundError(workbook)
-        verification = verify_task_workbook(workbook)
-        if not verification.passed:
-            raise ValueError(f"Stage 1 工作簿回读失败：{workbook}")
-        raw_digest = source_set_sha256(collect_source_files(task_dirs[number - 1]))
-        if verification.source_set_sha256 != raw_digest:
-            raise ValueError(f"task {number} 的 raw 与 Stage 1 工作簿来源摘要不一致")
+    with _task_progress("batch verify", task_dirs) as progress:
+        for number, task_dir in enumerate(task_dirs, start=1):
+            progress.set_postfix_str(f"Task {number}")
+            workbook = workbook_root / f"task_{number}_complete.xlsx"
+            if not workbook.is_file():
+                raise FileNotFoundError(workbook)
+            verification = verify_task_workbook(workbook)
+            if not verification.passed:
+                raise ValueError(f"Stage 1 工作簿回读失败：{workbook}")
+            raw_digest = source_set_sha256(collect_source_files(task_dir))
+            if verification.source_set_sha256 != raw_digest:
+                raise ValueError(f"task {number} 的 raw 与 Stage 1 工作簿来源摘要不一致")
+            progress.update()
+
+
+def _report_progress(message: str) -> None:
+    """向终端 stderr 写入不会干扰 JSON 输出的阶段提示。"""
+
+    if sys.stderr.isatty():
+        tqdm.write(f"[eval] {message}", file=sys.stderr)
+
+
+def _task_progress(description: str, task_dirs: Sequence[Path]) -> tqdm:
+    """创建五项物理任务的交互式进度条。"""
+
+    return _stage_progress(description, len(task_dirs), "task")
+
+
+def _stage_progress(description: str, total: int, unit: str) -> tqdm:
+    """创建仅在交互终端显示的 stderr 进度条。"""
+
+    return tqdm(
+        total=total,
+        desc=f"[eval] {description}",
+        unit=unit,
+        dynamic_ncols=True,
+        file=sys.stderr,
+        disable=not sys.stderr.isatty(),
+    )
 
 
 def _git_code_version(base: Path) -> str:

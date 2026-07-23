@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -120,13 +121,18 @@ def build_paper(
     output_root: Path,
     paper_root: Path,
     manuscript_path: Path,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """只读取五本 Stage 1 XLSX，发布图、表和中文主稿。"""
 
+    _report_progress(progress, "验证五本 XLSX")
     normalized = _validate_inputs(workbooks, output_root)
     settings = load_settings()
+    _report_progress(progress, "计算实验指标")
     results = analyze_workbooks(normalized, settings)
+    _report_progress(progress, "生成论文图表")
     figure_paths = publish_figures(results, paper_root.expanduser().resolve())
+    _report_progress(progress, "写入指标、表格和主稿")
     paper_paths = write_paper(
         results,
         paper_root.expanduser().resolve(),
@@ -149,6 +155,13 @@ def build_paper(
         encoding="utf-8",
     )
     return payload
+
+
+def _report_progress(progress: Callable[[str], None] | None, message: str) -> None:
+    """在调用方提供进度回调时报告论文构建阶段。"""
+
+    if progress is not None:
+        progress(message)
 
 
 __all__ = ["build_paper"]

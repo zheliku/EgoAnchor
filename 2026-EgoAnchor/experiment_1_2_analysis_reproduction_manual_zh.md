@@ -243,6 +243,9 @@ staging_root/batch_YYYYMMDD_HHMMSS_<config-hash>/
 `promote` 命令。重复执行同一批目录时，程序会完整重建；新批次通过后替换同名暂存批次，
 失败时保留旧暂存批次和当前活动批次。修正原 session 后重新运行整条 `stage`。
 
+`stage`、`promote`、`preprocess` 和 `analyze` 的耗时阶段会在终端显示任务进度条和当前步骤。
+进度走 stderr，最终 JSON 结果仍走 stdout。
+
 ### 阶段 3：promote，切换当前论文批次
 
 暂存区只有一个批次时：
