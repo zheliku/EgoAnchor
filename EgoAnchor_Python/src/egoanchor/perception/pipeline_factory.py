@@ -210,12 +210,14 @@ def build_quest_pose_pipeline(cfg: SimpleNamespace) -> QuestPosePipeline:
         project_root=python_root,
     )
 
+    process_width = int(calib_cfg.process_width)
+    process_height = int(calib_cfg.process_height)
+    depth_estimator.warm_up(process_height, process_width)
+
     symmetry_tfs = _build_symmetry_tfs(fp_cfg)
     mesh_path = _resolve_path(str(fp_cfg.mesh_path), python_root)
     debug_dir = _resolve_path(str(fp_cfg.debug_dir), python_root)
 
-    process_width = int(calib_cfg.process_width)
-    process_height = int(calib_cfg.process_height)
     bootstrap_k = np.array(
         [
             [float(max(process_width, 1)), 0.0, float(max(process_width, 1)) * 0.5],

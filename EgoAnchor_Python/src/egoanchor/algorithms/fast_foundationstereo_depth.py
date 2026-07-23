@@ -431,6 +431,26 @@ class FastFoundationStereoDepth:
             return self._trt_backend.predict_disparity(left_t, right_t)
         return self._pt_backend.predict_disparity(left_t, right_t)
 
+    def warm_up(self, input_height: int, input_width: int) -> None:
+        """在服务器就绪前完成固定输入尺寸的 FFS 首次推理。
+
+        TensorRT engine 的选择依赖实际输入尺寸，不能在构造器中猜测。正式 pipeline
+        的处理尺寸在启动时已冻结，因此这里使用同尺寸的中性立体图执行一次完整前向，
+        提前完成 engine 加载、CUDA 上下文初始化及首轮 kernel 初始化。该结果会被丢弃，
+        不接触 Quest 标定、跟踪状态或任何用户图像。
+        """
+
+        height = int(input_height)
+        width = int(input_width)
+        if height <= 0 or width <= 0:
+            raise ValueError(f"FFS 预热输入尺寸必须为正数，实际为 {height}x{width}。")
+
+        neutral_stereo = np.full((height, width, 3), 127, dtype=np.uint8)
+        started_at = time.perf_counter()
+        self.predict_depth(neutral_stereo, neutral_stereo, fx=1.0, baseline=1.0)
+        warm_up_ms = (time.perf_counter() - started_at) * 1000.0
+        LOGGER.info("FFS warm-up complete: backend=%s size=%dx%d elapsed_ms=%.1f", self.runtime_backend, width, height, warm_up_ms)
+
     def predict_depth(self, left_image: np.ndarray, right_image: np.ndarray, fx: float, baseline: float) -> np.ndarray:
         """预测米制深度图，输出 shape 与输入左图一致。"""
 
@@ -457,4 +477,3 @@ class FastFoundationStereoDepth:
         depth_meter[~np.isfinite(depth_meter)] = 0.0
         LOGGER.debug("backend=%s forward_ms=%.1f", self.runtime_backend, forward_ms)
         return depth_meter.astype(np.float32)
-

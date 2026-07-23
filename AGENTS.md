@@ -175,6 +175,7 @@ schema-v2 task directory
 - Python candidate ID 使用 `session_id:frame_id:frame_local_seq`；`RuntimeLogWriter` 关闭时把 candidate/event 的真实 `rows_written`、`dropped_rows` 和 `log_write_failures` 写回 `python_session.json`，供最终 manifest 汇总，Unity 不得伪造 Python 丢行统计。
 - `egoanchor.eval` 包级入口只导出 schema-v2、QC 和 Stage 1 workbook 基础设施；论文分析必须从 `egoanchor.eval.paper_analysis` 或离线 CLI 显式进入，运行时服务不得因论文绘图依赖加载失败。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`，避免 Windows 图像 DLL 冲突。
+- FFS 必须在 server 启动阶段按固定 `pipeline.calibration.process_width/process_height` 完成一次中性立体图完整预热；TRT engine 的尺寸匹配、CUDA 上下文和首次前向不得推迟到 Unity 首帧，预热结果不得进入跟踪状态或日志候选。
 - Python OpenCV debug 窗口按 `S` 时从当前诊断数据重新生成并无损保存 pose 与 VCD 两张高分辨率 PNG，默认写入 `data/debug/snapshots/`，尺寸分别为 `2560x1280` 与 `1920x1240`；保存分辨率独立于实时窗口尺寸。VCD 的 render RGB 与 render projected depth 都只在渲染 mask 内显示数据，mask 外统一使用中性棋盘背景。
 - 生成代码、`*_pb2.py` 和协议副本不手改。
 
