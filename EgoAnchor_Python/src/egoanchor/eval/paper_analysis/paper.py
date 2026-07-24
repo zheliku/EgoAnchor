@@ -49,13 +49,21 @@ _STRATEGY_COMPARISON_METRICS = (
     ("correction", "rotation_step_p95_deg", "deg"),
 )
 
+# 表格短名称与图例保持一致，但留在发布层，避免显示文本使指标缓存失效。
+_METHOD_LABELS = {
+    "Arrival-Hold": "Arrival",
+    "Capture-Hold": "Capture",
+    "One-Euro Anchor": "One-Euro",
+    FULL_VARIANT: "EgoAnchor",
+}
 
-def _fmt(value: float, digits: int = 3) -> str:
-    """按论文表格习惯格式化有限数值。"""
+
+def _fmt(value: float) -> str:
+    """按论文表格精度固定格式化有限数值。"""
 
     if not np.isfinite(value):
         return "--"
-    return f"{value:.{digits}f}".rstrip("0").rstrip(".")
+    return f"{value:.2f}"
 
 
 def _summary(rows: tuple[Mapping[str, Any], ...], key: str) -> tuple[float, float, float]:
@@ -68,11 +76,11 @@ def _summary(rows: tuple[Mapping[str, Any], ...], key: str) -> tuple[float, floa
     return tuple(float(item) for item in np.quantile(values, (0.5, 0.25, 0.75)))  # type: ignore[return-value]
 
 
-def _cell(summary: tuple[float, float, float], digits: int = 3) -> str:
+def _cell(summary: tuple[float, float, float]) -> str:
     """写出 ``median [Q1, Q3]`` 读者表格单元格。"""
 
     median, q1, q3 = summary
-    return f"{_fmt(median, digits)} [{_fmt(q1, digits)}, {_fmt(q3, digits)}]"
+    return f"{_fmt(median)} [{_fmt(q1)}, {_fmt(q3)}]"
 
 
 def _bold_median(cell: str) -> str:
@@ -150,19 +158,19 @@ def build_exp1_table(results: PaperResults) -> str:
         residual = _fmt(_summary(translation, "aligned_rmse_mm")[0])
         rotation_lag, rotation_residual = _summary(rotation, "effective_lag_ms")[0], _summary(rotation, "aligned_rmse_deg")[0]
         occlusion_p95 = _cell(_summary(occlusion, "translation_p95_mm"))
-        start = _cell(_summary(transition, "response_ms"), 1)
+        start = _cell(_summary(transition, "response_ms"))
         if np.isclose(medians["centered"][method], best["centered"]):
             centered = _bold_median(centered)
         if np.isclose(medians["absolute"][method], best["absolute"]):
             absolute = _bold_median(absolute)
         if np.isclose(medians["increment"][method], best["increment"]):
             increment = _bold_median(increment)
-        lag_text = _fmt(lag, 1)
+        lag_text = _fmt(lag)
         if np.isclose(medians["translation_lag"][method], best["translation_lag"]):
             lag_text = _bold_value(lag_text)
         if np.isclose(medians["translation_rmse"][method], best["translation_rmse"]):
             residual = _bold_value(residual)
-        rotation_lag_text = _fmt(rotation_lag, 1)
+        rotation_lag_text = _fmt(rotation_lag)
         if np.isclose(medians["rotation_lag"][method], best["rotation_lag"]):
             rotation_lag_text = _bold_value(rotation_lag_text)
         rotation_residual_text = _fmt(rotation_residual)
@@ -173,7 +181,7 @@ def build_exp1_table(results: PaperResults) -> str:
         if np.isclose(medians["start"][method], best["start"]):
             start = _bold_median(start)
         lines.append(
-            f"{method} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {start} " + r"\\"
+            f"{_METHOD_LABELS[method]} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {start} " + r"\\"
         )
     lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
     return "\n".join(lines)
@@ -271,7 +279,7 @@ def build_exp2_table(results: PaperResults) -> str:
         f"VCD 接纳 & 遮挡期平移误差 P95 & {_cell(_summary(vcd_full, 'translation_p95_mm'))}~mm & {_cell(_summary(vcd_disabled, 'translation_p95_mm'))}~mm & 对照$-$参照 {vcd_delta}~mm；{vcd_higher}/{len(vcd_deltas)} 个 episode 对照更高 \\\\",
         f"时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Smoothed KF {_fmt(extrapolation_translation)}~mm / {_fmt(extrapolation_rotation)}$^\\circ$ & Extrapolation--Linear: {_fmt(extrapolation_translation_delta)}~mm / {_fmt(extrapolation_rotation_delta)}$^\\circ$；{int(extrapolation_translation_higher)}/{len(results.translation_segments[LINEAR_SLERP_VARIANT])}、{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[LINEAR_SLERP_VARIANT])} 个片段外推较高 \\\\",
         f"Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Hermite {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & 与 Linear/SLERP 对照见图~3(d) \\\\",
-        f"停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP {_fmt(linear_overshoot)}~mm / {_fmt(linear_settling, 1)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling, 1)}~ms & Extrapolation--Linear: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta, 1)}~ms \\\\",
+        f"停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP {_fmt(linear_overshoot)}~mm / {_fmt(linear_settling)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling)}~ms & Extrapolation--Linear: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta)}~ms \\\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",

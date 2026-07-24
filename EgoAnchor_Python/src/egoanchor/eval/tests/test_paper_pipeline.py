@@ -64,7 +64,7 @@ class PaperPipelineTests(unittest.TestCase):
         )
 
     def test_main_tables_publish_occlusion_translation_p95(self) -> None:
-        """两张主表使用连续遮挡误差，阈值次数只留在审计产物。"""
+        """两张主表使用两位小数的连续遮挡误差，阈值次数只留在审计产物。"""
 
         def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
             """构造两个身份完整且可严格配对的片段。"""
@@ -136,7 +136,14 @@ class PaperPipelineTests(unittest.TestCase):
 
         self.assertIn("遮挡期平移误差 P95", experiment_one)
         self.assertIn(r"\begin{tabular}{lccccccc}", experiment_one)
+        self.assertIn("Capture & 2.50 [2.25, 2.75]", experiment_one)
+        for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
+            self.assertIn(f"{label} &", experiment_one)
+        self.assertNotIn("Arrival-Hold &", experiment_one)
+        self.assertNotIn("Capture-Hold &", experiment_one)
+        self.assertNotIn("One-Euro Anchor &", experiment_one)
         self.assertIn("遮挡期平移误差 P95", experiment_two)
+        self.assertIn("7.50 [7.25, 7.75]", experiment_two)
         self.assertIn("个 episode 对照更高", experiment_two)
         self.assertNotIn(">40", experiment_one + experiment_two)
         self.assertNotIn("灾难性失效", experiment_one + experiment_two)

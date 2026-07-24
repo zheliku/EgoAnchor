@@ -9,13 +9,13 @@
 \toprule
 比较 & 直接指标 & 参照 & 对照 & 配对差 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & 15.377 [13.436, 19.131]~mm & 43.753 [38.144, 55.599]~mm & +26.265 [22.918, 34.859]~mm; 12/12 改善 \\
-StaticLock & 中心化静止 P95 & 0.818~mm & 13.732~mm & +12.876~mm；12/12 片段变差 \\
-VCD score & event AURC（越低越好） & 4.795 [4.205, 5.134]~mm & 全覆盖风险 7.25 [5.151, 7.95]~mm & 相对全覆盖收益 2.277 [0.655, 3.228]~mm \\
-VCD 接纳 & 遮挡期平移误差 P95 & 4.854 [4.542, 13.668]~mm & 9.441 [4.612, 20.709]~mm & 对照$-$参照 0 [0, 3.405]~mm；5/12 个 episode 对照更高 \\
-时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Smoothed KF 49.51~mm / 12.211$^\circ$ & Extrapolation--Linear: 38.331~mm / 7.726$^\circ$；12/12、12/12 个片段外推较高 \\
-Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Hermite 12.04~mm / 4.767$^\circ$ & 与 Linear/SLERP 对照见图~3(d) \\
-停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP 0.723~mm / 2332.4~ms & Smoothed KF 0.984~mm / 2364.6~ms & Extrapolation--Linear: 0.298~mm / 21.3~ms \\
+采集时刻对齐 & 同一候选的复合 P95 & 15.38 [13.44, 19.13]~mm & 43.75 [38.14, 55.60]~mm & +26.27 [22.92, 34.86]~mm; 12/12 改善 \\
+StaticLock & 中心化静止 P95 & 0.82~mm & 13.73~mm & +12.88~mm；12/12 片段变差 \\
+VCD score & event AURC（越低越好） & 4.79 [4.20, 5.13]~mm & 全覆盖风险 7.25 [5.15, 7.95]~mm & 相对全覆盖收益 2.28 [0.65, 3.23]~mm \\
+VCD 接纳 & 遮挡期平移误差 P95 & 4.85 [4.54, 13.67]~mm & 9.44 [4.61, 20.71]~mm & 对照$-$参照 0.00 [0.00, 3.41]~mm；5/12 个 episode 对照更高 \\
+时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.95~mm / 4.70$^\circ$ & Smoothed KF 49.51~mm / 12.21$^\circ$ & Extrapolation--Linear: 38.33~mm / 7.73$^\circ$；12/12、12/12 个片段外推较高 \\
+Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.95~mm / 4.70$^\circ$ & Hermite 12.04~mm / 4.77$^\circ$ & 与 Linear/SLERP 对照见图~3(d) \\
+停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP 0.72~mm / 2332.40~ms & Smoothed KF 0.98~mm / 2364.60~ms & Extrapolation--Linear: 0.30~mm / 21.31~ms \\
 \bottomrule
 \end{tabular}%
 }
