@@ -25,7 +25,7 @@ header_padding_px = 10 # 顶部标题区域在字号之外增加的高度，单�
 row_label_line_spacing_px = 4 # 多行行标题的行间距，单位像素。
 
 [timeline]
-mode = "frame-sequence" # 时间轴模式，可选 none、relative-time 或 frame-sequence；后者显示可用于 --start-sample-id 的保存帧序号。
+mode = "relative-time" # 时间轴模式，可选 none、relative-time 或 frame-sequence；后者显示可用于 --start-sample-id 的保存帧序号。
 placement = "top" # 时间轴位置，可选 top 或 bottom；默认放在第一行图像上方。
 font_size_px = 40 # 时间刻度和横轴标题字号，单位像素。
 color_hex = "#202020" # 时间轴主线、刻度、箭头和文字颜色。
@@ -36,9 +36,9 @@ right_extension_px = 20 # 横轴箭头在最后一列图像右侧额外伸出的
 
 [crop]
 mode = "auto" # 裁剪模式，可选 auto 或 fixed。
-padding = 0.35 # 自动裁剪相对参考轮廓的额外留白比例。
+padding = 0 # 自动裁剪相对参考轮廓的额外留白比例。
 fixed_xywh = [] # 固定裁剪框 [x, y, width, height]；auto 模式必须留空。
-aspect_ratio = 1.3333333333 # 自动裁剪和图像单元的宽高比，默认 4:3。
+aspect_ratio = 1.5 # 自动裁剪和图像单元的宽高比，默认 4:3。
 
 [overlay]
 model_alpha = 0.6 # 四种方法纹理模型的填充不透明度，范围 0--1。
