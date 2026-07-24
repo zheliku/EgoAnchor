@@ -15,13 +15,11 @@ from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from .figures import summarize_risk_coverage
 from .metrics import (
-    HERMITE_INTERPOLATION_VARIANT,
     LINEAR_SLERP_VARIANT,
     SMOOTHED_EXTRAPOLATION_VARIANT,
     FULL_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
-    NO_VCD,
     PaperResults,
     TEMPORAL_STRATEGY_VARIANTS,
     paired_metric_matrix,
@@ -34,10 +32,14 @@ from .settings import DEFAULT_SETTINGS_PATH, settings_sha256
 _STRATEGY_COMPARISON_METRICS = (
     ("static", "centered_p95_mm", "mm"),
     ("static", "frame_increment_p95_mm", "mm"),
+    ("static", "centered_rotation_p95_deg", "deg"),
+    ("static", "frame_rotation_increment_p95_deg", "deg"),
     ("translation", "effective_lag_ms", "ms"),
     ("translation", "aligned_rmse_mm", "mm"),
+    ("translation", "aligned_residual_increment_p95_mm", "mm"),
     ("rotation", "effective_lag_ms", "ms"),
     ("rotation", "aligned_rmse_deg", "deg"),
+    ("rotation", "aligned_residual_increment_p95_deg", "deg"),
     ("occlusion", "translation_p95_mm", "mm"),
     ("occlusion", "translation_max_mm", "mm"),
     ("occlusion", "catastrophic_gt40", "episode"),
@@ -90,12 +92,6 @@ def _bold_median(cell: str) -> str:
     return rf"\textbf{{{median}}} {interval}"
 
 
-def _bold_value(value: str) -> str:
-    """加粗不带区间的标量表格值。"""
-
-    return rf"\textbf{{{value}}}"
-
-
 def _sample_label(
     rows: Mapping[str, tuple[Mapping[str, Any], ...]],
     key: str,
@@ -112,180 +108,200 @@ def _sample_label(
     return f"n={min(counts)}--{max(counts)}"
 
 
-def build_exp1_table(results: PaperResults) -> str:
-    """生成实验一以连续误差为主的七指标表。"""
+def _best_cells(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    key: str,
+) -> Mapping[str, str]:
+    """生成四方法汇总单元格，并加粗最优中位数。"""
 
+    summaries = {method: _summary(rows[method], key) for method in METHODS}
+    best = min(summary[0] for summary in summaries.values())
+    return {
+        method: (
+            _bold_median(_cell(summary))
+            if np.isclose(summary[0], best)
+            else _cell(summary)
+        )
+        for method, summary in summaries.items()
+    }
+
+
+def build_exp1_static_table(results: PaperResults) -> str:
+    """生成实验一静止、世界一致性与遮挡稳健性表。"""
+
+    metrics = (
+        (results.static_segments, "centered_p95_mm"),
+        (results.static_segments, "absolute_p95_mm"),
+        (results.static_segments, "frame_increment_p95_mm"),
+        (results.occlusion_episodes, "translation_p95_mm"),
+    )
+    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}",
-        r"\label{tab:exp1-final}",
+        r"\caption{实验一的静止与遮挡稳定性。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
+        r"\label{tab:exp1-static}",
         r"\small",
-        r"\setlength{\tabcolsep}{2.4pt}",
-        r"\renewcommand{\arraystretch}{1.18}",
-        r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{lccccccc}",
+        r"\setlength{\tabcolsep}{4.0pt}",
+        r"\renewcommand{\arraystretch}{1.14}",
+        r"\begin{tabular}{lcccc}",
         r"\toprule",
-        "& \\multicolumn{2}{c}{世界一致性} & 静止稳定性 & \\multicolumn{2}{c}{动态保真度} & 遮挡稳健性 & 转换代价 \\\\",
-        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-7}\cmidrule(lr){8-8}",
-        "方法 & 头动泄漏 P95 $\\downarrow$ & 绝对注册 P95 $\\downarrow$ & 帧间增量 P95 $\\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡期平移误差 P95 $\\downarrow$ & Start-transition $\\downarrow$ \\\\",
-        "& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (ms) \\\\",
-        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ \\\\",
+        r"& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 \\",
+        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}",
+        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ \\",
+        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ " + r"\\",
         r"\midrule",
     ]
-    medians: dict[str, dict[str, float]] = {
-        "centered": {method: _summary(results.static_segments[method], "centered_p95_mm")[0] for method in METHODS},
-        "absolute": {method: _summary(results.static_segments[method], "absolute_p95_mm")[0] for method in METHODS},
-        "increment": {method: _summary(results.static_segments[method], "frame_increment_p95_mm")[0] for method in METHODS},
-        "translation_lag": {method: _summary(results.translation_segments[method], "effective_lag_ms")[0] for method in METHODS},
-        "translation_rmse": {method: _summary(results.translation_segments[method], "aligned_rmse_mm")[0] for method in METHODS},
-        "rotation_lag": {method: _summary(results.rotation_segments[method], "effective_lag_ms")[0] for method in METHODS},
-        "rotation_rmse": {method: _summary(results.rotation_segments[method], "aligned_rmse_deg")[0] for method in METHODS},
-        "occlusion": {method: _summary(results.occlusion_episodes[method], "translation_p95_mm")[0] for method in METHODS},
-        "start": {method: _summary(results.transition_segments[method], "response_ms")[0] for method in METHODS},
-    }
-    best: dict[str, float] = {key: min(values.values()) for key, values in medians.items()}
     for method in METHODS:
-        static = results.static_segments[method]
-        translation = results.translation_segments[method]
-        rotation = results.rotation_segments[method]
-        occlusion = results.occlusion_episodes[method]
-        transition = results.transition_segments[method]
-        centered = _cell(_summary(static, "centered_p95_mm"))
-        absolute = _cell(_summary(static, "absolute_p95_mm"))
-        increment = _cell(_summary(static, "frame_increment_p95_mm"))
-        lag = _summary(translation, "effective_lag_ms")[0]
-        residual = _fmt(_summary(translation, "aligned_rmse_mm")[0])
-        rotation_lag, rotation_residual = _summary(rotation, "effective_lag_ms")[0], _summary(rotation, "aligned_rmse_deg")[0]
-        occlusion_p95 = _cell(_summary(occlusion, "translation_p95_mm"))
-        start = _cell(_summary(transition, "response_ms"))
-        if np.isclose(medians["centered"][method], best["centered"]):
-            centered = _bold_median(centered)
-        if np.isclose(medians["absolute"][method], best["absolute"]):
-            absolute = _bold_median(absolute)
-        if np.isclose(medians["increment"][method], best["increment"]):
-            increment = _bold_median(increment)
-        lag_text = _fmt(lag)
-        if np.isclose(medians["translation_lag"][method], best["translation_lag"]):
-            lag_text = _bold_value(lag_text)
-        if np.isclose(medians["translation_rmse"][method], best["translation_rmse"]):
-            residual = _bold_value(residual)
-        rotation_lag_text = _fmt(rotation_lag)
-        if np.isclose(medians["rotation_lag"][method], best["rotation_lag"]):
-            rotation_lag_text = _bold_value(rotation_lag_text)
-        rotation_residual_text = _fmt(rotation_residual)
-        if np.isclose(medians["rotation_rmse"][method], best["rotation_rmse"]):
-            rotation_residual_text = _bold_value(rotation_residual_text)
-        if np.isclose(medians["occlusion"][method], best["occlusion"]):
-            occlusion_p95 = _bold_median(occlusion_p95)
-        if np.isclose(medians["start"][method], best["start"]):
-            start = _bold_median(start)
         lines.append(
-            f"{_METHOD_LABELS[method]} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {start} " + r"\\"
+            f"{_METHOD_LABELS[method]} & {cells[0][method]} & {cells[1][method]} & {cells[2][method]} & {cells[3][method]} " + r"\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}"])
+    return "\n".join(lines) + "\n"
+
+
+def build_exp1_dynamic_table(results: PaperResults) -> str:
+    """生成实验一动态 6DoF 保真度与起动转换代价表。"""
+
+    metrics = (
+        (results.translation_segments, "effective_lag_ms"),
+        (results.translation_segments, "aligned_rmse_mm"),
+        (results.rotation_segments, "effective_lag_ms"),
+        (results.rotation_segments, "aligned_rmse_deg"),
+        (results.transition_segments, "response_ms"),
+    )
+    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
+    lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\caption{实验一的动态 6DoF 保真度。有效时延与 lag-aligned RMSE 必须成对解释；Start-transition 表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
+        r"\label{tab:exp1-dynamic}",
+        r"\small",
+        r"\setlength{\tabcolsep}{3.1pt}",
+        r"\renewcommand{\arraystretch}{1.14}",
+        r"\resizebox{\textwidth}{!}{%",
+        r"\begin{tabular}{lccccc}",
+        r"\toprule",
+        r"& \multicolumn{2}{c}{持续平移} & \multicolumn{2}{c}{持续旋转} & 转换代价 \\",
+        r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}",
+        r"方法 & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (deg) $\downarrow$ & Start-transition (ms) $\downarrow$ \\",
+        f"& ${_sample_label(results.translation_segments, 'effective_lag_ms')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'effective_lag_ms')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ " + r"\\",
+        r"\midrule",
+    ]
+    for method in METHODS:
+        lines.append(
+            f"{_METHOD_LABELS[method]} & {cells[0][method]} & {cells[1][method]} & {cells[2][method]} & {cells[3][method]} & {cells[4][method]} " + r"\\"
         )
     lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
-def _paired_summary(
+def _paired_values(
     rows: Mapping[str, tuple[Mapping[str, Any], ...]],
     alternative_variant: str,
     key: str,
     reference_variant: str = FULL_VARIANT,
-) -> tuple[float, float, float, float]:
-    """返回参考、替代和配对差值的中位数，以及替代值较大的片段数。"""
+) -> tuple[np.ndarray, np.ndarray]:
+    """返回按片段身份严格配对的参照值和对照值。"""
 
-    matrix = paired_metric_matrix(rows, (reference_variant, alternative_variant), (key,))[:, :, 0]
-    reference = matrix[:, 0]
-    alternative = matrix[:, 1]
-    deltas = alternative - reference
+    matrix = paired_metric_matrix(
+        rows,
+        (reference_variant, alternative_variant),
+        (key,),
+    )[:, :, 0]
+    return matrix[:, 0], matrix[:, 1]
+
+
+def _array_cell(values: np.ndarray) -> str:
+    """把有限数组写成 median [Q1, Q3] 单元格。"""
+
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        raise ValueError("论文表缺少有限配对指标")
+    median, q1, q3 = (float(item) for item in np.quantile(finite, (0.5, 0.25, 0.75)))
+    return _cell((median, q1, q3))
+
+
+def _effect_summary(reference: np.ndarray, alternative: np.ndarray) -> tuple[str, str]:
+    """按配对样本汇总对照/参照倍率及对照更差的一致性。"""
+
+    valid = np.isfinite(reference) & np.isfinite(alternative) & (reference > 0.0)
+    if not bool(valid.any()):
+        raise ValueError("论文表效应倍率缺少正的有限参照值")
+    reference = reference[valid]
+    alternative = alternative[valid]
+    ratios = alternative / reference
     return (
-        float(np.median(reference)),
-        float(np.median(alternative)),
-        float(np.median(deltas)),
-        float(np.sum(deltas > 0)),
+        f"{_array_cell(ratios)}$\\times$",
+        f"{int(np.sum(alternative > reference))}/{len(reference)}",
     )
 
 
-def build_exp2_table(results: PaperResults) -> str:
-    """生成实验二三项组件归因与配对时序策略表。"""
+def build_exp2_attribution_table(results: PaperResults) -> str:
+    """生成实验二四项设计归因与配对时序策略表。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
     arrival = np.asarray([float(row["arrival_p95_mm"]) for row in results.capture_alignment])
-    capture_text = f"{_fmt(float(np.median(capture)))} [{_fmt(float(np.quantile(capture, .25)))}, {_fmt(float(np.quantile(capture, .75)))}]"
-    arrival_text = f"{_fmt(float(np.median(arrival)))} [{_fmt(float(np.quantile(arrival, .25)))}, {_fmt(float(np.quantile(arrival, .75)))}]"
-    reduction = arrival - capture
-    capture_effect = f"+{_fmt(float(np.median(reduction)))} [{_fmt(float(np.quantile(reduction, .25)))}, {_fmt(float(np.quantile(reduction, .75)))}]~mm; {int(np.sum(reduction > 0))}/{len(reduction)} 改善"
-    full_static, disabled_static, static_delta, static_positive = _paired_summary(results.static_segments, NO_STATIC_LOCK, "centered_p95_mm")
-    linear_translation, extrapolation_translation, extrapolation_translation_delta, extrapolation_translation_higher = _paired_summary(
+    if capture.size == 0 or capture.size != arrival.size:
+        raise ValueError("采集时刻对齐表缺少完整配对片段")
+    capture_effect, capture_consistency = _effect_summary(capture, arrival)
+
+    full_static, disabled_static = _paired_values(
+        results.static_segments,
+        NO_STATIC_LOCK,
+        "centered_p95_mm",
+    )
+    static_effect, static_consistency = _effect_summary(full_static, disabled_static)
+
+    linear_translation, extrapolation_translation = _paired_values(
         results.translation_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "aligned_rmse_mm",
         LINEAR_SLERP_VARIANT,
     )
-    linear_rotation, extrapolation_rotation, extrapolation_rotation_delta, extrapolation_rotation_higher = _paired_summary(
+    linear_rotation, extrapolation_rotation = _paired_values(
         results.rotation_segments,
         SMOOTHED_EXTRAPOLATION_VARIANT,
         "aligned_rmse_deg",
         LINEAR_SLERP_VARIANT,
     )
-    linear_overshoot, extrapolation_overshoot, extrapolation_overshoot_delta, _ = _paired_summary(
-        results.stop_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "forward_overshoot_mm",
-        LINEAR_SLERP_VARIANT,
+    translation_effect, translation_consistency = _effect_summary(
+        linear_translation,
+        extrapolation_translation,
     )
-    linear_settling, extrapolation_settling, extrapolation_settling_delta, _ = _paired_summary(
-        results.stop_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "settling_time_ms",
-        LINEAR_SLERP_VARIANT,
+    rotation_effect, rotation_consistency = _effect_summary(
+        linear_rotation,
+        extrapolation_rotation,
     )
-    hermite_translation = _summary(results.translation_segments[HERMITE_INTERPOLATION_VARIANT], "aligned_rmse_mm")[0]
-    hermite_rotation = _summary(results.rotation_segments[HERMITE_INTERPOLATION_VARIANT], "aligned_rmse_deg")[0]
-    vcd_full = results.occlusion_episodes[FULL_VARIANT]
-    vcd_disabled = results.occlusion_episodes[NO_VCD]
-    vcd_aurc = _cell(_summary(results.vcd_aurc_segments, "aurc_mm"))
-    vcd_full_risk = _cell(_summary(results.vcd_aurc_segments, "full_coverage_risk_mm"))
-    vcd_risk_gain = _cell(_summary(results.vcd_aurc_segments, "risk_gain_mm"))
-    vcd_matrix = paired_metric_matrix(
-        results.occlusion_episodes,
-        (FULL_VARIANT, NO_VCD),
-        ("translation_p95_mm",),
-    )[:, :, 0]
-    vcd_deltas = vcd_matrix[:, 1] - vcd_matrix[:, 0]
-    vcd_delta_summary = (
-        float(np.median(vcd_deltas)),
-        float(np.quantile(vcd_deltas, 0.25)),
-        float(np.quantile(vcd_deltas, 0.75)),
+
+    vcd_aurc = np.asarray([float(row["aurc_mm"]) for row in results.vcd_aurc_segments])
+    vcd_full_risk = np.asarray(
+        [float(row["full_coverage_risk_mm"]) for row in results.vcd_aurc_segments]
     )
-    vcd_delta = _cell(vcd_delta_summary)
-    vcd_higher = int(np.sum(vcd_deltas > 0))
+    vcd_effect, vcd_consistency = _effect_summary(vcd_aurc, vcd_full_risk)
+
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD 接纳行报告冻结阈值下的遮挡期平移误差 P95 及逐 episode 配对差。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
+        r"\caption{实验二的设计归因。效应倍率先在同一片段或 event 内计算 Component off / on，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的 on/off 分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF。}",
         r"\label{tab:exp2-final}",
         r"\small",
-        r"\setlength{\tabcolsep}{4.8pt}",
+        r"\setlength{\tabcolsep}{3.0pt}",
         r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{lllll}",
+        r"\begin{tabular}{llllll}",
         r"\toprule",
-        "比较 & 直接指标 & 参照 & 对照 & 配对差 \\\\",
+        r"组件关闭 & 参照指标 & EgoAnchor (on) & Component off & 效应倍率 & 一致性 \\",
         r"\midrule",
-        f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
-        f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
-        f"VCD score & event AURC（越低越好） & {vcd_aurc}~mm & 全覆盖风险 {vcd_full_risk}~mm & 相对全覆盖收益 {vcd_risk_gain}~mm \\\\",
-        f"VCD 接纳 & 遮挡期平移误差 P95 & {_cell(_summary(vcd_full, 'translation_p95_mm'))}~mm & {_cell(_summary(vcd_disabled, 'translation_p95_mm'))}~mm & 对照$-$参照 {vcd_delta}~mm；{vcd_higher}/{len(vcd_deltas)} 个 episode 对照更高 \\\\",
-        f"时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Smoothed KF {_fmt(extrapolation_translation)}~mm / {_fmt(extrapolation_rotation)}$^\\circ$ & Extrapolation--Linear: {_fmt(extrapolation_translation_delta)}~mm / {_fmt(extrapolation_rotation_delta)}$^\\circ$；{int(extrapolation_translation_higher)}/{len(results.translation_segments[LINEAR_SLERP_VARIANT])}、{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[LINEAR_SLERP_VARIANT])} 个片段外推较高 \\\\",
-        f"Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Hermite {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & 与 Linear/SLERP 对照见图~3(d) \\\\",
-        f"停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP {_fmt(linear_overshoot)}~mm / {_fmt(linear_settling)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling)}~ms & Extrapolation--Linear: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta)}~ms \\\\",
+        f"采集时刻对齐 & 同候选复合 P95 & Capture time {_array_cell(capture)}~mm & Arrival time {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
+        f"StaticLock & 中心化静止 P95 & {_array_cell(full_static)}~mm & {_array_cell(disabled_static)}~mm & {static_effect} & {static_consistency} " + r"\\",
+        f"VCD 判别性 & event AURC & {_array_cell(vcd_aurc)}~mm & Full coverage {_array_cell(vcd_full_risk)}~mm & {vcd_effect} & {vcd_consistency} " + r"\\",
+        f"时序策略 & 平移 / 旋转 aligned RMSE & \\shortstack{{Linear/SLERP (StaticLock off)\\\\{_array_cell(linear_translation)}~mm / {_array_cell(linear_rotation)}$^\\circ$}} & \\shortstack{{Smoothed KF (StaticLock off)\\\\{_array_cell(extrapolation_translation)}~mm / {_array_cell(extrapolation_rotation)}$^\\circ$}} & \\shortstack{{T: {translation_effect}\\\\R: {rotation_effect}}} & \\shortstack{{T: {translation_consistency}\\\\R: {rotation_consistency}}} " + r"\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",
         r"\end{table*}",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def _write_strategy_candidate_data(
@@ -528,6 +544,7 @@ def _write_figure_source_data(
         variants: tuple[str, ...],
         x_key: str | None,
         y_key: str,
+        metric_role: str | None = None,
     ) -> None:
         """把一个面板的各配置片段追加到统一长表。"""
 
@@ -542,7 +559,7 @@ def _write_figure_source_data(
                     {
                         "figure": figure,
                         "panel": panel,
-                        "series": variant,
+                        "series": f"{variant}: {metric_role}" if metric_role else variant,
                         "variant_id": variant,
                         "session_id": identity[0],
                         "trial_id": identity[1],
@@ -558,29 +575,82 @@ def _write_figure_source_data(
     append_metric_rows(
         figure2_rows,
         figure="Figure 2",
-        panel="(a) Head-motion leakage",
+        panel="(a) Static translation",
         rows=results.static_segments,
         variants=METHODS,
         x_key=None,
         y_key="centered_p95_mm",
+        metric_role="Error (left axis)",
     )
     append_metric_rows(
         figure2_rows,
         figure="Figure 2",
-        panel="(b) Dynamic translation",
-        rows=results.translation_segments,
-        variants=METHODS,
-        x_key="effective_lag_ms",
-        y_key="aligned_rmse_mm",
-    )
-    append_metric_rows(
-        figure2_rows,
-        figure="Figure 2",
-        panel="(c) Occlusion robustness",
-        rows=results.occlusion_episodes,
+        panel="(a) Static translation",
+        rows=results.static_segments,
         variants=METHODS,
         x_key=None,
-        y_key="translation_p95_mm",
+        y_key="frame_increment_p95_mm",
+        metric_role="Jitter (right axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(b) Static rotation",
+        rows=results.static_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="centered_rotation_p95_deg",
+        metric_role="Error (left axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(b) Static rotation",
+        rows=results.static_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="frame_rotation_increment_p95_deg",
+        metric_role="Jitter (right axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(c) Dynamic translation",
+        rows=results.translation_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="aligned_rmse_mm",
+        metric_role="Error (left axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(c) Dynamic translation",
+        rows=results.translation_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="aligned_residual_increment_p95_mm",
+        metric_role="Jitter (right axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(d) Dynamic rotation",
+        rows=results.rotation_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="aligned_rmse_deg",
+        metric_role="Error (left axis)",
+    )
+    append_metric_rows(
+        figure2_rows,
+        figure="Figure 2",
+        panel="(d) Dynamic rotation",
+        rows=results.rotation_segments,
+        variants=METHODS,
+        x_key=None,
+        y_key="aligned_residual_increment_p95_deg",
+        metric_role="Jitter (right axis)",
     )
 
     figure3_rows: list[dict[str, Any]] = []
@@ -677,7 +747,7 @@ def _write_figure_source_data(
             {"项目": "用途", "说明": "图 2 和图 3 的逐点绘图数据；每行是一条实际显示的片段/episode 记录。"},
             {"项目": "数据来源", "说明": "五本只读 Stage 1 工作簿，由论文分析重新计算，不回读 raw JSONL。"},
             {"项目": "配对语义", "说明": "session_id、trial_id、segment_id 相同的记录属于严格配对。"},
-            {"项目": "图 2(b)", "说明": "只绘制散点与中位数/IQR，不连接跨方法折线。"},
+            {"项目": "图 2", "说明": "四个面板分别记录左轴误差和右轴抖动；动态抖动是 lag 对齐残差的帧间增量 P95。"},
             {"项目": "图 3(c)", "说明": "event 曲线不拆分同分候选；固定 coverage 汇总取第一个不小于目标 coverage 的完整同分组。"},
             {"项目": "数值精度", "说明": "XLSX 保留计算得到的浮点值；论文表格另行格式化。"},
         ],
@@ -709,25 +779,31 @@ def _figure_two_tex(figure_directory: str) -> str:
 
     return f"""\\begin{{figure*}}[t]
   \\centering
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
     \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2a_head_motion.pdf}}
-    \\caption{{头动下的中心化误差}}
-    \\label{{fig:exp1-head-motion}}
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2a_static_translation.pdf}}
+    \\caption{{静止平移}}
+    \\label{{fig:exp1-static-translation}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
     \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2b_translation.pdf}}
-    \\caption{{持续平移的时延与残差}}
-    \\label{{fig:exp1-translation}}
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2b_static_rotation.pdf}}
+    \\caption{{静止旋转}}
+    \\label{{fig:exp1-static-rotation}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.32\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
     \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2c_occlusion.pdf}}
-    \\caption{{遮挡期间的平移误差}}
-    \\label{{fig:exp1-occlusion}}
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2c_dynamic_translation.pdf}}
+    \\caption{{动态平移}}
+    \\label{{fig:exp1-dynamic-translation}}
+  \\end{{subfigure}}\\hfill
+  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
+    \\centering
+    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2d_dynamic_rotation.pdf}}
+    \\caption{{动态旋转}}
+    \\label{{fig:exp1-dynamic-rotation}}
   \\end{{subfigure}}
-  \\caption{{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，并为比较可读性不显示超过 25~mm 的异常片段，完整数值保留在绘图审计表中。}}
+  \\caption{{实验一的平移与旋转误差--抖动分布。每个方法左移圆点对应左轴误差，右移空心菱形对应右轴抖动；浅色点为片段值，醒目标记与误差条为中位数和 IQR。静止误差采用中心化 P95，动态误差采用 lag-aligned RMSE；动态抖动采用同一最佳时延下残差轨迹的帧间增量 P95，因此不把真实运动计为抖动。左右纵轴相互独立，均为越低越好。}}
   \\label{{fig:exp1-final}}
 \\end{{figure*}}
 """
@@ -792,10 +868,15 @@ def write_analysis_artifacts(
         "head_motion_leakage_p95_mm",
         "absolute_registration_p95_mm",
         "stationary_frame_increment_p95_mm",
+        "stationary_rotation_leakage_p95_deg",
+        "absolute_rotation_registration_p95_deg",
+        "stationary_rotation_frame_increment_p95_deg",
         "translation_lag_ms",
         "translation_aligned_rmse_mm",
+        "translation_aligned_residual_increment_p95_mm",
         "rotation_lag_ms",
         "rotation_aligned_rmse_deg",
+        "rotation_aligned_residual_increment_p95_deg",
         "occlusion_p95_mm",
         "occlusion_max_mm",
         "catastrophic_failures_gt40",
@@ -818,10 +899,15 @@ def write_analysis_artifacts(
                     "head_motion_leakage_p95_mm": _summary(results.static_segments[method], "centered_p95_mm")[0],
                     "absolute_registration_p95_mm": _summary(results.static_segments[method], "absolute_p95_mm")[0],
                     "stationary_frame_increment_p95_mm": _summary(results.static_segments[method], "frame_increment_p95_mm")[0],
+                    "stationary_rotation_leakage_p95_deg": _summary(results.static_segments[method], "centered_rotation_p95_deg")[0],
+                    "absolute_rotation_registration_p95_deg": _summary(results.static_segments[method], "absolute_rotation_p95_deg")[0],
+                    "stationary_rotation_frame_increment_p95_deg": _summary(results.static_segments[method], "frame_rotation_increment_p95_deg")[0],
                     "translation_lag_ms": _summary(results.translation_segments[method], "effective_lag_ms")[0],
                     "translation_aligned_rmse_mm": _summary(results.translation_segments[method], "aligned_rmse_mm")[0],
+                    "translation_aligned_residual_increment_p95_mm": _summary(results.translation_segments[method], "aligned_residual_increment_p95_mm")[0],
                     "rotation_lag_ms": _summary(results.rotation_segments[method], "effective_lag_ms")[0],
                     "rotation_aligned_rmse_deg": _summary(results.rotation_segments[method], "aligned_rmse_deg")[0],
+                    "rotation_aligned_residual_increment_p95_deg": _summary(results.rotation_segments[method], "aligned_residual_increment_p95_deg")[0],
                     "occlusion_p95_mm": _summary(results.occlusion_episodes[method], "translation_p95_mm")[0],
                     "occlusion_max_mm": _summary(results.occlusion_episodes[method], "translation_max_mm")[0],
                     "catastrophic_failures_gt40": sum(bool(row["catastrophic_gt40"]) for row in results.occlusion_episodes[method]),
@@ -876,12 +962,18 @@ def write_analysis_artifacts(
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
     plot_data_path = _write_figure_source_data(results, plot_root)
-    exp1_table = build_exp1_table(results)
-    exp2_table = build_exp2_table(results)
-    exp1_table_path = table_root / "experiment1_system_characterization.tex"
+    exp1_static_table = build_exp1_static_table(results)
+    exp1_dynamic_table = build_exp1_dynamic_table(results)
+    exp2_table = build_exp2_attribution_table(results)
+    exp1_static_table_path = table_root / "experiment1_static_occlusion_stability.tex"
+    exp1_dynamic_table_path = table_root / "experiment1_dynamic_6dof_fidelity.tex"
     exp2_table_path = table_root / "experiment2_design_attribution.tex"
-    exp1_table_path.write_text(exp1_table, encoding="utf-8")
+    exp1_static_table_path.write_text(exp1_static_table, encoding="utf-8")
+    exp1_dynamic_table_path.write_text(exp1_dynamic_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
+    legacy_exp1_table = table_root / "experiment1_system_characterization.tex"
+    if legacy_exp1_table.exists():
+        legacy_exp1_table.unlink()
 
     figure_directory = figure_tex_directory.strip("/")
     if not figure_directory or ".." in Path(figure_directory).parts:
@@ -917,7 +1009,8 @@ def write_analysis_artifacts(
         encoding="utf-8",
     )
     return {
-        "exp1_table": exp1_table_path,
+        "exp1_static_table": exp1_static_table_path,
+        "exp1_dynamic_table": exp1_dynamic_table_path,
         "exp2_table": exp2_table_path,
         "figure2_tex": figure2_path,
         "figure3_tex": figure3_path,
@@ -934,7 +1027,8 @@ def write_analysis_artifacts(
 
 
 __all__ = [
-    "build_exp1_table",
-    "build_exp2_table",
+    "build_exp1_dynamic_table",
+    "build_exp1_static_table",
+    "build_exp2_attribution_table",
     "write_analysis_artifacts",
 ]

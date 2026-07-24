@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from .metrics import (
     FULL_VARIANT,
-    LINEAR_SLERP_VARIANT,
     METHODS,
     NO_STATIC_LOCK,
     PaperResults,
@@ -42,9 +41,10 @@ _FULL_COLOR = _METHOD_COLORS[FULL_VARIANT]
 _DISABLED_COLOR = "#B07AA1"
 _EXTRAPOLATION_COLOR = "#2A9D8F"
 _HERMITE_COLOR = "#9C6ADE"
+_ERROR_AXIS_COLOR = "#374151"
+_JITTER_AXIS_COLOR = "#8B3A88"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
-_EXP1_DYNAMIC_Y_DISPLAY_LIMIT = 25.0
 _EXP2_TEMPORAL_Y_DISPLAY_LIMIT = 32.0
 
 
@@ -91,8 +91,22 @@ def _save_pair(figure: Any, root: Path, stem: str) -> tuple[Path, Path]:
     return png, pdf
 
 
-def _values(rows: Mapping[str, tuple[Mapping[str, Any], ...]], variant: str, key: str) -> np.ndarray:
-    """提取某 variant 的有限片段值，并拒绝空图。"""
+def _remove_stale_panels(root: Path, published: Sequence[Path]) -> None:
+    """删除分析目录中不属于本次八面板清单的旧托管图片。"""
+
+    keep = {path.resolve() for path in published}
+    for suffix in ("pdf", "png"):
+        for candidate in root.glob(f"figure[23][a-d]_*.{suffix}"):
+            if candidate.resolve() not in keep:
+                candidate.unlink()
+
+
+def _metric_values(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    variant: str,
+    key: str,
+) -> np.ndarray:
+    """提取一个方法的有限片段指标，并拒绝空序列。"""
 
     values = np.asarray([float(row[key]) for row in rows.get(variant, ())], dtype=float)
     values = values[np.isfinite(values)]
@@ -101,78 +115,103 @@ def _values(rows: Mapping[str, tuple[Mapping[str, Any], ...]], variant: str, key
     return values
 
 
-def build_point_panel(
-    data: Mapping[str, np.ndarray],
-    ylabel: str,
-    paired_values: np.ndarray,
-) -> Any:
-    """绘制四系统片段散点与箱线分布。"""
+def _draw_metric_summary(
+    axis: Any,
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    key: str,
+    *,
+    horizontal_offset: float,
+    marker: str,
+    hollow: bool,
+) -> None:
+    """在指定轴上绘制四方法原始点、中位数与 IQR。"""
 
-    figure, axis = plt.subplots(figsize=(2.28, 2.18))
-    positions = np.arange(len(METHODS))
-    for values in paired_values:
-        axis.plot(
-            positions,
-            values,
-            color=_PAIR_COLOR,
-            linewidth=0.45,
-            alpha=0.14,
-            zorder=1,
-        )
     for index, method in enumerate(METHODS):
-        values = data[method]
-        offsets = np.linspace(-0.11, 0.11, len(values))
+        values = _metric_values(rows, method, key)
+        center = float(index) + horizontal_offset
+        raw_offsets = np.linspace(-0.035, 0.035, values.size)
         color = _METHOD_COLORS[method]
         axis.scatter(
-            positions[index] + offsets,
+            center + raw_offsets,
             values,
-            s=8,
-            alpha=0.25,
-            marker=_MARKERS[index],
-            color=color,
-            label=_SHORT_LABELS[method],
+            s=6.0,
+            alpha=0.20,
+            marker=marker,
+            facecolors="none" if hollow else color,
+            edgecolors=color,
+            linewidths=0.45,
             zorder=2,
         )
-        box = axis.boxplot(
-            [values],
-            positions=[positions[index]],
-            widths=0.18,
-            whis=(0, 100),
-            showfliers=False,
-            patch_artist=True,
-            zorder=3,
-            boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.0},
-            whiskerprops={"color": color, "linewidth": 1.0},
-            capprops={"color": color, "linewidth": 1.0},
-            medianprops={"color": color, "linewidth": 1.45},
-        )
-        for patch in box["boxes"]:
-            patch.set_alpha(0.72)
-        axis.plot(
-            positions[index],
-            float(np.median(values)),
-            marker=_MARKERS[index],
-            markersize=4.6,
-            markerfacecolor=color,
-            markeredgecolor="white",
-            markeredgewidth=0.7,
-            linestyle="none",
+        median = float(np.median(values))
+        q1, q3 = (float(item) for item in np.quantile(values, (0.25, 0.75)))
+        axis.errorbar(
+            center,
+            median,
+            yerr=[[median - q1], [q3 - median]],
+            fmt=marker,
+            markersize=4.7,
+            capsize=2.0,
+            linewidth=1.15,
+            color=color,
+            markerfacecolor="white" if hollow else color,
+            markeredgecolor=color,
+            markeredgewidth=0.85,
             zorder=4,
         )
-    axis.set_xticks(positions, [_SHORT_LABELS[method] for method in METHODS], rotation=16, ha="right")
-    axis.set_ylabel(ylabel)
-    axis.set_ylim(bottom=0)
-    _clean_axis(axis)
-    axis.legend(
-        frameon=False,
-        ncol=2,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.01),
-        borderaxespad=0.0,
-        handletextpad=0.5,
-        columnspacing=1.1,
+
+
+def build_dual_metric_panel(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    error_key: str,
+    jitter_key: str,
+    unit: str,
+) -> Any:
+    """绘制误差与抖动分属左右纵轴的四方法紧凑面板。"""
+
+    # 0.235\textwidth 在 VGTC 双栏中约为 1.67 英寸；原生宽度贴近最终尺寸，
+    # 避免 LaTeX 再缩小后把 7 pt 字体压到可读性门槛以下。
+    figure, error_axis = plt.subplots(figsize=(1.76, 2.16))
+    jitter_axis = error_axis.twinx()
+    positions = np.arange(len(METHODS), dtype=float)
+    _draw_metric_summary(
+        error_axis,
+        rows,
+        error_key,
+        horizontal_offset=-0.12,
+        marker="o",
+        hollow=False,
     )
-    figure.tight_layout()
+    _draw_metric_summary(
+        jitter_axis,
+        rows,
+        jitter_key,
+        horizontal_offset=0.12,
+        marker="D",
+        hollow=True,
+    )
+    error_axis.set_xticks(
+        positions,
+        [_SHORT_LABELS[method] for method in METHODS],
+        rotation=27,
+        ha="right",
+        rotation_mode="anchor",
+    )
+    error_axis.set_xlim(-0.45, len(METHODS) - 0.55)
+    error_axis.set_ylim(bottom=0.0)
+    jitter_axis.set_ylim(bottom=0.0)
+    error_axis.set_ylabel(f"Error P95 ({unit})", color=_ERROR_AXIS_COLOR, labelpad=1.8)
+    jitter_axis.set_ylabel(f"Jitter P95 ({unit})", color=_JITTER_AXIS_COLOR, labelpad=2.0)
+    error_axis.tick_params(axis="y", colors=_ERROR_AXIS_COLOR, pad=1.5)
+    jitter_axis.tick_params(axis="y", colors=_JITTER_AXIS_COLOR, pad=1.5)
+    error_axis.tick_params(axis="x", pad=1.8)
+    error_axis.grid(axis="y", linestyle=":", linewidth=0.7, alpha=0.30)
+    error_axis.spines["top"].set_visible(False)
+    jitter_axis.spines["top"].set_visible(False)
+    error_axis.spines["right"].set_visible(False)
+    jitter_axis.spines["left"].set_visible(False)
+    error_axis.spines["left"].set_color(_ERROR_AXIS_COLOR)
+    jitter_axis.spines["right"].set_color(_JITTER_AXIS_COLOR)
+    figure.tight_layout(pad=0.30)
     return figure
 
 
@@ -202,67 +241,6 @@ def _scatter_in_display_range(
         label=label,
         zorder=2,
     )
-
-
-def build_translation_panel(results: PaperResults) -> Any:
-    """绘制实验一持续平移 lag--residual 散点与 IQR。"""
-
-    figure, axis = plt.subplots(figsize=(2.28, 2.18))
-    paired = paired_metric_matrix(
-        results.translation_segments,
-        METHODS,
-        ("effective_lag_ms", "aligned_rmse_mm"),
-    )
-    for index, method in enumerate(METHODS):
-        points = paired[:, index, :]
-        color = _METHOD_COLORS[method]
-        _scatter_in_display_range(
-            axis,
-            points,
-            color=color,
-            marker=_MARKERS[index],
-            label=_SHORT_LABELS[method],
-            display_limit=_EXP1_DYNAMIC_Y_DISPLAY_LIMIT,
-            size=8.0,
-            alpha=0.24,
-        )
-        median_x, median_y = np.median(points, axis=0)
-        q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
-        q1_y, q3_y = np.quantile(points[:, 1], (0.25, 0.75))
-        axis.errorbar(
-            median_x,
-            median_y,
-            xerr=[[median_x - q1_x], [q3_x - median_x]],
-            yerr=[[median_y - q1_y], [q3_y - median_y]],
-            fmt=_MARKERS[index],
-            markersize=4.5,
-            capsize=2.5,
-            linewidth=1.1,
-            color=color,
-            alpha=1.0,
-            markeredgecolor="white",
-            markeredgewidth=0.6,
-        )
-    axis.set_xlabel("Effective lag (ms)")
-    axis.set_ylabel("Lag-aligned translation RMSE (mm)")
-    axis.set_xlim(
-        min(_DYNAMIC_X_LIMITS[0], float(np.min(paired[:, :, 0])) * 0.96),
-        max(_DYNAMIC_X_LIMITS[1], float(np.max(paired[:, :, 0])) * 1.04),
-    )
-    axis.set_ylim(0.0, _EXP1_DYNAMIC_Y_DISPLAY_LIMIT)
-    axis.annotate("better", xy=(168, 2.2), xytext=(205, 4.8), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
-    _clean_axis(axis, "both")
-    axis.legend(
-        frameon=False,
-        ncol=2,
-        loc="lower right",
-        bbox_to_anchor=(1.0, 1.0),
-        borderaxespad=0.0,
-        handletextpad=0.5,
-        columnspacing=1.1,
-    )
-    figure.tight_layout()
-    return figure
 
 
 def _paired_rows(
@@ -507,50 +485,51 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
 
 
 def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Path]:
-    """只在活动批次的分析目录发布图二和图三独立面板。"""
+    """在活动批次发布实验一四联图与实验二四个独立面板。"""
 
     _configure()
     panels = output_root / "figures"
     panels.mkdir(parents=True, exist_ok=True)
 
-    world = {
-        method: _values(results.static_segments, method, "centered_p95_mm")
-        for method in METHODS
-    }
-    world_paired = paired_metric_matrix(
-        results.static_segments,
-        METHODS,
-        ("centered_p95_mm",),
-    )[:, :, 0]
     figure2a = _save_pair(
-        build_point_panel(
-            world,
-            "Centered translation P95 (mm)",
-            world_paired,
+        build_dual_metric_panel(
+            results.static_segments,
+            "centered_p95_mm",
+            "frame_increment_p95_mm",
+            "mm",
         ),
         panels,
-        "figure2a_head_motion",
+        "figure2a_static_translation",
     )
     figure2b = _save_pair(
-        build_translation_panel(results), panels, "figure2b_translation"
-    )
-    occlusion = {
-        method: _values(results.occlusion_episodes, method, "translation_p95_mm")
-        for method in METHODS
-    }
-    occlusion_paired = paired_metric_matrix(
-        results.occlusion_episodes,
-        METHODS,
-        ("translation_p95_mm",),
-    )[:, :, 0]
-    figure2c = _save_pair(
-        build_point_panel(
-            occlusion,
-            "Occlusion translation P95 (mm)",
-            occlusion_paired,
+        build_dual_metric_panel(
+            results.static_segments,
+            "centered_rotation_p95_deg",
+            "frame_rotation_increment_p95_deg",
+            "deg",
         ),
         panels,
-        "figure2c_occlusion",
+        "figure2b_static_rotation",
+    )
+    figure2c = _save_pair(
+        build_dual_metric_panel(
+            results.translation_segments,
+            "aligned_rmse_mm",
+            "aligned_residual_increment_p95_mm",
+            "mm",
+        ),
+        panels,
+        "figure2c_dynamic_translation",
+    )
+    figure2d = _save_pair(
+        build_dual_metric_panel(
+            results.rotation_segments,
+            "aligned_rmse_deg",
+            "aligned_residual_increment_p95_deg",
+            "deg",
+        ),
+        panels,
+        "figure2d_dynamic_rotation",
     )
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
     arrival = np.asarray([float(row["arrival_p95_mm"]) for row in results.capture_alignment])
@@ -593,6 +572,10 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
         panels,
         "figure3d_temporal_strategies",
     )
+    _remove_stale_panels(
+        panels,
+        (*figure2a, *figure2b, *figure2c, *figure2d, *figure3a, *figure3b, *figure3c, *figure3d),
+    )
     return {
         "figure2a_pdf": figure2a[1],
         "figure2a_png": figure2a[0],
@@ -600,6 +583,8 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
         "figure2b_png": figure2b[0],
         "figure2c_pdf": figure2c[1],
         "figure2c_png": figure2c[0],
+        "figure2d_pdf": figure2d[1],
+        "figure2d_png": figure2d[0],
         "figure3a_pdf": figure3a[1],
         "figure3a_png": figure3a[0],
         "figure3b_pdf": figure3b[1],
@@ -612,8 +597,7 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
 
 
 __all__ = [
-    "build_point_panel",
-    "build_translation_panel",
+    "build_dual_metric_panel",
     "build_vcd_risk_coverage_panel",
     "publish_figures",
     "summarize_risk_coverage",

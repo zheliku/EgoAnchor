@@ -95,16 +95,18 @@ XeLaTeX。每本 XLSX 的指标独立缓存；缓存命中时不打开工作簿�
 data/experiments/experiment_1_2/analysis/
 ├─ metrics/                         # 完整精度 CSV、时序策略配对数据和性能统计
 ├─ plots/figure_plot_data.xlsx      # 图二、图三审计数据，不是绘图输入
-├─ figures/                         # 七个面板，各自的 PNG 和 PDF
+├─ figures/                         # 八个面板，各自的 PNG 和 PDF
 ├─ tex/
-│  ├─ tables/                       # 两张可手工引入的表格 TeX
+│  ├─ tables/                       # 三张可手工引入的表格 TeX
 │  └─ figures/                      # 图二、图三的 figure 环境 TeX
 └─ provenance/                      # 输入摘要、参数 SHA-256 和 build_result.json
 ```
 
-图 3(d) 的主比较是 *Smoothed KF Extrapolation* 与关闭 StaticLock 的 *Linear/SLERP*；
-*Hermite Interpolation* 是补充条件。图 2(b) 和图 3(d) 只绘制冻结纵轴上限内的原始点，完整数值仍
-保留在 `metrics/` 和 `figure_plot_data.xlsx`。
+实验一图二按静止平移、静止旋转、动态平移、动态旋转排列为一行四个双纵轴面板；左轴是误差，右轴是抖动。
+静止误差采用中心化 P95，动态误差采用最佳时延对齐后的 RMSE，动态抖动采用同一最佳时延下残差帧增量 P95，
+避免把真实运动直接计为抖动。图 3(d) 的主比较是 *Smoothed KF Extrapolation* 与关闭 StaticLock 的
+*Linear/SLERP*；*Hermite Interpolation* 是补充条件。完整数值仍保留在 `metrics/` 和
+`figure_plot_data.xlsx`。
 
 首次分析的主要耗时仍是 XLSX ZIP/XML 读取和 Python 分组统计。后续只替换一个 Task 时，耗时主要来自
 该 Task 的 XLSX；另外四项直接读取小型 JSON 指标缓存。
@@ -115,8 +117,9 @@ data/experiments/experiment_1_2/analysis/
 pixi run eval copy-assets
 ```
 
-该命令只复制当前 `analysis/figures/` 的七组实验 PNG/PDF，以及 `batch.toml` 中逐项声明的 relay PNG/PDF。
-它不会复制 TeX，也不会修改主稿。
+该命令先校验 `analysis/provenance/build_result.json` 的 batch ID，再严格按本次 `figure_paths` 清单复制八组实验
+PNG/PDF，以及 `batch.toml` 中逐项声明的 relay PNG/PDF。分析目录中残留的旧面板不会被复制；命令不会复制 TeX，
+也不会修改主稿。
 
 从以下目录手工选择、审阅并复制 TeX 到主稿：
 
@@ -125,7 +128,8 @@ data/experiments/experiment_1_2/analysis/tex/tables/
 data/experiments/experiment_1_2/analysis/tex/figures/
 ```
 
-主稿与 PDF 的编译不属于 `pixi run eval`。完成手工引入后，按论文工程既有方式运行本机 LaTeX 工具链。
+主稿与 PDF 的编译不属于 `pixi run eval`。当前中文主稿为 `2026-EgoAnchor/egoanchor_cn_v7.tex`；完成手工引入后，
+在 `2026-EgoAnchor/` 下运行 `latexmk -xelatex egoanchor_cn_v7.tex`。
 
 ## 诊断与重建
 

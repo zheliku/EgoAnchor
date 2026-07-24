@@ -7,7 +7,6 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -22,10 +21,10 @@ from egoanchor.eval.paper_analysis import (
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
     build_analysis,
-    build_exp1_table,
-    build_exp2_table,
-    build_point_panel,
-    build_translation_panel,
+    build_dual_metric_panel,
+    build_exp1_dynamic_table,
+    build_exp1_static_table,
+    build_exp2_attribution_table,
     cache_key,
     cache_path,
     eligible_trials,
@@ -63,8 +62,8 @@ class PaperPipelineTests(unittest.TestCase):
             ),
         )
 
-    def test_main_tables_publish_occlusion_translation_p95(self) -> None:
-        """两张主表使用两位小数的连续遮挡误差，阈值次数只留在审计产物。"""
+    def test_main_tables_publish_requested_three_table_contract(self) -> None:
+        """三张主表冻结实验一拆表与实验二四行归因契约。"""
 
         def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
             """构造两个身份完整且可严格配对的片段。"""
@@ -100,16 +99,21 @@ class PaperPipelineTests(unittest.TestCase):
                 centered_p95_mm=1.0,
                 absolute_p95_mm=2.0,
                 frame_increment_p95_mm=0.1,
+                centered_rotation_p95_deg=0.5,
+                absolute_rotation_p95_deg=1.5,
+                frame_rotation_increment_p95_deg=0.05,
             ),
             translation_segments=rows(
                 temporal_variants,
                 effective_lag_ms=200.0,
                 aligned_rmse_mm=5.0,
+                aligned_residual_increment_p95_mm=0.5,
             ),
             rotation_segments=rows(
                 temporal_variants,
                 effective_lag_ms=220.0,
                 aligned_rmse_deg=2.0,
+                aligned_residual_increment_p95_deg=0.2,
             ),
             occlusion_episodes=occlusion,
             transition_segments=rows(METHODS, response_ms=150.0),
@@ -131,22 +135,33 @@ class PaperPipelineTests(unittest.TestCase):
             performance={},
         )
 
-        experiment_one = build_exp1_table(results)
-        experiment_two = build_exp2_table(results)
+        static_table = build_exp1_static_table(results)
+        dynamic_table = build_exp1_dynamic_table(results)
+        attribution_table = build_exp2_attribution_table(results)
 
-        self.assertIn("遮挡期平移误差 P95", experiment_one)
-        self.assertIn(r"\begin{tabular}{lccccccc}", experiment_one)
-        self.assertIn("Capture & 2.50 [2.25, 2.75]", experiment_one)
+        for table in (static_table, dynamic_table, attribution_table):
+            self.assertTrue(table.endswith("\n"))
+            self.assertFalse(table.endswith("\n\n"))
+        self.assertIn("遮挡平移 P95", static_table)
+        self.assertIn(r"\begin{tabular}{lcccc}", static_table)
+        self.assertIn("Capture & 2.50 [2.25, 2.75]", static_table)
+        self.assertIn("Start-transition", dynamic_table)
+        self.assertIn(r"\begin{tabular}{lccccc}", dynamic_table)
         for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
-            self.assertIn(f"{label} &", experiment_one)
-        self.assertNotIn("Arrival-Hold &", experiment_one)
-        self.assertNotIn("Capture-Hold &", experiment_one)
-        self.assertNotIn("One-Euro Anchor &", experiment_one)
-        self.assertIn("遮挡期平移误差 P95", experiment_two)
-        self.assertIn("7.50 [7.25, 7.75]", experiment_two)
-        self.assertIn("个 episode 对照更高", experiment_two)
-        self.assertNotIn(">40", experiment_one + experiment_two)
-        self.assertNotIn("灾难性失效", experiment_one + experiment_two)
+            self.assertIn(f"{label} &", static_table)
+            self.assertIn(f"{label} &", dynamic_table)
+        combined = static_table + dynamic_table + attribution_table
+        self.assertNotIn("Arrival-Hold &", combined)
+        self.assertNotIn("Capture-Hold &", combined)
+        self.assertNotIn("One-Euro Anchor &", combined)
+        self.assertIn("组件关闭 & 参照指标 & EgoAnchor (on) & Component off", attribution_table)
+        for row_label in ("采集时刻对齐", "StaticLock", "VCD 判别性", "时序策略"):
+            self.assertIn(f"{row_label} &", attribution_table)
+        for removed in ("VCD 接纳", "Hermite 补充", "停止护栏"):
+            self.assertNotIn(removed, attribution_table)
+        self.assertIn(r"$\times$", attribution_table)
+        self.assertNotIn(">40", combined)
+        self.assertNotIn("灾难性失效", combined)
 
     def test_vcd_risk_coverage_keeps_score_ties_indivisible(self) -> None:
         """同分候选必须整组进入曲线，AURC 不得依赖候选行顺序。"""
@@ -510,53 +525,40 @@ class PaperPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "配对不完整"):
             paired_metric_matrix(rows, METHODS, ("value",))
 
-    def test_experiment_one_panels_use_consistent_method_legend(self) -> None:
-        """图二三个面板均保留一致的四方法图例，独立阅读时不依赖相邻子图。"""
+    def test_experiment_one_dual_panel_has_two_axes_and_method_labels(self) -> None:
+        """实验一面板必须用独立左右纵轴并在横轴直接标出四方法。"""
 
-        values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
-        point_figure = build_point_panel(
-            values,
-            "Metric",
-            np.asarray(((1.0, 1.1, 1.2, 1.3), (2.0, 2.1, 2.2, 2.3))),
-        )
         rows = {
             method: (
                 {
                     "session_id": "s",
                     "trial_id": "t",
                     "segment_id": "a",
-                    "effective_lag_ms": 200.0 + index,
-                    "aligned_rmse_mm": 4.0 + index,
+                    "error": 4.0 + index,
+                    "jitter": 0.4 + index,
                 },
                 {
                     "session_id": "s",
                     "trial_id": "t",
                     "segment_id": "b",
-                    "effective_lag_ms": 220.0 + index,
-                    "aligned_rmse_mm": 5.0 + index,
+                    "error": 5.0 + index,
+                    "jitter": 0.5 + index,
                 },
             )
             for index, method in enumerate(METHODS)
         }
-        translation_figure = build_translation_panel(
-            SimpleNamespace(translation_segments=rows)
-        )
+        figure = build_dual_metric_panel(rows, "error", "jitter", "mm")
 
-        point_legend = point_figure.axes[0].get_legend()
-        translation_legend = translation_figure.axes[0].get_legend()
-        self.assertIsNotNone(point_legend)
-        self.assertIsNotNone(translation_legend)
+        self.assertEqual(len(figure.axes), 2)
+        self.assertEqual(figure.axes[0].get_ylabel(), "Error P95 (mm)")
+        self.assertEqual(figure.axes[1].get_ylabel(), "Jitter P95 (mm)")
         self.assertEqual(
-            [text.get_text() for text in point_legend.get_texts()],
-            ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
-        )
-        self.assertEqual(
-            [text.get_text() for text in translation_legend.get_texts()],
+            [text.get_text() for text in figure.axes[0].get_xticklabels()],
             ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
         )
 
-    def test_translation_panel_does_not_connect_methods(self) -> None:
-        """图二(b) 不连接跨方法散点，避免方法顺序造成视觉混淆。"""
+    def test_experiment_one_dual_panel_does_not_connect_methods(self) -> None:
+        """双轴面板只画各方法分布和 IQR，不连接跨方法结果。"""
 
         rows = {
             method: (
@@ -564,28 +566,36 @@ class PaperPipelineTests(unittest.TestCase):
                     "session_id": "s",
                     "trial_id": "t",
                     "segment_id": "a",
-                    "effective_lag_ms": 200.0 + index,
-                    "aligned_rmse_mm": 4.0 + index,
+                    "error": 4.0 + index,
+                    "jitter": 0.4 + index,
                 },
             )
             for index, method in enumerate(METHODS)
         }
-        figure = build_translation_panel(SimpleNamespace(translation_segments=rows))
+        figure = build_dual_metric_panel(rows, "error", "jitter", "deg")
 
-        paired_lines = [line for line in figure.axes[0].lines if line.get_alpha() == 0.20]
-        self.assertEqual(paired_lines, [])
+        for axis in figure.axes:
+            self.assertFalse(any(len(line.get_xdata()) == len(METHODS) for line in axis.lines))
 
     def test_panel_titles_are_owned_by_tex_fragment(self) -> None:
         """绘图代码不重复写入由手工引入 TeX 子标题承担的小标题。"""
 
-        values = {method: np.asarray((1.0, 2.0)) for method in METHODS}
-        figure = build_point_panel(
-            values,
-            "Metric",
-            np.asarray(((1.0, 1.1, 1.2, 1.3), (2.0, 2.1, 2.2, 2.3))),
-        )
+        rows = {
+            method: (
+                {
+                    "session_id": "s",
+                    "trial_id": "t",
+                    "segment_id": "a",
+                    "error": 1.0,
+                    "jitter": 0.1,
+                },
+            )
+            for method in METHODS
+        }
+        figure = build_dual_metric_panel(rows, "error", "jitter", "mm")
 
         self.assertEqual(figure.axes[0].get_title(), "")
+        self.assertEqual(figure.axes[1].get_title(), "")
 
 
 if __name__ == "__main__":

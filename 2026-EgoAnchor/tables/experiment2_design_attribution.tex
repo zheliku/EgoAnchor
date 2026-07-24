@@ -1,21 +1,18 @@
 \begin{table*}[t]
 \centering
-\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD 接纳行报告冻结阈值下的遮挡期平移误差 P95 及逐 episode 配对差。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}
+\caption{实验二的设计归因。效应倍率先在同一片段或 event 内计算 Component off / on，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的 on/off 分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF。}
 \label{tab:exp2-final}
 \small
-\setlength{\tabcolsep}{4.8pt}
+\setlength{\tabcolsep}{3.0pt}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{lllll}
+\begin{tabular}{llllll}
 \toprule
-比较 & 直接指标 & 参照 & 对照 & 配对差 \\
+组件关闭 & 参照指标 & EgoAnchor (on) & Component off & 效应倍率 & 一致性 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & 15.38 [13.44, 19.13]~mm & 43.75 [38.14, 55.60]~mm & +26.27 [22.92, 34.86]~mm; 12/12 改善 \\
-StaticLock & 中心化静止 P95 & 0.82~mm & 13.73~mm & +12.88~mm；12/12 片段变差 \\
-VCD score & event AURC（越低越好） & 4.79 [4.20, 5.13]~mm & 全覆盖风险 7.25 [5.15, 7.95]~mm & 相对全覆盖收益 2.28 [0.65, 3.23]~mm \\
-VCD 接纳 & 遮挡期平移误差 P95 & 4.85 [4.54, 13.67]~mm & 9.44 [4.61, 20.71]~mm & 对照$-$参照 0.00 [0.00, 3.41]~mm；5/12 个 episode 对照更高 \\
-时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.95~mm / 4.70$^\circ$ & Smoothed KF 49.51~mm / 12.21$^\circ$ & Extrapolation--Linear: 38.33~mm / 7.73$^\circ$；12/12、12/12 个片段外推较高 \\
-Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.95~mm / 4.70$^\circ$ & Hermite 12.04~mm / 4.77$^\circ$ & 与 Linear/SLERP 对照见图~3(d) \\
-停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP 0.72~mm / 2332.40~ms & Smoothed KF 0.98~mm / 2364.60~ms & Extrapolation--Linear: 0.30~mm / 21.31~ms \\
+采集时刻对齐 & 同候选复合 P95 & Capture time 15.38 [13.44, 19.13]~mm & Arrival time 43.75 [38.14, 55.60]~mm & 2.69 [2.38, 3.00]$\times$ & 12/12 \\
+StaticLock & 中心化静止 P95 & 0.82 [0.58, 0.92]~mm & 13.73 [11.90, 14.89]~mm & 17.06 [13.89, 27.52]$\times$ & 12/12 \\
+VCD 判别性 & event AURC & 5.65 [4.90, 5.92]~mm & Full coverage 6.53 [5.98, 7.31]~mm & 1.21 [1.18, 1.24]$\times$ & 12/12 \\
+时序策略 & 平移 / 旋转 aligned RMSE & \shortstack{Linear/SLERP (StaticLock off)\\8.93 [7.41, 11.61]~mm / 4.70 [4.35, 4.82]$^\circ$} & \shortstack{Smoothed KF (StaticLock off)\\45.64 [37.58, 49.73]~mm / 12.21 [11.28, 13.77]$^\circ$} & \shortstack{T: 5.46 [4.02, 5.73]$\times$\\R: 2.63 [2.44, 2.78]$\times$} & \shortstack{T: 16/16\\R: 12/12} \\
 \bottomrule
 \end{tabular}%
 }

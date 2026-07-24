@@ -125,13 +125,13 @@ class PaperResults:
     """五本只读 Stage 1 XLSX 的文件摘要。"""
 
     static_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
-    """静止头动片段的中心化、绝对和帧间增量 P95。"""
+    """静止头动片段的平移/旋转误差与逐帧增量 P95。"""
 
     translation_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
-    """持续平移片段的有效时延和对齐 RMSE。"""
+    """持续平移片段的有效时延、对齐 RMSE 和残差帧增量 P95。"""
 
     rotation_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
-    """持续旋转片段的有效角时延和对齐角 RMSE。"""
+    """持续旋转片段的有效角时延、对齐角 RMSE 和残差帧增量 P95。"""
 
     occlusion_episodes: Mapping[str, tuple[Mapping[str, Any], ...]]
     """遮挡过程的平移 P95 与灾难性失效标识。"""
@@ -601,10 +601,10 @@ def _translation_lag(
     display: np.ndarray,
     reference: np.ndarray,
     settings: PaperSettings,
-) -> tuple[float, float]:
-    """搜索使 display 与历史 reference 位置 RMSE 最小的有效时延。"""
+) -> tuple[float, float, float]:
+    """搜索最佳平移时延，并返回对齐 RMSE 与残差帧增量 P95。"""
 
-    best = (math.inf, math.nan)
+    best = (math.inf, math.nan, math.nan)
     for lag_ms in _lag_grid(settings):
         query_times = times - lag_ms
         valid = (query_times >= times[0]) & (query_times <= times[-1])
@@ -613,11 +613,17 @@ def _translation_lag(
         interpolated = np.column_stack(
             [np.interp(query_times[valid], times, reference[:, axis]) for axis in range(3)]
         )
-        distances_mm = 1000.0 * np.linalg.norm(display[valid] - interpolated, axis=1)
+        residual_mm = 1000.0 * (display[valid] - interpolated)
+        distances_mm = np.linalg.norm(residual_mm, axis=1)
         rmse_mm = float(np.sqrt(np.mean(np.square(distances_mm))))
         if rmse_mm < best[0]:
-            best = (rmse_mm, float(lag_ms))
-    return best[1], best[0]
+            residual_increments_mm = np.linalg.norm(np.diff(residual_mm, axis=0), axis=1)
+            best = (
+                rmse_mm,
+                float(lag_ms),
+                _quantile(residual_increments_mm, 0.95),
+            )
+    return best[1], best[0], best[2]
 
 
 def _rotation_lag(
@@ -625,14 +631,14 @@ def _rotation_lag(
     display: np.ndarray,
     reference: np.ndarray,
     settings: PaperSettings,
-) -> tuple[float, float]:
-    """使用四元数 Slerp 搜索角 RMSE 最小的有效时延。"""
+) -> tuple[float, float, float]:
+    """使用四元数 Slerp 搜索最佳角时延及残差帧增量 P95。"""
 
     display = display / np.linalg.norm(display, axis=1, keepdims=True)
     reference = reference / np.linalg.norm(reference, axis=1, keepdims=True)
     display_rotation = Rotation.from_quat(display)
     reference_slerp = Slerp(times, Rotation.from_quat(reference))
-    best = (math.inf, math.nan)
+    best = (math.inf, math.nan, math.nan)
     for lag_ms in _lag_grid(settings):
         query_times = times - lag_ms
         valid = (query_times >= times[0]) & (query_times <= times[-1])
@@ -642,8 +648,33 @@ def _rotation_lag(
         errors_deg = np.degrees(relative.magnitude())
         rmse_deg = float(np.sqrt(np.mean(np.square(errors_deg))))
         if rmse_deg < best[0]:
-            best = (rmse_deg, float(lag_ms))
-    return best[1], best[0]
+            residual_increments = relative[:-1].inv() * relative[1:]
+            best = (
+                rmse_deg,
+                float(lag_ms),
+                _quantile(np.degrees(residual_increments.magnitude()), 0.95),
+            )
+    return best[1], best[0], best[2]
+
+
+def _static_rotation_metrics(
+    display: np.ndarray,
+    reference: np.ndarray,
+) -> tuple[float, float, float]:
+    """计算静止片段的中心化/绝对旋转误差与帧间角增量 P95。"""
+
+    display = display / np.linalg.norm(display, axis=1, keepdims=True)
+    reference = reference / np.linalg.norm(reference, axis=1, keepdims=True)
+    display_rotation = Rotation.from_quat(display)
+    reference_rotation = Rotation.from_quat(reference)
+    absolute = reference_rotation.inv() * display_rotation
+    centered = absolute.mean().inv() * absolute
+    increments = display_rotation[:-1].inv() * display_rotation[1:]
+    return (
+        _quantile(np.degrees(centered.magnitude()), 0.95),
+        _quantile(np.degrees(absolute.magnitude()), 0.95),
+        _quantile(np.degrees(increments.magnitude()), 0.95),
+    )
 
 
 def _first_sustained(
@@ -783,23 +814,50 @@ def _render_metrics(
             errors = display - reference
             centered = errors - np.median(errors, axis=0)
             increments = 1000.0 * np.linalg.norm(np.diff(display, axis=0), axis=1)
+            centered_rotation, rotation_error, rotation_increment = _static_rotation_metrics(
+                display_rotation,
+                reference_rotation,
+            )
             static[variant_id].append(
                 {
                     **identity,
                     "centered_p95_mm": _quantile(1000.0 * np.linalg.norm(centered, axis=1), 0.95),
                     "absolute_p95_mm": _quantile(1000.0 * np.linalg.norm(errors, axis=1), 0.95),
                     "frame_increment_p95_mm": _quantile(increments, 0.95),
+                    "centered_rotation_p95_deg": centered_rotation,
+                    "absolute_rotation_p95_deg": rotation_error,
+                    "frame_rotation_increment_p95_deg": rotation_increment,
                 }
             )
         elif _scenario_matches(scenario, "continuous_translation"):
-            lag, residual = _translation_lag(times, display, reference, settings)
+            lag, residual, residual_increment = _translation_lag(
+                times,
+                display,
+                reference,
+                settings,
+            )
             translation[variant_id].append(
-                {**identity, "effective_lag_ms": lag, "aligned_rmse_mm": residual}
+                {
+                    **identity,
+                    "effective_lag_ms": lag,
+                    "aligned_rmse_mm": residual,
+                    "aligned_residual_increment_p95_mm": residual_increment,
+                }
             )
         elif _scenario_matches(scenario, "continuous_rotation"):
-            lag, residual = _rotation_lag(times, display_rotation, reference_rotation, settings)
+            lag, residual, residual_increment = _rotation_lag(
+                times,
+                display_rotation,
+                reference_rotation,
+                settings,
+            )
             rotation[variant_id].append(
-                {**identity, "effective_lag_ms": lag, "aligned_rmse_deg": residual}
+                {
+                    **identity,
+                    "effective_lag_ms": lag,
+                    "aligned_rmse_deg": residual,
+                    "aligned_residual_increment_p95_deg": residual_increment,
+                }
             )
         elif _scenario_matches(scenario, "occlusion_recovery"):
             if event_roles.get((session_id, trial_id, event_id)) != "occlusion_started":

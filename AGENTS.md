@@ -18,7 +18,7 @@
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 10. 每次操作完后记得更新AGENTS.md
-11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；当前中文主稿为 `egoanchor_cn_v6.tex`。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
+11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；当前中文主稿为 `egoanchor_cn_v7.tex`，`egoanchor_cn_v6.tex` 只作归档保留。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
 
@@ -26,7 +26,7 @@
 
 ## IEEE VR 2027 论文路线
 
-当前中文主稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_v6.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
+当前中文主稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_v7.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；`egoanchor_cn_v6.tex` 只作归档保留，旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
 
 中心论点：开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor。EgoAnchor 将低频、异步、质量不均的视觉位姿观测，转换为消费级混合现实应用可持续使用的世界系对象锚点。
 
@@ -139,14 +139,14 @@ schema-v2 task directory
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`preprocess`）** 只读取缓存缺失或失效 task 的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；每个版本化原始目录唯一对应一个共享工作簿缓存，命中时不得重复 QC 或回读 XLSX。不得把 XLSX 之前的任何中间文件作为后续输入。
 - Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 只接受 `variant_matrix_id=exp12_9_smoothed_hermite_v4` 的当前九 runtime 矩阵，并检查主外键、生命周期、事件合并、warmup reference、平滑外推诊断和两端 writer 停止态统计；未消费 candidate 仅作为 latest-only 警告。
-- `analyze` 按工作簿 SHA、`paper.toml` SHA 和指标实现指纹复用逐 task JSON 指标缓存，只扫描缓存失效的 Stage 1 XLSX；随后合并五项结果，并在活动批次 `analysis/` 发布七个独立 PDF/PNG 面板、两张 TeX 表和图环境 TeX。它不得回读 raw JSON/JSONL、改写 XLSX、修改 `2026-EgoAnchor` 下的主稿、图片、表格或 PDF。
+- `analyze` 按工作簿 SHA、`paper.toml` SHA 和指标实现指纹复用逐 task JSON 指标缓存，只扫描缓存失效的 Stage 1 XLSX；随后合并五项结果，并在活动批次 `analysis/` 发布八个独立 PDF/PNG 面板、三张 TeX 表和图环境 TeX。它不得回读 raw JSON/JSONL、改写 XLSX、修改 `2026-EgoAnchor` 下的主稿、图片、表格或 PDF。
 - VCD 连续分数的风险判别性只在最终有效的 `occlusion_started` event 内计算：仅使用完整 EgoAnchor 的 capture-time aligned raw pose 与同 frame 有效平台参考，按分数降序且同分候选整组进入，以保留候选的平均平移误差为 selective risk，并用右连续阶梯积分得到 event AURC。不得按 admission 决策过滤低分候选，不得跨 event 混池候选；论文汇总 event AURC 的 median [Q1, Q3]，并与冻结阈值的 VCD admission 尾部效果分开报告。
 - 旧 Stage 2/3、v2 replay 与历史分析包已删除；当前代码位于 `egoanchor.eval.paper_analysis`，不保留旧入口兼容层。
 - `pixi run eval` 提供 `config`、`sessions`、`stage`、`promote`、`qc`、`preprocess`、`analyze`、`copy-assets` 和 `rebuild`。操作路径和明确的 PNG/PDF 发布清单只从 `egoanchor/eval/config/batch.toml` 读取，不使用 shell 环境变量或路径参数；主稿编译不属于评估 CLI，论文统计参数仍只属于 `paper.toml`。文件系统或工具错误返回 1，批次、schema、QC 或论文输入契约失败返回 2。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
-- 实验一发布一行三个 LaTeX 子图，实验二发布一行四个 LaTeX 子图；图内不重复小标题，图 2(b) 不连接跨方法折线，遮挡只投影 `occlusion_started` episode，图内最小字号固定为 7 pt。
-- 实验一图二三个面板均显示一致的四方法图例；图 2(b) 的原始点、IQR 误差条与实心中位数保持由轻到重的视觉层级；图 3(c) 只显示 event median 与 IQR，横轴为按 VCD 分数从高到低保留候选的比例，纵轴按有效风险范围收紧；图 3(d) 使用 `Smoothed KF`、`Linear/SLERP`、`Hermite` 的紧凑右上图例。动态 lag--residual 面板仅绘制冻结纵轴上限内的点，不使用顶端替代三角；完整异常值仍保留在指标和表格中。
+- 实验一发布一行四个 LaTeX 子图，依次为静止平移、静止旋转、动态平移和动态旋转的误差--抖动双纵轴面板；实验二发布一行四个 LaTeX 子图。图内不重复小标题，图内最小字号固定为 7 pt。
+- 实验一图二以四方法为横轴，左移实心圆表示左轴误差，右移空心菱形表示右轴抖动；静止误差使用中心化 P95，动态误差使用 lag-aligned RMSE，动态抖动必须使用同一最佳时延下残差轨迹的帧间增量 P95，不得把真实运动计为抖动。图 3(c) 只显示 event median 与 IQR，横轴为按 VCD 分数从高到低保留候选的比例，纵轴按有效风险范围收紧；图 3(d) 使用 `Smoothed KF`、`Linear/SLERP`、`Hermite` 的紧凑右上图例。
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 先按活动 `batch.json` 解析五个独立任务缓存，只对缓存缺失或失效项检查固定源文件、执行 QC 并发布；一个 task 失败不得改写其他 task 的既有缓存。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit 用于审计，但普通 Git 提交本身不作为缓存失效条件。
@@ -158,7 +158,7 @@ schema-v2 task directory
 - 论文六行连续轨迹图使用独立 `egoanchor.qualitative_replay` 包和 `pixi run replay` 入口；它只读取 `data/replay_capture/` 下的 `egoanchor_qualitative_replay` v1 capture，不得读取或写入正式 `data/eval/`、实验一/二工作簿和 schema-v2 产物。采集方式固定为 Quest Link 串流下的 Unity Editor Play Mode，完整操作说明固定在 `EgoAnchor_Python/docs/qualitative_replay.md`。离线 silhouette 必须按三角面并集生成，不能把整组重叠三角形交给 OpenCV 奇偶填充。
 - 正式论文数据不得按场景或指标择优拼接。局部重采可以只替换对应任务，但活动 `batch.json` 中五项任务必须共享对象、协议、配置 hash、冻结参数集和运行时矩阵；未变化任务复用已有工作簿和指标缓存。逐场景仍报告 event 数、缺失率、median[IQR] 与护栏；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格中的连续数值统一固定显示两位小数，计数和样本量保持整数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告七项行为属性，表内方法短名称固定为 `Arrival`、`Capture`、`One-Euro` 和 `EgoAnchor`；实验二按组件报告启用、关闭和配对效应。
-- One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`；三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件。图 3(d) 的时序策略主比较是 Smoothed KF Extrapolation 与关闭 StaticLock 的 Linear/SLERP；Hermite Interpolation 是共享关闭 StaticLock、候选、Kalman、VCD 和生命周期设置的补充条件。图 2(b) 与图 3(d) 为保证阅读尺度使用固定纵轴上限，只绘制范围内的原始点；完整数值、统计和审计表不得删除或截断。
+- One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`；三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件。图 3(d) 的时序策略主比较是 Smoothed KF Extrapolation 与关闭 StaticLock 的 Linear/SLERP；Hermite Interpolation 是共享关闭 StaticLock、候选、Kalman、VCD 和生命周期设置的补充条件。图 3(d) 为保证阅读尺度使用固定纵轴上限，只绘制范围内的原始点；完整数值、统计和审计表不得删除或截断。
 - 同一批五项物理任务同时驱动实验一四配置、实验二三个消融与两路时序策略；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；不得把不同参考姿态下的旋转向量导数直接混用。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的两个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
@@ -245,7 +245,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 人工分析只使用 `pixi run eval` 的固定路径工作流；旧任意路径 `qc`、`preprocess`、`build-paper` CLI 和 `batch_cli.py` 均已删除，不保留兼容层。
 - `stage`、`preprocess` 和 `rebuild` 新写工作簿时，`code_version` 自动读取当前 Git commit，不提供人工覆盖入口；缓存失效使用 Stage 1 相关源码内容指纹，不因无关提交重建。论文分析的 temporal provenance 使用 `temporal_strategy_comparison`。耗时 CLI 阶段使用 `tqdm` 在 stderr 显示任务命中/重建和发布阶段，最终 JSON 只写 stdout。
-- `preprocess` 将失效 task 原子发布为完整 XLSX；`analyze` 合并五份逐 task 指标结果，并在 `analysis/figures/` 发布七个独立 PDF/PNG 面板、在 `analysis/tex/` 发布 TeX 表和图环境；`copy-assets` 必须先核对 analysis provenance 的 batch ID，再按 TOML 清单复制 PNG/PDF 到 `2026-EgoAnchor`，主稿由研究者手工编辑。
+- `preprocess` 将失效 task 原子发布为完整 XLSX；`analyze` 合并五份逐 task 指标结果，并在 `analysis/figures/` 发布八个独立 PDF/PNG 面板、在 `analysis/tex/` 发布三张 TeX 表和图环境；`copy-assets` 必须先核对 analysis provenance 的 batch ID，再严格按本次 `build_result.figure_paths` 复制 PNG/PDF 到 `2026-EgoAnchor`，不得从分析目录残留文件推断发布清单，主稿由研究者手工编辑。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
@@ -290,7 +290,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 论文（`2026-EgoAnchor`，在手工引入 TeX 后）：
 
 ```text
-latexmk -xelatex egoanchor_cn_v6.tex
+latexmk -xelatex egoanchor_cn_v7.tex
 ```
 
 ## 环境与远端关键坑
@@ -316,9 +316,9 @@ latexmk -xelatex egoanchor_cn_v6.tex
 
 - Stage 1 workbook-v2 契约、XLSX writer 和回读验证保持不变；活动 `batch.json` 引用的 `task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；每本 XLSX 的指标独立缓存为严格 JSON，非有限浮点显式编码，性能统计保存可跨 task 合并的原始样本。缓存键绑定 workbook SHA、`paper.toml` SHA 和 `metrics.py`/`xlsx.py` 内容指纹。
-- 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal strategy 四个 LaTeX 子图同占一行，其中时序面板只展示 Smoothed KF Extrapolation 与 Hermite Interpolation。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
-- 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡期平移误差 P95 和起停转换；实验二的 VCD admission 同样报告完整系统、w/o VCD 及逐 episode 配对的遮挡期平移误差 P95。40 mm 超限次数与最大值只保留在完整指标和审计输出中，不进入主表。遮挡旋转不新增为本轮主指标，旋转证据继续由 Task 4 的 lag--RMSE 独立报告。
-- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 主文只使用 `occlusion_started` episode 的平移误差 P95，独立计算的最大值和 40 mm 超限数仅作审计；时序合成使用持续平移 lag--RMSE。
+- 实验一图固定为静止平移、静止旋转、动态平移和动态旋转四个误差--抖动双纵轴 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal strategy 四个 LaTeX 子图同占一行，其中时序面板展示 Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation。实验一原始片段点、中位数和 IQR 均保留，左右指标以错位 marker、轴颜色和明确单位共同区分；缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt。图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
+- 实验一正文拆为静止与遮挡稳定性、动态 6DoF 保真度两张表，分别报告中心化泄漏、绝对注册、静止帧间增量、遮挡平移 P95，以及平移/旋转 lag--RMSE 和 Start-transition。实验二归因表固定为采集时刻对齐、StaticLock、VCD 判别性和时序策略四行；VCD admission、停止护栏与 Hermite 补充只保留在完整指标、图或审计输出中，不进入主表。
+- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 判别性比较 `occlusion_started` event 的排序 AURC 与全覆盖风险；时序策略比较同样关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF 的平移、旋转 lag-aligned RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
 - 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式组合使用五个不同 session，每个
   session 只完成对应的一项任务。新组合清单先进入 `data/experiments/_staging/`，旧清单和旧分析进入

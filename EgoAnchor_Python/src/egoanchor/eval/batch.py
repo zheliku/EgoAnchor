@@ -57,16 +57,13 @@ _COMMON_MANIFEST_FIELDS = (
 )
 """同一正式批次必须完全一致的 manifest 字段。"""
 
-_EXPERIMENT_FIGURE_STEMS = (
-    "figure2a_head_motion",
-    "figure2b_translation",
-    "figure2c_occlusion",
-    "figure3a_capture_alignment",
-    "figure3b_static_lock",
-    "figure3c_vcd_risk_coverage",
-    "figure3d_temporal_strategies",
+_EXPERIMENT_FIGURE_KEYS = frozenset(
+    f"figure{figure}{panel}_{suffix}"
+    for figure in (2, 3)
+    for panel in "abcd"
+    for suffix in ("pdf", "png")
 )
-"""实验一、二分析必须发布并可复制的七个面板。"""
+"""本次分析清单必须声明的八面板 PNG/PDF 键集合。"""
 
 _BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
 """活动批次组合清单的结构版本。"""
@@ -1076,13 +1073,24 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
     if build_result.get("batch_id") != batch_id:
         raise ValueError("当前 analysis 不属于活动批次，请先运行 pixi run eval analyze")
 
+    raw_figure_paths = build_result.get("figure_paths")
+    if not isinstance(raw_figure_paths, dict) or set(raw_figure_paths) != _EXPERIMENT_FIGURE_KEYS:
+        raise ValueError("当前 analysis 的图片清单必须恰好覆盖图二和图三的八个 PNG/PDF 面板")
+    resolved_figure_root = figure_root.resolve()
     copies: list[AssetCopy] = []
-    for stem in _EXPERIMENT_FIGURE_STEMS:
-        for suffix in (".pdf", ".png"):
-            source = figure_root / f"{stem}{suffix}"
-            if not source.is_file():
-                raise FileNotFoundError(f"当前分析缺少实验面板：{source}")
-            copies.append(AssetCopy(source=source, destination=paths.experiment_asset_destination / source.name))
+    for key in sorted(_EXPERIMENT_FIGURE_KEYS):
+        source = Path(str(raw_figure_paths[key])).expanduser().resolve()
+        expected_suffix = f".{key.rsplit('_', 1)[1]}"
+        if source.parent != resolved_figure_root or source.suffix.lower() != expected_suffix:
+            raise ValueError(f"当前分析图片清单越界或后缀不匹配：{key}: {source}")
+        if not source.is_file():
+            raise FileNotFoundError(f"当前分析缺少实验面板：{source}")
+        copies.append(
+            AssetCopy(
+                source=source,
+                destination=paths.experiment_asset_destination / source.name,
+            )
+        )
     copies.extend(paths.relay_assets)
 
     published = [_copy_asset_file(item) for item in copies]

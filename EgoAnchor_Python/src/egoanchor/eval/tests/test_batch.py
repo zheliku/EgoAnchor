@@ -466,21 +466,27 @@ class BatchWorkflowTests(unittest.TestCase):
             figure_root = active_root / "analysis" / "figures"
             figure_root.mkdir(parents=True)
             stems = (
-                "figure2a_head_motion",
-                "figure2b_translation",
-                "figure2c_occlusion",
+                "figure2a_static_translation",
+                "figure2b_static_rotation",
+                "figure2c_dynamic_translation",
+                "figure2d_dynamic_rotation",
                 "figure3a_capture_alignment",
                 "figure3b_static_lock",
                 "figure3c_vcd_risk_coverage",
                 "figure3d_temporal_strategies",
             )
+            figure_paths = {}
             for stem in stems:
                 for suffix in (".pdf", ".png"):
-                    (figure_root / f"{stem}{suffix}").write_bytes(f"{stem}{suffix}".encode())
+                    source = figure_root / f"{stem}{suffix}"
+                    source.write_bytes(f"{stem}{suffix}".encode())
+                    figure_paths[f"{stem.split('_', 1)[0]}_{suffix[1:]}"] = str(source.resolve())
+            for suffix in (".pdf", ".png"):
+                (figure_root / f"figure2c_occlusion{suffix}").write_bytes(b"stale")
             provenance = active_root / "analysis" / "provenance"
             provenance.mkdir()
             (provenance / "build_result.json").write_text(
-                json.dumps({"batch_id": "batch_test"}),
+                json.dumps({"batch_id": "batch_test", "figure_paths": figure_paths}),
                 encoding="utf-8",
             )
             paper_root = root.parent / "paper"
@@ -510,9 +516,10 @@ class BatchWorkflowTests(unittest.TestCase):
                 result = copy_current_assets(root=root)
 
             self.assertTrue(result["passed"])
-            self.assertEqual(len(result["published"]), 15)
+            self.assertEqual(len(result["published"]), 17)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
+            self.assertFalse((paper_root / "figures" / "panels" / "figure2c_occlusion.pdf").exists())
             self.assertFalse((paper_root / "main.tex").exists())
 
 
