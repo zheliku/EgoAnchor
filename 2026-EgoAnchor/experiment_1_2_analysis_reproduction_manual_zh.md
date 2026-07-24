@@ -1,504 +1,252 @@
 # 实验一/二数据归档与分析手册
 
-本手册使用唯一入口 `pixi run eval`。命令不接收任意输入、输出路径；数据目录和图片发布位置
-统一写在 `src/egoanchor/eval/config/batch.toml`。主稿编译不属于评估 CLI。
+所有命令都在 `EgoAnchor_Python` 目录运行。评估入口固定为 `pixi run eval`；路径从
+`src/egoanchor/eval/config/batch.toml` 读取，不接收任意输入或输出路径。主稿编译不属于该 CLI。
 
-以下命令都在 `EgoAnchor_Python` 目录运行。
+## 一、目录和缓存
 
-## 当前 Kalman 重采边界
-
-当前活动批次可能仍是 v3 归档数据，使用旧的 Kalman 过程协方差。它只能用于只读诊断和历史
-结果核对，不能作为 CWNA 修正后运行时的正式结果。切换新批次前必须确认正式场景中的六个
-`KalmanModel` 参数完全一致，配置指纹包含 `q-model:cwna-v1`，并通过 Unity EditMode 测试。
-
-新批次仍按任务 1--5 各采一个正式 session。五项数据没有全部完成并通过 `stage` 前，不切换
-活动批次，也不从 v3 单独保留某个表现更好的场景。完成整批 QC 后再使用 `promote` 原子替换，
-随后运行 `analyze` 生成本地指标、图片和 TeX 片段；图片发布与主稿编译由人工确认后分别执行。
-
-## 一、先弄清三类文件
-
-### 1. 新采集 session
-
-Unity 和 Python 同步回来的原始 session 位于：
+原始任务、Stage 1 工作簿、任务指标和当前组合相互独立：
 
 ```text
-data/eval/<session_id>/
+data/experiments/
+├─ task_data/                     # 唯一原始归档
+├─ task_workbooks/                # 每个原始目录唯一对应一本 XLSX
+├─ task_analysis/                 # 每本 XLSX 唯一对应一份指标缓存
+├─ _staging/experiment_1_2/       # 待提升的 batch.json
+├─ _archive/experiment_1_2/       # 旧 batch.json 和旧 analysis
+└─ experiment_1_2/
+   ├─ batch.json                  # 当前选中的五项任务
+   └─ analysis/                   # 当前五项合并后的图、表和 TeX
 ```
 
-这里是采集和同步入口，不是分析源。每个正式 session 只能完成一个任务。两端停止并完成同步后，
-把 session 移到：
+活动目录不再复制 `raw/` 或 `workbooks/`。例如只重采 Task 3 时，只会新增 Task 3 的原始目录、
+工作簿缓存和指标缓存；Task 1、2、4、5 继续复用。
 
-```text
-data/experiments/task_data/task_<任务号>_v<版本>_<YYYYMMDD_HHMMSS>_<物体>/
-```
-
-时间和物体必须与内部 manifest 一致。实验一/二的一批完整数据由五个不同 session 组成，并且
-恰好覆盖任务 1--5。
-
-### 2. 当前活动批次
-
-论文分析只读取 `active_root` 指向的批次，默认是：
-
-```text
-data/experiments/experiment_1_2/
-├─ raw/          # 五项 JSON/JSONL 原始任务
-├─ workbooks/    # 五本 Stage 1 XLSX
-└─ analysis/     # 指标、绘图数据、PNG/PDF、TeX 片段和分析 provenance
-```
-
-`raw/` 中的 JSON/JSONL 是当前批次的只读归档。`workbooks/` 是 JSONL 与论文分析之间的唯一
-桥梁。这里常说的“raw XLSX”实际是 Stage 1 完整工作簿，它保留原始行、来源行号、行摘要、
-事件、reference、admission 和 render 表，但它仍是预处理产物，不是原始采集文件。
-
-### 3. 论文工程
-
-论文源稿、图和表位于 `2026-EgoAnchor/`。当前版本化源稿是：
-
-```text
-egoanchor_cn_v6.tex
-```
-
-`v6` 只表示源稿版本。面向阅读和交付的 PDF 使用稳定名称：
-
-```text
-pdf/EgoAnchor.pdf
-```
-
-以后主稿升级为 v7 时，直接维护 `2026-EgoAnchor` 下的源稿和论文工程编译设置；评估 CLI 不读取
-主稿文件名或 PDF 输出路径。
-
-## 二、配置文件怎么改
-
-### 1. 操作路径和论文文件：batch.toml
-
-配置文件：
-
-```text
-src/egoanchor/eval/config/batch.toml
-```
-
-当前内容：
-
-```toml
-[paths]
-task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
-staging_root = "data/experiments/_staging/experiment_1_2" # 新批次完成 QC 和工作簿发布前的临时目录。
-archive_root = "data/experiments/_archive/experiment_1_2" # 退出当前论文的完整旧批次冷归档目录。
-active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动批次目录。
-paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的论文目录。
-```
-
-`[paths]` 的相对路径以 `EgoAnchor_Python` 根目录为基准，不是以 TOML 所在目录为基准。
-
-可以修改：
-
-- `task_data_root`：归档后的任务数据放在其他 `data/` 子目录时修改。
-- `staging_root`、`archive_root`：需要调整暂存和冷归档位置时修改。
-- `active_root`：需要维护另一套完整实验批次时修改。
-- `paper_root`：图片发布目标根目录改变时修改。
-
-这些路径有硬限制：四个数据目录必须位于 `EgoAnchor_Python/data/` 内，彼此不能相同或互相
-嵌套；图片发布目录必须位于当前仓库内。TeX 主稿和最终 PDF 不受该配置约束。
-
-修改 TOML 只会改变下一条命令读取和写入的位置，不会自动搬迁旧数据。改完先运行：
-
-```text
-pixi run eval config
-```
-
-它会打印全部绝对路径，并列出所有 `pixi run eval` 子命令的实际输入、输出。路径不符合
-预期时不要继续。
-
-### 2. 论文统计参数：paper.toml
-
-科学参数位于：
-
-```text
-src/egoanchor/eval/config/paper.toml
-```
-
-这里控制有效时延搜索范围和步长、最小样本数、起停判定阈值、遮挡灾难性失效阈值。它不
-控制目录、文件名、颜色或字体。
-
-修改 `paper.toml` 会改变正式结果。分析 provenance 会记录该文件的 SHA-256，因此正式采集
-完成后不能为了得到更好看的数字反复调参。确需修改时，应先说明原因、冻结新参数，再对五项
-任务完整重建，不能只重算某一个场景。
-
-绘图风格目前由 `egoanchor.eval.paper_analysis` 的绘图代码控制，没有命令行或 TOML 覆盖项。
-`figure_plot_data.xlsx` 是审计输出，手工修改它不会改变图片。
-
-## 三、命令总表
-
-| 命令                                   | 主要输入                | 主要输出或写入                                   | 是否改当前活动批次 |
-| -------------------------------------- | ----------------------- | ------------------------------------------------ | ------------------ |
-| `pixi run eval config`               | `batch.toml`          | 终端 JSON                                        | 否                 |
-| `pixi run eval sessions`             | `task_data_root`      | 可识别任务目录清单 JSON                          | 否                 |
-| `pixi run eval stage --promote`      | 自动选择的五项任务数据 | 暂存、五本工作簿和新`active_root`              | 是                 |
-| `pixi run eval promote [batch_id]`   | 一个已有完整暂存批次    | 新`active_root`，旧批次进入 `archive_root`   | 是，仅恢复路径     |
-| `pixi run eval qc`                   | `active_root/raw`     | QC JSON；必要时生成`events.jsonl`              | 否                 |
-| `pixi run eval preprocess`           | `active_root/raw`     | 五本 Stage 1 XLSX                                | 否                 |
-| `pixi run eval analyze`              | 五本 Stage 1 XLSX       | 活动批次本地指标、绘图数据、面板和手工引入 TeX   | 否                 |
-| `pixi run eval copy-assets`          | 本地面板和显式 relay 文件 | 论文目录中的 PNG/PDF                            | 是，仅图片         |
-| `pixi run eval rebuild`              | `active_root/raw`     | preprocess + analyze 的本地分析输出              | 否                 |
-
-只有 `promote` 会替换当前活动批次。`preprocess`、`analyze` 和 `rebuild` 会更新活动批次内的
-派生产物，但不会把另一个批次切换进来。
-
-## 四、新数据如何进入下一批
-
-### 阶段 0：等待两端停止和同步完成
-
-先停止 Unity session 和远端 Python 服务，确认 `python_session.json` 已写入
-`python_stopped`，两端 writer 的 `dropped_rows` 和 `log_write_failures` 都是 0。
-
-刷新并查看 Mutagen：
-
-```text
-pixi run mutagen sync flush logs-5090
-pixi run mutagen sync list logs-5090
-```
-
-确认没有 conflict，文件数量和大小不再变化，然后停止同步项目：
-
-```text
-pixi run mutagen project terminate
-```
-
-writer 或 Mutagen 仍在写入时，不要执行 `stage`，也不要移动、重命名或删除 session。
-
-### 阶段 1：归档并查看候选 session
-
-先把已经停止同步的五个 session 从 `data/eval` 移到 `task_data_root`。目录名格式为：
+`task_data/` 目录名固定为：
 
 ```text
 task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>
 ```
 
-局部重采时只增加该任务的版本。例如 Task 3 的第二次正式数据可命名为
-`task_3_v2_20260724_034253_controller_right`。
-
-命令：
+例如：
 
 ```text
+task_3_v2_20260724_034253_controller_right
+```
+
+时间和物体必须与 `manifest.session_id`、`manifest.object_id` 一致。每个目录只完成一项任务。目录
+进入 `task_data/` 后视为只读；需要替换内容时新建更高版本，不要覆盖原目录文件。
+
+## 二、配置
+
+当前数据路径配置为：
+
+```toml
+[paths]
+task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
+task_workbook_root = "data/experiments/task_workbooks" # 每个原始任务目录唯一对应的 Stage 1 工作簿缓存。
+task_analysis_root = "data/experiments/task_analysis" # 每本 Stage 1 工作簿唯一对应的论文指标缓存。
+staging_root = "data/experiments/_staging/experiment_1_2" # 新组合切换前的轻量暂存目录。
+archive_root = "data/experiments/_archive/experiment_1_2" # 旧组合清单和分析产物归档目录。
+active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动组合目录。
+paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的论文目录。
+```
+
+修改后先运行：
+
+```powershell
+pixi run eval config
+```
+
+确认打印的绝对路径正确再继续。`paper.toml` 只保存论文统计参数；修改它会让逐任务指标缓存失效，
+但不会重建 Stage 1 XLSX。
+
+## 三、日常命令
+
+正常流程只有三条：
+
+```powershell
+pixi run eval stage --promote
+pixi run eval analyze
+pixi run eval copy-assets
+```
+
+其中 `stage --promote` 自动选择数据、补建变化任务的工作簿，并切换当前五任务组合。`analyze` 只重算
+变化任务的指标，然后统一生成完整图表。`copy-assets` 在人工看过结果后才发布 PNG/PDF。
+
+## 四、新数据归档
+
+先停止 Unity session 和远端 Python 服务，确认 `python_session.json` 的状态为 `python_stopped`，
+writer 的 `dropped_rows` 与 `log_write_failures` 都是 0。Mutagen 仍在写入时不要移动目录。
+
+确认同步完成后，把 session 从 `data/eval/` 移到 `task_data_root`，按任务独立维护版本。只重采
+Task 3 时，不需要改另外四个目录。
+
+查看可选数据：
+
+```powershell
 pixi run eval sessions
 ```
 
-输入：`batch.toml` 的 `task_data_root`。
+输出会列出任务、版本、采集时间、物体、session ID、完成任务、Python 停止状态和运行时矩阵。
+非法目录会显示错误，不会进入自动选择。
 
-输出：终端 JSON，包含目录解析出的任务、版本、时间、物体，以及 `session_id`、`completed_tasks`、
-`config_hash`、`python_state` 和 `variant_matrix_id`。非法名称会显示错误，不会被静默忽略。
+## 五、stage：只处理变化任务
 
-你能控制的内容：需要改入口目录时修改 `batch.toml` 的 `task_data_root`。
+默认命令：
 
-成功判据：找得到准备归档的五个 session；每个 session 的 `python_state` 是
-`python_stopped`，五项任务编号没有重复。
-
-### 阶段 2：stage，复制新批次并生成工作簿
-
-命令：
-
-```text
+```powershell
 pixi run eval stage --promote
 ```
 
-固定全部任务使用 v2：
+默认对每项任务选择最高版本，再选择该版本时间最新的目录。也可以固定选择：
 
-```text
+```powershell
 pixi run eval stage --promote --version v2
-```
-
-只指定局部重采版本：
-
-```text
 pixi run eval stage --promote --task-version 3=v2 --task-version 4=v3
+pixi run eval stage --promote --object controller_right
 ```
 
-默认情况下，每项任务选择最高数值版本，再从该版本选择目录时间最新者。`--version` 统一限制
-五项任务，`--task-version` 覆盖指定任务。如果多个物体都完整覆盖五项任务，再加
-`--object <物体>`。批次名仍按选中任务 1--5 的 manifest `session_id` 时间组成。
+`--version` 限制五项任务；重复的 `--task-version` 只覆盖指定任务。存在多个完整物体集合时必须用
+`--object`，程序不会猜。
 
-检查内容：
-
-- 五个 session ID 唯一，每个 session 只完成一项任务，整批恰好覆盖任务 1--5。
-- `run_kind` 为 `formal`，九路矩阵为 `exp12_9_smoothed_hermite_v4`。
-- 五个 session 的配置哈希、冻结参数、对象、模型和协议一致。
-- Task 2 的 `transition_started` / `transition_stopped` 严格交替闭合；Smoothed KF Extrapolation 的实际时域不超过配置指纹中的上限，校正残差有限，异常连续性重置计数单调不减。
-- 固定 JSON/JSONL 文件齐全，生命周期、事件、主外键和九路 admission/render 矩阵通过 QC。
-- 复制期间来源文件没有继续变化。
-
-写入：
+`stage` 先读取五个 manifest，检查 Task 1--5 覆盖、session 唯一性、对象、模型、协议、配置哈希、
+冻结参数集和 `variant_matrix_id`。随后逐任务处理：
 
 ```text
-staging_root/batch_<task1-time>_<task2-time>_<task3-time>_<task4-time>_<task5-time>/
-├─ raw/
-│  ├─ task_1_static_head_motion/
-│  ├─ task_2_start_stop_6dof/
-│  ├─ task_3_continuous_translation/
-│  ├─ task_4_continuous_rotation/
-│  └─ task_5_occlusion_recovery/
-└─ workbooks/
-   ├─ task_1_complete.xlsx
-   ├─ task_2_complete.xlsx
-   ├─ task_3_complete.xlsx
-   ├─ task_4_complete.xlsx
-   └─ task_5_complete.xlsx
+缓存命中 -> 直接复用
+缓存缺失或失效 -> events 物化 -> 完整 QC -> 写 XLSX -> 回读验证 -> 发布 cache.json
 ```
 
-需要特别注意：如果 session 中缺少派生的 `events.jsonl`，`stage` 会先根据
-`python_events.jsonl` 和 `unity_events.jsonl` 在原 session 内确定性生成它。因此
-`task_data_root` 中的源目录不会被重命名或删除，但并非绝对零写入。
+缓存命中判断使用 Stage 1 实现指纹、原始目录文件快照、工作簿存在性和大小。它不重新扫描 JSONL，
+也不重新回读 XLSX。完整来源 SHA 和工作簿 SHA 在首次构建时已记录。需要重新深查原始数据时使用
+`pixi run eval qc`。
 
-你能控制的内容：统一版本、逐任务版本和物体筛选；暂存根目录由 `batch.toml` 控制。批次名自动由
-任务 1--5 的 manifest 时间组成。日常使用 `--promote` 自动切换活动批次，不需要手写批次名。
+首次处理五个新目录时，JSON 中应显示：
 
-成功判据：返回 `"passed": true`、`active_batch` 和五本工作簿 SHA-256。`--promote` 只在整批
-QC 和工作簿发布成功后才切换活动批次；失败时保留旧暂存批次和当前活动批次。修正原 session 后
-重新运行整条 `stage --promote`。
-
-`stage`、`promote`、`preprocess` 和 `analyze` 的耗时阶段会在终端显示任务进度条和当前步骤。
-进度走 stderr，最终 JSON 结果仍走 stdout。
-
-### 阶段 3：promote，切换当前论文批次
-
-暂存区只有一个批次时：
-
-```text
-pixi run eval promote
+```json
+"cache_hits": [],
+"rebuilt_tasks": [1, 2, 3, 4, 5]
 ```
 
-暂存区有多个批次时：
+只替换 Task 3 后应显示：
 
-```text
+```json
+"cache_hits": [1, 2, 4, 5],
+"rebuilt_tasks": [3]
+```
+
+暂存批次只包含 `batch.json`，不会复制 raw 或 XLSX。`--promote` 随后直接切换这份组合清单。批次名
+由五个 session 时间按任务号组成，所以任一任务变化都会产生新的确定名称。
+
+如果不带 `--promote`，命令返回 `batch_id`。之后可运行：
+
+```powershell
 pixi run eval promote <batch_id>
 ```
 
-输入：一个 `staging_root/<batch_id>`。提升前会重新执行 QC、回读五本工作簿，并核对每本
-工作簿记录的来源摘要是否与对应 raw 一致。
+省略 ID 时，暂存区必须恰好只有一个批次。`promote` 不重跑 QC，也不打开五本 XLSX；它只确认
+清单引用仍存在，并把旧 `batch.json` 和旧 `analysis/` 移入归档。
 
-写入和移动：旧 `active_root` 整体移动到 `archive_root/<old_batch_id>`，新暂存批次整体移动
-到 `active_root`。第二次移动失败时会回滚旧活动批次。
+## 六、analyze：只重算变化任务
 
-你能控制的内容：多个暂存批次并存时必须明确给出 `batch_id`；活动和归档路径由 TOML
-控制。命令不允许覆盖已经存在的冷归档。
-
-成功判据：返回新的 `active_root` 和旧批次 `archived_root`。新活动批次此时只有 `raw/` 和
-`workbooks/`；还要执行 `analyze` 才会得到这一批对应的本地分析结果。
-
-确认 `task_data_root` 中的原始 session 已完整归档并且新批次分析正确后，再清理不再需要的
-`data/eval` 同步副本。
-继续采集前重新启动同步：
-
-```text
-pixi run mutagen project start
-```
-
-## 五、当前活动批次如何逐阶段分析
-
-### 阶段 4：qc，只检查当前 raw
-
-命令：
-
-```text
-pixi run eval qc
-```
-
-输入：`active_root/raw/` 下五个固定任务目录。
-
-输出：终端 QC JSON，包含每个 session 的错误、警告和计数；QC 不通过时同样返回完整报告，
-并使用退出码 2。若某个 task 缺少
-`events.jsonl`，命令会在该 raw task 内确定性生成它；除此之外不生成工作簿、图或论文。
-
-你能控制的内容：输入位置只由 `active_root` 控制。QC 规则和九路矩阵属于正式数据契约，
-不能通过命令关闭。
-
-成功判据：退出码为 0，顶层 `"passed": true`，五项 task 都没有 error。latest-only 导致的
-`python_candidates_not_consumed` 可以是警告；Unity admission 指向未知 candidate、丢行、
-writer 失败或任务不完整都属于硬错误。
-
-失败处理：根据 JSON 中的 error code 定位问题。不要修改 JSONL 补行，也不要从别的批次复制局部文件。先修复同步或选择正确批次，
-然后重新运行 QC。
-
-### 阶段 5：preprocess，JSON/JSONL 转五本 Stage 1 XLSX
-
-命令：
-
-```text
-pixi run eval preprocess
-```
-
-输入：`active_root/raw/`。命令先对五项任务重新做整批 QC。
-
-输出：
-
-```text
-active_root/workbooks/
-├─ task_1_complete.xlsx
-├─ task_2_complete.xlsx
-├─ task_3_complete.xlsx
-├─ task_4_complete.xlsx
-└─ task_5_complete.xlsx
-```
-
-每本工作簿记录当前 Git commit、来源文件摘要、原始行和 QC 结果，写出后还会独立回读验证。
-单本工作簿采用临时文件加原子替换，不会留下半本 XLSX。五本工作簿不是一个跨文件事务；
-如果第 N 本因文件锁失败，前面成功的工作簿可能已经更新。关闭 Excel、修复问题后，重新运行
-整条 `preprocess` 即可，不要只手工补某一本。
-
-你能控制的内容：raw 和 workbooks 根目录由 `active_root` 决定，文件名固定。正式命令不允许
-覆盖代码版本或跳过 QC。
-
-成功判据：返回五个 `workbook_sha256`。工作簿可以只读查看，但不要在 Excel 中保存后继续
-用于正式分析；Excel 保存会改变文件内容和摘要。
-
-### 阶段 6：analyze，从五本 XLSX 生成活动批次本地分析结果
-
-```text
+```powershell
 pixi run eval analyze
 ```
 
-输入：
+输入由活动 `batch.json` 指向。分析缓存键包含三部分：
 
 ```text
-active_root/workbooks/task_1_complete.xlsx
-...
-active_root/workbooks/task_5_complete.xlsx
+Stage 1 workbook SHA-256
+paper.toml SHA-256
+metrics.py + xlsx.py 实现指纹
 ```
 
-该阶段不回读 raw JSON/JSONL，也不修改五本工作簿。
+缓存命中时不打开 XLSX。缓存缺失或键变化时，只对对应工作簿计算 SHA、核对 `batch.json` 摘要并读取
+其大表。Task 3 更新后，正常进度应为四个“使用指标缓存”和一个“重建指标缓存”。
 
-输出：
+五项 `TaskResults` 合并后才计算全批性能统计并生成七个面板、两张表和 TeX。性能缓存保存原始
+TRACK、REGISTER 和 pose publish interval 样本，不会错误合并各 Task 的中位数。
+
+输出目录：
 
 ```text
-active_root/analysis/
-├─ metrics/
-│  ├─ experiment1_summary.csv
-│  ├─ capture_alignment.csv
-│  ├─ runtime_performance.json
-│  ├─ strategy_comparison_segments.csv
-│  └─ strategy_comparison_summary.csv
-├─ plots/
-│  └─ figure_plot_data.xlsx
-├─ figures/
-│  ├─ figure2a_head_motion.png/.pdf
-│  ├─ figure2b_translation.png/.pdf
-│  ├─ figure2c_occlusion.png/.pdf
-│  ├─ figure3a_capture_alignment.png/.pdf
-│  ├─ figure3b_static_lock.png/.pdf
-│  ├─ figure3c_vcd_risk_coverage.png/.pdf
-│  └─ figure3d_temporal_strategies.png/.pdf
-├─ tex/
-│  ├─ tables/
-│  │  ├─ experiment1_system_characterization.tex
-│  │  └─ experiment2_design_attribution.tex
-│  └─ figures/
-│     ├─ figure2_experiment1.tex
-│     └─ figure3_experiment2.tex
-└─ provenance/
-   ├─ analysis_manifest.json
-   └─ build_result.json
+data/experiments/experiment_1_2/analysis/
+├─ metrics/                         # 完整精度指标
+├─ plots/figure_plot_data.xlsx      # 图中可见数据点
+├─ figures/                         # 七个 PNG/PDF 面板
+├─ tex/                             # 手工引入的表格和图环境
+└─ provenance/build_result.json     # batch、输入、参数、实现指纹和缓存状态
 ```
 
-重要边界：`analyze` 不修改 `2026-EgoAnchor` 下的主稿、图、表或 PDF，也不运行 XeLaTeX。
-它只更新活动批次的 `analysis/`。图 2(b) 和图 3(d) 中超出显示上限的真实点用图顶空心上三角表示，
-完整数值仍保留在 `metrics/` 与 `figure_plot_data.xlsx`，不得因此删行或修改统计。
+成功后检查 JSON 中 `task_cache`。第一次分析应全部为 `rebuilt`；原样再次运行应全部为 `hit`；局部
+重采后只有相应任务为 `rebuilt`。
 
-`figure_plot_data.xlsx` 与 PNG/PDF 面板来自同一份内存分析结果。它用于核对图中可见点，不是
-后续绘图输入。手改它不会改变图片，下次分析还会覆盖它。
+`analyze` 不读取原始 JSON/JSONL，不改写 XLSX，不修改论文目录，也不调用 XeLaTeX。
 
-你能控制的内容：
+## 七、发布图片
 
-- 输入、分析输出、论文根目录和图片发布清单由 `batch.toml` 控制。
-- 指标算法参数由 `paper.toml` 控制，但正式采集后不能临时调参。
-
-成功判据：退出码为 0，`build_result.json` 中 `"passed": true`，七组面板、两张 TeX 表和两段
-图环境 TeX 都存在。分析输出不是跨全部文件的单一事务；中途失败时不要使用局部新产物，修复问题后
-重新运行完整 `analyze`。
-
-### 阶段 7：copy-assets，显式发布 PNG/PDF
-
-确认活动批次 `analysis/` 的数值和图形后运行：
-
-```text
+```powershell
 pixi run eval copy-assets
 ```
 
-命令只复制当前 `analysis/figures/` 下的七组实验面板 PNG/PDF，以及 `batch.toml` 中逐项声明的
-replay/relay PNG/PDF。它不会复制 TeX，不会修改主稿，也不会编译 PDF。定性图来源不得按修改时间猜测，
-应在 `[[copy_assets.relay]]` 中显式固定。
+命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误发布旧图。
+通过后，只复制 `analysis/figures/` 的实验 PNG/PDF 和 `batch.toml` 明确列出的 relay PNG/PDF。
+TeX 和主稿不会自动修改。
 
-研究者从 `analysis/tex/tables/` 和 `analysis/tex/figures/` 手工复制、审阅所需片段到主稿。
-评估 CLI 到此结束；主稿编译继续使用论文工程已有的本机 LaTeX 工作流，不读取评估数据，也不重画图片。
-
-## 六、组合命令怎么选
-
-### 当前 raw 全部重建
+表格和图环境位于：
 
 ```text
+data/experiments/experiment_1_2/analysis/tex/tables/
+data/experiments/experiment_1_2/analysis/tex/figures/
+```
+
+审阅后手工纳入 `2026-EgoAnchor/egoanchor_cn_v6.tex`，再按论文工程单独编译。
+
+## 八、诊断和强制重建
+
+```powershell
+pixi run eval qc
+pixi run eval preprocess
 pixi run eval rebuild
 ```
 
-等价于依次执行：
+- `qc`：对活动组合引用的五个原始目录执行完整硬 QC。它会读取全部 JSON/JSONL，耗时较长。
+- `preprocess`：检查五项 Stage 1 缓存，只补建缺失或失效项。
+- `rebuild`：明确强制重建五本 XLSX 和五份指标缓存，再生成合并产物。日常局部重采不要用它。
 
-```text
-pixi run eval preprocess
-pixi run eval analyze
-```
+修改工作簿契约、reader 或 QC 实现时，Stage 1 实现指纹会变化，对应缓存会重建。修改论文指标或 XLSX
+分析 reader 时，只会使指标缓存失效。普通 Git 提交不会单独让缓存失效。
 
-它不执行 `stage` 或 `promote`，不会切换数据批次。
+## 九、常见问题
 
-### 工作簿已经确认，只重算指标和图
+### stage 为什么仍要求五项任务？
 
-```text
-pixi run eval analyze
-```
+因为 `batch.json` 表示一组可进入论文的完整输入，需要检查共同配置和 Task 1--5 覆盖。但这只是选择
+和身份检查，不代表重做五项数据。真正耗时的 QC 和 XLSX 写出只发生在变化任务上。
 
-### 只改了普通 LaTeX 正文
+### promote 为什么很快？
 
-不要运行评估命令。直接在论文工程中使用既有的 LaTeX 编译方式；`analyze` 不会回填主稿。
+它只切换组合清单。原始数据和工作簿已在共享缓存中，不需要复制，也不需要再验证一遍重型内容。
 
-### 新采集五个 session 的完整顺序
+### analyze 为什么仍会重新生成所有图？
 
-```text
+图和表代表当前五项组合，必须统一发布。重画本身很快；耗时的 XLSX 解析和片段统计已按 Task 缓存。
+
+### 能否修改旧 task_data 目录？
+
+不要。创建新 `vN` 目录。版本化不可变目录是快速缓存成立的前提，也是原始数据可审计的边界。
+
+### 已有旧 active/raw 和 active/workbooks 怎么办？
+
+新代码不会读取它们。第一次运行 `stage --promote` 会写入新的 `batch.json`，之后 `analyze` 只按清单
+读取共享缓存。确认新流程结果后，可人工归档旧副本；工具不自动删除已有实验数据。
+
+## 十、验证命令
+
+```powershell
+pixi run python -m compileall src/egoanchor/eval
+pixi run python -m unittest discover -s src/egoanchor/eval/tests -t src -p test_*.py
 pixi run eval config
 pixi run eval sessions
-pixi run eval stage --promote
-pixi run eval analyze
-pixi run eval copy-assets
-```
-
-`stage` 已经为暂存批次生成工作簿，提升后通常直接 `analyze`，不必再次 preprocess。检查本地
-`analysis/` 后再运行 `copy-assets`；TeX 仍需手工引入主稿，之后按论文工程既有方式编译。
-
-## 七、哪些东西不能手工改
-
-- 不要补写、删行或拼接 raw JSON/JSONL。
-- 不要在 Excel 中保存后把修改过的 Stage 1 工作簿用于正式分析。
-- 不要把 `figure_plot_data.xlsx` 当成绘图输入。
-- 不要从不同采集批次挑选更好的场景或指标拼成论文结果。
-- 不要在 writer 或 Mutagen 仍运行时执行归档切换。
-- 不要恢复要求手工输入五组路径的旧 Python CLI。人工入口只有 `pixi run eval`。
-
-主稿正文、表格 TeX 和图环境由研究者手工维护。`analyze` 输出的 TeX 片段是可审阅的来源，不会自动
-覆盖主稿；若需调整统计或图形生成逻辑，应修改分析代码后对五本工作簿完整重建。
-
-## 八、退出码和排错
-
-| 退出码 | 含义                                        | 处理方式                         |
-| ------ | ------------------------------------------- | -------------------------------- |
-| `0`  | 命令成功                                    | 检查返回 JSON 中的路径和摘要     |
-| `1`  | 目录、固定文件、Git 或文件系统错误 | 检查同步、路径和文件锁 |
-| `2`  | 批次、schema、QC 或论文输入契约错误         | 修复数据或配置后整阶段重跑       |
-
-排错顺序：
-
-1. 运行 `pixi run eval config`，确认实际输入和输出。
-2. 运行 `pixi run eval qc`，先排除当前 raw 问题。
-3. 检查 Excel 是否打开了工作簿，LaTeX 是否缺少图表或参考文献。
-4. 修复后重跑失败的完整阶段，不手工拼补局部产物。
-
-日常使用不需要设置 `PYTHONPATH`，也不需要手工导入 Python 模块。需要写自己的只读检查
-脚本时，使用包级入口：
-
-```python
-from egoanchor.eval import describe_workflow, list_task_data, qc_current
 ```

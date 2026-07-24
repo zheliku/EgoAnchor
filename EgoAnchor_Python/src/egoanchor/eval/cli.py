@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     sessions = subparsers.add_parser("sessions", help="列出任务数据目录中的可选 session")
     sessions.set_defaults(handler=_run_sessions)
 
-    stage = subparsers.add_parser("stage", help="自动选择五项任务数据，执行 QC 并生成工作簿")
+    stage = subparsers.add_parser("stage", help="自动选择五项任务，只处理缺失或变化的任务缓存")
     stage.add_argument(
         "--version",
         type=_parse_version,
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     stage.add_argument(
         "--promote",
         action="store_true",
-        help="整批 QC 和工作簿发布成功后立刻切换为活动批次，无需手工输入 batch_id",
+        help="任务缓存就绪后立刻切换活动组合，无需手工输入 batch_id",
     )
     stage.set_defaults(handler=_run_stage)
 
@@ -77,16 +77,16 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("batch_id", nargs="?", help="省略时要求暂存区恰好只有一个批次")
     promote.set_defaults(handler=_run_promote)
 
-    qc = subparsers.add_parser("qc", help="检查当前活动批次的五项 raw 数据")
+    qc = subparsers.add_parser("qc", help="显式深查活动组合引用的五项原始数据")
     qc.set_defaults(handler=_run_qc)
 
-    preprocess = subparsers.add_parser("preprocess", help="将当前 raw 转为五本完整 XLSX")
+    preprocess = subparsers.add_parser("preprocess", help="补建活动组合中缺失或失效的任务 XLSX")
     preprocess.set_defaults(handler=_run_preprocess)
 
     analyze = subparsers.add_parser(
         "analyze",
-        help="从当前五本 XLSX 重建本地分析图表和 TeX 片段",
-        description="只读取当前五本 XLSX，更新活动批次 analysis 目录，不修改论文图表、表格或主稿。",
+        help="复用逐任务指标缓存，生成当前组合的图表和 TeX 片段",
+        description="从当前五本 XLSX 复用逐任务缓存，只重算变化任务并更新 analysis；不修改论文目录或主稿。",
     )
     analyze.set_defaults(handler=_run_analyze)
 
@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     copy_assets.set_defaults(handler=_run_copy_assets)
 
-    rebuild = subparsers.add_parser("rebuild", help="从当前 raw 开始执行 preprocess 和 analyze")
+    rebuild = subparsers.add_parser("rebuild", help="显式强制重建五项 XLSX 和全部分析产物")
     rebuild.set_defaults(handler=_run_rebuild)
     return parser
 
@@ -135,7 +135,7 @@ def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_stage(args: argparse.Namespace) -> dict[str, object]:
-    """暂存五个 session 并返回下一条 Pixi 命令。"""
+    """准备五项独立缓存和组合清单，并返回下一条 Pixi 命令。"""
 
     artifact = stage_batch(
         version=args.version,
@@ -147,6 +147,8 @@ def _run_stage(args: argparse.Namespace) -> dict[str, object]:
     promoted = promote_batch(artifact.batch_id)
     promoted["staged_batch"] = artifact.batch_id
     promoted["workbook_sha256"] = artifact.workbook_sha256
+    promoted["cache_hits"] = list(artifact.cache_hits)
+    promoted["rebuilt_tasks"] = list(artifact.rebuilt_tasks)
     promoted["next_command"] = "pixi run eval analyze"
     return promoted
 
@@ -158,13 +160,13 @@ def _run_promote(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_qc(_args: argparse.Namespace) -> dict[str, object]:
-    """检查当前活动批次的五项 raw 数据。"""
+    """显式深查当前活动组合的五项原始数据。"""
 
     return qc_current()
 
 
 def _run_preprocess(_args: argparse.Namespace) -> dict[str, object]:
-    """从当前 raw 生成五本 Stage 1 工作簿。"""
+    """补建当前活动组合缺失或失效的 Stage 1 工作簿。"""
 
     return preprocess_current()
 

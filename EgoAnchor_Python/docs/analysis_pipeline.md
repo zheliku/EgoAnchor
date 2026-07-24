@@ -10,10 +10,12 @@ data/eval/<session_id>                         # 采集与同步中的原始 ses
   -> 两端停止后移动并重命名
 data/experiments/task_data/task_<N>_v<V>_<YYYYMMDD_HHMMSS>_<object>
   -> stage
-  -> _staging/<batch_id>/{raw,workbooks}
+  -> task_workbooks/<task-directory>/task_N_complete.xlsx
+  -> _staging/<batch_id>/batch.json
   -> promote
-  -> experiment_1_2/{raw,workbooks}
+  -> experiment_1_2/batch.json
   -> analyze
+  -> task_analysis/<task-directory>/task_N_complete_metrics.json
   -> experiment_1_2/analysis/{metrics,plots,figures,tex,provenance}
   -> copy-assets
   -> 2026-EgoAnchor 中的 PNG/PDF
@@ -31,7 +33,9 @@ pixi run eval config
 `batch.toml` 只控制数据目录、论文图片发布目录和 relay 资源：
 
 - `[paths].task_data_root`：归档后可供 `stage` 自动选择的任务数据目录。
-- `[paths].active_root`：唯一参与论文分析的五项任务批次。
+- `[paths].task_workbook_root`：每个原始任务目录唯一对应的 Stage 1 工作簿缓存。
+- `[paths].task_analysis_root`：每本 Stage 1 工作簿唯一对应的指标缓存。
+- `[paths].active_root`：当前五项任务组合清单和合并后的分析产物。
 - `[paths].paper_root`：`copy-assets` 的图片目标根目录。
 - `[copy_assets]`：实验面板和 relay PNG/PDF 的明确来源、目标位置。
 
@@ -70,8 +74,12 @@ pixi run eval stage --promote --object controller_right
 都完整覆盖任务 1--5，必须用 `--object` 指定。目录名只负责候选选择；任务身份和配置一致性仍以
 `manifest.json` 和固定文件集合为准。
 
-`stage` 会完整 QC、复制 raw 并生成五本 `task_N_complete.xlsx`。`promote` 再次复核 raw 与工作簿来源
-摘要，然后原子切换活动批次。正常流程中，`promote` 后直接运行 `analyze`，不需要 `preprocess`。
+`stage` 不复制 raw。它先检查五个 manifest 的共同身份，再逐项检查缓存。已有缓存直接复用；新目录、
+目录内容变化或 Stage 1 实现变化时，只对对应 Task 物化事件、执行完整 QC 并写出 XLSX。首次运行通常
+显示五个 `rebuild`，只替换 Task 3 后应显示 Task 1、2、4、5 为 `hit`，Task 3 为 `rebuild`。
+
+`promote` 只核对轻量 `batch.json` 及其引用文件，然后切换活动组合，不重跑 QC，也不回读 XLSX。
+正常流程中，`promote` 后直接运行 `analyze`，不需要 `preprocess`。
 
 ## analyze 的本地产物
 
@@ -79,8 +87,9 @@ pixi run eval stage --promote --object controller_right
 pixi run eval analyze
 ```
 
-输入是当前活动批次的五本 Stage 1 XLSX。命令不读取 raw JSON/JSONL、不改写 XLSX，也不调用 XeLaTeX。
-它保留批次身份、任务覆盖和运行时矩阵检查，但不重复 `stage` 和 `promote` 已完成的全量工作簿回读。
+输入由活动 `batch.json` 指向五本 Stage 1 XLSX。命令不读取 raw JSON/JSONL、不改写 XLSX，也不调用
+XeLaTeX。每本 XLSX 的指标独立缓存；缓存命中时不打开工作簿，只有变化的 Task 会重新扫描。之后仍将
+五项结果合并，再统一生成完整图表和 TeX。
 
 ```text
 data/experiments/experiment_1_2/analysis/
@@ -97,8 +106,8 @@ data/experiments/experiment_1_2/analysis/
 *Hermite Interpolation* 是补充条件。图 2(b) 和图 3(d) 只绘制冻结纵轴上限内的原始点，完整数值仍
 保留在 `metrics/` 和 `figure_plot_data.xlsx`。
 
-分析主要耗时在 XLSX ZIP/XML 读取、校验与 Python 分组统计，不适合 GPU。现有流程已经避免重复的完整
-工作簿回读，并把校正步长计算合并进同一次 render 扫描。
+首次分析的主要耗时仍是 XLSX ZIP/XML 读取和 Python 分组统计。后续只替换一个 Task 时，耗时主要来自
+该 Task 的 XLSX；另外四项直接读取小型 JSON 指标缓存。
 
 ## 发布图片与手工引入 TeX
 
@@ -126,9 +135,9 @@ pixi run eval preprocess
 pixi run eval rebuild
 ```
 
-- `qc`：检查当前活动批次 raw 和事件物化状态，不生成工作簿。
-- `preprocess`：从当前 raw 重新生成五本工作簿。
-- `rebuild`：依次执行 `preprocess` 与 `analyze`，不切换批次、不发布图片。
+- `qc`：显式深查活动清单引用的五个原始目录；日常增量流程不需要运行。
+- `preprocess`：补建当前组合中缺失或失效的任务工作簿，已有缓存不重做。
+- `rebuild`：显式强制重建五本工作簿和全部指标缓存，不切换批次、不发布图片。
 
 工作簿只能只读查看，不要用 Excel 保存后继续正式分析。`figure_plot_data.xlsx` 是审计输出，手工修改它不会
 重绘图片。
@@ -142,7 +151,7 @@ pixi run eval copy-assets
 ```
 
 内部批次名由任务 1--5 的 manifest 时间按任务号组成。它确定地表示整组输入，局部重采任一任务都会
-得到新批次名；`--promote` 会在 QC 和工作簿发布成功后自动切换活动批次，因此无需手工输入该名称。
+得到新批次名；`--promote` 会在变化任务的缓存发布成功后自动切换活动组合，因此无需手工输入该名称。
 
 ## 验证
 

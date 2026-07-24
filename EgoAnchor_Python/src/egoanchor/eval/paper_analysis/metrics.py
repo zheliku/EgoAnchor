@@ -50,7 +50,7 @@ TEMPORAL_STRATEGY_VARIANTS = (
 """图 3(d) 中外推、默认 Linear/SLERP 与 Hermite 的固定顺序。"""
 
 
-def _validate_workbook_runtime_contract(workbook: Path) -> None:
+def validate_workbook_runtime_contract(workbook: Path) -> None:
     """确认 Stage 1 工作簿来自当前九路矩阵，拒绝把 v3 归档数据写入新论文。"""
 
     matrix_rows = [
@@ -156,6 +156,64 @@ class PaperResults:
 
     performance: Mapping[str, float | int]
     """Python 候选处理和发布间隔审计。"""
+
+
+@dataclass(frozen=True, slots=True)
+class PerformanceSamples:
+    """保存可跨 task 精确合并的运行时性能原始样本。"""
+
+    track_total_ms: tuple[float, ...]
+    """TRACK 候选的服务端总耗时。"""
+
+    register_total_ms: tuple[float, ...]
+    """REGISTER 候选的服务端总耗时。"""
+
+    pose_publish_intervals_ms: tuple[float, ...]
+    """同一 task 内相邻有效 pose 的发布时间间隔。"""
+
+
+@dataclass(frozen=True, slots=True)
+class TaskResults:
+    """保存一本 Stage 1 workbook 可独立缓存的全部分析结果。"""
+
+    workbook_path: str
+    """生成结果的 Stage 1 workbook 绝对路径。"""
+
+    workbook_sha256: str
+    """生成结果时 workbook 的内容摘要。"""
+
+    static_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的静止片段指标。"""
+
+    translation_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的持续平移片段指标。"""
+
+    rotation_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的持续旋转片段指标。"""
+
+    occlusion_episodes: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的遮挡 episode 指标。"""
+
+    transition_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的起动响应指标。"""
+
+    stop_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的停止护栏指标。"""
+
+    correction_segments: Mapping[str, tuple[Mapping[str, Any], ...]]
+    """当前 task 中的候选校正边界指标。"""
+
+    capture_alignment: tuple[Mapping[str, Any], ...]
+    """当前 task 中的采集时刻对齐比较。"""
+
+    vcd_risk_coverage: tuple[Mapping[str, Any], ...]
+    """当前 task 中的 VCD 风险--覆盖率曲线。"""
+
+    vcd_aurc_segments: tuple[Mapping[str, Any], ...]
+    """当前 task 中的 VCD event AURC。"""
+
+    performance_samples: PerformanceSamples
+    """当前 task 可供全批精确汇总的性能原始样本。"""
 
 
 def segment_identity(row: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -889,6 +947,8 @@ def _vcd_risk_coverage(
     workbooks: Sequence[Path],
     eligible_trials: frozenset[tuple[str, str]],
     event_roles: Mapping[tuple[str, str, str], str],
+    *,
+    require_candidates: bool = True,
 ) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
     """计算 VCD 连续分数的 event 级风险--覆盖率和 AURC。
 
@@ -993,8 +1053,10 @@ def _vcd_risk_coverage(
     empty_segments = sorted(set(candidate_rows) - set(grouped))
     if empty_segments:
         raise ValueError(f"遮挡 event 没有可评价的 VCD 候选：{empty_segments[0]}")
-    if not grouped:
+    if not grouped and require_candidates:
         raise ValueError("五本 workbook 缺少可计算 VCD risk-coverage 的遮挡候选")
+    if not grouped:
+        return (), ()
     curve_rows: list[Mapping[str, Any]] = []
     segment_rows: list[Mapping[str, Any]] = []
     for segment, values in sorted(grouped.items()):
@@ -1028,32 +1090,40 @@ def _vcd_risk_coverage(
     return tuple(curve_rows), tuple(segment_rows)
 
 
-def _performance(workbooks: Sequence[Path]) -> Mapping[str, float | int]:
-    """从 Python candidate 日志汇总运行时审计数字。"""
+def _performance_samples(workbook: Path) -> PerformanceSamples:
+    """从一本 workbook 收集可精确合并的运行时性能样本。"""
 
     track: list[float] = []
     register: list[float] = []
     intervals: list[float] = []
     columns = ("phase", "total_ms", "has_pose", "server_publish_mono_ms")
-    for workbook in workbooks:
-        published: list[float] = []
-        for row in iter_rows(workbook, "python_candidates", columns):
+    published: list[float] = []
+    for row in iter_rows(workbook, "python_candidates", columns):
+        try:
+            total_ms = float(row["total_ms"])
+        except (KeyError, TypeError, ValueError):
+            total_ms = math.nan
+        if math.isfinite(total_ms):
+            if row.get("phase") == "TRACK":
+                track.append(total_ms)
+            elif row.get("phase") == "REGISTER":
+                register.append(total_ms)
+        if _truthy(row.get("has_pose")):
             try:
-                total_ms = float(row["total_ms"])
+                published.append(float(row["server_publish_mono_ms"]))
             except (KeyError, TypeError, ValueError):
-                total_ms = math.nan
-            if math.isfinite(total_ms):
-                if row.get("phase") == "TRACK":
-                    track.append(total_ms)
-                elif row.get("phase") == "REGISTER":
-                    register.append(total_ms)
-            if _truthy(row.get("has_pose")):
-                try:
-                    published.append(float(row["server_publish_mono_ms"]))
-                except (KeyError, TypeError, ValueError):
-                    pass
-        if len(published) > 1:
-            intervals.extend(np.diff(np.asarray(sorted(published), dtype=float)).tolist())
+                pass
+    if len(published) > 1:
+        intervals.extend(np.diff(np.asarray(sorted(published), dtype=float)).tolist())
+    return PerformanceSamples(tuple(track), tuple(register), tuple(intervals))
+
+
+def _summarize_performance(samples: Sequence[PerformanceSamples]) -> Mapping[str, float | int]:
+    """合并各 task 原始样本后复现原有全批性能统计。"""
+
+    track = tuple(value for sample in samples for value in sample.track_total_ms)
+    register = tuple(value for sample in samples for value in sample.register_total_ms)
+    intervals = tuple(value for sample in samples for value in sample.pose_publish_intervals_ms)
     if not track or not register or not intervals:
         raise ValueError("五本 workbook 缺少 TRACK、REGISTER 或 pose publish 性能样本")
     return {
@@ -1068,6 +1138,97 @@ def _performance(workbooks: Sequence[Path]) -> Mapping[str, float | int]:
     }
 
 
+def _merge_segment_maps(
+    results: Sequence[TaskResults],
+    field: str,
+) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
+    """按 task 顺序合并同类 variant 片段，并保留稳定行顺序。"""
+
+    merged: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for result in results:
+        rows_by_variant = getattr(result, field)
+        for variant, rows in rows_by_variant.items():
+            merged[variant].extend(rows)
+    return {variant: tuple(rows) for variant, rows in sorted(merged.items())}
+
+
+def analyze_task_workbook(
+    workbook: Path,
+    settings: PaperSettings | None = None,
+    *,
+    known_sha256: str | None = None,
+) -> TaskResults:
+    """只扫描一本 Stage 1 XLSX，生成可独立缓存的 task 结果。"""
+
+    normalized = workbook.expanduser().resolve()
+    if normalized.suffix.lower() != ".xlsx":
+        raise ValueError(f"论文分析只接受 Stage 1 XLSX：{workbook}")
+    if not normalized.is_file():
+        raise FileNotFoundError(normalized)
+    validate_workbook_runtime_contract(normalized)
+    valid_trials = eligible_trials((normalized,))
+    active_settings = settings or load_settings()
+    render, correction_render = _collect_render((normalized,), valid_trials)
+    event_roles = _event_roles((normalized,), valid_trials)
+    static, translation, rotation, occlusion, transition, stop = _render_metrics(
+        render,
+        event_roles,
+        active_settings,
+    )
+    vcd_risk_coverage, vcd_aurc_segments = _vcd_risk_coverage(
+        (normalized,),
+        valid_trials,
+        event_roles,
+        require_candidates=False,
+    )
+    return TaskResults(
+        workbook_path=str(normalized),
+        workbook_sha256=known_sha256 or workbook_sha256(normalized),
+        static_segments=static,
+        translation_segments=translation,
+        rotation_segments=rotation,
+        occlusion_episodes=occlusion,
+        transition_segments=transition,
+        stop_segments=stop,
+        correction_segments=_correction_metrics(correction_render),
+        capture_alignment=_capture_alignment((normalized,), valid_trials),
+        vcd_risk_coverage=vcd_risk_coverage,
+        vcd_aurc_segments=vcd_aurc_segments,
+        performance_samples=_performance_samples(normalized),
+    )
+
+
+def merge_task_results(results: Sequence[TaskResults]) -> PaperResults:
+    """合并五项独立 task 结果，并执行全批证据完整性检查。"""
+
+    ordered = tuple(results)
+    if not ordered:
+        raise ValueError("至少需要一个 task 分析结果")
+    workbook_digests = {result.workbook_path: result.workbook_sha256 for result in ordered}
+    if len(workbook_digests) != len(ordered):
+        raise ValueError("task 分析结果包含重复 workbook")
+    vcd_risk_coverage = tuple(row for result in ordered for row in result.vcd_risk_coverage)
+    vcd_aurc_segments = tuple(row for result in ordered for row in result.vcd_aurc_segments)
+    if not vcd_risk_coverage or not vcd_aurc_segments:
+        raise ValueError("五本 workbook 缺少可计算 VCD risk-coverage 的遮挡候选")
+    return PaperResults(
+        workbook_sha256=workbook_digests,
+        static_segments=_merge_segment_maps(ordered, "static_segments"),
+        translation_segments=_merge_segment_maps(ordered, "translation_segments"),
+        rotation_segments=_merge_segment_maps(ordered, "rotation_segments"),
+        occlusion_episodes=_merge_segment_maps(ordered, "occlusion_episodes"),
+        transition_segments=_merge_segment_maps(ordered, "transition_segments"),
+        stop_segments=_merge_segment_maps(ordered, "stop_segments"),
+        correction_segments=_merge_segment_maps(ordered, "correction_segments"),
+        capture_alignment=tuple(row for result in ordered for row in result.capture_alignment),
+        vcd_risk_coverage=vcd_risk_coverage,
+        vcd_aurc_segments=vcd_aurc_segments,
+        performance=_summarize_performance(
+            tuple(result.performance_samples for result in ordered)
+        ),
+    )
+
+
 def analyze_workbooks(
     workbooks: Sequence[Path],
     settings: PaperSettings | None = None,
@@ -1077,45 +1238,17 @@ def analyze_workbooks(
     normalized = tuple(path.expanduser().resolve() for path in workbooks)
     if not normalized:
         raise ValueError("至少需要一本 Stage 1 XLSX")
-    for path in normalized:
-        if path.suffix.lower() != ".xlsx":
-            raise ValueError(f"论文分析只接受 Stage 1 XLSX：{path}")
-        if not path.is_file():
-            raise FileNotFoundError(path)
-        _validate_workbook_runtime_contract(path)
-    valid_trials = eligible_trials(normalized)
     active_settings = settings or load_settings()
-    render, correction_render = _collect_render(normalized, valid_trials)
-    event_roles = _event_roles(normalized, valid_trials)
-    static, translation, rotation, occlusion, transition, stop = _render_metrics(
-        render,
-        event_roles,
-        active_settings,
-    )
-    vcd_risk_coverage, vcd_aurc_segments = _vcd_risk_coverage(
-        normalized,
-        valid_trials,
-        event_roles,
-    )
-    return PaperResults(
-        workbook_sha256={str(path): workbook_sha256(path) for path in normalized},
-        static_segments=static,
-        translation_segments=translation,
-        rotation_segments=rotation,
-        occlusion_episodes=occlusion,
-        transition_segments=transition,
-        stop_segments=stop,
-        correction_segments=_correction_metrics(correction_render),
-        capture_alignment=_capture_alignment(normalized, valid_trials),
-        vcd_risk_coverage=vcd_risk_coverage,
-        vcd_aurc_segments=vcd_aurc_segments,
-        performance=_performance(normalized),
+    return merge_task_results(
+        tuple(analyze_task_workbook(path, active_settings) for path in normalized)
     )
 
 
 __all__ = [
     "FULL_VARIANT",
     "PaperResults",
+    "PerformanceSamples",
+    "TaskResults",
     "HERMITE_INTERPOLATION_VARIANT",
     "LINEAR_SLERP_VARIANT",
     "SMOOTHED_EXTRAPOLATION_VARIANT",
@@ -1124,7 +1257,10 @@ __all__ = [
     "NO_VCD",
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
+    "analyze_task_workbook",
+    "merge_task_results",
     "paired_metric_matrix",
     "risk_coverage_curve",
     "segment_identity",
+    "validate_workbook_runtime_contract",
 ]

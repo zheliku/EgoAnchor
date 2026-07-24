@@ -1,5 +1,6 @@
 """实验一/二论文分析入口。"""
 
+from .cache import cache_key, cache_path, load_task_results, write_task_results
 from .figures import (
     build_point_panel,
     build_translation_panel,
@@ -13,10 +14,14 @@ from .metrics import (
     SMOOTHED_EXTRAPOLATION_VARIANT,
     METHODS,
     PaperResults,
+    PerformanceSamples,
+    TaskResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
+    analyze_task_workbook,
     eligible_trials,
     paired_metric_matrix,
+    merge_task_results,
     risk_coverage_curve,
 )
 from .paper import write_analysis_artifacts
@@ -27,6 +32,8 @@ from .xlsx import iter_rows, workbook_sha256
 
 __all__ = [
     "PaperResults",
+    "PerformanceSamples",
+    "TaskResults",
     "PaperSettings",
     "HERMITE_INTERPOLATION_VARIANT",
     "LINEAR_SLERP_VARIANT",
@@ -34,18 +41,24 @@ __all__ = [
     "METHODS",
     "TEMPORAL_STRATEGY_VARIANTS",
     "analyze_workbooks",
+    "analyze_task_workbook",
     "eligible_trials",
     "build_point_panel",
     "build_translation_panel",
     "build_vcd_risk_coverage_panel",
     "build_analysis",
+    "cache_key",
+    "cache_path",
     "iter_rows",
     "load_settings",
+    "load_task_results",
+    "merge_task_results",
     "paired_metric_matrix",
     "risk_coverage_curve",
     "publish_figures",
     "settings_sha256",
     "summarize_risk_coverage",
     "workbook_sha256",
+    "write_task_results",
     "write_analysis_artifacts",
 ]

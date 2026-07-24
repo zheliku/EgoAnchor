@@ -4,38 +4,25 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from .cache import (
+    cache_key,
+    cache_path,
+    implementation_sha256,
+    load_task_results,
+    write_task_results,
+)
 from .figures import publish_figures
-from .metrics import analyze_workbooks
+from .metrics import analyze_task_workbook, merge_task_results
 from .paper import write_analysis_artifacts
 from .settings import load_settings, settings_sha256
-from .xlsx import iter_rows
+from .xlsx import workbook_sha256 as calculate_workbook_sha256
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")
-
-_TASK_SCENARIOS = (
-    "static_head_motion",
-    "start_stop_6dof",
-    "continuous_translation",
-    "continuous_rotation",
-    "occlusion_recovery",
-)
-"""五本正式工作簿按文件编号对应的固定物理场景。"""
-
-_COMMON_MANIFEST_FIELDS = (
-    "config_hash",
-    "frozen_parameter_set_id",
-    "object_id",
-    "object_model_id",
-    "protocol_version",
-    "run_kind",
-)
-"""五项任务必须共享的运行时和对象身份。"""
-
 
 def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Path, ...]:
     """校验五本初始 workbook 的命名、唯一性和输出边界。"""
@@ -56,74 +43,62 @@ def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Pa
         numbers.append(int(match.group("number")))
     if sorted(numbers) != [1, 2, 3, 4, 5]:
         raise ValueError(f"输入 task 编号必须恰好覆盖 1--5：{sorted(numbers)}")
-    ordered = tuple(path for _, path in sorted(zip(numbers, normalized), key=lambda item: item[0]))
-    _validate_batch_identity(ordered)
-    return ordered
-
-
-def _validate_batch_identity(workbooks: tuple[Path, ...]) -> None:
-    """核对五项任务来自同一已提升的冻结批次。"""
-
-    session_ids: set[str] = set()
-    common_identity: tuple[str, ...] | None = None
-    for task_number, workbook in enumerate(workbooks, start=1):
-        manifest_rows = list(
-            iter_rows(
-                workbook,
-                "manifest",
-                ("session_id", *_COMMON_MANIFEST_FIELDS),
-            )
-        )
-        if len(manifest_rows) != 1:
-            raise ValueError(f"Stage 1 工作簿必须包含唯一 manifest 行：{workbook}")
-        manifest = manifest_rows[0]
-        session_id = str(manifest.get("session_id") or "")
-        if not session_id or session_id in session_ids:
-            raise ValueError(f"五本 Stage 1 工作簿的 session_id 必须非空且唯一：{session_id!r}")
-        session_ids.add(session_id)
-
-        identity = tuple(str(manifest.get(field) or "") for field in _COMMON_MANIFEST_FIELDS)
-        if identity[-1] != "formal":
-            raise ValueError(f"论文分析只接受 formal session：{workbook}")
-        if any(not value for value in identity):
-            raise ValueError(f"Stage 1 工作簿缺少冻结批次身份：{workbook}")
-        if common_identity is None:
-            common_identity = identity
-        elif identity != common_identity:
-            raise ValueError("五本 Stage 1 工作簿的对象、协议或冻结配置不一致")
-
-        expected_scenario = _TASK_SCENARIOS[task_number - 1]
-        completed_rows = list(
-            iter_rows(
-                workbook,
-                "completed_trials",
-                ("session_id", "scenario_id", "trial_id"),
-            )
-        )
-        if not completed_rows or any(
-            row.get("session_id") != session_id
-            or row.get("scenario_id") != expected_scenario
-            or not str(row.get("trial_id") or "")
-            for row in completed_rows
-        ):
-            raise ValueError(
-                f"task_{task_number} 必须只包含场景 {expected_scenario} 的最终完成 trial"
-            )
+    return tuple(path for _, path in sorted(zip(numbers, normalized), key=lambda item: item[0]))
 
 
 def build_analysis(
     workbooks: tuple[Path, ...],
     output_root: Path,
     figure_tex_directory: str,
+    cache_root: Path,
+    batch_id: str,
+    workbook_sha256: Mapping[str, str],
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """只读取五本 Stage 1 XLSX，发布当前批次的图、表和 TeX 片段。"""
+    """复用逐 task 指标缓存，发布当前五任务批次的完整论文产物。"""
 
     _report_progress(progress, "验证五本 XLSX")
     normalized = _validate_inputs(workbooks, output_root)
+    if not batch_id.strip():
+        raise ValueError("论文分析必须绑定非空 batch_id")
+    expected_paths = {str(path) for path in normalized}
+    if set(workbook_sha256) != expected_paths:
+        raise ValueError("batch manifest 的 workbook SHA 映射必须恰好覆盖 task_1 到 task_5")
+
+    frozen_digests: dict[str, str] = {}
+    for workbook in normalized:
+        expected_digest = str(workbook_sha256[str(workbook)]).lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+            raise ValueError(f"batch manifest 的 workbook SHA-256 非法：{workbook.name}")
+        frozen_digests[workbook.name] = expected_digest
+
     settings = load_settings()
-    _report_progress(progress, "计算实验指标")
-    results = analyze_workbooks(normalized, settings)
+    parameter_digest = settings_sha256()
+    task_results = []
+    cache_states: dict[str, str] = {}
+    for task_number, workbook in enumerate(normalized, start=1):
+        frozen_digest = frozen_digests[workbook.name]
+        key = cache_key(frozen_digest, parameter_digest)
+        destination = cache_path(cache_root, workbook)
+        result = load_task_results(destination, key, workbook)
+        if result is None:
+            _report_progress(progress, f"Task {task_number}: 重建指标缓存")
+            actual_digest = calculate_workbook_sha256(workbook)
+            if actual_digest != frozen_digest:
+                raise ValueError(f"Stage 1 workbook 与 batch manifest 摘要不一致：{workbook.name}")
+            result = analyze_task_workbook(
+                workbook,
+                settings,
+                known_sha256=actual_digest,
+            )
+            write_task_results(destination, key, result)
+            cache_states[workbook.name] = "rebuilt"
+        else:
+            _report_progress(progress, f"Task {task_number}: 使用指标缓存")
+            cache_states[workbook.name] = "hit"
+        task_results.append(result)
+
+    results = merge_task_results(tuple(task_results))
     _report_progress(progress, "生成本地论文图表")
     figure_paths = publish_figures(results, output_root.expanduser().resolve())
     _report_progress(progress, "写入本地指标、表格和 TeX")
@@ -134,9 +109,12 @@ def build_analysis(
     )
     payload = {
         "passed": True,
+        "batch_id": batch_id,
         "input_workbooks": [str(path) for path in normalized],
         "input_sha256": dict(results.workbook_sha256),
-        "parameters_sha256": settings_sha256(),
+        "parameters_sha256": parameter_digest,
+        "metrics_implementation_sha256": implementation_sha256(),
+        "task_cache": cache_states,
         "figure_paths": {key: str(value) for key, value in figure_paths.items()},
         "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "performance": dict(results.performance),

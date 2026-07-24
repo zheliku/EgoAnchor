@@ -65,8 +65,8 @@ class BatchWorkflowTests(unittest.TestCase):
 
         self._code_version_patch.stop()
 
-    def test_stage_maps_unordered_sessions_and_writes_verified_workbooks(self) -> None:
-        """stage 自动选择并按 manifest 复核任务，同时保留五个 task_data 源目录。"""
+    def test_stage_builds_independent_workbooks_and_keeps_sources_in_place(self) -> None:
+        """stage 为五个版本化原始目录分别发布唯一工作簿，不复制 raw。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -81,21 +81,29 @@ class BatchWorkflowTests(unittest.TestCase):
             )
             self.assertEqual(before, _tree_digest(root / "data" / "experiments" / "task_data"))
             self.assertEqual(artifact.selected_task_data, directories)
+            self.assertEqual(artifact.cache_hits, ())
+            self.assertEqual(artifact.rebuilt_tasks, (1, 2, 3, 4, 5))
             self.assertEqual([item.task_number for item in artifact.sessions], [1, 2, 3, 4, 5])
+            paths = load_batch_paths(root)
             for number in range(1, 6):
-                workbook = artifact.root / "workbooks" / f"task_{number}_complete.xlsx"
+                workbook = (
+                    paths.task_workbook_root
+                    / directories[number - 1]
+                    / f"task_{number}_complete.xlsx"
+                )
                 self.assertTrue(verify_task_workbook(workbook).passed)
-                raw = artifact.root / "raw" / _task_directory(number)
-                self.assertTrue((raw / "manifest.json").is_file())
-                self.assertFalse((raw / directories[number - 1]).exists())
+                self.assertTrue((workbook.parent / "cache.json").is_file())
+            self.assertTrue((artifact.root / "batch.json").is_file())
+            self.assertFalse((artifact.root / "raw").exists())
+            self.assertFalse((artifact.root / "workbooks").exists())
 
             rows = list_task_data(root)
             self.assertEqual(len(rows), 5)
             self.assertTrue(all(row["recognized_name"] for row in rows))
             self.assertTrue(all(row["python_state"] == "python_stopped" for row in rows))
 
-    def test_stage_does_not_publish_legacy_empty_audit_samples(self) -> None:
-        """旧采集残留的空审计目录不应污染新的 raw 暂存。"""
+    def test_stage_does_not_copy_empty_audit_directories(self) -> None:
+        """共享工作簿缓存不复制原始目录，因此不会生成空审计目录副本。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -107,7 +115,11 @@ class BatchWorkflowTests(unittest.TestCase):
 
             for number in range(1, 6):
                 self.assertFalse(
-                    (artifact.root / "raw" / _task_directory(number) / "audit_samples").exists()
+                    (
+                        load_batch_paths(root).task_workbook_root
+                        / directories[number - 1]
+                        / "audit_samples"
+                    ).exists()
                 )
 
     def test_stage_selects_highest_version_then_latest_time_per_task(self) -> None:
@@ -181,7 +193,7 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertIn("目录名必须为", rows[0]["error"])
 
     def test_stage_replaces_matching_staged_batch(self) -> None:
-        """重复提交同一批目录时，成功重建后替换旧暂存批次。"""
+        """重复提交同一组合时五项任务全部命中缓存，只替换轻量清单。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -195,6 +207,33 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertEqual(second.root, first.root)
             self.assertFalse(obsolete.exists())
             self.assertEqual(len(second.workbook_sha256), 5)
+            self.assertEqual(second.cache_hits, (1, 2, 3, 4, 5))
+            self.assertEqual(second.rebuilt_tasks, ())
+
+    def test_replacing_task_three_rebuilds_only_task_three(self) -> None:
+        """新增 Task 3 版本后只生成对应工作簿，其他四项缓存保持不变。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            directories = _write_batch_sessions(root)
+            first = stage_batch(root=root)
+            paths = load_batch_paths(root)
+            unchanged = {
+                number: _tree_digest(paths.task_workbook_root / directories[number - 1])
+                for number in (1, 2, 4, 5)
+            }
+            _write_task_data(root, 3, 2, "20260722_130003")
+
+            second = stage_batch(root=root)
+
+            self.assertNotEqual(second.batch_id, first.batch_id)
+            self.assertEqual(second.cache_hits, (1, 2, 4, 5))
+            self.assertEqual(second.rebuilt_tasks, (3,))
+            for number, digest in unchanged.items():
+                self.assertEqual(
+                    _tree_digest(paths.task_workbook_root / directories[number - 1]),
+                    digest,
+                )
 
     def test_stage_rejects_directory_label_that_disagrees_with_manifest(self) -> None:
         """文件夹任务标签只用于选择，不能覆盖 manifest 的真实任务身份。"""
@@ -210,24 +249,24 @@ class BatchWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "未对应任务"):
                 stage_batch(root=root)
 
-    def test_promote_rejects_raw_changed_after_workbook_build(self) -> None:
-        """暂存 raw 与工作簿来源摘要不一致时不得提升批次。"""
+    def test_promote_rejects_source_directory_changed_after_stage(self) -> None:
+        """版本目录在 stage 后被原地改写时不得提升批次。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
-            _write_batch_sessions(root)
+            directories = _write_batch_sessions(root)
             artifact = stage_batch(root=root)
-            changed = artifact.root / "raw" / _task_directory(1) / "unexpected.txt"
+            changed = load_batch_paths(root).task_data_root / directories[0] / "unexpected.txt"
             changed.write_text("changed", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "来源摘要不一致"):
+            with self.assertRaisesRegex(ValueError, "原地修改"):
                 promote_batch(artifact.batch_id, root=root)
 
             self.assertTrue(artifact.root.is_dir())
             self.assertFalse(load_batch_paths(root).active_root.exists())
 
-    def test_promote_rolls_back_active_when_staged_rename_fails(self) -> None:
-        """第二次目录切换失败时恢复原活动批次，不留下半切换状态。"""
+    def test_promote_keeps_active_manifest_when_replace_fails(self) -> None:
+        """同一组合的清单替换失败时保留原活动清单和暂存清单。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -235,45 +274,42 @@ class BatchWorkflowTests(unittest.TestCase):
             artifact = stage_batch(root=root)
             paths = load_batch_paths(root)
             shutil.copytree(artifact.root, paths.active_root)
-            original_rename = Path.rename
+            original_replace = Path.replace
 
-            def guarded_rename(path: Path, target: Path) -> Path:
-                """只让暂存批次提升这一步失败，归档和回滚照常执行。"""
+            def guarded_replace(path: Path, target: Path) -> Path:
+                """只让暂存清单覆盖活动清单时失败。"""
 
-                if path == artifact.root:
-                    raise OSError("simulated staged rename failure")
-                return original_rename(path, target)
+                if path == artifact.root / "batch.json":
+                    raise OSError("simulated manifest replace failure")
+                return original_replace(path, target)
 
-            with mock.patch.object(Path, "rename", guarded_rename):
+            with mock.patch.object(Path, "replace", guarded_replace):
                 with self.assertRaisesRegex(OSError, "simulated"):
                     promote_batch(artifact.batch_id, root=root)
 
-            self.assertTrue(paths.active_root.is_dir())
+            self.assertTrue((paths.active_root / "batch.json").is_file())
             self.assertTrue(artifact.root.is_dir())
-            self.assertFalse((paths.archive_root / artifact.batch_id).exists())
 
-    def test_promote_archives_legacy_active_batch(self) -> None:
-        """切换新矩阵前允许验证并归档旧矩阵活动批次。"""
+    def test_promote_archives_previous_manifest_and_analysis(self) -> None:
+        """切换不同任务组合时只归档旧清单和旧分析，不复制任务缓存。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
-            directories = _write_batch_sessions(root)
+            _write_batch_sessions(root)
             paths = load_batch_paths(root)
-            for number, directory in enumerate(directories, start=1):
-                source = paths.task_data_root / directory
-                destination = paths.active_root / "raw" / _task_directory(number)
-                shutil.copytree(source, destination)
-                manifest_path = destination / "manifest.json"
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                manifest["variant_matrix_id"] = "exp12_9_linear_v2"
-                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            first = stage_batch(root=root)
+            promote_batch(first.batch_id, root=root)
+            (paths.active_root / "analysis").mkdir()
+            (paths.active_root / "analysis" / "marker.txt").write_text("old", encoding="utf-8")
+            _write_task_data(root, 3, 2, "20260722_130003")
+            second = stage_batch(root=root)
 
-            artifact = stage_batch(root=root)
-            result = promote_batch(artifact.batch_id, root=root)
+            result = promote_batch(second.batch_id, root=root)
 
-            self.assertEqual(result["active_batch"], artifact.batch_id)
-            self.assertTrue((paths.active_root / "raw").is_dir())
+            self.assertEqual(result["active_batch"], second.batch_id)
+            self.assertTrue((paths.active_root / "batch.json").is_file())
             self.assertTrue(Path(result["archived_root"]).is_dir())
+            self.assertTrue((Path(result["archived_root"]) / "analysis" / "marker.txt").is_file())
 
     def test_cli_exposes_one_fixed_path_workflow(self) -> None:
         """唯一 CLI 只暴露固定路径的人工工作流。"""
@@ -303,6 +339,8 @@ class BatchWorkflowTests(unittest.TestCase):
         artifact = mock.Mock(
             batch_id="batch_20260722_120001_20260722_120002_20260722_120003_20260722_120004_20260722_120005",
             workbook_sha256={"task_1_complete.xlsx": "digest"},
+            cache_hits=(1, 2, 4, 5),
+            rebuilt_tasks=(3,),
         )
         with (
             mock.patch.object(eval_cli, "stage_batch", return_value=artifact) as staged,
@@ -340,7 +378,7 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertEqual(len(preprocess_result["workbook_sha256"]), 5)
             self.assertEqual(
                 Path(preprocess_result["output_root"]),
-                load_batch_paths(root).active_root / "workbooks",
+                load_batch_paths(root).task_workbook_root,
             )
 
     def test_config_describes_every_stage_without_paper_compilation(self) -> None:
@@ -388,6 +426,12 @@ class BatchWorkflowTests(unittest.TestCase):
             for stem in stems:
                 for suffix in (".pdf", ".png"):
                     (figure_root / f"{stem}{suffix}").write_bytes(f"{stem}{suffix}".encode())
+            provenance = active_root / "analysis" / "provenance"
+            provenance.mkdir()
+            (provenance / "build_result.json").write_text(
+                json.dumps({"batch_id": "batch_test"}),
+                encoding="utf-8",
+            )
             paper_root = root.parent / "paper"
             relay_source = root / "data" / "replay_capture" / "replay_grid.pdf"
             relay_source.parent.mkdir(parents=True)
@@ -395,6 +439,8 @@ class BatchWorkflowTests(unittest.TestCase):
             paths = BatchPaths(
                 project_root=root,
                 task_data_root=root / "data" / "experiments" / "task_data",
+                task_workbook_root=root / "data" / "experiments" / "task_workbooks",
+                task_analysis_root=root / "data" / "experiments" / "task_analysis",
                 staging_root=root / "data" / "staging",
                 archive_root=root / "data" / "archive",
                 active_root=active_root,
@@ -403,7 +449,13 @@ class BatchWorkflowTests(unittest.TestCase):
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
                 config_path=root / "batch.toml",
             )
-            with mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths):
+            with (
+                mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths),
+                mock.patch(
+                    "egoanchor.eval.batch._load_batch_records",
+                    return_value=("batch_test", ()),
+                ),
+            ):
                 result = copy_current_assets(root=root)
 
             self.assertTrue(result["passed"])
@@ -521,19 +573,6 @@ def _rewrite_session(
         )
     (root / "events.jsonl").unlink()
     finalize_task_events(root)
-
-
-def _task_directory(number: int) -> str:
-    """返回测试任务编号对应的固定 raw 目录名。"""
-
-    names = (
-        "task_1_static_head_motion",
-        "task_2_start_stop_6dof",
-        "task_3_continuous_translation",
-        "task_4_continuous_rotation",
-        "task_5_occlusion_recovery",
-    )
-    return names[number - 1]
 
 
 def _tree_digest(root: Path) -> tuple[tuple[str, bytes], ...]:

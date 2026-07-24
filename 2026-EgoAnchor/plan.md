@@ -85,8 +85,9 @@ pixi run eval stage --promote
 pixi run eval analyze
 ```
 
-中文主稿是 `egoanchor_cn_v6.tex`，稳定 PDF 为 `pdf/EgoAnchor.pdf`。分析管线从五本 Stage 1
-XLSX 回填实验一/二，不读取 raw JSON/JSONL。正文、图和表最多 9 页，实验三仍需预留空间。
+中文主稿是 `egoanchor_cn_v6.tex`，稳定 PDF 为 `pdf/EgoAnchor.pdf`。Stage 1 和指标按 Task 独立
+缓存，活动 `batch.json` 选择五本 XLSX 后合并回填实验一/二；`analyze` 不读取 raw JSON/JSONL。
+正文、图和表最多 9 页，实验三仍需预留空间。
 
 ## 诚实边界
 

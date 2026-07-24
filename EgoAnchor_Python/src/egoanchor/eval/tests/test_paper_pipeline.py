@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 from openpyxl import Workbook  # type: ignore[import-untyped]
@@ -13,17 +15,24 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.paper_analysis import (
     METHODS,
+    PerformanceSamples,
+    TaskResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
     build_analysis,
     build_point_panel,
     build_translation_panel,
+    cache_key,
+    cache_path,
     eligible_trials,
     iter_rows,
+    load_task_results,
+    merge_task_results,
     paired_metric_matrix,
     risk_coverage_curve,
     settings_sha256,
     summarize_risk_coverage,
+    write_task_results,
 )
 
 
@@ -127,8 +136,203 @@ class PaperPipelineTests(unittest.TestCase):
             output = root / "output"
 
             with self.assertRaisesRegex(ValueError, "五本 Stage 1 XLSX"):
-                build_analysis((source,), output, "figures/panels")
+                build_analysis(
+                    (source,),
+                    output,
+                    "figures/panels",
+                    root / "cache",
+                    "batch_test",
+                    {},
+                )
             self.assertFalse(output.exists())
+
+    def test_task_cache_round_trips_non_finite_metrics_as_strict_json(self) -> None:
+        """task 缓存必须显式编码 NaN，不能写出非标准 JSON 数字。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workbook = root / "task_1_complete.xlsx"
+            workbook.touch()
+            destination = cache_path(root / "cache", workbook)
+            key = cache_key("a" * 64, "b" * 64)
+            results = self._task_results(workbook, "a" * 64, nan_metric=True)
+
+            write_task_results(destination, key, results)
+            restored = load_task_results(destination, key, workbook)
+
+            self.assertIsNotNone(restored)
+            self.assertNotIn("NaN", destination.read_text(encoding="utf-8"))
+            self.assertTrue(
+                np.isnan(float(restored.static_segments["EgoAnchor"][0]["value"]))
+            )
+
+    def test_build_analysis_uses_five_task_caches_without_hashing_workbooks(self) -> None:
+        """五项缓存全部命中时不得重新读取或计算 Stage 1 workbook。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workbook_root = root / "workbooks"
+            cache_root = root / "cache"
+            output_root = root / "analysis"
+            workbook_root.mkdir()
+            workbooks = tuple(
+                workbook_root / f"task_{number}_complete.xlsx" for number in range(1, 6)
+            )
+            expected = {}
+            parameter_digest = settings_sha256()
+            for number, workbook in enumerate(workbooks, start=1):
+                workbook.touch()
+                digest = str(number) * 64
+                expected[str(workbook.resolve())] = digest
+                results = self._task_results(
+                    workbook,
+                    digest,
+                    include_vcd=number == 5,
+                )
+                write_task_results(
+                    cache_path(cache_root, workbook),
+                    cache_key(digest, parameter_digest),
+                    results,
+                )
+            progress: list[str] = []
+
+            with (
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.calculate_workbook_sha256",
+                    side_effect=AssertionError("缓存命中不应哈希 workbook"),
+                ),
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.analyze_task_workbook",
+                    side_effect=AssertionError("缓存命中不应扫描 workbook"),
+                ),
+                patch("egoanchor.eval.paper_analysis.pipeline.publish_figures", return_value={}),
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.write_analysis_artifacts",
+                    return_value={},
+                ),
+            ):
+                payload = build_analysis(
+                    workbooks,
+                    output_root,
+                    "figures/panels",
+                    cache_root,
+                    "batch_test",
+                    expected,
+                    progress.append,
+                )
+
+            self.assertTrue(payload["passed"])
+            self.assertEqual(set(payload["task_cache"].values()), {"hit"})
+            self.assertEqual(
+                [message for message in progress if "使用指标缓存" in message],
+                [f"Task {number}: 使用指标缓存" for number in range(1, 6)],
+            )
+
+            changed_workbook = workbooks[2]
+            changed_digest = "a" * 64
+            expected[str(changed_workbook.resolve())] = changed_digest
+            rebuilt = self._task_results(changed_workbook, changed_digest)
+            with (
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.calculate_workbook_sha256",
+                    return_value=changed_digest,
+                ) as hash_workbook,
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.analyze_task_workbook",
+                    return_value=rebuilt,
+                ) as analyze_workbook,
+                patch("egoanchor.eval.paper_analysis.pipeline.publish_figures", return_value={}),
+                patch(
+                    "egoanchor.eval.paper_analysis.pipeline.write_analysis_artifacts",
+                    return_value={},
+                ),
+            ):
+                replaced_payload = build_analysis(
+                    workbooks,
+                    output_root,
+                    "figures/panels",
+                    cache_root,
+                    "batch_replaced_task_3",
+                    expected,
+                )
+
+            hash_workbook.assert_called_once_with(changed_workbook.resolve())
+            self.assertEqual(analyze_workbook.call_count, 1)
+            self.assertEqual(replaced_payload["task_cache"][changed_workbook.name], "rebuilt")
+            self.assertEqual(
+                sum(state == "hit" for state in replaced_payload["task_cache"].values()),
+                4,
+            )
+
+    def test_task_merge_summarizes_raw_performance_samples(self) -> None:
+        """性能统计必须合并原始样本，不能对各 task 中位数再次汇总。"""
+
+        first = self._task_results(Path("task_1_complete.xlsx"), "1" * 64)
+        second = self._task_results(
+            Path("task_5_complete.xlsx"),
+            "5" * 64,
+            include_vcd=True,
+        )
+        first = replace(
+            first,
+            performance_samples=PerformanceSamples((0.0, 10.0), (1.0,), (50.0,)),
+        )
+        second = replace(
+            second,
+            performance_samples=PerformanceSamples((100.0,), (3.0,), (150.0,)),
+        )
+
+        merged = merge_task_results((first, second))
+
+        self.assertEqual(merged.performance["track_total_ms_median"], 10.0)
+        self.assertEqual(merged.performance["register_total_ms_median"], 2.0)
+        self.assertEqual(merged.performance["pose_publish_interval_ms_median"], 100.0)
+
+    @staticmethod
+    def _task_results(
+        workbook: Path,
+        digest: str,
+        *,
+        include_vcd: bool = False,
+        nan_metric: bool = False,
+    ) -> TaskResults:
+        """构造只覆盖缓存与合并契约的最小 task 结果。"""
+
+        static = (
+            {"session_id": "s", "trial_id": "t", "segment_id": "e", "value": np.nan},
+        ) if nan_metric else ()
+        vcd_curve = (
+            {
+                "session_id": "s5",
+                "trial_id": "t",
+                "segment_id": "e",
+                "coverage": 1.0,
+                "selective_risk_mm": 1.0,
+            },
+        ) if include_vcd else ()
+        vcd_aurc = (
+            {
+                "session_id": "s5",
+                "trial_id": "t",
+                "segment_id": "e",
+                "aurc_mm": 1.0,
+            },
+        ) if include_vcd else ()
+        return TaskResults(
+            workbook_path=str(workbook.resolve()),
+            workbook_sha256=digest,
+            static_segments={"EgoAnchor": static} if static else {},
+            translation_segments={},
+            rotation_segments={},
+            occlusion_episodes={},
+            transition_segments={},
+            stop_segments={},
+            correction_segments={},
+            capture_alignment=(),
+            vcd_risk_coverage=vcd_curve,
+            vcd_aurc_segments=vcd_aurc,
+            performance_samples=PerformanceSamples((1.0,), (2.0,), (100.0,)),
+        )
 
     def test_v3_stage_one_workbook_is_rejected_before_analysis(self) -> None:
         """旧 linear_v2 工作簿不得被新时序策略矩阵的论文入口接受。"""

@@ -21,13 +21,9 @@ from .preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
     StageOneQcReport,
-    WorkbookArtifact,
-    collect_source_files,
     finalize_task_events,
     require_task_sources,
     run_task_qc,
-    source_set_sha256,
-    verify_task_workbook,
     write_task_workbook,
 )
 
@@ -72,27 +68,33 @@ _EXPERIMENT_FIGURE_STEMS = (
 )
 """实验一、二分析必须发布并可复制的七个面板。"""
 
+_BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
+"""活动批次组合清单的结构版本。"""
+
+_TASK_CACHE_SCHEMA = "egoanchor_task_workbook_v1"
+"""单任务 Stage 1 缓存记录的结构版本。"""
+
+_BATCH_MANIFEST_NAME = "batch.json"
+"""暂存和活动目录中的批次组合清单文件名。"""
+
 
 @dataclass(frozen=True, slots=True)
 class TaskSpec:
-    """一项物理任务的编号、归档目录和场景标识。"""
+    """一项物理任务的编号和场景标识。"""
 
     number: int
     """从 1 开始的固定任务编号。"""
-
-    directory_name: str
-    """活动 raw 目录使用的固定名称。"""
 
     scenario_id: str
     """manifest 和事件行必须使用的场景标识。"""
 
 
 TASK_SPECS = (
-    TaskSpec(1, "task_1_static_head_motion", "static_head_motion"),
-    TaskSpec(2, "task_2_start_stop_6dof", "start_stop_6dof"),
-    TaskSpec(3, "task_3_continuous_translation", "continuous_translation"),
-    TaskSpec(4, "task_4_continuous_rotation", "continuous_rotation"),
-    TaskSpec(5, "task_5_occlusion_recovery", "occlusion_recovery"),
+    TaskSpec(1, "static_head_motion"),
+    TaskSpec(2, "start_stop_6dof"),
+    TaskSpec(3, "continuous_translation"),
+    TaskSpec(4, "continuous_rotation"),
+    TaskSpec(5, "occlusion_recovery"),
 )
 """当前正式流水线要求的五项物理任务。"""
 
@@ -104,8 +106,8 @@ class SessionSummary:
     task_number: int
     """该 session 唯一完成的任务编号。"""
 
-    task_directory: str
-    """复制到 raw 后使用的固定目录名。"""
+    source_directory: str
+    """`task_data_root` 下的版本化原始目录名。"""
 
     session_id: str
     """manifest 中不可改写的原始 session ID。"""
@@ -193,6 +195,12 @@ class BatchPaths:
     task_data_root: Path
     """人工归档并按任务、版本命名的原始日志目录。"""
 
+    task_workbook_root: Path
+    """按原始任务目录独立保存的 Stage 1 工作簿缓存。"""
+
+    task_analysis_root: Path
+    """按工作簿独立保存的论文指标缓存。"""
+
     staging_root: Path
     """新批次通过全部检查前的临时父目录。"""
 
@@ -234,6 +242,12 @@ class BatchArtifact:
     selected_task_data: tuple[str, ...]
     """本批次自动或显式选择的五个源目录名。"""
 
+    cache_hits: tuple[int, ...]
+    """直接复用既有 Stage 1 工作簿的任务编号。"""
+
+    rebuilt_tasks: tuple[int, ...]
+    """本次重新执行 QC 并生成工作簿的任务编号。"""
+
     def to_dict(self) -> dict[str, Any]:
         """返回适合 CLI JSON 输出的普通字典。"""
 
@@ -244,7 +258,67 @@ class BatchArtifact:
             "sessions": [item.to_dict() for item in self.sessions],
             "selected_task_data": list(self.selected_task_data),
             "workbook_sha256": dict(self.workbook_sha256),
+            "cache_hits": list(self.cache_hits),
+            "rebuilt_tasks": list(self.rebuilt_tasks),
             "next_command": f"pixi run eval promote {self.batch_id}",
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TaskCacheRecord:
+    """一个原始任务目录及其唯一 Stage 1 工作簿的冻结记录。"""
+
+    task_number: int
+    """任务编号。"""
+
+    source_directory: str
+    """`task_data_root` 下不可原地修改的原始目录名。"""
+
+    workbook_directory: str
+    """`task_workbook_root` 下保存该任务产物的目录名。"""
+
+    workbook_name: str
+    """任务工作簿文件名。"""
+
+    workbook_sha256: str
+    """已完整验证工作簿的 SHA-256。"""
+
+    source_set_sha256: str
+    """工作簿内冻结的原始来源集合 SHA-256。"""
+
+    stage_fingerprint: str
+    """生成工作簿所用 Stage 1 实现的内容指纹。"""
+
+    source_snapshot: tuple[tuple[str, int, int], ...]
+    """原始文件相对路径、大小和纳秒修改时间组成的快速快照。"""
+
+    workbook_size: int
+    """工作簿字节数，用于发现缓存文件被替换。"""
+
+    session: SessionSummary
+    """原始 session 的正式批次身份。"""
+
+    @property
+    def workbook_relative_path(self) -> Path:
+        """返回相对于工作簿缓存根目录的安全路径。"""
+
+        return Path(self.workbook_directory) / self.workbook_name
+
+    def to_dict(self) -> dict[str, Any]:
+        """返回可稳定写入 JSON 的缓存记录。"""
+
+        return {
+            "schema": _TASK_CACHE_SCHEMA,
+            "task_number": self.task_number,
+            "source_directory": self.source_directory,
+            "workbook_directory": self.workbook_directory,
+            "workbook_name": self.workbook_name,
+            "workbook_sha256": self.workbook_sha256,
+            "source_set_sha256": self.source_set_sha256,
+            "stage_fingerprint": self.stage_fingerprint,
+            "source_snapshot": [list(item) for item in self.source_snapshot],
+            "workbook_size": self.workbook_size,
+            "session": self.session.to_dict(),
         }
 
 
@@ -272,6 +346,8 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         raise ValueError("batch.toml 必须包含 [copy_assets]")
 
     task_data_root = _resolve_data_path(base, raw_paths, "task_data_root")
+    task_workbook_root = _resolve_data_path(base, raw_paths, "task_workbook_root")
+    task_analysis_root = _resolve_data_path(base, raw_paths, "task_analysis_root")
     staging_root = _resolve_data_path(base, raw_paths, "staging_root")
     archive_root = _resolve_data_path(base, raw_paths, "archive_root")
     active_root = _resolve_data_path(base, raw_paths, "active_root")
@@ -283,7 +359,14 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         directory=True,
     )
     relay_assets = _resolve_relay_assets(base, paper_root, raw_copy_assets)
-    managed = (task_data_root, staging_root, archive_root, active_root)
+    managed = (
+        task_data_root,
+        task_workbook_root,
+        task_analysis_root,
+        staging_root,
+        archive_root,
+        active_root,
+    )
     if len(set(managed)) != len(managed):
         raise ValueError("batch.toml 的 task_data/staging/archive/active 路径必须互不相同")
     for index, left in enumerate(managed):
@@ -295,6 +378,8 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     return BatchPaths(
         project_root=base,
         task_data_root=task_data_root,
+        task_workbook_root=task_workbook_root,
+        task_analysis_root=task_analysis_root,
         staging_root=staging_root,
         archive_root=archive_root,
         active_root=active_root,
@@ -315,6 +400,8 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
         "configuration_file": str(paths.config_path),
         "paths": {
             "task_data_root": str(paths.task_data_root),
+            "task_workbook_root": str(paths.task_workbook_root),
+            "task_analysis_root": str(paths.task_analysis_root),
             "staging_root": str(paths.staging_root),
             "archive_root": str(paths.archive_root),
             "active_root": str(active),
@@ -336,24 +423,28 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
             },
             "stage": {
                 "input": str(paths.task_data_root / "task_<N>_v<V>_<time>_<object>"),
-                "output": str(paths.staging_root / "<batch_id>"),
+                "output": [
+                    str(paths.task_workbook_root / "task_<N>_v<V>_<time>_<object>"),
+                    str(paths.staging_root / "<batch_id>" / _BATCH_MANIFEST_NAME),
+                ],
             },
             "promote": {
                 "input": str(paths.staging_root / "<batch_id>"),
                 "output": str(active),
             },
             "qc": {
-                "input": str(active / "raw"),
-                "output": "stdout JSON；events.jsonl 缺失时会在对应 raw task 内确定性生成",
+                "input": str(active / _BATCH_MANIFEST_NAME),
+                "output": "stdout JSON；按活动清单对五个 task_data 原始目录执行完整 QC",
             },
             "preprocess": {
-                "input": str(active / "raw"),
-                "output": str(active / "workbooks"),
+                "input": str(active / _BATCH_MANIFEST_NAME),
+                "output": str(paths.task_workbook_root),
             },
             "analyze": {
-                "input": str(active / "workbooks"),
+                "input": str(active / _BATCH_MANIFEST_NAME),
                 "output": [
                     str(active / "analysis"),
+                    str(paths.task_analysis_root),
                 ],
                 "note": "只发布活动批次内的图、表和 TeX 片段，不修改论文目录或主稿",
             },
@@ -369,9 +460,9 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "note": "只复制配置允许的 PNG/PDF；不复制 TeX，不改写主稿",
             },
             "rebuild": {
-                "input": str(active / "raw"),
+                "input": str(active / _BATCH_MANIFEST_NAME),
                 "output": [
-                    str(active / "workbooks"),
+                    str(paths.task_workbook_root),
                     str(active / "analysis"),
                 ],
                 "note": "只重建活动批次工作簿和分析产物，不编译或改写论文",
@@ -433,6 +524,264 @@ def list_task_data(root: Path | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+def _stage_fingerprint() -> str:
+    """计算真正影响 Stage 1 内容的实现指纹，不绑定无关 Git 提交。"""
+
+    eval_root = Path(__file__).resolve().parent
+    source_files = sorted(
+        path
+        for directory_name in ("contracts", "preprocess", "schema_v2")
+        for path in (eval_root / directory_name).rglob("*.py")
+    )
+    digest = hashlib.sha256()
+    for path in source_files:
+        digest.update(path.relative_to(eval_root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _source_snapshot(source: Path) -> tuple[tuple[str, int, int], ...]:
+    """只读取目录项元数据，快速发现版本目录被原地改写。"""
+
+    rows: list[tuple[str, int, int]] = []
+    for path in sorted(item for item in source.rglob("*") if item.is_file()):
+        stat = path.stat()
+        rows.append((path.relative_to(source).as_posix(), stat.st_size, stat.st_mtime_ns))
+    return tuple(rows)
+
+
+def _cache_directory(paths: BatchPaths, entry: TaskDataEntry) -> Path:
+    """返回一个任务目录专属的 Stage 1 缓存目录。"""
+
+    return paths.task_workbook_root / entry.directory.name
+
+
+def _read_task_cache(
+    paths: BatchPaths,
+    entry: TaskDataEntry,
+    summary: SessionSummary,
+    stage_fingerprint: str,
+) -> TaskCacheRecord | None:
+    """验证轻量缓存记录和工作簿摘要；失效时返回空值并由调用方重建。"""
+
+    cache_root = _cache_directory(paths, entry)
+    metadata_path = cache_root / "cache.json"
+    try:
+        document = _read_json(metadata_path)
+        record = _task_cache_from_document(document)
+        workbook = paths.task_workbook_root / record.workbook_relative_path
+        if (
+            record.task_number != entry.task_number
+            or record.source_directory != entry.directory.name
+            or record.workbook_directory != entry.directory.name
+            or record.session != summary
+            or record.stage_fingerprint != stage_fingerprint
+            or record.source_snapshot != _source_snapshot(entry.directory)
+            or not workbook.is_file()
+            or workbook.stat().st_size != record.workbook_size
+        ):
+            return None
+        return record
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _build_task_cache(
+    paths: BatchPaths,
+    entry: TaskDataEntry,
+    summary: SessionSummary,
+    stage_fingerprint: str,
+) -> TaskCacheRecord:
+    """对单个任务执行一次完整 QC，并原子发布其唯一工作簿缓存。"""
+
+    source = entry.directory
+    require_task_sources((source,), TASK_SOURCE_FILE_NAMES)
+    finalize_task_events(source)
+    require_task_sources((source,), REQUIRED_FILE_NAMES)
+
+    destination = _cache_directory(paths, entry)
+    temporary = create_inherited_temp_directory(
+        paths.task_workbook_root,
+        f".{entry.directory.name}.tmp-",
+    )
+    workbook_name = f"task_{entry.task_number}_complete.xlsx"
+    try:
+        artifact = write_task_workbook(
+            source,
+            temporary / workbook_name,
+            code_version=_git_code_version(paths.project_root),
+        )
+        record = TaskCacheRecord(
+            task_number=entry.task_number,
+            source_directory=entry.directory.name,
+            workbook_directory=entry.directory.name,
+            workbook_name=workbook_name,
+            workbook_sha256=artifact.sha256,
+            source_set_sha256=artifact.source_set_sha256,
+            stage_fingerprint=stage_fingerprint,
+            source_snapshot=_source_snapshot(source),
+            workbook_size=artifact.path.stat().st_size,
+            session=summary,
+        )
+        _write_json_atomic(temporary / "cache.json", record.to_dict())
+        _replace_staged_batch(temporary, destination)
+    except Exception:
+        remove_tree_with_retry(temporary)
+        raise
+    return record
+
+
+def _ensure_task_caches(
+    paths: BatchPaths,
+    entries: Sequence[TaskDataEntry],
+    summaries: Sequence[SessionSummary],
+    *,
+    force: bool,
+) -> tuple[tuple[TaskCacheRecord, ...], tuple[int, ...], tuple[int, ...]]:
+    """按任务复用或重建工作簿缓存，并返回命中与重建编号。"""
+
+    summary_by_task = {summary.task_number: summary for summary in summaries}
+    stage_fingerprint = _stage_fingerprint()
+    records: list[TaskCacheRecord] = []
+    cache_hits: list[int] = []
+    rebuilt_tasks: list[int] = []
+    with _task_progress("Stage 1 cache", tuple(entry.directory for entry in entries)) as progress:
+        for entry in entries:
+            summary = summary_by_task[entry.task_number]
+            record = None if force else _read_task_cache(
+                paths,
+                entry,
+                summary,
+                stage_fingerprint,
+            )
+            if record is None:
+                progress.set_postfix_str(f"Task {entry.task_number}: rebuild")
+                record = _build_task_cache(paths, entry, summary, stage_fingerprint)
+                rebuilt_tasks.append(entry.task_number)
+            else:
+                progress.set_postfix_str(f"Task {entry.task_number}: hit")
+                cache_hits.append(entry.task_number)
+            records.append(record)
+            progress.update()
+    return tuple(records), tuple(cache_hits), tuple(rebuilt_tasks)
+
+
+def _batch_manifest_document(
+    batch_id: str,
+    records: Sequence[TaskCacheRecord],
+) -> dict[str, Any]:
+    """构造只引用共享任务缓存的轻量批次组合清单。"""
+
+    return {
+        "schema": _BATCH_MANIFEST_SCHEMA,
+        "batch_id": batch_id,
+        "tasks": [record.to_dict() for record in records],
+    }
+
+
+def _task_cache_from_document(document: Mapping[str, Any]) -> TaskCacheRecord:
+    """严格解析一个单任务缓存记录。"""
+
+    if document.get("schema") != _TASK_CACHE_SCHEMA:
+        raise ValueError("任务缓存 schema 不受支持")
+    snapshot = document.get("source_snapshot")
+    if not isinstance(snapshot, list):
+        raise ValueError("任务缓存缺少 source_snapshot")
+    session_document = document.get("session")
+    if not isinstance(session_document, dict):
+        raise ValueError("任务缓存缺少 session")
+    session = SessionSummary(**session_document)
+    return TaskCacheRecord(
+        task_number=int(document["task_number"]),
+        source_directory=str(document["source_directory"]),
+        workbook_directory=str(document["workbook_directory"]),
+        workbook_name=str(document["workbook_name"]),
+        workbook_sha256=str(document["workbook_sha256"]),
+        source_set_sha256=str(document["source_set_sha256"]),
+        stage_fingerprint=str(document["stage_fingerprint"]),
+        source_snapshot=tuple(
+            (str(item[0]), int(item[1]), int(item[2]))
+            for item in snapshot
+            if isinstance(item, list) and len(item) == 3
+        ),
+        workbook_size=int(document["workbook_size"]),
+        session=session,
+    )
+
+
+def _write_json_atomic(path: Path, document: Mapping[str, Any]) -> None:
+    """以同目录临时文件原子发布 UTF-8 JSON。"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _load_batch_records(
+    batch_root: Path,
+    paths: BatchPaths,
+) -> tuple[str, tuple[TaskCacheRecord, ...]]:
+    """读取轻量批次清单，并快速核对五项共享缓存仍可用。"""
+
+    document = _read_json(batch_root / _BATCH_MANIFEST_NAME)
+    if document.get("schema") != _BATCH_MANIFEST_SCHEMA:
+        raise ValueError("批次清单 schema 不受支持")
+    batch_id = str(document.get("batch_id") or "")
+    _require_batch_id(batch_id)
+    tasks = document.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != len(TASK_SPECS):
+        raise ValueError("批次清单必须恰好包含 Task 1--5")
+    records = tuple(
+        _task_cache_from_document(item)
+        for item in tasks
+        if isinstance(item, dict)
+    )
+    if len(records) != len(TASK_SPECS):
+        raise ValueError("批次清单包含非法任务记录")
+    if [record.task_number for record in records] != [spec.number for spec in TASK_SPECS]:
+        raise ValueError("批次清单任务必须按 1--5 唯一排序")
+
+    for record in records:
+        expected_name = f"task_{record.task_number}_complete.xlsx"
+        if (
+            Path(record.source_directory).name != record.source_directory
+            or Path(record.workbook_directory).name != record.workbook_directory
+            or record.workbook_directory != record.source_directory
+            or record.workbook_name != expected_name
+            or record.session.source_directory != record.source_directory
+        ):
+            raise ValueError(f"Task {record.task_number} 的缓存路径非法")
+        source = paths.task_data_root / record.source_directory
+        workbook = paths.task_workbook_root / record.workbook_relative_path
+        metadata = paths.task_workbook_root / record.workbook_directory / "cache.json"
+        if not source.is_dir():
+            raise FileNotFoundError(source)
+        if not workbook.is_file() or not metadata.is_file():
+            raise FileNotFoundError(f"Task {record.task_number} 的工作簿缓存不完整")
+        if workbook.stat().st_size != record.workbook_size:
+            raise ValueError(f"Task {record.task_number} 的工作簿大小与批次清单不一致")
+        if _source_snapshot(source) != record.source_snapshot:
+            raise ValueError(
+                f"Task {record.task_number} 的版本目录已被原地修改；请创建新的 vN 目录"
+            )
+
+    summaries = tuple(record.session for record in records)
+    _validate_common_summaries(summaries)
+    if _batch_id(summaries) != batch_id:
+        raise ValueError("batch_id 与五项 session 组合不一致")
+    return batch_id, records
+
+
 def stage_batch(
     version: int | None = None,
     task_versions: Mapping[int, int] | None = None,
@@ -441,10 +790,9 @@ def stage_batch(
     root: Path | None = None,
     batch_id: str | None = None,
 ) -> BatchArtifact:
-    """从 task_data 自动选择五项任务，复制到暂存区并生成工作簿。"""
+    """选择五项任务，并只为缓存缺失或失效的任务生成工作簿。"""
 
     paths = load_batch_paths(root)
-    base = paths.project_root
     entries = select_task_data(
         root=root,
         version=version,
@@ -455,29 +803,24 @@ def stage_batch(
     _report_progress("stage: 已选择以下五项任务数据")
     for entry in entries:
         _report_progress(f"  Task {entry.task_number}: {entry.directory.name}")
-    _validate_task_data_names(entries)
-    source_dirs = tuple(entry.directory for entry in entries)
-    source_dirs, summaries = _map_eval_sessions(source_dirs)
-    _report_progress("stage: 检查五个原始 session")
-    _finalize_and_require_qc(source_dirs)
+    _, summaries = _map_eval_sessions(tuple(entry.directory for entry in entries))
+    _validate_task_data_names(entries, summaries)
+    _report_progress("stage: 核对五个原始 session 的批次身份")
 
     resolved_batch_id = batch_id or _batch_id(summaries)
     _require_batch_id(resolved_batch_id)
+    records, cache_hits, rebuilt_tasks = _ensure_task_caches(
+        paths,
+        entries,
+        summaries,
+        force=False,
+    )
     destination = paths.staging_root / resolved_batch_id
     temporary = create_inherited_temp_directory(paths.staging_root, f".{resolved_batch_id}.tmp-")
     try:
-        _report_progress("stage: 复制五项原始日志到暂存批次")
-        staged_dirs = _copy_task_sources(source_dirs, temporary / "raw")
-        copied_summaries = _validate_task_directories(staged_dirs)
-        if copied_summaries != summaries:
-            raise ValueError("复制后的 manifest 批次身份与 eval 源不一致")
-        _report_progress("stage: 复核暂存 raw")
-        _finalize_and_require_qc(staged_dirs)
-        _report_progress("stage: 发布五本 Stage 1 工作簿")
-        artifacts = _write_workbooks(
-            staged_dirs,
-            temporary / "workbooks",
-            _git_code_version(base),
+        _write_json_atomic(
+            temporary / _BATCH_MANIFEST_NAME,
+            _batch_manifest_document(resolved_batch_id, records),
         )
         _replace_staged_batch(temporary, destination)
     except Exception:
@@ -489,8 +832,10 @@ def stage_batch(
         batch_id=resolved_batch_id,
         root=destination,
         sessions=summaries,
-        workbook_sha256={artifact.path.name: artifact.sha256 for artifact in artifacts},
+        workbook_sha256={record.workbook_name: record.workbook_sha256 for record in records},
         selected_task_data=tuple(entry.directory.name for entry in entries),
+        cache_hits=cache_hits,
+        rebuilt_tasks=rebuilt_tasks,
     )
 
 
@@ -513,7 +858,7 @@ def _replace_staged_batch(temporary: Path, destination: Path) -> None:
 
 
 def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> dict[str, Any]:
-    """将一个已验证暂存批次切换为当前活动批次，并冷归档旧批次。"""
+    """原子切换轻量批次组合清单，并归档上一组合的分析产物。"""
 
     paths = load_batch_paths(root)
     resolved_batch_id = batch_id or _only_staged_batch(paths.staging_root)
@@ -521,30 +866,54 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     staged = paths.staging_root / resolved_batch_id
     if not staged.is_dir():
         raise FileNotFoundError(f"找不到暂存批次：{staged}")
-    _report_progress("promote: 复核暂存 raw 与五本工作簿")
-    _validate_complete_batch(staged)
+    _report_progress("promote: 复核暂存批次清单与任务缓存")
+    staged_id, _ = _load_batch_records(staged, paths)
+    if staged_id != resolved_batch_id:
+        raise ValueError("暂存目录名与 batch.json 的 batch_id 不一致")
 
     active = paths.active_root
     archive_parent = paths.archive_root
     archived: Path | None = None
-    if active.exists():
-        current_summaries = _validate_task_directories(
-            _task_dirs(active / "raw"),
-            require_current_matrix=False,
+    active.mkdir(parents=True, exist_ok=True)
+    active_manifest = active / _BATCH_MANIFEST_NAME
+    staged_manifest = staged / _BATCH_MANIFEST_NAME
+    current_batch_id: str | None = None
+    if active_manifest.is_file():
+        current_batch_id, _ = _load_batch_records(active, paths)
+    if current_batch_id == resolved_batch_id:
+        staged_manifest.replace(active_manifest)
+        remove_tree_with_retry(staged)
+        return {
+            "passed": True,
+            "active_batch": resolved_batch_id,
+            "active_root": str(active),
+            "archived_root": None,
+            "next_command": "pixi run eval analyze",
+        }
+    if current_batch_id is not None:
+        archived = archive_parent / current_batch_id
+        archive_temporary = create_inherited_temp_directory(
+            archive_parent,
+            f".{current_batch_id}.tmp-",
         )
-        archived = archive_parent / _batch_id(current_summaries)
-        if archived.exists():
-            raise FileExistsError(f"旧批次冷归档已存在，拒绝覆盖：{archived}")
-        archive_parent.mkdir(parents=True, exist_ok=True)
-        _report_progress(f"promote: 归档旧活动批次到 {archived.name}")
-        active.rename(archived)
-
+        _report_progress(f"promote: 归档旧活动清单到 {archived.name}")
+        active_manifest.rename(archive_temporary / _BATCH_MANIFEST_NAME)
+        analysis = active / "analysis"
+        if analysis.exists():
+            analysis.rename(archive_temporary / "analysis")
+        _replace_staged_batch(archive_temporary, archived)
     try:
-        _report_progress("promote: 切换新的活动批次")
-        staged.rename(active)
+        _report_progress("promote: 切换新的活动组合清单")
+        staged_manifest.replace(active_manifest)
+        remove_tree_with_retry(staged)
     except Exception:
-        if archived is not None and archived.exists() and not active.exists():
-            archived.rename(active)
+        if archived is not None and (archived / _BATCH_MANIFEST_NAME).exists():
+            (archived / _BATCH_MANIFEST_NAME).rename(active_manifest)
+            archived_analysis = archived / "analysis"
+            if archived_analysis.exists():
+                archived_analysis.rename(active / "analysis")
+            if archived.exists() and not any(archived.iterdir()):
+                archived.rmdir()
         raise
 
     _report_progress("promote: 活动批次已切换")
@@ -558,27 +927,28 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
 
 
 def rebuild_current(*, root: Path | None = None) -> dict[str, Any]:
-    """从当前 raw 重新生成五本工作簿和本地分析产物。"""
+    """显式强制重建活动组合的五本工作簿和本地分析产物。"""
 
-    _report_progress("rebuild: 从当前 raw 重建工作簿和分析产物")
+    _report_progress("rebuild: 强制重建五项任务缓存和分析产物")
     paths = load_batch_paths(root)
-    preprocess_result = preprocess_current(root=paths.project_root)
+    preprocess_result = preprocess_current(root=paths.project_root, force=True)
     result = analyze_current(root=paths.project_root)
     result["workbook_sha256"] = preprocess_result["workbook_sha256"]
     return result
 
 
 def qc_current(*, root: Path | None = None) -> dict[str, Any]:
-    """对当前活动批次的五个 raw task 执行完整硬 QC。"""
+    """按活动清单对五个原始任务显式执行完整硬 QC。"""
 
     _report_progress("qc: 检查当前活动批次")
     paths = load_batch_paths(root)
-    task_dirs = _task_dirs(paths.active_root / "raw")
+    _, records = _load_batch_records(paths.active_root, paths)
+    task_dirs = tuple(paths.task_data_root / record.source_directory for record in records)
     summaries = _validate_task_directories(task_dirs)
     reports = _finalize_and_run_qc(task_dirs)
     return {
         "passed": all(report.passed for report in reports),
-        "raw_root": str(paths.active_root / "raw"),
+        "task_data_root": str(paths.task_data_root),
         "sessions": [summary.to_dict() for summary in summaries],
         "tasks": [report.to_dict() for report in reports],
     }
@@ -587,23 +957,34 @@ def qc_current(*, root: Path | None = None) -> dict[str, Any]:
 def preprocess_current(
     *,
     root: Path | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
-    """把当前活动批次的 raw JSON/JSONL 发布为五本完整工作簿。"""
+    """只重建活动组合中缺失或失效的任务工作簿；可显式强制全部重建。"""
 
-    _report_progress("preprocess: 检查当前 raw 并重建五本工作簿")
+    _report_progress("preprocess: 检查五项独立 Stage 1 缓存")
     paths = load_batch_paths(root)
-    task_dirs = _task_dirs(paths.active_root / "raw")
-    _validate_task_directories(task_dirs)
-    _finalize_and_require_qc(task_dirs)
-    artifacts = _write_workbooks(
-        task_dirs,
-        paths.active_root / "workbooks",
-        _git_code_version(paths.project_root),
+    batch_id, current_records = _load_batch_records(paths.active_root, paths)
+    entries = tuple(
+        _parse_task_data_entry(paths.task_data_root / record.source_directory)
+        for record in current_records
+    )
+    summaries = tuple(record.session for record in current_records)
+    records, cache_hits, rebuilt_tasks = _ensure_task_caches(
+        paths,
+        entries,
+        summaries,
+        force=force,
+    )
+    _write_json_atomic(
+        paths.active_root / _BATCH_MANIFEST_NAME,
+        _batch_manifest_document(batch_id, records),
     )
     return {
         "passed": True,
-        "output_root": str(paths.active_root / "workbooks"),
-        "workbook_sha256": {artifact.path.name: artifact.sha256 for artifact in artifacts},
+        "output_root": str(paths.task_workbook_root),
+        "workbook_sha256": {record.workbook_name: record.workbook_sha256 for record in records},
+        "cache_hits": list(cache_hits),
+        "rebuilt_tasks": list(rebuilt_tasks),
         "next_command": "pixi run eval analyze",
     }
 
@@ -615,9 +996,11 @@ def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
 
     paths = load_batch_paths(root)
     active = paths.active_root
-    workbooks = tuple(active / "workbooks" / f"task_{number}_complete.xlsx" for number in range(1, 6))
+    batch_id, records = _load_batch_records(active, paths)
+    workbooks = tuple(paths.task_workbook_root / record.workbook_relative_path for record in records)
+    workbook_sha256 = {str(path): record.workbook_sha256 for path, record in zip(workbooks, records, strict=True)}
     figure_tex_directory = paths.experiment_asset_destination.relative_to(paths.paper_root).as_posix()
-    with _stage_progress("analyze", 4, "stage") as progress:
+    with _stage_progress("analyze", 8, "stage") as progress:
         def update_analysis_progress(message: str) -> None:
             """更新论文分析的当前阶段。"""
 
@@ -628,6 +1011,9 @@ def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
             workbooks,
             active / "analysis",
             figure_tex_directory,
+            cache_root=paths.task_analysis_root,
+            batch_id=batch_id,
+            workbook_sha256=workbook_sha256,
             progress=update_analysis_progress,
         )
     return {
@@ -641,9 +1027,15 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
     """将当前分析面板和配置指定 relay PNG/PDF 显式复制到论文目录。"""
 
     paths = load_batch_paths(root)
+    batch_id, _ = _load_batch_records(paths.active_root, paths)
     figure_root = paths.active_root / "analysis" / "figures"
     if not figure_root.is_dir():
         raise FileNotFoundError(f"尚未生成当前批次图片，请先运行 analyze：{figure_root}")
+    build_result = _read_json(
+        paths.active_root / "analysis" / "provenance" / "build_result.json"
+    )
+    if build_result.get("batch_id") != batch_id:
+        raise ValueError("当前 analysis 不属于活动批次，请先运行 pixi run eval analyze")
 
     copies: list[AssetCopy] = []
     for stem in _EXPERIMENT_FIGURE_STEMS:
@@ -777,12 +1169,6 @@ def _resolve_relay_assets(
     return tuple(assets)
 
 
-def _task_dirs(raw_root: Path) -> tuple[Path, ...]:
-    """返回任务 1--5 的固定 raw 目录。"""
-
-    return tuple(raw_root / spec.directory_name for spec in TASK_SPECS)
-
-
 def select_task_data(
     *,
     root: Path | None = None,
@@ -907,12 +1293,17 @@ def _require_version(version: int, label: str) -> int:
 
 def _validate_task_data_names(
     entries: Sequence[TaskDataEntry],
+    summaries: Sequence[SessionSummary],
 ) -> None:
     """确认目录标签与 manifest 的任务、时间和对象身份一致。"""
 
+    summary_by_source = {summary.source_directory: summary for summary in summaries}
     for entry in entries:
-        spec = TASK_SPECS[entry.task_number - 1]
-        summary = _session_summary(entry.directory, spec)
+        summary = summary_by_source[entry.directory.name]
+        if summary.task_number != entry.task_number:
+            raise ValueError(
+                f"{entry.directory.name} 的 manifest 未对应任务 {entry.task_number}"
+            )
         match = _SESSION_TIME_PATTERN.match(summary.session_id)
         session_timestamp = f"{match.group('date')}_{match.group('time')}" if match else ""
         if entry.timestamp != session_timestamp:
@@ -950,10 +1341,8 @@ def _map_eval_sessions(task_dirs: Sequence[Path]) -> tuple[tuple[Path, ...], tup
 
 def _validate_task_directories(
     task_dirs: Sequence[Path],
-    *,
-    require_current_matrix: bool = True,
 ) -> tuple[SessionSummary, ...]:
-    """检查五个目录的任务映射和批次公共身份，可放宽旧批次的矩阵版本。"""
+    """检查五个目录的任务映射和当前批次公共身份。"""
 
     if len(task_dirs) != len(TASK_SPECS):
         raise ValueError("正式批次必须恰好包含任务 1--5 五个目录")
@@ -961,14 +1350,12 @@ def _validate_task_directories(
         _session_summary(path, spec)
         for path, spec in zip(task_dirs, TASK_SPECS, strict=True)
     )
-    _validate_common_summaries(summaries, require_current_matrix=require_current_matrix)
+    _validate_common_summaries(summaries)
     return summaries
 
 
 def _validate_common_summaries(
     summaries: Sequence[SessionSummary],
-    *,
-    require_current_matrix: bool = True,
 ) -> None:
     """检查 session 唯一性、正式状态和跨 task 公共身份。"""
 
@@ -981,7 +1368,7 @@ def _validate_common_summaries(
             raise ValueError(f"五个 session 的 {field_name} 不一致")
     if first.run_kind != "formal":
         raise ValueError("正式批次的 run_kind 必须为 formal")
-    if require_current_matrix and first.variant_matrix_id != EXPECTED_MATRIX_ID:
+    if first.variant_matrix_id != EXPECTED_MATRIX_ID:
         raise ValueError(f"variant_matrix_id 必须为 {EXPECTED_MATRIX_ID}")
 
 
@@ -1005,7 +1392,7 @@ def _session_summary(
         raise ValueError(f"{session_id} 的 scenario_id 未对应 {spec.scenario_id}")
     return SessionSummary(
         task_number=spec.number,
-        task_directory=spec.directory_name,
+        source_directory=task_dir.name,
         session_id=session_id,
         scenario_id=spec.scenario_id,
         config_hash=_nonempty_text(manifest, "config_hash"),
@@ -1057,86 +1444,6 @@ def _finalize_and_run_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, .
     return tuple(reports)
 
 
-def _finalize_and_require_qc(task_dirs: Sequence[Path]) -> tuple[StageOneQcReport, ...]:
-    """物化事件总表，并要求每个 task 的完整硬 QC 通过。"""
-
-    reports = _finalize_and_run_qc(task_dirs)
-    failed = [report for report in reports if not report.passed]
-    if failed:
-        details = "; ".join(
-            f"{report.session_id}: {', '.join(issue.code for issue in report.errors)}"
-            for report in failed
-        )
-        raise ValueError(f"批次 QC 失败：{details}")
-    return reports
-
-
-def _copy_task_sources(source_dirs: Sequence[Path], raw_root: Path) -> tuple[Path, ...]:
-    """逐 task 复制完整来源，并用来源集合 SHA-256 验证副本。"""
-
-    raw_root.mkdir(parents=True, exist_ok=True)
-    destinations: list[Path] = []
-    with _task_progress("copy", source_dirs) as progress:
-        for source, spec in zip(source_dirs, TASK_SPECS, strict=True):
-            progress.set_postfix_str(f"Task {spec.number}")
-            destination = raw_root / spec.directory_name
-            source_digest = source_set_sha256(collect_source_files(source))
-            shutil.copytree(source, destination, ignore=_ignore_empty_audit_samples)
-            source_digest_after_copy = source_set_sha256(collect_source_files(source))
-            copied_digest = source_set_sha256(collect_source_files(destination))
-            if source_digest_after_copy != source_digest:
-                raise OSError(f"task {spec.number} 在复制期间仍被写入，拒绝暂存半同步数据")
-            if copied_digest != source_digest:
-                raise OSError(f"task {spec.number} 复制后来源 SHA-256 不一致")
-            destinations.append(destination)
-            progress.update()
-    return tuple(destinations)
-
-
-def _ignore_empty_audit_samples(directory: str, names: list[str]) -> set[str]:
-    """暂存时跳过遗留的空 audit_samples 目录，保留真实审计文件。"""
-
-    ignored: set[str] = set()
-    source = Path(directory)
-    for name in names:
-        if name != "audit_samples":
-            continue
-        candidate = source / name
-        if candidate.is_dir() and not any(path.is_file() for path in candidate.rglob("*")):
-            ignored.add(name)
-    return ignored
-
-
-def _write_workbooks(
-    task_dirs: Sequence[Path],
-    output_root: Path,
-    code_version: str,
-) -> tuple[WorkbookArtifact, ...]:
-    """按任务 1--5 发布完整工作簿，并独立回读确认。"""
-
-    output_root.mkdir(parents=True, exist_ok=True)
-    artifacts: list[WorkbookArtifact] = []
-    with _task_progress("XLSX write", task_dirs) as progress:
-        for task_dir, spec in zip(task_dirs, TASK_SPECS, strict=True):
-            progress.set_postfix_str(f"Task {spec.number}")
-            artifacts.append(
-                write_task_workbook(
-                    task_dir,
-                    output_root / f"task_{spec.number}_complete.xlsx",
-                    code_version=code_version,
-                )
-            )
-            progress.update()
-    with _task_progress("XLSX verify", task_dirs) as progress:
-        for artifact, spec in zip(artifacts, TASK_SPECS, strict=True):
-            progress.set_postfix_str(f"Task {spec.number}")
-            verification = verify_task_workbook(artifact.path)
-            if not verification.passed:
-                raise ValueError(f"Stage 1 工作簿回读失败：{artifact.path}")
-            progress.update()
-    return tuple(artifacts)
-
-
 def _batch_id(summaries: Sequence[SessionSummary]) -> str:
     """用五项任务 session 时间构造确定且能区分局部重采的批次名。"""
 
@@ -1170,28 +1477,6 @@ def _only_staged_batch(staging_parent: Path) -> str:
     if len(candidates) != 1:
         raise ValueError("未指定 batch_id 时，暂存区必须恰好包含一个完整批次")
     return candidates[0]
-
-
-def _validate_complete_batch(batch_root: Path) -> None:
-    """在目录切换前重新检查 raw 和五本工作簿。"""
-
-    task_dirs = _task_dirs(batch_root / "raw")
-    _validate_task_directories(task_dirs)
-    _finalize_and_require_qc(task_dirs)
-    workbook_root = batch_root / "workbooks"
-    with _task_progress("batch verify", task_dirs) as progress:
-        for number, task_dir in enumerate(task_dirs, start=1):
-            progress.set_postfix_str(f"Task {number}")
-            workbook = workbook_root / f"task_{number}_complete.xlsx"
-            if not workbook.is_file():
-                raise FileNotFoundError(workbook)
-            verification = verify_task_workbook(workbook)
-            if not verification.passed:
-                raise ValueError(f"Stage 1 工作簿回读失败：{workbook}")
-            raw_digest = source_set_sha256(collect_source_files(task_dir))
-            if verification.source_set_sha256 != raw_digest:
-                raise ValueError(f"task {number} 的 raw 与 Stage 1 工作簿来源摘要不一致")
-            progress.update()
 
 
 def _report_progress(message: str) -> None:

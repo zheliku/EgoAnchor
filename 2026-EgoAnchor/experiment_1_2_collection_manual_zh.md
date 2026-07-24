@@ -293,12 +293,15 @@ pixi run eval sessions
 pixi run eval stage --promote
 ```
 
-返回码为 `0` 且 JSON 中 `"passed": true` 才算整批通过。工具会检查 writer 的 `dropped_rows`、`log_write_failures` 都为 0，完成任务与 lifecycle 一致，当前任务有 marker，每个被 Unity 消费的 candidate 有 9 个 admission，每个 render tick 有 9 个 runtime。任务 2 的 `transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 都必须严格交替并成对闭合。分析还会检查五项任务覆盖、三个组件消融和两路时序策略的关键指标，缺少任一项都不会发布正式 CSV、PDF 或 TeX。
+返回码为 `0` 且 JSON 中 `"passed": true` 才算通过。首次处理的新任务会检查 writer 的
+`dropped_rows`、`log_write_failures`、lifecycle、marker、九路 admission 和 render 完整性。任务 2 的
+`transition_started` / `transition_stopped`、任务 5 的遮挡/重新可见 marker 必须严格交替并闭合。
+已有任务工作簿直接复用；JSON 中的 `cache_hits` 和 `rebuilt_tasks` 会说明本次实际处理了哪些任务。
 
 实验一和实验二使用同一组五项任务。每个正式 session 只完成一个任务；五个 session 必须
-使用相同配置并分别对应任务 1--5。`stage` 会把通过 QC 的副本写入
-`data/experiments/_staging/experiment_1_2/<batch_id>/raw/` 的固定任务目录，原始 session 保留在
-`task_data`。不要移动或删除仍未完成同步的 session。
+使用相同配置并分别对应任务 1--5。`stage` 不复制原始 session；它把每个任务的 Stage 1 工作簿
+独立写入 `data/experiments/task_workbooks/<task-directory>/`，暂存区只保存五项组合的
+`batch.json`。不要移动或删除仍未完成同步的 session。
 
 工作簿和论文结果统一通过 `pixi run eval` 重建，完整命令见
 `experiment_1_2_analysis_reproduction_manual_zh.md`。
