@@ -34,7 +34,8 @@ StaticLock 的配置，只改变输出策略。这个比较不改变完整 EgoAn
 
 比较 Arrival-Hold、Capture-Hold、One-Euro Anchor 和 EgoAnchor。五项任务覆盖静止头动、
 起停 6DoF、持续平移、持续旋转和遮挡恢复。每个场景分别报告世界一致性、静止稳定性、
-lag--fidelity、失效控制和转换代价，不汇总成全局排名。
+lag--fidelity、遮挡稳健性和转换代价，不汇总成全局排名。遮挡稳健性以 episode-level
+平移误差 P95 为主指标；40 mm 超限次数与最大值仅保留在完整指标和审计输出中。
 
 ### 实验二：系统设计归因与时序策略比较
 
@@ -46,7 +47,7 @@ lag--fidelity、失效控制和转换代价，不汇总成全局排名。
 
 图 3(d) 和对应表格比较 `Smoothed KF Extrapolation vs. Hermite Interpolation`。
 除 lag--residual 外，还报告候选生效边界步长、静止帧间增量、起动响应、停止前向过冲、
-反向回动、settling time、旋转误差和遮挡超限。候选生效边界步长按 `source_frame_id`
+反向回动、settling time、旋转误差和遮挡期平移误差 P95。候选生效边界步长按 `source_frame_id`
 改变前后相邻 render pose 的差计算，只作为同一时间线上的配对显示护栏，不称为 Kalman
 innovation。
 

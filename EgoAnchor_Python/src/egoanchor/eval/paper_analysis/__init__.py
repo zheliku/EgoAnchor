@@ -24,7 +24,7 @@ from .metrics import (
     merge_task_results,
     risk_coverage_curve,
 )
-from .paper import write_analysis_artifacts
+from .paper import build_exp1_table, build_exp2_table, write_analysis_artifacts
 from .pipeline import build_analysis
 from .settings import PaperSettings, load_settings, settings_sha256
 from .xlsx import iter_rows, workbook_sha256
@@ -44,6 +44,8 @@ __all__ = [
     "analyze_task_workbook",
     "eligible_trials",
     "build_point_panel",
+    "build_exp1_table",
+    "build_exp2_table",
     "build_translation_panel",
     "build_vcd_risk_coverage_panel",
     "build_analysis",

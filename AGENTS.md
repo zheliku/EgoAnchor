@@ -317,8 +317,8 @@ latexmk -xelatex egoanchor_cn_v6.tex
 - Stage 1 workbook-v2 契约、XLSX writer 和回读验证保持不变；活动 `batch.json` 引用的 `task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；每本 XLSX 的指标独立缓存为严格 JSON，非有限浮点显式编码，性能统计保存可跨 task 合并的原始样本。缓存键绑定 workbook SHA、`paper.toml` SHA 和 `metrics.py`/`xlsx.py` 内容指纹。
 - 实验一图固定为头动中心化泄漏、持续平移 lag--RMSE 和遮挡 episode P95 三个 LaTeX 子图同占一行；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal strategy 四个 LaTeX 子图同占一行，其中时序面板只展示 Smoothed KF Extrapolation 与 Hermite Interpolation。所有 episode 均显示，不做 IQR 可视层删除；图 2(a)/(c) 与图 3 细灰线只按 `session_id × trial_id × segment_id` 严格连接同一事件，图 2(b) 不连接跨方法散点。缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt；图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，避免 LaTeX 缩小字体，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
-- 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡 P95/40 mm 超限和起停转换；实验二按组件报告启用、关闭和配对效应。
-- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 只使用 `occlusion_started` episode 的 P95、独立计算的最大值、40 mm 超限数；时序合成使用持续平移 lag--RMSE。
+- 实验一表同时报告中心化泄漏、绝对注册、帧间增量、平移/旋转 lag--RMSE、遮挡期平移误差 P95 和起停转换；实验二的 VCD admission 同样报告完整系统、w/o VCD 及逐 episode 配对的遮挡期平移误差 P95。40 mm 超限次数与最大值只保留在完整指标和审计输出中，不进入主表。遮挡旋转不新增为本轮主指标，旋转证据继续由 Task 4 的 lag--RMSE 独立报告。
+- capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 主文只使用 `occlusion_started` episode 的平移误差 P95，独立计算的最大值和 40 mm 超限数仅作审计；时序合成使用持续平移 lag--RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
 - 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式组合使用五个不同 session，每个
   session 只完成对应的一项任务。新组合清单先进入 `data/experiments/_staging/`，旧清单和旧分析进入

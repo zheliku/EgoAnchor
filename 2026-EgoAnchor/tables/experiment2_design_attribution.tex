@@ -1,18 +1,22 @@
 \begin{table*}[t]
 \centering
-\caption{实验二的组件归因与逐帧输出策略比较。组件效应为关闭配置减完整系统；额外策略对照固定关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。正式数值将在 v4 五项任务完整重采后由冻结分析管线自动回填。}
+\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD 接纳行报告冻结阈值下的遮挡期平移误差 P95 及逐 episode 配对差。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}
 \label{tab:exp2-final}
 \small
-\setlength{\tabcolsep}{5pt}
+\setlength{\tabcolsep}{4.8pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllll}
 \toprule
-组件 & 直接指标 & 启用 & 关闭 / 替代 & 效应 \\
+比较 & 直接指标 & 参照 & 对照 & 配对差 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
-StaticLock & 中心化静止 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
-VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
-逐帧输出策略（StaticLock off） & fitted lag / aligned RMSE & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
-逐帧输出护栏（StaticLock off） & lag / residual / 起停护栏 & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
+采集时刻对齐 & 同一候选的复合 P95 & 15.377 [13.436, 19.131]~mm & 43.753 [38.144, 55.599]~mm & +26.265 [22.918, 34.859]~mm; 12/12 改善 \\
+StaticLock & 中心化静止 P95 & 0.818~mm & 13.732~mm & +12.876~mm；12/12 片段变差 \\
+VCD score & event AURC（越低越好） & 4.795 [4.205, 5.134]~mm & 全覆盖风险 7.25 [5.151, 7.95]~mm & 相对全覆盖收益 2.277 [0.655, 3.228]~mm \\
+VCD 接纳 & 遮挡期平移误差 P95 & 4.854 [4.542, 13.668]~mm & 9.441 [4.612, 20.709]~mm & 对照$-$参照 0 [0, 3.405]~mm；5/12 个 episode 对照更高 \\
+时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Smoothed KF 49.51~mm / 12.211$^\circ$ & Extrapolation--Linear: 38.331~mm / 7.726$^\circ$；12/12、12/12 个片段外推较高 \\
+Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Hermite 12.04~mm / 4.767$^\circ$ & 与 Linear/SLERP 对照见图~3(d) \\
+停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP 0.723~mm / 2332.4~ms & Smoothed KF 0.984~mm / 2364.6~ms & Extrapolation--Linear: 0.298~mm / 21.3~ms \\
 \bottomrule
 \end{tabular}%
+}
 \end{table*}

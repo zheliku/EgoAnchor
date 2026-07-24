@@ -16,11 +16,14 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.paper_analysis import (
     METHODS,
+    PaperResults,
     PerformanceSamples,
     TaskResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
     build_analysis,
+    build_exp1_table,
+    build_exp2_table,
     build_point_panel,
     build_translation_panel,
     cache_key,
@@ -59,6 +62,84 @@ class PaperPipelineTests(unittest.TestCase):
                 "Hermite Interpolation",
             ),
         )
+
+    def test_main_tables_publish_occlusion_translation_p95(self) -> None:
+        """两张主表使用连续遮挡误差，阈值次数只留在审计产物。"""
+
+        def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
+            """构造两个身份完整且可严格配对的片段。"""
+
+            return {
+                variant: tuple(
+                    {
+                        "session_id": "session",
+                        "trial_id": "trial",
+                        "segment_id": f"segment_{index}",
+                        **{
+                            key: value + variant_index + index
+                            for key, value in metrics.items()
+                        },
+                    }
+                    for index in range(2)
+                )
+                for variant_index, variant in enumerate(variants)
+            }
+
+        static_variants = (*METHODS, "EgoAnchor w/o StaticLock")
+        temporal_variants = (
+            *METHODS,
+            "EgoAnchor w/o StaticLock",
+            "Smoothed KF Extrapolation",
+            "Hermite Interpolation",
+        )
+        occlusion = rows((*METHODS, "EgoAnchor w/o VCD"), translation_p95_mm=4.0)
+        results = PaperResults(
+            workbook_sha256={},
+            static_segments=rows(
+                static_variants,
+                centered_p95_mm=1.0,
+                absolute_p95_mm=2.0,
+                frame_increment_p95_mm=0.1,
+            ),
+            translation_segments=rows(
+                temporal_variants,
+                effective_lag_ms=200.0,
+                aligned_rmse_mm=5.0,
+            ),
+            rotation_segments=rows(
+                temporal_variants,
+                effective_lag_ms=220.0,
+                aligned_rmse_deg=2.0,
+            ),
+            occlusion_episodes=occlusion,
+            transition_segments=rows(METHODS, response_ms=150.0),
+            stop_segments=rows(
+                ("EgoAnchor w/o StaticLock", "Smoothed KF Extrapolation"),
+                forward_overshoot_mm=1.0,
+                settling_time_ms=300.0,
+            ),
+            correction_segments={},
+            capture_alignment=(
+                {"capture_p95_mm": 2.0, "arrival_p95_mm": 5.0},
+                {"capture_p95_mm": 3.0, "arrival_p95_mm": 7.0},
+            ),
+            vcd_aurc_segments=(
+                {"aurc_mm": 2.0, "full_coverage_risk_mm": 4.0, "risk_gain_mm": 2.0},
+                {"aurc_mm": 3.0, "full_coverage_risk_mm": 5.0, "risk_gain_mm": 2.0},
+            ),
+            vcd_risk_coverage=(),
+            performance={},
+        )
+
+        experiment_one = build_exp1_table(results)
+        experiment_two = build_exp2_table(results)
+
+        self.assertIn("遮挡期平移误差 P95", experiment_one)
+        self.assertIn(r"\begin{tabular}{lccccccc}", experiment_one)
+        self.assertIn("遮挡期平移误差 P95", experiment_two)
+        self.assertIn("个 episode 对照更高", experiment_two)
+        self.assertNotIn(">40", experiment_one + experiment_two)
+        self.assertNotIn("灾难性失效", experiment_one + experiment_two)
 
     def test_vcd_risk_coverage_keeps_score_ties_indivisible(self) -> None:
         """同分候选必须整组进入曲线，AURC 不得依赖候选行顺序。"""

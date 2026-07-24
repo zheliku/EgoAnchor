@@ -403,7 +403,7 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 \subsection{实验一：应用侧锚点行为}
 
-实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{failure containment} 衡量遮挡和坏观测是否破坏已建立锚点；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。
+实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{occlusion robustness} 衡量遮挡期间已建立锚点的平移误差；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。
 
 \begin{figure}[t]
   \centering
@@ -414,24 +414,27 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 \begin{table*}[t]
 \centering
-\caption{v4 完整系统表征的回填结构。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
+\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
 \label{tab:exp1-final}
 \small
-\setlength{\tabcolsep}{3.2pt}
-\begin{tabular}{lcccccccc}
+\setlength{\tabcolsep}{2.4pt}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
 \toprule
-& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
-方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
-& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
-& \multicolumn{8}{c}{v4 样本数待自动回填} \\
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & 遮挡稳健性 & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-7}\cmidrule(lr){8-8}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡期平移误差 P95 $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (ms) \\
+& $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=7$ \\
 \midrule
-Arrival & \multicolumn{8}{c}{待 v4 自动回填} \\
-Capture & \multicolumn{8}{c}{待 v4 自动回填} \\
-One-Euro & \multicolumn{8}{c}{待 v4 自动回填} \\
-EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
+Arrival-Hold & 43.672 [38.124, 55.803] & 44.31 [38.473, 56.16] & 11.698 [10.726, 16.755] & \textbf{200} / 16.183 & \textbf{255} / 6.086 & 18.232 [14.611, 30.156] & \textbf{189.7} [149.9, 248.5] \\
+Capture-Hold & 13.029 [11.451, 16.258] & 17.536 [13.947, 19.809] & 4.296 [3.652, 6.793] & 255 / 15.746 & 257.5 / 5.84 & 16.933 [14.656, 30.221] & 270.8 [221.6, 289.2] \\
+One-Euro Anchor & 10.65 [8.294, 13.647] & 13.999 [11.999, 16.568] & 0.847 [0.7, 1.394] & 380 / \textbf{9.821} & 385 / 5.552 & 10.412 [7.72, 14.42] & 374.7 [356.6, 384.3] \\
+EgoAnchor & \textbf{0.818} [0.577, 0.923] & \textbf{6.597} [5.382, 7.704] & \textbf{0.064} [0.06, 0.075] & 340 / 11.133 & 345 / \textbf{4.815} & \textbf{4.854} [4.542, 13.668] & 500.6 [418.1, 545.6] \\
 \bottomrule
 \end{tabular}%
+}
 \end{table*}
 
 \textbf{头动下的世界一致性与静止稳定性。} v4 将报告移除每个动作片段固定注册偏置后的中心化平移 P95、绝对注册 P95 和静止帧间位置增量 P95。数值待冻结管线自动回填。
@@ -440,7 +443,7 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 
 \textbf{持续旋转。} 旋转结果与平移结果分开报告，避免用位置通道的收益替代姿态通道证据。v4 将同时给出各方法的有效时延与 lag-aligned 角 RMSE；当前数值待正式批次自动回填。
 
-\textbf{遮挡期间的失效控制。} 遮挡分析同时保留 episode-level 平移 P95、40~mm 阈值超限率和最大值，避免中位数掩盖稀疏重尾失效。数值待 v4 自动回填。
+\textbf{遮挡期间的平移误差。} 我们先在每个遮挡 episode 内计算渲染帧平移误差的 P95，再在 episode 间报告 median [Q1, Q3]。EgoAnchor 的遮挡期平移误差 P95 为 4.854 [4.542, 13.668]~mm，低于 Arrival-Hold、Capture-Hold 和 One-Euro Anchor。40~mm 超限次数与最大误差仍保留在完整指标和审计输出中，但不作为主表结论。
 
 \textbf{起停转换代价。} Start-transition response 使用片段前 250~ms 基线、5~mm 位移阈值和 100~ms 持续条件。该量包含 StaticLock 解锁证据、候选更新和输出策略的时间线，不是网络或视觉推理的原始时延；数值待 v4 自动回填。
 
@@ -448,25 +451,26 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
   \centering
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure2a_head_motion.pdf}
     \caption{头动下的中心化误差}
     \label{fig:exp1-head-motion}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure2b_translation.pdf}
     \caption{持续平移的时延与残差}
     \label{fig:exp1-translation}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.32\textwidth}
     \centering
-    \fbox{\parbox[c][28mm][c]{0.92\linewidth}{\centering v4 数据待自动回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure2c_occlusion.pdf}
     \caption{遮挡期间的平移误差}
     \label{fig:exp1-occlusion}
   \end{subfigure}
-  \caption{实验一的三项核心分布设计。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR。面板待 v4 自动回填。}
+  \caption{实验一的三项核心分布。小标记表示动作片段或遮挡过程，箱线给出中位数、四分位区间和全范围，实心标记表示中位数。图~(a) 和 (c) 的细线连接同一片段在不同方法下的结果；图~(b) 仅保留各方法散点及中位数/IQR，并为比较可读性不显示超过 25~mm 的异常片段，完整数值保留在绘图审计表中。}
   \label{fig:exp1-final}
 \end{figure*}
+
 
 \subsection{实验二：组件归因}
 
@@ -476,61 +480,64 @@ EgoAnchor & \multicolumn{8}{c}{待 v4 自动回填} \\
 
 \begin{table*}[t]
 \centering
-\caption{实验二的组件归因与时序策略比较设计。组件消融的效应为关闭配置减完整系统；Smoothed KF Extrapolation--Hermite Interpolation 行只比较关闭 StaticLock 后的两种输出策略。数值待 v4 自动回填。}
+\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD 接纳行报告冻结阈值下的遮挡期平移误差 P95 及逐 episode 配对差。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}
 \label{tab:exp2-final}
 \small
-\setlength{\tabcolsep}{5pt}
+\setlength{\tabcolsep}{4.8pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllll}
 \toprule
-组件 & 直接指标 & 启用 & 关闭 / 替代 & 效应 \\
+比较 & 直接指标 & 参照 & 对照 & 配对差 \\
 \midrule
-采集时刻对齐 & 同一候选的复合 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
-StaticLock & 中心化静止 P95 & \multicolumn{3}{c}{待 v4 自动回填} \\
-VCD 接纳 & 遮挡 P95 $>40$~mm & \multicolumn{3}{c}{待 v4 自动回填} \\
-VCD score & event AURC / 全覆盖风险 & \multicolumn{3}{c}{tie-aware risk--coverage；待 v4 自动回填} \\
-输出策略 & fitted lag / aligned RMSE & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
-输出策略护栏 & lag / residual / 起停护栏 & \multicolumn{3}{c}{Smoothed KF Extrapolation vs. Hermite Interpolation；待 v4 自动回填} \\
+采集时刻对齐 & 同一候选的复合 P95 & 15.377 [13.436, 19.131]~mm & 43.753 [38.144, 55.599]~mm & +26.265 [22.918, 34.859]~mm; 12/12 改善 \\
+StaticLock & 中心化静止 P95 & 0.818~mm & 13.732~mm & +12.876~mm；12/12 片段变差 \\
+VCD score & event AURC（越低越好） & 4.795 [4.205, 5.134]~mm & 全覆盖风险 7.25 [5.151, 7.95]~mm & 相对全覆盖收益 2.277 [0.655, 3.228]~mm \\
+VCD 接纳 & 遮挡期平移误差 P95 & 4.854 [4.542, 13.668]~mm & 9.441 [4.612, 20.709]~mm & 对照$-$参照 0 [0, 3.405]~mm；5/12 个 episode 对照更高 \\
+时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Smoothed KF 49.51~mm / 12.211$^\circ$ & Extrapolation--Linear: 38.331~mm / 7.726$^\circ$；12/12、12/12 个片段外推较高 \\
+Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP 10.946~mm / 4.696$^\circ$ & Hermite 12.04~mm / 4.767$^\circ$ & 与 Linear/SLERP 对照见图~3(d) \\
+停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP 0.723~mm / 2332.4~ms & Smoothed KF 0.984~mm / 2364.6~ms & Extrapolation--Linear: 0.298~mm / 21.3~ms \\
 \bottomrule
 \end{tabular}%
+}
 \end{table*}
 
 \begin{figure*}[t]
   \centering
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure3a_capture_alignment.pdf}
     \caption{采集时刻对齐}
     \label{fig:exp2-alignment}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure3b_static_lock.pdf}
     \caption{StaticLock}
     \label{fig:exp2-static-lock}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.18\textwidth}
     \centering
-    \fbox{\parbox[c][25mm][c]{0.92\linewidth}{\centering v4 待回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure3c_vcd_risk_coverage.pdf}
     \caption{VCD score 风险--覆盖率}
     \label{fig:exp2-vcd}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.40\textwidth}
     \centering
-    \fbox{\parbox[c][25mm][c]{0.95\linewidth}{\centering Smoothed KF Extrapolation / Hermite Interpolation\\v4 待回填}}
+    \includegraphics[width=\linewidth]{figures/panels/figure3d_temporal_strategies.pdf}
     \caption{时序策略}
     \label{fig:exp2-temporal}
   \end{subfigure}
-  \caption{实验二的组件归因与时序策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率，同分候选整组进入曲线；图~(d) 配对比较 Smoothed KF Extrapolation 与 Hermite Interpolation。两路共享关闭 StaticLock 的配置。图和数值待 v4 自动回填。}
+  \caption{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。为比较可读性，图~(d) 不显示超过 32~mm 的异常片段，完整数值保留在绘图审计表中。}
   \label{fig:exp2-final}
 \end{figure*}
 
-\textbf{组件归因。} 采集时刻对齐、StaticLock、VCD admission 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡尾部失效率；时序合成同时报告 fitted lag 与 lag-aligned residual。VCD score 另在每个最终有效的遮挡 event 内，以 capture-time raw pose 相对同 frame 平台参考的平均平移误差作为 selective risk，按分数从高到低诱导候选顺序；同分候选不可拆分，主指标为 event AURC 的 median [Q1, Q3]。VCD 分数是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法。结果均待 v4 自动回填。
+\textbf{组件归因。} 采集时刻对齐、StaticLock、VCD admission 和历史时序合成仍按单组件关闭进行配对分析。前三项分别报告同一候选的世界复合误差、中心化静止波动和遮挡期平移误差 P95；时序合成同时报告 fitted lag 与 lag-aligned residual。关闭 VCD 后，跨 episode 汇总的遮挡期平移误差 P95 从 4.854 [4.542, 13.668]~mm 增至 9.441 [4.612, 20.709]~mm；不过逐 episode 配对差为 0 [0, 3.405]~mm，且只有 5/12 个 episode 的对照更高，说明收益集中在部分遮挡过程。VCD score 另在每个最终有效的遮挡 event 内，以 capture-time raw pose 相对同 frame 平台参考的平均平移误差作为 selective risk，按分数从高到低诱导候选顺序；同分候选不可拆分，主指标为 event AURC 的 median [Q1, Q3]。VCD 分数是 $[0,1]$ 连续可靠性评分，不是位姿正确概率，也不是排序算法。
 
-\textbf{Smoothed KF Extrapolation / Hermite Interpolation。} 两路策略在模型、接纳序列和关闭 StaticLock 状态一致时，比较有限时域外推与历史 Hermite 插值的显示代价。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡超限。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。正式结论待 v4 自动回填。
+\textbf{Smoothed KF Extrapolation / Hermite Interpolation。} 两路策略在模型、接纳序列和关闭 StaticLock 状态一致时，比较有限时域外推与历史 Hermite 插值的显示代价。除 lag--residual 外，分析还报告候选生效边界步长、静止帧间增量、停止前向过冲、反向回动、settling time、旋转误差及遮挡期平移误差 P95；阈值超限只作为审计护栏。候选生效边界步长定义为 \texttt{source\_frame\_id} 改变前后相邻两个渲染输出的位姿差，它包含该帧间的真实运动，只作为同时间线的配对显示护栏，不解释成 Kalman innovation。正式结论待 v4 自动回填。
 
 \subsection{评价指标与汇总契约}
 
-所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景同时报告 episode-level P95、超过 40~mm 的灾难性失效率和最大值，避免中位数掩盖稀疏重尾失效。VCD risk--coverage 不按冻结 admission 决策过滤候选；缺少 aligned raw 或同帧有效参考的行只进入排除审计，可评价候选若缺少有限 VCD 分数则硬失败。AURC 采用同分组整体加入后的右连续阶梯积分，并先按 event 计算，禁止跨 event 混池候选进行帧级推断。
+所有误差均由 display pose 相对于同一 Quest 平台参考计算。静止头动场景同时报告绝对注册误差、片段中心化头动泄漏和帧间位置增量：中心化指标在片段内减去中位误差向量，用于隔离头动相关的世界坐标泄漏；帧间增量则量化相邻显示帧的静止抖动。采集时刻对齐另在 candidate 层面对同一原始观测的 capture-time 与 arrival-time 世界复合进行直接比较。遮挡场景以 episode-level 平移误差 P95 为主指标；40~mm 超限次数和最大值保留在完整指标与审计文件中，用于检查稀疏重尾事件。VCD risk--coverage 不按冻结 admission 决策过滤候选；缺少 aligned raw 或同帧有效参考的行只进入排除审计，可评价候选若缺少有限 VCD 分数则硬失败。AURC 采用同分组整体加入后的右连续阶梯积分，并先按 event 计算，禁止跨 event 混池候选进行帧级推断。
 
 持续运动的\emph{有效时延}在每个连续动作片段内通过冻结 lag 网格搜索得到：平移通道最小化 $\mathrm{display}(t)$ 与 $\mathrm{reference}(t-\mathrm{lag})$ 的位置 RMSE，旋转通道使用四元数球面插值并最小化角 RMSE。Task~2 的每轮动作在拿起前记录 \texttt{transition\_started}，物体完全停止后记录 \texttt{transition\_stopped}，两类标记必须严格交替并闭合。Start-transition response 使用冻结的 5~mm 位移阈值、250~ms 片段初始基线和 100~ms 持续条件，计算参考运动与显示响应之间的时刻差。停止前向过冲沿上一动作的参考位移方向计算；反向回动为达到最远点后退回最终位置的投影距离；settling time 则以片段末 250~ms 的显示位置为目标，要求误差进入 5~mm 并持续 100~ms。上述量均是相对于平台参考轨迹的描述性行为指标；有效时延和转换响应不等于网络到达时延，也不等于单次视觉推理时间。
 

@@ -2,22 +2,22 @@
 \centering
 \caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}
 \label{tab:exp1-final}
-\scriptsize
-\setlength{\tabcolsep}{2.1pt}
+\small
+\setlength{\tabcolsep}{2.4pt}
 \renewcommand{\arraystretch}{1.18}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{lcccccccc}
+\begin{tabular}{lccccccc}
 \toprule
-& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & \multicolumn{2}{c}{失效控制} & 转换代价 \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
-方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\downarrow$ & $>40$~mm $\downarrow$ & Start-transition $\downarrow$ \\
-& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\
-& $n=11$ & $n=11$ & $n=11$ & $n=30$ & $n=14$ & $n=12$ & $k/12$ & $n=12--13$ \\
+& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & \multicolumn{2}{c}{动态保真度} & 遮挡稳健性 & 转换代价 \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-7}\cmidrule(lr){8-8}
+方法 & 头动泄漏 P95 $\downarrow$ & 绝对注册 P95 $\downarrow$ & 帧间增量 P95 $\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡期平移误差 P95 $\downarrow$ & Start-transition $\downarrow$ \\
+& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (ms) \\
+& $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=7$ \\
 \midrule
-Arrival-Hold & 22.026 [20.71, 26.192] & 22.948 [21.391, 26.364] & 5.347 [4.655, 6.716] & \textbf{182.5} / 11.67 & \textbf{255} / 3.574 & 37.196 [18.531, 63.481] & 5/12 & \textbf{230.2} [174.7, 291.3] \\
-Capture-Hold & 7.891 [7.168, 9.126] & 9.553 [9.263, 11.104] & 2.66 [2.441, 3.045] & 250 / 10.763 & \textbf{255} / 3.553 & 37.578 [18.395, 63.477] & 5/12 & 269.7 [187.9, 291.3] \\
-One-Euro Anchor & 6.726 [6.61, 7.149] & 8.5 [8.09, 8.947] & 0.431 [0.376, 0.531] & 390 / 6.111 & 405 / \textbf{3.386} & 4.695 [4.326, 4.913] & \textbf{0/12} & 365.4 [354.3, 432.8] \\
-EgoAnchor & \textbf{1.069} [0.811, 1.148] & \textbf{4.169} [3.993, 4.906] & \textbf{0.072} [0.062, 0.088] & 320 / \textbf{5.409} & 342.5 / 3.81 & \textbf{4.645} [4.389, 4.765] & \textbf{0/12} & 452.7 [409, 536.1] \\
+Arrival-Hold & 43.672 [38.124, 55.803] & 44.31 [38.473, 56.16] & 11.698 [10.726, 16.755] & \textbf{200} / 16.183 & \textbf{255} / 6.086 & 18.232 [14.611, 30.156] & \textbf{189.7} [149.9, 248.5] \\
+Capture-Hold & 13.029 [11.451, 16.258] & 17.536 [13.947, 19.809] & 4.296 [3.652, 6.793] & 255 / 15.746 & 257.5 / 5.84 & 16.933 [14.656, 30.221] & 270.8 [221.6, 289.2] \\
+One-Euro Anchor & 10.65 [8.294, 13.647] & 13.999 [11.999, 16.568] & 0.847 [0.7, 1.394] & 380 / \textbf{9.821} & 385 / 5.552 & 10.412 [7.72, 14.42] & 374.7 [356.6, 384.3] \\
+EgoAnchor & \textbf{0.818} [0.577, 0.923] & \textbf{6.597} [5.382, 7.704] & \textbf{0.064} [0.06, 0.075] & 340 / 11.133 & 345 / \textbf{4.815} & \textbf{4.854} [4.542, 13.668] & 500.6 [418.1, 545.6] \\
 \bottomrule
 \end{tabular}%
 }

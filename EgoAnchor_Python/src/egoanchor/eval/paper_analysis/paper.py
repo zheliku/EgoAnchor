@@ -104,25 +104,25 @@ def _sample_label(
     return f"n={min(counts)}--{max(counts)}"
 
 
-def _exp1_table(results: PaperResults) -> str:
-    """生成实验一八指标表。"""
+def build_exp1_table(results: PaperResults) -> str:
+    """生成实验一以连续误差为主的七指标表。"""
 
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
         r"\caption{新采集数据上的完整系统表征。连续指标报告重复动作片段或遮挡过程之间的 median [Q1, Q3]；指标名称中的 P95 先在每个片段内部对渲染帧计算，再在片段之间汇总。粗体标记每个数值列的最优中位数；绝对注册是护栏，平移与旋转的 lag / aligned RMSE 必须成对解释，Start-transition 是稳定优先策略的转换代价。}",
         r"\label{tab:exp1-final}",
-        r"\scriptsize",
-        r"\setlength{\tabcolsep}{2.1pt}",
+        r"\small",
+        r"\setlength{\tabcolsep}{2.4pt}",
         r"\renewcommand{\arraystretch}{1.18}",
         r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{lcccccccc}",
+        r"\begin{tabular}{lccccccc}",
         r"\toprule",
-        "& \\multicolumn{2}{c}{世界一致性} & 静止稳定性 & \\multicolumn{2}{c}{动态保真度} & \\multicolumn{2}{c}{失效控制} & 转换代价 \\\\",
-        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}",
-        "方法 & 头动泄漏 P95 $\\downarrow$ & 绝对注册 P95 $\\downarrow$ & 帧间增量 P95 $\\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡 P95 $\\downarrow$ & $>40$~mm $\\downarrow$ & Start-transition $\\downarrow$ \\\\",
-        "& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (次数) & (ms) \\\\",
-        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ & $k/{len(results.occlusion_episodes[METHODS[0]])}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ \\\\",
+        "& \\multicolumn{2}{c}{世界一致性} & 静止稳定性 & \\multicolumn{2}{c}{动态保真度} & 遮挡稳健性 & 转换代价 \\\\",
+        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-6}\cmidrule(lr){7-7}\cmidrule(lr){8-8}",
+        "方法 & 头动泄漏 P95 $\\downarrow$ & 绝对注册 P95 $\\downarrow$ & 帧间增量 P95 $\\downarrow$ & 平移 Lag / RMSE & 旋转 Lag / RMSE & 遮挡期平移误差 P95 $\\downarrow$ & Start-transition $\\downarrow$ \\\\",
+        "& (mm) & (mm) & (mm) & (ms / mm) & (ms / deg) & (mm) & (ms) \\\\",
+        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ \\\\",
         r"\midrule",
     ]
     medians: dict[str, dict[str, float]] = {
@@ -134,7 +134,6 @@ def _exp1_table(results: PaperResults) -> str:
         "rotation_lag": {method: _summary(results.rotation_segments[method], "effective_lag_ms")[0] for method in METHODS},
         "rotation_rmse": {method: _summary(results.rotation_segments[method], "aligned_rmse_deg")[0] for method in METHODS},
         "occlusion": {method: _summary(results.occlusion_episodes[method], "translation_p95_mm")[0] for method in METHODS},
-        "failures": {method: sum(bool(row["catastrophic_gt40"]) for row in results.occlusion_episodes[method]) for method in METHODS},
         "start": {method: _summary(results.transition_segments[method], "response_ms")[0] for method in METHODS},
     }
     best: dict[str, float] = {key: min(values.values()) for key, values in medians.items()}
@@ -151,7 +150,6 @@ def _exp1_table(results: PaperResults) -> str:
         residual = _fmt(_summary(translation, "aligned_rmse_mm")[0])
         rotation_lag, rotation_residual = _summary(rotation, "effective_lag_ms")[0], _summary(rotation, "aligned_rmse_deg")[0]
         occlusion_p95 = _cell(_summary(occlusion, "translation_p95_mm"))
-        failures = sum(bool(row["catastrophic_gt40"]) for row in occlusion)
         start = _cell(_summary(transition, "response_ms"), 1)
         if np.isclose(medians["centered"][method], best["centered"]):
             centered = _bold_median(centered)
@@ -172,13 +170,10 @@ def _exp1_table(results: PaperResults) -> str:
             rotation_residual_text = _bold_value(rotation_residual_text)
         if np.isclose(medians["occlusion"][method], best["occlusion"]):
             occlusion_p95 = _bold_median(occlusion_p95)
-        failure_text = f"{failures}/{len(occlusion)}"
-        if np.isclose(medians["failures"][method], best["failures"]):
-            failure_text = _bold_value(failure_text)
         if np.isclose(medians["start"][method], best["start"]):
             start = _bold_median(start)
         lines.append(
-            f"{method} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {failure_text} & {start} " + r"\\"
+            f"{method} & {centered} & {absolute} & {increment} & {lag_text} / {residual} & {rotation_lag_text} / {rotation_residual_text} & {occlusion_p95} & {start} " + r"\\"
         )
     lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
     return "\n".join(lines)
@@ -204,7 +199,7 @@ def _paired_summary(
     )
 
 
-def _exp2_table(results: PaperResults) -> str:
+def build_exp2_table(results: PaperResults) -> str:
     """生成实验二三项组件归因与配对时序策略表。"""
 
     capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
@@ -245,12 +240,23 @@ def _exp2_table(results: PaperResults) -> str:
     vcd_aurc = _cell(_summary(results.vcd_aurc_segments, "aurc_mm"))
     vcd_full_risk = _cell(_summary(results.vcd_aurc_segments, "full_coverage_risk_mm"))
     vcd_risk_gain = _cell(_summary(results.vcd_aurc_segments, "risk_gain_mm"))
-    full_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_full)
-    disabled_failures = sum(bool(row["catastrophic_gt40"]) for row in vcd_disabled)
+    vcd_matrix = paired_metric_matrix(
+        results.occlusion_episodes,
+        (FULL_VARIANT, NO_VCD),
+        ("translation_p95_mm",),
+    )[:, :, 0]
+    vcd_deltas = vcd_matrix[:, 1] - vcd_matrix[:, 0]
+    vcd_delta_summary = (
+        float(np.median(vcd_deltas)),
+        float(np.quantile(vcd_deltas, 0.25)),
+        float(np.quantile(vcd_deltas, 0.75)),
+    )
+    vcd_delta = _cell(vcd_delta_summary)
+    vcd_higher = int(np.sum(vcd_deltas > 0))
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD admission 行报告冻结阈值的运行时效果。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
+        r"\caption{新数据上的三项组件归因与逐帧输出策略比较。VCD score 行报告连续分数诱导顺序的 event 级 AURC；VCD 接纳行报告冻结阈值下的遮挡期平移误差 P95 及逐 episode 配对差。Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation 均关闭 StaticLock，并保持 Kalman、VCD、生命周期和候选序列一致。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{4.8pt}",
@@ -262,7 +268,7 @@ def _exp2_table(results: PaperResults) -> str:
         f"采集时刻对齐 & 同一候选的复合 P95 & {capture_text}~mm & {arrival_text}~mm & {capture_effect} \\\\",
         f"StaticLock & 中心化静止 P95 & {_fmt(full_static)}~mm & {_fmt(disabled_static)}~mm & +{_fmt(static_delta)}~mm；{int(static_positive)}/{len(results.static_segments[FULL_VARIANT])} 片段变差 \\\\",
         f"VCD score & event AURC（越低越好） & {vcd_aurc}~mm & 全覆盖风险 {vcd_full_risk}~mm & 相对全覆盖收益 {vcd_risk_gain}~mm \\\\",
-        f"VCD 接纳 & 遮挡最大误差 $>40$~mm & {full_failures}/{len(vcd_full)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_full))}~mm & {disabled_failures}/{len(vcd_disabled)}；max {_fmt(max(float(row['translation_max_mm']) for row in vcd_disabled))}~mm & 消除本批次观测到的灾难性失效 \\\\",
+        f"VCD 接纳 & 遮挡期平移误差 P95 & {_cell(_summary(vcd_full, 'translation_p95_mm'))}~mm & {_cell(_summary(vcd_disabled, 'translation_p95_mm'))}~mm & 对照$-$参照 {vcd_delta}~mm；{vcd_higher}/{len(vcd_deltas)} 个 episode 对照更高 \\\\",
         f"时序策略（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Smoothed KF {_fmt(extrapolation_translation)}~mm / {_fmt(extrapolation_rotation)}$^\\circ$ & Extrapolation--Linear: {_fmt(extrapolation_translation_delta)}~mm / {_fmt(extrapolation_rotation_delta)}$^\\circ$；{int(extrapolation_translation_higher)}/{len(results.translation_segments[LINEAR_SLERP_VARIANT])}、{int(extrapolation_rotation_higher)}/{len(results.rotation_segments[LINEAR_SLERP_VARIANT])} 个片段外推较高 \\\\",
         f"Hermite 补充（StaticLock off） & 平移 / 旋转 aligned RMSE & Linear/SLERP {_fmt(linear_translation)}~mm / {_fmt(linear_rotation)}$^\\circ$ & Hermite {_fmt(hermite_translation)}~mm / {_fmt(hermite_rotation)}$^\\circ$ & 与 Linear/SLERP 对照见图~3(d) \\\\",
         f"停止护栏（StaticLock off） & 前向过冲 / settling & Linear/SLERP {_fmt(linear_overshoot)}~mm / {_fmt(linear_settling, 1)}~ms & Smoothed KF {_fmt(extrapolation_overshoot)}~mm / {_fmt(extrapolation_settling, 1)}~ms & Extrapolation--Linear: {_fmt(extrapolation_overshoot_delta)}~mm / {_fmt(extrapolation_settling_delta, 1)}~ms \\\\",
@@ -562,7 +568,7 @@ def _write_figure_source_data(
     append_metric_rows(
         figure2_rows,
         figure="Figure 2",
-        panel="(c) Failure containment",
+        panel="(c) Occlusion robustness",
         rows=results.occlusion_episodes,
         variants=METHODS,
         x_key=None,
@@ -862,8 +868,8 @@ def write_analysis_artifacts(
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
     plot_data_path = _write_figure_source_data(results, plot_root)
-    exp1_table = _exp1_table(results)
-    exp2_table = _exp2_table(results)
+    exp1_table = build_exp1_table(results)
+    exp2_table = build_exp2_table(results)
     exp1_table_path = table_root / "experiment1_system_characterization.tex"
     exp2_table_path = table_root / "experiment2_design_attribution.tex"
     exp1_table_path.write_text(exp1_table, encoding="utf-8")
@@ -919,4 +925,8 @@ def write_analysis_artifacts(
     }
 
 
-__all__ = ["write_analysis_artifacts"]
+__all__ = [
+    "build_exp1_table",
+    "build_exp2_table",
+    "write_analysis_artifacts",
+]
