@@ -323,6 +323,7 @@ latexmk -xelatex egoanchor_cn_v6.tex
 - 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式组合使用五个不同 session，每个
   session 只完成对应的一项任务。新组合清单先进入 `data/experiments/_staging/`，旧清单和旧分析进入
   `data/experiments/_archive/`；共享 `task_data/`、`task_workbooks/` 和 `task_analysis/` 不随组合重复复制。
+- `batch.json` 中的每条任务记录必须与对应 `task_workbooks/<source>/cache.json` 逐字段一致；活动切换拒绝符号链接、同名归档覆盖和没有清单的旧活动快照。论文指标缓存另保存结果正文 SHA-256，正文被修改时自动失效并重算；这些检查只读取小型清单，不恢复五本 XLSX 的重复扫描。
 - `figure_plot_data.xlsx` 是与 PNG/PDF 面板共享同一分析结果的审计导出，不是绘图输入；正式流程
   没有独立的 plot XLSX 转图片命令。
 - 复现命令、批次归档、退出码和故障排查统一见 `EgoAnchor_Python/docs/analysis_pipeline.md` 与中文复现手册。

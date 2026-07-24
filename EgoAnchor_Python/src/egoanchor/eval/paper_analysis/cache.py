@@ -69,7 +69,12 @@ def load_task_results(
             return None
         if document.get("key") != dict(expected_key):
             return None
-        result = _decode_task_results(_decode_non_finite(document["result"]))
+        encoded_result = document["result"]
+        if not isinstance(document.get("result_sha256"), str):
+            return None
+        if _result_sha256(encoded_result) != document["result_sha256"]:
+            return None
+        result = _decode_task_results(_decode_non_finite(encoded_result))
     except (json.JSONDecodeError, KeyError, TypeError, UnicodeError, ValueError):
         return None
     if result.workbook_sha256 != expected_key["workbook_sha256"]:
@@ -86,9 +91,11 @@ def write_task_results(
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    encoded_result = _encode_non_finite(_encode_task_results(results))
     document = {
         "key": dict(key),
-        "result": _encode_non_finite(_encode_task_results(results)),
+        "result": encoded_result,
+        "result_sha256": _result_sha256(encoded_result),
     }
     try:
         temporary.write_text(
@@ -123,6 +130,19 @@ def _encode_task_results(results: TaskResults) -> Mapping[str, Any]:
             "pose_publish_intervals_ms": results.performance_samples.pose_publish_intervals_ms,
         },
     }
+
+
+def _result_sha256(value: Any) -> str:
+    """计算缓存结果的规范 JSON 摘要，防止只改结果正文而复用旧指标。"""
+
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _decode_task_results(document: Mapping[str, Any]) -> TaskResults:

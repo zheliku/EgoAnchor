@@ -265,6 +265,57 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertTrue(artifact.root.is_dir())
             self.assertFalse(load_batch_paths(root).active_root.exists())
 
+    def test_stage_rebuilds_when_cache_metadata_is_incomplete(self) -> None:
+        """单任务 cache.json 缺字段时只重建该任务，不影响其余缓存。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            directories = _write_batch_sessions(root)
+            first = stage_batch(root=root)
+            cache_path = (
+                load_batch_paths(root).task_workbook_root
+                / directories[2]
+                / "cache.json"
+            )
+            document = json.loads(cache_path.read_text(encoding="utf-8"))
+            del document["workbook_size"]
+            cache_path.write_text(json.dumps(document), encoding="utf-8")
+
+            second = stage_batch(root=root)
+
+            self.assertEqual(second.batch_id, first.batch_id)
+            self.assertEqual(second.cache_hits, (1, 2, 4, 5))
+            self.assertEqual(second.rebuilt_tasks, (3,))
+
+    def test_promote_rejects_batch_cache_record_mismatch(self) -> None:
+        """批次清单被单独修改后不得引用另一份任务缓存。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            _write_batch_sessions(root)
+            artifact = stage_batch(root=root)
+            manifest_path = artifact.root / "batch.json"
+            document = json.loads(manifest_path.read_text(encoding="utf-8"))
+            document["tasks"][0]["workbook_size"] += 1
+            manifest_path.write_text(json.dumps(document), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "batch.json 与 cache.json 不一致"):
+                promote_batch(artifact.batch_id, root=root)
+
+    def test_promote_rejects_legacy_active_snapshot_without_manifest(self) -> None:
+        """活动目录已有旧快照但没有清单时必须显式处理，不得静默覆盖。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            _write_batch_sessions(root)
+            paths = load_batch_paths(root)
+            paths.active_root.mkdir(parents=True)
+            (paths.active_root / "raw").mkdir()
+            artifact = stage_batch(root=root)
+
+            with self.assertRaisesRegex(ValueError, "缺少 batch.json"):
+                promote_batch(artifact.batch_id, root=root)
+
     def test_promote_keeps_active_manifest_when_replace_fails(self) -> None:
         """同一组合的清单替换失败时保留原活动清单和暂存清单。"""
 

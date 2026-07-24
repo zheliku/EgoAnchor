@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -165,6 +166,23 @@ class PaperPipelineTests(unittest.TestCase):
             self.assertTrue(
                 np.isnan(float(restored.static_segments["EgoAnchor"][0]["value"]))
             )
+
+    def test_task_cache_result_tampering_is_a_cache_miss(self) -> None:
+        """指标缓存正文被修改后必须重算，而不是只依赖未变化的 key。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workbook = root / "task_1_complete.xlsx"
+            workbook.touch()
+            destination = cache_path(root / "cache", workbook)
+            key = cache_key("a" * 64, "b" * 64)
+            write_task_results(destination, key, self._task_results(workbook, "a" * 64))
+
+            document = json.loads(destination.read_text(encoding="utf-8"))
+            document["result"]["workbook_sha256"] = "c" * 64
+            destination.write_text(json.dumps(document), encoding="utf-8")
+
+            self.assertIsNone(load_task_results(destination, key, workbook))
 
     def test_build_analysis_uses_five_task_caches_without_hashing_workbooks(self) -> None:
         """五项缓存全部命中时不得重新读取或计算 Stage 1 workbook。"""

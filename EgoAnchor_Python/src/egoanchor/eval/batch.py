@@ -569,8 +569,13 @@ def _read_task_cache(
     cache_root = _cache_directory(paths, entry)
     metadata_path = cache_root / "cache.json"
     try:
+        if entry.directory.is_symlink() or cache_root.is_symlink() or metadata_path.is_symlink():
+            return None
         document = _read_json(metadata_path)
         record = _task_cache_from_document(document)
+        expected_workbook_name = f"task_{entry.task_number}_complete.xlsx"
+        if record.workbook_name != expected_workbook_name:
+            return None
         workbook = paths.task_workbook_root / record.workbook_relative_path
         if (
             record.task_number != entry.task_number
@@ -580,11 +585,12 @@ def _read_task_cache(
             or record.stage_fingerprint != stage_fingerprint
             or record.source_snapshot != _source_snapshot(entry.directory)
             or not workbook.is_file()
+            or workbook.is_symlink()
             or workbook.stat().st_size != record.workbook_size
         ):
             return None
         return record
-    except (OSError, TypeError, ValueError):
+    except (KeyError, OSError, TypeError, ValueError):
         return None
 
 
@@ -693,6 +699,8 @@ def _task_cache_from_document(document: Mapping[str, Any]) -> TaskCacheRecord:
     if not isinstance(session_document, dict):
         raise ValueError("任务缓存缺少 session")
     session = SessionSummary(**session_document)
+    if any(not isinstance(item, list) or len(item) != 3 for item in snapshot):
+        raise ValueError("任务缓存的 source_snapshot 项格式非法")
     return TaskCacheRecord(
         task_number=int(document["task_number"]),
         source_directory=str(document["source_directory"]),
@@ -704,7 +712,6 @@ def _task_cache_from_document(document: Mapping[str, Any]) -> TaskCacheRecord:
         source_snapshot=tuple(
             (str(item[0]), int(item[1]), int(item[2]))
             for item in snapshot
-            if isinstance(item, list) and len(item) == 3
         ),
         workbook_size=int(document["workbook_size"]),
         session=session,
@@ -764,10 +771,20 @@ def _load_batch_records(
         source = paths.task_data_root / record.source_directory
         workbook = paths.task_workbook_root / record.workbook_relative_path
         metadata = paths.task_workbook_root / record.workbook_directory / "cache.json"
+        if (
+            source.is_symlink()
+            or workbook.parent.is_symlink()
+            or workbook.is_symlink()
+            or metadata.is_symlink()
+        ):
+            raise ValueError(f"Task {record.task_number} 的缓存路径不得使用符号链接")
         if not source.is_dir():
             raise FileNotFoundError(source)
         if not workbook.is_file() or not metadata.is_file():
             raise FileNotFoundError(f"Task {record.task_number} 的工作簿缓存不完整")
+        actual_cache = _task_cache_from_document(_read_json(metadata))
+        if actual_cache != record:
+            raise ValueError(f"Task {record.task_number} 的 batch.json 与 cache.json 不一致")
         if workbook.stat().st_size != record.workbook_size:
             raise ValueError(f"Task {record.task_number} 的工作簿大小与批次清单不一致")
         if _source_snapshot(source) != record.source_snapshot:
@@ -874,8 +891,14 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     active = paths.active_root
     archive_parent = paths.archive_root
     archived: Path | None = None
-    active.mkdir(parents=True, exist_ok=True)
+    if active.exists() and not active.is_dir():
+        raise NotADirectoryError(f"活动批次路径不是目录：{active}")
     active_manifest = active / _BATCH_MANIFEST_NAME
+    if active.is_dir() and not active_manifest.exists() and any(active.iterdir()):
+        raise ValueError(
+            "活动批次目录缺少 batch.json；请先迁移或清理旧 raw/workbooks 快照，禁止静默混用"
+        )
+    active.mkdir(parents=True, exist_ok=True)
     staged_manifest = staged / _BATCH_MANIFEST_NAME
     current_batch_id: str | None = None
     if active_manifest.is_file():
@@ -892,20 +915,33 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
         }
     if current_batch_id is not None:
         archived = archive_parent / current_batch_id
+        if archived.exists():
+            raise FileExistsError(f"旧活动批次归档目标已存在，拒绝覆盖：{archived}")
         archive_temporary = create_inherited_temp_directory(
             archive_parent,
             f".{current_batch_id}.tmp-",
         )
-        _report_progress(f"promote: 归档旧活动清单到 {archived.name}")
-        active_manifest.rename(archive_temporary / _BATCH_MANIFEST_NAME)
-        analysis = active / "analysis"
-        if analysis.exists():
-            analysis.rename(archive_temporary / "analysis")
-        _replace_staged_batch(archive_temporary, archived)
+        try:
+            _report_progress(f"promote: 归档旧活动清单到 {archived.name}")
+            active_manifest.rename(archive_temporary / _BATCH_MANIFEST_NAME)
+            analysis = active / "analysis"
+            if analysis.exists():
+                analysis.rename(archive_temporary / "analysis")
+            _replace_staged_batch(archive_temporary, archived)
+        except Exception:
+            if (archive_temporary / _BATCH_MANIFEST_NAME).exists() and not active_manifest.exists():
+                (archive_temporary / _BATCH_MANIFEST_NAME).rename(active_manifest)
+            archived_analysis = archive_temporary / "analysis"
+            if archived_analysis.exists() and not (active / "analysis").exists():
+                archived_analysis.rename(active / "analysis")
+            if archive_temporary.exists():
+                remove_tree_with_retry(archive_temporary)
+            raise
+    switched = False
     try:
         _report_progress("promote: 切换新的活动组合清单")
         staged_manifest.replace(active_manifest)
-        remove_tree_with_retry(staged)
+        switched = True
     except Exception:
         if archived is not None and (archived / _BATCH_MANIFEST_NAME).exists():
             (archived / _BATCH_MANIFEST_NAME).rename(active_manifest)
@@ -915,6 +951,9 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
             if archived.exists() and not any(archived.iterdir()):
                 archived.rmdir()
         raise
+    if switched:
+        # 清理暂存失败不再回滚已成功切换的活动清单，避免破坏可用批次；下次 stage 会覆盖同名暂存目录。
+        remove_tree_with_retry(staged)
 
     _report_progress("promote: 活动批次已切换")
     return {
