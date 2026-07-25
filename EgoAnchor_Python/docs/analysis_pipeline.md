@@ -134,14 +134,14 @@ PNG/PDF。所有来源在写入前统一校验，分析目录中的旧面板和�
 
 图环境 TeX 位于 `analysis/tex/figures/`，仍需研究者审阅后手工纳入论文。
 
-主稿与 PDF 的编译不属于 `pixi run eval`。当前中文主稿为 `2026-EgoAnchor/egoanchor_cn_v8.tex`；完成手工引入后，
+工作稿与 PDF 的编译不属于 `pixi run eval`。最新中文工作稿为 `2026-EgoAnchor/egoanchor_cn_ai_v8.tex`，其中 `ai` 表示该版本使用 AI 辅助撰写；该稿目前尚不可用，只供继续修改和内部审阅。完成手工引入后，
 在 `2026-EgoAnchor/` 下运行：
 
 ```powershell
-latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v8.tex
+latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_ai_v8.tex
 ```
 
-最终 PDF 和辅助文件都使用主稿 basename `egoanchor_cn_v8`，写入 `2026-EgoAnchor/pdf/`。
+PDF 和辅助文件都使用工作稿 basename `egoanchor_cn_ai_v8`，写入 `2026-EgoAnchor/pdf/`。
 工作区的 LaTeX Workshop 输出目录也指向 `%DIR%/pdf`，可以直接按 TeX 文件名打开 PDF。
 
 ## 诊断与重建

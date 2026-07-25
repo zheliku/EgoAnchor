@@ -18,7 +18,7 @@
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 10. 每次操作完后记得更新AGENTS.md
-11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；当前中文主稿为 `egoanchor_cn_v8.tex`，`egoanchor_cn_v6.tex` 与 `egoanchor_cn_v7.tex` 只作归档保留。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
+11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；最新中文工作稿为 `egoanchor_cn_ai_v8.tex`，文件名中的 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
 
@@ -26,7 +26,7 @@
 
 ## IEEE VR 2027 论文路线
 
-当前中文主稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_v8.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；`egoanchor_cn_v6.tex` 与 `egoanchor_cn_v7.tex` 只作归档保留，旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
+当前中文工作稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_ai_v8.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；文件名中的 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留。旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
 
 中心论点：开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor。EgoAnchor 将低频、异步、质量不均的视觉位姿观测，转换为消费级混合现实应用可持续使用的世界系对象锚点。
 
@@ -58,7 +58,7 @@ VCD 的三个语义层次不得混淆：
 - *EgoAnchor*：采集时刻世界复合、VCD 接纳、Kalman Linear/SLERP 合成、显式静止锚定和生命周期管理。
 - 组件消融使用 `EgoAnchor w/o <component>` 风格命名，不再恢复旧 RQ 命名或旧 CLI 兼容层。
 
-IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献最多另占 2 页。**当前处于撰写阶段，页数不作硬约束**：内容可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到投稿上限。不要为了压页数提前删减实质内容或牺牲论证完整性；也不要因为超页而拒绝补写章节。压缩留到定稿前的专门一轮处理，届时优先压缩公式展开、审计指标叙述和重复的边界说明，而不是删证据或删章节。`egoanchor_cn_v7.tex` 正文占 p1--p8、参考文献起于 p9。当前中文主稿已推进到 `egoanchor_cn_v8.tex`（§5.5 改写为纯主观感知评价后正文占 p1--p10、参考文献起于 p11，超出上限 1 页，留待定稿前压缩轮处理）。实验三是已规划的感知效用验证，当前只写冻结设计并占用一张结果表（`tables/exp3_subjective.tex`，数据待回填）；四面板配对图在数据采集完成前保持注释，避免 include 缺失文件导致编译失败。
+IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献最多另占 2 页。**当前处于撰写阶段，页数不作硬约束**：内容可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到投稿上限。不要为了压页数提前删减实质内容或牺牲论证完整性；也不要因为超页而拒绝补写章节。压缩留到定稿前的专门一轮处理，届时优先压缩公式展开、审计指标叙述和重复的边界说明，而不是删证据或删章节。`egoanchor_cn_v7.tex` 正文占 p1--p8、参考文献起于 p9。上一版 `egoanchor_cn_v8.tex` 在 §5.5 改写为纯主观感知评价后正文占 p1--p10、参考文献起于 p11，超出上限 1 页；最新 `egoanchor_cn_ai_v8.tex` 仍是尚不可用的 AI 辅助工作稿，页数压缩留待内容可用后的定稿轮处理。实验三是已规划的感知效用验证，当前只写冻结设计并占用一张结果表（`tables/exp3_subjective.tex`，数据待回填）；四面板配对图在数据采集完成前保持注释，避免 include 缺失文件导致编译失败。
 
 实验三的完整冻结设计固定在 `2026-EgoAnchor/experiment_3_design_zh.md`，`plan.md` 只保留摘要、论文 §5.5 只保留可发表叙述；改动前必须先读该文件，其开头的"本轮决策记录"表列出了 2026-07-25 被推翻的旧决定，**不得改回**。要点：**实验三是纯主观评价，不采集任何客观任务数据**（无任务时间、无成功率、无行为探针；T3 的四按钮面板行为任务已删除）。条件只有 *One-Euro Anchor* 与完整 *EgoAnchor*，*Arrival-Hold* 只作训练阶段演示、不进入推断统计。交叉核心对象为 `blue_mouse`、`stapler` 与 `gamepad`（覆盖尺寸/纹理/几何三个维度；手柄强制单手握持单侧搬移，使另一手保持握持控制器），`earphone` 作困难样例只由操作员采集并兼作训练物体。**区块结构是物体最外层、两条件嵌套在同一物体内**：物体外层因为 `--object` 只在服务启动时读取、协议无运行时切换动作，且同一物体的两条件由同一次感知会话服务；条件内层是灵敏度选择，同物体相邻 A/B 给出最紧配对。三项任务为静止观察、拿起放下、遮挡恢复，**固定顺序**（对应三个不同运行时状态，非同一构念的三次测量），合计 45--60 s 后统一评分。两类人为探针（读 4 字符码、射线选中小目标）均已评估否决：整体游移不影响可读性、单次注视内抖动仅 0.17 个字高，正确率会撞天花板；小目标选择受追踪补偿影响；两者还要额外花版面解释。**遮挡时长必须使锚点停留在 `FrozenUncertain` 而不进入 `Lost`（0.6--0.9 s 起，预实验校准后冻结）**：`AnchorStateMachine.cs:105-115` 的实际分支是 `<=0.45 s` 滑行、`0.45--1.0 s` 冻结、`>=1.0 s` 丢失，因此 **0.6--0.9 s 落在冻结区间而非滑行区间**（旧文档称"coasting 区间"与 0.45 s 滑行上限自相矛盾，已于 2026-07-25 修正）。更长的遮挡（含旧文档的 2 s 与 2.5 s）会使两条件都进入 `Lost` 并等待同一次服务器 REGISTER（中位数 750.26 ms），使恢复条目主要反映感知后端而非运行时；该区间还须避开 0.45 s 边界，否则计时抖动会把试次随机分到两种生命周期状态。生命周期状态分布与两条件的候选/VCD/接纳率一致性是必须报告的操纵检验。运行时参数不得为实验三修改。**测量为单一层级**：每个条件--物体区块后填 7 个条目（Q1 静止稳定/Q2 运动附着/Q3 恢复一致，七点同意度；Q4 合理可信/Q5 同步性，七点强度、单独成页；Q6 依赖意愿/Q7 稳定--响应平衡，七点同意度），全部以该区块为评价对象，共 42 个评分，加最终强制选择与 2 道开放题。逐项分析，**不得合并总分或报 Cronbach's alpha**，正文标注为非标准量表。**不得引入 SUS**（两条件共享完全相同的界面与交互）；**不得引入 NASA-TLX**（两条件任务动作与认知要求完全相同）；**不得以 CRIQ 之名署名 Q4/Q5**——已核查无法确证存在名为 CRIQ 的已验证量表（SelfBlending 归给 Gottsacker et al. ISMAR 2021，但该文标题不含量表名，缩写与分量表分类系其自身表述；该领域联网检索无同名已验证量表，唯一同名 `CRIq` 是无关的 Cognitive Reserve Index），论文只写"改编自既有跨现实交互提问的两个单项"并说明归属链。统计：主分析先把每条目在三物体上**取均值**（非中位数——三点中位数大量结平损失效能）再逐条目 Wilcoxon + Holm，次级用 CLMM（序数；固定效应 = 条件 + 物体 + 区块顺序，随机效应 = 参与者截距），条件 x 物体交互只作探索性报告，不使用 ART/ART-C。样本量 N=24 目标、N=18 下限（平衡组为 6 组，N 必须是 6 的倍数），不得用实验一的片段级中位数推导 n 或断言感知阈值。日常物体上没有同平台参考位姿，实验三不得报告绝对配准误差，只报主观评价和无需真值的自参考稳定性日志，且不得作中介效应主张；**也不得声称提供任务表现证据**，该边界必须在讨论/局限中明说。Exp3 使用独立的 2 runtime `variant_matrix_id`、独立启动门禁和与 schema-v2 隔离的日志与分析模块，不复用实验一/二的九路矩阵。
 
@@ -152,7 +152,7 @@ schema-v2 task directory
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `preprocess` 先按活动 `batch.json` 解析五个独立任务缓存，只对缓存缺失或失效项检查固定源文件、执行 QC 并发布；一个 task 失败不得改写其他 task 的既有缓存。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit 用于审计，但普通 Git 提交本身不作为缓存失效条件。
-- `analyze` 只在活动分析目录生成 TeX，不回填主稿；`copy-assets` 按本次 `build_result.json` 和 `batch.toml` 显式发布当前实验面板、指定 replay/relay PNG/PDF 与三张表格 TeX。表格默认发布为 `tables/exp1_static.tex`、`tables/exp1_dynamic.tex` 和 `tables/exp2_design.tex`；图环境 TeX 仍由研究者审阅后手工纳入。主稿编译不属于 `pixi run eval`，稳定交付文件为 `2026-EgoAnchor/pdf/egoanchor_cn_v8.pdf`。
+- `analyze` 只在活动分析目录生成 TeX，不回填主稿；`copy-assets` 按本次 `build_result.json` 和 `batch.toml` 显式发布当前实验面板、指定 replay/relay PNG/PDF 与三张表格 TeX。表格默认发布为 `tables/exp1_static.tex`、`tables/exp1_dynamic.tex` 和 `tables/exp2_design.tex`；图环境 TeX 仍由研究者审阅后手工纳入。主稿编译不属于 `pixi run eval`，当前工作稿编译产物为 `2026-EgoAnchor/pdf/egoanchor_cn_ai_v8.pdf`，仅供内部审阅，不是稳定交付版本。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - `data/eval/` 只作为新采集和 Mutagen 同步入口；两端停止后，完整 session 移入可配置的 `task_data/`，并按 `task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>` 命名且视为不可原地修改。`task_workbooks/` 保存逐原始目录的 Stage 1 缓存，`task_analysis/` 保存逐工作簿指标缓存；活动 `experiment_1_2/` 只保存当前五任务 `batch.json` 和合并后的 `analysis/`。目录规则见 `EgoAnchor_Python/docs/data_layout.md`。旧 `data/eval/`、活动 `raw/`/`workbooks/` 快照与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - `audit_samples/` 是可选审计样本目录：没有真实审计文件时不得在新 session 中预创建；Stage 1 暂存会跳过遗留的空目录，但一旦存在真实文件则必须完整复制并纳入来源摘要。
@@ -292,7 +292,7 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 论文（`2026-EgoAnchor`，在审阅并纳入图环境 TeX 后）：
 
 ```text
-latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v8.tex
+latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_ai_v8.tex
 ```
 
 ## 环境与远端关键坑
@@ -319,7 +319,7 @@ latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf 
 - Stage 1 workbook-v2 契约、XLSX writer 和回读验证保持不变；活动 `batch.json` 引用的 `task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `paper_analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；每本 XLSX 的指标独立缓存为严格 JSON，非有限浮点显式编码，性能统计保存可跨 task 合并的原始样本。缓存键绑定 workbook SHA、`paper.toml` SHA 和 `metrics.py`/`xlsx.py` 内容指纹。
 - 实验一图固定为静止平移、静止旋转、动态平移和动态旋转四个误差--抖动双纵轴 LaTeX 子图同占一行，每个子图使用 `0.245\textwidth`；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal strategy 四个 LaTeX 子图同占一行，其中时序面板展示 Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation。实验一原始片段点、中位数和 IQR 均保留，左右指标以错位 marker、轴颜色和明确单位共同区分；缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt。图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，图 3(d) 的原生宽高比与 `0.40\textwidth` 目标严格匹配；四张面板保留固定等高 PDF 画布和相同坐标轴上下边界，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
-- 论文构建使用 `egoanchor_cn_v8` basename（`makefile` 的 `SOURCE` 已同步）；PDF 与辅助产物写入 `2026-EgoAnchor/pdf/`，稳定交付文件为 `pdf/egoanchor_cn_v8.pdf`。工作区的 LaTeX Workshop 输出目录同步设为 `%DIR%/pdf`，不得再固定为无关的 `EgoAnchor` jobname。
+- 论文构建使用 `egoanchor_cn_ai_v8` basename（`makefile` 的 `SOURCE` 已同步）；PDF 与辅助产物写入 `2026-EgoAnchor/pdf/`，当前编译产物为 `pdf/egoanchor_cn_ai_v8.pdf`，仅供内部审阅。工作区的 LaTeX Workshop 输出目录同步设为 `%DIR%/pdf`，不得再固定为无关的 `EgoAnchor` jobname。
 - 实验一正文拆为静止与遮挡稳定性、动态 6DoF 保真度两张表。表一依次报告中心化泄漏、绝对注册、静止帧间增量、遮挡平移 P95，并把 Start-transition 放在最右列；表二只报告平移/旋转 effective lag、lag-aligned RMSE 和 current-time RMSE。实验二归因表固定为采集时刻对齐、StaticLock、VCD 判别性和时序策略四行；VCD admission、停止护栏与 Hermite 补充只保留在完整指标、图或审计输出中，不进入主表。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 判别性比较 `occlusion_started` event 的排序 AURC 与全覆盖风险；时序策略比较同样关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF 的平移、旋转 lag-aligned RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。

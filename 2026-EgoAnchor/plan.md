@@ -173,7 +173,7 @@ pixi run eval stage --promote
 pixi run eval analyze
 ```
 
-中文主稿是 `egoanchor_cn_v8.tex`，`egoanchor_cn_v6.tex` 与 `egoanchor_cn_v7.tex` 只作归档保留，稳定 PDF 为 `pdf/egoanchor_cn_v8.pdf`。Stage 1 和指标按 Task 独立
+最新中文工作稿是 `egoanchor_cn_ai_v8.tex`，其中 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留，当前编译产物为 `pdf/egoanchor_cn_ai_v8.pdf`。Stage 1 和指标按 Task 独立
 缓存，活动 `batch.json` 选择五本 XLSX 后合并回填实验一/二；`analyze` 不读取 raw JSON/JSONL。
 IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献另占 2 页。**撰写阶段页数不作硬约束**：
 可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到上限。不要为压页数提前删减实质内容，
