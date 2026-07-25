@@ -202,7 +202,7 @@ pixi run eval copy-assets
 2026-EgoAnchor/tables/exp2_design.tex
 ```
 
-图环境仍位于 `analysis/tex/figures/`，审阅后手工纳入 `2026-EgoAnchor/egoanchor_cn_v7.tex`，
+图环境仍位于 `analysis/tex/figures/`，审阅后手工纳入 `2026-EgoAnchor/egoanchor_cn_v8.tex`，
 再按论文工程单独编译。
 
 ## 八、诊断和强制重建

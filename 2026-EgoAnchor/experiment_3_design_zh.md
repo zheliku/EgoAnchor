@@ -1,584 +1,284 @@
-可以。现在把实验 3 明确定位为**跨对象感知评价**，任务只负责让参与者经历论文关心的三种运行时状态，问卷负责测量用户是否感知到锚点在稳定性、运动附着、恢复和可信度上的差异。
+# 实验三冻结设计：日常物体上的跨对象感知评价
 
-这与正文逻辑相符：实验 1、2 已量化头动一致性、静止抖动、起停权衡和遮挡恢复；实验 3 只补充用户是否感知到这些差异。EgoAnchor 的设计目标本身就是世界一致性、持续输出和可预测的失效—恢复行为。 实验 3 在整篇论文中的角色也应当是应用侧感知效用，而不是重复系统性能测量。
+> **本轮（2026-07-25）重大变更：实验三改为纯主观评价，不采集任何客观任务数据。**
+> 论文 §5.5 已按本文件重写。改动本文件前先读"本轮决策记录"。
 
-下面给出一份可以直接落地到 Unity 和伦理材料中的最终量表方案。
+## 本轮决策记录
 
----
+| 项 | 旧设计 | 现设计 | 理由 |
+| --- | --- | --- | --- |
+| 因变量 | 首次成功操作时间 + 成功率 + 主观单项 | **只有主观评分** | 用户明确要求把重点放在主观数据 |
+| 设计 | `2 条件 x 3 物体 x 3 任务 x 2 重复 = 36 试次` | `2 条件 x 3 物体 = 6 区块`，每区块 3 任务 + 7 条目 | 无客观测量则不需要每单元 6 次观测 |
+| 区块嵌套 | 物体最外层，方法级问卷按方法填 | **物体最外层，条件嵌套在物体内** | 同物体相邻 A/B 给出最紧配对；同一感知会话服务两条件 |
+| 测量层级 | 物体级 3 项 + 方法级 7 项两层 | **单一层级：每区块 7 条目** | 每方法每条目得 3 次观测而非 1 次，且无需跨物体回忆 |
+| Q4/Q5 署名 | "adapted CRIQ plausibility-illusion" | **"改编自既有跨现实交互提问的两个单项"** | 已核查：无法确证存在名为 CRIQ 的已验证量表（见下） |
+| 遮挡时长 | 2.5 s | **0.6--0.9 s（预实验校准后冻结）** | 2.5 s 使两条件都进入 Lost 等同一次 REGISTER |
+| 遮挡目标状态 | 称为"coasting 区间" | **`FrozenUncertain` 区间** | 0.45 s 是滑行上限，0.6--0.9 s 实际落在冻结区间 |
+| NASA-TLX | 每条件后填写 | **删除** | 两条件任务动作与认知要求完全相同，工作负荷非目标构念 |
+| 客观探针 | T3 保留按钮选择行为任务 | **删除** | 纯主观设计下不需要行为终点 |
 
-# 一、量表总体结构
+### Q4/Q5 署名的核查结论
 
-建议采用三级测量：
-
-| 填写时点                     | 内容                                        |                   数量 |
-| ---------------------------- | ------------------------------------------- | ---------------------: |
-| 每完成一个物体的三个任务后   | 物体级即时体验：稳定、附着、恢复            |                   3 项 |
-| 每完成一种方法下的三个物体后 | CRIQ plausibility、锚点信任、稳定—响应平衡 |                   7 项 |
-| 两种方法全部结束后           | 最终选择和开放反馈                          | 1 个选择题＋2 个开放题 |
-
-每位参与者总共填写：
-
-* 物体级即时评分：
-  (2\text{ 方法}\times3\text{ 物体}\times3\text{ 项}=18) 项；
-* 方法级评分：
-  (2\text{ 方法}\times7\text{ 项}=14) 项；
-* 最终偏好：1 项；
-* 开放题：2 项。
-
-总共 33 个量化评分，分散在整个实验中，不会形成很重的问卷负担。
-
-## 统一评分方式
-
-除 CRIQ 外，所有研究定制条目使用 7 点 Likert：
-
-* 1：完全不同意
-* 2：不同意
-* 3：比较不同意
-* 4：既不同意也不赞同
-* 5：比较同意
-* 6：同意
-* 7：完全同意
-
-不要使用 0–6，也不要在不同任务之间改变刻度。
+- SelfBlending（TVCG 2026, doi:10.1109/TVCG.2026.3690947）§IV-D 称 CRIQ 是 "a purpose-built
+  questionnaire"，引用其参考文献 [2] = Gottsacker et al., ISMAR 2021,
+  *Diegetic Representations for Seamless Cross-Reality Interruptions*（pp. 310--319）。
+- 该 ISMAR 论文标题不含任何量表名，是技术论文。
+- 联网检索"cross-reality interaction questionnaire / CRIQ"在 VR/MR 领域**无**已验证同名量表；
+  唯一同名的 `CRIq` 是 Cognitive Reserve Index questionnaire（教育/工作/闲暇三分量表），完全无关。
+- Q4/Q5 的原文措辞在 SelfBlending 之外的文献中检索不到。
+- `par.nsf.gov`、`sreal.ucf.edu`、`semanticscholar.org` 均被网络策略阻断，无法直读 2021 原文。
+- **结论**：Gottsacker 等人很可能确实为其研究自建了问卷，但无法确证它被命名为 CRIQ 或作为
+  五分量表工具经过验证；该命名与分量表划分系 SelfBlending 自身表述。因此论文只写"改编自
+  Elsharkawy 等人在跨现实交互评价中使用的提问"，并说明该文将其归于 Gottsacker 等人。
+  **不要**改回"adapted CRIQ subscale"，除非先取得 2021 原文并确认其中确有此命名量表与条目原文。
 
 ---
 
-# 二、物体级即时问卷
+## 一、设计结构
 
-## 填写时间
-
-参与者对一个物体依次完成：
-
-1. 静止观察；
-2. 拿起、移动、放下；
-3. 遮挡恢复。
-
-三个阶段全部完成后，虚拟锚定内容暂时隐藏，在 HMD 中立即显示以下三个题目。
-
-不要在每一个任务后都中断填写。三个任务总共约 45–60 秒，结束后再问对应的三项，参与者仍能清楚记得各阶段体验，同时不会频繁破坏实验连续性。
-
----
-
-## O1：静止稳定性
-
-**条目 ID：`OBJ_STATIC_STABILITY`**
-
-> 在静止观察阶段，虚拟内容在真实物体上的位置保持稳定。
-
-英文可写：
-
-> During static observation, the virtual content remained stable relative to the physical object.
-
-### 对应任务
-
-静止观察，包括：
-
-* 正面观察；
-* 左右移动头部；
-* 改变观察角度；
-* 适当靠近物体。
-
-### 对应论文机制
-
-* capture-time world alignment；
-* StaticLock；
-* stationary jitter；
-* head-motion consistency。
-
-该条目不要写成“系统没有抖动和漂移”，因为“抖动”和“漂移”是两个相近但不完全相同的现象。正文解释时可以同时联系两项系统指标，但问卷条目保持单一判断。
-
----
-
-## O2：运动附着感
-
-**条目 ID：`OBJ_MOTION_ATTACHMENT`**
-
-> 在拿起、移动和旋转物体时，虚拟内容与真实物体保持一致运动。
-
-英文可写：
-
-> While I picked up, moved, and rotated the object, the virtual content moved consistently with the physical object.
-
-### 对应任务
-
-* 拿起物体；
-* 平移约 25–30 cm；
-* 旋转约 30–45°；
-* 在空中短暂停留；
-* 放置到目标区域。
-
-### 对应论文机制
-
-* temporal synthesis；
-* motion continuity；
-* response lag；
-* anchor sliding。
-
-这里使用“保持一致运动”，比“像物体的一部分”更中性。后者带有较强的具身或所有权隐喻。
-
----
-
-## O3：遮挡恢复可信度
-
-**条目 ID：`OBJ_RECOVERY_CONFIDENCE`**
-
-> 遮挡移除后，虚拟内容恢复到了与真实物体一致的位置。
-
-英文可写：
-
-> After the occlusion was removed, the virtual content recovered to a position consistent with the physical object.
-
-### 对应任务
-
-* 物体完全遮挡约 2.5 秒；
-* 移除遮挡；
-* 继续观察约 5–7 秒。
-
-### 对应论文机制
-
-* VCD admission；
-* lifecycle management；
-* frozen/gliding states；
-* reacquisition；
-* failure containment。
-
-该条目重点是“恢复结果”，不要同时加入“恢复很快”“恢复过程平滑”等内容，否则会成为双重问题。
-
----
-
-## 物体级问卷的处理方式
-
-这三个条目分别代表三个不同任务阶段，因此：
-
-* 不合并为总分；
-* 不计算 Cronbach’s (\alpha)；
-* 不称为一个标准量表；
-* 分别分析方法和物体的影响。
-
-论文中称为：
-
-> three task-specific single-item ratings
-
-而不是：
-
-> Object Anchoring Questionnaire
-
-这样最诚实。
-
----
-
-# 三、方法级问卷
-
-## 填写时间
-
-参与者在同一种方法下完成三个物体后，填写一次方法级问卷。
-
-流程是：
+`2 条件 x 3 物体 = 6 个区块`，被试内。每个区块 = 3 项任务 + 7 个条目。
 
 ```text
-方法 A
-  物体 1：三个任务 → 3 项即时评分
-  物体 2：三个任务 → 3 项即时评分
-  物体 3：三个任务 → 3 项即时评分
-  方法级问卷：7 项
-  休息
-方法 B
-  重复相同流程
-  方法级问卷：7 项
+物体 1（Python session 1）
+  条件 A：静止观察 -> 拿起放下 -> 遮挡恢复 -> 7 条目
+  条件 B：静止观察 -> 拿起放下 -> 遮挡恢复 -> 7 条目
+  休息（切换物体，重启服务）
+物体 2（session 2）：同上
+物体 3（session 3）：同上
+最终：强制选择 + 2 道开放题
 ```
 
-方法级问卷要求参与者评价：
+每位参与者产生 `2 x 3 x 7 = 42` 个评分 + 1 个强制选择 + 2 道开放题。
 
-> “刚才这种方法在三个物体上的总体体验。”
+**物体最外层**是工程硬约束：`--object` 只在服务启动时读取
+（`tracking_server.py:266` -> `load_config`），`anchor.proto` 只有 Reset / Reacquire /
+AnchorControl，无运行时切换对象的动作。物体外层使每位参与者只发生 3 次重启，且同一物体的
+两个条件由同一次感知会话服务，不把会话间差异写入条件对比。
 
-不能让参与者只根据最后一个物体作答，因此问卷首页应明确写：
+**条件嵌套在物体内**是灵敏度选择：全部证据来自主观评分，同物体相邻 A/B 给出最紧配对。
+代价是参与者更易察觉在比较两个版本，以匿名标签、避免操纵描述的措辞、不反馈评分约束，
+并在开放反馈中如实记录参与者推测。
 
-> 请综合考虑刚才在三个物体上的全部体验进行评分。
-
----
-
-# 四、CRIQ plausibility-illusion：3 项
-
-SelfBlending 使用的 CRIQ plausibility-illusion 子量表通过三个问题评价交互是否可信、同步和具有响应性。 这三个方面与 EgoAnchor 的虚实空间一致性和运行时响应较接近。
-
-## CRIQ-P1：总体合理可信度
-
-**条目 ID：`CRIQ_PLAUSIBILITY`**
-
-> 这种虚实交互体验在多大程度上让你觉得合理可信？
-
-英文原意：
-
-> How much did the interaction feel plausible to you?
-
-## CRIQ-P2：同步性
-
-**条目 ID：`CRIQ_SYNCHRONY`**
-
-> 你在多大程度上感觉真实物体与虚拟内容之间的交互是同步的？
-
-英文原意：
-
-> How much did you have the perception of a synchronized interaction between the physical and virtual environments?
-
-## CRIQ-P3：响应性
-
-**条目 ID：`CRIQ_RESPONSIVENESS`**
-
-> 你在多大程度上感觉这一体验会响应你的操作？
-
-英文原意：
-
-> How much did you feel like the experience was responding to you?
-
-## CRIQ 的评分锚点
-
-因为原条目采用“How much”问法，使用：
-
-* 1：完全没有
-* 2：非常少
-* 3：比较少
-* 4：中等程度
-* 5：比较强
-* 6：很强
-* 7：非常强烈
-
-三个条目取平均，得到：
-
-[
-CRIQ_}
-======
-
-\frac{P1+P2+P3}{3}
-]
-
-## 一个重要命名问题
-
-上述中文版本将“physical and virtual environments”具体化为“真实物体与虚拟内容”。因此，严格来说它属于：
-
-> adapted CRIQ plausibility-illusion items
-
-而不是未经修改的原始 CRIQ。
-
-论文中建议写：
-
-> We used three adapted items based on the CRIQ plausibility-illusion subscale, targeting perceived plausibility, synchrony, and responsiveness between the physical object and attached virtual content.
-
-如果你希望直接称为 CRIQ 子量表，应：
-
-1. 找到 CRIQ 原始论文和正式条目；
-2. 保留原始措辞；
-3. 完成中文翻译—回译；
-4. 在补充材料中提供中英文版本。
-
-不要仅根据 SelfBlending 的转述就声称使用了“官方中文版 CRIQ”。
+**平衡**：物体顺序按拉丁方（3 序列）在参与者间平衡；条件顺序在参与者内固定、在参与者间平衡。
+平衡组 = `3 x 2 = 6`，故 N 必须是 6 的倍数。
 
 ---
 
-# 五、锚点信任与依赖意愿：3 项
+## 二、条件
 
-这一部分是研究定制的核心量表，测量用户是否相信并愿意依赖锚点。
+只有 **One-Euro Anchor** 与完整 **EgoAnchor**，以 A/B 匿名呈现。
 
-建议命名为：
+One-Euro 已共享采集时刻对齐、VCD 接纳、自适应历史目标时刻、Linear/SLERP、生命周期与
+逐渲染帧输出，差异集中在运动状态模型与 StaticLock，是强对照。
 
-> Anchor Trust and Reliance
+**Arrival-Hold 只在训练阶段作演示**，对所有参与者统一施加以校准评分尺度下端，不进入推断统计。
+不作正式条件：其不可行性已由实验一系统表征、实验二采集时刻对齐归因和定性 replay 图回答；
+放进用户研究只会引入接近地板的退化数据（头动泄漏 43.67 mm），并使显著结果可被解读为
+选了弱化对照。**Capture-Hold 与三个组件消融只留在实验二。**
 
-或中文：
+两个 runtime 在后台同时消费同一候选流，只显示当前条件
+（复用 `DynamicObjectAnchor.SetRenderersHidden`）。
 
-> 锚点信任与依赖意愿
-
-不能将其称为已经验证的标准量表。
+实验前不讲解任何机制名称（StaticLock / VCD / One-Euro / Kalman），不告知哪个是完整系统，
+只说明"你将体验两种不同的对象锚定方法，并评价虚拟内容与真实物体之间的空间关系"。
 
 ---
 
-## AT1：位置可信度
+## 三、对象
 
-**条目 ID：`TRUST_POSITION`**
+交叉核心：`blue_mouse` + `stapler` + `gamepad`，覆盖尺寸/纹理/几何三维度。
 
-> 我相信该方法显示的虚拟内容位于真实物体上的正确位置。
+- **鼠标**：小、曲率连续、纹理偏弱 -> 几何约束较弱的小型日常物体
+- **订书机**：细长、多平面、明显非对称 -> 位姿条件更好的结构化物体
+- **手柄**：较大、按键与摇杆纹理丰富 -> 几何更复杂
+
+**手柄强制单手握持单侧搬移**，另一手始终握持控制器，统一抓握方式并保证评分时随时可用；
+手部遮挡在两条件间对称且共享同一候选流，是常量不是混淆。
+
+`earphone` 作困难样例**只由操作员采集**（小、表面均匀、近似对称，可能使感知后端成为瓶颈），
+用于报告候选可用率、VCD 分布、重获取次数与失败模式。它同时用作**训练物体**。
+
+降级顺序固定 `gamepad -> earphone`；`blue_mouse` / `stapler` 不可替换。
+每个对象正式采集前必须通过 `replay frame` 像素贴合检查。
+`defaults.toml` 中四个对象的 `symmetry_mode` 都是 `none`，手柄若出现偏航翻转
+**不得**改成 `axis`（会改变位姿语义并破坏与实验一/二的可比性），应降级为操作员覆盖对象。
+
+---
+
+## 四、任务
+
+每区块三项任务，**固定顺序**（对应三个不同运行时状态而非同一构念的三次测量；
+固定顺序保证评分时对三阶段的记忆位置一致）。合计约 45--60 s，**全部结束后再统一评分**，
+不在每项任务后中断。
+
+### T1 静止观察
+物体静置，按预录语音提示完成固定脚本：正面 -> 左移头部 -> 右移头部 -> 略微靠近。
+对应：capture-time world alignment、StaticLock、stationary jitter、head-motion consistency。
+
+### T2 拿起放下
+单手拿起 -> 平移 25--30 cm -> 旋转 30--45° -> 空中短暂停留 -> 放置到目标区域。
+对应：temporal synthesis、motion continuity、response lag、start-transition。
+**这是完整系统预期先付代价的环节**（Start-transition 510 vs 334 ms），结果如实报告。
+
+### T3 遮挡恢复
+滑入固定遮挡板后方 -> 停留校准后时长 -> 移回 -> 继续观察 5--7 s。
+对应：VCD admission、lifecycle、`FrozenUncertain` 下的保持行为、恢复收敛、failure containment。
+用固定挡板而非手掌，以统一遮挡比例、时长与恢复路径。
+
+### 遮挡时长的硬约束
+
+`AnchorPolicyHost.cs:55,64`：`coastTimeoutSeconds=0.45f`、`lostTimeoutSeconds=1.0f`。
+`AnchorStateMachine.cs:105-115` 的实际分支是：
+
+| 无可靠观测时长 | 状态 |
+| --- | --- |
+| `<= 0.45 s` | `Coasting` |
+| `0.45 -- 1.0 s` | `FrozenUncertain` |
+| `>= 1.0 s` | `Lost` |
+
+**遮挡时长设为 0.6--0.9 s 起，预实验校准后冻结。目标状态是 `FrozenUncertain`，不是 `Coasting`。**
+（旧文档与旧记忆把该区间称为"coasting 区间"，与 0.45 s 的滑行上限自相矛盾，已于
+2026-07-25 修正；论文 §5.5 现按状态区间表述。）
+
+选择理由：该区间长于滑行上限，构成参与者可觉察的真实失效事件；又短于丢失上限，
+使恢复经由候选流正常恢复而非服务器重注册完成，因此两条件在遮挡进入时的保持位姿与恢复时的
+收敛行为都由锚定运行时决定。该区间同时**避开 0.45 s 边界**——贴边会让计时抖动把试次随机
+分到滑行与冻结两种状态，反而把数据劈成两个生命周期区制。
+
+旧设计的 2 s 与 GPT 提议的 2.5 s **都不可用**：会使两条件同时进入 Lost 并等待同一次服务器
+REGISTER（实测中位数 750.26 ms），该共享常数同时抬高两条件的恢复质量、压缩相对差异，
+使恢复条目主要反映感知后端重注册而非锚定运行时差异。
+
+实验一的遮挡任务是操作员自由配速、partial/full 混合，其 4.85 vs 10.41 mm
+**不能**外推到任何固定时长。**运行时常数本身不得为实验三修改。**
+
+同理不安排持续快速运动期间的判断：实验一表明该阶段两条件的 current-time RMSE 均超过 10 cm，
+此时提问会同时把两条件推向地板。
+
+---
+
+## 五、七个条目
+
+每区块三项任务全部完成后，虚拟内容暂时隐藏，头显内头锁 UI 逐条填写。
+界面标题："请根据刚才在这个物体上的体验作答"。**七个条目全部以该条件--物体区块为评价对象**，
+不要求跨物体或跨条件回忆。
+
+### 任务特异条目（与三项任务一一对应，七点同意度尺）
+
+| ID | 简称 | 中文条目 |
+| --- | --- | --- |
+| `OBJ_STATIC_STABILITY` | Q1 静止稳定 | 在静止观察阶段，虚拟内容在真实物体上的位置保持稳定。 |
+| `OBJ_MOTION_ATTACHMENT` | Q2 运动附着 | 在拿起、移动和旋转物体时，虚拟内容与真实物体保持一致运动。 |
+| `OBJ_RECOVERY_CONSISTENCY` | Q3 恢复一致 | 遮挡移除后，虚拟内容恢复到了与真实物体一致的位置。 |
 
 英文：
+- During static observation, the virtual content remained stable relative to the physical object.
+- While I picked up, moved, and rotated the object, the virtual content moved consistently with the physical object.
+- After the occlusion was removed, the virtual content recovered to a position consistent with the physical object.
 
-> I trusted that the virtual content displayed by this method was located at the correct position relative to the physical object.
+三项均为**单一判断**：不把抖动与漂移合并，也不把恢复结果与恢复速度/平滑度合并成双重问题。
 
-这是最直接的锚点信任条目。
+### 跨现实一致性条目（跨三项任务评价该区块整体，七点强度尺）
 
----
+| ID | 简称 | 中文条目 |
+| --- | --- | --- |
+| `XR_PLAUSIBILITY` | Q4 合理可信 | 这种虚实交互体验在多大程度上让你觉得合理可信？ |
+| `XR_SYNCHRONY` | Q5 同步性 | 你在多大程度上感觉真实物体与虚拟内容之间的交互是同步的？ |
 
-## AT2：恢复后信任
+英文（改编自 SelfBlending 使用的提问，将 "physical and virtual environments" 具体化为
+"真实物体与虚拟内容"）：
+- How much did the interaction feel plausible to you?
+- How much did you have the perception of a synchronized interaction between the physical object and the attached virtual content?
 
-**条目 ID：`TRUST_AFTER_RECOVERY`**
+**署名见"本轮决策记录"。原设计的第三项（responsiveness）已删除**，因为它与 Q7 的响应及时性
+重叠；Q7 对论文的权衡叙述更重要。
 
-> 短暂遮挡后，我仍然相信恢复后的锚点位置是可靠的。
+### 应用侧条目（七点同意度尺）
 
-英文：
-
-> After a temporary occlusion, I still trusted the recovered anchor position.
-
-这直接对应论文的生命周期和重新获取贡献。
-
----
-
-## AT3：实际依赖意愿
-
-**条目 ID：`TRUST_RELIANCE`**
-
-> 在需要虚拟内容准确附着于真实物体的混合现实应用中，我愿意依赖这种锚定方法。
-
-英文：
-
-> I would be willing to rely on this anchoring method in an MR application that requires virtual content to be accurately attached to a physical object.
-
-这是最重要的应用层条目。它不是泛泛地问“喜欢不喜欢”，而是问参与者是否愿意基于该锚点完成实际应用。
-
----
-
-## 信任量表的计分
-
-若内部一致性可以接受，则计算：
-
-[
-AnchorTrust
-===========
-
-\frac{AT1+AT2+AT3}{3}
-]
-
-报告：
-
-* Cronbach’s (\alpha)，或 McDonald’s (\omega)；
-* 每种方法的中位数和 IQR；
-* 配对差；
-* 效应量和置信区间。
-
-由于样本预计只有 18 人，内部一致性结果只能用于描述，不能声称完成了量表验证。
-
-如果内部一致性很低，例如 (\alpha<0.70)，不要强行报告总分，应分别报告三个条目。
-
----
-
-# 六、稳定性—响应性平衡：1 项
-
-**条目 ID：`STABILITY_RESPONSIVENESS_BALANCE`**
-
-> 总体而言，该方法在锚点稳定性与响应及时性之间取得了合适的平衡。
+| ID | 简称 | 中文条目 |
+| --- | --- | --- |
+| `TRUST_RELIANCE` | Q6 依赖意愿 | 在需要虚拟内容准确附着于真实物体的混合现实应用中，我愿意依赖这种锚定方法。 |
+| `STABILITY_RESPONSIVENESS_BALANCE` | Q7 稳定--响应平衡 | 总体而言，该方法在锚点稳定性与响应及时性之间取得了合适的平衡。 |
 
 英文：
+- I would be willing to rely on this anchoring method in an MR application that requires virtual content to be accurately attached to a physical object.
+- Overall, this method achieved an appropriate balance between anchor stability and responsiveness.
 
-> Overall, this method achieved an appropriate balance between anchor stability and responsiveness.
+**Q6 是最重要的应用层条目**：问是否愿意基于该锚点完成实际应用，而非泛泛问偏好。
+**Q7 单独报告**：EgoAnchor 不追求单独最小化时延，而是处理稳定性、连续性、转换与恢复之间的
+系统权衡。该条目可能揭示——One-Euro 的即时响应感相近或更高，但参与者仍判断完整系统的
+总体权衡更合适——与实验一形成闭环。
 
-使用标准 1–7 同意度量尺。
+原设计的 `TRUST_POSITION` 与 `TRUST_AFTER_RECOVERY` 已删除：单一层级下它们与 Q1/Q3
+在同一页面内近乎重复（"位置正确"vs"位置保持稳定"、"恢复后仍相信"vs"恢复到一致位置"），
+会引发响应定式。信任构念由 Q6 承载。
 
-该题单独报告，不加入 CRIQ 或信任量表。
+### 评分尺度
 
-它对整篇论文很重要，因为 EgoAnchor 并不追求单独最小化时延，而是处理稳定性、连续性、转换和恢复之间的系统权衡。正文也明确要求时延和轨迹质量成对解释。
+- Q1--Q3、Q6、Q7：七点同意度（1 完全不同意 … 4 既不同意也不赞同 … 7 完全同意）
+- Q4--Q5：七点强度（1 完全没有、2 非常少、3 比较少、4 中等程度、5 比较强、6 很强、7 非常强烈）
 
-这一题可以揭示一种很有价值的结果：
+两种尺度**单独成页**、端点文字明确不同，避免语义混淆。
+同一条目在全部区块中使用完全相同的措辞与刻度。不使用 0--6，不在区块间改变刻度。
 
-* EgoAnchor 的稳定性、恢复信任评分更高；
-* One-Euro 的即时响应感可能相近或更高；
-* 但参与者仍认为 EgoAnchor 的总体权衡更合适。
+条目措辞**避开对操纵的直接描述**：不出现"抖动""漂移""滤波"，只问参与者观察到什么、
+是否愿意依赖，不要求其评估系统属性。
 
-这会与实验 1 的结果形成闭环。
+### 明确不用的量表
 
----
-
-# 七、两种方法完成后的最终问卷
-
-两种方法全部完成后，参与者摘下头显，在平板或纸质问卷上完成最终比较。
-
-## F1：实际选择
-
-**条目 ID：`FINAL_METHOD_CHOICE`**
-
-> 如果需要在实际混合现实应用中使用一个对象锚定方法，你会选择哪一种？
-
-选项：
-
-* 方法 A
-* 方法 B
-* 无明显偏好
-
-这比问“哪一种更好”更具体，因为它对应实际使用意愿。
-
-不要向参与者透露哪一个是 EgoAnchor。
+- **不用 SUS**：两条件共享完全相同的界面与交互，SUS 测产品可用性，对该操纵不敏感
+  （且此前的 7 点改版已破坏其 0--100 标准计分）。
+- **不用 NASA-TLX**：两条件任务动作与认知要求完全相同，工作负荷不是本操纵的目标构念。
+- **不用 CRIQ 之名**：见"本轮决策记录"。
+- **七个条目全部逐项分析，不合并总分，不报 Cronbach's alpha / McDonald's omega**，
+  论文中明确标注为非标准量表。先例：VRGaussianAvatar（arXiv:2602.01674）用 3 个自拟单项
+  7 点逐项分析、只对聚合量表报 alpha。
 
 ---
 
-## F2：感知差异
+## 六、最终问卷
 
-**条目 ID：`OPEN_DIFFERENCE`**
+两条件全部结束后摘下头显填写：
 
-> 你认为两种锚定方法之间最明显的区别是什么？
+1. `FINAL_METHOD_CHOICE`：如果需要在实际混合现实应用中使用一个对象锚定方法，你会选择哪一种？
+   （方法 A / 方法 B / 无明显偏好）
+2. `OPEN_DIFFERENCE`：你认为两种锚定方法之间最明显的区别是什么？
+3. `OPEN_DISTRUST`：在使用附着于真实物体的虚拟内容时，什么现象最容易使你不再信任这个锚点？
+4. 可选的结束不适检查（SSQ 衍生清单**只作安全监测**，不作因变量）
 
-用于识别：
-
-* 微小抖动；
-* 头动漂移；
-* 运动打滑；
-* 放下后的迟滞；
-* 遮挡后跳变；
-* 无明显差异。
+`OPEN_DISTRUST` 是整个访谈中信息量最高的问题：让参与者自然指出何种运行时行为真正破坏信任，
+而不是复述问卷术语。**全程不向参与者揭示哪一条件是完整系统。**
 
 ---
 
-## F3：信任破坏因素
+## 七、流程
 
-**条目 ID：`OPEN_DISTRUST`**
+### 阶段 0：实验前
+年龄、性别、主手、正常或矫正视力、VR/MR 使用经验、可选的当前不适程度。
+这些是参与者信息，不是因变量。
 
-> 在使用附着于真实物体的虚拟内容时，什么现象最容易使你不再信任这个锚点？
+### 阶段 1：训练
+用 `earphone` 走完三项任务 + 体验 Arrival-Hold 演示 + 练习七点评分。
+训练数据不进入分析。结束只确认"是否理解任务和评分方式"，**不填写正式条目**。
 
-这是整个开放访谈中最有价值的问题。它能够让参与者自然指出什么运行时行为真正破坏信任，而不是只复述问卷中的术语。
+### 阶段 2--4：六个正式区块
+按物体外层、条件内层完成。物体切换处安排休息（约 2 min），期间：
+- 不反馈评分
+- 不讨论两条件差异
+- 不揭示方法真实名称
 
----
-
-# 八、完整流程中的填写时点
-
-## 阶段 0：实验开始前
-
-填写：
-
-* 年龄；
-* 性别；
-* 主手；
-* 正常或矫正视力；
-* VR/MR 使用经验；
-* 可选的当前不适程度。
-
-这些是参与者信息，不属于实验 3 的因变量。
-
-不要在实验前向参与者讲解：
-
-* StaticLock；
-* VCD；
-* One-Euro；
-* Kalman；
-* 哪个条件是完整系统。
-
-只说明：
-
-> 你将体验两种不同的对象锚定方法，并评价虚拟内容与真实物体之间的空间关系。
-
-这样可以减少需求特征。
+### 阶段 5：最终问卷
+摘下头显填写第六节四项。
 
 ---
 
-## 阶段 1：训练
+## 八、Unity 呈现
 
-使用粉色耳机盒完成：
-
-1. 静止观察；
-2. 拿起放下；
-3. 遮挡恢复；
-4. 演示如何使用 1–7 评分。
-
-训练数据不进入正式分析。
-
-训练结束后只问：
-
-> 是否理解任务和评分方式？
-
-不填写正式量表。
-
----
-
-## 阶段 2：方法 A、物体 1
-
-### 任务顺序
-
-1. 静止观察；
-2. 拿起放下；
-3. 遮挡恢复。
-
-### 任务结束后
-
-隐藏虚拟内容，出现三道物体级问题：
-
-1. `OBJ_STATIC_STABILITY`
-2. `OBJ_MOTION_ATTACHMENT`
-3. `OBJ_RECOVERY_CONFIDENCE`
-
-每题单独一页，选择后进入下一题。
-
-填写时间约 20–30 秒。
-
----
-
-## 阶段 3：方法 A、物体 2 和物体 3
-
-重复完全相同流程。
-
-三个物体结束后，进入方法 A 的方法级问卷。
-
----
-
-## 阶段 4：方法 A 方法级问卷
-
-填写顺序建议：
-
-### 第一页：CRIQ
-
-1. `CRIQ_PLAUSIBILITY`
-2. `CRIQ_SYNCHRONY`
-3. `CRIQ_RESPONSIVENESS`
-
-### 第二页：锚点信任
-
-4. `TRUST_POSITION`
-5. `TRUST_AFTER_RECOVERY`
-6. `TRUST_RELIANCE`
-
-### 第三页：系统权衡
-
-7. `STABILITY_RESPONSIVENESS_BALANCE`
-
-总填写时间约 60–90 秒。
-
-完成后：
-
-* 摘下或抬起头显；
-* 休息约 2 分钟；
-* 不向参与者反馈其评分；
-* 不讨论两种方法差异。
-
----
-
-## 阶段 5：方法 B
-
-完整重复：
-
-* 三个物体；
-* 每物体三个即时评分；
-* 方法级七项问卷。
-
-方法顺序在参与者之间平衡。
-
----
-
-## 阶段 6：最终问卷
-
-摘下头显后填写：
-
-1. `FINAL_METHOD_CHOICE`
-2. `OPEN_DIFFERENCE`
-3. `OPEN_DISTRUST`
-4. 可选的结束不适检查。
-
----
-
-# 九、Unity 中如何呈现问卷
-
-建议全部使用 head-locked UI，而不是把问卷附着在物体上。
-
-## 物体级三项
-
-界面标题：
-
-> 请根据刚才操作的这个物体作答
-
-界面显示：
+全部使用 **head-locked UI**，不把问卷附着在物体上。
 
 ```text
+请根据刚才在这个物体上的体验作答
+
 在静止观察阶段，虚拟内容在真实物体上的位置保持稳定。
 
 1   2   3   4   5   6   7
@@ -586,23 +286,14 @@ AnchorTrust
 ```
 
 要求：
+- 每次只显示一个条目，选择后需按"确认"进入下一题
+- 控制器射线选择
+- 不显示前一条件的回答
+- 不允许实验员代填
+- 不显示方法真实名称
+- Q4--Q5 与同意度题使用不同端点文字
 
-* 每次只显示一个条目；
-* 使用控制器射线选择；
-* 选择后需要按“确认”；
-* 不显示前一方法的回答；
-* 不允许实验员代填；
-* 不显示方法真实名称。
-
-## 方法级问卷
-
-界面标题：
-
-> 请综合考虑刚才在三个物体上的全部体验
-
-CRIQ 与同意度题使用不同的端点文字，避免评分语义混淆。
-
-## 建议记录字段
+### 记录字段
 
 ```text
 participant_id
@@ -610,158 +301,109 @@ method_id
 method_order
 object_id
 object_order
-questionnaire_level
+block_index
 item_id
 response
 timestamp
 ```
 
-其中：
-
-* 物体级条目记录具体 `object_id`；
-* 方法级条目将 `object_id` 留空；
-* 最终偏好单独记录。
-
-即使不采集任务客观数据，也应记录：
-
-* 当前方法；
-* 当前物体；
-* 任务是否正常完成；
-* 是否发生系统崩溃或人工重初始化。
-
-这些只是数据审计信息，不作为客观因变量。
+即使不采集客观因变量，仍须记录：当前方法、当前物体、任务是否正常完成、
+是否发生系统崩溃或人工重初始化。这些是**数据审计信息**，不作客观因变量。
 
 ---
 
-# 十、最终分析和论文汇报
+## 九、分析
 
-## 10.1 三个主要感知结果
+### 主分析
+每位参与者内先把同一条目在三个物体上的评分**取均值**作为该条件下的汇总值，
+再对七个条目分别做 Wilcoxon 符号秩检验，七个条目上作 Holm 校正。
 
-正文优先报告：
+**取均值而非中位数**：三个物体的中位数只能取到七个刻度点，会产生大量配对结平从而损失效能；
+均值使汇总值落在 1/3 刻度上，同时保持每位参与者一个配对差的检验单位。
 
-1. 静止稳定性：`OBJ_STATIC_STABILITY`
-2. 运动附着感：`OBJ_MOTION_ATTACHMENT`
-3. 遮挡恢复可信度：`OBJ_RECOVERY_CONFIDENCE`
+报告：两条件中位数与 IQR、配对差、匹配秩双列相关（效应量）及其自举置信区间。
 
-因为这三项一一对应三种标准化任务，也直接连接实验 1 的系统表征。
+### 次级分析
+评分作序数结局建立累积链接混合模型（CLMM）：固定效应 = 条件 + 物体 + 区块顺序，
+随机效应 = 参与者截距。用以在不聚合的情况下同时估计条件与物体的作用。
 
-对每一项分析：
+**条件 x 物体交互只作探索性报告**：关心的是条件效应在三个物体上方向是否一致，
+而非交互本身是否显著。只有两个条件，不使用 ART/ART-C。
 
-[
+物体分项结果用小型 heatmap 或补充材料分面图。
 
-Rating \sim Method \times Object
-]
+### 开放题
+轻量主题分析。预设初始编码：stationary jitter、viewpoint-dependent drift、motion lag、
+motion sliding、post-placement settling、recovery jump、wrong recovery、predictability、
+no noticeable difference。允许出现新的归纳主题。
+正文只报最主要的 3--4 个主题与少量短引语，完整编码放补充材料。
 
-重点报告：
+### 样本量
+**N=24 目标、N=18 下限**（平衡组 6 组，N 必须是 6 的倍数）。
+报告达成 N 下的最小可检出效应，**不报事后功效**。
+先例：SelfBlending N=18。
 
-* Method 主效应；
-* 三个物体上的方向是否一致；
-* Method × Object 仅作为探索性结果。
-
----
-
-## 10.2 方法级结果
-
-正文报告：
-
-* CRIQ plausibility-illusion 平均分；
-* Anchor Trust and Reliance 平均分；
-* stability–responsiveness balance 单项；
-* 最终方法选择。
-
-对 CRIQ 和 Anchor Trust 报告内部一致性。
+**不得用实验一的片段级中位数推导 n**：那是单操作员的配对系统比较，不能换算为参与者间的
+感知效应，也不足以支撑感知阈值断言（毫米到视角的换算只能用于内部定标任务参数，
+不得写进论文）。
 
 ---
 
-## 10.3 开放反馈
+## 十、必须报告的操纵检验
 
-对两道开放题进行轻量主题分析。
+1. 两条件的**候选到达率、VCD 分数分布与接纳率是否一致**
+2. 校准后的遮挡时长是否使**多数遮挡过程停留在 `FrozenUncertain` 而未进入 `Lost`**，
+   且 `Lost` 比例在条件间平衡
 
-建议预设初始编码框架：
+只有这两项成立，条目差异才能归因于锚定运行时而非感知后端的输入差异。
 
-* stationary jitter；
-* viewpoint-dependent drift；
-* motion lag；
-* motion sliding；
-* post-placement settling；
-* recovery jump；
-* wrong recovery；
-* predictability；
-* no noticeable difference。
+### 自参考日志（无需真值）
+候选到达率、VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进出、
+生命周期状态、重获取次数。
 
-同时允许出现新的归纳主题。
-
-正文只报告最主要的 3–4 个主题和少量短引语，完整编码放补充材料。
+这些**只作审计与操纵检验**，不作因变量；与评分的关系只作区块级探索性关联报告，
+**不作中介效应主张**。
 
 ---
 
-# 十一、正文中建议展示的结果
+## 十一、诚实边界
 
-## 图
-
-一张四面板配对图：
-
-* (a) Static stability
-* (b) Motion attachment
-* (c) Recovery confidence
-* (d) Anchor trust
-
-每位参与者显示配对点和连接线，不用柱状图。
-
-三个物体的分项结果可使用：
-
-* 小型 heatmap；
-* 或 supplement 中的分面图。
-
-## 表
-
-| Measure                           | One-Euro | EgoAnchor | Effect | 95% CI | (p_{\mathrm{adj}}) |
-| --------------------------------- | -------: | --------: | -----: | -----: | -----------------: |
-| Static stability                  |          |           |        |        |                    |
-| Motion attachment                 |          |           |        |        |                    |
-| Recovery confidence               |          |           |        |        |                    |
-| CRIQ plausibility                 |          |           |        |        |                    |
-| Anchor trust                      |          |           |        |        |                    |
-| Stability–responsiveness balance |          |           |        |        |                    |
-
-最终方法选择用一句话报告：
-
-> X/18 participants preferred EgoAnchor, Y/18 preferred One-Euro, and Z/18 reported no clear preference.
+- 日常物体上不存在与头显同平台的参考位姿，**实验三不报告绝对配准误差**。
+  两篇参考论文的用户研究同样未报告任何配准误差，这是常规边界不是缺陷。
+- **实验三不提供任务表现证据**：它回答用户能否感知并信任实验一量化的系统差异，
+  不能替代对完成时间或成功率的测量。这一点必须在讨论/局限中明说，
+  对这两类结局的检验留待后续工作。
+- 七个条目是非标准量表的单项，不合并总分、不报内部一致性。
+- 结论只描述当前对象、设备、参数与任务条件。
 
 ---
 
-# 十二、最终量表清单
+## 十二、工程现状
 
-## 每个物体后，重复 6 次
+实验三**完全未实现**：
+- 无 Exp3 Unity 场景（`Assets/Scene/` 只有 Develop / Experiment12 / ReplayCapture）
+- `egoanchor.eval` 下无 Exp3 模块
 
-1. **静止稳定性**
-   在静止观察阶段，虚拟内容在真实物体上的位置保持稳定。
-2. **运动附着感**
-   在拿起、移动和旋转物体时，虚拟内容与真实物体保持一致运动。
-3. **恢复可信度**
-   遮挡移除后，虚拟内容恢复到了与真实物体一致的位置。
+需要新建：
+- 2-runtime 场景（复用 `DynamicObjectAnchor.SetRenderersHidden` 实现"双 runtime 并行、
+  只显示当前条件"）
+- 独立 `variant_matrix_id` 与启动门禁分支（**不复用**实验一/二的九路硬校验）
+- 区块编排器（物体外层、条件内层、拉丁方平衡）
+- 头锁问卷 UI（7 条目、两种尺度、逐条呈现）
+- 与 schema-v2 隔离的日志/QC/分析模块
 
-## 每种方法后，重复 2 次
+可选优化：FFS/TRT 预热是对象无关的（中性立体图 + 固定 process size），
+FoundationPose mesh 在 `pipeline_factory.py:218` 的工厂闭包内加载，
+因此理论上可只重建 estimator + 更新分割 prompt 而免重启；当前不做，不阻塞采集。
 
-4. **CRIQ 合理可信度**
-   这种虚实交互体验在多大程度上让你觉得合理可信？
-5. **CRIQ 同步性**
-   你在多大程度上感觉真实物体与虚拟内容之间的交互是同步的？
-6. **CRIQ 响应性**
-   你在多大程度上感觉这一体验会响应你的操作？
-7. **位置信任**
-   我相信该方法显示的虚拟内容位于真实物体上的正确位置。
-8. **恢复后信任**
-   短暂遮挡后，我仍然相信恢复后的锚点位置是可靠的。
-9. **依赖意愿**
-   在需要虚拟内容准确附着于真实物体的混合现实应用中，我愿意依赖这种锚定方法。
-10. **稳定—响应平衡**
-    总体而言，该方法在锚点稳定性与响应及时性之间取得了合适的平衡。
+### 启动门禁
+九路矩阵门禁与外推诊断只属于实验一/二。实验三使用独立 `variant_matrix_id` 与独立启动门禁，
+并额外要求预实验完成任务参数校准（头动幅度、遮挡时长、观察脚本节奏），
+且确认遮挡时长使锚点停留在 `FrozenUncertain` 而不进入 `Lost`。**运行时参数本身不得为实验三修改。**
 
-## 全部实验结束后
+---
 
-11. 实际应用中会选择方法 A、方法 B，还是无明显偏好？
-12. 两种方法最明显的区别是什么？
-13. 什么现象最容易使你不再信任一个真实物体锚点？
+## 十三、伦理
 
-这套结构已经足够支持实验 3。它不会把实验扩展成复杂的 HCI 量表研究，同时能够完整覆盖正文最重要的四个应用侧构念：**稳定、附着、恢复和信任**。
+用户已自行移除 `2026-EgoAnchor/experiment/` 下的伦理批件、知情同意书与量表 docx，
+并明确表示伦理审查不在本仓库任务范围内。**不要再为此新建文件或提出备案建议。**
