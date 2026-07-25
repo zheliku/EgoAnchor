@@ -1,4 +1,4 @@
-"""实验一/二批次整理、切换、本地分析和图片发布工作流。"""
+"""实验一/二批次整理、切换、本地分析和图表发布工作流。"""
 
 from __future__ import annotations
 
@@ -64,6 +64,21 @@ _EXPERIMENT_FIGURE_KEYS = frozenset(
     for suffix in ("pdf", "png")
 )
 """本次分析清单必须声明的八面板 PNG/PDF 键集合。"""
+
+_ANALYSIS_TABLE_KEYS = frozenset(
+    {
+        "exp1_static_table",
+        "exp1_dynamic_table",
+        "exp2_table",
+    }
+)
+"""允许从当前分析产物发布到论文目录的三张表格键。"""
+
+_IMAGE_SUFFIXES = frozenset({".png", ".pdf"})
+"""图片发布允许的文件后缀。"""
+
+_PUBLISH_SUFFIXES = _IMAGE_SUFFIXES | {".tex"}
+"""copy-assets 允许原子发布的全部文件后缀。"""
 
 _BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
 """活动批次组合清单的结构版本。"""
@@ -172,8 +187,19 @@ class TaskDataEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactDestination:
+    """一项分析产物键及其论文目标路径。"""
+
+    artifact_key: str
+    """`build_result.json` 中 `artifact_paths` 使用的稳定键。"""
+
+    destination: Path
+    """论文根目录内由 batch.toml 显式配置的目标文件。"""
+
+
+@dataclass(frozen=True, slots=True)
 class AssetCopy:
-    """一项经配置允许复制到论文目录的图片或 PDF。"""
+    """一项经配置允许复制到论文目录的文件。"""
 
     source: Path
     """仓库内的只读源文件。"""
@@ -208,10 +234,13 @@ class BatchPaths:
     """当前论文唯一使用的活动批次目录。"""
 
     paper_root: Path
-    """仅用于发布论文图片的仓库内目录。"""
+    """用于发布论文图片和表格 TeX 的仓库内目录。"""
 
     experiment_asset_destination: Path
     """实验一、二图片复制到论文时使用的目标目录。"""
+
+    table_destinations: tuple[ArtifactDestination, ...]
+    """三张分析表格在论文目录中的显式目标路径。"""
 
     relay_assets: tuple[AssetCopy, ...]
     """由配置显式选择的 relay 图片或 PDF。"""
@@ -351,10 +380,11 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     paper_root = _resolve_paper_path(base, raw_paths)
     experiment_asset_destination = _resolve_asset_destination(
         paper_root,
-        raw_copy_assets,
+        raw_copy_assets.get("experiment_destination"),
         "experiment_destination",
         directory=True,
     )
+    table_destinations = _resolve_table_destinations(paper_root, raw_copy_assets)
     relay_assets = _resolve_relay_assets(base, paper_root, raw_copy_assets)
     managed = (
         task_data_root,
@@ -382,6 +412,7 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
         active_root=active_root,
         paper_root=paper_root,
         experiment_asset_destination=experiment_asset_destination,
+        table_destinations=table_destinations,
         relay_assets=relay_assets,
         config_path=DEFAULT_BATCH_CONFIG_PATH,
     )
@@ -404,6 +435,13 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
             "active_root": str(active),
             "paper_root": str(paths.paper_root),
             "experiment_asset_destination": str(paths.experiment_asset_destination),
+            "table_destinations": [
+                {
+                    "artifact_key": item.artifact_key,
+                    "destination": str(item.destination),
+                }
+                for item in paths.table_destinations
+            ],
             "relay_assets": [
                 {"source": str(asset.source), "destination": str(asset.destination)}
                 for asset in paths.relay_assets
@@ -448,13 +486,15 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
             "copy-assets": {
                 "input": [
                     str(active / "analysis" / "figures"),
+                    str(active / "analysis" / "tex" / "tables"),
                     *[str(asset.source) for asset in paths.relay_assets],
                 ],
                 "output": [
                     str(paths.experiment_asset_destination),
+                    *[str(item.destination) for item in paths.table_destinations],
                     *[str(asset.destination) for asset in paths.relay_assets],
                 ],
-                "note": "只复制配置允许的 PNG/PDF；不复制 TeX，不改写主稿",
+                "note": "复制本次分析清单中的 PNG/PDF、三张表格 TeX 和显式 relay；不改写主稿",
             },
             "rebuild": {
                 "input": str(active / _BATCH_MANIFEST_NAME),
@@ -1060,7 +1100,7 @@ def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
 
 
 def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
-    """将当前分析面板和配置指定 relay PNG/PDF 显式复制到论文目录。"""
+    """将当前分析面板、表格 TeX 和显式 relay 文件复制到论文目录。"""
 
     paths = load_batch_paths(root)
     batch_id, _ = _load_batch_records(paths.active_root, paths)
@@ -1076,7 +1116,11 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
     raw_figure_paths = build_result.get("figure_paths")
     if not isinstance(raw_figure_paths, dict) or set(raw_figure_paths) != _EXPERIMENT_FIGURE_KEYS:
         raise ValueError("当前 analysis 的图片清单必须恰好覆盖图二和图三的八个 PNG/PDF 面板")
+    raw_artifact_paths = build_result.get("artifact_paths")
+    if not isinstance(raw_artifact_paths, dict):
+        raise ValueError("当前 analysis 缺少 artifact_paths 产物清单")
     resolved_figure_root = figure_root.resolve()
+    resolved_table_root = (paths.active_root / "analysis" / "tex" / "tables").resolve()
     copies: list[AssetCopy] = []
     for key in sorted(_EXPERIMENT_FIGURE_KEYS):
         source = Path(str(raw_figure_paths[key])).expanduser().resolve()
@@ -1091,25 +1135,47 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
                 destination=paths.experiment_asset_destination / source.name,
             )
         )
+    for item in paths.table_destinations:
+        raw_source = raw_artifact_paths.get(item.artifact_key)
+        if not isinstance(raw_source, str) or not raw_source:
+            raise ValueError(f"当前 analysis 缺少表格产物：{item.artifact_key}")
+        source = Path(raw_source).expanduser().resolve()
+        if source.parent != resolved_table_root or source.suffix.lower() != ".tex":
+            raise ValueError(f"当前分析表格清单越界或后缀不匹配：{item.artifact_key}: {source}")
+        if not source.is_file():
+            raise FileNotFoundError(f"当前分析缺少表格 TeX：{source}")
+        copies.append(AssetCopy(source=source, destination=item.destination))
     copies.extend(paths.relay_assets)
 
+    _validate_asset_copies(copies)
     published = [_copy_asset_file(item) for item in copies]
     return {
         "passed": True,
         "experiment_source": str(figure_root),
         "experiment_destination": str(paths.experiment_asset_destination),
+        "table_destinations": [str(item.destination) for item in paths.table_destinations],
         "published": published,
-        "next_command": "手工从 analysis/tex/ 复制所需 TeX 片段，并按论文工作流自行编译主稿",
+        "next_command": "审阅已发布图表，并按论文工作流自行编译主稿",
     }
 
 
-def _copy_asset_file(asset: AssetCopy) -> dict[str, str]:
-    """原子覆盖一项 PNG/PDF，并返回源和目标的内容摘要。"""
+def _validate_asset_copies(copies: Sequence[AssetCopy]) -> None:
+    """在写入论文目录前完整校验来源、后缀和目标唯一性。"""
 
-    if not asset.source.is_file():
-        raise FileNotFoundError(f"待复制资源不存在：{asset.source}")
-    if asset.source.suffix.lower() not in {".png", ".pdf"}:
-        raise ValueError(f"只允许复制 PNG 或 PDF：{asset.source}")
+    destinations: set[Path] = set()
+    for asset in copies:
+        if not asset.source.is_file():
+            raise FileNotFoundError(f"待复制资源不存在：{asset.source}")
+        if asset.source.suffix.lower() not in _PUBLISH_SUFFIXES:
+            raise ValueError(f"只允许复制 PNG、PDF 或 TeX：{asset.source}")
+        if asset.destination in destinations:
+            raise ValueError(f"copy-assets 目标路径重复：{asset.destination}")
+        destinations.add(asset.destination)
+
+
+def _copy_asset_file(asset: AssetCopy) -> dict[str, str]:
+    """原子覆盖一项已校验文件，并返回源和目标的内容摘要。"""
+
     asset.destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = asset.destination.with_name(f".{asset.destination.name}.tmp")
     try:
@@ -1163,27 +1229,55 @@ def _resolve_paper_path(base: Path, raw_paths: dict[str, Any]) -> Path:
 
 def _resolve_asset_destination(
     paper_root: Path,
-    values: dict[str, Any],
-    field_name: str,
+    raw_value: Any,
+    config_key: str,
     *,
     directory: bool,
+    allowed_suffixes: frozenset[str] = _IMAGE_SUFFIXES,
 ) -> Path:
-    """解析论文目录内的图片发布目标，并拒绝绝对路径和越界路径。"""
+    """解析论文目录内的发布目标，并拒绝绝对路径和越界路径。"""
 
-    raw_value = values.get(field_name)
     if not isinstance(raw_value, str) or not raw_value:
-        raise ValueError(f"batch.toml copy_assets.{field_name} 必须为非空字符串")
+        raise ValueError(f"batch.toml copy_assets.{config_key} 必须为非空字符串")
     relative = Path(raw_value)
     if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"batch.toml copy_assets.{field_name} 必须是 paper_root 内的相对路径")
+        raise ValueError(f"batch.toml copy_assets.{config_key} 必须是 paper_root 内的相对路径")
     resolved = (paper_root / relative).resolve()
     if not resolved.is_relative_to(paper_root):
-        raise ValueError(f"batch.toml copy_assets.{field_name} 超出 paper_root")
+        raise ValueError(f"batch.toml copy_assets.{config_key} 超出 paper_root")
     if directory:
         return resolved
-    if resolved.suffix.lower() not in {".png", ".pdf"}:
-        raise ValueError(f"batch.toml copy_assets.{field_name} 只能指向 PNG 或 PDF")
+    if resolved.suffix.lower() not in allowed_suffixes:
+        readable_suffixes = "、".join(sorted(suffix.lstrip(".").upper() for suffix in allowed_suffixes))
+        raise ValueError(f"batch.toml copy_assets.{config_key} 只能指向 {readable_suffixes}")
     return resolved
+
+
+def _resolve_table_destinations(
+    paper_root: Path,
+    copy_assets: dict[str, Any],
+) -> tuple[ArtifactDestination, ...]:
+    """读取三张分析表格在论文目录中的显式目标路径。"""
+
+    raw_tables = copy_assets.get("tables")
+    if not isinstance(raw_tables, dict) or set(raw_tables) != _ANALYSIS_TABLE_KEYS:
+        raise ValueError("batch.toml copy_assets.tables 必须恰好配置三张分析表格")
+    destinations = tuple(
+        ArtifactDestination(
+            artifact_key=key,
+            destination=_resolve_asset_destination(
+                paper_root,
+                raw_tables[key],
+                f"tables.{key}",
+                directory=False,
+                allowed_suffixes=frozenset({".tex"}),
+            ),
+        )
+        for key in sorted(_ANALYSIS_TABLE_KEYS)
+    )
+    if len({item.destination for item in destinations}) != len(destinations):
+        raise ValueError("batch.toml copy_assets.tables 的目标路径不得重复")
+    return destinations
 
 
 def _resolve_relay_assets(
@@ -1209,7 +1303,12 @@ def _resolve_relay_assets(
         source = (project_root / source_relative).resolve()
         if not source.is_relative_to(project_root) or source.suffix.lower() not in {".png", ".pdf"}:
             raise ValueError(f"batch.toml copy_assets.relay[{index}].source 只能指向项目内 PNG 或 PDF")
-        destination = _resolve_asset_destination(paper_root, item, "destination", directory=False)
+        destination = _resolve_asset_destination(
+            paper_root,
+            item.get("destination"),
+            f"relay[{index}].destination",
+            directory=False,
+        )
         assets.append(AssetCopy(source=source, destination=destination))
     if len({item.destination for item in assets}) != len(assets):
         raise ValueError("batch.toml copy_assets.relay 的 destination 不得重复")

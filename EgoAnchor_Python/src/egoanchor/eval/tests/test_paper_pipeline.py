@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import numpy as np
 from openpyxl import Workbook  # type: ignore[import-untyped]
+from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.paper_analysis import (
@@ -22,6 +23,7 @@ from egoanchor.eval.paper_analysis import (
     analyze_workbooks,
     build_analysis,
     build_dual_metric_panel,
+    build_temporal_strategy_panel,
     build_exp1_dynamic_table,
     build_exp1_static_table,
     build_exp2_attribution_table,
@@ -29,12 +31,15 @@ from egoanchor.eval.paper_analysis import (
     cache_path,
     eligible_trials,
     iter_rows,
+    load_settings,
     load_task_results,
     merge_task_results,
     paired_metric_matrix,
     risk_coverage_curve,
+    rotation_lag_metrics,
     settings_sha256,
     summarize_risk_coverage,
+    translation_lag_metrics,
     write_task_results,
 )
 
@@ -61,6 +66,53 @@ class PaperPipelineTests(unittest.TestCase):
                 "Hermite Interpolation",
             ),
         )
+
+    def test_lag_metrics_recover_known_translation_and_rotation_delay(self) -> None:
+        """已知延迟轨迹必须按正毫秒方向恢复平移和旋转时延。"""
+
+        times = np.arange(0.0, 2000.0, 10.0)
+        delay_ms = 120.0
+        query_times = np.clip(times - delay_ms, times[0], times[-1])
+        reference_positions = np.column_stack(
+            (
+                0.08 * np.sin(times / 170.0),
+                0.05 * np.cos(times / 230.0),
+                0.03 * np.sin(times / 310.0 + 0.4),
+            )
+        )
+        display_positions = np.column_stack(
+            [
+                np.interp(query_times, times, reference_positions[:, axis])
+                for axis in range(3)
+            ]
+        )
+        reference_angles = 0.0015 * times + 0.18 * np.sin(times / 260.0)
+        reference_rotations = Rotation.from_euler("z", reference_angles[:, None])
+        display_rotations = Slerp(times, reference_rotations)(query_times)
+        settings = replace(
+            load_settings(),
+            lag_maximum_ms=250.0,
+            lag_step_ms=5.0,
+            lag_minimum_samples=30,
+        )
+
+        translation_lag, translation_rmse, _ = translation_lag_metrics(
+            times,
+            display_positions,
+            reference_positions,
+            settings,
+        )
+        rotation_lag, rotation_rmse, _ = rotation_lag_metrics(
+            times,
+            display_rotations.as_quat(),
+            reference_rotations.as_quat(),
+            settings,
+        )
+
+        self.assertEqual(translation_lag, delay_ms)
+        self.assertEqual(rotation_lag, delay_ms)
+        self.assertLess(translation_rmse, 1e-9)
+        self.assertLess(rotation_rmse, 1e-9)
 
     def test_main_tables_publish_requested_three_table_contract(self) -> None:
         """三张主表冻结实验一拆表与实验二四行归因契约。"""
@@ -107,12 +159,14 @@ class PaperPipelineTests(unittest.TestCase):
                 temporal_variants,
                 effective_lag_ms=200.0,
                 aligned_rmse_mm=5.0,
+                current_time_rmse_mm=25.0,
                 aligned_residual_increment_p95_mm=0.5,
             ),
             rotation_segments=rows(
                 temporal_variants,
                 effective_lag_ms=220.0,
                 aligned_rmse_deg=2.0,
+                current_time_rmse_deg=12.0,
                 aligned_residual_increment_p95_deg=0.2,
             ),
             occlusion_episodes=occlusion,
@@ -143,10 +197,12 @@ class PaperPipelineTests(unittest.TestCase):
             self.assertTrue(table.endswith("\n"))
             self.assertFalse(table.endswith("\n\n"))
         self.assertIn("遮挡平移 P95", static_table)
-        self.assertIn(r"\begin{tabular}{lcccc}", static_table)
+        self.assertIn("Start-transition", static_table)
+        self.assertIn(r"\begin{tabular}{lccccc}", static_table)
         self.assertIn("Capture & 2.50 [2.25, 2.75]", static_table)
-        self.assertIn("Start-transition", dynamic_table)
-        self.assertIn(r"\begin{tabular}{lccccc}", dynamic_table)
+        self.assertNotIn("Start-transition", dynamic_table)
+        self.assertIn(r"\begin{tabular}{lcccccc}", dynamic_table)
+        self.assertIn("当前 RMSE", dynamic_table)
         for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
             self.assertIn(f"{label} &", static_table)
             self.assertIn(f"{label} &", dynamic_table)
@@ -556,6 +612,66 @@ class PaperPipelineTests(unittest.TestCase):
             [text.get_text() for text in figure.axes[0].get_xticklabels()],
             ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
         )
+
+    def test_dynamic_panel_names_lag_aligned_rmse_explicitly(self) -> None:
+        """动态面板不得把 lag-aligned RMSE 误标为 Error P95。"""
+
+        rows = {
+            method: (
+                {
+                    "session_id": "s",
+                    "trial_id": "t",
+                    "segment_id": "a",
+                    "error": 4.0 + index,
+                    "jitter": 0.4 + index,
+                },
+            )
+            for index, method in enumerate(METHODS)
+        }
+
+        figure = build_dual_metric_panel(
+            rows,
+            "error",
+            "jitter",
+            "mm",
+            error_label="Lag-aligned RMSE",
+        )
+
+        self.assertEqual(figure.axes[0].get_ylabel(), "Lag-aligned RMSE (mm)")
+
+    def test_temporal_panel_keeps_all_points_and_expands_axis(self) -> None:
+        """时序面板必须显示全部片段，且固定画布的纵向坐标轴齐平。"""
+
+        points = np.asarray(
+            [
+                ((260.0, 58.0), (350.0, 8.0), (360.0, 9.0)),
+                ((280.0, 45.0), (365.0, 12.0), (375.0, 14.0)),
+            ],
+            dtype=float,
+        )
+
+        figure = build_temporal_strategy_panel(points)
+        axis = figure.axes[0]
+        labeled_collections = {
+            collection.get_label(): collection
+            for collection in axis.collections
+            if collection.get_label() in {"Smoothed KF", "Linear/SLERP", "Hermite"}
+        }
+
+        self.assertEqual(tuple(figure.get_size_inches()), (2.8, 2.18))
+        self.assertEqual(set(labeled_collections), {"Smoothed KF", "Linear/SLERP", "Hermite"})
+        self.assertTrue(
+            all(len(collection.get_offsets()) == 2 for collection in labeled_collections.values())
+        )
+        self.assertGreater(axis.get_ylim()[1], float(np.max(points[:, :, 1])))
+        self.assertAlmostEqual(axis.get_position().y0, 0.25)
+        self.assertAlmostEqual(axis.get_position().y1, 0.97)
+        self.assertEqual(
+            [text.get_text() for text in axis.get_legend().get_texts()],
+            ["Smoothed KF", "Linear/SLERP", "Hermite"],
+        )
+        self.assertFalse(axis.get_legend().get_frame_on())
+        self.assertEqual(axis.get_legend().borderaxespad, 0.0)
 
     def test_experiment_one_dual_panel_does_not_connect_methods(self) -> None:
         """双轴面板只画各方法分布和 IQR，不连接跨方法结果。"""

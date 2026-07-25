@@ -72,7 +72,7 @@ pixi run eval copy-assets
 ```
 
 其中 `stage --promote` 自动选择数据、补建变化任务的工作簿，并切换当前五任务组合。`analyze` 只重算
-变化任务的指标，然后统一生成完整图表。`copy-assets` 在人工看过结果后才发布 PNG/PDF。
+变化任务的指标，然后统一生成完整图表。`copy-assets` 在人工看过结果后发布 PNG/PDF 和三张表格 TeX。
 
 ## 四、新数据归档
 
@@ -165,7 +165,7 @@ metrics.py + xlsx.py 实现指纹
 缓存命中时不打开 XLSX。缓存缺失或键变化时，只对对应工作簿计算 SHA、核对 `batch.json` 摘要并读取
 其大表。Task 3 更新后，正常进度应为四个“使用指标缓存”和一个“重建指标缓存”。
 
-五项 `TaskResults` 合并后才计算全批性能统计并生成七个面板、两张表和 TeX。性能缓存保存原始
+五项 `TaskResults` 合并后才计算全批性能统计并生成八个面板、三张表和 TeX。性能缓存保存原始
 TRACK、REGISTER 和 pose publish interval 样本，不会错误合并各 Task 的中位数。
 
 输出目录：
@@ -174,8 +174,8 @@ TRACK、REGISTER 和 pose publish interval 样本，不会错误合并各 Task �
 data/experiments/experiment_1_2/analysis/
 ├─ metrics/                         # 完整精度指标
 ├─ plots/figure_plot_data.xlsx      # 图中可见数据点
-├─ figures/                         # 七个 PNG/PDF 面板
-├─ tex/                             # 手工引入的表格和图环境
+├─ figures/                         # 八个 PNG/PDF 面板
+├─ tex/                             # 待发布的表格和待审阅的图环境
 └─ provenance/build_result.json     # batch、输入、参数、实现指纹和缓存状态
 ```
 
@@ -184,24 +184,26 @@ data/experiments/experiment_1_2/analysis/
 
 `analyze` 不读取原始 JSON/JSONL，不改写 XLSX，不修改论文目录，也不调用 XeLaTeX。
 
-## 七、发布图片
+## 七、发布图表
 
 ```powershell
 pixi run eval copy-assets
 ```
 
-命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误发布旧图。
-通过后，只复制 `analysis/figures/` 的实验 PNG/PDF 和 `batch.toml` 明确列出的 relay PNG/PDF。
-TeX 和主稿不会自动修改。
+命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误发布旧图表。
+通过后，复制本次清单中的实验 PNG/PDF、`batch.toml` 明确列出的 relay PNG/PDF，以及
+`[copy_assets.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
 
-表格和图环境位于：
+表格默认发布到：
 
 ```text
-data/experiments/experiment_1_2/analysis/tex/tables/
-data/experiments/experiment_1_2/analysis/tex/figures/
+2026-EgoAnchor/tables/exp1_static.tex
+2026-EgoAnchor/tables/exp1_dynamic.tex
+2026-EgoAnchor/tables/exp2_design.tex
 ```
 
-审阅后手工纳入 `2026-EgoAnchor/egoanchor_cn_v6.tex`，再按论文工程单独编译。
+图环境仍位于 `analysis/tex/figures/`，审阅后手工纳入 `2026-EgoAnchor/egoanchor_cn_v7.tex`，
+再按论文工程单独编译。
 
 ## 八、诊断和强制重建
 

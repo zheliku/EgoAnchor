@@ -36,11 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="pixi run eval",
-        description="EgoAnchor 实验一/二数据整理、本地分析与图片发布",
+        description="EgoAnchor 实验一/二数据整理、本地分析与图表发布",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    config = subparsers.add_parser("config", help="显示当前生效的数据路径和图片发布位置")
+    config = subparsers.add_parser("config", help="显示当前生效的数据路径和图表发布位置")
     config.set_defaults(handler=_run_config)
 
     sessions = subparsers.add_parser("sessions", help="列出任务数据目录中的可选 session")
@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     copy_assets = subparsers.add_parser(
         "copy-assets",
-        help="将当前实验面板和配置指定 relay PNG/PDF 复制到论文目录",
+        help="将当前实验面板、表格 TeX 和配置指定 relay 文件复制到论文目录",
     )
     copy_assets.set_defaults(handler=_run_copy_assets)
 

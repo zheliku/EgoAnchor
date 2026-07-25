@@ -45,7 +45,11 @@ _ERROR_AXIS_COLOR = "#374151"
 _JITTER_AXIS_COLOR = "#8B3A88"
 _MARKERS = ("s", "o", "^", "D")
 _DYNAMIC_X_LIMITS = (150.0, 400.0)
-_EXP2_TEMPORAL_Y_DISPLAY_LIMIT = 32.0
+_EXP2_PANEL_HEIGHT_IN = 2.18
+_EXP2_NARROW_WIDTH_IN = 1.26
+_EXP2_WIDE_WIDTH_IN = 2.80
+_EXP2_AXIS_BOTTOM = 0.25
+_EXP2_AXIS_TOP = 0.97
 
 
 def _configure() -> None:
@@ -74,21 +78,47 @@ def _clean_axis(axis: Any, grid: str | None = "y") -> None:
     axis.spines["right"].set_visible(False)
 
 
-def _save_pair(figure: Any, root: Path, stem: str) -> tuple[Path, Path]:
-    """同时保存 PNG 与矢量 PDF。"""
+def _save_pair(
+    figure: Any,
+    root: Path,
+    stem: str,
+    *,
+    crop_to_content: bool = True,
+) -> tuple[Path, Path]:
+    """同时保存 PNG 与矢量 PDF，并按需保留固定画布。"""
 
     root.mkdir(parents=True, exist_ok=True)
     png = root / f"{stem}.png"
     pdf = root / f"{stem}.pdf"
-    figure.savefig(png, bbox_inches="tight", pad_inches=0.06)
+    crop_options = (
+        {"bbox_inches": "tight", "pad_inches": 0.06}
+        if crop_to_content
+        else {}
+    )
+    figure.savefig(png, **crop_options)
     figure.savefig(
         pdf,
-        bbox_inches="tight",
-        pad_inches=0.06,
         metadata={"CreationDate": None, "ModDate": None},
+        **crop_options,
     )
     plt.close(figure)
     return png, pdf
+
+
+def _set_experiment_two_layout(
+    figure: Any,
+    *,
+    left: float,
+    right: float,
+) -> None:
+    """固定实验二所有面板的纵向坐标轴边界，保证 LaTeX 排版后齐平。"""
+
+    figure.subplots_adjust(
+        left=left,
+        right=right,
+        bottom=_EXP2_AXIS_BOTTOM,
+        top=_EXP2_AXIS_TOP,
+    )
 
 
 def _remove_stale_panels(root: Path, published: Sequence[Path]) -> None:
@@ -165,10 +195,12 @@ def build_dual_metric_panel(
     error_key: str,
     jitter_key: str,
     unit: str,
+    *,
+    error_label: str = "Error P95",
 ) -> Any:
     """绘制误差与抖动分属左右纵轴的四方法紧凑面板。"""
 
-    # 0.235\textwidth 在 VGTC 双栏中约为 1.67 英寸；原生宽度贴近最终尺寸，
+    # 0.245\textwidth 在 VGTC 双栏中约为 1.75 英寸；原生宽度贴近最终尺寸，
     # 避免 LaTeX 再缩小后把 7 pt 字体压到可读性门槛以下。
     figure, error_axis = plt.subplots(figsize=(1.76, 2.16))
     jitter_axis = error_axis.twinx()
@@ -199,7 +231,7 @@ def build_dual_metric_panel(
     error_axis.set_xlim(-0.45, len(METHODS) - 0.55)
     error_axis.set_ylim(bottom=0.0)
     jitter_axis.set_ylim(bottom=0.0)
-    error_axis.set_ylabel(f"Error P95 ({unit})", color=_ERROR_AXIS_COLOR, labelpad=1.8)
+    error_axis.set_ylabel(f"{error_label} ({unit})", color=_ERROR_AXIS_COLOR, labelpad=1.8)
     jitter_axis.set_ylabel(f"Jitter P95 ({unit})", color=_JITTER_AXIS_COLOR, labelpad=2.0)
     error_axis.tick_params(axis="y", colors=_ERROR_AXIS_COLOR, pad=1.5)
     jitter_axis.tick_params(axis="y", colors=_JITTER_AXIS_COLOR, pad=1.5)
@@ -213,34 +245,6 @@ def build_dual_metric_panel(
     jitter_axis.spines["right"].set_color(_JITTER_AXIS_COLOR)
     figure.tight_layout(pad=0.30)
     return figure
-
-
-def _scatter_in_display_range(
-    axis: Any,
-    points: np.ndarray,
-    *,
-    color: str,
-    marker: str,
-    label: str,
-    display_limit: float,
-    size: float = 13.0,
-    alpha: float = 0.28,
-) -> None:
-    """仅绘制指定纵轴范围内的点，不显示异常值的替代符号。"""
-
-    visible = points[:, 1] <= display_limit
-    if not np.any(visible):
-        return
-    axis.scatter(
-        points[visible, 0],
-        points[visible, 1],
-        s=size,
-        alpha=alpha,
-        marker=marker,
-        color=color,
-        label=label,
-        zorder=2,
-    )
 
 
 def _paired_rows(
@@ -316,9 +320,11 @@ def _paired_panel(
     """创建可直接放入 LaTeX 子图的单个配对面板。"""
 
     # LaTeX 以 0.18\textwidth 放置前三个图三面板；原生宽度与目标宽度一致可避免字体缩小。
-    figure, axis = plt.subplots(figsize=(1.26, 2.18))
+    figure, axis = plt.subplots(
+        figsize=(_EXP2_NARROW_WIDTH_IN, _EXP2_PANEL_HEIGHT_IN)
+    )
     _paired_axis(axis, full, disabled, ylabel, labels, logarithmic, endpoint_colors)
-    figure.tight_layout()
+    _set_experiment_two_layout(figure, left=0.34, right=0.96)
     return figure
 
 
@@ -341,15 +347,15 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
         zip(labels, colors, markers, strict=True)
     ):
         points = paired_points[:, index, :]
-        _scatter_in_display_range(
-            axis,
-            points,
-            color=color,
-            marker=marker,
-            label=label,
-            display_limit=_EXP2_TEMPORAL_Y_DISPLAY_LIMIT,
-            size=15.0 if index < 2 else 11.0,
+        axis.scatter(
+            points[:, 0],
+            points[:, 1],
+            s=15.0 if index < 2 else 11.0,
             alpha=0.38 if index < 2 else 0.24,
+            marker=marker,
+            color=color,
+            label=label,
+            zorder=2,
         )
         median_x, median_y = np.median(points, axis=0)
         q1_x, q3_x = np.quantile(points[:, 0], (0.25, 0.75))
@@ -368,33 +374,37 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
     axis.set_xlabel("Effective lag (ms)")
     axis.set_ylabel("Lag-aligned translation RMSE (mm)")
     all_points = paired_points.reshape(-1, paired_points.shape[-1])
-    visible_points = all_points[all_points[:, 1] <= _EXP2_TEMPORAL_Y_DISPLAY_LIMIT]
     axis.set_xlim(
-        min(_DYNAMIC_X_LIMITS[0], float(np.min(visible_points[:, 0])) * 0.96),
-        max(_DYNAMIC_X_LIMITS[1], float(np.max(visible_points[:, 0])) * 1.02),
+        min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
+        max(_DYNAMIC_X_LIMITS[1], float(np.max(all_points[:, 0])) * 1.02),
     )
-    axis.set_ylim(0.0, _EXP2_TEMPORAL_Y_DISPLAY_LIMIT)
+    y_step_mm = 5.0
+    y_max_mm = max(
+        y_step_mm,
+        y_step_mm * np.ceil(float(np.max(all_points[:, 1])) * 1.08 / y_step_mm),
+    )
+    axis.set_ylim(0.0, y_max_mm)
     axis.annotate("better", xy=(168, 2.2), xytext=(220, 5.4), arrowprops={"arrowstyle": "->", "linewidth": 0.9})
     _clean_axis(axis, "both")
     axis.legend(
-        frameon=True,
-        facecolor="white",
-        edgecolor="none",
-        framealpha=0.92,
+        frameon=False,
         ncol=1,
-        loc="upper right",
-        borderaxespad=0.25,
+        loc="upper left",
+        bbox_to_anchor=(-0.01, 1.0),
+        borderaxespad=0.0,
         handletextpad=0.4,
         labelspacing=0.25,
     )
 
 
-def _temporal_panel(paired_points: np.ndarray) -> Any:
+def build_temporal_strategy_panel(paired_points: np.ndarray) -> Any:
     """创建可直接放入 LaTeX 子图的时序合成面板。"""
 
-    figure, axis = plt.subplots(figsize=(2.9, 2.18))
+    figure, axis = plt.subplots(
+        figsize=(_EXP2_WIDE_WIDTH_IN, _EXP2_PANEL_HEIGHT_IN)
+    )
     _plot_temporal_axis(axis, paired_points)
-    figure.tight_layout()
+    _set_experiment_two_layout(figure, left=0.18, right=0.94)
     return figure
 
 
@@ -458,7 +468,9 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
     if not grouped:
         raise ValueError("VCD risk-coverage 图缺少 event 曲线")
 
-    figure, axis = plt.subplots(figsize=(1.26, 2.18))
+    figure, axis = plt.subplots(
+        figsize=(_EXP2_NARROW_WIDTH_IN, _EXP2_PANEL_HEIGHT_IN)
+    )
     summary = summarize_risk_coverage(results.vcd_risk_coverage)
     coverage = np.asarray([float(row["coverage"]) for row in summary], dtype=float)
     median = np.asarray([float(row["selective_risk_median_mm"]) for row in summary], dtype=float)
@@ -480,7 +492,7 @@ def build_vcd_risk_coverage_panel(results: PaperResults) -> Any:
         handletextpad=0.3,
         labelspacing=0.2,
     )
-    figure.tight_layout()
+    _set_experiment_two_layout(figure, left=0.34, right=0.96)
     return figure
 
 
@@ -517,6 +529,7 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
             "aligned_rmse_mm",
             "aligned_residual_increment_p95_mm",
             "mm",
+            error_label="Lag-aligned RMSE",
         ),
         panels,
         "figure2c_dynamic_translation",
@@ -527,6 +540,7 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
             "aligned_rmse_deg",
             "aligned_residual_increment_p95_deg",
             "deg",
+            error_label="Lag-aligned RMSE",
         ),
         panels,
         "figure2d_dynamic_rotation",
@@ -556,21 +570,25 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
         ),
         panels,
         "figure3a_capture_alignment",
+        crop_to_content=False,
     )
     figure3b = _save_pair(
         _paired_panel(full_static, no_lock, "Centered P95 (mm)"),
         panels,
         "figure3b_static_lock",
+        crop_to_content=False,
     )
     figure3c = _save_pair(
         build_vcd_risk_coverage_panel(results),
         panels,
         "figure3c_vcd_risk_coverage",
+        crop_to_content=False,
     )
     figure3d = _save_pair(
-        _temporal_panel(temporal_points),
+        build_temporal_strategy_panel(temporal_points),
         panels,
         "figure3d_temporal_strategies",
+        crop_to_content=False,
     )
     _remove_stale_panels(
         panels,
@@ -598,6 +616,7 @@ def publish_figures(results: PaperResults, output_root: Path) -> Mapping[str, Pa
 
 __all__ = [
     "build_dual_metric_panel",
+    "build_temporal_strategy_panel",
     "build_vcd_risk_coverage_panel",
     "publish_figures",
     "summarize_risk_coverage",

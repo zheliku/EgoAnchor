@@ -25,8 +25,8 @@ data/
       └─ analysis/
          ├─ metrics/                          # 完整精度 CSV/JSON
          ├─ plots/figure_plot_data.xlsx       # 图 2、图 3 的逐点审计数据
-         ├─ figures/                          # 七个实验面板的 PNG/PDF
-         ├─ tex/                              # 手工引入主稿的表格和图环境
+         ├─ figures/                          # 八个实验面板的 PNG/PDF
+         ├─ tex/                              # 待发布的表格和待审阅的图环境
          └─ provenance/                       # 输入、参数和缓存状态
 ```
 
@@ -71,7 +71,7 @@ SHA 和指标实现内容指纹组成。修改论文参数或指标实现时会�
 ## 发布边界
 
 `analyze` 只写当前活动组合的 `analysis/`，不会修改论文目录。确认结果后，`pixi run eval copy-assets`
-才按 `batch.toml` 的清单复制 PNG/PDF 到 `2026-EgoAnchor`。TeX 由研究者手工纳入主稿。
+才按 `batch.toml` 的清单复制 PNG/PDF 和三张表格 TeX 到 `2026-EgoAnchor`。图环境 TeX 仍由研究者手工审阅。
 
 所有操作路径从 `src/egoanchor/eval/config/batch.toml` 读取。原始数据、工作簿缓存、指标缓存和活动
 分析目录均由 `.gitignore` 排除；Git 只跟踪代码、说明、论文源稿和正式图表。

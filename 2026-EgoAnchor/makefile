@@ -1,21 +1,18 @@
-SOURCE := egoanchor_cn_v6.tex
+SOURCE := egoanchor_cn_v7.tex
 OUTDIR := pdf
-JOBNAME := EgoAnchor
-FINAL := $(OUTDIR)/$(JOBNAME).pdf
 LATEXMK := latexmk
-LATEXFLAGS := -xelatex -interaction=nonstopmode -halt-on-error -jobname=$(JOBNAME) -outdir=$(OUTDIR)
+LATEXFLAGS := -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=$(OUTDIR)
 
-.PHONY: all latest clean
+.PHONY: all latest clean distclean
 
-all: $(FINAL)
-
-latest: $(FINAL)
+all latest: | $(OUTDIR)
+	$(LATEXMK) $(LATEXFLAGS) $(SOURCE)
 
 $(OUTDIR):
 	mkdir $(OUTDIR)
 
-$(FINAL): $(SOURCE) vgtc.cls | $(OUTDIR)
-	$(LATEXMK) $(LATEXFLAGS) $(SOURCE)
-
 clean:
-	$(LATEXMK) -C -jobname=$(JOBNAME) -outdir=$(OUTDIR) $(SOURCE)
+	$(LATEXMK) -c -outdir=$(OUTDIR) $(SOURCE)
+
+distclean:
+	$(LATEXMK) -C -outdir=$(OUTDIR) $(SOURCE)

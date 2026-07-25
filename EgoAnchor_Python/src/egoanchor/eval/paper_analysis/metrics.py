@@ -596,7 +596,7 @@ def _lag_grid(settings: PaperSettings) -> np.ndarray:
     )
 
 
-def _translation_lag(
+def translation_lag_metrics(
     times: np.ndarray,
     display: np.ndarray,
     reference: np.ndarray,
@@ -626,7 +626,7 @@ def _translation_lag(
     return best[1], best[0], best[2]
 
 
-def _rotation_lag(
+def rotation_lag_metrics(
     times: np.ndarray,
     display: np.ndarray,
     reference: np.ndarray,
@@ -655,6 +655,30 @@ def _rotation_lag(
                 _quantile(np.degrees(residual_increments.magnitude()), 0.95),
             )
     return best[1], best[0], best[2]
+
+
+def _translation_current_time_rmse(
+    display: np.ndarray,
+    reference: np.ndarray,
+) -> float:
+    """计算不补偿时延的同渲染时刻平移 RMSE。"""
+
+    residual_mm = 1000.0 * (display - reference)
+    distances_mm = np.linalg.norm(residual_mm, axis=1)
+    return float(np.sqrt(np.mean(np.square(distances_mm))))
+
+
+def _rotation_current_time_rmse(
+    display: np.ndarray,
+    reference: np.ndarray,
+) -> float:
+    """计算不补偿时延的同渲染时刻旋转测地 RMSE。"""
+
+    display = display / np.linalg.norm(display, axis=1, keepdims=True)
+    reference = reference / np.linalg.norm(reference, axis=1, keepdims=True)
+    relative = Rotation.from_quat(display).inv() * Rotation.from_quat(reference)
+    errors_deg = np.degrees(relative.magnitude())
+    return float(np.sqrt(np.mean(np.square(errors_deg))))
 
 
 def _static_rotation_metrics(
@@ -830,7 +854,7 @@ def _render_metrics(
                 }
             )
         elif _scenario_matches(scenario, "continuous_translation"):
-            lag, residual, residual_increment = _translation_lag(
+            lag, residual, residual_increment = translation_lag_metrics(
                 times,
                 display,
                 reference,
@@ -841,11 +865,15 @@ def _render_metrics(
                     **identity,
                     "effective_lag_ms": lag,
                     "aligned_rmse_mm": residual,
+                    "current_time_rmse_mm": _translation_current_time_rmse(
+                        display,
+                        reference,
+                    ),
                     "aligned_residual_increment_p95_mm": residual_increment,
                 }
             )
         elif _scenario_matches(scenario, "continuous_rotation"):
-            lag, residual, residual_increment = _rotation_lag(
+            lag, residual, residual_increment = rotation_lag_metrics(
                 times,
                 display_rotation,
                 reference_rotation,
@@ -856,6 +884,10 @@ def _render_metrics(
                     **identity,
                     "effective_lag_ms": lag,
                     "aligned_rmse_deg": residual,
+                    "current_time_rmse_deg": _rotation_current_time_rmse(
+                        display_rotation,
+                        reference_rotation,
+                    ),
                     "aligned_residual_increment_p95_deg": residual_increment,
                 }
             )
@@ -1319,6 +1351,8 @@ __all__ = [
     "merge_task_results",
     "paired_metric_matrix",
     "risk_coverage_curve",
+    "rotation_lag_metrics",
     "segment_identity",
+    "translation_lag_metrics",
     "validate_workbook_runtime_contract",
 ]

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from egoanchor.eval import (
+    ArtifactDestination,
     AssetCopy,
     BatchPaths,
     copy_current_assets,
@@ -433,7 +434,7 @@ class BatchWorkflowTests(unittest.TestCase):
             )
 
     def test_config_describes_every_stage_without_paper_compilation(self) -> None:
-        """config 只描述数据阶段和显式图片发布，不承担论文编译。"""
+        """config 描述显式图表发布，但不承担论文编译。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_project(Path(tmp))
@@ -456,9 +457,16 @@ class BatchWorkflowTests(unittest.TestCase):
             )
             self.assertNotIn("manuscript", payload["paths"])
             self.assertNotIn("output_pdf", payload["paths"])
+            self.assertEqual(
+                {
+                    Path(item["destination"]).name
+                    for item in payload["paths"]["table_destinations"]
+                },
+                {"exp1_static.tex", "exp1_dynamic.tex", "exp2_design.tex"},
+            )
 
-    def test_copy_assets_only_publishes_current_panels_and_configured_relay_files(self) -> None:
-        """图片发布只复制当前分析面板和显式配置的 relay PNG/PDF，不处理 TeX。"""
+    def test_copy_assets_publishes_current_panels_tables_and_relay_files(self) -> None:
+        """发布命令只复制本次清单中的面板、三张表格和显式 relay 文件。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "EgoAnchor_Python"
@@ -483,10 +491,29 @@ class BatchWorkflowTests(unittest.TestCase):
                     figure_paths[f"{stem.split('_', 1)[0]}_{suffix[1:]}"] = str(source.resolve())
             for suffix in (".pdf", ".png"):
                 (figure_root / f"figure2c_occlusion{suffix}").write_bytes(b"stale")
+            table_root = active_root / "analysis" / "tex" / "tables"
+            table_root.mkdir(parents=True)
+            table_names = {
+                "exp1_static_table": "experiment1_static_occlusion_stability.tex",
+                "exp1_dynamic_table": "experiment1_dynamic_6dof_fidelity.tex",
+                "exp2_table": "experiment2_design_attribution.tex",
+            }
+            artifact_paths = {}
+            for key, name in table_names.items():
+                source = table_root / name
+                source.write_text(key, encoding="utf-8")
+                artifact_paths[key] = str(source.resolve())
+            (table_root / "stale_table.tex").write_text("stale", encoding="utf-8")
             provenance = active_root / "analysis" / "provenance"
             provenance.mkdir()
             (provenance / "build_result.json").write_text(
-                json.dumps({"batch_id": "batch_test", "figure_paths": figure_paths}),
+                json.dumps(
+                    {
+                        "batch_id": "batch_test",
+                        "figure_paths": figure_paths,
+                        "artifact_paths": artifact_paths,
+                    }
+                ),
                 encoding="utf-8",
             )
             paper_root = root.parent / "paper"
@@ -503,6 +530,11 @@ class BatchWorkflowTests(unittest.TestCase):
                 active_root=active_root,
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
+                table_destinations=(
+                    ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
+                    ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
+                    ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
+                ),
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
                 config_path=root / "batch.toml",
             )
@@ -516,11 +548,86 @@ class BatchWorkflowTests(unittest.TestCase):
                 result = copy_current_assets(root=root)
 
             self.assertTrue(result["passed"])
-            self.assertEqual(len(result["published"]), 17)
+            self.assertEqual(len(result["published"]), 20)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
+            self.assertEqual(
+                (paper_root / "tables" / "exp1_dynamic.tex").read_text(encoding="utf-8"),
+                "exp1_dynamic_table",
+            )
             self.assertFalse((paper_root / "figures" / "panels" / "figure2c_occlusion.pdf").exists())
+            self.assertFalse((paper_root / "tables" / "stale_table.tex").exists())
             self.assertFalse((paper_root / "main.tex").exists())
+
+    def test_copy_assets_preflights_all_tables_before_writing(self) -> None:
+        """任一配置表格缺失时，论文目录不得先写入部分图片。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "EgoAnchor_Python"
+            active_root = root / "data" / "experiments" / "experiment_1_2"
+            figure_root = active_root / "analysis" / "figures"
+            figure_root.mkdir(parents=True)
+            figure_paths = {}
+            for figure in (2, 3):
+                for panel in "abcd":
+                    for suffix in ("pdf", "png"):
+                        key = f"figure{figure}{panel}_{suffix}"
+                        source = figure_root / f"{key}.{suffix}"
+                        source.write_bytes(key.encode())
+                        figure_paths[key] = str(source.resolve())
+            table_root = active_root / "analysis" / "tex" / "tables"
+            table_root.mkdir(parents=True)
+            static_table = table_root / "static.tex"
+            dynamic_table = table_root / "dynamic.tex"
+            static_table.write_text("static", encoding="utf-8")
+            dynamic_table.write_text("dynamic", encoding="utf-8")
+            provenance = active_root / "analysis" / "provenance"
+            provenance.mkdir()
+            missing_table = table_root / "missing.tex"
+            (provenance / "build_result.json").write_text(
+                json.dumps(
+                    {
+                        "batch_id": "batch_test",
+                        "figure_paths": figure_paths,
+                        "artifact_paths": {
+                            "exp1_static_table": str(static_table.resolve()),
+                            "exp1_dynamic_table": str(dynamic_table.resolve()),
+                            "exp2_table": str(missing_table.resolve()),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            paper_root = root.parent / "paper"
+            paths = BatchPaths(
+                project_root=root,
+                task_data_root=root / "data" / "experiments" / "task_data",
+                task_workbook_root=root / "data" / "experiments" / "task_workbooks",
+                task_analysis_root=root / "data" / "experiments" / "task_analysis",
+                staging_root=root / "data" / "staging",
+                archive_root=root / "data" / "archive",
+                active_root=active_root,
+                paper_root=paper_root,
+                experiment_asset_destination=paper_root / "figures" / "panels",
+                table_destinations=(
+                    ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
+                    ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
+                    ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
+                ),
+                relay_assets=(),
+                config_path=root / "batch.toml",
+            )
+            with (
+                mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths),
+                mock.patch(
+                    "egoanchor.eval.batch._load_batch_records",
+                    return_value=("batch_test", ()),
+                ),
+                self.assertRaises(FileNotFoundError),
+            ):
+                copy_current_assets(root=root)
+
+            self.assertFalse(paper_root.exists())
 
 
 def _write_project(parent: Path) -> Path:

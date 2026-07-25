@@ -1,6 +1,6 @@
 # 实验一/二离线分析
 
-正式数据操作只从 `pixi run eval` 进入。它负责整理 session、生成本地指标和 TeX 片段、发布图片；
+正式数据操作只从 `pixi run eval` 进入。它负责整理 session、生成本地指标和 TeX 片段、发布图表；
 不再编译或修改论文主稿。
 
 ## 数据流
@@ -18,11 +18,11 @@ data/experiments/task_data/task_<N>_v<V>_<YYYYMMDD_HHMMSS>_<object>
   -> task_analysis/<task-directory>/task_N_complete_metrics.json
   -> experiment_1_2/analysis/{metrics,plots,figures,tex,provenance}
   -> copy-assets
-  -> 2026-EgoAnchor 中的 PNG/PDF
+  -> 2026-EgoAnchor 中的 PNG/PDF 和三张表格 TeX
 ```
 
 `analyze` 只写活动批次的 `analysis/`，不会改动 `2026-EgoAnchor` 的主稿、表格、图片或 PDF。
-表格 TeX 和图环境 TeX 与图片一起生成在本地，之后由你手工复制到主稿。
+`copy-assets` 在审阅后发布图片和三张表格 TeX；图环境 TeX 仍由研究者手工处理。
 
 ## 配置
 
@@ -30,14 +30,16 @@ data/experiments/task_data/task_<N>_v<V>_<YYYYMMDD_HHMMSS>_<object>
 pixi run eval config
 ```
 
-`batch.toml` 只控制数据目录、论文图片发布目录和 relay 资源：
+`batch.toml` 控制数据目录和论文图表发布路径：
 
 - `[paths].task_data_root`：归档后可供 `stage` 自动选择的任务数据目录。
 - `[paths].task_workbook_root`：每个原始任务目录唯一对应的 Stage 1 工作簿缓存。
 - `[paths].task_analysis_root`：每本 Stage 1 工作簿唯一对应的指标缓存。
 - `[paths].active_root`：当前五项任务组合清单和合并后的分析产物。
-- `[paths].paper_root`：`copy-assets` 的图片目标根目录。
-- `[copy_assets]`：实验面板和 relay PNG/PDF 的明确来源、目标位置。
+- `[paths].paper_root`：`copy-assets` 的论文目标根目录。
+- `[copy_assets]`：实验面板的目标目录。
+- `[copy_assets.tables]`：三张分析表格的论文相对目标路径，键固定，文件名可修改。
+- `[[copy_assets.relay]]`：relay PNG/PDF 的明确来源和目标位置。
 
 更换定性 replay 图时，直接修改 `[[copy_assets.relay]]` 的 `source` 与 `destination`。程序不会按修改
 时间猜测最新文件。
@@ -97,39 +99,50 @@ data/experiments/experiment_1_2/analysis/
 ├─ plots/figure_plot_data.xlsx      # 图二、图三审计数据，不是绘图输入
 ├─ figures/                         # 八个面板，各自的 PNG 和 PDF
 ├─ tex/
-│  ├─ tables/                       # 三张可手工引入的表格 TeX
+│  ├─ tables/                       # 三张由 copy-assets 显式发布的表格 TeX
 │  └─ figures/                      # 图二、图三的 figure 环境 TeX
 └─ provenance/                      # 输入摘要、参数 SHA-256 和 build_result.json
 ```
 
 实验一图二按静止平移、静止旋转、动态平移、动态旋转排列为一行四个双纵轴面板；左轴是误差，右轴是抖动。
 静止误差采用中心化 P95，动态误差采用最佳时延对齐后的 RMSE，动态抖动采用同一最佳时延下残差帧增量 P95，
-避免把真实运动直接计为抖动。图 3(d) 的主比较是 *Smoothed KF Extrapolation* 与关闭 StaticLock 的
+避免把真实运动直接计为抖动。动态表另报告不补偿时延的 current-time RMSE，用于披露包含相位差的当前配准误差。
+未对齐显示位姿的原始帧间增量包含目标真实运动，不作为 perceived jitter。图 3(d) 的主比较是 *Smoothed KF Extrapolation* 与关闭 StaticLock 的
 *Linear/SLERP*；*Hermite Interpolation* 是补充条件。完整数值仍保留在 `metrics/` 和
 `figure_plot_data.xlsx`。
 
 首次分析的主要耗时仍是 XLSX ZIP/XML 读取和 Python 分组统计。后续只替换一个 Task 时，耗时主要来自
 该 Task 的 XLSX；另外四项直接读取小型 JSON 指标缓存。
 
-## 发布图片与手工引入 TeX
+## 发布图片与表格 TeX
 
 ```text
 pixi run eval copy-assets
 ```
 
-该命令先校验 `analysis/provenance/build_result.json` 的 batch ID，再严格按本次 `figure_paths` 清单复制八组实验
-PNG/PDF，以及 `batch.toml` 中逐项声明的 relay PNG/PDF。分析目录中残留的旧面板不会被复制；命令不会复制 TeX，
-也不会修改主稿。
+该命令先校验 `analysis/provenance/build_result.json` 的 batch ID，再严格按本次 `figure_paths` 复制八组实验
+PNG/PDF，按 `artifact_paths` 和 `[copy_assets.tables]` 发布三张表格 TeX，并复制 TOML 中逐项声明的 relay
+PNG/PDF。所有来源在写入前统一校验，分析目录中的旧面板和旧表不会被推断发布；命令不修改主稿。
 
-从以下目录手工选择、审阅并复制 TeX 到主稿：
+表格默认发布为：
 
 ```text
-data/experiments/experiment_1_2/analysis/tex/tables/
-data/experiments/experiment_1_2/analysis/tex/figures/
+2026-EgoAnchor/tables/exp1_static.tex
+2026-EgoAnchor/tables/exp1_dynamic.tex
+2026-EgoAnchor/tables/exp2_design.tex
 ```
 
+图环境 TeX 位于 `analysis/tex/figures/`，仍需研究者审阅后手工纳入论文。
+
 主稿与 PDF 的编译不属于 `pixi run eval`。当前中文主稿为 `2026-EgoAnchor/egoanchor_cn_v7.tex`；完成手工引入后，
-在 `2026-EgoAnchor/` 下运行 `latexmk -xelatex egoanchor_cn_v7.tex`。
+在 `2026-EgoAnchor/` 下运行：
+
+```powershell
+latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v7.tex
+```
+
+最终 PDF 和辅助文件都使用主稿 basename `egoanchor_cn_v7`，写入 `2026-EgoAnchor/pdf/`。
+工作区的 LaTeX Workshop 输出目录也指向 `%DIR%/pdf`，可以直接按 TeX 文件名打开 PDF。
 
 ## 诊断与重建
 
@@ -141,7 +154,7 @@ pixi run eval rebuild
 
 - `qc`：显式深查活动清单引用的五个原始目录；日常增量流程不需要运行。
 - `preprocess`：补建当前组合中缺失或失效的任务工作簿，已有缓存不重做。
-- `rebuild`：显式强制重建五本工作簿和全部指标缓存，不切换批次、不发布图片。
+- `rebuild`：显式强制重建五本工作簿和全部指标缓存，不切换批次、不发布图表。
 
 工作簿只能只读查看，不要用 Excel 保存后继续正式分析。`figure_plot_data.xlsx` 是审计输出，手工修改它不会
 重绘图片。

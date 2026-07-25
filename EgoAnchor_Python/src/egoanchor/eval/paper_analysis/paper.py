@@ -36,9 +36,11 @@ _STRATEGY_COMPARISON_METRICS = (
     ("static", "frame_rotation_increment_p95_deg", "deg"),
     ("translation", "effective_lag_ms", "ms"),
     ("translation", "aligned_rmse_mm", "mm"),
+    ("translation", "current_time_rmse_mm", "mm"),
     ("translation", "aligned_residual_increment_p95_mm", "mm"),
     ("rotation", "effective_lag_ms", "ms"),
     ("rotation", "aligned_rmse_deg", "deg"),
+    ("rotation", "current_time_rmse_deg", "deg"),
     ("rotation", "aligned_residual_increment_p95_deg", "deg"),
     ("occlusion", "translation_p95_mm", "mm"),
     ("occlusion", "translation_max_mm", "mm"),
@@ -127,70 +129,81 @@ def _best_cells(
 
 
 def build_exp1_static_table(results: PaperResults) -> str:
-    """生成实验一静止、世界一致性与遮挡稳健性表。"""
+    """生成实验一静止、世界一致性、遮挡与起动转换代价表。"""
 
     metrics = (
         (results.static_segments, "centered_p95_mm"),
         (results.static_segments, "absolute_p95_mm"),
         (results.static_segments, "frame_increment_p95_mm"),
         (results.occlusion_episodes, "translation_p95_mm"),
-    )
-    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
-    lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
-        r"\caption{实验一的静止与遮挡稳定性。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
-        r"\label{tab:exp1-static}",
-        r"\small",
-        r"\setlength{\tabcolsep}{4.0pt}",
-        r"\renewcommand{\arraystretch}{1.14}",
-        r"\begin{tabular}{lcccc}",
-        r"\toprule",
-        r"& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 \\",
-        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}",
-        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ \\",
-        f"& ${_sample_label(results.static_segments, 'centered_p95_mm')}$ & ${_sample_label(results.static_segments, 'absolute_p95_mm')}$ & ${_sample_label(results.static_segments, 'frame_increment_p95_mm')}$ & ${_sample_label(results.occlusion_episodes, 'translation_p95_mm')}$ " + r"\\",
-        r"\midrule",
-    ]
-    for method in METHODS:
-        lines.append(
-            f"{_METHOD_LABELS[method]} & {cells[0][method]} & {cells[1][method]} & {cells[2][method]} & {cells[3][method]} " + r"\\"
-        )
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}"])
-    return "\n".join(lines) + "\n"
-
-
-def build_exp1_dynamic_table(results: PaperResults) -> str:
-    """生成实验一动态 6DoF 保真度与起动转换代价表。"""
-
-    metrics = (
-        (results.translation_segments, "effective_lag_ms"),
-        (results.translation_segments, "aligned_rmse_mm"),
-        (results.rotation_segments, "effective_lag_ms"),
-        (results.rotation_segments, "aligned_rmse_deg"),
         (results.transition_segments, "response_ms"),
     )
     cells = tuple(_best_cells(rows, key) for rows, key in metrics)
+    sample_labels = " & ".join(
+        f"${_sample_label(rows, key)}$" for rows, key in metrics
+    )
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验一的动态 6DoF 保真度。有效时延与 lag-aligned RMSE 必须成对解释；Start-transition 表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
-        r"\label{tab:exp1-dynamic}",
+        r"\caption{实验一的静止、遮挡稳定性与起动转换代价。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。Start-transition 表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
+        r"\label{tab:exp1-static}",
         r"\small",
-        r"\setlength{\tabcolsep}{3.1pt}",
+        r"\setlength{\tabcolsep}{3.0pt}",
         r"\renewcommand{\arraystretch}{1.14}",
         r"\resizebox{\textwidth}{!}{%",
         r"\begin{tabular}{lccccc}",
         r"\toprule",
-        r"& \multicolumn{2}{c}{持续平移} & \multicolumn{2}{c}{持续旋转} & 转换代价 \\",
-        r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}",
-        r"方法 & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (deg) $\downarrow$ & Start-transition (ms) $\downarrow$ \\",
-        f"& ${_sample_label(results.translation_segments, 'effective_lag_ms')}$ & ${_sample_label(results.translation_segments, 'aligned_rmse_mm')}$ & ${_sample_label(results.rotation_segments, 'effective_lag_ms')}$ & ${_sample_label(results.rotation_segments, 'aligned_rmse_deg')}$ & ${_sample_label(results.transition_segments, 'response_ms')}$ " + r"\\",
+        r"& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 & 转换代价 \\",
+        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}",
+        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ & Start-transition (ms) $\downarrow$ \\",
+        f"& {sample_labels} " + r"\\",
         r"\midrule",
     ]
     for method in METHODS:
+        method_cells = " & ".join(metric_cells[method] for metric_cells in cells)
         lines.append(
-            f"{_METHOD_LABELS[method]} & {cells[0][method]} & {cells[1][method]} & {cells[2][method]} & {cells[3][method]} & {cells[4][method]} " + r"\\"
+            f"{_METHOD_LABELS[method]} & {method_cells} " + r"\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
+    return "\n".join(lines) + "\n"
+
+
+def build_exp1_dynamic_table(results: PaperResults) -> str:
+    """生成实验一动态 6DoF 保真度表。"""
+
+    metrics = (
+        (results.translation_segments, "effective_lag_ms"),
+        (results.translation_segments, "aligned_rmse_mm"),
+        (results.translation_segments, "current_time_rmse_mm"),
+        (results.rotation_segments, "effective_lag_ms"),
+        (results.rotation_segments, "aligned_rmse_deg"),
+        (results.rotation_segments, "current_time_rmse_deg"),
+    )
+    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
+    sample_labels = " & ".join(
+        f"${_sample_label(rows, key)}$" for rows, key in metrics
+    )
+    lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\caption{实验一的动态 6DoF 保真度。有效时延表示响应滞后；对齐 RMSE 表示移除最佳时延后的空间残差；当前 RMSE 在同一渲染时刻直接比较显示与参考，包含延迟造成的相位误差。三者必须成对解释。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
+        r"\label{tab:exp1-dynamic}",
+        r"\small",
+        r"\setlength{\tabcolsep}{2.4pt}",
+        r"\renewcommand{\arraystretch}{1.14}",
+        r"\resizebox{\textwidth}{!}{%",
+        r"\begin{tabular}{lcccccc}",
+        r"\toprule",
+        r"& \multicolumn{3}{c}{持续平移} & \multicolumn{3}{c}{持续旋转} \\",
+        r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
+        r"方法 & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (mm) $\downarrow$ & 当前 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (deg) $\downarrow$ & 当前 RMSE (deg) $\downarrow$ \\",
+        f"& {sample_labels} " + r"\\",
+        r"\midrule",
+    ]
+    for method in METHODS:
+        method_cells = " & ".join(metric_cells[method] for metric_cells in cells)
+        lines.append(
+            f"{_METHOD_LABELS[method]} & {method_cells} " + r"\\"
         )
     lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
     return "\n".join(lines) + "\n"
@@ -620,7 +633,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_rmse_mm",
-        metric_role="Error (left axis)",
+        metric_role="Lag-aligned RMSE (left axis)",
     )
     append_metric_rows(
         figure2_rows,
@@ -640,7 +653,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_rmse_deg",
-        metric_role="Error (left axis)",
+        metric_role="Lag-aligned RMSE (left axis)",
     )
     append_metric_rows(
         figure2_rows,
@@ -779,25 +792,25 @@ def _figure_two_tex(figure_directory: str) -> str:
 
     return f"""\\begin{{figure*}}[t]
   \\centering
-  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2a_static_translation.pdf}}
     \\caption{{静止平移}}
     \\label{{fig:exp1-static-translation}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2b_static_rotation.pdf}}
     \\caption{{静止旋转}}
     \\label{{fig:exp1-static-rotation}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2c_dynamic_translation.pdf}}
     \\caption{{动态平移}}
     \\label{{fig:exp1-dynamic-translation}}
   \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.235\\textwidth}}
+  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
     \\centering
     \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2d_dynamic_rotation.pdf}}
     \\caption{{动态旋转}}
@@ -838,7 +851,7 @@ def _figure_three_tex(figure_directory: str) -> str:
     \\caption{{时序策略}}
     \\label{{fig:exp2-temporal}}
   \\end{{subfigure}}
-  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。为比较可读性，图~(d) 不显示超过 32~mm 的异常片段，完整数值保留在绘图审计表中。}}
+  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线；所有片段均按原值显示。}}
   \\label{{fig:exp2-final}}
 \\end{{figure*}}
 """
@@ -873,9 +886,11 @@ def write_analysis_artifacts(
         "stationary_rotation_frame_increment_p95_deg",
         "translation_lag_ms",
         "translation_aligned_rmse_mm",
+        "translation_current_time_rmse_mm",
         "translation_aligned_residual_increment_p95_mm",
         "rotation_lag_ms",
         "rotation_aligned_rmse_deg",
+        "rotation_current_time_rmse_deg",
         "rotation_aligned_residual_increment_p95_deg",
         "occlusion_p95_mm",
         "occlusion_max_mm",
@@ -904,9 +919,11 @@ def write_analysis_artifacts(
                     "stationary_rotation_frame_increment_p95_deg": _summary(results.static_segments[method], "frame_rotation_increment_p95_deg")[0],
                     "translation_lag_ms": _summary(results.translation_segments[method], "effective_lag_ms")[0],
                     "translation_aligned_rmse_mm": _summary(results.translation_segments[method], "aligned_rmse_mm")[0],
+                    "translation_current_time_rmse_mm": _summary(results.translation_segments[method], "current_time_rmse_mm")[0],
                     "translation_aligned_residual_increment_p95_mm": _summary(results.translation_segments[method], "aligned_residual_increment_p95_mm")[0],
                     "rotation_lag_ms": _summary(results.rotation_segments[method], "effective_lag_ms")[0],
                     "rotation_aligned_rmse_deg": _summary(results.rotation_segments[method], "aligned_rmse_deg")[0],
+                    "rotation_current_time_rmse_deg": _summary(results.rotation_segments[method], "current_time_rmse_deg")[0],
                     "rotation_aligned_residual_increment_p95_deg": _summary(results.rotation_segments[method], "aligned_residual_increment_p95_deg")[0],
                     "occlusion_p95_mm": _summary(results.occlusion_episodes[method], "translation_p95_mm")[0],
                     "occlusion_max_mm": _summary(results.occlusion_episodes[method], "translation_max_mm")[0],

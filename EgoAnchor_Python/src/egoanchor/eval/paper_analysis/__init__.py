@@ -3,6 +3,7 @@
 from .cache import cache_key, cache_path, load_task_results, write_task_results
 from .figures import (
     build_dual_metric_panel,
+    build_temporal_strategy_panel,
     build_vcd_risk_coverage_panel,
     publish_figures,
     summarize_risk_coverage,
@@ -22,6 +23,8 @@ from .metrics import (
     paired_metric_matrix,
     merge_task_results,
     risk_coverage_curve,
+    rotation_lag_metrics,
+    translation_lag_metrics,
 )
 from .paper import (
     build_exp1_dynamic_table,
@@ -48,6 +51,7 @@ __all__ = [
     "analyze_task_workbook",
     "eligible_trials",
     "build_dual_metric_panel",
+    "build_temporal_strategy_panel",
     "build_exp1_dynamic_table",
     "build_exp1_static_table",
     "build_exp2_attribution_table",
@@ -61,9 +65,11 @@ __all__ = [
     "merge_task_results",
     "paired_metric_matrix",
     "risk_coverage_curve",
+    "rotation_lag_metrics",
     "publish_figures",
     "settings_sha256",
     "summarize_risk_coverage",
+    "translation_lag_metrics",
     "workbook_sha256",
     "write_task_results",
     "write_analysis_artifacts",

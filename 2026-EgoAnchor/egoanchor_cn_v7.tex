@@ -405,6 +405,8 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 实验一围绕五项应用可感知属性组织：\emph{world consistency} 衡量主动头动是否被错误写入静止物体的世界位置；\emph{rest stability} 衡量静止锚点的逐帧显示抖动；\emph{dynamic fidelity} 将持续运动中的有效时延与时延对齐后的轨迹残差作为不可拆分的权衡；\emph{occlusion robustness} 衡量遮挡期间已建立锚点的平移误差；\emph{transition cost} 衡量稳定优先策略从静止锁定切换到可见运动跟随的代价。
 
+\textbf{证据状态。} 本节当前数值来自旧 $q\Delta t$ 协方差运行时的归档批次，只用于工程诊断、指标核对和版式验证，不作为 CWNA 新运行时的正式证据。正式稿必须在冻结代码上完整重采五项任务，并由同一分析链路整体替换这些数值。
+
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/replay_grid.pdf}
@@ -412,24 +414,84 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
   \label{fig:replay-grid}
 \end{figure}
 
-\input{tables/experiment1_static_occlusion_stability.tex}
-\input{tables/experiment1_dynamic_6dof_fidelity.tex}
+\begin{figure*}[t]
+  \centering
+  \begin{subfigure}[t]{0.25\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure2a_static_translation.pdf}
+    \caption{静止平移}
+    \label{fig:exp1-static-translation}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.25\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure2b_static_rotation.pdf}
+    \caption{静止旋转}
+    \label{fig:exp1-static-rotation}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.25\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure2c_dynamic_translation.pdf}
+    \caption{动态平移}
+    \label{fig:exp1-dynamic-translation}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.25\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure2d_dynamic_rotation.pdf}
+    \caption{动态旋转}
+    \label{fig:exp1-dynamic-rotation}
+  \end{subfigure}
+  \caption{实验一的平移与旋转误差--抖动分布。每个方法左移圆点对应左轴误差，右移空心菱形对应右轴抖动；浅色点为片段值，醒目标记与误差条为中位数和 IQR。静止误差采用中心化 P95，动态误差采用 lag-aligned RMSE；动态抖动采用同一最佳时延下残差轨迹的帧间增量 P95，因此不把真实运动计为抖动。左右纵轴相互独立，均为越低越好。}
+  \label{fig:exp1-final}
+\end{figure*}
 
-\textbf{头动下的世界一致性与静止稳定性。} 表~\ref{tab:exp1-static} 同时报告中心化头动泄漏、绝对注册护栏、静止平移帧间增量和遮挡期平移 P95。EgoAnchor 的中心化平移泄漏中位数为 0.82~mm，绝对注册中位数为 6.60~mm，静止帧间增量中位数为 0.06~mm，均为四种方法中的最低值；其遮挡期平移 P95 为 6.00~mm。绝对注册与中心化泄漏分开报告，避免把固定坐标偏置误写成头动抖动。
 
-\textbf{动态 6DoF 保真度。} 表~\ref{tab:exp1-dynamic} 将平移、旋转的有效时延与 lag-aligned RMSE 成对报告，并单列 Start-transition。EgoAnchor 的平移/旋转对齐 RMSE 中位数分别为 9.12~mm 和 4.81~deg，均低于三种基线；同时 Start-transition 为 510.36~ms，说明显式静止锚定以转换响应换取稳定保持。这个量是系统输出时间线的转换代价，不是网络或单次视觉推理时延。
+\input{tables/exp1_static.tex}
+\input{tables/exp1_dynamic.tex}
+
+\textbf{头动下的世界一致性、静止稳定性与转换代价。} 表~\ref{tab:exp1-static} 同时报告中心化头动泄漏、绝对注册护栏、静止平移帧间增量、遮挡期平移 P95，并在最右列报告 Start-transition。EgoAnchor 的中心化平移泄漏中位数为 0.82~mm，绝对注册中位数为 6.60~mm，静止帧间增量中位数为 0.06~mm，均为四种方法中的最低值；其遮挡期平移 P95 为 6.00~mm。绝对注册与中心化泄漏分开报告，避免把固定坐标偏置误写成头动抖动。EgoAnchor 的 Start-transition 为 510.36~ms，说明显式静止锚定以响应速度换取稳定保持；这个量是系统输出时间线的转换代价，不是网络或单次视觉推理时延。
+
+\textbf{动态 6DoF 保真度。} 表~\ref{tab:exp1-dynamic} 将平移、旋转的有效时延、lag-aligned RMSE 与 current-time RMSE 分开报告。EgoAnchor 的平移/旋转有效时延中位数为 360.00/345.00~ms，对齐 RMSE 为 9.12~mm/4.81~deg；One-Euro 的相应结果为 380.00/385.00~ms 和 15.69~mm/5.55~deg。若不补偿时延而在同一渲染时刻直接比较，EgoAnchor 的 RMSE 上升至 125.83~mm/31.88~deg，One-Euro 为 117.61~mm/34.10~deg；Arrival 则为 84.74~mm/25.44~deg。这一排序反转说明，较低的对齐残差只表示移除相位差后轨迹更接近参考，不表示当前时刻的配准误差更低。
 
 \textbf{误差与抖动的图示口径。} 图~\ref{fig:exp1-final} 的静止面板使用中心化平移/旋转误差 P95 与显示帧间增量 P95；动态面板使用最佳时延对齐后的平移/旋转 RMSE，并对同一对齐残差求帧间增量 P95。动态抖动因此不包含目标的真实运动。每个面板左右纵轴独立，圆点和空心菱形分别表示误差与抖动，完整片段值保留在绘图审计工作簿中。
 
-\input{figures/figure2_experiment1.tex}
+\textbf{平滑性与当前时刻误差。} EgoAnchor 的平移/旋转 residual jitter 中位数为 4.56~mm/2.64~deg，低于 Arrival 的 41.08~mm/10.40~deg 和 Capture 的 39.69~mm/10.26~deg，也略低于 One-Euro 的 5.25~mm/2.70~deg。该结果支持平滑输出的结论，但不能抵消表~\ref{tab:exp1-dynamic} 中更高的 current-time RMSE。本文不把未对齐显示位姿的原始帧间运动量命名为 perceived jitter，因为持续运动本身就会贡献这一数值；端到端体验由 current-time RMSE、有效时延和 residual jitter 共同描述，并将在实验三中进一步检验。
 
 
 \subsection{实验二：组件归因}
 
 实验二复用实验一的候选、参考轨迹和渲染时间线。表~\ref{tab:exp2-final} 保留四项设计归因：采集时刻对齐、StaticLock、VCD 分数的风险判别性和逐帧时序策略。完整 EgoAnchor 及组件对照共享候选流、Kalman、生命周期与参考轨迹；只在明确的比较条件中切换目标设计。
 
-\input{figures/figure3_experiment2.tex}
-\input{tables/experiment2_design_attribution.tex}
+\begin{figure*}[t]
+  \centering
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3a_capture_alignment.pdf}
+    \caption{采集时刻对齐}
+    \label{fig:exp2-alignment}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3b_static_lock.pdf}
+    \caption{StaticLock}
+    \label{fig:exp2-static-lock}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.18\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3c_vcd_risk_coverage.pdf}
+    \caption{VCD score 风险--覆盖率}
+    \label{fig:exp2-vcd}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.40\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/panels/figure3d_temporal_strategies.pdf}
+    \caption{时序策略}
+    \label{fig:exp2-temporal}
+  \end{subfigure}
+  \caption{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线。为比较可读性，图~(d) 不显示超过 32~mm 的异常片段，完整数值保留在绘图审计表中。}
+  \label{fig:exp2-final}
+\end{figure*}
+
+\input{tables/exp2_design.tex}
 
 \textbf{组件归因。} 采集时刻对齐将同一候选分别按 capture-time 与 arrival-time 世界位姿复合，arrival 条件的配对误差倍率为 2.69 倍。关闭 StaticLock 后，中心化静止误差的配对倍率为 17.06 倍，12/12 个片段均变差。VCD 判别性行比较 event 级 AURC 与忽略分数排序的 full-coverage risk；AURC 为 5.65 [4.90, 5.92]~mm，全覆盖风险为 6.53 [5.98, 7.31]~mm，12/12 个 event 的排序收益为正。该行不是冻结阈值 admission 的运行时消融，VCD 分数仍是连续可靠性评分，不是位姿正确概率，也不是排序算法。
 
@@ -451,9 +513,9 @@ EgoAnchor 的对象接口不绑定预定义类别。本文选择控制器是为�
 
 EgoAnchor 将异步视觉观测转换为对象锚点时，需要区分相机运动造成的坐标变换错配与目标物体在观测到达前继续运动造成的轨迹滞后。基于帧标识的采集时刻对齐处理前一问题；运动估计与时序平滑只在观测之间维持连续输出，并不消除采集后的目标运动滞后。两类误差具有不同的时间语义，不能由单一“端到端时延”指标替代。
 
-\textbf{时间一致性的边界。} 帧对齐可避免将历史相机系观测与到达时刻相机位姿错误复合，但不能恢复目标物体在采集之后的当前位姿。动态场景仍受感知处理时间、观测更新率和平滑策略引入的插值延迟共同影响。因此，动态表征以渲染时刻误差描述应用实际获得的配准质量，不把帧对齐表述为对物体运动时延的补偿。
+\textbf{时间一致性的边界。} 帧对齐可避免将历史相机系观测与到达时刻相机位姿错误复合，但不能恢复目标物体在采集之后的当前位姿。动态场景仍受感知处理时间、观测更新率和平滑策略引入的插值延迟共同影响。因此，本文将有效时延与 lag-aligned residual 成对报告：前者描述响应滞后，后者描述移除相位差后的轨迹保真度。lag-aligned residual 不能替代零时延的当前时刻配准误差，也不能把帧对齐解释为对物体运动时延的补偿。
 
-\textbf{稳定性与响应性的边界。} StaticLock、历史时序合成与 Smoothed KF Extrapolation 都会共同改变静止波动、轨迹残差和起停响应；本文已将这些量作为联合权衡报告，并把停止后的前向过冲、反向回动与 settling time 保留在审计产物中。主结论只使用当前 v4 批次的五项任务和冻结指标，不把 v3 归档数字或网页回放作为正式证据。
+\textbf{稳定性与响应性的边界。} StaticLock、历史时序合成与 Smoothed KF Extrapolation 都会共同改变静止波动、轨迹残差和起停响应；本文已将这些量作为联合权衡报告，并把停止后的前向过冲、反向回动与 settling time 保留在审计产物中。当前旧 $q\Delta t$ 批次只作工程诊断；正式主结论必须来自 CWNA 冻结运行时下完整重采的五项任务，不能混用归档数字或网页回放。
 
 \subsection{平台定位与可比性}
 

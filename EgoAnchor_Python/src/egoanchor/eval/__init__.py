@@ -59,6 +59,7 @@ from .schema_v2 import (
     validate_schema_mapping,
 )
 from .batch import (
+    ArtifactDestination,
     BatchArtifact,
     AssetCopy,
     BatchPaths,
@@ -81,6 +82,7 @@ from .batch import (
 
 __all__ = [
     "DERIVED_FILE_NAMES",
+    "ArtifactDestination",
     "BatchArtifact",
     "AssetCopy",
     "BatchPaths",
