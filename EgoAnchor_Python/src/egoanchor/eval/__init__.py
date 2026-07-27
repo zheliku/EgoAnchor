@@ -1,8 +1,9 @@
 """EgoAnchor 运行时评估基础设施的包级入口。
 
 这里导出 schema-v2、QC、Stage 1 workbook 和固定路径批次工作流。论文分析从
-``egoanchor.eval.paper_analysis`` 或相应 CLI 显式进入，避免运行时服务初始化时加载绘图和
-PDF 分析依赖。
+``egoanchor.eval.paper_analysis.experiment_1_2``、
+``egoanchor.eval.paper_analysis.experiment_3`` 或相应 CLI 显式进入，避免运行时服务初始化时
+加载绘图和 PDF 分析依赖。
 """
 from .preprocess import (
     DERIVED_FILE_NAMES,

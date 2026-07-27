@@ -382,6 +382,7 @@ class BatchWorkflowTests(unittest.TestCase):
                 "rebuild",
                 "analyze",
                 "copy-assets",
+                "experiment3",
             },
         )
 

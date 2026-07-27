@@ -321,7 +321,7 @@ length_m = 0.02 # 缩短 XYZ 轴，减少对模型的遮挡。
 thickness_px = 2 # 使用较细轴线。
 ```
 
-默认画面仍使用真实左目 RGB。半透明层只覆盖模型投影区域。四种方法严格复用论文图 2 在 `egoanchor.eval.paper_analysis.figures` 中的颜色：Arrival `#4C78A8`、Capture `#59A14F`、One-Euro `#F28E2B`、EgoAnchor `#E15759`。capture 清单中原始记录的颜色只作为 provenance 保留，不再决定论文 replay 图的轮廓色。XYZ 轴采用带白色 halo 的 X 红、Y 绿、Z 蓝，并带字母标记，避免与方法轮廓颜色混淆。纹理后端的颜色是 unlit base-color；它不声称复现 Unity 的法线、金属度、粗糙度和光照。
+默认画面仍使用真实左目 RGB。半透明层只覆盖模型投影区域。四种方法严格复用论文图 2 在 `egoanchor.eval.paper_analysis.experiment_1_2.figures` 中的颜色：Arrival `#4C78A8`、Capture `#59A14F`、One-Euro `#F28E2B`、EgoAnchor `#E15759`。capture 清单中原始记录的颜色只作为 provenance 保留，不再决定论文 replay 图的轮廓色。XYZ 轴采用带白色 halo 的 X 红、Y 绿、Z 蓝，并带字母标记，避免与方法轮廓颜色混淆。纹理后端的颜色是 unlit base-color；它不声称复现 Unity 的法线、金属度、粗糙度和光照。
 
 ## 九、自定义显示行、裁剪和文字
 

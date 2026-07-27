@@ -1,4 +1,4 @@
-"""通过 `pixi run eval` 调用的实验一/二唯一人工入口。"""
+"""通过 ``pixi run eval`` 调用的实验一、二、三统一人工入口。"""
 
 from __future__ import annotations
 
@@ -6,19 +6,31 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+
+from tqdm.auto import tqdm
 
 from .batch import (
     BatchToolError,
     analyze_current,
-    copy_current_assets,
     describe_workflow,
     list_task_data,
     preprocess_current,
+    plan_current_assets,
     promote_batch,
     qc_current,
     rebuild_current,
     stage_batch,
 )
+from .paper_analysis.experiment_3 import (
+    analyze_experiment3,
+    create_template as create_experiment3_template,
+    describe_experiment3,
+    plan_experiment3_assets_if_ready,
+    plot_experiment3,
+    validate_input as validate_experiment3_input,
+)
+from .paper_analysis.common import publish_artifact_plans
 
 
 EXIT_OK = 0
@@ -36,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="pixi run eval",
-        description="EgoAnchor 实验一/二数据整理、本地分析与图表发布",
+        description="EgoAnchor 实验一/二批次分析与实验三问卷分析",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
@@ -98,6 +110,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     rebuild = subparsers.add_parser("rebuild", help="显式强制重建五项 XLSX 和全部分析产物")
     rebuild.set_defaults(handler=_run_rebuild)
+
+    experiment3 = subparsers.add_parser(
+        "experiment3",
+        help="实验三原始模板、问卷统计、CLMM 与论文图",
+    )
+    experiment3.set_defaults(handler=_run_experiment3_help, experiment3_parser=experiment3)
+    experiment3_commands = experiment3.add_subparsers(dest="experiment3_command", metavar="COMMAND")
+
+    experiment3_config = experiment3_commands.add_parser("config", help="显示实验三配置与当前填表进度")
+    experiment3_config.set_defaults(handler=_run_experiment3_config)
+
+    experiment3_template = experiment3_commands.add_parser("build-template", help="在新路径生成空白原始模板")
+    experiment3_template.add_argument("--destination", type=Path, required=True, help="必须是尚不存在的新工作簿路径")
+    experiment3_template.set_defaults(handler=_run_experiment3_template)
+
+    experiment3_validate = experiment3_commands.add_parser("validate", help="检查实验三原始工作簿结构和填表完整性")
+    experiment3_validate.add_argument("--input", type=Path, help="覆盖配置中的默认输入工作簿")
+    experiment3_validate.add_argument("--complete", action="store_true", help="进一步要求达到正式分析完整性")
+    experiment3_validate.add_argument("--allow-synthetic", action="store_true", help=argparse.SUPPRESS)
+    experiment3_validate.set_defaults(handler=_run_experiment3_validate)
+
+    experiment3_analyze = experiment3_commands.add_parser("analyze", help="从原始值生成实验三结果 XLSX 与 TeX")
+    experiment3_analyze.add_argument("--input", type=Path, help="覆盖配置中的默认输入工作簿")
+    experiment3_analyze.add_argument("--output-root", type=Path, help="覆盖配置中的本地分析输出目录")
+    experiment3_analyze.add_argument("--allow-synthetic", action="store_true", help=argparse.SUPPRESS)
+    experiment3_analyze.set_defaults(handler=_run_experiment3_analyze)
+
+    experiment3_plot = experiment3_commands.add_parser("plot", help="只读结果 XLSX 生成实验三 PNG/PDF")
+    experiment3_plot.add_argument("--output-root", type=Path, help="覆盖配置中的本地分析输出目录")
+    experiment3_plot.set_defaults(handler=_run_experiment3_plot)
     return parser
 
 
@@ -178,15 +220,99 @@ def _run_analyze(_args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_copy_assets(_args: argparse.Namespace) -> dict[str, object]:
-    """显式复制配置允许的论文图片资源。"""
+    """联合预检已就绪的实验一/二与实验三，再一次性发布论文资源。"""
 
-    return copy_current_assets()
+    experiment3_plan = plan_experiment3_assets_if_ready()
+    experiment12_plan = None
+    try:
+        experiment12_plan = plan_current_assets()
+    except (FileNotFoundError, BatchToolError) as error:
+        if experiment3_plan is None:
+            raise
+        experiment12_status: dict[str, object] = {"status": "skipped", "reason": str(error)}
+    else:
+        experiment12_status = {"status": "published"}
+    plans = tuple(plan for plan in (experiment12_plan, experiment3_plan) if plan is not None)
+    published = publish_artifact_plans(plans)
+    by_owner = {
+        owner: [item for item in published if item["owner"] == owner]
+        for owner in ("experiment_1_2", "experiment_3")
+    }
+    if experiment12_plan is not None:
+        experiment12_status["published"] = by_owner["experiment_1_2"]
+    experiment3_status: dict[str, object]
+    if experiment3_plan is None:
+        experiment3_status = {"status": "skipped", "reason": "实验三尚无完整分析构建"}
+    else:
+        experiment3_status = {
+            "status": "published",
+            "published": by_owner["experiment_3"],
+        }
+    return {
+        "passed": True,
+        "experiment_1_2": experiment12_status,
+        "experiment_3": experiment3_status,
+        "next_command": "审阅已发布图表，并按论文工作流自行编译主稿",
+    }
 
 
 def _run_rebuild(_args: argparse.Namespace) -> dict[str, object]:
     """从当前 raw 完整重建本地分析产物。"""
 
     return rebuild_current()
+
+
+def _run_experiment3_help(args: argparse.Namespace) -> dict[str, object]:
+    """缺少实验三子命令时打印局部帮助。"""
+
+    args.experiment3_parser.print_help()
+    return {"passed": True}
+
+
+def _run_experiment3_config(_args: argparse.Namespace) -> dict[str, object]:
+    """显示实验三配置与工作簿进度。"""
+
+    return describe_experiment3()
+
+
+def _run_experiment3_template(args: argparse.Namespace) -> dict[str, object]:
+    """从美化来源重建空白正式模板。"""
+
+    return create_experiment3_template(destination=args.destination)
+
+
+def _run_experiment3_validate(args: argparse.Namespace) -> dict[str, object]:
+    """检查实验三输入结构或正式分析完整性。"""
+
+    return validate_experiment3_input(
+        input_workbook=args.input,
+        require_complete=args.complete,
+        allow_synthetic=args.allow_synthetic,
+    )
+
+
+def _run_experiment3_analyze(args: argparse.Namespace) -> dict[str, object]:
+    """显示阶段进度并运行完整实验三离线分析。"""
+
+    with tqdm(total=17, desc="experiment3 analyze", unit="stage", leave=False) as bar:
+        def update(message: str) -> None:
+            """更新分析阶段描述，保持 JSON stdout 干净。"""
+
+            bar.set_postfix_str(message)
+            bar.update(1)
+
+        return analyze_experiment3(
+            input_workbook=args.input,
+            output_root=args.output_root,
+            allow_synthetic=args.allow_synthetic,
+            progress=update,
+        )
+
+
+def _run_experiment3_plot(args: argparse.Namespace) -> dict[str, object]:
+    """从结果工作簿回读并生成论文图。"""
+
+    return plot_experiment3(output_root=args.output_root)
 
 
 def _parse_version(value: str) -> int:

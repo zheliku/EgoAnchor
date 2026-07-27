@@ -170,6 +170,184 @@ pixi run eval copy-assets
 内部批次名由任务 1--5 的 manifest 时间按任务号组成。它确定地表示整组输入，局部重采任一任务都会
 得到新批次名；`--promote` 会在变化任务的缓存发布成功后自动切换活动组合，因此无需手工输入该名称。
 
+## 实验三：问卷原始数据与分析
+
+实验三的正式输入和实验一/二的 Stage 1 XLSX 完全隔离。它只接受 24 个平衡单元的问卷原始工作簿，
+不读取 schema-v2 事件、不会把问卷答案写回 Unity，也不会用日常物体场景生成没有平台真值的绝对配准误差。
+实验三的结论边界是跨对象的主观感知评价和无需真值的自参考运行时日志；它不提供客观任务表现证据。
+
+### 文件与数据流
+
+实验三没有单独的 TOML。三个实验共用现有的 `batch.toml` 和 `paper.toml`：前者保存输入、分析输出和论文发布
+路径，后者保存统计契约与图尺寸。实验一/二只读取自己的配置节，实验三只读取 `[experiment_3.*]`，两边的参数
+摘要互不污染。每项配置都带行内中文说明；正式采集开始后不要临时修改计分、缺失值、检验或多重校正规则。
+
+分析代码同样按实验并列，不把实验三挂在旧模块旁边：
+
+```text
+src/egoanchor/eval/paper_analysis/
+├─ common/                 # 两条流水线共享的资源发布契约
+├─ experiment_1_2/         # 实验一/二指标、图表、工作簿和流水线
+└─ experiment_3/           # 实验三读取、计分、推断、CLMM、图表和流水线
+```
+
+`paper_analysis` 顶层不重导出两边的业务接口。CLI 分别从两个实验包的包级入口导入，再在 `copy-assets` 阶段合并
+发布计划。
+
+```text
+2026-EgoAnchor/material/
+  EgoAnchor_Experiment3_DataCollection_24P_v5_1_Beautified_Checked_VSCodeSafe.xlsx
+  -> pixi run eval experiment3 build-template --destination <尚不存在的新文件.xlsx>
+  EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx
+  -> 人工填写 Participants 与 Records；Derived/Analysis 只读
+  -> pixi run eval experiment3 validate --complete
+  -> pixi run eval experiment3 analyze
+  data/experiments/experiment_3/analysis/
+  ├─ results/experiment3_analysis.xlsx
+  ├─ tex/exp3_subjective.tex
+  └─ provenance/build_result.json
+  -> pixi run eval experiment3 plot
+  └─ figures/figure4_exp3_paired.{png,pdf}, figure5_exp3_scales.{png,pdf}
+  -> pixi run eval copy-assets
+  2026-EgoAnchor/figures/panels/ 与 tables/exp3_subjective.tex
+```
+
+`EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 是已经生成并验证的默认正式输入。生成命令从美化定稿复制设计映射、
+对象顺序和方法盲法映射，清空年龄、状态、原始评分、运行时审计、最终选择和开放题；不会复制模拟作答、
+模型标语或历史推断结果。`build-template` 强制要求 `--destination`，目标已经存在时直接拒绝，不能覆盖正在填写
+的正式数据。日常采集和分析不需要重新生成模板；只有审查模板构造时才生成另一个新文件。
+
+```powershell
+pixi run eval experiment3 config
+pixi run eval experiment3 build-template --destination ..\2026-EgoAnchor\material\exp3_template_review.xlsx
+```
+
+### 填写正式原始模板
+
+只有 `Participants` 和 `Records` 可以人工填写。`Questionnaire` 是条目字典，`Derived` 与 `Analysis` 是公式
+审计面板，不能在其中粘贴数值或修改公式。工作簿打开时强制完整重算；若 Excel 显示旧值，先启用自动计算并
+等待状态栏完成计算，再关闭并重新打开确认。
+
+`Participants` 的 A--K 列是预设平衡单元，不可改动。填写 L--X 的背景、同意、起止时间、纳入状态和备注。
+只有 `纳入分析=是` 的参与者会进入实时小分、离线统计和图表；被排除者保留在原始表中以便审计，但不会进入 N。
+
+`Records` 由三段组成：
+
+- A 段 144 行：每人六个方法×物体区块。13 个正式七点评分必须完整；Q10 是默认关闭的可选项。填写任务、
+  问卷和区块有效状态，并保留运行时审计值和技术说明。`区块有效=是` 是是否纳入区块统计的明确裁决，技术说明
+  可以记录非排除性现象。
+- B 段 48 行：每人两条方法级记录。TiA 可填 `无法回答`，但 R/C 至少五项、U/P 至少三项才形成分量表；
+  S-TIAS 三项必须完整。尺度切换确认、A/B 归属回忆确认和方法级记录有效都必须填“是”。TiA 反向项只会在
+  `Derived` 中按 `6-原始分` 计分，原始分永远保留。
+- C 段 24 行：填写标签层的偏好和信任选择、区分信心、开放题和不适。没有明显偏好时，偏好强度填 `N/A` 或
+  留空；做出偏好时必须填写 1--7。
+
+下拉和整数校验会阻止常见的输入错误。不要删除记录行、增加参与者、重排 ID 或解除 A/B 映射，因为 reader
+会严格要求 `24 / 144 / 48 / 24` 的身份结构。日常保存前可做只读结构检查：
+
+```powershell
+pixi run eval experiment3 validate
+```
+
+正式分析前必须完成严格检查：
+
+```powershell
+pixi run eval experiment3 validate --complete
+```
+
+该检查拒绝模拟输入、少于 18 个明确纳入者、未完成的有效区块、无效的方法级审核、非法量尺、最终选择缺失和
+被修改的平衡映射。少于 24 人但不少于 18 人会产生警告，并按实际配对 N 报告。
+
+### 实时面板与离线统计
+
+模板的绿色单元格是 Excel 即时审计，不是第二套统计实现。`Derived` 先按参与者纳入状态和区块有效状态形成
+AQ 小分、TiA 换向小分、三个物体上的参与者×方法均值和 `EgoAnchor - One-Euro` 配对差。`Analysis` 由此显示：
+
+- 纳入人数、有效区块和方法级记录、最终问卷完成度、过长问卷与连续同分诊断；
+- 主证实七项和五个已发表量表的 N、两种方法的 Q1/中位数/Q3、配对差中位数、均值、SD 与 `dz`；
+- 候选率、VCD、接纳率、输出可用率和遮挡时长的参与者级描述值；
+- 偏好强度与区分信心的纳入者级描述值。
+
+黄色单元格特意不在 Excel 中伪造：Wilcoxon W、精确 p、Holm 校正、匹配秩双列相关及其自举区间、信度、
+CLMM 和 TOST 都只由 Python 写入结果工作簿。Python 不读取任何公式缓存，而是从 `Participants` 与 `Records`
+的原始值重新计分，因此绿色定义与离线结果共享同一纳入、三物体均值和差值方向契约。
+
+### 生成结果与论文图
+
+```powershell
+pixi run eval experiment3 analyze
+pixi run eval experiment3 plot
+```
+
+`analyze` 在 stderr 显示 `tqdm` 进度，stdout 只输出可存档的 JSON。它写入
+`results/experiment3_analysis.xlsx`，其中有来源与参数摘要、主结果、量表、次级条目、当前样本信度、逐物体描述、
+操纵检验、选择、开放题双编码工作区、CLMM 系数/对象内对比和两张图的逐行输入数据。结果文件每张表均可直接
+筛选、冻结表头和审计；`README` 记录输入与参数 SHA-256，避免拿到旧分析结果后误写论文。
+
+冻结的统计规则如下：
+
+- 单位是参与者；先在三个对象取均值，再形成 `EgoAnchor - One-Euro` 完整配对。
+- 主证实顺序固定为 Q1、Q8、Q2、Q9、Q3、Q6、Q7，双侧 Wilcoxon、删除零差、平均并列秩的精确符号置换 p，
+  并在该七项家族内 Holm 校正。
+- 已发表量表家族顺序固定为 AQ-EQ、AQ-IQ、TiA-R/C、TiA-U/P、S-TIAS，独立执行 Holm。AQ 默认完整三条目；
+  只有预实验作出明确冻结决定时才把 `aq_mode` 改成 `reduced` 并重新分析。
+- `r_rb` 以参与者级固定种子自举 10,000 次给出 95% 百分位区间；分位数采用与 Excel `QUARTILE.INC` 一致的
+  type-7 规则，`dz` 使用配对差的样本 SD（`ddof=1`）。
+- 信度仅是当前样本的 raw Cronbach alpha、单因子 omega total；缩减 AQ 两条目时 omega 留空并报告
+  Spearman--Brown。它不构成对象化改编量表的验证声明。
+- 逐条目 CLMM 是次级稳健性分析：`response ~ method*object + object_position + within_object_order + (1|participant)`，
+  使用 Gauss--Hermite 求积的真实随机截距累积 logit。每个模型输出收敛状态、迭代数、梯度、随机截距 SD 和
+  交互 LRT；只有交互显著才对三个对象内方法对比作条件 Holm。
+- TOST 默认关闭。所有正等价界必须在预实验冻结后同时写入 TOML 并把 `equivalence.enabled` 设为 `true`；
+  不得把“不显著”解释为等价。
+
+`plot` 只读 `experiment3_analysis.xlsx` 的 `Plot_Paired`、`Plot_Scales` 和结果表，绝不回读原始工作簿。它输出两张
+论文级 PNG/PDF：图 4 的四面板展示 Q1、Q8、Q3、Q6 在三个对象上的参与者内配对、箱体分布、均值标记和
+Holm 校正结果；图 5 用紧凑小多图展示 Q6/Q7 与五个已发表量表分数，七点和五点量尺各用自己的纵轴。版式参考
+SelfBlending 的紧凑分组统计图和 VRGaussianAvatar 的箱体、均值标记与顶部显著性括号，同时保留实验三权威设计
+冻结的配对线，而不是改成柱状图。修改结果 XLSX 后，来源摘要校验会失败；应重新运行 `analyze`，再运行 `plot`。
+
+若只在审查副本上工作，可显式覆盖输入或本地输出位置；输出仍必须位于 `EgoAnchor_Python/data/`：
+
+```powershell
+pixi run eval experiment3 validate --input .\data\review\raw.xlsx
+pixi run eval experiment3 analyze --input .\data\review\raw.xlsx --output-root .\data\review\experiment3
+pixi run eval experiment3 plot --output-root .\data\review\experiment3
+```
+
+### 发布到论文目录
+
+```powershell
+pixi run eval copy-assets
+```
+
+统一发布命令先分别构造实验一/二与实验三的只读发布计划，再联合检查全部来源、摘要、后缀和目标冲突。只有联合
+预检全部通过才开始复制。实验三还要求构建完整、输入为正式工作簿，并且输入 SHA、配置 SHA、结果 SHA 和四个
+图摘要一致。默认发布文件为：
+
+```text
+2026-EgoAnchor/figures/panels/figure4_exp3_paired.png
+2026-EgoAnchor/figures/panels/figure4_exp3_paired.pdf
+2026-EgoAnchor/figures/panels/figure5_exp3_scales.png
+2026-EgoAnchor/figures/panels/figure5_exp3_scales.pdf
+2026-EgoAnchor/tables/exp3_subjective.tex
+```
+
+模拟或演练输入永远不能发布。若实验一/二活动批次尚未准备好，`copy-assets` 可以只发布通过校验的正式实验三
+资源，并在 JSON 中明确标记实验一/二为跳过；两条发布链都就绪时则作为同一份联合计划发布。任一已就绪计划的
+来源或摘要失效都会让命令在写入前失败。主稿的图环境仍由研究者审阅后手工纳入，该命令不会编译或改写主稿。
+
+### 实验三验证
+
+```powershell
+pixi run python -m unittest egoanchor.eval.tests.test_artifacts egoanchor.eval.tests.test_experiment3
+pixi run eval experiment3 config
+pixi run eval experiment3 validate
+```
+
+正式采集完成后的最短路径是：`validate --complete`、`analyze`、`plot`、审阅结果工作簿与 PNG/PDF、最后
+`copy-assets`。任何原始数据、TOML 或分析源码的变化都应从 `analyze` 重新开始，不能复用旧的图或 TeX。
+
 ## 验证
 
 ```text

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[1] / "config" / "paper.toml"
+DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[2] / "config" / "paper.toml"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +45,16 @@ class PaperSettings:
 
 
 def settings_sha256() -> str:
-    """返回冻结论文参数文件的 SHA-256。"""
+    """返回仅覆盖实验一/二参数节的稳定 SHA-256。"""
 
-    return hashlib.sha256(DEFAULT_SETTINGS_PATH.read_bytes()).hexdigest()
+    with DEFAULT_SETTINGS_PATH.open("rb") as handle:
+        document = tomllib.load(handle)
+    owned = {
+        section: document[section]
+        for section in ("contract", "lag", "transition", "occlusion")
+    }
+    encoded = json.dumps(owned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def load_settings() -> PaperSettings:

@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
-from ..preprocess import (
+from ...preprocess import (
     CURRENT_VARIANT_MATRIX_ID,
     FORMAL_METHODS,
     FORMAL_VARIANTS,

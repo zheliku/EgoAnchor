@@ -17,10 +17,12 @@ from typing import Any, Mapping, Sequence
 from tqdm import tqdm
 
 from ._filesystem import create_inherited_temp_directory, remove_tree_with_retry
+from .paper_analysis.common import ArtifactPlan, PlannedAsset, publish_artifact_plans
 from .preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
     StageOneQcReport,
+    file_sha256,
     finalize_task_events,
     require_task_sources,
     run_task_qc,
@@ -76,9 +78,6 @@ _ANALYSIS_TABLE_KEYS = frozenset(
 
 _IMAGE_SUFFIXES = frozenset({".png", ".pdf"})
 """图片发布允许的文件后缀。"""
-
-_PUBLISH_SUFFIXES = _IMAGE_SUFFIXES | {".tex"}
-"""copy-assets 允许原子发布的全部文件后缀。"""
 
 _BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
 """活动批次组合清单的结构版本。"""
@@ -1068,7 +1067,7 @@ def preprocess_current(
 def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
     """从当前五本工作簿生成活动批次内的指标、图表和 TeX 片段。"""
 
-    from .paper_analysis import build_analysis
+    from .paper_analysis.experiment_1_2 import build_analysis
 
     paths = load_batch_paths(root)
     active = paths.active_root
@@ -1099,8 +1098,8 @@ def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
     }
 
 
-def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
-    """将当前分析面板、表格 TeX 和显式 relay 文件复制到论文目录。"""
+def plan_current_assets(*, root: Path | None = None) -> ArtifactPlan:
+    """预检实验一/二当前分析并返回不写文件的完整发布计划。"""
 
     paths = load_batch_paths(root)
     batch_id, _ = _load_batch_records(paths.active_root, paths)
@@ -1121,7 +1120,7 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
         raise ValueError("当前 analysis 缺少 artifact_paths 产物清单")
     resolved_figure_root = figure_root.resolve()
     resolved_table_root = (paths.active_root / "analysis" / "tex" / "tables").resolve()
-    copies: list[AssetCopy] = []
+    copies: list[PlannedAsset] = []
     for key in sorted(_EXPERIMENT_FIGURE_KEYS):
         source = Path(str(raw_figure_paths[key])).expanduser().resolve()
         expected_suffix = f".{key.rsplit('_', 1)[1]}"
@@ -1130,9 +1129,12 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
         if not source.is_file():
             raise FileNotFoundError(f"当前分析缺少实验面板：{source}")
         copies.append(
-            AssetCopy(
+            PlannedAsset(
+                owner="experiment_1_2",
+                key=key,
                 source=source,
                 destination=paths.experiment_asset_destination / source.name,
+                expected_sha256=file_sha256(source),
             )
         )
     for item in paths.table_destinations:
@@ -1144,51 +1146,41 @@ def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
             raise ValueError(f"当前分析表格清单越界或后缀不匹配：{item.artifact_key}: {source}")
         if not source.is_file():
             raise FileNotFoundError(f"当前分析缺少表格 TeX：{source}")
-        copies.append(AssetCopy(source=source, destination=item.destination))
-    copies.extend(paths.relay_assets)
+        copies.append(
+            PlannedAsset(
+                owner="experiment_1_2",
+                key=item.artifact_key,
+                source=source,
+                destination=item.destination,
+                expected_sha256=file_sha256(source),
+            )
+        )
+    copies.extend(
+        PlannedAsset(
+            owner="experiment_1_2",
+            key=f"relay_{index}",
+            source=item.source,
+            destination=item.destination,
+            expected_sha256=file_sha256(item.source),
+        )
+        for index, item in enumerate(paths.relay_assets, start=1)
+    )
+    return ArtifactPlan(owner="experiment_1_2", assets=tuple(copies))
 
-    _validate_asset_copies(copies)
-    published = [_copy_asset_file(item) for item in copies]
+
+def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
+    """联合预检后发布实验一/二当前面板、表格与 relay 文件。"""
+
+    plan = plan_current_assets(root=root)
+    paths = load_batch_paths(root)
+    published = publish_artifact_plans((plan,))
     return {
         "passed": True,
-        "experiment_source": str(figure_root),
+        "experiment_source": str(paths.active_root / "analysis" / "figures"),
         "experiment_destination": str(paths.experiment_asset_destination),
         "table_destinations": [str(item.destination) for item in paths.table_destinations],
         "published": published,
         "next_command": "审阅已发布图表，并按论文工作流自行编译主稿",
-    }
-
-
-def _validate_asset_copies(copies: Sequence[AssetCopy]) -> None:
-    """在写入论文目录前完整校验来源、后缀和目标唯一性。"""
-
-    destinations: set[Path] = set()
-    for asset in copies:
-        if not asset.source.is_file():
-            raise FileNotFoundError(f"待复制资源不存在：{asset.source}")
-        if asset.source.suffix.lower() not in _PUBLISH_SUFFIXES:
-            raise ValueError(f"只允许复制 PNG、PDF 或 TeX：{asset.source}")
-        if asset.destination in destinations:
-            raise ValueError(f"copy-assets 目标路径重复：{asset.destination}")
-        destinations.add(asset.destination)
-
-
-def _copy_asset_file(asset: AssetCopy) -> dict[str, str]:
-    """原子覆盖一项已校验文件，并返回源和目标的内容摘要。"""
-
-    asset.destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = asset.destination.with_name(f".{asset.destination.name}.tmp")
-    try:
-        shutil.copyfile(asset.source, temporary)
-        temporary.replace(asset.destination)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-    digest = hashlib.sha256(asset.destination.read_bytes()).hexdigest()
-    return {
-        "source": str(asset.source),
-        "destination": str(asset.destination),
-        "sha256": digest,
     }
 
 
@@ -1683,6 +1675,7 @@ __all__ = [
     "describe_workflow",
     "list_task_data",
     "load_batch_paths",
+    "plan_current_assets",
     "preprocess_current",
     "project_root",
     "promote_batch",

@@ -22,3 +22,12 @@ destination = "figures/replay_grid.pdf" # relay PDF 的论文相对目标路径�
 [[copy_assets.relay]]
 source = "data/replay_capture/20260723_125041_569_controller_right/rendered/grid/replay_grid.png" # 已确认的 relay 网格 PNG，相对于 EgoAnchor_Python 根目录；更换定性图时在此显式指定。
 destination = "figures/replay_grid.png" # relay PNG 的论文相对目标路径。
+
+[experiment_3.paths]
+source_template = "../2026-EgoAnchor/material/EgoAnchor_Experiment3_DataCollection_24P_v5_1_Beautified_Checked_VSCodeSafe.xlsx" # 重新生成正式空白模板时读取的美化来源。
+input_workbook = "../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx" # 正式参与者原始数据工作簿；日常分析只读此文件。
+analysis_root = "data/experiments/experiment_3/analysis" # 实验三结果工作簿、图、TeX 与来源清单的本地根目录。
+
+[experiment_3.copy_assets]
+experiment_destination = "figures/panels" # 实验三 PNG/PDF 的论文相对发布目录。
+table_destination = "tables/exp3_subjective.tex" # 实验三主观结果表的论文相对发布路径；图片复用 copy_assets.experiment_destination。

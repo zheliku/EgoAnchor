@@ -14,7 +14,7 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
-from egoanchor.eval.paper_analysis import (
+from egoanchor.eval.paper_analysis.experiment_1_2 import (
     METHODS,
     PaperResults,
     PerformanceSamples,
@@ -375,16 +375,19 @@ class PaperPipelineTests(unittest.TestCase):
 
             with (
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.calculate_workbook_sha256",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.calculate_workbook_sha256",
                     side_effect=AssertionError("缓存命中不应哈希 workbook"),
                 ),
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.analyze_task_workbook",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.analyze_task_workbook",
                     side_effect=AssertionError("缓存命中不应扫描 workbook"),
                 ),
-                patch("egoanchor.eval.paper_analysis.pipeline.publish_figures", return_value={}),
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.write_analysis_artifacts",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.publish_figures",
+                    return_value={},
+                ),
+                patch(
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.write_analysis_artifacts",
                     return_value={},
                 ),
             ):
@@ -411,16 +414,19 @@ class PaperPipelineTests(unittest.TestCase):
             rebuilt = self._task_results(changed_workbook, changed_digest)
             with (
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.calculate_workbook_sha256",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.calculate_workbook_sha256",
                     return_value=changed_digest,
                 ) as hash_workbook,
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.analyze_task_workbook",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.analyze_task_workbook",
                     return_value=rebuilt,
                 ) as analyze_workbook,
-                patch("egoanchor.eval.paper_analysis.pipeline.publish_figures", return_value={}),
                 patch(
-                    "egoanchor.eval.paper_analysis.pipeline.write_analysis_artifacts",
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.publish_figures",
+                    return_value={},
+                ),
+                patch(
+                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.write_analysis_artifacts",
                     return_value={},
                 ),
             ):

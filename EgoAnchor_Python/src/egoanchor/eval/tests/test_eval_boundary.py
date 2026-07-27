@@ -26,6 +26,7 @@ EXPECTED_COMMANDS = {
     "analyze",
     "copy-assets",
     "rebuild",
+    "experiment3",
 }
 """当前唯一人工入口的固定路径命令。"""
 
