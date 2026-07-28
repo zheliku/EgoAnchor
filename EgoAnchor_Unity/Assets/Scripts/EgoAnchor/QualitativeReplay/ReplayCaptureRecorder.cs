@@ -38,16 +38,16 @@ namespace EgoAnchor.QualitativeReplay
         public const string EgoAnchorId = "egoanchor";
 
         /// <summary>Arrival-Hold 论文颜色。</summary>
-        public const string ArrivalHoldColor = "#0072B2";
+        public const string ArrivalHoldColor = "#4C78A8";
 
         /// <summary>Capture-Hold 论文颜色。</summary>
-        public const string CaptureHoldColor = "#009E73";
+        public const string CaptureHoldColor = "#F28E2B";
 
         /// <summary>One-Euro Interpolation 论文颜色。</summary>
-        public const string OneEuroColor = "#E69F00";
+        public const string OneEuroColor = "#59A14F";
 
         /// <summary>EgoAnchor 论文颜色。</summary>
-        public const string EgoAnchorColor = "#D55E00";
+        public const string EgoAnchorColor = "#E15759";
 
         /// <summary>提供 exact JPEG 和采集双时间的现有发布器。</summary>
         [Header("Existing Capture Chain")]

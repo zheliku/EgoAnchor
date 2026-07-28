@@ -10,6 +10,8 @@ from typing import Any
 
 from PIL import Image
 
+from egoanchor.visuals import METHOD_COLORS_HEX
+
 from .geometry import verify_projection_matrix
 
 
@@ -27,8 +29,14 @@ VARIANT_IDS = (
 )
 """四种实验一方法的固定顺序。"""
 
-VARIANT_COLORS_HEX = ("#0072B2", "#009E73", "#E69F00", "#D55E00")
-"""Arrival、Capture、One-Euro、EgoAnchor 的固定蓝绿橙红论文颜色。"""
+VARIANT_COLORS_HEX = METHOD_COLORS_HEX
+"""Arrival、Capture、One-Euro、EgoAnchor 的当前全文共享论文颜色。"""
+
+_LEGACY_CAPTURE_COLORS_HEX = ("#0072B2", "#009E73", "#E69F00", "#D55E00")
+"""已采集 replay 清单中保留的历史 provenance 颜色。"""
+
+_ACCEPTED_CAPTURE_COLOR_SETS = (VARIANT_COLORS_HEX, _LEGACY_CAPTURE_COLORS_HEX)
+"""新旧 replay 清单允许的颜色集合；可见轮廓始终由渲染配置决定。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +202,7 @@ def _validate_manifest(value: dict[str, Any], *, strict: bool) -> None:
     if variants != VARIANT_IDS:
         raise ValueError(f"replay 四方法顺序不合法: {variants}")
     colors = tuple(str(item) for item in value.get("variant_colors_hex", []))
-    if colors != VARIANT_COLORS_HEX:
+    if colors not in _ACCEPTED_CAPTURE_COLOR_SETS:
         raise ValueError(f"replay 方法颜色不合法: {colors}")
 
     count_names = (

@@ -28,9 +28,10 @@ from egoanchor.qualitative_replay import (
     select_stride_samples,
     verify_projection_matrix,
 )
+from egoanchor.visuals import METHOD_COLORS_HEX
 
 
-COLORS = ("#0072B2", "#009E73", "#E69F00", "#D55E00")
+COLORS = METHOD_COLORS_HEX
 REFERENCE_PATH = (
     "OVRCameraRig/OVRInteractionComprehensive/"
     "OVRControllerVisualRight/OVRControllerPrefab"
@@ -378,9 +379,9 @@ class QualitativeReplayTests(unittest.TestCase):
         self.assertEqual(defaults.timeline.placement, "top")
         self.assertEqual(defaults.timeline.line_thickness_px, 3)
         self.assertEqual(defaults.timeline.tick_length_px, 10)
-        self.assertEqual(defaults.timeline.right_extension_px, 64)
-        self.assertEqual(defaults.selection.columns, 5)
-        self.assertIsNone(defaults.selection.start_sample_id)
+        self.assertEqual(defaults.timeline.right_extension_px, 20)
+        self.assertEqual(defaults.selection.columns, 6)
+        self.assertEqual(defaults.selection.start_sample_id, "000000365")
         self.assertAlmostEqual(defaults.axes.length_m, 0.06)
         self.assertEqual(defaults.axes.label_font_size_px, 16)
         self.assertEqual(defaults.selection.row_keys[1], "reference")
@@ -392,7 +393,7 @@ class QualitativeReplayTests(unittest.TestCase):
         self.assertEqual(defaults.overlay.method_contour_thickness_px, 3)
         self.assertEqual(
             defaults.overlay.method_colors_hex,
-            ("#4C78A8", "#59A14F", "#F28E2B", "#E15759"),
+            METHOD_COLORS_HEX,
         )
         self.assertAlmostEqual(resolved.overlay.model_alpha, 0.42)
         self.assertEqual(resolved.selection.start_sample_id, "000000397")
@@ -565,7 +566,7 @@ class QualitativeReplayTests(unittest.TestCase):
         self.assertFalse(metadata["axes"]["clipping"])
         self.assertEqual(
             metadata["method_colors_hex"],
-            ["#4C78A8", "#59A14F", "#F28E2B", "#E15759"],
+            list(METHOD_COLORS_HEX),
         )
         self.assertEqual(metadata["overlay"]["fill_mode_requested"], "texture")
         self.assertEqual(metadata["overlay"]["fill_mode_resolved"], "color")
@@ -818,8 +819,8 @@ class QualitativeReplayTests(unittest.TestCase):
             no_axes_metadata["samples"][0]["crop_xywh"][2],
         )
 
-    def test_grid_supports_configurable_columns(self) -> None:
-        """连续网格应允许用户选择 2--20 范围内的列数。"""
+    def test_grid_defaults_to_six_columns(self) -> None:
+        """直接调用底层渲染入口时，也应与 TOML 一样默认输出 6 列。"""
 
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
@@ -828,7 +829,6 @@ class QualitativeReplayTests(unittest.TestCase):
                 capture,
                 _projector(),
                 tmp_path / "six_columns",
-                columns=6,
                 frame_step=1,
                 show_axes=False,
             )

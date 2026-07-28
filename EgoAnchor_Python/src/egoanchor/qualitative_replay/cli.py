@@ -64,7 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_capture_argument(grid)
     grid.add_argument("--columns", type=int, default=None, help="列数，范围 2--20；默认读取 TOML")
-    grid.add_argument("--frame-step", type=int, default=None, help="相邻列间隔的已保存帧数，默认 3")
+    grid.add_argument("--frame-step", type=int, default=None, help="相邻列间隔的已保存帧数；默认读取 TOML")
     selection = grid.add_mutually_exclusive_group()
     selection.add_argument("--start-sample-id", default=None, help="首列 sample id；省略时找最早完整连续序列")
     selection.add_argument(

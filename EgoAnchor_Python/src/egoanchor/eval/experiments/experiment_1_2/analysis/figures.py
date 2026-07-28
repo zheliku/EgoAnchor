@@ -10,6 +10,13 @@ from typing import Any
 import matplotlib
 import numpy as np
 
+from egoanchor.visuals import (
+    ARRIVAL_COLOR_HEX,
+    CAPTURE_COLOR_HEX,
+    EGOANCHOR_COLOR_HEX,
+    ONE_EURO_COLOR_HEX,
+)
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
@@ -31,10 +38,10 @@ _SHORT_LABELS = {
     FULL_VARIANT: "EgoAnchor",
 }
 _METHOD_COLORS = {
-    "Arrival-Hold": "#4C78A8",
-    "Capture-Hold": "#59A14F",
-    "One-Euro Anchor": "#F28E2B",
-    FULL_VARIANT: "#E15759",
+    "Arrival-Hold": ARRIVAL_COLOR_HEX,
+    "Capture-Hold": CAPTURE_COLOR_HEX,
+    "One-Euro Anchor": ONE_EURO_COLOR_HEX,
+    FULL_VARIANT: EGOANCHOR_COLOR_HEX,
 }
 _PAIR_COLOR = "#7F8790"
 _FULL_COLOR = _METHOD_COLORS[FULL_VARIANT]

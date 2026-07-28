@@ -2,7 +2,7 @@
 
 这套流程只用于论文中的二维定性示意。它在 Unity Editor 的 Quest Link 串流模式下，同步保存左目原图、Quest 官方右手柄参考和四种实验一方法的显示位姿。数据直接写入电脑，不需要构建 APK，也不需要 ADB 导出。
 
-最终图片默认使用 5 列，可设置为 2--20 列；默认显示 6 行：
+最终图片默认使用 6 列，可设置为 2--20 列；默认显示 6 行：
 
 1. `Passthrough`
 2. `Quest Reference`（默认在图中分成两行）
@@ -161,15 +161,15 @@ pixi run replay inspect .\data\replay_capture\<capture_id> `
 
 ## 七、生成连续轨迹图
 
-默认使用 5 列，推荐先每隔 3 个已保存帧取一列：
+默认使用 6 列，推荐先每隔 3 个已保存帧取一列：
 
 ```powershell
-pixi run replay grid .\data\replay_capture\<capture_id> --columns 5 --frame-step 3
+pixi run replay grid .\data\replay_capture\<capture_id> --columns 6 --frame-step 3
 ```
 
 参数含义：
 
-- `--columns 5`：默认显示 5 个连续时刻；可改为 2--20 的任意整数，例如 `--columns 6`。
+- `--columns 6`：默认显示 6 个连续时刻；可改为 2--20 的任意整数。
 - `--frame-step 3`：列索引为 `s, s+3, s+6, ...`。这里的 3 是已保存样本数，不是假定的 30 Hz 时间。
 - `selection.start_sample_id` 留空且不写 `--start-sample-id` 时，工具从头寻找第一段参考有效且四种方法都有显示 pose 的完整序列。把起点写入 TOML 后可固定复现；命令行显式 `--start-sample-id` 优先覆盖它。
 - 默认在第一行图像上方绘制横向 `Δt (s)` 时间轴，刻度与每列中心对齐，第一列固定为 `0.00`。左侧六个行名从上到下构成方法轴。时间来自每个样本实际记录的 `image_mono_ms`，不是 capture 的绝对时钟。
@@ -180,23 +180,23 @@ pixi run replay grid .\data\replay_capture\<capture_id> --columns 5 --frame-step
 
 ```powershell
 # 看细小的逐帧抖动
-pixi run replay grid .\data\replay_capture\<capture_id> --columns 5 --frame-step 1
+pixi run replay grid .\data\replay_capture\<capture_id> --columns 6 --frame-step 1
 
 # 看约 0.5 秒内更明显的连续轨迹
-pixi run replay grid .\data\replay_capture\<capture_id> --columns 5 --frame-step 3
+pixi run replay grid .\data\replay_capture\<capture_id> --columns 6 --frame-step 3
 
 # 从人工确认过的正确识别时刻开始，仍保持固定 N 帧间隔
-pixi run replay grid .\data\replay_capture\<capture_id> --columns 5 --frame-step 7 --start-sample-id 000000397
+pixi run replay grid .\data\replay_capture\<capture_id> --columns 6 --frame-step 7 --start-sample-id 000000397
 ```
 
 当前本机两份 capture 中，`20260722_203655_652_controller_right` 没有任何“平台参考和四种方法同时可显示”的完整样本，不能排成六行图。更适合观察差异的是下面这段。这也是本次最终图片实际使用的命令：
 
 ```powershell
 pixi run replay grid .\data\replay_capture\20260723_125041_569_controller_right `
-  --output .\data\replay_capture\20260723_104214_928_controller_right\rendered\jitter_user_targets_step77
+  --output .\data\replay_capture\20260723_125041_569_controller_right\rendered\grid
 ```
 
-这段使用 `000000761, 000000838, 000000915, 000000992, 000001069`，覆盖约 12.85 秒。`000000838` 是原 `820 + step 6` 的 0.75 秒列，`000000992` 是原 `890 + step 34` 的 4.25 秒列；两者分别处在这张图的第 2 列和第 4 列。窗口严格保持固定间隔 `N=77`，同时覆盖多个手柄视角。平台参考只用于同一 Quest 时间线内的定性诊断，不是外部真值，论文结论仍以 schema-v2 分析为准。
+这段使用 `000000365, 000000395, 000000425, 000000455, 000000485, 000000515`，覆盖约 6.25 秒。六列严格保持固定间隔 `N=30`，同时覆盖多个手柄视角。平台参考只用于同一 Quest 时间线内的定性诊断，不是外部真值，论文结论仍以 schema-v2 分析为准。
 
 这组画面使用 TOML 默认配置，包含物体局部 XYZ 轴和 PDF 输出。
 
@@ -206,8 +206,8 @@ pixi run replay grid .\data\replay_capture\20260723_125041_569_controller_right 
 pixi run replay grid `
   .\data\replay_capture\20260723_125041_569_controller_right `
   --config .\src\egoanchor\qualitative_replay\config\qualitative_replay.toml `
-  --columns 5 --frame-step 77 --start-sample-id 000000761 `
-  --output .\data\replay_capture\20260723_104214_928_controller_right\rendered\jitter_user_targets_step77
+  --columns 6 --frame-step 30 --start-sample-id 000000365 `
+  --output .\data\replay_capture\20260723_125041_569_controller_right\rendered\grid
 ```
 
 `layout.gutter_px`、`layout.canvas_color_hex`、时间轴的字号/颜色/线宽/刻度长度/留白、四方法颜色、XYZ 三轴颜色和六个默认标题仍以 TOML 为完整配置入口；`--row-titles` 也可一次覆盖六个标题，但含换行时更适合写 TOML。`replay_grid.json` 会保存最终解析后的参数、实际/过滤后的 mesh 面数、纹理请求后端与实际后端、mesh 哈希、严格校验状态和 `configuration.effective_sha256`；复现时应同时保留 PNG、JSON 和所用 TOML。
@@ -216,7 +216,7 @@ pixi run replay grid `
 
 ```powershell
 pixi run replay grid .\data\replay_capture\<capture_id> `
-  --sample-ids 000000761 000000838 000000915 000000992 000001069
+  --sample-ids 000000365 000000395 000000425 000000455 000000485 000000515
 ```
 
 输出默认位于：
@@ -249,7 +249,7 @@ pixi run replay grid .\data\replay_capture\<capture_id> `
 
 | TOML 字段                                  | 含义                                                                    |
 | ------------------------------------------ | ----------------------------------------------------------------------- |
-| `selection.columns`                      | 列数，范围 2--20，默认 5                                                |
+| `selection.columns`                      | 列数，范围 2--20，默认 6                                                |
 | `selection.frame_step`                   | 相邻列的固定已保存样本间隔`N`                                         |
 | `selection.start_sample_id`              | 默认首列 sample id；空字符串表示自动寻找完整起点                        |
 | `selection.row_keys`                     | 数据行稳定键及顺序，与`selection.rows` 逐项对应                       |
@@ -321,7 +321,7 @@ length_m = 0.02 # 缩短 XYZ 轴，减少对模型的遮挡。
 thickness_px = 2 # 使用较细轴线。
 ```
 
-默认画面仍使用真实左目 RGB。半透明层只覆盖模型投影区域。四种方法严格复用论文图 2 在 `egoanchor.eval.experiments.experiment_1_2.figures` 中的颜色：Arrival `#4C78A8`、Capture `#59A14F`、One-Euro `#F28E2B`、EgoAnchor `#E15759`。capture 清单中原始记录的颜色只作为 provenance 保留，不再决定论文 replay 图的轮廓色。XYZ 轴采用带白色 halo 的 X 红、Y 绿、Z 蓝，并带字母标记，避免与方法轮廓颜色混淆。纹理后端的颜色是 unlit base-color；它不声称复现 Unity 的法线、金属度、粗糙度和光照。
+默认画面仍使用真实左目 RGB。半透明层只覆盖模型投影区域。四种方法严格复用全文共享配色：Arrival `#4C78A8`、Capture `#F28E2B`、One-Euro `#59A14F`、EgoAnchor `#E15759`；实验三因此使用绿/红对比。capture 清单中原始记录的颜色只作为 provenance 保留，不再决定论文 replay 图的轮廓色。XYZ 轴采用带白色 halo 的 X 红、Y 绿、Z 蓝，并带字母标记，避免与方法轮廓颜色混淆。纹理后端的颜色是 unlit base-color；它不声称复现 Unity 的法线、金属度、粗糙度和光照。
 
 ## 九、自定义显示行、裁剪和文字
 
@@ -331,7 +331,7 @@ thickness_px = 2 # 使用较细轴线。
 
 ```powershell
 pixi run replay grid .\data\replay_capture\<capture_id> `
-  --columns 5 --frame-step 7 --start-sample-id 000000397 `
+  --columns 6 --frame-step 7 --start-sample-id 000000397 `
   --row-keys reference arrival one-euro egoanchor
 ```
 
@@ -377,7 +377,7 @@ pixi run replay grid .\data\replay_capture\<capture_id> `
 
 默认 `timeline.placement = "top"`。横轴从左上方第一列图像单元的左边界开始，向右表示相对首列的 `Δt (s)`；时间刻度仍放在各列中心，因为每列代表一个离散样本。纵轴从同一个左上角向下，行中心刻度依次对应 Passthrough、Quest Reference、Arrival、Capture、One-Euro 和 EgoAnchor。左侧文字是类别型行标签，不是数值误差轴。
 
-默认轴线宽为 3 px、刻度长为 10 px，横轴从最后一列图像的实际右边缘精确延伸 64 px 后再绘制箭头。`timeline.line_thickness_px`、`timeline.tick_length_px` 和 `timeline.right_extension_px` 都可在 TOML 中调整。`coordinate_axes` sidecar 会记录图像网格右边缘、原点、横轴终点、额外延伸长度以及横纵刻度中心，可直接核对实际延伸量。
+默认轴线宽为 3 px、刻度长为 10 px，横轴从最后一列图像的实际右边缘精确延伸 20 px 后再绘制箭头。`timeline.line_thickness_px`、`timeline.tick_length_px` 和 `timeline.right_extension_px` 都可在 TOML 中调整。`coordinate_axes` sidecar 会记录图像网格右边缘、原点、横轴终点、额外延伸长度以及横纵刻度中心，可直接核对实际延伸量。
 
 ### 调整半透明模型、轮廓和坐标轴
 
@@ -414,7 +414,7 @@ row_label_line_spacing_px = 4 # 两行之间的像素间距。
 
 ```powershell
 pixi run replay grid .\data\replay_capture\20260722_203752_143_controller_right `
-  --columns 5 --frame-step 7 --start-sample-id 000000397 `
+  --columns 6 --frame-step 7 --start-sample-id 000000397 `
   --row-keys passthrough reference arrival capture one-euro egoanchor `
   --crop-padding 0.35 --cell-width 320 `
   --column-label none --timeline-mode relative-time --timeline-placement top `

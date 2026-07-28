@@ -13,6 +13,8 @@ import numpy as np
 import trimesh
 from PIL import Image, ImageDraw, ImageFont
 
+from egoanchor.visuals import METHOD_COLORS_HEX
+
 from .contracts import ReplayCapture, ReplaySample, VARIANT_IDS
 from .geometry import (
     projection_mesh_local_matrix,
@@ -51,7 +53,7 @@ DEFAULT_ROW_TITLES = tuple(ROW_TITLES[row] for row in ROW_KEYS)
 DEFAULT_AXIS_COLORS_HEX = ("#D62728", "#2CA02C", "#1F77B4")
 """X、Y、Z 轴的默认红、绿、蓝颜色。"""
 
-DEFAULT_METHOD_COLORS_HEX = ("#4C78A8", "#59A14F", "#F28E2B", "#E15759")
+DEFAULT_METHOD_COLORS_HEX = METHOD_COLORS_HEX
 """与论文图 2 一致的 Arrival、Capture、One-Euro、EgoAnchor 颜色。"""
 
 
@@ -792,7 +794,7 @@ def render_comparison_grid(
         resolved_columns = len(selected)
         resolved_step = selected[1][0] - selected[0][0]
     else:
-        resolved_columns = 5 if columns is None else int(columns)
+        resolved_columns = 6 if columns is None else int(columns)
         resolved_step = 3 if frame_step is None else int(frame_step)
         selected = select_stride_samples(
             capture.samples,

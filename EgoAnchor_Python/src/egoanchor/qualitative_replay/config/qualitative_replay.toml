@@ -2,7 +2,7 @@
 version = 1 # 定性 replay 配置契约版本。
 
 [selection]
-columns = 6 # 连续轨迹网格默认使用 5 列；命令行或自定义 TOML 可设为 2--20 列。
+columns = 6 # 连续轨迹网格默认使用 6 列；命令行或自定义 TOML 可设为 2--20 列。
 frame_step = 30 # 相邻列之间的已保存样本索引差；设为 3 时中间跳过 2 个样本。
 start_sample_id = "000000365" # 默认首列的保存帧序号；留空自动寻找最早完整序列，填写如 000000761 可固定复现窗口。
 row_keys = ["passthrough", "reference", "arrival", "capture", "one-euro", "egoanchor"] # 数据源行及排列顺序，使用稳定的小写行标识；与 rows 按索引一一对应。
@@ -49,7 +49,7 @@ texture_max_size_px = 0 # CUDA 纹理预滤波后的最长边，范围 64--4096�
 minimum_component_faces = 1 # 保留不连通 mesh 组件所需的最小三角面数；默认 1 完整保留模型，提高后可隐藏部分微小装饰几何。
 texture_brightness = 1.0 # unlit base-color 纹理亮度倍率，范围 0--3。
 model_color_hex = "#D8DCE2" # fill_mode=color 或纹理不可用时的回退填充颜色。
-method_colors_hex = ["#4C78A8", "#59A14F", "#F28E2B", "#E15759"] # Arrival、Capture、One-Euro、EgoAnchor 的轮廓颜色，与论文图 2 完全一致。
+method_colors_hex = ["#4C78A8", "#F28E2B", "#59A14F", "#E15759"] # Arrival、Capture、One-Euro、EgoAnchor 的轮廓颜色，与全文方法配色完全一致。
 method_contour_thickness_px = 3 # 四种方法彩色轮廓的线宽，单位原图像素。
 reference_contour_color_hex = "#2D2D2D" # Quest Reference 内轮廓颜色。
 reference_contour_thickness_px = 3 # Quest Reference 内轮廓线宽，单位原图像素。
