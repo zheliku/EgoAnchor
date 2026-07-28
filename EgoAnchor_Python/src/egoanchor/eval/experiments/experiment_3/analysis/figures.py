@@ -10,6 +10,8 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
+from egoanchor.visuals import EGOANCHOR_COLOR_HEX, ONE_EURO_COLOR_HEX
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
@@ -27,9 +29,8 @@ from .contracts import (
 from ..settings import Exp3Settings
 
 
-_COLORS = {ONE_EURO: "#4E79A7", EGOANCHOR: "#E15759"}
+_COLORS = {ONE_EURO: ONE_EURO_COLOR_HEX, EGOANCHOR: EGOANCHOR_COLOR_HEX}
 _GRID_COLOR = "#E4E7EA"
-_PAIR_COLOR = "#697078"
 _TEXT_COLOR = "#202428"
 _METHOD_ORDER = (ONE_EURO, EGOANCHOR)
 _PAIRED_OUTCOMES = ("Q1", "Q8", "Q3", "Q6")
@@ -137,7 +138,7 @@ def _paired_figure(
 
 
 def _draw_object_panel(axis: Any, data: pd.DataFrame) -> None:
-    """按三个物体绘制弱配对线、原始点、箱线和均值。"""
+    """按三个物体绘制原始点、箱线和均值。"""
 
     for object_index, object_key in enumerate(OBJECTS):
         subset = data[data["Object_Key"] == object_key]
@@ -155,15 +156,6 @@ def _draw_object_panel(axis: Any, data: pd.DataFrame) -> None:
         jitter = _symmetric_jitter(len(paired), 0.043)
         left_positions = object_index - 0.18 + jitter
         right_positions = object_index + 0.18 + jitter
-        for row_index, (_, row) in enumerate(paired.iterrows()):
-            axis.plot(
-                [left_positions[row_index], right_positions[row_index]],
-                [row[ONE_EURO], row[EGOANCHOR]],
-                color=_PAIR_COLOR,
-                linewidth=0.42,
-                alpha=0.18,
-                zorder=1,
-            )
         _draw_distribution(
             axis,
             paired[ONE_EURO].to_numpy(dtype=float),
@@ -260,7 +252,7 @@ def _scale_figure(
 
 
 def _draw_method_panel(axis: Any, data: pd.DataFrame, *, upper: float) -> None:
-    """绘制参与者级配对轨迹、原始点和两组箱线。"""
+    """绘制参与者级原始点和两组箱线。"""
 
     pivot = data.pivot_table(
         index="Participant_ID",
@@ -276,15 +268,6 @@ def _draw_method_panel(axis: Any, data: pd.DataFrame, *, upper: float) -> None:
     jitter = _symmetric_jitter(len(paired), 0.105)
     left_positions = jitter
     right_positions = 1.0 + jitter
-    for row_index, (_, row) in enumerate(paired.iterrows()):
-        axis.plot(
-            [left_positions[row_index], right_positions[row_index]],
-            [row[ONE_EURO], row[EGOANCHOR]],
-            color=_PAIR_COLOR,
-            linewidth=0.40,
-            alpha=0.16,
-            zorder=1,
-        )
     _draw_distribution(
         axis,
         paired[ONE_EURO].to_numpy(dtype=float),
