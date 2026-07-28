@@ -26,7 +26,7 @@ from .contracts import (
     OUTCOME_LABELS,
     SCALE_OUTCOMES,
 )
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 
 
 _COLORS = {ONE_EURO: ONE_EURO_COLOR_HEX, EGOANCHOR: EGOANCHOR_COLOR_HEX}
@@ -41,7 +41,7 @@ _SCALE_FIGURE_OUTCOMES = ("Q6", "Q7", "AQ_EQ", "AQ_IQ", "TIA_RC", "TIA_UP", "STI
 def publish_figures(
     results_workbook: Path,
     output_root: Path,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> dict[str, Path]:
     """只读结果 XLSX，生成冻结四面板与量表小多图的 PNG/PDF。"""
 
@@ -97,7 +97,7 @@ def _configure(dpi: int) -> None:
 def _paired_figure(
     data: pd.DataFrame,
     results: pd.DataFrame,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> Any:
     """绘制按物体展开的四项冻结主图结局。"""
 
@@ -201,7 +201,7 @@ def _scale_figure(
     data: pd.DataFrame,
     primary_results: pd.DataFrame,
     scale_results: pd.DataFrame,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> Any:
     """绘制 Q6/Q7 和五项已发表量表的原生尺度小多图。"""
 

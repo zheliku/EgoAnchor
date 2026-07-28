@@ -6,33 +6,34 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..common import begin_build, complete_build, source_tree_sha256
-from .analysis import (
-    analyze_scores,
-    derive_scores,
-    fit_item_models,
-    publish_figures,
-    read_workbook,
-    validate_for_analysis,
-    write_results_workbook,
-    write_subjective_table,
-)
-from .settings import Exp3Settings, settings_sha256
+from ...common import begin_build, complete_build, source_tree_sha256
+from .clmm import fit_item_models
+from .figures import publish_figures
+from .paper import write_subjective_table
+from .reader import read_workbook, validate_for_analysis
+from .scoring import derive_scores
+from .settings import AnalysisSettings
+from .summaries import analyze_scores
+from .workbook import write_results_workbook
 
 
 def build_analysis(
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
     *,
-    input_workbook: Path | None = None,
-    output_root: Path | None = None,
+    input_workbook: Path,
+    output_root: Path,
+    project_root: Path,
+    config_sha256: str,
+    batch_config_path: Path,
+    paper_config_path: Path,
     allow_synthetic: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """一次完成计分、推断、结果工作簿、TeX 和论文图。"""
 
-    source = (input_workbook or settings.paths.input_workbook).expanduser().resolve()
-    root = (output_root or settings.paths.output_root).expanduser().resolve()
-    _validate_output_root(root, settings.paths.project_root)
+    source = input_workbook.expanduser().resolve()
+    root = output_root.expanduser().resolve()
+    _validate_output_root(root, project_root.expanduser().resolve())
     _report_progress(progress, "读取并验证原始工作簿")
     data = read_workbook(source)
     validation = validate_for_analysis(
@@ -42,7 +43,6 @@ def build_analysis(
         q10_enabled=settings.q10_enabled,
         allow_synthetic=allow_synthetic,
     )
-    config_digest = settings_sha256()
     implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
     building = begin_build(
         root,
@@ -55,7 +55,7 @@ def build_analysis(
                 "sha256": data.source_sha256,
             },
         ),
-        config_sha256=config_digest,
+        config_sha256=config_sha256,
         implementation_sha256=implementation_digest,
         details={"included_count": validation["included_count"]},
     )
@@ -78,7 +78,9 @@ def build_analysis(
         clmm_coefficients=clmm_coefficients,
         clmm_contrasts=clmm_contrasts,
         settings=settings,
-        settings_sha256=config_digest,
+        settings_sha256=config_sha256,
+        batch_config_path=batch_config_path,
+        paper_config_path=paper_config_path,
         validation=validation,
     )
     tex_path = write_subjective_table(
@@ -144,3 +146,4 @@ def _report_progress(callback: Callable[[str], None] | None, message: str) -> No
 
 
 __all__ = ["build_analysis"]
+

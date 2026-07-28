@@ -25,7 +25,7 @@ def implementation_sha256() -> str:
 
     digest = hashlib.sha256()
     module_root = Path(__file__).resolve().parent
-    for name in ("metrics.py", "xlsx.py"):
+    for name in ("metrics.py", "reader.py"):
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
         digest.update((module_root / name).read_bytes())

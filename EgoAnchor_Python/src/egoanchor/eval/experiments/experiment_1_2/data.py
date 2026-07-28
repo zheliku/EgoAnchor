@@ -26,7 +26,25 @@ from ...preprocess import (
     run_task_qc,
     write_task_workbook,
 )
-from .settings import BatchPaths, load_batch_paths, project_root
+from ..common import (
+    DEFAULT_BATCH_CONFIG_PATH,
+    load_toml,
+    project_root as resolve_project_root,
+    require_table,
+)
+
+
+_ANALYSIS_TABLE_KEYS = frozenset(
+    {
+        "exp1_static_table",
+        "exp1_dynamic_table",
+        "exp2_table",
+    }
+)
+"""实验一/二必须复制到论文目录的三张表格键。"""
+
+_IMAGE_SUFFIXES = frozenset({".png", ".pdf"})
+"""论文图片资源允许的文件后缀。"""
 
 
 EXPECTED_MATRIX_ID = "exp12_9_smoothed_hermite_v4"
@@ -61,8 +79,300 @@ _BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
 _TASK_CACHE_SCHEMA = "egoanchor_task_workbook_v1"
 """单任务 Stage 1 缓存记录的结构版本。"""
 
-_BATCH_MANIFEST_NAME = "batch.json"
+BATCH_MANIFEST_NAME = "batch.json"
 """暂存和活动目录中的批次组合清单文件名。"""
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDestination:
+    """保存一项分析产物键及其论文目标路径。"""
+
+    artifact_key: str
+    """``build_result.json`` 中的稳定产物键。"""
+
+    destination: Path
+    """论文根目录内由 ``batch.toml`` 明确配置的目标文件。"""
+
+
+@dataclass(frozen=True, slots=True)
+class AssetCopy:
+    """保存一项由配置选择的只读资源及其论文目标。"""
+
+    source: Path
+    """EgoAnchor_Python 项目内的只读源文件。"""
+
+    destination: Path
+    """论文根目录内的目标文件。"""
+
+
+@dataclass(frozen=True, slots=True)
+class BatchPaths:
+    """保存实验一/二从共享路径配置解析出的全部绝对路径。"""
+
+    project_root: Path
+    """包含 ``pixi.toml`` 的 EgoAnchor_Python 根目录。"""
+
+    task_data_root: Path
+    """人工归档并按任务、版本命名的原始日志目录。"""
+
+    task_workbook_root: Path
+    """按原始任务目录独立保存的 Stage 1 工作簿缓存。"""
+
+    task_analysis_root: Path
+    """按工作簿独立保存的论文指标缓存。"""
+
+    staging_root: Path
+    """新批次通过全部检查前的临时父目录。"""
+
+    archive_root: Path
+    """退出当前论文活动集的旧批次父目录。"""
+
+    active_root: Path
+    """当前论文唯一使用的活动批次目录。"""
+
+    paper_root: Path
+    """论文图片和表格所在的仓库内目录。"""
+
+    experiment_asset_destination: Path
+    """实验一、二图片复制到论文时使用的目标目录。"""
+
+    table_destinations: tuple[ArtifactDestination, ...]
+    """三张分析表格在论文目录中的明确目标路径。"""
+
+    relay_assets: tuple[AssetCopy, ...]
+    """由配置明确选择的定性 replay 图片或 PDF。"""
+
+    batch_config_path: Path
+    """本次读取的共享路径配置绝对路径。"""
+
+
+def project_root() -> Path:
+    """返回包含 ``pixi.toml`` 的 EgoAnchor_Python 根目录。"""
+
+    return resolve_project_root()
+
+
+def load_batch_paths(
+    root: Path | None = None,
+    batch_config_path: Path | None = None,
+) -> BatchPaths:
+    """读取共享 ``batch.toml`` 中实验一/二拥有的路径。"""
+
+    config_path = (batch_config_path or DEFAULT_BATCH_CONFIG_PATH).expanduser().resolve()
+    document = load_toml(config_path)
+    base = resolve_project_root(root)
+    experiment = require_table(document, "experiment_1_2", config_path.name)
+    return _load_paths(document, experiment, base, config_path)
+
+
+def _load_paths(
+    document: dict[str, Any],
+    experiment: dict[str, Any],
+    base: Path,
+    batch_config_path: Path,
+) -> BatchPaths:
+    """解析实验一/二路径，并限制输入、输出和论文目录边界。"""
+
+    shared = require_table(document, "shared", "batch.toml")
+    shared_paths = require_table(shared, "paths", "batch.toml [shared]")
+    raw_paths = require_table(experiment, "paths", "batch.toml [experiment_1_2]")
+    raw_copy = require_table(
+        experiment,
+        "copy_assets",
+        "batch.toml [experiment_1_2]",
+    )
+
+    task_data_root = _resolve_data_path(base, raw_paths, "task_data_root")
+    task_workbook_root = _resolve_data_path(base, raw_paths, "task_workbook_root")
+    task_analysis_root = _resolve_data_path(base, raw_paths, "task_analysis_root")
+    staging_root = _resolve_data_path(base, raw_paths, "staging_root")
+    archive_root = _resolve_data_path(base, raw_paths, "archive_root")
+    active_root = _resolve_data_path(base, raw_paths, "active_root")
+    paper_root = _resolve_paper_path(base, shared_paths)
+    experiment_asset_destination = _resolve_asset_destination(
+        paper_root,
+        raw_copy.get("experiment_destination"),
+        "experiment_destination",
+        directory=True,
+    )
+    table_destinations = _resolve_table_destinations(paper_root, raw_copy)
+    relay_assets = _resolve_relay_assets(base, paper_root, raw_copy)
+    managed = (
+        task_data_root,
+        task_workbook_root,
+        task_analysis_root,
+        staging_root,
+        archive_root,
+        active_root,
+    )
+    if len(set(managed)) != len(managed):
+        raise ValueError("batch.toml 的实验一/二托管路径必须互不相同")
+    for index, left in enumerate(managed):
+        for right in managed[index + 1 :]:
+            if left.is_relative_to(right) or right.is_relative_to(left):
+                raise ValueError("batch.toml 的实验一/二托管路径不得互为父子目录")
+    if any(
+        paper_root.is_relative_to(path) or path.is_relative_to(paper_root)
+        for path in managed
+    ):
+        raise ValueError("paper_root 不得与实验一/二托管数据目录重叠")
+    return BatchPaths(
+        project_root=base,
+        task_data_root=task_data_root,
+        task_workbook_root=task_workbook_root,
+        task_analysis_root=task_analysis_root,
+        staging_root=staging_root,
+        archive_root=archive_root,
+        active_root=active_root,
+        paper_root=paper_root,
+        experiment_asset_destination=experiment_asset_destination,
+        table_destinations=table_destinations,
+        relay_assets=relay_assets,
+        batch_config_path=batch_config_path,
+    )
+
+
+def _resolve_data_path(base: Path, raw_paths: dict[str, Any], field_name: str) -> Path:
+    """解析必须位于 EgoAnchor_Python/data 内的实验目录。"""
+
+    raw_value = raw_paths.get(field_name)
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError(f"batch.toml experiment_1_2.paths.{field_name} 必须为非空字符串")
+    resolved = (base / raw_value).resolve()
+    data_root = (base / "data").resolve()
+    if not resolved.is_relative_to(data_root):
+        raise ValueError(
+            f"batch.toml experiment_1_2.paths.{field_name} 必须位于 {data_root} 内"
+        )
+    return resolved
+
+
+def _resolve_paper_path(base: Path, raw_paths: dict[str, Any]) -> Path:
+    """解析必须位于当前仓库内的论文目录。"""
+
+    raw_value = raw_paths.get("paper_root")
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError("batch.toml shared.paths.paper_root 必须为非空字符串")
+    resolved = (base / raw_value).resolve()
+    repository_root = base.parent.resolve()
+    if not resolved.is_relative_to(repository_root):
+        raise ValueError(f"batch.toml shared.paths.paper_root 必须位于 {repository_root} 内")
+    return resolved
+
+
+def _resolve_asset_destination(
+    paper_root: Path,
+    raw_value: Any,
+    config_key: str,
+    *,
+    directory: bool,
+    allowed_suffixes: frozenset[str] = _IMAGE_SUFFIXES,
+) -> Path:
+    """解析论文目录内的资源目标，并拒绝绝对路径和越界路径。"""
+
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError(
+            f"batch.toml experiment_1_2.copy_assets.{config_key} 必须为非空字符串"
+        )
+    relative = Path(raw_value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(
+            f"batch.toml experiment_1_2.copy_assets.{config_key} 必须是 paper_root 内的相对路径"
+        )
+    resolved = (paper_root / relative).resolve()
+    if not resolved.is_relative_to(paper_root):
+        raise ValueError(
+            f"batch.toml experiment_1_2.copy_assets.{config_key} 超出 paper_root"
+        )
+    if directory:
+        return resolved
+    if resolved.suffix.lower() not in allowed_suffixes:
+        readable_suffixes = "、".join(
+            sorted(suffix.lstrip(".").upper() for suffix in allowed_suffixes)
+        )
+        raise ValueError(
+            f"batch.toml experiment_1_2.copy_assets.{config_key} 只能指向 {readable_suffixes}"
+        )
+    return resolved
+
+
+def _resolve_table_destinations(
+    paper_root: Path,
+    copy_assets: dict[str, Any],
+) -> tuple[ArtifactDestination, ...]:
+    """读取三张分析表格在论文目录中的明确目标路径。"""
+
+    raw_tables = copy_assets.get("tables")
+    if not isinstance(raw_tables, dict) or set(raw_tables) != _ANALYSIS_TABLE_KEYS:
+        raise ValueError(
+            "batch.toml experiment_1_2.copy_assets.tables 必须恰好配置三张分析表格"
+        )
+    destinations = tuple(
+        ArtifactDestination(
+            artifact_key=key,
+            destination=_resolve_asset_destination(
+                paper_root,
+                raw_tables[key],
+                f"tables.{key}",
+                directory=False,
+                allowed_suffixes=frozenset({".tex"}),
+            ),
+        )
+        for key in sorted(_ANALYSIS_TABLE_KEYS)
+    )
+    if len({item.destination for item in destinations}) != len(destinations):
+        raise ValueError("batch.toml experiment_1_2.copy_assets.tables 的目标路径不得重复")
+    return destinations
+
+
+def _resolve_relay_assets(
+    project_root_path: Path,
+    paper_root: Path,
+    copy_assets: dict[str, Any],
+) -> tuple[AssetCopy, ...]:
+    """读取明确的 replay 来源与论文目标，不按修改时间猜测资源。"""
+
+    raw_assets = copy_assets.get("relay")
+    if not isinstance(raw_assets, list) or not raw_assets:
+        raise ValueError(
+            "batch.toml experiment_1_2.copy_assets.relay 必须包含至少一项明确资源"
+        )
+    assets: list[AssetCopy] = []
+    for index, item in enumerate(raw_assets, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"batch.toml experiment_1_2.copy_assets.relay[{index}] 必须是表"
+            )
+        raw_source = item.get("source")
+        if not isinstance(raw_source, str) or not raw_source:
+            raise ValueError(
+                f"batch.toml experiment_1_2.copy_assets.relay[{index}].source 必须为非空字符串"
+            )
+        source_relative = Path(raw_source)
+        if source_relative.is_absolute() or ".." in source_relative.parts:
+            raise ValueError(
+                f"batch.toml experiment_1_2.copy_assets.relay[{index}].source 必须是项目内相对路径"
+            )
+        source = (project_root_path / source_relative).resolve()
+        if (
+            not source.is_relative_to(project_root_path)
+            or source.suffix.lower() not in _IMAGE_SUFFIXES
+        ):
+            raise ValueError(
+                f"batch.toml experiment_1_2.copy_assets.relay[{index}].source 只能指向项目内 PNG 或 PDF"
+            )
+        destination = _resolve_asset_destination(
+            paper_root,
+            item.get("destination"),
+            f"relay[{index}].destination",
+            directory=False,
+        )
+        assets.append(AssetCopy(source=source, destination=destination))
+    if len({item.destination for item in assets}) != len(assets):
+        raise ValueError(
+            "batch.toml experiment_1_2.copy_assets.relay 的 destination 不得重复"
+        )
+    return tuple(assets)
 
 
 @dataclass(frozen=True, slots=True)
@@ -533,7 +843,7 @@ def _load_batch_records(
 ) -> tuple[str, tuple[TaskCacheRecord, ...]]:
     """读取轻量批次清单，并快速核对五项共享缓存仍可用。"""
 
-    document = _read_json(batch_root / _BATCH_MANIFEST_NAME)
+    document = _read_json(batch_root / BATCH_MANIFEST_NAME)
     if document.get("schema") != _BATCH_MANIFEST_SCHEMA:
         raise ValueError("批次清单 schema 不受支持")
     batch_id = str(document.get("batch_id") or "")
@@ -595,7 +905,7 @@ def _load_batch_records(
 def active_batch_id(active_root: Path) -> str | None:
     """只读返回活动批次 ID；缺少或损坏清单时返回空值。"""
 
-    manifest = active_root / _BATCH_MANIFEST_NAME
+    manifest = active_root / BATCH_MANIFEST_NAME
     if not manifest.is_file():
         return None
     try:
@@ -646,12 +956,12 @@ def stage_batch(
         object_name=object_name,
     )
 
-    _report_progress("stage: 已选择以下五项任务数据")
+    report_progress("stage: 已选择以下五项任务数据")
     for entry in entries:
-        _report_progress(f"  Task {entry.task_number}: {entry.directory.name}")
+        report_progress(f"  Task {entry.task_number}: {entry.directory.name}")
     _, summaries = _map_eval_sessions(tuple(entry.directory for entry in entries))
     _validate_task_data_names(entries, summaries)
-    _report_progress("stage: 核对五个原始 session 的批次身份")
+    report_progress("stage: 核对五个原始 session 的批次身份")
 
     resolved_batch_id = batch_id or _batch_id(summaries)
     _require_batch_id(resolved_batch_id)
@@ -665,7 +975,7 @@ def stage_batch(
     temporary = create_inherited_temp_directory(paths.staging_root, f".{resolved_batch_id}.tmp-")
     try:
         _write_json_atomic(
-            temporary / _BATCH_MANIFEST_NAME,
+            temporary / BATCH_MANIFEST_NAME,
             _batch_manifest_document(resolved_batch_id, records),
         )
         _replace_staged_batch(temporary, destination)
@@ -673,7 +983,7 @@ def stage_batch(
         remove_tree_with_retry(temporary)
         raise
 
-    _report_progress(f"stage: 暂存批次已就绪：{resolved_batch_id}")
+    report_progress(f"stage: 暂存批次已就绪：{resolved_batch_id}")
     return BatchArtifact(
         batch_id=resolved_batch_id,
         root=destination,
@@ -712,7 +1022,7 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     staged = paths.staging_root / resolved_batch_id
     if not staged.is_dir():
         raise FileNotFoundError(f"找不到暂存批次：{staged}")
-    _report_progress("promote: 复核暂存批次清单与任务缓存")
+    report_progress("promote: 复核暂存批次清单与任务缓存")
     staged_id, _ = _load_batch_records(staged, paths)
     if staged_id != resolved_batch_id:
         raise ValueError("暂存目录名与 batch.json 的 batch_id 不一致")
@@ -722,13 +1032,13 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     archived: Path | None = None
     if active.exists() and not active.is_dir():
         raise NotADirectoryError(f"活动批次路径不是目录：{active}")
-    active_manifest = active / _BATCH_MANIFEST_NAME
+    active_manifest = active / BATCH_MANIFEST_NAME
     if active.is_dir() and not active_manifest.exists() and any(active.iterdir()):
         raise ValueError(
             "活动批次目录缺少 batch.json；请先迁移或清理旧 raw/workbooks 快照，禁止静默混用"
         )
     active.mkdir(parents=True, exist_ok=True)
-    staged_manifest = staged / _BATCH_MANIFEST_NAME
+    staged_manifest = staged / BATCH_MANIFEST_NAME
     current_batch_id: str | None = None
     if active_manifest.is_file():
         current_batch_id, _ = _load_batch_records(active, paths)
@@ -751,15 +1061,15 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
             f".{current_batch_id}.tmp-",
         )
         try:
-            _report_progress(f"promote: 归档旧活动清单到 {archived.name}")
-            active_manifest.rename(archive_temporary / _BATCH_MANIFEST_NAME)
+            report_progress(f"promote: 归档旧活动清单到 {archived.name}")
+            active_manifest.rename(archive_temporary / BATCH_MANIFEST_NAME)
             analysis = active / "analysis"
             if analysis.exists():
                 analysis.rename(archive_temporary / "analysis")
             _replace_staged_batch(archive_temporary, archived)
         except Exception:
-            if (archive_temporary / _BATCH_MANIFEST_NAME).exists() and not active_manifest.exists():
-                (archive_temporary / _BATCH_MANIFEST_NAME).rename(active_manifest)
+            if (archive_temporary / BATCH_MANIFEST_NAME).exists() and not active_manifest.exists():
+                (archive_temporary / BATCH_MANIFEST_NAME).rename(active_manifest)
             archived_analysis = archive_temporary / "analysis"
             if archived_analysis.exists() and not (active / "analysis").exists():
                 archived_analysis.rename(active / "analysis")
@@ -768,12 +1078,12 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
             raise
     switched = False
     try:
-        _report_progress("promote: 切换新的活动组合清单")
+        report_progress("promote: 切换新的活动组合清单")
         staged_manifest.replace(active_manifest)
         switched = True
     except Exception:
-        if archived is not None and (archived / _BATCH_MANIFEST_NAME).exists():
-            (archived / _BATCH_MANIFEST_NAME).rename(active_manifest)
+        if archived is not None and (archived / BATCH_MANIFEST_NAME).exists():
+            (archived / BATCH_MANIFEST_NAME).rename(active_manifest)
             archived_analysis = archived / "analysis"
             if archived_analysis.exists():
                 archived_analysis.rename(active / "analysis")
@@ -784,7 +1094,7 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
         # 清理暂存失败不再回滚已成功切换的活动清单，避免破坏可用批次；下次 stage 会覆盖同名暂存目录。
         remove_tree_with_retry(staged)
 
-    _report_progress("promote: 活动批次已切换")
+    report_progress("promote: 活动批次已切换")
     return {
         "passed": True,
         "active_batch": resolved_batch_id,
@@ -801,7 +1111,7 @@ def preprocess_current(
 ) -> dict[str, Any]:
     """只重建活动组合中缺失或失效的任务工作簿；可显式强制全部重建。"""
 
-    _report_progress("preprocess: 检查五项独立 Stage 1 缓存")
+    report_progress("preprocess: 检查五项独立 Stage 1 缓存")
     paths = load_batch_paths(root)
     batch_id, current_records = _load_batch_records(paths.active_root, paths)
     entries = tuple(
@@ -816,7 +1126,7 @@ def preprocess_current(
         force=force,
     )
     _write_json_atomic(
-        paths.active_root / _BATCH_MANIFEST_NAME,
+        paths.active_root / BATCH_MANIFEST_NAME,
         _batch_manifest_document(batch_id, records),
     )
     return {
@@ -1139,7 +1449,7 @@ def _only_staged_batch(staging_parent: Path) -> str:
     return candidates[0]
 
 
-def _report_progress(message: str) -> None:
+def report_progress(message: str) -> None:
     """向终端 stderr 写入不会干扰 JSON 输出的阶段提示。"""
 
     if sys.stderr.isatty():
@@ -1149,10 +1459,10 @@ def _report_progress(message: str) -> None:
 def _task_progress(description: str, task_dirs: Sequence[Path]) -> tqdm:
     """创建五项物理任务的交互式进度条。"""
 
-    return _stage_progress(description, len(task_dirs), "task")
+    return stage_progress(description, len(task_dirs), "task")
 
 
-def _stage_progress(description: str, total: int, unit: str) -> tqdm:
+def stage_progress(description: str, total: int, unit: str) -> tqdm:
     """创建仅在交互终端显示的 stderr 进度条。"""
 
     return tqdm(
@@ -1182,7 +1492,11 @@ def _git_code_version(base: Path) -> str:
 
 
 __all__ = [
+    "ArtifactDestination",
+    "AssetCopy",
+    "BATCH_MANIFEST_NAME",
     "BatchArtifact",
+    "BatchPaths",
     "BatchToolError",
     "EXPECTED_MATRIX_ID",
     "SessionSummary",
@@ -1191,10 +1505,14 @@ __all__ = [
     "TaskSpec",
     "active_batch_id",
     "list_task_data",
+    "load_batch_paths",
     "load_active_batch",
     "preprocess_current",
     "promote_batch",
+    "project_root",
+    "report_progress",
     "select_task_data",
     "stage_batch",
+    "stage_progress",
     "validate_active_data",
 ]

@@ -78,10 +78,15 @@ class EvalBoundaryTests(unittest.TestCase):
 
         experiments_root = EVAL_ROOT / "experiments"
         for experiment in ("experiment_1_2", "experiment_3"):
-            for module in ("data.py", "pipeline.py", "settings.py", "workflow.py"):
+            for module in ("data.py", "workflow.py"):
                 self.assertTrue(
                     (experiments_root / experiment / module).is_file(),
                     f"{experiment}/{module}",
+                )
+            for module in ("pipeline.py", "settings.py"):
+                self.assertTrue(
+                    (experiments_root / experiment / "analysis" / module).is_file(),
+                    f"{experiment}/analysis/{module}",
                 )
             analysis_root = experiments_root / experiment / "analysis"
             self.assertTrue((analysis_root / "__init__.py").is_file())
@@ -92,7 +97,7 @@ class EvalBoundaryTests(unittest.TestCase):
                 "figures.py",
                 "metrics.py",
                 "paper.py",
-                "xlsx.py",
+                "reader.py",
             },
             "experiment_3": {
                 "clmm.py",
@@ -100,8 +105,10 @@ class EvalBoundaryTests(unittest.TestCase):
                 "figures.py",
                 "inference.py",
                 "paper.py",
+                "pipeline.py",
                 "reader.py",
                 "scoring.py",
+                "settings.py",
                 "summaries.py",
                 "workbook.py",
             },

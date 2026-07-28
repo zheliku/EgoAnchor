@@ -26,13 +26,16 @@ from .contracts import (
 from .figures import publish_figures
 from .inference import holm_adjust, signed_rank_test
 from .paper import write_subjective_table
+from .pipeline import build_analysis
 from .reader import describe_workbook, read_workbook, validate_for_analysis
 from .scoring import derive_scores
+from .settings import AnalysisSettings, load_settings, settings_sha256
 from .summaries import analyze_scores
 from .workbook import write_results_workbook
 
 
 __all__ = [
+    "AnalysisSettings",
     "AnalysisTables",
     "BLOCK_ITEMS",
     "BLOCK_RECORD_COLUMNS",
@@ -52,15 +55,18 @@ __all__ = [
     "WORKBOOK_SOURCE_CATEGORY",
     "analyze_scores",
     "aq_scale_items",
+    "build_analysis",
     "derive_scores",
     "describe_workbook",
     "fit_item_models",
     "holm_adjust",
+    "load_settings",
     "publish_figures",
     "published_scale_items",
     "read_workbook",
     "required_block_items",
     "signed_rank_test",
+    "settings_sha256",
     "validate_for_analysis",
     "write_results_workbook",
     "write_subjective_table",

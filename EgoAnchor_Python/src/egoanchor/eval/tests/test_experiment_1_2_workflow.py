@@ -31,9 +31,9 @@ from egoanchor.eval.experiments.common import (
 from egoanchor.eval.experiments.experiment_1_2 import (
     describe_workflow,
     plan_assets,
-    settings_sha256,
     validate_workflow,
 )
+from egoanchor.eval.experiments.experiment_1_2.analysis import settings_sha256
 
 from .test_reader_qc import _write_valid_task
 
@@ -556,7 +556,6 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 ),
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
                 batch_config_path=root / "batch.toml",
-                paper_config_path=root / "paper.toml",
             )
             with (
                 mock.patch(
@@ -655,7 +654,6 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 ),
                 relay_assets=(),
                 batch_config_path=root / "batch.toml",
-                paper_config_path=root / "paper.toml",
             )
             with (
                 mock.patch(

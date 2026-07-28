@@ -8,22 +8,24 @@ from typing import Any
 from ...preprocess import file_sha256
 from ..common import (
     ArtifactPlan,
+    DEFAULT_PAPER_CONFIG_PATH,
     PlannedAsset,
     read_build_manifest,
     source_tree_sha256,
     validate_output_files,
 )
+from . import analysis
+from .analysis import build_analysis, load_settings, settings_sha256
 from .data import (
-    _BATCH_MANIFEST_NAME,
-    _report_progress,
-    _stage_progress,
+    BATCH_MANIFEST_NAME,
     active_batch_id,
     load_active_batch,
     preprocess_current,
+    report_progress,
+    stage_progress,
     validate_active_data,
 )
-from .pipeline import build_analysis
-from .settings import load_batch_paths, settings_sha256
+from .data import load_batch_paths
 
 
 _EXPERIMENT_FIGURE_KEYS = frozenset(
@@ -58,7 +60,7 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
         "target": "exp1-2",
         "configs": {
             "batch": str(paths.batch_config_path),
-            "paper": str(paths.paper_config_path),
+            "paper": str(DEFAULT_PAPER_CONFIG_PATH),
         },
         "paths": {
             "task_data_root": str(paths.task_data_root),
@@ -92,7 +94,7 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "input": str(paths.task_data_root / "task_<N>_v<V>_<time>_<object>"),
                 "output": [
                     str(paths.task_workbook_root / "task_<N>_v<V>_<time>_<object>"),
-                    str(paths.staging_root / "<batch_id>" / _BATCH_MANIFEST_NAME),
+                    str(paths.staging_root / "<batch_id>" / BATCH_MANIFEST_NAME),
                 ],
             },
             "data_promote": {
@@ -100,15 +102,15 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 "output": str(active),
             },
             "validate": {
-                "input": str(active / _BATCH_MANIFEST_NAME),
+                "input": str(active / BATCH_MANIFEST_NAME),
                 "output": "stdout JSON；按活动清单对五个 task_data 原始目录执行完整 QC",
             },
             "data_preprocess": {
-                "input": str(active / _BATCH_MANIFEST_NAME),
+                "input": str(active / BATCH_MANIFEST_NAME),
                 "output": str(paths.task_workbook_root),
             },
             "analyze": {
-                "input": str(active / _BATCH_MANIFEST_NAME),
+                "input": str(active / BATCH_MANIFEST_NAME),
                 "output": [
                     str(active / "analysis"),
                     str(paths.task_analysis_root),
@@ -135,7 +137,7 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
 def validate_workflow(*, root: Path | None = None) -> dict[str, Any]:
     """按活动清单对五个原始任务显式执行完整硬 QC。"""
 
-    _report_progress("qc: 检查当前活动批次")
+    report_progress("qc: 检查当前活动批次")
     paths = load_batch_paths(root)
     summaries, reports = validate_active_data(paths)
     return {
@@ -156,7 +158,7 @@ def analyze_workflow(
     paths = load_batch_paths(root)
     rebuilt_workbooks: dict[str, str] | None = None
     if rebuild:
-        _report_progress("analyze: 强制重建五项任务缓存")
+        report_progress("analyze: 强制重建五项任务缓存")
         preprocess_result = preprocess_current(root=paths.project_root, force=True)
         rebuilt_workbooks = dict(preprocess_result["workbook_sha256"])
     active = paths.active_root
@@ -171,7 +173,9 @@ def analyze_workflow(
     figure_tex_directory = paths.experiment_asset_destination.relative_to(
         paths.paper_root
     ).as_posix()
-    with _stage_progress("analyze", 8, "stage") as progress:
+    analysis_settings = load_settings()
+    config_digest = settings_sha256()
+    with stage_progress("analyze", 8, "stage") as progress:
 
         def update_analysis_progress(message: str) -> None:
             """更新论文分析的当前阶段。"""
@@ -186,6 +190,8 @@ def analyze_workflow(
             cache_root=paths.task_analysis_root,
             batch_id=batch_id,
             workbook_sha256=workbook_sha256,
+            settings=analysis_settings,
+            config_sha256=config_digest,
             progress=update_analysis_progress,
         )
     result = {
@@ -217,7 +223,7 @@ def plan_assets(*, root: Path | None = None) -> ArtifactPlan:
         raise ValueError("当前 analysis 不属于活动批次，请先运行 analyze exp1-2")
     if build_result.get("config_sha256") != settings_sha256():
         raise ValueError("实验一/二分析参数已变化，请重新运行 analyze exp1-2")
-    implementation_root = Path(__file__).resolve().parent
+    implementation_root = Path(analysis.__file__).resolve().parent
     if build_result.get("implementation_sha256") != source_tree_sha256(implementation_root):
         raise ValueError("实验一/二分析实现已变化，请重新运行 analyze exp1-2")
     expected_inputs = {

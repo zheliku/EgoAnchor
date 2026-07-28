@@ -21,10 +21,10 @@ from .contracts import (
     aq_scale_items,
 )
 from .reader import block_valid_mask, included_participant_ids, method_record_valid_mask
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 
 
-def derive_scores(data: Exp3Data, settings: Exp3Settings) -> ScoreData:
+def derive_scores(data: Exp3Data, settings: AnalysisSettings) -> ScoreData:
     """从 ``Exp3Data`` 的原始记录派生不改写原值的分析长表。"""
 
     participants = data.participants
@@ -50,7 +50,7 @@ def derive_scores(data: Exp3Data, settings: Exp3Settings) -> ScoreData:
 def _derive_block_scores(
     blocks: pd.DataFrame,
     included: frozenset[str],
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> pd.DataFrame:
     """筛选有效区块，并在不替换原始条目的前提下计算 AQ 子量表。"""
 
@@ -71,7 +71,7 @@ def _derive_block_scores(
 def _derive_method_scores(
     methods: pd.DataFrame,
     included: frozenset[str],
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> pd.DataFrame:
     """对 TiA 换向并计算方法级三项量表分。"""
 
@@ -95,7 +95,7 @@ def _derive_method_scores(
     return selected
 
 
-def _aggregate_block_outcomes(block_scores: pd.DataFrame, settings: Exp3Settings) -> pd.DataFrame:
+def _aggregate_block_outcomes(block_scores: pd.DataFrame, settings: AnalysisSettings) -> pd.DataFrame:
     """按参与者×方法在三个对象上形成每项区块级结局的均值。"""
 
     outcomes = list(PRIMARY_OUTCOMES) + list(_aq_item_sets(settings))
@@ -165,7 +165,7 @@ def _pair_scores(aggregate_scores: pd.DataFrame) -> pd.DataFrame:
 def _reliability_items(
     block_scores: pd.DataFrame,
     method_scores: pd.DataFrame,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> pd.DataFrame:
     """构造按参与者独立汇总的量表项目矩阵长表。"""
 
@@ -208,13 +208,13 @@ def _reliability_items(
     return pd.DataFrame(rows, columns=("Participant_ID", "Condition", "Scale", "Item", "Value"))
 
 
-def _aq_item_sets(settings: Exp3Settings) -> dict[str, tuple[str, ...]]:
+def _aq_item_sets(settings: AnalysisSettings) -> dict[str, tuple[str, ...]]:
     """按完整或预实验冻结的缩减模式返回 AQ 条目。"""
 
     return aq_scale_items(settings.aq_mode)
 
 
-def _minimum_items(scale: str, settings: Exp3Settings) -> int:
+def _minimum_items(scale: str, settings: AnalysisSettings) -> int:
     """返回方法级量表的最少可计分条目数。"""
 
     if scale == "TIA_RC":
@@ -233,3 +233,4 @@ def _outcome_column(outcome: str) -> str:
 
 
 __all__ = ["derive_scores"]
+

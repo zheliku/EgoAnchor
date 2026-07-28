@@ -27,7 +27,7 @@ from .analysis import (
     aq_scale_items,
     required_block_items,
 )
-from .settings import Exp3Settings
+from .analysis import AnalysisSettings
 
 
 _NAVY = "18324A"
@@ -43,15 +43,16 @@ _GRID = "C8D1D9"
 
 
 def build_raw_template(
-    settings: Exp3Settings,
-    destination: Path | None = None,
+    settings: AnalysisSettings,
+    destination: Path,
     *,
+    source_template: Path,
     overwrite: bool = False,
 ) -> Path:
     """复制美化来源，清空采集值并加入实时公式分析区。"""
 
-    source = settings.paths.source_template
-    output = (destination or settings.paths.input_workbook).expanduser().resolve()
+    source = source_template.expanduser().resolve()
+    output = destination.expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"原始美化模板不存在：{source}")
     if output == source.resolve():
@@ -231,7 +232,7 @@ def _repair_records_validations(workbook: Any) -> None:
         _add_whole_number_validation(records, range_reference, 0, 1_000_000, allow_blank=True)
 
 
-def _replace_formula_sheets(workbook: Any, settings: Exp3Settings) -> None:
+def _replace_formula_sheets(workbook: Any, settings: AnalysisSettings) -> None:
     """用正式实时派生表和分析面板替换旧的空回填壳。"""
 
     if "Derived" in workbook.sheetnames:
@@ -244,7 +245,7 @@ def _replace_formula_sheets(workbook: Any, settings: Exp3Settings) -> None:
     _build_analysis_sheet(analysis)
 
 
-def _build_derived_sheet(worksheet: Any, settings: Exp3Settings) -> None:
+def _build_derived_sheet(worksheet: Any, settings: AnalysisSettings) -> None:
     """构建原始值到小分、参与者均值与配对差的透明公式链。"""
 
     _title_row(

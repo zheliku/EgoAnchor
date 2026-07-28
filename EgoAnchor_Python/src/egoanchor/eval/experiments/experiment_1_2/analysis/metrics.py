@@ -18,8 +18,8 @@ from ....preprocess import (
     FORMAL_METHODS,
     FORMAL_VARIANTS,
 )
-from ..settings import PaperSettings, load_settings
-from .xlsx import iter_rows, workbook_sha256
+from .reader import iter_rows, workbook_sha256
+from .settings import AnalysisSettings, load_settings
 
 
 FULL_VARIANT = "EgoAnchor"
@@ -586,7 +586,7 @@ def _sorted_arrays(
     return unique_times, display_positions, reference_positions, display_rotations, reference_rotations
 
 
-def _lag_grid(settings: PaperSettings) -> np.ndarray:
+def _lag_grid(settings: AnalysisSettings) -> np.ndarray:
     """构造包含上界的冻结有效时延网格。"""
 
     return np.arange(
@@ -600,7 +600,7 @@ def translation_lag_metrics(
     times: np.ndarray,
     display: np.ndarray,
     reference: np.ndarray,
-    settings: PaperSettings,
+    settings: AnalysisSettings,
 ) -> tuple[float, float, float]:
     """搜索最佳平移时延，并返回对齐 RMSE 与残差帧增量 P95。"""
 
@@ -630,7 +630,7 @@ def rotation_lag_metrics(
     times: np.ndarray,
     display: np.ndarray,
     reference: np.ndarray,
-    settings: PaperSettings,
+    settings: AnalysisSettings,
 ) -> tuple[float, float, float]:
     """使用四元数 Slerp 搜索最佳角时延及残差帧增量 P95。"""
 
@@ -723,7 +723,7 @@ def _transition_response(
     times: np.ndarray,
     display: np.ndarray,
     reference: np.ndarray,
-    settings: PaperSettings,
+    settings: AnalysisSettings,
 ) -> float:
     """按冻结的 250 ms 基线、5 mm、100 ms 持续条件计算响应。"""
 
@@ -774,7 +774,7 @@ def _stop_costs(
     times: np.ndarray,
     display: np.ndarray,
     incoming_direction: np.ndarray | None,
-    settings: PaperSettings,
+    settings: AnalysisSettings,
 ) -> tuple[float, float, float]:
     """计算停止后的前向过冲、反向回动和到最终显示位置的稳定时间。"""
 
@@ -811,7 +811,7 @@ def _stop_costs(
 def _render_metrics(
     render: Mapping[tuple[str, str, str, str, str], list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]],
     event_roles: Mapping[tuple[str, str, str], str],
-    settings: PaperSettings,
+    settings: AnalysisSettings,
 ) -> tuple[
     Mapping[str, tuple[Mapping[str, Any], ...]],
     Mapping[str, tuple[Mapping[str, Any], ...]],
@@ -1244,7 +1244,7 @@ def _merge_segment_maps(
 
 def analyze_task_workbook(
     workbook: Path,
-    settings: PaperSettings | None = None,
+    settings: AnalysisSettings | None = None,
     *,
     known_sha256: str | None = None,
 ) -> TaskResults:
@@ -1321,7 +1321,7 @@ def merge_task_results(results: Sequence[TaskResults]) -> PaperResults:
 
 def analyze_workbooks(
     workbooks: Sequence[Path],
-    settings: PaperSettings | None = None,
+    settings: AnalysisSettings | None = None,
 ) -> PaperResults:
     """只读五本 Stage 1 XLSX，返回论文所需结果。"""
 

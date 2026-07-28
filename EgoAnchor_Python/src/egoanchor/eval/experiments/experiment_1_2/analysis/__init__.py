@@ -1,5 +1,6 @@
 """实验一/二论文统计、图表与工作簿读取的包级入口。"""
 
+from .pipeline import build_analysis
 from .cache import (
     cache_key,
     cache_path,
@@ -38,10 +39,12 @@ from .paper import (
     build_exp2_attribution_table,
     write_analysis_artifacts,
 )
-from .xlsx import iter_rows, workbook_sha256
+from .reader import iter_rows, workbook_sha256
+from .settings import AnalysisSettings, load_settings, settings_sha256
 
 
 __all__ = [
+    "AnalysisSettings",
     "HERMITE_INTERPOLATION_VARIANT",
     "LINEAR_SLERP_VARIANT",
     "METHODS",
@@ -52,6 +55,7 @@ __all__ = [
     "TaskResults",
     "analyze_task_workbook",
     "analyze_workbooks",
+    "build_analysis",
     "build_dual_metric_panel",
     "build_exp1_dynamic_table",
     "build_exp1_static_table",
@@ -64,12 +68,14 @@ __all__ = [
     "iter_rows",
     "implementation_sha256",
     "load_task_results",
+    "load_settings",
     "merge_task_results",
     "paired_metric_matrix",
     "publish_figures",
     "risk_coverage_curve",
     "rotation_lag_metrics",
     "summarize_risk_coverage",
+    "settings_sha256",
     "translation_lag_metrics",
     "workbook_sha256",
     "write_analysis_artifacts",

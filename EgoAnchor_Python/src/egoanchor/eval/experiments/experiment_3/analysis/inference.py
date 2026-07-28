@@ -12,7 +12,7 @@ from scipy import stats  # type: ignore[import-untyped]
 from sklearn.decomposition import FactorAnalysis  # type: ignore[import-untyped]
 
 from .contracts import METHODS, SCALE_OUTCOMES, published_scale_items
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 
 
 def paired_result(
@@ -145,7 +145,7 @@ def holm_adjust(p_values: Sequence[float]) -> np.ndarray:
     return adjusted
 
 
-def reliability_results(items: pd.DataFrame, settings: Exp3Settings) -> pd.DataFrame:
+def reliability_results(items: pd.DataFrame, settings: AnalysisSettings) -> pd.DataFrame:
     """按量表与方法计算参与者级 raw alpha、omega total 和有效 N。"""
 
     rows: list[dict[str, Any]] = []
@@ -323,3 +323,4 @@ __all__ = [
     "reliability_results",
     "signed_rank_test",
 ]
+

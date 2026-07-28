@@ -7,23 +7,23 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from ..common import begin_build, complete_build, source_tree_sha256
-from .analysis import (
+from ...common import begin_build, complete_build, source_tree_sha256
+from .cache import (
     cache_key,
     cache_path,
-    analyze_task_workbook,
     implementation_sha256,
     load_task_results,
-    merge_task_results,
-    publish_figures,
-    workbook_sha256 as calculate_workbook_sha256,
-    write_analysis_artifacts,
     write_task_results,
 )
-from .settings import load_settings, settings_sha256
+from .figures import publish_figures
+from .metrics import analyze_task_workbook, merge_task_results
+from .paper import write_analysis_artifacts
+from .reader import workbook_sha256 as calculate_workbook_sha256
+from .settings import AnalysisSettings
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")
+
 
 def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Path, ...]:
     """校验五本初始 workbook 的命名、唯一性和输出边界。"""
@@ -54,6 +54,8 @@ def build_analysis(
     cache_root: Path,
     batch_id: str,
     workbook_sha256: Mapping[str, str],
+    settings: AnalysisSettings,
+    config_sha256: str,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """复用逐 task 指标缓存，发布当前五任务批次的完整论文产物。"""
@@ -62,6 +64,8 @@ def build_analysis(
     normalized = _validate_inputs(workbooks, output_root)
     if not batch_id.strip():
         raise ValueError("论文分析必须绑定非空 batch_id")
+    if re.fullmatch(r"[0-9a-f]{64}", config_sha256) is None:
+        raise ValueError("实验一/二科学参数摘要必须是小写 SHA-256")
     expected_paths = {str(path) for path in normalized}
     if set(workbook_sha256) != expected_paths:
         raise ValueError("batch manifest 的 workbook SHA 映射必须恰好覆盖 task_1 到 task_5")
@@ -73,8 +77,6 @@ def build_analysis(
             raise ValueError(f"batch manifest 的 workbook SHA-256 非法：{workbook.name}")
         frozen_digests[workbook.name] = expected_digest
 
-    settings = load_settings()
-    parameter_digest = settings_sha256()
     implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
     building = begin_build(
         output_root,
@@ -88,7 +90,7 @@ def build_analysis(
             }
             for number, workbook in enumerate(normalized, start=1)
         ),
-        config_sha256=parameter_digest,
+        config_sha256=config_sha256,
         implementation_sha256=implementation_digest,
         details={"batch_id": batch_id},
     )
@@ -96,7 +98,7 @@ def build_analysis(
     cache_states: dict[str, str] = {}
     for task_number, workbook in enumerate(normalized, start=1):
         frozen_digest = frozen_digests[workbook.name]
-        key = cache_key(frozen_digest, parameter_digest)
+        key = cache_key(frozen_digest, config_sha256)
         destination = cache_path(cache_root, workbook)
         result = load_task_results(destination, key, workbook)
         if result is None:

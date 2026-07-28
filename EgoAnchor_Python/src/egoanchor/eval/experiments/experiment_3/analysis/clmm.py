@@ -13,7 +13,7 @@ from numpy.polynomial.hermite import hermgauss
 from scipy import optimize, special, stats  # type: ignore[import-untyped]
 
 from .contracts import BLOCK_ITEMS, EGOANCHOR, OBJECTS, PRIMARY_OUTCOMES
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 from .inference import holm_adjust
 
 
@@ -68,7 +68,7 @@ class _FitResult:
 
 def fit_item_models(
     block_scores: pd.DataFrame,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
     *,
     progress: Callable[[str], None] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -114,7 +114,7 @@ def _model_frame(block_scores: pd.DataFrame, outcome: str) -> pd.DataFrame:
 def _fit_outcome(
     frame: pd.DataFrame,
     outcome: str,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """拟合单一条目，并计算交互 LRT 和三个对象内方法对比。"""
 
@@ -171,7 +171,7 @@ def _fit_clmm(
     y: np.ndarray,
     design: np.ndarray,
     groups: Sequence[np.ndarray],
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> _FitResult:
     """以自适应初值和 Gauss-Hermite 求积拟合随机截距模型。"""
 
@@ -392,3 +392,4 @@ def _wald(estimate: float, se: float) -> tuple[float, float, float, float]:
 
 
 __all__ = ["fit_item_models"]
+

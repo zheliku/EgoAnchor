@@ -14,7 +14,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side  # type: 
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from .contracts import AnalysisTables, Exp3Data, ScoreData
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 
 
 _NAVY = "18324A"
@@ -37,8 +37,10 @@ def write_results_workbook(
     tables: AnalysisTables,
     clmm_coefficients: pd.DataFrame,
     clmm_contrasts: pd.DataFrame,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
     settings_sha256: str,
+    batch_config_path: Path,
+    paper_config_path: Path,
     validation: dict[str, Any],
 ) -> Path:
     """写入包含描述统计、推断、模型、QC 与绘图数据的结果 XLSX。"""
@@ -47,7 +49,14 @@ def write_results_workbook(
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     workbook.remove(workbook.active)
-    readme_rows = _readme_rows(data, settings, settings_sha256, validation)
+    readme_rows = _readme_rows(
+        data,
+        settings,
+        settings_sha256,
+        batch_config_path,
+        paper_config_path,
+        validation,
+    )
     _write_key_value_sheet(workbook, "README", readme_rows)
     _write_frame(workbook, "Participant_Summary", tables.participant_summary)
     _write_frame(workbook, "Participant_Balance", tables.participant_balance)
@@ -78,8 +87,10 @@ def write_results_workbook(
 
 def _readme_rows(
     data: Exp3Data,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
     settings_digest: str,
+    batch_config_path: Path,
+    paper_config_path: Path,
     validation: dict[str, Any],
 ) -> tuple[tuple[str, Any], ...]:
     """生成结果首屏的来源、规则与诚实边界。"""
@@ -90,8 +101,8 @@ def _readme_rows(
         ("输入工作簿", data.source_path),
         ("输入 SHA-256", data.source_sha256),
         ("来源类型", data.source_kind),
-        ("批处理配置", str(settings.paths.batch_config_path)),
-        ("论文参数配置", str(settings.paths.paper_config_path)),
+        ("批处理配置", str(batch_config_path)),
+        ("论文参数配置", str(paper_config_path)),
         ("参数 SHA-256", settings_digest),
         ("模板版本", settings.template_version),
         ("纳入参与者", validation["included_count"]),
@@ -264,3 +275,4 @@ def _verify_results_workbook(path: Path, input_sha256: str, included_count: int)
 
 
 __all__ = ["write_results_workbook"]
+

@@ -39,7 +39,7 @@ from .reader import (
     method_assessment_complete_mask,
     method_record_valid_mask,
 )
-from ..settings import Exp3Settings
+from .settings import AnalysisSettings
 
 
 _SECONDARY_ITEMS = ("AQ_EQ1", "AQ_EQ2", "AQ_EQ3", "AQ_IQ1", "AQ_IQ2", "AQ_IQ3")
@@ -66,7 +66,7 @@ _OPEN_THEMES = (
 def analyze_scores(
     data: Exp3Data,
     scores: ScoreData,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> AnalysisTables:
     """计算主分析、量表、描述性结果和绘图长表。"""
 
@@ -117,7 +117,7 @@ def analyze_scores(
 def _participant_results(
     data: Exp3Data,
     *,
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """生成样本流程、论文描述、平衡性和逐人审计表。"""
 
@@ -499,7 +499,7 @@ def _is_no(value: Any) -> bool:
 def _family_results(
     paired: pd.DataFrame,
     outcomes: Iterable[str],
-    settings: Exp3Settings,
+    settings: AnalysisSettings,
     *,
     holm: bool = True,
 ) -> pd.DataFrame:
@@ -567,7 +567,7 @@ def _pair_block_items(data: Any, outcomes: Iterable[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _object_results(block_scores: pd.DataFrame, settings: Exp3Settings) -> pd.DataFrame:
+def _object_results(block_scores: pd.DataFrame, settings: AnalysisSettings) -> pd.DataFrame:
     """按三个对象输出区块结局的配对描述统计。"""
 
     outcomes = list(PRIMARY_OUTCOMES) + list(SCALE_OUTCOMES[:2])
@@ -606,7 +606,7 @@ def _object_results(block_scores: pd.DataFrame, settings: Exp3Settings) -> pd.Da
     return pd.DataFrame(rows)
 
 
-def _manipulation_results(data: Any, settings: Exp3Settings) -> pd.DataFrame:
+def _manipulation_results(data: Any, settings: AnalysisSettings) -> pd.DataFrame:
     """汇总连续输入一致性、生命周期和重获取审计。"""
 
     included = included_participant_ids(data.participants)
@@ -880,3 +880,4 @@ def _outcome_seed(base_seed: int, outcome: str) -> int:
 
 
 __all__ = ["analyze_scores"]
+

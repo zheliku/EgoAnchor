@@ -243,10 +243,12 @@ class Experiment3Tests(unittest.TestCase):
                 tables=tables,
                 clmm_coefficients=tables.primary.iloc[0:0],
                 clmm_contrasts=tables.primary.iloc[0:0],
-                settings=settings,
-                settings_sha256="0" * 64,
-                validation=validation,
-            )
+            settings=settings,
+            settings_sha256="0" * 64,
+            batch_config_path=root / "batch.toml",
+            paper_config_path=root / "paper.toml",
+            validation=validation,
+        )
             figures = publish_figures(results, root, settings)
             workbook = load_workbook(results, read_only=True, data_only=True)
             try:
