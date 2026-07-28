@@ -43,7 +43,7 @@ task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>
 固定选择。
 
 `task_data/` 是唯一原始归档。目录进入这里后视为只读；不要在原目录里覆盖 JSON/JSONL。需要修正
-或重采时创建新的 `vN` 目录。`stage` 用文件路径、大小和修改时间快速识别原地变化，显式 `qc`
+或重采时创建新的 `vN` 目录。`data exp1-2 stage` 用文件路径、大小和修改时间快速识别原地变化，显式 `validate exp1-2`
 用于需要完整深查的情况。
 
 ## 独立缓存
@@ -59,7 +59,7 @@ SHA 和指标实现内容指纹组成。修改论文参数或指标实现时会�
 ## 活动组合
 
 `experiment_1_2/batch.json` 是当前论文数据的唯一选择清单。它按 Task 1--5 引用五个原始目录和五本
-工作簿，并冻结 session 身份与工作簿摘要。`promote` 只切换这份清单，不复制 raw，不复制 XLSX，
+工作簿，并冻结 session 身份与工作簿摘要。`data exp1-2 promote` 只切换这份清单，不复制 raw，不复制 XLSX，
 也不重跑 QC。
 
 替换一个任务后，批次名会变化，但正式分析仍要求五项任务共享对象、协议、配置哈希、冻结参数集和
@@ -70,7 +70,7 @@ SHA 和指标实现内容指纹组成。修改论文参数或指标实现时会�
 
 ## 发布边界
 
-`analyze` 只写当前活动组合的 `analysis/`，不会修改论文目录。确认结果后，`pixi run eval copy-assets`
+`pixi run eval analyze exp1-2` 只写当前活动组合的 `analysis/`，不会修改论文目录。确认结果后，`pixi run eval publish exp1-2`
 才按 `batch.toml` 的清单复制 PNG/PDF 和三张表格 TeX 到 `2026-EgoAnchor`。图环境 TeX 仍由研究者手工审阅。
 
 所有操作路径从 `src/egoanchor/eval/config/batch.toml` 读取。原始数据、工作簿缓存、指标缓存和活动

@@ -101,8 +101,8 @@ pilot 冻结参数后不再根据 v4 正式结果调参。
 停止 Python 后依次运行：
 
 ```text
-pixi run eval stage --promote
-pixi run eval analyze
+pixi run eval data exp1-2 stage --promote
+pixi run eval analyze exp1-2
 ```
 
 最新中文工作稿是 `egoanchor_cn_ai_v8.tex`，其中 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留，当前编译产物为 `pdf/egoanchor_cn_ai_v8.pdf`。Stage 1 和指标按 Task 独立

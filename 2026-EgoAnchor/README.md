@@ -11,7 +11,7 @@ EgoAnchor 中文论文工程
 - `egoanchor_cn_ai_v8.tex`：最新中文工作稿，目前尚不可用。
 - `egoanchor_cn_refs.bib`：主稿参考文献。
 - `figures/`：系统图、定性 replay 和论文分析发布的独立面板。
-- `tables/`：由 `copy-assets` 按 TOML 显式发布的三张 LaTeX 表。
+- `tables/`：由统一 `publish` 命令按 TOML 显式发布的 LaTeX 表。
 - `pdf/egoanchor_cn_ai_v8.pdf`：与工作稿同名的编译结果，供内部审阅和 VSCode/LaTeX Workshop 打开。
 - `plan.md`：当前论文路线和实验边界。
 - `experiment_1_2_collection_manual_zh.md`：正式采集手册。
@@ -31,8 +31,8 @@ EgoAnchor 中文论文工程
 分析与图片
 ----------
 
-论文分析由 `EgoAnchor_Python` 下的 `pixi run eval analyze` 生成八个独立 PNG/PDF 面板、
-三张表和两个 figure 环境片段。`pixi run eval copy-assets` 按 `batch.toml` 发布图片和三张表格 TeX，
+实验一/二分析由 `EgoAnchor_Python` 下的 `pixi run eval analyze exp1-2` 生成八个独立 PNG/PDF 面板、
+三张表和两个 figure 环境片段。`pixi run eval publish exp1-2` 按 `batch.toml` 发布图片和三张表格 TeX，
 不会修改主稿；figure 环境片段仍由研究者审阅后手工纳入。
 
 实验一四个面板由 LaTeX subfigure 排成一行；动态结果把 effective lag、lag-aligned RMSE、

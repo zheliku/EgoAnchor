@@ -17,18 +17,13 @@ EVAL_ROOT = Path(__file__).resolve().parents[1]
 """评估包根目录，用于检查旧实现是否已删除。"""
 
 EXPECTED_COMMANDS = {
-    "config",
-    "sessions",
-    "stage",
-    "promote",
-    "qc",
-    "preprocess",
+    "status",
+    "validate",
     "analyze",
-    "copy-assets",
-    "rebuild",
-    "experiment3",
+    "publish",
+    "data",
 }
-"""当前唯一人工入口的固定路径命令。"""
+"""统一评估工程固定的五个生命周期入口。"""
 
 
 class EvalBoundaryTests(unittest.TestCase):
@@ -108,7 +103,7 @@ class EvalBoundaryTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised:
                 eval_cli.main(["analyze", "--help"])
         self.assertEqual(raised.exception.code, 0)
-        self.assertIn("当前五本 XLSX", output.getvalue())
+        self.assertIn("当前五任务活动批次", output.getvalue())
 
     def test_stage_rejects_removed_directory_arguments(self) -> None:
         """stage 不再接受五个长目录名，防止旧入口继续被误用。"""
@@ -119,11 +114,67 @@ class EvalBoundaryTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 2)
 
+    def test_all_removed_top_level_commands_are_rejected(self) -> None:
+        """旧命令不保留别名或隐藏转发，避免新旧手册长期并存。"""
+
+        for command in (
+            "config",
+            "sessions",
+            "stage",
+            "promote",
+            "qc",
+            "preprocess",
+            "rebuild",
+            "copy-assets",
+            "experiment3",
+        ):
+            with self.subTest(command=command), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    eval_cli.build_parser().parse_args([command])
+                self.assertEqual(raised.exception.code, 2)
+
+    def test_status_defaults_to_the_complete_workspace(self) -> None:
+        """status 无目标时稳定显示 all，其他生命周期必须显式指定目标。"""
+
+        arguments = eval_cli.build_parser().parse_args(["status"])
+
+        self.assertEqual(arguments.target, "all")
+        self.assertIs(arguments.handler, eval_cli._run_status)
+
+    def test_formal_experiment3_analysis_rejects_path_and_synthetic_overrides(self) -> None:
+        """正式 CLI 只读 TOML 固定路径，不暴露模拟数据后门。"""
+
+        for option in ("--input", "--output-root", "--allow-synthetic"):
+            with self.subTest(option=option), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    eval_cli.build_parser().parse_args(["analyze", "exp3", option, "value"])
+                self.assertEqual(raised.exception.code, 2)
+
+    def test_analyze_all_uses_explicit_experiment12_rebuild_flag(self) -> None:
+        """联合重建参数明确归属实验一/二，不把 rebuild 伪装成共享统计动作。"""
+
+        arguments = eval_cli.build_parser().parse_args(
+            ["analyze", "all", "--rebuild-exp1-2"]
+        )
+
+        self.assertTrue(arguments.rebuild_exp1_2)
+        self.assertEqual(arguments.target, "all")
+
     def test_stage_accepts_short_version_selectors(self) -> None:
         """stage 接受统一版本、逐任务版本和对象筛选。"""
 
         args = eval_cli.build_parser().parse_args(
-            ["stage", "--version", "v2", "--task-version", "3=v4", "--object", "cube"]
+            [
+                "data",
+                "exp1-2",
+                "stage",
+                "--version",
+                "v2",
+                "--task-version",
+                "3=v4",
+                "--object",
+                "cube",
+            ]
         )
 
         self.assertEqual(args.version, 2)
@@ -134,9 +185,13 @@ class EvalBoundaryTests(unittest.TestCase):
         """QC 完整报告为失败时，CLI 必须保留 JSON 并返回退出码二。"""
 
         output = io.StringIO()
-        with mock.patch.object(eval_cli, "qc_current", return_value={"passed": False, "tasks": []}):
+        with mock.patch.object(
+            eval_cli,
+            "validate_workspace",
+            return_value={"passed": False, "tasks": []},
+        ):
             with contextlib.redirect_stdout(output):
-                result = eval_cli.main(["qc"])
+                result = eval_cli.main(["validate", "exp1-2"])
 
         self.assertEqual(result, eval_cli.EXIT_DATA_ERROR)
         self.assertIn('"passed": false', output.getvalue())

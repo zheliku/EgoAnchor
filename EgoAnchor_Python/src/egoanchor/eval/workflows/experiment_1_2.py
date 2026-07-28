@@ -1,4 +1,4 @@
-"""实验一/二批次整理、切换、本地分析和图表发布工作流。"""
+"""实验一/二数据批次、Stage 1 缓存与论文分析工作流。"""
 
 from __future__ import annotations
 
@@ -16,9 +16,15 @@ from typing import Any, Mapping, Sequence
 
 from tqdm import tqdm
 
-from ._filesystem import create_inherited_temp_directory, remove_tree_with_retry
-from .paper_analysis.common import ArtifactPlan, PlannedAsset, publish_artifact_plans
-from .preprocess import (
+from .._filesystem import create_inherited_temp_directory, remove_tree_with_retry
+from ..paper_analysis.common import (
+    ArtifactPlan,
+    PlannedAsset,
+    read_build_manifest,
+    source_tree_sha256,
+    validate_output_files,
+)
+from ..preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
     StageOneQcReport,
@@ -33,7 +39,7 @@ from .preprocess import (
 EXPECTED_MATRIX_ID = "exp12_9_smoothed_hermite_v4"
 """正式实验一/二必须使用的九路运行时矩阵标识。"""
 
-DEFAULT_BATCH_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "batch.toml"
+DEFAULT_BATCH_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "batch.toml"
 """批次输入、输出和论文路径的唯一操作配置。"""
 
 _BATCH_ID_PATTERN = re.compile(r"^batch_(?:\d{8}_\d{6})(?:_\d{8}_\d{6}){4}$")
@@ -285,7 +291,7 @@ class BatchArtifact:
             "workbook_sha256": dict(self.workbook_sha256),
             "cache_hits": list(self.cache_hits),
             "rebuilt_tasks": list(self.rebuilt_tasks),
-            "next_command": f"pixi run eval promote {self.batch_id}",
+            "next_command": f"pixi run eval data exp1-2 promote {self.batch_id}",
         }
 
 
@@ -354,7 +360,7 @@ class BatchToolError(RuntimeError):
 def project_root() -> Path:
     """返回包含 pixi.toml 的 EgoAnchor_Python 根目录。"""
 
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[4]
 
 
 def load_batch_paths(root: Path | None = None) -> BatchPaths:
@@ -363,12 +369,21 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     base = _normalize_project_root(root)
     with DEFAULT_BATCH_CONFIG_PATH.open("rb") as handle:
         document = tomllib.load(handle)
-    raw_paths = document.get("paths")
+    shared = document.get("shared")
+    if not isinstance(shared, dict):
+        raise ValueError("batch.toml 必须包含 [shared]")
+    shared_paths = shared.get("paths")
+    if not isinstance(shared_paths, dict):
+        raise ValueError("batch.toml 必须包含 [shared.paths]")
+    experiment = document.get("experiment_1_2")
+    if not isinstance(experiment, dict):
+        raise ValueError("batch.toml 必须包含 [experiment_1_2]")
+    raw_paths = experiment.get("paths")
     if not isinstance(raw_paths, dict):
-        raise ValueError("batch.toml 必须包含 [paths]")
-    raw_copy_assets = document.get("copy_assets")
-    if not isinstance(raw_copy_assets, dict):
-        raise ValueError("batch.toml 必须包含 [copy_assets]")
+        raise ValueError("batch.toml 必须包含 [experiment_1_2.paths]")
+    raw_publish = experiment.get("publish")
+    if not isinstance(raw_publish, dict):
+        raise ValueError("batch.toml 必须包含 [experiment_1_2.publish]")
 
     task_data_root = _resolve_data_path(base, raw_paths, "task_data_root")
     task_workbook_root = _resolve_data_path(base, raw_paths, "task_workbook_root")
@@ -376,15 +391,15 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
     staging_root = _resolve_data_path(base, raw_paths, "staging_root")
     archive_root = _resolve_data_path(base, raw_paths, "archive_root")
     active_root = _resolve_data_path(base, raw_paths, "active_root")
-    paper_root = _resolve_paper_path(base, raw_paths)
+    paper_root = _resolve_paper_path(base, shared_paths)
     experiment_asset_destination = _resolve_asset_destination(
         paper_root,
-        raw_copy_assets.get("experiment_destination"),
+        raw_publish.get("experiment_destination"),
         "experiment_destination",
         directory=True,
     )
-    table_destinations = _resolve_table_destinations(paper_root, raw_copy_assets)
-    relay_assets = _resolve_relay_assets(base, paper_root, raw_copy_assets)
+    table_destinations = _resolve_table_destinations(paper_root, raw_publish)
+    relay_assets = _resolve_relay_assets(base, paper_root, raw_publish)
     managed = (
         task_data_root,
         task_workbook_root,
@@ -418,12 +433,26 @@ def load_batch_paths(root: Path | None = None) -> BatchPaths:
 
 
 def describe_workflow(root: Path | None = None) -> dict[str, Any]:
-    """返回当前生效配置，以及每个命令的固定输入和输出。"""
+    """返回实验一/二配置、活动批次和统一生命周期状态。"""
 
     paths = load_batch_paths(root)
     active = paths.active_root
+    build_path = active / "analysis" / "provenance" / "build_result.json"
+    build: dict[str, Any] = {"status": "missing"}
+    if build_path.is_file():
+        try:
+            manifest = read_build_manifest(active / "analysis", owner="experiment_1_2")
+        except (OSError, ValueError) as error:
+            build = {"status": "invalid", "reason": str(error)}
+        else:
+            build = {
+                "build_id": manifest["build_id"],
+                "status": manifest["status"],
+                "source_kind": manifest["source_kind"],
+            }
     return {
         "passed": True,
+        "target": "exp1-2",
         "configuration_file": str(paths.config_path),
         "paths": {
             "task_data_root": str(paths.task_data_root),
@@ -446,31 +475,29 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 for asset in paths.relay_assets
             ],
         },
-        "stages": {
-            "config": {
-                "input": str(paths.config_path),
-                "output": "stdout JSON",
-            },
-            "sessions": {
+        "active_batch": _active_batch_id(active),
+        "build": build,
+        "operations": {
+            "data_sessions": {
                 "input": str(paths.task_data_root),
                 "output": "stdout JSON",
             },
-            "stage": {
+            "data_stage": {
                 "input": str(paths.task_data_root / "task_<N>_v<V>_<time>_<object>"),
                 "output": [
                     str(paths.task_workbook_root / "task_<N>_v<V>_<time>_<object>"),
                     str(paths.staging_root / "<batch_id>" / _BATCH_MANIFEST_NAME),
                 ],
             },
-            "promote": {
+            "data_promote": {
                 "input": str(paths.staging_root / "<batch_id>"),
                 "output": str(active),
             },
-            "qc": {
+            "validate": {
                 "input": str(active / _BATCH_MANIFEST_NAME),
                 "output": "stdout JSON；按活动清单对五个 task_data 原始目录执行完整 QC",
             },
-            "preprocess": {
+            "data_preprocess": {
                 "input": str(active / _BATCH_MANIFEST_NAME),
                 "output": str(paths.task_workbook_root),
             },
@@ -482,7 +509,7 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 ],
                 "note": "只发布活动批次内的图、表和 TeX 片段，不修改论文目录或主稿",
             },
-            "copy-assets": {
+            "publish": {
                 "input": [
                     str(active / "analysis" / "figures"),
                     str(active / "analysis" / "tex" / "tables"),
@@ -495,16 +522,22 @@ def describe_workflow(root: Path | None = None) -> dict[str, Any]:
                 ],
                 "note": "复制本次分析清单中的 PNG/PDF、三张表格 TeX 和显式 relay；不改写主稿",
             },
-            "rebuild": {
-                "input": str(active / _BATCH_MANIFEST_NAME),
-                "output": [
-                    str(paths.task_workbook_root),
-                    str(active / "analysis"),
-                ],
-                "note": "只重建活动批次工作簿和分析产物，不编译或改写论文",
-            },
         },
     }
+
+
+def _active_batch_id(active_root: Path) -> str | None:
+    """只读返回活动 batch ID；缺少活动清单时返回空值。"""
+
+    manifest = active_root / _BATCH_MANIFEST_NAME
+    if not manifest.is_file():
+        return None
+    try:
+        document = _read_json(manifest)
+    except (OSError, ValueError):
+        return None
+    value = document.get("batch_id")
+    return str(value) if isinstance(value, str) and value else None
 
 
 def list_task_data(root: Path | None = None) -> list[dict[str, Any]]:
@@ -947,7 +980,7 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
             "active_batch": resolved_batch_id,
             "active_root": str(active),
             "archived_root": None,
-            "next_command": "pixi run eval analyze",
+            "next_command": "pixi run eval analyze exp1-2",
         }
     if current_batch_id is not None:
         archived = archive_parent / current_batch_id
@@ -997,22 +1030,11 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
         "active_batch": resolved_batch_id,
         "active_root": str(active),
         "archived_root": str(archived) if archived is not None else None,
-        "next_command": "pixi run eval analyze",
+        "next_command": "pixi run eval analyze exp1-2",
     }
 
 
-def rebuild_current(*, root: Path | None = None) -> dict[str, Any]:
-    """显式强制重建活动组合的五本工作簿和本地分析产物。"""
-
-    _report_progress("rebuild: 强制重建五项任务缓存和分析产物")
-    paths = load_batch_paths(root)
-    preprocess_result = preprocess_current(root=paths.project_root, force=True)
-    result = analyze_current(root=paths.project_root)
-    result["workbook_sha256"] = preprocess_result["workbook_sha256"]
-    return result
-
-
-def qc_current(*, root: Path | None = None) -> dict[str, Any]:
+def validate_workflow(*, root: Path | None = None) -> dict[str, Any]:
     """按活动清单对五个原始任务显式执行完整硬 QC。"""
 
     _report_progress("qc: 检查当前活动批次")
@@ -1060,16 +1082,25 @@ def preprocess_current(
         "workbook_sha256": {record.workbook_name: record.workbook_sha256 for record in records},
         "cache_hits": list(cache_hits),
         "rebuilt_tasks": list(rebuilt_tasks),
-        "next_command": "pixi run eval analyze",
+        "next_command": "pixi run eval analyze exp1-2",
     }
 
 
-def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
+def analyze_workflow(
+    *,
+    root: Path | None = None,
+    rebuild: bool = False,
+) -> dict[str, Any]:
     """从当前五本工作簿生成活动批次内的指标、图表和 TeX 片段。"""
 
-    from .paper_analysis.experiment_1_2 import build_analysis
+    from ..paper_analysis.experiment_1_2 import build_analysis
 
     paths = load_batch_paths(root)
+    rebuilt_workbooks: dict[str, str] | None = None
+    if rebuild:
+        _report_progress("analyze: 强制重建五项任务缓存")
+        preprocess_result = preprocess_current(root=paths.project_root, force=True)
+        rebuilt_workbooks = dict(preprocess_result["workbook_sha256"])
     active = paths.active_root
     batch_id, records = _load_batch_records(active, paths)
     workbooks = tuple(paths.task_workbook_root / record.workbook_relative_path for record in records)
@@ -1091,68 +1122,91 @@ def analyze_current(*, root: Path | None = None) -> dict[str, Any]:
             workbook_sha256=workbook_sha256,
             progress=update_analysis_progress,
         )
-    return {
+    result = {
         "passed": True,
         "analysis": payload,
-        "next_command": "pixi run eval copy-assets",
+        "next_command": "pixi run eval publish exp1-2",
     }
+    if rebuilt_workbooks is not None:
+        result["workbook_sha256"] = rebuilt_workbooks
+    return result
 
 
-def plan_current_assets(*, root: Path | None = None) -> ArtifactPlan:
+def plan_publication(*, root: Path | None = None) -> ArtifactPlan:
     """预检实验一/二当前分析并返回不写文件的完整发布计划。"""
 
+    from ..paper_analysis.experiment_1_2 import settings_sha256
+
     paths = load_batch_paths(root)
-    batch_id, _ = _load_batch_records(paths.active_root, paths)
+    batch_id, records = _load_batch_records(paths.active_root, paths)
+    analysis_root = paths.active_root / "analysis"
     figure_root = paths.active_root / "analysis" / "figures"
     if not figure_root.is_dir():
-        raise FileNotFoundError(f"尚未生成当前批次图片，请先运行 analyze：{figure_root}")
-    build_result = _read_json(
-        paths.active_root / "analysis" / "provenance" / "build_result.json"
-    )
-    if build_result.get("batch_id") != batch_id:
-        raise ValueError("当前 analysis 不属于活动批次，请先运行 pixi run eval analyze")
+        raise FileNotFoundError(f"尚未生成当前批次图片，请先运行 analyze exp1-2：{figure_root}")
+    build_result = read_build_manifest(analysis_root, owner="experiment_1_2")
+    if build_result.get("status") != "complete" or build_result.get("source_kind") != "formal":
+        raise ValueError("实验一/二构建尚未完整完成，拒绝发布")
+    details = build_result.get("details")
+    if not isinstance(details, dict) or details.get("batch_id") != batch_id:
+        raise ValueError("当前 analysis 不属于活动批次，请先运行 pixi run eval analyze exp1-2")
+    if build_result.get("config_sha256") != settings_sha256():
+        raise ValueError("实验一/二分析参数已变化，请重新运行 analyze exp1-2")
+    implementation_root = Path(__file__).resolve().parents[1] / "paper_analysis" / "experiment_1_2"
+    if build_result.get("implementation_sha256") != source_tree_sha256(implementation_root):
+        raise ValueError("实验一/二分析实现已变化，请重新运行 analyze exp1-2")
+    expected_inputs = {
+        f"task_{record.task_number}": {
+            "path": str((paths.task_workbook_root / record.workbook_relative_path).resolve()),
+            "sha256": record.workbook_sha256,
+        }
+        for record in records
+    }
+    actual_inputs = {
+        str(item.get("key")): {
+            "path": str(item.get("path")),
+            "sha256": str(item.get("sha256")),
+        }
+        for item in build_result.get("inputs", [])
+        if isinstance(item, dict)
+    }
+    if actual_inputs != expected_inputs:
+        raise ValueError("实验一/二构建输入与活动批次不一致，请重新运行 analyze exp1-2")
 
-    raw_figure_paths = build_result.get("figure_paths")
-    if not isinstance(raw_figure_paths, dict) or set(raw_figure_paths) != _EXPERIMENT_FIGURE_KEYS:
+    outputs = validate_output_files(build_result)
+    if not _EXPERIMENT_FIGURE_KEYS.issubset(outputs):
         raise ValueError("当前 analysis 的图片清单必须恰好覆盖图二和图三的八个 PNG/PDF 面板")
-    raw_artifact_paths = build_result.get("artifact_paths")
-    if not isinstance(raw_artifact_paths, dict):
-        raise ValueError("当前 analysis 缺少 artifact_paths 产物清单")
     resolved_figure_root = figure_root.resolve()
     resolved_table_root = (paths.active_root / "analysis" / "tex" / "tables").resolve()
     copies: list[PlannedAsset] = []
     for key in sorted(_EXPERIMENT_FIGURE_KEYS):
-        source = Path(str(raw_figure_paths[key])).expanduser().resolve()
+        figure_output = outputs[key]
+        source = Path(figure_output["path"]).expanduser().resolve()
         expected_suffix = f".{key.rsplit('_', 1)[1]}"
         if source.parent != resolved_figure_root or source.suffix.lower() != expected_suffix:
             raise ValueError(f"当前分析图片清单越界或后缀不匹配：{key}: {source}")
-        if not source.is_file():
-            raise FileNotFoundError(f"当前分析缺少实验面板：{source}")
         copies.append(
             PlannedAsset(
                 owner="experiment_1_2",
                 key=key,
                 source=source,
                 destination=paths.experiment_asset_destination / source.name,
-                expected_sha256=file_sha256(source),
+                expected_sha256=figure_output["sha256"],
             )
         )
     for item in paths.table_destinations:
-        raw_source = raw_artifact_paths.get(item.artifact_key)
-        if not isinstance(raw_source, str) or not raw_source:
+        table_output = outputs.get(item.artifact_key)
+        if table_output is None:
             raise ValueError(f"当前 analysis 缺少表格产物：{item.artifact_key}")
-        source = Path(raw_source).expanduser().resolve()
+        source = Path(table_output["path"]).expanduser().resolve()
         if source.parent != resolved_table_root or source.suffix.lower() != ".tex":
             raise ValueError(f"当前分析表格清单越界或后缀不匹配：{item.artifact_key}: {source}")
-        if not source.is_file():
-            raise FileNotFoundError(f"当前分析缺少表格 TeX：{source}")
         copies.append(
             PlannedAsset(
                 owner="experiment_1_2",
                 key=item.artifact_key,
                 source=source,
                 destination=item.destination,
-                expected_sha256=file_sha256(source),
+                expected_sha256=table_output["sha256"],
             )
         )
     copies.extend(
@@ -1166,22 +1220,6 @@ def plan_current_assets(*, root: Path | None = None) -> ArtifactPlan:
         for index, item in enumerate(paths.relay_assets, start=1)
     )
     return ArtifactPlan(owner="experiment_1_2", assets=tuple(copies))
-
-
-def copy_current_assets(*, root: Path | None = None) -> dict[str, Any]:
-    """联合预检后发布实验一/二当前面板、表格与 relay 文件。"""
-
-    plan = plan_current_assets(root=root)
-    paths = load_batch_paths(root)
-    published = publish_artifact_plans((plan,))
-    return {
-        "passed": True,
-        "experiment_source": str(paths.active_root / "analysis" / "figures"),
-        "experiment_destination": str(paths.experiment_asset_destination),
-        "table_destinations": [str(item.destination) for item in paths.table_destinations],
-        "published": published,
-        "next_command": "审阅已发布图表，并按论文工作流自行编译主稿",
-    }
 
 
 def _normalize_project_root(root: Path | None) -> Path:
@@ -1230,30 +1268,30 @@ def _resolve_asset_destination(
     """解析论文目录内的发布目标，并拒绝绝对路径和越界路径。"""
 
     if not isinstance(raw_value, str) or not raw_value:
-        raise ValueError(f"batch.toml copy_assets.{config_key} 必须为非空字符串")
+        raise ValueError(f"batch.toml experiment_1_2.publish.{config_key} 必须为非空字符串")
     relative = Path(raw_value)
     if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"batch.toml copy_assets.{config_key} 必须是 paper_root 内的相对路径")
+        raise ValueError(f"batch.toml experiment_1_2.publish.{config_key} 必须是 paper_root 内的相对路径")
     resolved = (paper_root / relative).resolve()
     if not resolved.is_relative_to(paper_root):
-        raise ValueError(f"batch.toml copy_assets.{config_key} 超出 paper_root")
+        raise ValueError(f"batch.toml experiment_1_2.publish.{config_key} 超出 paper_root")
     if directory:
         return resolved
     if resolved.suffix.lower() not in allowed_suffixes:
         readable_suffixes = "、".join(sorted(suffix.lstrip(".").upper() for suffix in allowed_suffixes))
-        raise ValueError(f"batch.toml copy_assets.{config_key} 只能指向 {readable_suffixes}")
+        raise ValueError(f"batch.toml experiment_1_2.publish.{config_key} 只能指向 {readable_suffixes}")
     return resolved
 
 
 def _resolve_table_destinations(
     paper_root: Path,
-    copy_assets: dict[str, Any],
+    publish: dict[str, Any],
 ) -> tuple[ArtifactDestination, ...]:
     """读取三张分析表格在论文目录中的显式目标路径。"""
 
-    raw_tables = copy_assets.get("tables")
+    raw_tables = publish.get("tables")
     if not isinstance(raw_tables, dict) or set(raw_tables) != _ANALYSIS_TABLE_KEYS:
-        raise ValueError("batch.toml copy_assets.tables 必须恰好配置三张分析表格")
+        raise ValueError("batch.toml experiment_1_2.publish.tables 必须恰好配置三张分析表格")
     destinations = tuple(
         ArtifactDestination(
             artifact_key=key,
@@ -1268,33 +1306,33 @@ def _resolve_table_destinations(
         for key in sorted(_ANALYSIS_TABLE_KEYS)
     )
     if len({item.destination for item in destinations}) != len(destinations):
-        raise ValueError("batch.toml copy_assets.tables 的目标路径不得重复")
+        raise ValueError("batch.toml experiment_1_2.publish.tables 的目标路径不得重复")
     return destinations
 
 
 def _resolve_relay_assets(
     project_root: Path,
     paper_root: Path,
-    copy_assets: dict[str, Any],
+    publish: dict[str, Any],
 ) -> tuple[AssetCopy, ...]:
     """读取显式 relay 源与论文目标，避免按修改时间猜测研究选择。"""
 
-    raw_assets = copy_assets.get("relay")
+    raw_assets = publish.get("relay")
     if not isinstance(raw_assets, list) or not raw_assets:
-        raise ValueError("batch.toml copy_assets.relay 必须包含至少一项显式 relay 资源")
+        raise ValueError("batch.toml experiment_1_2.publish.relay 必须包含至少一项显式 relay 资源")
     assets: list[AssetCopy] = []
     for index, item in enumerate(raw_assets, start=1):
         if not isinstance(item, dict):
-            raise ValueError(f"batch.toml copy_assets.relay[{index}] 必须是表")
+            raise ValueError(f"batch.toml experiment_1_2.publish.relay[{index}] 必须是表")
         raw_source = item.get("source")
         if not isinstance(raw_source, str) or not raw_source:
-            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 必须为非空字符串")
+            raise ValueError(f"batch.toml experiment_1_2.publish.relay[{index}].source 必须为非空字符串")
         source_relative = Path(raw_source)
         if source_relative.is_absolute() or ".." in source_relative.parts:
-            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 必须是项目内相对路径")
+            raise ValueError(f"batch.toml experiment_1_2.publish.relay[{index}].source 必须是项目内相对路径")
         source = (project_root / source_relative).resolve()
         if not source.is_relative_to(project_root) or source.suffix.lower() not in {".png", ".pdf"}:
-            raise ValueError(f"batch.toml copy_assets.relay[{index}].source 只能指向项目内 PNG 或 PDF")
+            raise ValueError(f"batch.toml experiment_1_2.publish.relay[{index}].source 只能指向项目内 PNG 或 PDF")
         destination = _resolve_asset_destination(
             paper_root,
             item.get("destination"),
@@ -1303,7 +1341,7 @@ def _resolve_relay_assets(
         )
         assets.append(AssetCopy(source=source, destination=destination))
     if len({item.destination for item in assets}) != len(assets):
-        raise ValueError("batch.toml copy_assets.relay 的 destination 不得重复")
+        raise ValueError("batch.toml experiment_1_2.publish.relay 的 destination 不得重复")
     return tuple(assets)
 
 
@@ -1670,17 +1708,15 @@ __all__ = [
     "TASK_SPECS",
     "TaskDataEntry",
     "TaskSpec",
-    "analyze_current",
-    "copy_current_assets",
     "describe_workflow",
     "list_task_data",
     "load_batch_paths",
-    "plan_current_assets",
+    "analyze_workflow",
+    "plan_publication",
     "preprocess_current",
     "project_root",
     "promote_batch",
-    "qc_current",
-    "rebuild_current",
+    "validate_workflow",
     "select_task_data",
     "stage_batch",
 ]

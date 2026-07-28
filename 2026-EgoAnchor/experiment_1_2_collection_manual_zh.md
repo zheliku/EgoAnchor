@@ -284,13 +284,13 @@ task_<任务号>_v<版本>_<YYYYMMDD_HHMMSS>_<物体>
 `EgoAnchor_Python` 目录列出可供分析选择的数据：
 
 ```text
-pixi run eval sessions
+pixi run eval data exp1-2 sessions
 ```
 
 默认选择每项任务的最高版本并直接切换活动批次：
 
 ```text
-pixi run eval stage --promote
+pixi run eval data exp1-2 stage --promote
 ```
 
 返回码为 `0` 且 JSON 中 `"passed": true` 才算通过。首次处理的新任务会检查 writer 的

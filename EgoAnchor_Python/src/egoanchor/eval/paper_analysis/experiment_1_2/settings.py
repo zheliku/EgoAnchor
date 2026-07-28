@@ -49,10 +49,7 @@ def settings_sha256() -> str:
 
     with DEFAULT_SETTINGS_PATH.open("rb") as handle:
         document = tomllib.load(handle)
-    owned = {
-        section: document[section]
-        for section in ("contract", "lag", "transition", "occlusion")
-    }
+    owned = document["experiment_1_2"]
     encoded = json.dumps(owned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -63,10 +60,11 @@ def load_settings() -> PaperSettings:
     source = DEFAULT_SETTINGS_PATH.resolve()
     with source.open("rb") as handle:
         document = tomllib.load(handle)
-    contract = document["contract"]
-    lag = document["lag"]
-    transition = document["transition"]
-    occlusion = document["occlusion"]
+    experiment = document["experiment_1_2"]
+    contract = experiment["contract"]
+    lag = experiment["lag"]
+    transition = experiment["transition"]
+    occlusion = experiment["occlusion"]
     settings = PaperSettings(
         contract_version=int(contract["version"]),
         lag_minimum_ms=float(lag["minimum_ms"]),

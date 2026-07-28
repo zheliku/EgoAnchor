@@ -1,9 +1,8 @@
 """EgoAnchor 运行时评估基础设施的包级入口。
 
-这里导出 schema-v2、QC、Stage 1 workbook 和固定路径批次工作流。论文分析从
-``egoanchor.eval.paper_analysis.experiment_1_2``、
-``egoanchor.eval.paper_analysis.experiment_3`` 或相应 CLI 显式进入，避免运行时服务初始化时
-加载绘图和 PDF 分析依赖。
+这里仅导出 schema-v2、QC 与 Stage 1 workbook。人工数据工作流从
+``egoanchor.eval.workflows`` 包级入口进入，论文统计从 ``egoanchor.eval.paper_analysis``
+进入，避免运行时服务初始化时加载批次、绘图和 PDF 分析依赖。
 """
 from .preprocess import (
     DERIVED_FILE_NAMES,
@@ -59,35 +58,8 @@ from .schema_v2 import (
     UnityRenderRow,
     validate_schema_mapping,
 )
-from .batch import (
-    ArtifactDestination,
-    BatchArtifact,
-    AssetCopy,
-    BatchPaths,
-    BatchToolError,
-    SessionSummary,
-    TaskDataEntry,
-    TaskSpec,
-    analyze_current,
-    copy_current_assets,
-    describe_workflow,
-    list_task_data,
-    load_batch_paths,
-    preprocess_current,
-    promote_batch,
-    qc_current,
-    rebuild_current,
-    select_task_data,
-    stage_batch,
-)
-
 __all__ = [
     "DERIVED_FILE_NAMES",
-    "ArtifactDestination",
-    "BatchArtifact",
-    "AssetCopy",
-    "BatchPaths",
-    "BatchToolError",
     "EMPTY_TEXT_MARKER",
     "EXPECTED_EVENTS",
     "EXCEL_MAX_CELL_CHARS",
@@ -110,11 +82,8 @@ __all__ = [
     "SourceFileRecord",
     "SourceRow",
     "StageOneQcReport",
-    "SessionSummary",
-    "TaskDataEntry",
     "TASK_SOURCE_FILE_NAMES",
     "TaskDataset",
-    "TaskSpec",
     "UnityAdmissionRow",
     "UnityReferenceRow",
     "UnityRenderRow",
@@ -122,31 +91,20 @@ __all__ = [
     "WorkbookValidationError",
     "WorkbookVerification",
     "aggregate_config_hash",
-    "analyze_current",
-    "copy_current_assets",
     "collect_source_files",
     "decode_workbook_text",
-    "describe_workflow",
     "file_sha256",
     "finalize_task_events",
     "flatten_json",
     "iter_jsonl",
-    "list_task_data",
-    "load_batch_paths",
-    "preprocess_current",
     "read_json_document",
     "read_task",
-    "promote_batch",
-    "qc_current",
     "require_task_sources",
     "reproducible_generated_at",
-    "rebuild_current",
-    "select_task_data",
     "run_task_qc",
     "source_file_info",
     "source_set_sha256",
     "stable_workbook_id",
-    "stage_batch",
     "validate_schema_mapping",
     "variant_config_hash",
     "verify_task_workbook",

@@ -1,4 +1,4 @@
-"""通过 ``pixi run eval`` 调用的实验一、二、三统一人工入口。"""
+"""通过 ``pixi run eval`` 使用的统一评估工程命令行入口。"""
 
 from __future__ import annotations
 
@@ -10,137 +10,120 @@ from pathlib import Path
 
 from tqdm.auto import tqdm
 
-from .batch import (
+from .workflows import (
     BatchToolError,
-    analyze_current,
-    describe_workflow,
+    analyze_workspace,
+    create_raw_template,
+    describe_workspace,
     list_task_data,
     preprocess_current,
-    plan_current_assets,
     promote_batch,
-    qc_current,
-    rebuild_current,
+    publish_workspace,
     stage_batch,
+    validate_workspace,
 )
-from .paper_analysis.experiment_3 import (
-    analyze_experiment3,
-    create_template as create_experiment3_template,
-    describe_experiment3,
-    plan_experiment3_assets_if_ready,
-    plot_experiment3,
-    validate_input as validate_experiment3_input,
-)
-from .paper_analysis.common import publish_artifact_plans
 
 
 EXIT_OK = 0
 """命令完整成功。"""
 
 EXIT_IO_ERROR = 1
-"""文件系统或外部工具错误。"""
+"""文件系统、Git 或其他外部工具错误。"""
 
 EXIT_DATA_ERROR = 2
-"""批次、schema、QC 或论文输入契约错误。"""
+"""数据、schema、QC 或论文输入契约错误。"""
+
+_TARGETS = ("all", "exp1-2", "exp3")
+"""生命周期命令接受的稳定目标集合。"""
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """构造不需要人工传递路径的纯 Pixi 命令。"""
+    """构造生命周期统一、正式路径固定的纯 Pixi 命令。"""
 
     parser = argparse.ArgumentParser(
         prog="pixi run eval",
-        description="EgoAnchor 实验一/二批次分析与实验三问卷分析",
+        description="EgoAnchor 实验一/二与实验三统一离线评估工程",
     )
-    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+    commands = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    config = subparsers.add_parser("config", help="显示当前生效的数据路径和图表发布位置")
-    config.set_defaults(handler=_run_config)
+    status = commands.add_parser("status", help="只读显示配置、输入进度和最近构建状态")
+    status.add_argument("target", nargs="?", choices=_TARGETS, default="all", help="默认显示全部实验")
+    status.set_defaults(handler=_run_status)
 
-    sessions = subparsers.add_parser("sessions", help="列出任务数据目录中的可选 session")
+    validate = commands.add_parser("validate", help="检查正式输入能否进入分析")
+    validate.add_argument("target", choices=_TARGETS, help="要验证的实验集合")
+    validate.set_defaults(handler=_run_validate)
+
+    analyze = commands.add_parser("analyze", help="生成指定实验的全部本地分析产物")
+    analyze_targets = analyze.add_subparsers(dest="target", metavar="TARGET", required=True)
+    analyze_exp12 = analyze_targets.add_parser("exp1-2", help="分析当前五任务活动批次")
+    analyze_exp12.add_argument("--rebuild", action="store_true", help="先强制重建五本 Stage 1 工作簿")
+    analyze_exp12.set_defaults(handler=_run_analyze, rebuild_experiment_1_2=False)
+    analyze_exp3 = analyze_targets.add_parser("exp3", help="一次生成结果 XLSX、TeX 和全部论文图")
+    analyze_exp3.set_defaults(handler=_run_analyze, rebuild_experiment_1_2=False)
+    analyze_all = analyze_targets.add_parser("all", help="联合门禁通过后依次分析全部实验")
+    analyze_all.add_argument(
+        "--rebuild-exp1-2",
+        action="store_true",
+        help="联合分析前强制重建实验一/二的五本 Stage 1 工作簿",
+    )
+    analyze_all.set_defaults(handler=_run_analyze, rebuild_experiment_1_2=False)
+
+    publish = commands.add_parser("publish", help="联合预检后事务性发布论文图表")
+    publish.add_argument("target", choices=_TARGETS, help="必须明确本次预期发布的实验集合")
+    publish.set_defaults(handler=_run_publish)
+
+    data = commands.add_parser("data", help="管理实验专属输入，不执行论文统计")
+    data_targets = data.add_subparsers(dest="data_target", metavar="TARGET", required=True)
+    _add_experiment_1_2_data_commands(data_targets)
+    _add_experiment_3_data_commands(data_targets)
+    return parser
+
+
+def _add_experiment_1_2_data_commands(targets: argparse._SubParsersAction) -> None:
+    """注册实验一/二的 session、暂存、提升和预处理命令。"""
+
+    experiment = targets.add_parser("exp1-2", help="管理实验一/二五任务批次")
+    commands = experiment.add_subparsers(dest="data_command", metavar="COMMAND", required=True)
+
+    sessions = commands.add_parser("sessions", help="列出任务数据目录中的可选 session")
     sessions.set_defaults(handler=_run_sessions)
 
-    stage = subparsers.add_parser("stage", help="自动选择五项任务，只处理缺失或变化的任务缓存")
+    stage = commands.add_parser("stage", help="选择五项任务并准备独立 Stage 1 缓存")
     stage.add_argument(
         "--version",
         type=_parse_version,
         metavar="VERSION",
-        help="五项任务统一使用指定版本，例如 2 或 v2；省略时各任务使用最高版本",
+        help="五项任务统一使用指定版本，例如 2 或 v2",
     )
     stage.add_argument(
         "--task-version",
         action="append",
         default=[],
         metavar="TASK=VERSION",
-        help="覆盖单项任务版本，可重复使用，例如 --task-version 3=v2",
+        help="覆盖单项任务版本，可重复使用",
     )
-    stage.add_argument(
-        "--object",
-        dest="object_name",
-        metavar="OBJECT",
-        help="限制目录名中的物体；存在多个完整物体批次时必须指定",
-    )
-    stage.add_argument(
-        "--promote",
-        action="store_true",
-        help="任务缓存就绪后立刻切换活动组合，无需手工输入 batch_id",
-    )
+    stage.add_argument("--object", dest="object_name", metavar="OBJECT", help="限制正式物体目录名")
+    stage.add_argument("--promote", action="store_true", help="暂存成功后立即切换为活动批次")
     stage.set_defaults(handler=_run_stage)
 
-    promote = subparsers.add_parser("promote", help="将已验证暂存批次切换为当前活动批次")
+    promote = commands.add_parser("promote", help="切换已验证的暂存批次")
     promote.add_argument("batch_id", nargs="?", help="省略时要求暂存区恰好只有一个批次")
     promote.set_defaults(handler=_run_promote)
 
-    qc = subparsers.add_parser("qc", help="显式深查活动组合引用的五项原始数据")
-    qc.set_defaults(handler=_run_qc)
-
-    preprocess = subparsers.add_parser("preprocess", help="补建活动组合中缺失或失效的任务 XLSX")
+    preprocess = commands.add_parser("preprocess", help="补建活动批次缺失或失效的 Stage 1 工作簿")
+    preprocess.add_argument("--force", action="store_true", help="强制重建全部五本工作簿")
     preprocess.set_defaults(handler=_run_preprocess)
 
-    analyze = subparsers.add_parser(
-        "analyze",
-        help="复用逐任务指标缓存，生成当前组合的图表和 TeX 片段",
-        description="从当前五本 XLSX 复用逐任务缓存，只重算变化任务并更新 analysis；不修改论文目录或主稿。",
-    )
-    analyze.set_defaults(handler=_run_analyze)
 
-    copy_assets = subparsers.add_parser(
-        "copy-assets",
-        help="将当前实验面板、表格 TeX 和配置指定 relay 文件复制到论文目录",
-    )
-    copy_assets.set_defaults(handler=_run_copy_assets)
+def _add_experiment_3_data_commands(targets: argparse._SubParsersAction) -> None:
+    """注册实验三正式空白模板生成命令。"""
 
-    rebuild = subparsers.add_parser("rebuild", help="显式强制重建五项 XLSX 和全部分析产物")
-    rebuild.set_defaults(handler=_run_rebuild)
-
-    experiment3 = subparsers.add_parser(
-        "experiment3",
-        help="实验三原始模板、问卷统计、CLMM 与论文图",
-    )
-    experiment3.set_defaults(handler=_run_experiment3_help, experiment3_parser=experiment3)
-    experiment3_commands = experiment3.add_subparsers(dest="experiment3_command", metavar="COMMAND")
-
-    experiment3_config = experiment3_commands.add_parser("config", help="显示实验三配置与当前填表进度")
-    experiment3_config.set_defaults(handler=_run_experiment3_config)
-
-    experiment3_template = experiment3_commands.add_parser("build-template", help="在新路径生成空白原始模板")
-    experiment3_template.add_argument("--destination", type=Path, required=True, help="必须是尚不存在的新工作簿路径")
-    experiment3_template.set_defaults(handler=_run_experiment3_template)
-
-    experiment3_validate = experiment3_commands.add_parser("validate", help="检查实验三原始工作簿结构和填表完整性")
-    experiment3_validate.add_argument("--input", type=Path, help="覆盖配置中的默认输入工作簿")
-    experiment3_validate.add_argument("--complete", action="store_true", help="进一步要求达到正式分析完整性")
-    experiment3_validate.add_argument("--allow-synthetic", action="store_true", help=argparse.SUPPRESS)
-    experiment3_validate.set_defaults(handler=_run_experiment3_validate)
-
-    experiment3_analyze = experiment3_commands.add_parser("analyze", help="从原始值生成实验三结果 XLSX 与 TeX")
-    experiment3_analyze.add_argument("--input", type=Path, help="覆盖配置中的默认输入工作簿")
-    experiment3_analyze.add_argument("--output-root", type=Path, help="覆盖配置中的本地分析输出目录")
-    experiment3_analyze.add_argument("--allow-synthetic", action="store_true", help=argparse.SUPPRESS)
-    experiment3_analyze.set_defaults(handler=_run_experiment3_analyze)
-
-    experiment3_plot = experiment3_commands.add_parser("plot", help="只读结果 XLSX 生成实验三 PNG/PDF")
-    experiment3_plot.add_argument("--output-root", type=Path, help="覆盖配置中的本地分析输出目录")
-    experiment3_plot.set_defaults(handler=_run_experiment3_plot)
-    return parser
+    experiment = targets.add_parser("exp3", help="管理实验三正式原始工作簿")
+    commands = experiment.add_subparsers(dest="data_command", metavar="COMMAND", required=True)
+    template = commands.add_parser("create-template", help="在新路径生成空白正式模板")
+    template.add_argument("--output", type=Path, required=True, help="必须是尚不存在的新工作簿路径")
+    template.set_defaults(handler=_run_create_template)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -163,21 +146,55 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_DATA_ERROR
 
 
-def _run_config(_args: argparse.Namespace) -> dict[str, object]:
-    """显示 batch.toml 解析后的绝对输入和输出。"""
+def _run_status(args: argparse.Namespace) -> dict[str, object]:
+    """显示目标工作区状态。"""
 
-    return describe_workflow()
+    return describe_workspace(args.target)
+
+
+def _run_validate(args: argparse.Namespace) -> dict[str, object]:
+    """运行目标正式分析门禁。"""
+
+    return validate_workspace(args.target)
+
+
+def _run_analyze(args: argparse.Namespace) -> dict[str, object]:
+    """显示实验三阶段进度，并运行指定目标的完整本地分析。"""
+
+    rebuild = bool(
+        getattr(args, "rebuild", False) or getattr(args, "rebuild_exp1_2", False)
+    )
+    if args.target not in {"exp3", "all"}:
+        return analyze_workspace(args.target, rebuild_experiment_1_2=rebuild)
+    with tqdm(total=18, desc=f"analyze {args.target}", unit="stage", leave=False) as bar:
+        def update(message: str) -> None:
+            """更新实验三分析阶段，保持 stdout 只有 JSON。"""
+
+            bar.set_postfix_str(message)
+            bar.update(1)
+
+        return analyze_workspace(
+            args.target,
+            rebuild_experiment_1_2=rebuild,
+            experiment_3_progress=update,
+        )
+
+
+def _run_publish(args: argparse.Namespace) -> dict[str, object]:
+    """通过统一事务发布明确目标集合。"""
+
+    return publish_workspace(args.target)
 
 
 def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:
-    """列出 eval session，不修改任何日志。"""
+    """列出实验一/二候选 session，不修改任何日志。"""
 
     rows = list_task_data()
-    return {"passed": True, "count": len(rows), "sessions": rows}
+    return {"passed": True, "target": "exp1-2", "count": len(rows), "sessions": rows}
 
 
 def _run_stage(args: argparse.Namespace) -> dict[str, object]:
-    """准备五项独立缓存和组合清单，并返回下一条 Pixi 命令。"""
+    """准备五项独立缓存和组合清单，并可立即提升。"""
 
     artifact = stage_batch(
         version=args.version,
@@ -191,132 +208,30 @@ def _run_stage(args: argparse.Namespace) -> dict[str, object]:
     promoted["workbook_sha256"] = artifact.workbook_sha256
     promoted["cache_hits"] = list(artifact.cache_hits)
     promoted["rebuilt_tasks"] = list(artifact.rebuilt_tasks)
-    promoted["next_command"] = "pixi run eval analyze"
+    promoted["next_command"] = "pixi run eval analyze exp1-2"
     return promoted
 
 
 def _run_promote(args: argparse.Namespace) -> dict[str, object]:
-    """切换当前活动批次。"""
+    """切换实验一/二当前活动批次。"""
 
     return promote_batch(args.batch_id)
 
 
-def _run_qc(_args: argparse.Namespace) -> dict[str, object]:
-    """显式深查当前活动组合的五项原始数据。"""
+def _run_preprocess(args: argparse.Namespace) -> dict[str, object]:
+    """增量或强制重建实验一/二 Stage 1 工作簿。"""
 
-    return qc_current()
-
-
-def _run_preprocess(_args: argparse.Namespace) -> dict[str, object]:
-    """补建当前活动组合缺失或失效的 Stage 1 工作簿。"""
-
-    return preprocess_current()
+    return preprocess_current(force=args.force)
 
 
-def _run_analyze(_args: argparse.Namespace) -> dict[str, object]:
-    """从当前工作簿重建本地分析产物。"""
+def _run_create_template(args: argparse.Namespace) -> dict[str, object]:
+    """从美化来源生成新的实验三空白正式模板。"""
 
-    return analyze_current()
-
-
-def _run_copy_assets(_args: argparse.Namespace) -> dict[str, object]:
-    """联合预检已就绪的实验一/二与实验三，再一次性发布论文资源。"""
-
-    experiment3_plan = plan_experiment3_assets_if_ready()
-    experiment12_plan = None
-    try:
-        experiment12_plan = plan_current_assets()
-    except (FileNotFoundError, BatchToolError) as error:
-        if experiment3_plan is None:
-            raise
-        experiment12_status: dict[str, object] = {"status": "skipped", "reason": str(error)}
-    else:
-        experiment12_status = {"status": "published"}
-    plans = tuple(plan for plan in (experiment12_plan, experiment3_plan) if plan is not None)
-    published = publish_artifact_plans(plans)
-    by_owner = {
-        owner: [item for item in published if item["owner"] == owner]
-        for owner in ("experiment_1_2", "experiment_3")
-    }
-    if experiment12_plan is not None:
-        experiment12_status["published"] = by_owner["experiment_1_2"]
-    experiment3_status: dict[str, object]
-    if experiment3_plan is None:
-        experiment3_status = {"status": "skipped", "reason": "实验三尚无完整分析构建"}
-    else:
-        experiment3_status = {
-            "status": "published",
-            "published": by_owner["experiment_3"],
-        }
-    return {
-        "passed": True,
-        "experiment_1_2": experiment12_status,
-        "experiment_3": experiment3_status,
-        "next_command": "审阅已发布图表，并按论文工作流自行编译主稿",
-    }
-
-
-def _run_rebuild(_args: argparse.Namespace) -> dict[str, object]:
-    """从当前 raw 完整重建本地分析产物。"""
-
-    return rebuild_current()
-
-
-def _run_experiment3_help(args: argparse.Namespace) -> dict[str, object]:
-    """缺少实验三子命令时打印局部帮助。"""
-
-    args.experiment3_parser.print_help()
-    return {"passed": True}
-
-
-def _run_experiment3_config(_args: argparse.Namespace) -> dict[str, object]:
-    """显示实验三配置与工作簿进度。"""
-
-    return describe_experiment3()
-
-
-def _run_experiment3_template(args: argparse.Namespace) -> dict[str, object]:
-    """从美化来源重建空白正式模板。"""
-
-    return create_experiment3_template(destination=args.destination)
-
-
-def _run_experiment3_validate(args: argparse.Namespace) -> dict[str, object]:
-    """检查实验三输入结构或正式分析完整性。"""
-
-    return validate_experiment3_input(
-        input_workbook=args.input,
-        require_complete=args.complete,
-        allow_synthetic=args.allow_synthetic,
-    )
-
-
-def _run_experiment3_analyze(args: argparse.Namespace) -> dict[str, object]:
-    """显示阶段进度并运行完整实验三离线分析。"""
-
-    with tqdm(total=17, desc="experiment3 analyze", unit="stage", leave=False) as bar:
-        def update(message: str) -> None:
-            """更新分析阶段描述，保持 JSON stdout 干净。"""
-
-            bar.set_postfix_str(message)
-            bar.update(1)
-
-        return analyze_experiment3(
-            input_workbook=args.input,
-            output_root=args.output_root,
-            allow_synthetic=args.allow_synthetic,
-            progress=update,
-        )
-
-
-def _run_experiment3_plot(args: argparse.Namespace) -> dict[str, object]:
-    """从结果工作簿回读并生成论文图。"""
-
-    return plot_experiment3(output_root=args.output_root)
+    return create_raw_template(args.output)
 
 
 def _parse_version(value: str) -> int:
-    """把命令行中的 `2` 或 `v2` 解析为正整数版本。"""
+    """把命令行中的 ``2`` 或 ``v2`` 解析为正整数版本。"""
 
     normalized = value[1:] if value.lower().startswith("v") else value
     if not normalized.isdigit() or normalized.startswith("0"):
@@ -325,7 +240,7 @@ def _parse_version(value: str) -> int:
 
 
 def _parse_task_versions(values: Sequence[str]) -> dict[int, int]:
-    """解析可重复的 TASK=VERSION，并拒绝重复任务覆盖。"""
+    """解析可重复的 ``TASK=VERSION``，并拒绝重复任务覆盖。"""
 
     parsed: dict[int, int] = {}
     for value in values:
@@ -342,13 +257,7 @@ def _parse_task_versions(values: Sequence[str]) -> dict[int, int]:
     return parsed
 
 
-__all__ = [
-    "EXIT_DATA_ERROR",
-    "EXIT_IO_ERROR",
-    "EXIT_OK",
-    "build_parser",
-    "main",
-]
+__all__ = ["EXIT_DATA_ERROR", "EXIT_IO_ERROR", "EXIT_OK", "build_parser", "main"]
 
 
 if __name__ == "__main__":

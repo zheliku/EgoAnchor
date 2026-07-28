@@ -1,4 +1,4 @@
-"""实验一/二纯 Pixi 批次管理工作流测试。"""
+"""实验一/二数据批次与统一工作流测试。"""
 
 from __future__ import annotations
 
@@ -9,23 +9,31 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from egoanchor.eval import (
+from egoanchor.eval import finalize_task_events, verify_task_workbook
+from egoanchor.eval.workflows import (
     ArtifactDestination,
     AssetCopy,
     BatchPaths,
-    copy_current_assets,
-    describe_workflow,
-    finalize_task_events,
     list_task_data,
     load_batch_paths,
     preprocess_current,
     promote_batch,
-    qc_current,
     select_task_data,
     stage_batch,
-    verify_task_workbook,
 )
 from egoanchor.eval import cli as eval_cli
+from egoanchor.eval.paper_analysis.common import (
+    begin_build,
+    complete_build,
+    publish_artifact_plans,
+    source_tree_sha256,
+)
+from egoanchor.eval.paper_analysis.experiment_1_2 import settings_sha256
+from egoanchor.eval.workflows.experiment_1_2 import (
+    describe_workflow,
+    plan_publication,
+    validate_workflow,
+)
 
 from .test_reader_qc import _write_valid_task
 
@@ -49,14 +57,14 @@ _MARKER_ROLES = (
 """各测试场景满足 QC 所需的最小 marker 角色。"""
 
 
-class BatchWorkflowTests(unittest.TestCase):
+class Experiment12WorkflowTests(unittest.TestCase):
     """验证 session 映射、复制校验、工作簿发布和安全切换。"""
 
     def setUp(self) -> None:
         """测试临时项目没有 Git 元数据，统一模拟真实 commit 读取结果。"""
 
         self._code_version_patch = mock.patch(
-            "egoanchor.eval.batch._git_code_version",
+            "egoanchor.eval.workflows.experiment_1_2._git_code_version",
             return_value="test-version",
         )
         self._code_version_patch.start()
@@ -372,18 +380,7 @@ class BatchWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(
             set(subparsers.choices),
-            {
-                "sessions",
-                "config",
-                "stage",
-                "promote",
-                "qc",
-                "preprocess",
-                "rebuild",
-                "analyze",
-                "copy-assets",
-                "experiment3",
-            },
+            {"status", "validate", "analyze", "publish", "data"},
         )
 
     def test_stage_promote_switches_batch_without_manual_batch_id(self) -> None:
@@ -405,14 +402,23 @@ class BatchWorkflowTests(unittest.TestCase):
         ):
             result = eval_cli._run_stage(
                 eval_cli.build_parser().parse_args(
-                    ["stage", "--promote", "--version", "v2", "--task-version", "3=v3"]
+                    [
+                        "data",
+                        "exp1-2",
+                        "stage",
+                        "--promote",
+                        "--version",
+                        "v2",
+                        "--task-version",
+                        "3=v3",
+                    ]
                 )
             )
 
         staged.assert_called_once_with(version=2, task_versions={3: 3}, object_name=None)
         promoted.assert_called_once_with(artifact.batch_id)
         self.assertEqual(result["staged_batch"], artifact.batch_id)
-        self.assertEqual(result["next_command"], "pixi run eval analyze")
+        self.assertEqual(result["next_command"], "pixi run eval analyze exp1-2")
 
     def test_current_qc_and_preprocess_use_configured_active_paths(self) -> None:
         """逐阶段命令只读取 batch.toml 指定的当前活动批次。"""
@@ -423,7 +429,7 @@ class BatchWorkflowTests(unittest.TestCase):
             artifact = stage_batch(root=root)
             promote_batch(artifact.batch_id, root=root)
 
-            qc_result = qc_current(root=root)
+            qc_result = validate_workflow(root=root)
             preprocess_result = preprocess_current(root=root)
 
             self.assertTrue(qc_result["passed"])
@@ -443,17 +449,15 @@ class BatchWorkflowTests(unittest.TestCase):
             payload = describe_workflow(root)
 
             self.assertEqual(
-                set(payload["stages"]),
+                set(payload["operations"]),
                 {
-                    "config",
-                    "sessions",
-                    "stage",
-                    "promote",
-                    "qc",
-                    "preprocess",
+                    "data_sessions",
+                    "data_stage",
+                    "data_promote",
+                    "validate",
+                    "data_preprocess",
                     "analyze",
-                    "copy-assets",
-                    "rebuild",
+                    "publish",
                 },
             )
             self.assertNotIn("manuscript", payload["paths"])
@@ -466,7 +470,7 @@ class BatchWorkflowTests(unittest.TestCase):
                 {"exp1_static.tex", "exp1_dynamic.tex", "exp2_design.tex"},
             )
 
-    def test_copy_assets_publishes_current_panels_tables_and_relay_files(self) -> None:
+    def test_publish_plan_copies_current_panels_tables_and_relay_files(self) -> None:
         """发布命令只复制本次清单中的面板、三张表格和显式 relay 文件。"""
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -505,17 +509,31 @@ class BatchWorkflowTests(unittest.TestCase):
                 source.write_text(key, encoding="utf-8")
                 artifact_paths[key] = str(source.resolve())
             (table_root / "stale_table.tex").write_text("stale", encoding="utf-8")
-            provenance = active_root / "analysis" / "provenance"
-            provenance.mkdir()
-            (provenance / "build_result.json").write_text(
-                json.dumps(
-                    {
-                        "batch_id": "batch_test",
-                        "figure_paths": figure_paths,
-                        "artifact_paths": artifact_paths,
-                    }
+            implementation_root = (
+                Path(__file__).resolve().parents[1] / "paper_analysis" / "experiment_1_2"
+            )
+            building = begin_build(
+                active_root / "analysis",
+                owner="experiment_1_2",
+                source_kind="formal",
+                inputs=(),
+                config_sha256=settings_sha256(),
+                implementation_sha256=source_tree_sha256(implementation_root),
+                details={"batch_id": "batch_test"},
+            )
+            complete_build(
+                active_root / "analysis",
+                building,
+                outputs=(
+                    *(
+                        {"key": key, "kind": Path(path).suffix[1:], "path": path}
+                        for key, path in figure_paths.items()
+                    ),
+                    *(
+                        {"key": key, "kind": "tex", "path": path}
+                        for key, path in artifact_paths.items()
+                    ),
                 ),
-                encoding="utf-8",
             )
             paper_root = root.parent / "paper"
             relay_source = root / "data" / "replay_capture" / "replay_grid.pdf"
@@ -540,16 +558,18 @@ class BatchWorkflowTests(unittest.TestCase):
                 config_path=root / "batch.toml",
             )
             with (
-                mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths),
                 mock.patch(
-                    "egoanchor.eval.batch._load_batch_records",
+                    "egoanchor.eval.workflows.experiment_1_2.load_batch_paths",
+                    return_value=paths,
+                ),
+                mock.patch(
+                    "egoanchor.eval.workflows.experiment_1_2._load_batch_records",
                     return_value=("batch_test", ()),
                 ),
             ):
-                result = copy_current_assets(root=root)
+                result = publish_artifact_plans((plan_publication(root=root),))
 
-            self.assertTrue(result["passed"])
-            self.assertEqual(len(result["published"]), 20)
+            self.assertEqual(len(result), 20)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
             self.assertEqual(
@@ -560,7 +580,7 @@ class BatchWorkflowTests(unittest.TestCase):
             self.assertFalse((paper_root / "tables" / "stale_table.tex").exists())
             self.assertFalse((paper_root / "main.tex").exists())
 
-    def test_copy_assets_preflights_all_tables_before_writing(self) -> None:
+    def test_publish_plan_preflights_all_tables_before_writing(self) -> None:
         """任一配置表格缺失时，论文目录不得先写入部分图片。"""
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -582,23 +602,40 @@ class BatchWorkflowTests(unittest.TestCase):
             dynamic_table = table_root / "dynamic.tex"
             static_table.write_text("static", encoding="utf-8")
             dynamic_table.write_text("dynamic", encoding="utf-8")
-            provenance = active_root / "analysis" / "provenance"
-            provenance.mkdir()
             missing_table = table_root / "missing.tex"
-            (provenance / "build_result.json").write_text(
-                json.dumps(
-                    {
-                        "batch_id": "batch_test",
-                        "figure_paths": figure_paths,
-                        "artifact_paths": {
-                            "exp1_static_table": str(static_table.resolve()),
-                            "exp1_dynamic_table": str(dynamic_table.resolve()),
-                            "exp2_table": str(missing_table.resolve()),
-                        },
-                    }
-                ),
-                encoding="utf-8",
+            missing_table.write_text("missing", encoding="utf-8")
+            artifact_paths = {
+                "exp1_static_table": str(static_table.resolve()),
+                "exp1_dynamic_table": str(dynamic_table.resolve()),
+                "exp2_table": str(missing_table.resolve()),
+            }
+            implementation_root = (
+                Path(__file__).resolve().parents[1] / "paper_analysis" / "experiment_1_2"
             )
+            building = begin_build(
+                active_root / "analysis",
+                owner="experiment_1_2",
+                source_kind="formal",
+                inputs=(),
+                config_sha256=settings_sha256(),
+                implementation_sha256=source_tree_sha256(implementation_root),
+                details={"batch_id": "batch_test"},
+            )
+            complete_build(
+                active_root / "analysis",
+                building,
+                outputs=(
+                    *(
+                        {"key": key, "kind": Path(path).suffix[1:], "path": path}
+                        for key, path in figure_paths.items()
+                    ),
+                    *(
+                        {"key": key, "kind": "tex", "path": path}
+                        for key, path in artifact_paths.items()
+                    ),
+                ),
+            )
+            missing_table.unlink()
             paper_root = root.parent / "paper"
             paths = BatchPaths(
                 project_root=root,
@@ -619,14 +656,17 @@ class BatchWorkflowTests(unittest.TestCase):
                 config_path=root / "batch.toml",
             )
             with (
-                mock.patch("egoanchor.eval.batch.load_batch_paths", return_value=paths),
                 mock.patch(
-                    "egoanchor.eval.batch._load_batch_records",
+                    "egoanchor.eval.workflows.experiment_1_2.load_batch_paths",
+                    return_value=paths,
+                ),
+                mock.patch(
+                    "egoanchor.eval.workflows.experiment_1_2._load_batch_records",
                     return_value=("batch_test", ()),
                 ),
-                self.assertRaises(FileNotFoundError),
+                self.assertRaises(ValueError),
             ):
-                copy_current_assets(root=root)
+                publish_artifact_plans((plan_publication(root=root),))
 
             self.assertFalse(paper_root.exists())
 

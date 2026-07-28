@@ -21,7 +21,7 @@ def write_subjective_table(
     output = destination.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        "% 由 pixi run eval experiment3 analyze 自动生成；请勿手工修改。",
+        "% 由 pixi run eval analyze exp3 自动生成；请勿手工修改。",
         r"\begin{table}[t]",
         r"\centering",
         r"\caption{实验三的参与者内主观评价结果。每位参与者先在三个物体上取均值；差值方向为 EgoAnchor$-$One-Euro。}",

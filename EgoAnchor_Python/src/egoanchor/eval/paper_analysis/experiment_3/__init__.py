@@ -4,11 +4,9 @@ from .figures import publish_figures
 from .inference import signed_rank_test
 from .pipeline import (
     analyze_experiment3,
-    copy_experiment3_assets_if_ready,
     create_template,
     describe_experiment3,
-    plan_experiment3_assets_if_ready,
-    plot_experiment3,
+    plan_publication,
     validate_input,
 )
 from .reader import read_workbook, validate_for_analysis
@@ -24,13 +22,11 @@ __all__ = [
     "analyze_experiment3",
     "analyze_scores",
     "build_raw_template",
-    "copy_experiment3_assets_if_ready",
     "create_template",
     "derive_scores",
     "describe_experiment3",
     "load_settings",
-    "plan_experiment3_assets_if_ready",
-    "plot_experiment3",
+    "plan_publication",
     "publish_figures",
     "read_workbook",
     "signed_rank_test",

@@ -1,4 +1,4 @@
-"""实验三正式模板、统计与结果产物测试。"""
+"""实验三正式模板、统计与完整构建产物测试。"""
 
 from __future__ import annotations
 
@@ -207,13 +207,13 @@ class Experiment3Tests(unittest.TestCase):
         self.assertAlmostEqual(float(result["rank_biserial"]), 0.0)
         self.assertEqual(float(result["p_value"]), 1.0)
 
-    def test_cli_exposes_nested_experiment3_workflow(self) -> None:
-        """统一 CLI 暴露固定路径的模板、验证、分析和绘图命令。"""
+    def test_cli_exposes_experiment3_as_analyze_target(self) -> None:
+        """实验三与实验一/二共享 analyze 生命周期，不再另设 plot。"""
 
         parser = eval_cli.build_parser()
-        args = parser.parse_args(["experiment3", "analyze"])
-        self.assertEqual(args.experiment3_command, "analyze")
-        self.assertIs(args.handler, eval_cli._run_experiment3_analyze)
+        args = parser.parse_args(["analyze", "exp3"])
+        self.assertEqual(args.target, "exp3")
+        self.assertIs(args.handler, eval_cli._run_analyze)
 
 
 if __name__ == "__main__":

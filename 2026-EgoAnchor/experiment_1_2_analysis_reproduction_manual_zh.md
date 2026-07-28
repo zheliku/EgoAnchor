@@ -42,20 +42,22 @@ task_3_v2_20260724_034253_controller_right
 当前数据路径配置为：
 
 ```toml
-[paths]
+[shared.paths]
+paper_root = "../2026-EgoAnchor" # 全部实验论文资源的唯一发布根目录。
+
+[experiment_1_2.paths]
 task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
 task_workbook_root = "data/experiments/task_workbooks" # 每个原始任务目录唯一对应的 Stage 1 工作簿缓存。
 task_analysis_root = "data/experiments/task_analysis" # 每本 Stage 1 工作簿唯一对应的论文指标缓存。
 staging_root = "data/experiments/_staging/experiment_1_2" # 新组合切换前的轻量暂存目录。
 archive_root = "data/experiments/_archive/experiment_1_2" # 旧组合清单和分析产物归档目录。
 active_root = "data/experiments/experiment_1_2" # 当前论文唯一使用的活动组合目录。
-paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的论文目录。
 ```
 
 修改后先运行：
 
 ```powershell
-pixi run eval config
+pixi run eval status exp1-2
 ```
 
 确认打印的绝对路径正确再继续。`paper.toml` 只保存论文统计参数；修改它会让逐任务指标缓存失效，
@@ -63,16 +65,16 @@ pixi run eval config
 
 ## 三、日常命令
 
-正常流程只有三条：
+已有活动批次时的正常流程为：
 
 ```powershell
-pixi run eval stage --promote
-pixi run eval analyze
-pixi run eval copy-assets
+pixi run eval validate exp1-2
+pixi run eval analyze exp1-2
+pixi run eval publish exp1-2
 ```
 
-其中 `stage --promote` 自动选择数据、补建变化任务的工作簿，并切换当前五任务组合。`analyze` 只重算
-变化任务的指标，然后统一生成完整图表。`copy-assets` 在人工看过结果后发布 PNG/PDF 和三张表格 TeX。
+新增或局部重采时，先用 `data exp1-2 stage --promote` 自动选择数据、补建变化任务的工作簿并切换组合。
+`analyze exp1-2` 只重算变化任务的指标，然后统一生成完整图表；`publish exp1-2` 在人工审阅后发布资源。
 
 ## 四、新数据归档
 
@@ -85,7 +87,7 @@ Task 3 时，不需要改另外四个目录。
 查看可选数据：
 
 ```powershell
-pixi run eval sessions
+pixi run eval data exp1-2 sessions
 ```
 
 输出会列出任务、版本、采集时间、物体、session ID、完成任务、Python 停止状态和运行时矩阵。
@@ -96,15 +98,15 @@ pixi run eval sessions
 默认命令：
 
 ```powershell
-pixi run eval stage --promote
+pixi run eval data exp1-2 stage --promote
 ```
 
 默认对每项任务选择最高版本，再选择该版本时间最新的目录。也可以固定选择：
 
 ```powershell
-pixi run eval stage --promote --version v2
-pixi run eval stage --promote --task-version 3=v2 --task-version 4=v3
-pixi run eval stage --promote --object controller_right
+pixi run eval data exp1-2 stage --promote --version v2
+pixi run eval data exp1-2 stage --promote --task-version 3=v2 --task-version 4=v3
+pixi run eval data exp1-2 stage --promote --object controller_right
 ```
 
 `--version` 限制五项任务；重复的 `--task-version` 只覆盖指定任务。存在多个完整物体集合时必须用
@@ -120,7 +122,7 @@ pixi run eval stage --promote --object controller_right
 
 缓存命中判断使用 Stage 1 实现指纹、原始目录文件快照、工作簿存在性和大小。它不重新扫描 JSONL，
 也不重新回读 XLSX。完整来源 SHA 和工作簿 SHA 在首次构建时已记录。需要重新深查原始数据时使用
-`pixi run eval qc`。
+`pixi run eval validate exp1-2`。
 
 首次处理五个新目录时，JSON 中应显示：
 
@@ -142,7 +144,7 @@ pixi run eval stage --promote --object controller_right
 如果不带 `--promote`，命令返回 `batch_id`。之后可运行：
 
 ```powershell
-pixi run eval promote <batch_id>
+pixi run eval data exp1-2 promote <batch_id>
 ```
 
 省略 ID 时，暂存区必须恰好只有一个批次。`promote` 不重跑 QC，也不打开五本 XLSX；它只确认
@@ -151,7 +153,7 @@ pixi run eval promote <batch_id>
 ## 六、analyze：只重算变化任务
 
 ```powershell
-pixi run eval analyze
+pixi run eval analyze exp1-2
 ```
 
 输入由活动 `batch.json` 指向。分析缓存键包含三部分：
@@ -187,12 +189,12 @@ data/experiments/experiment_1_2/analysis/
 ## 七、发布图表
 
 ```powershell
-pixi run eval copy-assets
+pixi run eval publish exp1-2
 ```
 
 命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误发布旧图表。
 通过后，复制本次清单中的实验 PNG/PDF、`batch.toml` 明确列出的 relay PNG/PDF，以及
-`[copy_assets.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
+`[experiment_1_2.publish.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
 
 表格默认发布到：
 
@@ -208,14 +210,14 @@ pixi run eval copy-assets
 ## 八、诊断和强制重建
 
 ```powershell
-pixi run eval qc
-pixi run eval preprocess
-pixi run eval rebuild
+pixi run eval validate exp1-2
+pixi run eval data exp1-2 preprocess
+pixi run eval analyze exp1-2 --rebuild
 ```
 
-- `qc`：对活动组合引用的五个原始目录执行完整硬 QC。它会读取全部 JSON/JSONL，耗时较长。
-- `preprocess`：检查五项 Stage 1 缓存，只补建缺失或失效项。
-- `rebuild`：明确强制重建五本 XLSX 和五份指标缓存，再生成合并产物。日常局部重采不要用它。
+- `validate exp1-2`：对活动组合引用的五个原始目录执行完整硬 QC。它会读取全部 JSON/JSONL，耗时较长。
+- `data exp1-2 preprocess`：检查五项 Stage 1 缓存，只补建缺失或失效项。
+- `analyze exp1-2 --rebuild`：强制重建五本 XLSX 和五份指标缓存，再生成合并产物。日常局部重采不要用它。
 
 修改工作簿契约、reader 或 QC 实现时，Stage 1 实现指纹会变化，对应缓存会重建。修改论文指标或 XLSX
 分析 reader 时，只会使指标缓存失效。普通 Git 提交不会单独让缓存失效。
@@ -241,7 +243,7 @@ pixi run eval rebuild
 
 ### 已有旧 active/raw 和 active/workbooks 怎么办？
 
-新代码不会读取它们。第一次运行 `stage --promote` 会写入新的 `batch.json`，之后 `analyze` 只按清单
+新代码不会读取它们。第一次运行 `data exp1-2 stage --promote` 会写入新的 `batch.json`，之后 `analyze exp1-2` 只按清单
 读取共享缓存。确认新流程结果后，可人工归档旧副本；工具不自动删除已有实验数据。
 
 ## 十、验证命令
@@ -249,6 +251,6 @@ pixi run eval rebuild
 ```powershell
 pixi run python -m compileall src/egoanchor/eval
 pixi run python -m unittest discover -s src/egoanchor/eval/tests -t src -p test_*.py
-pixi run eval config
-pixi run eval sessions
+pixi run eval status exp1-2
+pixi run eval data exp1-2 sessions
 ```

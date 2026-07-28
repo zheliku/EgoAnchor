@@ -34,7 +34,7 @@ class Exp3Paths:
     """结果工作簿、图表、TeX 与来源清单的本地根目录。"""
 
     paper_root: Path
-    """``copy-assets`` 允许写入的论文目录。"""
+    """``publish`` 允许写入的论文目录。"""
 
     figure_destination: Path
     """实验三论文图片的明确发布目录。"""
@@ -145,7 +145,8 @@ def settings_sha256(
     paper_path = (paper_config_path or DEFAULT_PAPER_CONFIG_PATH).expanduser().resolve()
     batch_document = _load_toml(batch_path)
     paper_document = _load_toml(paper_path)
-    shared_paths = _mapping(batch_document, "paths", batch_path.name)
+    shared = _mapping(batch_document, "shared", batch_path.name)
+    shared_paths = _mapping(shared, "paths", "batch.toml [shared]")
     owned = {
         "batch": {
             "paper_root": shared_paths.get("paper_root"),
@@ -248,9 +249,10 @@ def _load_paths(
 ) -> Exp3Paths:
     """解析实验三路径，并限制输入、输出和发布边界。"""
 
-    shared_paths = _mapping(batch_document, "paths", "batch.toml")
+    shared = _mapping(batch_document, "shared", "batch.toml")
+    shared_paths = _mapping(shared, "paths", "batch.toml [shared]")
     raw_paths = _mapping(experiment, "paths", "batch.toml [experiment_3]")
-    raw_copy = _mapping(experiment, "copy_assets", "batch.toml [experiment_3]")
+    raw_copy = _mapping(experiment, "publish", "batch.toml [experiment_3]")
     repository_root = base.parent.resolve()
 
     def resolve(value: Any, field: str) -> Path:
@@ -275,15 +277,15 @@ def _load_paths(
     figure_destination = _paper_destination(
         paper_root,
         raw_copy.get("experiment_destination"),
-        "experiment_3.copy_assets.experiment_destination",
+        "experiment_3.publish.experiment_destination",
     )
     table_destination = _paper_destination(
         paper_root,
         raw_copy.get("table_destination"),
-        "experiment_3.copy_assets.table_destination",
+        "experiment_3.publish.table_destination",
     )
     if table_destination.suffix.lower() != ".tex":
-        raise ValueError("experiment_3.copy_assets.table_destination 必须是 .tex 文件")
+        raise ValueError("experiment_3.publish.table_destination 必须是 .tex 文件")
     return Exp3Paths(
         project_root=base,
         source_template=source_template,

@@ -1,4 +1,4 @@
-"""论文分析入口的边界与最小计算测试。"""
+"""实验一/二论文分析核心与构建边界测试。"""
 
 from __future__ import annotations
 
@@ -44,13 +44,13 @@ from egoanchor.eval.paper_analysis.experiment_1_2 import (
 )
 
 
-class PaperPipelineTests(unittest.TestCase):
+class Experiment12AnalysisTests(unittest.TestCase):
     """冻结新管线只读取 Stage 1 XLSX 且不恢复旧阶段命令。"""
 
     def test_formal_cli_does_not_allow_parameter_overrides(self) -> None:
         """正式论文入口只能读取冻结的 paper.toml。"""
 
-        arguments = eval_cli.build_parser().parse_args(["analyze"])
+        arguments = eval_cli.build_parser().parse_args(["analyze", "exp1-2"])
 
         self.assertFalse(hasattr(arguments, "settings"))
         self.assertEqual(len(settings_sha256()), 64)

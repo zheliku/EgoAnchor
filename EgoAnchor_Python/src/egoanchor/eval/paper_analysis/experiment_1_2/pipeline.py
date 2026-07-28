@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from ..common import begin_build, complete_build, source_tree_sha256
 from .cache import (
     cache_key,
     cache_path,
@@ -74,6 +74,23 @@ def build_analysis(
 
     settings = load_settings()
     parameter_digest = settings_sha256()
+    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
+    building = begin_build(
+        output_root,
+        owner="experiment_1_2",
+        source_kind="formal",
+        inputs=(
+            {
+                "key": f"task_{number}",
+                "path": str(workbook),
+                "sha256": frozen_digests[workbook.name],
+            }
+            for number, workbook in enumerate(normalized, start=1)
+        ),
+        config_sha256=parameter_digest,
+        implementation_sha256=implementation_digest,
+        details={"batch_id": batch_id},
+    )
     task_results = []
     cache_states: dict[str, str] = {}
     for task_number, workbook in enumerate(normalized, start=1):
@@ -107,25 +124,27 @@ def build_analysis(
         output_root.expanduser().resolve(),
         figure_tex_directory,
     )
-    payload = {
-        "passed": True,
+    details = {
         "batch_id": batch_id,
-        "input_workbooks": [str(path) for path in normalized],
-        "input_sha256": dict(results.workbook_sha256),
-        "parameters_sha256": parameter_digest,
         "metrics_implementation_sha256": implementation_sha256(),
         "task_cache": cache_states,
-        "figure_paths": {key: str(value) for key, value in figure_paths.items()},
-        "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "performance": dict(results.performance),
     }
-    provenance_root = output_root / "provenance"
-    provenance_root.mkdir(parents=True, exist_ok=True)
-    (provenance_root / "build_result.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    outputs = [
+        {"key": key, "kind": value.suffix.lower().lstrip("."), "path": str(value)}
+        for key, value in sorted(figure_paths.items())
+    ]
+    outputs.extend(
+        {"key": key, "kind": value.suffix.lower().lstrip("."), "path": str(value)}
+        for key, value in sorted(artifact_paths.items())
     )
-    return payload
+    manifest = complete_build(output_root, building, outputs=outputs, details=details)
+    return {
+        "passed": True,
+        "build": manifest,
+        "task_cache": cache_states,
+        "performance": dict(results.performance),
+    }
 
 
 def _report_progress(progress: Callable[[str], None] | None, message: str) -> None:

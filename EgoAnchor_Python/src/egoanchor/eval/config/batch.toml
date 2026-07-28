@@ -1,25 +1,27 @@
-[paths]
+[shared.paths]
+paper_root = "../2026-EgoAnchor" # 全部实验论文资源的唯一发布根目录。
+
+[experiment_1_2.paths]
 task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
 task_workbook_root = "data/experiments/task_workbooks" # 每个原始任务目录唯一对应的 Stage 1 工作簿缓存。
 task_analysis_root = "data/experiments/task_analysis" # 每本 Stage 1 工作簿唯一对应的论文指标缓存。
 staging_root = "data/experiments/_staging/experiment_1_2" # 待提升的五任务组合清单暂存目录。
 archive_root = "data/experiments/_archive/experiment_1_2" # 旧组合清单及其分析产物归档目录。
 active_root = "data/experiments/experiment_1_2" # 当前论文五任务组合清单和合并分析目录。
-paper_root = "../2026-EgoAnchor" # 手工发布实验图片和 relay 图片的论文目录。
 
-[copy_assets]
+[experiment_1_2.publish]
 experiment_destination = "figures/panels" # 当前活动批次 analysis/figures 下实验一、二 PNG/PDF 的论文相对目标目录。
 
-[copy_assets.tables]
+[experiment_1_2.publish.tables]
 exp1_static_table = "tables/exp1_static.tex" # 实验一静止、头动与遮挡表的论文相对目标路径。
 exp1_dynamic_table = "tables/exp1_dynamic.tex" # 实验一动态 6DoF 表的论文相对目标路径。
 exp2_table = "tables/exp2_design.tex" # 实验二系统设计归因表的论文相对目标路径。
 
-[[copy_assets.relay]]
+[[experiment_1_2.publish.relay]]
 source = "data/replay_capture/20260723_125041_569_controller_right/rendered/grid/replay_grid.pdf" # 已确认的 relay 网格 PDF，相对于 EgoAnchor_Python 根目录；更换定性图时在此显式指定。
 destination = "figures/replay_grid.pdf" # relay PDF 的论文相对目标路径。
 
-[[copy_assets.relay]]
+[[experiment_1_2.publish.relay]]
 source = "data/replay_capture/20260723_125041_569_controller_right/rendered/grid/replay_grid.png" # 已确认的 relay 网格 PNG，相对于 EgoAnchor_Python 根目录；更换定性图时在此显式指定。
 destination = "figures/replay_grid.png" # relay PNG 的论文相对目标路径。
 
@@ -28,6 +30,6 @@ source_template = "../2026-EgoAnchor/material/EgoAnchor_Experiment3_DataCollecti
 input_workbook = "../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx" # 正式参与者原始数据工作簿；日常分析只读此文件。
 analysis_root = "data/experiments/experiment_3/analysis" # 实验三结果工作簿、图、TeX 与来源清单的本地根目录。
 
-[experiment_3.copy_assets]
+[experiment_3.publish]
 experiment_destination = "figures/panels" # 实验三 PNG/PDF 的论文相对发布目录。
-table_destination = "tables/exp3_subjective.tex" # 实验三主观结果表的论文相对发布路径；图片复用 copy_assets.experiment_destination。
+table_destination = "tables/exp3_subjective.tex" # 实验三主观结果表的论文相对发布路径；图片复用统一的面板目录。

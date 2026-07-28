@@ -45,7 +45,7 @@ class ArtifactPlan:
 
 
 def publish_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, str]]:
-    """联合预检全部实验，暂存全部文件后再逐项原子替换。"""
+    """联合预检、暂存并以可回滚事务发布全部实验资源。"""
 
     for plan in plans:
         if any(asset.owner != plan.owner for asset in plan.assets):
@@ -53,6 +53,8 @@ def publish_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, st
     assets = tuple(asset for plan in plans for asset in plan.assets)
     _validate_assets(assets)
     staged: list[tuple[PlannedAsset, Path]] = []
+    backups: list[tuple[PlannedAsset, Path | None]] = []
+    preserve_backups = False
     try:
         for asset in assets:
             asset.destination.parent.mkdir(parents=True, exist_ok=True)
@@ -61,11 +63,36 @@ def publish_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, st
             )
             shutil.copyfile(asset.source, temporary)
             staged.append((asset, temporary))
+        for asset, _ in staged:
+            backup: Path | None = None
+            if asset.destination.exists():
+                backup = asset.destination.with_name(
+                    f".{asset.destination.name}.{uuid4().hex}.backup"
+                )
+                asset.destination.replace(backup)
+            backups.append((asset, backup))
         for asset, temporary in staged:
             temporary.replace(asset.destination)
+    except Exception:
+        restore_errors: list[str] = []
+        for asset, backup in reversed(backups):
+            try:
+                asset.destination.unlink(missing_ok=True)
+                if backup is not None and backup.exists():
+                    backup.replace(asset.destination)
+            except OSError as error:
+                restore_errors.append(f"{asset.destination}: {error}")
+        if restore_errors:
+            preserve_backups = True
+            raise RuntimeError("发布失败且回滚不完整：" + "; ".join(restore_errors))
+        raise
     finally:
         for _, temporary in staged:
             temporary.unlink(missing_ok=True)
+        if not preserve_backups:
+            for _, backup in backups:
+                if backup is not None:
+                    backup.unlink(missing_ok=True)
     return [
         {
             "owner": asset.owner,
@@ -95,7 +122,7 @@ def _validate_assets(assets: tuple[PlannedAsset, ...]) -> None:
         if source.suffix.lower() not in _PUBLISH_SUFFIXES:
             raise ValueError(f"只允许复制 PNG、PDF 或 TeX：{source}")
         if destination in destinations:
-            raise ValueError(f"copy-assets 目标路径重复：{destination}")
+            raise ValueError(f"publish 目标路径重复：{destination}")
         destinations.add(destination)
         if asset.expected_sha256 is not None and _sha256(source) != asset.expected_sha256:
             raise ValueError(f"待复制资源摘要已变化：{asset.owner}/{asset.key}")
