@@ -13,12 +13,12 @@ from typing import Any
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
-from ...preprocess import (
+from ....preprocess import (
     CURRENT_VARIANT_MATRIX_ID,
     FORMAL_METHODS,
     FORMAL_VARIANTS,
 )
-from .settings import PaperSettings, load_settings
+from ..settings import PaperSettings, load_settings
 from .xlsx import iter_rows, workbook_sha256
 
 

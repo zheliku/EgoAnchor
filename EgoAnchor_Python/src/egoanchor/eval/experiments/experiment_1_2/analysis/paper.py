@@ -25,7 +25,6 @@ from .metrics import (
     paired_metric_matrix,
     segment_identity,
 )
-from .settings import DEFAULT_SETTINGS_PATH, settings_sha256
 
 
 # 关闭 StaticLock 后平滑外推与 Hermite 插值的片段级配对输出契约。
@@ -866,12 +865,10 @@ def write_analysis_artifacts(
 
     metrics_root = output_root / "metrics"
     plot_root = output_root / "plots"
-    provenance_root = output_root / "provenance"
     tex_root = output_root / "tex"
     table_root = tex_root / "tables"
     figure_root = tex_root / "figures"
     metrics_root.mkdir(parents=True, exist_ok=True)
-    provenance_root.mkdir(parents=True, exist_ok=True)
     table_root.mkdir(parents=True, exist_ok=True)
     figure_root.mkdir(parents=True, exist_ok=True)
     summary_path = metrics_root / "experiment1_summary.csv"
@@ -999,32 +996,6 @@ def write_analysis_artifacts(
     figure3_path = figure_root / "figure3_experiment2.tex"
     figure2_path.write_text(_figure_two_tex(figure_directory), encoding="utf-8")
     figure3_path.write_text(_figure_three_tex(figure_directory), encoding="utf-8")
-    manifest = provenance_root / "analysis_manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "inputs": dict(results.workbook_sha256),
-                "parameters": DEFAULT_SETTINGS_PATH.name,
-                "parameters_sha256": settings_sha256(),
-                "publication_boundary": "analysis_only_manual_tex_copy",
-                "figure_tex_directory": figure_directory,
-                "temporal_evidence": "actual_runtime",
-                "output_strategy": "temporal_strategy_comparison",
-                "vcd_score_evidence": {
-                    "risk": "capture_time_aligned_raw_translation_error_mm",
-                    "score_direction": "descending",
-                    "tie_policy": "same_score_group_is_indivisible",
-                    "auc_integration": "right_continuous_step_over_event_coverage",
-                    "unit": "occlusion_event",
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
     return {
         "exp1_static_table": exp1_static_table_path,
         "exp1_dynamic_table": exp1_dynamic_table_path,
@@ -1039,7 +1010,6 @@ def write_analysis_artifacts(
         "plot_data": plot_data_path,
         "strategy_metrics": strategy_metrics_path,
         "strategy_summary": strategy_summary_path,
-        "manifest": manifest,
     }
 
 

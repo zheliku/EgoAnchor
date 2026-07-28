@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from datetime import datetime, time, timedelta
 from collections.abc import Iterable
 from typing import Any
 
@@ -14,9 +15,12 @@ from .contracts import (
     AnalysisTables,
     BLOCK_ITEMS,
     EGOANCHOR,
+    Exp3Data,
     METHODS,
     OBJECTS,
     ONE_EURO,
+    PARTICIPANT_BACKGROUND_COLUMNS,
+    PARTICIPANT_CATEGORIES,
     PRIMARY_OUTCOMES,
     SCALE_OUTCOMES,
     ScoreData,
@@ -29,8 +33,13 @@ from .inference import (
     quartiles,
     reliability_results,
 )
-from .reader import block_valid_mask, included_participant_ids
-from .settings import Exp3Settings
+from .reader import (
+    block_valid_mask,
+    included_participant_ids,
+    method_assessment_complete_mask,
+    method_record_valid_mask,
+)
+from ..settings import Exp3Settings
 
 
 _SECONDARY_ITEMS = ("AQ_EQ1", "AQ_EQ2", "AQ_EQ3", "AQ_IQ1", "AQ_IQ2", "AQ_IQ3")
@@ -55,12 +64,16 @@ _OPEN_THEMES = (
 
 
 def analyze_scores(
-    data: Any,
+    data: Exp3Data,
     scores: ScoreData,
     settings: Exp3Settings,
 ) -> AnalysisTables:
     """计算主分析、量表、描述性结果和绘图长表。"""
 
+    participant_summary, participant_balance, participant_audit = _participant_results(
+        data,
+        settings=settings,
+    )
     primary = _family_results(scores.paired_scores, PRIMARY_OUTCOMES, settings)
     scales = _family_results(scores.paired_scores, SCALE_OUTCOMES, settings)
     reliability = reliability_results(scores.reliability_items, settings)
@@ -84,6 +97,9 @@ def analyze_scores(
         scores.aggregate_scores["Outcome"].isin(("Q6", "Q7", *SCALE_OUTCOMES))
     ].copy()
     return AnalysisTables(
+        participant_summary=participant_summary,
+        participant_balance=participant_balance,
+        participant_audit=participant_audit,
         primary=primary,
         scales=scales,
         secondary=secondary,
@@ -96,6 +112,388 @@ def analyze_scores(
         plot_paired=plot_paired,
         plot_scales=plot_scales,
     )
+
+
+def _participant_results(
+    data: Exp3Data,
+    *,
+    settings: Exp3Settings,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """生成样本流程、论文描述、平衡性和逐人审计表。"""
+
+    audit = _participant_audit(data)
+    included = audit[audit["Included"]]
+    consented = audit[audit["Consented"]]
+    exposed = consented[consented["Started"]]
+    included_denominator = len(consented) or len(included)
+    summary_rows: list[dict[str, Any]] = []
+
+    def add_count(section: str, variable: str, category: str, count: int, denominator: int, role: str) -> None:
+        """追加一行显式分母的计数和比例。"""
+
+        summary_rows.append(
+            {
+                "Section": section,
+                "Variable": variable,
+                "Category": category,
+                "N": count,
+                "Denominator": denominator,
+                "Proportion": count / denominator if denominator else math.nan,
+                "Paper_Role": role,
+            }
+        )
+
+    add_count(
+        "Sample_Flow",
+        "Preallocated_Slots",
+        "all",
+        len(audit),
+        settings.target_participants,
+        "audit",
+    )
+    add_count("Sample_Flow", "Consented", "yes", len(consented), len(audit), "main_text")
+    add_count("Sample_Flow", "Started", "yes", int(consented["Started"].sum()), len(consented), "main_text")
+    add_count(
+        "Sample_Flow",
+        "Completed_Session",
+        "yes",
+        int(consented["Completed_Session"].sum()),
+        len(consented),
+        "main_text",
+    )
+    add_count("Sample_Flow", "Included", "yes", len(included), included_denominator, "main_text")
+    add_count("Sample_Flow", "Excluded", "yes", int(consented["Excluded"].sum()), len(consented), "main_text")
+    add_count(
+        "Sample_Flow",
+        "Pending_Review",
+        "yes",
+        int(consented["Pending_Review"].sum()),
+        len(consented),
+        "audit",
+    )
+
+    _append_continuous_summary(summary_rows, included["Age"], "Age", len(included), "main_text")
+    _append_continuous_summary(
+        summary_rows,
+        included["Session_Duration_Minutes"],
+        "Session_Duration_Minutes",
+        len(included),
+        "supplement",
+    )
+    for variable, categories in PARTICIPANT_CATEGORIES.items():
+        is_safety = "Discomfort" in variable
+        population = exposed if is_safety else included
+        values = population[variable]
+        for category in categories:
+            add_count(
+                "Safety" if is_safety else "Participant_Profile",
+                variable,
+                category,
+                int((values.astype(str) == category).sum()),
+                len(population),
+                "main_text" if variable in {"Gender", "Handedness", "Vision"} else "supplement",
+            )
+        add_count(
+            "Safety" if is_safety else "Participant_Profile",
+            variable,
+            "Missing",
+            sum(_is_missing(value) for value in values),
+            len(population),
+            "missingness",
+        )
+
+    comparable = exposed[exposed["Discomfort_Change"].notna()]
+    worsened = int((comparable["Discomfort_Change"] == "Worsened").sum())
+    add_count("Safety", "Discomfort_Change", "Worsened", worsened, len(comparable), "main_text")
+
+    excluded = audit[audit["Excluded"]]
+    reasons = excluded["Exclusion_Reason"].map(lambda value: "Missing" if _is_missing(value) else str(value).strip())
+    for reason, count in reasons.value_counts(dropna=False, sort=False).items():
+        add_count("Exclusion", "Exclusion_Reason", str(reason), int(count), len(excluded), "main_text")
+
+    summary = pd.DataFrame(summary_rows)
+    balance = _participant_balance(
+        data.participants,
+        target_participants=settings.target_participants,
+    )
+    return summary, balance, audit
+
+
+def _participant_audit(data: Exp3Data) -> pd.DataFrame:
+    """将 Participants 和三段 Records 合并为不含自由备注的逐人审计表。"""
+
+    blocks = data.blocks.copy()
+    blocks["_valid"] = block_valid_mask(blocks)
+    valid_blocks = blocks.groupby(blocks["Participant_ID"].astype(str))["_valid"].sum()
+    methods = data.methods.copy()
+    methods["_completed"] = method_assessment_complete_mask(methods)
+    methods["_valid"] = method_record_valid_mask(methods)
+    completed_methods = methods.groupby(methods["Participant_ID"].astype(str))["_completed"].sum()
+    valid_methods = methods.groupby(methods["Participant_ID"].astype(str))["_valid"].sum()
+    finals = data.finals.set_index(data.finals["Participant_ID"].astype(str), drop=False)
+
+    rows: list[dict[str, Any]] = []
+    for _, source in data.participants.iterrows():
+        participant_id = str(source["Participant_ID"])
+        final = finals.loc[participant_id]
+        included = _is_yes(source.get("纳入分析"))
+        explicitly_excluded = _is_no(source.get("纳入分析")) and _is_yes(source.get("签署同意"))
+        final_complete = _final_complete(final)
+        started = not _is_missing(source.get("开始时间"))
+        completed_session = started and not _is_missing(source.get("结束时间"))
+        block_count = int(valid_blocks.get(participant_id, 0)) if included else 0
+        completed_method_count = int(completed_methods.get(participant_id, 0))
+        valid_method_count = int(valid_methods.get(participant_id, 0)) if included else 0
+        analysis_complete = (
+            included
+            and block_count == 6
+            and completed_method_count == 2
+            and valid_method_count == 2
+            and final_complete
+        )
+        audit_status = _audit_status(
+            source,
+            included=included,
+            explicitly_excluded=explicitly_excluded,
+            analysis_complete=analysis_complete,
+        )
+        baseline_discomfort = source.get("基线不适")
+        end_discomfort = final.get("结束不适")
+        row: dict[str, Any] = {
+            "Participant_ID": participant_id,
+            "Consented": _is_yes(source.get("签署同意")),
+            "Started": started,
+            "Completed_Session": completed_session,
+            "Analysis_Complete": analysis_complete,
+            "Included": included,
+            "Excluded": explicitly_excluded,
+            "Pending_Review": _is_yes(source.get("签署同意")) and not included and not explicitly_excluded,
+            "Valid_Blocks": block_count,
+            "Completed_Method_Assessments": completed_method_count,
+            "Valid_Method_Records": valid_method_count,
+            "Final_Complete": final_complete,
+            "Session_Duration_Minutes": _duration_minutes(source.get("开始时间"), source.get("结束时间")),
+            "Consent": source.get("签署同意"),
+            "Baseline_Discomfort": baseline_discomfort,
+            "End_Discomfort": end_discomfort,
+            "Discomfort_Change": _discomfort_change(baseline_discomfort, end_discomfort),
+            "Exclusion_Reason": source.get("退出/技术问题"),
+            "Audit_Status": audit_status,
+        }
+        for output_column, source_column in PARTICIPANT_BACKGROUND_COLUMNS.items():
+            row[output_column] = source.get(source_column) if included else math.nan
+        rows.append(row)
+    columns = (
+        "Participant_ID", "Consented", "Started", "Completed_Session", "Analysis_Complete",
+        "Included", "Excluded",
+        "Pending_Review", "Age", "Gender", "Handedness", "Vision", "VRMR_Experience",
+        "PhysicalMR_Experience", "Session_Duration_Minutes", "Valid_Blocks",
+        "Completed_Method_Assessments", "Valid_Method_Records", "Final_Complete",
+        "Consent", "Baseline_Discomfort", "End_Discomfort",
+        "Discomfort_Change", "Exclusion_Reason", "Audit_Status",
+    )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _append_continuous_summary(
+    rows: list[dict[str, Any]],
+    series: pd.Series,
+    variable: str,
+    denominator: int,
+    role: str,
+) -> None:
+    """追加连续变量的 N、均值、SD、中位数、IQR 与范围。"""
+
+    values = pd.to_numeric(series, errors="coerce").dropna().to_numpy(dtype=float)
+    q1, median, q3 = quartiles(values) if len(values) else (math.nan, math.nan, math.nan)
+    rows.append(
+        {
+            "Section": "Participant_Profile",
+            "Variable": variable,
+            "Category": "Summary",
+            "N": int(len(values)),
+            "Denominator": denominator,
+            "Proportion": len(values) / denominator if denominator else math.nan,
+            "Mean": float(np.mean(values)) if len(values) else math.nan,
+            "SD": float(np.std(values, ddof=1)) if len(values) > 1 else math.nan,
+            "Median": median,
+            "Q1": q1,
+            "Q3": q3,
+            "Min": float(np.min(values)) if len(values) else math.nan,
+            "Max": float(np.max(values)) if len(values) else math.nan,
+            "Missing_N": denominator - len(values),
+            "Paper_Role": role,
+        }
+    )
+
+
+def _participant_balance(participants: pd.DataFrame, *, target_participants: int) -> pd.DataFrame:
+    """按冻结设计因子报告实际人数与平衡偏差。"""
+
+    factors = {
+        "Balance_Unit": "平衡单元",
+        "Object_Order": "物体排列ID",
+        "Method_Sequence": "标签序列",
+        "A_Mapping": "方法A=（保密）",
+        "First_Method": "先行实际方法",
+    }
+    rows: list[dict[str, Any]] = []
+    included = participants.loc[participants["纳入分析"].map(_is_yes)]
+    included_count = len(included)
+    for factor, column in factors.items():
+        levels = tuple(participants[column].dropna().astype(str).unique())
+        expected_target = target_participants / len(levels) if levels else math.nan
+        expected_actual = included_count / len(levels) if levels else math.nan
+        for level in levels:
+            count = int((included[column].astype(str) == level).sum())
+            deviation = count - expected_actual
+            if factor == "Balance_Unit" and included_count < target_participants:
+                status = "partial_coverage"
+            elif abs(deviation) < 1e-12:
+                status = "balanced"
+            else:
+                status = "review"
+            rows.append(
+                {
+                    "Factor": factor,
+                    "Level": level,
+                    "N": count,
+                    "Expected_At_Target": expected_target,
+                    "Expected_At_Actual_N": expected_actual,
+                    "Deviation_From_Actual_Balance": deviation,
+                    "Status": status,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _final_complete(row: pd.Series) -> bool:
+    """按最终问卷七项与偏好强度跳题规则判断完整。"""
+
+    choice = row.get("方法选择(标签)")
+    strength = row.get("偏好强度(1-7/NA)")
+    required = (
+        choice,
+        row.get("信任选择(标签)"),
+        row.get("区分信心(1-7)"),
+        row.get("开放:最明显区别"),
+        row.get("开放:最破坏信任的现象"),
+        row.get("结束不适"),
+    )
+    if any(_is_missing(value) for value in required):
+        return False
+    if str(choice) == "无明显偏好":
+        return _is_missing(strength) or str(strength).strip().lower() in {"n/a", "na"}
+    numeric = pd.to_numeric(pd.Series([strength]), errors="coerce").iloc[0]
+    return pd.notna(numeric) and 1 <= float(numeric) <= 7
+
+
+def _audit_status(
+    row: pd.Series,
+    *,
+    included: bool,
+    explicitly_excluded: bool,
+    analysis_complete: bool,
+) -> str:
+    """生成不替代人工决策的参与者流程状态。"""
+
+    consented = _is_yes(row.get("签署同意"))
+    manual_columns = (
+        *PARTICIPANT_BACKGROUND_COLUMNS.values(),
+        "签署同意",
+        "基线不适",
+        "开始时间",
+        "结束时间",
+        "纳入分析",
+        "退出/技术问题",
+        "备注",
+    )
+    manual_values = [row.get(column) for column in manual_columns if column in row.index]
+    if not consented and all(_is_missing(value) for value in manual_values):
+        return "unused_slot"
+    if not consented:
+        return "not_consented"
+    if included:
+        return "included_complete" if analysis_complete else "included_but_incomplete"
+    if explicitly_excluded:
+        return "excluded" if not _is_missing(row.get("退出/技术问题")) else "excluded_reason_missing"
+    return "pending_review"
+
+
+def _duration_minutes(start: Any, end: Any) -> float:
+    """解析 Excel 日期时间或 HH:MM 文本，允许会话跨越午夜。"""
+
+    if _is_missing(start) or _is_missing(end):
+        return math.nan
+    if isinstance(start, datetime) and isinstance(end, datetime):
+        delta = end - start
+        if delta.total_seconds() < 0:
+            delta += timedelta(days=1)
+        return delta.total_seconds() / 60.0
+    if isinstance(start, (int, float, np.number)) and isinstance(end, (int, float, np.number)):
+        start_value = float(start)
+        end_value = float(end)
+        if math.isfinite(start_value) and math.isfinite(end_value):
+            return ((end_value - start_value) % 1.0) * 24 * 60
+    start_time = _as_time(start)
+    end_time = _as_time(end)
+    if start_time is None or end_time is None:
+        return math.nan
+    start_minutes = start_time.hour * 60 + start_time.minute + start_time.second / 60
+    end_minutes = end_time.hour * 60 + end_time.minute + end_time.second / 60
+    return (end_minutes - start_minutes) % (24 * 60)
+
+
+def _as_time(value: Any) -> time | None:
+    """把 Excel 时间或常见时刻文本转为 time。"""
+
+    if isinstance(value, time):
+        return value
+    if isinstance(value, datetime):
+        return value.time()
+    text = str(value).strip()
+    for pattern in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, pattern).time()
+        except ValueError:
+            continue
+    return None
+
+
+def _is_missing(value: Any) -> bool:
+    """识别工作簿空白值。"""
+
+    return value is None or bool(pd.isna(value)) or str(value).strip() == ""
+
+
+def _discomfort_change(baseline: Any, end: Any) -> str | None:
+    """按冻结安全等级返回不适变化方向。"""
+
+    levels = {label: index for index, label in enumerate(PARTICIPANT_CATEGORIES["End_Discomfort"])}
+    if _is_missing(baseline) or _is_missing(end):
+        return None
+    baseline_text = str(baseline).strip()
+    end_text = str(end).strip()
+    if baseline_text not in levels or end_text not in levels:
+        return None
+    difference = levels[end_text] - levels[baseline_text]
+    if difference > 0:
+        return "Worsened"
+    if difference < 0:
+        return "Improved"
+    return "Unchanged"
+
+
+def _is_yes(value: Any) -> bool:
+    """识别明确肯定选项。"""
+
+    return str(value or "").strip().lower() in {"是", "yes", "true", "1"}
+
+
+def _is_no(value: Any) -> bool:
+    """识别明确否定选项。"""
+
+    return str(value or "").strip().lower() in {"否", "no", "false", "0"}
 
 
 def _family_results(

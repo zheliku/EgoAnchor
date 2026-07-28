@@ -537,10 +537,10 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 ### 9.1 采集与分析工作簿与问卷包（v5.1 正式版）
 
-**唯一正式工作簿：`material/EgoAnchor_Experiment3_DataCollection_24P_v5_1_Beautified_Checked_VSCodeSafe.xlsx`**
-（结构由 v5.1 生成器产出、经研究者美化与复核定稿；生成脚本已随定稿移除，此后内容修改直接在
-该文件进行并在 `Verification_Audit` 表补记录；素版与 GPT 25 表初版均已归档 `material/old/`）。
-精简 6 表：问卷详情一表、实验记录一表。
+**唯一正式采集与分析输入：`material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx`**。
+`material/reference/EgoAnchor_Experiment3_DataCollection_24P_v5_1_Beautified_Checked_VSCodeSafe.xlsx` 仅作美化来源，不直接采集。
+正式文件由 `egoanchor.eval.experiments.experiment_3` 的模板构造器确定性生成，日常采集不需重建；审查副本使用
+`pixi run eval data exp3 create-template --output <尚不存在的仓库内路径>` 生成，命令拒绝覆盖已有文件。正式文件共 7 表：
 
 **参与者问卷包（蓝本 + 应急纸质版）**：`material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.md`
 为**唯一事实源**，同名 docx 由 `material/build_exp3_questionnaire_docx.py` 从 md 确定性生成——
@@ -550,23 +550,25 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 | 工作表 | 内容 |
 | --- | --- |
-| `README` | 正式模板声明、五步使用流程、冻结分析家族摘要、剩余前置（中文回译 + 认知访谈）、程序日志字段建议 |
+| `README` | 正式模板声明、五步使用流程、冻结分析家族摘要、采集前置、程序日志字段建议与稳定工作簿契约标记 |
 | `Verification_Audit` | 〇节"v5.1 核对结果"的逐条存档（AQ/TiA/S-TIAS/Gottsacker/时点修正/家族更名）+ 四篇来源文献完整书目 |
 | `Questionnaire` | **全部条目一表**：背景 B1–B6（含选项分档）→ 区块级 13+1 项（页序/中文施测/官方英文/对象化英文/家族/来源）→ TiA 6+4（官方原文/反向/条目号/计分/官方相对呈现顺序）→ S-TIAS 3 → 最终 7 项 → 量尺锚点定义 |
 | `Participants` | 24 平衡单元预填（每个物体排列内按 S1-EA / S2-EA / S2-OE / S1-OE 轮转编号，提前止收时优先补齐整组 4 人）+ 背景字段 + 纳入/退出审计 |
 | `Records` | **实验记录一表**，三段堆叠：A 区块记录 144 行（进度表 + 13+1 评分 + 问卷时长 + 运行时审计合并为一行一区块）；B 方法级记录 48 行（TiA 10 + S-TIAS 3 原始分 + 尺度切换确认）；C 最终问卷 24 行（选择/强度/信心/开放题/安全检查） |
-| `Analysis` | 结果回填壳（由分析代码填写，不含公式）：主证实家族 7 项 Wilcoxon 表 → 已发表量表家族 5 检验 + 当前样本 α/ω → 逐物体描述 → CLMM 摘要 → 操纵检验（含 TOST 等价界）→ 选择/强度/信心计数 → 开放题双编码工作区 |
+| `Derived` | **只读公式派生层**：D1 区块有效性与 AQ；D2 TiA 换向与方法级小分；D3 参与者×方法的区块级三物体均值，并直接带入方法级小分；D4 `EgoAnchor-One-Euro` 配对差；D5 最终问卷完整性；D6 参与者样本流、人口学、经验、时长、安全变化、平衡和记录状态审计。D6 不替代人工纳入决定 |
+| `Analysis` | **实时描述仪表板**：样本流与完整性；年龄/会话时长 N、缺失、Mean/SD、Mdn/IQR、范围；人口学与经验分布以纳入 N 为分母，基线/结束不适和不适加重以所有已同意且已开始体验者为安全分母；另含顺序/标签平衡、两个统计家族的实时描述与操纵描述。黄色离线列不在本文件回填 |
 
-约定：无公式、无数据校验、无冻结窗格（公式在 VS Code Office Viewer 中不计算，完整性与合法值
-检查由分析代码执行）；美化定稿版的节标题行含合并单元格（偏离最初"无合并"约定，经确认保留，
-后续程序读取须按值读取、不得依赖合并结构）；原始评分列不得被反向分覆盖，反向计分只在分析中
-派生；方法映射列仅实验员可见，参与者界面只显示 A/B。历史模板（v3/v4/GPT 30 题方案/25 表初版/
-素版）均在 `material/old/`，调研语料在 `material/old2/`，一律不得用于正式采集。
+约定：`Participants` 和 `Records` 是唯一人工原始值区域，不得含公式；TiA 原始反向项不得被换向分覆盖。输入区有冻结下拉或整数校验，
+公式只存在 `Derived`/`Analysis`；它们供 Excel 现场复算，正式 Python 分析从原始值独立重算且不读公式缓存。结果另写
+`data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx`，其中参与者数字分为 `Participant_Summary`、`Participant_Balance` 和 `Participant_Audit`。
+方法映射列仅实验员可见，参与者界面只显示 A/B。历史模板与合成演练数据不得用于正式采集或论文结果。
 
-### 9.2 Unity / Python 工程（实验三完全未实现）
+### 9.2 Unity / Python 工程状态
 
-- 无 Exp3 场景（`Assets/Scene/` 只有 Develop / Experiment12 / ReplayCapture），
-  `egoanchor.eval` 下无 Exp3 模块
+- Python 侧正式实现位于 `egoanchor.eval.experiments.experiment_3`，与 `experiment_1_2` 使用同一套
+  `data/settings/workflow/pipeline` 骨架；两边的 reader、计分、统计和绘图都收在各自 `analysis/` 子包。
+  人工入口为 `status exp3`、`validate exp3`、`analyze exp3` 和
+  `copy-assets exp3`，配置与实验一/二共享 `batch.toml` 与 `paper.toml`；
 - 需新建：2-runtime 场景（复用 `DynamicObjectAnchor.SetRenderersHidden`，双 runtime 并行、
   只显示当前方法）；独立 `variant_matrix_id` 与启动门禁分支（不复用实验一/二九路硬校验）；
   区块编排器（物体外层、24 单元平衡表驱动）；**头锁问卷 UI：区块级 13 项单尺度逐条呈现 +

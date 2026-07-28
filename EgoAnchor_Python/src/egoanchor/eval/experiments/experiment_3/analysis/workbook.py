@@ -14,7 +14,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side  # type: 
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from .contracts import AnalysisTables, Exp3Data, ScoreData
-from .settings import Exp3Settings
+from ..settings import Exp3Settings
 
 
 _NAVY = "18324A"
@@ -49,6 +49,9 @@ def write_results_workbook(
     workbook.remove(workbook.active)
     readme_rows = _readme_rows(data, settings, settings_sha256, validation)
     _write_key_value_sheet(workbook, "README", readme_rows)
+    _write_frame(workbook, "Participant_Summary", tables.participant_summary)
+    _write_frame(workbook, "Participant_Balance", tables.participant_balance)
+    _write_frame(workbook, "Participant_Audit", tables.participant_audit)
     _write_frame(workbook, "Main_Results", tables.primary, significant_column="p_Holm")
     _write_frame(workbook, "Scale_Results", tables.scales, significant_column="p_Holm")
     _write_frame(workbook, "Secondary", tables.secondary, significant_column="p_raw")
@@ -157,13 +160,14 @@ def _write_frame(
         cell.border = _border()
     for row_index, values in enumerate(frame.itertuples(index=False, name=None), start=2):
         for column_index, value in enumerate(values, start=1):
+            column = columns[column_index - 1]
             cell = worksheet.cell(row_index, column_index, _excel_value(value))
             cell.fill = PatternFill("solid", fgColor=_GREEN if row_index % 2 == 0 else "F4F8F7")
             cell.font = Font(color=_TEXT, size=9)
             cell.border = _border()
             cell.alignment = Alignment(vertical="top", wrap_text=isinstance(value, str) and len(value) > 35)
-            if isinstance(value, (float, np.floating)):
-                cell.number_format = "0.0000"
+            if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+                cell.number_format = _number_format(column)
     worksheet.freeze_panes = "A2"
     worksheet.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{max(1, len(frame) + 1)}"
     worksheet.row_dimensions[1].height = 32
@@ -200,6 +204,26 @@ def _excel_value(value: Any) -> Any:
     return value
 
 
+def _number_format(column: str) -> str:
+    """按列语义选择结果工作簿中的稳定数字格式。"""
+
+    if column == "Proportion" or "Percent" in column:
+        return "0.0%"
+    if column in {
+        "N",
+        "Denominator",
+        "Missing_N",
+        "Valid_Blocks",
+        "Completed_Method_Assessments",
+        "Valid_Method_Records",
+        "Age",
+    }:
+        return "0"
+    if column == "Session_Duration_Minutes":
+        return "0.0"
+    return "0.0000"
+
+
 def _border() -> Border:
     """返回统一浅灰细边框。"""
 
@@ -213,7 +237,8 @@ def _verify_results_workbook(path: Path, input_sha256: str, included_count: int)
     workbook = load_workbook(path, read_only=True, data_only=False)
     try:
         required = {
-            "README", "Main_Results", "Scale_Results", "Reliability", "By_Object", "CLMM",
+            "README", "Participant_Summary", "Participant_Balance", "Participant_Audit",
+            "Main_Results", "Scale_Results", "Reliability", "By_Object", "CLMM",
             "Manipulation", "Choices", "Open_Coding", "Plot_Paired", "Plot_Scales",
         }
         missing = required.difference(workbook.sheetnames)
@@ -225,6 +250,15 @@ def _verify_results_workbook(path: Path, input_sha256: str, included_count: int)
             raise ValueError("实验三结果工作簿的输入摘要回读不一致")
         if int(values.get("纳入参与者") or 0) != included_count:
             raise ValueError("实验三结果工作簿的纳入人数回读不一致")
+        summary = workbook["Participant_Summary"]
+        headers = [summary.cell(1, column).value for column in range(1, summary.max_column + 1)]
+        rows = [dict(zip(headers, values, strict=True)) for values in summary.iter_rows(min_row=2, values_only=True)]
+        included_rows = [
+            row for row in rows
+            if row.get("Section") == "Sample_Flow" and row.get("Variable") == "Included"
+        ]
+        if len(included_rows) != 1 or int(included_rows[0].get("N") or 0) != included_count:
+            raise ValueError("实验三结果工作簿的参与者汇总 N 回读不一致")
     finally:
         workbook.close()
 

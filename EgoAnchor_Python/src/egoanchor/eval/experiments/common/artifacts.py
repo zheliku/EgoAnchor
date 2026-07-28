@@ -1,4 +1,4 @@
-"""跨实验联合预检并发布论文资源。"""
+"""跨实验联合预检并复制论文资源。"""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from pathlib import Path
 from uuid import uuid4
 
 
-_PUBLISH_SUFFIXES = frozenset({".png", ".pdf", ".tex"})
-"""论文资源发布器接受的固定文件类型。"""
+_COPY_SUFFIXES = frozenset({".png", ".pdf", ".tex"})
+"""论文资源复制器接受的固定文件类型。"""
 
 
 @dataclass(frozen=True, slots=True)
 class PlannedAsset:
-    """描述一项通过来源清单约束的待发布文件。"""
+    """描述一项通过来源清单约束的待复制文件。"""
 
     owner: str
     """拥有该资源的实验流水线。"""
@@ -35,7 +35,7 @@ class PlannedAsset:
 
 @dataclass(frozen=True, slots=True)
 class ArtifactPlan:
-    """保存一条实验流水线的完整发布计划。"""
+    """保存一条实验流水线的完整资源复制计划。"""
 
     owner: str
     """实验流水线稳定名称。"""
@@ -44,12 +44,12 @@ class ArtifactPlan:
     """该实验全部待发布资源。"""
 
 
-def publish_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, str]]:
-    """联合预检、暂存并以可回滚事务发布全部实验资源。"""
+def copy_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, str]]:
+    """联合预检、暂存并以可回滚事务复制全部实验资源。"""
 
     for plan in plans:
         if any(asset.owner != plan.owner for asset in plan.assets):
-            raise ValueError(f"发布计划包含其他实验的资源：{plan.owner}")
+            raise ValueError(f"资源计划包含其他实验的文件：{plan.owner}")
     assets = tuple(asset for plan in plans for asset in plan.assets)
     _validate_assets(assets)
     staged: list[tuple[PlannedAsset, Path]] = []
@@ -84,7 +84,7 @@ def publish_artifact_plans(plans: tuple[ArtifactPlan, ...]) -> list[dict[str, st
                 restore_errors.append(f"{asset.destination}: {error}")
         if restore_errors:
             preserve_backups = True
-            raise RuntimeError("发布失败且回滚不完整：" + "; ".join(restore_errors))
+            raise RuntimeError("复制失败且回滚不完整：" + "; ".join(restore_errors))
         raise
     finally:
         for _, temporary in staged:
@@ -119,10 +119,10 @@ def _validate_assets(assets: tuple[PlannedAsset, ...]) -> None:
         destination = asset.destination.expanduser().resolve()
         if not source.is_file():
             raise FileNotFoundError(f"待复制资源不存在：{source}")
-        if source.suffix.lower() not in _PUBLISH_SUFFIXES:
+        if source.suffix.lower() not in _COPY_SUFFIXES:
             raise ValueError(f"只允许复制 PNG、PDF 或 TeX：{source}")
         if destination in destinations:
-            raise ValueError(f"publish 目标路径重复：{destination}")
+            raise ValueError(f"copy-assets 目标路径重复：{destination}")
         destinations.add(destination)
         if asset.expected_sha256 is not None and _sha256(source) != asset.expected_sha256:
             raise ValueError(f"待复制资源摘要已变化：{asset.owner}/{asset.key}")
@@ -138,4 +138,4 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-__all__ = ["ArtifactPlan", "PlannedAsset", "publish_artifact_plans"]
+__all__ = ["ArtifactPlan", "PlannedAsset", "copy_artifact_plans"]

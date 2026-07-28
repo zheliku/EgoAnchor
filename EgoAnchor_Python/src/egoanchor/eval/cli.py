@@ -10,15 +10,15 @@ from pathlib import Path
 
 from tqdm.auto import tqdm
 
-from .workflows import (
+from .experiments import (
     BatchToolError,
     analyze_workspace,
+    copy_workspace_assets,
     create_raw_template,
     describe_workspace,
     list_task_data,
     preprocess_current,
     promote_batch,
-    publish_workspace,
     stage_batch,
     validate_workspace,
 )
@@ -69,9 +69,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze_all.set_defaults(handler=_run_analyze, rebuild_experiment_1_2=False)
 
-    publish = commands.add_parser("publish", help="联合预检后事务性发布论文图表")
-    publish.add_argument("target", choices=_TARGETS, help="必须明确本次预期发布的实验集合")
-    publish.set_defaults(handler=_run_publish)
+    copy_assets = commands.add_parser(
+        "copy-assets",
+        help="联合预检后事务性复制论文图表",
+    )
+    copy_assets.add_argument(
+        "target",
+        nargs="?",
+        choices=_TARGETS,
+        default="exp1-2",
+        help="默认复制实验一/二；使用 all 可联合复制全部实验",
+    )
+    copy_assets.set_defaults(handler=_run_copy_assets)
 
     data = commands.add_parser("data", help="管理实验专属输入，不执行论文统计")
     data_targets = data.add_subparsers(dest="data_target", metavar="TARGET", required=True)
@@ -180,10 +189,10 @@ def _run_analyze(args: argparse.Namespace) -> dict[str, object]:
         )
 
 
-def _run_publish(args: argparse.Namespace) -> dict[str, object]:
-    """通过统一事务发布明确目标集合。"""
+def _run_copy_assets(args: argparse.Namespace) -> dict[str, object]:
+    """通过统一事务复制明确目标集合。"""
 
-    return publish_workspace(args.target)
+    return copy_workspace_assets(args.target)
 
 
 def _run_sessions(_args: argparse.Namespace) -> dict[str, object]:

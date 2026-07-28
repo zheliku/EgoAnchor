@@ -1,11 +1,11 @@
-"""统一协调实验一/二和实验三的状态、门禁、构建与论文发布。"""
+"""统一协调实验一/二和实验三的状态、门禁、构建与论文资源复制。"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any, Literal
 
-from ..paper_analysis.common import ArtifactPlan, publish_artifact_plans
+from .common import ArtifactPlan, copy_artifact_plans
 from . import experiment_1_2, experiment_3
 
 
@@ -84,43 +84,38 @@ def analyze_workspace(
             "exp1-2": experiment_1_2_result,
             "exp3": experiment_3_result,
         },
-        "next_command": "pixi run eval publish all",
+        "next_command": "pixi run eval copy-assets all",
     }
 
 
-def publish_workspace(target: WorkflowTarget) -> dict[str, Any]:
-    """构造明确目标集合，联合预检后由唯一入口发布论文资源。"""
+def copy_workspace_assets(target: WorkflowTarget) -> dict[str, Any]:
+    """构造明确目标集合，联合预检后由唯一入口复制论文资源。"""
 
-    plans = _publication_plans(target)
-    published = publish_artifact_plans(plans)
+    plans = _asset_plans(target)
+    copied = copy_artifact_plans(plans)
     by_owner = {
-        owner: [item for item in published if item["owner"] == owner]
+        owner: [item for item in copied if item["owner"] == owner]
         for owner in {plan.owner for plan in plans}
     }
     return {
         "passed": True,
-        "status": "published",
+        "status": "copied",
         "target": target,
         "experiments": by_owner,
-        "next_command": "审阅已发布图表，并在论文目录手工运行 XeLaTeX 编译",
+        "next_command": "审阅已复制图表，并在论文目录手工运行 XeLaTeX 编译",
     }
 
 
-def _publication_plans(target: WorkflowTarget) -> tuple[ArtifactPlan, ...]:
-    """为显式目标构造完整发布计划；缺少任何目标构建即整体失败。"""
+def _asset_plans(target: WorkflowTarget) -> tuple[ArtifactPlan, ...]:
+    """为显式目标构造完整资源计划；缺少任何目标构建即整体失败。"""
 
     if target == "exp1-2":
-        return (experiment_1_2.plan_publication(),)
+        return (experiment_1_2.plan_assets(),)
     if target == "exp3":
-        plan = experiment_3.plan_publication()
-        if plan is None:
-            raise FileNotFoundError("实验三尚无完整正式构建，请先运行 analyze exp3")
-        return (plan,)
+        return (experiment_3.plan_assets(),)
     _require_target(target)
-    experiment_1_2_plan = experiment_1_2.plan_publication()
-    experiment_3_plan = experiment_3.plan_publication()
-    if experiment_3_plan is None:
-        raise FileNotFoundError("publish all 要求实验三已有完整正式构建")
+    experiment_1_2_plan = experiment_1_2.plan_assets()
+    experiment_3_plan = experiment_3.plan_assets()
     return (experiment_1_2_plan, experiment_3_plan)
 
 
@@ -152,7 +147,7 @@ def _require_target(target: str) -> None:
 __all__ = [
     "WorkflowTarget",
     "analyze_workspace",
+    "copy_workspace_assets",
     "describe_workspace",
-    "publish_workspace",
     "validate_workspace",
 ]

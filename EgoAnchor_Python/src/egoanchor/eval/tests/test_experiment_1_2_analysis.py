@@ -14,14 +14,18 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
-from egoanchor.eval.paper_analysis.experiment_1_2 import (
+from egoanchor.eval.experiments.experiment_1_2 import (
+    build_analysis,
+    load_settings,
+    settings_sha256,
+)
+from egoanchor.eval.experiments.experiment_1_2.analysis import (
     METHODS,
     PaperResults,
     PerformanceSamples,
     TaskResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
-    build_analysis,
     build_dual_metric_panel,
     build_temporal_strategy_panel,
     build_exp1_dynamic_table,
@@ -31,13 +35,11 @@ from egoanchor.eval.paper_analysis.experiment_1_2 import (
     cache_path,
     eligible_trials,
     iter_rows,
-    load_settings,
     load_task_results,
     merge_task_results,
     paired_metric_matrix,
     risk_coverage_curve,
     rotation_lag_metrics,
-    settings_sha256,
     summarize_risk_coverage,
     translation_lag_metrics,
     write_task_results,
@@ -375,19 +377,19 @@ class Experiment12AnalysisTests(unittest.TestCase):
 
             with (
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.calculate_workbook_sha256",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.calculate_workbook_sha256",
                     side_effect=AssertionError("缓存命中不应哈希 workbook"),
                 ),
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.analyze_task_workbook",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.analyze_task_workbook",
                     side_effect=AssertionError("缓存命中不应扫描 workbook"),
                 ),
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.publish_figures",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.publish_figures",
                     return_value={},
                 ),
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.write_analysis_artifacts",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.write_analysis_artifacts",
                     return_value={},
                 ),
             ):
@@ -414,19 +416,19 @@ class Experiment12AnalysisTests(unittest.TestCase):
             rebuilt = self._task_results(changed_workbook, changed_digest)
             with (
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.calculate_workbook_sha256",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.calculate_workbook_sha256",
                     return_value=changed_digest,
                 ) as hash_workbook,
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.analyze_task_workbook",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.analyze_task_workbook",
                     return_value=rebuilt,
                 ) as analyze_workbook,
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.publish_figures",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.publish_figures",
                     return_value={},
                 ),
                 patch(
-                    "egoanchor.eval.paper_analysis.experiment_1_2.pipeline.write_analysis_artifacts",
+                    "egoanchor.eval.experiments.experiment_1_2.pipeline.write_analysis_artifacts",
                     return_value={},
                 ),
             ):

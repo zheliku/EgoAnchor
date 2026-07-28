@@ -1,0 +1,146 @@
+"""实验三从原始工作簿到本地分析产物的构建管线。"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from ..common import begin_build, complete_build, source_tree_sha256
+from .analysis import (
+    analyze_scores,
+    derive_scores,
+    fit_item_models,
+    publish_figures,
+    read_workbook,
+    validate_for_analysis,
+    write_results_workbook,
+    write_subjective_table,
+)
+from .settings import Exp3Settings, settings_sha256
+
+
+def build_analysis(
+    settings: Exp3Settings,
+    *,
+    input_workbook: Path | None = None,
+    output_root: Path | None = None,
+    allow_synthetic: bool = False,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """一次完成计分、推断、结果工作簿、TeX 和论文图。"""
+
+    source = (input_workbook or settings.paths.input_workbook).expanduser().resolve()
+    root = (output_root or settings.paths.output_root).expanduser().resolve()
+    _validate_output_root(root, settings.paths.project_root)
+    _report_progress(progress, "读取并验证原始工作簿")
+    data = read_workbook(source)
+    validation = validate_for_analysis(
+        data,
+        minimum_participants=settings.minimum_participants,
+        aq_mode=settings.aq_mode,
+        q10_enabled=settings.q10_enabled,
+        allow_synthetic=allow_synthetic,
+    )
+    config_digest = settings_sha256()
+    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
+    building = begin_build(
+        root,
+        owner="experiment_3",
+        source_kind=data.source_kind,
+        inputs=(
+            {
+                "key": "raw_workbook",
+                "path": data.source_path,
+                "sha256": data.source_sha256,
+            },
+        ),
+        config_sha256=config_digest,
+        implementation_sha256=implementation_digest,
+        details={"included_count": validation["included_count"]},
+    )
+    _report_progress(progress, "计算区块、量表和参与者配对分")
+    scores = derive_scores(data, settings)
+    _report_progress(progress, "计算 Wilcoxon、Holm、效应量、信度与操纵描述")
+    tables = analyze_scores(data, scores, settings)
+    clmm_coefficients, clmm_contrasts = fit_item_models(
+        scores.block_scores,
+        settings,
+        progress=progress,
+    )
+    _report_progress(progress, "写入并回读验证结果工作簿")
+    results_path = root / "results" / "experiment3_analysis.xlsx"
+    write_results_workbook(
+        results_path,
+        data=data,
+        scores=scores,
+        tables=tables,
+        clmm_coefficients=clmm_coefficients,
+        clmm_contrasts=clmm_contrasts,
+        settings=settings,
+        settings_sha256=config_digest,
+        validation=validation,
+    )
+    tex_path = write_subjective_table(
+        root / "tex" / "exp3_subjective.tex",
+        tables.primary,
+        tables.scales,
+    )
+    _report_progress(progress, "从结果工作簿生成论文图")
+    figures = publish_figures(results_path, root, settings)
+    details = {
+        "included_count": validation["included_count"],
+        "clmm_models": (
+            int(clmm_coefficients["Outcome"].nunique())
+            if not clmm_coefficients.empty
+            else 0
+        ),
+        "clmm_converged": (
+            int(
+                clmm_coefficients.groupby("Outcome")["Converged"]
+                .first()
+                .fillna(False)
+                .sum()
+            )
+            if not clmm_coefficients.empty
+            else 0
+        ),
+    }
+    outputs = [
+        {"key": "results_workbook", "kind": "xlsx", "path": str(results_path)},
+        {"key": "subjective_table", "kind": "tex", "path": str(tex_path)},
+    ]
+    outputs.extend(
+        {
+            "key": key,
+            "kind": value.suffix.lower().lstrip("."),
+            "path": str(value),
+        }
+        for key, value in sorted(figures.items())
+    )
+    manifest = complete_build(
+        root,
+        building,
+        outputs=outputs,
+        warnings=validation["warnings"],
+        details=details,
+    )
+    return {"passed": True, "build": manifest}
+
+
+def _validate_output_root(root: Path, project_root: Path) -> None:
+    """限制实验三分析输出位于 EgoAnchor_Python/data。"""
+
+    data_root = (project_root / "data").resolve()
+    if not root.is_relative_to(data_root):
+        raise ValueError(f"实验三输出必须位于 {data_root} 内：{root}")
+
+
+def _report_progress(callback: Callable[[str], None] | None, message: str) -> None:
+    """存在回调时报告当前分析阶段。"""
+
+    if callback is not None:
+        callback(message)
+
+
+__all__ = ["build_analysis"]

@@ -1,8 +1,8 @@
 """EgoAnchor 运行时评估基础设施的包级入口。
 
-这里仅导出 schema-v2、QC 与 Stage 1 workbook。人工数据工作流从
-``egoanchor.eval.workflows`` 包级入口进入，论文统计从 ``egoanchor.eval.paper_analysis``
-进入，避免运行时服务初始化时加载批次、绘图和 PDF 分析依赖。
+这里仅导出 schema-v2、QC 与 Stage 1 workbook。实验工作流和论文统计统一从
+``egoanchor.eval.experiments`` 包级入口进入，避免运行时服务初始化时加载批次、
+绘图和工作簿分析依赖。
 """
 from .preprocess import (
     DERIVED_FILE_NAMES,

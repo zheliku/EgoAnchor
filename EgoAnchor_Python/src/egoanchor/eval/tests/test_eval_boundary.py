@@ -20,7 +20,7 @@ EXPECTED_COMMANDS = {
     "status",
     "validate",
     "analyze",
-    "publish",
+    "copy-assets",
     "data",
 }
 """统一评估工程固定的五个生命周期入口。"""
@@ -35,15 +35,16 @@ class EvalBoundaryTests(unittest.TestCase):
         self.assertIsNotNone(PythonCandidateRow)
         self.assertTrue(issubclass(SchemaV2Error, Exception))
 
-    def test_old_analysis_paths_are_absent(self) -> None:
-        """旧离线分析目录和单文件入口不得继续存在。"""
+    def test_experiment_packages_replace_old_cross_cutting_paths(self) -> None:
+        """实验包并列存在，旧 paper_analysis/workflows 源码入口已经删除。"""
 
         for relative_path in (
             "analysis",
-            "experiments",
             "metrics",
             "paper",
             "publishing",
+            "paper_analysis",
+            "workflows",
             "figure_style.py",
             "excel.py",
         ):
@@ -54,11 +55,12 @@ class EvalBoundaryTests(unittest.TestCase):
                 self.assertFalse(target.exists(), relative_path)
 
         for module_name in (
-            "egoanchor.eval.experiments",
             "egoanchor.eval.metrics",
             "egoanchor.eval.paper",
             "egoanchor.eval.analysis",
             "egoanchor.eval.publishing",
+            "egoanchor.eval.paper_analysis",
+            "egoanchor.eval.workflows",
         ):
             try:
                 spec = importlib.util.find_spec(module_name)
@@ -73,6 +75,43 @@ class EvalBoundaryTests(unittest.TestCase):
                     ),
                     module_name,
                 )
+
+        experiments_root = EVAL_ROOT / "experiments"
+        for experiment in ("experiment_1_2", "experiment_3"):
+            for module in ("data.py", "pipeline.py", "settings.py", "workflow.py"):
+                self.assertTrue(
+                    (experiments_root / experiment / module).is_file(),
+                    f"{experiment}/{module}",
+                )
+            analysis_root = experiments_root / experiment / "analysis"
+            self.assertTrue((analysis_root / "__init__.py").is_file())
+            self.assertTrue(any(analysis_root.glob("*.py")))
+        analysis_leaves = {
+            "experiment_1_2": {
+                "cache.py",
+                "figures.py",
+                "metrics.py",
+                "paper.py",
+                "xlsx.py",
+            },
+            "experiment_3": {
+                "clmm.py",
+                "contracts.py",
+                "figures.py",
+                "inference.py",
+                "paper.py",
+                "reader.py",
+                "scoring.py",
+                "summaries.py",
+                "workbook.py",
+            },
+        }
+        for experiment, leaves in analysis_leaves.items():
+            root = experiments_root / experiment
+            for leaf in leaves:
+                self.assertFalse((root / leaf).exists(), f"{experiment}/{leaf}")
+                self.assertTrue((root / "analysis" / leaf).is_file(), f"{experiment}/analysis/{leaf}")
+        self.assertTrue((experiments_root / "workspace.py").is_file())
 
     def test_cli_exposes_only_fixed_path_workflow_commands(self) -> None:
         """统一 CLI 不再保留要求手工拼路径的旧命令。"""
@@ -125,7 +164,7 @@ class EvalBoundaryTests(unittest.TestCase):
             "qc",
             "preprocess",
             "rebuild",
-            "copy-assets",
+            "publish",
             "experiment3",
         ):
             with self.subTest(command=command), contextlib.redirect_stderr(io.StringIO()):
@@ -140,6 +179,14 @@ class EvalBoundaryTests(unittest.TestCase):
 
         self.assertEqual(arguments.target, "all")
         self.assertIs(arguments.handler, eval_cli._run_status)
+
+    def test_copy_assets_without_target_keeps_the_established_exp12_default(self) -> None:
+        """无目标 copy-assets 仍可直接复制实验一/二，实验三通过显式目标加入。"""
+
+        arguments = eval_cli.build_parser().parse_args(["copy-assets"])
+
+        self.assertEqual(arguments.target, "exp1-2")
+        self.assertIs(arguments.handler, eval_cli._run_copy_assets)
 
     def test_formal_experiment3_analysis_rejects_path_and_synthetic_overrides(self) -> None:
         """正式 CLI 只读 TOML 固定路径，不暴露模拟数据后门。"""

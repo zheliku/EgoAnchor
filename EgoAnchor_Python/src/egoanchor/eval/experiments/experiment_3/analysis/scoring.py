@@ -20,8 +20,8 @@ from .contracts import (
     ScoreData,
     aq_scale_items,
 )
-from .reader import block_valid_mask, included_participant_ids
-from .settings import Exp3Settings
+from .reader import block_valid_mask, included_participant_ids, method_record_valid_mask
+from ..settings import Exp3Settings
 
 
 def derive_scores(data: Exp3Data, settings: Exp3Settings) -> ScoreData:
@@ -76,7 +76,7 @@ def _derive_method_scores(
     """对 TiA 换向并计算方法级三项量表分。"""
 
     selected = methods.loc[
-        methods["Participant_ID"].astype(str).isin(included) & methods.apply(_method_is_valid, axis=1)
+        methods["Participant_ID"].astype(str).isin(included) & method_record_valid_mask(methods)
     ].copy()
     selected["Participant_ID"] = selected["Participant_ID"].astype(str)
     selected["Condition(保密)"] = selected["Condition(保密)"].astype(str)
@@ -230,18 +230,6 @@ def _outcome_column(outcome: str) -> str:
     if outcome in {"AQ_EQ", "AQ_IQ"}:
         return outcome
     return BLOCK_ITEMS[outcome]
-
-
-def _method_is_valid(row: pd.Series) -> bool:
-    """判断一行方法级问卷是否通过完整性与人工审核门禁。"""
-
-    technical = str(row.get("技术问题") or "").strip()
-    if str(row.get("尺度切换确认") or "").strip() != "是" or technical not in {"", "无"}:
-        return False
-    for optional_column in ("A/B归属回忆确认", "方法级记录有效"):
-        if optional_column in row.index and str(row.get(optional_column) or "").strip() != "是":
-            return False
-    return True
 
 
 __all__ = ["derive_scores"]

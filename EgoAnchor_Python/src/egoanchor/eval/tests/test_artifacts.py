@@ -1,4 +1,4 @@
-"""跨实验论文资源发布契约测试。"""
+"""跨实验论文资源复制契约测试。"""
 
 from __future__ import annotations
 
@@ -7,17 +7,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from egoanchor.eval.paper_analysis.common import (
+from egoanchor.eval.experiments.common import (
     ArtifactPlan,
     PlannedAsset,
     begin_build,
     complete_build,
-    publish_artifact_plans,
+    copy_artifact_plans,
     read_build_manifest,
 )
 
 
-class ArtifactPublishingTests(unittest.TestCase):
+class ArtifactCopyTests(unittest.TestCase):
     """验证实验一/二与实验三共享的联合预检边界。"""
 
     def test_joint_preflight_writes_nothing_when_any_source_is_missing(self) -> None:
@@ -56,7 +56,7 @@ class ArtifactPublishingTests(unittest.TestCase):
             )
 
             with self.assertRaises(FileNotFoundError):
-                publish_artifact_plans(plans)
+                copy_artifact_plans(plans)
 
             self.assertFalse(experiment12_destination.exists())
             self.assertFalse(experiment3_destination.exists())
@@ -80,7 +80,7 @@ class ArtifactPublishingTests(unittest.TestCase):
             )
 
             with self.assertRaises(ValueError):
-                publish_artifact_plans((plan,))
+                copy_artifact_plans((plan,))
 
     def test_publish_rolls_back_every_destination_when_commit_fails(self) -> None:
         """第二项替换失败时，前一项和既有目标都必须恢复原内容。"""
@@ -116,7 +116,7 @@ class ArtifactPublishingTests(unittest.TestCase):
                 mock.patch.object(Path, "replace", autospec=True, side_effect=fail_second_commit),
                 self.assertRaises(OSError),
             ):
-                publish_artifact_plans((plan,))
+                copy_artifact_plans((plan,))
 
             self.assertEqual(destination_a.read_bytes(), b"old-a")
             self.assertEqual(destination_b.read_bytes(), b"old-b")
@@ -192,7 +192,7 @@ class ArtifactPublishingTests(unittest.TestCase):
                 mock.patch.object(Path, "replace", autospec=True, side_effect=fail_commit_and_restore),
                 self.assertRaisesRegex(RuntimeError, "回滚不完整"),
             ):
-                publish_artifact_plans((plan,))
+                copy_artifact_plans((plan,))
 
             backups = tuple((root / "paper").glob(".*.backup"))
             self.assertEqual(len(backups), 1)

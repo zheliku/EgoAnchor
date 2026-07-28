@@ -8,18 +8,19 @@ from pathlib import Path
 from typing import Any
 
 from ..common import begin_build, complete_build, source_tree_sha256
-from .cache import (
+from .analysis import (
     cache_key,
     cache_path,
+    analyze_task_workbook,
     implementation_sha256,
     load_task_results,
+    merge_task_results,
+    publish_figures,
+    workbook_sha256 as calculate_workbook_sha256,
+    write_analysis_artifacts,
     write_task_results,
 )
-from .figures import publish_figures
-from .metrics import analyze_task_workbook, merge_task_results
-from .paper import write_analysis_artifacts
 from .settings import load_settings, settings_sha256
-from .xlsx import workbook_sha256 as calculate_workbook_sha256
 
 
 _TASK_PATTERN = re.compile(r"^task_(?P<number>[1-9][0-9]*)_complete\.xlsx$")

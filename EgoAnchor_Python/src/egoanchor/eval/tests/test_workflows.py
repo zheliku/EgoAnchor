@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from egoanchor.eval.paper_analysis.common import ArtifactPlan, PlannedAsset
-from egoanchor.eval.workflows import workspace
+from egoanchor.eval.experiments import workspace
+from egoanchor.eval.experiments.common import ArtifactPlan, PlannedAsset
 
 
 class WorkspaceWorkflowTests(unittest.TestCase):
@@ -50,8 +50,8 @@ class WorkspaceWorkflowTests(unittest.TestCase):
         exp12.assert_not_called()
         exp3.assert_not_called()
 
-    def test_publish_all_requires_both_complete_plans_before_copying(self) -> None:
-        """实验三缺少完整构建时，publish all 不得降级成单实验发布。"""
+    def test_copy_all_requires_both_complete_plans_before_copying(self) -> None:
+        """实验三缺少完整构建时，copy-assets all 不得降级成单实验复制。"""
 
         source = Path("source.png")
         plan = ArtifactPlan(
@@ -61,20 +61,20 @@ class WorkspaceWorkflowTests(unittest.TestCase):
         with (
             mock.patch.object(
                 workspace.experiment_1_2,
-                "plan_publication",
+                "plan_assets",
                 return_value=plan,
             ),
             mock.patch.object(
                 workspace.experiment_3,
-                "plan_publication",
-                return_value=None,
+                "plan_assets",
+                side_effect=FileNotFoundError("exp3 build missing"),
             ),
-            mock.patch.object(workspace, "publish_artifact_plans") as publish,
+            mock.patch.object(workspace, "copy_artifact_plans") as copy_assets,
             self.assertRaises(FileNotFoundError),
         ):
-            workspace.publish_workspace("all")
+            workspace.copy_workspace_assets("all")
 
-        publish.assert_not_called()
+        copy_assets.assert_not_called()
 
 
 if __name__ == "__main__":

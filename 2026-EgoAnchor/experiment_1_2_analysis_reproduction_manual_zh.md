@@ -43,7 +43,7 @@ task_3_v2_20260724_034253_controller_right
 
 ```toml
 [shared.paths]
-paper_root = "../2026-EgoAnchor" # 全部实验论文资源的唯一发布根目录。
+paper_root = "../2026-EgoAnchor" # 全部实验论文资源的唯一根目录。
 
 [experiment_1_2.paths]
 task_data_root = "data/experiments/task_data" # 人工归档并按 task_任务_v版本_时间_物体 命名的原始日志目录。
@@ -70,11 +70,11 @@ pixi run eval status exp1-2
 ```powershell
 pixi run eval validate exp1-2
 pixi run eval analyze exp1-2
-pixi run eval publish exp1-2
+pixi run eval copy-assets exp1-2
 ```
 
 新增或局部重采时，先用 `data exp1-2 stage --promote` 自动选择数据、补建变化任务的工作簿并切换组合。
-`analyze exp1-2` 只重算变化任务的指标，然后统一生成完整图表；`publish exp1-2` 在人工审阅后发布资源。
+`analyze exp1-2` 只重算变化任务的指标，然后统一生成完整图表；`copy-assets exp1-2` 在人工审阅后复制论文资源。
 
 ## 四、新数据归档
 
@@ -177,7 +177,7 @@ data/experiments/experiment_1_2/analysis/
 ├─ metrics/                         # 完整精度指标
 ├─ plots/figure_plot_data.xlsx      # 图中可见数据点
 ├─ figures/                         # 八个 PNG/PDF 面板
-├─ tex/                             # 待发布的表格和待审阅的图环境
+├─ tex/                             # 待复制的表格和待审阅的图环境
 └─ provenance/build_result.json     # batch、输入、参数、实现指纹和缓存状态
 ```
 
@@ -186,17 +186,17 @@ data/experiments/experiment_1_2/analysis/
 
 `analyze` 不读取原始 JSON/JSONL，不改写 XLSX，不修改论文目录，也不调用 XeLaTeX。
 
-## 七、发布图表
+## 七、复制论文图表
 
 ```powershell
-pixi run eval publish exp1-2
+pixi run eval copy-assets exp1-2
 ```
 
-命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误发布旧图表。
+命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误复制旧图表。
 通过后，复制本次清单中的实验 PNG/PDF、`batch.toml` 明确列出的 relay PNG/PDF，以及
-`[experiment_1_2.publish.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
+`[experiment_1_2.copy_assets.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
 
-表格默认发布到：
+表格默认复制到：
 
 ```text
 2026-EgoAnchor/tables/exp1_static.tex
@@ -235,7 +235,7 @@ pixi run eval analyze exp1-2 --rebuild
 
 ### analyze 为什么仍会重新生成所有图？
 
-图和表代表当前五项组合，必须统一发布。重画本身很快；耗时的 XLSX 解析和片段统计已按 Task 缓存。
+图和表代表当前五项组合，必须按组合统一重建。重画本身很快；耗时的 XLSX 解析和片段统计已按 Task 缓存。
 
 ### 能否修改旧 task_data 目录？
 

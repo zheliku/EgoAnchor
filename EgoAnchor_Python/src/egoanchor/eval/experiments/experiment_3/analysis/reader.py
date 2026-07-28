@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from collections.abc import Iterable
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +16,14 @@ from openpyxl.cell.cell import Cell  # type: ignore[import-untyped]
 from .contracts import (
     BLOCK_ITEMS,
     EGOANCHOR,
+    EXCLUSION_REASONS,
     Exp3Data,
     METHOD_ITEM_COLUMNS,
     METHODS,
     OBJECTS,
     ONE_EURO,
+    PARTICIPANT_BACKGROUND_COLUMNS,
+    PARTICIPANT_CATEGORIES,
     WORKBOOK_CONTRACT_ID,
     WORKBOOK_SOURCE_CATEGORY,
     required_block_items,
@@ -127,19 +132,40 @@ def validate_for_analysis(
     participants = data.participants.copy()
     included = participants[participants["纳入分析"].map(_is_yes)]
     included_ids = frozenset(included["Participant_ID"].astype(str))
+    safety_ids = frozenset(
+        participants.loc[
+            participants["签署同意"].map(_is_yes)
+            & ~participants["开始时间"].map(_is_missing_or_na),
+            "Participant_ID",
+        ].astype(str)
+    )
     warnings: list[str] = []
     if len(included_ids) < minimum_participants:
         raise ValueError(
             f"纳入分析且已确认的参与者只有 {len(included_ids)} 人，少于冻结下限 {minimum_participants}"
         )
+    _validate_participant_values(
+        data.participants,
+        included_ids,
+        require_complete=data.source_kind == "formal",
+    )
     _validate_block_values(
         data.blocks,
         included_ids,
         aq_mode=aq_mode,
         q10_enabled=q10_enabled,
     )
-    _validate_method_values(data.methods, included_ids)
-    _validate_final_values(data.finals, included_ids)
+    _validate_method_values(
+        data.methods,
+        included_ids,
+        require_complete=data.source_kind == "formal",
+    )
+    _validate_final_values(
+        data.finals,
+        included_ids,
+        safety_ids,
+        require_complete=data.source_kind == "formal",
+    )
     if len(included_ids) < 24:
         warnings.append(f"当前纳入 {len(included_ids)} 人，少于目标 N=24；结果按实际配对 N 报告")
     return {
@@ -210,14 +236,24 @@ def _find_header_after(worksheet: Any, marker: str) -> int:
 
 
 def _source_kind(workbook: Any, filename: str) -> str:
-    """优先按核心属性识别正式输入，只用文本识别合成演练。"""
+    """优先按工作表契约识别正式输入，兼容 Excel 丢弃核心属性。"""
 
+    readme = workbook["README"]
+    markers = {
+        str(readme.cell(row, 1).value or "").strip(): str(readme.cell(row, 2).value or "").strip()
+        for row in range(1, min(readme.max_row, 40) + 1)
+    }
     if (
-        workbook.properties.identifier == WORKBOOK_CONTRACT_ID
-        and workbook.properties.category == WORKBOOK_SOURCE_CATEGORY
+        (
+            workbook.properties.identifier == WORKBOOK_CONTRACT_ID
+            and workbook.properties.category == WORKBOOK_SOURCE_CATEGORY
+        )
+        or (
+            markers.get("工作簿契约") == WORKBOOK_CONTRACT_ID
+            and markers.get("数据类别") == WORKBOOK_SOURCE_CATEGORY
+        )
     ):
         return "formal"
-    readme = workbook["README"]
 
     text = " ".join(
         str(readme.cell(row, column).value or "")
@@ -234,7 +270,13 @@ def _source_kind(workbook: Any, filename: str) -> str:
 def _validate_structure(data: Exp3Data) -> None:
     """验证 24 平衡单元和三段记录的固定身份。"""
 
-    _require_columns(data.participants, _PARTICIPANT_DESIGN_COLUMNS + ("纳入分析",), "Participants")
+    _require_columns(
+        data.participants,
+        _PARTICIPANT_DESIGN_COLUMNS
+        + tuple(PARTICIPANT_BACKGROUND_COLUMNS.values())
+        + ("签署同意", "基线不适", "开始时间", "结束时间", "纳入分析", "退出/技术问题"),
+        "Participants",
+    )
     _require_columns(
         data.blocks,
         _BLOCK_DESIGN_COLUMNS + tuple(BLOCK_ITEMS.values()) + (
@@ -258,6 +300,9 @@ def _validate_structure(data: Exp3Data) -> None:
             "偏好强度(1-7/NA)",
             "信任选择(标签)",
             "区分信心(1-7)",
+            "开放:最明显区别",
+            "开放:最破坏信任的现象",
+            "结束不适",
         ),
         "Records C",
     )
@@ -283,7 +328,43 @@ def _validate_structure(data: Exp3Data) -> None:
 def _validate_design_mapping(data: Exp3Data) -> None:
     """核对标签映射、对象覆盖和方法级评分顺序。"""
 
-    participants = data.participants.set_index("Participant_ID")
+    design = data.participants.copy()
+    if design["平衡单元"].astype(str).duplicated().any():
+        raise ValueError("Participants 的 24 个平衡单元必须唯一")
+    order_ids = pd.to_numeric(design["物体排列ID"], errors="coerce")
+    if order_ids.isna().any() or not set(order_ids.astype(int)) == set(range(1, 7)):
+        raise ValueError("Participants 的物体排列ID必须覆盖 1--6")
+    actual_cells = {
+        (int(order_id), str(sequence), str(mapping))
+        for order_id, sequence, mapping in zip(
+            order_ids,
+            design["标签序列"],
+            design["方法A=（保密）"],
+            strict=True,
+        )
+    }
+    expected_cells = {
+        (order_id, sequence, mapping)
+        for order_id in range(1, 7)
+        for sequence in ("S1", "S2")
+        for mapping in METHODS
+    }
+    if actual_cells != expected_cells:
+        raise ValueError("Participants 必须恰好覆盖 6 物体排列 × S1/S2 × A 标签映射的 24 单元")
+    expected_label_order = {
+        "S1": "A-B / B-A / A-B",
+        "S2": "B-A / A-B / B-A",
+    }
+    for _, row in design.iterrows():
+        sequence = str(row["标签序列"])
+        if str(row["区块内标签顺序"]) != expected_label_order.get(sequence):
+            raise ValueError(f"{row['Participant_ID']} 的区块内标签顺序与 {sequence} 不一致")
+        first_label = "方法A" if sequence == "S1" else "方法B"
+        first_method = row["方法A=（保密）"] if first_label == "方法A" else row["方法B=（保密）"]
+        if str(row["先行实际方法"]) != str(first_method):
+            raise ValueError(f"{row['Participant_ID']} 的先行实际方法与标签序列不一致")
+
+    participants = design.set_index("Participant_ID")
     for participant_id, rows in data.blocks.groupby("Participant_ID", sort=False):
         if frozenset(rows["Condition(保密)"].astype(str)) != frozenset(METHODS):
             raise ValueError(f"{participant_id} 的区块未覆盖两种方法")
@@ -304,6 +385,22 @@ def _validate_design_mapping(data: Exp3Data) -> None:
     for participant_id, rows in data.methods.groupby("Participant_ID", sort=False):
         if frozenset(rows["Condition(保密)"].astype(str)) != frozenset(METHODS):
             raise ValueError(f"{participant_id} 的方法级记录未覆盖两种方法")
+        mapping = participants.loc[participant_id]
+        expected_conditions = {
+            "方法A": str(mapping["方法A=（保密）"]),
+            "方法B": str(mapping["方法B=（保密）"]),
+        }
+        sequence = str(mapping["标签序列"])
+        expected_labels = ("方法A", "方法B") if sequence == "S1" else ("方法B", "方法A")
+        ordered = rows.sort_values("Rating_Order")
+        if tuple(pd.to_numeric(ordered["Rating_Order"], errors="coerce")) != (1, 2):
+            raise ValueError(f"{participant_id} 的方法级 Rating_Order 必须为 1、2")
+        if tuple(ordered["Shown_Label"].astype(str)) != expected_labels:
+            raise ValueError(f"{participant_id} 的方法级评分顺序与 {sequence} 不一致")
+        for _, row in ordered.iterrows():
+            label = str(row["Shown_Label"])
+            if expected_conditions.get(label) != str(row["Condition(保密)"]):
+                raise ValueError(f"{participant_id} 的方法级 {label} 映射与 Participants 不一致")
 
 
 def _require_columns(table: pd.DataFrame, columns: Iterable[str], name: str) -> None:
@@ -341,22 +438,147 @@ def _validate_block_values(
         "可选区块评分",
         allow_missing=True,
     )
+    _validate_manipulation_values(selected)
 
 
-def _validate_method_values(methods: pd.DataFrame, included_ids: frozenset[str]) -> None:
+def _validate_manipulation_values(blocks: pd.DataFrame) -> None:
+    """检查冻结方案要求报告的运行时操纵审计字段。"""
+
+    _validate_finite_range(blocks, "Candidate_Rate_Hz", minimum=0.0, strict_minimum=True)
+    for column in ("VCD_Median", "VCD_Admission_Rate", "Output_Availability"):
+        _validate_finite_range(blocks, column, minimum=0.0, maximum=1.0)
+    _validate_finite_range(blocks, "遮挡时长_s", minimum=0.0, strict_minimum=True)
+    for column in ("服务器重获取次数", "StaticLock进入次数"):
+        _validate_finite_range(blocks, column, minimum=0.0, integer=True)
+    lifecycle = {"Coasting", "FrozenUncertain", "Lost", "不适用"}
+    if blocks["遮挡生命周期状态"].map(_is_missing_or_na).any() or not blocks[
+        "遮挡生命周期状态"
+    ].astype(str).isin(lifecycle).all():
+        raise ValueError("纳入区块的遮挡生命周期状态必须使用冻结选项")
+    if blocks["进入Lost"].map(_is_missing_or_na).any() or not blocks["进入Lost"].map(
+        lambda value: _is_yes(value) or _is_no(value)
+    ).all():
+        raise ValueError("纳入区块的进入Lost必须明确填写是或否")
+
+
+def _validate_finite_range(
+    table: pd.DataFrame,
+    column: str,
+    *,
+    minimum: float,
+    maximum: float | None = None,
+    strict_minimum: bool = False,
+    integer: bool = False,
+) -> None:
+    """验证一列审计数值完整、有限并位于指定范围。"""
+
+    numeric = pd.to_numeric(table[column], errors="coerce")
+    if numeric.isna().any() or not numeric.map(math.isfinite).all():
+        raise ValueError(f"纳入区块的 {column} 必须全部填写有限数值")
+    below = numeric <= minimum if strict_minimum else numeric < minimum
+    above = numeric > maximum if maximum is not None else pd.Series(False, index=numeric.index)
+    non_integer = numeric % 1 != 0 if integer else pd.Series(False, index=numeric.index)
+    if (below | above | non_integer).any():
+        interval = f"{minimum:g}--{maximum:g}" if maximum is not None else f">={minimum:g}"
+        raise ValueError(f"纳入区块的 {column} 超出合法范围 {interval}")
+
+
+def _validate_participant_values(
+    participants: pd.DataFrame,
+    included_ids: frozenset[str],
+    *,
+    require_complete: bool,
+) -> None:
+    """校验纳入样本的背景字段，并保留原始分类语义。"""
+
+    selected = participants[participants["Participant_ID"].astype(str).isin(included_ids)]
+    if require_complete:
+        started_without_consent = participants[
+            ~participants["开始时间"].map(_is_missing_or_na)
+            & ~participants["签署同意"].map(_is_yes)
+        ]
+        if not started_without_consent.empty:
+            raise ValueError("已开始会话的参与者必须先明确签署同意")
+        if not selected["签署同意"].map(_is_yes).all():
+            raise ValueError("纳入参与者必须全部明确签署同意")
+        pending = participants[
+            participants["签署同意"].map(_is_yes)
+            & ~participants["纳入分析"].map(_is_yes)
+            & ~participants["纳入分析"].map(_is_no)
+        ]
+        if not pending.empty:
+            raise ValueError("正式分析前，所有已签署同意的参与者都必须明确标记纳入或排除")
+        age = pd.to_numeric(selected["B1_年龄"], errors="coerce")
+        if age.isna().any() or ((age <= 0) | (age > 120) | (age % 1 != 0)).any():
+            raise ValueError("纳入参与者的 B1_年龄必须是 1--120 的正整数；此范围只作录入合法性检查")
+        for output_column, source_column in PARTICIPANT_BACKGROUND_COLUMNS.items():
+            if output_column == "Age":
+                continue
+            allowed = set(PARTICIPANT_CATEGORIES[output_column])
+            values = selected[source_column]
+            if values.isna().any() or not values.astype(str).isin(allowed).all():
+                raise ValueError(f"纳入参与者的 {source_column} 必须使用冻结下拉选项")
+        exposed = participants[
+            participants["签署同意"].map(_is_yes)
+            & ~participants["开始时间"].map(_is_missing_or_na)
+        ]
+        baseline_allowed = set(PARTICIPANT_CATEGORIES["Baseline_Discomfort"])
+        baseline = exposed["基线不适"]
+        invalid_baseline = ~baseline.map(_is_missing_or_na) & ~baseline.astype(str).isin(baseline_allowed)
+        if invalid_baseline.any():
+            raise ValueError("已开始参与者的基线不适必须留空或使用冻结选项")
+        for column in ("开始时间", "结束时间"):
+            values = selected[column]
+            if values.map(_is_missing_or_na).any():
+                raise ValueError(f"纳入参与者的 {column} 不得缺失")
+            if not values.map(_is_supported_time).all():
+                raise ValueError(f"纳入参与者的 {column} 必须是 Excel 时间或 HH:MM[:SS]")
+        if not exposed["开始时间"].map(_is_supported_time).all():
+            raise ValueError("已开始参与者的开始时间必须是 Excel 时间或 HH:MM[:SS]")
+        recorded_end = exposed.loc[~exposed["结束时间"].map(_is_missing_or_na), "结束时间"]
+        if not recorded_end.map(_is_supported_time).all():
+            raise ValueError("已开始参与者的非空结束时间必须是 Excel 时间或 HH:MM[:SS]")
+
+    excluded = participants[
+        participants["签署同意"].map(_is_yes)
+        & participants["纳入分析"].map(_is_no)
+    ]
+    if require_complete and excluded["退出/技术问题"].map(_is_missing_or_na).any():
+        raise ValueError("已签署同意但不纳入分析的参与者必须记录退出/技术问题")
+    if require_complete:
+        recorded_reasons = excluded.loc[~excluded["退出/技术问题"].map(_is_missing_or_na), "退出/技术问题"]
+        if not recorded_reasons.astype(str).isin(EXCLUSION_REASONS).all():
+            raise ValueError("退出/技术问题必须使用冻结主原因；补充细节只写备注")
+
+
+def _validate_method_values(
+    methods: pd.DataFrame,
+    included_ids: frozenset[str],
+    *,
+    require_complete: bool,
+) -> None:
     """检查纳入参与者的方法级原始评分与审核状态。"""
 
     selected = methods[methods["Participant_ID"].astype(str).isin(included_ids)]
+    if require_complete:
+        for column in METHOD_ITEM_COLUMNS[:10]:
+            if selected[column].map(_is_blank_response).any():
+                raise ValueError(f"纳入参与者的 TiA 条目 {column} 必须填写评分或“无法回答”")
     _validate_numeric_range(selected, METHOD_ITEM_COLUMNS[:10], 1.0, 5.0, "TiA 原始评分", allow_missing=True)
     _validate_numeric_range(selected, METHOD_ITEM_COLUMNS[10:], 1.0, 7.0, "S-TIAS 原始评分")
-    if not selected["尺度切换确认"].map(_is_yes).all():
-        raise ValueError("纳入参与者的两次方法级问卷都必须确认尺度切换")
-    for optional_column in ("A/B归属回忆确认", "方法级记录有效"):
-        if optional_column in selected and not selected[optional_column].map(_is_yes).all():
-            raise ValueError(f"纳入参与者的 {optional_column} 必须全部确认")
+    if require_complete and not method_assessment_complete_mask(selected).all():
+        raise ValueError("纳入参与者的两次方法级问卷都必须完整作答并确认尺度切换")
+    if not method_record_valid_mask(selected).all():
+        raise ValueError("纳入参与者的方法级记录必须通过技术状态、A/B 回忆和人工有效性审核")
 
 
-def _validate_final_values(finals: pd.DataFrame, included_ids: frozenset[str]) -> None:
+def _validate_final_values(
+    finals: pd.DataFrame,
+    included_ids: frozenset[str],
+    safety_ids: frozenset[str],
+    *,
+    require_complete: bool,
+) -> None:
     """检查最终选择、条件跳题与区分信心。"""
 
     selected = finals[finals["Participant_ID"].astype(str).isin(included_ids)]
@@ -374,6 +596,39 @@ def _validate_final_values(finals: pd.DataFrame, included_ids: frozenset[str]) -
                 raise ValueError("选择无明显偏好时，偏好强度必须留空或写 N/A")
         elif _number_or_none(strength) is None or not 1.0 <= float(strength) <= 7.0:
             raise ValueError("做出方法选择时，偏好强度必须为 1--7")
+    if require_complete:
+        for column in ("开放:最明显区别", "开放:最破坏信任的现象", "结束不适"):
+            if selected[column].map(_is_missing_or_na).any():
+                raise ValueError(f"纳入参与者的 {column} 不得缺失")
+        allowed_discomfort = set(PARTICIPANT_CATEGORIES["End_Discomfort"])
+        if not selected["结束不适"].astype(str).isin(allowed_discomfort).all():
+            raise ValueError("纳入参与者的结束不适必须使用冻结选项")
+        safety = finals[finals["Participant_ID"].astype(str).isin(safety_ids)]
+        recorded = safety.loc[~safety["结束不适"].map(_is_missing_or_na), "结束不适"]
+        if not recorded.astype(str).isin(allowed_discomfort).all():
+            raise ValueError("已开始参与者的非空结束不适必须使用冻结选项")
+
+
+def method_assessment_complete_mask(methods: pd.DataFrame) -> pd.Series:
+    """返回方法级问卷已作答且完成尺度切换确认的掩码。"""
+
+    responses = methods.loc[:, list(METHOD_ITEM_COLUMNS)].apply(
+        lambda column: ~column.map(_is_blank_response)
+    )
+    return responses.all(axis=1) & methods["尺度切换确认"].map(_is_yes)
+
+
+def method_record_valid_mask(methods: pd.DataFrame) -> pd.Series:
+    """返回通过技术、回忆与人工审核的方法级记录掩码。"""
+
+    valid = methods["尺度切换确认"].map(_is_yes)
+    valid &= methods["技术问题"].map(
+        lambda value: _is_missing_or_na(value) or str(value).strip() == "无"
+    )
+    for optional_column in ("A/B归属回忆确认", "方法级记录有效"):
+        if optional_column in methods:
+            valid &= methods[optional_column].map(_is_yes)
+    return valid
 
 
 def block_valid_mask(blocks: pd.DataFrame) -> pd.Series:
@@ -448,10 +703,41 @@ def _is_yes(value: Any) -> bool:
     return str(value or "").strip().lower() in {"是", "yes", "true", "1"}
 
 
+def _is_no(value: Any) -> bool:
+    """识别人工确认字段中的否定值。"""
+
+    return str(value or "").strip().lower() in {"否", "no", "false", "0"}
+
+
+def _is_supported_time(value: Any) -> bool:
+    """判断会话时刻能否稳定解析为 Excel 时间或常见时刻文本。"""
+
+    if isinstance(value, (datetime, time)):
+        return True
+    text = str(value).strip()
+    for pattern in ("%H:%M", "%H:%M:%S"):
+        try:
+            datetime.strptime(text, pattern)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _is_blank_response(value: Any) -> bool:
+    """区分真正空白与 TiA 的显式“无法回答”响应。"""
+
+    if isinstance(value, str) and value.strip() == "无法回答":
+        return False
+    return _is_missing_or_na(value)
+
+
 __all__ = [
     "block_valid_mask",
     "describe_workbook",
     "included_participant_ids",
+    "method_assessment_complete_mask",
+    "method_record_valid_mask",
     "read_workbook",
     "validate_for_analysis",
     "workbook_sha256",

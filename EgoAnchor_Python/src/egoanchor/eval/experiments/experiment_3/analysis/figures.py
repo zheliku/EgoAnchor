@@ -24,13 +24,13 @@ from .contracts import (
     OUTCOME_LABELS,
     SCALE_OUTCOMES,
 )
-from .settings import Exp3Settings
+from ..settings import Exp3Settings
 
 
-_COLORS = {ONE_EURO: "#3B6EA8", EGOANCHOR: "#D55E4A"}
-_GRID_COLOR = "#D9DEE3"
-_PAIR_COLOR = "#727A82"
-_TEXT_COLOR = "#20252A"
+_COLORS = {ONE_EURO: "#4E79A7", EGOANCHOR: "#E15759"}
+_GRID_COLOR = "#E4E7EA"
+_PAIR_COLOR = "#697078"
+_TEXT_COLOR = "#202428"
 _METHOD_ORDER = (ONE_EURO, EGOANCHOR)
 _PAIRED_OUTCOMES = ("Q1", "Q8", "Q3", "Q6")
 _SCALE_FIGURE_OUTCOMES = ("Q6", "Q7", "AQ_EQ", "AQ_IQ", "TIA_RC", "TIA_UP", "STIAS")
@@ -74,18 +74,18 @@ def _configure(dpi: int) -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 7.2,
+            "font.size": 7.1,
             "axes.labelcolor": _TEXT_COLOR,
-            "axes.labelsize": 7.2,
-            "axes.titlesize": 7.8,
-            "axes.titlepad": 5.0,
-            "axes.linewidth": 0.75,
-            "axes.edgecolor": "#6F767D",
+            "axes.labelsize": 7.1,
+            "axes.titlesize": 7.6,
+            "axes.titlepad": 5.5,
+            "axes.linewidth": 0.65,
+            "axes.edgecolor": "#70767C",
             "xtick.color": _TEXT_COLOR,
-            "xtick.labelsize": 6.7,
+            "xtick.labelsize": 6.6,
             "ytick.color": _TEXT_COLOR,
             "ytick.labelsize": 6.6,
-            "legend.fontsize": 7.0,
+            "legend.fontsize": 6.9,
             "savefig.dpi": dpi,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
@@ -107,7 +107,7 @@ def _paired_figure(
     ):
         _draw_object_panel(axis, data[data["Outcome"] == outcome])
         axis.set_title(
-            f"{chr(97 + panel_index)}) {outcome}  {OUTCOME_LABELS[outcome]}",
+            f"{chr(97 + panel_index)}) {OUTCOME_LABELS[outcome]} ({outcome})",
             loc="left",
             fontweight="bold",
             color=_TEXT_COLOR,
@@ -121,11 +121,18 @@ def _paired_figure(
         loc="upper center",
         ncol=3,
         frameon=False,
-        bbox_to_anchor=(0.5, 1.005),
-        handlelength=1.5,
-        columnspacing=1.5,
+        bbox_to_anchor=(0.5, 0.995),
+        handlelength=1.4,
+        columnspacing=1.35,
     )
-    figure.subplots_adjust(left=0.065, right=0.995, bottom=0.085, top=0.89, wspace=0.16, hspace=0.38)
+    figure.subplots_adjust(
+        left=0.064,
+        right=0.995,
+        bottom=0.085,
+        top=0.88,
+        wspace=0.15,
+        hspace=0.36,
+    )
     return figure
 
 
@@ -145,7 +152,7 @@ def _draw_object_panel(axis: Any, data: pd.DataFrame) -> None:
         paired = pivot.dropna(subset=list(_METHOD_ORDER)).sort_index()
         if paired.empty:
             continue
-        jitter = np.linspace(-0.045, 0.045, len(paired))
+        jitter = _symmetric_jitter(len(paired), 0.043)
         left_positions = object_index - 0.18 + jitter
         right_positions = object_index + 0.18 + jitter
         for row_index, (_, row) in enumerate(paired.iterrows()):
@@ -153,8 +160,8 @@ def _draw_object_panel(axis: Any, data: pd.DataFrame) -> None:
                 [left_positions[row_index], right_positions[row_index]],
                 [row[ONE_EURO], row[EGOANCHOR]],
                 color=_PAIR_COLOR,
-                linewidth=0.36,
-                alpha=0.12,
+                linewidth=0.42,
+                alpha=0.18,
                 zorder=1,
             )
         _draw_distribution(
@@ -172,14 +179,14 @@ def _draw_object_panel(axis: Any, data: pd.DataFrame) -> None:
             right_positions,
         )
     axis.set_xlim(-0.55, len(OBJECTS) - 0.45)
-    axis.set_ylim(0.72, 8.75)
+    axis.set_ylim(0.72, 8.42)
     axis.set_yticks(range(1, 8))
     axis.set_xticks(range(len(OBJECTS)), [OBJECT_LABELS[item] for item in OBJECTS])
     _clean_axis(axis)
 
 
 def _draw_global_result(axis: Any, result: pd.Series) -> None:
-    """在面板角落标出跨三物体主检验与匹配秩效应量。"""
+    """在面板右上角紧凑标出跨三物体主检验与匹配秩效应量。"""
 
     p_text = _format_p(result.get("p_Holm"))
     effect = _format_number(result.get("r_rb"), 2)
@@ -187,15 +194,14 @@ def _draw_global_result(axis: Any, result: pd.Series) -> None:
     high = _format_number(result.get("r_rb_CI_High"), 2)
     axis.text(
         0.985,
-        0.965,
-        f"Holm p {p_text}  {_significance_label(result.get('p_Holm'))}\n"
-        f"$r_{{rb}}$={effect} [{low}, {high}]",
+        0.975,
+        f"Holm p {p_text}  {_significance_label(result.get('p_Holm'))}"
+        f"   $r_{{rb}}$={effect} [{low}, {high}]",
         transform=axis.transAxes,
         ha="right",
         va="top",
-        fontsize=6.5,
-        color="#41484F",
-        linespacing=1.3,
+        fontsize=6.15,
+        color="#4A5056",
     )
 
 
@@ -242,20 +248,57 @@ def _scale_figure(
                 color="#4A5158",
             )
     _draw_legend_panel(axes.flat[7])
-    figure.subplots_adjust(left=0.065, right=0.995, bottom=0.09, top=0.96, wspace=0.22, hspace=0.40)
+    figure.subplots_adjust(
+        left=0.062,
+        right=0.995,
+        bottom=0.09,
+        top=0.96,
+        wspace=0.20,
+        hspace=0.38,
+    )
     return figure
 
 
 def _draw_method_panel(axis: Any, data: pd.DataFrame, *, upper: float) -> None:
-    """绘制一个参与者级方法汇总结局的两组箱线。"""
+    """绘制参与者级配对轨迹、原始点和两组箱线。"""
 
-    for position, method in enumerate(_METHOD_ORDER):
-        subset = data[data["Condition"] == method].sort_values("Participant_ID")
-        values = pd.to_numeric(subset["Value"], errors="coerce").dropna().to_numpy(dtype=float)
-        if values.size == 0:
-            continue
-        jitter = np.linspace(-0.12, 0.12, values.size)
-        _draw_distribution(axis, values, float(position), _COLORS[method], position + jitter)
+    pivot = data.pivot_table(
+        index="Participant_ID",
+        columns="Condition",
+        values="Value",
+        aggfunc="first",
+    )
+    if not set(_METHOD_ORDER).issubset(pivot.columns):
+        return
+    paired = pivot.dropna(subset=list(_METHOD_ORDER)).sort_index()
+    if paired.empty:
+        return
+    jitter = _symmetric_jitter(len(paired), 0.105)
+    left_positions = jitter
+    right_positions = 1.0 + jitter
+    for row_index, (_, row) in enumerate(paired.iterrows()):
+        axis.plot(
+            [left_positions[row_index], right_positions[row_index]],
+            [row[ONE_EURO], row[EGOANCHOR]],
+            color=_PAIR_COLOR,
+            linewidth=0.40,
+            alpha=0.16,
+            zorder=1,
+        )
+    _draw_distribution(
+        axis,
+        paired[ONE_EURO].to_numpy(dtype=float),
+        0.0,
+        _COLORS[ONE_EURO],
+        left_positions,
+    )
+    _draw_distribution(
+        axis,
+        paired[EGOANCHOR].to_numpy(dtype=float),
+        1.0,
+        _COLORS[EGOANCHOR],
+        right_positions,
+    )
     extra = 1.05 if upper == 7.0 else 0.90
     axis.set_xlim(-0.48, 1.48)
     axis.set_ylim(0.72, upper + extra)
@@ -274,41 +317,46 @@ def _draw_distribution(
     color: str,
     point_positions: np.ndarray,
 ) -> None:
-    """绘制一组透明原始点、箱线和空心均值菱形。"""
+    """绘制一组原始点、箱线和空心均值圆点。"""
 
     axis.scatter(
         point_positions,
         values,
-        s=8.0,
+        s=9.5,
         facecolor=color,
         edgecolor="white",
-        linewidth=0.22,
-        alpha=0.36,
-        zorder=2,
+        linewidth=0.28,
+        alpha=0.70,
+        zorder=4,
     )
     box = axis.boxplot(
         [values],
         positions=[position],
-        widths=0.28,
+        widths=0.25,
         patch_artist=True,
         showfliers=False,
         whis=1.5,
-        boxprops={"facecolor": color, "edgecolor": color, "linewidth": 0.95, "alpha": 0.19},
-        medianprops={"color": color, "linewidth": 1.5},
-        whiskerprops={"color": color, "linewidth": 0.8},
-        capprops={"color": color, "linewidth": 0.8},
+        boxprops={
+            "facecolor": color,
+            "edgecolor": color,
+            "linewidth": 0.9,
+            "alpha": 0.30,
+        },
+        medianprops={"color": _TEXT_COLOR, "linewidth": 1.15},
+        whiskerprops={"color": color, "linewidth": 0.75},
+        capprops={"color": color, "linewidth": 0.75},
     )
     for patch in box["boxes"]:
         patch.set_zorder(3)
     axis.scatter(
         [position],
         [float(np.mean(values))],
-        s=20,
-        marker="D",
+        s=18,
+        marker="o",
         facecolor="white",
         edgecolor=color,
-        linewidth=1.0,
-        zorder=5,
+        linewidth=0.95,
+        zorder=6,
     )
 
 
@@ -321,7 +369,7 @@ def _significance_bracket(axis: Any, value: Any, upper: float) -> None:
         [0.04, 0.04, 0.96, 0.96],
         [y, y + height, y + height, y],
         color="#3C4248",
-        linewidth=0.75,
+        linewidth=0.70,
         clip_on=False,
         zorder=6,
     )
@@ -331,7 +379,7 @@ def _significance_bracket(axis: Any, value: Any, upper: float) -> None:
         _significance_label(value),
         ha="center",
         va="bottom",
-        fontsize=7.0,
+        fontsize=6.8,
         fontweight="bold",
         color=_TEXT_COLOR,
     )
@@ -352,7 +400,7 @@ def _draw_legend_panel(axis: Any) -> None:
     axis.text(
         0.0,
         0.34,
-        "Diamond: mean; line: median\nBracket: Holm-adjusted p",
+        "Circle: mean; bar: median\nBracket: Holm-adjusted p",
         transform=axis.transAxes,
         ha="left",
         va="top",
@@ -390,22 +438,30 @@ def _method_handles(*, include_mean: bool) -> list[Any]:
             Line2D(
                 [],
                 [],
-                marker="D",
+                marker="o",
                 linestyle="none",
                 markerfacecolor="white",
                 markeredgecolor="#4A5158",
-                markersize=4.8,
+                markersize=4.6,
                 label="Mean",
             )
         )
     return handles
 
 
+def _symmetric_jitter(count: int, width: float) -> np.ndarray:
+    """返回确定性的对称横向偏移，重复构建不引入随机差异。"""
+
+    if count <= 1:
+        return np.zeros(max(count, 0), dtype=float)
+    return np.linspace(-width, width, count)
+
+
 def _clean_axis(axis: Any) -> None:
     """应用浅色水平网格并压低非数据墨水。"""
 
     axis.set_axisbelow(True)
-    axis.grid(axis="y", color=_GRID_COLOR, linestyle="-", linewidth=0.52, alpha=0.72)
+    axis.grid(axis="y", color=_GRID_COLOR, linestyle="-", linewidth=0.48, alpha=0.80)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
     axis.tick_params(axis="both", length=2.5, width=0.65, pad=1.8)
@@ -416,11 +472,9 @@ def _save_pair(figure: Any, root: Path, stem: str) -> tuple[Path, Path]:
 
     png = root / f"{stem}.png"
     pdf = root / f"{stem}.pdf"
-    figure.savefig(png, bbox_inches="tight", pad_inches=0.035, facecolor="white")
+    figure.savefig(png, facecolor="white")
     figure.savefig(
         pdf,
-        bbox_inches="tight",
-        pad_inches=0.035,
         facecolor="white",
         metadata={"CreationDate": None, "ModDate": None},
     )

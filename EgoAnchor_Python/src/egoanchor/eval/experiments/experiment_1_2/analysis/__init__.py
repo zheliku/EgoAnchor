@@ -1,6 +1,12 @@
-"""实验一端到端表征与实验二系统设计归因的共享分析入口。"""
+"""实验一/二论文统计、图表与工作簿读取的包级入口。"""
 
-from .cache import cache_key, cache_path, load_task_results, write_task_results
+from .cache import (
+    cache_key,
+    cache_path,
+    implementation_sha256,
+    load_task_results,
+    write_task_results,
+)
 from .figures import (
     build_dual_metric_panel,
     build_temporal_strategy_panel,
@@ -32,8 +38,6 @@ from .paper import (
     build_exp2_attribution_table,
     write_analysis_artifacts,
 )
-from .pipeline import build_analysis
-from .settings import PaperSettings, load_settings, settings_sha256
 from .xlsx import iter_rows, workbook_sha256
 
 
@@ -42,14 +46,12 @@ __all__ = [
     "LINEAR_SLERP_VARIANT",
     "METHODS",
     "PaperResults",
-    "PaperSettings",
     "PerformanceSamples",
     "SMOOTHED_EXTRAPOLATION_VARIANT",
     "TEMPORAL_STRATEGY_VARIANTS",
     "TaskResults",
     "analyze_task_workbook",
     "analyze_workbooks",
-    "build_analysis",
     "build_dual_metric_panel",
     "build_exp1_dynamic_table",
     "build_exp1_static_table",
@@ -60,14 +62,13 @@ __all__ = [
     "cache_path",
     "eligible_trials",
     "iter_rows",
-    "load_settings",
+    "implementation_sha256",
     "load_task_results",
     "merge_task_results",
     "paired_metric_matrix",
     "publish_figures",
     "risk_coverage_curve",
     "rotation_lag_metrics",
-    "settings_sha256",
     "summarize_risk_coverage",
     "translation_lag_metrics",
     "workbook_sha256",

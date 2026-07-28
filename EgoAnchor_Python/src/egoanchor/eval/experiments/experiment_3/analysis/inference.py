@@ -12,7 +12,7 @@ from scipy import stats  # type: ignore[import-untyped]
 from sklearn.decomposition import FactorAnalysis  # type: ignore[import-untyped]
 
 from .contracts import METHODS, SCALE_OUTCOMES, published_scale_items
-from .settings import Exp3Settings
+from ..settings import Exp3Settings
 
 
 def paired_result(
@@ -42,8 +42,8 @@ def paired_result(
         seed=bootstrap_seed,
         confidence_level=confidence_level,
     )
-    left_q1, left_median, left_q3 = quartiles(left)
-    right_q1, right_median, right_q3 = quartiles(right)
+    left_q1, left_median, left_q3 = quartiles(left.tolist())
+    right_q1, right_median, right_q3 = quartiles(right.tolist())
     return {
         "N": int(difference.size),
         "N_Nonzero": int(rank["n_nonzero"]),

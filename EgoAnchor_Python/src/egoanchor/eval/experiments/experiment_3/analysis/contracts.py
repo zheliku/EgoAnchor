@@ -33,6 +33,39 @@ OBJECT_LABELS: Final = {
 }
 """对象键到论文图英文短标签的映射。"""
 
+PARTICIPANT_BACKGROUND_COLUMNS: Final[dict[str, str]] = {
+    "Age": "B1_年龄",
+    "Gender": "B2_性别",
+    "Handedness": "B3_主手",
+    "Vision": "B4_视力",
+    "VRMR_Experience": "B5_VR/MR经验",
+    "PhysicalMR_Experience": "B6_实物MR经验",
+}
+"""结果工作簿稳定英文键到 Participants 原始列的映射。"""
+
+PARTICIPANT_CATEGORIES: Final[dict[str, tuple[str, ...]]] = {
+    "Gender": ("女", "男", "非二元或其他", "不愿透露"),
+    "Handedness": ("右手", "左手", "双手均可"),
+    "Vision": ("正常", "矫正后正常", "其他"),
+    "VRMR_Experience": ("从未", "1–5 次", "6–20 次", "超过 20 次", "经常使用"),
+    "PhysicalMR_Experience": ("从未", "1–2 次", "数次", "经常"),
+    "Baseline_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
+    "End_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
+}
+"""背景与安全字段的冻结选项及论文汇报顺序。"""
+
+EXCLUSION_REASONS: Final = (
+    "参与者退出",
+    "身体不适",
+    "设备故障",
+    "网络故障",
+    "追踪异常",
+    "问卷中断",
+    "协议偏离",
+    "其他（见备注）",
+)
+"""参与者级退出或技术排除的冻结主原因；细节只写备注。"""
+
 WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.1"
 """正式原始工作簿写入核心属性的稳定契约标识。"""
 
@@ -75,7 +108,7 @@ BLOCK_RECORD_COLUMNS: Final = {
 }
 """区块条目到 Records A 段 Excel 列的稳定映射。"""
 
-AQ_SCALE_ITEMS: Final = {
+AQ_SCALE_ITEMS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "full": {
         "AQ_EQ": ("AQ_EQ1", "AQ_EQ2", "AQ_EQ3"),
         "AQ_IQ": ("AQ_IQ1", "AQ_IQ2", "AQ_IQ3"),
@@ -234,6 +267,15 @@ class ScoreData:
 class AnalysisTables:
     """保存结果工作簿和绘图所需的全部确定性分析表。"""
 
+    participant_summary: pd.DataFrame
+    """论文可直接汇报的样本流程、人口学、经验与安全描述。"""
+
+    participant_balance: pd.DataFrame
+    """24 平衡单元的物体顺序、标签映射与先行方法实际人数。"""
+
+    participant_audit: pd.DataFrame
+    """去除自由文本后的逐参与者流程、完整性、时长与安全审计。"""
+
     primary: pd.DataFrame
     """主证实家族的描述统计、Wilcoxon、Holm 与效应量。"""
 
@@ -274,6 +316,7 @@ __all__ = [
     "AQ_SCALE_ITEMS",
     "AnalysisTables",
     "EGOANCHOR",
+    "EXCLUSION_REASONS",
     "Exp3Data",
     "METHODS",
     "METHOD_ITEM_COLUMNS",
@@ -284,6 +327,8 @@ __all__ = [
     "OBJECT_LABELS",
     "ONE_EURO",
     "OUTCOME_LABELS",
+    "PARTICIPANT_BACKGROUND_COLUMNS",
+    "PARTICIPANT_CATEGORIES",
     "PRIMARY_OUTCOMES",
     "REVERSED_TIA_ITEMS",
     "SCALE_OUTCOMES",

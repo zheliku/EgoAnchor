@@ -13,7 +13,7 @@ from numpy.polynomial.hermite import hermgauss
 from scipy import optimize, special, stats  # type: ignore[import-untyped]
 
 from .contracts import BLOCK_ITEMS, EGOANCHOR, OBJECTS, PRIMARY_OUTCOMES
-from .settings import Exp3Settings
+from ..settings import Exp3Settings
 from .inference import holm_adjust
 
 

@@ -15,49 +15,59 @@ pixi run eval --help
 
 三个实验共用四个生命周期动作，实验一/二另有采集批次管理动作：
 
-| 命令 | 作用 | 是否写论文目录 |
-|---|---|---|
-| `pixi run eval status [all\|exp1-2\|exp3]` | 查看配置、输入进度和最近构建状态；默认 `all` | 否 |
-| `pixi run eval validate <all\|exp1-2\|exp3>` | 执行正式分析门禁 | 否 |
-| `pixi run eval analyze <all\|exp1-2\|exp3>` | 生成本地统计、XLSX、TeX 和图片 | 否 |
-| `pixi run eval publish <all\|exp1-2\|exp3>` | 联合预检后发布指定实验的论文资源 | 是 |
-| `pixi run eval data ...` | 管理实验专属原始输入和 Stage 1 缓存 | 否 |
+| 命令                                         | 作用                                          | 是否写论文目录 |
+| -------------------------------------------- | --------------------------------------------- | -------------- |
+| `pixi run eval status [all\|exp1-2\|exp3]`   | 查看配置、输入进度和最近构建状态；默认`all` | 否             |
+| `pixi run eval validate <all\|exp1-2\|exp3>` | 执行正式分析门禁                              | 否             |
+| `pixi run eval analyze <all\|exp1-2\|exp3>`  | 生成本地统计、XLSX、TeX 和图片                | 否             |
+| `pixi run eval copy-assets [all\|exp1-2\|exp3]` | 联合预检后复制指定实验的论文资源          | 是             |
+| `pixi run eval data ...`                       | 管理实验专属原始输入和 Stage 1 缓存       | 否             |
 
 实验三的统计和绘图已经合并进一次 `analyze exp3`。不存在单独的 `plot` 阶段，也不需要在命令之间
 手工传递结果路径。
 
-最终论文发布应使用：
+两边分析完成后，用以下命令同步论文资源：
 
 ```powershell
-pixi run eval publish all
+pixi run eval copy-assets all
 ```
 
-`publish all` 要求实验一/二和实验三都存在最新、完整、正式来源的构建。采集尚未完成时若只需要更新
-实验一/二，必须明确运行 `publish exp1-2`；命令不会自动跳过缺失的实验。
+`copy-assets all` 要求实验一/二和实验三都存在最新、完整、正式来源的构建。采集尚未完成时若只需要更新
+实验一/二，运行无参数的 `copy-assets` 或明确运行 `copy-assets exp1-2`；命令不会自动跳过缺失的实验。
 
 ## 2. 工程结构
 
 ```text
 src/egoanchor/eval/
 ├─ cli.py                         # 唯一人工命令入口
-├─ workflows/
-│  ├─ workspace.py               # status/validate/analyze/publish 统一编排
-│  ├─ experiment_1_2.py          # 五任务批次、Stage 1 缓存和活动批次
-│  └─ experiment_3.py            # 正式问卷工作簿工作流适配层
-├─ paper_analysis/
-│  ├─ common/                    # 构建清单、摘要和事务性发布
-│  ├─ experiment_1_2/            # 实验一/二指标、图表和 TeX
-│  └─ experiment_3/              # 计分、Wilcoxon、信度、CLMM、XLSX 和绘图
+├─ experiments/
+│  ├─ common/                    # 构建清单、摘要和事务性资源复制
+│  ├─ experiment_1_2/
+│  │  ├─ data.py                 # 五任务选择、Stage 1 缓存和活动批次
+│  │  ├─ settings.py             # 共享 TOML 中实验一/二拥有的配置
+│  │  ├─ workflow.py             # status/validate/analyze/copy-assets 生命周期
+│  │  ├─ pipeline.py             # 五本 Stage 1 XLSX 到本地产物
+│  │  └─ analysis/               # XLSX reader、指标、缓存、论文图表
+│  ├─ experiment_3/
+│  │  ├─ data.py                 # 正式空白模板生成
+│  │  ├─ settings.py             # 共享 TOML 中实验三拥有的配置
+│  │  ├─ workflow.py             # status/validate/analyze/copy-assets 生命周期
+│  │  ├─ pipeline.py             # 正式原始工作簿到本地产物
+│  │  ├─ template.py             # 采集工作簿结构与实时公式
+│  │  └─ analysis/               # reader、计分、推断、结果工作簿与论文图
+│  └─ workspace.py               # 跨实验统一编排
 ├─ preprocess/                   # 实验一/二 Stage 1 工作簿
 ├─ schema_v2/                    # 正式运行时日志 schema
 ├─ contracts/                    # 工作簿公共契约
 └─ config/
-   ├─ batch.toml                 # 路径、输入和发布目标
+   ├─ batch.toml                 # 路径、输入和资源复制目标
    └─ paper.toml                 # 冻结统计参数和画布参数
 ```
 
-`workflows` 只组织阶段，不实现统计；`paper_analysis/experiment_1_2` 与
-`paper_analysis/experiment_3` 保留各自的数据模型和统计核心。两边只共享生命周期清单、文件摘要和发布器。
+实验一/二与实验三是并列实验包，都以 `data/settings/workflow/pipeline` 为稳定骨架。实验一和实验二共享
+同一套五任务日志、Stage 1 契约和论文结果，因此合并为 `experiment_1_2`，不拆成两个空壳目录。两边的根目录
+只负责数据、配置、工作流和构建编排；reader、指标、计分、模型与绘图放在各自 `analysis/` 中。跨实验只共享
+构建清单、文件摘要和事务性资源复制。
 
 ## 3. TOML 配置
 
@@ -69,15 +79,15 @@ src/egoanchor/eval/
 [shared.paths]
 
 [experiment_1_2.paths]
-[experiment_1_2.publish]
-[experiment_1_2.publish.tables]
-[[experiment_1_2.publish.relay]]
+[experiment_1_2.copy_assets]
+[experiment_1_2.copy_assets.tables]
+[[experiment_1_2.copy_assets.relay]]
 
 [experiment_3.paths]
-[experiment_3.publish]
+[experiment_3.copy_assets]
 ```
 
-`shared.paths.paper_root` 是唯一论文发布根目录。实验一/二的原始日志、工作簿缓存、指标缓存、暂存批次、
+`shared.paths.paper_root` 是唯一论文资源根目录。实验一/二的原始日志、工作簿缓存、指标缓存、暂存批次、
 归档批次和活动批次都在 `[experiment_1_2.paths]` 下。实验三的美化来源、正式原始工作簿和本地分析目录
 都在 `[experiment_3.paths]` 下。
 
@@ -102,8 +112,8 @@ src/egoanchor/eval/
 [experiment_3.figures]
 ```
 
-修改任一实验拥有的参数后，该实验旧构建会因配置摘要不一致而拒绝发布。另一实验的参数变化不会使
-无关缓存失效。
+修改 `paper.toml` 中任一实验拥有的科学分析参数后，该实验旧构建会因配置摘要不一致而拒绝复制。
+`batch.toml` 的路径和复制目标由工作流另行核验；另一实验的配置变化不会使无关缓存失效。
 
 实验三正式采集前必须确认以下冻结项：`aq_mode`、`q10_enabled`、五项 TOST 等价界、CLMM 开关和
 问卷施测模态。当前 `aq_mode = "full"`，而 Round 2 负担诊断记录建议缩减 AQ；是否切到 `reduced`
@@ -147,7 +157,7 @@ pixi run eval validate all
 pixi run eval status exp1-2
 pixi run eval validate exp1-2
 pixi run eval analyze exp1-2
-pixi run eval publish exp1-2
+pixi run eval copy-assets exp1-2
 ```
 
 `analyze exp1-2` 读取活动 `batch.json` 指向的五本 Stage 1 XLSX。逐任务指标缓存按工作簿摘要、实验一/二
@@ -165,7 +175,7 @@ data/experiments/experiment_1_2/analysis/
 └─ provenance/build_result.json
 ```
 
-只有 `publish exp1-2` 会把清单中的面板、三张表格和 TOML 明确列出的 relay 文件写入论文目录。
+只有 `copy-assets exp1-2` 会把清单中的面板、三张表格和 TOML 明确列出的 relay 文件写入论文目录。
 
 ## 6. 实验一/二新增或局部重采
 
@@ -242,9 +252,69 @@ pixi run eval data exp3 create-template --output ..\2026-EgoAnchor\material\exp3
 
 目标文件必须位于仓库内且尚不存在，命令拒绝覆盖任何已有工作簿。
 
-原始评分只写入 `Participants` 和 `Records` 规定区域；TiA 反向项仍存原始分，`6 - raw` 只在派生层计算。
-不要用计算结果覆盖原始评分。工作簿中的绿色区和 `Derived`/`Analysis` 公式用于现场核对可实时计算的小分，
-Python 会从原始值独立重算全部统计。
+### 7.1 人工输入
+
+只有 `Participants` 和 `Records` 需要填写。`Participants` 保存 B1--B6 背景、同意、起止时间、
+纳入决定和排除原因；`Records` 保存六个区块、两次方法级问卷和最终问卷的原始回答。TiA 反向项仍填原始分，
+`6 - raw` 只在派生层执行。不要把任何小分、配对差或 Python 结果粘回这两张表。
+
+纳入正式分析的参与者必须完整填写 B1--B6、签署同意、起止时间、六个有效区块、两条有效方法级记录和完整最终问卷。
+已签署同意但标记为不纳入时，`退出/技术问题` 必须选择冻结主原因；补充情况只写 `备注`，不会复制到结果工作簿。
+开始分析前，所有已同意者都要明确标记“纳入”或“排除”，已经开始的记录不能缺少同意确认。
+年龄只检查是否为合法正整数，不由分析代码擅自设定成人纳入界限。基线不适允许留空；非空时必须使用下拉选项，缺失会在安全汇总中单独报告。
+
+### 7.2 `Derived` 怎样工作
+
+`Derived` 不是实施检查表，也无需人工填写。它是一张只读的 Excel 公式派生表，把每一步计分显式展开：
+
+| 区域 | 一行代表什么 | 作用 |
+|---|---|---|
+| D1 | 一个方法×物体区块 | 判断区块是否有效，保留七个自制条目，计算 AQ-EQ/AQ-IQ，标记超时和连续同分，整理运行时审计值 |
+| D2 | 一位参与者对一种方法的问卷 | 分开显示“已作答”和“记录有效”；执行 TiA `6 - raw` 换向，再按各分量表的最少有效条目数计算 TiA-R/C、TiA-U/P 与 S-TIAS |
+| D3 | 一位参与者×一种方法 | 区块级结局要求三个物体都有效后取均值；方法级 TiA/S-TIAS 小分直接带入，不再跨物体求均值 |
+| D4 | 一位参与者 | 计算 `EgoAnchor - One-Euro` 配对差，`Pair_Check` 必须为 `OK` |
+| D5 | 一位参与者 | 处理偏好强度跳题，检查两项选择、区分信心、两道开放题和结束不适 |
+| D6 | 一位参与者 | 分开派生 `Completed_Session` 与 `Analysis_Complete`，并整理人口学、经验、时长、安全、平衡因子和审计状态 |
+
+黄色单元格表示状态或离线统计占位，绿色单元格是公式派生值，其中也包括 ID、类别和标签。`Valid_Block` 与 `Valid_Record` 受
+`Participants!纳入分析` 影响；参与者尚未标记为“是”时，相关行显示无效或空白是正常的，不代表原始数据已被删除。
+
+TiA 的“无法回答”是显式响应，不等同于漏填。D2 先保留该响应，再分别应用 TiA-R/C 5/6、TiA-U/P 3/4 和 S-TIAS 3/3 的计分门槛。
+因此某个分量表可能缺分，但同一方法的其他分量表仍可计分；正式结果按每个结局自己的配对 N 报告。
+
+D6 的 `Audit_Status` 只描述当前记录状态，不替研究者作纳入决定：
+
+| 状态 | 含义 |
+|---|---|
+| `unused_slot` | 该预分配行还没有人工数据 |
+| `not_consented` | 行内已有记录，但“签署同意”不是“是” |
+| `pending_review` | 已同意，但“纳入分析”仍为空 |
+| `included_complete` | 已标记纳入，六个区块、两次方法级问卷和最终问卷均完整 |
+| `included_but_incomplete` | 已标记纳入，但至少一项必要测量未完成 |
+| `excluded` | 已明确排除，并记录了原因 |
+| `excluded_reason_missing` | 已明确排除，但原因仍为空 |
+
+`Derived` 和 `Analysis` 已启用无密码工作表保护，用于防止误覆盖公式。不要在其中输入、粘贴或排序。要修正数据时回到 `Participants` 或 `Records`，
+公式会自动更新；正式分析仍从这两张原始表独立重算。
+
+### 7.3 `Analysis` 该看什么
+
+`Analysis` 只读取 `Derived`，是现场核对仪表板。首屏把“已完成会话”和“纳入者分析记录完整”分开显示，随后列出论文所需的参与者描述：
+
+- 年龄与会话时长的 N、缺失数、均值、SD、中位数、IQR 和范围；
+- 性别、主手、视力、VR/MR 经验和实物 MR 经验的人数及占纳入 N 的比例；
+- 基线/结束不适与不适加重人数；安全分母是所有已同意且已开始体验者，不因后续排除而缩小；
+- 六种物体排列、S1/S2、A 标签映射和先行方法的实际人数。
+
+后续绿色区可实时显示 Mdn/IQR、配对差均值与 SD、`dz` 和操纵描述。黄色 W、p、Holm、`r_rb` 区间、信度、CLMM 和 TOST 不会回填本工作簿；
+它们只出现在 Python 生成的独立结果工作簿中。这样可以避免现场公式和正式推断被误当成同一个计算源。
+
+Office Viewer 和 `openpyxl` 不重算公式，只能显示已有缓存。现场查看实时值时使用能重算公式的 Excel；Python 分析本身不依赖任何公式缓存。
+
+### 7.4 24 个平衡单元的记录边界
+
+当前正式工作簿固定为 24 个参与者行和 24 个平衡单元。已签同意、开始后退出或被技术排除的记录不得覆盖。如需在排除后补招以保持最终 N=24，
+必须先冻结可扩展的招募/替补日志和对应平衡单元规则；不得直接复用原 Participant_ID。当前代码不会擅自把被排除者替换掉。
 
 建议每位参与者结束后执行：
 
@@ -252,9 +322,7 @@ Python 会从原始值独立重算全部统计。
 pixi run eval status exp3
 ```
 
-每天备份正式原始工作簿，并核对 `included_confirmed`、区块评分数、方法级评分数和最终选择数。Office Viewer
-和 `openpyxl` 不计算公式；它们只显示工作簿已有缓存。现场最终核对应使用能重算公式的 Excel，Python 分析本身
-不依赖这些缓存值。
+每天备份正式原始工作簿，并核对 `included_confirmed`、样本流、区块评分数、方法级评分数和最终问卷完整数。
 
 ## 8. 实验三完成分析
 
@@ -289,21 +357,31 @@ data/experiments/experiment_3/analysis/
 └─ provenance/build_result.json
 ```
 
-重点审阅结果工作簿中的纳入人数、warnings、主家族和已发表量表家族的 Holm 校正、CLMM 收敛数、操纵
-检查及信度。不能手工修改结果 XLSX 后把它当作正式绘图源；原始工作簿、TOML 或分析代码变化后，直接重新
-运行 `analyze exp3`。
+结果工作簿的参与者相关表为：
+
+| 表 | 内容 | 论文用法 |
+|---|---|---|
+| `Participant_Summary` | 样本流、年龄和时长描述、人口学、经验、基线/结束不适、不适加重人数、缺失与排除原因；每行显式保存分母 | 样本段和安全段的唯一正式数字源 |
+| `Participant_Balance` | 24 平衡单元、六种物体排列、S1/S2、A 标签映射和先行方法的实际数与偏差 | 顺序平衡操纵审计 |
+| `Participant_Audit` | 逐 Participant_ID 的同意、开始、会话完成、分析完整、纳入、有效区块、方法问卷作答数、有效方法记录数、最终问卷、时长和安全状态 | 内部审计；不直接公开逐人属性组合 |
+
+`Participant_Audit` 故意不复制 `备注`、访谈原文和开放题，避免为了方便审计而增加重识别风险。该表只供内部核查，不随论文公开逐人属性组合。
+人口学只做描述，不事后拆成年龄、性别或经验亚组去寻找显著性，也不临时加入 Wilcoxon 或 CLMM 作协变量。会话时长和不适只作流程/安全审计，不解释为方法表现。
+
+除参与者三表外，还需审阅 warnings、主家族和已发表量表家族的 Holm 校正、CLMM 收敛数、操纵检查及信度。不能手工修改结果 XLSX 后把它当作正式绘图源；
+原始工作簿、TOML 或分析代码变化后，直接重新运行 `analyze exp3`。
 
 合成和模拟工作簿只能通过 Python 包级 API 或独立模拟脚本调用 `allow_synthetic=True`。正式 CLI 没有该
-选项，合成构建即使完整也会被 `publish` 拒绝。
+选项，合成构建即使完整也会被 `copy-assets` 拒绝。
 
-## 9. 联合分析和最终发布
+## 9. 联合分析和最终资源复制
 
 两边正式数据都准备好后：
 
 ```powershell
 pixi run eval validate all
 pixi run eval analyze all
-pixi run eval publish all
+pixi run eval copy-assets all
 ```
 
 `analyze all` 先运行联合门禁；任一实验未通过时，两条分析都不会开始。门禁通过后先分析实验一/二，再分析
@@ -313,31 +391,31 @@ pixi run eval publish all
 pixi run eval analyze all --rebuild-exp1-2
 ```
 
-`publish all` 在写任何论文目标前完成两条构建的来源、配置、实现、输入、输出摘要和目标冲突检查。发布过程
+`copy-assets all` 在写任何论文目标前完成两条构建的来源、配置、实现、输入、输出摘要和目标冲突检查。复制过程
 先暂存全部文件，再替换目标；中途失败会恢复所有已有目标，避免论文目录出现跨构建的新旧混合版本。
 
-发布只更新 TOML 声明的 PNG、PDF 和表格 TeX，不修改主稿，也不自动编译论文。发布成功后在
+该命令只更新 TOML 声明的 PNG、PDF 和表格 TeX，不修改主稿，也不自动编译论文。复制成功后在
 `2026-EgoAnchor` 目录运行项目规定的 XeLaTeX/`latexmk -xelatex` 检查。
 
 ## 10. 构建清单与失效规则
 
 每条分析在 `provenance/build_result.json` 写统一清单，关键字段包括：
 
-| 字段 | 含义 |
-|---|---|
-| `schema` | 构建清单契约版本 |
-| `owner` | `experiment_1_2` 或 `experiment_3` |
-| `build_id` | 输入、配置和实现共同决定的构建身份 |
-| `status` | `building` 或 `complete` |
-| `source_kind` | `formal` 或 `synthetic` |
-| `inputs` | 每个输入的绝对路径和 SHA-256 |
-| `config_sha256` | 该实验拥有的 TOML 参数摘要 |
-| `implementation_sha256` | 该实验分析源码树摘要 |
-| `outputs` | 每个本地产物的路径、类型和 SHA-256 |
-| `warnings` / `details` | 诊断、批次和模型摘要 |
+| 字段                       | 含义                                   |
+| -------------------------- | -------------------------------------- |
+| `schema`                 | 构建清单契约版本                       |
+| `owner`                  | `experiment_1_2` 或 `experiment_3` |
+| `build_id`               | 输入、配置和实现共同决定的构建身份     |
+| `status`                 | `building` 或 `complete`           |
+| `source_kind`            | `formal` 或 `synthetic`            |
+| `inputs`                 | 每个输入的绝对路径和 SHA-256           |
+| `config_sha256`          | 该实验在 `paper.toml` 中的科学参数摘要 |
+| `implementation_sha256`  | 该实验分析源码树摘要                   |
+| `outputs`                | 每个本地产物的路径、类型和 SHA-256     |
+| `warnings` / `details` | 诊断、批次和模型摘要                   |
 
 新分析一开始就把清单切换为 `building`。只有 XLSX、TeX、PNG、PDF 和其他声明产物全部成功并完成摘要后，
-才原子提交 `complete`。因此失败重跑不会留下仍可发布的旧完成状态。
+才原子提交 `complete`。因此失败重跑不会留下仍可复制的旧完成状态。
 
 以下任一变化都会阻止复用旧构建：
 
@@ -352,11 +430,11 @@ pixi run eval analyze all --rebuild-exp1-2
 
 机器可读结果始终是 stdout 上的一份 JSON。耗时阶段的 `tqdm` 进度只写 stderr，不会污染 JSON。
 
-| 退出码 | 含义 |
-|---:|---|
-| `0` | 命令成功；`status` 中尚未采完不算错误 |
-| `1` | 文件系统、Git 或外部工具错误 |
-| `2` | 数据、schema、QC、统计配置或发布契约错误 |
+| 退出码 | 含义                                     |
+| -----: | ---------------------------------------- |
+|  `0` | 命令成功；`status` 中尚未采完不算错误  |
+|  `1` | 文件系统、Git 或外部工具错误             |
+|  `2` | 数据、schema、QC、统计配置或资源复制契约错误 |
 
 脚本自动化应同时检查退出码和 JSON 的 `passed` 字段，不要只搜索控制台文本。
 
@@ -376,7 +454,7 @@ pixi run eval analyze all --rebuild-exp1-2
 先看结果工作簿中的完整模型与约简模型状态和 warnings。不要用普通有序回归冒充随机效应模型，也不要删除
 不收敛记录。确认原始评分与配置后，再决定是否按论文统计计划报告约简结果。
 
-### `publish` 报输入、配置、实现或产物摘要变化
+### `copy-assets` 报输入、配置、实现或产物摘要变化
 
 说明本地产物不再能证明来自当前正式输入。重新运行对应 `analyze`；不要复制文件绕过摘要门禁。
 
@@ -390,7 +468,7 @@ Office Viewer 与 `openpyxl` 不负责重算公式。用 Excel 打开并重算�
 通过 `data exp1-2 stage --version ...` 或逐任务 `--task-version` 重新构造并提升组合。不要复制旧
 `raw/workbooks` 快照，也不要手改活动 `batch.json`。
 
-### 只想发布一个实验
+### 只想复制一个实验的论文资源
 
-显式使用 `publish exp1-2` 或 `publish exp3`。最终论文同步仍必须使用 `publish all`，这样才能确认两边资源来自
+使用 `copy-assets exp1-2` 或 `copy-assets exp3`。最终论文同步使用 `copy-assets all`，这样才能确认两边资源来自
 各自最新的完整构建。

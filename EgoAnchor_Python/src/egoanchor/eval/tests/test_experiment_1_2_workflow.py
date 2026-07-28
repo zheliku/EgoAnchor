@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from egoanchor.eval import finalize_task_events, verify_task_workbook
-from egoanchor.eval.workflows import (
+from egoanchor.eval.experiments import (
     ArtifactDestination,
     AssetCopy,
     BatchPaths,
@@ -22,16 +22,16 @@ from egoanchor.eval.workflows import (
     stage_batch,
 )
 from egoanchor.eval import cli as eval_cli
-from egoanchor.eval.paper_analysis.common import (
+from egoanchor.eval.experiments.common import (
     begin_build,
     complete_build,
-    publish_artifact_plans,
+    copy_artifact_plans,
     source_tree_sha256,
 )
-from egoanchor.eval.paper_analysis.experiment_1_2 import settings_sha256
-from egoanchor.eval.workflows.experiment_1_2 import (
+from egoanchor.eval.experiments.experiment_1_2 import (
     describe_workflow,
-    plan_publication,
+    plan_assets,
+    settings_sha256,
     validate_workflow,
 )
 
@@ -64,7 +64,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
         """测试临时项目没有 Git 元数据，统一模拟真实 commit 读取结果。"""
 
         self._code_version_patch = mock.patch(
-            "egoanchor.eval.workflows.experiment_1_2._git_code_version",
+            "egoanchor.eval.experiments.experiment_1_2.data._git_code_version",
             return_value="test-version",
         )
         self._code_version_patch.start()
@@ -380,7 +380,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
         )
         self.assertEqual(
             set(subparsers.choices),
-            {"status", "validate", "analyze", "publish", "data"},
+            {"status", "validate", "analyze", "copy-assets", "data"},
         )
 
     def test_stage_promote_switches_batch_without_manual_batch_id(self) -> None:
@@ -457,7 +457,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     "validate",
                     "data_preprocess",
                     "analyze",
-                    "publish",
+                    "copy-assets",
                 },
             )
             self.assertNotIn("manuscript", payload["paths"])
@@ -510,7 +510,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 artifact_paths[key] = str(source.resolve())
             (table_root / "stale_table.tex").write_text("stale", encoding="utf-8")
             implementation_root = (
-                Path(__file__).resolve().parents[1] / "paper_analysis" / "experiment_1_2"
+                Path(__file__).resolve().parents[1] / "experiments" / "experiment_1_2"
             )
             building = begin_build(
                 active_root / "analysis",
@@ -555,19 +555,20 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
                 ),
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
-                config_path=root / "batch.toml",
+                batch_config_path=root / "batch.toml",
+                paper_config_path=root / "paper.toml",
             )
             with (
                 mock.patch(
-                    "egoanchor.eval.workflows.experiment_1_2.load_batch_paths",
+                    "egoanchor.eval.experiments.experiment_1_2.workflow.load_batch_paths",
                     return_value=paths,
                 ),
                 mock.patch(
-                    "egoanchor.eval.workflows.experiment_1_2._load_batch_records",
+                    "egoanchor.eval.experiments.experiment_1_2.workflow.load_active_batch",
                     return_value=("batch_test", ()),
                 ),
             ):
-                result = publish_artifact_plans((plan_publication(root=root),))
+                result = copy_artifact_plans((plan_assets(root=root),))
 
             self.assertEqual(len(result), 20)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
@@ -610,7 +611,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 "exp2_table": str(missing_table.resolve()),
             }
             implementation_root = (
-                Path(__file__).resolve().parents[1] / "paper_analysis" / "experiment_1_2"
+                Path(__file__).resolve().parents[1] / "experiments" / "experiment_1_2"
             )
             building = begin_build(
                 active_root / "analysis",
@@ -653,20 +654,21 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
                 ),
                 relay_assets=(),
-                config_path=root / "batch.toml",
+                batch_config_path=root / "batch.toml",
+                paper_config_path=root / "paper.toml",
             )
             with (
                 mock.patch(
-                    "egoanchor.eval.workflows.experiment_1_2.load_batch_paths",
+                    "egoanchor.eval.experiments.experiment_1_2.workflow.load_batch_paths",
                     return_value=paths,
                 ),
                 mock.patch(
-                    "egoanchor.eval.workflows.experiment_1_2._load_batch_records",
+                    "egoanchor.eval.experiments.experiment_1_2.workflow.load_active_batch",
                     return_value=("batch_test", ()),
                 ),
                 self.assertRaises(ValueError),
             ):
-                publish_artifact_plans((plan_publication(root=root),))
+                copy_artifact_plans((plan_assets(root=root),))
 
             self.assertFalse(paper_root.exists())
 

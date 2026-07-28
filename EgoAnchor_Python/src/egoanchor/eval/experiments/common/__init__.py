@@ -1,6 +1,6 @@
-"""两条论文分析流水线共享的轻量文件发布契约。"""
+"""两条实验分析流水线共享的构建与资源复制契约。"""
 
-from .artifacts import ArtifactPlan, PlannedAsset, publish_artifact_plans
+from .artifacts import ArtifactPlan, PlannedAsset, copy_artifact_plans
 from .builds import (
     BUILD_MANIFEST_NAME,
     BUILD_MANIFEST_SCHEMA,
@@ -26,7 +26,7 @@ __all__ = [
     "complete_build",
     "file_sha256",
     "output_map",
-    "publish_artifact_plans",
+    "copy_artifact_plans",
     "read_build_manifest",
     "source_tree_sha256",
     "validate_output_files",
