@@ -773,7 +773,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://prefix.dev/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
       - pypi: ./Cutie
-      - pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+74db594-cp314-cp314-win_amd64.whl
+      - pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+bba9247-cp314-cp314-win_amd64.whl
       - pypi: git+https://github.com/cheind/py-thin-plate-spline#f6995795397118b7d0ac01aecd3f39ffbfad9dee
       - pypi: git+https://github.com/ultralytics/CLIP.git#f5e9fc6a896e66309f07747bd607704f6c3d282a
       - pypi: https://download-r2.pytorch.org/whl/cu130/torch-2.12.1%2Bcu130-cp314-cp314-win_amd64.whl
@@ -9425,9 +9425,9 @@ packages:
   - requests
   - pyqtdarktheme
   requires_python: '>=3.8'
-- pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+74db594-cp314-cp314-win_amd64.whl
+- pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+bba9247-cp314-cp314-win_amd64.whl
   name: open3d
-  version: 0.19.0+74db594
+  version: 0.19.0+bba9247
   requires_dist:
   - numpy>=1.18.0
   - dash>=2.6.0

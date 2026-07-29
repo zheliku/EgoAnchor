@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -268,11 +269,35 @@ class Experiment12WorkflowTests(unittest.TestCase):
             changed = load_batch_paths(root).task_data_root / directories[0] / "unexpected.txt"
             changed.write_text("changed", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "原地修改"):
+            with self.assertRaisesRegex(ValueError, "内容已改变"):
                 promote_batch(artifact.batch_id, root=root)
 
             self.assertTrue(artifact.root.is_dir())
             self.assertFalse(load_batch_paths(root).active_root.exists())
+
+    def test_promote_accepts_line_ending_and_mtime_only_changes(self) -> None:
+        """行尾归一和修改时间刷新不算原地改写，仍可提升批次。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            directories = _write_batch_sessions(root)
+            artifact = stage_batch(root=root)
+            source = load_batch_paths(root).task_data_root / directories[0]
+
+            normalized = 0
+            for path in sorted(item for item in source.rglob("*") if item.is_file()):
+                original = path.read_bytes()
+                # 归一成 LF 再写回，模拟被文本模式复制/同步/还原过的归档。
+                path.write_bytes(original.replace(b"\r\n", b"\n"))
+                if b"\r\n" in original:
+                    self.assertLess(path.stat().st_size, len(original))
+                    normalized += 1
+                # 同时刷新修改时间，确认它已不参与判定。
+                os.utime(path, (1_600_000_000, 1_600_000_000))
+            self.assertGreater(normalized, 0)
+
+            promote_batch(artifact.batch_id, root=root)
+            self.assertTrue(load_batch_paths(root).active_root.is_dir())
 
     def test_stage_rebuilds_when_cache_metadata_is_incomplete(self) -> None:
         """单任务 cache.json 缺字段时只重建该任务，不影响其余缓存。"""

@@ -4,6 +4,7 @@
 # Root-local Python scratch, if quick scripts are run from the repo root
 /__pycache__/
 /*.py[cod]
+*.zip
 
 # Blender local assets and generated working files
 /EgoAnchor_Blender/ai_model/

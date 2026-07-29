@@ -76,7 +76,7 @@ _COMMON_MANIFEST_FIELDS = (
 _BATCH_MANIFEST_SCHEMA = "egoanchor_eval_batch_v1"
 """活动批次组合清单的结构版本。"""
 
-_TASK_CACHE_SCHEMA = "egoanchor_task_workbook_v1"
+_TASK_CACHE_SCHEMA = "egoanchor_task_workbook_v2"
 """单任务 Stage 1 缓存记录的结构版本。"""
 
 BATCH_MANIFEST_NAME = "batch.json"
@@ -537,8 +537,8 @@ class TaskCacheRecord:
     stage_fingerprint: str
     """生成工作簿所用 Stage 1 实现的内容指纹。"""
 
-    source_snapshot: tuple[tuple[str, int, int], ...]
-    """原始文件相对路径、大小和纳秒修改时间组成的快速快照。"""
+    source_snapshot: tuple[tuple[str, str], ...]
+    """原始文件相对路径和行尾归一摘要组成的内容快照。"""
 
     workbook_size: int
     """工作簿字节数，用于发现缓存文件被替换。"""
@@ -645,13 +645,37 @@ def _stage_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def _source_snapshot(source: Path) -> tuple[tuple[str, int, int], ...]:
-    """只读取目录项元数据，快速发现版本目录被原地改写。"""
+def _normalized_file_sha256(path: Path) -> str:
+    """流式计算按 LF 归一行尾后的文件摘要，忽略纯 CRLF 差异。"""
 
-    rows: list[tuple[str, int, int]] = []
+    digest = hashlib.sha256()
+    pending_cr = False
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            if pending_cr:
+                # 上一块以 CR 结尾：只有当前块以 LF 开头才构成跨块 CRLF。
+                if not chunk.startswith(b"\n"):
+                    digest.update(b"\r")
+                pending_cr = False
+            if chunk.endswith(b"\r"):
+                pending_cr = True
+                chunk = chunk[:-1]
+            digest.update(chunk.replace(b"\r\n", b"\n"))
+    if pending_cr:
+        digest.update(b"\r")
+    return digest.hexdigest()
+
+
+def _source_snapshot(source: Path) -> tuple[tuple[str, str], ...]:
+    """按内容而非文件元数据发现版本目录被原地改写。
+
+    只记录相对路径和行尾归一后的摘要：修改时间和纯 CRLF/LF 行尾变化都不算改写，
+    复制、同步或还原原始归档不会误报；任何实质内容变化仍会被摘要捕获。
+    """
+
+    rows: list[tuple[str, str]] = []
     for path in sorted(item for item in source.rglob("*") if item.is_file()):
-        stat = path.stat()
-        rows.append((path.relative_to(source).as_posix(), stat.st_size, stat.st_mtime_ns))
+        rows.append((path.relative_to(source).as_posix(), _normalized_file_sha256(path)))
     return tuple(rows)
 
 
@@ -802,7 +826,7 @@ def _task_cache_from_document(document: Mapping[str, Any]) -> TaskCacheRecord:
     if not isinstance(session_document, dict):
         raise ValueError("任务缓存缺少 session")
     session = SessionSummary(**session_document)
-    if any(not isinstance(item, list) or len(item) != 3 for item in snapshot):
+    if any(not isinstance(item, list) or len(item) != 2 for item in snapshot):
         raise ValueError("任务缓存的 source_snapshot 项格式非法")
     return TaskCacheRecord(
         task_number=int(document["task_number"]),
@@ -813,7 +837,7 @@ def _task_cache_from_document(document: Mapping[str, Any]) -> TaskCacheRecord:
         source_set_sha256=str(document["source_set_sha256"]),
         stage_fingerprint=str(document["stage_fingerprint"]),
         source_snapshot=tuple(
-            (str(item[0]), int(item[1]), int(item[2]))
+            (str(item[0]), str(item[1]))
             for item in snapshot
         ),
         workbook_size=int(document["workbook_size"]),
@@ -892,7 +916,7 @@ def _load_batch_records(
             raise ValueError(f"Task {record.task_number} 的工作簿大小与批次清单不一致")
         if _source_snapshot(source) != record.source_snapshot:
             raise ValueError(
-                f"Task {record.task_number} 的版本目录已被原地修改；请创建新的 vN 目录"
+                f"Task {record.task_number} 的版本目录内容已改变；请创建新的 vN 目录"
             )
 
     summaries = tuple(record.session for record in records)
