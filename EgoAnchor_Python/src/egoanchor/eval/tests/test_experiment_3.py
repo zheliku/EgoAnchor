@@ -75,10 +75,43 @@ class Experiment3Tests(unittest.TestCase):
                 self.assertEqual(workbook["Derived"]["Y308"].value, "Discomfort_Change")
                 self.assertEqual(workbook["Derived"]["Z308"].value, "Audit_Status")
                 self.assertIn("Participants!L3:X3", str(workbook["Derived"]["Z309"].value))
+                self.assertEqual(workbook["Derived"]["A334"].value[:2], "D7")
+                self.assertEqual(workbook["Derived"]["B336"].value, "blue_mouse")
+                self.assertEqual(workbook["Derived"]["B360"].value, "stapler")
+                self.assertEqual(workbook["Derived"]["B384"].value, "gamepad")
+                self.assertIn("COUNTIFS", str(workbook["Derived"]["C336"].value))
+                self.assertIn("AVERAGEIFS", str(workbook["Derived"]["D336"].value))
+                self.assertIn("AVERAGEIFS", str(workbook["Derived"]["E336"].value))
+                self.assertEqual(
+                    workbook["Derived"]["F336"].value,
+                    '=IF(OR(D336="",E336=""),"",E336-D336)',
+                )
                 self.assertEqual(workbook["Analysis"]["A19"].value[:2], "B1")
                 self.assertEqual(workbook["Analysis"]["A25"].value[:2], "B2")
                 self.assertEqual(workbook["Analysis"]["A58"].value[:2], "B3")
-                self.assertIn("QUARTILE.INC", str(workbook["Analysis"]["G21"].value))
+                self.assertEqual(workbook["Analysis"]["A75"].value[:2], "C1")
+                self.assertEqual(workbook["Analysis"]["A86"].value[:2], "C2")
+                self.assertEqual(workbook["Analysis"]["A88"].value, "Q1")
+                self.assertEqual(workbook["Analysis"]["C88"].value, "Mouse")
+                self.assertIn(
+                    "QUARTILE(Derived!$D$336:$D$359,1)",
+                    str(workbook["Analysis"]["E88"].value),
+                )
+                self.assertEqual(workbook["Analysis"]["A108"].value, "Q7")
+                self.assertEqual(workbook["Analysis"]["C108"].value, "Gamepad")
+                self.assertEqual(workbook["Analysis"]["A111"].value[:1], "D")
+                self.assertEqual(workbook["Analysis"]["A120"].value[:1], "E")
+                self.assertEqual(workbook["Analysis"]["A129"].value[:1], "F")
+                analysis_formulas = (
+                    str(cell.value)
+                    for row in workbook["Analysis"].iter_rows()
+                    for cell in row
+                    if cell.data_type == "f"
+                )
+                formula_text = "\n".join(analysis_formulas)
+                self.assertEqual(formula_text.count("QUARTILE("), 140)
+                self.assertNotIn("QUARTILE.INC", formula_text)
+                self.assertIn("QUARTILE(Derived!G309:G332,1)", formula_text)
                 self.assertEqual(workbook["Analysis"]["A56"].value, "Discomfort_Change")
                 self.assertEqual(workbook["Analysis"]["E59"].value, "Expected_at_Actual_N")
                 self.assertIn("FILTER", str(workbook["Analysis"]["D77"].value))
@@ -88,8 +121,9 @@ class Experiment3Tests(unittest.TestCase):
                 self.assertEqual(workbook.properties.category, "formal-participant-data")
                 self.assertEqual(workbook["README"]["B27"].value, "EgoAnchor.Experiment3.RawData.v5.1")
                 self.assertEqual(workbook["README"]["B28"].value, "formal-participant-data")
-                self.assertEqual((workbook["Derived"].max_row, workbook["Derived"].max_column), (332, 26))
-                self.assertEqual((workbook["Analysis"].max_row, workbook["Analysis"].max_column), (107, 20))
+                self.assertEqual((workbook["Derived"].max_row, workbook["Derived"].max_column), (407, 26))
+                self.assertEqual((workbook["Analysis"].max_row, workbook["Analysis"].max_column), (132, 20))
+                self.assertEqual(workbook["Analysis"].auto_filter.ref, "A76:T83")
                 self.assertFalse(any("78" in str(item) for item in workbook["Analysis"].merged_cells.ranges))
                 self.assertTrue(workbook["Derived"].protection.sheet)
                 self.assertTrue(workbook["Analysis"].protection.sheet)

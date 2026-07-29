@@ -17,6 +17,8 @@ from .analysis import (
     BLOCK_RECORD_COLUMNS,
     EXCLUSION_REASONS,
     METHOD_RECORD_COLUMNS,
+    OBJECT_LABELS,
+    OBJECTS,
     OUTCOME_LABELS,
     PARTICIPANT_CATEGORIES,
     PRIMARY_OUTCOMES,
@@ -252,13 +254,14 @@ def _build_derived_sheet(worksheet: Any, settings: AnalysisSettings) -> None:
         worksheet,
         1,
         26,
-        "实时派生（仅公式）：区块有效性与 AQ → TiA 换向与方法分 → 三物体均值 → 配对差",
+        "实时派生（仅公式）：区块与量表小分 → 三物体均值 → 跨物体与逐物体配对",
     )
     worksheet.merge_cells("A2:Z2")
     worksheet["A2"] = (
         "本表无需填写，也不是实施检查表。D1 计算区块与 AQ；D2 换向 TiA 并计算方法级小分；"
         "D3 形成每人每方法的三物体均值；D4 计算 EgoAnchor-One-Euro 配对差；"
-        "D5 审计最终问卷；D6 派生论文参与者概况。正式分析不读取这些公式缓存。"
+        "D5 审计最终问卷；D6 派生论文参与者概况；D7 形成逐物体完整配对描述。"
+        "正式分析不读取这些公式缓存。"
     )
     worksheet["A2"].font = Font(color="5B6570", italic=True, size=10)
     worksheet["A2"].alignment = Alignment(wrap_text=True, vertical="center")
@@ -501,6 +504,54 @@ def _build_derived_sheet(worksheet: Any, settings: AnalysisSettings) -> None:
         for column in (14, 15, 16):
             worksheet.cell(row, column).number_format = "0"
 
+    _section_row(
+        worksheet,
+        334,
+        24,
+        "D7. 逐物体完整配对 helper：同一参与者在同一物体上的两方法均有效",
+    )
+    d7_value_headers = tuple(
+        header
+        for outcome in PRIMARY_OUTCOMES
+        for header in (f"OE_{outcome}", f"EA_{outcome}", f"Diff_{outcome}")
+    )
+    _header_row(
+        worksheet,
+        335,
+        ("Participant_ID", "Object_Key", "Pair_Valid", *d7_value_headers),
+    )
+    for object_index, object_key in enumerate(OBJECTS):
+        for participant_index in range(24):
+            row = 336 + object_index * 24 + participant_index
+            participant_row = 3 + participant_index
+            worksheet.cell(row, 1).value = f'=Participants!A{participant_row}'
+            worksheet.cell(row, 2).value = object_key
+            shared_criteria = (
+                f'$A$5:$A$148,$A{row},$D$5:$D$148,$B{row},$E$5:$E$148,"是"'
+            )
+            worksheet.cell(row, 3).value = (
+                f'=IF(AND(COUNTIFS({shared_criteria},$C$5:$C$148,"One-Euro")=1,'
+                f'COUNTIFS({shared_criteria},$C$5:$C$148,"EgoAnchor")=1),"是","否")'
+            )
+            for outcome_index, outcome in enumerate(PRIMARY_OUTCOMES):
+                source_column = d1_columns[outcome]
+                oe_column = 4 + outcome_index * 3
+                ea_column = oe_column + 1
+                diff_column = oe_column + 2
+                for method, target_column in (("One-Euro", oe_column), ("EgoAnchor", ea_column)):
+                    worksheet.cell(row, target_column).value = (
+                        f'=IF($C{row}<>"是","",AVERAGEIFS(${source_column}$5:${source_column}$148,'
+                        f'{shared_criteria},$C$5:$C$148,"{method}"))'
+                    )
+                oe_cell = f"{get_column_letter(oe_column)}{row}"
+                ea_cell = f"{get_column_letter(ea_column)}{row}"
+                worksheet.cell(row, diff_column).value = (
+                    f'=IF(OR({oe_cell}="",{ea_cell}=""),"",{ea_cell}-{oe_cell})'
+                )
+            for column in range(1, 25):
+                _formula_style(worksheet.cell(row, column))
+            _status_formula_style(worksheet.cell(row, 3))
+
     worksheet.freeze_panes = "A5"
     worksheet.auto_filter.ref = "A4:Z148"
     widths = {1: 15, 2: 13, 3: 13, 4: 15, 5: 12}
@@ -560,8 +611,8 @@ def _build_analysis_sheet(worksheet: Any) -> None:
             f'=IF(B{row}=0,"",AVERAGE({value_range}))',
             f'=IF(B{row}<2,"",STDEV.S({value_range}))',
             f'=IF(B{row}=0,"",MEDIAN({value_range}))',
-            f'=IF(B{row}=0,"",QUARTILE.INC({value_range},1))',
-            f'=IF(B{row}=0,"",QUARTILE.INC({value_range},3))',
+            _quartile_formula(f"B{row}", value_range, 1),
+            _quartile_formula(f"B{row}", value_range, 3),
             f'=IF(B{row}=0,"",MIN({value_range}))',
             f'=IF(B{row}=0,"",MAX({value_range}))',
             role,
@@ -647,8 +698,7 @@ def _build_analysis_sheet(worksheet: Any) -> None:
             balance_row += 1
 
     main_start = 75
-    scale_start = 86
-    _section_row(worksheet, main_start, 20, "C. 主证实家族：三物体均值后的完整配对统计")
+    _section_row(worksheet, main_start, 20, "C1. 主证实家族：三物体均值后的完整配对统计")
     result_headers = (
         "Outcome", "简称", "N", "OE_Q1", "OE_Median", "OE_Q3", "EA_Q1", "EA_Median", "EA_Q3",
         "Diff_Median", "Diff_Mean", "Diff_SD", "dz", "W", "p_raw", "p_Holm", "r_rb", "r_CI_Low",
@@ -666,12 +716,51 @@ def _build_analysis_sheet(worksheet: Any) -> None:
     for row, outcome in enumerate(PRIMARY_OUTCOMES, start=main_start + 2):
         _analysis_result_row(worksheet, row, outcome, d3_columns[outcome], d4_columns[outcome])
 
+    object_start = 86
+    _section_row(
+        worksheet,
+        object_start,
+        20,
+        "C2. 主证实家族的逐物体完整配对描述：供论文分面图和方向核查使用；主检验见 C1",
+    )
+    object_headers = (
+        "Outcome", "简称", "Object", "N_pair", "OE_Q1", "OE_Median", "OE_Q3",
+        "EA_Q1", "EA_Median", "EA_Q3", "Diff_Median", "Diff_Mean", "Diff_SD",
+        "dz（描述性）",
+    )
+    _header_row(worksheet, object_start + 1, object_headers)
+    d7_columns = {
+        outcome: (
+            get_column_letter(4 + outcome_index * 3),
+            get_column_letter(5 + outcome_index * 3),
+            get_column_letter(6 + outcome_index * 3),
+        )
+        for outcome_index, outcome in enumerate(PRIMARY_OUTCOMES)
+    }
+    object_ranges = {
+        object_key: (336 + object_index * 24, 359 + object_index * 24)
+        for object_index, object_key in enumerate(OBJECTS)
+    }
+    object_row = object_start + 2
+    for outcome in PRIMARY_OUTCOMES:
+        for object_key in OBJECTS:
+            _analysis_object_result_row(
+                worksheet,
+                object_row,
+                outcome,
+                OBJECT_LABELS[object_key],
+                d7_columns[outcome],
+                object_ranges[object_key],
+            )
+            object_row += 1
+
+    scale_start = 111
     _section_row(worksheet, scale_start, 20, "D. 已发表量表家族：当前样本信度由 Python 另行报告")
     _header_row(worksheet, scale_start + 1, result_headers)
     for row, outcome in enumerate(SCALE_OUTCOMES, start=scale_start + 2):
         _analysis_result_row(worksheet, row, outcome, d3_columns[outcome], d4_columns[outcome])
 
-    manipulation_start = 95
+    manipulation_start = 120
     _section_row(worksheet, manipulation_start, 20, "E. 操纵与运行时描述：每位参与者先在三个物体上取均值")
     _header_row(worksheet, manipulation_start + 1, ("Metric", "N", "One-Euro Mean", "EgoAnchor Mean", "Difference Mean", "TOST Margin", "p_TOST", "Status"))
     manipulation_columns = {
@@ -692,7 +781,7 @@ def _build_analysis_sheet(worksheet: Any) -> None:
         for column_index in range(6, 9):
             _offline_style(worksheet.cell(row, column_index))
 
-    choice_start = 104
+    choice_start = 129
     _section_row(worksheet, choice_start, 20, "F. 最终描述测量")
     _header_row(worksheet, choice_start + 1, ("Measure", "Count", "Median", "Q1", "Q3", "Mean", "SD"))
     final_metrics = (
@@ -704,8 +793,8 @@ def _build_analysis_sheet(worksheet: Any) -> None:
         worksheet.cell(row, 1).value = metric
         worksheet.cell(row, 2).value = f'=COUNT({value_range})'
         worksheet.cell(row, 3).value = f'=IF(B{row}=0,"",MEDIAN({value_range}))'
-        worksheet.cell(row, 4).value = f'=IF(B{row}=0,"",QUARTILE.INC({value_range},1))'
-        worksheet.cell(row, 5).value = f'=IF(B{row}=0,"",QUARTILE.INC({value_range},3))'
+        worksheet.cell(row, 4).value = _quartile_formula(f"B{row}", value_range, 1)
+        worksheet.cell(row, 5).value = _quartile_formula(f"B{row}", value_range, 3)
         worksheet.cell(row, 6).value = f'=IF(B{row}=0,"",AVERAGE({value_range}))'
         worksheet.cell(row, 7).value = f'=IF(B{row}<2,"",STDEV.S({value_range}))'
         for column_index in range(1, 8):
@@ -716,7 +805,7 @@ def _build_analysis_sheet(worksheet: Any) -> None:
     widths = (18, 28, 10, 11, 12, 11, 11, 12, 11, 13, 12, 11, 10, 10, 11, 11, 10, 11, 12, 20)
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(index)].width = width
-    worksheet.auto_filter.ref = "A76:T82"
+    worksheet.auto_filter.ref = "A76:T83"
     worksheet.conditional_formatting.add(
         "D6:D17",
         FormulaRule(
@@ -745,12 +834,12 @@ def _analysis_result_row(
         outcome,
         OUTCOME_LABELS[outcome],
         f'=COUNT({diff_range})',
-        f'=IF(C{row}=0,"",QUARTILE.INC({paired_oe},1))',
+        _quartile_formula(f"C{row}", paired_oe, 1),
         f'=IF(C{row}=0,"",MEDIAN({paired_oe}))',
-        f'=IF(C{row}=0,"",QUARTILE.INC({paired_oe},3))',
-        f'=IF(C{row}=0,"",QUARTILE.INC({paired_ea},1))',
+        _quartile_formula(f"C{row}", paired_oe, 3),
+        _quartile_formula(f"C{row}", paired_ea, 1),
         f'=IF(C{row}=0,"",MEDIAN({paired_ea}))',
-        f'=IF(C{row}=0,"",QUARTILE.INC({paired_ea},3))',
+        _quartile_formula(f"C{row}", paired_ea, 3),
         f'=IF(C{row}=0,"",MEDIAN({diff_range}))',
         f'=IF(C{row}=0,"",AVERAGE({diff_range}))',
         f'=IF(C{row}<2,"",STDEV.S({diff_range}))',
@@ -761,6 +850,42 @@ def _analysis_result_row(
         _formula_style(worksheet.cell(row, column_index))
     for column_index in range(14, 21):
         _offline_style(worksheet.cell(row, column_index))
+
+
+def _analysis_object_result_row(
+    worksheet: Any,
+    row: int,
+    outcome: str,
+    object_label: str,
+    d7_columns: tuple[str, str, str],
+    d7_rows: tuple[int, int],
+) -> None:
+    """写一行逐物体完整配对描述，不生成额外证实检验。"""
+
+    start_row, end_row = d7_rows
+    oe_column, ea_column, diff_column = d7_columns
+    oe_range = f'Derived!${oe_column}${start_row}:${oe_column}${end_row}'
+    ea_range = f'Derived!${ea_column}${start_row}:${ea_column}${end_row}'
+    diff_range = f'Derived!${diff_column}${start_row}:${diff_column}${end_row}'
+    formulas = (
+        outcome,
+        OUTCOME_LABELS[outcome],
+        object_label,
+        f'=COUNT({diff_range})',
+        _quartile_formula(f"D{row}", oe_range, 1),
+        f'=IF(D{row}=0,"",MEDIAN({oe_range}))',
+        _quartile_formula(f"D{row}", oe_range, 3),
+        _quartile_formula(f"D{row}", ea_range, 1),
+        f'=IF(D{row}=0,"",MEDIAN({ea_range}))',
+        _quartile_formula(f"D{row}", ea_range, 3),
+        f'=IF(D{row}=0,"",MEDIAN({diff_range}))',
+        f'=IF(D{row}=0,"",AVERAGE({diff_range}))',
+        f'=IF(D{row}<2,"",STDEV.S({diff_range}))',
+        f'=IF(OR(D{row}<2,M{row}=0),"",L{row}/M{row})',
+    )
+    for column_index, value in enumerate(formulas, start=1):
+        worksheet.cell(row, column_index).value = value
+        _formula_style(worksheet.cell(row, column_index))
 
 
 def _final_complete_formula(final_row: int, *, included_cell: str | None = None) -> str:
@@ -783,6 +908,13 @@ def _complete_average_formula(references: tuple[str, ...]) -> str:
 
     arguments = ",".join(references)
     return f'=IF(COUNT({arguments})={len(references)},AVERAGE({arguments}),"")'
+
+
+def _quartile_formula(count_cell: str, value_range: str, quartile: int) -> str:
+    """生成 Excel/WPS 通用的 inclusive 四分位数公式。"""
+
+    # 兼容函数 QUARTILE 与 QUARTILE.INC 的算法相同；WPS 不识别后者。
+    return f'=IF({count_cell}=0,"",QUARTILE({value_range},{quartile}))'
 
 
 def _straightline_formula(source_row: int, items: tuple[str, ...]) -> str:
