@@ -141,7 +141,6 @@ def build_raw_template(
     destination: Path,
     *,
     source_template: Path | None = None,
-    overwrite: bool = False,
 ) -> Path:
     """按实验三路径配置复制美化来源并生成空白正式工作簿。"""
 
@@ -150,7 +149,6 @@ def build_raw_template(
         settings,
         destination,
         source_template=source_template or paths.source_template,
-        overwrite=overwrite,
     )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from collections.abc import Iterable
 from datetime import datetime, time
@@ -32,6 +33,11 @@ from .contracts import (
 
 _REQUIRED_SHEETS = frozenset({"README", "Participants", "Records"})
 """分析输入必须包含的最小工作表集合。"""
+
+_KNOWN_SYNTHETIC_RESPONSE_FINGERPRINTS = frozenset(
+    {"5993ef77a827eb89c99fb9c1db85f29ae09d1a2f423f88f2713b6fa3789fe84a"}
+)
+"""已逐格审计并确认的合成身份与核心响应指纹。"""
 
 _PARTICIPANT_DESIGN_COLUMNS = (
     "Participant_ID",
@@ -70,6 +76,28 @@ _METHOD_DESIGN_COLUMNS = (
 )
 """Records B 段的固定设计列。"""
 
+_BLOCK_FINGERPRINT_COLUMNS = _BLOCK_DESIGN_COLUMNS + tuple(BLOCK_ITEMS.values())
+"""区块段参与者/条件身份与十四个核心评分，共 144×24 个单元格。"""
+
+_METHOD_FINGERPRINT_COLUMNS = (
+    _METHOD_DESIGN_COLUMNS + tuple(METHOD_ITEM_COLUMNS) + ("尺度切换确认",)
+)
+"""方法段参与者/条件身份、十三个量表响应与尺度确认，共 48×18 个单元格。"""
+
+_FINAL_FINGERPRINT_COLUMNS = (
+    "Participant_ID",
+    "方法选择(标签)",
+    "偏好强度(1-7/NA)",
+    "信任选择(标签)",
+    "区分信心(1-7)",
+    "开放:最明显区别",
+    "开放:最破坏信任的现象",
+    "结束不适",
+    "方法选择(解码)",
+    "信任选择(解码)",
+)
+"""最终段除访谈备注外的身份与核心响应，共 24×10 个单元格。"""
+
 
 def workbook_sha256(path: Path) -> str:
     """返回原始工作簿的 SHA-256。"""
@@ -87,7 +115,7 @@ def read_workbook(path: Path) -> Exp3Data:
     source = path.expanduser().resolve()
     if source.suffix.lower() != ".xlsx" or not source.is_file():
         raise FileNotFoundError(f"实验三输入必须是现存 XLSX：{source}")
-    workbook = load_workbook(source, read_only=False, data_only=False)
+    workbook = load_workbook(source, read_only=True, data_only=False)
     try:
         missing = _REQUIRED_SHEETS.difference(workbook.sheetnames)
         if missing:
@@ -99,7 +127,7 @@ def read_workbook(path: Path) -> Exp3Data:
         final_header = _find_header_after(records, "C. 最终问卷记录")
         blocks = _read_table(records, block_header, block_header + 1, method_header - 2)
         methods = _read_table(records, method_header, method_header + 1, final_header - 2)
-        finals = _read_table(records, final_header, final_header + 1, records.max_row)
+        finals = _read_table(records, final_header, final_header + 1, final_header + 24)
         source_kind = _source_kind(workbook, source.name)
     finally:
         workbook.close()
@@ -122,6 +150,7 @@ def validate_for_analysis(
     minimum_participants: int,
     aq_mode: str,
     q10_enabled: bool,
+    approved_response_fingerprints: frozenset[str],
     allow_synthetic: bool = False,
 ) -> dict[str, Any]:
     """检查采集完成状态、合法值和正式来源边界。"""
@@ -140,6 +169,14 @@ def validate_for_analysis(
         ].astype(str)
     )
     warnings: list[str] = []
+    response_fingerprint = _response_fingerprint(data)
+    paper_eligible, source_gate_reason = _source_gate_result(
+        source_kind=data.source_kind,
+        response_fingerprint=response_fingerprint,
+        approved_response_fingerprints=approved_response_fingerprints,
+    )
+    if not paper_eligible:
+        warnings.append(source_gate_reason)
     if len(included_ids) < minimum_participants:
         raise ValueError(
             f"纳入分析且已确认的参与者只有 {len(included_ids)} 人，少于冻结下限 {minimum_participants}"
@@ -173,6 +210,9 @@ def validate_for_analysis(
         "included_count": len(included_ids),
         "warnings": tuple(warnings),
         "source_kind": data.source_kind,
+        "response_fingerprint": response_fingerprint,
+        "paper_eligible": paper_eligible,
+        "source_gate_reason": source_gate_reason,
     }
 
 
@@ -202,14 +242,29 @@ def describe_workbook(data: Exp3Data) -> dict[str, Any]:
 def _read_table(worksheet: Any, header_row: int, first_row: int, last_row: int) -> pd.DataFrame:
     """按指定表头和行边界读取一张普通值表。"""
 
-    headers = [worksheet.cell(header_row, column).value for column in range(1, worksheet.max_column + 1)]
+    header_cells = next(
+        worksheet.iter_rows(
+            min_row=header_row,
+            max_row=header_row,
+            min_col=1,
+            max_col=worksheet.max_column,
+        )
+    )
+    headers = [cell.value for cell in header_cells]
     while headers and headers[-1] is None:
         headers.pop()
     if not headers or any(value is None for value in headers):
         raise ValueError(f"{worksheet.title}!{header_row} 表头包含空列")
     rows: list[dict[str, Any]] = []
-    for row_number in range(first_row, last_row + 1):
-        cells = [worksheet.cell(row_number, column) for column in range(1, len(headers) + 1)]
+    for row_number, cells in enumerate(
+        worksheet.iter_rows(
+            min_row=first_row,
+            max_row=last_row,
+            min_col=1,
+            max_col=len(headers),
+        ),
+        start=first_row,
+    ):
         if all(cell.value is None for cell in cells):
             continue
         _reject_formulas(worksheet.title, row_number, cells)
@@ -228,8 +283,11 @@ def _reject_formulas(sheet_name: str, row_number: int, cells: Iterable[Cell]) ->
 def _find_header_after(worksheet: Any, marker: str) -> int:
     """按 A 列节标题定位其下一行表头。"""
 
-    for row_number in range(1, worksheet.max_row + 1):
-        value = worksheet.cell(row_number, 1).value
+    for row_number, (cell,) in enumerate(
+        worksheet.iter_rows(min_col=1, max_col=1),
+        start=1,
+    ):
+        value = cell.value
         if isinstance(value, str) and value.startswith(marker):
             return row_number + 1
     raise ValueError(f"Records 缺少节标题：{marker}")
@@ -239,9 +297,18 @@ def _source_kind(workbook: Any, filename: str) -> str:
     """优先按工作表契约识别正式输入，兼容 Excel 丢弃核心属性。"""
 
     readme = workbook["README"]
+    rows = tuple(
+        readme.iter_rows(
+            min_row=1,
+            max_row=min(readme.max_row, 40),
+            min_col=1,
+            max_col=min(readme.max_column, 5),
+        )
+    )
     markers = {
-        str(readme.cell(row, 1).value or "").strip(): str(readme.cell(row, 2).value or "").strip()
-        for row in range(1, min(readme.max_row, 40) + 1)
+        str(row[0].value or "").strip(): str(row[1].value or "").strip()
+        for row in rows
+        if len(row) >= 2
     }
     if (
         (
@@ -256,15 +323,124 @@ def _source_kind(workbook: Any, filename: str) -> str:
         return "formal"
 
     text = " ".join(
-        str(readme.cell(row, column).value or "")
-        for row in range(1, min(readme.max_row, 12) + 1)
-        for column in range(1, min(readme.max_column, 5) + 1)
+        str(cell.value or "")
+        for row in rows[:12]
+        for cell in row[:5]
     ).lower()
     combined = f"{filename} {text}".lower()
     synthetic_terms = ("合成数据", "模拟演练", "synthetic", "simulated", "claude-opus")
     if any(term in combined for term in synthetic_terms):
         return "synthetic"
     return "unknown"
+
+
+def _response_fingerprint(data: Exp3Data) -> str:
+    """计算三段身份与核心响应的稳定内容指纹。
+
+    冻结列正好覆盖已逐格审计的 4560 个身份/问卷单元格；人口学、计时、运行时日志、技术
+    有效性字段、访谈备注和样式均不参与。已知合成指纹总是拒绝；其他正式输入只有在来源
+    核验后把该指纹登记到批准列表，才能作为论文证据。
+    """
+
+    payload: list[dict[str, Any]] = []
+    fingerprint_tables = (
+        (
+            data.blocks,
+            _BLOCK_FINGERPRINT_COLUMNS,
+            ("Participant_ID", "Block_Index"),
+        ),
+        (
+            data.methods,
+            _METHOD_FINGERPRINT_COLUMNS,
+            ("Participant_ID", "Rating_Order"),
+        ),
+        (
+            data.finals,
+            _FINAL_FINGERPRINT_COLUMNS,
+            ("Participant_ID",),
+        ),
+    )
+    for frame, columns, sort_columns in fingerprint_tables:
+        payload.append(
+            {
+                "columns": [str(column) for column in columns],
+                "rows": _canonical_fingerprint_rows(
+                    frame,
+                    columns=columns,
+                    sort_columns=sort_columns,
+                ),
+            }
+        )
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _source_gate_result(
+    *,
+    source_kind: str,
+    response_fingerprint: str,
+    approved_response_fingerprints: frozenset[str],
+) -> tuple[bool, str]:
+    """按“已知合成拒绝→正式标记→正向批准”的固定顺序判定论文资格。"""
+
+    if response_fingerprint in _KNOWN_SYNTHETIC_RESPONSE_FINGERPRINTS:
+        return (
+            False,
+            "来源完整性门禁：核心响应与已知 GPT 合成参考逐格一致；即使工作簿"
+            "标记为 formal 或该指纹误入批准列表，也只能用于流程演练",
+        )
+    if source_kind != "formal":
+        return (
+            False,
+            "来源完整性门禁：输入没有正式参与者工作簿标记，不得用于论文",
+        )
+    if response_fingerprint not in approved_response_fingerprints:
+        return (
+            False,
+            "来源完整性门禁：工作簿虽标记为 formal，但核心响应指纹 "
+            f"{response_fingerprint} 尚未经来源核验并登记到批准列表；本次输出仅供流程演练",
+        )
+    return True, "来源完整性门禁：formal 标记与已批准核心响应指纹一致"
+
+
+def _canonical_fingerprint_rows(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...],
+    sort_columns: tuple[str, ...],
+) -> list[list[str | None]]:
+    """按稳定身份键排序核心响应，使工作表行重排不改变来源指纹。"""
+
+    selected = frame.loc[:, columns]
+    rows = [
+        [_fingerprint_value(value) for value in row]
+        for row in selected.itertuples(index=False, name=None)
+    ]
+    sort_positions = tuple(columns.index(column) for column in sort_columns)
+
+    def canonical_key(row: list[str | None]) -> tuple[tuple[bool, str], ...]:
+        """先按身份键、再按整行稳定排序；缺失值使用显式次序。"""
+
+        positions = (*sort_positions, *range(len(row)))
+        return tuple((row[position] is None, row[position] or "") for position in positions)
+
+    return sorted(rows, key=canonical_key)
+
+
+def _fingerprint_value(value: Any) -> str | None:
+    """把原始单元格值规范化为响应指纹使用的稳定文本。"""
+
+    if value is None or _is_missing_or_na(value):
+        return None
+    if isinstance(value, (datetime, time)):
+        return value.isoformat()
+    if isinstance(value, float):
+        return format(value, ".15g")
+    return str(value)
 
 
 def _validate_structure(data: Exp3Data) -> None:

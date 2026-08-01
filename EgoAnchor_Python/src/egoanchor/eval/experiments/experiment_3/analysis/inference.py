@@ -15,6 +15,10 @@ from .contracts import METHODS, SCALE_OUTCOMES, published_scale_items
 from .settings import AnalysisSettings
 
 
+_DIFFERENCE_DECIMALS = 12
+"""配对差统一保留的小数位数，用于消除数学等值均分的二进制浮点尾差。"""
+
+
 def paired_result(
     one_euro: Sequence[float],
     egoanchor: Sequence[float],
@@ -32,10 +36,8 @@ def paired_result(
     right = right[finite]
     if left.size == 0:
         return empty_paired_result()
-    difference = right - left
+    difference = _stabilize_differences(right - left)
     rank = signed_rank_test(difference)
-    difference_sd = float(np.std(difference, ddof=1)) if difference.size > 1 else math.nan
-    dz = float(np.mean(difference) / difference_sd) if difference_sd > 0.0 else math.nan
     ci_low, ci_high = bootstrap_rank_biserial(
         difference,
         iterations=bootstrap_iterations,
@@ -44,6 +46,7 @@ def paired_result(
     )
     left_q1, left_median, left_q3 = quartiles(left.tolist())
     right_q1, right_median, right_q3 = quartiles(right.tolist())
+    difference_q1, difference_median, difference_q3 = quartiles(difference.tolist())
     return {
         "N": int(difference.size),
         "N_Nonzero": int(rank["n_nonzero"]),
@@ -53,10 +56,9 @@ def paired_result(
         "EgoAnchor_Q1": right_q1,
         "EgoAnchor_Median": right_median,
         "EgoAnchor_Q3": right_q3,
-        "Difference_Median": float(np.median(difference)),
-        "Difference_Mean": float(np.mean(difference)),
-        "Difference_SD": difference_sd,
-        "dz": dz,
+        "Difference_Q1": difference_q1,
+        "Difference_Median": difference_median,
+        "Difference_Q3": difference_q3,
         "W": float(rank["w"]),
         "p_raw": float(rank["p_value"]),
         "r_rb": float(rank["rank_biserial"]),
@@ -79,20 +81,35 @@ def _interval_status(effect: float, low: float, high: float) -> str:
     if not (math.isfinite(low) and math.isfinite(high)):
         return "not_estimable"
     if high - low <= 0.0:
-        return "degenerate_at_bound"
+        return (
+            "degenerate_at_bound"
+            if math.isclose(abs(effect), 1.0, rel_tol=0.0, abs_tol=1e-12)
+            else "not_estimable"
+        )
     if abs(effect) >= 1.0:
         return "point_at_bound"
     return "usable"
 
 
-def signed_rank_test(differences: Sequence[float]) -> dict[str, float | int]:
-    """用含并列秩的精确符号置换动态规划计算双侧 Wilcoxon。"""
+def signed_rank_test(
+    differences: Sequence[float] | np.ndarray,
+) -> dict[str, float | int]:
+    """用含并列秩的条件精确符号置换动态规划计算双侧 Wilcoxon。
 
-    values = np.asarray(differences, dtype=float)
+    三物体均值会把数学上相同的三分之一表示成略有差异的二进制浮点数。先把配对差
+    规范到 12 位小数，再删除零差和计算平均秩，确保并列关系不受计算路径影响。
+    """
+
+    values = _stabilize_differences(differences)
     values = values[np.isfinite(values)]
     values = values[values != 0.0]
     if values.size == 0:
-        return {"n_nonzero": 0, "w": 0.0, "p_value": 1.0, "rank_biserial": 0.0}
+        return {
+            "n_nonzero": 0,
+            "w": 0.0,
+            "p_value": 1.0,
+            "rank_biserial": math.nan,
+        }
     ranks = stats.rankdata(np.abs(values), method="average")
     positive = float(ranks[values > 0.0].sum())
     negative = float(ranks[values < 0.0].sum())
@@ -119,15 +136,19 @@ def signed_rank_test(differences: Sequence[float]) -> dict[str, float | int]:
 
 
 def bootstrap_rank_biserial(
-    differences: Sequence[float],
+    differences: Sequence[float] | np.ndarray,
     *,
     iterations: int,
     seed: int,
     confidence_level: float,
 ) -> tuple[float, float]:
-    """按参与者配对重采样匹配秩双列相关的百分位区间。"""
+    """按参与者配对重采样匹配秩双列相关的百分位区间。
 
-    values = np.asarray(differences, dtype=float)
+    自举与主检验共享 12 位小数的配对差，避免同一批数据在点估计和区间估计中形成
+    不同的并列秩。
+    """
+
+    values = _stabilize_differences(differences)
     values = values[np.isfinite(values)]
     if values.size == 0:
         return math.nan, math.nan
@@ -137,15 +158,27 @@ def bootstrap_rank_biserial(
     ranks = stats.rankdata(absolute, axis=1, method="average", nan_policy="omit")
     signed_sums = np.nansum(ranks * np.sign(sampled), axis=1)
     total_ranks = np.nansum(ranks, axis=1)
-    estimates = np.divide(
+    estimates = np.full(iterations, np.nan, dtype=float)
+    np.divide(
         signed_sums,
         total_ranks,
-        out=np.zeros(iterations, dtype=float),
+        out=estimates,
         where=total_ranks > 0.0,
     )
+    estimates = estimates[np.isfinite(estimates)]
+    if not len(estimates):
+        return math.nan, math.nan
     tail = (1.0 - confidence_level) / 2.0
     low, high = np.quantile(estimates, (tail, 1.0 - tail), method="linear")
     return float(low), float(high)
+
+
+def _stabilize_differences(
+    differences: Sequence[float] | np.ndarray,
+) -> np.ndarray:
+    """把配对差规范到固定精度，使数学等值的离散评分均分保留同一并列秩。"""
+
+    return np.round(np.asarray(differences, dtype=float), decimals=_DIFFERENCE_DECIMALS)
 
 
 def holm_adjust(p_values: Sequence[float]) -> np.ndarray:
@@ -188,15 +221,6 @@ def reliability_results(items: pd.DataFrame, settings: AnalysisSettings) -> pd.D
             unit = "block_mean" if levels == {"block_mean"} else (
                 "method_single" if levels == {"method_single"} else "mixed"
             )
-            notes = [
-                "条目分为三物体均值，因此是分析单位（三物体均值合成分）的信度，"
-                "系统性高于单次施测的条目级 alpha，不可与原量表发表值直接比较"
-                if unit == "block_mean"
-                else "条目为每种方法单次施测，是常规条目级内部一致性"
-            ]
-            if values.shape[1] == 2:
-                notes.append("缩减版两条目量表：omega 不可稳定识别，报告 alpha 与 Spearman-Brown")
-            notes.append("当前样本信度；不作量表验证声明")
             rows.append(
                 {
                     "Outcome": scale,
@@ -207,7 +231,6 @@ def reliability_results(items: pd.DataFrame, settings: AnalysisSettings) -> pd.D
                     "Cronbach_Alpha": alpha,
                     "Omega_Total": omega,
                     "Spearman_Brown": spearman_brown,
-                    "Note": "；".join(notes),
                 }
             )
     return pd.DataFrame(rows)
@@ -293,7 +316,7 @@ def paired_tost(differences: Sequence[float], margin: float) -> dict[str, float 
     }
 
 
-def quartiles(values: Sequence[float]) -> tuple[float, float, float]:
+def quartiles(values: Sequence[float] | np.ndarray) -> tuple[float, float, float]:
     """按 Excel QUARTILE.INC 对齐的 type-7 规则计算四分位数。"""
 
     q1, median, q3 = np.quantile(
@@ -316,10 +339,9 @@ def empty_paired_result() -> dict[str, Any]:
         "EgoAnchor_Q1": math.nan,
         "EgoAnchor_Median": math.nan,
         "EgoAnchor_Q3": math.nan,
+        "Difference_Q1": math.nan,
         "Difference_Median": math.nan,
-        "Difference_Mean": math.nan,
-        "Difference_SD": math.nan,
-        "dz": math.nan,
+        "Difference_Q3": math.nan,
         "W": math.nan,
         "p_raw": math.nan,
         "r_rb": math.nan,
@@ -354,4 +376,3 @@ __all__ = [
     "reliability_results",
     "signed_rank_test",
 ]
-

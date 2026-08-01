@@ -16,8 +16,11 @@ persistence_ms = 100.0 # 位移必须持续超过阈值的时间，单位毫秒�
 catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾难性失效，单位毫米。
 
 [experiment_3.contract]
-version = 1 # 实验三原始模板与论文分析参数契约版本；不兼容变更时递增。
+version = 2 # 实验三原始模板与论文分析参数契约版本；v2 固定六页结果工作簿与单张 Figure 4。
 template_version = "v5.1" # 实验三原始数据模板与问卷的冻结版本。
+
+[experiment_3.source_gate]
+approved_response_fingerprints = [] # 经来源核验后批准用于论文的核心响应 SHA-256；真实采集完成前保持为空。
 
 [experiment_3.analysis]
 alpha = 0.05 # 两个冻结检验家族各自使用的显著性水平。
@@ -26,7 +29,7 @@ minimum_participants = 18 # 正式推断允许的最小完整配对人数。
 objects_per_method = 3 # 每人每方法形成主分析分数时必须覆盖的物体数。
 bootstrap_iterations = 10000 # 匹配秩双列相关置信区间的参与者级自举次数。
 bootstrap_seed = 20260728 # 效应量自举的固定随机种子。
-confidence_level = 0.95 # 效应量和模型区间的置信水平。
+confidence_level = 0.95 # 匹配秩双列相关自举区间的置信水平。
 aq_mode = "full" # AQ 计分模式；预实验正式冻结前使用完整三条目子量表，可选值为 full 或 reduced。
 q10_enabled = false # Q10 默认关闭；只有预实验触发并冻结后才启用。
 wilcoxon_alternative = "two-sided" # 主分析冻结为双侧配对 Wilcoxon。
@@ -38,12 +41,6 @@ tia_rc_min_items = 5 # TiA Reliability/Competence 六项中形成分量表所需
 tia_up_min_items = 3 # TiA Understanding/Predictability 四项中形成分量表所需的最少有效条目数。
 stias_min_items = 3 # S-TIAS 三项必须全部有效。
 
-[experiment_3.clmm]
-enabled = true # 是否运行逐条目随机截距累积 logit 模型。
-quadrature_points = 15 # CLMM 随机截距积分使用的 Gauss-Hermite 节点数。
-maximum_iterations = 300 # 每个完整或约简 CLMM 的最大优化迭代次数。
-tolerance = 1.0e-7 # CLMM 极大似然优化的收敛容差。
-
 [experiment_3.equivalence]
 enabled = false # 预实验冻结全部正等价界后才启用 TOST。
 candidate_rate_margin_hz = 0.0 # 候选到达率配对差的对称等价界；0 表示尚未冻结。
@@ -54,7 +51,5 @@ occlusion_seconds_margin = 0.0 # 遮挡时长配对差的对称等价界；0 表
 
 [experiment_3.figures]
 dpi = 300 # 实验三 PNG 的导出分辨率。
-primary_width_inches = 7.15 # 主证实家族小多图的原生宽度，贴合 VGTC 双栏版心。
-primary_height_inches = 4.20 # 主证实家族小多图的原生高度。
-scales_width_inches = 7.15 # 已发表量表家族小多图的原生宽度。
-scales_height_inches = 4.10 # Q6/Q7 与已发表量表小多图的原生高度。
+paired_width_inches = 7.15 # 实验三四面板配对图的原生宽度，贴合 VGTC 双栏版心。
+paired_height_inches = 4.20 # 实验三四面板配对图的原生高度。

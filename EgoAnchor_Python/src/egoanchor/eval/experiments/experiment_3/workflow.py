@@ -48,7 +48,6 @@ def describe_workflow() -> dict[str, Any]:
         "aq_mode": settings.aq_mode,
         "q10_enabled": settings.q10_enabled,
         "tost_enabled": settings.equivalence_enabled,
-        "clmm_enabled": settings.clmm_enabled,
     }
     if paths.input_workbook.is_file():
         payload["workbook"] = describe_workbook(read_workbook(paths.input_workbook))
@@ -61,10 +60,19 @@ def describe_workflow() -> dict[str, Any]:
         except (OSError, ValueError) as error:
             payload["build"] = {"status": "invalid", "reason": str(error)}
         else:
+            details = manifest.get("details")
+            paper_eligible = (
+                details.get("paper_eligible")
+                if isinstance(details, dict)
+                else None
+            )
+            warnings = manifest.get("warnings")
             payload["build"] = {
                 "build_id": manifest["build_id"],
                 "status": manifest["status"],
                 "source_kind": manifest["source_kind"],
+                "paper_eligible": paper_eligible,
+                "warnings": list(warnings) if isinstance(warnings, list) else [],
             }
     else:
         payload["build"] = {"status": "missing"}
@@ -78,13 +86,20 @@ def validate_workflow() -> dict[str, Any]:
     settings = load_settings()
     data = read_workbook(paths.input_workbook)
     payload = describe_workbook(data)
-    payload["analysis_readiness"] = validate_for_analysis(
+    readiness = validate_for_analysis(
         data,
         minimum_participants=settings.minimum_participants,
         aq_mode=settings.aq_mode,
         q10_enabled=settings.q10_enabled,
+        approved_response_fingerprints=settings.approved_response_fingerprints,
         allow_synthetic=False,
     )
+    payload["analysis_readiness"] = readiness
+    payload["paper_eligible"] = bool(readiness["paper_eligible"])
+    payload["warnings"] = list(readiness["warnings"])
+    if not payload["paper_eligible"]:
+        payload["passed"] = False
+        payload["reason"] = readiness["source_gate_reason"]
     return payload
 
 
@@ -106,7 +121,15 @@ def analyze_workflow(
         paper_config_path=DEFAULT_PAPER_CONFIG_PATH,
         progress=progress,
     )
-    payload["next_command"] = "pixi run eval copy-assets exp3"
+    details = payload.get("build", {}).get("details", {})
+    payload["next_command"] = (
+        "pixi run eval copy-assets exp3"
+        if isinstance(details, dict) and details.get("paper_eligible") is True
+        else (
+            "当前输入未通过来源完整性门禁，仅可用于流程演练；"
+            "请用来源可核验的真实参与者数据替换输入，再运行 pixi run eval analyze exp3"
+        )
+    )
     return payload
 
 
@@ -122,6 +145,9 @@ def plan_assets() -> ArtifactPlan:
         raise ValueError("实验三构建尚未完整完成，拒绝复制论文资源")
     if manifest.get("source_kind") != "formal":
         raise ValueError("实验三合成/模拟构建不得复制到论文目录")
+    details = manifest.get("details")
+    if not isinstance(details, dict) or details.get("paper_eligible") is not True:
+        raise ValueError("实验三输入未通过来源完整性门禁，不得复制到论文目录")
     if manifest.get("config_sha256") != settings_sha256():
         raise ValueError("实验三配置已变化，请重新运行 analyze exp3")
     implementation_root = Path(analysis.__file__).resolve().parent
@@ -138,10 +164,8 @@ def plan_assets() -> ArtifactPlan:
     outputs = validate_output_files(manifest)
     figure_root = (paths.analysis_root / "figures").resolve()
     expected_figure_names = {
-        "paired_png": "figure4_exp3_paired.png",
-        "paired_pdf": "figure4_exp3_paired.pdf",
-        "scales_png": "figure5_exp3_scales.png",
-        "scales_pdf": "figure5_exp3_scales.pdf",
+        "figure4_png": "figure4_exp3_paired.png",
+        "figure4_pdf": "figure4_exp3_paired.pdf",
     }
     assets: list[PlannedAsset] = []
     for key, expected_name in expected_figure_names.items():

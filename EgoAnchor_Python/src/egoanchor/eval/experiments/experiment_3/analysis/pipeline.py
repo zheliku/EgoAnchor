@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from ...common import begin_build, complete_build, source_tree_sha256
-from .clmm import fit_item_models
 from .figures import publish_figures
 from .paper import write_subjective_table
 from .reader import read_workbook, validate_for_analysis
@@ -41,6 +40,7 @@ def build_analysis(
         minimum_participants=settings.minimum_participants,
         aq_mode=settings.aq_mode,
         q10_enabled=settings.q10_enabled,
+        approved_response_fingerprints=settings.approved_response_fingerprints,
         allow_synthetic=allow_synthetic,
     )
     implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
@@ -63,46 +63,37 @@ def build_analysis(
     scores = derive_scores(data, settings)
     _report_progress(progress, "计算 Wilcoxon、Holm、效应量、信度与操纵描述")
     tables = analyze_scores(data, scores, settings)
-    clmm_coefficients, clmm_contrasts = fit_item_models(
-        scores.block_scores,
-        settings,
-        progress=progress,
-    )
     _report_progress(progress, "写入并回读验证结果工作簿")
     results_path = root / "results" / "experiment3_analysis.xlsx"
     write_results_workbook(
         results_path,
         data=data,
-        scores=scores,
         tables=tables,
-        clmm_coefficients=clmm_coefficients,
-        clmm_contrasts=clmm_contrasts,
         settings=settings,
         settings_sha256=config_sha256,
         batch_config_path=batch_config_path,
         paper_config_path=paper_config_path,
         validation=validation,
     )
-    tex_path = write_subjective_table(root / "tex" / "exp3_subjective.tex", tables.results)
-    _report_progress(progress, "从结果工作簿生成论文图")
-    figures = publish_figures(results_path, root, settings)
+    paper_eligible = bool(validation["paper_eligible"])
+    tex_path = write_subjective_table(
+        root / "tex" / "exp3_subjective.tex",
+        tables.results,
+        paper_eligible=paper_eligible,
+    )
+    _report_progress(progress, "从同一批内存结果生成论文图")
+    figures = publish_figures(
+        scores,
+        tables,
+        root,
+        settings,
+        paper_eligible=paper_eligible,
+    )
     details = {
         "included_count": validation["included_count"],
-        "clmm_models": (
-            int(clmm_coefficients["Outcome"].nunique())
-            if not clmm_coefficients.empty
-            else 0
-        ),
-        "clmm_converged": (
-            int(
-                clmm_coefficients.groupby("Outcome")["Converged"]
-                .first()
-                .fillna(False)
-                .sum()
-            )
-            if not clmm_coefficients.empty
-            else 0
-        ),
+        "paper_eligible": paper_eligible,
+        "response_fingerprint": validation["response_fingerprint"],
+        "source_gate_reason": validation["source_gate_reason"],
     }
     outputs = [
         {"key": "results_workbook", "kind": "xlsx", "path": str(results_path)},
@@ -142,4 +133,3 @@ def _report_progress(callback: Callable[[str], None] | None, message: str) -> No
 
 
 __all__ = ["build_analysis"]
-

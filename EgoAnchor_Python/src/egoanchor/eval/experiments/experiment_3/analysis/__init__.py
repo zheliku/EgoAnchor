@@ -1,12 +1,10 @@
 """实验三读取、计分、统计、结果工作簿与论文图的包级入口。"""
 
-from .clmm import fit_item_models
 from .contracts import (
     BLOCK_ITEMS,
     BLOCK_RECORD_COLUMNS,
     EGOANCHOR,
     EXCLUSION_REASONS,
-    EXPLORATORY_FAMILY,
     MAIN_FAMILY,
     METHOD_RECORD_COLUMNS,
     METHODS,
@@ -27,8 +25,8 @@ from .contracts import (
     published_scale_items,
     required_block_items,
 )
-from .figures import publish_figures, read_significance
-from .inference import holm_adjust, signed_rank_test
+from .figures import publish_figures
+from .inference import holm_adjust, paired_result, signed_rank_test
 from .paper import write_subjective_table
 from .pipeline import build_analysis
 from .reader import describe_workbook, read_workbook, validate_for_analysis
@@ -36,10 +34,12 @@ from .scoring import derive_scores
 from .settings import AnalysisSettings, load_settings, settings_sha256
 from .summaries import analyze_scores
 from .workbook import (
+    CHOICES_SHEET,
+    INFO_SHEET,
     OBJECT_RESULTS_SHEET,
+    RELIABILITY_SHEET,
     RESULTS_SHEET,
-    SCORES_BLOCK_SHEET,
-    SCORES_PAIRED_SHEET,
+    SAMPLE_QC_SHEET,
     write_results_workbook,
 )
 
@@ -49,10 +49,11 @@ __all__ = [
     "AnalysisTables",
     "BLOCK_ITEMS",
     "BLOCK_RECORD_COLUMNS",
+    "CHOICES_SHEET",
     "EGOANCHOR",
     "EXCLUSION_REASONS",
-    "EXPLORATORY_FAMILY",
     "Exp3Data",
+    "INFO_SHEET",
     "MAIN_FAMILY",
     "METHODS",
     "METHOD_RECORD_COLUMNS",
@@ -62,12 +63,12 @@ __all__ = [
     "OUTCOME_LABELS",
     "PARTICIPANT_CATEGORIES",
     "PRIMARY_OUTCOMES",
+    "RELIABILITY_SHEET",
     "RESULTS_SHEET",
     "REVERSED_TIA_ITEMS",
     "SCALE_FAMILY",
     "SCALE_OUTCOMES",
-    "SCORES_BLOCK_SHEET",
-    "SCORES_PAIRED_SHEET",
+    "SAMPLE_QC_SHEET",
     "ScoreData",
     "WORKBOOK_CONTRACT_ID",
     "WORKBOOK_SOURCE_CATEGORY",
@@ -76,12 +77,11 @@ __all__ = [
     "build_analysis",
     "derive_scores",
     "describe_workbook",
-    "fit_item_models",
     "holm_adjust",
     "load_settings",
+    "paired_result",
     "publish_figures",
     "published_scale_items",
-    "read_significance",
     "read_workbook",
     "required_block_items",
     "signed_rank_test",

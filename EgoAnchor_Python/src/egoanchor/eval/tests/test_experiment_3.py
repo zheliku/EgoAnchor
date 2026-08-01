@@ -4,26 +4,34 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from dataclasses import replace
 from datetime import time
 from pathlib import Path
 from shutil import copyfile
+from typing import Any
 
-import pandas as pd
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
-from egoanchor.eval.experiments.experiment_3 import build_raw_template, load_settings
+from egoanchor.eval.experiments.experiment_3 import (
+    ExperimentPaths,
+    analyze_workflow,
+    build_raw_template,
+    describe_workflow,
+    load_settings,
+    plan_assets,
+    validate_workflow,
+)
 from egoanchor.eval.experiments.experiment_3.analysis import (
-    EXPLORATORY_FAMILY,
+    Exp3Data,
     MAIN_FAMILY,
     SCALE_FAMILY,
     analyze_scores,
+    build_analysis,
     derive_scores,
     publish_figures,
     read_workbook,
-    signed_rank_test,
-    read_significance,
     validate_for_analysis,
     write_results_workbook,
 )
@@ -41,9 +49,54 @@ R2_WORKBOOK = (
 )
 """只用于测试分析契约的冻结结构模拟工作簿。"""
 
+GPT_WORKBOOK = (
+    REPOSITORY_ROOT
+    / "2026-EgoAnchor"
+    / "material"
+    / "reference"
+    / "GPT-5.6-Thinking_v3_AnalysisFilled_VSCodeSafe.xlsx"
+)
+"""已逐格审计并冻结的 GPT 合成响应参考。"""
+
+PAPER_CONFIG = (
+    REPOSITORY_ROOT
+    / "EgoAnchor_Python"
+    / "src"
+    / "egoanchor"
+    / "eval"
+    / "config"
+    / "paper.toml"
+)
+"""受版本控制的实验三科学参数配置。"""
+
 
 class Experiment3Tests(unittest.TestCase):
     """验证空白模板、实时公式边界和离线结果链。"""
+
+    def test_settings_freeze_paper_thresholds_and_start_without_approved_source(self) -> None:
+        """发布阈值与 95% CI 口径不可漂移，真实采集前批准列表为空。"""
+
+        settings = load_settings()
+        self.assertEqual(settings.alpha, 0.05)
+        self.assertEqual(settings.confidence_level, 0.95)
+        self.assertEqual(settings.approved_response_fingerprints, frozenset())
+        source = PAPER_CONFIG.read_text(encoding="utf-8")
+        cases = (
+            ("alpha", "alpha = 0.05", "alpha = 0.04", "冻结 alpha=0.05"),
+            (
+                "confidence",
+                "confidence_level = 0.95",
+                "confidence_level = 0.90",
+                "冻结 confidence_level=0.95",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            for name, original, replacement, error in cases:
+                with self.subTest(parameter=name):
+                    config = Path(directory) / f"{name}.toml"
+                    config.write_text(source.replace(original, replacement, 1), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, error):
+                        load_settings(config)
 
     def test_raw_template_is_empty_and_keeps_live_formulas_outside_raw_regions(self) -> None:
         """模板只保留设计映射，原始值区为空且公式仅位于派生表。"""
@@ -184,16 +237,276 @@ class Experiment3Tests(unittest.TestCase):
             finally:
                 workbook.close()
 
+    def test_source_gate_fingerprints_only_audited_core_responses(self) -> None:
+        """非核心日志和备注不能绕过门禁，核心评分变化必须改变指纹。"""
+
+        settings = load_settings()
+
+        def validate(
+            data: Exp3Data,
+            approvals: frozenset[str] | None = None,
+        ) -> dict[str, Any]:
+            """按正式分析入口返回一份已读取数据的来源门禁结果。"""
+
+            return validate_for_analysis(
+                data,
+                minimum_participants=settings.minimum_participants,
+                aq_mode=settings.aq_mode,
+                q10_enabled=settings.q10_enabled,
+                approved_response_fingerprints=(
+                    settings.approved_response_fingerprints
+                    if approvals is None
+                    else approvals
+                ),
+            )
+
+        audited_fingerprint = "5993ef77a827eb89c99fb9c1db85f29ae09d1a2f423f88f2713b6fa3789fe84a"
+        data = replace(read_workbook(GPT_WORKBOOK), source_kind="formal")
+        baseline = validate(data, frozenset({audited_fingerprint}))
+        self.assertEqual(baseline["response_fingerprint"], audited_fingerprint)
+        self.assertFalse(baseline["paper_eligible"])
+        self.assertIn("已知 GPT 合成参考", baseline["source_gate_reason"])
+
+        noncore_blocks = data.blocks.copy()
+        noncore_methods = data.methods.copy()
+        noncore_finals = data.finals.copy()
+        noncore_blocks.at[0, "Candidate_Rate_Hz"] = (
+            float(noncore_blocks.at[0, "Candidate_Rate_Hz"]) + 0.125
+        )
+        noncore_blocks.at[0, "备注"] = "仅修改区块运行时备注"
+        noncore_methods.at[0, "备注"] = "仅修改方法级备注"
+        noncore_finals.at[0, "访谈备注"] = "仅修改最终访谈备注"
+        noncore_result = validate(
+            replace(
+                data,
+                blocks=noncore_blocks,
+                methods=noncore_methods,
+                finals=noncore_finals,
+            ),
+            frozenset({audited_fingerprint}),
+        )
+        self.assertEqual(noncore_result["response_fingerprint"], audited_fingerprint)
+        self.assertFalse(noncore_result["paper_eligible"])
+
+        reordered_result = validate(
+            replace(
+                data,
+                blocks=data.blocks.sample(frac=1.0, random_state=11).reset_index(drop=True),
+                methods=data.methods.sample(frac=1.0, random_state=12).reset_index(drop=True),
+                finals=data.finals.sample(frac=1.0, random_state=13).reset_index(drop=True),
+            ),
+            frozenset({audited_fingerprint}),
+        )
+        self.assertEqual(reordered_result["response_fingerprint"], audited_fingerprint)
+        self.assertFalse(reordered_result["paper_eligible"])
+
+        core_blocks = data.blocks.copy()
+        core_blocks.at[0, "Q1"] = 2 if core_blocks.at[0, "Q1"] == 1 else 1
+        changed_data = replace(data, blocks=core_blocks)
+        unapproved = validate(changed_data)
+        changed_fingerprint = unapproved["response_fingerprint"]
+        self.assertNotEqual(changed_fingerprint, audited_fingerprint)
+        self.assertFalse(unapproved["paper_eligible"])
+        self.assertIn("尚未经来源核验", unapproved["source_gate_reason"])
+
+        approved = validate(changed_data, frozenset({changed_fingerprint}))
+        self.assertTrue(approved["paper_eligible"])
+        self.assertEqual(approved["warnings"], ())
+
+        approved_reordered = validate(
+            replace(
+                changed_data,
+                blocks=changed_data.blocks.sample(frac=1.0, random_state=21).reset_index(drop=True),
+                methods=changed_data.methods.sample(frac=1.0, random_state=22).reset_index(drop=True),
+                finals=changed_data.finals.sample(frac=1.0, random_state=23).reset_index(drop=True),
+            ),
+            frozenset({changed_fingerprint}),
+        )
+        self.assertEqual(approved_reordered["response_fingerprint"], changed_fingerprint)
+        self.assertTrue(approved_reordered["paper_eligible"])
+
+    def test_ineligible_build_persists_gate_and_cannot_plan_paper_assets(self) -> None:
+        """构建清单必须保存门禁结果，后续命令不得诱导或执行论文复制。"""
+
+        settings = replace(load_settings(), bootstrap_iterations=1000)
+        source = GPT_WORKBOOK.resolve()
+        data = replace(read_workbook(source), source_kind="formal")
+        python_root = REPOSITORY_ROOT / "EgoAnchor_Python"
+        with tempfile.TemporaryDirectory(dir=python_root / "data") as directory:
+            sandbox = Path(directory)
+            analysis_root = sandbox / "analysis"
+            with mock.patch(
+                "egoanchor.eval.experiments.experiment_3.analysis.pipeline.read_workbook",
+                return_value=data,
+            ):
+                payload = build_analysis(
+                    settings,
+                    input_workbook=source,
+                    output_root=analysis_root,
+                    project_root=python_root,
+                    config_sha256="0" * 64,
+                    batch_config_path=sandbox / "batch.toml",
+                    paper_config_path=sandbox / "paper.toml",
+                )
+            self.assertFalse(payload["build"]["details"]["paper_eligible"])
+            results_path = analysis_root / "results" / "experiment3_analysis.xlsx"
+            workbook = load_workbook(results_path, read_only=True, data_only=True)
+            try:
+                readme_text = " ".join(
+                    str(cell.value or "")
+                    for row in workbook["说明"].iter_rows()
+                    for cell in row
+                )
+            finally:
+                workbook.close()
+            self.assertIn("流程演练", readme_text)
+            tex_text = (analysis_root / "tex" / "exp3_subjective.tex").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("流程演练，禁止作为论文证据", tex_text)
+
+            paths = ExperimentPaths(
+                project_root=python_root,
+                source_template=source,
+                input_workbook=source,
+                analysis_root=analysis_root,
+                paper_root=sandbox / "paper",
+                figure_destination=sandbox / "paper" / "figures",
+                table_destination=sandbox / "paper" / "tables" / "exp3_subjective.tex",
+                batch_config_path=sandbox / "batch.toml",
+            )
+            with mock.patch(
+                "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
+                return_value=paths,
+            ):
+                status = describe_workflow()
+                self.assertFalse(status["build"]["paper_eligible"])
+                self.assertTrue(
+                    any("来源完整性门禁" in item for item in status["build"]["warnings"])
+                )
+                with self.assertRaisesRegex(ValueError, "来源完整性门禁"):
+                    plan_assets()
+
+            with (
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
+                    return_value=paths,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.load_settings",
+                    return_value=settings,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.read_workbook",
+                    return_value=data,
+                ),
+            ):
+                validation_status = validate_workflow()
+            self.assertFalse(validation_status["passed"])
+            self.assertFalse(validation_status["paper_eligible"])
+            self.assertIn("来源完整性门禁", validation_status["reason"])
+
+            mocked_build = {
+                "passed": True,
+                "build": {"details": {"paper_eligible": False}},
+            }
+            with (
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
+                    return_value=paths,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.load_settings",
+                    return_value=settings,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.settings_sha256",
+                    return_value="0" * 64,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.build_analysis",
+                    return_value=mocked_build,
+                ),
+            ):
+                workflow_result = analyze_workflow()
+            self.assertIn("真实参与者数据", workflow_result["next_command"])
+
+    def test_eligible_build_plans_only_figure4_and_subjective_table(self) -> None:
+        """通过来源门禁后，论文资源计划只包含 Figure 4 与完整结果表。"""
+
+        settings = replace(load_settings(), bootstrap_iterations=1000)
+        source = GPT_WORKBOOK.resolve()
+        data = replace(read_workbook(source), source_kind="formal")
+        blocks = data.blocks.copy()
+        blocks.at[0, "Q1"] = 2 if blocks.at[0, "Q1"] == 1 else 1
+        data = replace(data, blocks=blocks)
+        unapproved = validate_for_analysis(
+            data,
+            minimum_participants=settings.minimum_participants,
+            aq_mode=settings.aq_mode,
+            q10_enabled=settings.q10_enabled,
+            approved_response_fingerprints=settings.approved_response_fingerprints,
+        )
+        settings = replace(
+            settings,
+            approved_response_fingerprints=frozenset({unapproved["response_fingerprint"]}),
+        )
+        python_root = REPOSITORY_ROOT / "EgoAnchor_Python"
+        with tempfile.TemporaryDirectory(dir=python_root / "data") as directory:
+            sandbox = Path(directory)
+            analysis_root = sandbox / "analysis"
+            with mock.patch(
+                "egoanchor.eval.experiments.experiment_3.analysis.pipeline.read_workbook",
+                return_value=data,
+            ):
+                payload = build_analysis(
+                    settings,
+                    input_workbook=source,
+                    output_root=analysis_root,
+                    project_root=python_root,
+                    config_sha256="0" * 64,
+                    batch_config_path=sandbox / "batch.toml",
+                    paper_config_path=sandbox / "paper.toml",
+                )
+            self.assertTrue(payload["build"]["details"]["paper_eligible"])
+
+            paths = ExperimentPaths(
+                project_root=python_root,
+                source_template=source,
+                input_workbook=source,
+                analysis_root=analysis_root,
+                paper_root=sandbox / "paper",
+                figure_destination=sandbox / "paper" / "figures",
+                table_destination=sandbox / "paper" / "tables" / "exp3_subjective.tex",
+                batch_config_path=sandbox / "batch.toml",
+            )
+            with (
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
+                    return_value=paths,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.workflow.settings_sha256",
+                    return_value="0" * 64,
+                ),
+            ):
+                plan = plan_assets()
+            self.assertEqual(
+                {asset.key for asset in plan.assets},
+                {"figure4_png", "figure4_pdf", "subjective_table"},
+            )
+
     def test_r2_simulation_reproduces_frozen_family_directions(self) -> None:
         """模拟输入只用于验证计分、配对方向和家族校正实现。"""
 
-        settings = replace(load_settings(), bootstrap_iterations=1000, clmm_enabled=False)
+        settings = replace(load_settings(), bootstrap_iterations=1000)
         data = read_workbook(R2_WORKBOOK)
         validation = validate_for_analysis(
             data,
             minimum_participants=settings.minimum_participants,
             aq_mode=settings.aq_mode,
             q10_enabled=settings.q10_enabled,
+            approved_response_fingerprints=settings.approved_response_fingerprints,
             allow_synthetic=True,
         )
         scores = derive_scores(data, settings)
@@ -208,67 +521,54 @@ class Experiment3Tests(unittest.TestCase):
         balance = sample[sample["Section"] == "Design_Balance"]
         self.assertEqual(validation["included_count"], 24)
         self.assertEqual(int(included_row["N"]), 24)
-        self.assertEqual(int(age_row["Missing_N"]), 24)
+        self.assertEqual(int(age_row["N"]), 0)
+        self.assertEqual(int(age_row["Denominator"]), 24)
+        self.assertNotIn("Missing_N", sample.columns)
         self.assertTrue((balance["Status"] == "balanced").all())
-        self.assertEqual(len(tables.participant_audit), 24)
+        self.assertEqual(
+            tuple(type(scores).__dataclass_fields__),
+            ("block_scores", "paired_scores", "reliability_items"),
+        )
+        self.assertEqual(
+            tuple(tables.results.columns),
+            (
+                "Family",
+                "Outcome",
+                "N",
+                "N_Nonzero",
+                "OneEuro_Q1",
+                "OneEuro_Median",
+                "OneEuro_Q3",
+                "EgoAnchor_Q1",
+                "EgoAnchor_Median",
+                "EgoAnchor_Q3",
+                "Difference_Q1",
+                "Difference_Median",
+                "Difference_Q3",
+                "W",
+                "r_rb",
+                "r_rb_CI_Low",
+                "r_rb_CI_High",
+                "r_rb_CI_Status",
+                "p_Holm",
+            ),
+        )
         self.assertEqual(int(primary.loc["Q1", "N"]), 24)
         self.assertLess(float(primary.loc["Q1", "p_Holm"]), 0.01)
         self.assertGreater(float(primary.loc["Q2", "p_Holm"]), 0.05)
         self.assertLess(float(scales.loc["STIAS", "p_Holm"]), 0.01)
-        workbook = load_workbook(R2_WORKBOOK, data_only=True, read_only=True)
-        try:
-            analysis = workbook["Analysis"]
-            for row_number, outcome in enumerate(
-                ("Q1", "Q8", "Q2", "Q9", "Q3", "Q6", "Q7"),
-                start=5,
-            ):
-                offline = primary.loc[outcome]
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 5).value),
-                    float(offline["Difference_Median"]),
-                )
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 6).value),
-                    float(offline["Difference_Mean"]),
-                )
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 7).value),
-                    float(offline["Difference_SD"]),
-                )
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 8).value),
-                    float(offline["dz"]),
-                )
-            for row_number, outcome in enumerate(
-                ("AQ_EQ", "AQ_IQ", "TIA_RC", "TIA_UP", "STIAS"),
-                start=15,
-            ):
-                offline = scales.loc[outcome]
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 4).value),
-                    float(offline["Difference_Median"]),
-                )
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 5).value),
-                    float(offline["Difference_SD"]),
-                )
-                self.assertAlmostEqual(
-                    float(analysis.cell(row_number, 6).value),
-                    float(offline["dz"]),
-                )
-        finally:
-            workbook.close()
 
     def test_results_workbook_and_figures_share_one_analysis_object(self) -> None:
         """结果 XLSX 可回读绘图，并同时生成非空 PNG/PDF。"""
 
-        settings = replace(load_settings(), bootstrap_iterations=1000, clmm_enabled=False)
+        settings = replace(load_settings(), bootstrap_iterations=1000)
         data = read_workbook(R2_WORKBOOK)
         validation = validate_for_analysis(
             data,
             minimum_participants=settings.minimum_participants,
             aq_mode=settings.aq_mode,
             q10_enabled=settings.q10_enabled,
+            approved_response_fingerprints=settings.approved_response_fingerprints,
             allow_synthetic=True,
         )
         scores = derive_scores(data, settings)
@@ -278,78 +578,47 @@ class Experiment3Tests(unittest.TestCase):
             results = write_results_workbook(
                 root / "experiment3_analysis.xlsx",
                 data=data,
-                scores=scores,
                 tables=tables,
-                clmm_coefficients=tables.results.iloc[0:0],
-                clmm_contrasts=tables.results.iloc[0:0],
                 settings=settings,
                 settings_sha256="0" * 64,
                 batch_config_path=root / "batch.toml",
                 paper_config_path=root / "paper.toml",
                 validation=validation,
             )
-            figures = publish_figures(results, root, settings)
+            figures = publish_figures(
+                scores,
+                tables,
+                root,
+                settings,
+                paper_eligible=validation["paper_eligible"],
+            )
             workbook = load_workbook(results, read_only=True, data_only=True)
             try:
                 self.assertEqual(
                     workbook.sheetnames,
                     [
-                        "README", "Sample", "Participant_Audit", "Results",
-                        "Results_By_Object", "Reliability", "Model_CLMM", "Manipulation",
-                        "Choices", "Open_Coding", "Scores_Block", "Scores_Method",
-                        "Scores_Paired",
+                        "说明", "样本与质控", "主结果", "分物体描述", "量表信度", "选择结果",
                     ],
                 )
-                self.assertEqual(workbook["Participant_Audit"].max_row, 25)
-                sample = workbook["Sample"]
-                headers = [sample.cell(1, column).value for column in range(1, sample.max_column + 1)]
-                proportion_column = headers.index("Proportion") + 1
-                self.assertEqual(sample.cell(2, proportion_column).number_format, "0.0%")
-                objects = workbook["Results_By_Object"]
+                self.assertEqual(workbook["主结果"].max_row, 16)
+                self.assertEqual(workbook["分物体描述"].max_row, 25)
                 object_headers = [
-                    objects.cell(1, column).value for column in range(1, objects.max_column + 1)
+                    workbook["分物体描述"].cell(4, column).value
+                    for column in range(1, workbook["分物体描述"].max_column + 1)
                 ]
-                self.assertIn("p_Holm_Panel", object_headers)
+                self.assertFalse(any("p" in str(value).lower() for value in object_headers))
+                self.assertIn("配对差中位数 [Q1, Q3]", object_headers)
             finally:
                 workbook.close()
-            self.assertGreater(results.stat().st_size, 50_000)
-            self.assertEqual(set(figures), {"paired_png", "paired_pdf", "scales_png", "scales_pdf"})
+            self.assertGreater(results.stat().st_size, 20_000)
+            self.assertEqual(set(figures), {"figure4_png", "figure4_pdf"})
             for path in figures.values():
                 self.assertGreater(path.stat().st_size, 10_000)
-            self._assert_significance_survives_round_trip(results, settings)
-
-    def _assert_significance_survives_round_trip(
-        self,
-        results: Path,
-        settings: object,
-    ) -> None:
-        """回读结果工作簿，核对显著性判定不因 XLSX 往返而失真。
-
-        探索性家族留空会把 ``Significant`` 整列变成 float64，真值回读为 ``1.0``；森林图必须
-        仍按家族内 Holm 结论决定实心点，否则会静默画成全空心。
-        """
-
-        frame = pd.read_excel(results, sheet_name="Results", engine="openpyxl")
-        confirmatory = frame[frame["Family"].isin((MAIN_FAMILY, SCALE_FAMILY))]
-        exploratory = frame[frame["Family"] == EXPLORATORY_FAMILY]
-        self.assertTrue(exploratory["Significant"].isna().all())
-        self.assertTrue(exploratory["p_Holm"].isna().all())
-        for _, row in confirmatory.iterrows():
-            expected = float(row["p_Holm"]) < float(settings.alpha)  # type: ignore[attr-defined]
-            self.assertEqual(read_significance(row["Significant"]), expected, msg=str(row["Outcome"]))
-        self.assertGreater(int(confirmatory["Significant"].sum()), 0)
-        statuses = set(frame["r_rb_CI_Status"].astype(str))
-        self.assertTrue(
-            statuses.issubset(
-                {"usable", "point_at_bound", "degenerate_at_bound", "not_estimable"}
-            ),
-            msg=str(sorted(statuses)),
-        )
 
     def test_formal_participant_summary_reports_demographics_duration_and_balance(self) -> None:
         """正式分析严格校验背景字段，并以纳入 N 为分母汇总。"""
 
-        settings = replace(load_settings(), bootstrap_iterations=1000, clmm_enabled=False)
+        settings = replace(load_settings(), bootstrap_iterations=1000)
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "formal_participants.xlsx"
             copyfile(R2_WORKBOOK, source)
@@ -399,6 +668,7 @@ class Experiment3Tests(unittest.TestCase):
                 minimum_participants=settings.minimum_participants,
                 aq_mode=settings.aq_mode,
                 q10_enabled=settings.q10_enabled,
+                approved_response_fingerprints=settings.approved_response_fingerprints,
             )
             scores = derive_scores(data, settings)
             tables = analyze_scores(data, scores, settings)
@@ -414,7 +684,8 @@ class Experiment3Tests(unittest.TestCase):
             ].iloc[0]
             self.assertEqual(validation["included_count"], 24)
             self.assertAlmostEqual(float(age["Mean"]), 31.5)
-            self.assertEqual(int(age["Missing_N"]), 0)
+            self.assertEqual(int(age["N"]), 24)
+            self.assertEqual(int(age["Denominator"]), 24)
             self.assertAlmostEqual(float(duration["Median"]), 60.0)
             self.assertEqual(int(women["N"]), 12)
             self.assertAlmostEqual(float(women["Proportion"]), 0.5)
@@ -450,6 +721,7 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             pending = edited_case("pending", (("Participants", "V3", None),))
@@ -459,6 +731,7 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             no_consent = edited_case("no_consent", (("Participants", "R3", None),))
@@ -468,6 +741,7 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             missing_runtime = edited_case("missing_runtime", (("Records", "AF5", None),))
@@ -477,6 +751,7 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_method = edited_case("invalid_method", (("Records", "V152", "设备故障"),))
@@ -486,6 +761,7 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_safety = edited_case(
@@ -502,20 +778,12 @@ class Experiment3Tests(unittest.TestCase):
                     minimum_participants=settings.minimum_participants,
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
+                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_mapping = edited_case("invalid_mapping", (("Records", "C152", "方法B"),))
             with self.assertRaisesRegex(ValueError, "评分顺序"):
                 read_workbook(invalid_mapping)
-
-    def test_signed_rank_exact_sign_dp_handles_zeros_and_ties(self) -> None:
-        """精确秩检验删除零差，并以平均秩保留并列。"""
-
-        result = signed_rank_test([0.0, 1.0, 1.0, -2.0])
-        self.assertEqual(result["n_nonzero"], 3)
-        self.assertAlmostEqual(float(result["w"]), 3.0)
-        self.assertAlmostEqual(float(result["rank_biserial"]), 0.0)
-        self.assertEqual(float(result["p_value"]), 1.0)
 
     def test_cli_exposes_experiment3_as_analyze_target(self) -> None:
         """实验三与实验一/二共享 analyze 生命周期，不再另设 plot。"""

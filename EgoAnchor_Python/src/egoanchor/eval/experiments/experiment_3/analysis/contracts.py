@@ -245,16 +245,10 @@ class Exp3Data:
 
 @dataclass(frozen=True, slots=True)
 class ScoreData:
-    """保存原始评分派生出的区块、方法与参与者配对长表。"""
+    """保存结果统计和 Figure 4 真正消费的派生长表。"""
 
     block_scores: pd.DataFrame
     """有效区块的原始条目与 AQ 子量表分。"""
-
-    method_scores: pd.DataFrame
-    """方法级 TiA 换向条目、分量表与 S-TIAS 分。"""
-
-    aggregate_scores: pd.DataFrame
-    """每位参与者每种方法在三物体上的冻结汇总分。"""
 
     paired_scores: pd.DataFrame
     """每位参与者各结局的 EgoAnchor、One-Euro 与配对差。"""
@@ -269,29 +263,23 @@ MAIN_FAMILY: Final = "Main_Confirmatory"
 SCALE_FAMILY: Final = "Published_Scale"
 """已发表量表家族在结果表 ``Family`` 列中的稳定取值。"""
 
-EXPLORATORY_FAMILY: Final = "Exploratory"
-"""探索性条目在结果表 ``Family`` 列中的稳定取值。"""
-
-
 @dataclass(frozen=True, slots=True)
 class AnalysisTables:
-    """保存结果工作簿和绘图所需的全部确定性分析表。
+    """保存结果工作簿和论文图所需的六类确定性分析表。
 
-    每张表只出现一次，不保留任何重排或裁剪后的副本：结果工作簿直接落盘这些表，
-    论文图表也只从同一批表取数，避免同一数字在多张工作表里重复呈现。
+    逐参与者审计、开放题编码工作区和派生评分长表不属于论文结果，因此不进入本契约。
+    前两者分别留在样本汇总的内部计算过程和独立的人工定性编码流程中；派生评分则由
+    ``ScoreData`` 持有，避免在结果工作簿中重复堆放同一数字。
     """
 
     sample: pd.DataFrame
     """样本流程、人口学、经验、安全描述与 24 平衡单元的设计平衡。"""
 
-    participant_audit: pd.DataFrame
-    """去除自由文本后的逐参与者流程、完整性、时长与安全审计。"""
-
     results: pd.DataFrame
-    """三个家族（主证实、已发表量表、探索性）的配对推断结果纵向合并表。"""
+    """主证实与已发表量表两个冻结家族共十二项配对推断结果。"""
 
     objects: pd.DataFrame
-    """区块结局按对象拆分的配对结果，含面板内 Holm 的探索性显著性。"""
+    """七个主条目按三个对象拆分的描述统计，不包含任何逐对象推断。"""
 
     reliability: pd.DataFrame
     """五个已发表量表按方法计算的当前样本信度。"""
@@ -302,10 +290,6 @@ class AnalysisTables:
     choices: pd.DataFrame
     """最终偏好、信任选择、强度、区分信心摘要与偏好×信任交叉表。"""
 
-    open_coding: pd.DataFrame
-    """两道开放题的双编码与裁决工作区。"""
-
-
 __all__ = [
     "BLOCK_ITEMS",
     "BLOCK_RECORD_COLUMNS",
@@ -313,7 +297,6 @@ __all__ = [
     "AnalysisTables",
     "EGOANCHOR",
     "EXCLUSION_REASONS",
-    "EXPLORATORY_FAMILY",
     "Exp3Data",
     "MAIN_FAMILY",
     "METHODS",

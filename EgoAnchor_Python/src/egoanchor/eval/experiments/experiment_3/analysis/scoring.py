@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 import numpy as np
 import pandas as pd
 
@@ -40,8 +38,6 @@ def derive_scores(data: Exp3Data, settings: AnalysisSettings) -> ScoreData:
     reliability_items = _reliability_items(block_scores, method_scores, settings)
     return ScoreData(
         block_scores=block_scores,
-        method_scores=method_scores,
-        aggregate_scores=aggregate_scores,
         paired_scores=paired_scores,
         reliability_items=reliability_items,
     )
@@ -238,4 +234,3 @@ def _outcome_column(outcome: str) -> str:
 
 
 __all__ = ["derive_scores"]
-

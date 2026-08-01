@@ -100,7 +100,6 @@ class EvalBoundaryTests(unittest.TestCase):
                 "reader.py",
             },
             "experiment_3": {
-                "clmm.py",
                 "contracts.py",
                 "figures.py",
                 "inference.py",

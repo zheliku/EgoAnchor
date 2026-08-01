@@ -11,34 +11,67 @@ import pandas as pd
 from .contracts import MAIN_FAMILY, OUTCOME_LABELS, SCALE_FAMILY
 
 
-def write_subjective_table(destination: Path, results: pd.DataFrame) -> Path:
+_OUTCOME_LABELS_ZH = {
+    "Q1": "静止稳定",
+    "Q8": "位置正确",
+    "Q2": "运动附着",
+    "Q9": "姿态一致",
+    "Q3": "恢复一致",
+    "Q6": "依赖意愿",
+    "Q7": "稳定--响应平衡",
+    "AQ_EQ": "AQ 嵌入质量",
+    "AQ_IQ": "AQ 交互质量",
+    "TIA_RC": "TiA 可靠性/能力",
+    "TIA_UP": "TiA 理解/可预测性",
+    "STIAS": "S-TIAS",
+}
+"""中文工作稿中十二项冻结结局的紧凑显示名。"""
+
+
+def write_subjective_table(
+    destination: Path,
+    results: pd.DataFrame,
+    *,
+    paper_eligible: bool,
+) -> Path:
     """从唯一结果表按家族筛选，写入紧凑的论文主观评价表。"""
 
     output = destination.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "% 由 pixi run eval analyze exp3 自动生成；请勿手工修改。",
-        r"\begin{table}[t]",
+        (
+            "% SYNTHETIC REHEARSAL — NOT PAPER EVIDENCE."
+            if not paper_eligible
+            else "% 来源已通过论文资源门禁。"
+        ),
+        r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验三的参与者内主观评价结果。每位参与者先在三个物体上取均值；差值方向为 EgoAnchor$-$One-Euro。}",
+        (
+            r"\caption{\textbf{流程演练，禁止作为论文证据。} 实验三的参与者内主观评价结果。"
+            if not paper_eligible
+            else r"\caption{实验三的参与者内主观评价结果。"
+        )
+        + r"每位参与者先在三个物体上取均值；差值方向为 EgoAnchor$-$One-Euro。"
+        + r"$p$ 值来自含并列中秩的双侧条件精确 Wilcoxon 符号置换，并在各冻结家族内作 Holm 校正。}",
         r"\label{tab:exp3-subjective}",
         r"\small",
-        r"\setlength{\tabcolsep}{3.2pt}",
-        r"\begin{tabular}{lcccc}",
+        r"\setlength{\tabcolsep}{2.5pt}",
+        r"\begin{tabular}{lcccccc}",
         r"\toprule",
-        r"结局 & One-Euro Mdn [IQR] & EgoAnchor Mdn [IQR] & $p_{\mathrm{Holm}}$ & $r_{rb}$ \\",
+        r"结局 & One-Euro Mdn [IQR] & EgoAnchor Mdn [IQR] & $\Delta$ Mdn [IQR] & $W$ & $p_{\mathrm{Holm}}$ & $r_{rb}$ [95\% CI] \\",
         r"\midrule",
-        r"\multicolumn{5}{l}{\emph{主证实家族}} \\",
+        r"\multicolumn{7}{l}{\emph{主证实家族}} \\",
     ]
     lines.extend(_result_rows(results[results["Family"] == MAIN_FAMILY]))
     lines.extend(
         [
             r"\midrule",
-            r"\multicolumn{5}{l}{\emph{已发表量表家族}} \\",
+            r"\multicolumn{7}{l}{\emph{已发表量表家族}} \\",
         ]
     )
     lines.extend(_result_rows(results[results["Family"] == SCALE_FAMILY]))
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""])
     output.write_text("\n".join(lines), encoding="utf-8")
     return output
 
@@ -49,13 +82,29 @@ def _result_rows(frame: pd.DataFrame) -> list[str]:
     rows: list[str] = []
     for _, row in frame.iterrows():
         outcome = str(row["Outcome"])
-        label = _escape_tex(OUTCOME_LABELS.get(outcome, outcome))
+        label = _escape_tex(_OUTCOME_LABELS_ZH.get(outcome, OUTCOME_LABELS.get(outcome, outcome)))
         one_euro = _median_iqr(row, "OneEuro")
         egoanchor = _median_iqr(row, "EgoAnchor")
+        difference = _median_iqr(row, "Difference")
+        statistic = _format_number(row.get("W"), 1)
         p_value = _format_p(row.get("p_Holm"))
-        effect = _format_number(row.get("r_rb"), 2)
-        rows.append(f"{label} & {one_euro} & {egoanchor} & {p_value} & {effect}" + r" \\")
+        effect = _format_effect(row)
+        rows.append(
+            f"{label} & {one_euro} & {egoanchor} & {difference} & {statistic} & "
+            f"{p_value} & {effect}" + r" \\"
+        )
     return rows
+
+
+def _format_effect(row: pd.Series) -> str:
+    """格式化匹配秩双列相关，并避免把边界退化区间伪报为置信区间。"""
+
+    effect = _format_number(row.get("r_rb"), 2)
+    if row.get("r_rb_CI_Status") == "degenerate_at_bound":
+        return f"{effect}（全同向）"
+    low = _format_number(row.get("r_rb_CI_Low"), 2)
+    high = _format_number(row.get("r_rb_CI_High"), 2)
+    return f"{effect} [{low}, {high}]"
 
 
 def _median_iqr(row: pd.Series, prefix: str) -> str:

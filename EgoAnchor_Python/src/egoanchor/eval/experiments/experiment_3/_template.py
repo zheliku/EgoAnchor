@@ -49,7 +49,6 @@ def build_raw_template(
     destination: Path,
     *,
     source_template: Path,
-    overwrite: bool = False,
 ) -> Path:
     """复制美化来源，清空采集值并加入实时公式分析区。"""
 
@@ -59,7 +58,7 @@ def build_raw_template(
         raise FileNotFoundError(f"原始美化模板不存在：{source}")
     if output == source.resolve():
         raise ValueError("新原始模板不得覆盖美化来源文件")
-    if output.exists() and not overwrite:
+    if output.exists():
         raise FileExistsError(f"拒绝覆盖已有实验三原始工作簿：{output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.stem}.{uuid4().hex}.tmp.xlsx")
