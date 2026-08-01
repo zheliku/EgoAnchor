@@ -62,7 +62,27 @@ def paired_result(
         "r_rb": float(rank["rank_biserial"]),
         "r_rb_CI_Low": ci_low,
         "r_rb_CI_High": ci_high,
+        "r_rb_CI_Status": _interval_status(float(rank["rank_biserial"]), ci_low, ci_high),
     }
+
+
+def _interval_status(effect: float, low: float, high: float) -> str:
+    """标注匹配秩双列相关自举区间的可解释性。
+
+    当全部非零配对差同号时 ``r_rb`` 恰好取到 ±1 的边界，任何配对重采样都只能得到同一个
+    值，百分位区间必然退化为零宽度。这不是估计精度极高，而是有界统计量在边界上不可用；
+    论文必须按"方向完全一致"叙述，不得把 ``[1.00, 1.00]`` 当作置信区间报告。
+    """
+
+    if not math.isfinite(effect):
+        return "not_estimable"
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return "not_estimable"
+    if high - low <= 0.0:
+        return "degenerate_at_bound"
+    if abs(effect) >= 1.0:
+        return "point_at_bound"
+    return "usable"
 
 
 def signed_rank_test(differences: Sequence[float]) -> dict[str, float | int]:
@@ -164,20 +184,30 @@ def reliability_results(items: pd.DataFrame, settings: AnalysisSettings) -> pd.D
             alpha = cronbach_alpha(values)
             omega = omega_total(values)
             spearman_brown = _spearman_brown(values) if values.shape[1] == 2 else math.nan
+            levels = frozenset(subset["Level"].astype(str)) if "Level" in subset else frozenset()
+            unit = "block_mean" if levels == {"block_mean"} else (
+                "method_single" if levels == {"method_single"} else "mixed"
+            )
+            notes = [
+                "条目分为三物体均值，因此是分析单位（三物体均值合成分）的信度，"
+                "系统性高于单次施测的条目级 alpha，不可与原量表发表值直接比较"
+                if unit == "block_mean"
+                else "条目为每种方法单次施测，是常规条目级内部一致性"
+            ]
+            if values.shape[1] == 2:
+                notes.append("缩减版两条目量表：omega 不可稳定识别，报告 alpha 与 Spearman-Brown")
+            notes.append("当前样本信度；不作量表验证声明")
             rows.append(
                 {
                     "Outcome": scale,
                     "Condition": method,
+                    "Measurement_Unit": unit,
                     "N": int(values.shape[0]),
                     "Items": int(values.shape[1]),
                     "Cronbach_Alpha": alpha,
                     "Omega_Total": omega,
                     "Spearman_Brown": spearman_brown,
-                    "Note": (
-                        "缩减版两条目量表：omega 不可稳定识别，报告 alpha 与 Spearman-Brown"
-                        if values.shape[1] == 2
-                        else "当前样本信度；不作量表验证声明"
-                    ),
+                    "Note": "；".join(notes),
                 }
             )
     return pd.DataFrame(rows)
@@ -295,6 +325,7 @@ def empty_paired_result() -> dict[str, Any]:
         "r_rb": math.nan,
         "r_rb_CI_Low": math.nan,
         "r_rb_CI_High": math.nan,
+        "r_rb_CI_Status": "not_estimable",
     }
 
 

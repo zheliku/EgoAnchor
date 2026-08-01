@@ -83,11 +83,7 @@ def build_analysis(
         paper_config_path=paper_config_path,
         validation=validation,
     )
-    tex_path = write_subjective_table(
-        root / "tex" / "exp3_subjective.tex",
-        tables.primary,
-        tables.scales,
-    )
+    tex_path = write_subjective_table(root / "tex" / "exp3_subjective.tex", tables.results)
     _report_progress(progress, "从结果工作簿生成论文图")
     figures = publish_figures(results_path, root, settings)
     details = {

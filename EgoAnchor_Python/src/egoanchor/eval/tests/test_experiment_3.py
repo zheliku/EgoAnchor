@@ -9,16 +9,21 @@ from datetime import time
 from pathlib import Path
 from shutil import copyfile
 
+import pandas as pd
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.experiments.experiment_3 import build_raw_template, load_settings
 from egoanchor.eval.experiments.experiment_3.analysis import (
+    EXPLORATORY_FAMILY,
+    MAIN_FAMILY,
+    SCALE_FAMILY,
     analyze_scores,
     derive_scores,
     publish_figures,
     read_workbook,
     signed_rank_test,
+    read_significance,
     validate_for_analysis,
     write_results_workbook,
 )
@@ -193,18 +198,18 @@ class Experiment3Tests(unittest.TestCase):
         )
         scores = derive_scores(data, settings)
         tables = analyze_scores(data, scores, settings)
-        primary = tables.primary.set_index("Outcome")
-        scales = tables.scales.set_index("Outcome")
-        participant_summary = tables.participant_summary
-        included_row = participant_summary[
-            (participant_summary["Section"] == "Sample_Flow")
-            & (participant_summary["Variable"] == "Included")
+        primary = tables.results[tables.results["Family"] == MAIN_FAMILY].set_index("Outcome")
+        scales = tables.results[tables.results["Family"] == SCALE_FAMILY].set_index("Outcome")
+        sample = tables.sample
+        included_row = sample[
+            (sample["Section"] == "Sample_Flow") & (sample["Variable"] == "Included")
         ].iloc[0]
-        age_row = participant_summary[participant_summary["Variable"] == "Age"].iloc[0]
+        age_row = sample[sample["Variable"] == "Age"].iloc[0]
+        balance = sample[sample["Section"] == "Design_Balance"]
         self.assertEqual(validation["included_count"], 24)
         self.assertEqual(int(included_row["N"]), 24)
         self.assertEqual(int(age_row["Missing_N"]), 24)
-        self.assertTrue((tables.participant_balance["Status"] == "balanced").all())
+        self.assertTrue((balance["Status"] == "balanced").all())
         self.assertEqual(len(tables.participant_audit), 24)
         self.assertEqual(int(primary.loc["Q1", "N"]), 24)
         self.assertLess(float(primary.loc["Q1", "p_Holm"]), 0.01)
@@ -275,31 +280,71 @@ class Experiment3Tests(unittest.TestCase):
                 data=data,
                 scores=scores,
                 tables=tables,
-                clmm_coefficients=tables.primary.iloc[0:0],
-                clmm_contrasts=tables.primary.iloc[0:0],
-            settings=settings,
-            settings_sha256="0" * 64,
-            batch_config_path=root / "batch.toml",
-            paper_config_path=root / "paper.toml",
-            validation=validation,
-        )
+                clmm_coefficients=tables.results.iloc[0:0],
+                clmm_contrasts=tables.results.iloc[0:0],
+                settings=settings,
+                settings_sha256="0" * 64,
+                batch_config_path=root / "batch.toml",
+                paper_config_path=root / "paper.toml",
+                validation=validation,
+            )
             figures = publish_figures(results, root, settings)
             workbook = load_workbook(results, read_only=True, data_only=True)
             try:
-                self.assertIn("Participant_Summary", workbook.sheetnames)
-                self.assertIn("Participant_Balance", workbook.sheetnames)
-                self.assertIn("Participant_Audit", workbook.sheetnames)
+                self.assertEqual(
+                    workbook.sheetnames,
+                    [
+                        "README", "Sample", "Participant_Audit", "Results",
+                        "Results_By_Object", "Reliability", "Model_CLMM", "Manipulation",
+                        "Choices", "Open_Coding", "Scores_Block", "Scores_Method",
+                        "Scores_Paired",
+                    ],
+                )
                 self.assertEqual(workbook["Participant_Audit"].max_row, 25)
-                summary = workbook["Participant_Summary"]
-                headers = [summary.cell(1, column).value for column in range(1, summary.max_column + 1)]
+                sample = workbook["Sample"]
+                headers = [sample.cell(1, column).value for column in range(1, sample.max_column + 1)]
                 proportion_column = headers.index("Proportion") + 1
-                self.assertEqual(summary.cell(2, proportion_column).number_format, "0.0%")
+                self.assertEqual(sample.cell(2, proportion_column).number_format, "0.0%")
+                objects = workbook["Results_By_Object"]
+                object_headers = [
+                    objects.cell(1, column).value for column in range(1, objects.max_column + 1)
+                ]
+                self.assertIn("p_Holm_Panel", object_headers)
             finally:
                 workbook.close()
             self.assertGreater(results.stat().st_size, 50_000)
             self.assertEqual(set(figures), {"paired_png", "paired_pdf", "scales_png", "scales_pdf"})
             for path in figures.values():
                 self.assertGreater(path.stat().st_size, 10_000)
+            self._assert_significance_survives_round_trip(results, settings)
+
+    def _assert_significance_survives_round_trip(
+        self,
+        results: Path,
+        settings: object,
+    ) -> None:
+        """回读结果工作簿，核对显著性判定不因 XLSX 往返而失真。
+
+        探索性家族留空会把 ``Significant`` 整列变成 float64，真值回读为 ``1.0``；森林图必须
+        仍按家族内 Holm 结论决定实心点，否则会静默画成全空心。
+        """
+
+        frame = pd.read_excel(results, sheet_name="Results", engine="openpyxl")
+        confirmatory = frame[frame["Family"].isin((MAIN_FAMILY, SCALE_FAMILY))]
+        exploratory = frame[frame["Family"] == EXPLORATORY_FAMILY]
+        self.assertTrue(exploratory["Significant"].isna().all())
+        self.assertTrue(exploratory["p_Holm"].isna().all())
+        for _, row in confirmatory.iterrows():
+            expected = float(row["p_Holm"]) < float(settings.alpha)  # type: ignore[attr-defined]
+            self.assertEqual(read_significance(row["Significant"]), expected, msg=str(row["Outcome"]))
+        self.assertGreater(int(confirmatory["Significant"].sum()), 0)
+        statuses = set(frame["r_rb_CI_Status"].astype(str))
+        self.assertTrue(
+            statuses.issubset(
+                {"usable", "point_at_bound", "degenerate_at_bound", "not_estimable"}
+            ),
+            msg=str(sorted(statuses)),
+        )
 
     def test_formal_participant_summary_reports_demographics_duration_and_balance(self) -> None:
         """正式分析严格校验背景字段，并以纳入 N 为分母汇总。"""
@@ -357,7 +402,7 @@ class Experiment3Tests(unittest.TestCase):
             )
             scores = derive_scores(data, settings)
             tables = analyze_scores(data, scores, settings)
-            summary = tables.participant_summary
+            summary = tables.sample
             age = summary[summary["Variable"] == "Age"].iloc[0]
             duration = summary[summary["Variable"] == "Session_Duration_Minutes"].iloc[0]
             women = summary[
@@ -374,7 +419,9 @@ class Experiment3Tests(unittest.TestCase):
             self.assertEqual(int(women["N"]), 12)
             self.assertAlmostEqual(float(women["Proportion"]), 0.5)
             self.assertEqual(int(worsened["N"]), 0)
-            self.assertTrue((tables.participant_balance["Status"] == "balanced").all())
+            self.assertTrue(
+                (summary[summary["Section"] == "Design_Balance"]["Status"] == "balanced").all()
+            )
 
             valid_source = Path(directory) / "formal_valid.xlsx"
             copyfile(source, valid_source)

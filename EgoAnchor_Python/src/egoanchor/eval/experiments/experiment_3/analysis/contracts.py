@@ -263,51 +263,47 @@ class ScoreData:
     """已发表量表信度计算使用的参与者级条目长表。"""
 
 
+MAIN_FAMILY: Final = "Main_Confirmatory"
+"""主证实家族在结果表 ``Family`` 列中的稳定取值。"""
+
+SCALE_FAMILY: Final = "Published_Scale"
+"""已发表量表家族在结果表 ``Family`` 列中的稳定取值。"""
+
+EXPLORATORY_FAMILY: Final = "Exploratory"
+"""探索性条目在结果表 ``Family`` 列中的稳定取值。"""
+
+
 @dataclass(frozen=True, slots=True)
 class AnalysisTables:
-    """保存结果工作簿和绘图所需的全部确定性分析表。"""
+    """保存结果工作簿和绘图所需的全部确定性分析表。
 
-    participant_summary: pd.DataFrame
-    """论文可直接汇报的样本流程、人口学、经验与安全描述。"""
+    每张表只出现一次，不保留任何重排或裁剪后的副本：结果工作簿直接落盘这些表，
+    论文图表也只从同一批表取数，避免同一数字在多张工作表里重复呈现。
+    """
 
-    participant_balance: pd.DataFrame
-    """24 平衡单元的物体顺序、标签映射与先行方法实际人数。"""
+    sample: pd.DataFrame
+    """样本流程、人口学、经验、安全描述与 24 平衡单元的设计平衡。"""
 
     participant_audit: pd.DataFrame
     """去除自由文本后的逐参与者流程、完整性、时长与安全审计。"""
 
-    primary: pd.DataFrame
-    """主证实家族的描述统计、Wilcoxon、Holm 与效应量。"""
+    results: pd.DataFrame
+    """三个家族（主证实、已发表量表、探索性）的配对推断结果纵向合并表。"""
 
-    scales: pd.DataFrame
-    """已发表量表家族的推断结果与方法级信度摘要。"""
-
-    secondary: pd.DataFrame
-    """Q10 和非主家族区块条目的探索性结果。"""
+    objects: pd.DataFrame
+    """区块结局按对象拆分的配对结果，含面板内 Holm 的探索性显著性。"""
 
     reliability: pd.DataFrame
     """五个已发表量表按方法计算的当前样本信度。"""
-
-    objects: pd.DataFrame
-    """区块结局按对象拆分的配对描述统计。"""
 
     manipulation: pd.DataFrame
     """候选、VCD、输出与生命周期操纵检验。"""
 
     choices: pd.DataFrame
-    """最终偏好、信任选择、强度和区分信心摘要。"""
-
-    choice_cross: pd.DataFrame
-    """总体偏好与信任选择的完整三乘三交叉表。"""
+    """最终偏好、信任选择、强度、区分信心摘要与偏好×信任交叉表。"""
 
     open_coding: pd.DataFrame
     """两道开放题的双编码与裁决工作区。"""
-
-    plot_paired: pd.DataFrame
-    """四项论文主图结局的参与者级逐物体配对长表。"""
-
-    plot_scales: pd.DataFrame
-    """Q6/Q7 与五项已发表量表的参与者汇总长表。"""
 
 
 __all__ = [
@@ -317,7 +313,9 @@ __all__ = [
     "AnalysisTables",
     "EGOANCHOR",
     "EXCLUSION_REASONS",
+    "EXPLORATORY_FAMILY",
     "Exp3Data",
+    "MAIN_FAMILY",
     "METHODS",
     "METHOD_ITEM_COLUMNS",
     "METHOD_LABELS",
@@ -331,6 +329,7 @@ __all__ = [
     "PARTICIPANT_CATEGORIES",
     "PRIMARY_OUTCOMES",
     "REVERSED_TIA_ITEMS",
+    "SCALE_FAMILY",
     "SCALE_OUTCOMES",
     "ScoreData",
     "WORKBOOK_CONTRACT_ID",

@@ -1065,7 +1065,14 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
     staged_manifest = staged / BATCH_MANIFEST_NAME
     current_batch_id: str | None = None
     if active_manifest.is_file():
-        current_batch_id, _ = _load_batch_records(active, paths)
+        # 旧活动清单只用于归档命名，不再逐项复核它引用的任务缓存：
+        # 升级 schema 或旧缓存失效都不应阻塞一个已完整验证的新批次。
+        current_batch_id = active_batch_id(active)
+        if current_batch_id is None:
+            raise ValueError(
+                "活动批次 batch.json 读不出 batch_id；请先手工归档或删除该文件，禁止静默覆盖"
+            )
+        _require_batch_id(current_batch_id)
     if current_batch_id == resolved_batch_id:
         staged_manifest.replace(active_manifest)
         remove_tree_with_retry(staged)

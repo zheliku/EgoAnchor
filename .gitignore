@@ -14,3 +14,6 @@
 
 # Local/private patent workspace
 /EgoAnchor_Invention_Patent/
+
+# Office 临时锁文件（Excel/Word 打开文档时生成）
+~$*

@@ -185,6 +185,7 @@ def _reliability_items(
                             "Condition": str(condition),
                             "Scale": scale,
                             "Item": item,
+                            "Level": "block_mean",
                             "Value": float(values.mean()),
                         }
                     )
@@ -202,10 +203,14 @@ def _reliability_items(
                             "Condition": condition,
                             "Scale": scale,
                             "Item": item,
+                            "Level": "method_single",
                             "Value": float(value),
                         }
                     )
-    return pd.DataFrame(rows, columns=("Participant_ID", "Condition", "Scale", "Item", "Value"))
+    return pd.DataFrame(
+        rows,
+        columns=("Participant_ID", "Condition", "Scale", "Item", "Level", "Value"),
+    )
 
 
 def _aq_item_sets(settings: AnalysisSettings) -> dict[str, tuple[str, ...]]:

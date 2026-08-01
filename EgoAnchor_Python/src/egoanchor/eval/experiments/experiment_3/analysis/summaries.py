@@ -15,13 +15,17 @@ from .contracts import (
     AnalysisTables,
     BLOCK_ITEMS,
     EGOANCHOR,
+    EXPLORATORY_FAMILY,
     Exp3Data,
+    MAIN_FAMILY,
     METHODS,
     OBJECTS,
     ONE_EURO,
+    OUTCOME_LABELS,
     PARTICIPANT_BACKGROUND_COLUMNS,
     PARTICIPANT_CATEGORIES,
     PRIMARY_OUTCOMES,
+    SCALE_FAMILY,
     SCALE_OUTCOMES,
     ScoreData,
 )
@@ -68,49 +72,35 @@ def analyze_scores(
     scores: ScoreData,
     settings: AnalysisSettings,
 ) -> AnalysisTables:
-    """计算主分析、量表、描述性结果和绘图长表。"""
+    """计算样本描述、三家族推断、逐对象结果与最终问卷汇总。"""
 
-    participant_summary, participant_balance, participant_audit = _participant_results(
-        data,
-        settings=settings,
-    )
-    primary = _family_results(scores.paired_scores, PRIMARY_OUTCOMES, settings)
-    scales = _family_results(scores.paired_scores, SCALE_OUTCOMES, settings)
-    reliability = reliability_results(scores.reliability_items, settings)
-    scales = scales.merge(
-        _reliability_wide(reliability),
-        on="Outcome",
-        how="left",
-        validate="one_to_one",
-    )
+    sample, participant_audit = _participant_results(data, settings=settings)
     secondary_outcomes = list(_SECONDARY_ITEMS)
     if settings.q10_enabled:
         secondary_outcomes.insert(0, "Q10")
-    secondary_pairs = _pair_block_items(data, secondary_outcomes)
-    secondary = _family_results(secondary_pairs, secondary_outcomes, settings, holm=False)
-    objects = _object_results(scores.block_scores, settings)
-    manipulation = _manipulation_results(data, settings)
-    choices, choice_cross = _choice_results(data)
-    open_coding = _open_coding_table(data)
-    plot_paired = _plot_paired(scores.block_scores)
-    plot_scales = scores.aggregate_scores.loc[
-        scores.aggregate_scores["Outcome"].isin(("Q6", "Q7", *SCALE_OUTCOMES))
-    ].copy()
+    results = pd.concat(
+        (
+            _family_results(scores.paired_scores, PRIMARY_OUTCOMES, settings, family=MAIN_FAMILY),
+            _family_results(scores.paired_scores, SCALE_OUTCOMES, settings, family=SCALE_FAMILY),
+            _family_results(
+                _pair_block_items(data, secondary_outcomes),
+                secondary_outcomes,
+                settings,
+                family=EXPLORATORY_FAMILY,
+                holm=False,
+            ),
+        ),
+        ignore_index=True,
+    )
     return AnalysisTables(
-        participant_summary=participant_summary,
-        participant_balance=participant_balance,
+        sample=sample,
         participant_audit=participant_audit,
-        primary=primary,
-        scales=scales,
-        secondary=secondary,
-        reliability=reliability,
-        objects=objects,
-        manipulation=manipulation,
-        choices=choices,
-        choice_cross=choice_cross,
-        open_coding=open_coding,
-        plot_paired=plot_paired,
-        plot_scales=plot_scales,
+        results=results,
+        objects=_object_results(scores.block_scores, settings),
+        reliability=reliability_results(scores.reliability_items, settings),
+        manipulation=_manipulation_results(data, settings),
+        choices=_choice_results(data),
+        open_coding=_open_coding_table(data),
     )
 
 
@@ -118,8 +108,8 @@ def _participant_results(
     data: Exp3Data,
     *,
     settings: AnalysisSettings,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """生成样本流程、论文描述、平衡性和逐人审计表。"""
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """生成合并了设计平衡的样本描述表和逐人审计表。"""
 
     audit = _participant_audit(data)
     included = audit[audit["Included"]]
@@ -211,12 +201,13 @@ def _participant_results(
     for reason, count in reasons.value_counts(dropna=False, sort=False).items():
         add_count("Exclusion", "Exclusion_Reason", str(reason), int(count), len(excluded), "main_text")
 
-    summary = pd.DataFrame(summary_rows)
-    balance = _participant_balance(
-        data.participants,
-        target_participants=settings.target_participants,
+    summary_rows.extend(
+        _design_balance_rows(
+            data.participants,
+            target_participants=settings.target_participants,
+        )
     )
-    return summary, balance, audit
+    return pd.DataFrame(summary_rows), audit
 
 
 def _participant_audit(data: Exp3Data) -> pd.DataFrame:
@@ -327,8 +318,12 @@ def _append_continuous_summary(
     )
 
 
-def _participant_balance(participants: pd.DataFrame, *, target_participants: int) -> pd.DataFrame:
-    """按冻结设计因子报告实际人数与平衡偏差。"""
+def _design_balance_rows(
+    participants: pd.DataFrame,
+    *,
+    target_participants: int,
+) -> list[dict[str, Any]]:
+    """按冻结设计因子生成实际人数与平衡偏差行，并入样本描述表。"""
 
     factors = {
         "Balance_Unit": "平衡单元",
@@ -355,16 +350,20 @@ def _participant_balance(participants: pd.DataFrame, *, target_participants: int
                 status = "review"
             rows.append(
                 {
-                    "Factor": factor,
-                    "Level": level,
+                    "Section": "Design_Balance",
+                    "Variable": factor,
+                    "Category": level,
                     "N": count,
+                    "Denominator": included_count,
+                    "Proportion": count / included_count if included_count else math.nan,
                     "Expected_At_Target": expected_target,
                     "Expected_At_Actual_N": expected_actual,
                     "Deviation_From_Actual_Balance": deviation,
                     "Status": status,
+                    "Paper_Role": "audit",
                 }
             )
-    return pd.DataFrame(rows)
+    return rows
 
 
 def _final_complete(row: pd.Series) -> bool:
@@ -501,9 +500,10 @@ def _family_results(
     outcomes: Iterable[str],
     settings: AnalysisSettings,
     *,
+    family: str,
     holm: bool = True,
 ) -> pd.DataFrame:
-    """按冻结顺序计算一组配对结局，并可选执行 Holm。"""
+    """按冻结顺序计算一个家族的配对结局，并在家族内可选执行 Holm。"""
 
     rows: list[dict[str, Any]] = []
     for outcome in outcomes:
@@ -515,13 +515,22 @@ def _family_results(
             bootstrap_seed=_outcome_seed(settings.bootstrap_seed, outcome),
             confidence_level=settings.confidence_level,
         )
-        rows.append({"Outcome": outcome, **result})
+        rows.append(
+            {
+                "Family": family,
+                "Outcome": outcome,
+                "Label": OUTCOME_LABELS.get(outcome, outcome),
+                **result,
+            }
+        )
     frame = pd.DataFrame(rows)
     frame["p_Holm"] = holm_adjust(frame["p_raw"]) if holm else np.nan
-    frame["Significant"] = (
-        frame["p_Holm"].lt(settings.alpha)
+    # 只有做过家族内 Holm 的行才允许写显著性结论；探索性家族留空，避免未校正 p 被读成结论。
+    frame["Significant"] = frame["p_Holm"].lt(settings.alpha) if holm else np.nan
+    frame["Multiplicity"] = (
+        f"Holm within {family} (m={len(frame)})"
         if holm
-        else frame["p_raw"].lt(settings.alpha)
+        else "uncorrected exploratory; no significance verdict"
     )
     return frame
 
@@ -568,18 +577,20 @@ def _pair_block_items(data: Any, outcomes: Iterable[str]) -> pd.DataFrame:
 
 
 def _object_results(block_scores: pd.DataFrame, settings: AnalysisSettings) -> pd.DataFrame:
-    """按三个对象输出区块结局的配对描述统计。"""
+    """按三个对象输出区块结局的配对结果，并在每个结局内做 Holm 校正。
+
+    逐对象检验按权威计划属于探索性方向一致性检查：置信家族的确证检验只做在
+    三物体均值上，因此这里的 ``p_Holm_Panel`` 只在同一结局的三个对象之间校正，
+    仅用于论文图的面板内星号标注，不得替代 ``results`` 表的确证结论。
+    """
 
     outcomes = list(PRIMARY_OUTCOMES) + list(SCALE_OUTCOMES[:2])
     if settings.q10_enabled:
         outcomes.append("Q10")
-    rows: list[dict[str, Any]] = []
+    frames: list[pd.DataFrame] = []
     for outcome in outcomes:
-        column = (
-            outcome
-            if outcome.startswith("AQ_") and outcome in {"AQ_EQ", "AQ_IQ"}
-            else BLOCK_ITEMS[outcome]
-        )
+        column = outcome if outcome in {"AQ_EQ", "AQ_IQ"} else BLOCK_ITEMS[outcome]
+        rows: list[dict[str, Any]] = []
         for object_key in OBJECTS:
             subset = block_scores[block_scores["Object_Key"] == object_key]
             pivot = subset.pivot_table(
@@ -602,8 +613,23 @@ def _object_results(block_scores: pd.DataFrame, settings: AnalysisSettings) -> p
                     ),
                     confidence_level=settings.confidence_level,
                 )
-            rows.append({"Outcome": outcome, "Object_Key": object_key, **result})
-    return pd.DataFrame(rows)
+            rows.append(
+                {
+                    "Outcome": outcome,
+                    "Label": OUTCOME_LABELS.get(outcome, outcome),
+                    "Object_Key": object_key,
+                    **result,
+                }
+            )
+        panel = pd.DataFrame(rows)
+        panel["p_Holm_Panel"] = holm_adjust(panel["p_raw"])
+        panel["Significant_Exploratory"] = panel["p_Holm_Panel"].lt(settings.alpha)
+        panel["Multiplicity"] = (
+            f"exploratory; Holm within {outcome} across {len(OBJECTS)} objects; "
+            f"not corrected across the {len(outcomes)} outcomes shown here"
+        )
+        frames.append(panel)
+    return pd.concat(frames, ignore_index=True)
 
 
 def _manipulation_results(data: Any, settings: AnalysisSettings) -> pd.DataFrame:
@@ -710,8 +736,8 @@ def _manipulation_results(data: Any, settings: AnalysisSettings) -> pd.DataFrame
     return pd.DataFrame(rows)
 
 
-def _choice_results(data: Any) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """解码最终标签选择并计算描述统计与三乘三交叉表。"""
+def _choice_results(data: Any) -> pd.DataFrame:
+    """解码最终标签选择，并把描述统计与偏好×信任交叉表堆叠为一张表。"""
 
     included = included_participant_ids(data.participants)
     participants = data.participants.set_index("Participant_ID")
@@ -803,8 +829,18 @@ def _choice_results(data: Any) -> tuple[pd.DataFrame, pd.DataFrame]:
         frame["Trust_Choice"],
         dropna=False,
     ).reindex(index=choices, columns=choices, fill_value=0)
-    cross.index.name = "Method_Choice"
-    return pd.DataFrame(rows), cross.reset_index()
+    for method_choice in choices:
+        for trust_choice in choices:
+            count = int(cross.at[method_choice, trust_choice])
+            rows.append(
+                {
+                    "Measure": "Method_By_Trust",
+                    "Category": f"{method_choice} → {trust_choice}",
+                    "Count": count,
+                    "Proportion": count / len(frame) if len(frame) else math.nan,
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def _open_coding_table(data: Any) -> pd.DataFrame:
@@ -832,43 +868,6 @@ def _open_coding_table(data: Any) -> pd.DataFrame:
                 result[f"{theme}_Coder2"] = ""
                 result[f"{theme}_Final"] = ""
             rows.append(result)
-    return pd.DataFrame(rows)
-
-
-def _plot_paired(block_scores: pd.DataFrame) -> pd.DataFrame:
-    """生成冻结四面板使用的逐参与者逐物体长表。"""
-
-    rows: list[dict[str, Any]] = []
-    for outcome in ("Q1", "Q8", "Q3", "Q6"):
-        column = BLOCK_ITEMS[outcome]
-        for _, row in block_scores.iterrows():
-            value = pd.to_numeric(row[column], errors="coerce")
-            if pd.notna(value):
-                rows.append(
-                    {
-                        "Participant_ID": str(row["Participant_ID"]),
-                        "Outcome": outcome,
-                        "Object_Key": str(row["Object_Key"]),
-                        "Condition": str(row["Condition(保密)"]),
-                        "Value": float(value),
-                    }
-                )
-    return pd.DataFrame(rows)
-
-
-def _reliability_wide(reliability: pd.DataFrame) -> pd.DataFrame:
-    """把方法级信度长表展开为量表结果的一行式列。"""
-
-    rows: list[dict[str, Any]] = []
-    for outcome, group in reliability.groupby("Outcome", sort=False):
-        result: dict[str, Any] = {"Outcome": outcome}
-        for _, row in group.iterrows():
-            suffix = "EA" if row["Condition"] == EGOANCHOR else "OE"
-            result[f"Reliability_N_{suffix}"] = row["N"]
-            result[f"Alpha_{suffix}"] = row["Cronbach_Alpha"]
-            result[f"Omega_{suffix}"] = row["Omega_Total"]
-            result[f"SpearmanBrown_{suffix}"] = row["Spearman_Brown"]
-        rows.append(result)
     return pd.DataFrame(rows)
 
 

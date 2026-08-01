@@ -560,7 +560,8 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 约定：`Participants` 和 `Records` 是唯一人工原始值区域，不得含公式；TiA 原始反向项不得被换向分覆盖。输入区有冻结下拉或整数校验，
 公式只存在 `Derived`/`Analysis`；它们供 Excel 现场复算，正式 Python 分析从原始值独立重算且不读公式缓存。结果另写
-`data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx`，其中参与者数字分为 `Participant_Summary`、`Participant_Balance` 和 `Participant_Audit`。
+`data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx`，固定 13 张表并在 `README` 内置工作表索引：
+样本与平衡审计合并在 `Sample`，三个统计家族合并在 `Results` 并以 `Family` 列区分，逐人核查在 `Participant_Audit`。
 方法映射列仅实验员可见，参与者界面只显示 A/B。历史模板与合成演练数据不得用于正式采集或论文结果。
 
 ### 9.2 Unity / Python 工程状态

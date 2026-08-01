@@ -8,15 +8,11 @@ from typing import Any
 
 import pandas as pd
 
-from .contracts import OUTCOME_LABELS
+from .contracts import MAIN_FAMILY, OUTCOME_LABELS, SCALE_FAMILY
 
 
-def write_subjective_table(
-    destination: Path,
-    primary: pd.DataFrame,
-    scales: pd.DataFrame,
-) -> Path:
-    """写入主家族和已发表量表家族的紧凑论文表。"""
+def write_subjective_table(destination: Path, results: pd.DataFrame) -> Path:
+    """从唯一结果表按家族筛选，写入紧凑的论文主观评价表。"""
 
     output = destination.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -34,14 +30,14 @@ def write_subjective_table(
         r"\midrule",
         r"\multicolumn{5}{l}{\emph{主证实家族}} \\",
     ]
-    lines.extend(_result_rows(primary))
+    lines.extend(_result_rows(results[results["Family"] == MAIN_FAMILY]))
     lines.extend(
         [
             r"\midrule",
             r"\multicolumn{5}{l}{\emph{已发表量表家族}} \\",
         ]
     )
-    lines.extend(_result_rows(scales))
+    lines.extend(_result_rows(results[results["Family"] == SCALE_FAMILY]))
     lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
     output.write_text("\n".join(lines), encoding="utf-8")
     return output

@@ -34,6 +34,7 @@ from egoanchor.eval.experiments.experiment_1_2 import (
     plan_assets,
     validate_workflow,
 )
+from egoanchor.eval.experiments.experiment_1_2 import analysis
 from egoanchor.eval.experiments.experiment_1_2.analysis import settings_sha256
 
 from .test_reader_qc import _write_valid_task
@@ -350,6 +351,61 @@ class Experiment12WorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "缺少 batch.json"):
                 promote_batch(artifact.batch_id, root=root)
 
+    def test_promote_replaces_active_manifest_with_unsupported_task_schema(self) -> None:
+        """旧活动清单的任务缓存 schema 过期时，仍可提升已验证的新批次。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            _write_batch_sessions(root)
+            paths = load_batch_paths(root)
+            artifact = stage_batch(root=root)
+            shutil.copytree(artifact.root, paths.active_root)
+            _downgrade_task_cache_schema(paths.active_root / "batch.json")
+
+            result = promote_batch(artifact.batch_id, root=root)
+
+            self.assertEqual(result["active_batch"], artifact.batch_id)
+            self.assertIsNone(result["archived_root"])
+            document = json.loads((paths.active_root / "batch.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                {task["schema"] for task in document["tasks"]},
+                {"egoanchor_task_workbook_v2"},
+            )
+
+    def test_promote_archives_active_manifest_with_unsupported_task_schema(self) -> None:
+        """切换到不同组合时，过期 schema 的旧活动清单仍按自身 batch_id 归档。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            _write_batch_sessions(root)
+            paths = load_batch_paths(root)
+            first = stage_batch(root=root)
+            shutil.copytree(first.root, paths.active_root)
+            _downgrade_task_cache_schema(paths.active_root / "batch.json")
+            _write_task_data(root, 3, 2, "20260722_130003")
+            second = stage_batch(root=root)
+            self.assertNotEqual(second.batch_id, first.batch_id)
+
+            result = promote_batch(second.batch_id, root=root)
+
+            self.assertEqual(result["active_batch"], second.batch_id)
+            self.assertEqual(Path(result["archived_root"]).name, first.batch_id)
+            self.assertTrue((Path(result["archived_root"]) / "batch.json").is_file())
+
+    def test_promote_rejects_active_manifest_without_usable_batch_id(self) -> None:
+        """活动清单存在但读不出 batch_id 时必须显式失败，不得静默覆盖。"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _write_project(Path(tmp))
+            _write_batch_sessions(root)
+            paths = load_batch_paths(root)
+            artifact = stage_batch(root=root)
+            shutil.copytree(artifact.root, paths.active_root)
+            (paths.active_root / "batch.json").write_text("{ not json", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "读不出 batch_id"):
+                promote_batch(artifact.batch_id, root=root)
+
     def test_promote_keeps_active_manifest_when_replace_fails(self) -> None:
         """同一组合的清单替换失败时保留原活动清单和暂存清单。"""
 
@@ -534,9 +590,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 source.write_text(key, encoding="utf-8")
                 artifact_paths[key] = str(source.resolve())
             (table_root / "stale_table.tex").write_text("stale", encoding="utf-8")
-            implementation_root = (
-                Path(__file__).resolve().parents[1] / "experiments" / "experiment_1_2"
-            )
+            implementation_root = _analysis_implementation_root()
             building = begin_build(
                 active_root / "analysis",
                 owner="experiment_1_2",
@@ -634,9 +688,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 "exp1_dynamic_table": str(dynamic_table.resolve()),
                 "exp2_table": str(missing_table.resolve()),
             }
-            implementation_root = (
-                Path(__file__).resolve().parents[1] / "experiments" / "experiment_1_2"
-            )
+            implementation_root = _analysis_implementation_root()
             building = begin_build(
                 active_root / "analysis",
                 owner="experiment_1_2",
@@ -704,6 +756,21 @@ def _write_project(parent: Path) -> Path:
     (parent / "2026-EgoAnchor").mkdir()
     (root / "pixi.toml").write_text("[workspace]\nname='test'\n", encoding="utf-8")
     return root
+
+
+def _analysis_implementation_root() -> Path:
+    """返回 plan_assets 实际摘要的分析实现目录，避免测试与被测代码取不同根。"""
+
+    return Path(analysis.__file__).resolve().parent
+
+
+def _downgrade_task_cache_schema(manifest_path: Path) -> None:
+    """把清单内每条任务缓存记录改成已不受支持的旧 schema，用于模拟升级前的活动批次。"""
+
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for task in document["tasks"]:
+        task["schema"] = "egoanchor_task_workbook_v1"
+    manifest_path.write_text(json.dumps(document), encoding="utf-8")
 
 
 def _write_batch_sessions(
