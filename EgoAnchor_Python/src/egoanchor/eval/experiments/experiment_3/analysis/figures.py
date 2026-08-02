@@ -1,4 +1,4 @@
-"""直接从实验三内存分析结果生成论文 Figure 4。"""
+"""从实验三内存分析结果生成主条目与已发表量表箱线图。"""
 
 from __future__ import annotations
 
@@ -14,47 +14,66 @@ from egoanchor.visuals import EGOANCHOR_COLOR_HEX, ONE_EURO_COLOR_HEX
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.lines import Line2D  # noqa: E402
 
+from .artifacts import EXP3_ARTIFACTS
 from .contracts import (
     AnalysisTables,
-    BLOCK_ITEMS,
     EGOANCHOR,
     MAIN_FAMILY,
-    METHOD_LABELS,
-    OBJECTS,
-    OBJECT_LABELS,
     ONE_EURO,
+    PRIMARY_OUTCOMES,
+    SCALE_FAMILY,
+    SCALE_OUTCOMES,
     ScoreData,
 )
+from .inference import holm_adjust, signed_rank_test
 from .settings import AnalysisSettings
+from .source_gate import (
+    SourceGateStatus,
+    artifact_path,
+    require_source_gate_status,
+)
 
 
-_COLORS = {ONE_EURO: ONE_EURO_COLOR_HEX, EGOANCHOR: EGOANCHOR_COLOR_HEX}
-_METHOD_ORDER = (ONE_EURO, EGOANCHOR)
-_METHOD_MARKERS = {ONE_EURO: "o", EGOANCHOR: "s"}
-_METHOD_OFFSETS = {ONE_EURO: -0.18, EGOANCHOR: 0.18}
-"""两种方法固定使用颜色、形状和左右位置三重编码。"""
-
+_TEXT_COLOR = "#202428"
+_MUTED_COLOR = "#5D646B"
 _PAIR_COLOR = "#7F8790"
 _GRID_COLOR = "#D9DEE3"
-_TEXT_COLOR = "#202428"
-_MUTED_COLOR = "#4A5158"
-"""与实验一、二论文图一致的上下文线、网格和文字颜色。"""
+"""与实验一、二共用的正文文字、配对线和网格颜色。"""
 
-_PAIRED_OUTCOMES = ("Q1", "Q8", "Q3", "Q6")
-"""Figure 4 预先冻结的四项区块级结局。"""
-
-_PANEL_LABELS = {
-    "Q1": "Static stability",
-    "Q8": "Position correctness",
-    "Q3": "Recovery consistency",
-    "Q6": "Willingness to rely",
+_METHODS = (ONE_EURO, EGOANCHOR)
+_METHOD_LABELS = ("One-Euro\nAnchor", "EgoAnchor")
+_METHOD_COLORS = (ONE_EURO_COLOR_HEX, EGOANCHOR_COLOR_HEX)
+_METHOD_MARKERS = ("o", "s")
+_PRIMARY_LABELS = {
+    "Q1": "Static\nstability",
+    "Q8": "Position\ncorrectness",
+    "Q2": "Motion\nattachment",
+    "Q9": "Orientation\nconsistency",
+    "Q3": "Recovery\nconsistency",
+    "Q6": "Willingness\nto rely",
+    "Q7": "Stability-response\nbalance",
 }
-"""论文图四个面板使用的英文短标题。"""
+"""Figure 4 七个主条目的紧凑英文面板标题。"""
 
-_CONDITION_COLUMN = "Condition(保密)"
-"""派生区块分表中保存盲化方法 ID 的列。"""
+_SCALE_LABELS = {
+    "AQ_EQ": "AQ-EQ",
+    "AQ_IQ": "AQ-IQ",
+    "TIA_RC": "TiA R/C",
+    "TIA_UP": "TiA U/P",
+    "STIAS": "S-TIAS",
+}
+"""Figure 5 的紧凑量表缩写；完整名称由论文图注解释。"""
+
+_SCALE_RANGES = {
+    "AQ_EQ": (1, 7),
+    "AQ_IQ": (1, 7),
+    "TIA_RC": (1, 5),
+    "TIA_UP": (1, 5),
+    "STIAS": (1, 7),
+}
+"""各已发表量表的理论计分范围。"""
+
 
 def publish_figures(
     scores: ScoreData,
@@ -62,54 +81,80 @@ def publish_figures(
     output_root: Path,
     settings: AnalysisSettings,
     *,
-    paper_eligible: bool,
+    source_gate_status: SourceGateStatus,
 ) -> dict[str, Path]:
-    """从同一次分析的内存对象发布 Figure 4 的 PNG/PDF。
+    """发布主条目 Figure 4 和已发表量表 Figure 5。
 
-    绘图不回读结果工作簿，避免工作簿展示层重命名、四舍五入或删表影响论文图。
-    ``scores`` 提供逐参与者评分，``tables`` 提供家族内主检验。来源门禁未通过时，
-    图中会保留不可移除的流程演练警告，防止合成响应被误用为论文证据。
+    两张图都使用与主分析一致的参与者级得分：区块级结局先在三个物体上取
+    均值，TiA 与 S-TIAS 使用方法级单次施测得分。显著性括号只编码各冻结
+    家族内的 Holm 校正结果，不对三个物体分别检验或标星。未通过来源门禁
+    时不在画布上加水印，而是写入演练目录并把状态编码进文件名。
     """
 
-    _validate_figure_data(scores.block_scores, tables.results)
-    figure_root = output_root.expanduser().resolve() / "figures"
-    figure_root.mkdir(parents=True, exist_ok=True)
-    _configure(settings.figure_dpi)
-    figure = _paired_figure(
-        scores.block_scores,
-        tables.results,
-        figure_size=settings.paired_figure_size,
+    checked_status = require_source_gate_status(source_gate_status)
+    ordered = _validate_figure_data(scores.paired_scores, tables.results)
+    primary_png = artifact_path(
+        output_root,
+        EXP3_ARTIFACTS.figure4_png,
+        checked_status,
     )
-    if not paper_eligible:
-        _mark_rehearsal(figure)
-    paired_png, paired_pdf = _save_pair(
-        figure,
-        figure_root,
-        "figure4_exp3_paired",
+    primary_pdf = artifact_path(
+        output_root,
+        EXP3_ARTIFACTS.figure4_pdf,
+        checked_status,
+    )
+    _configure(settings.figure_dpi)
+
+    primary = _boxplot_grid(
+        scores.paired_scores,
+        ordered,
+        outcomes=PRIMARY_OUTCOMES,
+        labels=_PRIMARY_LABELS,
+        ranges={outcome: (1, 7) for outcome in PRIMARY_OUTCOMES},
+        columns=4,
+        figure_size=settings.primary_figure_size,
+        y_label="Agreement score",
+    )
+    primary_png, primary_pdf = _save_pair(
+        primary,
+        primary_png,
+        primary_pdf,
+    )
+    scale_png = artifact_path(
+        output_root,
+        EXP3_ARTIFACTS.figure5_png,
+        checked_status,
+    )
+    scale_pdf = artifact_path(
+        output_root,
+        EXP3_ARTIFACTS.figure5_pdf,
+        checked_status,
+    )
+    scales = _boxplot_grid(
+        scores.paired_scores,
+        ordered,
+        outcomes=SCALE_OUTCOMES,
+        labels=_SCALE_LABELS,
+        ranges=_SCALE_RANGES,
+        columns=5,
+        figure_size=settings.scale_figure_size,
+        y_label="Scale score",
+    )
+    scale_png, scale_pdf = _save_pair(
+        scales,
+        scale_png,
+        scale_pdf,
     )
     return {
-        "figure4_png": paired_png,
-        "figure4_pdf": paired_pdf,
+        EXP3_ARTIFACTS.figure4_png.key: primary_png,
+        EXP3_ARTIFACTS.figure4_pdf.key: primary_pdf,
+        EXP3_ARTIFACTS.figure5_png.key: scale_png,
+        EXP3_ARTIFACTS.figure5_pdf.key: scale_pdf,
     }
 
 
-def _mark_rehearsal(figure: Any) -> None:
-    """在未通过来源门禁的图片底部写入醒目但不遮挡数据的警告。"""
-
-    figure.text(
-        0.5,
-        0.018,
-        "SYNTHETIC REHEARSAL — NOT PAPER EVIDENCE",
-        ha="center",
-        va="bottom",
-        fontsize=7.2,
-        fontweight="bold",
-        color="#B42318",
-    )
-
-
 def _configure(dpi: int) -> None:
-    """应用与实验一、二一致且最终排版后不低于 7 pt 的样式。"""
+    """应用实验一、二的固定字体、线宽和矢量字体导出规则。"""
 
     plt.rcParams.update(
         {
@@ -117,15 +162,14 @@ def _configure(dpi: int) -> None:
             "font.size": 7.6,
             "axes.labelcolor": _TEXT_COLOR,
             "axes.labelsize": 7.6,
-            "axes.titlesize": 7.6,
-            "axes.titlepad": 5.0,
+            "axes.titlesize": 7.4,
+            "axes.titlepad": 4.0,
             "axes.linewidth": 0.9,
             "axes.edgecolor": "#70767C",
             "xtick.color": _TEXT_COLOR,
-            "xtick.labelsize": 7.2,
+            "xtick.labelsize": 7.0,
             "ytick.color": _TEXT_COLOR,
             "ytick.labelsize": 7.2,
-            "legend.fontsize": 7.0,
             "savefig.dpi": dpi,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
@@ -133,303 +177,379 @@ def _configure(dpi: int) -> None:
     )
 
 
-def _paired_figure(
-    blocks: pd.DataFrame,
+def _boxplot_grid(
+    paired_scores: pd.DataFrame,
     results: pd.DataFrame,
     *,
+    outcomes: tuple[str, ...],
+    labels: dict[str, str],
+    ranges: dict[str, tuple[int, int]],
+    columns: int,
     figure_size: tuple[float, float],
+    y_label: str,
 ) -> Any:
-    """绘制四项结局的逐参与者、逐对象配对评分与中位数/IQR。"""
+    """按参考论文版式生成一组紧凑的两方法箱线图。"""
 
-    figure, axes = plt.subplots(2, 2, figsize=figure_size, sharey=True)
-    confirmatory = (
-        results.loc[results["Family"] == MAIN_FAMILY]
-        .drop_duplicates(subset="Outcome", keep=False)
-        .set_index("Outcome")
+    rows = math.ceil(len(outcomes) / columns)
+    figure = plt.figure(figsize=figure_size)
+    axes = _panel_axes(
+        figure,
+        outcome_count=len(outcomes),
+        rows=rows,
+        columns=columns,
     )
-    for panel_index, (axis, outcome) in enumerate(
-        zip(axes.flat, _PAIRED_OUTCOMES, strict=True)
-    ):
-        _draw_outcome_panel(axis, blocks, BLOCK_ITEMS[outcome])
+    for index, outcome in enumerate(outcomes):
+        axis = axes[index]
+        subset = paired_scores.loc[
+            paired_scores["Outcome"].astype(str) == outcome
+        ].sort_values("Participant_ID")
+        values = tuple(
+            pd.to_numeric(subset[method], errors="coerce").to_numpy(dtype=float)
+            for method in _METHODS
+        )
+        _draw_box_panel(
+            axis,
+            values,
+            score_range=ranges[outcome],
+            p_holm=results.loc[outcome, "p_Holm"],
+        )
+        panel = chr(ord("a") + index)
         axis.set_title(
-            f"{chr(97 + panel_index)}) {_PANEL_LABELS[outcome]} ({outcome})",
+            f"({panel}) {labels[outcome]}",
             loc="left",
-            fontweight="bold",
+            y=1.045,
+            va="bottom",
+            fontsize=7.2,
+            fontweight="normal",
             color=_TEXT_COLOR,
+            linespacing=1.05,
         )
-        axis.set_title(
-            _confirmatory_label(confirmatory.loc[outcome]),
-            loc="right",
-            fontsize=7.0,
-            color=_MUTED_COLOR,
-        )
-        if panel_index % 2 == 0:
-            axis.set_ylabel("Agreement (1-7)")
-
-    figure.legend(
-        handles=_method_handles(),
-        loc="upper center",
-        ncol=2,
-        frameon=False,
-        bbox_to_anchor=(0.5, 0.995),
-        handlelength=1.4,
-        handletextpad=0.55,
-        columnspacing=1.8,
-    )
+        if index == 0 or (rows > 1 and index == columns):
+            axis.set_ylabel(y_label)
     figure.subplots_adjust(
-        left=0.064,
-        right=0.993,
-        bottom=0.085,
+        left=0.070,
+        right=0.985 if rows == 1 else 0.995,
+        bottom=0.145 if rows == 1 else 0.105,
         top=0.885,
-        wspace=0.12,
-        hspace=0.39,
+        wspace=0.42 if rows > 1 else 0.36,
+        hspace=0.62 if rows > 1 else 0.0,
     )
     return figure
 
 
-def _draw_outcome_panel(axis: Any, blocks: pd.DataFrame, column: str) -> None:
-    """在一个面板内按对象画出每位参与者的两方法完整配对。"""
+def _panel_axes(
+    figure: Any,
+    *,
+    outcome_count: int,
+    rows: int,
+    columns: int,
+) -> tuple[Any, ...]:
+    """创建规则面板；七项主结果的第二行使用半列偏移居中。"""
 
-    for object_index, object_key in enumerate(OBJECTS):
-        subset = blocks.loc[
-            blocks["Object_Key"].astype(str) == object_key,
-            ["Participant_ID", _CONDITION_COLUMN, column],
-        ]
-        pivot = subset.pivot(
-            index="Participant_ID",
-            columns=_CONDITION_COLUMN,
-            values=column,
+    if outcome_count == 7 and rows == 2 and columns == 4:
+        grid = figure.add_gridspec(2, 8)
+        positions = (
+            (0, slice(0, 2)),
+            (0, slice(2, 4)),
+            (0, slice(4, 6)),
+            (0, slice(6, 8)),
+            (1, slice(1, 3)),
+            (1, slice(3, 5)),
+            (1, slice(5, 7)),
         )
-        complete = pivot.dropna(subset=list(_METHOD_ORDER)).sort_index()
-        _draw_participant_pairs(axis, complete, float(object_index))
+        return tuple(
+            figure.add_subplot(grid[row, columns_])
+            for row, columns_ in positions
+        )
+    grid = figure.add_gridspec(rows, columns)
+    return tuple(
+        figure.add_subplot(grid[index // columns, index % columns])
+        for index in range(outcome_count)
+    )
 
-    axis.set_xlim(-0.52, len(OBJECTS) - 0.48)
-    axis.set_ylim(0.65, 7.35)
-    axis.set_yticks(range(1, 8))
-    axis.set_xticks(range(len(OBJECTS)), [OBJECT_LABELS[item] for item in OBJECTS])
+
+def _draw_box_panel(
+    axis: Any,
+    values: tuple[np.ndarray, np.ndarray],
+    *,
+    score_range: tuple[int, int],
+    p_holm: Any,
+) -> None:
+    """绘制一项结局的参与者级配对点、箱线图和 Holm 显著性括号。"""
+
+    if values[0].size == 0 or values[0].size != values[1].size:
+        raise ValueError("实验三箱线图缺少完整参与者配对")
+    count = values[0].size
+    offsets = np.zeros(1) if count == 1 else np.linspace(-0.065, 0.065, count)
+    for participant in range(count):
+        axis.plot(
+            [offsets[participant], 1.0 + offsets[participant]],
+            [values[0][participant], values[1][participant]],
+            color=_PAIR_COLOR,
+            linewidth=0.50,
+            alpha=0.12,
+            zorder=1,
+        )
+    for method_index, (method_values, color, marker) in enumerate(
+        zip(values, _METHOD_COLORS, _METHOD_MARKERS, strict=True)
+    ):
+        axis.scatter(
+            float(method_index) + offsets,
+            method_values,
+            s=7.0,
+            marker=marker,
+            facecolors="white" if method_index == 0 else color,
+            edgecolors=color,
+            linewidths=0.5,
+            alpha=0.50,
+            zorder=2,
+        )
+    boxplot = axis.boxplot(
+        values,
+        positions=(0.0, 1.0),
+        widths=0.42,
+        patch_artist=True,
+        showfliers=False,
+        whis=1.5,
+        boxprops={"linewidth": 1.0},
+        whiskerprops={"color": _MUTED_COLOR, "linewidth": 0.85},
+        capprops={"color": _MUTED_COLOR, "linewidth": 0.85},
+        medianprops={"linewidth": 1.35},
+        zorder=3,
+    )
+    for patch, color in zip(boxplot["boxes"], _METHOD_COLORS, strict=True):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.30)
+        patch.set_edgecolor(color)
+    for median in boxplot["medians"]:
+        median.set_color(_TEXT_COLOR)
+    lower, upper = score_range
+    headroom = 0.82 if upper == 7 else 0.72
+    axis.set_ylim(lower - 0.30, upper + headroom)
+    axis.set_yticks(range(lower, upper + 1))
+    axis.set_xticks((0.0, 1.0), _METHOD_LABELS)
+    axis.set_xlim(-0.42, 1.42)
+    _draw_significance(axis, p_holm, float(upper), headroom)
     _clean_axis(axis)
 
 
-def _draw_participant_pairs(
-    axis: Any,
-    pairs: pd.DataFrame,
-    center: float,
-) -> None:
-    """绘制一个对象的配对线、两方法端点以及中位数/IQR。
+def _draw_significance(axis: Any, p_holm: Any, scale_upper: float, headroom: float) -> None:
+    """仅为家族内 Holm 校正后显著的比较绘制括号和星号。"""
 
-    参与者按稳定 ID 排序后只在横轴上做极小、成对一致的展开；纵轴保持原始 Likert
-    评分不变。这样能降低完全重叠，同时不制造虚假的非整数评分。
-
-    """
-
-    if pairs.empty:
+    stars = _significance_label(p_holm)
+    if not stars:
         return
-    jitter = (
-        np.zeros(1, dtype=float)
-        if len(pairs) == 1
-        else np.linspace(-0.045, 0.045, len(pairs), dtype=float)
-    )
-    left = center + _METHOD_OFFSETS[ONE_EURO] + jitter
-    right = center + _METHOD_OFFSETS[EGOANCHOR] + jitter
-    one_euro = pairs[ONE_EURO].to_numpy(dtype=float)
-    egoanchor = pairs[EGOANCHOR].to_numpy(dtype=float)
-
-    for x_left, x_right, left_value, right_value in zip(
-        left,
-        right,
-        one_euro,
-        egoanchor,
-        strict=True,
-    ):
-        axis.plot(
-            [x_left, x_right],
-            [left_value, right_value],
-            color=_PAIR_COLOR,
-            linewidth=0.8,
-            alpha=0.35,
-            zorder=1,
-        )
-
-    axis.scatter(
-        left,
-        one_euro,
-        s=13.0,
-        marker=_METHOD_MARKERS[ONE_EURO],
-        facecolors="white",
-        edgecolors=_COLORS[ONE_EURO],
-        linewidths=0.75,
-        alpha=0.82,
-        zorder=2,
-    )
-    axis.scatter(
-        right,
-        egoanchor,
-        s=13.0,
-        marker=_METHOD_MARKERS[EGOANCHOR],
-        facecolors=_COLORS[EGOANCHOR],
-        edgecolors=_COLORS[EGOANCHOR],
-        linewidths=0.65,
-        alpha=0.72,
-        zorder=2,
-    )
-
-    for method, values in ((ONE_EURO, one_euro), (EGOANCHOR, egoanchor)):
-        _draw_summary(
-            axis,
-            values,
-            center + _METHOD_OFFSETS[method],
-            _COLORS[method],
-        )
-
-
-def _draw_summary(
-    axis: Any,
-    values: np.ndarray,
-    position: float,
-    color: str,
-) -> None:
-    """在参与者端点之上叠加该方法的中位数与四分位区间。"""
-
-    quartile_low, median, quartile_high = _quartiles(values)
+    bracket = scale_upper + headroom * 0.38
+    height = headroom * 0.16
     axis.plot(
-        [position, position],
-        [quartile_low, quartile_high],
-        color=color,
-        linewidth=4.2,
-        alpha=0.42,
-        solid_capstyle="round",
-        zorder=4,
-    )
-    axis.plot(
-        [position - 0.072, position + 0.072],
-        [median, median],
+        [0.0, 0.0, 1.0, 1.0],
+        [bracket, bracket + height, bracket + height, bracket],
         color=_TEXT_COLOR,
-        linewidth=1.6,
-        solid_capstyle="butt",
+        linewidth=0.9,
+        clip_on=False,
         zorder=5,
     )
-
-
-def _method_handles() -> list[Line2D]:
-    """返回含颜色、点形和填充冗余编码的统一图例句柄。"""
-
-    return [
-        Line2D(
-            [],
-            [],
-            linestyle="none",
-            marker=_METHOD_MARKERS[method],
-            markersize=4.7,
-            markerfacecolor="white" if method == ONE_EURO else _COLORS[method],
-            markeredgecolor=_COLORS[method],
-            markeredgewidth=0.85,
-            label=METHOD_LABELS[method],
-        )
-        for method in _METHOD_ORDER
-    ]
-
-
-def _quartiles(values: np.ndarray) -> tuple[float, float, float]:
-    """返回一组有限值的 Q1、中位数与 Q3。"""
-
-    finite = np.asarray(values, dtype=float)
-    finite = finite[np.isfinite(finite)]
-    if not len(finite):
-        return math.nan, math.nan, math.nan
-    quartile_low, median, quartile_high = np.percentile(
-        finite,
-        (25.0, 50.0, 75.0),
+    axis.text(
+        0.5,
+        bracket + height + headroom * 0.04,
+        stars,
+        ha="center",
+        va="bottom",
+        color=_TEXT_COLOR,
+        fontsize=7.4,
+        fontweight="bold",
+        clip_on=False,
     )
-    return float(quartile_low), float(median), float(quartile_high)
 
 
-def _clean_axis(axis: Any) -> None:
-    """应用浅点状水平网格并移除不必要的上、右边框。"""
+def _ordered_results(results: pd.DataFrame) -> pd.DataFrame:
+    """按冻结家族和顺序返回唯一十二项结果索引。"""
 
-    axis.set_axisbelow(True)
-    axis.grid(axis="y", color=_GRID_COLOR, linestyle=":", linewidth=0.75, alpha=0.35)
-    axis.spines["top"].set_visible(False)
-    axis.spines["right"].set_visible(False)
-    axis.tick_params(axis="both", length=2.5, width=0.75, pad=2.0)
-
-
-def _save_pair(figure: Any, root: Path, stem: str) -> tuple[Path, Path]:
-    """按固定画布同时保存 300 dpi PNG 与嵌入 TrueType 字体的 PDF。"""
-
-    png = root / f"{stem}.png"
-    pdf = root / f"{stem}.pdf"
-    figure.savefig(png, facecolor="white")
-    figure.savefig(
-        pdf,
-        facecolor="white",
-        metadata={"CreationDate": None, "ModDate": None},
-    )
-    plt.close(figure)
-    return png, pdf
-
-
-def _validate_figure_data(blocks: pd.DataFrame, results: pd.DataFrame) -> None:
-    """拒绝缺列、重复区块、缺方法、缺对象或缺主检验的内存输入。"""
-
-    block_columns = {
-        "Participant_ID",
-        _CONDITION_COLUMN,
-        "Object_Key",
-        *(BLOCK_ITEMS[outcome] for outcome in _PAIRED_OUTCOMES),
+    summary_columns = {
+        f"{prefix}_{statistic}"
+        for prefix in ("OneEuro", "EgoAnchor", "Difference")
+        for statistic in ("Q1", "Median", "Q3")
     }
-    _require_columns(blocks, block_columns, "ScoreData.block_scores")
     _require_columns(
         results,
-        {"Family", "Outcome", "p_Holm", "r_rb"},
+        {
+            "Family",
+            "Outcome",
+            "N",
+            "N_Nonzero",
+            "W",
+            "p_Holm",
+            *summary_columns,
+        },
         "AnalysisTables.results",
     )
-    identities = blocks.loc[:, ["Participant_ID", _CONDITION_COLUMN, "Object_Key"]]
+    expected = (*PRIMARY_OUTCOMES, *SCALE_OUTCOMES)
+    selected = results.loc[results["Family"].isin((MAIN_FAMILY, SCALE_FAMILY))].copy()
+    duplicates = selected.loc[selected["Outcome"].duplicated(keep=False), "Outcome"]
+    if not duplicates.empty:
+        raise ValueError(
+            "AnalysisTables.results 存在重复冻结结局："
+            f"{sorted(duplicates.astype(str).unique())}"
+        )
+    indexed = selected.set_index("Outcome")
+    if set(indexed.index.astype(str)) != set(expected):
+        missing = set(expected).difference(indexed.index.astype(str))
+        unexpected = set(indexed.index.astype(str)).difference(expected)
+        raise ValueError(
+            "AnalysisTables.results 必须恰好包含十二项冻结结局："
+            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
+        )
+    if not (indexed.loc[list(PRIMARY_OUTCOMES), "Family"] == MAIN_FAMILY).all():
+        raise ValueError("主条目的结果家族归属不正确")
+    if not (indexed.loc[list(SCALE_OUTCOMES), "Family"] == SCALE_FAMILY).all():
+        raise ValueError("已发表量表的结果家族归属不正确")
+    return indexed.loc[list(expected)]
+
+
+def _validate_figure_data(paired: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
+    """从配对分重算冻结推断，并核对结果表和箱线图的全部数字。"""
+
+    ordered = _ordered_results(results)
+    _require_columns(
+        paired,
+        {"Participant_ID", "Outcome", ONE_EURO, EGOANCHOR, "Difference"},
+        "ScoreData.paired_scores",
+    )
+    expected = (*PRIMARY_OUTCOMES, *SCALE_OUTCOMES)
+    selected = paired.loc[paired["Outcome"].astype(str).isin(expected)]
+    identities = selected.loc[:, ["Participant_ID", "Outcome"]]
     if identities.duplicated().any():
         duplicates = identities.loc[identities.duplicated(keep=False)].drop_duplicates()
         raise ValueError(
-            "ScoreData.block_scores 存在重复的参与者×方法×对象区块："
+            "ScoreData.paired_scores 存在重复参与者×结局："
             f"{duplicates.astype(str).to_dict('records')}"
         )
-    missing_methods = set(_METHOD_ORDER).difference(blocks[_CONDITION_COLUMN].astype(str))
-    if missing_methods:
-        raise ValueError(f"ScoreData.block_scores 缺少方法：{sorted(missing_methods)}")
-    missing_objects = set(OBJECTS).difference(blocks["Object_Key"].astype(str))
-    if missing_objects:
-        raise ValueError(f"ScoreData.block_scores 缺少对象：{sorted(missing_objects)}")
-
-    confirmatory = results.loc[results["Family"] == MAIN_FAMILY]
-    duplicated_outcomes = confirmatory.loc[
-        confirmatory["Outcome"].duplicated(keep=False),
-        "Outcome",
-    ]
-    if not duplicated_outcomes.empty:
-        raise ValueError(
-            "AnalysisTables.results 的主家族包含重复结局："
-            f"{sorted(duplicated_outcomes.astype(str).unique())}"
+    missing = set(expected).difference(selected["Outcome"].astype(str))
+    if missing:
+        raise ValueError(f"ScoreData.paired_scores 缺少冻结结局：{sorted(missing)}")
+    recomputed: dict[str, dict[str, float | int]] = {}
+    for outcome in expected:
+        subset = selected.loc[selected["Outcome"].astype(str) == outcome]
+        complete = subset.loc[:, [ONE_EURO, EGOANCHOR, "Difference"]].apply(
+            pd.to_numeric,
+            errors="coerce",
         )
-    missing_outcomes = set(_PAIRED_OUTCOMES).difference(confirmatory["Outcome"].astype(str))
-    if missing_outcomes:
-        raise ValueError(
-            "AnalysisTables.results 缺少 Figure 4 主检验："
-            f"{sorted(missing_outcomes)}"
+        if complete.empty or not np.isfinite(complete.to_numpy(dtype=float)).all():
+            raise ValueError(f"ScoreData.paired_scores 的 {outcome} 含非有限配对值")
+        one_euro = complete[ONE_EURO].to_numpy(dtype=float)
+        egoanchor = complete[EGOANCHOR].to_numpy(dtype=float)
+        difference = complete["Difference"].to_numpy(dtype=float)
+        if not np.allclose(
+            difference,
+            egoanchor - one_euro,
+            rtol=0.0,
+            atol=1.0e-12,
+        ):
+            raise ValueError(f"ScoreData.paired_scores 的 {outcome} 配对差不等于 EgoAnchor−One-Euro")
+        result_row = ordered.loc[outcome]
+        result_n = _finite_number(result_row["N"])
+        if (
+            not math.isfinite(result_n)
+            or result_n % 1 != 0
+            or int(result_n) != len(complete)
+        ):
+            raise ValueError(f"AnalysisTables.results 的 {outcome} N 与绘图配对人数不一致")
+        p_holm = _finite_number(result_row["p_Holm"])
+        if not math.isfinite(p_holm) or not 0.0 <= p_holm <= 1.0:
+            raise ValueError(f"AnalysisTables.results 的 {outcome} p_Holm 必须位于 [0,1]")
+        rank = signed_rank_test(difference)
+        recomputed[outcome] = {
+            "N_Nonzero": int(rank["n_nonzero"]),
+            "W": float(rank["w"]),
+            "p_raw": float(rank["p_value"]),
+        }
+        _validate_result_summaries(
+            outcome,
+            result_row,
+            one_euro,
+            egoanchor,
+            difference,
         )
+    for family in (PRIMARY_OUTCOMES, SCALE_OUTCOMES):
+        adjusted = holm_adjust(
+            [float(recomputed[outcome]["p_raw"]) for outcome in family]
+        )
+        for outcome, p_holm in zip(family, adjusted, strict=True):
+            recomputed[outcome]["p_Holm"] = float(p_holm)
 
-    for outcome in _PAIRED_OUTCOMES:
-        column = BLOCK_ITEMS[outcome]
-        for object_key in OBJECTS:
-            subset = blocks.loc[
-                blocks["Object_Key"].astype(str) == object_key,
-                ["Participant_ID", _CONDITION_COLUMN, column],
-            ]
-            pivot = subset.pivot(
-                index="Participant_ID",
-                columns=_CONDITION_COLUMN,
-                values=column,
+    validated = ordered.copy()
+    for outcome in expected:
+        _validate_recomputed_inference(
+            outcome,
+            ordered.loc[outcome],
+            recomputed[outcome],
+        )
+        for field in ("N_Nonzero", "W", "p_Holm"):
+            validated.at[outcome, field] = recomputed[outcome][field]
+    return validated
+
+
+def _validate_recomputed_inference(
+    outcome: str,
+    result: pd.Series,
+    recomputed: dict[str, float | int],
+) -> None:
+    """要求结果表的非零 N、W 和 Holm p 与当前配对分重算值一致。
+
+    ``p_raw`` 仅作为家族内 Holm 的内部输入，不在精简结果表中重复发布；因此
+    对其完整重算后，通过最终 ``p_Holm`` 与结果表闭环核对。
+    """
+
+    recorded_nonzero = _finite_number(result["N_Nonzero"])
+    expected_nonzero = int(recomputed["N_Nonzero"])
+    if (
+        not math.isfinite(recorded_nonzero)
+        or recorded_nonzero % 1 != 0
+        or int(recorded_nonzero) != expected_nonzero
+    ):
+        raise ValueError(
+            f"AnalysisTables.results 的 {outcome} N_Nonzero 与配对分重算结果不一致"
+        )
+    for field in ("W", "p_Holm"):
+        recorded = _finite_number(result[field])
+        expected = float(recomputed[field])
+        if not math.isclose(recorded, expected, rel_tol=0.0, abs_tol=1.0e-12):
+            raise ValueError(
+                f"AnalysisTables.results 的 {outcome} {field} 与配对分重算结果不一致"
             )
-            if not set(_METHOD_ORDER).issubset(pivot.columns):
-                raise ValueError(f"{outcome}/{object_key} 缺少两种方法的评分")
-            if pivot.dropna(subset=list(_METHOD_ORDER)).empty:
-                raise ValueError(f"{outcome}/{object_key} 没有可绘制的完整参与者配对")
+
+
+def _validate_result_summaries(
+    outcome: str,
+    result: pd.Series,
+    one_euro: np.ndarray,
+    egoanchor: np.ndarray,
+    difference: np.ndarray,
+) -> None:
+    """要求显著性来源表与实际绘图分数拥有相同的四分位摘要。"""
+
+    expected = {
+        "OneEuro": np.quantile(one_euro, (0.25, 0.5, 0.75), method="linear"),
+        "EgoAnchor": np.quantile(egoanchor, (0.25, 0.5, 0.75), method="linear"),
+        "Difference": np.quantile(
+            np.round(difference, decimals=12),
+            (0.25, 0.5, 0.75),
+            method="linear",
+        ),
+    }
+    for prefix, values in expected.items():
+        recorded = np.asarray(
+            [
+                _finite_number(result[f"{prefix}_Q1"]),
+                _finite_number(result[f"{prefix}_Median"]),
+                _finite_number(result[f"{prefix}_Q3"]),
+            ],
+            dtype=float,
+        )
+        if not np.allclose(recorded, values, rtol=0.0, atol=1.0e-12):
+            raise ValueError(
+                f"AnalysisTables.results 的 {outcome} {prefix} 描述统计与绘图数据不一致"
+            )
 
 
 def _require_columns(frame: pd.DataFrame, columns: set[str], source_name: str) -> None:
@@ -440,52 +560,58 @@ def _require_columns(frame: pd.DataFrame, columns: set[str], source_name: str) -
         raise ValueError(f"{source_name} 缺少绘图列：{sorted(missing)}")
 
 
-def _confirmatory_label(result: pd.Series) -> str:
-    """生成三物体均值主检验在面板右上角的紧凑摘要。"""
+def _clean_axis(axis: Any) -> None:
+    """应用实验一、二的浅点状横网格并移除多余边框。"""
 
-    p_value = result.get("p_Holm")
-    stars = _significance_label(p_value)
-    effect = _format_decimal(result.get("r_rb"), 2)
-    p_text = _format_p(p_value)
-    return rf"$p_{{\mathrm{{Holm}}}}{p_text}$ {stars}  $r_{{rb}}={effect}$"
+    axis.set_axisbelow(True)
+    axis.grid(
+        axis="y",
+        color=_GRID_COLOR,
+        linestyle=":",
+        linewidth=0.7,
+        alpha=0.30,
+    )
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    axis.tick_params(axis="both", length=2.5, width=0.75, pad=2.0)
 
 
-def _format_p(value: Any) -> str:
-    """按论文图规范格式化 Holm 校正 p 值。"""
+def _save_pair(figure: Any, png: Path, pdf: Path) -> tuple[Path, Path]:
+    """同时保存 300 dpi PNG 与嵌入 TrueType 字体的 PDF。"""
+
+    if (
+        png.parent != pdf.parent
+        or png.suffix.lower() != ".png"
+        or pdf.suffix.lower() != ".pdf"
+    ):
+        raise ValueError("实验三图产物契约必须提供同目录的 PNG/PDF 路径")
+    png.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        figure.savefig(png, facecolor="white")
+        figure.savefig(
+            pdf,
+            facecolor="white",
+            metadata={"CreationDate": None, "ModDate": None},
+        )
+    finally:
+        plt.close(figure)
+    return png, pdf
+
+
+def _finite_number(value: Any) -> float:
+    """把可转换且有限的值保留为浮点数，否则返回 NaN。"""
 
     try:
         number = float(value)
     except (TypeError, ValueError):
-        return "=NA"
-    if not math.isfinite(number):
-        return "=NA"
-    return "<.001" if number < 0.001 else f"={_format_decimal(number, 3)}"
-
-
-def _format_decimal(value: Any, digits: int) -> str:
-    """格式化有限小数，并省略绝对值小于 1 时的小数点前零。"""
-
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return "NA"
-    if not math.isfinite(number):
-        return "NA"
-    formatted = f"{number:.{digits}f}"
-    if formatted.startswith("-0."):
-        return f"-.{formatted[3:]}"
-    if formatted.startswith("0."):
-        return f".{formatted[2:]}"
-    return formatted
+        return math.nan
+    return number if math.isfinite(number) else math.nan
 
 
 def _significance_label(value: Any) -> str:
-    """把主检验 Holm p 值转换为面板级显著性标记。"""
+    """把 Holm p 值转换为参考论文使用的显著性星号。"""
 
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return ""
+    number = _finite_number(value)
     if not math.isfinite(number):
         return ""
     if number < 0.001:
@@ -494,7 +620,7 @@ def _significance_label(value: Any) -> str:
         return "**"
     if number < 0.05:
         return "*"
-    return "ns"
+    return ""
 
 
 __all__ = ["publish_figures"]

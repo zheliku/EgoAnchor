@@ -19,12 +19,14 @@ from .contracts import (
     Exp3Data,
     MAIN_FAMILY,
     METHOD_LABELS,
+    OBJECTS,
     ONE_EURO,
     PRIMARY_OUTCOMES,
     SCALE_FAMILY,
     SCALE_OUTCOMES,
 )
 from .settings import AnalysisSettings
+from .source_gate import SourceGateStatus, is_paper_eligible, require_source_gate_status
 
 
 INFO_SHEET = "说明"
@@ -40,7 +42,7 @@ OBJECT_RESULTS_SHEET = "分物体描述"
 """七个主条目乘三个对象的纯描述结果工作表。"""
 
 RELIABILITY_SHEET = "量表信度"
-"""五个已发表量表在当前样本中的内部一致性工作表。"""
+"""已发表量表家族五项结局在当前样本中的内部一致性工作表。"""
 
 CHOICES_SHEET = "选择结果"
 """最终偏好、信任选择、强度与区分信心的描述工作表。"""
@@ -48,7 +50,7 @@ CHOICES_SHEET = "选择结果"
 _SHEET_GUIDE: tuple[tuple[str, str], ...] = (
     (INFO_SHEET, "数据来源、统计口径、解释边界与六页索引"),
     (SAMPLE_QC_SHEET, "样本流、参与者概况、安全、设计平衡与运行时操纵检查"),
-    (RESULTS_SHEET, "七个主条目和五个已发表量表的家族内 Holm 校正结果"),
+    (RESULTS_SHEET, "七个主条目和已发表量表家族五项结局的 Holm 校正结果"),
     (OBJECT_RESULTS_SHEET, "七个主条目在三个对象上的方向检查；只作描述，不作推断"),
     (RELIABILITY_SHEET, "AQ、TiA 与 S-TIAS 按方法计算的当前样本信度"),
     (CHOICES_SHEET, "总体偏好、信任选择、强度、区分信心与选择交叉表"),
@@ -153,6 +155,12 @@ def write_results_workbook(
     """
 
     output = destination.expanduser().resolve()
+    input_digest = _require_sha256(data.source_sha256, "输入 SHA-256")
+    settings_digest = _require_sha256(settings_sha256, "参数 SHA-256")
+    source_gate_status, response_fingerprint = _validate_source_gate_metadata(
+        data,
+        validation,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -164,10 +172,12 @@ def write_results_workbook(
         workbook,
         data,
         settings,
-        settings_sha256,
+        settings_digest,
         batch_config_path,
         paper_config_path,
         validation,
+        source_gate_status,
+        response_fingerprint,
     )
     _write_sample_quality(workbook, tables.sample, tables.manipulation)
     _write_main_results(workbook, tables.results, settings.alpha)
@@ -184,8 +194,11 @@ def write_results_workbook(
             workbook.close()
         _verify_results_workbook(
             temporary,
-            input_sha256=data.source_sha256,
+            input_sha256=input_digest,
+            settings_sha256=settings_digest,
             included_count=len(validation["included_participants"]),
+            source_gate_status=source_gate_status,
+            response_fingerprint=response_fingerprint,
         )
         temporary.replace(output)
     finally:
@@ -201,6 +214,8 @@ def _write_info(
     batch_config_path: Path,
     paper_config_path: Path,
     validation: dict[str, Any],
+    source_gate_status: SourceGateStatus,
+    response_fingerprint: str,
 ) -> None:
     """写入来源、推断口径、诚实边界和六页索引。"""
 
@@ -220,9 +235,10 @@ def _write_info(
         (
             ("输入工作簿", data.source_path),
             ("输入 SHA-256", data.source_sha256),
-            ("核心响应指纹", validation.get("response_fingerprint", "")),
+            ("核心响应指纹", response_fingerprint),
             ("工作簿标记", _source_marker_text(data.source_kind)),
-            ("可用于论文", "是" if validation.get("paper_eligible", False) else "否"),
+            ("来源门禁状态", source_gate_status),
+            ("可用于论文", "是" if is_paper_eligible(source_gate_status) else "否"),
             ("纳入参与者", validation["included_count"]),
             ("批处理配置", str(batch_config_path)),
             ("论文参数配置", str(paper_config_path)),
@@ -235,7 +251,11 @@ def _write_info(
         row,
         "统计口径",
         (
-            ("分析单位", "每位参与者先在三个对象上取均值，再计算 EgoAnchor−One-Euro 配对差"),
+            (
+                "分析单位",
+                "区块级结局先按参与者在三个对象上取均值；TiA 与 S-TIAS 使用方法级"
+                "单次施测得分；随后计算 EgoAnchor−One-Euro 配对差",
+            ),
             (
                 "Wilcoxon",
                 "配对差先四舍五入至 12 位；删除零差；并列绝对差使用中秩；"
@@ -251,7 +271,7 @@ def _write_info(
                 "GPT 工作簿使用并列方差校正、无连续性校正的正态近似；"
                 "本分析按 N≤24 的离散配对评分使用条件精确分布，因此 p 值不必相同",
             ),
-            ("多重比较", "七个主条目与五个已发表量表分别在家族内做 Holm 校正"),
+            ("多重比较", "七个主条目与已发表量表家族五项结局分别做 Holm 校正"),
             ("效应量", f"匹配秩双列相关 r_rb；自举区间置信水平 {settings.confidence_level:.0%}"),
             ("逐对象结果", "只检查描述方向，不计算逐对象 p 值、星号、Holm 或效应推断"),
             ("显著性阈值", settings.alpha),
@@ -274,6 +294,34 @@ def _write_info(
     worksheet.column_dimensions["A"].width = 23
     worksheet.column_dimensions["B"].width = 100
     worksheet.freeze_panes = "A4"
+
+
+def _validate_source_gate_metadata(
+    data: Exp3Data,
+    validation: dict[str, Any],
+) -> tuple[SourceGateStatus, str]:
+    """把读取器给出的门禁结论与本次输入快照严格绑定。"""
+
+    status = require_source_gate_status(validation.get("source_gate_status"))
+    expected = is_paper_eligible(status)
+    if validation.get("paper_eligible") is not expected:
+        raise ValueError("实验三来源门禁状态与 paper_eligible 自相矛盾")
+    if data.source_kind not in {"formal", "synthetic", "unknown"}:
+        raise ValueError(f"实验三输入来源类型未知：{data.source_kind!r}")
+    if validation.get("source_kind") != data.source_kind:
+        raise ValueError("实验三来源门禁元数据未绑定当前输入的 source_kind")
+    if status in {"approved", "unapproved_formal"} and data.source_kind != "formal":
+        raise ValueError(f"实验三门禁状态 {status} 只适用于 formal 输入")
+    if status == "nonformal" and data.source_kind == "formal":
+        raise ValueError("formal 输入不得标记为 nonformal")
+    response_fingerprint = _require_sha256(
+        validation.get("response_fingerprint"),
+        "核心响应指纹",
+    )
+    reason = validation.get("source_gate_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("实验三结果工作簿缺少 source_gate_reason")
+    return status, response_fingerprint
 
 
 def _write_sample_quality(
@@ -433,7 +481,7 @@ def _write_object_descriptions(workbook: Workbook, objects: pd.DataFrame) -> Non
 
 
 def _write_reliability(workbook: Workbook, reliability: pd.DataFrame) -> None:
-    """写入五个已发表量表按方法分开的当前样本信度。"""
+    """写入已发表量表家族五项结局按方法分开的当前样本信度。"""
 
     worksheet = workbook.create_sheet(RELIABILITY_SHEET)
     _prepare_sheet(worksheet, tab_color="7B8F5A", portrait=False)
@@ -1082,6 +1130,19 @@ def _source_marker_text(source_kind: str) -> str:
     }.get(source_kind, f"未知标记：{source_kind}")
 
 
+def _require_sha256(value: object, label: str) -> str:
+    """读取 64 位小写十六进制 SHA-256，拒绝伪摘要和隐式转换。"""
+
+    hexadecimal = frozenset("0123456789abcdef")
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or not set(value).issubset(hexadecimal)
+    ):
+        raise ValueError(f"实验三{label}必须是 64 位小写十六进制 SHA-256")
+    return value
+
+
 def _as_number(value: Any) -> float:
     """把标量安全转换为有限性可检查的浮点数。"""
 
@@ -1123,8 +1184,16 @@ def _excel_value(value: Any) -> Any:
     return value
 
 
-def _verify_results_workbook(path: Path, *, input_sha256: str, included_count: int) -> None:
-    """回读六页清单、来源、样本 N 与两张核心结果表的行数。"""
+def _verify_results_workbook(
+    path: Path,
+    *,
+    input_sha256: str,
+    settings_sha256: str,
+    included_count: int,
+    source_gate_status: SourceGateStatus,
+    response_fingerprint: str,
+) -> None:
+    """回读六页、来源门禁、样本 N 与两张核心结果表的冻结键。"""
 
     workbook = load_workbook(path, read_only=True, data_only=False)
     try:
@@ -1137,8 +1206,24 @@ def _verify_results_workbook(path: Path, *, input_sha256: str, included_count: i
             for row in range(1, info.max_row + 1)
             if info.cell(row, 1).value is not None
         }
-        if facts.get("输入 SHA-256") != input_sha256:
-            raise ValueError("实验三结果工作簿的输入摘要回读不一致")
+        checked_status = require_source_gate_status(source_gate_status)
+        expected_facts = {
+            "输入 SHA-256": _require_sha256(input_sha256, "输入 SHA-256"),
+            "核心响应指纹": _require_sha256(response_fingerprint, "核心响应指纹"),
+            "来源门禁状态": checked_status,
+            "可用于论文": "是" if is_paper_eligible(checked_status) else "否",
+            "参数 SHA-256": _require_sha256(settings_sha256, "参数 SHA-256"),
+        }
+        mismatched = tuple(
+            key
+            for key, expected_value in expected_facts.items()
+            if facts.get(key) != expected_value
+        )
+        if mismatched:
+            raise ValueError(
+                "实验三结果工作簿的来源或参数摘要回读不一致："
+                + "、".join(mismatched)
+            )
         if int(facts.get("纳入参与者") or 0) != included_count:
             raise ValueError("实验三结果工作簿的纳入人数回读不一致")
         expected_outcomes = tuple(
@@ -1148,50 +1233,31 @@ def _verify_results_workbook(path: Path, *, input_sha256: str, included_count: i
         actual_outcomes = _table_column_values(workbook[RESULTS_SHEET], "指标")
         if actual_outcomes != expected_outcomes:
             raise ValueError(
-                "主结果必须按冻结顺序恰好包含七个主条目和五个已发表量表："
+                "主结果必须按冻结顺序恰好包含七个主条目和已发表量表家族五项结局："
                 f"{actual_outcomes}"
             )
-        if _table_row_count(workbook[OBJECT_RESULTS_SHEET], "指标") != 21:
-            raise ValueError("分物体描述必须恰好包含七个主条目乘三个对象")
+        expected_object_keys = tuple(
+            (_OUTCOME_NAMES[outcome], _OBJECT_NAMES[object_key])
+            for outcome in PRIMARY_OUTCOMES
+            for object_key in OBJECTS
+        )
+        actual_object_keys = _table_key_values(
+            workbook[OBJECT_RESULTS_SHEET],
+            ("指标", "物体"),
+        )
+        if actual_object_keys != expected_object_keys:
+            raise ValueError(
+                "分物体描述必须按冻结顺序恰好包含七个主条目乘三个对象："
+                f"{actual_object_keys}"
+            )
     finally:
         workbook.close()
-
-
-def _table_row_count(worksheet: Any, header: str) -> int:
-    """查找指定表头并统计其下方连续非空行数。"""
-
-    location = next(
-        (
-            (row, column)
-            for row in range(1, worksheet.max_row + 1)
-            for column in range(1, worksheet.max_column + 1)
-            if str(worksheet.cell(row, column).value) == header
-        ),
-        None,
-    )
-    if location is None:
-        return 0
-    header_row, header_column = location
-    count = 0
-    for row in range(header_row + 1, worksheet.max_row + 1):
-        if worksheet.cell(row, header_column).value is None:
-            break
-        count += 1
-    return count
 
 
 def _table_column_values(worksheet: Any, header: str) -> tuple[str, ...]:
     """返回指定表头下方的连续文本值，用于验证冻结行键与顺序。"""
 
-    location = next(
-        (
-            (row, column)
-            for row in range(1, worksheet.max_row + 1)
-            for column in range(1, worksheet.max_column + 1)
-            if str(worksheet.cell(row, column).value) == header
-        ),
-        None,
-    )
+    location = _find_table_header(worksheet, header)
     if location is None:
         return ()
     header_row, header_column = location
@@ -1202,6 +1268,44 @@ def _table_column_values(worksheet: Any, header: str) -> tuple[str, ...]:
             break
         values.append(str(value))
     return tuple(values)
+
+
+def _table_key_values(
+    worksheet: Any,
+    headers: tuple[str, ...],
+) -> tuple[tuple[str, ...], ...]:
+    """返回同一表头行下的连续复合键，保留冻结行顺序。"""
+
+    locations = tuple(_find_table_header(worksheet, header) for header in headers)
+    if any(location is None for location in locations):
+        return ()
+    checked_locations = tuple(location for location in locations if location is not None)
+    header_rows = {row for row, _ in checked_locations}
+    if len(header_rows) != 1:
+        return ()
+    header_row = checked_locations[0][0]
+    columns = tuple(column for _, column in checked_locations)
+    keys: list[tuple[str, ...]] = []
+    for row in range(header_row + 1, worksheet.max_row + 1):
+        values = tuple(worksheet.cell(row, column).value for column in columns)
+        if all(value is None for value in values):
+            break
+        keys.append(tuple("" if value is None else str(value) for value in values))
+    return tuple(keys)
+
+
+def _find_table_header(worksheet: Any, header: str) -> tuple[int, int] | None:
+    """在一个阅读页中定位唯一表头文本。"""
+
+    return next(
+        (
+            (row, column)
+            for row in range(1, worksheet.max_row + 1)
+            for column in range(1, worksheet.max_column + 1)
+            if str(worksheet.cell(row, column).value) == header
+        ),
+        None,
+    )
 
 
 __all__ = [

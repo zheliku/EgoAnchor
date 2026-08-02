@@ -17,6 +17,12 @@ ONE_EURO: Final = "One-Euro"
 METHODS: Final = (ONE_EURO, EGOANCHOR)
 """分析和绘图使用的固定方法顺序。"""
 
+TARGET_PARTICIPANTS: Final = 24
+"""正式设计预分配的参与者和平衡单元数。"""
+
+MINIMUM_PARTICIPANTS: Final = 18
+"""每项冻结结局进入正式推断所需的最小完整配对人数。"""
+
 METHOD_LABELS: Final = {
     ONE_EURO: "One-Euro Anchor",
     EGOANCHOR: "EgoAnchor",
@@ -32,6 +38,13 @@ OBJECT_LABELS: Final = {
     "gamepad": "Gamepad",
 }
 """对象键到论文图英文短标签的映射。"""
+
+OBJECT_RAW_LABELS: Final = {
+    "blue_mouse": "鼠标",
+    "stapler": "固定订书机",
+    "gamepad": "游戏手柄",
+}
+"""对象键到正式采集工作簿中文设计标签的映射。"""
 
 PARTICIPANT_BACKGROUND_COLUMNS: Final[dict[str, str]] = {
     "Age": "B1_年龄",
@@ -245,7 +258,7 @@ class Exp3Data:
 
 @dataclass(frozen=True, slots=True)
 class ScoreData:
-    """保存结果统计和 Figure 4 真正消费的派生长表。"""
+    """保存结果统计和两张正文箱线图共同消费的派生长表。"""
 
     block_scores: pd.DataFrame
     """有效区块的原始条目与 AQ 子量表分。"""
@@ -282,7 +295,7 @@ class AnalysisTables:
     """七个主条目按三个对象拆分的描述统计，不包含任何逐对象推断。"""
 
     reliability: pd.DataFrame
-    """五个已发表量表按方法计算的当前样本信度。"""
+    """已发表量表家族五项结局按方法计算的当前样本信度。"""
 
     manipulation: pd.DataFrame
     """候选、VCD、输出与生命周期操纵检验。"""
@@ -299,6 +312,7 @@ __all__ = [
     "EXCLUSION_REASONS",
     "Exp3Data",
     "MAIN_FAMILY",
+    "MINIMUM_PARTICIPANTS",
     "METHODS",
     "METHOD_ITEM_COLUMNS",
     "METHOD_LABELS",
@@ -306,6 +320,7 @@ __all__ = [
     "METHOD_SCALE_ITEMS",
     "OBJECTS",
     "OBJECT_LABELS",
+    "OBJECT_RAW_LABELS",
     "ONE_EURO",
     "OUTCOME_LABELS",
     "PARTICIPANT_BACKGROUND_COLUMNS",
@@ -315,6 +330,7 @@ __all__ = [
     "SCALE_FAMILY",
     "SCALE_OUTCOMES",
     "ScoreData",
+    "TARGET_PARTICIPANTS",
     "WORKBOOK_CONTRACT_ID",
     "WORKBOOK_SOURCE_CATEGORY",
     "aq_scale_items",

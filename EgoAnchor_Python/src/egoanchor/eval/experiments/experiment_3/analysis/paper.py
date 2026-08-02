@@ -9,6 +9,11 @@ from typing import Any
 import pandas as pd
 
 from .contracts import MAIN_FAMILY, OUTCOME_LABELS, SCALE_FAMILY
+from .source_gate import (
+    SourceGateStatus,
+    is_paper_eligible,
+    require_source_gate_status,
+)
 
 
 _OUTCOME_LABELS_ZH = {
@@ -32,16 +37,18 @@ def write_subjective_table(
     destination: Path,
     results: pd.DataFrame,
     *,
-    paper_eligible: bool,
+    source_gate_status: SourceGateStatus,
 ) -> Path:
     """从唯一结果表按家族筛选，写入紧凑的论文主观评价表。"""
 
+    checked_status = require_source_gate_status(source_gate_status)
     output = destination.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    paper_eligible = is_paper_eligible(checked_status)
     lines = [
         "% 由 pixi run eval analyze exp3 自动生成；请勿手工修改。",
         (
-            "% SYNTHETIC REHEARSAL — NOT PAPER EVIDENCE."
+            f"% 未通过来源门禁，仅供流程演练；状态：{checked_status}。"
             if not paper_eligible
             else "% 来源已通过论文资源门禁。"
         ),
@@ -52,7 +59,8 @@ def write_subjective_table(
             if not paper_eligible
             else r"\caption{实验三的参与者内主观评价结果。"
         )
-        + r"每位参与者先在三个物体上取均值；差值方向为 EgoAnchor$-$One-Euro。"
+        + r"区块级结局先按参与者在三个物体上取均值，TiA 与 S-TIAS 使用方法级单次施测得分；"
+        + r"差值方向为 EgoAnchor$-$One-Euro。"
         + r"$p$ 值来自含并列中秩的双侧条件精确 Wilcoxon 符号置换，并在各冻结家族内作 Holm 校正。}",
         r"\label{tab:exp3-subjective}",
         r"\small",

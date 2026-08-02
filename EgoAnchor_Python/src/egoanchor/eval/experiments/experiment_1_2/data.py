@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -15,7 +14,11 @@ from typing import Any, Mapping, Sequence
 
 from tqdm import tqdm
 
-from ..._filesystem import create_inherited_temp_directory, remove_tree_with_retry
+from ..._filesystem import (
+    create_inherited_temp_directory,
+    remove_tree_with_retry,
+    replace_directory_with_rollback,
+)
 from ...preprocess import (
     REQUIRED_FILE_NAMES,
     TASK_SOURCE_FILE_NAMES,
@@ -759,7 +762,7 @@ def _build_task_cache(
             session=summary,
         )
         _write_json_atomic(temporary / "cache.json", record.to_dict())
-        _replace_staged_batch(temporary, destination)
+        replace_directory_with_rollback(temporary, destination)
     except Exception:
         remove_tree_with_retry(temporary)
         raise
@@ -1002,7 +1005,7 @@ def stage_batch(
             temporary / BATCH_MANIFEST_NAME,
             _batch_manifest_document(resolved_batch_id, records),
         )
-        _replace_staged_batch(temporary, destination)
+        replace_directory_with_rollback(temporary, destination)
     except Exception:
         remove_tree_with_retry(temporary)
         raise
@@ -1017,24 +1020,6 @@ def stage_batch(
         cache_hits=cache_hits,
         rebuilt_tasks=rebuilt_tasks,
     )
-
-
-def _replace_staged_batch(temporary: Path, destination: Path) -> None:
-    """以已验证的新批次替换同名暂存批次，失败时恢复旧批次。"""
-
-    backup: Path | None = None
-    if destination.exists():
-        backup = create_inherited_temp_directory(destination.parent, f".{destination.name}.previous-")
-        backup.rmdir()
-        destination.rename(backup)
-    try:
-        temporary.rename(destination)
-    except Exception:
-        if backup is not None and backup.exists() and not destination.exists():
-            backup.rename(destination)
-        raise
-    if backup is not None:
-        remove_tree_with_retry(backup)
 
 
 def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> dict[str, Any]:
@@ -1097,7 +1082,11 @@ def promote_batch(batch_id: str | None = None, *, root: Path | None = None) -> d
             analysis = active / "analysis"
             if analysis.exists():
                 analysis.rename(archive_temporary / "analysis")
-            _replace_staged_batch(archive_temporary, archived)
+            replace_directory_with_rollback(
+                archive_temporary,
+                archived,
+                replace_existing=False,
+            )
         except Exception:
             if (archive_temporary / BATCH_MANIFEST_NAME).exists() and not active_manifest.exists():
                 (archive_temporary / BATCH_MANIFEST_NAME).rename(active_manifest)

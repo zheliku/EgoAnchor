@@ -6,12 +6,20 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ...._filesystem import (
+    create_inherited_temp_directory,
+    remove_tree_with_retry,
+    replace_directory_with_rollback,
+)
 from ...common import begin_build, complete_build, source_tree_sha256
+from .artifacts import EXP3_ARTIFACTS
+from .contracts import PRIMARY_OUTCOMES, SCALE_OUTCOMES
 from .figures import publish_figures
 from .paper import write_subjective_table
 from .reader import read_workbook, validate_for_analysis
 from .scoring import derive_scores
 from .settings import AnalysisSettings
+from .source_gate import artifact_path, is_paper_eligible, require_source_gate_status
 from .summaries import analyze_scores
 from .workbook import write_results_workbook
 
@@ -37,84 +45,136 @@ def build_analysis(
     data = read_workbook(source)
     validation = validate_for_analysis(
         data,
-        minimum_participants=settings.minimum_participants,
         aq_mode=settings.aq_mode,
         q10_enabled=settings.q10_enabled,
         approved_response_fingerprints=settings.approved_response_fingerprints,
         allow_synthetic=allow_synthetic,
     )
-    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
-    building = begin_build(
-        root,
-        owner="experiment_3",
-        source_kind=data.source_kind,
-        inputs=(
-            {
-                "key": "raw_workbook",
-                "path": data.source_path,
-                "sha256": data.source_sha256,
-            },
-        ),
-        config_sha256=config_sha256,
-        implementation_sha256=implementation_digest,
-        details={"included_count": validation["included_count"]},
-    )
+    source_gate_status = require_source_gate_status(validation.get("source_gate_status"))
     _report_progress(progress, "计算区块、量表和参与者配对分")
     scores = derive_scores(data, settings)
+    validate_complete_pair_counts(scores.paired_scores, settings.minimum_participants)
     _report_progress(progress, "计算 Wilcoxon、Holm、效应量、信度与操纵描述")
     tables = analyze_scores(data, scores, settings)
-    _report_progress(progress, "写入并回读验证结果工作簿")
-    results_path = root / "results" / "experiment3_analysis.xlsx"
-    write_results_workbook(
-        results_path,
-        data=data,
-        tables=tables,
-        settings=settings,
-        settings_sha256=config_sha256,
-        batch_config_path=batch_config_path,
-        paper_config_path=paper_config_path,
-        validation=validation,
-    )
-    paper_eligible = bool(validation["paper_eligible"])
-    tex_path = write_subjective_table(
-        root / "tex" / "exp3_subjective.tex",
-        tables.results,
-        paper_eligible=paper_eligible,
-    )
-    _report_progress(progress, "从同一批内存结果生成论文图")
-    figures = publish_figures(
-        scores,
-        tables,
-        root,
-        settings,
-        paper_eligible=paper_eligible,
-    )
+    paper_eligible = is_paper_eligible(source_gate_status)
     details = {
         "included_count": validation["included_count"],
         "paper_eligible": paper_eligible,
+        "source_gate_status": source_gate_status,
         "response_fingerprint": validation["response_fingerprint"],
         "source_gate_reason": validation["source_gate_reason"],
     }
-    outputs = [
-        {"key": "results_workbook", "kind": "xlsx", "path": str(results_path)},
-        {"key": "subjective_table", "kind": "tex", "path": str(tex_path)},
-    ]
-    outputs.extend(
-        {
-            "key": key,
-            "kind": value.suffix.lower().lstrip("."),
-            "path": str(value),
+    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
+    staging = create_inherited_temp_directory(root.parent, f".{root.name}.build-")
+    try:
+        building = begin_build(
+            staging,
+            owner="experiment_3",
+            source_kind=data.source_kind,
+            inputs=(
+                {
+                    "key": "raw_workbook",
+                    "path": data.source_path,
+                    "sha256": data.source_sha256,
+                },
+            ),
+            config_sha256=config_sha256,
+            implementation_sha256=implementation_digest,
+            details=details,
+        )
+        _report_progress(progress, "写入并回读验证结果工作簿")
+        results_path = artifact_path(
+            staging,
+            EXP3_ARTIFACTS.results_workbook,
+            source_gate_status,
+        )
+        write_results_workbook(
+            results_path,
+            data=data,
+            tables=tables,
+            settings=settings,
+            settings_sha256=config_sha256,
+            batch_config_path=batch_config_path,
+            paper_config_path=paper_config_path,
+            validation=validation,
+        )
+        tex_path = write_subjective_table(
+            artifact_path(
+                staging,
+                EXP3_ARTIFACTS.subjective_table,
+                source_gate_status,
+            ),
+            tables.results,
+            source_gate_status=source_gate_status,
+        )
+        _report_progress(progress, "从同一批内存结果生成论文图")
+        figures = publish_figures(
+            scores,
+            tables,
+            staging,
+            settings,
+            source_gate_status=source_gate_status,
+        )
+        paths_by_key = {
+            EXP3_ARTIFACTS.results_workbook.key: results_path,
+            EXP3_ARTIFACTS.subjective_table.key: tex_path,
+            **figures,
         }
-        for key, value in sorted(figures.items())
-    )
-    manifest = complete_build(
-        root,
-        building,
-        outputs=outputs,
-        warnings=validation["warnings"],
-        details=details,
-    )
+        expected_keys = {artifact.key for artifact in EXP3_ARTIFACTS.outputs}
+        if set(paths_by_key) != expected_keys:
+            raise ValueError("实验三构建产物与冻结产物契约不一致")
+        outputs = [
+            {
+                "key": artifact.key,
+                "kind": artifact.kind,
+                "path": str(paths_by_key[artifact.key]),
+            }
+            for artifact in EXP3_ARTIFACTS.outputs
+        ]
+        manifest = complete_build(
+            staging,
+            building,
+            outputs=outputs,
+            warnings=validation["warnings"],
+            details=details,
+            published_root=root,
+        )
+        replace_directory_with_rollback(staging, root)
+    except Exception:
+        remove_tree_with_retry(staging)
+        raise
     return {"passed": True, "build": manifest}
+
+
+def validate_complete_pair_counts(paired_scores: Any, minimum: int) -> dict[str, int]:
+    """要求十二项冻结结局各自达到参与者级完整配对下限。"""
+
+    expected = (*PRIMARY_OUTCOMES, *SCALE_OUTCOMES)
+    required_columns = {"Participant_ID", "Outcome"}
+    if not required_columns.issubset(paired_scores.columns):
+        raise ValueError("实验三配对分缺少 Participant_ID 或 Outcome，无法执行逐结局样本量门禁")
+    selected = paired_scores.loc[
+        paired_scores["Outcome"].astype(str).isin(expected),
+        ["Participant_ID", "Outcome"],
+    ].copy()
+    selected["Participant_ID"] = selected["Participant_ID"].astype(str)
+    selected["Outcome"] = selected["Outcome"].astype(str)
+    if selected.duplicated(["Participant_ID", "Outcome"]).any():
+        raise ValueError("实验三逐结局样本量门禁发现重复的参与者×结局配对")
+    counts = {
+        outcome: int((selected["Outcome"] == outcome).sum())
+        for outcome in expected
+    }
+    insufficient: list[str] = []
+    for outcome, count in counts.items():
+        if count < minimum:
+            insufficient.append(f"{outcome} N={count}")
+    if insufficient:
+        raise ValueError(
+            f"十二项冻结结局均须至少有 {minimum} 个完整配对；不足项："
+            + "，".join(insufficient)
+        )
+    return counts
 
 
 def _validate_output_root(root: Path, project_root: Path) -> None:
@@ -123,6 +183,9 @@ def _validate_output_root(root: Path, project_root: Path) -> None:
     data_root = (project_root / "data").resolve()
     if not root.is_relative_to(data_root):
         raise ValueError(f"实验三输出必须位于 {data_root} 内：{root}")
+    relative = root.relative_to(data_root)
+    if len(relative.parts) < 2 or root.name != "analysis":
+        raise ValueError(f"实验三事务发布目标必须是 data 下的专用 analysis 目录：{root}")
 
 
 def _report_progress(callback: Callable[[str], None] | None, message: str) -> None:
@@ -132,4 +195,4 @@ def _report_progress(callback: Callable[[str], None] | None, message: str) -> No
         callback(message)
 
 
-__all__ = ["build_analysis"]
+__all__ = ["build_analysis", "validate_complete_pair_counts"]

@@ -348,19 +348,33 @@ pixi run eval analyze exp3
 → Wilcoxon、分层 Holm、效应量、信度和操纵检查
 → 写入并回读六页结果 XLSX
 → 生成 TeX 主表
-→ 从同一次分析的内存数据生成 Figure 4 PNG/PDF
+→ 从同一次分析的内存数据生成正文候选 Figure 4 与 Figure 5 PNG/PDF
 → 校验全部产物并提交 complete 构建清单
 ```
 
-结果位于：
+来源门禁状态为 `approved` 时，正式产物位于：
 
 ```text
 data/experiments/experiment_3/analysis/
 ├─ results/experiment3_analysis.xlsx
 ├─ tex/exp3_subjective.tex
-├─ figures/figure4_exp3_paired.{png,pdf}
+├─ figures/figure4_exp3_primary_outcomes.{png,pdf}
+├─ figures/figure5_exp3_published_scales.{png,pdf}
 └─ provenance/build_result.json
 ```
+
+门禁失败时，`provenance/build_result.json` 仍位于分析根目录；结果簿、TeX 和图片进入各自类别下的
+`rehearsal_not_paper_evidence/`，文件名附带具体状态。各类文件的路径如下：
+
+```text
+results/rehearsal_not_paper_evidence/experiment3_analysis__<status>_rehearsal_not_paper_evidence.xlsx
+tex/rehearsal_not_paper_evidence/exp3_subjective__<status>_rehearsal_not_paper_evidence.tex
+figures/rehearsal_not_paper_evidence/figure4_exp3_primary_outcomes__<status>_rehearsal_not_paper_evidence.{png,pdf}
+figures/rehearsal_not_paper_evidence/figure5_exp3_published_scales__<status>_rehearsal_not_paper_evidence.{png,pdf}
+```
+
+其中 `<status>` 只能是 `known_synthetic`、`unapproved_formal` 或 `nonformal`。这些文件用于流程演练，
+不是正文候选 Figure，也不能由 `copy-assets exp3` 复制到论文目录。
 
 结果工作簿固定为六张中文页，顺序和职责如下：
 
@@ -368,16 +382,19 @@ data/experiments/experiment_3/analysis/
 | ---- | ---- | -------- |
 | `说明` | 来源指纹、是否可用于论文、统计规则、参数摘要、警告和页面索引 | 先确认分析来源与发布资格 |
 | `样本与质控` | 样本流、人口学、经验、安全、设计平衡和运行时操纵描述 | 样本、流程和操纵检查段 |
-| `主结果` | 7 个主条目和 5 个已发表量表的描述统计、精确 Wilcoxon、家族内 Holm 与 `r_rb` | 论文完整结果表的唯一数字源 |
+| `主结果` | 7 个主条目和已发表量表家族 5 项结局的描述统计、精确 Wilcoxon、家族内 Holm 与 `r_rb` | 论文完整结果表的唯一数字源 |
 | `分物体描述` | 7 个主条目在三个物体上的两方法描述统计与配对差 | 方向一致性核查；不作逐物体推断 |
-| `量表信度` | 五个已发表量表按方法计算的当前样本 α、ω、Spearman--Brown 与测量单位 | 量表信度脚注或补充材料 |
+| `量表信度` | 已发表量表家族各结局按方法计算的当前样本 α、ω、Spearman--Brown 与测量单位 | 量表信度脚注或补充材料 |
 | `选择结果` | 偏好、信任选择、偏好强度、区分信心及偏好×信任交叉 | 最终选择的描述性汇报 |
 
 人口学只做描述，不事后拆成年龄、性别或经验亚组寻找显著性。会话时长和不适只作流程与安全审计，
 不解释为方法表现。开放题原文及人工编码另存于不会被自动重建覆盖的独立文件，避免分析重跑覆盖人工工作。
 
-确证结论只看 `主结果` 的“Holm 校正 p”：主证实家族 m=7，已发表量表家族 m=5。每位参与者先在三个物体上取均值，
-然后运行含并列中秩的双侧条件精确 Wilcoxon 符号置换；零配对差删除并另报非零配对数。两个家族分别做 Holm 校正。
+确证结论只看 `主结果` 的“Holm 校正 p”：主证实家族 m=7，已发表量表家族 m=5。七个自制条目逐项分析，
+不合并总分；AQ-EQ/AQ-IQ 先按冻结模式计算区块内子量表均值，再与七个自制条目一起在三个物体上取均值。
+TiA 四个反向项按 `6 - raw` 换向，R/C 至少有 5/6 项、U/P 至少有 3/4 项有效时取有效条目均值；S-TIAS 三项均有效时取均值。
+TiA 两个分量表与 S-TIAS 三项均分来自每种方法一次的方法级施测，不跨物体汇总。随后运行含并列中秩的双侧条件精确
+Wilcoxon 符号置换，删除零配对差并另报非零配对数；两个家族分别做 Holm 校正。
 “条件精确”只表示在给定非零绝对差及其中秩后枚举零假设下的等概率符号分配。该检验仍要求非零配对差的符号在零假设下
 可交换，通常由配对差分布关于零对称的假设支撑，不能写成无假设检验；若正式数据明显偏离该条件，应在论文中列为解释限制。
 `分物体描述` 不含 p 值或星号，不能被读成逐物体显著性结论。
@@ -391,10 +408,12 @@ CLMM 不进入冻结分析、结果工作簿或论文。被删除的自定义实
 其标准误、Wald p 值和区间没有统计依据；数值 Hessian 又近奇异，不能安全替换。若后续要回答物体异质性问题，
 应先冻结新的假设，再使用经过验证的序数混合模型实现，不能恢复这套旧代码。
 
-论文图只保留 `figure4_exp3_paired`。四个面板分别显示 Q1、Q8、Q3 和 Q6；每个物体绘制参与者的
-One-Euro→EgoAnchor 浅灰配对线，并叠加两方法的中位数与 IQR。面板右上角只标三物体均值主检验的 Holm p、星号和 `r_rb`。
-星号阈值固定为 `* p_Holm < .05`、`** p_Holm < .01`、`*** p_Holm < .001`。论文图注必须说明 p 值来自每位参与者
-三物体均值后的主检验；逐物体数据只检查方向是否一致，不分别检验或添加星号。
+两张正文候选 Figure 都是箱线图。`figure4_exp3_primary_outcomes` 上排 4 个、下排 3 个面板，展示 7 个主条目；`figure5_exp3_published_scales` 单行展示
+AQ-EQ、AQ-IQ、TiA-R/C、TiA-U/P 与 S-TIAS。各面板使用与主分析一致的参与者级得分：区块级结局先在三个物体上取均值，
+TiA 两个分量表与 S-TIAS 三项均分使用方法级单次施测得分；图中叠加半透明参与者级得分点和浅灰配对线。若所属家族内 Holm 校正后的 p<.05，
+则在两个箱体上方显示括号和星号（`* p_Holm < .05`、
+`** p_Holm < .01`、`*** p_Holm < .001`）。TiA 使用 1--5 理论量尺，其余面板使用 1--7。逐物体数据只检查方向，
+不分别检验或添加星号。
 
 合成和模拟工作簿只能通过 Python 包级 API 或独立模拟脚本调用 `allow_synthetic=True`。正式 CLI 没有该
 选项，合成构建即使完整也会被 `copy-assets` 拒绝。

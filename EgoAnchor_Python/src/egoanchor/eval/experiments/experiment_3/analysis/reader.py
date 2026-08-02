@@ -7,6 +7,7 @@ import json
 import math
 from collections.abc import Iterable
 from datetime import datetime, time
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -14,21 +15,23 @@ import pandas as pd
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 from openpyxl.cell.cell import Cell  # type: ignore[import-untyped]
 
+from ...common import file_sha256
 from .contracts import (
     BLOCK_ITEMS,
-    EGOANCHOR,
     EXCLUSION_REASONS,
     Exp3Data,
+    MINIMUM_PARTICIPANTS,
     METHOD_ITEM_COLUMNS,
     METHODS,
+    OBJECT_RAW_LABELS,
     OBJECTS,
-    ONE_EURO,
     PARTICIPANT_BACKGROUND_COLUMNS,
     PARTICIPANT_CATEGORIES,
     WORKBOOK_CONTRACT_ID,
     WORKBOOK_SOURCE_CATEGORY,
     required_block_items,
 )
+from .source_gate import SourceGateStatus
 
 
 _REQUIRED_SHEETS = frozenset({"README", "Participants", "Records"})
@@ -76,6 +79,24 @@ _METHOD_DESIGN_COLUMNS = (
 )
 """Records B 段的固定设计列。"""
 
+_METHOD_AUDIT_COLUMNS = (
+    "尺度切换确认",
+    "技术问题",
+    "A/B归属回忆确认",
+    "方法级记录有效",
+)
+"""v5.1 方法级问卷必须保留的施测与人工审核列。"""
+
+_OBJECT_ORDERS = {
+    1: ("鼠标", "固定订书机", "游戏手柄"),
+    2: ("鼠标", "游戏手柄", "固定订书机"),
+    3: ("固定订书机", "鼠标", "游戏手柄"),
+    4: ("固定订书机", "游戏手柄", "鼠标"),
+    5: ("游戏手柄", "鼠标", "固定订书机"),
+    6: ("游戏手柄", "固定订书机", "鼠标"),
+}
+"""物体排列 ID 与三个正式对象全排列的冻结绑定。"""
+
 _BLOCK_FINGERPRINT_COLUMNS = _BLOCK_DESIGN_COLUMNS + tuple(BLOCK_ITEMS.values())
 """区块段参与者/条件身份与十四个核心评分，共 144×24 个单元格。"""
 
@@ -99,23 +120,15 @@ _FINAL_FINGERPRINT_COLUMNS = (
 """最终段除访谈备注外的身份与核心响应，共 24×10 个单元格。"""
 
 
-def workbook_sha256(path: Path) -> str:
-    """返回原始工作簿的 SHA-256。"""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while block := handle.read(1024 * 1024):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def read_workbook(path: Path) -> Exp3Data:
-    """按值读取 Participants 与 Records 三段，并验证结构身份。"""
+    """从同一字节快照读取三段原始值、摘要并验证结构身份。"""
 
     source = path.expanduser().resolve()
     if source.suffix.lower() != ".xlsx" or not source.is_file():
         raise FileNotFoundError(f"实验三输入必须是现存 XLSX：{source}")
-    workbook = load_workbook(source, read_only=True, data_only=False)
+    payload = source.read_bytes()
+    source_digest = hashlib.sha256(payload).hexdigest()
+    workbook = load_workbook(BytesIO(payload), read_only=True, data_only=False)
     try:
         missing = _REQUIRED_SHEETS.difference(workbook.sheetnames)
         if missing:
@@ -131,6 +144,8 @@ def read_workbook(path: Path) -> Exp3Data:
         source_kind = _source_kind(workbook, source.name)
     finally:
         workbook.close()
+    if file_sha256(source) != source_digest:
+        raise ValueError("实验三输入工作簿在读取期间发生变化，请保存完成后重试")
     data = Exp3Data(
         participants=participants,
         blocks=blocks,
@@ -138,7 +153,7 @@ def read_workbook(path: Path) -> Exp3Data:
         finals=finals,
         source_kind=source_kind,
         source_path=str(source),
-        source_sha256=workbook_sha256(source),
+        source_sha256=source_digest,
     )
     _validate_structure(data)
     return data
@@ -147,7 +162,6 @@ def read_workbook(path: Path) -> Exp3Data:
 def validate_for_analysis(
     data: Exp3Data,
     *,
-    minimum_participants: int,
     aq_mode: str,
     q10_enabled: bool,
     approved_response_fingerprints: frozenset[str],
@@ -170,16 +184,18 @@ def validate_for_analysis(
     )
     warnings: list[str] = []
     response_fingerprint = _response_fingerprint(data)
-    paper_eligible, source_gate_reason = _source_gate_result(
+    source_gate_status, source_gate_reason = _source_gate_result(
         source_kind=data.source_kind,
         response_fingerprint=response_fingerprint,
         approved_response_fingerprints=approved_response_fingerprints,
     )
+    paper_eligible = source_gate_status == "approved"
     if not paper_eligible:
         warnings.append(source_gate_reason)
-    if len(included_ids) < minimum_participants:
+    if len(included_ids) < MINIMUM_PARTICIPANTS:
         raise ValueError(
-            f"纳入分析且已确认的参与者只有 {len(included_ids)} 人，少于冻结下限 {minimum_participants}"
+            f"纳入分析且已确认的参与者只有 {len(included_ids)} 人，"
+            f"少于冻结下限 {MINIMUM_PARTICIPANTS}"
         )
     _validate_participant_values(
         data.participants,
@@ -212,6 +228,7 @@ def validate_for_analysis(
         "source_kind": data.source_kind,
         "response_fingerprint": response_fingerprint,
         "paper_eligible": paper_eligible,
+        "source_gate_status": source_gate_status,
         "source_gate_reason": source_gate_reason,
     }
 
@@ -384,27 +401,27 @@ def _source_gate_result(
     source_kind: str,
     response_fingerprint: str,
     approved_response_fingerprints: frozenset[str],
-) -> tuple[bool, str]:
+) -> tuple[SourceGateStatus, str]:
     """按“已知合成拒绝→正式标记→正向批准”的固定顺序判定论文资格。"""
 
     if response_fingerprint in _KNOWN_SYNTHETIC_RESPONSE_FINGERPRINTS:
         return (
-            False,
+            "known_synthetic",
             "来源完整性门禁：核心响应与已知 GPT 合成参考逐格一致；即使工作簿"
             "标记为 formal 或该指纹误入批准列表，也只能用于流程演练",
         )
     if source_kind != "formal":
         return (
-            False,
+            "nonformal",
             "来源完整性门禁：输入没有正式参与者工作簿标记，不得用于论文",
         )
     if response_fingerprint not in approved_response_fingerprints:
         return (
-            False,
+            "unapproved_formal",
             "来源完整性门禁：工作簿虽标记为 formal，但核心响应指纹 "
             f"{response_fingerprint} 尚未经来源核验并登记到批准列表；本次输出仅供流程演练",
         )
-    return True, "来源完整性门禁：formal 标记与已批准核心响应指纹一致"
+    return "approved", "来源完整性门禁：formal 标记与已批准核心响应指纹一致"
 
 
 def _canonical_fingerprint_rows(
@@ -465,7 +482,7 @@ def _validate_structure(data: Exp3Data) -> None:
     )
     _require_columns(
         data.methods,
-        _METHOD_DESIGN_COLUMNS + METHOD_ITEM_COLUMNS + ("尺度切换确认", "技术问题"),
+        _METHOD_DESIGN_COLUMNS + METHOD_ITEM_COLUMNS + _METHOD_AUDIT_COLUMNS,
         "Records B",
     )
     _require_columns(
@@ -507,11 +524,13 @@ def _validate_design_mapping(data: Exp3Data) -> None:
     design = data.participants.copy()
     if design["平衡单元"].astype(str).duplicated().any():
         raise ValueError("Participants 的 24 个平衡单元必须唯一")
-    order_ids = pd.to_numeric(design["物体排列ID"], errors="coerce")
-    if order_ids.isna().any() or not set(order_ids.astype(int)) == set(range(1, 7)):
+    order_ids = tuple(_exact_integer(value) for value in design["物体排列ID"])
+    if any(order_id not in _OBJECT_ORDERS for order_id in order_ids):
+        raise ValueError("Participants 的物体排列ID必须是 1--6 整数")
+    if set(order_ids) != set(_OBJECT_ORDERS):
         raise ValueError("Participants 的物体排列ID必须覆盖 1--6")
     actual_cells = {
-        (int(order_id), str(sequence), str(mapping))
+        (order_id, str(sequence), str(mapping))
         for order_id, sequence, mapping in zip(
             order_ids,
             design["标签序列"],
@@ -532,6 +551,14 @@ def _validate_design_mapping(data: Exp3Data) -> None:
         "S2": "B-A / A-B / B-A",
     }
     for _, row in design.iterrows():
+        order_id = _exact_integer(row["物体排列ID"])
+        if order_id is None:
+            raise ValueError("Participants 的物体排列ID必须是 1--6 整数")
+        actual_object_order = tuple(str(row[f"物体{position}"]) for position in range(1, 4))
+        if actual_object_order != _OBJECT_ORDERS[order_id]:
+            raise ValueError(
+                f"{row['Participant_ID']} 的物体排列ID {order_id} 未绑定冻结的物体1--3顺序"
+            )
         sequence = str(row["标签序列"])
         if str(row["区块内标签顺序"]) != expected_label_order.get(sequence):
             raise ValueError(f"{row['Participant_ID']} 的区块内标签顺序与 {sequence} 不一致")
@@ -549,15 +576,16 @@ def _validate_design_mapping(data: Exp3Data) -> None:
         if len(rows.groupby(["Object_Key", "Condition(保密)"], dropna=False)) != 6:
             raise ValueError(f"{participant_id} 的对象×方法区块不唯一")
         mapping = participants.loc[participant_id]
-        expected_label = {
+        expected_method = {
             "方法A": str(mapping["方法A=（保密）"]),
             "方法B": str(mapping["方法B=（保密）"]),
         }
-        for _, row in rows.iterrows():
-            label = str(row["Shown_Label"])
-            condition = str(row["Condition(保密)"])
-            if expected_label.get(label) != condition:
-                raise ValueError(f"{participant_id} 的 {label} 映射与 Participants 不一致")
+        _validate_participant_block_order(
+            str(participant_id),
+            rows,
+            mapping,
+            expected_method,
+        )
     for participant_id, rows in data.methods.groupby("Participant_ID", sort=False):
         if frozenset(rows["Condition(保密)"].astype(str)) != frozenset(METHODS):
             raise ValueError(f"{participant_id} 的方法级记录未覆盖两种方法")
@@ -577,6 +605,65 @@ def _validate_design_mapping(data: Exp3Data) -> None:
             label = str(row["Shown_Label"])
             if expected_conditions.get(label) != str(row["Condition(保密)"]):
                 raise ValueError(f"{participant_id} 的方法级 {label} 映射与 Participants 不一致")
+
+
+def _validate_participant_block_order(
+    participant_id: str,
+    rows: pd.DataFrame,
+    mapping: pd.Series,
+    expected_method: dict[str, str],
+) -> None:
+    """核对六个实际区块与 Participants 冻结计划逐位置一致。"""
+
+    block_indices = pd.to_numeric(rows["Block_Index"], errors="coerce")
+    if block_indices.isna().any() or (block_indices % 1 != 0).any():
+        raise ValueError(f"{participant_id} 的 Block_Index 必须是 1--6 整数")
+    ordered = rows.assign(_block_index=block_indices.astype(int)).sort_values("_block_index")
+    if tuple(ordered["_block_index"]) != tuple(range(1, 7)):
+        raise ValueError(f"{participant_id} 的实际区块顺序必须恰好覆盖 1--6")
+
+    sequence = str(mapping["标签序列"])
+    label_pairs = {
+        "S1": (("方法A", "方法B"), ("方法B", "方法A"), ("方法A", "方法B")),
+        "S2": (("方法B", "方法A"), ("方法A", "方法B"), ("方法B", "方法A")),
+    }
+    expected_pairs = label_pairs.get(sequence)
+    if expected_pairs is None:
+        raise ValueError(f"{participant_id} 的标签序列不是 S1 或 S2")
+    raw_key_by_label = {label: key for key, label in OBJECT_RAW_LABELS.items()}
+    method_occurrences = {method: 0 for method in METHODS}
+    for row_offset, (_, row) in enumerate(ordered.iterrows()):
+        object_position = row_offset // 2 + 1
+        within_object = row_offset % 2 + 1
+        planned_object = str(mapping[f"物体{object_position}"])
+        expected_object_key = raw_key_by_label.get(planned_object)
+        if expected_object_key is None:
+            raise ValueError(f"{participant_id} 的 Participants 物体计划含未知标签：{planned_object}")
+        expected_label = expected_pairs[object_position - 1][within_object - 1]
+        expected_condition = expected_method[expected_label]
+        method_occurrences[expected_condition] += 1
+        expected_values = {
+            "平衡单元": str(mapping["平衡单元"]),
+            "物体位置": object_position,
+            "物体": planned_object,
+            "Object_Key": expected_object_key,
+            "Shown_Label": expected_label,
+            "Condition(保密)": expected_condition,
+            "物体内先后": within_object,
+            "该方法第几次": method_occurrences[expected_condition],
+        }
+        for column, expected in expected_values.items():
+            actual = row[column]
+            matches = (
+                _exact_integer(actual) == expected
+                if isinstance(expected, int)
+                else str(actual) == expected
+            )
+            if not matches:
+                raise ValueError(
+                    f"{participant_id} 的实际区块顺序与 Participants 计划不一致："
+                    f"Block_Index={row['_block_index']}，{column}={actual!r}，期望 {expected!r}"
+                )
 
 
 def _require_columns(table: pd.DataFrame, columns: Iterable[str], name: str) -> None:
@@ -801,9 +888,8 @@ def method_record_valid_mask(methods: pd.DataFrame) -> pd.Series:
     valid &= methods["技术问题"].map(
         lambda value: _is_missing_or_na(value) or str(value).strip() == "无"
     )
-    for optional_column in ("A/B归属回忆确认", "方法级记录有效"):
-        if optional_column in methods:
-            valid &= methods[optional_column].map(_is_yes)
+    valid &= methods["A/B归属回忆确认"].map(_is_yes)
+    valid &= methods["方法级记录有效"].map(_is_yes)
     return valid
 
 
@@ -865,6 +951,15 @@ def _number_or_none(value: Any) -> float | None:
         return None
 
 
+def _exact_integer(value: Any) -> int | None:
+    """把有限整数值规范化为 int，拒绝小数、无穷和缺失。"""
+
+    number = _number_or_none(value)
+    if number is None or not math.isfinite(number) or number % 1 != 0:
+        return None
+    return int(number)
+
+
 def _is_missing_or_na(value: Any) -> bool:
     """识别工作簿允许的空值或 N/A 文本。"""
 
@@ -916,5 +1011,4 @@ __all__ = [
     "method_record_valid_mask",
     "read_workbook",
     "validate_for_analysis",
-    "workbook_sha256",
 ]

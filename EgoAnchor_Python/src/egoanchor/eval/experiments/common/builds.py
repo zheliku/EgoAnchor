@@ -89,9 +89,16 @@ def complete_build(
     outputs: Iterable[Mapping[str, str]],
     warnings: Iterable[str] = (),
     details: Mapping[str, Any] | None = None,
+    published_root: Path | None = None,
 ) -> dict[str, Any]:
-    """核对全部产物存在后，原子提交 ``complete`` 构建清单。"""
+    """核对全部产物后提交清单，并可把暂存路径映射到发布根目录。"""
 
+    staged_root = output_root.expanduser().resolve()
+    final_root = (
+        published_root.expanduser().resolve()
+        if published_root is not None
+        else staged_root
+    )
     normalized_outputs: list[dict[str, str]] = []
     keys: set[str] = set()
     for raw in outputs:
@@ -105,7 +112,14 @@ def complete_build(
         path = Path(path_text).expanduser().resolve()
         if not path.is_file():
             raise FileNotFoundError(f"构建产物不存在：{path}")
-        item["path"] = str(path)
+        if published_root is not None:
+            try:
+                relative = path.relative_to(staged_root)
+            except ValueError as error:
+                raise ValueError(f"暂存构建产物越出 output_root：{path}") from error
+            item["path"] = str(final_root / relative)
+        else:
+            item["path"] = str(path)
         item["sha256"] = file_sha256(path)
         normalized_outputs.append(item)
         keys.add(key)

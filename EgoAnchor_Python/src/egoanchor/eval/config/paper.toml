@@ -16,7 +16,7 @@ persistence_ms = 100.0 # 位移必须持续超过阈值的时间，单位毫秒�
 catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾难性失效，单位毫米。
 
 [experiment_3.contract]
-version = 2 # 实验三原始模板与论文分析参数契约版本；v2 固定六页结果工作簿与单张 Figure 4。
+version = 3 # 实验三原始模板与论文分析参数契约版本；v3 固定六页结果工作簿、正文 Figure 4 与 Figure 5。
 template_version = "v5.1" # 实验三原始数据模板与问卷的冻结版本。
 
 [experiment_3.source_gate]
@@ -51,5 +51,7 @@ occlusion_seconds_margin = 0.0 # 遮挡时长配对差的对称等价界；0 表
 
 [experiment_3.figures]
 dpi = 300 # 实验三 PNG 的导出分辨率。
-paired_width_inches = 7.15 # 实验三四面板配对图的原生宽度，贴合 VGTC 双栏版心。
-paired_height_inches = 4.20 # 实验三四面板配对图的原生高度。
+primary_width_inches = 7.15 # 正文 Figure 4 主条目箱线图的原生宽度，贴合 VGTC 双栏版心。
+primary_height_inches = 4.00 # 正文 Figure 4 七个主条目箱线图的原生高度。
+scale_width_inches = 7.15 # 正文 Figure 5 已发表量表箱线图的原生宽度，贴合 VGTC 双栏版心。
+scale_height_inches = 2.55 # 正文 Figure 5 五个量表箱线图的原生高度。
