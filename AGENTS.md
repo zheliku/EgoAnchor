@@ -26,7 +26,7 @@
 
 ## IEEE VR 2027 论文路线
 
-当前中文工作稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_ai_v9.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；文件名中的 `ai` 表示该版本使用 AI 辅助撰写。**`egoanchor_cn_ai_v9.tex` 为当前最新工作稿（2026-08-02 建立，完整 v1 初稿，XeLaTeX 编译通过 9 页：正文含图表 p1--p7、参考文献 p8--p9）**；`egoanchor_cn_ai_v8.tex` 与 `egoanchor_cn_v6/v7/v8.tex` 作为旧稿保留，不再继续修改。旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
+当前中文工作稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_ai_v8.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；文件名中的 `ai` 表示该版本使用 AI 辅助撰写。**`egoanchor_cn_ai_v8.tex` 为当前最新工作稿（2026-08-02 完成实验三结果回填，XeLaTeX 编译通过 12 页：正文含图表 p1--p10、参考文献 p11--p12）**；`egoanchor_cn_v6/v7/v8.tex` 作为旧稿保留，不再继续修改。旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
 
 v9 相对 v8 的结构性变更（供后续接手者判断，不要退回 v8 结构）：
 
@@ -49,7 +49,7 @@ v9 相对 v8 的结构性变更（供后续接手者判断，不要退回 v8 结
 
 - **实验一：端到端系统表征**。在静止目标与主动头动、起停 6DoF、持续平移/旋转、遮挡恢复条件下，比较 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor* 的系统行为。
 - **实验二：系统设计归因**。在同一日志格式和平台参考下关闭单一设计，归因采集时刻世界对齐、VCD 观测接纳、时序合成和静止锚定的贡献与代价。
-- **实验三：日常物体上的跨对象感知评价**。`2 方法 x 3 物体 = 6 区块` 被试内设计，每区块 3 任务 + 13 条目（问卷 v5），只比较 *One-Euro Anchor* 与完整 *EgoAnchor*；**2026-07-25 起改为纯主观评价，不采集任何客观任务数据**。当前只冻结设计，实验一/二完成后再启动正式采集。**唯一权威文件是 `2026-EgoAnchor/experiment_3_questionnaire_design_zh.md`（v5 完整计划：结构+测量+分析+汇报）**；原结构文档 `experiment_3_design_zh.md` 已于 2026-07-26 并入该文件并删除，不得再引用。
+- **实验三：日常物体上的跨对象感知评价**。`2 方法 x 3 物体 = 6 区块` 被试内设计，每区块 3 任务 + 13 条目（问卷 v5），只比较 *One-Euro Anchor* 与完整 *EgoAnchor*；**2026-07-25 起改为纯主观评价，不采集任何客观任务数据**。**2026-08-02 完成正式结果回填**：24 名参与者，144 个有效区块，主证实家族 5/7 项显著（静止稳定、位置正确、恢复一致、依赖意愿、稳定--响应平衡），已发表量表家族 4/5 项显著（AQ-EQ、TiA-R/C、TiA-U/P、S-TIAS），论文正文包含完整结果叙述、表~\ref{tab:exp3-subjective}、图~\ref{fig:exp3-primary} 和图~\ref{fig:exp3-scales}。**唯一权威文件是 `2026-EgoAnchor/experiment_3_questionnaire_design_zh.md`（v5 完整计划：结构+测量+分析+汇报）**；原结构文档 `experiment_3_design_zh.md` 已于 2026-07-26 并入该文件并删除，不得再引用。
 
 VCD 的三个语义层次不得混淆：
 
