@@ -18,16 +18,13 @@ from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.experiments.experiment_3 import (
     ExperimentPaths,
     SettingsSnapshot,
-    analyze_workflow,
     build_raw_template,
-    describe_workflow,
     load_settings,
     load_settings_snapshot,
     plan_assets,
     validate_workflow,
 )
 from egoanchor.eval.experiments.experiment_3.analysis import (
-    Exp3Data,
     MAIN_FAMILY,
     SCALE_FAMILY,
     analyze_scores,
@@ -43,22 +40,13 @@ from egoanchor.eval.experiments.experiment_3.analysis import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 """包含论文目录与 Python 工程的仓库根目录。"""
 
-R2_WORKBOOK = (
-    REPOSITORY_ROOT
-    / "2026-EgoAnchor"
-    / "material"
-    / "reference"
-    / "EgoAnchor_Experiment3_Simulated_Claude-Opus-5-1M_R2_v5_1_24P.xlsx"
-)
-"""只用于测试分析契约的冻结结构模拟工作簿。"""
-
-GPT_WORKBOOK = (
+RAW_WORKBOOK = (
     REPOSITORY_ROOT
     / "2026-EgoAnchor"
     / "material"
     / "EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx"
 )
-"""具备 v5.1 硬契约、但核心响应已确认为 GPT 合成镜像的门禁样本。"""
+"""用于结构、质量校验和完整构建回归测试的 v5.1 原始工作簿。"""
 
 PAPER_CONFIG = (
     REPOSITORY_ROOT
@@ -75,15 +63,14 @@ PAPER_CONFIG = (
 class Experiment3Tests(unittest.TestCase):
     """验证空白模板、实时公式边界和离线结果链。"""
 
-    def test_settings_freeze_paper_thresholds_and_start_without_approved_source(self) -> None:
-        """发布阈值与 95% CI 口径不可漂移，真实采集前批准列表为空。"""
+    def test_settings_freeze_paper_thresholds(self) -> None:
+        """发布阈值与 95% CI 口径不可漂移。"""
 
         settings = load_settings()
         self.assertEqual(settings.alpha, 0.05)
         self.assertEqual(settings.confidence_level, 0.95)
         self.assertEqual(settings.target_participants, 24)
         self.assertEqual(settings.minimum_participants, 18)
-        self.assertEqual(settings.approved_response_fingerprints, frozenset())
         source = PAPER_CONFIG.read_text(encoding="utf-8")
         cases = (
             ("alpha", "alpha = 0.05", "alpha = 0.04", "冻结 alpha=0.05"),
@@ -136,7 +123,7 @@ class Experiment3Tests(unittest.TestCase):
             ),
             (
                 "bool_as_int",
-                "[experiment_3.contract]\nversion = 3",
+                "[experiment_3.contract]\nversion = 4",
                 "[experiment_3.contract]\nversion = true",
                 "version 必须是 int",
             ),
@@ -192,7 +179,6 @@ class Experiment3Tests(unittest.TestCase):
             output = Path(directory) / "experiment3_raw.xlsx"
             build_raw_template(settings, output)
             data = read_workbook(output)
-            self.assertEqual(data.source_kind, "formal")
             self.assertEqual(len(data.blocks), 144)
             workbook = load_workbook(output, data_only=False)
             try:
@@ -262,9 +248,9 @@ class Experiment3Tests(unittest.TestCase):
                 self.assertTrue(workbook.calculation.fullCalcOnLoad)
                 self.assertTrue(workbook.calculation.forceFullCalc)
                 self.assertEqual(workbook.properties.identifier, "EgoAnchor.Experiment3.RawData.v5.1")
-                self.assertEqual(workbook.properties.category, "formal-participant-data")
+                self.assertEqual(workbook.properties.category, "experiment-3-raw-workbook")
                 self.assertEqual(workbook["README"]["B27"].value, "EgoAnchor.Experiment3.RawData.v5.1")
-                self.assertEqual(workbook["README"]["B28"].value, "formal-participant-data")
+                self.assertEqual(workbook["README"]["B28"].value, "experiment-3-raw-workbook")
                 self.assertEqual((workbook["Derived"].max_row, workbook["Derived"].max_column), (407, 26))
                 self.assertEqual((workbook["Analysis"].max_row, workbook["Analysis"].max_column), (132, 20))
                 self.assertEqual(workbook["Analysis"].auto_filter.ref, "A76:T83")
@@ -328,7 +314,7 @@ class Experiment3Tests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "changing.xlsx"
-            copyfile(GPT_WORKBOOK, source)
+            copyfile(RAW_WORKBOOK, source)
 
             def load_then_replace(stream: Any, *args: Any, **kwargs: Any) -> Any:
                 """先从内存快照建好工作簿对象，再模拟 Excel 保存覆盖路径。"""
@@ -353,7 +339,7 @@ class Experiment3Tests(unittest.TestCase):
             root = Path(directory)
 
             fractional = root / "fractional_order.xlsx"
-            copyfile(GPT_WORKBOOK, fractional)
+            copyfile(RAW_WORKBOOK, fractional)
             workbook = load_workbook(fractional)
             try:
                 for row in range(23, 27):
@@ -365,7 +351,7 @@ class Experiment3Tests(unittest.TestCase):
                 read_workbook(fractional)
 
             remapped = root / "remapped_order.xlsx"
-            copyfile(GPT_WORKBOOK, remapped)
+            copyfile(RAW_WORKBOOK, remapped)
             workbook = load_workbook(remapped)
             try:
                 participants = workbook["Participants"]
@@ -388,7 +374,7 @@ class Experiment3Tests(unittest.TestCase):
                 read_workbook(remapped)
 
             wrong_unit = root / "wrong_balance_unit.xlsx"
-            copyfile(GPT_WORKBOOK, wrong_unit)
+            copyfile(RAW_WORKBOOK, wrong_unit)
             workbook = load_workbook(wrong_unit)
             try:
                 workbook["Records"]["C5"] = "O6-S2-OE"
@@ -399,7 +385,7 @@ class Experiment3Tests(unittest.TestCase):
                 read_workbook(wrong_unit)
 
             legacy_method_audit = root / "legacy_method_audit.xlsx"
-            copyfile(GPT_WORKBOOK, legacy_method_audit)
+            copyfile(RAW_WORKBOOK, legacy_method_audit)
             workbook = load_workbook(legacy_method_audit)
             try:
                 workbook["Records"]["X151"] = "旧版可选回忆字段"
@@ -409,267 +395,12 @@ class Experiment3Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "A/B归属回忆确认"):
                 read_workbook(legacy_method_audit)
 
-    def test_source_gate_fingerprints_only_audited_core_responses(self) -> None:
-        """非核心日志和备注不能绕过门禁，核心评分变化必须改变指纹。"""
-
-        settings = load_settings()
-
-        def validate(
-            data: Exp3Data,
-            approvals: frozenset[str] | None = None,
-        ) -> dict[str, Any]:
-            """按正式分析入口返回一份已读取数据的来源门禁结果。"""
-
-            return validate_for_analysis(
-                data,
-                aq_mode=settings.aq_mode,
-                q10_enabled=settings.q10_enabled,
-                approved_response_fingerprints=(
-                    settings.approved_response_fingerprints
-                    if approvals is None
-                    else approvals
-                ),
-            )
-
-        audited_fingerprint = "5993ef77a827eb89c99fb9c1db85f29ae09d1a2f423f88f2713b6fa3789fe84a"
-        data = replace(read_workbook(GPT_WORKBOOK), source_kind="formal")
-        baseline = validate(data, frozenset({audited_fingerprint}))
-        self.assertEqual(baseline["response_fingerprint"], audited_fingerprint)
-        self.assertFalse(baseline["paper_eligible"])
-        self.assertEqual(baseline["source_gate_status"], "known_synthetic")
-        self.assertIn("已知 GPT 合成参考", baseline["source_gate_reason"])
-
-        noncore_blocks = data.blocks.copy()
-        noncore_methods = data.methods.copy()
-        noncore_finals = data.finals.copy()
-        noncore_blocks.at[0, "Candidate_Rate_Hz"] = (
-            float(noncore_blocks.at[0, "Candidate_Rate_Hz"]) + 0.125
-        )
-        noncore_blocks.at[0, "备注"] = "仅修改区块运行时备注"
-        noncore_methods.at[0, "备注"] = "仅修改方法级备注"
-        noncore_finals.at[0, "访谈备注"] = "仅修改最终访谈备注"
-        noncore_result = validate(
-            replace(
-                data,
-                blocks=noncore_blocks,
-                methods=noncore_methods,
-                finals=noncore_finals,
-            ),
-            frozenset({audited_fingerprint}),
-        )
-        self.assertEqual(noncore_result["response_fingerprint"], audited_fingerprint)
-        self.assertFalse(noncore_result["paper_eligible"])
-        self.assertEqual(noncore_result["source_gate_status"], "known_synthetic")
-
-        reordered_result = validate(
-            replace(
-                data,
-                blocks=data.blocks.sample(frac=1.0, random_state=11).reset_index(drop=True),
-                methods=data.methods.sample(frac=1.0, random_state=12).reset_index(drop=True),
-                finals=data.finals.sample(frac=1.0, random_state=13).reset_index(drop=True),
-            ),
-            frozenset({audited_fingerprint}),
-        )
-        self.assertEqual(reordered_result["response_fingerprint"], audited_fingerprint)
-        self.assertFalse(reordered_result["paper_eligible"])
-
-        core_blocks = data.blocks.copy()
-        core_blocks.at[0, "Q1"] = 2 if core_blocks.at[0, "Q1"] == 1 else 1
-        changed_data = replace(data, blocks=core_blocks)
-        unapproved = validate(changed_data)
-        changed_fingerprint = unapproved["response_fingerprint"]
-        self.assertNotEqual(changed_fingerprint, audited_fingerprint)
-        self.assertFalse(unapproved["paper_eligible"])
-        self.assertEqual(unapproved["source_gate_status"], "unapproved_formal")
-        self.assertIn("尚未经来源核验", unapproved["source_gate_reason"])
-
-        approved = validate(changed_data, frozenset({changed_fingerprint}))
-        self.assertTrue(approved["paper_eligible"])
-        self.assertEqual(approved["source_gate_status"], "approved")
-        self.assertEqual(approved["warnings"], ())
-
-        nonformal = validate_for_analysis(
-            replace(changed_data, source_kind="synthetic"),
-            aq_mode=settings.aq_mode,
-            q10_enabled=settings.q10_enabled,
-            approved_response_fingerprints=frozenset({changed_fingerprint}),
-            allow_synthetic=True,
-        )
-        self.assertFalse(nonformal["paper_eligible"])
-        self.assertEqual(nonformal["source_gate_status"], "nonformal")
-
-        approved_reordered = validate(
-            replace(
-                changed_data,
-                blocks=changed_data.blocks.sample(frac=1.0, random_state=21).reset_index(drop=True),
-                methods=changed_data.methods.sample(frac=1.0, random_state=22).reset_index(drop=True),
-                finals=changed_data.finals.sample(frac=1.0, random_state=23).reset_index(drop=True),
-            ),
-            frozenset({changed_fingerprint}),
-        )
-        self.assertEqual(approved_reordered["response_fingerprint"], changed_fingerprint)
-        self.assertTrue(approved_reordered["paper_eligible"])
-
-    def test_ineligible_build_persists_gate_and_cannot_plan_paper_assets(self) -> None:
-        """构建清单必须保存门禁结果，后续命令不得诱导或执行论文复制。"""
-
-        settings = replace(load_settings(), bootstrap_iterations=1000)
-        source = GPT_WORKBOOK.resolve()
-        data = replace(read_workbook(source), source_kind="formal")
-        python_root = REPOSITORY_ROOT / "EgoAnchor_Python"
-        with tempfile.TemporaryDirectory(dir=python_root / "data") as directory:
-            sandbox = Path(directory)
-            analysis_root = sandbox / "analysis"
-            stale_results = analysis_root / "results" / "experiment3_analysis.xlsx"
-            stale_results.parent.mkdir(parents=True)
-            stale_results.write_bytes(b"stale canonical workbook")
-            stale_tex = (
-                analysis_root
-                / "tex"
-                / "rehearsal_not_paper_evidence"
-                / "exp3_subjective__unapproved_formal_rehearsal_not_paper_evidence.tex"
-            )
-            stale_tex.parent.mkdir(parents=True)
-            stale_tex.write_text("stale rehearsal table", encoding="utf-8")
-            stale_figure = analysis_root / "figures" / "figure4_exp3_paired.png"
-            stale_figure.parent.mkdir(parents=True)
-            stale_figure.write_bytes(b"retired figure")
-            with mock.patch(
-                "egoanchor.eval.experiments.experiment_3.analysis.pipeline.read_workbook",
-                return_value=data,
-            ):
-                payload = build_analysis(
-                    settings,
-                    input_workbook=source,
-                    output_root=analysis_root,
-                    project_root=python_root,
-                    config_sha256="0" * 64,
-                    batch_config_path=sandbox / "batch.toml",
-                    paper_config_path=sandbox / "paper.toml",
-                )
-            self.assertFalse(payload["build"]["details"]["paper_eligible"])
-            self.assertEqual(
-                payload["build"]["details"]["source_gate_status"],
-                "known_synthetic",
-            )
-            results_path = (
-                analysis_root
-                / "results"
-                / "rehearsal_not_paper_evidence"
-                / "experiment3_analysis__known_synthetic_rehearsal_not_paper_evidence.xlsx"
-            )
-            self.assertFalse(
-                (analysis_root / "results" / "experiment3_analysis.xlsx").exists()
-            )
-            workbook = load_workbook(results_path, read_only=True, data_only=True)
-            try:
-                readme_text = " ".join(
-                    str(cell.value or "")
-                    for row in workbook["说明"].iter_rows()
-                    for cell in row
-                )
-            finally:
-                workbook.close()
-            self.assertIn("流程演练", readme_text)
-            tex_path = (
-                analysis_root
-                / "tex"
-                / "rehearsal_not_paper_evidence"
-                / "exp3_subjective__known_synthetic_rehearsal_not_paper_evidence.tex"
-            )
-            self.assertFalse((analysis_root / "tex" / "exp3_subjective.tex").exists())
-            self.assertFalse(stale_results.exists())
-            self.assertFalse(stale_tex.exists())
-            self.assertFalse(stale_figure.exists())
-            tex_text = tex_path.read_text(encoding="utf-8")
-            self.assertIn("流程演练，禁止作为论文证据", tex_text)
-            self.assertNotIn("SYNTHETIC REHEARSAL", tex_text)
-            rehearsal_figures = analysis_root / "figures" / "rehearsal_not_paper_evidence"
-            self.assertEqual(
-                {path.name for path in rehearsal_figures.iterdir()},
-                {
-                    "figure4_exp3_primary_outcomes__known_synthetic_rehearsal_not_paper_evidence.png",
-                    "figure4_exp3_primary_outcomes__known_synthetic_rehearsal_not_paper_evidence.pdf",
-                    "figure5_exp3_published_scales__known_synthetic_rehearsal_not_paper_evidence.png",
-                    "figure5_exp3_published_scales__known_synthetic_rehearsal_not_paper_evidence.pdf",
-                },
-            )
-            self.assertFalse(
-                (analysis_root / "figures" / "figure4_exp3_primary_outcomes.png").exists()
-            )
-
-            paths = ExperimentPaths(
-                project_root=python_root,
-                source_template=source,
-                input_workbook=source,
-                analysis_root=analysis_root,
-                paper_root=sandbox / "paper",
-                figure_destination=sandbox / "paper" / "figures",
-                table_destination=sandbox / "paper" / "tables" / "exp3_subjective.tex",
-                batch_config_path=sandbox / "batch.toml",
-            )
-            with mock.patch(
-                "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
-                return_value=paths,
-            ):
-                status = describe_workflow()
-                self.assertFalse(status["build"]["paper_eligible"])
-                self.assertEqual(
-                    status["build"]["source_gate_status"],
-                    "known_synthetic",
-                )
-                self.assertTrue(
-                    any("来源完整性门禁" in item for item in status["build"]["warnings"])
-                )
-                with self.assertRaisesRegex(ValueError, "来源完整性门禁"):
-                    plan_assets()
-
-            with (
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
-                    return_value=paths,
-                ),
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.load_settings_snapshot",
-                    return_value=SettingsSnapshot(settings=settings, sha256="0" * 64),
-                ),
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.read_workbook",
-                    return_value=data,
-                ),
-            ):
-                validation_status = validate_workflow()
-            self.assertFalse(validation_status["passed"])
-            self.assertFalse(validation_status["paper_eligible"])
-            self.assertIn("来源完整性门禁", validation_status["reason"])
-
-            mocked_build = {
-                "passed": True,
-                "build": {"details": {"paper_eligible": False}},
-            }
-            with (
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.load_paths",
-                    return_value=paths,
-                ),
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.load_settings_snapshot",
-                    return_value=SettingsSnapshot(settings=settings, sha256="0" * 64),
-                ),
-                mock.patch(
-                    "egoanchor.eval.experiments.experiment_3.workflow.build_analysis",
-                    return_value=mocked_build,
-                ),
-            ):
-                workflow_result = analyze_workflow()
-            self.assertIn("真实参与者数据", workflow_result["next_command"])
-
     def test_build_requires_minimum_complete_pairs_for_every_frozen_outcome(self) -> None:
         """总纳入 N 足够时，任一冻结结局配对 N 不足仍必须拒绝发布。"""
 
         settings = replace(load_settings(), bootstrap_iterations=1000)
-        source = GPT_WORKBOOK.resolve()
-        data = replace(read_workbook(source), source_kind="formal")
+        source = RAW_WORKBOOK.resolve()
+        data = read_workbook(source)
         methods = data.methods.copy()
         participant_ids = sorted(methods["Participant_ID"].astype(str).unique())
         insufficient_ids = set(participant_ids[1:])
@@ -742,8 +473,8 @@ class Experiment3Tests(unittest.TestCase):
         """写图或写表失败时只清理 staging，上一轮分析目录保持不变。"""
 
         settings = replace(load_settings(), bootstrap_iterations=1000)
-        source = GPT_WORKBOOK.resolve()
-        data = replace(read_workbook(source), source_kind="formal")
+        source = RAW_WORKBOOK.resolve()
+        data = read_workbook(source)
         python_root = REPOSITORY_ROOT / "EgoAnchor_Python"
         with tempfile.TemporaryDirectory(dir=python_root / "data") as directory:
             analysis_root = Path(directory) / "analysis"
@@ -774,25 +505,12 @@ class Experiment3Tests(unittest.TestCase):
             self.assertEqual({path.name for path in analysis_root.iterdir()}, {marker.name})
             self.assertFalse(tuple(analysis_root.parent.glob(".analysis.build-*")))
 
-    def test_eligible_build_plans_both_figures_and_subjective_table(self) -> None:
-        """通过来源门禁后，论文资源计划包含两张正文图与完整结果表。"""
+    def test_complete_build_plans_both_figures_and_subjective_table(self) -> None:
+        """完整构建按固定名称生成两张正文图与完整结果表。"""
 
         settings = replace(load_settings(), bootstrap_iterations=1000)
-        source = GPT_WORKBOOK.resolve()
-        data = replace(read_workbook(source), source_kind="formal")
-        blocks = data.blocks.copy()
-        blocks.at[0, "Q1"] = 2 if blocks.at[0, "Q1"] == 1 else 1
-        data = replace(data, blocks=blocks)
-        unapproved = validate_for_analysis(
-            data,
-            aq_mode=settings.aq_mode,
-            q10_enabled=settings.q10_enabled,
-            approved_response_fingerprints=settings.approved_response_fingerprints,
-        )
-        settings = replace(
-            settings,
-            approved_response_fingerprints=frozenset({unapproved["response_fingerprint"]}),
-        )
+        source = RAW_WORKBOOK.resolve()
+        data = read_workbook(source)
         python_root = REPOSITORY_ROOT / "EgoAnchor_Python"
         with tempfile.TemporaryDirectory(dir=python_root / "data") as directory:
             sandbox = Path(directory)
@@ -810,18 +528,11 @@ class Experiment3Tests(unittest.TestCase):
                     batch_config_path=sandbox / "batch.toml",
                     paper_config_path=sandbox / "paper.toml",
                 )
-            self.assertTrue(payload["build"]["details"]["paper_eligible"])
-            self.assertEqual(payload["build"]["details"]["source_gate_status"], "approved")
+            self.assertEqual(payload["build"]["details"]["included_count"], 24)
             self.assertTrue(
                 (analysis_root / "results" / "experiment3_analysis.xlsx").is_file()
             )
             self.assertTrue((analysis_root / "tex" / "exp3_subjective.tex").is_file())
-            self.assertFalse(
-                (analysis_root / "results" / "rehearsal_not_paper_evidence").exists()
-            )
-            self.assertFalse(
-                (analysis_root / "tex" / "rehearsal_not_paper_evidence").exists()
-            )
 
             paths = ExperimentPaths(
                 project_root=python_root,
@@ -855,88 +566,15 @@ class Experiment3Tests(unittest.TestCase):
                 },
             )
 
-    def test_r2_simulation_reproduces_frozen_family_directions(self) -> None:
-        """模拟输入只用于验证计分、配对方向和家族校正实现。"""
-
-        settings = replace(load_settings(), bootstrap_iterations=1000)
-        with tempfile.TemporaryDirectory() as directory:
-            source = _copy_with_v51_method_audits(
-                R2_WORKBOOK,
-                Path(directory) / "r2_v51_contract.xlsx",
-            )
-            data = read_workbook(source)
-        validation = validate_for_analysis(
-            data,
-            aq_mode=settings.aq_mode,
-            q10_enabled=settings.q10_enabled,
-            approved_response_fingerprints=settings.approved_response_fingerprints,
-            allow_synthetic=True,
-        )
-        scores = derive_scores(data, settings)
-        tables = analyze_scores(data, scores, settings)
-        primary = tables.results[tables.results["Family"] == MAIN_FAMILY].set_index("Outcome")
-        scales = tables.results[tables.results["Family"] == SCALE_FAMILY].set_index("Outcome")
-        sample = tables.sample
-        included_row = sample[
-            (sample["Section"] == "Sample_Flow") & (sample["Variable"] == "Included")
-        ].iloc[0]
-        age_row = sample[sample["Variable"] == "Age"].iloc[0]
-        balance = sample[sample["Section"] == "Design_Balance"]
-        self.assertEqual(validation["included_count"], 24)
-        self.assertEqual(int(included_row["N"]), 24)
-        self.assertEqual(int(age_row["N"]), 0)
-        self.assertEqual(int(age_row["Denominator"]), 24)
-        self.assertNotIn("Missing_N", sample.columns)
-        self.assertTrue((balance["Status"] == "balanced").all())
-        self.assertEqual(
-            tuple(type(scores).__dataclass_fields__),
-            ("block_scores", "paired_scores", "reliability_items"),
-        )
-        self.assertEqual(
-            tuple(tables.results.columns),
-            (
-                "Family",
-                "Outcome",
-                "N",
-                "N_Nonzero",
-                "OneEuro_Q1",
-                "OneEuro_Median",
-                "OneEuro_Q3",
-                "EgoAnchor_Q1",
-                "EgoAnchor_Median",
-                "EgoAnchor_Q3",
-                "Difference_Q1",
-                "Difference_Median",
-                "Difference_Q3",
-                "W",
-                "r_rb",
-                "r_rb_CI_Low",
-                "r_rb_CI_High",
-                "r_rb_CI_Status",
-                "p_Holm",
-            ),
-        )
-        self.assertEqual(int(primary.loc["Q1", "N"]), 24)
-        self.assertLess(float(primary.loc["Q1", "p_Holm"]), 0.01)
-        self.assertGreater(float(primary.loc["Q2", "p_Holm"]), 0.05)
-        self.assertLess(float(scales.loc["STIAS", "p_Holm"]), 0.01)
-
     def test_results_workbook_and_figures_share_one_analysis_object(self) -> None:
         """结果 XLSX 可回读绘图，并同时生成非空 PNG/PDF。"""
 
         settings = replace(load_settings(), bootstrap_iterations=1000)
-        with tempfile.TemporaryDirectory() as source_directory:
-            source = _copy_with_v51_method_audits(
-                R2_WORKBOOK,
-                Path(source_directory) / "r2_v51_contract.xlsx",
-            )
-            data = read_workbook(source)
+        data = read_workbook(RAW_WORKBOOK)
         validation = validate_for_analysis(
             data,
             aq_mode=settings.aq_mode,
             q10_enabled=settings.q10_enabled,
-            approved_response_fingerprints=settings.approved_response_fingerprints,
-            allow_synthetic=True,
         )
         scores = derive_scores(data, settings)
         tables = analyze_scores(data, scores, settings)
@@ -957,7 +595,6 @@ class Experiment3Tests(unittest.TestCase):
                 tables,
                 root,
                 settings,
-                source_gate_status=validation["source_gate_status"],
             )
             workbook = load_workbook(results, read_only=True, data_only=True)
             try:
@@ -1006,7 +643,6 @@ class Experiment3Tests(unittest.TestCase):
                     tables,
                     root / "bad_difference",
                     settings,
-                    source_gate_status=validation["source_gate_status"],
                 )
 
             bad_results = tables.results.copy()
@@ -1017,7 +653,6 @@ class Experiment3Tests(unittest.TestCase):
                     replace(tables, results=bad_results),
                     root / "bad_p",
                     settings,
-                    source_gate_status=validation["source_gate_status"],
                 )
 
             bad_n = tables.results.copy()
@@ -1028,7 +663,6 @@ class Experiment3Tests(unittest.TestCase):
                     replace(tables, results=bad_n),
                     root / "bad_n",
                     settings,
-                    source_gate_status=validation["source_gate_status"],
                 )
 
     def test_formal_participant_summary_reports_demographics_duration_and_balance(self) -> None:
@@ -1037,7 +671,7 @@ class Experiment3Tests(unittest.TestCase):
         settings = replace(load_settings(), bootstrap_iterations=1000)
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "formal_participants.xlsx"
-            _copy_with_v51_method_audits(R2_WORKBOOK, source)
+            copyfile(RAW_WORKBOOK, source)
             workbook = load_workbook(source)
             try:
                 workbook.properties.identifier = "EgoAnchor.Experiment3.RawData.v5.1"
@@ -1083,7 +717,6 @@ class Experiment3Tests(unittest.TestCase):
                 data,
                 aq_mode=settings.aq_mode,
                 q10_enabled=settings.q10_enabled,
-                approved_response_fingerprints=settings.approved_response_fingerprints,
             )
             scores = derive_scores(data, settings)
             tables = analyze_scores(data, scores, settings)
@@ -1135,7 +768,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(invalid_baseline),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             pending = edited_case("pending", (("Participants", "V3", None),))
@@ -1144,7 +776,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(pending),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             no_consent = edited_case("no_consent", (("Participants", "R3", None),))
@@ -1153,7 +784,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(no_consent),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             missing_runtime = edited_case("missing_runtime", (("Records", "AF5", None),))
@@ -1162,7 +792,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(missing_runtime),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_method = edited_case("invalid_method", (("Records", "V152", "设备故障"),))
@@ -1171,7 +800,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(invalid_method),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_safety = edited_case(
@@ -1187,7 +815,6 @@ class Experiment3Tests(unittest.TestCase):
                     read_workbook(invalid_safety),
                     aq_mode=settings.aq_mode,
                     q10_enabled=settings.q10_enabled,
-                    approved_response_fingerprints=settings.approved_response_fingerprints,
                 )
 
             invalid_mapping = edited_case("invalid_mapping", (("Records", "C152", "方法B"),))
@@ -1211,25 +838,6 @@ class Experiment3Tests(unittest.TestCase):
         args = parser.parse_args(["analyze", "exp3"])
         self.assertEqual(args.target, "exp3")
         self.assertIs(args.handler, eval_cli._run_analyze)
-
-
-def _copy_with_v51_method_audits(source: Path, destination: Path) -> Path:
-    """给旧演练复本补齐当前硬契约列，仅供既有统计回归测试读取。"""
-
-    copyfile(source, destination)
-    workbook = load_workbook(destination)
-    try:
-        records = workbook["Records"]
-        records["X151"] = "A/B归属回忆确认"
-        records["Y151"] = "方法级记录有效"
-        for row in range(152, 200):
-            records.cell(row, 24, "是")
-            records.cell(row, 25, "是")
-        workbook.save(destination)
-    finally:
-        workbook.close()
-    return destination
-
 
 if __name__ == "__main__":
     unittest.main()

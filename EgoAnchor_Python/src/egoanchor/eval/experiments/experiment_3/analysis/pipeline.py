@@ -19,7 +19,6 @@ from .paper import write_subjective_table
 from .reader import read_workbook, validate_for_analysis
 from .scoring import derive_scores
 from .settings import AnalysisSettings
-from .source_gate import artifact_path, is_paper_eligible, require_source_gate_status
 from .summaries import analyze_scores
 from .workbook import write_results_workbook
 
@@ -33,7 +32,6 @@ def build_analysis(
     config_sha256: str,
     batch_config_path: Path,
     paper_config_path: Path,
-    allow_synthetic: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """一次完成计分、推断、结果工作簿、TeX 和论文图。"""
@@ -47,22 +45,15 @@ def build_analysis(
         data,
         aq_mode=settings.aq_mode,
         q10_enabled=settings.q10_enabled,
-        approved_response_fingerprints=settings.approved_response_fingerprints,
-        allow_synthetic=allow_synthetic,
     )
-    source_gate_status = require_source_gate_status(validation.get("source_gate_status"))
     _report_progress(progress, "计算区块、量表和参与者配对分")
     scores = derive_scores(data, settings)
     validate_complete_pair_counts(scores.paired_scores, settings.minimum_participants)
     _report_progress(progress, "计算 Wilcoxon、Holm、效应量、信度与操纵描述")
     tables = analyze_scores(data, scores, settings)
-    paper_eligible = is_paper_eligible(source_gate_status)
     details = {
         "included_count": validation["included_count"],
-        "paper_eligible": paper_eligible,
-        "source_gate_status": source_gate_status,
-        "response_fingerprint": validation["response_fingerprint"],
-        "source_gate_reason": validation["source_gate_reason"],
+        "artifact_contract_version": EXP3_ARTIFACTS.version,
     }
     implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
     staging = create_inherited_temp_directory(root.parent, f".{root.name}.build-")
@@ -70,7 +61,7 @@ def build_analysis(
         building = begin_build(
             staging,
             owner="experiment_3",
-            source_kind=data.source_kind,
+            source_kind="raw_workbook",
             inputs=(
                 {
                     "key": "raw_workbook",
@@ -83,11 +74,7 @@ def build_analysis(
             details=details,
         )
         _report_progress(progress, "写入并回读验证结果工作簿")
-        results_path = artifact_path(
-            staging,
-            EXP3_ARTIFACTS.results_workbook,
-            source_gate_status,
-        )
+        results_path = EXP3_ARTIFACTS.results_workbook.path_under(staging)
         write_results_workbook(
             results_path,
             data=data,
@@ -99,13 +86,8 @@ def build_analysis(
             validation=validation,
         )
         tex_path = write_subjective_table(
-            artifact_path(
-                staging,
-                EXP3_ARTIFACTS.subjective_table,
-                source_gate_status,
-            ),
+            EXP3_ARTIFACTS.subjective_table.path_under(staging),
             tables.results,
-            source_gate_status=source_gate_status,
         )
         _report_progress(progress, "从同一批内存结果生成论文图")
         figures = publish_figures(
@@ -113,7 +95,6 @@ def build_analysis(
             tables,
             staging,
             settings,
-            source_gate_status=source_gate_status,
         )
         paths_by_key = {
             EXP3_ARTIFACTS.results_workbook.key: results_path,

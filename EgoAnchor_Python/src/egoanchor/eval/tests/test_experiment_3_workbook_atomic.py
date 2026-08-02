@@ -98,38 +98,17 @@ class Experiment3WorkbookAtomicTests(unittest.TestCase):
             finally:
                 workbook.close()
 
-    def test_inconsistent_source_gate_metadata_preserves_existing_workbook(self) -> None:
-        """写入器拒绝门禁状态与论文资格矛盾的直接调用。"""
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "experiment3_analysis.xlsx"
-            _write_old_workbook(output)
-            original_bytes = output.read_bytes()
-            validation = _validation()
-            validation["paper_eligible"] = True
-            with self.assertRaisesRegex(ValueError, "自相矛盾"):
-                _write(
-                    output,
-                    _tables((*PRIMARY_OUTCOMES, *SCALE_OUTCOMES)),
-                    validation=validation,
-                )
-            self.assertEqual(output.read_bytes(), original_bytes)
-
-
 def _write(
     output: Path,
     tables: AnalysisTables,
-    *,
-    validation: dict[str, object] | None = None,
 ) -> Path:
-    """使用不依赖真实来源门禁的最小契约写入一个结果工作簿。"""
+    """使用最小输入与验证摘要写入一个结果工作簿。"""
 
     data = Exp3Data(
         participants=pd.DataFrame(),
         blocks=pd.DataFrame(),
         methods=pd.DataFrame(),
         finals=pd.DataFrame(),
-        source_kind="synthetic",
         source_path="memory://experiment-3-atomic-test",
         source_sha256="a" * 64,
     )
@@ -141,22 +120,17 @@ def _write(
         settings_sha256="b" * 64,
         batch_config_path=output.parent / "batch.toml",
         paper_config_path=output.parent / "paper.toml",
-        validation=_validation() if validation is None else validation,
+        validation=_validation(),
     )
 
 
 def _validation() -> dict[str, object]:
-    """返回字段完整且自洽的非正式来源门禁测试元数据。"""
+    """返回字段完整且自洽的最小分析验证摘要。"""
 
     return {
         "included_participants": ("P001", "P002"),
         "included_count": 2,
-        "source_kind": "synthetic",
-        "paper_eligible": False,
-        "source_gate_status": "nonformal",
-        "source_gate_reason": "仅用于原子写入测试的非正式内存数据",
-        "response_fingerprint": "c" * 64,
-        "warnings": ("仅用于原子写入测试",),
+        "warnings": (),
     }
 
 

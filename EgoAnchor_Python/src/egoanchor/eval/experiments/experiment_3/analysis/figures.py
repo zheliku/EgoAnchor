@@ -28,31 +28,26 @@ from .contracts import (
 )
 from .inference import holm_adjust, signed_rank_test
 from .settings import AnalysisSettings
-from .source_gate import (
-    SourceGateStatus,
-    artifact_path,
-    require_source_gate_status,
-)
 
 
 _TEXT_COLOR = "#202428"
-_MUTED_COLOR = "#5D646B"
-_PAIR_COLOR = "#7F8790"
-_GRID_COLOR = "#D9DEE3"
+_MUTED_COLOR = "#596168"
+_PAIR_COLOR = "#8E969E"
+_GRID_COLOR = "#D6DBDF"
 """与实验一、二共用的正文文字、配对线和网格颜色。"""
 
 _METHODS = (ONE_EURO, EGOANCHOR)
-_METHOD_LABELS = ("One-Euro\nAnchor", "EgoAnchor")
+_METHOD_LABELS = ("One-Euro", "EgoAnchor")
 _METHOD_COLORS = (ONE_EURO_COLOR_HEX, EGOANCHOR_COLOR_HEX)
 _METHOD_MARKERS = ("o", "s")
 _PRIMARY_LABELS = {
-    "Q1": "Static\nstability",
-    "Q8": "Position\ncorrectness",
-    "Q2": "Motion\nattachment",
-    "Q9": "Orientation\nconsistency",
-    "Q3": "Recovery\nconsistency",
-    "Q6": "Willingness\nto rely",
-    "Q7": "Stability-response\nbalance",
+    "Q1": "Static stability",
+    "Q8": "Position correctness",
+    "Q2": "Motion attachment",
+    "Q9": "Orientation consistency",
+    "Q3": "Recovery consistency",
+    "Q6": "Willingness to rely",
+    "Q7": "Stability-response balance",
 }
 """Figure 4 七个主条目的紧凑英文面板标题。"""
 
@@ -80,29 +75,17 @@ def publish_figures(
     tables: AnalysisTables,
     output_root: Path,
     settings: AnalysisSettings,
-    *,
-    source_gate_status: SourceGateStatus,
 ) -> dict[str, Path]:
     """发布主条目 Figure 4 和已发表量表 Figure 5。
 
     两张图都使用与主分析一致的参与者级得分：区块级结局先在三个物体上取
     均值，TiA 与 S-TIAS 使用方法级单次施测得分。显著性括号只编码各冻结
-    家族内的 Holm 校正结果，不对三个物体分别检验或标星。未通过来源门禁
-    时不在画布上加水印，而是写入演练目录并把状态编码进文件名。
+    家族内的 Holm 校正结果，不对三个物体分别检验或标星。
     """
 
-    checked_status = require_source_gate_status(source_gate_status)
     ordered = _validate_figure_data(scores.paired_scores, tables.results)
-    primary_png = artifact_path(
-        output_root,
-        EXP3_ARTIFACTS.figure4_png,
-        checked_status,
-    )
-    primary_pdf = artifact_path(
-        output_root,
-        EXP3_ARTIFACTS.figure4_pdf,
-        checked_status,
-    )
+    primary_png = EXP3_ARTIFACTS.figure4_png.path_under(output_root)
+    primary_pdf = EXP3_ARTIFACTS.figure4_pdf.path_under(output_root)
     _configure(settings.figure_dpi)
 
     primary = _boxplot_grid(
@@ -120,16 +103,8 @@ def publish_figures(
         primary_png,
         primary_pdf,
     )
-    scale_png = artifact_path(
-        output_root,
-        EXP3_ARTIFACTS.figure5_png,
-        checked_status,
-    )
-    scale_pdf = artifact_path(
-        output_root,
-        EXP3_ARTIFACTS.figure5_pdf,
-        checked_status,
-    )
+    scale_png = EXP3_ARTIFACTS.figure5_png.path_under(output_root)
+    scale_pdf = EXP3_ARTIFACTS.figure5_pdf.path_under(output_root)
     scales = _boxplot_grid(
         scores.paired_scores,
         ordered,
@@ -159,17 +134,17 @@ def _configure(dpi: int) -> None:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 7.6,
+            "font.size": 7.2,
             "axes.labelcolor": _TEXT_COLOR,
-            "axes.labelsize": 7.6,
-            "axes.titlesize": 7.4,
-            "axes.titlepad": 4.0,
-            "axes.linewidth": 0.9,
+            "axes.labelsize": 7.2,
+            "axes.titlesize": 7.2,
+            "axes.titlepad": 3.0,
+            "axes.linewidth": 0.8,
             "axes.edgecolor": "#70767C",
             "xtick.color": _TEXT_COLOR,
-            "xtick.labelsize": 7.0,
+            "xtick.labelsize": 6.8,
             "ytick.color": _TEXT_COLOR,
-            "ytick.labelsize": 7.2,
+            "ytick.labelsize": 6.8,
             "savefig.dpi": dpi,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
@@ -217,22 +192,22 @@ def _boxplot_grid(
         axis.set_title(
             f"({panel}) {labels[outcome]}",
             loc="left",
-            y=1.045,
+            y=1.025,
             va="bottom",
             fontsize=7.2,
-            fontweight="normal",
+            fontweight="bold",
             color=_TEXT_COLOR,
             linespacing=1.05,
         )
         if index == 0 or (rows > 1 and index == columns):
             axis.set_ylabel(y_label)
     figure.subplots_adjust(
-        left=0.070,
-        right=0.985 if rows == 1 else 0.995,
-        bottom=0.145 if rows == 1 else 0.105,
-        top=0.885,
-        wspace=0.42 if rows > 1 else 0.36,
-        hspace=0.62 if rows > 1 else 0.0,
+        left=0.062,
+        right=0.995,
+        bottom=0.155 if rows == 1 else 0.105,
+        top=0.900,
+        wspace=0.34 if rows > 1 else 0.30,
+        hspace=0.54 if rows > 1 else 0.0,
     )
     return figure
 
@@ -286,8 +261,8 @@ def _draw_box_panel(
             [offsets[participant], 1.0 + offsets[participant]],
             [values[0][participant], values[1][participant]],
             color=_PAIR_COLOR,
-            linewidth=0.50,
-            alpha=0.12,
+            linewidth=0.55,
+            alpha=0.22,
             zorder=1,
         )
     for method_index, (method_values, color, marker) in enumerate(
@@ -296,30 +271,30 @@ def _draw_box_panel(
         axis.scatter(
             float(method_index) + offsets,
             method_values,
-            s=7.0,
+            s=9.0,
             marker=marker,
             facecolors="white" if method_index == 0 else color,
             edgecolors=color,
-            linewidths=0.5,
-            alpha=0.50,
+            linewidths=0.55,
+            alpha=0.68,
             zorder=2,
         )
     boxplot = axis.boxplot(
         values,
         positions=(0.0, 1.0),
-        widths=0.42,
+        widths=0.50,
         patch_artist=True,
         showfliers=False,
         whis=1.5,
-        boxprops={"linewidth": 1.0},
+        boxprops={"linewidth": 0.95},
         whiskerprops={"color": _MUTED_COLOR, "linewidth": 0.85},
         capprops={"color": _MUTED_COLOR, "linewidth": 0.85},
-        medianprops={"linewidth": 1.35},
+        medianprops={"linewidth": 1.55},
         zorder=3,
     )
     for patch, color in zip(boxplot["boxes"], _METHOD_COLORS, strict=True):
         patch.set_facecolor(color)
-        patch.set_alpha(0.30)
+        patch.set_alpha(0.42)
         patch.set_edgecolor(color)
     for median in boxplot["medians"]:
         median.set_color(_TEXT_COLOR)
@@ -328,7 +303,7 @@ def _draw_box_panel(
     axis.set_ylim(lower - 0.30, upper + headroom)
     axis.set_yticks(range(lower, upper + 1))
     axis.set_xticks((0.0, 1.0), _METHOD_LABELS)
-    axis.set_xlim(-0.42, 1.42)
+    axis.set_xlim(-0.48, 1.48)
     _draw_significance(axis, p_holm, float(upper), headroom)
     _clean_axis(axis)
 
@@ -345,7 +320,7 @@ def _draw_significance(axis: Any, p_holm: Any, scale_upper: float, headroom: flo
         [0.0, 0.0, 1.0, 1.0],
         [bracket, bracket + height, bracket + height, bracket],
         color=_TEXT_COLOR,
-        linewidth=0.9,
+        linewidth=0.85,
         clip_on=False,
         zorder=5,
     )
@@ -356,7 +331,7 @@ def _draw_significance(axis: Any, p_holm: Any, scale_upper: float, headroom: flo
         ha="center",
         va="bottom",
         color=_TEXT_COLOR,
-        fontsize=7.4,
+        fontsize=7.2,
         fontweight="bold",
         clip_on=False,
     )
@@ -568,8 +543,8 @@ def _clean_axis(axis: Any) -> None:
         axis="y",
         color=_GRID_COLOR,
         linestyle=":",
-        linewidth=0.7,
-        alpha=0.30,
+        linewidth=0.65,
+        alpha=0.55,
     )
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)

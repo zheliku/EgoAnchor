@@ -82,8 +82,8 @@ EXCLUSION_REASONS: Final = (
 WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.1"
 """正式原始工作簿写入核心属性的稳定契约标识。"""
 
-WORKBOOK_SOURCE_CATEGORY: Final = "formal-participant-data"
-"""正式参与者原始数据使用的核心属性类别。"""
+WORKBOOK_DATA_CATEGORY: Final = "experiment-3-raw-workbook"
+"""实验三原始工作簿的通用数据类别，仅用于 provenance。"""
 
 BLOCK_ITEMS: Final = {
     "Q1": "Q1",
@@ -246,9 +246,6 @@ class Exp3Data:
     finals: pd.DataFrame
     """Records C 段的一行一参与者最终问卷记录。"""
 
-    source_kind: str
-    """输入来源类型：formal、synthetic 或 unknown。"""
-
     source_path: str
     """本次只读输入工作簿的规范化绝对路径。"""
 
@@ -332,7 +329,7 @@ __all__ = [
     "ScoreData",
     "TARGET_PARTICIPANTS",
     "WORKBOOK_CONTRACT_ID",
-    "WORKBOOK_SOURCE_CATEGORY",
+    "WORKBOOK_DATA_CATEGORY",
     "aq_scale_items",
     "published_scale_items",
     "required_block_items",

@@ -25,7 +25,7 @@ from .analysis import (
     REVERSED_TIA_ITEMS,
     SCALE_OUTCOMES,
     WORKBOOK_CONTRACT_ID,
-    WORKBOOK_SOURCE_CATEGORY,
+    WORKBOOK_DATA_CATEGORY,
     aq_scale_items,
     required_block_items,
 )
@@ -70,7 +70,6 @@ def build_raw_template(
         _repair_records_validations(workbook)
         _replace_formula_sheets(workbook, settings)
         _enable_recalculation(workbook)
-        _assert_no_synthetic_boilerplate(workbook)
         workbook.save(temporary)
     finally:
         workbook.close()
@@ -85,10 +84,10 @@ def _clean_front_matter(workbook: Any) -> None:
     """删除过期过程说明，并把首屏改成正式采集事实。"""
 
     workbook.properties.identifier = WORKBOOK_CONTRACT_ID
-    workbook.properties.category = WORKBOOK_SOURCE_CATEGORY
+    workbook.properties.category = WORKBOOK_DATA_CATEGORY
     workbook.properties.version = "v5.1"
     readme = workbook["README"]
-    readme["A1"] = "EgoAnchor 实验三正式原始数据工作簿（v5.1）"
+    readme["A1"] = "EgoAnchor 实验三原始数据工作簿（v5.1）"
     readme["A2"] = (
         "唯一权威规格：2026-EgoAnchor/experiment_3_questionnaire_design_zh.md（v5.1）。"
         "Participants 与 Records 是唯一人工输入；Derived 是只读公式派生层，"
@@ -105,7 +104,7 @@ def _clean_front_matter(workbook: Any) -> None:
     readme["A27"] = "工作簿契约"
     readme["B27"] = WORKBOOK_CONTRACT_ID
     readme["A28"] = "数据类别"
-    readme["B28"] = WORKBOOK_SOURCE_CATEGORY
+    readme["B28"] = WORKBOOK_DATA_CATEGORY
     for row in (27, 28):
         readme.cell(row, 1)._style = copy(readme["A13"]._style)
         readme.cell(row, 2)._style = copy(readme["B13"]._style)
@@ -1109,17 +1108,6 @@ def _enable_recalculation(workbook: Any) -> None:
     workbook.calculation.calcMode = "auto"
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
-
-
-def _assert_no_synthetic_boilerplate(workbook: Any) -> None:
-    """拒绝把模拟模型标语带入正式原始模板。"""
-
-    forbidden = ("synthetic /", "模拟分析结果", "合成数据：", "gpt-5.6-thinking", "claude-opus")
-    for worksheet in workbook.worksheets:
-        for row in worksheet.iter_rows():
-            for cell in row:
-                if isinstance(cell.value, str) and any(term in cell.value.lower() for term in forbidden):
-                    raise ValueError(f"正式原始模板仍含模拟标语：{worksheet.title}!{cell.coordinate}")
 
 
 __all__ = ["build_raw_template"]

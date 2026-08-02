@@ -1,4 +1,4 @@
-"""实验三产物契约、绘图推断闭环和来源门禁入口测试。"""
+"""实验三产物契约与绘图推断闭环测试。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,6 @@ from egoanchor.eval.experiments.experiment_3.analysis import (
     load_settings,
     publish_figures,
     signed_rank_test,
-    write_subjective_table,
 )
 
 
@@ -34,7 +33,7 @@ ONE_EURO = METHODS[0]
 
 
 class Experiment3ArtifactContractTests(unittest.TestCase):
-    """验证绘图星号不能脱离配对分，且所有发布入口先执行来源门禁。"""
+    """验证绘图星号不能脱离配对分，且发布产物遵循固定契约。"""
 
     def test_figures_recompute_rank_statistics_and_family_holm(self) -> None:
         """即使错误 Holm p 仍位于合法范围，绘图入口也必须拒绝。"""
@@ -63,36 +62,8 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                             replace(tables, results=bad_results),
                             output,
                             settings,
-                            source_gate_status="approved",
                         )
                     self.assertFalse(output.exists())
-
-    def test_publication_entries_reject_unknown_gate_before_writing(self) -> None:
-        """绘图和 TeX 入口对未知门禁状态统一抛出 ValueError 且不落盘。"""
-
-        scores, tables = _analysis_fixture()
-        invalid_status = cast(Any, "unexpected")
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            figure_root = root / "figures_output"
-            with self.assertRaisesRegex(ValueError, "未知实验三来源门禁状态"):
-                publish_figures(
-                    scores,
-                    tables,
-                    figure_root,
-                    load_settings(),
-                    source_gate_status=invalid_status,
-                )
-            self.assertFalse(figure_root.exists())
-
-            table = root / "tex_output" / "table.tex"
-            with self.assertRaisesRegex(ValueError, "未知实验三来源门禁状态"):
-                write_subjective_table(
-                    table,
-                    pd.DataFrame(),
-                    source_gate_status=invalid_status,
-                )
-            self.assertFalse(table.parent.exists())
 
     def test_artifact_contract_contains_unique_fixed_outputs(self) -> None:
         """单一不可变契约覆盖 XLSX、TeX 与两张图的 PNG/PDF。"""

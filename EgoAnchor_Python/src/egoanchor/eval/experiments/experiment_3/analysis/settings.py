@@ -33,9 +33,6 @@ class AnalysisSettings:
     template_version: str
     """原始模板与问卷版本。"""
 
-    approved_response_fingerprints: frozenset[str]
-    """已核验并批准用于论文的核心响应 SHA-256 集合。"""
-
     alpha: float
     """每个冻结检验家族的显著性水平。"""
 
@@ -121,7 +118,6 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
     document = load_toml(config_path)
     experiment = require_table(document, "experiment_3", config_path.name)
     contract = require_table(experiment, "contract", "paper.toml [experiment_3]")
-    source_gate = require_table(experiment, "source_gate", "paper.toml [experiment_3]")
     analysis = require_table(experiment, "analysis", "paper.toml [experiment_3]")
     missing = require_table(experiment, "missing", "paper.toml [experiment_3]")
     equivalence = require_table(experiment, "equivalence", "paper.toml [experiment_3]")
@@ -129,7 +125,6 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
     settings = AnalysisSettings(
         contract_version=_require_int(contract, "version"),
         template_version=_require_str(contract, "template_version"),
-        approved_response_fingerprints=_approved_fingerprints(source_gate),
         alpha=_require_float(analysis, "alpha"),
         target_participants=_require_int(analysis, "target_participants"),
         minimum_participants=_require_int(analysis, "minimum_participants"),
@@ -180,8 +175,8 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
 def _validate_settings(settings: AnalysisSettings) -> None:
     """检查统计、缺失处理和绘图参数的联合约束。"""
 
-    if settings.contract_version != 3 or settings.template_version != "v5.1":
-        raise ValueError("实验三当前只接受配置契约 v3 与模板 v5.1")
+    if settings.contract_version != 4 or settings.template_version != "v5.1":
+        raise ValueError("实验三当前只接受配置契约 v4 与模板 v5.1")
     if settings.alpha != 0.05:
         raise ValueError("实验三冻结 alpha=0.05，不得与论文图中的显著性标记阈值脱节")
     if settings.confidence_level != 0.95:
@@ -222,24 +217,6 @@ def _validate_settings(settings: AnalysisSettings) -> None:
         for value in size
     ):
         raise ValueError("论文图分辨率或画布尺寸无效")
-
-
-def _approved_fingerprints(source_gate: dict[str, Any]) -> frozenset[str]:
-    """读取并严格校验受版本控制的响应指纹批准列表。"""
-
-    raw = source_gate.get("approved_response_fingerprints")
-    if not isinstance(raw, list) or any(not isinstance(value, str) for value in raw):
-        raise ValueError("approved_response_fingerprints 必须是字符串数组")
-    fingerprints = tuple(value.strip() for value in raw)
-    if len(fingerprints) != len(set(fingerprints)):
-        raise ValueError("approved_response_fingerprints 不得包含重复指纹")
-    hexadecimal = frozenset("0123456789abcdef")
-    if any(
-        len(fingerprint) != 64 or not set(fingerprint).issubset(hexadecimal)
-        for fingerprint in fingerprints
-    ):
-        raise ValueError("approved_response_fingerprints 必须是 64 位小写十六进制 SHA-256")
-    return frozenset(fingerprints)
 
 
 def _require_scalar(

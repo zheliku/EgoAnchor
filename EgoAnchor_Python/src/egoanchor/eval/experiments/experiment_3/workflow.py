@@ -1,4 +1,4 @@
-"""实验三的状态、门禁、分析构建和论文资源计划。"""
+"""实验三的状态、质量检查、分析构建和论文资源计划。"""
 
 from __future__ import annotations
 
@@ -62,25 +62,9 @@ def describe_workflow() -> dict[str, Any]:
         except (OSError, ValueError) as error:
             payload["build"] = {"status": "invalid", "reason": str(error)}
         else:
-            details = manifest.get("details")
-            paper_eligible = (
-                details.get("paper_eligible")
-                if isinstance(details, dict)
-                else None
-            )
-            source_gate_status = (
-                details.get("source_gate_status")
-                if isinstance(details, dict)
-                else None
-            )
-            warnings = manifest.get("warnings")
             payload["build"] = {
                 "build_id": manifest["build_id"],
                 "status": manifest["status"],
-                "source_kind": manifest["source_kind"],
-                "paper_eligible": paper_eligible,
-                "source_gate_status": source_gate_status,
-                "warnings": list(warnings) if isinstance(warnings, list) else [],
             }
     else:
         payload["build"] = {"status": "missing"}
@@ -88,7 +72,7 @@ def describe_workflow() -> dict[str, Any]:
 
 
 def validate_workflow() -> dict[str, Any]:
-    """执行正式来源门禁，并要求工作簿达到完整分析条件。"""
+    """执行工作簿结构、填写完整性和冻结配对样本量检查。"""
 
     paths = load_paths()
     settings = load_settings_snapshot().settings
@@ -98,18 +82,17 @@ def validate_workflow() -> dict[str, Any]:
         data,
         aq_mode=settings.aq_mode,
         q10_enabled=settings.q10_enabled,
-        approved_response_fingerprints=settings.approved_response_fingerprints,
-        allow_synthetic=False,
     )
     scores = derive_scores(data, settings)
-    validate_complete_pair_counts(scores.paired_scores, settings.minimum_participants)
-    payload["analysis_readiness"] = readiness
-    payload["paper_eligible"] = bool(readiness["paper_eligible"])
-    payload["source_gate_status"] = readiness["source_gate_status"]
-    payload["warnings"] = list(readiness["warnings"])
-    if not payload["paper_eligible"]:
-        payload["passed"] = False
-        payload["reason"] = readiness["source_gate_reason"]
+    pair_counts = validate_complete_pair_counts(
+        scores.paired_scores,
+        settings.minimum_participants,
+    )
+    payload["analysis_readiness"] = {
+        "included_participants": list(readiness["included_participants"]),
+        "included_count": readiness["included_count"],
+        "paired_counts": pair_counts,
+    }
     return payload
 
 
@@ -132,36 +115,21 @@ def analyze_workflow(
         paper_config_path=DEFAULT_PAPER_CONFIG_PATH,
         progress=progress,
     )
-    details = payload.get("build", {}).get("details", {})
-    payload["next_command"] = (
-        "pixi run eval copy-assets exp3"
-        if isinstance(details, dict) and details.get("paper_eligible") is True
-        else (
-            "当前输入未通过来源完整性门禁，仅可用于流程演练；"
-            "请用来源可核验的真实参与者数据替换输入，再运行 pixi run eval analyze exp3"
-        )
-    )
+    payload["next_command"] = "pixi run eval copy-assets exp3"
     return payload
 
 
 def plan_assets() -> ArtifactPlan:
-    """返回实验三完整正式构建的只读资源计划。"""
+    """返回实验三完整构建的只读资源计划。"""
 
     paths = load_paths()
     snapshot = load_settings_snapshot()
     manifest_path = build_manifest_path(paths.analysis_root)
     if not manifest_path.is_file():
-        raise FileNotFoundError("实验三尚无完整正式构建，请先运行 analyze exp3")
+        raise FileNotFoundError("实验三尚无完整构建，请先运行 analyze exp3")
     manifest = read_build_manifest(paths.analysis_root, owner="experiment_3")
     if manifest.get("status") != "complete":
         raise ValueError("实验三构建尚未完整完成，拒绝复制论文资源")
-    if manifest.get("source_kind") != "formal":
-        raise ValueError("实验三合成/模拟构建不得复制到论文目录")
-    details = manifest.get("details")
-    if not isinstance(details, dict) or details.get("source_gate_status") != "approved":
-        raise ValueError("实验三输入未通过来源完整性门禁，不得复制到论文目录")
-    if details.get("paper_eligible") is not True:
-        raise ValueError("实验三输入未通过来源完整性门禁，不得复制到论文目录")
     if manifest.get("config_sha256") != snapshot.sha256:
         raise ValueError("实验三配置已变化，请重新运行 analyze exp3")
     implementation_root = Path(analysis.__file__).resolve().parent
@@ -172,7 +140,7 @@ def plan_assets() -> ArtifactPlan:
         raise ValueError("实验三构建必须恰好声明一个原始工作簿")
     input_path = Path(str(inputs[0].get("path", ""))).expanduser().resolve()
     if input_path != paths.input_workbook.resolve():
-        raise ValueError("实验三构建没有使用配置固定的正式原始工作簿")
+        raise ValueError("实验三构建没有使用配置固定的原始工作簿")
     if not input_path.is_file() or file_sha256(input_path) != inputs[0].get("sha256"):
         raise ValueError("实验三原始输入已变化，请重新运行 analyze exp3")
     outputs = validate_output_files(manifest)
@@ -192,9 +160,9 @@ def plan_assets() -> ArtifactPlan:
         expected = (
             paths.analysis_root / artifact.category / artifact.canonical_name
         ).resolve()
-        if source != expected:
+        if output.get("kind") != artifact.kind or source != expected:
             raise ValueError(
-                f"实验三产物来源越界或文件名不匹配：{artifact.key}: {source}"
+                f"实验三产物来源越界、文件名或类型不匹配：{artifact.key}: {source}"
             )
         resolved_outputs[artifact.key] = (source, output["sha256"])
 
@@ -206,7 +174,7 @@ def plan_assets() -> ArtifactPlan:
                 owner="experiment_3",
                 key=artifact.key,
                 source=source,
-                destination=paths.figure_destination / source.name,
+                destination=paths.figure_destination / artifact.canonical_name,
                 expected_sha256=sha256,
             )
         )

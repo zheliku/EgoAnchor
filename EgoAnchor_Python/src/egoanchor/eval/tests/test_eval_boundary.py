@@ -194,10 +194,10 @@ class EvalBoundaryTests(unittest.TestCase):
         self.assertEqual(arguments.target, "exp1-2")
         self.assertIs(arguments.handler, eval_cli._run_copy_assets)
 
-    def test_formal_experiment3_analysis_rejects_path_and_synthetic_overrides(self) -> None:
-        """正式 CLI 只读 TOML 固定路径，不暴露模拟数据后门。"""
+    def test_formal_experiment3_analysis_rejects_path_overrides(self) -> None:
+        """正式 CLI 只读 TOML 固定输入和输出路径。"""
 
-        for option in ("--input", "--output-root", "--allow-synthetic"):
+        for option in ("--input", "--output-root"):
             with self.subTest(option=option), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as raised:
                     eval_cli.build_parser().parse_args(["analyze", "exp3", option, "value"])

@@ -19,7 +19,7 @@ from .contracts import (
     SCALE_FAMILY,
     SCALE_OUTCOMES,
     WORKBOOK_CONTRACT_ID,
-    WORKBOOK_SOURCE_CATEGORY,
+    WORKBOOK_DATA_CATEGORY,
     AnalysisTables,
     Exp3Data,
     ScoreData,
@@ -35,7 +35,6 @@ from .pipeline import build_analysis, validate_complete_pair_counts
 from .reader import describe_workbook, read_workbook, validate_for_analysis
 from .scoring import derive_scores
 from .settings import AnalysisSettings, SettingsSnapshot, load_settings, load_settings_snapshot
-from .source_gate import SourceGateStatus
 from .summaries import analyze_scores
 from .workbook import (
     CHOICES_SHEET,
@@ -77,10 +76,9 @@ __all__ = [
     "SAMPLE_QC_SHEET",
     "ScoreData",
     "SettingsSnapshot",
-    "SourceGateStatus",
     "TARGET_PARTICIPANTS",
     "WORKBOOK_CONTRACT_ID",
-    "WORKBOOK_SOURCE_CATEGORY",
+    "WORKBOOK_DATA_CATEGORY",
     "analyze_scores",
     "aq_scale_items",
     "build_analysis",

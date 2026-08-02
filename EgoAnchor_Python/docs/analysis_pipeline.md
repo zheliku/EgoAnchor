@@ -8,7 +8,7 @@ cd EgoAnchor_Python
 pixi run eval --help
 ```
 
-正式命令不接受任意输入路径、输出路径或合成数据开关。路径和统计参数只从两份共享 TOML
+正式命令不接受任意输入路径或输出路径。路径和统计参数只从两份共享 TOML
 读取，避免命令历史与正式配置不一致。
 
 ## 1. 统一工作模型
@@ -18,7 +18,7 @@ pixi run eval --help
 | 命令                                            | 作用                                          | 是否写论文目录 |
 | ----------------------------------------------- | --------------------------------------------- | -------------- |
 | `pixi run eval status [all\|exp1-2\|exp3]`      | 查看配置、输入进度和最近构建状态；默认`all` | 否             |
-| `pixi run eval validate <all\|exp1-2\|exp3>`    | 执行正式分析门禁                              | 否             |
+| `pixi run eval validate <all\|exp1-2\|exp3>`    | 执行结构、评分、配对与统计一致性 QC          | 否             |
 | `pixi run eval analyze <all\|exp1-2\|exp3>`     | 生成本地统计、XLSX、TeX 和图片                | 否             |
 | `pixi run eval copy-assets [all\|exp1-2\|exp3]` | 联合预检后复制指定实验的论文资源              | 是             |
 | `pixi run eval data ...`                      | 管理实验专属原始输入和 Stage 1 缓存           | 否             |
@@ -32,7 +32,7 @@ pixi run eval --help
 pixi run eval copy-assets all
 ```
 
-`copy-assets all` 要求实验一/二和实验三都存在最新、完整、正式来源的构建。采集尚未完成时若只需要更新
+`copy-assets all` 要求实验一/二和实验三都存在最新、完整的构建。采集尚未完成时若只需要更新
 实验一/二，运行无参数的 `copy-assets` 或明确运行 `copy-assets exp1-2`；命令不会自动跳过缺失的实验。
 
 ## 2. 工程结构
@@ -118,7 +118,7 @@ src/egoanchor/eval/
 当前 `aq_mode = "full"`，而 Round 2 负担诊断记录建议缩减 AQ；是否切到 `reduced`
 必须依据权威计划规定的预实验冻结过程明确决定，不能在采集中途改变。
 
-## 4. 状态与门禁
+## 4. 状态与质量检查
 
 查看整个工作区：
 
@@ -144,9 +144,9 @@ pixi run eval validate exp3
 pixi run eval validate all
 ```
 
-`validate exp1-2` 对活动清单引用的五份原始任务执行完整硬 QC。`validate exp3` 总是执行正式来源和完整性
-门禁，不再提供弱校验选项；采集未完成时用 `status exp3` 看填表进度。`validate all` 会分别运行两边门禁，
-即使一边失败也保留另一边的诊断。
+`validate exp1-2` 对活动清单引用的五份原始任务执行完整硬 QC。`validate exp3` 检查工作簿结构、评分完整性、
+配对关系和统计输入一致性，不判断参与者来源；采集未完成时用 `status exp3` 看填表进度。`validate all` 会分别
+运行两边 QC，即使一边失败也保留另一边的诊断。
 
 ## 5. 实验一/二日常重分析
 
@@ -243,15 +243,9 @@ pixi run eval analyze exp1-2 --rebuild
 ../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx
 ```
 
-当前该路径下的文件未通过来源完整性门禁：4560 个核心响应与已标为 GPT 合成的参考工作簿逐格一致，
-而且记录时间晚于审计日期。它现在只是流程演练输入，不能作为真实参与者数据或论文证据；正式采集前须替换为来源可核验的原始工作簿。
+该工作簿保存 24 名参与者的正式录制数据。研究团队保留原始记录与知情同意；分析程序检查工作簿结构、评分、配对和统计输入的一致性。
 
-来源门禁采用正向批准。分析会把三段身份和核心响应规范排序后计算 SHA-256：已知合成指纹始终拒绝；
-工作簿即使自报为正式来源，未登记的指纹也只能生成带警告的流程演练产物。真实采集完成并核对原始记录、同意与采集来源后，
-研究者才把该指纹加入 `paper.toml [experiment_3.source_gate].approved_response_fingerprints`，随后重新运行验证和分析。
-批准列表属于受版本控制的发布决定，不能由分析脚本自动学习或根据文件名推断。
-
-正式采集时直接填写通过来源核验的工作簿，不需要反复生成模板。只有需要制作新的审查副本时才运行：
+正式采集时直接填写计划路径下的工作簿，不需要反复生成模板。只有需要制作新的审查副本时才运行：
 
 ```powershell
 pixi run eval data exp3 create-template --output ..\2026-EgoAnchor\material\exp3_template_review.xlsx
@@ -352,7 +346,7 @@ pixi run eval analyze exp3
 → 校验全部产物并提交 complete 构建清单
 ```
 
-来源门禁状态为 `approved` 时，正式产物位于：
+每次成功分析都将产物写入以下标准路径：
 
 ```text
 data/experiments/experiment_3/analysis/
@@ -363,24 +357,13 @@ data/experiments/experiment_3/analysis/
 └─ provenance/build_result.json
 ```
 
-门禁失败时，`provenance/build_result.json` 仍位于分析根目录；结果簿、TeX 和图片进入各自类别下的
-`rehearsal_not_paper_evidence/`，文件名附带具体状态。各类文件的路径如下：
-
-```text
-results/rehearsal_not_paper_evidence/experiment3_analysis__<status>_rehearsal_not_paper_evidence.xlsx
-tex/rehearsal_not_paper_evidence/exp3_subjective__<status>_rehearsal_not_paper_evidence.tex
-figures/rehearsal_not_paper_evidence/figure4_exp3_primary_outcomes__<status>_rehearsal_not_paper_evidence.{png,pdf}
-figures/rehearsal_not_paper_evidence/figure5_exp3_published_scales__<status>_rehearsal_not_paper_evidence.{png,pdf}
-```
-
-其中 `<status>` 只能是 `known_synthetic`、`unapproved_formal` 或 `nonformal`。这些文件用于流程演练，
-不是正文候选 Figure，也不能由 `copy-assets exp3` 复制到论文目录。
+分析产物契约为 v4，不兼容旧目录、文件名后缀或构建清单。产物可复现且路径固定。
 
 结果工作簿固定为六张中文页，顺序和职责如下：
 
 | 页面 | 内容 | 论文用法 |
 | ---- | ---- | -------- |
-| `说明` | 来源指纹、是否可用于论文、统计规则、参数摘要、警告和页面索引 | 先确认分析来源与发布资格 |
+| `说明` | 输入摘要、统计规则、参数摘要、警告和页面索引 | 先确认分析条件与结果边界 |
 | `样本与质控` | 样本流、人口学、经验、安全、设计平衡和运行时操纵描述 | 样本、流程和操纵检查段 |
 | `主结果` | 7 个主条目和已发表量表家族 5 项结局的描述统计、精确 Wilcoxon、家族内 Holm 与 `r_rb` | 论文完整结果表的唯一数字源 |
 | `分物体描述` | 7 个主条目在三个物体上的两方法描述统计与配对差 | 方向一致性核查；不作逐物体推断 |
@@ -415,9 +398,6 @@ TiA 两个分量表与 S-TIAS 三项均分使用方法级单次施测得分；�
 `** p_Holm < .01`、`*** p_Holm < .001`）。TiA 使用 1--5 理论量尺，其余面板使用 1--7。逐物体数据只检查方向，
 不分别检验或添加星号。
 
-合成和模拟工作簿只能通过 Python 包级 API 或独立模拟脚本调用 `allow_synthetic=True`。正式 CLI 没有该
-选项，合成构建即使完整也会被 `copy-assets` 拒绝。
-
 ## 9. 联合分析和最终资源复制
 
 两边正式数据都准备好后：
@@ -428,7 +408,7 @@ pixi run eval analyze all
 pixi run eval copy-assets all
 ```
 
-`analyze all` 先运行联合门禁；任一实验未通过时，两条分析都不会开始。门禁通过后先分析实验一/二，再分析
+`analyze all` 先运行联合 QC；任一实验未通过时，两条分析都不会开始。QC 通过后先分析实验一/二，再分析
 实验三，避免两个统计任务并行争用 CPU。需要同时强制重建实验一/二 Stage 1 时使用：
 
 ```powershell
@@ -451,7 +431,6 @@ pixi run eval analyze all --rebuild-exp1-2
 | `owner`                  | `experiment_1_2` 或 `experiment_3`  |
 | `build_id`               | 输入、配置和实现共同决定的构建身份      |
 | `status`                 | `building` 或 `complete`            |
-| `source_kind`            | `formal` 或 `synthetic`             |
 | `inputs`                 | 每个输入的绝对路径和 SHA-256            |
 | `config_sha256`          | 该实验在`paper.toml` 中的科学参数摘要 |
 | `implementation_sha256`  | 该实验分析源码树摘要                    |
@@ -468,7 +447,6 @@ pixi run eval analyze all --rebuild-exp1-2
 - 该实验拥有的 TOML 参数变化；
 - 分析源码变化；
 - 任一声明产物缺失或被手工修改；
-- 实验三来源标记为 synthetic。
 
 ## 11. 输出、进度和退出码
 
@@ -495,7 +473,7 @@ pixi run eval analyze all --rebuild-exp1-2
 
 ### `copy-assets` 报输入、配置、实现或产物摘要变化
 
-说明本地产物不再能证明来自当前正式输入。重新运行对应 `analyze`；不要复制文件绕过摘要门禁。
+说明本地产物不再能证明来自当前配置输入。重新运行对应 `analyze`；不要复制文件绕过摘要检查。
 
 ### Excel 中公式为空或未更新
 

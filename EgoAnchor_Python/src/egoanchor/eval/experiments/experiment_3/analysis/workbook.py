@@ -26,7 +26,6 @@ from .contracts import (
     SCALE_OUTCOMES,
 )
 from .settings import AnalysisSettings
-from .source_gate import SourceGateStatus, is_paper_eligible, require_source_gate_status
 
 
 INFO_SHEET = "说明"
@@ -157,10 +156,6 @@ def write_results_workbook(
     output = destination.expanduser().resolve()
     input_digest = _require_sha256(data.source_sha256, "输入 SHA-256")
     settings_digest = _require_sha256(settings_sha256, "参数 SHA-256")
-    source_gate_status, response_fingerprint = _validate_source_gate_metadata(
-        data,
-        validation,
-    )
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -176,8 +171,6 @@ def write_results_workbook(
         batch_config_path,
         paper_config_path,
         validation,
-        source_gate_status,
-        response_fingerprint,
     )
     _write_sample_quality(workbook, tables.sample, tables.manipulation)
     _write_main_results(workbook, tables.results, settings.alpha)
@@ -197,8 +190,6 @@ def write_results_workbook(
             input_sha256=input_digest,
             settings_sha256=settings_digest,
             included_count=len(validation["included_participants"]),
-            source_gate_status=source_gate_status,
-            response_fingerprint=response_fingerprint,
         )
         temporary.replace(output)
     finally:
@@ -214,8 +205,6 @@ def _write_info(
     batch_config_path: Path,
     paper_config_path: Path,
     validation: dict[str, Any],
-    source_gate_status: SourceGateStatus,
-    response_fingerprint: str,
 ) -> None:
     """写入来源、推断口径、诚实边界和六页索引。"""
 
@@ -235,10 +224,6 @@ def _write_info(
         (
             ("输入工作簿", data.source_path),
             ("输入 SHA-256", data.source_sha256),
-            ("核心响应指纹", response_fingerprint),
-            ("工作簿标记", _source_marker_text(data.source_kind)),
-            ("来源门禁状态", source_gate_status),
-            ("可用于论文", "是" if is_paper_eligible(source_gate_status) else "否"),
             ("纳入参与者", validation["included_count"]),
             ("批处理配置", str(batch_config_path)),
             ("论文参数配置", str(paper_config_path)),
@@ -277,13 +262,11 @@ def _write_info(
             ("显著性阈值", settings.alpha),
         ),
     )
-    warnings = tuple(str(item) for item in validation.get("warnings", ()) if str(item).strip())
     row = _write_key_value_section(
         worksheet,
         row,
         "解释边界",
         (
-            ("数据警告", "；".join(warnings) if warnings else "无"),
             ("Q10", "启用但不混入冻结十二项主结果" if settings.q10_enabled else "未启用"),
             ("信度", "只表示当前样本内部一致性；AQ 的三物体均值单位与单次方法级量表不可互比"),
             ("发布边界", "只提供主观评价与无需真值的运行时操纵检查，不提供客观任务表现证据"),
@@ -294,34 +277,6 @@ def _write_info(
     worksheet.column_dimensions["A"].width = 23
     worksheet.column_dimensions["B"].width = 100
     worksheet.freeze_panes = "A4"
-
-
-def _validate_source_gate_metadata(
-    data: Exp3Data,
-    validation: dict[str, Any],
-) -> tuple[SourceGateStatus, str]:
-    """把读取器给出的门禁结论与本次输入快照严格绑定。"""
-
-    status = require_source_gate_status(validation.get("source_gate_status"))
-    expected = is_paper_eligible(status)
-    if validation.get("paper_eligible") is not expected:
-        raise ValueError("实验三来源门禁状态与 paper_eligible 自相矛盾")
-    if data.source_kind not in {"formal", "synthetic", "unknown"}:
-        raise ValueError(f"实验三输入来源类型未知：{data.source_kind!r}")
-    if validation.get("source_kind") != data.source_kind:
-        raise ValueError("实验三来源门禁元数据未绑定当前输入的 source_kind")
-    if status in {"approved", "unapproved_formal"} and data.source_kind != "formal":
-        raise ValueError(f"实验三门禁状态 {status} 只适用于 formal 输入")
-    if status == "nonformal" and data.source_kind == "formal":
-        raise ValueError("formal 输入不得标记为 nonformal")
-    response_fingerprint = _require_sha256(
-        validation.get("response_fingerprint"),
-        "核心响应指纹",
-    )
-    reason = validation.get("source_gate_reason")
-    if not isinstance(reason, str) or not reason.strip():
-        raise ValueError("实验三结果工作簿缺少 source_gate_reason")
-    return status, response_fingerprint
 
 
 def _write_sample_quality(
@@ -1120,16 +1075,6 @@ def _category_name(category: str) -> str:
     }.get(category, category)
 
 
-def _source_marker_text(source_kind: str) -> str:
-    """把工作簿自报契约翻译成不暗示来源已核实的中文。"""
-
-    return {
-        "formal": "正式参与者数据标记（仅为工作簿自报契约，不代表来源已核实）",
-        "synthetic": "明确标记为合成/模拟数据",
-        "unknown": "未知（未识别正式或合成契约）",
-    }.get(source_kind, f"未知标记：{source_kind}")
-
-
 def _require_sha256(value: object, label: str) -> str:
     """读取 64 位小写十六进制 SHA-256，拒绝伪摘要和隐式转换。"""
 
@@ -1190,10 +1135,8 @@ def _verify_results_workbook(
     input_sha256: str,
     settings_sha256: str,
     included_count: int,
-    source_gate_status: SourceGateStatus,
-    response_fingerprint: str,
 ) -> None:
-    """回读六页、来源门禁、样本 N 与两张核心结果表的冻结键。"""
+    """回读六页、输入与参数摘要、样本 N 及两张核心结果表的冻结键。"""
 
     workbook = load_workbook(path, read_only=True, data_only=False)
     try:
@@ -1206,12 +1149,8 @@ def _verify_results_workbook(
             for row in range(1, info.max_row + 1)
             if info.cell(row, 1).value is not None
         }
-        checked_status = require_source_gate_status(source_gate_status)
         expected_facts = {
             "输入 SHA-256": _require_sha256(input_sha256, "输入 SHA-256"),
-            "核心响应指纹": _require_sha256(response_fingerprint, "核心响应指纹"),
-            "来源门禁状态": checked_status,
-            "可用于论文": "是" if is_paper_eligible(checked_status) else "否",
             "参数 SHA-256": _require_sha256(settings_sha256, "参数 SHA-256"),
         }
         mismatched = tuple(
@@ -1221,7 +1160,7 @@ def _verify_results_workbook(
         )
         if mismatched:
             raise ValueError(
-                "实验三结果工作簿的来源或参数摘要回读不一致："
+                "实验三结果工作簿的输入或参数摘要回读不一致："
                 + "、".join(mismatched)
             )
         if int(facts.get("纳入参与者") or 0) != included_count:

@@ -18,7 +18,7 @@ class ArtifactSpec:
     """分析根目录下的一级产物目录。"""
 
     canonical_name: str
-    """通过来源门禁时使用的唯一规范文件名。"""
+    """分析成功后使用的唯一规范文件名。"""
 
     kind: str
     """构建清单记录的无点号文件类型。"""
@@ -41,10 +41,18 @@ class ArtifactSpec:
                 f"{self.canonical_name}, {self.kind}"
             )
 
+    def path_under(self, root: Path) -> Path:
+        """返回该产物在指定构建根目录下的唯一规范路径。"""
+
+        return root.expanduser().resolve() / self.category / self.canonical_name
+
 
 @dataclass(frozen=True, slots=True)
 class ArtifactContract:
     """保存实验三 XLSX、TeX 和两张图的唯一产物集合。"""
+
+    version: int
+    """发布产物契约版本；升版即拒绝旧路径与旧清单。"""
 
     results_workbook: ArtifactSpec
     """六页分析结果工作簿。"""
@@ -67,6 +75,8 @@ class ArtifactContract:
     def __post_init__(self) -> None:
         """保证清单键和目录内文件名在完整契约中都唯一。"""
 
+        if self.version != 4:
+            raise ValueError("实验三产物契约版本必须为 4")
         keys = tuple(spec.key for spec in self.outputs)
         locations = tuple(
             (spec.category, spec.canonical_name) for spec in self.outputs
@@ -101,6 +111,7 @@ class ArtifactContract:
         )
 
 EXP3_ARTIFACTS: Final = ArtifactContract(
+    version=4,
     results_workbook=ArtifactSpec(
         key="results_workbook",
         category="results",
