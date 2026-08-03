@@ -53,7 +53,7 @@
 ### 实验三复合图（v2 Figure 6；资源名 Figure 4）
 
 - 只发布一张双栏宽的双排复合图 `figure4_exp3_subjective_outcomes.{pdf,png}`，全图共享一个方法图例；在 v2 主稿中该资源实际编号为 Figure 6，避免与实验一的单栏 `replay_grid.pdf`（正文 Figure 4）混淆。
-- 上排 `(a)` 填满七个等宽槽，依次显示 `Stability / Attachment / Recovery / Reliance / Balance / Position / Orientation`，不显示不连续的问卷编号。内部仍以 Q1/Q2/Q3/Q6/Q7/Q8/Q9 作为稳定分析键，纵轴保留原始 1--7 分。
+- 上排 `(a)` 填满七个等宽槽，依次显示 `Stability / Attachment / Orientation / Recovery / Position / Reliance / Balance`，不显示问卷编号。内部键为 Q1–Q7，纵轴保留原始 1--7 分。
 - 下排沿用上排的物理槽宽，五项已发表量表整体居中。左侧 `(b)` 三个槽展示 AQ-EQ、AQ-IQ 与 S-TIAS，共用 1--7 轴；右侧 `(c)` 两个槽展示 TiA R/C 与 TiA U/P，共用 1--5 右轴。两个量尺分区之间留窄缝，不归一化也不共用纵轴。
 - 每项结局并列 One-Euro 和 EgoAnchor。One-Euro 使用绿色菱形，EgoAnchor 使用红色方形；固定左右位置、点形和箱体边框共同区分方法。
 - 浅色点是参与者级得分，浅灰线连接同一参与者。透明箱体表示 IQR，箱内横线表示中位数，圆点表示均值，须线采用 1.5 倍 IQR 规则。

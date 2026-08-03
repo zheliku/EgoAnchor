@@ -11,7 +11,7 @@ from egoanchor.eval.experiments.common import ArtifactPlan, PlannedAsset
 
 
 class WorkspaceWorkflowTests(unittest.TestCase):
-    """验证 all 目标的联合门禁、分析短路和严格发布集合。"""
+    """验证 all 目标的独立诊断、直接分析和严格发布集合。"""
 
     def test_validate_all_keeps_both_experiment_diagnostics(self) -> None:
         """一侧输入异常时仍运行另一侧门禁，并统一返回数据失败。"""
@@ -35,20 +35,28 @@ class WorkspaceWorkflowTests(unittest.TestCase):
         self.assertTrue(result["experiments"]["exp3"]["passed"])
         validate_exp3.assert_called_once_with()
 
-    def test_analyze_all_writes_nothing_when_joint_gate_fails(self) -> None:
-        """联合门禁失败时，两条分析流水线都不得开始覆盖本地产物。"""
+    def test_analyze_all_runs_both_analyses_without_joint_validation(self) -> None:
+        """联合目标直接运行两条分析流水线，不额外重复验证。"""
 
-        failed = {"passed": False, "target": "all", "experiments": {}}
         with (
-            mock.patch.object(workspace, "validate_workspace", return_value=failed),
-            mock.patch.object(workspace.experiment_1_2, "analyze_workflow") as exp12,
-            mock.patch.object(workspace.experiment_3, "analyze_workflow") as exp3,
+            mock.patch.object(workspace, "validate_workspace") as validate,
+            mock.patch.object(
+                workspace.experiment_1_2,
+                "analyze_workflow",
+                return_value={"passed": True},
+            ) as exp12,
+            mock.patch.object(
+                workspace.experiment_3,
+                "analyze_workflow",
+                return_value={"passed": True},
+            ) as exp3,
         ):
             result = workspace.analyze_workspace("all")
 
-        self.assertFalse(result["passed"])
-        exp12.assert_not_called()
-        exp3.assert_not_called()
+        self.assertTrue(result["passed"])
+        validate.assert_not_called()
+        exp12.assert_called_once_with(rebuild=False)
+        exp3.assert_called_once_with(progress=None)
 
     def test_copy_all_requires_both_complete_plans_before_copying(self) -> None:
         """实验三缺少完整构建时，copy-assets all 不得降级成单实验复制。"""

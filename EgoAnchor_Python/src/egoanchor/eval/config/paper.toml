@@ -16,8 +16,8 @@ persistence_ms = 100.0 # 位移必须持续超过阈值的时间，单位毫秒�
 catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾难性失效，单位毫米。
 
 [experiment_3.contract]
-version = 4 # 实验三原始模板与论文分析参数契约版本；v4 固定通用 QC 与六页结果工作簿契约。
-template_version = "v5.1" # 实验三原始数据模板与问卷的冻结版本。
+version = 5 # 实验三原始模板与论文分析参数契约版本；v5 切换为五表原始数据结构和连续 Q1--Q7 编号。
+template_version = "v5.2" # 实验三原始数据模板与问卷版本；v5.2 删除 Q10 并整理研究定制条目编号。
 
 [experiment_3.analysis]
 alpha = 0.05 # 两个冻结检验家族各自使用的显著性水平。
@@ -28,7 +28,6 @@ bootstrap_iterations = 10000 # 匹配秩双列相关置信区间的参与者级�
 bootstrap_seed = 20260728 # 效应量自举的固定随机种子。
 confidence_level = 0.95 # 匹配秩双列相关自举区间的置信水平。
 aq_mode = "full" # AQ 计分模式；预实验正式冻结前使用完整三条目子量表，可选值为 full 或 reduced。
-q10_enabled = false # Q10 默认关闭；只有预实验触发并冻结后才启用。
 wilcoxon_alternative = "two-sided" # 主分析冻结为双侧配对 Wilcoxon。
 wilcoxon_zero_method = "wilcox" # 主分析删除零配对差并另报非零配对数。
 wilcoxon_p_method = "exact-sign-dp" # 使用含并列秩的精确符号置换动态规划计算 p 值。
@@ -37,14 +36,6 @@ wilcoxon_p_method = "exact-sign-dp" # 使用含并列秩的精确符号置换动
 tia_rc_min_items = 5 # TiA Reliability/Competence 六项中形成分量表所需的最少有效条目数。
 tia_up_min_items = 3 # TiA Understanding/Predictability 四项中形成分量表所需的最少有效条目数。
 stias_min_items = 3 # S-TIAS 三项必须全部有效。
-
-[experiment_3.equivalence]
-enabled = false # 预实验冻结全部正等价界后才启用 TOST。
-candidate_rate_margin_hz = 0.0 # 候选到达率配对差的对称等价界；0 表示尚未冻结。
-vcd_median_margin = 0.0 # VCD 中位分配对差的对称等价界；0 表示尚未冻结。
-admission_rate_margin = 0.0 # VCD 接纳率配对差的对称等价界；0 表示尚未冻结。
-output_availability_margin = 0.0 # 输出可用率配对差的对称等价界；0 表示尚未冻结。
-occlusion_seconds_margin = 0.0 # 遮挡时长配对差的对称等价界；0 表示尚未冻结。
 
 [experiment_3.figures]
 dpi = 300 # 实验三 PNG 的导出分辨率。

@@ -1,11 +1,10 @@
-"""实验三三段堆叠原始工作簿的严格只读 reader。"""
+"""实验三五表原始工作簿的严格只读 reader。"""
 
 from __future__ import annotations
 
 import hashlib
 import math
 from collections.abc import Iterable
-from datetime import datetime, time
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -26,12 +25,22 @@ from .contracts import (
     OBJECTS,
     PARTICIPANT_BACKGROUND_COLUMNS,
     PARTICIPANT_CATEGORIES,
+    WORKBOOK_CONTRACT_ID,
+    WORKBOOK_TEMPLATE_CONTRACT_ID,
     required_block_items,
 )
 
 
-_REQUIRED_SHEETS = frozenset({"README", "Participants", "Records"})
-"""分析输入必须包含的最小工作表集合。"""
+_REQUIRED_SHEETS = frozenset(
+    {"Questionnaire", "Participants", "Block", "Method", "Final"}
+)
+"""v5.2 原始工作簿必须包含的五张工作表。"""
+
+_QUESTIONNAIRE_ITEM_ORDER = (
+    "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7",
+    "AQ_EQ1", "AQ_EQ2", "AQ_EQ3", "AQ_IQ1", "AQ_IQ2", "AQ_IQ3",
+)
+"""区块问卷按研究定制条目、AQ-EQ、AQ-IQ 分组的固定顺序。"""
 
 _PARTICIPANT_DESIGN_COLUMNS = (
     "Participant_ID",
@@ -60,7 +69,7 @@ _BLOCK_DESIGN_COLUMNS = (
     "物体内先后",
     "该方法第几次",
 )
-"""Records A 段的固定设计列。"""
+"""``Block`` 工作表的固定设计列。"""
 
 _METHOD_DESIGN_COLUMNS = (
     "Participant_ID",
@@ -68,15 +77,10 @@ _METHOD_DESIGN_COLUMNS = (
     "Shown_Label",
     "Condition(保密)",
 )
-"""Records B 段的固定设计列。"""
+"""``Method`` 工作表的固定设计列。"""
 
-_METHOD_AUDIT_COLUMNS = (
-    "尺度切换确认",
-    "技术问题",
-    "A/B归属回忆确认",
-    "方法级记录有效",
-)
-"""v5.1 方法级问卷必须保留的施测与人工审核列。"""
+_METHOD_STATUS_COLUMNS = ("尺度切换确认", "技术问题")
+"""方法级问卷的完成状态列。"""
 
 _OBJECT_ORDERS = {
     1: ("鼠标", "固定订书机", "游戏手柄"),
@@ -89,7 +93,7 @@ _OBJECT_ORDERS = {
 """物体排列 ID 与三个正式对象全排列的冻结绑定。"""
 
 def read_workbook(path: Path) -> Exp3Data:
-    """从同一字节快照读取三段原始值、摘要并验证结构身份。"""
+    """从同一字节快照读取五表原始值并验证结构身份。"""
 
     source = path.expanduser().resolve()
     if source.suffix.lower() != ".xlsx" or not source.is_file():
@@ -98,17 +102,25 @@ def read_workbook(path: Path) -> Exp3Data:
     source_digest = hashlib.sha256(payload).hexdigest()
     workbook = load_workbook(BytesIO(payload), read_only=True, data_only=False)
     try:
-        missing = _REQUIRED_SHEETS.difference(workbook.sheetnames)
-        if missing:
-            raise ValueError(f"实验三工作簿缺少工作表：{sorted(missing)}")
-        participants = _read_table(workbook["Participants"], 2, 3, 26)
-        records = workbook["Records"]
-        block_header = _find_header_after(records, "A. 区块记录")
-        method_header = _find_header_after(records, "B. 方法级记录")
-        final_header = _find_header_after(records, "C. 最终问卷记录")
-        blocks = _read_table(records, block_header, block_header + 1, method_header - 2)
-        methods = _read_table(records, method_header, method_header + 1, final_header - 2)
-        finals = _read_table(records, final_header, final_header + 1, final_header + 24)
+        actual_sheets = frozenset(workbook.sheetnames)
+        if actual_sheets != _REQUIRED_SHEETS:
+            missing = _REQUIRED_SHEETS.difference(actual_sheets)
+            unexpected = actual_sheets.difference(_REQUIRED_SHEETS)
+            raise ValueError(
+                "实验三工作簿必须恰好包含五张固定工作表："
+                f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
+            )
+        accepted_contracts = {WORKBOOK_CONTRACT_ID, WORKBOOK_TEMPLATE_CONTRACT_ID}
+        if workbook.properties.identifier not in accepted_contracts:
+            raise ValueError(
+                "实验三工作簿契约标识不匹配："
+                f"{workbook.properties.identifier!r} not in {sorted(accepted_contracts)!r}"
+            )
+        _validate_questionnaire_sheet(workbook["Questionnaire"])
+        participants = _read_table(workbook["Participants"], 1, 2, workbook["Participants"].max_row)
+        blocks = _read_table(workbook["Block"], 1, 2, workbook["Block"].max_row)
+        methods = _read_table(workbook["Method"], 1, 2, workbook["Method"].max_row)
+        finals = _read_table(workbook["Final"], 1, 2, workbook["Final"].max_row)
     finally:
         workbook.close()
     if file_sha256(source) != source_digest:
@@ -129,7 +141,6 @@ def validate_for_analysis(
     data: Exp3Data,
     *,
     aq_mode: str,
-    q10_enabled: bool,
 ) -> dict[str, Any]:
     """对所有输入统一检查采集完成状态、平衡设计与合法值。"""
 
@@ -137,11 +148,7 @@ def validate_for_analysis(
     included = participants[participants["纳入分析"].map(_is_yes)]
     included_ids = frozenset(included["Participant_ID"].astype(str))
     safety_ids = frozenset(
-        participants.loc[
-            participants["签署同意"].map(_is_yes)
-            & ~participants["开始时间"].map(_is_missing_or_na),
-            "Participant_ID",
-        ].astype(str)
+        participants.loc[participants["签署同意"].map(_is_yes), "Participant_ID"].astype(str)
     )
     warnings: list[str] = []
     if len(included_ids) < MINIMUM_PARTICIPANTS:
@@ -157,7 +164,6 @@ def validate_for_analysis(
         data.blocks,
         included_ids,
         aq_mode=aq_mode,
-        q10_enabled=q10_enabled,
     )
     _validate_method_values(
         data.methods,
@@ -240,27 +246,45 @@ def _reject_formulas(sheet_name: str, row_number: int, cells: Iterable[Cell]) ->
             raise ValueError(f"原始数据区域不得含公式：{sheet_name}!{cell.coordinate}（第 {row_number} 行）")
 
 
-def _find_header_after(worksheet: Any, marker: str) -> int:
-    """按 A 列节标题定位其下一行表头。"""
+def _validate_questionnaire_sheet(worksheet: Any) -> None:
+    """核对区块问卷页序、连续题号和已删除可选题状态。"""
 
-    for row_number, (cell,) in enumerate(
-        worksheet.iter_rows(min_col=1, max_col=1),
-        start=1,
-    ):
-        value = cell.value
-        if isinstance(value, str) and value.startswith(marker):
-            return row_number + 1
-    raise ValueError(f"Records 缺少节标题：{marker}")
+    header_row: int | None = None
+    for row in range(1, worksheet.max_row + 1):
+        if worksheet.cell(row, 1).value == "页序" and worksheet.cell(row, 2).value == "Item_ID":
+            header_row = row
+            break
+    if header_row is None:
+        raise ValueError("Questionnaire 缺少区块条目表头")
+    items: list[str] = []
+    pages: list[int] = []
+    for row in range(header_row + 1, worksheet.max_row + 1):
+        page = worksheet.cell(row, 1).value
+        item = worksheet.cell(row, 2).value
+        if page == "量尺":
+            break
+        if page is None and item is None:
+            continue
+        try:
+            pages.append(int(page))
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Questionnaire 第 {row} 行页序必须是整数") from error
+        items.append(str(item))
+    if tuple(pages) != tuple(range(1, 14)) or tuple(items) != _QUESTIONNAIRE_ITEM_ORDER:
+        raise ValueError(
+            "Questionnaire 区块条目必须按 1--13 页固定排列："
+            f"pages={pages}, items={items}"
+        )
 
 
 def _validate_structure(data: Exp3Data) -> None:
-    """验证 24 平衡单元和三段记录的固定身份。"""
+    """验证 24 平衡单元和五表记录的固定身份。"""
 
     _require_columns(
         data.participants,
         _PARTICIPANT_DESIGN_COLUMNS
         + tuple(PARTICIPANT_BACKGROUND_COLUMNS.values())
-        + ("签署同意", "基线不适", "开始时间", "结束时间", "纳入分析", "退出/技术问题"),
+        + ("签署同意", "基线不适", "纳入分析", "退出/技术问题"),
         "Participants",
     )
     _require_columns(
@@ -271,12 +295,12 @@ def _validate_structure(data: Exp3Data) -> None:
             "区块有效",
             "技术问题",
         ),
-        "Records A",
+        "Block",
     )
     _require_columns(
         data.methods,
-        _METHOD_DESIGN_COLUMNS + METHOD_ITEM_COLUMNS + _METHOD_AUDIT_COLUMNS,
-        "Records B",
+        _METHOD_DESIGN_COLUMNS + METHOD_ITEM_COLUMNS + _METHOD_STATUS_COLUMNS,
+        "Method",
     )
     _require_columns(
         data.finals,
@@ -290,20 +314,20 @@ def _validate_structure(data: Exp3Data) -> None:
             "开放:最破坏信任的现象",
             "结束不适",
         ),
-        "Records C",
+        "Final",
     )
     if len(data.participants) != 24 or len(data.blocks) != 144 or len(data.methods) != 48 or len(data.finals) != 24:
         raise ValueError(
-            "实验三固定结构必须是 Participants=24、Records A=144、B=48、C=24"
+            "实验三固定结构必须是 Participants=24、Block=144、Method=48、Final=24"
         )
     participant_ids = tuple(data.participants["Participant_ID"].astype(str))
     if len(set(participant_ids)) != 24:
         raise ValueError("Participants 的 Participant_ID 必须唯一")
     expected = frozenset(participant_ids)
     for name, table, repetitions in (
-        ("Records A", data.blocks, 6),
-        ("Records B", data.methods, 2),
-        ("Records C", data.finals, 1),
+        ("Block", data.blocks, 6),
+        ("Method", data.methods, 2),
+        ("Final", data.finals, 1),
     ):
         counts = table["Participant_ID"].astype(str).value_counts()
         if frozenset(counts.index) != expected or not (counts == repetitions).all():
@@ -472,7 +496,6 @@ def _validate_block_values(
     included_ids: frozenset[str],
     *,
     aq_mode: str,
-    q10_enabled: bool,
 ) -> None:
     """检查纳入参与者的区块状态与 1--7 原始评分。"""
 
@@ -482,61 +505,7 @@ def _validate_block_values(
         if int(valid.sum()) != 6:
             raise ValueError(f"{participant_id} 必须有 6 个明确完成且有效的正式区块")
     required = [BLOCK_ITEMS[item] for item in required_block_items(aq_mode)]
-    if q10_enabled:
-        required.append(BLOCK_ITEMS["Q10"])
     _validate_numeric_range(selected, required, 1.0, 7.0, "区块评分")
-    optional = set(BLOCK_ITEMS.values()).difference(required)
-    _validate_numeric_range(
-        selected,
-        tuple(sorted(optional)),
-        1.0,
-        7.0,
-        "可选区块评分",
-        allow_missing=True,
-    )
-    _validate_manipulation_values(selected)
-
-
-def _validate_manipulation_values(blocks: pd.DataFrame) -> None:
-    """检查冻结方案要求报告的运行时操纵审计字段。"""
-
-    _validate_finite_range(blocks, "Candidate_Rate_Hz", minimum=0.0, strict_minimum=True)
-    for column in ("VCD_Median", "VCD_Admission_Rate", "Output_Availability"):
-        _validate_finite_range(blocks, column, minimum=0.0, maximum=1.0)
-    _validate_finite_range(blocks, "遮挡时长_s", minimum=0.0, strict_minimum=True)
-    for column in ("服务器重获取次数", "StaticLock进入次数"):
-        _validate_finite_range(blocks, column, minimum=0.0, integer=True)
-    lifecycle = {"Coasting", "FrozenUncertain", "Lost", "不适用"}
-    if blocks["遮挡生命周期状态"].map(_is_missing_or_na).any() or not blocks[
-        "遮挡生命周期状态"
-    ].astype(str).isin(lifecycle).all():
-        raise ValueError("纳入区块的遮挡生命周期状态必须使用冻结选项")
-    if blocks["进入Lost"].map(_is_missing_or_na).any() or not blocks["进入Lost"].map(
-        lambda value: _is_yes(value) or _is_no(value)
-    ).all():
-        raise ValueError("纳入区块的进入Lost必须明确填写是或否")
-
-
-def _validate_finite_range(
-    table: pd.DataFrame,
-    column: str,
-    *,
-    minimum: float,
-    maximum: float | None = None,
-    strict_minimum: bool = False,
-    integer: bool = False,
-) -> None:
-    """验证一列审计数值完整、有限并位于指定范围。"""
-
-    numeric = pd.to_numeric(table[column], errors="coerce")
-    if numeric.isna().any() or not numeric.map(math.isfinite).all():
-        raise ValueError(f"纳入区块的 {column} 必须全部填写有限数值")
-    below = numeric <= minimum if strict_minimum else numeric < minimum
-    above = numeric > maximum if maximum is not None else pd.Series(False, index=numeric.index)
-    non_integer = numeric % 1 != 0 if integer else pd.Series(False, index=numeric.index)
-    if (below | above | non_integer).any():
-        interval = f"{minimum:g}--{maximum:g}" if maximum is not None else f">={minimum:g}"
-        raise ValueError(f"纳入区块的 {column} 超出合法范围 {interval}")
 
 
 def _validate_participant_values(
@@ -546,12 +515,6 @@ def _validate_participant_values(
     """校验纳入样本的背景字段，并保留原始分类语义。"""
 
     selected = participants[participants["Participant_ID"].astype(str).isin(included_ids)]
-    started_without_consent = participants[
-        ~participants["开始时间"].map(_is_missing_or_na)
-        & ~participants["签署同意"].map(_is_yes)
-    ]
-    if not started_without_consent.empty:
-        raise ValueError("已开始会话的参与者必须先明确签署同意")
     if not selected["签署同意"].map(_is_yes).all():
         raise ValueError("纳入参与者必须全部明确签署同意")
     pending = participants[
@@ -571,27 +534,12 @@ def _validate_participant_values(
         values = selected[source_column]
         if values.isna().any() or not values.astype(str).isin(allowed).all():
             raise ValueError(f"纳入参与者的 {source_column} 必须使用冻结下拉选项")
-    exposed = participants[
-        participants["签署同意"].map(_is_yes)
-        & ~participants["开始时间"].map(_is_missing_or_na)
-    ]
+    exposed = participants[participants["签署同意"].map(_is_yes)]
     baseline_allowed = set(PARTICIPANT_CATEGORIES["Baseline_Discomfort"])
     baseline = exposed["基线不适"]
     invalid_baseline = ~baseline.map(_is_missing_or_na) & ~baseline.astype(str).isin(baseline_allowed)
     if invalid_baseline.any():
         raise ValueError("已开始参与者的基线不适必须留空或使用冻结选项")
-    for column in ("开始时间", "结束时间"):
-        values = selected[column]
-        if values.map(_is_missing_or_na).any():
-            raise ValueError(f"纳入参与者的 {column} 不得缺失")
-        if not values.map(_is_supported_time).all():
-            raise ValueError(f"纳入参与者的 {column} 必须是 Excel 时间或 HH:MM[:SS]")
-    if not exposed["开始时间"].map(_is_supported_time).all():
-        raise ValueError("已开始参与者的开始时间必须是 Excel 时间或 HH:MM[:SS]")
-    recorded_end = exposed.loc[~exposed["结束时间"].map(_is_missing_or_na), "结束时间"]
-    if not recorded_end.map(_is_supported_time).all():
-        raise ValueError("已开始参与者的非空结束时间必须是 Excel 时间或 HH:MM[:SS]")
-
     excluded = participants[
         participants["签署同意"].map(_is_yes)
         & participants["纳入分析"].map(_is_no)
@@ -607,7 +555,7 @@ def _validate_method_values(
     methods: pd.DataFrame,
     included_ids: frozenset[str],
 ) -> None:
-    """检查纳入参与者的方法级原始评分与审核状态。"""
+    """检查纳入参与者的方法级原始评分与完成状态。"""
 
     selected = methods[methods["Participant_ID"].astype(str).isin(included_ids)]
     for column in METHOD_ITEM_COLUMNS[:10]:
@@ -618,7 +566,7 @@ def _validate_method_values(
     if not method_assessment_complete_mask(selected).all():
         raise ValueError("纳入参与者的两次方法级问卷都必须完整作答并确认尺度切换")
     if not method_record_valid_mask(selected).all():
-        raise ValueError("纳入参与者的方法级记录必须通过技术状态、A/B 回忆和人工有效性审核")
+        raise ValueError("纳入参与者的方法级记录必须完整且没有技术故障")
 
 
 def _validate_final_values(
@@ -665,14 +613,12 @@ def method_assessment_complete_mask(methods: pd.DataFrame) -> pd.Series:
 
 
 def method_record_valid_mask(methods: pd.DataFrame) -> pd.Series:
-    """返回通过技术、回忆与人工审核的方法级记录掩码。"""
+    """返回完成作答且没有记录技术故障的方法级记录掩码。"""
 
-    valid = methods["尺度切换确认"].map(_is_yes)
+    valid = method_assessment_complete_mask(methods)
     valid &= methods["技术问题"].map(
         lambda value: _is_missing_or_na(value) or str(value).strip() == "无"
     )
-    valid &= methods["A/B归属回忆确认"].map(_is_yes)
-    valid &= methods["方法级记录有效"].map(_is_yes)
     return valid
 
 
@@ -761,21 +707,6 @@ def _is_no(value: Any) -> bool:
     """识别人工确认字段中的否定值。"""
 
     return str(value or "").strip().lower() in {"否", "no", "false", "0"}
-
-
-def _is_supported_time(value: Any) -> bool:
-    """判断会话时刻能否稳定解析为 Excel 时间或常见时刻文本。"""
-
-    if isinstance(value, (datetime, time)):
-        return True
-    text = str(value).strip()
-    for pattern in ("%H:%M", "%H:%M:%S"):
-        try:
-            datetime.strptime(text, pattern)
-            return True
-        except ValueError:
-            continue
-    return False
 
 
 def _is_blank_response(value: Any) -> bool:

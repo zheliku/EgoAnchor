@@ -38,3 +38,8 @@ EgoAnchor 中文论文工程
 实验一和实验二的组合图均为原生 `1 x 4` 布局。实验一各面板使用单个线性纵轴；动态结果把
 effective lag、lag-aligned RMSE、current-time RMSE 和 residual jitter 分开解释。实验二 Figure 3(d)
 只展示 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 仅保留在审计数据中。
+
+实验三直接运行 `pixi run eval analyze exp3`，不要求先运行联合审计门禁；`validate exp3` 只是可选诊断。
+正式 24 人输入为 `material/EgoAnchor_Experiment3_RawData.xlsx`（v5.2），后续采集使用
+`material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`（v5.3）。两版不合并分析。区块评分顺序固定为
+`Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`，Q10 已删除。v5.3 才启用 AQ-EQ2、TiA-RC1/RC4/UP1 的情境化措辞和互斥 B5 累计次数选项。

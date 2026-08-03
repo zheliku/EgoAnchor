@@ -84,7 +84,7 @@ class Experiment3WorkbookIntegrityTests(unittest.TestCase):
                 self.assertEqual(properties.keywords, "EgoAnchor, Experiment 3, Wilcoxon, Holm")
                 self.assertEqual(properties.category, "experiment-3-analysis")
                 self.assertIsNone(properties.contentStatus)
-                self.assertEqual(workbook["说明"].max_row, 37)
+                self.assertEqual(workbook["说明"].max_row, 36)
             finally:
                 workbook.close()
 
@@ -154,7 +154,6 @@ def _tables() -> AnalysisTables:
         results=results,
         objects=objects,
         reliability=pd.DataFrame(),
-        manipulation=pd.DataFrame(columns=("Type",)),
         choices=pd.DataFrame(columns=("Measure", "Category")),
     )
 

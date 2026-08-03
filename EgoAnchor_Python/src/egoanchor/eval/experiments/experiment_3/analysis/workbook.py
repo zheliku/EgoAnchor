@@ -32,7 +32,7 @@ INFO_SHEET = "说明"
 """来源、统计口径、解释边界和页面指南所在的首张工作表。"""
 
 SAMPLE_QC_SHEET = "样本与质控"
-"""样本流程、参与者概况、设计平衡和操纵检验的合并工作表。"""
+"""样本流程、参与者概况、安全与设计平衡的合并工作表。"""
 
 RESULTS_SHEET = "主结果"
 """十二项冻结结局的唯一推断结果工作表。"""
@@ -48,7 +48,7 @@ CHOICES_SHEET = "选择结果"
 
 _SHEET_GUIDE: tuple[tuple[str, str], ...] = (
     (INFO_SHEET, "数据来源、统计口径、解释边界与六页索引"),
-    (SAMPLE_QC_SHEET, "样本流、参与者概况、安全、设计平衡与运行时操纵检查"),
+    (SAMPLE_QC_SHEET, "样本流、参与者概况、安全与设计平衡"),
     (RESULTS_SHEET, "七个主条目和已发表量表家族五项结局的 Holm 校正结果"),
     (OBJECT_RESULTS_SHEET, "七个主条目在三个对象上的方向检查；只作描述，不作推断"),
     (RELIABILITY_SHEET, "AQ、TiA 与 S-TIAS 按方法计算的当前样本信度"),
@@ -84,10 +84,10 @@ _CORE_PROPERTIES = {
 
 _OUTCOME_NAMES = {
     "Q1": "Q1 静止稳定",
-    "Q8": "Q8 位置正确",
     "Q2": "Q2 运动附着",
-    "Q9": "Q9 姿态一致",
-    "Q3": "Q3 恢复一致",
+    "Q3": "Q3 姿态一致",
+    "Q4": "Q4 恢复一致",
+    "Q5": "Q5 位置正确",
     "Q6": "Q6 依赖意愿",
     "Q7": "Q7 稳定—响应平衡",
     "AQ_EQ": "AQ 嵌入质量",
@@ -114,7 +114,6 @@ _SAMPLE_NAMES = {
     "Excluded": "排除",
     "Pending_Review": "待人工复核",
     "Age": "年龄（岁）",
-    "Session_Duration_Minutes": "会话时长（分钟）",
     "Gender": "性别",
     "Handedness": "主手",
     "Vision": "视力",
@@ -131,21 +130,6 @@ _SAMPLE_NAMES = {
     "First_Method": "先行方法",
 }
 """样本摘要内部键到中文显示名的映射。"""
-
-_MANIPULATION_NAMES = {
-    "Candidate_Rate_Hz": "候选率（Hz）",
-    "VCD_Median": "VCD 评分中位数",
-    "VCD_Admission_Rate": "VCD 接纳率",
-    "Output_Availability": "输出可用率",
-    "Occlusion_Seconds": "遮挡时长（s）",
-    "Lifecycle_FrozenUncertain": "遮挡停留 FrozenUncertain",
-    "Lifecycle_Lost": "遮挡进入 Lost",
-    "Lifecycle_Coasting": "遮挡停留 Coasting",
-    "Server_Reacquisition_Count": "服务器重获取次数",
-    "StaticLock_Enter_Count": "StaticLock 进入次数",
-}
-"""运行时操纵检查内部键到中文显示名的映射。"""
-
 
 def write_results_workbook(
     destination: Path,
@@ -182,7 +166,7 @@ def write_results_workbook(
         paper_config_path,
         validation,
     )
-    _write_sample_quality(workbook, tables.sample, tables.manipulation)
+    _write_sample_quality(workbook, tables.sample)
     _write_main_results(workbook, tables.results, settings.alpha)
     _write_object_descriptions(workbook, tables.objects)
     _write_reliability(workbook, tables.reliability)
@@ -223,7 +207,7 @@ def _write_info(
     _write_title(
         worksheet,
         "EgoAnchor 实验三分析结果",
-        "六页阅读版 · 所有结果由原始 Records 独立重算，不读取模板公式缓存",
+        "六页阅读版 · 所有结果由五张原始数据表独立重算",
         2,
     )
     row = 4
@@ -272,9 +256,8 @@ def _write_info(
         row,
         "解释边界",
         (
-            ("Q10", "启用但不混入冻结十二项主结果" if settings.q10_enabled else "未启用"),
             ("信度", "只表示当前样本内部一致性；AQ 的三物体均值单位与单次方法级量表不可互比"),
-            ("发布边界", "只提供主观评价与无需真值的运行时操纵检查，不提供客观任务表现证据"),
+            ("发布边界", "本工作簿只分析问卷与选择结果，不提供客观任务表现证据"),
         ),
     )
     guide = tuple((name, purpose) for name, purpose in _SHEET_GUIDE)
@@ -287,16 +270,15 @@ def _write_info(
 def _write_sample_quality(
     workbook: Workbook,
     sample: pd.DataFrame,
-    manipulation: pd.DataFrame,
 ) -> None:
-    """把样本摘要和运行时操纵检查合并为一张分节质控页。"""
+    """把样本流程、背景、安全与设计平衡写入一张分节质控页。"""
 
     worksheet = workbook.create_sheet(SAMPLE_QC_SHEET)
     _prepare_sheet(worksheet, tab_color=_TEAL, portrait=False)
     _write_title(
         worksheet,
         "样本与质控",
-        "先确认纳入、缺失与平衡，再阅读候选/VCD/输出和遮挡生命周期检查",
+        "确认纳入、缺失、参与者背景与实验顺序平衡",
         6,
     )
     row = 4
@@ -337,38 +319,6 @@ def _write_sample_quality(
             ("Expected", "实际 N 下期望/水平", 18, "decimal"),
             ("Max_Deviation", "最大绝对偏差", 16, "decimal"),
             ("Status", "状态", 14, "text"),
-        ),
-    )
-    continuous = manipulation[manipulation.get("Type", pd.Series(dtype=str)).astype(str) == "continuous"]
-    row = _write_section_table(
-        worksheet,
-        row,
-        "运行时连续指标",
-        "两方法先按参与者汇总再比较；等价界未冻结时只展示描述统计，不下等价结论。",
-        _continuous_manipulation(continuous),
-        (
-            ("Metric", "指标", 24, "text"),
-            ("N", "配对 N", 9, "integer"),
-            ("OneEuro", "One-Euro 平均值", 17, "decimal"),
-            ("EgoAnchor", "EgoAnchor 平均值", 17, "decimal"),
-            ("Difference", "平均差（EA−OE）", 18, "decimal"),
-            ("Equivalence", "等价性状态", 34, "text"),
-        ),
-    )
-    counts = manipulation[manipulation.get("Type", pd.Series(dtype=str)).astype(str) == "count"]
-    _write_section_table(
-        worksheet,
-        row,
-        "生命周期与事件计数",
-        "FrozenUncertain/Lost 分布是遮挡操纵检查；事件计数为描述性运行时日志。",
-        _count_manipulation(counts),
-        (
-            ("Metric", "指标", 30, "text"),
-            ("Method", "方法", 22, "text"),
-            ("Count", "计数", 10, "decimal"),
-            ("Total", "分母/有效区块", 15, "integer"),
-            ("Proportion", "比例", 11, "percent"),
-            ("Status", "说明", 18, "text"),
         ),
     )
     worksheet.freeze_panes = "A7"
@@ -620,54 +570,6 @@ def _balance_summary(sample: pd.DataFrame) -> pd.DataFrame:
                 "Expected": float(expected.iloc[0]) if len(expected) else math.nan,
                 "Max_Deviation": float(deviations.max()) if len(deviations) else math.nan,
                 "Status": status,
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _continuous_manipulation(frame: pd.DataFrame) -> pd.DataFrame:
-    """把连续操纵检查压缩为每项指标一行。"""
-
-    rows: list[dict[str, Any]] = []
-    for _, source in frame.iterrows():
-        rows.append(
-            {
-                "Metric": _MANIPULATION_NAMES.get(str(source.get("Metric")), str(source.get("Metric"))),
-                "N": source.get("N_Pairs"),
-                "OneEuro": source.get("OneEuro_Mean"),
-                "EgoAnchor": source.get("EgoAnchor_Mean"),
-                "Difference": source.get("Difference_Mean"),
-                "Equivalence": _equivalence_text(source),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _equivalence_text(row: pd.Series) -> str:
-    """把 TOST 状态转成不夸大未运行检验的中文短句。"""
-
-    status = str(row.get("Status", ""))
-    if status == "equivalent":
-        return f"等价（界 ±{_format_number(row.get('Margin'))}，p={_format_p(row.get('p_TOST'))}）"
-    if status == "not_equivalent":
-        return f"未达等价（界 ±{_format_number(row.get('Margin'))}，p={_format_p(row.get('p_TOST'))}）"
-    return "未运行：等价界尚未冻结"
-
-
-def _count_manipulation(frame: pd.DataFrame) -> pd.DataFrame:
-    """把生命周期和运行时事件计数转换为中文显示行。"""
-
-    rows: list[dict[str, Any]] = []
-    for _, source in frame.iterrows():
-        status = str(source.get("Status", ""))
-        rows.append(
-            {
-                "Metric": _MANIPULATION_NAMES.get(str(source.get("Metric")), str(source.get("Metric"))),
-                "Method": METHOD_LABELS.get(str(source.get("Condition")), str(source.get("Condition", ""))),
-                "Count": source.get("Count"),
-                "Total": source.get("Total"),
-                "Proportion": source.get("Proportion"),
-                "Status": {"majority": "主要状态", "descriptive": "描述性"}.get(status, status),
             }
         )
     return pd.DataFrame(rows)

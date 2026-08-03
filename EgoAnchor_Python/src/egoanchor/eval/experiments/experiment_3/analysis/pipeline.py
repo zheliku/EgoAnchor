@@ -44,12 +44,11 @@ def build_analysis(
     validation = validate_for_analysis(
         data,
         aq_mode=settings.aq_mode,
-        q10_enabled=settings.q10_enabled,
     )
     _report_progress(progress, "计算区块、量表和参与者配对分")
     scores = derive_scores(data, settings)
     validate_complete_pair_counts(scores.paired_scores, settings.minimum_participants)
-    _report_progress(progress, "计算 Wilcoxon、Holm、效应量、信度与操纵描述")
+    _report_progress(progress, "计算 Wilcoxon、Holm、效应量与量表信度")
     tables = analyze_scores(data, scores, settings)
     details = {
         "included_count": validation["included_count"],

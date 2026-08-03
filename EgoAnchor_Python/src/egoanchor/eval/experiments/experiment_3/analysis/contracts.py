@@ -60,12 +60,22 @@ PARTICIPANT_CATEGORIES: Final[dict[str, tuple[str, ...]]] = {
     "Gender": ("女", "男", "非二元或其他", "不愿透露"),
     "Handedness": ("右手", "左手", "双手均可"),
     "Vision": ("正常", "矫正后正常", "其他"),
-    "VRMR_Experience": ("从未", "1–5 次", "6–20 次", "超过 20 次", "经常使用"),
+    "VRMR_Experience": (
+        "从未",
+        "1–5 次",
+        "6–20 次",
+        "超过 20 次",
+        "经常使用",
+        "21 次及以上",
+    ),
     "PhysicalMR_Experience": ("从未", "1–2 次", "数次", "经常"),
     "Baseline_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
     "End_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
 }
-"""背景与安全字段的冻结选项及论文汇报顺序。"""
+"""背景与安全字段的允许选项；VR/MR 经验同时覆盖 v5.2 与 v5.3。"""
+
+VRMR_EXPERIENCE_TEMPLATE_OPTIONS: Final = ("从未", "1–5 次", "6–20 次", "21 次及以上")
+"""后续模板使用的互斥累计次数选项；正式 v5.2 数据保留旧选项以便复现。"""
 
 EXCLUSION_REASONS: Final = (
     "参与者退出",
@@ -79,8 +89,11 @@ EXCLUSION_REASONS: Final = (
 )
 """参与者级退出或技术排除的冻结主原因；细节只写备注。"""
 
-WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.1"
+WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.2"
 """正式原始工作簿写入核心属性的稳定契约标识。"""
+
+WORKBOOK_TEMPLATE_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.3"
+"""后续空白采集模板的契约标识；不覆盖已经完成的 v5.2 原始数据。"""
 
 WORKBOOK_DATA_CATEGORY: Final = "experiment-3-raw-workbook"
 """实验三原始工作簿的通用数据类别，仅用于 provenance。"""
@@ -88,38 +101,19 @@ WORKBOOK_DATA_CATEGORY: Final = "experiment-3-raw-workbook"
 BLOCK_ITEMS: Final = {
     "Q1": "Q1",
     "Q2": "Q2",
-    "Q9": "Q9",
-    "Q10": "Q10_OPT",
-    "AQ_IQ2": "AQ_IQ2",
-    "AQ_IQ3": "AQ_IQ3",
     "Q3": "Q3",
-    "Q8": "Q8",
+    "Q4": "Q4",
+    "Q5": "Q5",
+    "Q6": "Q6",
+    "Q7": "Q7",
     "AQ_EQ1": "AQ_EQ1",
     "AQ_EQ2": "AQ_EQ2",
     "AQ_EQ3": "AQ_EQ3",
     "AQ_IQ1": "AQ_IQ1",
-    "Q6": "Q6",
-    "Q7": "Q7",
+    "AQ_IQ2": "AQ_IQ2",
+    "AQ_IQ3": "AQ_IQ3",
 }
-"""分析条目 ID 到 Records A 段列名的映射。"""
-
-BLOCK_RECORD_COLUMNS: Final = {
-    "Q1": "K",
-    "Q2": "L",
-    "Q9": "M",
-    "Q10": "N",
-    "AQ_IQ2": "O",
-    "AQ_IQ3": "P",
-    "Q3": "Q",
-    "Q8": "R",
-    "AQ_EQ1": "S",
-    "AQ_EQ2": "T",
-    "AQ_EQ3": "U",
-    "AQ_IQ1": "V",
-    "Q6": "W",
-    "Q7": "X",
-}
-"""区块条目到 Records A 段 Excel 列的稳定映射。"""
+"""分析条目 ID 到 ``Block`` 工作表列名的映射，顺序与问卷一致。"""
 
 AQ_SCALE_ITEMS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "full": {
@@ -133,21 +127,20 @@ AQ_SCALE_ITEMS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
 }
 """预实验冻结前后两种 AQ 模式的唯一条目契约。"""
 
-PRIMARY_OUTCOMES: Final = ("Q1", "Q2", "Q3", "Q6", "Q7", "Q8", "Q9")
-"""主证实家族按题号升序排列的冻结报告顺序。"""
+PRIMARY_OUTCOMES: Final = ("Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7")
+"""七个研究定制条目按问卷出现顺序排列的冻结报告顺序。"""
 
 SCALE_OUTCOMES: Final = ("AQ_EQ", "AQ_IQ", "TIA_RC", "TIA_UP", "STIAS")
 """已发表量表家族的冻结顺序。"""
 
 OUTCOME_LABELS: Final = {
     "Q1": "Static stability",
-    "Q8": "Position correctness",
     "Q2": "Motion attachment",
-    "Q9": "Orientation consistency",
-    "Q3": "Recovery consistency",
+    "Q3": "Orientation consistency",
+    "Q4": "Recovery consistency",
+    "Q5": "Position correctness",
     "Q6": "Willingness to rely",
     "Q7": "Stability-response balance",
-    "Q10": "Post-placement settling",
     "AQ_EQ": "AQ Embedding Quality",
     "AQ_IQ": "AQ Interaction Quality",
     "TIA_RC": "TiA Reliability/Competence",
@@ -171,12 +164,7 @@ METHOD_ITEM_COLUMNS: Final = (
     "STIAS2",
     "STIAS3",
 )
-"""Records B 段的原始方法级评分列。"""
-
-METHOD_RECORD_COLUMNS: Final = dict(
-    zip(METHOD_ITEM_COLUMNS, ("E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"), strict=True)
-)
-"""方法级原始条目到 Records B 段 Excel 列的稳定映射。"""
+"""``Method`` 工作表的原始方法级评分列。"""
 
 METHOD_SCALE_ITEMS: Final = {
     "TIA_RC": ("TIA_RC1", "TIA_RC2", "TIA_RC3_REV", "TIA_RC4", "TIA_RC5_REV", "TIA_RC6"),
@@ -205,17 +193,9 @@ def required_block_items(aq_mode: str) -> tuple[str, ...]:
 
     aq_items = aq_scale_items(aq_mode)
     return (
-        "Q1",
-        "Q2",
-        "Q9",
-        "AQ_IQ2",
-        "AQ_IQ3",
-        "Q3",
-        "Q8",
+        *PRIMARY_OUTCOMES,
         *aq_items["AQ_EQ"],
-        *tuple(item for item in aq_items["AQ_IQ"] if item not in {"AQ_IQ2", "AQ_IQ3"}),
-        "Q6",
-        "Q7",
+        *aq_items["AQ_IQ"],
     )
 
 
@@ -238,13 +218,13 @@ class Exp3Data:
     """Participants 表中的 24 个平衡单元与人工录入字段。"""
 
     blocks: pd.DataFrame
-    """Records A 段的一行一区块原始记录。"""
+    """``Block`` 工作表的一行一区块原始记录。"""
 
     methods: pd.DataFrame
-    """Records B 段的一行一方法原始记录。"""
+    """``Method`` 工作表的一行一方法原始记录。"""
 
     finals: pd.DataFrame
-    """Records C 段的一行一参与者最终问卷记录。"""
+    """``Final`` 工作表的一行一参与者最终问卷记录。"""
 
     source_path: str
     """本次只读输入工作簿的规范化绝对路径。"""
@@ -294,15 +274,11 @@ class AnalysisTables:
     reliability: pd.DataFrame
     """已发表量表家族五项结局按方法计算的当前样本信度。"""
 
-    manipulation: pd.DataFrame
-    """候选、VCD、输出与生命周期操纵检验。"""
-
     choices: pd.DataFrame
     """最终偏好、信任选择、强度、区分信心摘要与偏好×信任交叉表。"""
 
 __all__ = [
     "BLOCK_ITEMS",
-    "BLOCK_RECORD_COLUMNS",
     "AQ_SCALE_ITEMS",
     "AnalysisTables",
     "EGOANCHOR",
@@ -313,7 +289,6 @@ __all__ = [
     "METHODS",
     "METHOD_ITEM_COLUMNS",
     "METHOD_LABELS",
-    "METHOD_RECORD_COLUMNS",
     "METHOD_SCALE_ITEMS",
     "OBJECTS",
     "OBJECT_LABELS",
@@ -322,6 +297,7 @@ __all__ = [
     "OUTCOME_LABELS",
     "PARTICIPANT_BACKGROUND_COLUMNS",
     "PARTICIPANT_CATEGORIES",
+    "VRMR_EXPERIENCE_TEMPLATE_OPTIONS",
     "PRIMARY_OUTCOMES",
     "REVERSED_TIA_ITEMS",
     "SCALE_FAMILY",
@@ -329,6 +305,7 @@ __all__ = [
     "ScoreData",
     "TARGET_PARTICIPANTS",
     "WORKBOOK_CONTRACT_ID",
+    "WORKBOOK_TEMPLATE_CONTRACT_ID",
     "WORKBOOK_DATA_CATEGORY",
     "aq_scale_items",
     "published_scale_items",

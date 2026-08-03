@@ -60,11 +60,11 @@ _METHOD_MARKERS = {
 _OUTCOME_LABELS = {
     "Q1": "Stability",
     "Q2": "Attachment",
-    "Q3": "Recovery",
+    "Q3": "Orientation",
+    "Q4": "Recovery",
+    "Q5": "Position",
     "Q6": "Reliance",
     "Q7": "Balance",
-    "Q8": "Position",
-    "Q9": "Orientation",
 }
 """Figure 4 横轴上的七项紧凑主结局标签。"""
 

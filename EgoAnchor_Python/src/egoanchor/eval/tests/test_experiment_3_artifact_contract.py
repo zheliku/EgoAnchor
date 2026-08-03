@@ -80,7 +80,7 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                 "figure4_pdf",
             ),
         )
-        self.assertEqual(EXP3_ARTIFACTS.version, 7)
+        self.assertEqual(EXP3_ARTIFACTS.version, 8)
         self.assertEqual(
             EXP3_ARTIFACTS.figure4_png.canonical_name,
             "figure4_exp3_subjective_outcomes.png",
@@ -132,11 +132,11 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             [
                 "Stability",
                 "Attachment",
+                "Orientation",
                 "Recovery",
+                "Position",
                 "Reliance",
                 "Balance",
-                "Position",
-                "Orientation",
             ],
         )
         self.assertEqual(
@@ -255,7 +255,6 @@ def _analysis_fixture() -> tuple[ScoreData, AnalysisTables]:
         results=results,
         objects=pd.DataFrame(),
         reliability=pd.DataFrame(),
-        manipulation=pd.DataFrame(),
         choices=pd.DataFrame(),
     )
     return scores, tables

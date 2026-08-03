@@ -56,7 +56,7 @@ def analyze_workspace(
     rebuild_experiment_1_2: bool = False,
     experiment_3_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """完成指定实验的全部本地产物；只在 ``all`` 下先执行联合门禁。"""
+    """直接完成指定实验的全部本地产物。"""
 
     if target == "exp1-2":
         return experiment_1_2.analyze_workflow(rebuild=rebuild_experiment_1_2)
@@ -65,14 +65,6 @@ def analyze_workspace(
             raise ValueError("analyze exp3 不接受实验一/二重建参数")
         return experiment_3.analyze_workflow(progress=experiment_3_progress)
     _require_target(target)
-    validation = validate_workspace("all")
-    if validation["passed"] is not True:
-        return {
-            "passed": False,
-            "target": "all",
-            "validation": validation,
-            "reason": "联合门禁未通过，未开始任何分析构建",
-        }
     experiment_1_2_result = experiment_1_2.analyze_workflow(
         rebuild=rebuild_experiment_1_2
     )

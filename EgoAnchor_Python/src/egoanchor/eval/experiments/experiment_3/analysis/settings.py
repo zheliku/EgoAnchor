@@ -8,7 +8,6 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, TypeVar
 
 from ...common import (
@@ -57,9 +56,6 @@ class AnalysisSettings:
     aq_mode: str
     """AQ 计分模式：``full`` 或 ``reduced``。"""
 
-    q10_enabled: bool
-    """是否启用可选 Q10 次级条目。"""
-
     wilcoxon_alternative: str
     """配对 Wilcoxon 的冻结备择方向。"""
 
@@ -77,12 +73,6 @@ class AnalysisSettings:
 
     stias_min_items: int
     """S-TIAS 分数所需的最少有效条目数。"""
-
-    equivalence_enabled: bool
-    """是否按预实验冻结边界运行操纵检验 TOST。"""
-
-    equivalence_margins: Mapping[str, float]
-    """五项连续操纵检验的对称等价界。"""
 
     figure_dpi: int
     """PNG 论文面板分辨率。"""
@@ -117,7 +107,6 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
     contract = require_table(experiment, "contract", "paper.toml [experiment_3]")
     analysis = require_table(experiment, "analysis", "paper.toml [experiment_3]")
     missing = require_table(experiment, "missing", "paper.toml [experiment_3]")
-    equivalence = require_table(experiment, "equivalence", "paper.toml [experiment_3]")
     figures = require_table(experiment, "figures", "paper.toml [experiment_3]")
     settings = AnalysisSettings(
         contract_version=_require_int(contract, "version"),
@@ -130,31 +119,12 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
         bootstrap_seed=_require_int(analysis, "bootstrap_seed"),
         confidence_level=_require_float(analysis, "confidence_level"),
         aq_mode=_require_str(analysis, "aq_mode"),
-        q10_enabled=_require_bool(analysis, "q10_enabled"),
         wilcoxon_alternative=_require_str(analysis, "wilcoxon_alternative"),
         wilcoxon_zero_method=_require_str(analysis, "wilcoxon_zero_method"),
         wilcoxon_p_method=_require_str(analysis, "wilcoxon_p_method"),
         tia_rc_min_items=_require_int(missing, "tia_rc_min_items"),
         tia_up_min_items=_require_int(missing, "tia_up_min_items"),
         stias_min_items=_require_int(missing, "stias_min_items"),
-        equivalence_enabled=_require_bool(equivalence, "enabled"),
-        equivalence_margins=MappingProxyType(
-            {
-                "Candidate_Rate_Hz": _require_float(
-                    equivalence, "candidate_rate_margin_hz"
-                ),
-                "VCD_Median": _require_float(equivalence, "vcd_median_margin"),
-                "VCD_Admission_Rate": _require_float(
-                    equivalence, "admission_rate_margin"
-                ),
-                "Output_Availability": _require_float(
-                    equivalence, "output_availability_margin"
-                ),
-                "Occlusion_Seconds": _require_float(
-                    equivalence, "occlusion_seconds_margin"
-                ),
-            }
-        ),
         figure_dpi=_require_int(figures, "dpi"),
         figure_size=(
             _require_float(figures, "width_inches"),
@@ -168,8 +138,8 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
 def _validate_settings(settings: AnalysisSettings) -> None:
     """检查统计、缺失处理和绘图参数的联合约束。"""
 
-    if settings.contract_version != 4 or settings.template_version != "v5.1":
-        raise ValueError("实验三当前只接受配置契约 v4 与模板 v5.1")
+    if settings.contract_version != 5 or settings.template_version != "v5.2":
+        raise ValueError("实验三当前只接受配置契约 v5 与模板 v5.2")
     if settings.alpha != 0.05:
         raise ValueError("实验三冻结 alpha=0.05，不得与论文图中的显著性标记阈值脱节")
     if settings.confidence_level != 0.95:
@@ -196,11 +166,6 @@ def _validate_settings(settings: AnalysisSettings) -> None:
         raise ValueError("tia_up_min_items 必须位于 1--4")
     if not 1 <= settings.stias_min_items <= 3:
         raise ValueError("stias_min_items 必须位于 1--3")
-    margins = tuple(settings.equivalence_margins.values())
-    if any(not math.isfinite(margin) or margin < 0.0 for margin in margins):
-        raise ValueError("五项等价界必须是有限非负数")
-    if settings.equivalence_enabled and any(margin <= 0.0 for margin in margins):
-        raise ValueError("启用 TOST 前必须冻结五项正等价界")
     if settings.figure_dpi < 150 or any(
         not math.isfinite(value) or value <= 0.0
         for value in settings.figure_size
@@ -236,12 +201,6 @@ def _require_float(table: Mapping[str, Any], key: str) -> float:
     if not math.isfinite(value):
         raise ValueError(f"实验三配置 {key} 必须是有限浮点数")
     return value
-
-
-def _require_bool(table: Mapping[str, Any], key: str) -> bool:
-    """读取严格 TOML 布尔值。"""
-
-    return _require_scalar(table, key, bool)
 
 
 def _require_str(table: Mapping[str, Any], key: str) -> str:

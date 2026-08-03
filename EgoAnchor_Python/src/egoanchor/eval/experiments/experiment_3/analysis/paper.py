@@ -13,10 +13,10 @@ from .contracts import MAIN_FAMILY, OUTCOME_LABELS, SCALE_FAMILY
 
 _OUTCOME_LABELS_ZH = {
     "Q1": "静止稳定",
-    "Q8": "位置正确",
     "Q2": "运动附着",
-    "Q9": "姿态一致",
-    "Q3": "恢复一致",
+    "Q3": "姿态一致",
+    "Q4": "恢复一致",
+    "Q5": "位置正确",
     "Q6": "依赖意愿",
     "Q7": "稳定--响应平衡",
     "AQ_EQ": "AQ 嵌入质量",

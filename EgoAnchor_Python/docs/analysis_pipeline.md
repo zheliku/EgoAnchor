@@ -107,16 +107,15 @@ src/egoanchor/eval/
 [experiment_3.contract]
 [experiment_3.analysis]
 [experiment_3.missing]
-[experiment_3.equivalence]
 [experiment_3.figures]
 ```
 
 修改 `paper.toml` 中任一实验拥有的科学分析参数后，该实验旧构建会因配置摘要不一致而拒绝复制。
 `batch.toml` 的路径和复制目标由工作流另行核验；另一实验的配置变化不会使无关缓存失效。
 
-实验三正式采集前必须确认以下冻结项：`aq_mode`、`q10_enabled`、五项 TOST 等价界和问卷施测模态。
-当前 `aq_mode = "full"`，而 Round 2 负担诊断记录建议缩减 AQ；是否切到 `reduced`
-必须依据权威计划规定的预实验冻结过程明确决定，不能在采集中途改变。
+实验三正式采集前必须确认 `aq_mode` 与问卷施测模态。Q10 已从 v5.2 正式工作簿和 v5.3 后续模板删除，
+不再保留 `q10_enabled` 或 TOST 等价性分支。当前 `aq_mode = "full"`；正式 v5.2 数据与后续 v5.3
+数据必须分版本分析，不能合并。
 
 ## 4. 状态与质量检查
 
@@ -237,13 +236,15 @@ pixi run eval analyze exp1-2 --rebuild
 
 ## 7. 实验三原始模板与采集
 
-计划中的正式原始工作簿路径由 TOML 固定为：
+正式原始工作簿路径由 TOML 固定为：
 
 ```text
-../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx
+../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData.xlsx
 ```
 
-该工作簿保存 24 名参与者的正式录制数据。研究团队保留原始记录与知情同意；分析程序检查工作簿结构、评分、配对和统计输入的一致性。
+该工作簿保存 24 名参与者的 v5.2 正式数据。后续采集使用
+`../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`，两版数据不合并。
+研究团队保留原始记录与知情同意；分析程序检查工作簿结构、评分、配对和统计输入的一致性。
 
 正式采集时直接填写计划路径下的工作簿，不需要反复生成模板。只有需要制作新的审查副本时才运行：
 
@@ -255,16 +256,26 @@ pixi run eval data exp3 create-template --output ..\2026-EgoAnchor\material\exp3
 
 ### 7.1 人工输入
 
-只有 `Participants` 和 `Records` 需要填写。`Participants` 保存 B1--B6 背景、同意、起止时间、
-纳入决定和排除原因；`Records` 保存六个区块、两次方法级问卷和最终问卷的原始回答。TiA 反向项仍填原始分，
-`6 - raw` 只在派生层执行。不要把任何小分、配对差或 Python 结果粘回这两张表。
+`Participants`、`Block`、`Method` 和 `Final` 需要填写。`Participants` 保存 B1--B6 背景、同意、
+纳入决定和排除原因；`Block` 保存六个区块，`Method` 保存两次方法级问卷，`Final` 保存最终问卷。TiA 反向项仍填原始分，
+`6 - raw` 只在分析阶段执行。不要把任何小分、配对差或 Python 结果粘回原始输入表。
 
-纳入正式分析的参与者必须完整填写 B1--B6、签署同意、起止时间、六个有效区块、两条有效方法级记录和完整最终问卷。
+纳入正式分析的参与者必须完整填写 B1--B6、签署同意、六个有效区块、两条有效方法级记录和完整最终问卷。
 已签署同意但标记为不纳入时，`退出/技术问题` 必须选择冻结主原因；补充情况只写 `备注`，不会复制到结果工作簿。
 开始分析前，所有已同意者都要明确标记“纳入”或“排除”，已经开始的记录不能缺少同意确认。
 年龄只检查是否为合法正整数，不由分析代码擅自设定成人纳入界限。基线不适允许留空；非空时必须使用下拉选项，缺失会在安全汇总中单独报告。
 
-### 7.2 `Derived` 怎样工作
+### 7.2 当前五表直接分析
+
+当前工作簿只包含 `Questionnaire`、`Participants`、`Block`、`Method` 和 `Final` 五张表。
+`Questionnaire` 与 `Block` 的区块评分顺序固定为 `Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`，Q10 不再存在。
+`Participants` 填写背景与纳入信息，`Block` 填写 144 个方法×物体区块，`Method` 填写两次方法级问卷，
+`Final` 填写最终选择、开放题和安全检查。TiA 反向项保留原始分，`6 - raw` 由 Python 计分执行。
+
+后续 v5.3 模板的 B5 使用互斥累计次数“从未 / 1–5 次 / 6–20 次 / 21 次及以上”；正式 v5.2 工作簿保留原分档。
+两版工作簿不得合并。工作簿不包含需要 Excel 重算的派生表，正式分析直接从原始值读取。
+
+### 附录：历史 Derived 工作簿说明（不适用于 v5.2/v5.3）
 
 `Derived` 不是实施检查表，也无需人工填写。它是一张只读的 Excel 公式派生表，把每一步计分显式展开：
 
@@ -298,7 +309,7 @@ D6 的 `Audit_Status` 只描述当前记录状态，不替研究者作纳入决�
 `Derived` 和 `Analysis` 已启用无密码工作表保护，用于防止误覆盖公式。不要在其中输入、粘贴或排序。要修正数据时回到 `Participants` 或 `Records`，
 公式会自动更新；正式分析仍从这两张原始表独立重算。
 
-### 7.3 `Analysis` 该看什么
+### 附录：历史 Analysis 工作簿说明（不适用于 v5.2/v5.3）
 
 `Analysis` 只读取 `Derived`，是现场核对仪表板。首屏把“已完成会话”和“纳入者分析记录完整”分开显示，随后列出论文所需的参与者描述：
 
@@ -327,19 +338,20 @@ pixi run eval status exp3
 
 ## 8. 实验三完成分析
 
-采集完成后：
+采集完成后可直接分析：
 
 ```powershell
-pixi run eval validate exp3
 pixi run eval analyze exp3
 ```
+
+`pixi run eval validate exp3` 保留为可选诊断，不是 `analyze exp3` 的前置门禁。
 
 `analyze exp3` 内部顺序固定为：
 
 ```text
 读取并验证正式原始工作簿
 → 从原始评分计算区块、量表和参与者配对分
-→ Wilcoxon、分层 Holm、效应量、信度和操纵检查
+→ Wilcoxon、分层 Holm、效应量和信度
 → 写入并回读六页结果 XLSX
 → 生成 TeX 主表
 → 从同一次分析的内存数据生成正文候选 Figure 4 PNG/PDF
@@ -356,7 +368,7 @@ data/experiments/experiment_3/analysis/
 └─ provenance/build_result.json
 ```
 
-分析参数契约为 v4，图产物契约为 v7。当前不兼容旧目录、旧文件名或旧 v4/v5/v6 构建清单；产物路径固定。
+分析参数契约为 v5，图产物契约为 v7。当前不兼容旧目录、旧文件名或旧 v4/v5/v6 构建清单；产物路径固定。
 
 结果工作簿固定为六张中文页，顺序和职责如下：
 
@@ -391,8 +403,8 @@ CLMM 不进入冻结分析、结果工作簿或论文。被删除的自定义实
 应先冻结新的假设，再使用经过验证的序数混合模型实现，不能恢复这套旧代码。
 
 正文候选是一张双栏宽的双排复合图 `figure4_exp3_subjective_outcomes`，全图只用一个方法图例。
-上排填满七个等宽槽，依次显示 Stability、Attachment、Recovery、Reliance、Balance、Position 和
-Orientation；内部键仍为 Q1/Q2/Q3/Q6/Q7/Q8/Q9，纵轴保留 1--7 原始分。下排沿用相同的物理槽宽，
+上排填满七个等宽槽，依次显示 Stability、Attachment、Orientation、Recovery、Position、Reliance 和
+Balance；内部键为 Q1–Q7，纵轴保留 1--7 原始分。下排沿用相同的物理槽宽，
 五项已发表量表整体居中。左侧三个槽放置 AQ-EQ、AQ-IQ 与 S-TIAS，共用 1--7 轴；右侧两个槽放置
 TiA R/C 与 TiA U/P，共用 1--5 右轴。两个量尺分区之间留窄缝，不归一化也不共用纵轴。
 
@@ -411,8 +423,8 @@ pixi run eval analyze all
 pixi run eval copy-assets all
 ```
 
-`analyze all` 先运行联合 QC；任一实验未通过时，两条分析都不会开始。QC 通过后先分析实验一/二，再分析
-实验三，避免两个统计任务并行争用 CPU。需要同时强制重建实验一/二 Stage 1 时使用：
+`analyze all` 直接按顺序分析实验一/二和实验三，不再先运行联合审计门禁。`validate all` 仅在需要诊断输入时单独运行。
+需要同时强制重建实验一/二 Stage 1 时使用：
 
 ```powershell
 pixi run eval analyze all --rebuild-exp1-2

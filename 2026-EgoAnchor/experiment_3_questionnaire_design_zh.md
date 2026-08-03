@@ -1,9 +1,15 @@
-# 实验三完整计划（v5）：日常物体上的跨对象感知评价
+# 实验三完整计划（v5.3）：日常物体上的跨对象感知评价
 
 > **本文件是实验三的唯一权威规格**：设计结构、任务、测量工具、施测流程、统计分析与论文汇报
 > 均以本文件为准。原 `experiment_3_design_zh.md`（结构文档）已于 2026-07-26 并入本文件并删除；
 > 本文件 v4 版本（仅测量规格）同时被本版取代。
 > 论文可发表叙述见 `egoanchor_cn_v2.tex` 的实验三小节，两者必须保持一致；冲突时以本文件为准并同步修复。
+
+> **当前数据版本边界（2026-08-03）**：正式 24 人数据保存在
+> `material/EgoAnchor_Experiment3_RawData.xlsx`，按 v5.2 施测措辞完成，分析时只使用该版本。
+> 后续采集使用 `material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 及同名 v5.3 问卷包；
+> v5.2 与 v5.3 不合并分析。区块级题目按页面连续排列为
+> `Q1–Q7 → AQ_EQ1–AQ_EQ3 → AQ_IQ1–AQ_IQ3`，Q10 已永久删除。
 
 ---
 
@@ -38,7 +44,7 @@
 | --- | --- | --- |
 | 实验三正文图 | 原 Figure 4 与 Figure 5 合并为一张双排复合图（资源名 `figure4_exp3_subjective_outcomes`，v2 主稿编号 Figure 6）；上排 `(a)` 展示七项主结局，下排 `(b)/(c)` 按 1--7 与 1--5 理论量尺展示五项已发表量表结局 | 两排共用七槽物理网格和一个方法图例，五项量表整体居中，避免两张图上下排列时出现箱宽和组间距不一致 |
 | 图产物契约 | 图产物契约由 v6 升至 v7，只发布 `figure4_exp3_subjective_outcomes.{png,pdf}` | 该资源在 v2 主稿中为 Figure 6；实验一单栏 `replay_grid.pdf` 为 Figure 4。独立 Figure 5 已退役；旧文件名和旧 v4/v5/v6 构建清单不得继续发布 |
-| 正式数据 | `EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 为24名参与者输入，已作为论文结果输入 | 结构、配对完整性和冻结统计分析已通过，结果图表由统一流水线生成 |
+| 正式数据 | `EgoAnchor_Experiment3_RawData.xlsx` 为 24 名参与者的 v5.2 输入；`EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 只用于后续采集 | v5.2 已完成结构、配对完整性和冻结统计分析；v5.3 另行分析，不与 v5.2 合并 |
 
 ### v5.1 增补（2026-07-26，用户批准）
 
@@ -246,28 +252,27 @@ VCD 接纳、自适应历史目标时刻、生命周期管理、对象模型与�
 5 比较同意 / 6 同意 / 7 完全同意）。同一条目在全部区块中措辞与刻度完全相同。
 措辞避开对操纵的直接描述（不出现"抖动""漂移""滤波""锁定"），只问参与者观察到什么。
 
-呈现顺序按体验时间线（≠编号顺序），Q1 与 Q8 间隔 5 页以抑制响应定式：
+呈现顺序与分析编号保持一致，按以下连续顺序施测：
 
 | 页 | ID | 简称 | 条目（中文施测版） | 英文 | 来源 | 对应实验一实测差异（One-Euro → EgoAnchor） |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Q1 `OBJ_STATIC_STABILITY` | 静止稳定 | 在静止观察阶段，虚拟内容保持在同一位置不动。 | During static observation, the virtual content stayed in the same position without moving. | 自制（v4 冻结措辞） | 头动泄漏 P95 10.65→0.82 mm；静止帧间增量 0.85→0.06 mm |
 | 2 | Q2 `OBJ_MOTION_ATTACHMENT` | 运动附着 | 在拿起、移动和旋转物体时，虚拟内容始终附着在真实物体上的同一位置。 | While I picked up, moved, and rotated the object, the virtual content remained attached to the same location on the physical object. | 自制（v5.1 锐化措辞） | 平移对齐 RMSE 15.69→9.12 mm **对** Start-transition 334→510 ms（反向）——预期近零效应，如实报告 |
-| 3 | Q9 `OBJ_ORIENTATION_CONSISTENCY` | 姿态一致 | 旋转物体时，虚拟内容的朝向与真实物体的朝向保持一致。 | While I rotated the object, the orientation of the virtual content stayed consistent with the orientation of the physical object. | 自制（冻结） | 静止旋转泄漏 3.29→0.33°；旋转对齐 RMSE 5.55→4.81° |
-| （3'） | Q10 `OBJ_POST_PLACEMENT_SETTLING` `OPT` | 放置后稳定 | 把物体放到桌面后，虚拟内容很快就稳定下来。 | After I placed the object on the table, the virtual content settled quickly. | 自制，**默认不启用** | 前向过冲 0.485→0.217 mm（正向）**对** 反向回动 0.497→0.695 mm（反向） |
-| 4 | AQ-IQ2 | 响应及时 | 虚拟内容实时响应我对真实物体的操作。 | The virtual object responds in real-time.（官方原文） | AQ Interaction Quality（对象化适配） | 有效时延 380→360 ms；Start-transition 反向 |
-| 5 | AQ-IQ3 | 运动平滑 | 在交互过程中，虚拟内容随真实物体平滑运动。 | The virtual object moves smoothly.（官方原文） | AQ Interaction Quality | 显示帧间增量与转换平滑性 |
-| 6 | Q3 `OBJ_RECOVERY_CONSISTENCY` | 恢复一致 | 遮挡移除后，虚拟内容恢复到了与真实物体一致的位置。 | After the occlusion was removed, the virtual content recovered to a position consistent with the physical object. | 自制（冻结） | 遮挡平移 P95 10.41→4.85 mm；灾难性失效 >40 mm 1→0 次 |
-| 7 | Q8 `OBJ_POSITION_CORRECTNESS` | 位置正确 | 虚拟内容出现的位置，与真实物体实际所在的位置相符。 | The virtual content appeared at a position that matched where the physical object actually was. | 自制（冻结） | 绝对配准 P95 14.00→6.60 mm |
+| 3 | Q3 `OBJ_ORIENTATION_CONSISTENCY` | 姿态一致 | 旋转物体时，虚拟内容的朝向与真实物体的朝向保持一致。 | While I rotated the object, the orientation of the virtual content stayed consistent with the orientation of the physical object. | 自制（冻结） | 静止旋转泄漏 3.29→0.33°；旋转对齐 RMSE 5.55→4.81° |
+| 4 | Q4 `OBJ_RECOVERY_CONSISTENCY` | 恢复一致 | 遮挡移除后，虚拟内容恢复到了与真实物体一致的位置。 | After the occlusion was removed, the virtual content recovered to a position consistent with the physical object. | 自制（冻结） | 遮挡平移 P95 10.41→4.85 mm；灾难性失效 >40 mm 1→0 次 |
+| 5 | Q5 `OBJ_POSITION_CORRECTNESS` | 位置正确 | 虚拟内容出现的位置，与真实物体实际所在的位置相符。 | The virtual content appeared at a position that matched where the physical object actually was. | 自制（冻结） | 绝对配准 P95 14.00→6.60 mm |
+| 6 | Q6 `TRUST_RELIANCE` | 依赖意愿 | 在需要虚拟内容准确附着于真实物体的混合现实应用中，我愿意依赖这种锚定方法。 | I would be willing to rely on this anchoring method in an MR application that requires virtual content to be accurately attached to a physical object. | 自制（冻结） | 应用侧结局；灾难性失效 1→0 |
+| 7 | Q7 `STABILITY_RESPONSIVENESS_BALANCE` | 稳定–响应平衡 | 总体而言，该方法在锚点稳定性与响应及时性之间取得了合适的平衡。 | Overall, this method achieved an appropriate balance between anchor stability and responsiveness. | 自制（冻结） | 稳定性收益与时延代价的整体权衡 |
 | 8 | AQ-EQ1 | 融合 | 虚拟内容与真实物体及周围真实元素自然融合。 | The virtual object blends in with real elements.（官方原文） | AQ Embedding Quality | 综合配准质量 |
-| 9 | AQ-EQ2 | 嵌入可信 | 虚拟内容真实地嵌入在真实物体及其现实环境中。 | The virtual object is realistically embedded in the environment.（官方原文） | AQ Embedding Quality | 综合（接管原 Q4 合理可信构念） |
+| 9 | AQ-EQ2 | 嵌入可信 | 虚拟内容真实地嵌入在真实物体及其现实环境中。 | The virtual object is realistically embedded in the environment.（官方原文） | AQ Embedding Quality | 综合；正式 v5.2 保留原施测措辞 |
 | 10 | AQ-EQ3 | 尺度协调 | 虚拟内容的尺度与真实物体及现实世界中的事物相匹配。 | The size of the virtual object is in scale to things in the real world.（官方原文） | AQ Embedding Quality | 预期天花板（尺度不随方法变化），保留以维持完整子量表 |
 | 11 | AQ-IQ1 | 交互直观 | 通过操作真实物体与虚拟内容进行交互是直观的。 | Interaction with the virtual object is intuitive.（官方原文） | AQ Interaction Quality | 综合 |
-| 12 | Q6 `TRUST_RELIANCE` | 依赖意愿 | 在需要虚拟内容准确附着于真实物体的混合现实应用中，我愿意依赖这种锚定方法。 | I would be willing to rely on this anchoring method in an MR application that requires virtual content to be accurately attached to a physical object. | 自制（冻结） | 应用侧结局；灾难性失效 1→0 |
-| 13 | Q7 `STABILITY_RESPONSIVENESS_BALANCE` | 稳定–响应平衡 | 总体而言，该方法在锚点稳定性与响应及时性之间取得了合适的平衡。 | Overall, this method achieved an appropriate balance between anchor stability and responsiveness. | 自制（冻结） | 稳定性收益与时延代价的整体权衡 |
+| 12 | AQ-IQ2 | 响应及时 | 虚拟内容实时响应我对真实物体的操作。 | The virtual object responds in real-time.（官方原文） | AQ Interaction Quality（对象化适配） | 有效时延 380→360 ms；Start-transition 反向 |
+| 13 | AQ-IQ3 | 运动平滑 | 在交互过程中，虚拟内容随真实物体平滑运动。 | The virtual object moves smoothly.（官方原文） | AQ Interaction Quality | 显示帧间增量与转换平滑性 |
 
-**Q1/Q8 正交性**（继承 v4）：Q1 只承载时间稳定性、Q8 只承载空间正确性。纹丝不动但整体偏移的
-锚点在 Q1 高分、Q8 低分；没有 Q8，问卷无法区分"稳定且正确"与"稳定但错误"，而后者恰是显式
-静止锚定的失败模式（实验一同时报中心化泄漏与绝对配准正为此）。**Q9 独立性**：Q2 的判断由更显著
+**Q1/Q5 正交性**：Q1 只承载时间稳定性、Q5 只承载空间正确性。纹丝不动但整体偏移的
+锚点在 Q1 高分、Q5 低分；没有 Q5，问卷无法区分"稳定且正确"与"稳定但错误"，而后者恰是显式
+静止锚定的失败模式（实验一同时报中心化泄漏与绝对配准正为此）。**Q3 独立性**：Q2 的判断由更显著
 的平移通道主导，旋转证据必须独立测量、不得用平移收益替代。**Q2 与 AQ-IQ3 的分工**（v5.1）：
 Q2 测运动中的附着位置恒定（是否滑动、脱附），AQ-IQ3 测运动平滑度；v4 的"保持一致运动"措辞
 同时含两者，与 AQ-IQ3 并存后判别效度模糊，故锐化为附着位置表述。预实验认知访谈须确认
@@ -279,10 +284,11 @@ AQ 条目为"对象化适配"版：官方原量表（消费级移动 AR 场景�
 本研究仅将其具体化为附着于真实物体的虚拟内容并补充操作情境，替换幅度极小；采集表
 `Questionnaire` 表同时保留官方原文、对象化英文与中文施测版三列，论文须声明适配方式（见第七节）。
 
-**Q10 启用判据**（预实验冻结，默认不启用）：单区块问卷 ≤150 s 且无连续同分 ≥5 项。
-**AQ 缩减规则**（预实验冻结）：若单区块问卷 >150 s 或出现响应定式，先停用 AQ-EQ3（预期天花板）
-与 AQ-IQ1（与 Q7 构念最近），退到 11 项；此时 AQ 两子量表按剩余条目报告为"缩减版"，
-不再声称完整子量表。
+正式 v5.2 的 AQ-EQ2 保留“虚拟内容真实地嵌入在真实物体及其现实环境中”。后续 v5.3
+改为“虚拟内容看起来真实、自然地融入了真实物体及其周围环境”，用于避免“嵌入物体内部”的歧义；
+该改写须先经认知访谈确认，不能把两版评分放在同一分析中。
+
+**Q10 已删除**：当前 v5.2 正式数据和 v5.3 后续模板均只保留上述 13 项；不再设置 Q10 启用分支。
 
 ### 4.3 界面与呈现（区块级）
 
@@ -314,7 +320,7 @@ S1 参与者先评方法 A、S2 参与者先评方法 B（先评方法 12/12 平
 同一模态）；若预实验显示疲劳明显可整体改为平板，但两方法必须同一模态。界面标题：
 `请根据方法 X 在全部三个物体上的整体表现作答`。
 
-#### TiA 两分量表（10 项，官方原文已核对；中文措辞已冻结，预实验认知访谈作确认性检查）
+#### TiA 两分量表（10 项，官方原文已核对；正式 v5.2 措辞与后续 v5.3 改写分开管理）
 
 五点同意度（1 Strongly disagree / 2 Rather disagree / 3 Neither disagree nor agree /
 4 Rather agree / 5 Strongly agree），允许"无法回答"（记缺失）；反向项计分 = 6 − 原始分；
@@ -335,6 +341,11 @@ S1 参与者先评方法 A、S2 参与者先评方法 B（先评方法 12/12 平
 | TIA_UP2 | U/P | The system reacts unpredictably. | 这种对象锚定方法的反应难以预测。 | **是** | 7 |
 | TIA_UP3 | U/P | I was able to understand why things happened. | 我能够理解为什么会出现刚才的锚定行为。 | 否 | 11 |
 | TIA_UP4 | U/P | It's difficult to identify what the system will do next. | 我很难判断这种对象锚定方法接下来会怎样表现。 | **是** | 16 |
+
+正式 24 人数据使用上表 v5.2 中文措辞。后续 v5.3 模板将三处 TiA 情境化措辞更新为：RC1
+“这种对象锚定方法能够根据当前情况做出正确的锚定反应”、RC4“这种对象锚定方法能够处理复杂的对象锚定任务”、
+UP1“这种对象锚定方法当前的工作状态对我来说始终清楚”。这些改写只在认知访谈确认后启用，
+不得与 v5.2 数据合并。
 
 认知访谈最高优先项：TIA_RC1（"判断状况"对低层锚定算法偏抽象）、TIA_RC4（"承担复杂任务"
 与锚点运行时语义匹配较弱）；若理解不良，与其余条目一起按翻译流程修订后重测。
@@ -396,7 +407,7 @@ TiA（五点同意度）与 S-TIAS（七点程度尺）端点不同，切换处�
 | TiA（Körber 2019） | CC BY-SA 4.0 | GitHub `moritzkoerber/TiA_Trust_in_Automation_Questionnaire`（官方英/德问卷） | **已核对（2026-07-26）**：6+4 结构、官方条目号、反向项与五点量尺已回填 4.4 节；英文版仍需进一步验证 → 署名 adapted TiA subscales |
 | S-TIAS（McGrath et al. 2025） | CC BY | Frontiers in AI, doi:10.3389/frai.2025.1582880 | **已核对（2026-07-26）**：原文指代 "the AI assistant"、量尺 1 Not at all – 7 Extremely 已回填 4.4 节；**作者更正为 McGrath, Lack, Tisch, Duenser**（语料标注 Karpus 有误），*Measuring trust in artificial intelligence: validation of an established scale and its short form*, 8:1582880，bib 已改键为 `mcgrath2025stias` |
 | Gottsacker et al. 2024（仅引用，不施测） | — | Computers & Graphics, doi:10.1016/j.cag.2024.104035 | **已核对（2026-07-26）**：Gottsacker, Furuya, Choudhary, Erickson, Schubert, Bruder, Browne, Welch, *Investigating the relationships between user behaviors and tracking factors on task performance and trust in augmented reality*, 123:104035，bib 已补全；引用表述遵守〇节的水平边界 |
-| 自制 Q1/Q2/Q3/Q6/Q7/Q8/Q9/Q10 | 本研究 | 本文件 4.2 节 | 已冻结（v4 措辞；Q2 于 v5.1 锐化） |
+| 自制 Q1–Q7 | 本研究 | 本文件 4.2 节 | v5.2 正式措辞；Q2 沿用 v5.1 锐化，v5.3 只改后续模板的四处情境化措辞 |
 
 > **核对状态（2026-07-26，全部完成）**：TiA、AQ、S-TIAS、Gottsacker 的原文与书目已由研究者逐条核对；
 > 19 条量表条目的中文措辞也已对照官方原文完成语义等价审计，并于同日冻结为 v5.1 Final wording。
@@ -436,9 +447,9 @@ TiA（五点同意度）与 S-TIAS（七点程度尺）端点不同，切换处�
 
 | 家族 | 内容 | 检验与校正 | 角色 |
 | --- | --- | --- | --- |
-| **主证实家族（7 项，与 v4 完全一致）** | Q1 静止稳定、Q8 位置正确、Q2 运动附着、Q9 姿态一致、Q3 恢复一致、Q6 依赖意愿、Q7 平衡 | 物体均值 → 逐条目 Wilcoxon 符号秩，家族内 Holm | 回答"运行时差异是否抵达知觉与信任" |
+| **主证实家族（7 项）** | Q1 静止稳定、Q2 运动附着、Q3 姿态一致、Q4 恢复一致、Q5 位置正确、Q6 依赖意愿、Q7 平衡 | 物体均值 → 逐条目 Wilcoxon 符号秩，家族内 Holm | 回答"运行时差异是否抵达知觉与信任" |
 | **已发表量表家族（5 检验）** | AQ-EQ、AQ-IQ（区块施测 → 子量表 3 项均值 → 三物体均值）、TiA-R/C、TiA-U/P、S-TIAS（方法级单次施测；S-TIAS 取 3 项均值，TiA 反向项先按 6−raw 换向） | 同上配对检验，家族内 Holm；**仅对这五项量表结局报告内部一致性（α/ω，且只表述为当前样本信度）** | 感知与信任构念的外部锚 |
-| 次级 | Q10（若启用） | 独立检验 | 停止瞬间探索 |
+| 次级 | 无（Q10 已删除） | — | — |
 | 描述性 | 两项强制选择（人数与比例）、偏好强度与区分信心（描述统计）、开放题主题、SSQ 安全监测、运行时审计日志 | 不作推断 | 解释与审计 |
 
 主家族七项都直接对应实验一量化过的运行时行为或应用侧结局；家族划分使已发表量表的加入
@@ -522,8 +533,8 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 一句解释性小结）与 VRGaussianAvatar 的图内显著性标注：
 
 1. **十二项主观结局复合图**：正文候选使用资源
-   `figures/panels/figure4_exp3_subjective_outcomes.pdf`，全图共享一个方法图例。上排 `(a)` 填满七个等宽槽，依次显示 Stability、Attachment、Recovery、Reliance、Balance、Position 和 Orientation，不显示问卷编号；内部仍以 Q1/Q2/Q3/Q6/Q7/Q8/Q9 作为稳定分析键，纵轴保留七点同意度的原始 1--7 分。下排沿用相同槽宽，将五项已发表量表整体居中：左侧 `(b)` 展示 AQ-EQ、AQ-IQ 与 S-TIAS，保留 1--7 理论量尺；右侧 `(c)` 展示 TiA-R/C 与 TiA-U/P，保留 1--5 理论量尺。两个分区之间留窄缝，不归一化也不共用纵轴。
-   每项结局并列绘制 One-Euro 与 EgoAnchor 的透明箱体、浅色参与者点和浅灰配对线；箱体表示 IQR，箱内横线表示中位数，圆点表示均值，须线采用 1.5 倍 IQR 规则。若所属冻结家族内 Holm 校正后的 $p<.05$，则在对应的两方法上方绘制括号，并标 $*<.05$、$**<.01$ 或 $***<.001$。图注须说明区块级得分先在三个物体上取均值；三个物体不分别检验或标星。Q2、Q9 无论是否显著均予保留，不按结果筛选指标。
+   `figures/panels/figure4_exp3_subjective_outcomes.pdf`，全图共享一个方法图例。上排 `(a)` 填满七个等宽槽，依次显示 Stability、Attachment、Orientation、Recovery、Position、Reliance 和 Balance，不显示问卷编号；内部键为 Q1–Q7，纵轴保留七点同意度的原始 1--7 分。下排沿用相同槽宽，将五项已发表量表整体居中：左侧 `(b)` 展示 AQ-EQ、AQ-IQ 与 S-TIAS，保留 1--7 理论量尺；右侧 `(c)` 展示 TiA-R/C 与 TiA-U/P，保留 1--5 理论量尺。两个分区之间留窄缝，不归一化也不共用纵轴。
+   每项结局并列绘制 One-Euro 与 EgoAnchor 的透明箱体、浅色参与者点和浅灰配对线；箱体表示 IQR，箱内横线表示中位数，圆点表示均值，须线采用 1.5 倍 IQR 规则。若所属冻结家族内 Holm 校正后的 $p<.05$，则在对应的两方法上方绘制括号，并标 $*<.05$、$**<.01$ 或 $***<.001$。图注须说明区块级得分先在三个物体上取均值；三个物体不分别检验或标星。Q1–Q7 无论是否显著均予保留，不按结果筛选指标。
 2. **完整结果表** `tables/exp3_subjective.tex`：保留 7 个主条目和已发表量表家族 5 项结局的全部结果，包括不显著项；列出配对差中位数、家族内 Holm 校正后的 $p$ 值和 $r_{rb}$ [95% CI]。信度（α/ω）只在结果工作簿中对已发表量表家族报告。复合图负责分布，表负责完整统计结果。
 3. **强制选择与开放题**：人数比例 + 主题计数；代表性引语放讨论章（不放结果章）。
 4. **操纵检验**：候选/VCD/接纳一致性表 + 生命周期状态分布，放正文一段或补充材料。
@@ -544,7 +555,7 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 1. **遮挡时长**：0.6–0.9 s 内取定一个值（避开 0.45/1.0 s 边界），确认多数过程停留
    `FrozenUncertain`；同时冻结头动幅度、操作节奏与初始化等待条件。
-2. **Q10 是否启用**：单区块问卷 ≤150 s 且无连续同分 ≥5 项才启用。
+2. **Q10**：已删除，不再评估启用条件。
 3. **AQ 缩减规则是否触发**：>150 s 或响应定式 → 停用 AQ-EQ3 与 AQ-IQ1（见 4.2）。
 4. **方法级问卷模态**：默认头显内；疲劳明显则整体改平板（两方法同一模态）。
 5. **认知访谈：Q2 与 AQ-IQ3 的判别**【v5.1】：确认参与者把 Q2 理解为"附着位置是否恒定
@@ -558,36 +569,38 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 ## 九、采集材料与工程实现
 
-### 9.1 采集与分析工作簿与问卷包（v5.1 正式版）
+### 9.1 采集与分析工作簿与问卷包（v5.2 正式数据 / v5.3 后续模板）
 
-**唯一正式采集与分析输入：`material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx`**。
-该文件也作为空白审查副本的只读结构与样式来源；模板构造器先复制工作簿，再清空全部人工采集区域并重建派生表，不改写正式文件。审查副本使用
-`pixi run eval data exp3 create-template --output <尚不存在的仓库内路径>` 生成，命令拒绝覆盖已有文件。正式文件共 7 表：
+**正式采集与分析输入：`material/EgoAnchor_Experiment3_RawData.xlsx`**（v5.2，24 人）。
+后续采集使用 `material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`；模板只改变未来施测措辞，
+不覆盖正式工作簿，也不与 v5.2 数据合并。正式文件共 5 表：
 
 **参与者问卷包（蓝本 + 应急纸质版）**由同名 MD 与 DOCX 组成：
 `material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.{md,docx}`。条目和量尺以本文件的冻结设计为准，
-两份问卷包须同步维护并逐项核对。问卷包已按 v5.1 修正：Q2 锐化措辞、最终问卷 F1–F7
+正式 v5.1 问卷包保留为历史施测记录；后续 v5.3 问卷包由
+`material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_3_Bilingual.md` 生成并作为新采集蓝本。
+后续问卷包按 v5.3 修正：Q2 沿用既有措辞、AQ-EQ2 与 TiA-RC1/RC4/UP1 采用情境化改写、最终问卷 F1–F7
 （含偏好强度与区分信心）、TiA 中性序号按官方相对顺序呈现并含"无法回答"选项、区块/方法级指导语、
 蓝本定位说明。
 
 | 工作表 | 内容 |
 | --- | --- |
-| `README` | 正式模板声明、五步使用流程、冻结分析家族摘要、采集前置、程序日志字段建议与稳定工作簿契约标记 |
-| `Verification_Audit` | 〇节"v5.1 核对结果"的逐条存档（AQ/TiA/S-TIAS/Gottsacker/时点修正/家族更名）+ 四篇来源文献完整书目 |
-| `Questionnaire` | **全部条目一表**：背景 B1–B6（含选项分档）→ 区块级 13+1 项（页序/中文施测/官方英文/对象化英文/家族/来源）→ TiA 6+4（官方原文/反向/条目号/计分/官方相对呈现顺序）→ S-TIAS 3 → 最终 7 项 → 量尺锚点定义 |
+| `Questionnaire` | **全部条目一表**：背景 B1–B6（含选项分档）→ 区块级 13 项（`Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`）→ TiA 6+4 → S-TIAS 3 → 最终问卷与量尺锚点。Q10 已删除 |
 | `Participants` | 24 平衡单元预填（每个物体排列内按 S1-EA / S2-EA / S2-OE / S1-OE 轮转编号，提前止收时优先补齐整组 4 人）+ 背景字段 + 纳入/退出审计 |
-| `Records` | **实验记录一表**，三段堆叠：A 区块记录 144 行（进度表 + 13+1 评分 + 问卷时长 + 运行时审计合并为一行一区块）；B 方法级记录 48 行（TiA 10 + S-TIAS 3 原始分 + 尺度切换确认）；C 最终问卷 24 行（选择/强度/信心/开放题/安全检查） |
-| `Derived` | **只读公式派生层**：D1 区块有效性与 AQ；D2 TiA 换向与方法级小分；D3 参与者×方法的区块级三物体均值，并直接带入方法级小分；D4 `EgoAnchor-One-Euro` 配对差；D5 最终问卷完整性；D6 参与者样本流、人口学、经验、时长、安全变化、平衡和记录状态审计。D6 不替代人工纳入决定 |
-| `Analysis` | **实时描述仪表板**：样本流与完整性；年龄/会话时长 N、缺失、Mean/SD、Mdn/IQR、范围；人口学与经验分布以纳入 N 为分母，基线/结束不适和不适加重以所有已同意且已开始体验者为安全分母；另含顺序/标签平衡、两个统计家族的实时描述与操纵描述。主证实区分为 C1（三物体均值后的冻结主分析单位）和 C2（7 个主条目 × 3 个物体的完整配对描述）；C2 只用于核对逐物体方向，不作逐物体显著性检验。黄色离线列不在本文件回填 |
+| `Block` | 144 个方法×物体区块；评分列固定为 `Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`，不含 Q10 |
+| `Method` | 48 条方法级记录（TiA 10 + S-TIAS 3 原始分） |
+| `Final` | 24 条最终问卷（选择、强度、信心、开放题、安全检查） |
 
-约定：`Participants` 和 `Records` 是唯一人工原始值区域，不得含公式；TiA 原始反向项不得被换向分覆盖。输入区有冻结下拉或整数校验，
-公式只存在 `Derived`/`Analysis`；它们供 Excel 现场复算，正式 Python 分析从原始值独立重算且不读公式缓存。结果另写
+约定：`Participants`、`Block`、`Method` 和 `Final` 是人工原始值区域，不得含公式；TiA 原始反向项不得被换向分覆盖。
+输入区有冻结下拉或整数校验，正式 Python 分析从原始值独立重算。B5 在 v5.2 正式数据中沿用原分档；
+v5.3 模板改为互斥累计次数“从未 / 1–5 次 / 6–20 次 / 21 次及以上”。结果另写
 `data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx`，固定 6 张中文结果页：
 `说明`（输入、方法、边界与页索引）、`样本与质控`（样本流、人口学、平衡、操纵与生命周期）、
 `主结果`（冻结的 7+5 结局）、`分物体描述`（7 条目×3 物体，仅描述）、`量表信度`（当前样本）、
 `选择结果`（偏好、信任、强度、信心与交叉）。逐人审计和派生底表不再复制到结果簿；原始输入已
 保存追溯信息。开放题人工编码使用独立、持久且不会被自动分析重建覆盖的文件。
-方法映射列仅实验员可见，参与者界面只显示 A/B。`material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 为正式参与者数据，包含24名参与者、144个方法--物体区块；分析程序已完成结构、计分、配对与统计一致性检查，结果已复制进论文。
+方法映射列仅实验员可见，参与者界面只显示 A/B。v5.2 正式输入包含 24 名参与者、144 个方法--物体区块；
+分析程序已完成结构、计分、配对与统计一致性检查。后续 v5.3 数据必须单独建批次，不能和 v5.2 合并。
 
 ### 9.2 Unity / Python 工程状态
 

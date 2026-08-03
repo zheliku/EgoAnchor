@@ -95,8 +95,6 @@ def _aggregate_block_outcomes(block_scores: pd.DataFrame, settings: AnalysisSett
     """按参与者×方法在三个对象上形成每项区块级结局的均值。"""
 
     outcomes = list(PRIMARY_OUTCOMES) + list(_aq_item_sets(settings))
-    if settings.q10_enabled:
-        outcomes.append("Q10")
     records: list[dict[str, object]] = []
     for (participant_id, condition), rows in block_scores.groupby(
         ["Participant_ID", "Condition(保密)"], sort=True

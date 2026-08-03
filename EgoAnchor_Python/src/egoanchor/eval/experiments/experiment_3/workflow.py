@@ -48,8 +48,6 @@ def describe_workflow() -> dict[str, Any]:
         "paper_figure_destination": str(paths.figure_destination),
         "paper_table_destination": str(paths.table_destination),
         "aq_mode": settings.aq_mode,
-        "q10_enabled": settings.q10_enabled,
-        "tost_enabled": settings.equivalence_enabled,
     }
     if paths.input_workbook.is_file():
         payload["workbook"] = describe_workbook(read_workbook(paths.input_workbook))
@@ -81,7 +79,6 @@ def validate_workflow() -> dict[str, Any]:
     readiness = validate_for_analysis(
         data,
         aq_mode=settings.aq_mode,
-        q10_enabled=settings.q10_enabled,
     )
     scores = derive_scores(data, settings)
     pair_counts = validate_complete_pair_counts(
