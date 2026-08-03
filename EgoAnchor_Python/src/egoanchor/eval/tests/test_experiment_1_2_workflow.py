@@ -27,7 +27,7 @@ from egoanchor.eval.experiments.common import (
     begin_build,
     complete_build,
     copy_artifact_plans,
-    source_tree_sha256,
+    source_trees_sha256,
 )
 from egoanchor.eval.experiments.experiment_1_2 import (
     describe_workflow,
@@ -35,6 +35,7 @@ from egoanchor.eval.experiments.experiment_1_2 import (
     validate_workflow,
 )
 from egoanchor.eval.experiments.experiment_1_2 import analysis
+from egoanchor.eval.experiments.experiment_1_2 import workflow as experiment_workflow
 from egoanchor.eval.experiments.experiment_1_2.analysis import settings_sha256
 
 from .test_reader_qc import _write_valid_task
@@ -460,7 +461,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
             action for action in parser._actions if getattr(action, "choices", None) is not None
         )
         self.assertEqual(
-            set(subparsers.choices),
+            set(subparsers.choices or ()),
             {"status", "validate", "analyze", "copy-assets", "data"},
         )
 
@@ -548,11 +549,16 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     Path(item["destination"]).name
                     for item in payload["paths"]["table_destinations"]
                 },
-                {"exp1_static.tex", "exp1_dynamic.tex", "exp2_design.tex"},
+                {
+                    "exp1_performance.tex",
+                    "exp1_static.tex",
+                    "exp1_dynamic.tex",
+                    "exp2_design.tex",
+                },
             )
 
-    def test_publish_plan_copies_current_panels_tables_and_relay_files(self) -> None:
-        """发布命令只复制本次清单中的面板、三张表格和显式 relay 文件。"""
+    def test_publish_plan_copies_assets_and_rejects_changed_shared_style(self) -> None:
+        """发布当前资源，并在共享视觉样式变化后拒绝旧清单。"""
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "EgoAnchor_Python"
@@ -568,18 +574,27 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 "figure3b_static_lock",
                 "figure3c_vcd_risk_coverage",
                 "figure3d_temporal_strategies",
+                "figure2_exp1_behavior",
+                "figure3_exp2_attribution",
             )
             figure_paths = {}
             for stem in stems:
                 for suffix in (".pdf", ".png"):
                     source = figure_root / f"{stem}{suffix}"
                     source.write_bytes(f"{stem}{suffix}".encode())
-                    figure_paths[f"{stem.split('_', 1)[0]}_{suffix[1:]}"] = str(source.resolve())
+                    if stem == "figure2_exp1_behavior":
+                        key_stem = "figure2_composite"
+                    elif stem == "figure3_exp2_attribution":
+                        key_stem = "figure3_composite"
+                    else:
+                        key_stem = stem.split("_", 1)[0]
+                    figure_paths[f"{key_stem}_{suffix[1:]}"] = str(source.resolve())
             for suffix in (".pdf", ".png"):
                 (figure_root / f"figure2c_occlusion{suffix}").write_bytes(b"stale")
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
             table_names = {
+                "exp1_performance_table": "experiment1_performance.tex",
                 "exp1_static_table": "experiment1_static_occlusion_stability.tex",
                 "exp1_dynamic_table": "experiment1_dynamic_6dof_fidelity.tex",
                 "exp2_table": "experiment2_design_attribution.tex",
@@ -597,7 +612,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 source_kind="formal",
                 inputs=(),
                 config_sha256=settings_sha256(),
-                implementation_sha256=source_tree_sha256(implementation_root),
+                implementation_sha256=_analysis_implementation_sha256(
+                    implementation_root
+                ),
                 details={"batch_id": "batch_test"},
             )
             complete_build(
@@ -629,6 +646,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
                 table_destinations=(
+                    ArtifactDestination("exp1_performance_table", paper_root / "tables" / "exp1_performance.tex"),
                     ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
                     ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
@@ -647,9 +665,32 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 ),
             ):
                 result = copy_artifact_plans((plan_assets(root=root),))
+                visuals_root = implementation_root.parents[3] / "visuals"
+                actual_trees_sha256 = experiment_workflow.source_trees_sha256
 
-            self.assertEqual(len(result), 20)
+                def changed_style_sha256(source_roots: dict[str, Path]) -> str:
+                    """只替换共享 visuals 摘要，模拟 style.py 内容变化。"""
+
+                    self.assertEqual(
+                        source_roots["visuals"].expanduser().resolve(),
+                        visuals_root.resolve(),
+                    )
+                    current = actual_trees_sha256(source_roots)
+                    return "0" * 64 if current != "0" * 64 else "1" * 64
+
+                with (
+                    mock.patch.object(
+                        experiment_workflow,
+                        "source_trees_sha256",
+                        side_effect=changed_style_sha256,
+                    ),
+                    self.assertRaisesRegex(ValueError, "分析实现已变化"),
+                ):
+                    plan_assets(root=root)
+
+            self.assertEqual(len(result), 25)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
+            self.assertTrue((paper_root / "figures" / "panels" / "figure2_exp1_behavior.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
             self.assertEqual(
                 (paper_root / "tables" / "exp1_dynamic.tex").read_text(encoding="utf-8"),
@@ -675,15 +716,27 @@ class Experiment12WorkflowTests(unittest.TestCase):
                         source = figure_root / f"{key}.{suffix}"
                         source.write_bytes(key.encode())
                         figure_paths[key] = str(source.resolve())
+            for figure, stem in (
+                (2, "figure2_exp1_behavior"),
+                (3, "figure3_exp2_attribution"),
+            ):
+                for suffix in ("pdf", "png"):
+                    key = f"figure{figure}_composite_{suffix}"
+                    source = figure_root / f"{stem}.{suffix}"
+                    source.write_bytes(key.encode())
+                    figure_paths[key] = str(source.resolve())
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
             static_table = table_root / "static.tex"
             dynamic_table = table_root / "dynamic.tex"
+            performance_table = table_root / "performance.tex"
             static_table.write_text("static", encoding="utf-8")
             dynamic_table.write_text("dynamic", encoding="utf-8")
+            performance_table.write_text("performance", encoding="utf-8")
             missing_table = table_root / "missing.tex"
             missing_table.write_text("missing", encoding="utf-8")
             artifact_paths = {
+                "exp1_performance_table": str(performance_table.resolve()),
                 "exp1_static_table": str(static_table.resolve()),
                 "exp1_dynamic_table": str(dynamic_table.resolve()),
                 "exp2_table": str(missing_table.resolve()),
@@ -695,7 +748,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 source_kind="formal",
                 inputs=(),
                 config_sha256=settings_sha256(),
-                implementation_sha256=source_tree_sha256(implementation_root),
+                implementation_sha256=_analysis_implementation_sha256(
+                    implementation_root
+                ),
                 details={"batch_id": "batch_test"},
             )
             complete_build(
@@ -725,6 +780,7 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
                 table_destinations=(
+                    ArtifactDestination("exp1_performance_table", paper_root / "tables" / "exp1_performance.tex"),
                     ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
                     ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
@@ -762,6 +818,17 @@ def _analysis_implementation_root() -> Path:
     """返回 plan_assets 实际摘要的分析实现目录，避免测试与被测代码取不同根。"""
 
     return Path(analysis.__file__).resolve().parent
+
+
+def _analysis_implementation_sha256(analysis_root: Path) -> str:
+    """按生产清单的两棵源码树生成测试实现摘要。"""
+
+    return source_trees_sha256(
+        {
+            "analysis": analysis_root,
+            "visuals": analysis_root.parents[3] / "visuals",
+        }
+    )
 
 
 def _downgrade_task_cache_schema(manifest_path: Path) -> None:

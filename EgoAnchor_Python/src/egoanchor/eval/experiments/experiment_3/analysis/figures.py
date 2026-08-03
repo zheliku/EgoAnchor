@@ -1,4 +1,4 @@
-"""从实验三内存分析结果生成主条目与已发表量表箱线图。"""
+"""从实验三内存分析结果生成十二项主观结局的双排复合图。"""
 
 from __future__ import annotations
 
@@ -10,16 +10,27 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-from egoanchor.visuals import EGOANCHOR_COLOR_HEX, ONE_EURO_COLOR_HEX
+from egoanchor.visuals import (
+    EGOANCHOR_COLOR_HEX,
+    ONE_EURO_COLOR_HEX,
+    PAPER_GRID_COLOR,
+    PAPER_MUTED_COLOR,
+    PAPER_PAIR_COLOR,
+    PAPER_TEXT_COLOR,
+    apply_paper_style,
+)
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
 
 from .artifacts import EXP3_ARTIFACTS
 from .contracts import (
     AnalysisTables,
     EGOANCHOR,
     MAIN_FAMILY,
+    METHOD_LABELS,
+    METHODS,
     ONE_EURO,
     PRIMARY_OUTCOMES,
     SCALE_FAMILY,
@@ -30,26 +41,32 @@ from .inference import holm_adjust, signed_rank_test
 from .settings import AnalysisSettings
 
 
-_TEXT_COLOR = "#202428"
-_MUTED_COLOR = "#596168"
-_PAIR_COLOR = "#8E969E"
-_GRID_COLOR = "#D6DBDF"
-"""与实验一、二共用的正文文字、配对线和网格颜色。"""
+_PAIR_COLOR = PAPER_PAIR_COLOR
+_GRID_COLOR = PAPER_GRID_COLOR
+"""与实验一、二共用的配对线和网格颜色。"""
 
-_METHODS = (ONE_EURO, EGOANCHOR)
-_METHOD_LABELS = ("One-Euro", "EgoAnchor")
-_METHOD_COLORS = (ONE_EURO_COLOR_HEX, EGOANCHOR_COLOR_HEX)
-_METHOD_MARKERS = ("o", "s")
-_PRIMARY_LABELS = {
-    "Q1": "Static stability",
-    "Q8": "Position correctness",
-    "Q2": "Motion attachment",
-    "Q9": "Orientation consistency",
-    "Q3": "Recovery consistency",
-    "Q6": "Willingness to rely",
-    "Q7": "Stability-response balance",
+_PANEL_FONT_SIZE = 7.4
+"""与实验一、二组合图一致的坐标、刻度和显著性字号。"""
+
+_METHOD_COLORS = {
+    ONE_EURO: ONE_EURO_COLOR_HEX,
+    EGOANCHOR: EGOANCHOR_COLOR_HEX,
 }
-"""Figure 4 七个主条目的紧凑英文面板标题。"""
+_METHOD_MARKERS = {
+    ONE_EURO: "D",
+    EGOANCHOR: "s",
+}
+"""方法 ID 到论文颜色和点形的唯一映射。"""
+_OUTCOME_LABELS = {
+    "Q1": "Stability",
+    "Q2": "Attachment",
+    "Q3": "Recovery",
+    "Q6": "Reliance",
+    "Q7": "Balance",
+    "Q8": "Position",
+    "Q9": "Orientation",
+}
+"""Figure 4 横轴上的七项紧凑主结局标签。"""
 
 _SCALE_LABELS = {
     "AQ_EQ": "AQ-EQ",
@@ -58,16 +75,22 @@ _SCALE_LABELS = {
     "TIA_UP": "TiA U/P",
     "STIAS": "S-TIAS",
 }
-"""Figure 5 的紧凑量表缩写；完整名称由论文图注解释。"""
+"""Figure 4 下排使用的已发表量表缩写。"""
 
-_SCALE_RANGES = {
-    "AQ_EQ": (1, 7),
-    "AQ_IQ": (1, 7),
-    "TIA_RC": (1, 5),
-    "TIA_UP": (1, 5),
-    "STIAS": (1, 7),
-}
-"""各已发表量表的理论计分范围。"""
+_SCALE_GROUPS = (
+    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(b) Published scales (1-7)"),
+    (("TIA_RC", "TIA_UP"), 5, "(c) TiA scales (1-5)"),
+)
+"""下排两个量尺分区的结局、理论上限和面板标题。"""
+
+_SLOT_COUNT = len(PRIMARY_OUTCOMES)
+_PLOT_LEFT = 0.064
+_PLOT_RIGHT = 0.995
+_TOP_AXIS_BOTTOM = 0.565
+_BOTTOM_AXIS_BOTTOM = 0.105
+_ROW_HEIGHT = 0.325
+_SCALE_GUTTER = 0.018
+"""双排 Figure 4 的七槽绘图区、行高和量尺分区间距。"""
 
 
 def publish_figures(
@@ -76,265 +99,328 @@ def publish_figures(
     output_root: Path,
     settings: AnalysisSettings,
 ) -> dict[str, Path]:
-    """发布主条目 Figure 4 和已发表量表 Figure 5。
+    """发布包含主结局和已发表量表的双排 Figure 4。
 
-    两张图都使用与主分析一致的参与者级得分：区块级结局先在三个物体上取
-    均值，TiA 与 S-TIAS 使用方法级单次施测得分。显著性括号只编码各冻结
-    家族内的 Holm 校正结果，不对三个物体分别检验或标星。
+    七项区块级结局先按参与者在三个物体上取均值，并保留原始 1--7 分量尺。
+    AQ 子量表同样按三个物体取均值，TiA 与 S-TIAS 使用方法级单次施测得分。
+    显著性括号只编码各冻结家族内的 Holm 校正结果，不对三个物体分别检验或标星。
     """
 
     ordered = _validate_figure_data(scores.paired_scores, tables.results)
-    primary_png = EXP3_ARTIFACTS.figure4_png.path_under(output_root)
-    primary_pdf = EXP3_ARTIFACTS.figure4_pdf.path_under(output_root)
+    outcomes_png = EXP3_ARTIFACTS.figure4_png.path_under(output_root)
+    outcomes_pdf = EXP3_ARTIFACTS.figure4_pdf.path_under(output_root)
     _configure(settings.figure_dpi)
-
-    primary = _boxplot_grid(
+    figure = _subjective_figure(
         scores.paired_scores,
         ordered,
-        outcomes=PRIMARY_OUTCOMES,
-        labels=_PRIMARY_LABELS,
-        ranges={outcome: (1, 7) for outcome in PRIMARY_OUTCOMES},
-        columns=4,
-        figure_size=settings.primary_figure_size,
-        y_label="Agreement score",
+        figure_size=settings.figure_size,
     )
-    primary_png, primary_pdf = _save_pair(
-        primary,
-        primary_png,
-        primary_pdf,
-    )
-    scale_png = EXP3_ARTIFACTS.figure5_png.path_under(output_root)
-    scale_pdf = EXP3_ARTIFACTS.figure5_pdf.path_under(output_root)
-    scales = _boxplot_grid(
-        scores.paired_scores,
-        ordered,
-        outcomes=SCALE_OUTCOMES,
-        labels=_SCALE_LABELS,
-        ranges=_SCALE_RANGES,
-        columns=5,
-        figure_size=settings.scale_figure_size,
-        y_label="Scale score",
-    )
-    scale_png, scale_pdf = _save_pair(
-        scales,
-        scale_png,
-        scale_pdf,
+    outcomes_png, outcomes_pdf = _save_pair(
+        figure,
+        outcomes_png,
+        outcomes_pdf,
     )
     return {
-        EXP3_ARTIFACTS.figure4_png.key: primary_png,
-        EXP3_ARTIFACTS.figure4_pdf.key: primary_pdf,
-        EXP3_ARTIFACTS.figure5_png.key: scale_png,
-        EXP3_ARTIFACTS.figure5_pdf.key: scale_pdf,
+        EXP3_ARTIFACTS.figure4_png.key: outcomes_png,
+        EXP3_ARTIFACTS.figure4_pdf.key: outcomes_pdf,
     }
 
 
 def _configure(dpi: int) -> None:
-    """应用实验一、二的固定字体、线宽和矢量字体导出规则。"""
+    """应用实验一至三共享的字体、线宽和矢量字体导出规则。"""
 
-    plt.rcParams.update(
-        {
-            "font.family": "DejaVu Sans",
-            "font.size": 7.2,
-            "axes.labelcolor": _TEXT_COLOR,
-            "axes.labelsize": 7.2,
-            "axes.titlesize": 7.2,
-            "axes.titlepad": 3.0,
-            "axes.linewidth": 0.8,
-            "axes.edgecolor": "#70767C",
-            "xtick.color": _TEXT_COLOR,
-            "xtick.labelsize": 6.8,
-            "ytick.color": _TEXT_COLOR,
-            "ytick.labelsize": 6.8,
-            "savefig.dpi": dpi,
-            "pdf.fonttype": 42,
-            "ps.fonttype": 42,
-        }
+    apply_paper_style(font_size=_PANEL_FONT_SIZE, dpi=dpi)
+
+
+def _subjective_figure(
+    paired_scores: pd.DataFrame,
+    results: pd.DataFrame,
+    *,
+    figure_size: tuple[float, float],
+) -> Any:
+    """生成上排七项主结局、下排五项已发表量表的复合图。"""
+
+    scale_groups = _validated_scale_groups()
+    figure = plt.figure(figsize=figure_size)
+    plot_width = _PLOT_RIGHT - _PLOT_LEFT
+    slot_width = plot_width / _SLOT_COUNT
+    lower_width = (
+        slot_width * sum(len(outcomes) for outcomes, _, _ in scale_groups)
+        + _SCALE_GUTTER * (len(scale_groups) - 1)
     )
+    lower_left = _PLOT_LEFT + (plot_width - lower_width) / 2.0
+    axis = figure.add_axes(
+        (_PLOT_LEFT, _TOP_AXIS_BOTTOM, plot_width, _ROW_HEIGHT)
+    )
+    _draw_outcomes(
+        axis,
+        paired_scores,
+        results,
+        outcomes=PRIMARY_OUTCOMES,
+        scale_upper=7,
+    )
+    _format_outcome_axis(
+        axis,
+        outcomes=PRIMARY_OUTCOMES,
+        labels=_OUTCOME_LABELS,
+        scale_upper=7,
+    )
+    axis.set_title(
+        "(a) Primary outcomes",
+        loc="left",
+        fontsize=_PANEL_FONT_SIZE - 0.2,
+        fontweight="bold",
+        color=PAPER_TEXT_COLOR,
+    )
+    scale_axes: list[Any] = []
+    next_left = lower_left
+    for outcomes, scale_upper, title in scale_groups:
+        axis_width = slot_width * len(outcomes)
+        scale_axis = figure.add_axes(
+            (next_left, _BOTTOM_AXIS_BOTTOM, axis_width, _ROW_HEIGHT)
+        )
+        scale_axes.append(scale_axis)
+        _draw_outcomes(
+            scale_axis,
+            paired_scores,
+            results,
+            outcomes=outcomes,
+            scale_upper=scale_upper,
+        )
+        _format_outcome_axis(
+            scale_axis,
+            outcomes=outcomes,
+            labels=_SCALE_LABELS,
+            scale_upper=scale_upper,
+        )
+        scale_axis.set_title(
+            title,
+            loc="left",
+            fontsize=_PANEL_FONT_SIZE - 0.2,
+            fontweight="bold",
+            color=PAPER_TEXT_COLOR,
+        )
+        next_left += axis_width + _SCALE_GUTTER
+    right_axis = scale_axes[-1]
+    right_axis.yaxis.tick_right()
+    right_axis.yaxis.set_label_position("right")
+    right_axis.spines["left"].set_visible(False)
+    right_axis.spines["right"].set_visible(True)
+    figure.legend(
+        handles=_method_legend_handles(),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.985),
+        ncol=3,
+        frameon=False,
+        handletextpad=0.35,
+        columnspacing=1.4,
+    )
+    return figure
 
 
-def _boxplot_grid(
+def _draw_outcomes(
+    axis: Any,
     paired_scores: pd.DataFrame,
     results: pd.DataFrame,
     *,
     outcomes: tuple[str, ...],
-    labels: dict[str, str],
-    ranges: dict[str, tuple[int, int]],
-    columns: int,
-    figure_size: tuple[float, float],
-    y_label: str,
-) -> Any:
-    """按参考论文版式生成一组紧凑的两方法箱线图。"""
+    scale_upper: int,
+) -> None:
+    """把一组同量尺结局绘制到同一坐标轴。"""
 
-    rows = math.ceil(len(outcomes) / columns)
-    figure = plt.figure(figsize=figure_size)
-    axes = _panel_axes(
-        figure,
-        outcome_count=len(outcomes),
-        rows=rows,
-        columns=columns,
-    )
     for index, outcome in enumerate(outcomes):
-        axis = axes[index]
         subset = paired_scores.loc[
             paired_scores["Outcome"].astype(str) == outcome
         ].sort_values("Participant_ID")
         values = tuple(
             pd.to_numeric(subset[method], errors="coerce").to_numpy(dtype=float)
-            for method in _METHODS
+            for method in METHODS
         )
-        _draw_box_panel(
+        _draw_outcome_group(
             axis,
+            float(index),
             values,
-            score_range=ranges[outcome],
             p_holm=results.loc[outcome, "p_Holm"],
+            scale_upper=scale_upper,
         )
-        panel = chr(ord("a") + index)
-        axis.set_title(
-            f"({panel}) {labels[outcome]}",
-            loc="left",
-            y=1.025,
-            va="bottom",
-            fontsize=7.2,
-            fontweight="bold",
-            color=_TEXT_COLOR,
-            linespacing=1.05,
-        )
-        if index == 0 or (rows > 1 and index == columns):
-            axis.set_ylabel(y_label)
-    figure.subplots_adjust(
-        left=0.062,
-        right=0.995,
-        bottom=0.155 if rows == 1 else 0.105,
-        top=0.900,
-        wspace=0.34 if rows > 1 else 0.30,
-        hspace=0.54 if rows > 1 else 0.0,
-    )
-    return figure
 
 
-def _panel_axes(
-    figure: Any,
-    *,
-    outcome_count: int,
-    rows: int,
-    columns: int,
-) -> tuple[Any, ...]:
-    """创建规则面板；七项主结果的第二行使用半列偏移居中。"""
-
-    if outcome_count == 7 and rows == 2 and columns == 4:
-        grid = figure.add_gridspec(2, 8)
-        positions = (
-            (0, slice(0, 2)),
-            (0, slice(2, 4)),
-            (0, slice(4, 6)),
-            (0, slice(6, 8)),
-            (1, slice(1, 3)),
-            (1, slice(3, 5)),
-            (1, slice(5, 7)),
-        )
-        return tuple(
-            figure.add_subplot(grid[row, columns_])
-            for row, columns_ in positions
-        )
-    grid = figure.add_gridspec(rows, columns)
-    return tuple(
-        figure.add_subplot(grid[index // columns, index % columns])
-        for index in range(outcome_count)
-    )
-
-
-def _draw_box_panel(
+def _format_outcome_axis(
     axis: Any,
-    values: tuple[np.ndarray, np.ndarray],
     *,
-    score_range: tuple[int, int],
-    p_holm: Any,
+    outcomes: tuple[str, ...],
+    labels: dict[str, str],
+    scale_upper: int,
 ) -> None:
-    """绘制一项结局的参与者级配对点、箱线图和 Holm 显著性括号。"""
+    """设置同量尺结局轴的标签、范围和共享样式。"""
 
-    if values[0].size == 0 or values[0].size != values[1].size:
-        raise ValueError("实验三箱线图缺少完整参与者配对")
-    count = values[0].size
-    offsets = np.zeros(1) if count == 1 else np.linspace(-0.065, 0.065, count)
-    for participant in range(count):
-        axis.plot(
-            [offsets[participant], 1.0 + offsets[participant]],
-            [values[0][participant], values[1][participant]],
-            color=_PAIR_COLOR,
-            linewidth=0.55,
-            alpha=0.22,
-            zorder=1,
-        )
-    for method_index, (method_values, color, marker) in enumerate(
-        zip(values, _METHOD_COLORS, _METHOD_MARKERS, strict=True)
-    ):
-        axis.scatter(
-            float(method_index) + offsets,
-            method_values,
-            s=9.0,
-            marker=marker,
-            facecolors="white" if method_index == 0 else color,
-            edgecolors=color,
-            linewidths=0.55,
-            alpha=0.68,
-            zorder=2,
-        )
-    boxplot = axis.boxplot(
-        values,
-        positions=(0.0, 1.0),
-        widths=0.50,
-        patch_artist=True,
-        showfliers=False,
-        whis=1.5,
-        boxprops={"linewidth": 0.95},
-        whiskerprops={"color": _MUTED_COLOR, "linewidth": 0.85},
-        capprops={"color": _MUTED_COLOR, "linewidth": 0.85},
-        medianprops={"linewidth": 1.55},
-        zorder=3,
-    )
-    for patch, color in zip(boxplot["boxes"], _METHOD_COLORS, strict=True):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.42)
-        patch.set_edgecolor(color)
-    for median in boxplot["medians"]:
-        median.set_color(_TEXT_COLOR)
-    lower, upper = score_range
-    headroom = 0.82 if upper == 7 else 0.72
-    axis.set_ylim(lower - 0.30, upper + headroom)
-    axis.set_yticks(range(lower, upper + 1))
-    axis.set_xticks((0.0, 1.0), _METHOD_LABELS)
-    axis.set_xlim(-0.48, 1.48)
-    _draw_significance(axis, p_holm, float(upper), headroom)
+    centers: np.ndarray = np.arange(len(outcomes), dtype=float)
+    axis.set_xticks(centers, [labels[outcome] for outcome in outcomes])
+    axis.set_xlim(-0.50, len(outcomes) - 0.50)
+    axis.set_ylim(0.75, scale_upper + 0.50)
+    axis.set_yticks(np.arange(1.0, scale_upper + 1.0, 1.0))
+    axis.set_ylabel(f"Rating (1-{scale_upper})")
     _clean_axis(axis)
 
 
-def _draw_significance(axis: Any, p_holm: Any, scale_upper: float, headroom: float) -> None:
-    """仅为家族内 Holm 校正后显著的比较绘制括号和星号。"""
+def _draw_outcome_group(
+    axis: Any,
+    center: float,
+    values: tuple[np.ndarray, np.ndarray],
+    *,
+    p_holm: Any,
+    scale_upper: int,
+) -> None:
+    """用透明箱线图、均值点和参与者配对线绘制一项结局。"""
+
+    if values[0].size == 0 or values[0].size != values[1].size:
+        raise ValueError("实验三配对图缺少完整参与者配对")
+    count = values[0].size
+    positions = (center - 0.17, center + 0.17)
+    jitter: np.ndarray = (
+        np.zeros(1) if count == 1 else np.linspace(-0.036, 0.036, count)
+    )
+    for participant in range(count):
+        axis.plot(
+            [positions[0] + jitter[participant], positions[1] + jitter[participant]],
+            [values[0][participant], values[1][participant]],
+            color=_PAIR_COLOR,
+            linewidth=0.60,
+            alpha=0.14,
+            zorder=1,
+        )
+    for method_index, (method, method_values) in enumerate(
+        zip(METHODS, values, strict=True)
+    ):
+        color = _METHOD_COLORS[method]
+        marker = _METHOD_MARKERS[method]
+        axis.scatter(
+            positions[method_index] + jitter,
+            method_values,
+            s=6.0,
+            marker=marker,
+            facecolors=color,
+            edgecolors=color,
+            linewidths=0.45,
+            alpha=0.18,
+            zorder=2,
+        )
+        axis.boxplot(
+            [method_values],
+            positions=[positions[method_index]],
+            widths=0.18,
+            patch_artist=True,
+            manage_ticks=False,
+            showfliers=False,
+            showmeans=True,
+            whis=1.5,
+            boxprops={
+                "facecolor": "none",
+                "edgecolor": color,
+                "linewidth": 1.10,
+            },
+            medianprops={"color": color, "linewidth": 1.60},
+            whiskerprops={"color": color, "linewidth": 0.85},
+            capprops={"color": color, "linewidth": 0.85},
+            meanprops={
+                "marker": "o",
+                "markerfacecolor": color,
+                "markeredgecolor": "white",
+                "markeredgewidth": 0.45,
+                "markersize": 3.8,
+            },
+            zorder=3,
+        )
+    _draw_significance(axis, p_holm, positions, scale_upper=scale_upper)
+
+
+def _draw_significance(
+    axis: Any,
+    p_holm: Any,
+    positions: tuple[float, float],
+    *,
+    scale_upper: int,
+) -> None:
+    """仅为家族内 Holm 校正后显著的比较绘制括号和阈值标签。"""
 
     stars = _significance_label(p_holm)
     if not stars:
         return
-    bracket = scale_upper + headroom * 0.38
-    height = headroom * 0.16
+    bracket = scale_upper + 0.08
+    height = 0.10
     axis.plot(
-        [0.0, 0.0, 1.0, 1.0],
+        [positions[0], positions[0], positions[1], positions[1]],
         [bracket, bracket + height, bracket + height, bracket],
-        color=_TEXT_COLOR,
-        linewidth=0.85,
+        color=PAPER_MUTED_COLOR,
+        linewidth=0.65,
         clip_on=False,
         zorder=5,
     )
     axis.text(
-        0.5,
-        bracket + height + headroom * 0.04,
+        sum(positions) / 2.0,
+        bracket + height + 0.03,
         stars,
         ha="center",
         va="bottom",
-        color=_TEXT_COLOR,
-        fontsize=7.2,
+        color=PAPER_MUTED_COLOR,
+        fontsize=_PANEL_FONT_SIZE - 0.6,
         fontweight="bold",
         clip_on=False,
     )
+
+
+def _method_legend_handles() -> tuple[Line2D, Line2D, Line2D]:
+    """返回两方法箱体与均值点的共享图例。"""
+
+    methods: list[Line2D] = []
+    for method in METHODS:
+        color = _METHOD_COLORS[method]
+        marker = _METHOD_MARKERS[method]
+        methods.append(
+            Line2D(
+                [],
+                [],
+                color=color,
+                linestyle="-",
+                linewidth=1.10,
+                marker=marker,
+                markersize=6.0,
+                markerfacecolor=color,
+                markeredgecolor=color,
+                markeredgewidth=0.8,
+                label=METHOD_LABELS[method],
+            )
+        )
+    mean = Line2D(
+        [],
+        [],
+        linestyle="none",
+        marker="o",
+        markersize=3.8,
+        markerfacecolor=PAPER_TEXT_COLOR,
+        markeredgecolor="white",
+        markeredgewidth=0.45,
+        label="Mean",
+    )
+    return methods[0], methods[1], mean
+
+
+def _validated_scale_groups() -> tuple[tuple[tuple[str, ...], int, str], ...]:
+    """要求下排布局恰好覆盖冻结的五项已发表量表结局。"""
+
+    outcomes = tuple(
+        outcome
+        for group, _, _ in _SCALE_GROUPS
+        for outcome in group
+    )
+    if len(outcomes) != len(set(outcomes)) or set(outcomes) != set(SCALE_OUTCOMES):
+        missing = set(SCALE_OUTCOMES).difference(outcomes)
+        unexpected = set(outcomes).difference(SCALE_OUTCOMES)
+        raise ValueError(
+            "Figure 4 下排量表分区必须无重复地覆盖全部冻结结局："
+            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
+        )
+    return _SCALE_GROUPS
 
 
 def _ordered_results(results: pd.DataFrame) -> pd.DataFrame:
@@ -382,7 +468,7 @@ def _ordered_results(results: pd.DataFrame) -> pd.DataFrame:
 
 
 def _validate_figure_data(paired: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
-    """从配对分重算冻结推断，并核对结果表和箱线图的全部数字。"""
+    """从配对分重算冻结推断，并核对结果表和配对图的全部数字。"""
 
     ordered = _ordered_results(results)
     _require_columns(
@@ -503,7 +589,7 @@ def _validate_result_summaries(
 ) -> None:
     """要求显著性来源表与实际绘图分数拥有相同的四分位摘要。"""
 
-    expected = {
+    expected: dict[str, np.ndarray] = {
         "OneEuro": np.quantile(one_euro, (0.25, 0.5, 0.75), method="linear"),
         "EgoAnchor": np.quantile(egoanchor, (0.25, 0.5, 0.75), method="linear"),
         "Difference": np.quantile(
@@ -513,7 +599,7 @@ def _validate_result_summaries(
         ),
     }
     for prefix, values in expected.items():
-        recorded = np.asarray(
+        recorded: np.ndarray = np.asarray(
             [
                 _finite_number(result[f"{prefix}_Q1"]),
                 _finite_number(result[f"{prefix}_Median"]),
@@ -543,16 +629,16 @@ def _clean_axis(axis: Any) -> None:
         axis="y",
         color=_GRID_COLOR,
         linestyle=":",
-        linewidth=0.65,
-        alpha=0.55,
+        linewidth=0.70,
+        alpha=0.65,
     )
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
-    axis.tick_params(axis="both", length=2.5, width=0.75, pad=2.0)
+    axis.tick_params(axis="both", length=2.6, width=0.75, pad=2.0)
 
 
 def _save_pair(figure: Any, png: Path, pdf: Path) -> tuple[Path, Path]:
-    """同时保存 300 dpi PNG 与嵌入 TrueType 字体的 PDF。"""
+    """以固定画布保存正文复合图的 PNG/PDF。"""
 
     if (
         png.parent != pdf.parent
@@ -584,17 +670,17 @@ def _finite_number(value: Any) -> float:
 
 
 def _significance_label(value: Any) -> str:
-    """把 Holm p 值转换为参考论文使用的显著性星号。"""
+    """把 Holm p 值转换为带阈值的显著性标签。"""
 
     number = _finite_number(value)
     if not math.isfinite(number):
         return ""
     if number < 0.001:
-        return "***"
+        return "***<.001"
     if number < 0.01:
-        return "**"
+        return "**<.01"
     if number < 0.05:
-        return "*"
+        return "*<.05"
     return ""
 
 

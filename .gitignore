@@ -1,9 +1,14 @@
 # Root-local editor state
 /.vscode/
 
-# Root-local Python scratch, if quick scripts are run from the repo root
-/__pycache__/
-/*.py[cod]
+# Python caches and repository-local scratch output
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+/tmp/
+/2026-EgoAnchor/tmp/
 *.zip
 
 # Blender local assets and generated working files

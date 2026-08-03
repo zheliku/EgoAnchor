@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
+from .style import (
+    PAPER_DPI,
+    PAPER_EDGE_COLOR,
+    PAPER_FONT_FAMILY,
+    PAPER_FONT_SIZE,
+    PAPER_GRID_COLOR,
+    PAPER_MUTED_COLOR,
+    PAPER_PAIR_COLOR,
+    PAPER_TEXT_COLOR,
+    apply_paper_style,
+)
+
 
 ARRIVAL_COLOR_HEX = "#4C78A8"
 """Arrival-Hold 的论文蓝色。"""
@@ -30,4 +42,13 @@ __all__ = [
     "EGOANCHOR_COLOR_HEX",
     "METHOD_COLORS_HEX",
     "ONE_EURO_COLOR_HEX",
+    "PAPER_DPI",
+    "PAPER_EDGE_COLOR",
+    "PAPER_FONT_FAMILY",
+    "PAPER_FONT_SIZE",
+    "PAPER_GRID_COLOR",
+    "PAPER_MUTED_COLOR",
+    "PAPER_PAIR_COLOR",
+    "PAPER_TEXT_COLOR",
+    "apply_paper_style",
 ]

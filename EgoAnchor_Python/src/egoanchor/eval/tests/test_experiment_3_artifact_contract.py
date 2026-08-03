@@ -7,9 +7,11 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
 
 from egoanchor.eval.experiments.experiment_3.analysis import (
     EGOANCHOR,
@@ -66,7 +68,7 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                     self.assertFalse(output.exists())
 
     def test_artifact_contract_contains_unique_fixed_outputs(self) -> None:
-        """单一不可变契约覆盖 XLSX、TeX 与两张图的 PNG/PDF。"""
+        """单一不可变契约覆盖 XLSX、TeX 与正文复合图的 PNG/PDF。"""
 
         artifacts = EXP3_ARTIFACTS.outputs
         self.assertEqual(
@@ -76,22 +78,126 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                 "subjective_table",
                 "figure4_png",
                 "figure4_pdf",
-                "figure5_png",
-                "figure5_pdf",
             ),
+        )
+        self.assertEqual(EXP3_ARTIFACTS.version, 7)
+        self.assertEqual(
+            EXP3_ARTIFACTS.figure4_png.canonical_name,
+            "figure4_exp3_subjective_outcomes.png",
+        )
+        self.assertEqual(
+            EXP3_ARTIFACTS.figure4_pdf.canonical_name,
+            "figure4_exp3_subjective_outcomes.pdf",
         )
         self.assertEqual(len({artifact.key for artifact in artifacts}), len(artifacts))
         with self.assertRaises(AttributeError):
             setattr(EXP3_ARTIFACTS.figure4_png, "key", "changed")
 
+    def test_composite_figure_preserves_scales_slots_and_one_legend(self) -> None:
+        """双排 Figure 4 必须保持三组轴、等宽槽和单一共享图例。"""
+
+        scores, tables = _analysis_fixture()
+        settings = load_settings()
+        captured: list[Figure] = []
+
+        def capture(figure: Figure, *_args: Any, **_kwargs: Any) -> None:
+            """保留关闭后的 Figure 对象，供布局语义断言。"""
+
+            captured.append(figure)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(Figure, "savefig", autospec=True, side_effect=capture),
+        ):
+            outputs = publish_figures(
+                scores,
+                tables,
+                Path(directory),
+                settings,
+            )
+
+        self.assertEqual(set(outputs), {"figure4_png", "figure4_pdf"})
+        self.assertEqual(len({id(figure) for figure in captured}), 1)
+        figure = captured[0]
+        self.assertEqual(len(figure.axes), 3)
+        self.assertEqual(len(figure.legends), 1)
+        self.assertEqual(
+            [text.get_text() for text in figure.legends[0].get_texts()],
+            ["One-Euro", "EgoAnchor", "Mean"],
+        )
+
+        primary_axis, seven_point_axis, tia_axis = figure.axes
+        self.assertEqual(
+            [tick.get_text() for tick in primary_axis.get_xticklabels()],
+            [
+                "Stability",
+                "Attachment",
+                "Recovery",
+                "Reliance",
+                "Balance",
+                "Position",
+                "Orientation",
+            ],
+        )
+        self.assertEqual(
+            [tick.get_text() for tick in seven_point_axis.get_xticklabels()],
+            ["AQ-EQ", "AQ-IQ", "S-TIAS"],
+        )
+        self.assertEqual(
+            [tick.get_text() for tick in tia_axis.get_xticklabels()],
+            ["TiA R/C", "TiA U/P"],
+        )
+        self.assertEqual(primary_axis.get_ylabel(), "Rating (1-7)")
+        self.assertEqual(seven_point_axis.get_ylabel(), "Rating (1-7)")
+        self.assertEqual(tia_axis.get_ylabel(), "Rating (1-5)")
+        self.assertEqual(tia_axis.yaxis.get_label_position(), "right")
+        self.assertEqual(tia_axis.yaxis.get_ticks_position(), "right")
+        self.assertEqual(primary_axis.get_title(loc="left"), "(a) Primary outcomes")
+        self.assertEqual(
+            seven_point_axis.get_title(loc="left"),
+            "(b) Published scales (1-7)",
+        )
+        self.assertEqual(
+            tia_axis.get_title(loc="left"),
+            "(c) TiA scales (1-5)",
+        )
+        self.assertEqual(
+            [text.get_text() for text in primary_axis.texts],
+            ["*<.05"] * 7,
+        )
+        self.assertEqual(
+            [text.get_text() for text in seven_point_axis.texts],
+            ["**<.01"] * 3,
+        )
+        self.assertEqual(
+            [text.get_text() for text in tia_axis.texts],
+            ["**<.01"] * 2,
+        )
+
+        primary_box = primary_axis.get_position()
+        seven_point_box = seven_point_axis.get_position()
+        tia_box = tia_axis.get_position()
+        slot_width = primary_box.width / 7.0
+        self.assertAlmostEqual(seven_point_box.width / 3.0, slot_width, places=8)
+        self.assertAlmostEqual(tia_box.width / 2.0, slot_width, places=8)
+        self.assertGreater(tia_box.x0 - seven_point_box.x1, 0.0)
+        self.assertLess(tia_box.x0 - seven_point_box.x1, slot_width / 4.0)
+        self.assertAlmostEqual(
+            (seven_point_box.x0 + tia_box.x1) / 2.0,
+            (primary_box.x0 + primary_box.x1) / 2.0,
+            places=8,
+        )
 
 def _analysis_fixture() -> tuple[ScoreData, AnalysisTables]:
     """构造无需读取工作簿即可覆盖十二项冻结结局的最小一致分析对象。"""
 
     outcomes = (*PRIMARY_OUTCOMES, *SCALE_OUTCOMES)
-    one_euro = np.asarray((2.0, 3.0, 3.0, 4.0), dtype=float)
-    differences = np.asarray((1.0, 1.0, -1.0, 1.0), dtype=float)
-    egoanchor = one_euro + differences
+    one_euro: np.ndarray = np.asarray(
+        (2.0, 3.0, 3.0, 4.0, 2.0, 3.0, 3.0, 4.0, 2.0, 3.0),
+        dtype=float,
+    )
+    differences: np.ndarray = np.ones_like(one_euro)
+    egoanchor: np.ndarray = one_euro + differences
     paired_rows: list[dict[str, Any]] = []
     result_rows: list[dict[str, Any]] = []
     for outcome in outcomes:

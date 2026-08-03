@@ -7,15 +7,19 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
+from matplotlib.patches import PathPatch
+from matplotlib.text import Text
 from openpyxl import Workbook  # type: ignore[import-untyped]
 from scipy.spatial.transform import Rotation, Slerp  # type: ignore[import-untyped]
 
 from egoanchor.eval import cli as eval_cli
 from egoanchor.eval.experiments.experiment_1_2.analysis import (
     build_analysis,
+    build_exp1_behavior_figure,
     load_settings,
     settings_sha256,
     METHODS,
@@ -24,10 +28,11 @@ from egoanchor.eval.experiments.experiment_1_2.analysis import (
     TaskResults,
     TEMPORAL_STRATEGY_VARIANTS,
     analyze_workbooks,
-    build_dual_metric_panel,
     build_temporal_strategy_panel,
     build_exp1_dynamic_table,
+    build_exp1_performance_table,
     build_exp1_static_table,
+    build_exp2_attribution_figure,
     build_exp2_attribution_table,
     cache_key,
     cache_path,
@@ -40,6 +45,7 @@ from egoanchor.eval.experiments.experiment_1_2.analysis import (
     rotation_lag_metrics,
     summarize_risk_coverage,
     translation_lag_metrics,
+    write_analysis_artifacts,
     write_task_results,
 )
 
@@ -114,8 +120,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertLess(translation_rmse, 1e-9)
         self.assertLess(rotation_rmse, 1e-9)
 
-    def test_main_tables_publish_requested_three_table_contract(self) -> None:
-        """三张主表冻结实验一拆表与实验二四行归因契约。"""
+    def test_main_tables_publish_merged_exp1_and_audit_table_contract(self) -> None:
+        """正文合并表保留关键代价，旧拆表与实验二表继续用于审计。"""
 
         def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
             """构造两个身份完整且可严格配对的片段。"""
@@ -191,9 +197,10 @@ class Experiment12AnalysisTests(unittest.TestCase):
 
         static_table = build_exp1_static_table(results)
         dynamic_table = build_exp1_dynamic_table(results)
+        performance_table = build_exp1_performance_table(results)
         attribution_table = build_exp2_attribution_table(results)
 
-        for table in (static_table, dynamic_table, attribution_table):
+        for table in (static_table, dynamic_table, performance_table, attribution_table):
             self.assertTrue(table.endswith("\n"))
             self.assertFalse(table.endswith("\n\n"))
         self.assertIn("遮挡平移 P95", static_table)
@@ -206,7 +213,37 @@ class Experiment12AnalysisTests(unittest.TestCase):
         for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
             self.assertIn(f"{label} &", static_table)
             self.assertIn(f"{label} &", dynamic_table)
-        combined = static_table + dynamic_table + attribution_table
+        self.assertIn(r"\begin{table}[t]", performance_table)
+        self.assertNotIn(r"\begin{table*}", performance_table)
+        self.assertIn(
+            r"\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcccc@{}}",
+            performance_table,
+        )
+        self.assertIn(
+            r"指标 $\downarrow$ & Arrival & Capture & One-Euro & EgoAnchor \\",
+            performance_table,
+        )
+        self.assertNotIn(r"\shortstack{One-", performance_table)
+        self.assertNotIn(r"\shortstack{Ego", performance_table)
+        self.assertIn(
+            r"\shortstack[l]{静止帧间增量\\P95 (mm)}",
+            performance_table,
+        )
+        self.assertIn(
+            r"\shortstack[l]{当前时刻\\RMSE (mm)}",
+            performance_table,
+        )
+        self.assertIn(r"\normalsize", performance_table)
+        self.assertNotIn(r"\small", performance_table)
+        self.assertNotIn(r"\footnotesize", performance_table)
+        self.assertNotIn(r"\resizebox", performance_table)
+        self.assertIn("绝对注册 P95", performance_table)
+        self.assertIn("当前时刻", performance_table)
+        self.assertIn("Start-transition", performance_table)
+        self.assertNotIn("Mdn [", performance_table)
+        self.assertNotIn("[Q1", performance_table)
+        self.assertNotIn("n=", performance_table)
+        combined = static_table + dynamic_table + performance_table + attribution_table
         self.assertNotIn("Arrival-Hold &", combined)
         self.assertNotIn("Capture-Hold &", combined)
         self.assertNotIn("One-Euro Anchor &", combined)
@@ -218,6 +255,132 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertIn(r"$\times$", attribution_table)
         self.assertNotIn(">40", combined)
         self.assertNotIn("灾难性失效", combined)
+
+    def test_paper_composites_use_single_axes_and_hide_hermite(self) -> None:
+        """正文组合图固定为四面板，实验一无双轴且实验二不显示 Hermite。"""
+
+        results = _presentation_results()
+        self.assertIn("Hermite Interpolation", results.translation_segments)
+
+        def left_title(axis: Any) -> Text:
+            """通过 Matplotlib 公共 artist 查询返回左对齐标题。"""
+
+            return next(
+                artist
+                for artist in axis.findobj(Text)
+                if artist.get_text() == axis.get_title(loc="left")
+            )
+
+        experiment_one = build_exp1_behavior_figure(results)
+        self.assertEqual(len(experiment_one.axes), 4)
+        self.assertTrue(all(axis.get_yscale() == "linear" for axis in experiment_one.axes))
+        self.assertEqual(
+            [axis.get_title(loc="left") for axis in experiment_one.axes],
+            [
+                "(a) Static translation",
+                "(b) Static rotation",
+                "(c) Dynamic translation",
+                "(d) Dynamic rotation",
+            ],
+        )
+        self.assertLess(experiment_one.subplotpars.wspace, 0.4)
+        for axis in experiment_one.axes:
+            title = left_title(axis)
+            self.assertAlmostEqual(float(title.get_fontsize()), 7.2)
+            self.assertEqual(title.get_fontweight(), "bold")
+            self.assertAlmostEqual(axis.yaxis.label.get_fontsize(), 7.4)
+            boxes = [patch for patch in axis.patches if isinstance(patch, PathPatch)]
+            self.assertEqual(len(boxes), 8)
+            self.assertTrue(
+                all(
+                    float(np.asarray(patch.get_facecolor(), dtype=float)[-1]) == 0.0
+                    for patch in boxes
+                )
+            )
+            styles = [patch.get_linestyle() for patch in boxes]
+            self.assertEqual(styles[0::2], ["-"] * 4)
+            self.assertEqual(styles[1::2], ["--"] * 4)
+            means = [
+                line
+                for line in axis.lines
+                if line.get_marker() == "o"
+                and abs(line.get_markersize() - 3.6) < 1.0e-12
+            ]
+            self.assertEqual(len(means), 8)
+        self.assertEqual(
+            [text.get_text() for text in experiment_one.legends[0].get_texts()],
+            ["Error / lag-aligned RMSE", "Residual jitter P95", "Mean"],
+        )
+
+        experiment_two = build_exp2_attribution_figure(results)
+        self.assertEqual(len(experiment_two.axes), 4)
+        temporal_legend = [
+            text.get_text() for text in experiment_two.axes[3].get_legend().get_texts()
+        ]
+        self.assertEqual(temporal_legend, ["Smoothed KF", "Linear/SLERP"])
+        self.assertNotIn("Hermite", " ".join(temporal_legend))
+        self.assertEqual(
+            [axis.get_title(loc="left") for axis in experiment_two.axes],
+            [
+                "(a) Capture-time alignment",
+                "(b) StaticLock",
+                "(c) VCD risk-coverage",
+                "(d) Temporal strategy",
+            ],
+        )
+        self.assertLess(experiment_two.subplotpars.wspace, 0.4)
+        for axis in experiment_two.axes:
+            title = left_title(axis)
+            self.assertAlmostEqual(float(title.get_fontsize()), 7.2)
+            self.assertEqual(title.get_fontweight(), "bold")
+            self.assertAlmostEqual(axis.yaxis.label.get_fontsize(), 7.4)
+
+    def test_paper_vcd_axis_matches_aurc_step_intervals(self) -> None:
+        """正文 VCD 阶梯在零覆盖起步，并把完整同分组风险画在左侧区间。"""
+
+        figure = build_exp2_attribution_figure(_presentation_results())
+        axis = figure.axes[2]
+        event_lines = tuple(line for line in axis.lines if line.get_label() != "Median")
+        median_line = next(line for line in axis.lines if line.get_label() == "Median")
+
+        self.assertEqual(len(event_lines), 2)
+        for line in (*event_lines, median_line):
+            self.assertEqual(line.get_drawstyle(), "steps-pre")
+            self.assertEqual(float(line.get_xdata()[0]), 0.0)
+        np.testing.assert_allclose(event_lines[0].get_xdata(), (0.0, 0.5, 1.0))
+        np.testing.assert_allclose(event_lines[0].get_ydata(), (3.0, 3.0, 5.0))
+        coverage_index = int(np.searchsorted(event_lines[0].get_xdata(), 0.75, side="left"))
+        self.assertEqual(float(event_lines[0].get_ydata()[coverage_index]), 5.0)
+
+    def test_paper_attribution_rejects_duplicate_pair_identities(self) -> None:
+        """正文组件配对不得静默覆盖 StaticLock 或采集对齐的重复身份。"""
+
+        results = _presentation_results()
+        full_variant = METHODS[-1]
+        static_segments = dict(results.static_segments)
+        static_segments[full_variant] = (
+            *static_segments[full_variant],
+            dict(static_segments[full_variant][0]),
+        )
+        with self.subTest(path="StaticLock"), self.assertRaisesRegex(
+            ValueError,
+            "片段键重复",
+        ):
+            build_exp2_attribution_figure(
+                replace(results, static_segments=static_segments)
+            )
+
+        capture_alignment = (
+            *results.capture_alignment,
+            dict(results.capture_alignment[0]),
+        )
+        with self.subTest(path="capture alignment"), self.assertRaisesRegex(
+            ValueError,
+            "片段键重复",
+        ):
+            build_exp2_attribution_figure(
+                replace(results, capture_alignment=capture_alignment)
+            )
 
     def test_vcd_risk_coverage_keeps_score_ties_indivisible(self) -> None:
         """同分候选必须整组进入曲线，AURC 不得依赖候选行顺序。"""
@@ -299,7 +462,6 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 build_analysis(
                     (source,),
                     output,
-                    "figures/panels",
                     root / "cache",
                     "batch_test",
                     {},
@@ -307,6 +469,32 @@ class Experiment12AnalysisTests(unittest.TestCase):
                     config_sha256=settings_sha256(),
                 )
             self.assertFalse(output.exists())
+
+    def test_analysis_artifacts_remove_only_retired_figure_tex(self) -> None:
+        """重建时删除旧拼图 TeX，但保留同目录内未托管文件。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_root = Path(temporary_directory) / "analysis"
+            legacy_root = output_root / "tex" / "figures"
+            legacy_root.mkdir(parents=True)
+            retired = (
+                legacy_root / "figure2_experiment1.tex",
+                legacy_root / "figure3_experiment2.tex",
+            )
+            for path in retired:
+                path.write_text("retired", encoding="utf-8")
+            unrelated = legacy_root / "researcher_note.tex"
+            unrelated.write_text("keep", encoding="utf-8")
+
+            artifacts = write_analysis_artifacts(
+                _presentation_results(),
+                output_root,
+            )
+
+            self.assertTrue(all(not path.exists() for path in retired))
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep")
+            self.assertNotIn("figure2_tex", artifacts)
+            self.assertNotIn("figure3_tex", artifacts)
 
     def test_task_cache_round_trips_non_finite_metrics_as_strict_json(self) -> None:
         """task 缓存必须显式编码 NaN，不能写出非标准 JSON 数字。"""
@@ -323,6 +511,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
             restored = load_task_results(destination, key, workbook)
 
             self.assertIsNotNone(restored)
+            assert restored is not None
             self.assertNotIn("NaN", destination.read_text(encoding="utf-8"))
             self.assertTrue(
                 np.isnan(float(restored.static_segments["EgoAnchor"][0]["value"]))
@@ -396,7 +585,6 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 payload = build_analysis(
                     workbooks,
                     output_root,
-                    "figures/panels",
                     cache_root,
                     "batch_test",
                     expected,
@@ -437,7 +625,6 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 replaced_payload = build_analysis(
                     workbooks,
                     output_root,
-                    "figures/panels",
                     cache_root,
                     "batch_replaced_task_3",
                     expected,
@@ -584,7 +771,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
     def test_figure_pairing_rejects_missing_method_episode(self) -> None:
         """任一方法缺失 episode 时禁止生成看似配对的趋势线。"""
 
-        rows = {
+        rows: dict[str, tuple[dict[str, object], ...]] = {
             method: ({"session_id": "s", "trial_id": "t", "segment_id": "a", "value": 1.0},)
             for method in METHODS
         }
@@ -592,64 +779,6 @@ class Experiment12AnalysisTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "配对不完整"):
             paired_metric_matrix(rows, METHODS, ("value",))
-
-    def test_experiment_one_dual_panel_has_two_axes_and_method_labels(self) -> None:
-        """实验一面板必须用独立左右纵轴并在横轴直接标出四方法。"""
-
-        rows = {
-            method: (
-                {
-                    "session_id": "s",
-                    "trial_id": "t",
-                    "segment_id": "a",
-                    "error": 4.0 + index,
-                    "jitter": 0.4 + index,
-                },
-                {
-                    "session_id": "s",
-                    "trial_id": "t",
-                    "segment_id": "b",
-                    "error": 5.0 + index,
-                    "jitter": 0.5 + index,
-                },
-            )
-            for index, method in enumerate(METHODS)
-        }
-        figure = build_dual_metric_panel(rows, "error", "jitter", "mm")
-
-        self.assertEqual(len(figure.axes), 2)
-        self.assertEqual(figure.axes[0].get_ylabel(), "Error P95 (mm)")
-        self.assertEqual(figure.axes[1].get_ylabel(), "Jitter P95 (mm)")
-        self.assertEqual(
-            [text.get_text() for text in figure.axes[0].get_xticklabels()],
-            ["Arrival", "Capture", "One-Euro", "EgoAnchor"],
-        )
-
-    def test_dynamic_panel_names_lag_aligned_rmse_explicitly(self) -> None:
-        """动态面板不得把 lag-aligned RMSE 误标为 Error P95。"""
-
-        rows = {
-            method: (
-                {
-                    "session_id": "s",
-                    "trial_id": "t",
-                    "segment_id": "a",
-                    "error": 4.0 + index,
-                    "jitter": 0.4 + index,
-                },
-            )
-            for index, method in enumerate(METHODS)
-        }
-
-        figure = build_dual_metric_panel(
-            rows,
-            "error",
-            "jitter",
-            "mm",
-            error_label="Lag-aligned RMSE",
-        )
-
-        self.assertEqual(figure.axes[0].get_ylabel(), "Lag-aligned RMSE (mm)")
 
     def test_temporal_panel_keeps_all_points_and_expands_axis(self) -> None:
         """时序面板必须显示全部片段，且固定画布的纵向坐标轴齐平。"""
@@ -685,45 +814,115 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertFalse(axis.get_legend().get_frame_on())
         self.assertEqual(axis.get_legend().borderaxespad, 0.0)
 
-    def test_experiment_one_dual_panel_does_not_connect_methods(self) -> None:
-        """双轴面板只画各方法分布和 IQR，不连接跨方法结果。"""
+def _presentation_results() -> PaperResults:
+    """构造覆盖两张正文组合图全部输入契约的最小结果。"""
 
-        rows = {
-            method: (
+    def rows(
+        variants: tuple[str, ...],
+        **metrics: float,
+    ) -> dict[str, tuple[dict[str, object], ...]]:
+        """为每个配置构造三个身份严格匹配的正值片段。"""
+
+        return {
+            variant: tuple(
                 {
-                    "session_id": "s",
-                    "trial_id": "t",
-                    "segment_id": "a",
-                    "error": 4.0 + index,
-                    "jitter": 0.4 + index,
-                },
+                    "session_id": "session",
+                    "trial_id": "trial",
+                    "segment_id": f"segment_{index}",
+                    **{
+                        key: value + 0.2 * variant_index + 0.1 * index
+                        for key, value in metrics.items()
+                    },
+                }
+                for index in range(3)
             )
-            for index, method in enumerate(METHODS)
+            for variant_index, variant in enumerate(variants)
         }
-        figure = build_dual_metric_panel(rows, "error", "jitter", "deg")
 
-        for axis in figure.axes:
-            self.assertFalse(any(len(line.get_xdata()) == len(METHODS) for line in axis.lines))
-
-    def test_panel_titles_are_owned_by_tex_fragment(self) -> None:
-        """绘图代码不重复写入由手工引入 TeX 子标题承担的小标题。"""
-
-        rows = {
-            method: (
-                {
-                    "session_id": "s",
-                    "trial_id": "t",
-                    "segment_id": "a",
-                    "error": 1.0,
-                    "jitter": 0.1,
-                },
-            )
-            for method in METHODS
+    temporal_variants = (
+        *METHODS,
+        "EgoAnchor w/o StaticLock",
+        "Smoothed KF Extrapolation",
+        "Hermite Interpolation",
+    )
+    risk_rows = tuple(
+        {
+            "session_id": "session",
+            "trial_id": "trial",
+            "segment_id": f"event_{event}",
+            "coverage": coverage,
+            "selective_risk_mm": risk + event,
         }
-        figure = build_dual_metric_panel(rows, "error", "jitter", "mm")
-
-        self.assertEqual(figure.axes[0].get_title(), "")
-        self.assertEqual(figure.axes[1].get_title(), "")
+        for event in range(2)
+        for coverage, risk in ((0.5, 3.0), (1.0, 5.0))
+    )
+    return PaperResults(
+        workbook_sha256={},
+        static_segments=rows(
+            temporal_variants,
+            centered_p95_mm=1.0,
+            absolute_p95_mm=2.0,
+            frame_increment_p95_mm=0.1,
+            centered_rotation_p95_deg=0.5,
+            absolute_rotation_p95_deg=1.5,
+            frame_rotation_increment_p95_deg=0.05,
+        ),
+        translation_segments=rows(
+            temporal_variants,
+            effective_lag_ms=200.0,
+            aligned_rmse_mm=5.0,
+            current_time_rmse_mm=25.0,
+            aligned_residual_increment_p95_mm=0.5,
+        ),
+        rotation_segments=rows(
+            temporal_variants,
+            effective_lag_ms=220.0,
+            aligned_rmse_deg=2.0,
+            current_time_rmse_deg=12.0,
+            aligned_residual_increment_p95_deg=0.2,
+        ),
+        occlusion_episodes=rows(
+            temporal_variants,
+            translation_p95_mm=4.0,
+            translation_max_mm=6.0,
+            catastrophic_gt40=0.0,
+        ),
+        transition_segments=rows(temporal_variants, response_ms=150.0),
+        stop_segments=rows(
+            temporal_variants,
+            forward_overshoot_mm=3.0,
+            reverse_return_mm=1.0,
+            settling_time_ms=240.0,
+        ),
+        correction_segments=rows(
+            temporal_variants,
+            position_step_p95_mm=2.0,
+            rotation_step_p95_deg=1.0,
+        ),
+        capture_alignment=tuple(
+            {
+                "session_id": "session",
+                "trial_id": "trial",
+                "segment_id": f"segment_{index}",
+                "capture_p95_mm": 2.0 + index,
+                "arrival_p95_mm": 5.0 + index,
+            }
+            for index in range(3)
+        ),
+        vcd_aurc_segments=tuple(
+            {
+                "session_id": "session",
+                "trial_id": "trial",
+                "segment_id": f"event_{index}",
+                "aurc_mm": 3.0 + index,
+                "full_coverage_risk_mm": 5.0 + index,
+                "risk_gain_mm": 2.0,
+            }
+            for index in range(3)
+        ),
+        vcd_risk_coverage=risk_rows,
+        performance={},
+    )
 
 
 if __name__ == "__main__":

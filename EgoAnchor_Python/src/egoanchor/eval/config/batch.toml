@@ -13,6 +13,7 @@ active_root = "data/experiments/experiment_1_2" # 当前论文五任务组合清
 experiment_destination = "figures/panels" # 当前活动批次 analysis/figures 下实验一、二 PNG/PDF 的论文相对目标目录。
 
 [experiment_1_2.copy_assets.tables]
+exp1_performance_table = "tables/exp1_performance.tex" # 实验一正文合并表的论文相对目标路径；只显示中位数并保留全部收益与代价指标。
 exp1_static_table = "tables/exp1_static.tex" # 实验一静止、头动与遮挡表的论文相对目标路径。
 exp1_dynamic_table = "tables/exp1_dynamic.tex" # 实验一动态 6DoF 表的论文相对目标路径。
 exp2_table = "tables/exp2_design.tex" # 实验二系统设计归因表的论文相对目标路径。

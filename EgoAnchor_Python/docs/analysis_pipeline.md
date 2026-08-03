@@ -160,8 +160,8 @@ pixi run eval copy-assets exp1-2
 ```
 
 `analyze exp1-2` 读取活动 `batch.json` 指向的五本 Stage 1 XLSX。逐任务指标缓存按工作簿摘要、实验一/二
-参数摘要和指标实现摘要命中，只重算失效任务；随后统一生成八个 PNG/PDF 面板、三张主表、指标文件、
-绘图数据和 TeX 片段。
+参数摘要和指标实现摘要命中，只重算失效任务；随后生成两张组合图、八个独立审计子图及其 PNG/PDF、
+四张 TeX 表、指标文件和绘图数据。分析器不再生成 Figure 2/3 的图环境 TeX。
 
 本地产物位于：
 
@@ -174,7 +174,7 @@ data/experiments/experiment_1_2/analysis/
 └─ provenance/build_result.json
 ```
 
-只有 `copy-assets exp1-2` 会把清单中的面板、三张表格和 TOML 明确列出的 relay 文件写入论文目录。
+只有 `copy-assets exp1-2` 会把清单中的组合图、独立审计子图、四张表格和 TOML 明确列出的 relay 文件写入论文目录。
 
 ## 6. 实验一/二新增或局部重采
 
@@ -342,7 +342,7 @@ pixi run eval analyze exp3
 → Wilcoxon、分层 Holm、效应量、信度和操纵检查
 → 写入并回读六页结果 XLSX
 → 生成 TeX 主表
-→ 从同一次分析的内存数据生成正文候选 Figure 4 与 Figure 5 PNG/PDF
+→ 从同一次分析的内存数据生成正文候选 Figure 4 PNG/PDF
 → 校验全部产物并提交 complete 构建清单
 ```
 
@@ -352,12 +352,11 @@ pixi run eval analyze exp3
 data/experiments/experiment_3/analysis/
 ├─ results/experiment3_analysis.xlsx
 ├─ tex/exp3_subjective.tex
-├─ figures/figure4_exp3_primary_outcomes.{png,pdf}
-├─ figures/figure5_exp3_published_scales.{png,pdf}
+├─ figures/figure4_exp3_subjective_outcomes.{png,pdf}
 └─ provenance/build_result.json
 ```
 
-分析产物契约为 v4，不兼容旧目录、文件名后缀或构建清单。产物可复现且路径固定。
+分析参数契约为 v4，图产物契约为 v7。当前不兼容旧目录、旧文件名或旧 v4/v5/v6 构建清单；产物路径固定。
 
 结果工作簿固定为六张中文页，顺序和职责如下：
 
@@ -391,12 +390,16 @@ CLMM 不进入冻结分析、结果工作簿或论文。被删除的自定义实
 其标准误、Wald p 值和区间没有统计依据；数值 Hessian 又近奇异，不能安全替换。若后续要回答物体异质性问题，
 应先冻结新的假设，再使用经过验证的序数混合模型实现，不能恢复这套旧代码。
 
-两张正文候选 Figure 都是箱线图。`figure4_exp3_primary_outcomes` 上排 4 个、下排 3 个面板，展示 7 个主条目；`figure5_exp3_published_scales` 单行展示
-AQ-EQ、AQ-IQ、TiA-R/C、TiA-U/P 与 S-TIAS。各面板使用与主分析一致的参与者级得分：区块级结局先在三个物体上取均值，
-TiA 两个分量表与 S-TIAS 三项均分使用方法级单次施测得分；图中叠加半透明参与者级得分点和浅灰配对线。若所属家族内 Holm 校正后的 p<.05，
-则在两个箱体上方显示括号和星号（`* p_Holm < .05`、
-`** p_Holm < .01`、`*** p_Holm < .001`）。TiA 使用 1--5 理论量尺，其余面板使用 1--7。逐物体数据只检查方向，
-不分别检验或添加星号。
+正文候选是一张双栏宽的双排复合图 `figure4_exp3_subjective_outcomes`，全图只用一个方法图例。
+上排填满七个等宽槽，依次显示 Stability、Attachment、Recovery、Reliance、Balance、Position 和
+Orientation；内部键仍为 Q1/Q2/Q3/Q6/Q7/Q8/Q9，纵轴保留 1--7 原始分。下排沿用相同的物理槽宽，
+五项已发表量表整体居中。左侧三个槽放置 AQ-EQ、AQ-IQ 与 S-TIAS，共用 1--7 轴；右侧两个槽放置
+TiA R/C 与 TiA U/P，共用 1--5 右轴。两个量尺分区之间留窄缝，不归一化也不共用纵轴。
+
+每项结局并列 One-Euro 和 EgoAnchor。透明箱体表示 IQR，箱内横线表示中位数，圆点表示均值；
+浅色小点是参与者级得分，浅灰线连接同一参与者，须线采用 1.5 倍 IQR 规则。显著性括号分别使用
+所属冻结家族内 Holm 校正后的 p，并显示 `*<.05`、`**<.01` 或 `***<.001`。逐物体数据只检查方向，
+不分别检验或添加显著性标记。
 
 ## 9. 联合分析和最终资源复制
 

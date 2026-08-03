@@ -14,11 +14,39 @@ from egoanchor.eval.experiments.common import (
     complete_build,
     copy_artifact_plans,
     read_build_manifest,
+    source_trees_sha256,
 )
 
 
 class ArtifactCopyTests(unittest.TestCase):
     """验证实验一/二与实验三共享的联合预检边界。"""
+
+    def test_source_trees_digest_changes_with_either_input_tree(self) -> None:
+        """任一带标签源码树变化都必须使联合实现摘要失效。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            analysis_root = root / "analysis"
+            visuals_root = root / "visuals"
+            analysis_root.mkdir()
+            visuals_root.mkdir()
+            analysis_source = analysis_root / "pipeline.py"
+            visual_source = visuals_root / "style.py"
+            analysis_source.write_text("VALUE = 1\n", encoding="utf-8")
+            visual_source.write_text("COLOR = 'red'\n", encoding="utf-8")
+            roots = {"analysis": analysis_root, "visuals": visuals_root}
+
+            baseline = source_trees_sha256(roots)
+            self.assertEqual(
+                baseline,
+                source_trees_sha256({"visuals": visuals_root, "analysis": analysis_root}),
+            )
+
+            analysis_source.write_text("VALUE = 2\n", encoding="utf-8")
+            self.assertNotEqual(source_trees_sha256(roots), baseline)
+            analysis_source.write_text("VALUE = 1\n", encoding="utf-8")
+            visual_source.write_text("COLOR = 'blue'\n", encoding="utf-8")
+            self.assertNotEqual(source_trees_sha256(roots), baseline)
 
     def test_joint_preflight_writes_nothing_when_any_source_is_missing(self) -> None:
         """任一实验来源缺失时，另一实验的有效资源也不得提前发布。"""

@@ -87,11 +87,8 @@ class AnalysisSettings:
     figure_dpi: int
     """PNG 论文面板分辨率。"""
 
-    primary_figure_size: tuple[float, float]
-    """正文 Figure 4 主条目箱线图的原生英寸尺寸。"""
-
-    scale_figure_size: tuple[float, float]
-    """正文 Figure 5 已发表量表箱线图的原生英寸尺寸。"""
+    figure_size: tuple[float, float]
+    """正文 Figure 4 双排复合图的原生英寸尺寸。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,13 +156,9 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
             }
         ),
         figure_dpi=_require_int(figures, "dpi"),
-        primary_figure_size=(
-            _require_float(figures, "primary_width_inches"),
-            _require_float(figures, "primary_height_inches"),
-        ),
-        scale_figure_size=(
-            _require_float(figures, "scale_width_inches"),
-            _require_float(figures, "scale_height_inches"),
+        figure_size=(
+            _require_float(figures, "width_inches"),
+            _require_float(figures, "height_inches"),
         ),
     )
     _validate_settings(settings)
@@ -210,11 +203,7 @@ def _validate_settings(settings: AnalysisSettings) -> None:
         raise ValueError("启用 TOST 前必须冻结五项正等价界")
     if settings.figure_dpi < 150 or any(
         not math.isfinite(value) or value <= 0.0
-        for size in (
-            settings.primary_figure_size,
-            settings.scale_figure_size,
-        )
-        for value in size
+        for value in settings.figure_size
     ):
         raise ValueError("论文图分辨率或画布尺寸无效")
 

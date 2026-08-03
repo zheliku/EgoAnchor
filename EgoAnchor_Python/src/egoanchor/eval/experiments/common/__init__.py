@@ -11,6 +11,7 @@ from .builds import (
     output_map,
     read_build_manifest,
     source_tree_sha256,
+    source_trees_sha256,
     validate_output_files,
     write_build_manifest,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "require_table",
     "section_sha256",
     "source_tree_sha256",
+    "source_trees_sha256",
     "validate_output_files",
     "write_build_manifest",
 ]

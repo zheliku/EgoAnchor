@@ -9,7 +9,8 @@ from .cache import (
     write_task_results,
 )
 from .figures import (
-    build_dual_metric_panel,
+    build_exp1_behavior_figure,
+    build_exp2_attribution_figure,
     build_temporal_strategy_panel,
     build_vcd_risk_coverage_panel,
     publish_figures,
@@ -35,6 +36,7 @@ from .metrics import (
 )
 from .paper import (
     build_exp1_dynamic_table,
+    build_exp1_performance_table,
     build_exp1_static_table,
     build_exp2_attribution_table,
     write_analysis_artifacts,
@@ -56,8 +58,10 @@ __all__ = [
     "analyze_task_workbook",
     "analyze_workbooks",
     "build_analysis",
-    "build_dual_metric_panel",
+    "build_exp1_behavior_figure",
+    "build_exp2_attribution_figure",
     "build_exp1_dynamic_table",
+    "build_exp1_performance_table",
     "build_exp1_static_table",
     "build_exp2_attribution_table",
     "build_temporal_strategy_panel",

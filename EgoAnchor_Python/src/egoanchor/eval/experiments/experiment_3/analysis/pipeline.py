@@ -11,7 +11,7 @@ from ...._filesystem import (
     remove_tree_with_retry,
     replace_directory_with_rollback,
 )
-from ...common import begin_build, complete_build, source_tree_sha256
+from ...common import begin_build, complete_build, source_trees_sha256
 from .artifacts import EXP3_ARTIFACTS
 from .contracts import PRIMARY_OUTCOMES, SCALE_OUTCOMES
 from .figures import publish_figures
@@ -55,7 +55,13 @@ def build_analysis(
         "included_count": validation["included_count"],
         "artifact_contract_version": EXP3_ARTIFACTS.version,
     }
-    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
+    implementation_root = Path(__file__).resolve().parent
+    implementation_digest = source_trees_sha256(
+        {
+            "analysis": implementation_root,
+            "visuals": implementation_root.parents[3] / "visuals",
+        }
+    )
     staging = create_inherited_temp_directory(root.parent, f".{root.name}.build-")
     try:
         building = begin_build(

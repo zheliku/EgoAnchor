@@ -45,7 +45,7 @@ lag--fidelity、遮挡稳健性和转换代价，不汇总成全局排名。遮�
 - EgoAnchor w/o VCD；
 - EgoAnchor w/o StaticLock。
 
-图 3(d) 和对应表格比较 `Smoothed KF Extrapolation vs. Hermite Interpolation`。
+图 3(d) 的正文主比较是 `Smoothed KF Extrapolation vs. Linear/SLERP`，不展示或讨论 Hermite。
 除 lag--residual 外，还报告候选生效边界步长、静止帧间增量、起动响应、停止前向过冲、
 反向回动、settling time、旋转误差和遮挡期平移误差 P95。候选生效边界步长按 `source_frame_id`
 改变前后相邻 render pose 的差计算，只作为同一时间线上的配对显示护栏，不称为 Kalman
@@ -69,9 +69,9 @@ v4 正式批次已在同一冻结代码和参数下完整采完 Task 1--5（见"
 
 统计：主证实家族 7 项（Q1/Q8/Q2/Q9/Q3/Q6/Q7）三物体取均值后逐条目 Wilcoxon + 家族内 Holm（N=24 最严 MDE dz=0.801）；已发表量表家族 5 检验（AQ-EQ、AQ-IQ、TiA-R/C、TiA-U/P、S-TIAS）独立 Holm，仅该家族报告当前样本信度。Wilcoxon 使用含并列中秩的双侧条件精确符号置换：配对差先规范到 12 位小数、删除零差，再枚举符号分配；不使用 GPT 参考工作簿的正态近似。“条件精确”不表示无假设：零假设下非零配对差的符号须可交换，这通常由配对差分布关于零对称的假设支撑。2026-08-01 在真实采集前删除推断无效的自定义 CLMM；逐物体结果只作配对描述，不计算 p 值。自制单项不合并总分、不报 alpha。操纵检验必须报告候选/VCD/接纳一致性与生命周期状态分布。
 
-论文结果使用两张参与者内箱线图：Figure 4 上排 4 个、下排 3 个面板，展示 7 个主条目；Figure 5 单行展示已发表量表家族的 5 项结局。各面板使用与主分析一致的参与者级得分：区块级结局先在三个物体上取均值，TiA 与 S-TIAS 使用方法级单次施测得分；图中叠加参与者级得分点和浅灰配对线。若所属家族内 Holm 校正后的 p<.05，则绘制显著性括号并用星号编码该校正后 p。TiA 保留 1--5 理论量尺，其余结局使用 1--7 量尺。逐物体结果不标星。
+论文结果候选使用一张双排复合 Figure 4。上排七个等宽槽依次显示 Stability、Attachment、Recovery、Reliance、Balance、Position 和 Orientation，不显示问卷编号；内部仍以 Q1/Q2/Q3/Q6/Q7/Q8/Q9 作为稳定分析键，纵轴保留 1--7 原始分。下排沿用同一物理槽宽，五项已发表量表整体居中：AQ-EQ、AQ-IQ 与 S-TIAS 共用 1--7 左轴，TiA R/C 与 TiA U/P 共用 1--5 右轴，两个量尺分区之间留窄缝，不作跨量尺归一化。全图只保留一个方法图例；透明箱体表示 IQR，箱内横线表示中位数，圆点表示均值，并叠加参与者级浅色点和浅灰配对线。显著性括号分别编码所属家族内 Holm 校正后的 p。12 结局完整结果表仍保留全部显著与不显著结局，逐物体结果不标星。当前数据来源尚未人工确认，该图只用于样式预览，不进入 v2 正文。
 
-诚实边界：不报绝对配准误差、不提供任务表现证据、不作中介效应主张；结论只覆盖当前对象、设备、参数与任务条件。量表原文核对已于 2026-07-26 完成（AQ/TiA/S-TIAS/Gottsacker，见权威文件〇节）；三量表一律以 adapted 署名，不声称执行独立译者盲法回译。正式分析输入为 24 名参与者的录制数据 `material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx`；`Participants` 与 `Records` 保存人工原始值，`Derived` 和 `Analysis` 只作实时公式派生与现场核对。分析产物契约为 v4：程序检查工作簿结构、评分、配对和统计一致性，并写入固定结果路径。
+诚实边界：不报绝对配准误差、不提供任务表现证据、不作中介效应主张；结论只覆盖当前对象、设备、参数与任务条件。量表原文核对已于 2026-07-26 完成（AQ/TiA/S-TIAS/Gottsacker，见权威文件〇节）；三量表一律以 adapted 署名，不声称执行独立译者盲法回译。`material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 当前包含 24 组参与者格式记录，但其内容与明确标注为合成数据的参考簿高度同源，尚不能视为正式参与者数据。来源经研究团队核验前，分析只用于结构、计分、配对、统计一致性和图形样式检查，不发布论文结果。分析参数契约为 v4，图产物契约为 v7。
 
 ## v4 启动条件（实验一/二已满足，实验三沿用）
 
@@ -107,7 +107,7 @@ pixi run eval data exp1-2 stage --promote
 pixi run eval analyze exp1-2
 ```
 
-最新中文工作稿是 `egoanchor_cn_ai_v8.tex`，其中 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留，当前编译产物为 `pdf/egoanchor_cn_ai_v8.pdf`。Stage 1 和指标按 Task 独立
+最新中文工作稿是 `egoanchor_cn_v2.tex`，当前编译产物为 `pdf/egoanchor_cn_v2.pdf`。Stage 1 和指标按 Task 独立
 缓存，活动 `batch.json` 选择五本 XLSX 后合并回填实验一/二；`analyze` 不读取 raw JSON/JSONL。
 IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献另占 2 页。**撰写阶段页数不作硬约束**：
 可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到上限。不要为压页数提前删减实质内容，

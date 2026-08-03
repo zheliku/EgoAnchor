@@ -1,0 +1,508 @@
+{
+  "capture_id": "20260723_125041_569_controller_right",
+  "selection": "fixed_stride",
+  "selection_semantics": "strictly increasing fixed saved-frame stride; no automatic error-based selection",
+  "columns": 6,
+  "frame_step": 30,
+  "row_ids": [
+    "rgb",
+    "quest_reference",
+    "arrival_hold",
+    "capture_hold",
+    "one_euro_interpolation",
+    "egoanchor"
+  ],
+  "row_keys": [
+    "passthrough",
+    "reference",
+    "arrival",
+    "capture",
+    "one-euro",
+    "egoanchor"
+  ],
+  "row_titles": [
+    "Passthrough",
+    "Quest\nReference",
+    "Arrival",
+    "Capture",
+    "One-Euro",
+    "EgoAnchor\n(Ours)"
+  ],
+  "column_label": "none",
+  "font_sizes": {
+    "row_label": 40,
+    "column_label": 40,
+    "timeline": 40
+  },
+  "font_identifiers": {
+    "row_label": "C:\\Windows\\fonts\\arial.ttf",
+    "column_label": "C:\\Windows\\fonts\\arial.ttf",
+    "timeline": "C:\\Windows\\fonts\\arial.ttf"
+  },
+  "cell_width": 320,
+  "layout": {
+    "label_padding_px": 28,
+    "label_min_width_px": 80,
+    "gutter_px": 4,
+    "border_thickness_px": 1,
+    "canvas_color_hex": "#FFFFFF",
+    "border_color_hex": "#D2D2D2",
+    "row_label_color_hex": "#202020",
+    "column_label_color_hex": "#202020",
+    "header_padding_px": 10,
+    "row_label_line_spacing_px": 4
+  },
+  "method_colors_hex": [
+    "#4C78A8",
+    "#F28E2B",
+    "#59A14F",
+    "#E15759"
+  ],
+  "capture_variant_colors_hex": [
+    "#0072B2",
+    "#009E73",
+    "#E69F00",
+    "#D55E00"
+  ],
+  "projection_mesh_local_matrix": [
+    -1.0,
+    -1.2246467991473532e-16,
+    0.0,
+    0.0,
+    1.2246467991473532e-16,
+    -1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "overlay": {
+    "model_alpha": 0.6,
+    "model_color_hex": "#D8DCE2",
+    "method_colors_hex": [
+      "#4C78A8",
+      "#F28E2B",
+      "#59A14F",
+      "#E15759"
+    ],
+    "reference_alpha": 0.6,
+    "fill_mode_requested": "texture",
+    "fill_mode_resolved": "texture",
+    "texture_backend_requested": "auto",
+    "texture_backend_resolved": "nvdiffrast",
+    "texture_backend_fallback_reason": null,
+    "texture_max_size_px": 0,
+    "minimum_component_faces": 1,
+    "mesh_faces_original": 5609,
+    "mesh_faces_rendered": 5609,
+    "texture_brightness": 1.0,
+    "texture_source": "pbr_baseColorTexture",
+    "texture_size": [
+      2048,
+      2048
+    ],
+    "texture_render_size": [
+      2048,
+      2048
+    ],
+    "texture_fallback_reason": null,
+    "method_contour_thickness_px": 3,
+    "reference_contour_color_hex": "#2D2D2D",
+    "reference_contour_thickness_px": 3,
+    "reference_halo_color_hex": "#FFFFFF",
+    "reference_halo_thickness_px": 6
+  },
+  "axes": {
+    "enabled": true,
+    "coordinate_space": "FoundationPose mesh local coordinates after Unity renderer compensation recovery",
+    "length_m": 0.06,
+    "thickness_px": 2,
+    "label_font_size_px": 16,
+    "colors_hex": [
+      "#D62728",
+      "#2CA02C",
+      "#1F77B4"
+    ],
+    "halo_color_hex": "#FFFFFF",
+    "halo_thickness_px": 5,
+    "tip_length": 0.2,
+    "label_offset_px": [
+      3,
+      -3
+    ],
+    "origin_color_hex": "#232323",
+    "origin_radius_px": 2,
+    "clipping": false
+  },
+  "timeline": {
+    "mode": "relative-time",
+    "placement": "top",
+    "title": "Δt (s)",
+    "time_source": "image_mono_ms",
+    "origin": "first_selected_sample",
+    "origin_sample_id": "000000365",
+    "coordinate_origin": "top-left-of-first-image-cell",
+    "horizontal_axis_start": "first-image-left-edge",
+    "unit": "seconds",
+    "decimal_places": 2,
+    "tick_alignment": "selected_column_centers",
+    "spacing_semantics": "equal column spacing; labels use actual timestamps; not a metric time scale",
+    "font_size_px": 40,
+    "font_identifier": "C:\\Windows\\fonts\\arial.ttf",
+    "color_hex": "#202020",
+    "line_thickness_px": 3,
+    "tick_length_px": 10,
+    "padding_px": 3,
+    "right_extension_px": 20,
+    "band_height_px": 122,
+    "ticks": [
+      {
+        "column_index": 0,
+        "sample_id": "000000365",
+        "delta_time_ms": 0.0,
+        "label": "0.00"
+      },
+      {
+        "column_index": 1,
+        "sample_id": "000000395",
+        "delta_time_ms": 1250.1884000084829,
+        "label": "1.25"
+      },
+      {
+        "column_index": 2,
+        "sample_id": "000000425",
+        "delta_time_ms": 2499.347300006775,
+        "label": "2.50"
+      },
+      {
+        "column_index": 3,
+        "sample_id": "000000455",
+        "delta_time_ms": 3750.4718999989564,
+        "label": "3.75"
+      },
+      {
+        "column_index": 4,
+        "sample_id": "000000485",
+        "delta_time_ms": 4999.793499999214,
+        "label": "5.00"
+      },
+      {
+        "column_index": 5,
+        "sample_id": "000000515",
+        "delta_time_ms": 6249.179500009632,
+        "label": "6.25"
+      }
+    ]
+  },
+  "row_axis": {
+    "semantic": "method",
+    "direction": "top-to-bottom",
+    "row_keys": [
+      "passthrough",
+      "reference",
+      "arrival",
+      "capture",
+      "one-euro",
+      "egoanchor"
+    ],
+    "row_titles": [
+      "Passthrough",
+      "Quest\nReference",
+      "Arrival",
+      "Capture",
+      "One-Euro",
+      "EgoAnchor\n(Ours)"
+    ]
+  },
+  "coordinate_axes": {
+    "enabled": true,
+    "origin": "top-left-of-first-image-cell",
+    "origin_px": [
+      251,
+      122
+    ],
+    "x_direction": "right",
+    "x_semantic": "relative-time",
+    "x_tick_alignment": "selected-column-centers",
+    "x_tick_centers_px": [
+      411,
+      735,
+      1059,
+      1383,
+      1707,
+      2031
+    ],
+    "image_grid_right_px": 2190,
+    "x_axis_end_px": 2210,
+    "right_extension_px": 20,
+    "y_direction": "down",
+    "y_semantic": "display-row-category",
+    "y_tick_alignment": "row-cell-centers",
+    "y_ticks": [
+      {
+        "row_key": "passthrough",
+        "label": "Passthrough",
+        "center_y_px": 228
+      },
+      {
+        "row_key": "reference",
+        "label": "Quest\nReference",
+        "center_y_px": 445
+      },
+      {
+        "row_key": "arrival",
+        "label": "Arrival",
+        "center_y_px": 662
+      },
+      {
+        "row_key": "capture",
+        "label": "Capture",
+        "center_y_px": 879
+      },
+      {
+        "row_key": "one-euro",
+        "label": "One-Euro",
+        "center_y_px": 1096
+      },
+      {
+        "row_key": "egoanchor",
+        "label": "EgoAnchor\n(Ours)",
+        "center_y_px": 1313
+      }
+    ]
+  },
+  "outputs": {
+    "grid": "replay_grid.png",
+    "pdf": {
+      "enabled": true,
+      "path": "replay_grid.pdf",
+      "dpi": 300
+    }
+  },
+  "configuration": {
+    "sources": {
+      "contract_version": 1,
+      "default_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Python\\src\\egoanchor\\qualitative_replay\\config\\qualitative_replay.toml",
+      "default_sha256": "ecf928149b7ddb992c30a36a95164083c92e0a883a417db73ae15ca8dcf9834a",
+      "custom_path": null,
+      "custom_sha256": null,
+      "capture_validation_strict": true,
+      "mesh_path": "P:\\VSCode-Project\\EgoAnchor\\EgoAnchor_Python\\data\\model\\MetaQuestTouchPlus_Right.glb",
+      "mesh_sha256": "8d178e8547b6cf241a3e4ad208ccb24f177a134f975d7c4bcc1936d11f2bdc1c",
+      "mesh_overridden": false
+    },
+    "effective": {
+      "selection": {
+        "mode": "fixed_stride",
+        "columns": 6,
+        "frame_step": 30,
+        "start_sample_id": "000000365",
+        "sample_ids": [
+          "000000365",
+          "000000395",
+          "000000425",
+          "000000455",
+          "000000485",
+          "000000515"
+        ],
+        "rows": [
+          "passthrough",
+          "reference",
+          "arrival",
+          "capture",
+          "one-euro",
+          "egoanchor"
+        ]
+      },
+      "layout": {
+        "cell_width": 320,
+        "column_label": "none",
+        "label_font_size": 40,
+        "column_font_size": 40,
+        "label_padding_px": 28,
+        "label_min_width_px": 80,
+        "gutter_px": 4,
+        "border_thickness_px": 1,
+        "canvas_color_hex": "#FFFFFF",
+        "border_color_hex": "#D2D2D2",
+        "row_label_color_hex": "#202020",
+        "column_label_color_hex": "#202020",
+        "header_padding_px": 10,
+        "row_titles": [
+          "Passthrough",
+          "Quest\nReference",
+          "Arrival",
+          "Capture",
+          "One-Euro",
+          "EgoAnchor\n(Ours)"
+        ],
+        "row_label_line_spacing_px": 4
+      },
+      "timeline": {
+        "mode": "relative-time",
+        "placement": "top",
+        "font_size_px": 40,
+        "color_hex": "#202020",
+        "line_thickness_px": 3,
+        "tick_length_px": 10,
+        "padding_px": 3,
+        "right_extension_px": 20
+      },
+      "crop": {
+        "mode": "auto",
+        "padding": 0.0,
+        "fixed_xywh": null,
+        "aspect_ratio": 1.5
+      },
+      "overlay": {
+        "model_alpha": 0.6,
+        "model_color_hex": "#D8DCE2",
+        "method_colors_hex": [
+          "#4C78A8",
+          "#F28E2B",
+          "#59A14F",
+          "#E15759"
+        ],
+        "reference_alpha": 0.6,
+        "fill_mode": "texture",
+        "texture_backend": "auto",
+        "texture_max_size_px": 0,
+        "minimum_component_faces": 1,
+        "texture_brightness": 1.0,
+        "method_contour_thickness_px": 3,
+        "reference_contour_color_hex": "#2D2D2D",
+        "reference_contour_thickness_px": 3,
+        "reference_halo_color_hex": "#FFFFFF",
+        "reference_halo_thickness_px": 6
+      },
+      "axes": {
+        "enabled": true,
+        "length_m": 0.06,
+        "thickness_px": 2,
+        "label_font_size_px": 16,
+        "colors_hex": [
+          "#D62728",
+          "#2CA02C",
+          "#1F77B4"
+        ],
+        "halo_color_hex": "#FFFFFF",
+        "halo_thickness_px": 5,
+        "tip_length": 0.2,
+        "label_offset_px": [
+          3,
+          -3
+        ],
+        "origin_color_hex": "#232323",
+        "origin_radius_px": 2
+      },
+      "export": {
+        "pdf": true,
+        "pdf_dpi": 300
+      }
+    },
+    "effective_sha256": "c7859919016ab53d8d4e9119a7aa1b91d198febdc3fb48207dc9fa7a1bff0885"
+  },
+  "crop_mode": "auto_reference_centered",
+  "crop_padding": 0.0,
+  "crop_aspect_ratio": 1.5,
+  "requested_crop_xywh": null,
+  "crop_semantics": "reference-centered; fixed crop size across columns; one crop shared by all displayed rows",
+  "samples": [
+    {
+      "sample_index": 364,
+      "sample_id": "000000365",
+      "image_unity_frame": 1066,
+      "image_mono_ms": 29289.126105271862,
+      "delta_time_ms": 0.0,
+      "capture_relative_time_ms": 15257.813599993824,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        142,
+        186,
+        276,
+        184
+      ]
+    },
+    {
+      "sample_index": 394,
+      "sample_id": "000000395",
+      "image_unity_frame": 1147,
+      "image_mono_ms": 30539.314505280345,
+      "delta_time_ms": 1250.1884000084829,
+      "capture_relative_time_ms": 16508.002000002307,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        67,
+        208,
+        276,
+        184
+      ]
+    },
+    {
+      "sample_index": 424,
+      "sample_id": "000000425",
+      "image_unity_frame": 1235,
+      "image_mono_ms": 31788.473405278637,
+      "delta_time_ms": 2499.347300006775,
+      "capture_relative_time_ms": 17757.1609000006,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        232,
+        202,
+        276,
+        184
+      ]
+    },
+    {
+      "sample_index": 454,
+      "sample_id": "000000455",
+      "image_unity_frame": 1322,
+      "image_mono_ms": 33039.59800527082,
+      "delta_time_ms": 3750.4718999989564,
+      "capture_relative_time_ms": 19008.28549999278,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        98,
+        237,
+        276,
+        184
+      ]
+    },
+    {
+      "sample_index": 484,
+      "sample_id": "000000485",
+      "image_unity_frame": 1407,
+      "image_mono_ms": 34288.919605271076,
+      "delta_time_ms": 4999.793499999214,
+      "capture_relative_time_ms": 20257.607099993038,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        250,
+        234,
+        276,
+        184
+      ]
+    },
+    {
+      "sample_index": 514,
+      "sample_id": "000000515",
+      "image_unity_frame": 1490,
+      "image_mono_ms": 35538.30560528149,
+      "delta_time_ms": 6249.179500009632,
+      "capture_relative_time_ms": 21506.993100003456,
+      "reference_pose_source": "held",
+      "crop_xywh": [
+        231,
+        198,
+        276,
+        184
+      ]
+    }
+  ]
+}

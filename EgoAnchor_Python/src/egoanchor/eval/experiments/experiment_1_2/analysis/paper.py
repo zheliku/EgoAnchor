@@ -127,6 +127,101 @@ def _best_cells(
     }
 
 
+def _best_median_cells(
+    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
+    key: str,
+) -> Mapping[str, str]:
+    """生成只含中位数的四方法单元格，并加粗较低的最优值。"""
+
+    medians = {
+        method: _summary(rows[method], key)[0]
+        for method in METHODS
+    }
+    best = min(medians.values())
+    return {
+        method: (
+            rf"\textbf{{{_fmt(value)}}}"
+            if np.isclose(value, best)
+            else _fmt(value)
+        )
+        for method, value in medians.items()
+    }
+
+
+def build_exp1_performance_table(results: PaperResults) -> str:
+    """把实验一静态、动态指标合并为单栏正文表。"""
+
+    groups = (
+        (
+            "静止与遮挡",
+            (
+                (results.static_segments, "centered_p95_mm", "头动泄漏 P95 (mm)"),
+                (results.static_segments, "absolute_p95_mm", "绝对注册 P95 (mm)"),
+                (
+                    results.static_segments,
+                    "frame_increment_p95_mm",
+                    r"\shortstack[l]{静止帧间增量\\P95 (mm)}",
+                ),
+                (results.occlusion_episodes, "translation_p95_mm", "遮挡平移 P95 (mm)"),
+                (results.transition_segments, "response_ms", "Start-transition (ms)"),
+            ),
+        ),
+        (
+            "持续平移",
+            (
+                (results.translation_segments, "effective_lag_ms", "有效时延 (ms)"),
+                (results.translation_segments, "aligned_rmse_mm", "对齐 RMSE (mm)"),
+                (
+                    results.translation_segments,
+                    "current_time_rmse_mm",
+                    r"\shortstack[l]{当前时刻\\RMSE (mm)}",
+                ),
+            ),
+        ),
+        (
+            "持续旋转",
+            (
+                (results.rotation_segments, "effective_lag_ms", "有效时延 (ms)"),
+                (results.rotation_segments, "aligned_rmse_deg", "对齐 RMSE (deg)"),
+                (
+                    results.rotation_segments,
+                    "current_time_rmse_deg",
+                    r"\shortstack[l]{当前时刻\\RMSE (deg)}",
+                ),
+            ),
+        ),
+    )
+    lines = [
+        r"\begin{table}[t]",
+        r"\centering",
+        r"\caption{实验一的端到端系统行为（片段或遮挡过程的中位数）。所有指标越低越好，粗体为每行最优；原始片段值与 IQR 见图~\ref{fig:exp1-final}。}",
+        r"\label{tab:exp1-performance}",
+        r"\normalsize",
+        r"\setlength{\tabcolsep}{1.5pt}",
+        r"\renewcommand{\arraystretch}{1.08}",
+        r"\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcccc@{}}",
+        r"\toprule",
+        r"指标 $\downarrow$ & Arrival & Capture & One-Euro & EgoAnchor \\",
+        r"\midrule",
+    ]
+    for group_index, (group_label, metrics) in enumerate(groups):
+        if group_index:
+            lines.append(r"\midrule")
+        lines.append(rf"\multicolumn{{5}}{{@{{}}l}}{{\textit{{{group_label}}}}} \\")
+        for rows, key, label in metrics:
+            cells = _best_median_cells(rows, key)
+            method_cells = " & ".join(cells[method] for method in METHODS)
+            lines.append(f"{label} & {method_cells} " + r"\\")
+    lines.extend(
+        [
+            r"\bottomrule",
+            r"\end{tabularx}",
+            r"\end{table}",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_exp1_static_table(results: PaperResults) -> str:
     """生成实验一静止、世界一致性、遮挡与起动转换代价表。"""
 
@@ -592,7 +687,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="centered_p95_mm",
-        metric_role="Error (left axis)",
+        metric_role="Centered P95",
     )
     append_metric_rows(
         figure2_rows,
@@ -602,7 +697,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="frame_increment_p95_mm",
-        metric_role="Jitter (right axis)",
+        metric_role="Frame-increment P95",
     )
     append_metric_rows(
         figure2_rows,
@@ -612,7 +707,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="centered_rotation_p95_deg",
-        metric_role="Error (left axis)",
+        metric_role="Centered P95",
     )
     append_metric_rows(
         figure2_rows,
@@ -622,7 +717,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="frame_rotation_increment_p95_deg",
-        metric_role="Jitter (right axis)",
+        metric_role="Frame-increment P95",
     )
     append_metric_rows(
         figure2_rows,
@@ -632,7 +727,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_rmse_mm",
-        metric_role="Lag-aligned RMSE (left axis)",
+        metric_role="Lag-aligned RMSE",
     )
     append_metric_rows(
         figure2_rows,
@@ -642,7 +737,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_residual_increment_p95_mm",
-        metric_role="Jitter (right axis)",
+        metric_role="Residual jitter P95",
     )
     append_metric_rows(
         figure2_rows,
@@ -652,7 +747,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_rmse_deg",
-        metric_role="Lag-aligned RMSE (left axis)",
+        metric_role="Lag-aligned RMSE",
     )
     append_metric_rows(
         figure2_rows,
@@ -662,7 +757,7 @@ def _write_figure_source_data(
         variants=METHODS,
         x_key=None,
         y_key="aligned_residual_increment_p95_deg",
-        metric_role="Jitter (right axis)",
+        metric_role="Residual jitter P95",
     )
 
     figure3_rows: list[dict[str, Any]] = []
@@ -759,7 +854,7 @@ def _write_figure_source_data(
             {"项目": "用途", "说明": "图 2 和图 3 的逐点绘图数据；每行是一条实际显示的片段/episode 记录。"},
             {"项目": "数据来源", "说明": "五本只读 Stage 1 工作簿，由论文分析重新计算，不回读 raw JSONL。"},
             {"项目": "配对语义", "说明": "session_id、trial_id、segment_id 相同的记录属于严格配对。"},
-            {"项目": "图 2", "说明": "四个面板分别记录左轴误差和右轴抖动；动态抖动是 lag 对齐残差的帧间增量 P95。"},
+            {"项目": "图 2", "说明": "四个面板均在同一线性纵轴上记录主指标与残差抖动；动态抖动是 lag 对齐残差的帧间增量 P95。"},
             {"项目": "图 3(c)", "说明": "event 曲线不拆分同分候选；固定 coverage 汇总取第一个不小于目标 coverage 的完整同分组。"},
             {"项目": "数值精度", "说明": "XLSX 保留计算得到的浮点值；论文表格另行格式化。"},
         ],
@@ -786,91 +881,18 @@ def _write_figure_source_data(
     return destination
 
 
-def _figure_two_tex(figure_directory: str) -> str:
-    """生成实验一图片的手工粘贴 TeX 片段。"""
-
-    return f"""\\begin{{figure*}}[t]
-  \\centering
-  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2a_static_translation.pdf}}
-    \\caption{{静止平移}}
-    \\label{{fig:exp1-static-translation}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2b_static_rotation.pdf}}
-    \\caption{{静止旋转}}
-    \\label{{fig:exp1-static-rotation}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2c_dynamic_translation.pdf}}
-    \\caption{{动态平移}}
-    \\label{{fig:exp1-dynamic-translation}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.245\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure2d_dynamic_rotation.pdf}}
-    \\caption{{动态旋转}}
-    \\label{{fig:exp1-dynamic-rotation}}
-  \\end{{subfigure}}
-  \\caption{{实验一的平移与旋转误差--抖动分布。每个方法左移圆点对应左轴误差，右移空心菱形对应右轴抖动；浅色点为片段值，醒目标记与误差条为中位数和 IQR。静止误差采用中心化 P95，动态误差采用 lag-aligned RMSE；动态抖动采用同一最佳时延下残差轨迹的帧间增量 P95，因此不把真实运动计为抖动。左右纵轴相互独立，均为越低越好。}}
-  \\label{{fig:exp1-final}}
-\\end{{figure*}}
-"""
-
-
-def _figure_three_tex(figure_directory: str) -> str:
-    """生成实验二图片的手工粘贴 TeX 片段。"""
-
-    return f"""\\begin{{figure*}}[t]
-  \\centering
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3a_capture_alignment.pdf}}
-    \\caption{{采集时刻对齐}}
-    \\label{{fig:exp2-alignment}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3b_static_lock.pdf}}
-    \\caption{{StaticLock}}
-    \\label{{fig:exp2-static-lock}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.18\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3c_vcd_risk_coverage.pdf}}
-    \\caption{{VCD score 风险--覆盖率}}
-    \\label{{fig:exp2-vcd}}
-  \\end{{subfigure}}\\hfill
-  \\begin{{subfigure}}[t]{{0.40\\textwidth}}
-    \\centering
-    \\includegraphics[width=\\linewidth]{{{figure_directory}/figure3d_temporal_strategies.pdf}}
-    \\caption{{时序策略}}
-    \\label{{fig:exp2-temporal}}
-  \\end{{subfigure}}
-  \\caption{{实验二的组件归因与逐帧输出策略比较。图~(a)、(b) 分别比较采集时刻复合和 StaticLock；图~(c) 展示 VCD 分数诱导的 event 级风险--覆盖率：从高 VCD 候选逐步加入低 VCD 候选，横轴表示保留候选比例。图~(d) 的主体是 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 为补充条件。三路均关闭 StaticLock，并共享模型、接纳、生命周期、候选序列和渲染时间线；所有片段均按原值显示。}}
-  \\label{{fig:exp2-final}}
-\\end{{figure*}}
-"""
-
-
 def write_analysis_artifacts(
     results: PaperResults,
     output_root: Path,
-    figure_tex_directory: str,
 ) -> Mapping[str, Path]:
-    """只在活动批次写出指标、绘图 XLSX、表格和手工粘贴用 TeX 片段。"""
+    """只在活动批次写出指标、绘图 XLSX 和论文表格。"""
 
     metrics_root = output_root / "metrics"
     plot_root = output_root / "plots"
     tex_root = output_root / "tex"
     table_root = tex_root / "tables"
-    figure_root = tex_root / "figures"
     metrics_root.mkdir(parents=True, exist_ok=True)
     table_root.mkdir(parents=True, exist_ok=True)
-    figure_root.mkdir(parents=True, exist_ok=True)
     summary_path = metrics_root / "experiment1_summary.csv"
     fields = (
         "method",
@@ -978,30 +1000,32 @@ def write_analysis_artifacts(
     plot_data_path = _write_figure_source_data(results, plot_root)
     exp1_static_table = build_exp1_static_table(results)
     exp1_dynamic_table = build_exp1_dynamic_table(results)
+    exp1_performance_table = build_exp1_performance_table(results)
     exp2_table = build_exp2_attribution_table(results)
     exp1_static_table_path = table_root / "experiment1_static_occlusion_stability.tex"
     exp1_dynamic_table_path = table_root / "experiment1_dynamic_6dof_fidelity.tex"
+    exp1_performance_table_path = table_root / "experiment1_performance.tex"
     exp2_table_path = table_root / "experiment2_design_attribution.tex"
     exp1_static_table_path.write_text(exp1_static_table, encoding="utf-8")
     exp1_dynamic_table_path.write_text(exp1_dynamic_table, encoding="utf-8")
+    exp1_performance_table_path.write_text(exp1_performance_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
     legacy_exp1_table = table_root / "experiment1_system_characterization.tex"
     if legacy_exp1_table.exists():
         legacy_exp1_table.unlink()
+    legacy_figure_root = tex_root / "figures"
+    for legacy_name in ("figure2_experiment1.tex", "figure3_experiment2.tex"):
+        legacy_figure = legacy_figure_root / legacy_name
+        if legacy_figure.exists():
+            legacy_figure.unlink()
+    if legacy_figure_root.exists() and not any(legacy_figure_root.iterdir()):
+        legacy_figure_root.rmdir()
 
-    figure_directory = figure_tex_directory.strip("/")
-    if not figure_directory or ".." in Path(figure_directory).parts:
-        raise ValueError("图片 TeX 路径必须是论文内相对目录")
-    figure2_path = figure_root / "figure2_experiment1.tex"
-    figure3_path = figure_root / "figure3_experiment2.tex"
-    figure2_path.write_text(_figure_two_tex(figure_directory), encoding="utf-8")
-    figure3_path.write_text(_figure_three_tex(figure_directory), encoding="utf-8")
     return {
         "exp1_static_table": exp1_static_table_path,
         "exp1_dynamic_table": exp1_dynamic_table_path,
+        "exp1_performance_table": exp1_performance_table_path,
         "exp2_table": exp2_table_path,
-        "figure2_tex": figure2_path,
-        "figure3_tex": figure3_path,
         "summary": summary_path,
         "capture": capture_path,
         "vcd_risk_coverage": vcd_curve_path,
@@ -1015,6 +1039,7 @@ def write_analysis_artifacts(
 
 __all__ = [
     "build_exp1_dynamic_table",
+    "build_exp1_performance_table",
     "build_exp1_static_table",
     "build_exp2_attribution_table",
     "write_analysis_artifacts",

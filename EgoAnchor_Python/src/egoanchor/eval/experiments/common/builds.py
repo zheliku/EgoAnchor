@@ -44,6 +44,22 @@ def source_tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+def source_trees_sha256(roots: Mapping[str, Path]) -> str:
+    """按稳定标签联合摘要多个 Python 源码树。"""
+
+    if not roots:
+        raise ValueError("联合源码摘要至少需要一个源码树")
+    digest = hashlib.sha256()
+    for label, root in sorted(roots.items()):
+        if not label:
+            raise ValueError("联合源码摘要的源码树标签不得为空")
+        digest.update(label.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(source_tree_sha256(root).encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def begin_build(
     output_root: Path,
     *,
@@ -214,6 +230,7 @@ __all__ = [
     "output_map",
     "read_build_manifest",
     "source_tree_sha256",
+    "source_trees_sha256",
     "validate_output_files",
     "write_build_manifest",
 ]

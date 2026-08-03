@@ -24,7 +24,7 @@ MINIMUM_PARTICIPANTS: Final = 18
 """每项冻结结局进入正式推断所需的最小完整配对人数。"""
 
 METHOD_LABELS: Final = {
-    ONE_EURO: "One-Euro Anchor",
+    ONE_EURO: "One-Euro",
     EGOANCHOR: "EgoAnchor",
 }
 """内部方法 ID 到论文显示名的映射。"""
@@ -133,8 +133,8 @@ AQ_SCALE_ITEMS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
 }
 """预实验冻结前后两种 AQ 模式的唯一条目契约。"""
 
-PRIMARY_OUTCOMES: Final = ("Q1", "Q8", "Q2", "Q9", "Q3", "Q6", "Q7")
-"""主证实家族的冻结顺序。"""
+PRIMARY_OUTCOMES: Final = ("Q1", "Q2", "Q3", "Q6", "Q7", "Q8", "Q9")
+"""主证实家族按题号升序排列的冻结报告顺序。"""
 
 SCALE_OUTCOMES: Final = ("AQ_EQ", "AQ_IQ", "TIA_RC", "TIA_UP", "STIAS")
 """已发表量表家族的冻结顺序。"""
@@ -255,7 +255,7 @@ class Exp3Data:
 
 @dataclass(frozen=True, slots=True)
 class ScoreData:
-    """保存结果统计和两张正文箱线图共同消费的派生长表。"""
+    """保存结果统计和正文双排复合图共同消费的派生长表。"""
 
     block_scores: pd.DataFrame
     """有效区块的原始条目与 AQ 子量表分。"""

@@ -24,8 +24,10 @@ from egoanchor.eval.experiments.experiment_3 import (
     plan_assets,
     validate_workflow,
 )
+from egoanchor.eval.experiments.experiment_3 import workflow as experiment_workflow
 from egoanchor.eval.experiments.experiment_3.analysis import (
     MAIN_FAMILY,
+    PRIMARY_OUTCOMES,
     SCALE_FAMILY,
     analyze_scores,
     build_analysis,
@@ -71,6 +73,11 @@ class Experiment3Tests(unittest.TestCase):
         self.assertEqual(settings.confidence_level, 0.95)
         self.assertEqual(settings.target_participants, 24)
         self.assertEqual(settings.minimum_participants, 18)
+        self.assertEqual(
+            PRIMARY_OUTCOMES,
+            ("Q1", "Q2", "Q3", "Q6", "Q7", "Q8", "Q9"),
+        )
+        self.assertEqual(settings.figure_size, (7.15, 4.45))
         source = PAPER_CONFIG.read_text(encoding="utf-8")
         cases = (
             ("alpha", "alpha = 0.05", "alpha = 0.04", "冻结 alpha=0.05"),
@@ -141,9 +148,9 @@ class Experiment3Tests(unittest.TestCase):
             ),
             (
                 "nan_figure",
-                "primary_width_inches = 7.15",
-                "primary_width_inches = nan",
-                "primary_width_inches 必须是有限浮点数",
+                "width_inches = 7.15",
+                "width_inches = nan",
+                "width_inches 必须是有限浮点数",
             ),
         )
         with tempfile.TemporaryDirectory() as directory:
@@ -227,7 +234,7 @@ class Experiment3Tests(unittest.TestCase):
                     "QUARTILE(Derived!$D$336:$D$359,1)",
                     str(workbook["Analysis"]["E88"].value),
                 )
-                self.assertEqual(workbook["Analysis"]["A108"].value, "Q7")
+                self.assertEqual(workbook["Analysis"]["A108"].value, "Q9")
                 self.assertEqual(workbook["Analysis"]["C108"].value, "Gamepad")
                 self.assertEqual(workbook["Analysis"]["A111"].value[:1], "D")
                 self.assertEqual(workbook["Analysis"]["A120"].value[:1], "E")
@@ -505,8 +512,8 @@ class Experiment3Tests(unittest.TestCase):
             self.assertEqual({path.name for path in analysis_root.iterdir()}, {marker.name})
             self.assertFalse(tuple(analysis_root.parent.glob(".analysis.build-*")))
 
-    def test_complete_build_plans_both_figures_and_subjective_table(self) -> None:
-        """完整构建按固定名称生成两张正文图与完整结果表。"""
+    def test_complete_build_plans_assets_and_rejects_changed_shared_style(self) -> None:
+        """完整构建可发布，并在共享视觉样式变化后拒绝旧清单。"""
 
         settings = replace(load_settings(), bootstrap_iterations=1000)
         source = RAW_WORKBOOK.resolve()
@@ -532,7 +539,12 @@ class Experiment3Tests(unittest.TestCase):
             self.assertTrue(
                 (analysis_root / "results" / "experiment3_analysis.xlsx").is_file()
             )
-            self.assertTrue((analysis_root / "tex" / "exp3_subjective.tex").is_file())
+            table_path = analysis_root / "tex" / "exp3_subjective.tex"
+            self.assertTrue(table_path.is_file())
+            table_source = table_path.read_text(encoding="utf-8")
+            self.assertIn(r"\begin{table}[t]", table_source)
+            self.assertNotIn(r"\begin{table*}", table_source)
+            self.assertNotIn("[Q1, Q3]", table_source)
 
             paths = ExperimentPaths(
                 project_root=python_root,
@@ -555,13 +567,36 @@ class Experiment3Tests(unittest.TestCase):
                 ),
             ):
                 plan = plan_assets()
+                implementation_root = Path(
+                    experiment_workflow.analysis.__file__
+                ).resolve().parent
+                visuals_root = implementation_root.parents[3] / "visuals"
+                actual_trees_sha256 = experiment_workflow.source_trees_sha256
+
+                def changed_style_sha256(source_roots: dict[str, Path]) -> str:
+                    """只替换共享 visuals 摘要，模拟 style.py 内容变化。"""
+
+                    self.assertEqual(
+                        source_roots["visuals"].expanduser().resolve(),
+                        visuals_root.resolve(),
+                    )
+                    current = actual_trees_sha256(source_roots)
+                    return "0" * 64 if current != "0" * 64 else "1" * 64
+
+                with (
+                    mock.patch.object(
+                        experiment_workflow,
+                        "source_trees_sha256",
+                        side_effect=changed_style_sha256,
+                    ),
+                    self.assertRaisesRegex(ValueError, "分析实现已变化"),
+                ):
+                    plan_assets()
             self.assertEqual(
                 {asset.key for asset in plan.assets},
                 {
                     "figure4_png",
                     "figure4_pdf",
-                    "figure5_png",
-                    "figure5_pdf",
                     "subjective_table",
                 },
             )
@@ -617,23 +652,19 @@ class Experiment3Tests(unittest.TestCase):
             self.assertGreater(results.stat().st_size, 20_000)
             self.assertEqual(
                 set(figures),
-                {"figure4_png", "figure4_pdf", "figure5_png", "figure5_pdf"},
+                {"figure4_png", "figure4_pdf"},
             )
             for path in figures.values():
                 self.assertGreater(path.stat().st_size, 10_000)
-            expected_sizes = {
-                "figure4_png": tuple(
-                    round(value * settings.figure_dpi)
-                    for value in settings.primary_figure_size
-                ),
-                "figure5_png": tuple(
-                    round(value * settings.figure_dpi)
-                    for value in settings.scale_figure_size
-                ),
-            }
-            for key, expected_size in expected_sizes.items():
-                with Image.open(figures[key]) as image:
-                    self.assertEqual(image.size, expected_size)
+            figure_sizes = {"figure4_png": settings.figure_size}
+            for key, figure_size in figure_sizes.items():
+                with self.subTest(key=key):
+                    full_canvas = tuple(
+                        round(value * settings.figure_dpi)
+                        for value in figure_size
+                    )
+                    with Image.open(figures[key]) as image:
+                        self.assertEqual(image.size, full_canvas)
 
             bad_paired = scores.paired_scores.copy()
             bad_paired.at[bad_paired.index[0], "Difference"] += 0.25

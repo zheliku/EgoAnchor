@@ -49,7 +49,7 @@ class ArtifactSpec:
 
 @dataclass(frozen=True, slots=True)
 class ArtifactContract:
-    """保存实验三 XLSX、TeX 和两张图的唯一产物集合。"""
+    """保存实验三 XLSX、TeX 和正文复合图的唯一产物集合。"""
 
     version: int
     """发布产物契约版本；升版即拒绝旧路径与旧清单。"""
@@ -61,22 +61,16 @@ class ArtifactContract:
     """论文十二项主观结果表。"""
 
     figure4_png: ArtifactSpec
-    """七个主条目箱线图的 PNG。"""
+    """十二项主观结局双排复合图的 PNG。"""
 
     figure4_pdf: ArtifactSpec
-    """七个主条目箱线图的 PDF。"""
-
-    figure5_png: ArtifactSpec
-    """五项已发表量表结局箱线图的 PNG。"""
-
-    figure5_pdf: ArtifactSpec
-    """五项已发表量表结局箱线图的 PDF。"""
+    """十二项主观结局双排复合图的 PDF。"""
 
     def __post_init__(self) -> None:
         """保证清单键和目录内文件名在完整契约中都唯一。"""
 
-        if self.version != 4:
-            raise ValueError("实验三产物契约版本必须为 4")
+        if self.version != 7:
+            raise ValueError("实验三产物契约版本必须为 7")
         keys = tuple(spec.key for spec in self.outputs)
         locations = tuple(
             (spec.category, spec.canonical_name) for spec in self.outputs
@@ -95,23 +89,19 @@ class ArtifactContract:
             self.subjective_table,
             self.figure4_png,
             self.figure4_pdf,
-            self.figure5_png,
-            self.figure5_pdf,
         )
 
     @property
     def figures(self) -> tuple[ArtifactSpec, ...]:
-        """按 Figure 4、Figure 5 和 PNG、PDF 顺序返回四个图文件。"""
+        """按 PNG、PDF 顺序返回正文 Figure 4 的两个文件。"""
 
         return (
             self.figure4_png,
             self.figure4_pdf,
-            self.figure5_png,
-            self.figure5_pdf,
         )
 
 EXP3_ARTIFACTS: Final = ArtifactContract(
-    version=4,
+    version=7,
     results_workbook=ArtifactSpec(
         key="results_workbook",
         category="results",
@@ -127,25 +117,13 @@ EXP3_ARTIFACTS: Final = ArtifactContract(
     figure4_png=ArtifactSpec(
         key="figure4_png",
         category="figures",
-        canonical_name="figure4_exp3_primary_outcomes.png",
+        canonical_name="figure4_exp3_subjective_outcomes.png",
         kind="png",
     ),
     figure4_pdf=ArtifactSpec(
         key="figure4_pdf",
         category="figures",
-        canonical_name="figure4_exp3_primary_outcomes.pdf",
-        kind="pdf",
-    ),
-    figure5_png=ArtifactSpec(
-        key="figure5_png",
-        category="figures",
-        canonical_name="figure5_exp3_published_scales.png",
-        kind="png",
-    ),
-    figure5_pdf=ArtifactSpec(
-        key="figure5_pdf",
-        category="figures",
-        canonical_name="figure5_exp3_published_scales.pdf",
+        canonical_name="figure4_exp3_subjective_outcomes.pdf",
         kind="pdf",
     ),
 )

@@ -11,7 +11,7 @@ from ..common import (
     DEFAULT_PAPER_CONFIG_PATH,
     PlannedAsset,
     read_build_manifest,
-    source_tree_sha256,
+    source_trees_sha256,
     validate_output_files,
 )
 from . import analysis
@@ -28,13 +28,23 @@ from .data import (
 from .data import load_batch_paths
 
 
-_EXPERIMENT_FIGURE_KEYS = frozenset(
+_AUDIT_FIGURE_KEYS = frozenset(
     f"figure{figure}{panel}_{suffix}"
     for figure in (2, 3)
     for panel in "abcd"
     for suffix in ("pdf", "png")
 )
-"""一次完整构建必须声明的实验一/二面板键。"""
+"""一次完整构建必须声明的实验一/二冻结审计面板键。"""
+
+_PAPER_FIGURE_KEYS = frozenset(
+    f"figure{figure}_composite_{suffix}"
+    for figure in (2, 3)
+    for suffix in ("pdf", "png")
+)
+"""v2 正文使用的两张原生组合图键。"""
+
+_EXPERIMENT_FIGURE_KEYS = _AUDIT_FIGURE_KEYS | _PAPER_FIGURE_KEYS
+"""复制到论文目录的完整实验一/二图片集合。"""
 
 
 def describe_workflow(root: Path | None = None) -> dict[str, Any]:
@@ -170,9 +180,6 @@ def analyze_workflow(
         str(path): record.workbook_sha256
         for path, record in zip(workbooks, records, strict=True)
     }
-    figure_tex_directory = paths.experiment_asset_destination.relative_to(
-        paths.paper_root
-    ).as_posix()
     analysis_settings = load_settings()
     config_digest = settings_sha256()
     with stage_progress("analyze", 8, "stage") as progress:
@@ -186,7 +193,6 @@ def analyze_workflow(
         payload = build_analysis(
             workbooks,
             active / "analysis",
-            figure_tex_directory,
             cache_root=paths.task_analysis_root,
             batch_id=batch_id,
             workbook_sha256=workbook_sha256,
@@ -224,7 +230,13 @@ def plan_assets(*, root: Path | None = None) -> ArtifactPlan:
     if build_result.get("config_sha256") != settings_sha256():
         raise ValueError("实验一/二分析参数已变化，请重新运行 analyze exp1-2")
     implementation_root = Path(analysis.__file__).resolve().parent
-    if build_result.get("implementation_sha256") != source_tree_sha256(implementation_root):
+    implementation_digest = source_trees_sha256(
+        {
+            "analysis": implementation_root,
+            "visuals": implementation_root.parents[3] / "visuals",
+        }
+    )
+    if build_result.get("implementation_sha256") != implementation_digest:
         raise ValueError("实验一/二分析实现已变化，请重新运行 analyze exp1-2")
     expected_inputs = {
         f"task_{record.task_number}": {
@@ -248,7 +260,7 @@ def plan_assets(*, root: Path | None = None) -> ArtifactPlan:
 
     outputs = validate_output_files(build_result)
     if not _EXPERIMENT_FIGURE_KEYS.issubset(outputs):
-        raise ValueError("当前 analysis 的图片清单必须恰好覆盖图二和图三的八个 PNG/PDF 面板")
+        raise ValueError("当前 analysis 的图片清单必须覆盖冻结审计面板和两张正文组合图")
     resolved_figure_root = figure_root.resolve()
     resolved_table_root = (analysis_root / "tex" / "tables").resolve()
     copies: list[PlannedAsset] = []

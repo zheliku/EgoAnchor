@@ -531,8 +531,8 @@ def _write_choices(workbook: Workbook, choices: pd.DataFrame) -> None:
         _choice_cross_table(choices),
         (
             ("Preference", "总体偏好＼信任选择", 26, "text"),
-            (EGOANCHOR, "EgoAnchor", 14, "integer"),
-            (ONE_EURO, "One-Euro Anchor", 18, "integer"),
+            (EGOANCHOR, METHOD_LABELS[EGOANCHOR], 14, "integer"),
+            (ONE_EURO, METHOD_LABELS[ONE_EURO], 18, "integer"),
             ("No_Preference", "无明显偏好", 16, "integer"),
         ),
     )

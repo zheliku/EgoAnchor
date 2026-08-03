@@ -18,7 +18,7 @@
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
 10. 每次操作完后记得更新AGENTS.md
-11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；最新中文工作稿为 `egoanchor_cn_ai_v8.tex`，文件名中的 `ai` 表示该版本使用 AI 辅助撰写。该稿目前尚不可用，只供继续修改和内部审阅；`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
+11. 注意论文当前主稿路径是 `2026-EgoAnchor/`，使用 LaTeX 编写；最新中文工作稿为 `egoanchor_cn_v2.tex`。该稿第 3 章当前由 Claude 重写，其他 AI 不得回退、覆盖或用旧稿替换该章。`egoanchor_cn_ai_v8.tex`、`egoanchor_cn_v6.tex`、`egoanchor_cn_v7.tex` 与 `egoanchor_cn_v8.tex` 作为旧稿保留。修改后使用本机 XeLaTeX（推荐 `latexmk -xelatex`）编译检查通过。
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
 
@@ -26,7 +26,30 @@
 
 ## IEEE VR 2027 论文路线
 
-当前中文工作稿定位为系统论文。路线以 `2026-EgoAnchor/egoanchor_cn_ai_v8.tex` 和 `2026-EgoAnchor/plan.md` 的系统论文框架为准；文件名中的 `ai` 表示该版本使用 AI 辅助撰写。**`egoanchor_cn_ai_v8.tex` 为当前最新工作稿（2026-08-02 完成实验三结果回填，XeLaTeX 编译通过 12 页：正文含图表 p1--p10、参考文献 p11--p12）**；`egoanchor_cn_v6/v7/v8.tex` 作为旧稿保留，不再继续修改。旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
+当前中文工作稿定位为系统论文。路线以 `2026-EgoAnchor/plan.md` 的系统论文框架为准。**`egoanchor_cn_v2.tex` 为当前正在学术润色的工作稿（新编号系列；makefile `SOURCE` 已指向它，`latexmk -xelatex` 编译通过）**；`egoanchor_cn_ai_v8.tex`（2026-08-02 完成实验三结果回填，编译 12 页）与 `egoanchor_cn_v6/v7/v8.tex` 保留为先前稿，文件名中的 `ai` 表示该版本使用 AI 辅助撰写。旧 `IEEEVR2027_RQ12_REFACTOR_PLAN.md` 文件当前不存在，不再作为权威计划引用。
+
+v2 稿第 3 章当前由 Claude 单独重写。图表任务不得改写、回退或用旧稿覆盖该章；若图表调整涉及跨章引用，先核对 Claude 的最新内容。
+
+v2 稿第 3/4 章的已落定结构与口径（2026-08-03 完成，改动前先核对代码，不要凭旧稿回退）：
+
+- 第 3 章为「系统概览 / 感知后端 / 锚定运行时」。锚定运行时固定三小节：`sec:alignment` 采集时刻配准与观测准入（对应 G1+G2）、`sec:smoothing` 时间索引轨迹合成、`sec:staticlock` 运动感知输出与生命周期（共同定义 G3）。G1/G2/G3 只在 3.3 开头做一次紧凑映射，不逐段复述。
+- 公式清单：`eq:visibility`、`eq:depth-score`、`eq:vcd`、`eq:temporal-alignment`、`eq:spatial-alignment`、`eq:admission`、`eq:target-time`、`eq:staticlock`、`eq:lock-creep`、`eq:unlock`、`eq:cusum`。`eq:deadband` 与集合记号 `A_j` 已删除，不得复活。`eq:unlock` 必须保留（第 5 节 Start-transition 510.36 ms 与第 6 节的设计启示都需要可追溯机制），且必须用 `aligned` 折成两行，单行会溢出栏宽 79.7 pt。
+- `eq:vcd` 按代码写成"仅对有效模态取加权几何平均并重归一化权重"，因此无纹理模型退化为 `R = V * S_D`；不得写成 SSIM、也不得写成对深度残差取指数。颜色分为 LAB 三通道加权 ZNCC（L 权重 0.3）并映射 `(rho+1)/2`。
+- 第 4 章参数值一律以代码为准，已按 `StaticLockController.cs`、`HistoricalInterpolationStrategy.cs`、`pose_quality.py`、`depth_alignment.py` 核对。`AnchorPolicyHost.cs` 的 `staticSpeedThresholdMps=0.015`/`staticAngularSpeedThresholdDps=1.5` 是诊断用运动分类阈值，**不是入锁门槛**，不得写进论文的入锁条件。
+- `fig:arch` 使用 `figures/pipeline.png`（无矢量源）。图内标注写作"视觉感知后端"，正文统一为"感知后端"；图内也没有 `t_f/t_a/t_r` 标注，因此三时间线的映射由 caption 承担，正文不得声称该图直接标出三条时间线。
+- 术语口径：正文统一"感知后端"（不写"视觉感知后端"/"视觉后端"）。**方法名全文一律用短名 Arrival / Capture / One-Euro**（2026-08-03 用户决定），与图表一致；`variant_matrix_id` schema 中的 *Arrival-Hold* / *Capture-Hold* / *One-Euro Anchor* 只是数据管线 ID，不得回填正文。"StaticLock"在 3.3.3 首次与"静止锚定"绑定后，第 5/6 节可直接使用。"冻结"只保留运行时含义（冻结保持、冻结解锁判据），实验设计与分析口径一律写"预先固定"。
+- **G1/G2/G3 标签只在两处出现**：§1 第三段的缺口定义处，和 §3.3 开头的一次紧凑映射。§1 方案段与 §5.2 结果段不再回标（2026-08-03 移除 7 处）——机制名就在同句，标签零信息增量，且逐段回标会让自创分类学显得像核对清单。三缺口分解本身是脊梁，不得删：每个缺口都有对应的单组件消融把它隔离并给出数字，这是自创框架唯一站得住的辩护。
+- **"端到端"不加防守性限定语**。头显 + 外部工作站的两层部署是贡献 1（解耦架构）本身，不是局限，因此 §1 用陈述句直接披露部署形态（"对象锚定运行时运行于头显，感知后端运行于外部GPU工作站"），读者据此不会把"端到端"误读为计算自包含。不要写"此处的端到端指……而非……"这类在宣告系统的同句里预先防守的从句。"端到端时延"是 AR 标准术语，与此无关。
+- **Teaser 为占位状态**：`\teaser{}` 已就位（vgtc 原生命令，`fig:teaser` = Figure 1，正文所有图号靠 `\ref` 自动顺移）。占位框用 `\dimexpr\linewidth-2\fboxsep-2\fboxrule` 定宽，否则溢出 4.5 pt。投稿前必须替换为真实图：目标是"静止 / 拿起移动 / 遮挡 / 恢复"四阶段与 Arrival 基线并列的时间序列，候选素材 `figures/replay_grid.pdf`。
+- 实验二 StaticLock 归因行 `中心化静止 P95` 只有平移（mm），因此 17.06 倍必须写成"中心化静止**平移**误差"，并把旋转证据指向图 2(b)；不得手工拼装旋转行。表 1 的"头动泄漏 P95"与正文"中心化平移泄漏"是同一指标，已在指标定义处标注对应关系。
+
+全文去防守性表述口径（2026-08-03 完成，参照 `reference/` 中 VRGaussianAvatar 的表述分工）：
+
+- **正面定义作用域，不用否定句预先防守**。§1 方案段末句改为"系统构建于成熟组件之上（开放词表分割、双目深度估计与模型驱动的零样本6DoF位姿估计），本文的贡献在于将这些异步视觉能力组织为面向PMR的观测到锚点契约"，替换原"该设计不重新发明零样本位姿估计"。§6.1 首个小标题由"时间一致性的边界"改为"**时间一致性的作用域**"，段首直接给出作用域（帧对齐处理相机运动），再把采集后目标运动界定为需独立测量的另一类误差；第二个小标题由"边界"改为"**权衡**"，因该段内容是真实权衡而非边界。
+- **边界集中在 §6.2，不在正文中途插入免责从句**。§6.1 结尾原"其能否转化为用户侧的感知收益，仍需等待来源可核验的正式数据"已删（§5.3 与 §6.2 已各自声明），§6.1 首段结尾由"不能由单一'端到端时延'指标替代"改为"须分别测量与报告"。§6.2 第二段重写为先给出测量含义（"文中误差因此是平台参考下的相对误差，而非外部光学系统给出的物理真值"），再一次性列出约束，不再以三个"无法/不能"开头堆叠。
+- **不在已有定义处再补否定**。§5.2 原"这个量是系统输出时间线的转换代价，不是网络或单次视觉推理时延"已删——Start-transition 在 §5.1 转换代价处已定义。§5.2 动态段首由"动态指标仍需把……一起解释"改为"动态行为由……共同刻画"。
+- **必须逐字存活的强制句**（AGENTS.md:172 与诚实边界）：§6.1 的"两者均不等价于零时延的当前时刻配准误差，帧对齐也不是对物体运动时延的补偿"；§5.2 的"对齐残差描述移除相位差后的轨迹保真度，current-time RMSE 描述同一渲染时刻的实际配准误差，前者不能替代后者"；§6.2 的平台参考非真值、共模漂移不可观测、日常物体无平台参考、实验三不主张感知效用四项。去防守性改写**不得改变段落在论证中的功能，也不得删除任何强制项**——只允许重排语序、把否定改写为作用域定义、改小标题。
+- 已知遗留缺口（非本轮引入，历次稿件均未披露）：实验一/二为单操作员采集，正文只写"五个场景专用连续session"，未声明操作员数量。诚实边界第 5 条要求帧不作为独立样本量——当前正文只报告片段级 median [Q1, Q3]，无推断统计，故未违反；但若后续加入任何推断统计或声明 N，必须先披露单操作员事实。
 
 v9 相对 v8 的结构性变更（供后续接手者判断，不要退回 v8 结构）：
 
@@ -43,13 +66,13 @@ v9 相对 v8 的结构性变更（供后续接手者判断，不要退回 v8 结
 
 1. 感知后端与锚定运行时解耦的端到端对象锚定系统，以及基于 `frame_id` 的采集时刻世界对齐。
 2. 观测到锚点运行时：VCD 观测接纳、Kalman 状态估计与 Linear/SLERP 自适应历史合成、显式静止锚定和生命周期管理。
-3. 系统实现与分层评估：端到端系统表征、关键组件归因和计划中的跨对象任务层用户研究。
+3. 系统实现与分层评估：具有平台参考的端到端系统表征与关键组件归因。**2026-08-03 起不再把"计划中的用户研究设计"列为贡献**：无数据的研究设计不构成贡献，写在贡献列表里反而暴露实验未完成；参考论文的第三项贡献同样由结果支撑。实验三仍写在第 5 节作为设计与状态说明，摘要、贡献列表和结论均不再宣告"预先固定测量与分析口径"。
 
 论文外部不再使用 RQ1/RQ2/RQ3 作为顶层结构。当前实验组织为：
 
 - **实验一：端到端系统表征**。在静止目标与主动头动、起停 6DoF、持续平移/旋转、遮挡恢复条件下，比较 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor* 的系统行为。
 - **实验二：系统设计归因**。在同一日志格式和平台参考下关闭单一设计，归因采集时刻世界对齐、VCD 观测接纳、时序合成和静止锚定的贡献与代价。
-- **实验三：日常物体上的跨对象感知评价**。`2 方法 x 3 物体 = 6 区块` 被试内设计，每区块 3 任务 + 13 条目（问卷 v5），只比较 *One-Euro Anchor* 与完整 *EgoAnchor*；**2026-07-25 起改为纯主观评价，不采集任何客观任务数据**。**2026-08-02 完成正式结果回填**：24 名参与者，144 个有效区块，主证实家族 5/7 项显著（静止稳定、位置正确、恢复一致、依赖意愿、稳定--响应平衡），已发表量表家族 4/5 项显著（AQ-EQ、TiA-R/C、TiA-U/P、S-TIAS），论文正文包含完整结果叙述、表~\ref{tab:exp3-subjective}、图~\ref{fig:exp3-primary} 和图~\ref{fig:exp3-scales}。**唯一权威文件是 `2026-EgoAnchor/experiment_3_questionnaire_design_zh.md`（v5 完整计划：结构+测量+分析+汇报）**；原结构文档 `experiment_3_design_zh.md` 已于 2026-07-26 并入该文件并删除，不得再引用。
+- **实验三：日常物体上的跨对象感知评价**。`2 方法 x 3 物体 = 6 区块` 被试内设计，每区块 3 任务 + 13 条目（问卷 v5），只比较 *One-Euro Anchor* 与完整 *EgoAnchor*；**2026-07-25 起改为纯主观评价，不采集任何客观任务数据**。当前工作簿的采集日期与稿件时间存在冲突，源头和参与者记录未经人工确认前，只能用于分析管线和图表样式预览，不得写入论文结果。**唯一权威文件是 `2026-EgoAnchor/experiment_3_questionnaire_design_zh.md`（v5 完整计划：结构+测量+分析+汇报）**；原结构文档 `experiment_3_design_zh.md` 已于 2026-07-26 并入该文件并删除，不得再引用。
 
 VCD 的三个语义层次不得混淆：
 
@@ -65,7 +88,7 @@ VCD 的三个语义层次不得混淆：
 - *EgoAnchor*：采集时刻世界复合、VCD 接纳、Kalman Linear/SLERP 合成、显式静止锚定和生命周期管理。
 - 组件消融使用 `EgoAnchor w/o <component>` 风格命名，不再恢复旧 RQ 命名或旧 CLI 兼容层。
 
-IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献最多另占 2 页。**当前处于撰写阶段，页数不作硬约束**：内容可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到投稿上限。不要为了压页数提前删减实质内容或牺牲论证完整性；也不要因为超页而拒绝补写章节。压缩留到定稿前的专门一轮处理，届时优先压缩公式展开、审计指标叙述和重复的边界说明，而不是删证据或删章节。`egoanchor_cn_v7.tex` 正文占 p1--p8、参考文献起于 p9。上一版 `egoanchor_cn_v8.tex` 在 §5.5 改写为纯主观感知评价后正文占 p1--p10、参考文献起于 p11，超出上限 1 页；最新 `egoanchor_cn_ai_v8.tex` 仍是尚不可用的 AI 辅助工作稿，页数压缩留待内容可用后的定稿轮处理。实验三是已规划的感知效用验证，当前只写冻结设计并占用一张结果表（`tables/exp3_subjective.tex`，数据待回填）；Figure 4 主条目箱线图与 Figure 5 已发表量表箱线图在正式结果回填前保持注释，避免 include 缺失文件导致编译失败。
+IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献最多另占 2 页。**当前处于撰写阶段，页数不作硬约束**：内容可以适当超出 9 页，先把论述、证据和细节写足，最后统一浓缩到投稿上限。不要为了压页数提前删减实质内容或牺牲论证完整性；也不要因为超页而拒绝补写章节。压缩留到定稿前的专门一轮处理，届时优先压缩公式展开、审计指标叙述和重复的边界说明，而不是删证据或删章节。`egoanchor_cn_v2.tex` 是当前工作稿。实验三的来源尚未人工核验，因此不在 v2 中引用数据图表；核验后的正文候选是一张双排分组配对图和一张 12 结局完整结果表。
 
 实验三的完整冻结设计固定在 `2026-EgoAnchor/experiment_3_questionnaire_design_zh.md`（**v5 完整计划书，2026-07-26 起为唯一权威文件**；原结构文档 `experiment_3_design_zh.md` 已并入并删除），`plan.md` 只保留摘要、论文 §5.5 只保留可发表叙述；改动前必须先读该文件，其"版本沿革与决策记录"节列出了被推翻的旧决定，**不得改回**。要点：**实验三是纯主观评价，不采集任何客观任务数据**（无任务时间、无成功率、无行为探针；T3 的四按钮面板行为任务已删除）。条件只有 *One-Euro Anchor* 与完整 *EgoAnchor*，*Arrival-Hold* 只作训练阶段演示、不进入推断统计。交叉核心对象为 `blue_mouse`、`stapler` 与 `gamepad`（覆盖尺寸/纹理/几何三个维度；手柄强制单手握持单侧搬移，使另一手保持握持控制器），`earphone` 作困难样例只由操作员采集并兼作训练物体。**区块结构是物体最外层、两方法嵌套在同一物体内**：物体外层因为 `--object` 只在服务启动时读取、协议无运行时切换动作，且同一物体的两方法由同一次感知会话服务；方法内层是灵敏度选择，同物体相邻 A/B 给出最紧配对。三项任务为静止观察、拿起放下、遮挡恢复，**固定顺序**（对应三个不同运行时状态，非同一构念的三次测量），合计 45--60 s 后统一评分，**不在每项任务后中断**（GPT 曾提议的任务级即时评分已否决）。两类人为探针（读 4 字符码、射线选中小目标）均已评估否决：整体游移不影响可读性、单次注视内抖动仅 0.17 个字高，正确率会撞天花板；小目标选择受追踪补偿影响；两者还要额外花版面解释。**遮挡时长必须使锚点停留在 `FrozenUncertain` 而不进入 `Lost`（0.6--0.9 s 起，预实验校准后冻结）**：`AnchorStateMachine.cs:105-115` 的实际分支是 `<=0.45 s` 滑行、`0.45--1.0 s` 冻结、`>=1.0 s` 丢失，因此 **0.6--0.9 s 落在冻结区间而非滑行区间**（旧文档称"coasting 区间"与 0.45 s 滑行上限自相矛盾，已于 2026-07-25 修正）。更长的遮挡（含旧文档的 2 s 与 2.5 s）会使两方法都进入 `Lost` 并等待同一次服务器 REGISTER（中位数 750.26 ms），使恢复条目主要反映感知后端而非运行时；该区间还须避开 0.45 s 边界，否则计时抖动会把试次随机分到两种生命周期状态。生命周期状态分布与两方法的候选/VCD/接纳率一致性是必须报告的操纵检验。运行时参数不得为实验三修改。日常物体上没有同平台参考位姿，实验三不得报告绝对配准误差，只报主观评价和无需真值的自参考稳定性日志，且不得作中介效应主张；**也不得声称提供任务表现证据**，该边界必须在讨论/局限中明说。Exp3 使用独立的 2 runtime `variant_matrix_id`、独立启动门禁和与 schema-v2 隔离的日志与分析模块，不复用实验一/二的九路矩阵。
 
@@ -73,11 +96,11 @@ IEEE VR 2027 的投稿上限是正文、图和表最多 9 页，参考文献最�
 
 **顺序平衡已统一为 24 平衡单元**：3 物体的 6 种全排列 × 互补方法序列 S1(A--B, B--A, A--B)/S2(取反) × A/B 标签到方法的映射，N=24 时每单元 1 人、先行方法 12/12；匿名标签在参与者内全程稳定绑定同一方法，否则最终强制选择无从解释。N=18 下限时优先保先行方法与标签映射平衡。旧的"3 拉丁方 × 2 条件顺序 = 6 组"方案已废弃。**统计固定为参与者内 Wilcoxon + 分层 Holm**：七个自制条目逐项分析，不合并总分；AQ-EQ/AQ-IQ 先计算区块内子量表均值，再与七个自制条目一起在三物体上取均值。TiA 反向项先按 6−raw 换向，再分别计算 TiA-R/C 与 TiA-U/P 的有效条目均值；S-TIAS 取三项均值。这三项结局均来自每种方法一次的方法级施测，不跨物体汇总。主证实家族包含 Q1/Q8/Q2/Q9/Q3/Q6/Q7，已发表量表家族包含 AQ-EQ/AQ-IQ/TiA-R/C/TiA-U/P/S-TIAS；Q10 次级，选择、偏好强度、区分信心与开放题只作描述。Wilcoxon 使用含并列中秩的双侧条件精确符号置换：配对差先四舍五入至 12 位小数以恢复理论并列，删除零差，再对全部符号分配求精确 p；不得改回正态近似。“条件精确”只指在给定非零绝对差及其中秩后穷举符号分配，仍要求零假设下非零配对差的符号可交换，通常由配对差分布关于零对称的假设支撑，不得写成无假设检验。2026-08-01 在真实参与者采集前删除自定义 CLMM：其 L-BFGS-B 逆 Hessian 不能作为协方差，Wald 推断无效，数值 Hessian又近奇异；当前不再保留 CLMM 配置、代码、结果页或论文叙述。逐物体结果只作 7 条目 × 3 物体的配对描述，不计算 p 值或星号。
 
-**同步状态（2026-08-02）**：`egoanchor_cn_ai_v8.tex` §5.5、`plan.md` 与实验三权威设计已同步到条件精确 Wilcoxon、其符号可交换/差分布对称假设、逐物体仅描述和不再使用 CLMM 的口径。实验三现生成两张正文候选箱线图：Figure 4 上排 4 个、下排 3 个面板，展示 7 个主条目；Figure 5 单行展示已发表量表家族的 5 项结局。若所属家族内 Holm 校正后的 p<.05，则在箱体上方绘制显著性括号并用星号编码该校正后 p；绘图入口会从参与者配对分独立重算精确 Wilcoxon 和分家族 Holm，拒绝与结果表不一致的星号数据。六项分析产物名称与清单键由 v4 不可变契约维护，结果簿写入及回读会核对输入/参数摘要和精确 7×3 逐物体键。当前实现已通过 `egoanchor.eval.tests` 全量 155 项测试；本轮正式预览构建纳入 24/24 名参与者，六页结果簿与两张图均已通过回读和视觉检查。`2026-EgoAnchor/material/reference/EgoAnchor_Experiment3_DataCollection_24P_v5_1_Beautified_Checked_VSCodeSafe.xlsx` 仍是只读美化来源。正式原始输入路径为 `2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx`，其 7 张采集表结构不变：`Participants`/`Records` 只保存人工原始值，TiA 换向与其他公式只在 `Derived`/`Analysis`。模板构造器必须显式指定尚不存在的目标并拒绝覆盖。为兼容 WPS，实时四分位继续使用与 `QUARTILE.INC` 同算法的 `QUARTILE`。
+**同步状态（2026-08-03）**：实验三图产物契约为 v7，只生成 `figure4_exp3_subjective_outcomes.{png,pdf}`。Figure 4 是一张双栏宽的双排复合图，全图共享一个方法图例。上排七个等宽槽依次显示 Stability、Attachment、Recovery、Reliance、Balance、Position 和 Orientation，不显示问卷编号；内部仍以 Q1/Q2/Q3/Q6/Q7/Q8/Q9 作为稳定分析键，纵轴保留 1--7 原始分。下排沿用相同的物理槽宽，五项已发表量表整体居中：AQ-EQ、AQ-IQ 与 S-TIAS 共用 1--7 左轴，TiA R/C 与 TiA U/P 共用 1--5 右轴，两个量尺分区之间留窄缝，不归一化也不共用纵轴。全图使用方法色边框的透明箱体（IQR）、箱内中位数线、均值点、浅色参与者点和浅灰配对线，须线采用 1.5 倍 IQR 规则；配色、字号和网格与实验一、二共用样式。显著性括号仅编码所属冻结家族内 Holm 校正后的 p；绘图入口从参与者配对分重算精确 Wilcoxon 和分家族 Holm，拒绝与结果表不一致的显著性数据。
 
-**实验三结果工作簿现固定为 6 张中文页**：`说明`、`样本与质控`、`主结果`、`分物体描述`、`量表信度`、`选择结果`。`主结果` 只含冻结的 7 个主条目和已发表量表家族的 5 项结局；不再输出 AQ 单项探索行、`Participant_Audit`、`Model_CLMM`、`Open_Coding` 或三张 `Scores_*` 派生底表。`分物体描述` 只含 7×3 配对描述，不写 p、Holm、显著性或 `r_rb`。开放题编码必须放在独立、持久且不会被自动重建覆盖的文件。论文正文使用两张分布图和一张 12 结局完整结果表：`figure4_exp3_primary_outcomes` 展示 7 个主条目，`figure5_exp3_published_scales` 展示已发表量表家族的 5 项结局。各面板使用与主分析一致的参与者级得分：区块级结局先在三个物体上取均值，TiA 两个分量表与 S-TIAS 三项均分使用方法级单次施测得分；图中叠加参与者级得分点和浅灰配对线。若所属家族内 Holm 校正后的 p<.05，则绘制显著性括号并按 `*<.05`、`**<.01`、`***<.001` 编码该校正后 p。TiA 两个面板使用 1--5 理论量尺，其余面板使用 1--7；三个物体只作描述，不分别检验或标星。旧对象展开 Figure 4、效应量森林图和 Figure S1 均已退役。分析参数契约为 v4，不兼容旧的 13 页结果簿、旧图名或来源状态后缀。每轮 `analyze exp3` 先在活动 `analysis` 同级 staging 目录生成并验证 XLSX、TeX、PNG/PDF 和构建清单，再以可回滚的整目录切换发布；失败时保留上一轮完整活动结果。`r_rb_CI_Status=degenerate_at_bound` 时仍只能写"方向完全一致"，不得把 `[1.00, 1.00]` 当置信区间。`Reliability.Measurement_Unit=block_mean` 的 AQ 信度与 `method_single` 的 TiA/S-TIAS 信度不可互比，也不可与原量表发表 α 直接对标。
+**实验三结果工作簿现固定为 6 张中文页**：`说明`、`样本与质控`、`主结果`、`分物体描述`、`量表信度`、`选择结果`。`主结果` 含冻结的 7 个主条目和已发表量表家族的 5 项结局；不再输出 AQ 单项探索行、`Participant_Audit`、`Model_CLMM`、`Open_Coding` 或三张 `Scores_*` 派生底表。`分物体描述` 只含 7×3 配对描述，不写 p、Holm、显著性或 `r_rb`。开放题编码必须放在独立、持久且不会被自动重建覆盖的文件。正文候选使用一张双排分组配对图和一张 12 结局完整结果表；复合 Figure 4 的上排展示七项主结局，下排按 1--7 与 1--5 理论量尺分区展示五项已发表量表结局。旧对象展开 Figure 4、独立 Figure 5、效应量森林图和 Figure S1 均已退役。分析参数契约为 v4，图产物契约为 v7，不兼容旧结果簿、旧图名或来源状态后缀。每轮 `analyze exp3` 先在活动 `analysis` 同级 staging 目录生成并验证 XLSX、TeX、PNG/PDF 和构建清单，再以可回滚的整目录切换发布；失败时保留上一轮完整活动结果。`r_rb_CI_Status=degenerate_at_bound` 时仍只能写"方向完全一致"，不得把 `[1.00, 1.00]` 当置信区间。`Reliability.Measurement_Unit=block_mean` 的 AQ 信度与 `method_single` 的 TiA/S-TIAS 信度不可互比，也不可与原量表发表 α 直接对标。
 
-**实验三正式数据与分析状态（2026-08-02）**：正式分析输入为 `2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx`，包含 24 名参与者的录制数据。分析程序只执行结构、计分、配对和统计一致性 QC，并按 v4 契约写入固定路径，不再维护来源指纹、合成数据门禁、演练隔离目录或来源状态文件名后缀。参与者问卷包仍以 `material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.md` 为唯一事实源，同名 docx 由 `material/build_exp3_questionnaire_docx.py` 从 md 确定性生成，先改 md 再重跑脚本，不得手改 docx。`Participants` 与 `Records` 是正式原始输入，TiA 换向与其他公式只在派生层执行；正式分析从原始评分独立重算，不读取 Excel 公式缓存。不要依赖本机 Excel COM 重算：仓库在网络盘 `P:\` 上，受保护视图可能拒绝 COM 调用并残留锁文件。
+**实验三数据与分析状态（2026-08-03）**：`2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 当前包含 24 组参与者格式记录，但逐格来源审计显示其评分、时间、运行时审计值和开放题与明确标注为合成数据的参考簿高度同源，不能作为正式参与者数据进入论文。分析程序仍可用于结构、计分、配对、统计一致性和图形样式检查；研究团队核验采集日期、参与者记录与原始来源前，不得运行正式资源复制或把数字回填到主稿。参与者问卷包仍以 `material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.md` 为唯一事实源，同名 docx 由 `material/build_exp3_questionnaire_docx.py` 从 md 确定性生成，先改 md 再重跑脚本，不得手改 docx。不要依赖本机 Excel COM 重算：仓库在网络盘 `P:\` 上，受保护视图可能拒绝 COM 调用并残留锁文件。
 
 两次执行边界：Run 1 完成实验一/二采集前全部工程、论文框架、QC、分析骨架和中文采集手册，并保留实验三设计；用户完成功能自检与实验一/二正式采集；Run 2 完成实验一/二分析、图表和论文回填。本轮按用户明确要求，每个 Task 验证后独立提交并推送。
 
@@ -159,18 +182,18 @@ schema-v2 task directory
 - 原始 task 目录保留为只读冷归档；Stage 1 成功后，后续阶段不得再读取 JSON/JSONL。
 - **Stage 1（`data exp1-2 preprocess`）** 只读取缓存缺失或失效 task 的 JSON/JSONL，执行完整 QC 并逐 task 原子发布 XLSX；每个版本化原始目录唯一对应一个共享工作簿缓存，命中时不得重复 QC 或回读 XLSX。不得把 XLSX 之前的任何中间文件作为后续输入。
 - Stage 1 的 schema-v2 reader 按固定文件集合流式解析 JSONL，保留来源行号与行 SHA-256；只读硬 QC 只接受 `variant_matrix_id=exp12_9_smoothed_hermite_v4` 的当前九 runtime 矩阵，并检查主外键、生命周期、事件合并、warmup reference、平滑外推诊断和两端 writer 停止态统计；未消费 candidate 仅作为 latest-only 警告。
-- `analyze exp1-2` 按工作簿 SHA、`paper.toml` SHA 和指标实现指纹复用逐 task JSON 指标缓存，只扫描缓存失效的 Stage 1 XLSX；随后合并五项结果，并在活动批次 `analysis/` 发布八个独立 PDF/PNG 面板、三张 TeX 表和图环境 TeX。它不得回读 raw JSON/JSONL、改写 XLSX、修改 `2026-EgoAnchor` 下的主稿、图片、表格或 PDF。
+- `analyze exp1-2` 按工作簿 SHA、`paper.toml` SHA 和指标实现指纹复用逐 task JSON 指标缓存，只扫描缓存失效的 Stage 1 XLSX；随后合并五项结果，并在活动批次 `analysis/` 发布两张组合图、八个独立审计子图及其 PDF/PNG、四张 TeX 表和绘图工作簿。它不生成 Figure 2/3 的图环境 TeX，也不得回读 raw JSON/JSONL、改写 XLSX 或修改 `2026-EgoAnchor` 下的主稿、图片、表格和 PDF。
 - VCD 连续分数的风险判别性只在最终有效的 `occlusion_started` event 内计算：仅使用完整 EgoAnchor 的 capture-time aligned raw pose 与同 frame 有效平台参考，按分数降序且同分候选整组进入，以保留候选的平均平移误差为 selective risk，并用右连续阶梯积分得到 event AURC。不得按 admission 决策过滤低分候选，不得跨 event 混池候选；论文汇总 event AURC 的 median [Q1, Q3]，并与冻结阈值的 VCD admission 尾部效果分开报告。
 - 旧 Stage 2/3、v2 replay、`egoanchor.eval.workflows` 与 `egoanchor.eval.paper_analysis` 已删除。正式实现统一位于 `egoanchor.eval.experiments`：`experiment_1_2` 与 `experiment_3` 是同级实验包，都使用 `data.py`、`settings.py`、`workflow.py`、`pipeline.py` 四层，实验专属 reader、指标、计分、模型和绘图位于各自 `analysis/` 子包；跨实验编排在 `experiments/workspace.py`，构建清单和事务性资源复制在 `experiments/common`。实验一和实验二共享五任务日志、Stage 1 契约和结果模型，因此保留 `experiment_1_2`，不拆成两个空壳目录，也不保留旧路径兼容层。
 - `pixi run eval` 顶层只保留 `status`、`validate`、`analyze`、`copy-assets` 和 `data`，稳定目标为 `all`、`exp1-2` 与 `exp3`；实验三统计和绘图必须由一次 `analyze exp3` 完成，不再保留单独 `plot`。没有独立 `experiment3.toml`：共享路径及两个实验的路径/资源复制位置分层存于现有 `batch.toml`，统计参数分层存于现有 `paper.toml`；构建配置摘要只覆盖所属实验的 `paper.toml` 科学参数，路径、输入和复制目标由工作流独立核验。文件系统或工具错误返回 1，批次、schema、QC 或论文输入契约失败返回 2。
 - 统计单位固定为 event/segment，不是 frame；先在 session/trial/event/variant 内计算，再做同 event/segment 配对和 session 汇总。
 - 每个场景单独报告，禁止跨场景混池计算全局总分或总排名。
-- 实验一发布一行四个 LaTeX 子图，依次为静止平移、静止旋转、动态平移和动态旋转的误差--抖动双纵轴面板；实验二发布一行四个 LaTeX 子图。图内不重复小标题，图内最小字号固定为 7 pt。
-- 实验一图二以四方法为横轴，左移实心圆表示左轴误差，右移空心菱形表示右轴抖动；静止误差使用中心化 P95，动态左轴必须明确标为 lag-aligned RMSE，动态抖动必须使用同一最佳时延下残差轨迹的帧间增量 P95，不得把真实运动计为抖动。动态表另报告不补偿时延的 current-time RMSE，用于披露当前渲染时刻包含相位差的实际配准误差；不得把原始显示位姿的帧间运动量命名为感知抖动。图 3(c) 只显示 event median 与 IQR，横轴为按 VCD 分数从高到低保留候选的比例，纵轴按有效风险范围收紧；图 3(d) 使用 `Smoothed KF`、`Linear/SLERP`、`Hermite` 的紧凑左上图例，图例背景和边框均保持透明，左侧锚点略向 Y 轴靠拢且不得遮挡刻度文字或原始点。
+- 实验一、二各发布一张 `1 x 4` 双栏组合图，不用 LaTeX 拼接子图。实验一的四个面板依次为静止平移、静止旋转、动态平移和动态旋转；各面板两指标单位相同，共用一个线性纵轴。实验二图 3(d) 只展示 Smoothed KF 与 Linear/SLERP，不展示 Hermite。两图基础字号为 7.4 pt，子图标题为 7.2 pt 加粗。
+- 实验一图二以四方法为横轴，左移实心圆表示误差，右移空心菱形表示抖动；静止误差使用中心化 P95，动态误差使用 lag-aligned RMSE，动态抖动必须使用同一最佳时延下残差轨迹的帧间增量 P95，不得把真实运动计为抖动。合并表另报告不补偿时延的 current-time RMSE，用于披露当前渲染时刻包含相位差的实际配准误差。图 3(c) 保留 event 风险曲线、median 和 IQR，横轴为按 VCD 分数从高到低保留候选的比例。
 - `egoanchor.eval.contracts` 的 workbook 契约继续作为 Stage 1 Excel 的唯一结构来源，完整保留对齐原始位姿、时间、reference、render 和事件字段；论文参数唯一入口是 `egoanchor/eval/config/paper.toml`，正式 CLI 不提供覆盖参数，分析 provenance 必须记录该文件的 SHA-256；每个参数同行保留中文注释。
 - Stage 1 workbook writer 先执行全量硬 QC，再在目标目录写临时 XLSX；写出后独立回读检查分片、表头、行数、类型、主外键、来源集合摘要和超长值，并在替换前复算输入来源哈希，全部通过才原子替换正式文件。单 sheet 超限时使用 `_001`、`_002` 分片；未知 JSONL 字段进入 `row_kv`，超长值进入 `large_values`，不得截断或静默丢弃。内部大值 marker 必须精确绑定来源分片；经过转义的同形原始文本仍按字面量回读。每个物理 sheet 冻结首行，并按列语义写入稳定列宽。Windows 下删除临时文件和原子替换遇到短暂共享锁时有界重试，重试耗尽仍保留旧正式文件并返回文件系统错误。
 - `data exp1-2 preprocess` 先按活动 `batch.json` 解析五个独立任务缓存，只对缓存缺失或失效项检查固定源文件、执行 QC 并发布；一个 task 失败不得改写其他 task 的既有缓存。正式工作簿使用 `task_N_complete.xlsx`，代码版本自动读取当前 Git commit 用于审计，但普通 Git 提交本身不作为缓存失效条件。
-- `analyze` 只在各自活动分析目录生成结果，不回填主稿；每次构建开始即把统一 `build_result.json` 置为 `building`，只有输入、配置、实现与全部产物摘要冻结后才提交 `complete`。`copy-assets` 只接受完整且摘要一致的构建，先让目标实验构造只读资源计划，再联合校验配置、实现、输入、产物 SHA 与目标冲突，全部通过后暂存并以可回滚事务复制。`copy-assets all` 要求两个实验都就绪，不得静默跳过；无参数时默认实验一/二，也可显式指定 `exp3` 或 `all`。实验一/二表格默认复制为 `tables/exp1_static.tex`、`tables/exp1_dynamic.tex` 和 `tables/exp2_design.tex`；实验三始终从 v4 标准路径复制 `figures/panels/figure4_exp3_primary_outcomes.{png,pdf}`、`figures/panels/figure5_exp3_published_scales.{png,pdf}` 与 `tables/exp3_subjective.tex`。来源与是否可作为论文证据属于研究团队的数据治理责任，分析目录不生成来源状态后缀或隔离目录。图环境 TeX 仍由研究者审阅后手工纳入。主稿编译不属于 `pixi run eval`，当前工作稿编译产物为 `2026-EgoAnchor/pdf/egoanchor_cn_ai_v8.pdf`，仅供内部审阅，不是稳定交付版本。
+- `analyze` 只在各自活动分析目录生成结果，不回填主稿；每次构建开始即把统一 `build_result.json` 置为 `building`，只有输入、配置、实现与全部产物摘要冻结后才提交 `complete`。`copy-assets` 只接受完整且摘要一致的构建，先让目标实验构造只读资源计划，再联合校验配置、实现、输入、产物 SHA 与目标冲突，全部通过后暂存并以可回滚事务复制。`copy-assets all` 要求两个实验都就绪，不得静默跳过；无参数时默认实验一/二，也可显式指定 `exp3` 或 `all`。实验一/二复制正文组合图、独立审计子图、`tables/exp1_performance.tex` 和三张审计表；实验三的 v7 图产物契约复制 `figures/panels/figure4_exp3_subjective_outcomes.{png,pdf}` 与 `tables/exp3_subjective.tex`。来源与是否可作为论文证据属于研究团队的数据治理责任，分析目录不生成来源状态后缀或隔离目录。主稿中的图环境由研究者直接维护并引用组合 PDF。主稿编译不属于 `pixi run eval`，当前工作稿编译产物为 `2026-EgoAnchor/pdf/egoanchor_cn_v2.pdf`。
 - 当前中文主稿及自动发布图统一使用 `2026-EgoAnchor/figures/`，不得恢复或新增活动的 `2026-EgoAnchor/figs/` 依赖；面板 PDF 不写入构建时间元数据，确保相同输入重复构建时字节稳定。
 - `data/eval/` 只作为新采集和 Mutagen 同步入口；两端停止后，完整 session 移入可配置的 `task_data/`，并按 `task_<1-5>_v<正整数>_<YYYYMMDD_HHMMSS>_<物体>` 命名且视为不可原地修改。`task_workbooks/` 保存逐原始目录的 Stage 1 缓存，`task_analysis/` 保存逐工作簿指标缓存；活动 `experiment_1_2/` 只保存当前五任务 `batch.json` 和合并后的 `analysis/`。目录规则见 `EgoAnchor_Python/docs/data_layout.md`。旧 `data/eval/`、活动 `raw/`/`workbooks/` 快照与 `data/analysis/` 重复归档不得恢复为论文输入路径。
 - `audit_samples/` 是可选审计样本目录：没有真实审计文件时不得在新 session 中预创建；Stage 1 暂存会跳过遗留的空目录，但一旦存在真实文件则必须完整复制并纳入来源摘要。
@@ -178,7 +201,7 @@ schema-v2 task directory
 - 论文六行连续轨迹图使用独立 `egoanchor.qualitative_replay` 包和 `pixi run replay` 入口；它只读取 `data/replay_capture/` 下的 `egoanchor_qualitative_replay` v1 capture，不得读取或写入正式 `data/eval/`、实验一/二工作簿和 schema-v2 产物。采集方式固定为 Quest Link 串流下的 Unity Editor Play Mode，完整操作说明固定在 `EgoAnchor_Python/docs/qualitative_replay.md`。离线 silhouette 必须按三角面并集生成，不能把整组重叠三角形交给 OpenCV 奇偶填充。
 - 正式论文数据不得按场景或指标择优拼接。局部重采可以只替换对应任务，但活动 `batch.json` 中五项任务必须共享对象、协议、配置 hash、冻结参数集和运行时矩阵；未变化任务复用已有工作簿和指标缓存。逐场景仍报告 event 数、缺失率、median[IQR] 与护栏；技术 QC 通过不能替代参数 provenance 和关键场景覆盖门槛。
 - 读者表格中的连续数值统一固定显示两位小数，计数和样本量保持整数，完整精度保存在 `analysis/metrics/`；图中可见数据点统一写入 `analysis/plots/figure_plot_data.xlsx`。实验一按系统报告七项行为属性，表内方法短名称固定为 `Arrival`、`Capture`、`One-Euro` 和 `EgoAnchor`；实验二按组件报告启用、关闭和配对效应。
-- One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`；三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件。图 3(d) 的时序策略主比较是 Smoothed KF Extrapolation 与关闭 StaticLock 的 Linear/SLERP；Hermite Interpolation 是共享关闭 StaticLock、候选、Kalman、VCD 和生命周期设置的补充条件。图 3(d) 必须绘制全部片段原始点，纵轴按当前完整数据自动向上扩展，不得为了阅读尺度隐藏范围外数据。
+- One-Euro Interpolation 固定为 `OneEuroModel + LinearSlerpStrategy`；三个组件对照与完整系统同样使用 Linear/SLERP，确保只关闭目标组件。图 3(d) 的时序策略主比较是 Smoothed KF Extrapolation 与关闭 StaticLock 的 Linear/SLERP，必须绘制两路的全部片段原始点。Hermite Interpolation 仍可作分析审计条件，但不得进入正文图、caption 或结果叙述。
 - 同一批五项物理任务同时驱动实验一四配置、实验二三个消融与两路时序策略；原始 trial/event 上保留共享物理任务的 `exp1_system_characterization` 上下文，实验二由 variant/component 投影得到，不按 `experiment_id` 单独过滤。
 - 旋转控制点的 `AngularVelocityRad` 统一表示控制点姿态下的 body-local 角速度。Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度；不得把不同参考姿态下的旋转向量导数直接混用。
 - 正式场景中完整 EgoAnchor 及保留 StaticLock 的两个消融统一使用 `enterAngSpeedDps=22` 和 `unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
@@ -242,7 +265,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 正式参数在系统实现完成时随配置固定；所有记录的实验 session 均为 formal，采集后不得调参。
 - 图表和 LaTeX 数字由 `egoanchor.eval` 自动生成，主稿不手抄结果。
 - 由顺序录制的 Quest 投屏视频生成的轮廓极值叠加图，只能标为二维物体稳像后的定性示意；必须说明各方法片段并非同一候选流，不得把图像像素分离或人工挑选的极端帧写成正式配对指标，也不得替代 schema-v2 工作簿生成的定量证据。
-- 新定性 replay 的四种方法来自同一候选流和同一物理采集。离线图默认 6 列、可配置为 2--20 列，默认六行标题为 `Passthrough`、两行显示的 `Quest Reference`、`Arrival`、`Capture`、`One-Euro` 和 `EgoAnchor`，允许从中选择显示行；列必须按连续已保存样本的固定间隔 `N` 选择，显式 sample ID 同样必须按 capture 顺序严格递增且等距，不按误差或每种方法各自的极值挑帧。每列显示行共用同一真实左目背景、相机、时间点和裁剪框；自动裁剪跨列尺寸固定并以平台参考居中，也可显式指定所有列共用的原图裁剪框。默认坐标原点位于第一列第一行图像的左上角，顶部横轴向右显示相对首列的 `Δt (s)`，时间刻度与列中心对齐；纵轴从同一原点向下延伸，六个行中心刻度依次对应显示行。轴线、刻度和横轴相对最后一列图像实际右边缘的精确延伸长度由 TOML 的 `[timeline]` 管理。参考的 fresh 与 held 状态都可用，但图片不显示状态角标，来源只保留在 sidecar JSON。定性出图参数统一由 `egoanchor/qualitative_replay/config/qualitative_replay.toml` 管理，可用自定义 TOML 和显式 CLI 参数逐层覆盖；四方法轮廓色默认严格复用全文共享配色：Arrival `#4C78A8`、Capture `#F28E2B`、One-Euro `#59A14F`、EgoAnchor `#E15759`（唯一定义在 `egoanchor/visuals/__init__.py`，`qualitative_replay.toml` 的 `method_colors_hex` 必须与其逐项一致）。定性 replay 只画轮廓，不使用配对线；实验三 Figure 4 另以浅灰色线连接同一参与者的 One-Euro 与 EgoAnchor 评分。**已知可访问性缺陷**：该绿/红对在绿色盲（deutan）模拟下几乎无法区分，实验三两种方法在图中依靠位置、点形、填充和图例区分而非仅靠色相；若要修正必须全文一次性换成同一套色盲安全配色（Okabe-Ito：One-Euro `#0072B2`、EgoAnchor `#E69F00`、Arrival `#009E73`、Capture `#CC79A7`）并同步重跑实验一/二论文图与定性 replay grid，不得只改实验三而让同一方法在不同图里换色。GLB 的 unlit base-color 纹理默认保留；纹理优先使用与 VCD 一致的 nvdiffrast CUDA 栅格化，`auto` 不可用时才回退 CPU，微小组件过滤和纹理预滤波均由 TOML 显式控制。sidecar 必须保留默认和自定义 TOML、实际 mesh、严格校验模式、最终生效配置及其统一 SHA-256，并记录最终行列、字体、相对首列的 `delta-t`、二维坐标轴原点和刻度、纹理后端、半透明模型、独立参考/方法轮廓、XYZ 轴和裁剪配置。离线投影必须从 runtime 配置指纹恢复 OpenCV GLB 到 Unity 实际 renderer 的对象局部基，不能把已含 anchor-local 补偿的显示根节点 pose 直接作用到原始 GLB；模型轮廓和 XYZ 轴必须共用 `K * P * C` 投影链，同一 capture 中投影相关的 runtime 补偿必须保持一致，该局部矩阵写入 sidecar JSON。该图仍然只是二维定性示意，不得把像素偏移写成正式配对指标或替代 schema-v2 定量证据。首次使用某个对象模型时必须先用 `replay frame` 做实际像素贴合检查。
+- 新定性 replay 的四种方法来自同一候选流和同一物理采集。离线图默认 6 列、可配置为 2--20 列，默认六行标题为 `Passthrough`、两行显示的 `Quest Reference`、`Arrival`、`Capture`、`One-Euro` 和 `EgoAnchor`，允许从中选择显示行；列必须按连续已保存样本的固定间隔 `N` 选择，显式 sample ID 同样必须按 capture 顺序严格递增且等距，不按误差或每种方法各自的极值挑帧。每列显示行共用同一真实左目背景、相机、时间点和裁剪框；自动裁剪跨列尺寸固定并以平台参考居中，也可显式指定所有列共用的原图裁剪框。默认坐标原点位于第一列第一行图像的左上角，顶部横轴向右显示相对首列的 `Δt (s)`，时间刻度与列中心对齐；纵轴从同一原点向下延伸，六个行中心刻度依次对应显示行。轴线、刻度和横轴相对最后一列图像实际右边缘的精确延伸长度由 TOML 的 `[timeline]` 管理。参考的 fresh 与 held 状态都可用，但图片不显示状态角标，来源只保留在 sidecar JSON。定性出图参数统一由 `egoanchor/qualitative_replay/config/qualitative_replay.toml` 管理，可用自定义 TOML 和显式 CLI 参数逐层覆盖；四方法轮廓色默认严格复用全文共享配色：Arrival `#4C78A8`、Capture `#F28E2B`、One-Euro `#59A14F`、EgoAnchor `#E15759`（唯一定义在 `egoanchor/visuals/__init__.py`，`qualitative_replay.toml` 的 `method_colors_hex` 必须与其逐项一致）。定性 replay 只画轮廓，不使用配对线；实验三 Figure 4 另以浅灰色线连接同一参与者的 One-Euro 与 EgoAnchor 评分。**已知可访问性缺陷**：该绿/红对在绿色盲（deutan）模拟下几乎无法区分，实验三两种方法在图中依靠固定位置、点形、箱体边框和图例区分而非仅靠色相；若要修正必须全文一次性换成同一套色盲安全配色（Okabe-Ito：One-Euro `#0072B2`、EgoAnchor `#E69F00`、Arrival `#009E73`、Capture `#CC79A7`）并同步重跑实验一/二论文图与定性 replay grid，不得只改实验三而让同一方法在不同图里换色。GLB 的 unlit base-color 纹理默认保留；纹理优先使用与 VCD 一致的 nvdiffrast CUDA 栅格化，`auto` 不可用时才回退 CPU，微小组件过滤和纹理预滤波均由 TOML 显式控制。sidecar 必须保留默认和自定义 TOML、实际 mesh、严格校验模式、最终生效配置及其统一 SHA-256，并记录最终行列、字体、相对首列的 `delta-t`、二维坐标轴原点和刻度、纹理后端、半透明模型、独立参考/方法轮廓、XYZ 轴和裁剪配置。离线投影必须从 runtime 配置指纹恢复 OpenCV GLB 到 Unity 实际 renderer 的对象局部基，不能把已含 anchor-local 补偿的显示根节点 pose 直接作用到原始 GLB；模型轮廓和 XYZ 轴必须共用 `K * P * C` 投影链，同一 capture 中投影相关的 runtime 补偿必须保持一致，该局部矩阵写入 sidecar JSON。该图仍然只是二维定性示意，不得把像素偏移写成正式配对指标或替代 schema-v2 定量证据。首次使用某个对象模型时必须先用 `replay frame` 做实际像素贴合检查。
 - 定性窗口的六列必须体现持续差异，不能依赖单列峰值；启动阶段或重获取期间四种方法共同错位的区段必须排除，不能解释为某个基线的抖动。窗口筛选可用平台参考做同一 Quest 时间线内的诊断，但不得称为外部真值或按该诊断发布正式定量结论。
 - 定性窗口筛选优先依据最终投影轮廓的可见差异，而非仅凭 pose 数值。需要展示姿态范围时，在轮廓可读的前提下优先覆盖正面、侧转和倾斜视角；论文定性图必须保留物体局部 XYZ 轴、顶部时间轴和纵向方法轴。
 - `replay grid` 默认在 PNG 和 sidecar JSON 同目录输出单页 `replay_grid.pdf`，供 LaTeX 直接导入；PDF 只改变封装格式，不改变固定间隔选择、裁剪、纹理或坐标轴。
@@ -261,17 +284,19 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 旧命名扫描按语义判定：Unity/Python runtime、writer、namespace 和 CLI 不得依赖或输出旧 RQ/schema 名称；`schema_v2/readers.py`、`schema_v2/qc.py` 及其测试可保留旧文件名和字段名，仅用于显式拒绝旧输入，不得把这些 reject-only guard 当作兼容层删除。
 - 实验一分析先对完整 session 执行 schema-v2 基础 QC，再投影 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*；消融和两路时序策略不得混入实验一的 VCD、时延、图表或 LaTeX 数字。
 - 实验一单 session QC 只检查实际完成任务的 reference coverage 和 tick×variant 完整性；批次 QC 按已完成 trial 的场景并集要求任务 1--5 全部覆盖。失败时只写 session/trial/批次 QC 审计表并停止，禁止生成正式指标、PDF 和 LaTeX。
-- 实验二复用实验一任务 1--5 的同一批 schema-v2 session。采集时刻对齐和 StaticLock 使用静止头动任务，VCD 使用遮挡恢复任务，三项时序策略使用起停、持续运动与遮挡任务；批次仍要求五项物理任务全部覆盖。完整系统的三个归因组件必须全开，每个消融名称必须且只能关闭对应组件；图 3(d) 主比较 Smoothed KF Extrapolation 与 Linear/SLERP，并以 Hermite Interpolation 补充展示。分析同时报告校正边界显示步长、停止前向过冲、反向回动和 settling time。
+- 实验二复用实验一任务 1--5 的同一批 schema-v2 session。采集时刻对齐和 StaticLock 使用静止头动任务，VCD 使用遮挡恢复任务，三项时序策略使用起停、持续运动与遮挡任务；批次仍要求五项物理任务全部覆盖。完整系统的三个归因组件必须全开，每个消融名称必须且只能关闭对应组件；图 3(d) 正文只比较 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite Interpolation 仅保留为审计条件。分析同时报告校正边界显示步长、停止前向过冲、反向回动和 settling time。
 - 同一分析批次不得包含重复 `session_id`，且 formal run kind、对象、对象模型、协议、整体配置哈希、冻结参数集和 runtime 定义必须一致。`data exp1-2 stage` 只扫描 `task_data_root` 直接子目录，目录名用于任务、版本、时间和对象选择，选中后核对 manifest 的任务、时间、对象和共同身份；批次目录固定为任务 1--5 session 时间组成的 `batch_<task1-time>_..._<task5-time>`。每个原始目录在 `task_workbooks/` 中只有一个缓存，命中时只检查实现指纹、来源内容快照（文件路径加行尾归一摘要，忽略修改时间与 CRLF/LF 差异）、存在性和大小；新建或失效任务才执行完整 workbook-v2 构建与回读。`data exp1-2 promote` 只切换 `batch.json`，`analyze exp1-2` 命中逐 task 指标缓存时不打开 XLSX 大表。Mutagen `logs-5090` 启用期间不得移动或重命名 `data/eval` 原始目录，也不得修改内部固定文件名和 manifest `session_id`。
 - 实验二只在组件对应场景内按 `session_id × scenario_id × trial_id × event_id` 配对完整系统与消融。VCD risk-coverage 仅使用完整 *EgoAnchor* 的 capture-time aligned raw 相对同帧平台 reference 的平移误差，单位为毫米；不得用 VCD 或几何评分分量代替 risk，并列分数按同一阈值整体纳入。
 - 人工分析只使用 `pixi run eval` 的固定路径工作流；旧顶层 `config/sessions/stage/promote/qc/preprocess/rebuild/copy-assets/experiment3`、旧任意路径 `build-paper` 和 `batch_cli.py` 均已删除，不保留别名或兼容层。
 - `data exp1-2 stage`、`data exp1-2 preprocess` 和 `analyze exp1-2 --rebuild` 新写工作簿时，`code_version` 自动读取当前 Git commit，不提供人工覆盖入口；缓存失效使用 Stage 1 相关源码内容指纹，不因无关提交重建。论文分析的 temporal provenance 使用 `temporal_strategy_comparison`。耗时 CLI 阶段使用 `tqdm` 在 stderr 显示任务命中/重建和实验三分析阶段，最终 JSON 只写 stdout。
-- `data exp1-2 preprocess` 将失效 task 原子写成完整 XLSX；`analyze exp1-2` 合并五份逐 task 指标结果，并在 `analysis/figures/` 生成八个独立 PDF/PNG 面板、在 `analysis/tex/` 生成三张 TeX 表和图环境；统一构建清单的 `outputs` 冻结全部本地产物路径与摘要，`copy-assets` 只从该清单和 TOML 资源目标构造计划。所有来源必须在写入前统一校验，不得从分析目录残留文件推断资源清单，主稿由研究者手工编辑。
+- `data exp1-2 preprocess` 将失效 task 原子写成完整 XLSX；`analyze exp1-2` 合并五份逐 task 指标结果，在 `analysis/figures/` 生成两张组合图和八个独立审计子图的 PDF/PNG，在 `analysis/tex/tables/` 生成四张 TeX 表；统一构建清单的 `outputs` 冻结全部本地产物路径与摘要，`copy-assets` 只从该清单和 TOML 资源目标构造计划。所有来源必须在写入前统一校验，不得从分析目录残留文件推断资源清单，主稿由研究者手工编辑。
 - 自动生成的 LaTeX 控制序列不得含阿拉伯数字；分位数等后缀使用字母拼写（如 `PFifty`、`PNinetyFive`），避免 TeX 在数字处截断命令名。
 - 论文发布层的表格和图表必须将内部 `scenario_id`、指标键映射为读者可读的标签；CSV 与 QC 审计文件保留稳定机器字段，二者不得互相替代。
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、pilot 与参数冻结、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。Pilot 不启动 `EvalSession`，不进入正式 raw，也不用于论文回填。
-- 中文主稿从 `tables/` 引入由 `copy-assets` 显式复制的指标表；图环境 TeX 由研究者从当前 `analysis/tex/figures/` 审阅后手工纳入。图只从 `figures/panels/` 加载由 `copy-assets` 复制的独立 PDF，并由 LaTeX subfigure 排版。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 中文主稿从 `tables/` 引入由 `copy-assets` 显式复制的指标表，并从 `figures/panels/` 直接加载 Figure 2/3 的组合 PDF。八个独立子图只作审计，不由正文引用；不得恢复 `analysis/tex/figures/` 或 LaTeX subfigure 拼图路线。正式分析产物不存在时不得写占位数字或占用图表版面。
+- 论文渲染截图、实验三样式预览和一次性几何检查统一放在根目录 `tmp/` 或 `2026-EgoAnchor/tmp/`，两处均被 `.gitignore` 排除；这些目录不得作为论文资源提交，当前工作区不保留其内容。
+- 图表参考资料只保留 `2026-EgoAnchor/gpt-web/EgoAnchor_v3_complete_package/`；早期 `gpt-web` 输出包已清除，不能作为当前主稿或分析产物来源。
 
 ## 协议与生成输出
 
@@ -308,10 +333,10 @@ dotnet build "EgoAnchor_Unity\EgoAnchor.csproj" --no-restore
 pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 ```
 
-论文（`2026-EgoAnchor`，在审阅并纳入图环境 TeX 后）：
+论文（`2026-EgoAnchor`，在审阅已复制的组合图和表格后）：
 
 ```text
-latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_ai_v8.tex
+latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_v2.tex
 ```
 
 ## 环境与远端关键坑
@@ -337,12 +362,12 @@ latexmk -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf 
 
 - Stage 1 workbook-v2 契约、XLSX writer 和回读验证保持不变；活动 `batch.json` 引用的 `task_1_complete.xlsx` 到 `task_5_complete.xlsx` 是论文分析的唯一正式输入。
 - `experiments/experiment_1_2/analysis` 的只读 XLSX reader 直接解析 ZIP/XML 和逻辑分片 sheet；每本 XLSX 的指标独立缓存为严格 JSON，非有限浮点显式编码，性能统计保存可跨 task 合并的原始样本。缓存键绑定 workbook SHA、`paper.toml` SHA 和 `analysis/metrics.py`、`analysis/xlsx.py` 内容指纹。
-- 实验一图固定为静止平移、静止旋转、动态平移和动态旋转四个误差--抖动双纵轴 LaTeX 子图同占一行，每个子图使用 `0.245\textwidth`；实验二固定为 capture-time alignment、StaticLock、VCD 和 temporal strategy 四个 LaTeX 子图同占一行，其中时序面板展示 Smoothed KF Extrapolation、Linear/SLERP 与 Hermite Interpolation。实验一原始片段点、中位数和 IQR 均保留，左右指标以错位 marker、轴颜色和明确单位共同区分；缺失或重复键必须拒绝绘图，图内最终字号不得小于 7 pt。图 3(a)--(c) 的原生宽度应与 `0.18\textwidth` 目标宽度一致，图 3(d) 的原生宽高比与 `0.40\textwidth` 目标严格匹配；四张面板保留固定等高 PDF 画布和相同坐标轴上下边界，二元开关横轴使用不重叠的 `On`/`Off` 标签。图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
-- 论文构建使用 `egoanchor_cn_ai_v9` basename（`makefile` 的 `SOURCE` 已同步）；PDF 与辅助产物写入 `2026-EgoAnchor/pdf/`。工作区的 LaTeX Workshop 输出目录同步设为 `%DIR%/pdf`，不得再固定为无关的 `EgoAnchor` jobname。
-- v9 正文图独立于分析流水线的面板：`2026-EgoAnchor/figures/make_paper_figures.py` 只读 `experiment_1_2/analysis/metrics/*.csv`，输出 `figures/panels_v9/exp1_tradeoff.{pdf,png}` 与 `exp2_attribution.{pdf,png}`，可独立重跑，不修改 `analysis/figures.py`（后者仍受契约测试约束）。v9 采用该组图而非上一条所述的八面板布局：实验一为「稳定性收益 dot plot / 对齐与当前时刻 RMSE 对照 / 稳定性--时延权衡前沿」三面板，实验二为「G1 逐事件配对 / G2 风险--覆盖曲线 / G3 逐片段跨策略配对」三面板。方法配色取自 `egoanchor.visuals`，与既有面板一致。
+- 实验一、二的正文图由分析器原生生成为两张 `1 x 4` 双栏组合 PDF：`figure2_exp1_behavior` 和 `figure3_exp2_attribution`。实验一的两项指标在各面板内共用同一线性纵轴，并以方法色边框的透明箱体显示 IQR、箱内中位数线、均值点、1.5 倍 IQR 须线和全部原始片段点；实验二 (d) 只展示 Smoothed KF Extrapolation 与 Linear/SLERP，正文不展示 Hermite。两图的基础字号为 7.4 pt，子图标题为 7.2 pt 加粗，画布宽 7.15 in，图例共用，面板间距和导出边距保持紧凑。正文只引用组合 PDF，独立子图 PNG/PDF 只作审计。缺失、重复键或非有限值必须拒绝绘图；图二、图三的可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`。
+- 论文构建使用 `egoanchor_cn_v2` basename（`makefile` 的 `SOURCE` 已同步）；PDF 与辅助产物写入 `2026-EgoAnchor/pdf/`。工作区的 LaTeX Workshop 输出目录同步设为 `%DIR%/pdf`，不得再固定为无关的 `EgoAnchor` jobname。
+- 正文组合图已并入实验一/二的分析和资源发布契约；不恢复已废弃的 `figures/make_paper_figures.py`、`panels_v9` 或 LaTeX 拼接子图路线。共享样式 `egoanchor.visuals/style.py` 必须纳入实验一/二和实验三的实现指纹，样式改动后旧构建不得通过资源复制门禁。
 - v9 因双栏浮动体较多（4 图 + 1 宽表）而在前言放宽 `\dbltopfraction` 等浮动体参数，否则图会被挤到参考文献之后；调整该组参数前先确认浮动体总面积没有增加。
 - `figures/replay_grid.pdf` 来自 `replay_capture/20260722_203752_143_controller_right`，是**独立的定性回放采集**（`editor_link` 运行、`delayed_image_time_proxy` 图像时刻、平台参考含 683 个 held 样本），与实验一/二的 07-24 正式批次不同源。正文只能作为定性插图并显式标注，不得作为测量证据。
-- 实验一正文拆为静止与遮挡稳定性、动态 6DoF 保真度两张表。表一依次报告中心化泄漏、绝对注册、静止帧间增量、遮挡平移 P95，并把 Start-transition 放在最右列；表二只报告平移/旋转 effective lag、lag-aligned RMSE 和 current-time RMSE。实验二归因表固定为采集时刻对齐、StaticLock、VCD 判别性和时序策略四行；VCD admission、停止护栏与 Hermite 补充只保留在完整指标、图或审计输出中，不进入主表。
+- 实验一的静止、遮挡和动态指标已合并为一张单栏表 `tables/exp1_performance.tex`：方法作列，指标作行，不显示 `n=` 或 `[Q1,Q3]`；方法表头保持单行，只对较长的指标名换行。表格使用 `\normalsize` 和 `\columnwidth`。实验二归因表不进入 v2 正文，关键数值由图和结果文字承担。
 - capture-time alignment 直接比较完整 EgoAnchor 同一 raw candidate 的 capture-time 与 arrival-time 世界复合 P95；StaticLock 使用中心化静止 P95；VCD 判别性比较 `occlusion_started` event 的排序 AURC 与全覆盖风险；时序策略比较同样关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF 的平移、旋转 lag-aligned RMSE。
 - 正式数字必须由当前五本 Stage 1 XLSX 计算，不保留或读取历史 GPT 结果包。
 - 当前 Stage 1 不拆分多任务 session，也不合并多个 session；正式组合使用五个不同 session，每个

@@ -1,0 +1,226 @@
+\documentclass[review]{vgtc}
+
+\graphicspath{{figures/}{./}}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\onlineid{0}
+\vgtccategory{Research}
+\vgtcinsertpkg
+
+\newcommand{\system}{EgoAnchor}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\se}{\mathrm{SE}(3)}
+
+\title{EgoAnchor: From Asynchronous 6-DoF Pose Estimates to Stable Dynamic Object Anchors in Consumer Mixed Reality}
+\author{Anonymous Authors}
+\authorfooter{}
+
+\abstract{%
+Object-centric mixed-reality applications require virtual content to remain attached to physical objects while the user moves, the object is manipulated, and vision is temporarily degraded. A 6-DoF pose estimator alone does not provide this behavior: its output refers to a past image-capture time, arrives irregularly, contains harmful but numerically valid candidates, and does not define what an application should render between observations or during tracking loss. We present \system, an observation-to-anchor runtime that converts asynchronous camera-frame object poses into continuous world-frame anchors on a Meta Quest 3. The runtime combines capture-time world alignment, visibility-gated color-depth admission, state estimation, delayed Linear/SLERP synthesis, explicit static anchoring, and lifecycle-aware degradation and recovery. A controlled evaluation against a platform-tracked controller shows that \system reduces median static translational leakage to 0.82~mm and static rotational leakage to 0.33$^{\circ}$, while achieving lag-aligned dynamic errors of 9.12~mm and 4.81$^{\circ}$. Ablations attribute these gains to capture-time alignment, StaticLock, reliability-aware admission, and historical interpolation rather than unconstrained extrapolation. In a within-subject study with 24 participants and three everyday rigid objects, \system improved perceived static stability, positional correctness, recovery consistency, reliance intention, and the perceived stability--responsiveness balance over a One-Euro anchor baseline; motion attachment and orientation consistency did not significantly differ. These results establish dynamic object anchoring as a runtime systems problem with measurable trade-offs among world consistency, stability, responsiveness, and recoverability.
+}
+
+\keywords{mixed reality, dynamic object anchoring, 6-DoF tracking, asynchronous vision, runtime systems, trust}
+
+\begin{document}
+\firstsection{Introduction}
+\maketitle
+
+Passthrough mixed reality increasingly places instructions, status displays, controls, and other virtual content on nearby physical objects. Such content needs more than object recognition. It requires an object-level spatial reference that remains meaningful when the user turns their head, picks up and rotates the object, places it down, or briefly occludes it. Static world anchors cannot express object motion, whereas visual pose estimators typically return only a camera-relative pose for a particular image. The missing capability is an application-ready \emph{dynamic object anchor}: a continuously queryable world-frame transform with explicit behavior under delay, noise, motion transitions, and temporary tracking loss.
+
+Recent zero-shot object-pose pipelines make this problem practically relevant. Given a target mesh, modern systems can combine open-vocabulary detection, video segmentation, metric depth, and model-based registration to estimate the 6-DoF pose of previously unseen rigid objects~\cite{posecnn2017,densefusion2019,cosypose2020,megapose2022,foundationpose2023}. Platform object trackers and commercial model-target systems provide related functionality, but their supported objects, preparation requirements, internal filtering, and output semantics are platform-defined~\cite{appleObjectAnchor,azureObjectAnchors,vuforiaModelTargets,metaDynamicObjectTracker}. Neither line of work fully specifies how an asynchronous visual observation becomes a stable, continuous anchor that an MR application can consume.
+
+The gap is not a minor implementation detail. First, an observation arriving at time $t_a$ belongs to the camera pose at image-capture time $t_f$. Composing it with the headset pose at $t_a$ writes head motion into the object's world transform. Second, a pose can be syntactically valid yet physically implausible because of occlusion, depth artifacts, or mesh-image mismatch. Third, low-rate irregular observations cannot directly drive a high-rate renderer. The runtime must decide whether to hold, interpolate, predict, freeze, or reinitialize, and it must expose the resulting stability--responsiveness trade-off rather than hiding it behind a single accuracy number. In short, a pose estimate is not yet an MR anchor.
+
+We present \system, a system and runtime for dynamic object anchoring on consumer mixed-reality hardware. A perception backend produces asynchronous camera-frame poses and reliability diagnostics from stereo passthrough images and a target mesh. The headset runtime restores each observation's capture-time world semantics, rejects harmful updates, estimates motion, synthesizes a render-rate trajectory, explicitly stabilizes stationary objects, and manages coasting, freezing, loss, and recovery. Our contribution is not a new detector or pose network; it is the observation-to-anchor contract and the runtime mechanisms that make existing visual estimators usable by MR applications.
+
+We evaluate \system at three levels. First, a controlled platform-relative benchmark measures world consistency, rest stability, dynamic fidelity, transition cost, and occlusion behavior using a Quest Touch Plus controller with an SDK reference trajectory. Second, component ablations isolate capture-time alignment, StaticLock, reliability scoring, and temporal synthesis. Third, a within-subject study tests whether the resulting system differences are perceptible and affect trust when users manipulate everyday rigid objects.
+
+Our contributions are:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{An observation-to-anchor system architecture} that turns asynchronous camera-frame 6-DoF estimates into continuously queryable world-frame dynamic anchors on a consumer HMD.
+  \item \textbf{A runtime design} combining capture-time world alignment, reliability-aware admission, historical trajectory synthesis, explicit static anchoring, and lifecycle-aware recovery.
+  \item \textbf{A layered evaluation} that quantifies the runtime's accuracy--stability--latency trade-offs, attributes them through controlled ablations, and demonstrates perceptual and trust benefits without claiming improvements where the user study detected none.
+\end{itemize}
+
+\begin{figure*}[t]
+\centering
+\fbox{\parbox[c][1.55in][c]{0.96\textwidth}{\centering
+\textbf{Teaser placeholder.} Recommended composition: (left) a user manipulating an everyday object in Quest 3 passthrough; (center) three time-aligned overlays comparing Arrival-Hold, One-Euro, and \system during head motion, object motion, and recovery; (right) three headline results: 0.82~mm static leakage, 9.12~mm lag-aligned dynamic RMSE, and 18/24 participants trusting \system's annotations.}}
+\caption{\system converts delayed and irregular visual pose estimates into a stable dynamic object anchor. The teaser should communicate the input--runtime--outcome chain rather than show the entire implementation pipeline.}
+\label{fig:teaser}
+\end{figure*}
+
+\section{Related Work}
+\subsection{Object Tracking and Anchoring in MR}
+Marker-based tracking and dedicated object-side trackers provide reliable object poses, but instrument the target and constrain deployment~\cite{kato1999artoolkit,olson2011apriltag,garridojurado2014aruco}. Commercial object-anchor systems use object models and device sensing, but differ in supported object classes, initialization procedures, dynamic-motion support, and access to intermediate observations~\cite{appleObjectAnchor,azureObjectAnchors,vuforiaModelTargets,metaDynamicObjectTracker}. These systems demonstrate the importance of object-level spatial references, but do not expose a common runtime abstraction for third-party asynchronous visual estimates.
+
+\subsection{Model-Based 6-DoF Pose Estimation}
+Learning-based 6-DoF methods have progressed from instance-specific networks to model-based and zero-shot pose estimation~\cite{posecnn2017,densefusion2019,cosypose2020,megapose2022,foundationpose2023}. Open-vocabulary detection, video object segmentation, and stereo reconstruction further reduce per-object setup. Their primary output, however, is a pose in a camera coordinate frame at an image timestamp. \system treats these methods as replaceable observation producers and focuses on the downstream temporal, spatial, and lifecycle semantics required by MR.
+
+\subsection{Latency, Filtering, and Registration}
+Registration error in AR is strongly coupled to sensing and rendering latency~\cite{azuma1994improving,diluca2010latency}. Head-pose prediction and asynchronous time warp reduce display-side motion-to-photon latency~\cite{vanwaveren2016atw}, while filters such as One-Euro trade jitter against responsiveness for noisy input streams. Dynamic object anchoring differs in two respects: the observation belongs to a historical camera pose, and the object can move independently after capture. Capture-time alignment corrects the former but cannot reconstruct the latter; prediction or delayed interpolation must address continuity with an explicit error--latency trade-off.
+
+\section{System Overview}
+\subsection{Design Requirements}
+\system is guided by four requirements. \emph{World consistency} requires each observation to be transformed using the headset pose at image capture. \emph{Selective updating} requires harmful candidates to be rejected before they perturb the anchor. \emph{Continuous output} requires a defined pose at every render time despite low-rate irregular observations. \emph{Lifecycle predictability} requires explicit behavior during stationary periods, motion onset, short occlusion, prolonged loss, and recovery.
+
+\begin{figure*}[t]
+\centering
+\fbox{\parbox[c][1.75in][c]{0.96\textwidth}{\centering
+\textbf{Pipeline figure placeholder.} Draw two horizontal lanes. The perception lane contains stereo capture $\rightarrow$ target mask $\rightarrow$ metric depth $\rightarrow$ model-based 6-DoF pose $+$ VCD diagnostics. The runtime lane contains frame-history lookup $\rightarrow$ capture-time world alignment $\rightarrow$ admission gate $\rightarrow$ Kalman state $\rightarrow$ delayed Linear/SLERP synthesis $\rightarrow$ StaticLock/lifecycle state machine $\rightarrow$ application anchor. Add timestamps $t_f$, $t_a$, and $t_r$ above the boundary to make the time semantics explicit.}}
+\caption{The \system observation-to-anchor contract. The perception backend outputs a pose tied to image-capture time $t_f$; the runtime restores world semantics, admits reliable observations, and synthesizes a continuous anchor at render time $t_r$.}
+\label{fig:pipeline}
+\end{figure*}
+
+\subsection{Observation Contract}
+For image pair $I_f=(I_f^L,I_f^R)$ captured at frame identifier $f$, the backend returns
+\begin{equation}
+  o_f = \left(f, t_f, T_{o}^{c_f}, R_f, d_f\right),
+\end{equation}
+where $T_o^{c_f}\in\se$ is the object pose in the capture camera frame, $R_f\in[0,1]$ is a runtime reliability score, and $d_f$ stores diagnostic terms used for logging and recovery. The runtime records $T_c^w(f)$ when the frame is captured. This frame identifier is the synchronization key; arrival time is not used as a substitute for capture time.
+
+\subsection{Perception Backend}
+The default backend combines open-vocabulary target segmentation, temporal mask propagation, stereo depth reconstruction, and zero-shot model-based pose tracking~\cite{yoloe2025,cutie2024,foundationstereo2025,foundationpose2023}. These components are modular and are not individually claimed as contributions. Their role is to provide metric 6-DoF candidates and sufficient diagnostics for runtime admission.
+
+We compute a visibility-gated color-depth (VCD) score by rendering the target mesh at the estimated pose and comparing the rendered mask, color, and depth with the current observation. In compact form,
+\begin{equation}
+  R_f = V_f \cdot \exp\left(\frac{w_C\log(C_f+\epsilon)+w_D\log(D_f+\epsilon)}{w_C+w_D}\right),
+\end{equation}
+where $V_f$ measures visible rendered support, $C_f$ measures masked color agreement, and $D_f$ measures metric depth agreement. The geometric mean prevents a high score when only one modality agrees. The main paper reports the design and risk--coverage behavior; parameter details and all thresholds should be moved to supplementary material.
+
+\section{Observation-to-Anchor Runtime}
+\subsection{Capture-Time World Alignment}
+When $o_f$ arrives, the runtime retrieves the camera world transform recorded for the same frame and computes
+\begin{equation}
+  T_o^w(f) = T_c^w(f)\, T_o^{c_f}.
+  \label{eq:capture-align}
+\end{equation}
+A fixed basis conversion reconciles the OpenCV and Unity coordinate conventions before the composition. Equation~\ref{eq:capture-align} removes head-motion leakage caused by arrival-time composition. It does not predict object motion between $t_f$ and the current render time; this distinction is central to our evaluation.
+
+\subsection{Admission and State Estimation}
+An observation is admitted only when VCD and lifecycle conditions indicate that it is suitable for updating the anchor. Accepted poses update a constant-velocity Kalman model for translation and a local tangent-space model for rotation. Reliability is used as an admission signal rather than as an online probability calibration for measurement noise. This separation makes the filter behavior deterministic once an observation is accepted.
+
+\subsection{Historical Temporal Synthesis}
+Rather than extrapolating every estimate to the current time, the default runtime renders a delayed historical target time $t_r-\Delta$. The delay tracks the measured capture-to-render latency with a conservative lower bound and a bounded rate of change. When the target time lies between two accepted control points, translation is linearly interpolated and rotation uses shortest-arc SLERP. This strategy sacrifices phase latency to avoid prediction divergence, overshoot, and discontinuities at correction boundaries.
+
+We compare this design with smoothed Kalman extrapolation and Hermite interpolation. These alternatives share the same observations, alignment, admission, state estimation, and lifecycle logic. The comparison therefore isolates how the render-time trajectory is synthesized.
+
+\subsection{Static Anchoring and Lifecycle}
+Filtering alone cannot simultaneously suppress stationary jitter and remain responsive to motion onset. \system therefore includes \emph{StaticLock}, an explicit stationary state. The runtime enters StaticLock after translational and angular velocities remain below thresholds for a dwell interval under reliable observations. The displayed anchor is then frozen at a robust lock origin. Independent unlock channels detect sustained velocity, displacement from a low-gain observation consensus, persistent low reliability, and accumulated directional evidence. Unlock blending preserves continuity between the frozen and moving trajectories.
+
+The lifecycle state machine distinguishes tracking, short coasting, uncertain freezing, loss, and recovery. During brief missing observations, the runtime uses the existing history; after a longer gap, it freezes the last reliable anchor and marks uncertainty; persistent loss triggers re-registration. The state machine is an application contract: it defines what is rendered and what confidence is exposed, rather than allowing the final filter sample to persist indefinitely without semantics.
+
+\section{Implementation}
+The headset frontend runs on Meta Quest 3 in Unity and records stereo passthrough frames, camera calibration, and capture-time device poses. The perception backend runs on a GPU workstation and returns asynchronous pose observations. High-bandwidth images and low-bandwidth state/control messages use separate channels. The headset runtime is implemented in C\# and updates the application anchor at render rate. \todo{Reconcile and report a single end-to-end latency decomposition; the current materials contain protocol-dependent candidate rates near 9--13~Hz and should not be collapsed into one number without defining the measurement interval.}
+
+\section{Evaluation}
+Our evaluation follows a system-behavior--component-attribution--perceptual-utility structure. Experiments~1 and~2 replay the same visual candidate stream, render timeline, and platform reference across runtime variants. Frames reconstruct trajectories but are not treated as independent statistical samples; metrics are computed per predefined motion episode and summarized across episodes. Experiment~3 uses different live trials for the two methods and therefore tests perceptual utility rather than frame-identical algorithmic differences.
+
+\subsection{Experiment 1: End-to-End Anchor Behavior}
+\paragraph{Apparatus and reference.}
+A Quest Touch Plus controller serves as the visual target because the platform SDK provides a continuous controller pose in the same world coordinate system as the headset. We calibrate the fixed transform between the controller tracking frame and its mesh. This reference contains platform prediction, filtering, and common drift; results are therefore platform-relative system behavior, not external optical ground truth.
+
+\paragraph{Conditions.}
+Arrival-Hold composes each candidate with the headset pose at candidate arrival and holds it until the next update. Capture-Hold uses the image-capture pose but no continuous smoothing. One-Euro Anchor uses capture-time alignment, VCD admission, One-Euro filtering, the same delayed render interface, and the same lifecycle, but no StaticLock. \system uses Kalman state estimation, Linear/SLERP synthesis, StaticLock, and the full lifecycle.
+
+\paragraph{Metrics.}
+Static episodes measure centered translation and rotation P95 to isolate head-motion leakage from fixed calibration bias, plus frame-increment P95 for displayed jitter. Dynamic episodes report effective lag, lag-aligned RMSE, and residual-increment P95. Current-time error and lag-aligned error answer different questions and should not be merged: the former includes phase delay, whereas the latter measures trajectory fidelity after alignment. Start-transition time measures the cost of leaving a stable state.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[t]{0.245\textwidth}\includegraphics[width=\linewidth]{figure2a_static_translation.pdf}\caption{Static translation}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.245\textwidth}\includegraphics[width=\linewidth]{figure2b_static_rotation.pdf}\caption{Static rotation}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.245\textwidth}\includegraphics[width=\linewidth]{figure2c_dynamic_translation.pdf}\caption{Dynamic translation}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.245\textwidth}\includegraphics[width=\linewidth]{figure2d_dynamic_rotation.pdf}\caption{Dynamic rotation}\end{subfigure}
+\caption{End-to-end anchor behavior. Points are episode values; large markers and error bars show median and IQR. Static error is centered P95. Dynamic error is lag-aligned RMSE, and dynamic jitter is computed from the lag-aligned residual trajectory so that true target motion is not counted as jitter.}
+\label{fig:exp1}
+\end{figure*}
+
+\begin{table*}[t]
+\centering
+\caption{Experiment~1 median [Q1, Q3] across episodes. Lower is better.}
+\label{tab:exp1}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+Method & Static trans. P95 (mm) & Static rot. P95 ($^\circ$) & Static trans. jitter (mm) & Dynamic trans. RMSE (mm) & Dynamic rot. RMSE ($^\circ$) & Dynamic trans. jitter (mm) \\
+\midrule
+Arrival-Hold & 43.67 [38.12, 55.80] & 6.49 [4.54, 8.32] & 11.70 [10.73, 16.76] & 18.57 [14.89, 21.66] & 6.09 [5.76, 6.51] & 41.08 [32.60, 46.05] \\
+Capture-Hold & 13.03 [11.45, 16.26] & 5.40 [4.42, 7.67] & 4.30 [3.65, 6.79] & 17.14 [13.32, 19.13] & 5.84 [5.56, 6.04] & 39.69 [33.47, 45.87] \\
+One-Euro & 10.65 [8.29, 13.65] & 3.29 [3.01, 4.38] & 0.85 [0.70, 1.39] & 15.69 [13.20, 20.50] & 5.55 [5.11, 6.13] & 5.25 [4.21, 7.46] \\
+\system & \textbf{0.82 [0.58, 0.92]} & \textbf{0.33 [0.24, 0.36]} & \textbf{0.06 [0.06, 0.07]} & \textbf{9.12 [7.41, 11.61]} & \textbf{4.81 [4.71, 5.29]} & \textbf{4.56 [4.07, 6.14]} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{Results.}
+\system produced the lowest static leakage and frame-to-frame jitter in both translation and rotation (Table~\ref{tab:exp1}). Its median centered translation P95 was 0.82~mm, compared with 10.65~mm for One-Euro, and its median static translational increment was 0.06~mm. In dynamic episodes, \system also reduced lag-aligned trajectory error to 9.12~mm and 4.81$^{\circ}$, while residual jitter was similar to or lower than One-Euro. These improvements do not imply zero-latency attachment: the default historical synthesis introduces hundreds of milliseconds of effective lag, and StaticLock adds a motion-start transition cost. The correct interpretation is a deliberate shift toward stable and faithful historical trajectories, not superior current-time prediction.
+
+\subsection{Experiment 2: Component Attribution}
+We replayed the same observations and reference trajectories while changing one design element at a time. Capture-time versus arrival-time composition isolates temporal world alignment. \system with and without StaticLock isolates explicit stationary handling. VCD is evaluated using event-level risk--coverage curves. Finally, Linear/SLERP, Hermite interpolation, and smoothed Kalman extrapolation share the same model and observations but differ in render-time synthesis.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[t]{0.20\textwidth}\includegraphics[width=\linewidth]{figure3a_capture_alignment.pdf}\caption{Capture-time alignment}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.20\textwidth}\includegraphics[width=\linewidth]{figure3b_static_lock.pdf}\caption{StaticLock}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.25\textwidth}\includegraphics[width=\linewidth]{figure3c_vcd_risk_coverage.pdf}\caption{VCD risk--coverage}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.32\textwidth}\includegraphics[width=\linewidth]{figure3d_temporal_strategies.pdf}\caption{Temporal synthesis}\end{subfigure}
+\caption{Component attribution. Paired lines in (a--b) connect the same episode. The risk--coverage plot shows event curves and the median/IQR envelope. The temporal-strategy plot includes all episodes on a logarithmic error axis; no high-error episodes are clipped.}
+\label{fig:exp2}
+\end{figure*}
+
+Capture-time alignment reduced median head-motion leakage P95 from 43.75 to 15.38~mm under otherwise matched composition. StaticLock reduced median centered translation P95 from 13.73 to 0.82~mm, with all 12 paired episodes favoring the locked condition. The VCD risk--coverage curves indicate that high-scoring observations concentrate lower-error candidates, supporting its use as an admission signal rather than a calibrated correctness probability. For temporal synthesis, delayed Linear/SLERP achieved a median lag-aligned translation RMSE of 8.93~mm at 360~ms effective lag; smoothed extrapolation reduced lag to 305~ms but increased median error to 45.64~mm. Hermite interpolation was close to Linear/SLERP but added no consistent benefit. These results expose the central runtime trade-off: modestly lower lag through extrapolation was purchased with substantially less reliable spatial trajectories.
+
+\subsection{Experiment 3: Perceived Anchor Quality and Trust}
+\paragraph{Design.}
+Twenty-four participants completed a $2\times3$ within-subject study comparing One-Euro Anchor and \system across a wireless mouse, stapler, and game controller. Object order, within-object method order, and anonymous label mapping were balanced. Each method--object block included static inspection with head motion, pickup/move/rotate/place, and a calibrated 0.6--0.9~s full occlusion followed by recovery. The analysis plan and multiplicity families were frozen before inferential analysis. \todo{Insert the anonymized ethics-review statement required by IEEE VR 2027 and ensure the PCS record matches the manuscript.}
+
+Participants were balanced by gender (12 women, 12 men), with mean age 27.08 years (SD=4.45). All 24 completed the study and were included. Three reported mild post-study discomfort; none discontinued. Runtime logs showed nearly identical candidate rates (12.85 vs. 12.86~Hz), VCD admission rates (88.6\% vs. 88.2\%), and output availability (99.10\% vs. 99.06\%) for One-Euro and \system. All 72 occlusion blocks per method entered the intended FrozenUncertain state and none entered Lost.
+
+\paragraph{Measures and analysis.}
+Seven custom single items measured static stability, positional correctness, motion attachment, orientation consistency, recovery consistency, reliance intention, and the stability--responsiveness balance. We additionally used object-adapted Augmentation Quality embedding and interaction subscales, two Trust in Automation subscales, and S-TIAS. Custom items were analyzed separately rather than combined into an unvalidated total score. Block-level outcomes were averaged across objects per participant. Two-sided Wilcoxon signed-rank tests used exact conditional sign enumeration after removing zero differences; Holm correction was applied separately to the seven primary items and the five published-scale outcomes.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{figure4_exp3_primary_effects.pdf}\caption{Primary anchor-quality outcomes}\end{subfigure}\hfill
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{figure5_exp3_scale_effects.pdf}\caption{Published-scale outcomes}\end{subfigure}
+\caption{Median paired differences and IQRs in Experiment~3. Positive values favor \system. Filled circles denote Holm-adjusted $p<.05$; open diamonds denote non-significant outcomes. Participant-level paired distributions should replace this summary figure in the final submission if the raw score table is available.}
+\label{fig:exp3}
+\end{figure*}
+
+\paragraph{Primary outcomes.}
+\system received higher ratings for static stability ($\Delta\mathrm{Mdn}=1.00$, $p_{\mathrm{Holm}}<.001$, $r_{rb}=.90$), positional correctness ($\Delta\mathrm{Mdn}=0.67$, $p_{\mathrm{Holm}}=.001$, $r_{rb}=.85$), recovery consistency ($\Delta\mathrm{Mdn}=0.67$, $p_{\mathrm{Holm}}<.001$, $r_{rb}=.95$), reliance intention ($\Delta\mathrm{Mdn}=1.00$, $p_{\mathrm{Holm}}<.001$, $r_{rb}=.87$), and the stability--responsiveness balance ($\Delta\mathrm{Mdn}=0.33$, $p_{\mathrm{Holm}}=.003$, $r_{rb}=.90$). Motion attachment ($p_{\mathrm{Holm}}=.267$) and orientation consistency ($p_{\mathrm{Holm}}=.162$) did not significantly differ. The latter null results are important: the user study supports benefits in rest, recovery, and dependability, not a blanket claim of better live motion following.
+
+\paragraph{Published scales and choices.}
+\system improved AQ embedding quality ($p_{\mathrm{Holm}}=.004$), TiA reliability/competence ($p_{\mathrm{Holm}}<.001$), TiA understandability/predictability ($p_{\mathrm{Holm}}=.004$), and S-TIAS trust ($p_{\mathrm{Holm}}=.004$). AQ interaction quality did not differ ($p_{\mathrm{Holm}}=.446$), consistent with the non-significant motion-attachment item. Fifteen of 24 participants preferred \system overall, four preferred One-Euro, and five reported no preference. Eighteen trusted \system's annotations more, one trusted One-Euro more, and five reported no trust preference. Preference and trust choices differed for seven participants, suggesting that practical preference and willingness to rely on spatial annotations are related but non-identical constructs.
+
+\section{Discussion}
+\subsection{The Main Contribution Is the Runtime Contract}
+The results support framing \system as a systems paper rather than a pose-estimation paper. The perception modules provide candidates; the scientific question is how their time semantics, reliability, output continuity, and lifecycle are transformed into an application anchor. This framing also clarifies appropriate baselines: the strongest comparisons keep the candidate stream and render timeline fixed, then vary the runtime contract. Comparing against a different platform tracker without a shared object, reference, and internal observation stream would confound perception quality with runtime design.
+
+\subsection{Stability and Responsiveness Are Joint Outcomes}
+StaticLock and delayed interpolation produce substantial stability gains but cannot be presented as free improvements. The effective lag and start-transition cost are part of the method. For inspect--manipulate--place applications, stable rest and credible recovery may dominate the experience, as reflected in the trust results. For fast continuous manipulation, current-time phase error remains a limitation. Future versions should expose task-dependent policies rather than one universal operating point.
+
+\subsection{Trust Tracks Predictable Failure Behavior}
+Participants' ratings improved most for static stability, recovery consistency, and reliance intention, while live motion attachment did not significantly differ. This pattern suggests that trust depends not only on average geometric error but also on whether the anchor behaves predictably during rest and failure recovery. The divergence between preference and trust choices further argues against using a single overall preference item as the only user-facing endpoint.
+
+\subsection{Limitations}
+The controlled benchmark uses a platform-tracked controller rather than an independent optical system, so common platform drift and reference prediction are unobservable. The quantitative sessions are repeated episodes within a limited set of trajectories, not population-level evidence across environments and operators. The user study provides perceptual and trust evidence for three everyday objects but no absolute pose ground truth or task-performance measure for those objects. The system requires a rigid target mesh and remains vulnerable to severe occlusion, transparent or reflective materials, poor stereo geometry, and model mismatch. The current implementation depends on an external GPU workstation and wireless networking. Finally, some adapted scale reliabilities are condition-dependent and modest; the final paper should report the exact $\alpha$ and $\omega$ values in supplementary material rather than summarizing them as uniformly high.
+
+\section{Conclusion}
+We introduced \system, an observation-to-anchor runtime that turns delayed, irregular, and quality-varying visual 6-DoF estimates into continuous dynamic object anchors for consumer mixed reality. The system restores capture-time world semantics, selectively admits candidates, synthesizes a render-rate trajectory, explicitly stabilizes stationary objects, and defines degradation and recovery behavior. Controlled measurements show large gains in static world consistency and reduced lag-aligned dynamic residuals, while ablations reveal the associated latency and prediction trade-offs. A user study shows that these runtime properties improve perceived stability, correctness, recovery, reliance, and trust, but not every aspect of motion following. Dynamic object anchoring should therefore be evaluated as a complete runtime behavior---not as a sequence of pose-estimation snapshots.
+
+% IEEE VR 2027 requires disclosure of AI-generated content. Add a non-identifying,
+% accurate disclosure in the submitted manuscript/acknowledgments, consistent with
+% the conference and IEEE policy, without compromising double-blind anonymity.
+
+\bibliographystyle{abbrv-doi-hyperref-narrow}
+\bibliography{egoanchor_cn_refs}
+\end{document}

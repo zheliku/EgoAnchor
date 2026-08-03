@@ -13,7 +13,7 @@ from ..common import (
     build_manifest_path,
     file_sha256,
     read_build_manifest,
-    source_tree_sha256,
+    source_trees_sha256,
     validate_output_files,
 )
 from . import analysis
@@ -133,7 +133,13 @@ def plan_assets() -> ArtifactPlan:
     if manifest.get("config_sha256") != snapshot.sha256:
         raise ValueError("实验三配置已变化，请重新运行 analyze exp3")
     implementation_root = Path(analysis.__file__).resolve().parent
-    if manifest.get("implementation_sha256") != source_tree_sha256(implementation_root):
+    implementation_digest = source_trees_sha256(
+        {
+            "analysis": implementation_root,
+            "visuals": implementation_root.parents[3] / "visuals",
+        }
+    )
+    if manifest.get("implementation_sha256") != implementation_digest:
         raise ValueError("实验三分析实现已变化，请重新运行 analyze exp3")
     inputs = manifest.get("inputs")
     if not isinstance(inputs, list) or len(inputs) != 1 or not isinstance(inputs[0], dict):

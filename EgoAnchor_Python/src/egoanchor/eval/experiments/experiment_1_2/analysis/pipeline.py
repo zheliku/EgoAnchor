@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from ...common import begin_build, complete_build, source_tree_sha256
+from ...common import begin_build, complete_build, source_trees_sha256
 from .cache import (
     cache_key,
     cache_path,
@@ -50,7 +50,6 @@ def _validate_inputs(workbooks: tuple[Path, ...], output_root: Path) -> tuple[Pa
 def build_analysis(
     workbooks: tuple[Path, ...],
     output_root: Path,
-    figure_tex_directory: str,
     cache_root: Path,
     batch_id: str,
     workbook_sha256: Mapping[str, str],
@@ -77,7 +76,13 @@ def build_analysis(
             raise ValueError(f"batch manifest 的 workbook SHA-256 非法：{workbook.name}")
         frozen_digests[workbook.name] = expected_digest
 
-    implementation_digest = source_tree_sha256(Path(__file__).resolve().parent)
+    implementation_root = Path(__file__).resolve().parent
+    implementation_digest = source_trees_sha256(
+        {
+            "analysis": implementation_root,
+            "visuals": implementation_root.parents[3] / "visuals",
+        }
+    )
     building = begin_build(
         output_root,
         owner="experiment_1_2",
@@ -125,7 +130,6 @@ def build_analysis(
     artifact_paths = write_analysis_artifacts(
         results,
         output_root.expanduser().resolve(),
-        figure_tex_directory,
     )
     details = {
         "batch_id": batch_id,

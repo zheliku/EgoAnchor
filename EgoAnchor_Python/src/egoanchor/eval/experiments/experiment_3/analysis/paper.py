@@ -38,30 +38,29 @@ def write_subjective_table(
     output.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "% 由 pixi run eval analyze exp3 自动生成；请勿手工修改。",
-        r"\begin{table*}[t]",
+        r"\begin{table}[t]",
         r"\centering",
-        r"\caption{实验三的参与者内主观评价结果。"
-        + r"区块级结局先按参与者在三个物体上取均值，TiA 与 S-TIAS 使用方法级单次施测得分；"
-        + r"差值方向为 EgoAnchor$-$One-Euro。"
-        + r"$p$ 值来自含并列中秩的双侧条件精确 Wilcoxon 符号置换，并在各冻结家族内作 Holm 校正。}",
+        r"\caption{实验三十二项参与者内主观评价结果。区块级结局先在三个物体上取均值，"
+        + r"TiA 与 S-TIAS 使用方法级单次施测得分；差值为 EgoAnchor$-$One-Euro。"
+        + r"$p$ 值来自双侧条件精确 Wilcoxon 检验，并在各冻结家族内作 Holm 校正。}",
         r"\label{tab:exp3-subjective}",
         r"\small",
-        r"\setlength{\tabcolsep}{2.5pt}",
-        r"\begin{tabular}{lcccccc}",
+        r"\setlength{\tabcolsep}{3.4pt}",
+        r"\begin{tabular}{lccc}",
         r"\toprule",
-        r"结局 & One-Euro Mdn [IQR] & EgoAnchor Mdn [IQR] & $\Delta$ Mdn [IQR] & $W$ & $p_{\mathrm{Holm}}$ & $r_{rb}$ [95\% CI] \\",
+        r"结局 & $\Delta$Mdn & $p_{\mathrm{Holm}}$ & $r_{rb}$ [95\% CI] \\",
         r"\midrule",
-        r"\multicolumn{7}{l}{\emph{主证实家族}} \\",
+        r"\multicolumn{4}{l}{\emph{主证实家族}} \\",
     ]
     lines.extend(_result_rows(results[results["Family"] == MAIN_FAMILY]))
     lines.extend(
         [
             r"\midrule",
-            r"\multicolumn{7}{l}{\emph{已发表量表家族}} \\",
+            r"\multicolumn{4}{l}{\emph{已发表量表家族}} \\",
         ]
     )
     lines.extend(_result_rows(results[results["Family"] == SCALE_FAMILY]))
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""])
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
     output.write_text("\n".join(lines), encoding="utf-8")
     return output
 
@@ -73,15 +72,11 @@ def _result_rows(frame: pd.DataFrame) -> list[str]:
     for _, row in frame.iterrows():
         outcome = str(row["Outcome"])
         label = _escape_tex(_OUTCOME_LABELS_ZH.get(outcome, OUTCOME_LABELS.get(outcome, outcome)))
-        one_euro = _median_iqr(row, "OneEuro")
-        egoanchor = _median_iqr(row, "EgoAnchor")
-        difference = _median_iqr(row, "Difference")
-        statistic = _format_number(row.get("W"), 1)
+        difference = _format_number(row.get("Difference_Median"), 2)
         p_value = _format_p(row.get("p_Holm"))
         effect = _format_effect(row)
         rows.append(
-            f"{label} & {one_euro} & {egoanchor} & {difference} & {statistic} & "
-            f"{p_value} & {effect}" + r" \\"
+            f"{label} & {difference} & {p_value} & {effect}" + r" \\"
         )
     return rows
 
@@ -95,15 +90,6 @@ def _format_effect(row: pd.Series) -> str:
     low = _format_number(row.get("r_rb_CI_Low"), 2)
     high = _format_number(row.get("r_rb_CI_High"), 2)
     return f"{effect} [{low}, {high}]"
-
-
-def _median_iqr(row: pd.Series, prefix: str) -> str:
-    """按 Mdn [Q1, Q3] 格式化一个方法的描述统计。"""
-
-    median = _format_number(row.get(f"{prefix}_Median"), 2)
-    q1 = _format_number(row.get(f"{prefix}_Q1"), 2)
-    q3 = _format_number(row.get(f"{prefix}_Q3"), 2)
-    return f"{median} [{q1}, {q3}]"
 
 
 def _format_p(value: Any) -> str:
