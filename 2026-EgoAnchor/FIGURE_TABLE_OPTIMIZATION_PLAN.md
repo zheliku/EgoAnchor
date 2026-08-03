@@ -6,7 +6,7 @@
 
 - 当前主稿是 `egoanchor_cn_v2.tex`，makefile 的 `SOURCE` 已指向该文件。
 - v2 第 3 章由 Claude 重写，本轮不修改、回退或覆盖该章。
-- 实验一/二使用正式 v4 分析结果。实验三工作簿的来源尚未人工确认，因此只完成绘图与产物契约，不把其数据图表复制进 v2。
+- 实验一/二使用正式 v4 分析结果。实验三已完成24名参与者的正式分析，复合图与12结局表已复制进 v2。
 
 ## 统一视觉规范
 
@@ -50,9 +50,9 @@
 
 ## 实验三
 
-### Figure 4：十二项主观结局复合图
+### 实验三复合图（v2 Figure 6；资源名 Figure 4）
 
-- 只发布一张双栏宽的双排复合图 `figure4_exp3_subjective_outcomes.{pdf,png}`，全图共享一个方法图例。
+- 只发布一张双栏宽的双排复合图 `figure4_exp3_subjective_outcomes.{pdf,png}`，全图共享一个方法图例；在 v2 主稿中该资源实际编号为 Figure 6，避免与实验一的单栏 `replay_grid.pdf`（正文 Figure 4）混淆。
 - 上排 `(a)` 填满七个等宽槽，依次显示 `Stability / Attachment / Recovery / Reliance / Balance / Position / Orientation`，不显示不连续的问卷编号。内部仍以 Q1/Q2/Q3/Q6/Q7/Q8/Q9 作为稳定分析键，纵轴保留原始 1--7 分。
 - 下排沿用上排的物理槽宽，五项已发表量表整体居中。左侧 `(b)` 三个槽展示 AQ-EQ、AQ-IQ 与 S-TIAS，共用 1--7 轴；右侧 `(c)` 两个槽展示 TiA R/C 与 TiA U/P，共用 1--5 右轴。两个量尺分区之间留窄缝，不归一化也不共用纵轴。
 - 每项结局并列 One-Euro 和 EgoAnchor。One-Euro 使用绿色菱形，EgoAnchor 使用红色方形；固定左右位置、点形和箱体边框共同区分方法。
@@ -63,12 +63,12 @@
 
 - `tables/exp3_subjective.tex` 保留七个主结局和五个已发表量表结局，包括不显著项。
 - 表中报告配对差中位数、家族内 Holm 校正 p 和 $r_{rb}$ [95% CI]；不再展开两方法的 `[Q1,Q3]`。
-- 数据来源经研究团队人工确认前，该表与 Figure 4 都不进入 v2。
+- 实验三结果表与复合图资源已进入 v2 的候选稿；复合图在主稿中引用为 Figure 6，`replay_grid.pdf` 在主稿中引用为 Figure 4。
 
 ## 产物与实现契约
 
 - 实验一/二组合图由 `experiment_1_2/analysis/figures.py` 生成，不恢复独立 `make_paper_figures.py`、`panels_v9` 或 LaTeX 拼图路线。
-- 实验三图产物契约为 v7，只包含复合 Figure 4 的 PNG/PDF；旧 v4/v5/v6 构建清单均不兼容。
+- 实验三图产物契约为 v7，只包含复合图资源的 PNG/PDF；旧 v4/v5/v6 构建清单均不兼容。
 - 共享样式位于 `egoanchor.visuals/style.py`，必须同时纳入实验一/二和实验三的实现指纹。
 - `analyze` 在 staging 目录生成全部产物并验证后，再以可回滚的整目录切换发布。
 

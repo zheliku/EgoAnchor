@@ -24,7 +24,7 @@ class ExperimentPaths:
     """包含 ``pixi.toml`` 的 EgoAnchor_Python 根目录。"""
 
     source_template: Path
-    """生成新原始模板时读取的美化定稿来源。"""
+    """生成空白审查副本时读取的只读工作簿结构来源。"""
 
     input_workbook: Path
     """正式分析默认读取的原始数据工作簿。"""
@@ -142,7 +142,7 @@ def build_raw_template(
     *,
     source_template: Path | None = None,
 ) -> Path:
-    """按实验三路径配置复制美化来源并生成空白正式工作簿。"""
+    """按实验三路径配置复制只读结构来源并生成空白正式工作簿。"""
 
     paths = load_paths()
     return _build_raw_template(

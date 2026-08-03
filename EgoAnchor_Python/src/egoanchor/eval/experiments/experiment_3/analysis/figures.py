@@ -103,7 +103,7 @@ def publish_figures(
 
     七项区块级结局先按参与者在三个物体上取均值，并保留原始 1--7 分量尺。
     AQ 子量表同样按三个物体取均值，TiA 与 S-TIAS 使用方法级单次施测得分。
-    显著性括号只编码各冻结家族内的 Holm 校正结果，不对三个物体分别检验或标星。
+    显著性括号只编码两个预先固定统计家族内的 Holm 校正结果，不对三个物体分别检验或标星。
     """
 
     ordered = _validate_figure_data(scores.paired_scores, tables.results)
@@ -424,7 +424,7 @@ def _validated_scale_groups() -> tuple[tuple[tuple[str, ...], int, str], ...]:
 
 
 def _ordered_results(results: pd.DataFrame) -> pd.DataFrame:
-    """按冻结家族和顺序返回唯一十二项结果索引。"""
+    """按预先固定的统计家族和顺序返回唯一十二项结果索引。"""
 
     summary_columns = {
         f"{prefix}_{statistic}"

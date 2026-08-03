@@ -1,4 +1,4 @@
-"""从 v5.1 美化定稿生成正式空白原始数据模板。"""
+"""从 v5.1 正式工作簿结构生成空白原始数据模板。"""
 
 from __future__ import annotations
 
@@ -50,14 +50,14 @@ def build_raw_template(
     *,
     source_template: Path,
 ) -> Path:
-    """复制美化来源，清空采集值并加入实时公式分析区。"""
+    """复制只读结构来源，清空采集值并加入实时公式分析区。"""
 
     source = source_template.expanduser().resolve()
     output = destination.expanduser().resolve()
     if not source.is_file():
-        raise FileNotFoundError(f"原始美化模板不存在：{source}")
+        raise FileNotFoundError(f"原始工作簿结构来源不存在：{source}")
     if output == source.resolve():
-        raise ValueError("新原始模板不得覆盖美化来源文件")
+        raise ValueError("新原始模板不得覆盖结构来源文件")
     if output.exists():
         raise FileExistsError(f"拒绝覆盖已有实验三原始工作簿：{output}")
     output.parent.mkdir(parents=True, exist_ok=True)

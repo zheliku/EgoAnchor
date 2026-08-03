@@ -234,7 +234,7 @@ def _run_preprocess(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_create_template(args: argparse.Namespace) -> dict[str, object]:
-    """从美化来源生成新的实验三空白正式模板。"""
+    """从只读工作簿结构来源生成新的实验三空白正式模板。"""
 
     return create_raw_template(args.output)
 

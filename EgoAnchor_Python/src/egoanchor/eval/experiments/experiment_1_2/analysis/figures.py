@@ -25,6 +25,7 @@ from egoanchor.visuals import (
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 
 from .metrics import (
     FULL_VARIANT,
@@ -749,14 +750,6 @@ def _draw_vcd_paper_axis(axis: Any, results: PaperResults) -> None:
     axis.set_xticks((0.0, 0.5, 1.0), ("0", "50", "100"))
     axis.set_xlabel("Retained (%)")
     axis.set_ylabel("Risk (mm)", labelpad=1.0)
-    axis.legend(
-        frameon=False,
-        loc="upper left",
-        borderaxespad=0.15,
-        handlelength=1.0,
-        handletextpad=0.35,
-        labelspacing=0.18,
-    )
     _clean_axis(axis, "both")
 
 
@@ -816,13 +809,6 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
     axis.set_xlabel("Lag (ms)")
     axis.set_ylabel("RMSE (mm)", labelpad=1.0)
     axis.set_ylim(bottom=0.0)
-    axis.legend(
-        frameon=False,
-        loc="lower left",
-        borderaxespad=0.15,
-        handletextpad=0.35,
-        labelspacing=0.18,
-    )
     _clean_axis(axis, "both")
 
 
@@ -879,11 +865,53 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
             fontweight="bold",
         )
         axis.tick_params(axis="both", length=2.6, width=0.75, pad=2.0)
+    # 四个面板只共享一份图例，避免 VCD 与时序面板各自占用绘图区。
+    figure.legend(
+        handles=(
+            Patch(
+                facecolor=_FULL_COLOR,
+                edgecolor="none",
+                alpha=0.16,
+                label="IQR",
+            ),
+            Line2D(
+                (),
+                (),
+                color=_FULL_COLOR,
+                linewidth=1.8,
+                label="Median",
+            ),
+            Line2D(
+                (),
+                (),
+                color=_EXTRAPOLATION_COLOR,
+                marker="D",
+                linestyle="-",
+                markersize=4.8,
+                label="Smoothed KF",
+            ),
+            Line2D(
+                (),
+                (),
+                color=_FULL_COLOR,
+                marker="s",
+                linestyle="-",
+                markersize=4.8,
+                label="Linear/SLERP",
+            ),
+        ),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.995),
+        ncol=4,
+        frameon=False,
+        handletextpad=0.35,
+        columnspacing=1.0,
+    )
     figure.subplots_adjust(
         left=0.064,
         right=0.985,
         bottom=0.180,
-        top=0.900,
+        top=0.820,
         wspace=0.36,
     )
     return figure

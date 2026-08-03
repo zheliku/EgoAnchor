@@ -42,7 +42,7 @@ def write_subjective_table(
         r"\centering",
         r"\caption{实验三十二项参与者内主观评价结果。区块级结局先在三个物体上取均值，"
         + r"TiA 与 S-TIAS 使用方法级单次施测得分；差值为 EgoAnchor$-$One-Euro。"
-        + r"$p$ 值来自双侧条件精确 Wilcoxon 检验，并在各冻结家族内作 Holm 校正。}",
+        + r"$p$ 值来自双侧条件精确 Wilcoxon 检验，并在两个预先固定的统计家族内作 Holm 校正。}",
         r"\label{tab:exp3-subjective}",
         r"\small",
         r"\setlength{\tabcolsep}{3.4pt}",
