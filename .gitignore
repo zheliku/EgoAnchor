@@ -9,6 +9,8 @@ __pycache__/
 .ruff_cache/
 /tmp/
 /2026-EgoAnchor/tmp/
+/2026-EgoAnchor/pdftest/
+/2026-EgoAnchor/test_noclear.tex
 *.zip
 
 # Blender local assets and generated working files

@@ -295,7 +295,7 @@ Run 1 将原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`py
 - 分析 reader 对启动阶段的参考时间窗有明确边界：只有 render 内嵌参考有效、`source_capture_mono_ms` 早于首条 `unity_reference` 且 `source_frame_id` 位于首帧之前的 warmup 行可被保留；其余未知 frame-id 仍必须硬失败。指标层同样排除没有右表参考基线的 warmup candidate。
 - Run 1 中文采集手册固定为 `2026-EgoAnchor/experiment_1_2_collection_manual_zh.md`；它规定 NATS/Python/Unity 启动、跨端 session 配对、pilot 与参数冻结、实验一/二事件操作、随时停止、QC、失败重采和 formal 参数固定边界。Pilot 不启动 `EvalSession`，不进入正式 raw，也不用于论文回填。
 - 中文主稿从 `tables/` 引入由 `copy-assets` 显式复制的指标表，并从 `figures/panels/` 直接加载 Figure 2/3 的组合 PDF。八个独立子图只作审计，不由正文引用；不得恢复 `analysis/tex/figures/` 或 LaTeX subfigure 拼图路线。正式分析产物不存在时不得写占位数字或占用图表版面。
-- 论文渲染截图、实验三样式预览和一次性几何检查统一放在根目录 `tmp/` 或 `2026-EgoAnchor/tmp/`，两处均被 `.gitignore` 排除；这些目录不得作为论文资源提交，当前工作区不保留其内容。
+- 论文渲染截图、实验三样式预览和一次性几何检查统一放在根目录 `tmp/` 或 `2026-EgoAnchor/tmp/`；临时 XeLaTeX 包装文件使用 `2026-EgoAnchor/pdftest/` 和 `test_noclear.tex`。这些路径均被 `.gitignore` 排除，不得作为论文资源提交，当前工作区不保留其内容。
 - 图表参考资料只保留 `2026-EgoAnchor/gpt-web/EgoAnchor_v3_complete_package/`；早期 `gpt-web` 输出包已清除，不能作为当前主稿或分析产物来源。
 
 ## 协议与生成输出
