@@ -68,6 +68,26 @@ class Experiment3WorkbookIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "七个主条目乘三个对象"):
                 _verify(output)
 
+    def test_generated_workbook_uses_fixed_core_properties(self) -> None:
+        """结果簿必须写入固定属性，并保持说明页的冻结行数。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = _write(Path(directory) / "fixed_properties.xlsx")
+            workbook = load_workbook(output, read_only=False, data_only=False)
+            try:
+                properties = workbook.properties
+                self.assertEqual(properties.creator, "EgoAnchor")
+                self.assertEqual(properties.lastModifiedBy, "EgoAnchor")
+                self.assertEqual(properties.title, "EgoAnchor 实验三分析结果")
+                self.assertEqual(properties.subject, "跨对象主观感知评价的精简统计结果")
+                self.assertEqual(properties.description, "EgoAnchor 实验三统计分析结果工作簿。")
+                self.assertEqual(properties.keywords, "EgoAnchor, Experiment 3, Wilcoxon, Holm")
+                self.assertEqual(properties.category, "experiment-3-analysis")
+                self.assertIsNone(properties.contentStatus)
+                self.assertEqual(workbook["说明"].max_row, 37)
+            finally:
+                workbook.close()
+
 
 def _data() -> Exp3Data:
     """构造只供结果簿契约测试使用的最小输入快照。"""

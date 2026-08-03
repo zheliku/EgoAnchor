@@ -319,6 +319,11 @@ class Experiment12AnalysisTests(unittest.TestCase):
         ]
         self.assertEqual(temporal_legend, ["Smoothed KF", "Linear/SLERP"])
         self.assertNotIn("Hermite", " ".join(temporal_legend))
+        self.assertFalse(experiment_two.axes[3].get_legend().get_visible())
+        self.assertEqual(
+            [text.get_text() for text in experiment_two.legends[0].get_texts()],
+            ["IQR", "Median", "Smoothed KF", "Linear/SLERP"],
+        )
         self.assertEqual(
             [axis.get_title(loc="left") for axis in experiment_two.axes],
             [

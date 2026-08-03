@@ -256,6 +256,25 @@ class Experiment3Tests(unittest.TestCase):
                 self.assertTrue(workbook.calculation.forceFullCalc)
                 self.assertEqual(workbook.properties.identifier, "EgoAnchor.Experiment3.RawData.v5.1")
                 self.assertEqual(workbook.properties.category, "experiment-3-raw-workbook")
+                self.assertEqual(workbook.properties.creator, "EgoAnchor")
+                self.assertEqual(workbook.properties.lastModifiedBy, "EgoAnchor")
+                self.assertEqual(
+                    workbook.properties.title,
+                    "EgoAnchor 实验三空白原始数据模板",
+                )
+                self.assertEqual(
+                    workbook.properties.subject,
+                    "跨对象主观感知评价采集模板",
+                )
+                self.assertEqual(
+                    workbook.properties.description,
+                    "EgoAnchor 实验三空白数据采集模板；人工采集区域为空。",
+                )
+                self.assertEqual(
+                    workbook.properties.keywords,
+                    "EgoAnchor, Experiment 3, data collection",
+                )
+                self.assertIsNone(workbook.properties.contentStatus)
                 self.assertEqual(workbook["README"]["B27"].value, "EgoAnchor.Experiment3.RawData.v5.1")
                 self.assertEqual(workbook["README"]["B28"].value, "experiment-3-raw-workbook")
                 self.assertEqual((workbook["Derived"].max_row, workbook["Derived"].max_column), (407, 26))

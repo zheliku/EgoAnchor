@@ -133,6 +133,11 @@ def _save_axis_crops(
     root.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, Path]] = []
     axis_visibility = tuple(axis.get_visible() for axis in figure.axes)
+    axis_legends = tuple(axis.get_legend() for axis in figure.axes)
+    axis_legend_visibility = tuple(
+        legend.get_visible() if legend is not None else None
+        for legend in axis_legends
+    )
     legend_visibility = tuple(legend.get_visible() for legend in figure.legends)
     try:
         for legend in figure.legends:
@@ -140,6 +145,9 @@ def _save_axis_crops(
         for selected, stem in zip(figure.axes, stems, strict=True):
             for axis in figure.axes:
                 axis.set_visible(axis is selected)
+            for axis, legend in zip(figure.axes, axis_legends, strict=True):
+                if legend is not None:
+                    legend.set_visible(axis is selected)
             figure.canvas.draw()
             renderer = figure.canvas.get_renderer()
             bounds = selected.get_tightbbox(renderer).transformed(
@@ -158,6 +166,13 @@ def _save_axis_crops(
     finally:
         for axis, visible in zip(figure.axes, axis_visibility, strict=True):
             axis.set_visible(visible)
+        for legend, visible in zip(
+            axis_legends,
+            axis_legend_visibility,
+            strict=True,
+        ):
+            if legend is not None and visible is not None:
+                legend.set_visible(visible)
         for legend, visible in zip(figure.legends, legend_visibility, strict=True):
             legend.set_visible(visible)
         figure.canvas.draw()
@@ -750,6 +765,14 @@ def _draw_vcd_paper_axis(axis: Any, results: PaperResults) -> None:
     axis.set_xticks((0.0, 0.5, 1.0), ("0", "50", "100"))
     axis.set_xlabel("Retained (%)")
     axis.set_ylabel("Risk (mm)", labelpad=1.0)
+    axis.legend(
+        frameon=False,
+        loc="upper left",
+        borderaxespad=0.15,
+        handlelength=1.0,
+        handletextpad=0.35,
+        labelspacing=0.18,
+    )
     _clean_axis(axis, "both")
 
 
@@ -809,6 +832,13 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
     axis.set_xlabel("Lag (ms)")
     axis.set_ylabel("RMSE (mm)", labelpad=1.0)
     axis.set_ylim(bottom=0.0)
+    axis.legend(
+        frameon=False,
+        loc="lower left",
+        borderaxespad=0.15,
+        handletextpad=0.35,
+        labelspacing=0.18,
+    )
     _clean_axis(axis, "both")
 
 
@@ -865,6 +895,10 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
             fontweight="bold",
         )
         axis.tick_params(axis="both", length=2.6, width=0.75, pad=2.0)
+    for axis in axes[2:]:
+        legend = axis.get_legend()
+        if legend is not None:
+            legend.set_visible(False)
     # 四个面板只共享一份图例，避免 VCD 与时序面板各自占用绘图区。
     figure.legend(
         handles=(

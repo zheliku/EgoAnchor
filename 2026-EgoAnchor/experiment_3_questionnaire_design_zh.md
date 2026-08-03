@@ -30,7 +30,7 @@
 | CLMM | 从冻结分析和默认输出中删除 | 自定义 CLMM 把 L-BFGS-B 的拟牛顿逆 Hessian 误作协方差，Wald SE、p 和 CI 无效；数值 Hessian 又近奇异。该模型没有直接回答三物体平均后的参与者内主问题，继续保留只会增加一套不可靠推断。此决定发生在真实采集前，不依赖正式结果 |
 | 逐物体结果 | 只报告 7 个主条目的配对描述，不作逐物体显著性检验 | 主检验单位是每位参与者的三物体均值。若为 7×3 个条目—物体组合分别检验并标星，将新增 21 个未冻结检验；逐物体结果仅用于核对方向 |
 | 论文图表 | 正文候选使用两张分组配对图和一张 12 结局完整结果表（2026-08-03 被下方修订取代） | 资源名为 `figure4_exp3_subjective_outcomes` 的复合图在 v2 主稿中编号为 Figure 6；Figure 4 专用于实验一的单栏 `replay_grid.pdf`。复合图显示参与者级得分、配对关系、IQR、中位数和均值，显著性括号编码所属家族内的 Holm 校正结果。完整表保留全部 12 个冻结结局，不按显著性筛选 |
-| 结果工作簿与产物契约 | 固定为 6 张中文页：说明、样本与质控、主结果、分物体描述、量表信度、选择结果；分析产物契约升级为 v4 | 删除逐人审计副本、三张派生底表、空开放编码区和无效模型页；产物始终写入标准路径，不兼容旧来源状态后缀或隔离目录 |
+| 结果工作簿与产物契约 | 固定为 6 张中文页：说明、样本与质控、主结果、分物体描述、量表信度、选择结果；分析产物契约升级为 v4 | 删除逐人审计副本、三张派生底表、空开放编码区和无效模型页；产物始终写入标准路径，不兼容旧结果簿或旧图名 |
 
 ### 2026-08-03 图表呈现修订
 
@@ -38,20 +38,20 @@
 | --- | --- | --- |
 | 实验三正文图 | 原 Figure 4 与 Figure 5 合并为一张双排复合图（资源名 `figure4_exp3_subjective_outcomes`，v2 主稿编号 Figure 6）；上排 `(a)` 展示七项主结局，下排 `(b)/(c)` 按 1--7 与 1--5 理论量尺展示五项已发表量表结局 | 两排共用七槽物理网格和一个方法图例，五项量表整体居中，避免两张图上下排列时出现箱宽和组间距不一致 |
 | 图产物契约 | 图产物契约由 v6 升至 v7，只发布 `figure4_exp3_subjective_outcomes.{png,pdf}` | 该资源在 v2 主稿中为 Figure 6；实验一单栏 `replay_grid.pdf` 为 Figure 4。独立 Figure 5 已退役；旧文件名和旧 v4/v5/v6 构建清单不得继续发布 |
-| 数据来源状态 | `EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 为正式24名参与者输入，已作为论文结果输入 | 结构、配对完整性和冻结统计分析已通过，结果图表由统一流水线生成 |
+| 正式数据 | `EgoAnchor_Experiment3_RawData_24P_v5_1.xlsx` 为24名参与者输入，已作为论文结果输入 | 结构、配对完整性和冻结统计分析已通过，结果图表由统一流水线生成 |
 
-### v5.1 增补（2026-07-26，用户批准；来自对 GPT 方案 `material/old/gpt-5.6-sol_plan.md` 的复审）
+### v5.1 增补（2026-07-26，用户批准）
 
 | 项 | 内容 | 理由 |
 | --- | --- | --- |
 | **Q2 措辞锐化** | 由"虚拟内容与真实物体保持一致运动"改为"虚拟内容**始终附着在真实物体上的同一位置**" | AQ-IQ3 已承载运动平滑度，旧措辞与其判别效度模糊；新措辞使 Q2（附着位置恒定）⊥ AQ-IQ3（平滑）⊥ Q9（朝向）三通道正交，且预期 null 的解释更干净。构念与条目 ID 不变 |
 | **最终问卷 +2 题** | 新增 `FINAL_PREFERENCE_STRENGTH`（偏好强度）与 `FINAL_DISCRIMINATION_CONFIDENCE`（区分信心），均描述性 | 区分信心直接对准研究问题（能否察觉差异），并区分"无明显偏好"的两种成因（真无差异 vs 各有优劣）；偏好强度把三分类选择变为有梯度证据 |
 | **背景问卷补实物交互经验** | 参与者信息增加"是否用过需要操作真实物体的 AR/MR 应用"（B6），并采用分档选项集 | 对本任务最贴的协变量 |
-| **预实验清单 +2 检查、翻译流程补认知访谈** | ① 认知访谈确认 Q2 与 AQ-IQ3 的区分被理解；② 方法级问卷施测时 A/B 归属回忆准确。翻译流程明确为：正向翻译 → 独立回译 → 比对裁决 → 认知访谈 → 冻结 | 配套 Q2 锐化的判别验证；语料库使用提醒本要求认知访谈 |
+| **预实验清单 +2 检查、翻译流程补认知访谈** | ① 认知访谈确认 Q2 与 AQ-IQ3 的区分被理解；② 方法级问卷施测时 A/B 归属回忆准确。翻译流程明确为：逐条对照原文 → 认知访谈 → 冻结 | 配套 Q2 锐化的判别验证，并核对中文措辞的理解一致性 |
 
-复审中**维持否决**的 GPT 提议（理由见记忆与本文件相应节）：任务级即时评分（违反"三任务后统一评分"冻结原则）、方法级 CRIQ plausibility 三题（与区块级 AQ 重复且复活署名疑难）、CIQ 改编两题（与 AQ-IQ1 / TiA-U/P 重复）、删除 TiA（丢失 Predictability）、统计层级倒置（削弱实验一↔实验三逐通道对应）、遮挡 2.5 s（违反 `FrozenUncertain` 硬约束）。
+复审中**维持否决**的方案（理由见本文件相应节）：任务级即时评分（违反"三任务后统一评分"冻结原则）、方法级 CRIQ plausibility 三题（与区块级 AQ 重复且复活署名疑难）、CIQ 改编两题（与 AQ-IQ1 / TiA-U/P 重复）、删除 TiA（丢失 Predictability）、统计层级倒置（削弱实验一↔实验三逐通道对应）、遮挡 2.5 s（违反 `FrozenUncertain` 硬约束）。
 
-### v5.1 核对结果（2026-07-26，研究者经 GPT 网页端对照原文完成；逐条存档于采集表 `Verification_Audit` 表）
+### v5.1 核对结果（2026-07-26，研究者对照原文完成；逐条存档于采集表 `Verification_Audit` 表）
 
 | 对象 | 结论 |
 | --- | --- |
@@ -398,12 +398,10 @@ TiA（五点同意度）与 S-TIAS（七点程度尺）端点不同，切换处�
 | Gottsacker et al. 2024（仅引用，不施测） | — | Computers & Graphics, doi:10.1016/j.cag.2024.104035 | **已核对（2026-07-26）**：Gottsacker, Furuya, Choudhary, Erickson, Schubert, Bruder, Browne, Welch, *Investigating the relationships between user behaviors and tracking factors on task performance and trust in augmented reality*, 123:104035，bib 已补全；引用表述遵守〇节的水平边界 |
 | 自制 Q1/Q2/Q3/Q6/Q7/Q8/Q9/Q10 | 本研究 | 本文件 4.2 节 | 已冻结（v4 措辞；Q2 于 v5.1 锐化） |
 
-> **核对状态（2026-07-26，全部完成）**：原核对协议第 1–4 步（TiA/AQ/S-TIAS/Gottsacker 原文与书目）
-> 已由研究者经 GPT 网页端对照原文完成；**第 5 步中文措辞已于同日冻结（v5.1 Final wording）**——
-> 19 条量表条目由 AI 助手逐条对照官方原文完成语义等价审计（形成路径：GPT 正向翻译 → GPT 网页端
-> 对照原文复核 → 本仓库助手独立审计，三次独立通过；审计中微调两处：AQ-IQ2 去"能够"避免把行为
-> 陈述变成能力陈述，AQ-EQ2 去"看起来被"避免在 realistically 之上叠加第二层感知模糊），
-> 结论存档于〇节"v5.1 核对结果"与采集表 `Verification_Audit` 表。
+> **核对状态（2026-07-26，全部完成）**：TiA、AQ、S-TIAS、Gottsacker 的原文与书目已由研究者逐条核对；
+> 19 条量表条目的中文措辞也已对照官方原文完成语义等价审计，并于同日冻结为 v5.1 Final wording。
+> 审计中微调两处：AQ-IQ2 去"能够"，避免把行为陈述变成能力陈述；AQ-EQ2 去"看起来被"，
+> 避免在 realistically 之上叠加第二层感知模糊。结论存档于本节与采集表 `Verification_Audit` 表。
 > **不再单设"翻译冻结"关卡**：预实验中的小样本认知访谈改为**确认性检查**（最高优先：
 > TIA_RC1/RC4 构念贴合、Q2 与 AQ-IQ3 判别），仅当发现理解不良时才按"修订—重测—再冻结"规则改动措辞。
 > 论文测量段如实表述为"条目译为中文并对照原文逐条核对语义等价，预实验中经认知访谈确认理解"，
@@ -566,9 +564,9 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 该文件也作为空白审查副本的只读结构与样式来源；模板构造器先复制工作簿，再清空全部人工采集区域并重建派生表，不改写正式文件。审查副本使用
 `pixi run eval data exp3 create-template --output <尚不存在的仓库内路径>` 生成，命令拒绝覆盖已有文件。正式文件共 7 表：
 
-**参与者问卷包（蓝本 + 应急纸质版）**：`material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.md`
-为**唯一事实源**，同名 docx 由 `material/build_exp3_questionnaire_docx.py` 从 md 确定性生成——
-改问卷先改 md 再重跑脚本，不得手改 docx。问卷包已按 v5.1 修正：Q2 锐化措辞、最终问卷 F1–F7
+**参与者问卷包（蓝本 + 应急纸质版）**由同名 MD 与 DOCX 组成：
+`material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.{md,docx}`。条目和量尺以本文件的冻结设计为准，
+两份问卷包须同步维护并逐项核对。问卷包已按 v5.1 修正：Q2 锐化措辞、最终问卷 F1–F7
 （含偏好强度与区分信心）、TiA 中性序号按官方相对顺序呈现并含"无法回答"选项、区块/方法级指导语、
 蓝本定位说明。
 
@@ -593,17 +591,12 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 ### 9.2 Unity / Python 工程状态
 
-- Python 侧正式实现位于 `egoanchor.eval.experiments.experiment_3`，与 `experiment_1_2` 使用同一套
-  `data/settings/workflow/pipeline` 骨架；两边的 reader、计分、统计和绘图都收在各自 `analysis/` 子包。
-  人工入口为 `status exp3`、`validate exp3`、`analyze exp3` 和
-  `copy-assets exp3`，配置与实验一/二共享 `batch.toml` 与 `paper.toml`；
-- 需新建：2-runtime 场景（复用 `DynamicObjectAnchor.SetRenderersHidden`，双 runtime 并行、
-  只显示当前方法）；独立 `variant_matrix_id` 与启动门禁分支（不复用实验一/二九路硬校验）；
-  区块编排器（物体外层、24 单元平衡表驱动）；**头锁问卷 UI：区块级 13 项单尺度逐条呈现 +
-  方法级 TiA/S-TIAS 两尺度页组（切换处提示页）**；与 schema-v2 隔离的日志/QC/分析模块
-- 启动门禁额外要求：预实验完成任务参数校准，且确认遮挡时长使锚点停留 `FrozenUncertain`；
-  **运行时参数不得为实验三修改**
-- 可选优化（不阻塞采集）：FFS/TRT 预热对象无关，理论上可只重建 estimator 免重启；当前不做
+- Unity 正式场景为 `Assets/Scene/EgoAnchor-Experiment3.unity`，包含 One-Euro 与完整 EgoAnchor 两套运行时、
+  对应对象显示和实验状态界面。方法顺序与匿名标签由 24 单元平衡表执行；正式采集未修改运行时参数。
+- Python 正式实现位于 `egoanchor.eval.experiments.experiment_3`，与 `experiment_1_2` 使用同一套
+  `data/settings/workflow/pipeline` 骨架；reader、计分、统计和绘图位于实验三的 `analysis/` 子包。
+  人工入口为 `status exp3`、`validate exp3`、`analyze exp3` 和 `copy-assets exp3`，配置与实验一/二共享
+  `batch.toml` 与 `paper.toml`。
 
 ---
 

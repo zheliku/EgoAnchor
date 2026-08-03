@@ -83,6 +83,13 @@ def build_raw_template(
 def _clean_front_matter(workbook: Any) -> None:
     """删除过期过程说明，并把首屏改成正式采集事实。"""
 
+    workbook.properties.creator = "EgoAnchor"
+    workbook.properties.lastModifiedBy = "EgoAnchor"
+    workbook.properties.title = "EgoAnchor 实验三空白原始数据模板"
+    workbook.properties.subject = "跨对象主观感知评价采集模板"
+    workbook.properties.description = "EgoAnchor 实验三空白数据采集模板；人工采集区域为空。"
+    workbook.properties.keywords = "EgoAnchor, Experiment 3, data collection"
+    workbook.properties.contentStatus = None
     workbook.properties.identifier = WORKBOOK_CONTRACT_ID
     workbook.properties.category = WORKBOOK_DATA_CATEGORY
     workbook.properties.version = "v5.1"

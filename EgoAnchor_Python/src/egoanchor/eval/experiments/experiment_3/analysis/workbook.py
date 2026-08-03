@@ -71,6 +71,17 @@ _RULE = "B8C3CB"
 _FONT = "Microsoft YaHei"
 """结果工作簿使用的克制配色和中文字体。"""
 
+_CORE_PROPERTIES = {
+    "creator": "EgoAnchor",
+    "lastModifiedBy": "EgoAnchor",
+    "title": "EgoAnchor 实验三分析结果",
+    "subject": "跨对象主观感知评价的精简统计结果",
+    "description": "EgoAnchor 实验三统计分析结果工作簿。",
+    "keywords": "EgoAnchor, Experiment 3, Wilcoxon, Holm",
+    "category": "experiment-3-analysis",
+}
+"""结果簿写出和回读共同使用的固定核心属性。"""
+
 _OUTCOME_NAMES = {
     "Q1": "Q1 静止稳定",
     "Q8": "Q8 位置正确",
@@ -159,10 +170,9 @@ def write_results_workbook(
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     workbook.remove(workbook.active)
-    workbook.properties.creator = "EgoAnchor"
-    workbook.properties.title = "EgoAnchor 实验三分析结果"
-    workbook.properties.subject = "跨对象主观感知评价的精简统计结果"
-    workbook.properties.keywords = "EgoAnchor, Experiment 3, Wilcoxon, Holm"
+    for name, value in _CORE_PROPERTIES.items():
+        setattr(workbook.properties, name, value)
+    workbook.properties.contentStatus = None
     _write_info(
         workbook,
         data,
@@ -250,11 +260,6 @@ def _write_info(
                 "适用前提",
                 "零假设下非零配对差的符号必须可交换；通常对应配对差分布关于 0 对称，"
                 "“精确”不表示无分布前提",
-            ),
-            (
-                "与 GPT 参考的差异",
-                "GPT 工作簿使用并列方差校正、无连续性校正的正态近似；"
-                "本分析按 N≤24 的离散配对评分使用条件精确分布，因此 p 值不必相同",
             ),
             ("多重比较", "七个主条目与已发表量表家族五项结局分别做 Holm 校正"),
             ("效应量", f"匹配秩双列相关 r_rb；自举区间置信水平 {settings.confidence_level:.0%}"),
@@ -767,7 +772,7 @@ def _reliability_rows(reliability: pd.DataFrame) -> pd.DataFrame:
         unit = str(source.get("Measurement_Unit"))
         items = int(_as_number(source.get("Items"))) if math.isfinite(_as_number(source.get("Items"))) else 0
         if unit == "block_mean":
-            note = "三物体均值合成分的信度；不可与单次施测或原量表发表值直接比较"
+            note = "三物体均值分的信度；不可与单次施测或原量表发表值直接比较"
             unit_name = "三物体均值"
         elif unit == "method_single":
             note = "每种方法单次施测的条目级内部一致性"
@@ -1140,6 +1145,18 @@ def _verify_results_workbook(
 
     workbook = load_workbook(path, read_only=True, data_only=False)
     try:
+        mismatched_properties = tuple(
+            name
+            for name, expected_value in _CORE_PROPERTIES.items()
+            if getattr(workbook.properties, name, None) != expected_value
+        )
+        fields = mismatched_properties
+        if workbook.properties.contentStatus is not None:
+            fields += ("contentStatus",)
+        if fields:
+            raise ValueError(
+                "实验三结果工作簿的核心属性回读不一致：" + "、".join(fields)
+            )
         expected = [name for name, _ in _SHEET_GUIDE]
         if workbook.sheetnames != expected:
             raise ValueError(f"实验三结果工作簿必须固定为六张中文页：{workbook.sheetnames}")

@@ -16,7 +16,7 @@ persistence_ms = 100.0 # 位移必须持续超过阈值的时间，单位毫秒�
 catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾难性失效，单位毫米。
 
 [experiment_3.contract]
-version = 4 # 实验三原始模板与论文分析参数契约版本；v4 删除特定来源身份门禁并固定通用 QC。
+version = 4 # 实验三原始模板与论文分析参数契约版本；v4 固定通用 QC 与六页结果工作簿契约。
 template_version = "v5.1" # 实验三原始数据模板与问卷的冻结版本。
 
 [experiment_3.analysis]
