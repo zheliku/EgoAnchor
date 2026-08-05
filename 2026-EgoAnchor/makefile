@@ -1,4 +1,4 @@
-SOURCE := egoanchor_cn_v3.tex
+SOURCE := egoanchor_cn_final_v1.tex
 OUTDIR := pdf
 LATEXMK := latexmk
 LATEXFLAGS := -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=$(OUTDIR)
