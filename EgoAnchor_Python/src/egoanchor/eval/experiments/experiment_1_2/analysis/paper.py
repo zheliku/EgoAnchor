@@ -163,14 +163,22 @@ def build_exp1_performance_table(results: PaperResults) -> str:
                     r"\shortstack[l]{静止帧间增量\\P95 (mm)}",
                 ),
                 (results.occlusion_episodes, "translation_p95_mm", "遮挡平移 P95 (mm)"),
-                (results.transition_segments, "response_ms", "Start-transition (ms)"),
+                (
+                    results.transition_segments,
+                    "response_ms",
+                    r"\shortstack[l]{起动转换\\时延 (ms)}",
+                ),
             ),
         ),
         (
             "持续平移",
             (
                 (results.translation_segments, "effective_lag_ms", "有效时延 (ms)"),
-                (results.translation_segments, "aligned_rmse_mm", "对齐 RMSE (mm)"),
+                (
+                    results.translation_segments,
+                    "aligned_rmse_mm",
+                    r"\shortstack[l]{时延对齐\\RMSE (mm)}",
+                ),
                 (
                     results.translation_segments,
                     "current_time_rmse_mm",
@@ -182,7 +190,11 @@ def build_exp1_performance_table(results: PaperResults) -> str:
             "持续旋转",
             (
                 (results.rotation_segments, "effective_lag_ms", "有效时延 (ms)"),
-                (results.rotation_segments, "aligned_rmse_deg", "对齐 RMSE (deg)"),
+                (
+                    results.rotation_segments,
+                    "aligned_rmse_deg",
+                    r"\shortstack[l]{时延对齐\\RMSE (deg)}",
+                ),
                 (
                     results.rotation_segments,
                     "current_time_rmse_deg",
@@ -239,7 +251,7 @@ def build_exp1_static_table(results: PaperResults) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验一的静止、遮挡稳定性与起动转换代价。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。Start-transition 表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
+        r"\caption{实验一的静止、遮挡稳定性与起动转换代价。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。起动转换时延表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
         r"\label{tab:exp1-static}",
         r"\small",
         r"\setlength{\tabcolsep}{3.0pt}",
@@ -249,7 +261,7 @@ def build_exp1_static_table(results: PaperResults) -> str:
         r"\toprule",
         r"& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 & 转换代价 \\",
         r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}",
-        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ & Start-transition (ms) $\downarrow$ \\",
+        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ & 起动转换时延 (ms) $\downarrow$ \\",
         f"& {sample_labels} " + r"\\",
         r"\midrule",
     ]
@@ -280,7 +292,7 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验一的动态 6DoF 保真度。有效时延表示响应滞后；对齐 RMSE 表示移除最佳时延后的空间残差；当前 RMSE 在同一渲染时刻直接比较显示与参考，包含延迟造成的相位误差。三者必须成对解释。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
+        r"\caption{实验一的动态 6DoF 保真度。有效时延表示响应滞后；时延对齐 RMSE 表示移除最佳时延后的空间残差；当前时刻 RMSE 在同一渲染时刻直接比较显示与参考，包含延迟造成的相位误差。三者必须成对解释。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
         r"\label{tab:exp1-dynamic}",
         r"\small",
         r"\setlength{\tabcolsep}{2.4pt}",
@@ -290,7 +302,7 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
         r"\toprule",
         r"& \multicolumn{3}{c}{持续平移} & \multicolumn{3}{c}{持续旋转} \\",
         r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
-        r"方法 & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (mm) $\downarrow$ & 当前 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 对齐 RMSE (deg) $\downarrow$ & 当前 RMSE (deg) $\downarrow$ \\",
+        r"方法 & 有效时延 (ms) $\downarrow$ & 时延对齐 RMSE (mm) $\downarrow$ & 当前时刻 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 时延对齐 RMSE (deg) $\downarrow$ & 当前时刻 RMSE (deg) $\downarrow$ \\",
         f"& {sample_labels} " + r"\\",
         r"\midrule",
     ]
@@ -390,18 +402,18 @@ def build_exp2_attribution_table(results: PaperResults) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验二的设计归因。效应倍率先在同一片段或 event 内计算 Component off / on，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的 on/off 分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF。}",
+        r"\caption{实验二的设计归因。效应倍率先在同一片段或同一遮挡过程内计算组件关闭与启用之比，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的启用与关闭分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{3.0pt}",
         r"\resizebox{\textwidth}{!}{%",
         r"\begin{tabular}{llllll}",
         r"\toprule",
-        r"组件关闭 & 参照指标 & EgoAnchor (on) & Component off & 效应倍率 & 一致性 \\",
+        r"受评设计 & 参照指标 & 启用 & 关闭 & 效应倍率 & 一致性 \\",
         r"\midrule",
-        f"采集时刻对齐 & 同候选复合 P95 & Capture time {_array_cell(capture)}~mm & Arrival time {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
+        f"采集时刻对齐 & 同候选复合 P95 & 采集时刻 {_array_cell(capture)}~mm & 到达时刻 {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
         f"StaticLock & 中心化静止 P95 & {_array_cell(full_static)}~mm & {_array_cell(disabled_static)}~mm & {static_effect} & {static_consistency} " + r"\\",
-        f"VCD 判别性 & event AURC & {_array_cell(vcd_aurc)}~mm & Full coverage {_array_cell(vcd_full_risk)}~mm & {vcd_effect} & {vcd_consistency} " + r"\\",
+        f"VCD 判别性 & 遮挡过程 AURC & {_array_cell(vcd_aurc)}~mm & 全覆盖 {_array_cell(vcd_full_risk)}~mm & {vcd_effect} & {vcd_consistency} " + r"\\",
         f"时序策略 & 平移 / 旋转 aligned RMSE & \\shortstack{{Linear/SLERP (StaticLock off)\\\\{_array_cell(linear_translation)}~mm / {_array_cell(linear_rotation)}$^\\circ$}} & \\shortstack{{Smoothed KF (StaticLock off)\\\\{_array_cell(extrapolation_translation)}~mm / {_array_cell(extrapolation_rotation)}$^\\circ$}} & \\shortstack{{T: {translation_effect}\\\\R: {rotation_effect}}} & \\shortstack{{T: {translation_consistency}\\\\R: {rotation_consistency}}} " + r"\\",
         r"\bottomrule",
         r"\end{tabular}%",

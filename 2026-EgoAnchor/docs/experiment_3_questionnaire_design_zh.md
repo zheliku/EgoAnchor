@@ -5,10 +5,8 @@
 > 本文件 v4 版本（仅测量规格）同时被本版取代。
 > 论文可发表叙述见 `egoanchor_cn_v2.tex` 的实验三小节，两者必须保持一致；冲突时以本文件为准并同步修复。
 
-> **当前数据版本边界（2026-08-03）**：正式 24 人数据保存在
-> `material/EgoAnchor_Experiment3_RawData.xlsx`，按 v5.2 施测措辞完成，分析时只使用该版本。
-> 后续采集使用 `material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 及同名 v5.3 问卷包；
-> v5.2 与 v5.3 不合并分析。区块级题目按页面连续排列为
+> **当前数据源（2026-08-08）**：`material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`
+> 是唯一分析源，包含 24 人数据，并与同名 v5.3 问卷包配套。区块级题目按页面连续排列为
 > `Q1–Q7 → AQ_EQ1–AQ_EQ3 → AQ_IQ1–AQ_IQ3`，Q10 已永久删除。
 
 ---
@@ -44,7 +42,7 @@
 | --- | --- | --- |
 | 实验三正文图 | 原 Figure 4 与 Figure 5 合并为一张双排复合图（资源名 `figure4_exp3_subjective_outcomes`，v2 主稿编号 Figure 6）；上排 `(a)` 展示七项主结局，下排 `(b)/(c)` 按 1--7 与 1--5 理论量尺展示五项已发表量表结局 | 两排共用七槽物理网格和一个方法图例，五项量表整体居中，避免两张图上下排列时出现箱宽和组间距不一致 |
 | 图产物契约 | 图产物契约由 v6 升至 v7，只发布 `figure4_exp3_subjective_outcomes.{png,pdf}` | 该资源在 v2 主稿中为 Figure 6；实验一单栏 `replay_grid.pdf` 为 Figure 4。独立 Figure 5 已退役；旧文件名和旧 v4/v5/v6 构建清单不得继续发布 |
-| 正式数据 | `EgoAnchor_Experiment3_RawData.xlsx` 为 24 名参与者的 v5.2 输入；`EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 只用于后续采集 | v5.2 已完成结构、配对完整性和冻结统计分析；v5.3 另行分析，不与 v5.2 合并 |
+| 正式数据 | `EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 为 24 名参与者的唯一分析输入 | 已完成结构、配对完整性和冻结统计分析 |
 
 ### v5.1 增补（2026-07-26，用户批准）
 
@@ -569,11 +567,10 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 
 ## 九、采集材料与工程实现
 
-### 9.1 采集与分析工作簿与问卷包（v5.2 正式数据 / v5.3 后续模板）
+### 9.1 采集与分析工作簿与问卷包（v5.3）
 
-**正式采集与分析输入：`material/EgoAnchor_Experiment3_RawData.xlsx`**（v5.2，24 人）。
-后续采集使用 `material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`；模板只改变未来施测措辞，
-不覆盖正式工作簿，也不与 v5.2 数据合并。正式文件共 5 表：
+**正式采集与分析输入：`material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`**（v5.3，24 人）。
+该文件是当前唯一分析源，共 5 表：
 
 **参与者问卷包（蓝本 + 应急纸质版）**由同名 MD 与 DOCX 组成：
 `material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_1_Bilingual.{md,docx}`。条目和量尺以本文件的冻结设计为准，
@@ -592,15 +589,15 @@ VCD 分数、接纳率、输出可用率、显示帧间增量、StaticLock 进�
 | `Final` | 24 条最终问卷（选择、强度、信心、开放题、安全检查） |
 
 约定：`Participants`、`Block`、`Method` 和 `Final` 是人工原始值区域，不得含公式；TiA 原始反向项不得被换向分覆盖。
-输入区有冻结下拉或整数校验，正式 Python 分析从原始值独立重算。B5 在 v5.2 正式数据中沿用原分档；
-v5.3 模板改为互斥累计次数“从未 / 1–5 次 / 6–20 次 / 21 次及以上”。结果另写
+输入区有冻结下拉或整数校验，正式 Python 分析从原始值独立重算。B5 使用 v5.3 的互斥累计次数
+“从未 / 1–5 次 / 6–20 次 / 21 次及以上”。结果另写
 `data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx`，固定 6 张中文结果页：
 `说明`（输入、方法、边界与页索引）、`样本与质控`（样本流、人口学、平衡、操纵与生命周期）、
 `主结果`（冻结的 7+5 结局）、`分物体描述`（7 条目×3 物体，仅描述）、`量表信度`（当前样本）、
 `选择结果`（偏好、信任、强度、信心与交叉）。逐人审计和派生底表不再复制到结果簿；原始输入已
 保存追溯信息。开放题人工编码使用独立、持久且不会被自动分析重建覆盖的文件。
-方法映射列仅实验员可见，参与者界面只显示 A/B。v5.2 正式输入包含 24 名参与者、144 个方法--物体区块；
-分析程序已完成结构、计分、配对与统计一致性检查。后续 v5.3 数据必须单独建批次，不能和 v5.2 合并。
+方法映射列仅实验员可见，参与者界面只显示 A/B。当前 v5.3 输入包含 24 名参与者、144 个方法--物体区块；
+分析程序检查结构、计分、配对与统计一致性。
 
 ### 9.2 Unity / Python 工程状态
 

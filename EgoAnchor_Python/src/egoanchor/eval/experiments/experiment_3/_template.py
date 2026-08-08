@@ -1,4 +1,4 @@
-"""从 v5.2 五表工作簿生成空白实验三数据模板。"""
+"""从当前 v5.3 五表工作簿生成空白实验三数据模板。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .analysis import (
     PARTICIPANT_BACKGROUND_COLUMNS,
     PARTICIPANT_CATEGORIES,
     VRMR_EXPERIENCE_TEMPLATE_OPTIONS,
-    WORKBOOK_TEMPLATE_CONTRACT_ID,
+    WORKBOOK_CONTRACT_ID,
     WORKBOOK_DATA_CATEGORY,
     AnalysisSettings,
 )
@@ -69,8 +69,8 @@ def build_raw_template(
         raise ValueError("新原始模板不得覆盖结构来源文件")
     if output.exists():
         raise FileExistsError(f"拒绝覆盖已有实验三原始工作簿：{output}")
-    if settings.template_version != "v5.2":
-        raise ValueError("分析配置仍固定为 v5.2；后续空白模板单独写入 v5.3 标识")
+    if settings.template_version != "v5.3":
+        raise ValueError("实验三空白模板只接受当前 v5.3 配置")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.stem}.{uuid4().hex}.tmp.xlsx")
@@ -78,7 +78,7 @@ def build_raw_template(
     try:
         _validate_layout(workbook)
         _set_properties(workbook)
-        _update_future_questionnaire_text(workbook)
+        _ensure_v53_questionnaire_text(workbook)
         _clear_inputs(workbook)
         _rebuild_validations(workbook)
         _prepare_navigation(workbook)
@@ -120,13 +120,13 @@ def _set_properties(workbook: Any) -> None:
     workbook.properties.subject = "跨对象主观评价采集模板"
     workbook.properties.description = "EgoAnchor 实验三 v5.3 五表空白数据模板。"
     workbook.properties.keywords = "EgoAnchor, Experiment 3, questionnaire"
-    workbook.properties.identifier = WORKBOOK_TEMPLATE_CONTRACT_ID
+    workbook.properties.identifier = WORKBOOK_CONTRACT_ID
     workbook.properties.category = WORKBOOK_DATA_CATEGORY
     workbook.properties.version = "v5.3"
 
 
-def _update_future_questionnaire_text(workbook: Any) -> None:
-    """只更新后续空白模板的措辞，不改写已完成的 v5.2 原始工作簿。"""
+def _ensure_v53_questionnaire_text(workbook: Any) -> None:
+    """确保派生空白模板使用当前 v5.3 问卷措辞。"""
 
     sheet = workbook["Questionnaire"]
     sheet.cell(7, 3).value = "从未 / 1–5 次 / 6–20 次 / 21 次及以上"

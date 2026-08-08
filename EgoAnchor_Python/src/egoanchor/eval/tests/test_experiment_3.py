@@ -27,7 +27,6 @@ from egoanchor.eval.experiments.experiment_3.analysis import (
     EXP3_ARTIFACTS,
     PRIMARY_OUTCOMES,
     WORKBOOK_CONTRACT_ID,
-    WORKBOOK_TEMPLATE_CONTRACT_ID,
     analyze_scores,
     build_analysis,
     derive_scores,
@@ -49,9 +48,9 @@ RAW_WORKBOOK = (
     REPOSITORY_ROOT
     / "2026-EgoAnchor"
     / "material"
-    / "EgoAnchor_Experiment3_RawData.xlsx"
+    / "EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx"
 )
-"""五表正式参与者原始数据工作簿。"""
+"""实验三当前唯一的五表正式分析源。"""
 
 PAPER_CONFIG = (
     PYTHON_ROOT / "src" / "egoanchor" / "eval" / "config" / "paper.toml"
@@ -67,7 +66,7 @@ class Experiment3Tests(unittest.TestCase):
 
         settings = load_settings()
         self.assertEqual(settings.contract_version, 5)
-        self.assertEqual(settings.template_version, "v5.2")
+        self.assertEqual(settings.template_version, "v5.3")
         self.assertEqual(settings.alpha, 0.05)
         self.assertEqual(settings.confidence_level, 0.95)
         self.assertEqual(settings.target_participants, 24)
@@ -123,7 +122,7 @@ class Experiment3Tests(unittest.TestCase):
                 )
                 self.assertEqual(
                     workbook.properties.identifier,
-                    WORKBOOK_TEMPLATE_CONTRACT_ID,
+                    WORKBOOK_CONTRACT_ID,
                 )
                 questionnaire_items = tuple(
                     workbook["Questionnaire"].cell(row, 2).value
@@ -203,6 +202,18 @@ class Experiment3Tests(unittest.TestCase):
                 workbook.close()
             with self.assertRaisesRegex(ValueError, "契约标识不匹配"):
                 read_workbook(bad_contract)
+
+            bad_fallback = Path(directory) / "bad_fallback.xlsx"
+            copyfile(RAW_WORKBOOK, bad_fallback)
+            workbook = load_workbook(bad_fallback)
+            try:
+                workbook.properties.identifier = None
+                workbook.properties.description = "EgoAnchor 实验三 v5.2 五表原始数据。"
+                workbook.save(bad_fallback)
+            finally:
+                workbook.close()
+            with self.assertRaisesRegex(ValueError, "v5.3 文档属性不匹配"):
+                read_workbook(bad_fallback)
 
             bad_order = Path(directory) / "bad_order.xlsx"
             copyfile(RAW_WORKBOOK, bad_order)

@@ -1,0 +1,711 @@
+4.2
+
+Pre-recorded voice instructions
+
+We conducted a human-subject study to evaluate whether our system
+can effectively generate realistic user avatars for VR. The evaluation
+considered two perspectives: (1) whether a self-resembling avatar is
+perceived as one’s own, and (2) whether an avatar resembling another
+person can be accepted as one’s own. Based on these perspectives, we
+compared our system with two baseline methods.
+
+(A)
+
+=
+
+≠
+
+(B)
+Fig. 4: (A) User study setup with participants performing poses from
+pre-recorded voice instructions. (B) Avatar type factor with two levels:
+self (left, resembling the participant) and other (right, resembling another
+person).
+
+4
+
+E XPERIMENTS
+
+4.1
+
+Baselines
+
+User Study
+
+To evaluate our system, we compare against mesh-based full-body
+avatar reconstruction methods using the SMPL-X [38] model. Figure 3
+illustrates the baseline systems constructed for comparison: (A) videobased mesh avatar reconstruction, and (B) image-based mesh avatar
+reconstruction. For 3DGS avatar generation in our system, VRGaussianAvatar (Ours), a frontal image of each subject in an A-pose with
+arms slightly extended was captured. This single image served as the
+input for generating a full-body 3DGS avatar.
+In the case of video-based mesh avatar reconstruction (video), we
+separately utilized head and body videos. For the head, we recorded
+a one-minute video of the Facial Action Coding System (FACS) [8]based facial expressions and reconstructed it with FATE [62] to obtain
+a textured FLAME [26] model. For the body, we captured RGBD
+videos using the Azure Kinect DK7 and reconstructed the textured
+SMPL-X model with RC-SMPL [48]. The head and body textures were
+subsequently merged using the method of [47].
+For image-based mesh avatar reconstruction (image), we used the
+same single input image employed in VRGaussianAvatar. We adopted
+the off-the-shelf SMPL-X inference model SMPLer-X [3] for mesh
+recovery, and generated textures with TexDreamer [28], an image-based
+SMPL-X texture generator.
+Experimental Details.
+All baselines and the VRGaussianAvatar
+runtime were executed on a desktop PC equipped with an Intel Core
+i9-14900K CPU, an NVIDIA RTX 4090 GPU, and 64 GB of RAM.
+For avatar reconstruction, both the image-based mesh baseline and our
+system’s Gaussian Avatar Module were run on the same desktop PC as
+the runtime environment. The image-based baseline required approximately 30 seconds for SMPL-X parameter estimation and 19 seconds
+for texture generation. Our Gaussian Avatar Module reconstructed a
+full-body 3D Gaussian Avatar within 10 seconds. For the video-based
+mesh baseline, body reconstruction with RC-SMPL took about 30 seconds, and avatar integration required an additional 2 seconds. Facial
+reconstruction with FATE was performed on a separate workstation
+equipped with an NVIDIA A40 GPU and required about 12 hours.
+7 https://learn.microsoft.com/en-us/azure/kinect-dk/
+
+Study Design and Task.
+The experimental factors and
+conditions were organized as follows. The first factor was avatar
+type with two levels: (1) self-representative avatar (self ) and (2)
+other-representative avatar (other). For the other avatar type, we
+used avatars of non-participant models matched in gender, ethnicity,
+and similar age to the participants (Figure 4 (B)). The second factor
+was avatar reconstruction method with three conditions related to
+the generation process: (1) Ours (VRGaussianAvatar), (2) video
+(video-based avatar reconstruction) [47, 48, 62], and (3) image
+(image-based avatar reconstruction) [3, 28] methods. Both of the avatar
+type and method factors were within-subject factors, our experiment
+employed a 2×3 within-subject factorial design. To compare method
+conditions under the self and other perspectives, avatar type was
+counterbalanced across participants, and the three method conditions
+within each type were also counterbalanced using a Latin Square
+design.
+To evaluate the appearance and movements of avatars in VR, we
+adapted a commonly used avatar control task from prior studies assessing virtual embodiment [7, 44, 54]. In this task, participants wearing
+an HMD experienced their avatars in mirror mode and were instructed
+through audio cues to make specific body poses, while observing how
+these poses were reflected in their avatar [44]. We chose the mirrorbased observation (rather than a purely first-person view) because our
+primary goal was to let participants directly inspect the reconstructed
+avatar’s overall appearance and motion quality as a self-representation.
+Building on the previous work [7], which extended the original task
+[44] by adding side-view observation instructions, we designed the
+task to better fit our study context and to ensure that participants could
+sufficiently observe the avatars. For instance, participants were encouraged to freely explore their avatars (e.g., “Move your arms and take
+any posture you want.”) and were also given additional instructions
+to observe their avatars not only from the front, but also from the left,
+right, and rear views.
+Dependent Variables. In this study, the Sense of Embodiment (SoE)
+was measured as the primary dependent variable, as the study aimed to
+evaluate whether our realistic avatars’ appearance and movements conveyed appropriate body representation and perception [2,44]. Based on
+the previous studies that explored overall perception and embodiment
+of avatars in VR [30, 31, 33, 54, 58], we adopted two representative
+measurements: (1) the Virtual Embodiment Questionnaire (VEQ) by
+Roth and Latoschik [44] and (2) VEQ+ by Fiedler et al. [11]. The
+VEQ, which is specifically designed to assess SoE in VR environments,
+consists of three latent factors. First, Virtual Body Ownership (VBO)
+refers to the perception of a virtual body as one’s own. Second, Agency
+(AG) denotes the perception of control over the virtual body, and the
+last Change (CH) captures alterations in the perceived body schema.
+The VEQ+ extends this framework by incorporating two additional
+dimensions: Self-location (the feeling of being located at the position
+of one’s body) and Self-identification (related to personalization and
+resemblance). Under these dimensions, VEQ+ has three subscales—
+Self-Location (SL), Self-Attribution (SA), and Self-Similarity (SS).
+Both the VEQ and VEQ+ comprise 12 items, for a total of 24 items.
+The Virtual Human Plausibility Questionnaire (VHPQ) measures the
+extent to which a virtual avatar’s appearance and behavior are perceived
+as plausible, coherent, and consistent with the VR environment [29].
+Considering the objective and setup of our system evaluation, we only
+used the Appearance and Behavior Plausibility (ABP) subscale of the
+VHPQ, which consisted of six items. In addition, following earlier
+research [44], we also included three self-reported items to more di-
+
+rectly compare the realism, naturalness, and visuomotor synchrony of
+avatar motion behavior: “The virtual avatar’s movements were realistic,” “The virtual avatar’s movements were naturalistic,” and “The
+virtual avatar’s movements were in synchrony with my own movements.”
+All questionnaire measures were assessed on a 7-point Likert scale (1:
+Strongly disagree – 7: Strongly agree). For the post-experiment interview, we designed open-ended questions with reference to Menzel et
+al. [33] to collect qualitative feedback on avatar fidelity, suitability, and
+realism when observing both self and other avatar types. Participants
+were also asked about their subjective opinions on differences between
+avatars and their preferences.
+Procedure.
+This study was approved by the Institutional Review
+Board (IRB). Each participant attended two sessions. The first session
+was for data acquisition for the video method, where participants’ facial data were scanned (pre-processing required over 12 hours); They
+also received an explanation of the study, provided informed consent,
+and completed a demographic questionnaire. The second session, conducted at least one day later, was the main experiment. At the beginning,
+participants’ bodies were scanned to generate avatars for the Ours and
+image conditions, while the video avatars were generated by combining
+the pre-processed facial model with the newly scanned body.
+After avatar generation, participants wore an HMD and performed
+the avatar control task while standing in an empty experimental space
+(Figure 4 (A)). Following pre-recorded voice instructions, they assumed
+various body poses and observed their virtual avatars mirroring their
+poses in real-time. After each method condition, they removed the
+HMD and completed the post-task questionnaire. Participants first completed the three method conditions (Ours, video, image) arranged in a
+balanced order under one avatar type, and then repeated the sequence
+under the other type, resulting in six evaluations in total. Finally, a
+post-experiment interview was conducted to collect qualitative feedback on their experiences with each method under both self and other
+conditions.
+Participants.
+We recruited 24 participants (12 male, 12 female)
+through the campus website. Their ages ranged from 22 to 34 years
+(M = 27.67, SD = 3.17). Regarding prior experience with avatarmediated applications (e.g., social networking services, games), 17
+participants reported using such applications fewer than five times
+(70.83%), whereas seven participants reported using them five times
+or more (29.17%). In contrast, most participants (20, 83.3%) indicated
+that they had used AR/VR technologies and wearable devices more
+than five times, while only four participants reported fewer than five
+times of AR/VR experience (16.67%).
+4.3
+
+Quantitative Experiments
+
+We conducted a quantitative evaluation of the Gaussian Avatar Module,
+a core component of VRGaussianAvatar responsible for avatar representation. For comparison, we employed video-based [47, 48, 62] and
+image-based [3, 28] avatar reconstruction methods that are also applicable in VR, consistent with our user study setup. We also measured
+the rendering speed at different resolutions to assess the contribution of
+Binocular Batching for real-time rendering.
+Datasets. We recruited 24 participants (12 male and 12 female) for
+evaluation. For both VRGaussianAvatar and the image-based baseline,
+a single source image was captured with the subject standing in an
+A-pose (arms lowered and slightly apart from the body). For the videobased baseline, we recorded videos for facial and body reconstruction.
+Facial reconstruction used a one-minute RGB video containing diverse
+expressions based on the FACS [8], while body reconstruction relied
+on a 30-second RGBD video capturing both the frontal and rear views
+of the subject. For fair evaluation, rendered results from each method
+were cropped to the full-body and compared against the corresponding
+ground-truth images.
+Metrics.
+We employed four widely used metrics for evaluating
+avatar reconstruction quality: L1 distance, LPIPS [63], PSNR [15], and
+
+SSIM [55]. L1 distance measures pixel-wise absolute error between
+the rendered image and ground truth. LPIPS (Learned Perceptual
+Image Patch Similarity) assesses perceptual similarity based on deep
+neural network features, better reflecting human visual perception.
+PSNR (Peak Signal-to-Noise Ratio) quantifies reconstruction quality
+in terms of signal fidelity, with higher values indicating less distortion.
+SSIM (Structural Similarity Index) evaluates structural consistency and
+perceptual quality, particularly in terms of luminance, contrast and
+structure.
+5
+
+R ESULTS
+
+5.1
+
+User Study Analysis
+
+For subjective measures, a two-way repeated measures ANOVA with
+the Aligned Rank Transform (ART) was used for non-parametric factorial analysis (α = .05) [57]. The ART method has been widely
+utilized in human-subject research analysis because it is specialized in
+multi-factorial non-parametric analysis and accommodates ordinal and
+continuous variables [57]. All post-hoc comparisons were conducted
+using the ART-C procedure [9] with Bonferroni corrected p-values.
+The internal consistency among Likert items was examined by the
+Cronbach’s alpha reliability coefficient.
+5.1.1
+
+Virtual Embodiment
+
+VEQ. The results for the VEQ and its subscales are shown in Figure 6.
+The VEQ score, which aggregates all three subscales, showed a reliable
+consistency (αV EQ = .825), and the three subscales also showed an
+acceptable value (αV BO = .861; αAG = .837; αCH = .890). We found
+a main effect of avatar type (F1,23 = 8.464, p = .008, η p2 = .269), with
+self rated higher than other avatar types. There were no significant main
+effect of method (F2,46 = 1.082, p = .348, η p2 = .045), nor interaction
+effect between the two factors (F2,46 = 2.493, p = .094, η p2 = .098).
+For VBO, significant main effects were found for avatar type (F1,23 =
+15.064, p < .001, η p2 = .396) and method (F2,46 = 21.903, p < .001,
+η p2 = .488). Post-hoc tests indicated that self avatars were rated higher
+than other, and Ours method induced higher ownership than both video
+and image (all p < .001), while video and image did not differ. No
+interaction effect was observed (F2,46 = 1.419, p = .252). AG showed
+significant main effects of avatar type (F1,23 = 4.323, p = .049, η p2 =
+.158) and method (F2,46 = 6.041, p = .005, η p2 = .208). Post-hoc
+comparisons revealed that self avatars scored higher than other avatars,
+and that Ours conveyed higher agency than both video (p = .031)
+and image (p = .006), while video and image were not different. The
+interaction was not significant (F2,46 = 0.841, p = .438). The CH score,
+with lower values reflecting less perceived change from one’s own body
+and thus a better representation of the actual user, showed a significant
+main effect of method (F2,46 = 13.728, p < .001, η p2 = .374), but no
+main effect of avatar type. Pairwise comparisons showed that Ours
+yielded lower CH scores than both video (p = .001) and image (p <
+.001), whereas video and image did not differ. In addition, a significant
+interaction effect was observed between two factors (F2,46 = 7.932, p =
+.001, η p2 = .256). Follow-up analyses showed that in the self condition,
+Ours produced lower CH scores than both video and image (all p <
+.001), while in the other condition, Ours was only lower than image
+(p = .024).
+VEQ+. VEQ+ (αV EQ+ = .937) and its subscales all showed an
+acceptable Cronbach’s alpha (αSL = .765; αSA = .889; αSS = .965).
+The results of VEQ+ are also in Figure 6. The overall VEQ+ score
+revealed significant main effects of avatar type (F1,23 = 57.715, p <
+.001, η p2 = .715) and method (F2,46 = 49.487, p < .001, η p2 = .683),
+and a significant interaction effect (F2,46 = 16.155, p < .001, η p2 =
+.413). Post-hoc tests showed that self avatars scored higher than other,
+and Ours was significantly higher than both video and image (all p <
+.001). Also, video was rated higher than image (p < .001). Within
+the self condition, Ours was significantly higher than both video and
+image (all p < .001), and video was rated higher than image (p = .005).
+Within the other condition, Ours again scored significantly higher than
+
+User Motion
+(From HMDs)
+
+VRGA
+(Ours)
+
+Video-based
+Avatar
+
+Image-based
+Avatar
+
+Fig. 5: Qualitative comparison of VRGaussianAvatar with baseline avatar representations under identical HMD-only control. Compared to baselines,
+VRGaussianAvatar typically preserves sharper appearance details in close-up regions, including head/face (sky-blue boxes) and clothing (orange
+boxes). All methods are rendered stereoscopically in real time, enabling interactive avatar control in VR.
+
+User Motion (A) VE Q [A]
+(From HMDs)
+
+(A-2) Ag ency (AG) [A, M]
+
+(A-1) Virtual Body Ow nership (VBO)[A, M]
+
+***
+***
+
+***
+***
+
+*
+
+**
+
+(A-3) Change (CH) [M, I]
+
+**
+
+***
+***
+
+*
+
+other
+
+self
+
+other
+
+*
+
+VRGA
+(Ours)
+self
+
+other
+
+self
+
+**
+
+Video-based(B) VE Q+ [A, M, I]
+Avatar ***
+***
+***
+
+other
+
+self
+
+***
+
+*
+
+(B-1) Se lf-Location (SL) [A, M]
+
+***
+***
+
+***
+***
+
+other
+
+self
+
+(B-2) Se lf-Attributi on (SA) [A, M, I]
+
+**
+
+***
+***
+
+***
+***
+
+other
+
+self
+
+(B-3) Se lf-Similarity (SS) [A, M, I]
+
+***
+***
+
+***
+***
+***
+
+other
+
+self
+
+*
+
+***
+
+Image-based
+Avatar
+
+self
+
+***
+
+**
+
+***
+
+other
+
+***
+
+Fig. 6: Results for (A)–(A-3) Virtual Embodiment Questionnaire and its subscales; (B)–(B-3) VEQ+ and its subscales. (A and M: significant main
+effect of avatar type and method, respectively; I: significant interaction effect between avatar type and method)
+
+video and image (p < .001), while the difference between video and
+image was not significant.
+SL showed significant main effects of avatar type ( F1,23 = 9.389,
+p = .005, η p2 = .290) and method (F2,46 = 12.948, p < .001, η p2 =
+.360). Post-hoc comparisons indicated that self avatars were rated
+higher than other avatars, and Ours showed significantly higher SL
+
+than video (p = .001) and image (p < .001), whereas video and image
+did not differ. No interaction effect was found. SA revealed significant
+main effects of avatar type (F1,23 = 45.904, p < .001, η p2 = .666) and
+method (F2,46 = 44.525, p < .001, η p2 = .659), as well as a significant
+interaction effect (F2,46 = 10.653, p < .001, η p2 = .317). Post-hoc
+analysis showed that self type was higher than other type; Ours method
+
+(A) VEQ
+7
+
+6
+(C) VHPQ
+
+(D) Realism
+
+(C) VHPQ [M]
+7
+6
+
+(D) Realism
+
+**
+
+***
+
+**
+
+5
+
+6
+
+(E) Naturalness
+5
+
+[A, M]
+
+7
+
+***
+
+(E) Naturalness
+
+7
+
+**
+
+**
+
+5
+
+6
+
+**
+
+**
+
+4
+
+5
+
+4
+
+4
+
+4
+
+3
+
+3
+
+3
+
+2
+
+2
+
+2
+
+Synchrony
+(F) (F)
+Synchrony
+
+[M]
+
+[A, M, I]
+
+7
+6
+
+*
+
+**
+
+***
+
+5
+
+3
+
+4
+3
+
+2
+
+Ours
+Video−based
+
+2
+
+Image−based
+
+1
+1
+
+1
+
+Self
+self
+
+Other
+other
+
+1
+
+Self
+self
+
+Other
+other
+
+1
+
+Self
+self
+
+Other
+other
+
+Self
+
+Self
+self
+
+Other
+
+Other
+other
+
+*
+
+Fig. 7: Results for (C) Virtual Human Plausibility Questionnaire; (D)–(F) Additional subjective ratings. In (F), green jittered points indicate individual
+responses for the video-based method in the other avatar type, shown to complement the box plot where the interquartile range collapsed to a single
+value. (A and M: significant main effect of avatar type and method, respectively; I: significant interaction effect between avatar type and method)
+
+was rated significantly higher than video and image (all p < .001), and
+video was also higher than image (p = .006). In both the self and other
+conditions, Ours induced significantly higher scores than video and
+image (all p ≤ .001), and video was higher than image but only in the
+self condition (p = .005). Similarly, analysis of SS revealed significant
+main effects of avatar type (F1,23 = 71.296, p < .001, η p2 = .756),
+method (F2,46 = 63.800, p < .001, η p2 = .735), and their interaction
+(F2,46 = 25.390, p < .001, η p2 = .525). Post-hoc comparisons first
+indicated that self type was higher than other type. Moreover, Ours
+had significantly higher SS than video and image, and video was also
+higher than image (all p < .001). Within the self type, Ours perceived
+more similar with the participants than both video and image, and video
+was rated higher than image (all p < .001). In the other type, Ours also
+scored higher similarity than video (p = .027) and image (p < .001),
+while video and image had no difference.
+5.1.2
+
+Table 1: Quantitative comparison of rendering quality across different
+conditions. Video-based avatars are constructed following [47, 48, 62],
+and image-based avatars are constructed following [3, 28].
+
+Quantitative Results
+
+Table 1 summarizes the quantitative evaluation across different conditions. Our method (VRGA) achieves the best performance in all
+
+LPIPS ↓
+
+PSNR ↑
+
+SSIM ↑
+
+Video-based Avatar
+
+0.042
+
+0.099
+
+16.33
+
+0.927
+
+Image-based Avatar
+
+0.043
+
+0.103
+
+16.74
+
+0.917
+
+VRGA (Ours)
+
+0.033
+
+0.082
+
+17.92
+
+0.934
+
+Resolution
+
+VHPQ. The results regarding the VHPQ and self-reported measures
+are in Figure 7. With respect to the ABP in VHPQ, it showed a reliable
+Cronbach’s alpha (αV HPQ = .900). A main effect of method was
+observed (F2,46 = 13.126, p < .001, η p2 = .363), with Ours induced
+higher appearance and behavior plausibility than video (p = .001) and
+image (p = .005). No effects of avatar type or interaction were found.
+
+5.2
+
+L1 ↓
+
+Table 2: Rendering performance across different resolutions with and
+without Binocular Batching (BB). Binocular Batching enables efficient realtime stereoscopic rendering. Resolution indicates the per-eye resolution,
+and FPS is measured under binocular rendering.
+
+Virtual Avatar Plausibility and Motion Behavior
+
+Self-reported Motion Behavior. For motion realism, significant
+main effects of avatar type (F1,23 = 4.656, p = .042, η p2 = .168) and
+method (F2,46 = 5.244, p = .009, η p2 = .186) were observed, while
+the interaction effect was not significant. The pairwise post-hoc tests
+indicated that self avatars were higher than other avatars, and Ours
+induced higher behavior realism than video (p = .009). No other
+differences were significant. Regarding naturalness, a significant main
+effect of method was only found (F2,46 = 4.950, p = .011, η p2 = .177).
+Similar with the realism, post-hoc analysis revealed that Ours had
+significantly higher naturalness than video (p = .009), while image did
+not differ from either. No effect of avatar type or interaction was found.
+Lastly, one participant’s data contained an error and was excluded from
+the synchrony analysis. Synchrony showed a main effect of method
+(F2,44 = 10.604, p < .001, η p2 = .325), and an interaction with avatar
+type (F2,44 = 3.459, p = .040, η p2 = .136). In post-hoc analysis, it was
+revealed that Ours was rated as having higher motion synchrony than
+both video and image (all p < .001), and also video was higher than
+image (p = .012). In the self condition, Ours method had higher values
+than video (p = .031). In the other condition, Ours was higher than
+both video (p = .002) and image (p < .001), while other pairs were not
+different.
+
+Condition
+
+512×512
+768×768
+1024×1024
+
+Binocular
+Batching
+w/ BB
+w/o BB
+w/ BB
+w/o BB
+w/ BB
+w/o BB
+
+LPIPS ↓
+0.085
+0.084
+0.082
+
+Render
+Time
+21.78 ms
+37.47 ms
+23.19 ms
+38.33 ms
+25.45 ms
+38.80 ms
+
+FPS ↑
+45.91
+26.69
+43.12
+26.09
+39.29
+25.77
+
+metrics, demonstrating consistent advantages over both baselines. Between the two baselines, the video-based avatar shows better results
+than the image-based avatar in terms of L1, LPIPS, and SSIM.
+Table 2 presents image similarity, rendering time, and FPS across
+different resolutions with and without Binocular Batching (BB). By
+exploiting the fact that stereoscopic rendering in VR shares SMPL-X
+parameters and dynamic 3DGS attributes, our system renders both
+camera views simultaneously with a batch size of two, enabling highquality avatar rendering in real time. For the user study, we employed
+Binocular Batching at a resolution of 1024×1024, which provided
+real-time performance and visual quality.
+Figure 5 provides representative qualitative examples that visually
+corroborate these quantitative improvements, showing clearer appearance details for VRGaussianAvatar under identical HMD-only control.
+More qualitative results are provided in Appendix B.
+6
+
+D ISCUSSION
+
+The goal of this work is to enable practical, high-fidelity avatar representation for VR applications by addressing the limitations of existing
+video- and image-based approaches. To this end, we introduce VRGaussianAvatar, an HMD-only controllable avatar pipeline that integrates 3D
+Gaussian Splatting into an interactive VR system, and evaluate whether
+
+

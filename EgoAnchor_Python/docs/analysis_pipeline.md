@@ -113,9 +113,8 @@ src/egoanchor/eval/
 修改 `paper.toml` 中任一实验拥有的科学分析参数后，该实验旧构建会因配置摘要不一致而拒绝复制。
 `batch.toml` 的路径和复制目标由工作流另行核验；另一实验的配置变化不会使无关缓存失效。
 
-实验三正式采集前必须确认 `aq_mode` 与问卷施测模态。Q10 已从 v5.2 正式工作簿和 v5.3 后续模板删除，
-不再保留 `q10_enabled` 或 TOST 等价性分支。当前 `aq_mode = "full"`；正式 v5.2 数据与后续 v5.3
-数据必须分版本分析，不能合并。
+实验三使用 v5.3 工作簿与 `aq_mode = "full"`。Q10 已删除，不再保留 `q10_enabled` 或
+TOST 等价性分支。
 
 ## 4. 状态与质量检查
 
@@ -239,12 +238,11 @@ pixi run eval analyze exp1-2 --rebuild
 正式原始工作簿路径由 TOML 固定为：
 
 ```text
-../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData.xlsx
+../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx
 ```
 
-该工作簿保存 24 名参与者的 v5.2 正式数据。后续采集使用
-`../2026-EgoAnchor/material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`，两版数据不合并。
-研究团队保留原始记录与知情同意；分析程序检查工作簿结构、评分、配对和统计输入的一致性。
+该 v5.3 工作簿是实验三唯一分析源，保存 24 名参与者的数据。研究团队保留原始记录与知情同意；
+分析程序检查工作簿结构、评分、配对和统计输入的一致性。
 
 正式采集时直接填写计划路径下的工作簿，不需要反复生成模板。只有需要制作新的审查副本时才运行：
 
@@ -272,10 +270,10 @@ pixi run eval data exp3 create-template --output ..\2026-EgoAnchor\material\exp3
 `Participants` 填写背景与纳入信息，`Block` 填写 144 个方法×物体区块，`Method` 填写两次方法级问卷，
 `Final` 填写最终选择、开放题和安全检查。TiA 反向项保留原始分，`6 - raw` 由 Python 计分执行。
 
-后续 v5.3 模板的 B5 使用互斥累计次数“从未 / 1–5 次 / 6–20 次 / 21 次及以上”；正式 v5.2 工作簿保留原分档。
-两版工作簿不得合并。工作簿不包含需要 Excel 重算的派生表，正式分析直接从原始值读取。
+v5.3 的 B5 使用互斥累计次数“从未 / 1–5 次 / 6–20 次 / 21 次及以上”。工作簿不包含需要
+Excel 重算的派生表，正式分析直接从原始值读取。
 
-### 附录：历史 Derived 工作簿说明（不适用于 v5.2/v5.3）
+### 附录：历史 Derived 工作簿说明（不适用于当前 v5.3）
 
 `Derived` 不是实施检查表，也无需人工填写。它是一张只读的 Excel 公式派生表，把每一步计分显式展开：
 
@@ -309,7 +307,7 @@ D6 的 `Audit_Status` 只描述当前记录状态，不替研究者作纳入决�
 `Derived` 和 `Analysis` 已启用无密码工作表保护，用于防止误覆盖公式。不要在其中输入、粘贴或排序。要修正数据时回到 `Participants` 或 `Records`，
 公式会自动更新；正式分析仍从这两张原始表独立重算。
 
-### 附录：历史 Analysis 工作簿说明（不适用于 v5.2/v5.3）
+### 附录：历史 Analysis 工作簿说明（不适用于当前 v5.3）
 
 `Analysis` 只读取 `Derived`，是现场核对仪表板。首屏把“已完成会话”和“纳入者分析记录完整”分开显示，随后列出论文所需的参与者描述：
 

@@ -40,6 +40,6 @@ effective lag、lag-aligned RMSE、current-time RMSE 和 residual jitter 分开�
 只展示 Smoothed KF Extrapolation 与 Linear/SLERP，Hermite 仅保留在审计数据中。
 
 实验三直接运行 `pixi run eval analyze exp3`，不要求先运行联合审计门禁；`validate exp3` 只是可选诊断。
-正式 24 人输入为 `material/EgoAnchor_Experiment3_RawData.xlsx`（v5.2），后续采集使用
-`material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`（v5.3）。两版不合并分析。区块评分顺序固定为
-`Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`，Q10 已删除。v5.3 才启用 AQ-EQ2、TiA-RC1/RC4/UP1 的情境化措辞和互斥 B5 累计次数选项。
+唯一分析源为 `material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx`（v5.3，24 人）。区块评分顺序固定为
+`Q1–Q7 → AQ_EQ1–3 → AQ_IQ1–3`，Q10 已删除；当前工作簿使用 AQ-EQ2、TiA-RC1/RC4/UP1
+的情境化措辞和互斥 B5 累计次数选项。

@@ -26,7 +26,7 @@ from .contracts import (
     PARTICIPANT_BACKGROUND_COLUMNS,
     PARTICIPANT_CATEGORIES,
     WORKBOOK_CONTRACT_ID,
-    WORKBOOK_TEMPLATE_CONTRACT_ID,
+    WORKBOOK_DATA_CATEGORY,
     required_block_items,
 )
 
@@ -34,7 +34,18 @@ from .contracts import (
 _REQUIRED_SHEETS = frozenset(
     {"Questionnaire", "Participants", "Block", "Method", "Final"}
 )
-"""v5.2 原始工作簿必须包含的五张工作表。"""
+"""v5.3 原始工作簿必须包含的五张工作表。"""
+
+_WORKBOOK_DESCRIPTION = "EgoAnchor 实验三 v5.3 五表空白数据模板。"
+"""当前 v5.3 工作簿在文档属性中保存的版本说明。"""
+
+_V53_QUESTIONNAIRE_TEXT = {
+    "AQ_EQ2": "虚拟内容看起来真实、自然地融入了真实物体及其周围环境。",
+    "TIA_RC1": "这种对象锚定方法能够根据当前情况做出正确的锚定反应。",
+    "TIA_RC4": "这种对象锚定方法能够处理复杂的对象锚定任务。",
+    "TIA_UP1": "这种对象锚定方法当前的工作状态对我来说始终清楚。",
+}
+"""identifier 缺失时用于确认 v5.3 版本的关键施测文本。"""
 
 _QUESTIONNAIRE_ITEM_ORDER = (
     "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7",
@@ -110,12 +121,7 @@ def read_workbook(path: Path) -> Exp3Data:
                 "实验三工作簿必须恰好包含五张固定工作表："
                 f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
             )
-        accepted_contracts = {WORKBOOK_CONTRACT_ID, WORKBOOK_TEMPLATE_CONTRACT_ID}
-        if workbook.properties.identifier not in accepted_contracts:
-            raise ValueError(
-                "实验三工作簿契约标识不匹配："
-                f"{workbook.properties.identifier!r} not in {sorted(accepted_contracts)!r}"
-            )
+        _validate_workbook_identity(workbook)
         _validate_questionnaire_sheet(workbook["Questionnaire"])
         participants = _read_table(workbook["Participants"], 1, 2, workbook["Participants"].max_row)
         blocks = _read_table(workbook["Block"], 1, 2, workbook["Block"].max_row)
@@ -274,6 +280,44 @@ def _validate_questionnaire_sheet(worksheet: Any) -> None:
         raise ValueError(
             "Questionnaire 区块条目必须按 1--13 页固定排列："
             f"pages={pages}, items={items}"
+        )
+
+
+def _validate_workbook_identity(workbook: Any) -> None:
+    """验证 v5.3 契约；兼容 WPS/Excel 保存时清除 identifier 的情况。"""
+
+    identifier = workbook.properties.identifier
+    if identifier is not None:
+        if identifier != WORKBOOK_CONTRACT_ID:
+            raise ValueError(
+                "实验三工作簿契约标识不匹配："
+                f"{identifier!r} != {WORKBOOK_CONTRACT_ID!r}"
+            )
+        return
+
+    metadata = (workbook.properties.category, workbook.properties.description)
+    expected_metadata = (WORKBOOK_DATA_CATEGORY, _WORKBOOK_DESCRIPTION)
+    if metadata != expected_metadata:
+        raise ValueError(
+            "实验三工作簿缺少契约标识，且 v5.3 文档属性不匹配："
+            f"{metadata!r} != {expected_metadata!r}"
+        )
+
+    questionnaire = workbook["Questionnaire"]
+    actual_text: dict[str, Any] = {}
+    for row in range(1, questionnaire.max_row + 1):
+        item_candidates = (
+            questionnaire.cell(row, 1).value,
+            questionnaire.cell(row, 2).value,
+        )
+        for item in item_candidates:
+            if item in _V53_QUESTIONNAIRE_TEXT:
+                actual_text[str(item)] = questionnaire.cell(row, 4).value
+                break
+    if actual_text != _V53_QUESTIONNAIRE_TEXT:
+        raise ValueError(
+            "实验三工作簿缺少契约标识，且关键施测文本不是 v5.3："
+            f"{actual_text!r}"
         )
 
 

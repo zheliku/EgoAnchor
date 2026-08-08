@@ -138,8 +138,8 @@ def load_settings_snapshot(paper_config_path: Path | None = None) -> SettingsSna
 def _validate_settings(settings: AnalysisSettings) -> None:
     """检查统计、缺失处理和绘图参数的联合约束。"""
 
-    if settings.contract_version != 5 or settings.template_version != "v5.2":
-        raise ValueError("实验三当前只接受配置契约 v5 与模板 v5.2")
+    if settings.contract_version != 5 or settings.template_version != "v5.3":
+        raise ValueError("实验三当前只接受配置契约 v5 与工作簿 v5.3")
     if settings.alpha != 0.05:
         raise ValueError("实验三冻结 alpha=0.05，不得与论文图中的显著性标记阈值脱节")
     if settings.confidence_level != 0.95:

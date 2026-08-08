@@ -17,7 +17,7 @@ catastrophic_mm = 40.0 # 遮挡过程最大平移误差超过该值时记为灾�
 
 [experiment_3.contract]
 version = 5 # 实验三原始模板与论文分析参数契约版本；v5 切换为五表原始数据结构和连续 Q1--Q7 编号。
-template_version = "v5.2" # 实验三原始数据模板与问卷版本；v5.2 删除 Q10 并整理研究定制条目编号。
+template_version = "v5.3" # 实验三当前原始数据工作簿与问卷结构版本；Q10 已删除，研究定制条目使用连续 Q1--Q7 编号。
 
 [experiment_3.analysis]
 alpha = 0.05 # 两个冻结检验家族各自使用的显著性水平。

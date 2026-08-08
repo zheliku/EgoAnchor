@@ -72,10 +72,10 @@ PARTICIPANT_CATEGORIES: Final[dict[str, tuple[str, ...]]] = {
     "Baseline_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
     "End_Discomfort": ("无", "轻微", "中等", "明显", "因不适中止"),
 }
-"""背景与安全字段的允许选项；VR/MR 经验同时覆盖 v5.2 与 v5.3。"""
+"""背景与安全字段的允许选项；兼容当前工作簿中已经录入的 B5 分档。"""
 
 VRMR_EXPERIENCE_TEMPLATE_OPTIONS: Final = ("从未", "1–5 次", "6–20 次", "21 次及以上")
-"""后续模板使用的互斥累计次数选项；正式 v5.2 数据保留旧选项以便复现。"""
+"""v5.3 模板使用的互斥累计次数选项。"""
 
 EXCLUSION_REASONS: Final = (
     "参与者退出",
@@ -89,11 +89,8 @@ EXCLUSION_REASONS: Final = (
 )
 """参与者级退出或技术排除的冻结主原因；细节只写备注。"""
 
-WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.2"
-"""正式原始工作簿写入核心属性的稳定契约标识。"""
-
-WORKBOOK_TEMPLATE_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.3"
-"""后续空白采集模板的契约标识；不覆盖已经完成的 v5.2 原始数据。"""
+WORKBOOK_CONTRACT_ID: Final = "EgoAnchor.Experiment3.RawData.v5.3"
+"""当前 v5.3 原始工作簿与派生空白模板的稳定契约标识。"""
 
 WORKBOOK_DATA_CATEGORY: Final = "experiment-3-raw-workbook"
 """实验三原始工作簿的通用数据类别，仅用于 provenance。"""
@@ -305,7 +302,6 @@ __all__ = [
     "ScoreData",
     "TARGET_PARTICIPANTS",
     "WORKBOOK_CONTRACT_ID",
-    "WORKBOOK_TEMPLATE_CONTRACT_ID",
     "WORKBOOK_DATA_CATEGORY",
     "aq_scale_items",
     "published_scale_items",
