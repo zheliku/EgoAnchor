@@ -1,23 +1,15 @@
-\begin{table*}[t]
+\begin{table}[t]
 \centering
-\caption{实验一的静止、遮挡稳定性与起动转换代价。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。Start-transition 表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}
+\caption{实验一的静态保真度。各单元格按平移/旋转顺序给出片段中位数，三项指标均取P95；箭头标记优劣方向，粗体为各指标在该通道上的最优中位数。分布见图~\ref{fig:exp1-final}(a,\,b)。}
 \label{tab:exp1-static}
-\small
-\setlength{\tabcolsep}{3.0pt}
-\renewcommand{\arraystretch}{1.14}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lccccc}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 & 转换代价 \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}
-方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ & Start-transition (ms) $\downarrow$ \\
-& $n=12$ & $n=12$ & $n=12$ & $n=12$ & $n=12$ \\
+方法 & \shortstack{头动泄漏\,$\downarrow$\\mm/$^\circ$} & \shortstack{绝对注册\,$\downarrow$\\mm/$^\circ$} & \shortstack{静止抖动\,$\downarrow$\\mm/$^\circ$} \\
 \midrule
-Arrival & 43.67 [38.12, 55.80] & 44.31 [38.47, 56.16] & 11.70 [10.73, 16.76] & 18.23 [14.61, 30.16] & \textbf{157.04} [139.49, 196.89] \\
-Capture & 13.03 [11.45, 16.26] & 17.54 [13.95, 19.81] & 4.30 [3.65, 6.79] & 16.93 [14.66, 30.22] & 263.76 [229.86, 276.29] \\
-One-Euro & 10.65 [8.29, 13.65] & 14.00 [12.00, 16.57] & 0.85 [0.70, 1.39] & 10.41 [7.72, 14.42] & 333.98 [329.82, 345.37] \\
-EgoAnchor & \textbf{0.82} [0.58, 0.92] & \textbf{6.60} [5.38, 7.70] & \textbf{0.06} [0.06, 0.07] & \textbf{4.85} [4.54, 13.67] & 510.36 [462.26, 582.43] \\
+Arrival & 43.67/6.49 & 44.31/9.65 & 11.70/2.98 \\
+Capture & 13.03/5.40 & 17.54/8.26 & 4.30/2.60 \\
+One-Euro & 10.65/3.29 & 14.00/6.96 & 0.85/0.40 \\
+EgoAnchor & \textbf{0.82}/\textbf{0.33} & \textbf{6.60}/\textbf{4.39} & \textbf{0.06}/\textbf{0.03} \\
 \bottomrule
-\end{tabular}%
-}
-\end{table*}
+\end{tabular}
+\end{table}

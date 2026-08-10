@@ -5,13 +5,13 @@
 最终图片默认使用 6 列，可设置为 2--20 列；默认显示 6 行：
 
 1. `Passthrough`
-2. `Quest Reference`（默认在图中分成两行）
+2. `Quest Reference`（默认分成两行后整体旋转）
 3. `Arrival`
 4. `Capture`
 5. `One-Euro`
 6. `EgoAnchor`
 
-`selection.row_keys` 使用稳定的小写键 `passthrough`、`reference`、`arrival`、`capture`、`one-euro`、`egoanchor` 来选择和排列数据行。`selection.rows` 与它逐项对应，内容就是图左侧实际显示的文字，不再经过第二套标题映射；默认把 `Quest Reference` 和 `EgoAnchor (Ours)` 分为两行，避免标签区过宽。
+`selection.row_keys` 使用稳定的小写键 `passthrough`、`reference`、`arrival`、`capture`、`one-euro`、`egoanchor` 来选择和排列数据行。`selection.rows` 与它逐项对应，内容就是图左侧实际显示的文字。默认配置保留 `Quest Reference` 和 `EgoAnchor (Ours)` 的两行结构，再将全部行名旋转 90°，以较大字号缩窄标签栏。
 
 每一列来自同一条原子样本。该列所有显示行共用左目图像、相机标定、图像时刻相机位姿和裁剪框。离线工具按固定的已保存帧间隔 `N` 取列，不按误差大小挑帧。
 
@@ -210,7 +210,7 @@ pixi run replay grid `
   --output .\data\replay_capture\20260723_125041_569_controller_right\rendered\grid
 ```
 
-`layout.gutter_px`、`layout.canvas_color_hex`、时间轴的字号/颜色/线宽/刻度长度/留白、四方法颜色、XYZ 三轴颜色和六个默认标题仍以 TOML 为完整配置入口；`--row-titles` 也可一次覆盖六个标题，但含换行时更适合写 TOML。`replay_grid.json` 会保存最终解析后的参数、实际/过滤后的 mesh 面数、纹理请求后端与实际后端、mesh 哈希、严格校验状态和 `configuration.effective_sha256`；复现时应同时保留 PNG、JSON 和所用 TOML。
+行名字号与旋转角度、1:1 裁剪比例、时间轴样式、四方法颜色、XYZ 三轴和六个标题均由 TOML 管理；`--row-titles` 也可一次覆盖六个标题。`replay_grid.json` 会保存最终解析后的参数、实际/过滤后的 mesh 面数、纹理请求后端与实际后端、mesh 哈希、严格校验状态和 `configuration.effective_sha256`；复现时应同时保留 PNG、JSON 和所用 TOML。
 
 也可以明确写出每一列的 sample id。所有 id 必须按 capture 顺序严格递增，并保持同一个样本间隔 `N`；工具会拒绝乱序或不等距的输入。这个形式只用于复现已经确定的图，不能借它逐列挑选各方法的极端帧：
 
@@ -257,6 +257,7 @@ pixi run replay grid .\data\replay_capture\<capture_id> `
 | `layout.cell_width`                      | 每个图像单元的输出宽度                                                  |
 | `layout.column_label`                    | `none`、`delta-t`、`sample-id` 或 `both`                        |
 | `layout.label_font_size`                 | 左侧行名字号                                                            |
+| `layout.row_label_rotation_deg`          | 左侧行名逆时针旋转角度，范围 -90--90 度                                 |
 | `layout.column_font_size`                | 顶部列标题字号                                                          |
 | `layout.label_padding_px`                | 行名区域的水平留白                                                      |
 | `layout.label_min_width_px`              | 行名区域最小宽度                                                        |
@@ -367,6 +368,7 @@ pixi run replay grid .\data\replay_capture\<capture_id> `
 ```
 
 - `--label-font-size` 控制左侧行名；
+- `--row-label-rotation` 控制行名的逆时针旋转角度；
 - `--column-font-size` 控制 sample id 或 `Δt`；
 - `--label-padding` 和 `--label-min-width` 控制行名区域宽度；默认仅保留足以容纳最长名称的窄边距；
 - `--timeline-mode relative-time` 以所选首列为零点显示横向时间轴，也是 TOML 默认值；`--timeline-mode frame-sequence` 显示可直接用于 `--start-sample-id` 的 sample 序号；
@@ -375,7 +377,7 @@ pixi run replay grid .\data\replay_capture\<capture_id> `
 
 ### 顶部时间轴和方法纵轴
 
-默认 `timeline.placement = "top"`。横轴从左上方第一列图像单元的左边界开始，向右表示相对首列的 `Δt (s)`；时间刻度仍放在各列中心，因为每列代表一个离散样本。纵轴从同一个左上角向下，行中心刻度依次对应 Passthrough、Quest Reference、Arrival、Capture、One-Euro 和 EgoAnchor。左侧文字是类别型行标签，不是数值误差轴。
+默认 `timeline.placement = "top"`。横轴从左上方第一列图像单元的左边界开始，向右表示相对首列的 `Δt (s)`；时间刻度放在各列中心。纵轴从同一个左上角向下，行中心刻度依次对应 Passthrough、Quest Reference、Arrival、Capture、One-Euro 和 EgoAnchor。默认行名逆时针旋转 90°，仅改变排版，不改变类别轴语义。
 
 默认轴线宽为 3 px、刻度长为 10 px，横轴从最后一列图像的实际右边缘精确延伸 20 px 后再绘制箭头。`timeline.line_thickness_px`、`timeline.tick_length_px` 和 `timeline.right_extension_px` 都可在 TOML 中调整。`coordinate_axes` sidecar 会记录图像网格右边缘、原点、横轴终点、额外延伸长度以及横纵刻度中心，可直接核对实际延伸量。
 
@@ -405,6 +407,7 @@ row_keys = ["passthrough", "reference", "arrival", "capture", "one-euro", "egoan
 rows = ["Passthrough", "Quest\nReference", "Arrival", "Capture", "One-Euro", "EgoAnchor\n(Ours)"] # 每一项即图中实际显示的标题。
 
 [layout]
+row_label_rotation_deg = 90 # 行名整体逆时针旋转，缩窄标签栏。
 row_label_line_spacing_px = 4 # 两行之间的像素间距。
 ```
 
@@ -427,7 +430,7 @@ pixi run replay grid .\data\replay_capture\20260722_203752_143_controller_right 
 
 - 同一列六行使用同一张原始 RGB，不分别换背景。
 - 同一列六行使用完全相同的裁剪框；不同方法不能单独放大或平移。
-- 所有列默认使用同样大小的 4:3 裁剪框，比例由 `crop.aspect_ratio` 配置；裁剪中心跟随 Quest Reference，减少头动造成的背景大位移。
+- 所有列默认使用同样大小的 1:1 裁剪框，比例由 `crop.aspect_ratio` 配置；裁剪中心跟随 Quest Reference，增加行高而不缩小图像宽度。
 - 裁剪框同时覆盖参考和四种方法的轮廓，不能把偏移较大的方法裁掉。
 - 蓝、绿、橙、红分别对应 Arrival-Hold、Capture-Hold、One-Euro Interpolation 和 EgoAnchor；Quest Reference 使用带白色外沿的深灰轮廓。`transform/held` 只保留在 sidecar 中，不写进图片。
 - X、Y、Z 轴分别使用红、绿、蓝，并通过白色 halo 和端点字母与方法轮廓区分。

@@ -101,6 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="列标题：none、delta-t、sample-id 或 both；默认读取 TOML",
     )
     grid.add_argument("--label-font-size", type=int, default=None, help="左侧行名字号；默认读取 TOML")
+    grid.add_argument("--row-label-rotation", type=int, default=None, help="左侧行名逆时针旋转角度；默认读取 TOML")
     grid.add_argument("--column-font-size", type=int, default=None, help="列标题字号；默认读取 TOML")
     grid.add_argument(
         "--timeline-mode",
@@ -337,6 +338,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         column_label=_value_or(args.column_label, settings.layout.column_label),
         label_font_size=_value_or(args.label_font_size, settings.layout.label_font_size),
+        row_label_rotation=_value_or(
+            args.row_label_rotation,
+            settings.layout.row_label_rotation_deg,
+        ),
         column_font_size=_value_or(args.column_font_size, settings.layout.column_font_size),
         timeline=replace(
             settings.timeline,

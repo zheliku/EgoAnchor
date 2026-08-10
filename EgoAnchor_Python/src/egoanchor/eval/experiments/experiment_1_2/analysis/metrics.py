@@ -681,6 +681,21 @@ def _rotation_current_time_rmse(
     return float(np.sqrt(np.mean(np.square(errors_deg))))
 
 
+def _occlusion_rotation_metrics(
+    display: np.ndarray,
+    reference: np.ndarray,
+) -> tuple[float, float]:
+    """计算遮挡过程的绝对旋转误差 P95 与峰值，与平移通道口径一致。"""
+
+    if display.size == 0:
+        return math.nan, math.nan
+    display = display / np.linalg.norm(display, axis=1, keepdims=True)
+    reference = reference / np.linalg.norm(reference, axis=1, keepdims=True)
+    absolute = Rotation.from_quat(reference).inv() * Rotation.from_quat(display)
+    errors_deg = np.degrees(absolute.magnitude())
+    return _quantile(errors_deg, 0.95), float(np.max(errors_deg))
+
+
 def _static_rotation_metrics(
     display: np.ndarray,
     reference: np.ndarray,
@@ -897,11 +912,17 @@ def _render_metrics(
             errors_mm = 1000.0 * np.linalg.norm(display - reference, axis=1)
             p95 = _quantile(errors_mm, 0.95)
             maximum = float(np.max(errors_mm)) if errors_mm.size else math.nan
+            rotation_p95, rotation_maximum = _occlusion_rotation_metrics(
+                display_rotation,
+                reference_rotation,
+            )
             occlusion[variant_id].append(
                 {
                     **identity,
                     "translation_p95_mm": p95,
                     "translation_max_mm": maximum,
+                    "rotation_p95_deg": rotation_p95,
+                    "rotation_max_deg": rotation_maximum,
                     "catastrophic_gt40": maximum > settings.occlusion_catastrophic_mm,
                 }
             )

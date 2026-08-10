@@ -196,6 +196,153 @@ class DirectoryPublishTests(unittest.TestCase):
             self.assertTrue(staging.is_dir())
             self.assertFalse(destination.exists())
 
+    def test_transient_directory_handle_is_retried_instead_of_failing(self) -> None:
+        """短暂占用只让改名重试，不应把整次发布判失败。
+
+        Windows 上任何未带 ``FILE_SHARE_DELETE`` 的目录句柄都会让改名报
+        ``ACCESS_DENIED``，索引器、防病毒与编辑器目录监视都会瞬时开出这类句柄；
+        发布必须等它松手，而不是把可恢复的占用上抛给使用者。
+        """
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            staging = parent / "staging"
+            destination = parent / "active"
+            staging.mkdir()
+            destination.mkdir()
+            (staging / "new.txt").write_text("new", encoding="utf-8")
+            (destination / "old.txt").write_text("old", encoding="utf-8")
+            original_rename = Path.rename
+            denials = {"count": 0}
+
+            def briefly_denied(path: Path, target: Path) -> Path:
+                """前两次改名活动目录报拒绝访问，第三次放行。"""
+
+                if path == destination and denials["count"] < 2:
+                    denials["count"] += 1
+                    raise PermissionError(13, "Access is denied")
+                return original_rename(path, target)
+
+            with (
+                mock.patch.object(Path, "rename", autospec=True, side_effect=briefly_denied),
+                mock.patch.object(filesystem, "_WINDOWS_FILE_RETRY_DELAY_SECONDS", 0.0),
+            ):
+                result = filesystem.replace_directory_with_rollback(staging, destination)
+
+            self.assertEqual(denials["count"], 2)
+            self.assertTrue(result.replaced_existing)
+            self.assertIsNone(result.retained_backup)
+            self.assertEqual(
+                (destination / "new.txt").read_text(encoding="utf-8"), "new"
+            )
+            self.assertFalse(staging.exists())
+
+    def test_persistent_directory_handle_reports_actionable_guidance(self) -> None:
+        """持续占用在重试用尽后要给出可操作的排查线索，而非只报「拒绝访问」。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "source"
+            target = parent / "target"
+            source.mkdir()
+
+            with (
+                mock.patch.object(
+                    Path,
+                    "rename",
+                    autospec=True,
+                    side_effect=PermissionError(13, "Access is denied"),
+                ),
+                mock.patch.object(filesystem, "_WINDOWS_FILE_RETRY_DELAY_SECONDS", 0.0),
+                self.assertRaises(PermissionError) as raised,
+            ):
+                filesystem.rename_directory_with_retry(source, target)
+
+            message = str(raised.exception)
+            self.assertIn("FILE_SHARE_DELETE", message)
+            self.assertIn("不是权限问题", message)
+            self.assertIn(str(source), message)
+
+    @unittest.skipUnless(os.name == "nt", "共享模式语义只在 Windows 上成立")
+    def test_real_subtree_handle_is_named_in_the_error(self) -> None:
+        """真实占用子树深处时，错误必须点名那个对象而不是只报被改名的目录。
+
+        这是实际踩过的坑：``analysis`` 改名被拒，但独占打开 ``analysis`` 自身却成功，
+        真正被持有的是 ``analysis/results``。用真句柄而非 mock 才能锁住这个语义。
+        """
+
+        import ctypes
+        from ctypes import wintypes
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "active"
+            nested = source / "results"
+            nested.mkdir(parents=True)
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            create_file = kernel32.CreateFileW
+            create_file.restype = wintypes.HANDLE
+            create_file.argtypes = [
+                wintypes.LPCWSTR,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.LPVOID,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.HANDLE,
+            ]
+            # FILE_LIST_DIRECTORY，共享 READ|WRITE 但**不含 DELETE**，
+            # 即 explorer.exe 持有目录时的形态。
+            handle = create_file(
+                str(nested), 0x00000001, 0x00000003, None, 3, 0x02000000, None
+            )
+            self.assertNotEqual(handle, wintypes.HANDLE(-1).value, "无法建立测试句柄")
+            try:
+                with (
+                    mock.patch.object(
+                        filesystem, "_WINDOWS_RENAME_RETRY_ATTEMPTS", 2
+                    ),
+                    mock.patch.object(
+                        filesystem, "_WINDOWS_FILE_RETRY_DELAY_SECONDS", 0.0
+                    ),
+                    self.assertRaises(PermissionError) as raised,
+                ):
+                    filesystem.rename_directory_with_retry(source, parent / "renamed")
+
+                message = str(raised.exception)
+                self.assertIn("results", message)
+                self.assertIn(str(nested), message)
+                self.assertIn("explorer.exe", message)
+            finally:
+                kernel32.CloseHandle(wintypes.HANDLE(handle))
+
+            # 句柄释放后同一次改名应当成功，确认失败确实由该句柄造成。
+            filesystem.rename_directory_with_retry(source, parent / "renamed")
+            self.assertTrue((parent / "renamed" / "results").is_dir())
+
+    def test_rename_retry_does_not_mask_existing_target(self) -> None:
+        """目标已存在属于调用方逻辑错误，必须立刻上抛而不是重试等待。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "source"
+            target = parent / "target"
+            source.mkdir()
+            attempts = {"count": 0}
+
+            def counting_rename(path: Path, destination: Path) -> Path:
+                attempts["count"] += 1
+                raise FileExistsError(17, "File exists")
+
+            with (
+                mock.patch.object(Path, "rename", autospec=True, side_effect=counting_rename),
+                self.assertRaises(FileExistsError),
+            ):
+                filesystem.rename_directory_with_retry(source, target)
+
+            self.assertEqual(attempts["count"], 1)
+
     def test_create_only_publish_does_not_overwrite_concurrent_destination(self) -> None:
         """create-only 在最终 rename 前出现同名目标时保留对方目录。"""
 

@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{实验一的动态保真度。各单元格按平移/旋转顺序报告中位数；有效时延单位为ms，其余指标分别为mm/°。箭头表示越低越好，粗体标记各通道最优值。}
+\label{tab:exp1-dynamic}
+\setlength{\tabcolsep}{2.3pt}
+\renewcommand{\arraystretch}{1.10}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+方法 &
+\shortstack{有效时延\\$\downarrow$} &
+\shortstack{对齐RMSE\\$\downarrow$} &
+\shortstack{当前RMSE\\$\downarrow$} &
+\shortstack{残余抖动\\P95 $\downarrow$} \\
+\midrule
+Arrival   & \textbf{202.50}/\textbf{255.00} & 18.57/6.09 & \textbf{84.74}/25.44 & 41.08/10.40 \\
+Capture   & 255.00/257.50 & 17.14/5.84 & 103.63/\textbf{25.35} & 39.69/10.26 \\
+One-Euro  & 380.00/385.00 & 15.69/5.55 & 117.61/34.10 & 5.25/2.70 \\
+EgoAnchor & 360.00/345.00 & \textbf{9.12}/\textbf{4.81} & 125.83/31.88 & \textbf{4.56}/\textbf{2.64} \\
+\bottomrule
+\end{tabular}
+\end{table}

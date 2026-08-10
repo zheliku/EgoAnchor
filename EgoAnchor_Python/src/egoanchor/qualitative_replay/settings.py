@@ -47,6 +47,7 @@ _TABLE_KEYS = {
             "cell_width",
             "column_label",
             "label_font_size",
+            "row_label_rotation_deg",
             "column_font_size",
             "label_padding_px",
             "label_min_width_px",
@@ -145,6 +146,9 @@ class LayoutSettings:
 
     label_font_size: int
     """左侧行名字号，单位像素。"""
+
+    row_label_rotation_deg: int
+    """左侧行名逆时针旋转角度，单位度。"""
 
     column_font_size: int
     """顶部列标题字号，单位像素。"""
@@ -442,8 +446,8 @@ def _parse_settings(
     axes = _table(document, "axes")
 
     contract_version = _integer(contract, "version")
-    if contract_version != 1:
-        raise ValueError("定性 replay 只接受配置契约 v1")
+    if contract_version != 2:
+        raise ValueError("定性 replay 只接受配置契约 v2")
 
     columns = _integer(selection, "columns")
     if not 2 <= columns <= 20:
@@ -466,6 +470,12 @@ def _parse_settings(
     if column_label not in COLUMN_LABEL_MODES:
         raise ValueError(f"layout.column_label 必须是 {COLUMN_LABEL_MODES} 之一")
     label_font_size = _font_size(layout, "label_font_size")
+    row_label_rotation_deg = _bounded_integer(
+        layout,
+        "row_label_rotation_deg",
+        minimum=-90,
+        maximum=90,
+    )
     column_font_size = _font_size(layout, "column_font_size")
     label_padding_px = _bounded_integer(
         layout,
@@ -615,6 +625,7 @@ def _parse_settings(
             cell_width=cell_width,
             column_label=column_label,
             label_font_size=label_font_size,
+            row_label_rotation_deg=row_label_rotation_deg,
             column_font_size=column_font_size,
             label_padding_px=label_padding_px,
             label_min_width_px=label_min_width_px,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,8 @@ _STRATEGY_COMPARISON_METRICS = (
     ("rotation", "aligned_residual_increment_p95_deg", "deg"),
     ("occlusion", "translation_p95_mm", "mm"),
     ("occlusion", "translation_max_mm", "mm"),
+    ("occlusion", "rotation_p95_deg", "deg"),
+    ("occlusion", "rotation_max_deg", "deg"),
     ("occlusion", "catastrophic_gt40", "episode"),
     ("transition", "response_ms", "ms"),
     ("stop", "forward_overshoot_mm", "mm"),
@@ -69,6 +71,19 @@ def _fmt(value: float) -> str:
     return f"{value:.2f}"
 
 
+def _fmt_ms(value: float) -> str:
+    """按毫秒量级的实际分辨率格式化时延。
+
+    有效时延在 5~ms 的时延网格上取极小值，起动转换由帧间隔决定，两者均无
+    0.01~ms 级的分辨率；固定一位小数既保留配对中位数可能出现的半格，又不
+    暗示不存在的精度。
+    """
+
+    if not np.isfinite(value):
+        return "--"
+    return f"{value:.1f}"
+
+
 def _summary(rows: tuple[Mapping[str, Any], ...], key: str) -> tuple[float, float, float]:
     """返回片段值的 median、Q1 和 Q3。"""
 
@@ -86,50 +101,10 @@ def _cell(summary: tuple[float, float, float]) -> str:
     return f"{_fmt(median)} [{_fmt(q1)}, {_fmt(q3)}]"
 
 
-def _bold_median(cell: str) -> str:
-    """只加粗 median，保留同一单元格中的四分位区间。"""
-
-    median, interval = cell.split(" ", 1)
-    return rf"\textbf{{{median}}} {interval}"
-
-
-def _sample_label(
-    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
-    key: str,
-    variants: tuple[str, ...] = METHODS,
-) -> str:
-    """生成不掩盖配置间缺失差异的样本量标签。"""
-
-    counts = [
-        sum(np.isfinite(float(row[key])) for row in rows.get(variant, ()))
-        for variant in variants
-    ]
-    if min(counts) == max(counts):
-        return f"n={counts[0]}"
-    return f"n={min(counts)}--{max(counts)}"
-
-
-def _best_cells(
-    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
-    key: str,
-) -> Mapping[str, str]:
-    """生成四方法汇总单元格，并加粗最优中位数。"""
-
-    summaries = {method: _summary(rows[method], key) for method in METHODS}
-    best = min(summary[0] for summary in summaries.values())
-    return {
-        method: (
-            _bold_median(_cell(summary))
-            if np.isclose(summary[0], best)
-            else _cell(summary)
-        )
-        for method, summary in summaries.items()
-    }
-
-
 def _best_median_cells(
     rows: Mapping[str, tuple[Mapping[str, Any], ...]],
     key: str,
+    formatter: Callable[[float], str] = _fmt,
 ) -> Mapping[str, str]:
     """生成只含中位数的四方法单元格，并加粗较低的最优值。"""
 
@@ -140,179 +115,242 @@ def _best_median_cells(
     best = min(medians.values())
     return {
         method: (
-            rf"\textbf{{{_fmt(value)}}}"
+            rf"\textbf{{{formatter(value)}}}"
             if np.isclose(value, best)
-            else _fmt(value)
+            else formatter(value)
         )
         for method, value in medians.items()
     }
 
 
-def build_exp1_performance_table(results: PaperResults) -> str:
-    """把实验一静态、动态指标合并为单栏正文表。"""
+def _paired_channel_cells(
+    channels: tuple[tuple[Mapping[str, tuple[Mapping[str, Any], ...]], str], ...],
+) -> Mapping[str, str]:
+    """把平移/旋转两个通道并入同一单元格，各通道独立加粗最优中位数。"""
 
-    groups = (
-        (
-            "静止与遮挡",
-            (
-                (results.static_segments, "centered_p95_mm", "头动泄漏 P95 (mm)"),
-                (results.static_segments, "absolute_p95_mm", "绝对注册 P95 (mm)"),
-                (
-                    results.static_segments,
-                    "frame_increment_p95_mm",
-                    r"\shortstack[l]{静止帧间增量\\P95 (mm)}",
-                ),
-                (results.occlusion_episodes, "translation_p95_mm", "遮挡平移 P95 (mm)"),
-                (
-                    results.transition_segments,
-                    "response_ms",
-                    r"\shortstack[l]{起动转换\\时延 (ms)}",
-                ),
-            ),
-        ),
-        (
-            "持续平移",
-            (
-                (results.translation_segments, "effective_lag_ms", "有效时延 (ms)"),
-                (
-                    results.translation_segments,
-                    "aligned_rmse_mm",
-                    r"\shortstack[l]{时延对齐\\RMSE (mm)}",
-                ),
-                (
-                    results.translation_segments,
-                    "current_time_rmse_mm",
-                    r"\shortstack[l]{当前时刻\\RMSE (mm)}",
-                ),
-            ),
-        ),
-        (
-            "持续旋转",
-            (
-                (results.rotation_segments, "effective_lag_ms", "有效时延 (ms)"),
-                (
-                    results.rotation_segments,
-                    "aligned_rmse_deg",
-                    r"\shortstack[l]{时延对齐\\RMSE (deg)}",
-                ),
-                (
-                    results.rotation_segments,
-                    "current_time_rmse_deg",
-                    r"\shortstack[l]{当前时刻\\RMSE (deg)}",
-                ),
-            ),
-        ),
-    )
+    per_channel = [_best_median_cells(rows, key) for rows, key in channels]
+    return {
+        method: " / ".join(channel[method] for channel in per_channel)
+        for method in METHODS
+    }
+
+
+_CHANNEL_SEPARATOR = "/"
+"""单元格内平移与旋转两个通道之间的分隔。
+
+裸斜杠而非窄空包围的斜杠：双通道单元格是三张表里最宽的成分，去掉两侧窄空
+使承载指标最多的动态保真度表净宽从 229.50~pt 降到 220.49~pt，列距因而不必压
+到视觉上过挤的档位。
+"""
+
+
+def _channel_cells(
+    translation: tuple[Mapping[str, tuple[Mapping[str, Any], ...]], str],
+    rotation: tuple[Mapping[str, tuple[Mapping[str, Any], ...]], str],
+    formatter: Callable[[float], str] = _fmt,
+) -> Mapping[str, str]:
+    """把平移、旋转两个通道并入一个单元格，两通道各自独立加粗最优中位数。
+
+    单位统一写在表头，单元格只留裸数值；通道并入单元格后每个方法只占一行，
+    使按评价方面拆分的三张表都能在单栏宽度内保持模板字号与列距。
+    """
+
+    left = _best_median_cells(*translation, formatter)
+    right = _best_median_cells(*rotation, formatter)
+    return {
+        method: f"{left[method]}{_CHANNEL_SEPARATOR}{right[method]}"
+        for method in METHODS
+    }
+
+
+def _method_rows(columns: tuple[Mapping[str, str], ...]) -> list[str]:
+    """每个方法排成一行，各列按给定顺序取该方法的单元格。"""
+
+    return [
+        f"{_METHOD_LABELS[method]} & "
+        + " & ".join(column[method] for column in columns)
+        + r" \\"
+        for method in METHODS
+    ]
+
+
+def _metric_header(name: str, unit: str) -> str:
+    r"""排出「指标名 $\downarrow$ / 单位」两行表头。
+
+    箭头紧随指标名，标示整列的优劣方向；统计量写在题注而非表头，使按评价
+    方面拆分后的各表表头压到两行。
+    """
+
+    return r"\shortstack{" + rf"{name}\,$\downarrow$" + r"\\" + unit + "}"
+
+
+_CHANNEL_UNIT = r"mm/$^\circ$"
+"""双通道指标的单位，与单元格内的平移/旋转书写顺序一致。"""
+
+
+_DEFAULT_TABCOLSEP_PT = 6.0
+"""``vgtc`` 模板的 ``\\tabcolsep`` 默认值，仅作为是否需要收紧列距的判据。"""
+
+
+def _behavior_table(
+    caption: str,
+    label: str,
+    columns: tuple[tuple[str, str, Mapping[str, str]], ...],
+    tabcolsep_pt: float = _DEFAULT_TABCOLSEP_PT,
+) -> str:
+    """排出一张单栏的实验一评价方面表。
+
+    每列给出指标名、单位与四个方法的单元格；方法占一行，通道并入单元格。表格
+    按自然宽度排版（``tabular`` 而非 ``tabular*``），不横向撑满单栏，也不改动
+    模板字号；宽度只由 ``tabcolsep_pt`` 调节，且仅在需要收紧时才写出
+    ``\\setlength{\\tabcolsep}``——该赋值局限在 ``table`` 环境内，不外溢。
+
+    实测（``\\columnwidth`` 为 240.94~pt）：静态保真度三指标在模板列距下为
+    203.49~pt，转换响应两指标为 150.49~pt，均无需干预；动态保真度四指标为
+    277.49~pt，超出 36.55~pt，收到 2~pt 列距后为 236.49~pt。瓶颈是数值而非表头，
+    把单位从表头移入题注对宽度无影响（同为 220.49~pt），故单位保留在表头。
+    """
+
     lines = [
         r"\begin{table}[t]",
         r"\centering",
-        r"\caption{实验一的端到端系统行为（片段或遮挡过程的中位数）。所有指标越低越好，粗体为每行最优；原始片段值与 IQR 见图~\ref{fig:exp1-final}。}",
-        r"\label{tab:exp1-performance}",
-        r"\normalsize",
-        r"\setlength{\tabcolsep}{1.5pt}",
-        r"\renewcommand{\arraystretch}{1.08}",
-        r"\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcccc@{}}",
+        rf"\caption{{{caption}}}",
+        rf"\label{{{label}}}",
+        *(
+            [rf"\setlength{{\tabcolsep}}{{{tabcolsep_pt:g}pt}}"]
+            if tabcolsep_pt != _DEFAULT_TABCOLSEP_PT
+            else []
+        ),
+        r"\begin{tabular}{@{}l" + "c" * len(columns) + r"@{}}",
         r"\toprule",
-        r"指标 $\downarrow$ & Arrival & Capture & One-Euro & EgoAnchor \\",
+        "方法 & "
+        + " & ".join(_metric_header(name, unit) for name, unit, _ in columns)
+        + r" \\",
         r"\midrule",
     ]
-    for group_index, (group_label, metrics) in enumerate(groups):
-        if group_index:
-            lines.append(r"\midrule")
-        lines.append(rf"\multicolumn{{5}}{{@{{}}l}}{{\textit{{{group_label}}}}} \\")
-        for rows, key, label in metrics:
-            cells = _best_median_cells(rows, key)
-            method_cells = " & ".join(cells[method] for method in METHODS)
-            lines.append(f"{label} & {method_cells} " + r"\\")
-    lines.extend(
-        [
-            r"\bottomrule",
-            r"\end{tabularx}",
-            r"\end{table}",
-        ]
-    )
+    lines.extend(_method_rows(tuple(cells for _, _, cells in columns)))
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}"])
     return "\n".join(lines) + "\n"
 
 
 def build_exp1_static_table(results: PaperResults) -> str:
-    """生成实验一静止、世界一致性、遮挡与起动转换代价表。"""
+    """生成实验一静态保真度表：头动泄漏、绝对注册与静止抖动。"""
 
-    metrics = (
-        (results.static_segments, "centered_p95_mm"),
-        (results.static_segments, "absolute_p95_mm"),
-        (results.static_segments, "frame_increment_p95_mm"),
-        (results.occlusion_episodes, "translation_p95_mm"),
-        (results.transition_segments, "response_ms"),
+    static = results.static_segments
+    return _behavior_table(
+        r"实验一的静态保真度。各单元格按平移/旋转顺序给出片段中位数，"
+        r"三项指标均取P95；箭头标记优劣方向，粗体为各指标在该通道上的最优"
+        r"中位数。分布见图~\ref{fig:exp1-final}(a,\,b)。",
+        "tab:exp1-static",
+        (
+            (
+                "头动泄漏",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (static, "centered_p95_mm"),
+                    (static, "centered_rotation_p95_deg"),
+                ),
+            ),
+            (
+                "绝对注册",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (static, "absolute_p95_mm"),
+                    (static, "absolute_rotation_p95_deg"),
+                ),
+            ),
+            (
+                "静止抖动",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (static, "frame_increment_p95_mm"),
+                    (static, "frame_rotation_increment_p95_deg"),
+                ),
+            ),
+        ),
     )
-    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
-    sample_labels = " & ".join(
-        f"${_sample_label(rows, key)}$" for rows, key in metrics
-    )
-    lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
-        r"\caption{实验一的静止、遮挡稳定性与起动转换代价。连续指标报告片段或遮挡过程之间的 median [Q1, Q3]；P95 先在每个片段内部按渲染帧计算。起动转换时延表示稳定优先策略从保持状态转入运动输出的系统代价，不是网络或推理时延。粗体标记每列最优中位数，绝对注册误差作为系统护栏。}",
-        r"\label{tab:exp1-static}",
-        r"\small",
-        r"\setlength{\tabcolsep}{3.0pt}",
-        r"\renewcommand{\arraystretch}{1.14}",
-        r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{lccccc}",
-        r"\toprule",
-        r"& \multicolumn{2}{c}{世界一致性} & 静止稳定性 & 遮挡稳健性 & 转换代价 \\",
-        r"\cmidrule(lr){2-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}",
-        r"方法 & 头动泄漏 P95 (mm) $\downarrow$ & 绝对注册 P95 (mm) $\downarrow$ & 帧间增量 P95 (mm) $\downarrow$ & 遮挡平移 P95 (mm) $\downarrow$ & 起动转换时延 (ms) $\downarrow$ \\",
-        f"& {sample_labels} " + r"\\",
-        r"\midrule",
-    ]
-    for method in METHODS:
-        method_cells = " & ".join(metric_cells[method] for metric_cells in cells)
-        lines.append(
-            f"{_METHOD_LABELS[method]} & {method_cells} " + r"\\"
-        )
-    lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
-    return "\n".join(lines) + "\n"
 
 
 def build_exp1_dynamic_table(results: PaperResults) -> str:
-    """生成实验一动态 6DoF 保真度表。"""
+    """生成实验一动态保真度表：有效时延、两个RMSE与残余抖动。"""
 
-    metrics = (
-        (results.translation_segments, "effective_lag_ms"),
-        (results.translation_segments, "aligned_rmse_mm"),
-        (results.translation_segments, "current_time_rmse_mm"),
-        (results.rotation_segments, "effective_lag_ms"),
-        (results.rotation_segments, "aligned_rmse_deg"),
-        (results.rotation_segments, "current_time_rmse_deg"),
+    translation = results.translation_segments
+    rotation = results.rotation_segments
+    return _behavior_table(
+        r"实验一的动态保真度。各单元格按平移/旋转顺序给出片段中位数；"
+        r"LA-RMSE为时延对齐均方根误差，CT-RMSE为当前时刻均方根误差，"
+        r"残余抖动取P95。箭头标记优劣方向，粗体为各指标在该通道上的最优"
+        r"中位数。分布见图~\ref{fig:exp1-final}(c,\,d)。",
+        "tab:exp1-dynamic",
+        (
+            (
+                "有效时延",
+                "ms",
+                _channel_cells(
+                    (translation, "effective_lag_ms"),
+                    (rotation, "effective_lag_ms"),
+                    _fmt_ms,
+                ),
+            ),
+            (
+                "LA-RMSE",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (translation, "aligned_rmse_mm"),
+                    (rotation, "aligned_rmse_deg"),
+                ),
+            ),
+            (
+                "CT-RMSE",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (translation, "current_time_rmse_mm"),
+                    (rotation, "current_time_rmse_deg"),
+                ),
+            ),
+            (
+                "残余抖动",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (translation, "aligned_residual_increment_p95_mm"),
+                    (rotation, "aligned_residual_increment_p95_deg"),
+                ),
+            ),
+        ),
+        # 四指标×两通道是三张表中最宽的一张，模板列距下超出单栏 36.55~pt；
+        # 2~pt 列距使其为 236.49~pt，留 4.45~pt 余量以容纳数据更新带来的位数变化。
+        tabcolsep_pt=2.0,
     )
-    cells = tuple(_best_cells(rows, key) for rows, key in metrics)
-    sample_labels = " & ".join(
-        f"${_sample_label(rows, key)}$" for rows, key in metrics
+
+
+def build_exp1_transition_table(results: PaperResults) -> str:
+    """生成实验一转换响应表：遮挡误差与起动转换。"""
+
+    occlusion = results.occlusion_episodes
+    return _behavior_table(
+        r"实验一的转换响应。遮挡误差按平移/旋转顺序给出片段中位数并取"
+        r"P95，起动转换为跨通道标量。箭头标记优劣方向，粗体为最优中位数；"
+        r"同一序列上的定性行为见图~\ref{fig:exp1-replay}。",
+        "tab:exp1-transition",
+        (
+            (
+                "遮挡误差",
+                _CHANNEL_UNIT,
+                _channel_cells(
+                    (occlusion, "translation_p95_mm"),
+                    (occlusion, "rotation_p95_deg"),
+                ),
+            ),
+            (
+                "起动转换",
+                "ms",
+                _best_median_cells(
+                    results.transition_segments, "response_ms", _fmt_ms
+                ),
+            ),
+        ),
     )
-    lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
-        r"\caption{实验一的动态 6DoF 保真度。有效时延表示响应滞后；时延对齐 RMSE 表示移除最佳时延后的空间残差；当前时刻 RMSE 在同一渲染时刻直接比较显示与参考，包含延迟造成的相位误差。三者必须成对解释。各列报告片段间 median [Q1, Q3]，粗体标记最优中位数。}",
-        r"\label{tab:exp1-dynamic}",
-        r"\small",
-        r"\setlength{\tabcolsep}{2.4pt}",
-        r"\renewcommand{\arraystretch}{1.14}",
-        r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{lcccccc}",
-        r"\toprule",
-        r"& \multicolumn{3}{c}{持续平移} & \multicolumn{3}{c}{持续旋转} \\",
-        r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
-        r"方法 & 有效时延 (ms) $\downarrow$ & 时延对齐 RMSE (mm) $\downarrow$ & 当前时刻 RMSE (mm) $\downarrow$ & 有效时延 (ms) $\downarrow$ & 时延对齐 RMSE (deg) $\downarrow$ & 当前时刻 RMSE (deg) $\downarrow$ \\",
-        f"& {sample_labels} " + r"\\",
-        r"\midrule",
-    ]
-    for method in METHODS:
-        method_cells = " & ".join(metric_cells[method] for metric_cells in cells)
-        lines.append(
-            f"{_METHOD_LABELS[method]} & {method_cells} " + r"\\"
-        )
-    lines.extend([r"\bottomrule", r"\end{tabular}%", r"}", r"\end{table*}"])
-    return "\n".join(lines) + "\n"
+
 
 
 def _paired_values(
@@ -925,6 +963,8 @@ def write_analysis_artifacts(
         "rotation_aligned_residual_increment_p95_deg",
         "occlusion_p95_mm",
         "occlusion_max_mm",
+        "occlusion_rotation_p95_deg",
+        "occlusion_rotation_max_deg",
         "catastrophic_failures_gt40",
         "occlusion_episodes",
         "start_transition_response_ms",
@@ -958,6 +998,8 @@ def write_analysis_artifacts(
                     "rotation_aligned_residual_increment_p95_deg": _summary(results.rotation_segments[method], "aligned_residual_increment_p95_deg")[0],
                     "occlusion_p95_mm": _summary(results.occlusion_episodes[method], "translation_p95_mm")[0],
                     "occlusion_max_mm": _summary(results.occlusion_episodes[method], "translation_max_mm")[0],
+                    "occlusion_rotation_p95_deg": _summary(results.occlusion_episodes[method], "rotation_p95_deg")[0],
+                    "occlusion_rotation_max_deg": _summary(results.occlusion_episodes[method], "rotation_max_deg")[0],
                     "catastrophic_failures_gt40": sum(bool(row["catastrophic_gt40"]) for row in results.occlusion_episodes[method]),
                     "occlusion_episodes": len(results.occlusion_episodes[method]),
                     "start_transition_response_ms": _summary(results.transition_segments[method], "response_ms")[0],
@@ -1010,21 +1052,39 @@ def write_analysis_artifacts(
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
     plot_data_path = _write_figure_source_data(results, plot_root)
-    exp1_static_table = build_exp1_static_table(results)
-    exp1_dynamic_table = build_exp1_dynamic_table(results)
-    exp1_performance_table = build_exp1_performance_table(results)
+    exp1_tables = {
+        "exp1_static_table": (
+            "experiment1_static_fidelity.tex",
+            build_exp1_static_table(results),
+        ),
+        "exp1_dynamic_table": (
+            "experiment1_dynamic_fidelity.tex",
+            build_exp1_dynamic_table(results),
+        ),
+        "exp1_transition_table": (
+            "experiment1_transition_response.tex",
+            build_exp1_transition_table(results),
+        ),
+    }
+    exp1_table_paths = {}
+    for key, (name, content) in exp1_tables.items():
+        path = table_root / name
+        path.write_text(content, encoding="utf-8")
+        exp1_table_paths[key] = path
     exp2_table = build_exp2_attribution_table(results)
-    exp1_static_table_path = table_root / "experiment1_static_occlusion_stability.tex"
-    exp1_dynamic_table_path = table_root / "experiment1_dynamic_6dof_fidelity.tex"
-    exp1_performance_table_path = table_root / "experiment1_performance.tex"
     exp2_table_path = table_root / "experiment2_design_attribution.tex"
-    exp1_static_table_path.write_text(exp1_static_table, encoding="utf-8")
-    exp1_dynamic_table_path.write_text(exp1_dynamic_table, encoding="utf-8")
-    exp1_performance_table_path.write_text(exp1_performance_table, encoding="utf-8")
     exp2_table_path.write_text(exp2_table, encoding="utf-8")
-    legacy_exp1_table = table_root / "experiment1_system_characterization.tex"
-    if legacy_exp1_table.exists():
-        legacy_exp1_table.unlink()
+    legacy_exp1_tables = (
+        "experiment1_system_characterization.tex",
+        "experiment1_static_occlusion_stability.tex",
+        "experiment1_dynamic_6dof_fidelity.tex",
+        "experiment1_performance.tex",
+        "experiment1_anchor_behavior.tex",
+    )
+    for legacy_name in legacy_exp1_tables:
+        legacy_exp1_table = table_root / legacy_name
+        if legacy_exp1_table.exists():
+            legacy_exp1_table.unlink()
     legacy_figure_root = tex_root / "figures"
     for legacy_name in ("figure2_experiment1.tex", "figure3_experiment2.tex"):
         legacy_figure = legacy_figure_root / legacy_name
@@ -1034,9 +1094,7 @@ def write_analysis_artifacts(
         legacy_figure_root.rmdir()
 
     return {
-        "exp1_static_table": exp1_static_table_path,
-        "exp1_dynamic_table": exp1_dynamic_table_path,
-        "exp1_performance_table": exp1_performance_table_path,
+        **exp1_table_paths,
         "exp2_table": exp2_table_path,
         "summary": summary_path,
         "capture": capture_path,
@@ -1051,8 +1109,8 @@ def write_analysis_artifacts(
 
 __all__ = [
     "build_exp1_dynamic_table",
-    "build_exp1_performance_table",
     "build_exp1_static_table",
+    "build_exp1_transition_table",
     "build_exp2_attribution_table",
     "write_analysis_artifacts",
 ]

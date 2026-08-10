@@ -1,0 +1,14 @@
+# Fdb version 4
+["xdvipdfmx"] 0 "pdf/egoanchor_cn_final_v3_v8_academic.xdv" "pdf/egoanchor_cn_final_v3_v8_academic.pdf" "pdf/egoanchor_cn_final_v3_v8_academic" 0 -1
+  "pdf/egoanchor_cn_final_v3_v8_academic.xdv" 0 -1 0 "xelatex"
+  (generated)
+  "pdf/egoanchor_cn_final_v3_v8_academic.pdf"
+  (rewritten before read)
+["xelatex"] 0 "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/reference/gpt-web/egoanchor_v4_academic_revision/egoanchor_cn_final_v3_v8_academic.tex" "pdf/egoanchor_cn_final_v3_v8_academic.xdv" "egoanchor_cn_final_v3_v8_academic" 0 -1
+  "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/reference/gpt-web/egoanchor_v4_academic_revision/egoanchor_cn_final_v3_v8_academic.tex" 0 -1 0 ""
+  "pdf/egoanchor_cn_final_v3_v8_academic.aux" 0 -1 0 "xelatex"
+  (generated)
+  "pdf/egoanchor_cn_final_v3_v8_academic.aux"
+  "pdf/egoanchor_cn_final_v3_v8_academic.log"
+  "pdf/egoanchor_cn_final_v3_v8_academic.xdv"
+  (rewritten before read)

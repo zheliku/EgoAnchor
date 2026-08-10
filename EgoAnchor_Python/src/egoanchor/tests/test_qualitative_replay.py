@@ -374,16 +374,21 @@ class QualitativeReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "未知字段"):
                 load_replay_settings(invalid)
 
+        self.assertEqual(defaults.contract_version, 2)
         self.assertEqual(defaults.layout.column_label, "none")
+        self.assertEqual(defaults.layout.label_font_size, 56)
+        self.assertEqual(defaults.layout.row_label_rotation_deg, 90)
         self.assertEqual(defaults.timeline.mode, "relative-time")
         self.assertEqual(defaults.timeline.placement, "top")
+        self.assertEqual(defaults.timeline.font_size_px, 52)
         self.assertEqual(defaults.timeline.line_thickness_px, 3)
         self.assertEqual(defaults.timeline.tick_length_px, 10)
         self.assertEqual(defaults.timeline.right_extension_px, 20)
         self.assertEqual(defaults.selection.columns, 6)
         self.assertEqual(defaults.selection.start_sample_id, "000000365")
         self.assertAlmostEqual(defaults.axes.length_m, 0.06)
-        self.assertEqual(defaults.axes.label_font_size_px, 16)
+        self.assertEqual(defaults.axes.label_font_size_px, 22)
+        self.assertAlmostEqual(defaults.crop.aspect_ratio, 1.0)
         self.assertEqual(defaults.selection.row_keys[1], "reference")
         self.assertEqual(defaults.selection.rows[1], "Quest\nReference")
         self.assertEqual(defaults.layout.row_label_line_spacing_px, 4)
@@ -706,6 +711,7 @@ class QualitativeReplayTests(unittest.TestCase):
                 crop_xywh=(0, 0, 64, 48),
                 column_label="sample-id",
                 label_font_size=18,
+                row_label_rotation=90,
                 column_font_size=14,
                 show_axes=False,
             )
@@ -727,6 +733,11 @@ class QualitativeReplayTests(unittest.TestCase):
             ["Passthrough", "Quest\nReference", "EgoAnchor\n(Ours)"],
         )
         self.assertEqual(metadata["column_label"], "sample-id")
+        self.assertEqual(metadata["layout"]["row_label_rotation_deg"], 90)
+        self.assertEqual(
+            metadata["configuration"]["effective"]["layout"]["row_label_rotation_deg"],
+            90,
+        )
         self.assertEqual(metadata["crop_mode"], "fixed_image_space")
         self.assertIsNone(metadata["crop_padding"])
         self.assertTrue(metadata["font_identifiers"]["row_label"])

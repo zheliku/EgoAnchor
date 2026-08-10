@@ -77,9 +77,19 @@ _SCALE_LABELS = {
 }
 """Figure 4 下排使用的已发表量表缩写。"""
 
+_ITEM_GROUPS = (
+    (("Q1", "Q2", "Q3", "Q4"), 7, "(a) Stage-wise anchor behavior (1-7)"),
+    (("Q5", "Q6", "Q7"), 7, "(b) Overall anchoring judgment (1-7)"),
+)
+"""上排两个条目分区的结局、理论上限和面板标题。
+
+分区与论文第 5.3.3 节的条目分类一致：前者逐阶段考察锚点行为，
+后者给出跨阶段的整体判断；显著性仍按七项条目构成的同一家族校正。
+"""
+
 _SCALE_GROUPS = (
-    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(b) Published scales (1-7)"),
-    (("TIA_RC", "TIA_UP"), 5, "(c) TiA scales (1-5)"),
+    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(c) Published scales (1-7)"),
+    (("TIA_RC", "TIA_UP"), 5, "(d) TiA scales (1-5)"),
 )
 """下排两个量尺分区的结局、理论上限和面板标题。"""
 
@@ -90,7 +100,7 @@ _TOP_AXIS_BOTTOM = 0.565
 _BOTTOM_AXIS_BOTTOM = 0.105
 _ROW_HEIGHT = 0.325
 _SCALE_GUTTER = 0.018
-"""双排 Figure 4 的七槽绘图区、行高和量尺分区间距。"""
+"""双排 Figure 4 的七槽绘图区、行高和分区间距。"""
 
 
 def publish_figures(
@@ -138,74 +148,38 @@ def _subjective_figure(
     *,
     figure_size: tuple[float, float],
 ) -> Any:
-    """生成上排七项主结局、下排五项已发表量表的复合图。"""
+    """生成上排七项对象锚定条目、下排五项已发表量表的四面板复合图。
 
+    两排均按测量结构分区：上排分为逐阶段锚点行为与整体锚定判断，
+    下排分为七点已发表量表与五点 TiA 量表。槽宽在四个面板间保持一致，
+    因此各结局的箱体等宽，分区仅改变面板边界而不改变箱体尺度。
+    """
+
+    item_groups = _validated_item_blocks()
     scale_groups = _validated_scale_groups()
     figure = plt.figure(figsize=figure_size)
     plot_width = _PLOT_RIGHT - _PLOT_LEFT
-    slot_width = plot_width / _SLOT_COUNT
-    lower_width = (
-        slot_width * sum(len(outcomes) for outcomes, _, _ in scale_groups)
-        + _SCALE_GUTTER * (len(scale_groups) - 1)
-    )
-    lower_left = _PLOT_LEFT + (plot_width - lower_width) / 2.0
-    axis = figure.add_axes(
-        (_PLOT_LEFT, _TOP_AXIS_BOTTOM, plot_width, _ROW_HEIGHT)
-    )
-    _draw_outcomes(
-        axis,
+    slot_width = (plot_width - _SCALE_GUTTER * (len(item_groups) - 1)) / _SLOT_COUNT
+    _draw_group_row(
+        figure,
         paired_scores,
         results,
-        outcomes=PRIMARY_OUTCOMES,
-        scale_upper=7,
-    )
-    _format_outcome_axis(
-        axis,
-        outcomes=PRIMARY_OUTCOMES,
+        groups=item_groups,
         labels=_OUTCOME_LABELS,
-        scale_upper=7,
+        bottom=_TOP_AXIS_BOTTOM,
+        plot_width=plot_width,
+        slot_width=slot_width,
     )
-    axis.set_title(
-        "(a) Primary outcomes",
-        loc="left",
-        fontsize=_PANEL_FONT_SIZE - 0.2,
-        fontweight="bold",
-        color=PAPER_TEXT_COLOR,
+    _draw_group_row(
+        figure,
+        paired_scores,
+        results,
+        groups=scale_groups,
+        labels=_SCALE_LABELS,
+        bottom=_BOTTOM_AXIS_BOTTOM,
+        plot_width=plot_width,
+        slot_width=slot_width,
     )
-    scale_axes: list[Any] = []
-    next_left = lower_left
-    for outcomes, scale_upper, title in scale_groups:
-        axis_width = slot_width * len(outcomes)
-        scale_axis = figure.add_axes(
-            (next_left, _BOTTOM_AXIS_BOTTOM, axis_width, _ROW_HEIGHT)
-        )
-        scale_axes.append(scale_axis)
-        _draw_outcomes(
-            scale_axis,
-            paired_scores,
-            results,
-            outcomes=outcomes,
-            scale_upper=scale_upper,
-        )
-        _format_outcome_axis(
-            scale_axis,
-            outcomes=outcomes,
-            labels=_SCALE_LABELS,
-            scale_upper=scale_upper,
-        )
-        scale_axis.set_title(
-            title,
-            loc="left",
-            fontsize=_PANEL_FONT_SIZE - 0.2,
-            fontweight="bold",
-            color=PAPER_TEXT_COLOR,
-        )
-        next_left += axis_width + _SCALE_GUTTER
-    right_axis = scale_axes[-1]
-    right_axis.yaxis.tick_right()
-    right_axis.yaxis.set_label_position("right")
-    right_axis.spines["left"].set_visible(False)
-    right_axis.spines["right"].set_visible(True)
     figure.legend(
         handles=_method_legend_handles(),
         loc="upper center",
@@ -216,6 +190,86 @@ def _subjective_figure(
         columnspacing=1.4,
     )
     return figure
+
+
+def _draw_group_row(
+    figure: Any,
+    paired_scores: pd.DataFrame,
+    results: pd.DataFrame,
+    *,
+    groups: tuple[tuple[tuple[str, ...], int, str], ...],
+    labels: dict[str, str],
+    bottom: float,
+    plot_width: float,
+    slot_width: float,
+) -> list[Any]:
+    """按给定分区绘制一排面板，整排在绘图区内居中，纵轴按量尺归属放置。"""
+
+    row_scale = groups[0][1]
+    row_width = (
+        slot_width * sum(len(outcomes) for outcomes, _, _ in groups)
+        + _SCALE_GUTTER * (len(groups) - 1)
+    )
+    next_left = _PLOT_LEFT + (plot_width - row_width) / 2.0
+    axes: list[Any] = []
+    for position, (outcomes, scale_upper, title) in enumerate(groups):
+        axis_width = slot_width * len(outcomes)
+        axis = figure.add_axes((next_left, bottom, axis_width, _ROW_HEIGHT))
+        axes.append(axis)
+        _draw_outcomes(
+            axis,
+            paired_scores,
+            results,
+            outcomes=outcomes,
+            scale_upper=scale_upper,
+        )
+        _format_outcome_axis(
+            axis,
+            outcomes=outcomes,
+            labels=labels,
+            scale_upper=scale_upper,
+        )
+        _place_row_scale(
+            axis,
+            position=position,
+            group_count=len(groups),
+            shares_row_scale=scale_upper == row_scale,
+        )
+        axis.set_title(
+            title,
+            loc="left",
+            fontsize=_PANEL_FONT_SIZE - 0.2,
+            fontweight="bold",
+            color=PAPER_TEXT_COLOR,
+        )
+        next_left += axis_width + _SCALE_GUTTER
+    return axes
+
+
+def _place_row_scale(
+    axis: Any,
+    *,
+    position: int,
+    group_count: int,
+    shares_row_scale: bool,
+) -> None:
+    """决定一排中某个面板如何呈现纵轴。
+
+    与整排首个面板同量尺的后续面板只保留刻度线，读数由首个面板的纵轴给出；
+    量尺不同的末个面板改用右侧纵轴，使两套量尺各自贴近所在面板而互不干扰。
+    """
+
+    if position == 0:
+        return
+    if shares_row_scale:
+        axis.set_ylabel("")
+        axis.tick_params(axis="y", labelleft=False)
+        return
+    if position == group_count - 1:
+        axis.yaxis.tick_right()
+        axis.yaxis.set_label_position("right")
+        axis.spines["left"].set_visible(False)
+        axis.spines["right"].set_visible(True)
 
 
 def _draw_outcomes(
@@ -405,22 +459,38 @@ def _method_legend_handles() -> tuple[Line2D, Line2D, Line2D]:
     return methods[0], methods[1], mean
 
 
+def _validated_item_blocks() -> tuple[tuple[tuple[str, ...], int, str], ...]:
+    """要求上排布局恰好覆盖冻结的七项对象锚定条目。"""
+
+    return _validated_groups(_ITEM_GROUPS, PRIMARY_OUTCOMES, "上排条目")
+
+
 def _validated_scale_groups() -> tuple[tuple[tuple[str, ...], int, str], ...]:
     """要求下排布局恰好覆盖冻结的五项已发表量表结局。"""
 
+    return _validated_groups(_SCALE_GROUPS, SCALE_OUTCOMES, "下排量表")
+
+
+def _validated_groups(
+    groups: tuple[tuple[tuple[str, ...], int, str], ...],
+    expected: tuple[str, ...],
+    role: str,
+) -> tuple[tuple[tuple[str, ...], int, str], ...]:
+    """要求一排面板分区无重复地覆盖对应的冻结结局集合。"""
+
     outcomes = tuple(
         outcome
-        for group, _, _ in _SCALE_GROUPS
+        for group, _, _ in groups
         for outcome in group
     )
-    if len(outcomes) != len(set(outcomes)) or set(outcomes) != set(SCALE_OUTCOMES):
-        missing = set(SCALE_OUTCOMES).difference(outcomes)
-        unexpected = set(outcomes).difference(SCALE_OUTCOMES)
+    if len(outcomes) != len(set(outcomes)) or set(outcomes) != set(expected):
+        missing = set(expected).difference(outcomes)
+        unexpected = set(outcomes).difference(expected)
         raise ValueError(
-            "Figure 4 下排量表分区必须无重复地覆盖全部冻结结局："
+            f"Figure 4 {role}分区必须无重复地覆盖全部冻结结局："
             f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
         )
-    return _SCALE_GROUPS
+    return groups
 
 
 def _ordered_results(results: pd.DataFrame) -> pd.DataFrame:

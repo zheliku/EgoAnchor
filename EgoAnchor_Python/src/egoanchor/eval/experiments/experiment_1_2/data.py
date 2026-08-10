@@ -39,13 +39,13 @@ from ..common import (
 
 _ANALYSIS_TABLE_KEYS = frozenset(
     {
-        "exp1_performance_table",
         "exp1_static_table",
         "exp1_dynamic_table",
+        "exp1_transition_table",
         "exp2_table",
     }
 )
-"""实验一/二必须复制到论文目录的正文合并表与三张审计表格键。"""
+"""实验一/二必须复制到论文目录的正文表与审计表格键。"""
 
 _IMAGE_SUFFIXES = frozenset({".png", ".pdf"})
 """论文图片资源允许的文件后缀。"""

@@ -201,7 +201,7 @@ pixi run eval copy-assets exp1-2
 ```text
 2026-EgoAnchor/tables/exp1_static.tex
 2026-EgoAnchor/tables/exp1_dynamic.tex
-2026-EgoAnchor/tables/exp1_performance.tex
+2026-EgoAnchor/tables/exp1_transition.tex
 2026-EgoAnchor/tables/exp2_design.tex
 ```
 

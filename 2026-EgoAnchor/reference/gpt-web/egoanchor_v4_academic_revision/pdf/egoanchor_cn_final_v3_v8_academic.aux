@@ -1,0 +1,155 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\citation{appleObjectAnchor}
+\citation{appleObjectTracking2026}
+\citation{azureObjectAnchors}
+\citation{metaDynamicObjectTracker}
+\citation{foundationpose2023}
+\citation{megapose2022}
+\HyPL@Entry{0<</S/D>>}
+\newlabel{fig:teaser}{{1}{1}{}{figure.1}{}}
+\newlabel{fig:teaser@cref}{{[figure][1][]1}{[1][1][]1}{}{}{}}
+\newlabel{sec:introduction}{{}{1}{}{Doc-Start}{}}
+\newlabel{sec:introduction@cref}{{}{[1][1][]1}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {1}引言}{1}{section.3}\protected@file@percent }
+\@writefile{brf}{\backcite{appleObjectAnchor,appleObjectTracking2026,azureObjectAnchors,metaDynamicObjectTracker}{{1}{1}{section.3}}}
+\@writefile{brf}{\backcite{foundationpose2023,megapose2022}{{1}{1}{section.3}}}
+\citation{kato1999artoolkit}
+\citation{olson2011apriltag}
+\citation{garridojurado2014aruco}
+\citation{appleObjectAnchor}
+\citation{appleObjectTracking2026}
+\citation{azureObjectAnchors}
+\citation{vuforiaModelTargets}
+\citation{metaDynamicObjectTracker}
+\citation{cosypose2020}
+\citation{megapose2022}
+\citation{foundationpose2023}
+\citation{azuma1994improving}
+\citation{diluca2010latency}
+\citation{casiez2012oneeuro}
+\citation{vanwaveren2016atw}
+\citation{yoloe2025}
+\citation{cutie2024}
+\citation{foundationpose2023}
+\@writefile{toc}{\contentsline {section}{\numberline {2}相关工作}{2}{section.7}\protected@file@percent }
+\newlabel{sec:related-work}{{2}{2}{相关工作}{section.7}{}}
+\newlabel{sec:related-work@cref}{{[section][2][]2}{[1][2][]2}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}平台级真实物体锚定}{2}{subsection.8}\protected@file@percent }
+\@writefile{brf}{\backcite{kato1999artoolkit,olson2011apriltag,garridojurado2014aruco}{{2}{2.1}{subsection.8}}}
+\@writefile{brf}{\backcite{appleObjectAnchor,appleObjectTracking2026,azureObjectAnchors,vuforiaModelTargets,metaDynamicObjectTracker}{{2}{2.1}{subsection.8}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}6DoF物体位姿估计与跟踪}{2}{subsection.9}\protected@file@percent }
+\@writefile{brf}{\backcite{cosypose2020,megapose2022}{{2}{2.2}{subsection.9}}}
+\@writefile{brf}{\backcite{foundationpose2023}{{2}{2.2}{subsection.9}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}XR时延补偿与时间一致性}{2}{subsection.10}\protected@file@percent }
+\@writefile{brf}{\backcite{azuma1994improving,diluca2010latency}{{2}{2.3}{subsection.10}}}
+\@writefile{brf}{\backcite{casiez2012oneeuro}{{2}{2.3}{subsection.10}}}
+\@writefile{brf}{\backcite{vanwaveren2016atw}{{2}{2.3}{subsection.10}}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}EgoAnchor系统}{2}{section.11}\protected@file@percent }
+\newlabel{sec:system}{{3}{2}{EgoAnchor系统}{section.11}{}}
+\newlabel{sec:system@cref}{{[section][3][]3}{[1][2][]2}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}系统概览}{2}{subsection.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}感知后端}{2}{subsection.14}\protected@file@percent }
+\newlabel{sec:perception}{{3.2}{2}{感知后端}{subsection.14}{}}
+\newlabel{sec:perception@cref}{{[subsection][2][3]3.2}{[1][2][]2}{}{}{}}
+\newlabel{eq:observation}{{1}{2}{感知后端}{equation.15}{}}
+\newlabel{eq:observation@cref}{{[equation][1][]1}{[1][2][]2}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}面向锚定的感知流水线}{2}{subsubsection.16}\protected@file@percent }
+\@writefile{brf}{\backcite{yoloe2025}{{2}{3.2.1}{subsubsection.16}}}
+\newlabel{eq:detect}{{2}{2}{面向锚定的感知流水线}{equation.17}{}}
+\newlabel{eq:detect@cref}{{[equation][2][]2}{[1][2][]2}{}{}{}}
+\@writefile{brf}{\backcite{cutie2024}{{2}{3.2.1}{equation.17}}}
+\newlabel{eq:seg}{{3}{2}{面向锚定的感知流水线}{equation.18}{}}
+\newlabel{eq:seg@cref}{{[equation][3][]3}{[1][2][]2}{}{}{}}
+\newlabel{eq:depth}{{4}{2}{面向锚定的感知流水线}{equation.19}{}}
+\newlabel{eq:depth@cref}{{[equation][4][]4}{[1][2][]2}{}{}{}}
+\citation{cosypose2020}
+\citation{megapose2022}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces EgoAnchor的分层架构。感知后端（上）从双目图像、对象文本提示与目标三维模型中恢复相机系位姿候选，并给出逐观测VCD可靠性评分。锚定运行时（下）按采集时刻恢复世界系观测，经准入后写入时间索引轨迹，并在每个渲染帧按运动模式合成对象锚点，同时标注其有效性与可信度。}}{3}{figure.13}\protected@file@percent }
+\newlabel{fig:arch}{{2}{3}{EgoAnchor的分层架构。感知后端（上）从双目图像、对象文本提示与目标三维模型中恢复相机系位姿候选，并给出逐观测VCD可靠性评分。锚定运行时（下）按采集时刻恢复世界系观测，经准入后写入时间索引轨迹，并在每个渲染帧按运动模式合成对象锚点，同时标注其有效性与可信度。}{figure.13}{}}
+\newlabel{fig:arch@cref}{{[figure][2][]2}{[1][2][]3}{}{}{}}
+\@writefile{brf}{\backcite{foundationpose2023}{{3}{3.2.1}{equation.19}}}
+\newlabel{eq:pose}{{5}{3}{面向锚定的感知流水线}{equation.20}{}}
+\newlabel{eq:pose@cref}{{[equation][5][]5}{[1][3][]3}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}逐观测VCD评分}{3}{subsubsection.21}\protected@file@percent }
+\@writefile{brf}{\backcite{cosypose2020,megapose2022}{{3}{3.2.2}{subsubsection.21}}}
+\newlabel{eq:visibility}{{6}{3}{逐观测VCD评分}{equation.22}{}}
+\newlabel{eq:visibility@cref}{{[equation][6][]6}{[1][3][]3}{}{}{}}
+\newlabel{eq:depth-score}{{7}{3}{逐观测VCD评分}{equation.23}{}}
+\newlabel{eq:depth-score@cref}{{[equation][7][]7}{[1][3][]3}{}{}{}}
+\newlabel{eq:vcd}{{8}{3}{逐观测VCD评分}{equation.24}{}}
+\newlabel{eq:vcd@cref}{{[equation][8][]8}{[1][3][]3}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}锚定运行时}{3}{subsection.25}\protected@file@percent }
+\newlabel{sec:anchoring}{{3.3}{3}{锚定运行时}{subsection.25}{}}
+\newlabel{sec:anchoring@cref}{{[subsection][3][3]3.3}{[1][3][]3}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}观测校正}{4}{subsubsection.26}\protected@file@percent }
+\newlabel{sec:obs-update}{{3.3.1}{4}{观测校正}{subsubsection.26}{}}
+\newlabel{sec:obs-update@cref}{{[subsubsection][1][3,3]3.3.1}{[1][4][]4}{}{}{}}
+\newlabel{eq:capture-alignment}{{9}{4}{观测校正}{equation.27}{}}
+\newlabel{eq:capture-alignment@cref}{{[equation][9][]9}{[1][4][]4}{}{}{}}
+\newlabel{eq:admission}{{10}{4}{观测校正}{equation.28}{}}
+\newlabel{eq:admission@cref}{{[equation][10][]10}{[1][4][]4}{}{}{}}
+\newlabel{eq:trajectory}{{11}{4}{观测校正}{equation.29}{}}
+\newlabel{eq:trajectory@cref}{{[equation][11][]11}{[1][4][]4}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}锚点合成}{4}{subsubsection.30}\protected@file@percent }
+\newlabel{sec:frame-output}{{3.3.2}{4}{锚点合成}{subsubsection.30}{}}
+\newlabel{sec:frame-output@cref}{{[subsubsection][2][3,3]3.3.2}{[1][4][]4}{}{}{}}
+\newlabel{eq:target-time}{{12}{4}{锚点合成}{equation.31}{}}
+\newlabel{eq:target-time@cref}{{[equation][12][]12}{[1][4][]4}{}{}{}}
+\newlabel{eq:delayed-interp}{{13}{4}{锚点合成}{equation.32}{}}
+\newlabel{eq:delayed-interp@cref}{{[equation][13][]13}{[1][4][]4}{}{}{}}
+\newlabel{eq:staticlock}{{14}{4}{锚点合成}{equation.33}{}}
+\newlabel{eq:staticlock@cref}{{[equation][14][]14}{[1][4][]4}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}静止锚定}{4}{subsubsection.34}\protected@file@percent }
+\newlabel{sec:staticlock}{{3.3.3}{4}{静止锚定}{subsubsection.34}{}}
+\newlabel{sec:staticlock@cref}{{[subsubsection][3][3,3]3.3.3}{[1][4][]4}{}{}{}}
+\newlabel{eq:lock-entry}{{15}{4}{静止锚定}{equation.35}{}}
+\newlabel{eq:lock-entry@cref}{{[equation][15][]15}{[1][4][]4}{}{}{}}
+\newlabel{eq:lock-update}{{16}{4}{静止锚定}{equation.36}{}}
+\newlabel{eq:lock-update@cref}{{[equation][16][]16}{[1][4][]4}{}{}{}}
+\newlabel{eq:cusum}{{17}{4}{静止锚定}{equation.37}{}}
+\newlabel{eq:cusum@cref}{{[equation][17][]17}{[1][4][]4}{}{}{}}
+\citation{casiez2012oneeuro}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}运行流程}{5}{subsection.38}\protected@file@percent }
+\newlabel{sec:runtime-alg}{{3.4}{5}{运行流程}{subsection.38}{}}
+\newlabel{sec:runtime-alg@cref}{{[subsection][4][3]3.4}{[1][5][]5}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}系统实现}{5}{section.44}\protected@file@percent }
+\newlabel{sec:implementation}{{4}{5}{系统实现}{section.44}{}}
+\newlabel{sec:implementation@cref}{{[section][4][]4}{[1][5][]5}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}评估设计}{5}{section.45}\protected@file@percent }
+\newlabel{sec:evaluation}{{5}{5}{评估设计}{section.45}{}}
+\newlabel{sec:evaluation@cref}{{[section][5][]5}{[1][5][]5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}实验一：应用侧锚点行为}{5}{subsection.46}\protected@file@percent }
+\newlabel{sec:exp1-design}{{5.1}{5}{实验一：应用侧锚点行为}{subsection.46}{}}
+\newlabel{sec:exp1-design@cref}{{[subsection][1][5]5.1}{[1][5][]5}{}{}{}}
+\@writefile{brf}{\backcite{casiez2012oneeuro}{{5}{5.1}{Item.50}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}实验二：设计归因}{5}{subsection.51}\protected@file@percent }
+\newlabel{sec:exp2-design}{{5.2}{5}{实验二：设计归因}{subsection.51}{}}
+\newlabel{sec:exp2-design@cref}{{[subsection][2][5]5.2}{[1][5][]5}{}{}{}}
+\citation{gottsacker2024artrust}
+\citation{schein2025aq}
+\citation{koerber2019tia}
+\citation{mcgrath2025stias}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}实验三：用户研究}{6}{subsection.52}\protected@file@percent }
+\newlabel{sec:exp3-design}{{5.3}{6}{实验三：用户研究}{subsection.52}{}}
+\newlabel{sec:exp3-design@cref}{{[subsection][3][5]5.3}{[1][5][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}实验设计}{6}{subsubsection.53}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}任务}{6}{subsubsection.54}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.3}主观测量}{6}{subsubsection.58}\protected@file@percent }
+\@writefile{brf}{\backcite{gottsacker2024artrust}{{6}{5.3.3}{subsubsection.58}}}
+\@writefile{brf}{\backcite{schein2025aq}{{6}{5.3.3}{table.59}}}
+\@writefile{brf}{\backcite{koerber2019tia}{{6}{5.3.3}{table.59}}}
+\@writefile{brf}{\backcite{mcgrath2025stias}{{6}{5.3.3}{table.59}}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces 对象锚定体验条目。条目采用七点同意度评分。}}{6}{table.59}\protected@file@percent }
+\newlabel{tab:anchor-items}{{1}{6}{对象锚定体验条目。条目采用七点同意度评分。}{table.59}{}}
+\newlabel{tab:anchor-items@cref}{{[table][1][]1}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.4}实验流程}{6}{subsubsection.60}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.5}参与者}{6}{subsubsection.61}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.6}统计分析}{6}{subsubsection.62}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}结果}{6}{section.63}\protected@file@percent }
+\newlabel{sec:results}{{6}{6}{结果}{section.63}{}}
+\newlabel{sec:results@cref}{{[section][6][]6}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}实验一：应用侧锚点行为}{6}{subsection.64}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.1.1}世界一致性与静止稳定性}{6}{subsubsection.66}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces 实验一的静止与动态误差分布：（a）静止平移，（b）静止旋转，（c）动态平移，（d）动态旋转。实线表示头动泄漏P95（a、b）或时延对齐RMSE（c、d），虚线表示帧间增量P95（a、b）或残余抖动P95（c、d）；浅色点表示重复测量，箱体表�

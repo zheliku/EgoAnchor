@@ -30,8 +30,8 @@ from egoanchor.eval.experiments.experiment_1_2.analysis import (
     analyze_workbooks,
     build_temporal_strategy_panel,
     build_exp1_dynamic_table,
-    build_exp1_performance_table,
     build_exp1_static_table,
+    build_exp1_transition_table,
     build_exp2_attribution_figure,
     build_exp2_attribution_table,
     cache_key,
@@ -120,8 +120,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertLess(translation_rmse, 1e-9)
         self.assertLess(rotation_rmse, 1e-9)
 
-    def test_main_tables_publish_merged_exp1_and_audit_table_contract(self) -> None:
-        """正文合并表保留关键代价，旧拆表与实验二表继续用于审计。"""
+    def test_main_tables_split_exp1_by_aspect_and_keep_audit_table(self) -> None:
+        """实验一正文表按三个评价方面各自成表，实验二表继续用于审计。"""
 
         def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
             """构造两个身份完整且可严格配对的片段。"""
@@ -149,7 +149,11 @@ class Experiment12AnalysisTests(unittest.TestCase):
             "Smoothed KF Extrapolation",
             "Hermite Interpolation",
         )
-        occlusion = rows((*METHODS, "EgoAnchor w/o VCD"), translation_p95_mm=4.0)
+        occlusion = rows(
+            (*METHODS, "EgoAnchor w/o VCD"),
+            translation_p95_mm=4.0,
+            rotation_p95_deg=1.8,
+        )
         results = PaperResults(
             workbook_sha256={},
             static_segments=rows(
@@ -197,57 +201,106 @@ class Experiment12AnalysisTests(unittest.TestCase):
 
         static_table = build_exp1_static_table(results)
         dynamic_table = build_exp1_dynamic_table(results)
-        performance_table = build_exp1_performance_table(results)
+        transition_table = build_exp1_transition_table(results)
         attribution_table = build_exp2_attribution_table(results)
+        exp1_tables = (static_table, dynamic_table, transition_table)
 
-        for table in (static_table, dynamic_table, performance_table, attribution_table):
+        for table in (*exp1_tables, attribution_table):
             self.assertTrue(table.endswith("\n"))
             self.assertFalse(table.endswith("\n\n"))
-        self.assertIn("遮挡平移 P95", static_table)
-        self.assertIn("Start-transition", static_table)
-        self.assertIn(r"\begin{tabular}{lccccc}", static_table)
-        self.assertIn("Capture & 2.50 [2.25, 2.75]", static_table)
-        self.assertNotIn("Start-transition", dynamic_table)
-        self.assertIn(r"\begin{tabular}{lcccccc}", dynamic_table)
-        self.assertIn("当前 RMSE", dynamic_table)
-        for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
-            self.assertIn(f"{label} &", static_table)
-            self.assertIn(f"{label} &", dynamic_table)
-        self.assertIn(r"\begin{table}[t]", performance_table)
-        self.assertNotIn(r"\begin{table*}", performance_table)
+        # 三个评价方面各自成表，均按自然宽度排在单栏内：不横向撑满，不改字号，
+        # 也不动行距；唯一允许的宽度手段是列距。
+        for index, table in enumerate(exp1_tables):
+            self.assertIn(r"\begin{table}[t]", table)
+            self.assertNotIn(r"\begin{table*}", table)
+            self.assertIn(
+                r"\begin{tabular}{@{}l" + "c" * (3, 4, 2)[index] + r"@{}}",
+                table,
+            )
+            for forbidden in (
+                r"\begin{tabular*}",
+                r"\extracolsep",
+                r"\small",
+                r"\footnotesize",
+                r"\renewcommand{\arraystretch}",
+                r"\resizebox",
+                r"\multirow",
+                "$n=",
+                "Mdn [",
+                "[Q1",
+            ):
+                self.assertNotIn(forbidden, table)
+            # 通道并入单元格后每个方法只占一行，表内不再出现通道行标签。
+            for label in ("Arrival", "Capture", "One-Euro", "EgoAnchor"):
+                self.assertIn(f"{label} &", table)
+            self.assertNotIn("平移 &", table)
+            self.assertNotIn("旋转 &", table)
+        # 只有指标最多的动态保真度需要收紧列距，其余两张表保持模板列距；
+        # 赋值写在 table 环境内，因此不外溢到后续表格。
+        for table in (static_table, transition_table):
+            self.assertNotIn(r"\setlength{\tabcolsep}", table)
         self.assertIn(
-            r"\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcccc@{}}",
-            performance_table,
+            "\n" + r"\setlength{\tabcolsep}{2pt}" + "\n" + r"\begin{tabular}",
+            dynamic_table,
         )
+        self.assertGreater(
+            dynamic_table.index(r"\setlength{\tabcolsep}"),
+            dynamic_table.index(r"\caption{"),
+        )
+        # 方面名与 §5.1 的评价指标及 §6.1 的三个小节逐一对应，且各自单一概念。
+        for aspect, table in zip(
+            ("静态保真度", "动态保真度", "转换响应"), exp1_tables, strict=True
+        ):
+            self.assertIn(aspect, table)
+        for label, table in zip(
+            ("tab:exp1-static", "tab:exp1-dynamic", "tab:exp1-transition"),
+            exp1_tables,
+            strict=True,
+        ):
+            self.assertIn(rf"\label{{{label}}}", table)
+        # 每个指标列带一个方向箭头，箭头紧随指标名而非单位。
+        for count, table in zip((3, 4, 2), exp1_tables, strict=True):
+            self.assertEqual(table.count(r"$\downarrow$"), count)
+            self.assertNotIn(r"mm/$^\circ$\,$\downarrow$", table)
+        for header, table in (
+            (r"头动泄漏\,$\downarrow$", static_table),
+            (r"绝对注册\,$\downarrow$", static_table),
+            (r"静止抖动\,$\downarrow$", static_table),
+            (r"有效时延\,$\downarrow$", dynamic_table),
+            (r"LA-RMSE\,$\downarrow$", dynamic_table),
+            (r"CT-RMSE\,$\downarrow$", dynamic_table),
+            (r"残余抖动\,$\downarrow$", dynamic_table),
+            (r"遮挡误差\,$\downarrow$", transition_table),
+            (r"起动转换\,$\downarrow$", transition_table),
+        ):
+            self.assertIn(header, table)
+        # 单元格按平移/旋转顺序书写，两通道各自独立加粗最优中位数；通道分隔用
+        # 裸斜杠，双通道单元格是全表最宽成分，两侧窄空会把列距逼到过挤的档位。
         self.assertIn(
-            r"指标 $\downarrow$ & Arrival & Capture & One-Euro & EgoAnchor \\",
-            performance_table,
+            r"Arrival & \textbf{1.50}/\textbf{1.00} & "
+            r"\textbf{2.50}/\textbf{2.00} & \textbf{0.60}/\textbf{0.55} \\",
+            static_table,
         )
-        self.assertNotIn(r"\shortstack{One-", performance_table)
-        self.assertNotIn(r"\shortstack{Ego", performance_table)
+        self.assertIn(r"Capture & 2.50/2.00 & 3.50/3.00", static_table)
+        for table in exp1_tables:
+            self.assertNotIn(r"\,/\,", table)
+        # 时延按 5~ms 网格的实际分辨率保留一位小数，其余指标保留两位。
         self.assertIn(
-            r"\shortstack[l]{静止帧间增量\\P95 (mm)}",
-            performance_table,
+            r"Arrival & \textbf{200.5}/\textbf{220.5} & "
+            r"\textbf{5.50}/\textbf{2.50} & \textbf{25.50}/\textbf{12.50} & "
+            r"\textbf{1.00}/\textbf{0.70} \\",
+            dynamic_table,
         )
+        # 起动转换为跨通道标量，单元格内不再拼接通道。
         self.assertIn(
-            r"\shortstack[l]{当前时刻\\RMSE (mm)}",
-            performance_table,
+            r"Arrival & \textbf{4.50}/\textbf{2.30} & \textbf{150.5} \\",
+            transition_table,
         )
-        self.assertIn(r"\normalsize", performance_table)
-        self.assertNotIn(r"\small", performance_table)
-        self.assertNotIn(r"\footnotesize", performance_table)
-        self.assertNotIn(r"\resizebox", performance_table)
-        self.assertIn("绝对注册 P95", performance_table)
-        self.assertIn("当前时刻", performance_table)
-        self.assertIn("Start-transition", performance_table)
-        self.assertNotIn("Mdn [", performance_table)
-        self.assertNotIn("[Q1", performance_table)
-        self.assertNotIn("n=", performance_table)
-        combined = static_table + dynamic_table + performance_table + attribution_table
+        combined = "".join(exp1_tables) + attribution_table
         self.assertNotIn("Arrival-Hold &", combined)
         self.assertNotIn("Capture-Hold &", combined)
         self.assertNotIn("One-Euro Anchor &", combined)
-        self.assertIn("组件关闭 & 参照指标 & EgoAnchor (on) & Component off", attribution_table)
+        self.assertIn("受评设计 & 参照指标 & 启用 & 关闭", attribution_table)
         for row_label in ("采集时刻对齐", "StaticLock", "VCD 判别性", "时序策略"):
             self.assertIn(f"{row_label} &", attribution_table)
         for removed in ("VCD 接纳", "Hermite 补充", "停止护栏"):
@@ -890,6 +943,8 @@ def _presentation_results() -> PaperResults:
             temporal_variants,
             translation_p95_mm=4.0,
             translation_max_mm=6.0,
+            rotation_p95_deg=1.8,
+            rotation_max_deg=2.7,
             catastrophic_gt40=0.0,
         ),
         transition_segments=rows(temporal_variants, response_ms=150.0),

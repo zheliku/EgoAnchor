@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
@@ -657,6 +658,7 @@ def render_comparison_grid(
     crop_aspect_ratio: float = 4.0 / 3.0,
     column_label: str = "delta-t",
     label_font_size: int = 30,
+    row_label_rotation: int = 0,
     column_font_size: int = 24,
     timeline: TimelineSettings | None = None,
     label_padding: int = 8,
@@ -728,6 +730,8 @@ def render_comparison_grid(
     ):
         if not 8 <= int(size) <= 96:
             raise ValueError(f"{name} 必须位于 8 到 96。")
+    if not -90 <= int(row_label_rotation) <= 90:
+        raise ValueError("row_label_rotation 必须位于 -90 到 90 度。")
     _validate_overlay_options(
         model_alpha=model_alpha,
         reference_alpha=reference_alpha,
@@ -855,6 +859,7 @@ def render_comparison_grid(
         cell_width=int(cell_width),
         column_label=column_label,
         label_font_size=int(label_font_size),
+        row_label_rotation=int(row_label_rotation),
         column_font_size=int(column_font_size),
         timeline=timeline,
         label_padding=int(label_padding),
@@ -911,6 +916,7 @@ def render_comparison_grid(
             "cell_width": int(cell_width),
             "column_label": column_label,
             "label_font_size": int(label_font_size),
+            "row_label_rotation_deg": int(row_label_rotation),
             "column_font_size": int(column_font_size),
             "label_padding_px": int(label_padding),
             "label_min_width_px": int(label_min_width),
@@ -1003,6 +1009,7 @@ def render_comparison_grid(
         "layout": {
             "label_padding_px": int(label_padding),
             "label_min_width_px": int(label_min_width),
+            "row_label_rotation_deg": int(row_label_rotation),
             "gutter_px": int(gutter),
             "border_thickness_px": int(border_thickness),
             "canvas_color_hex": canvas_color_hex,
@@ -1503,6 +1510,7 @@ def _compose_grid(
     cell_width: int,
     column_label: str,
     label_font_size: int,
+    row_label_rotation: int,
     column_font_size: int,
     timeline: TimelineSettings | None,
     label_padding: int,
@@ -1540,19 +1548,25 @@ def _compose_grid(
     label_font = _load_font(label_font_size)
     column_font = _load_font(column_font_size)
     measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    row_label_images = {
+        row: _render_rotated_text_image(
+            row_titles[row],
+            label_font,
+            row_label_color,
+            spacing=row_label_line_spacing,
+            rotation_deg=row_label_rotation,
+        )
+        for row in rows
+    }
+    max_label_height = max(image.height for image in row_label_images.values())
+    if max_label_height > cell_height - 4:
+        raise ValueError(
+            "旋转后的行标题高于图像单元；请减小行名字号、降低旋转角度或增大裁剪高度。"
+        )
     label_width = int(
         max(
             label_min_width,
-            max(
-                _multiline_text_size(
-                    measure,
-                    row_titles[row],
-                    label_font,
-                    spacing=row_label_line_spacing,
-                )[0]
-                for row in rows
-            )
-            + label_padding,
+            max(image.width for image in row_label_images.values()) + label_padding,
         )
     )
     column_header_height = (
@@ -1596,13 +1610,10 @@ def _compose_grid(
         y = (
             grid_top + row_index * (cell_height + gutter)
         )
-        _draw_centered_text(
-            draw,
+        _paste_centered_label_image(
+            sheet,
             (2, y, label_width - 2, y + cell_height),
-            row_titles[row_key],
-            label_font,
-            row_label_color,
-            spacing=row_label_line_spacing,
+            row_label_images[row_key],
         )
 
     for column_index, column in enumerate(columns):
@@ -2796,23 +2807,57 @@ def _draw_centered_text(
     )
 
 
-def _multiline_text_size(
-    draw: ImageDraw.ImageDraw,
+def _render_rotated_text_image(
     text: str,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    color: tuple[int, int, int],
     *,
     spacing: int,
-) -> tuple[int, int]:
-    """返回与最终多行绘制规则一致的文字宽高。"""
+    rotation_deg: int,
+) -> Image.Image:
+    """把单行或多行标题渲染为可旋转的透明文字图层。"""
 
-    bounds = draw.multiline_textbbox(
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+    bounds = measure.multiline_textbbox(
         (0, 0),
         text,
         font=font,
         spacing=int(spacing),
         align="center",
     )
-    return int(round(bounds[2] - bounds[0])), int(round(bounds[3] - bounds[1]))
+    padding = 2
+    width = max(1, int(math.ceil(bounds[2] - bounds[0])) + padding * 2)
+    height = max(1, int(math.ceil(bounds[3] - bounds[1])) + padding * 2)
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    ImageDraw.Draw(image).multiline_text(
+        (padding - bounds[0], padding - bounds[1]),
+        text,
+        fill=(*color, 255),
+        font=font,
+        spacing=int(spacing),
+        align="center",
+    )
+    if int(rotation_deg):
+        image = image.rotate(
+            float(rotation_deg),
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+    visible = image.getbbox()
+    return image.crop(visible) if visible is not None else image
+
+
+def _paste_centered_label_image(
+    sheet: Image.Image,
+    box: tuple[int, int, int, int],
+    image: Image.Image,
+) -> None:
+    """把透明文字图层居中贴入标签区域。"""
+
+    left, top, right, bottom = box
+    x = int(round(left + (right - left - image.width) * 0.5))
+    y = int(round(top + (bottom - top - image.height) * 0.5))
+    sheet.paste(image, (x, y), image)
 
 
 def _load_rgb(path: Path) -> np.ndarray:

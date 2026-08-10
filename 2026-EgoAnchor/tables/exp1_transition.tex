@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{实验一的转换响应。遮挡误差按平移/旋转顺序给出片段中位数并取P95，起动转换为跨通道标量。箭头标记优劣方向，粗体为最优中位数；同一序列上的定性行为见图~\ref{fig:exp1-replay}。}
+\label{tab:exp1-transition}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+方法 & \shortstack{遮挡误差\,$\downarrow$\\mm/$^\circ$} & \shortstack{起动转换\,$\downarrow$\\ms} \\
+\midrule
+Arrival & 18.23/18.39 & \textbf{157.0} \\
+Capture & 16.93/18.38 & 263.8 \\
+One-Euro & 10.41/8.66 & 334.0 \\
+EgoAnchor & \textbf{4.85}/\textbf{5.52} & 510.4 \\
+\bottomrule
+\end{tabular}
+\end{table}

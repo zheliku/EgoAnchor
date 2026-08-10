@@ -94,7 +94,7 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             setattr(EXP3_ARTIFACTS.figure4_png, "key", "changed")
 
     def test_composite_figure_preserves_scales_slots_and_one_legend(self) -> None:
-        """双排 Figure 4 必须保持三组轴、等宽槽和单一共享图例。"""
+        """双排 Figure 4 必须保持四组轴、等宽槽和单一共享图例。"""
 
         scores, tables = _analysis_fixture()
         settings = load_settings()
@@ -119,25 +119,21 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
         self.assertEqual(set(outputs), {"figure4_png", "figure4_pdf"})
         self.assertEqual(len({id(figure) for figure in captured}), 1)
         figure = captured[0]
-        self.assertEqual(len(figure.axes), 3)
+        self.assertEqual(len(figure.axes), 4)
         self.assertEqual(len(figure.legends), 1)
         self.assertEqual(
             [text.get_text() for text in figure.legends[0].get_texts()],
             ["One-Euro", "EgoAnchor", "Mean"],
         )
 
-        primary_axis, seven_point_axis, tia_axis = figure.axes
+        stage_axis, overall_axis, seven_point_axis, tia_axis = figure.axes
         self.assertEqual(
-            [tick.get_text() for tick in primary_axis.get_xticklabels()],
-            [
-                "Stability",
-                "Attachment",
-                "Orientation",
-                "Recovery",
-                "Position",
-                "Reliance",
-                "Balance",
-            ],
+            [tick.get_text() for tick in stage_axis.get_xticklabels()],
+            ["Stability", "Attachment", "Orientation", "Recovery"],
+        )
+        self.assertEqual(
+            [tick.get_text() for tick in overall_axis.get_xticklabels()],
+            ["Position", "Reliance", "Balance"],
         )
         self.assertEqual(
             [tick.get_text() for tick in seven_point_axis.get_xticklabels()],
@@ -147,23 +143,38 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             [tick.get_text() for tick in tia_axis.get_xticklabels()],
             ["TiA R/C", "TiA U/P"],
         )
-        self.assertEqual(primary_axis.get_ylabel(), "Rating (1-7)")
+        # 每排首个面板给出该排量尺；与之同量尺的面板不再重复标注读数。
+        self.assertEqual(stage_axis.get_ylabel(), "Rating (1-7)")
         self.assertEqual(seven_point_axis.get_ylabel(), "Rating (1-7)")
+        self.assertEqual(overall_axis.get_ylabel(), "")
+        self.assertEqual(overall_axis.get_yticklabels(), [])
+        # 量尺不同的末个面板改用右侧纵轴，与相邻的七点面板互不干扰。
         self.assertEqual(tia_axis.get_ylabel(), "Rating (1-5)")
         self.assertEqual(tia_axis.yaxis.get_label_position(), "right")
         self.assertEqual(tia_axis.yaxis.get_ticks_position(), "right")
-        self.assertEqual(primary_axis.get_title(loc="left"), "(a) Primary outcomes")
+        self.assertEqual(
+            stage_axis.get_title(loc="left"),
+            "(a) Stage-wise anchor behavior (1-7)",
+        )
+        self.assertEqual(
+            overall_axis.get_title(loc="left"),
+            "(b) Overall anchoring judgment (1-7)",
+        )
         self.assertEqual(
             seven_point_axis.get_title(loc="left"),
-            "(b) Published scales (1-7)",
+            "(c) Published scales (1-7)",
         )
         self.assertEqual(
             tia_axis.get_title(loc="left"),
-            "(c) TiA scales (1-5)",
+            "(d) TiA scales (1-5)",
         )
         self.assertEqual(
-            [text.get_text() for text in primary_axis.texts],
-            ["*<.05"] * 7,
+            [text.get_text() for text in stage_axis.texts],
+            ["*<.05"] * 4,
+        )
+        self.assertEqual(
+            [text.get_text() for text in overall_axis.texts],
+            ["*<.05"] * 3,
         )
         self.assertEqual(
             [text.get_text() for text in seven_point_axis.texts],
@@ -174,17 +185,28 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             ["**<.01"] * 2,
         )
 
-        primary_box = primary_axis.get_position()
+        stage_box = stage_axis.get_position()
+        overall_box = overall_axis.get_position()
         seven_point_box = seven_point_axis.get_position()
         tia_box = tia_axis.get_position()
-        slot_width = primary_box.width / 7.0
-        self.assertAlmostEqual(seven_point_box.width / 3.0, slot_width, places=8)
-        self.assertAlmostEqual(tia_box.width / 2.0, slot_width, places=8)
-        self.assertGreater(tia_box.x0 - seven_point_box.x1, 0.0)
-        self.assertLess(tia_box.x0 - seven_point_box.x1, slot_width / 4.0)
+        # 四个面板共用同一槽宽，因此各结局的箱体等宽。
+        slot_width = stage_box.width / 4.0
+        for box, slots in (
+            (overall_box, 3.0),
+            (seven_point_box, 3.0),
+            (tia_box, 2.0),
+        ):
+            self.assertAlmostEqual(box.width / slots, slot_width, places=8)
+        for left_box, right_box in (
+            (stage_box, overall_box),
+            (seven_point_box, tia_box),
+        ):
+            self.assertGreater(right_box.x0 - left_box.x1, 0.0)
+            self.assertLess(right_box.x0 - left_box.x1, slot_width / 4.0)
+        # 两排各自在绘图区内居中，因此两排的水平中心重合。
         self.assertAlmostEqual(
+            (stage_box.x0 + overall_box.x1) / 2.0,
             (seven_point_box.x0 + tia_box.x1) / 2.0,
-            (primary_box.x0 + primary_box.x1) / 2.0,
             places=8,
         )
 

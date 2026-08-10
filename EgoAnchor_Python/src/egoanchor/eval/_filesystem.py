@@ -23,6 +23,27 @@ _WINDOWS_FILE_RETRY_ATTEMPTS = 12
 _WINDOWS_FILE_RETRY_DELAY_SECONDS = 0.25
 """目录清理重试的基础等待秒数。"""
 
+_WINDOWS_RENAME_RETRY_ATTEMPTS = 20
+"""目录改名遇到短暂句柄占用时的最大重试次数。
+
+实测结论（2026-08-11 逐位验证）：Windows 上**任何未带 ``FILE_SHARE_DELETE`` 的目录
+句柄都会让该目录改名失败**——八种共享模式里缺 bit 4 的四种一律失败，带 bit 4 的四种
+一律成功；且失败码是 ``ACCESS_DENIED``(5) 而不是 ``SHARING_VIOLATION``(32)，所以看起来
+像权限问题，其实不是。
+
+**更关键的一条：占用可以在子树任意深处，报错却落在祖先目录上。** 曾因此排查了很久：
+``analysis`` 改名被拒，但以 ``share=0`` 独占打开 ``analysis`` 本身却成功、ACL 与可正常
+改名的兄弟目录逐条一致——真正被持有的是 ``analysis/results``。**判定占用必须遍历整个
+子树逐项探测，只测被改名的那个目录会得出「无人持有」的错误结论。**
+
+索引器、防病毒、网盘同步、编辑器与文件资源管理器的目录监视都会开出这类句柄，因此
+发布期的两次改名必须重试；只对删除重试（``remove_tree_with_retry``）覆盖不到发布路径。
+次数比删除多一档：改名只需句柄关闭的那一瞬，等下去通常能成。
+"""
+
+_WINDOWS_SHARING_VIOLATION = 32
+"""``ERROR_SHARING_VIOLATION``；独占打开失败即证明该对象正被他人持有。"""
+
 _WINDOWS_REPARSE_POINT_ATTRIBUTE = 0x0400
 """Windows ``FILE_ATTRIBUTE_REPARSE_POINT`` 的稳定数值。"""
 
@@ -114,6 +135,127 @@ def remove_tree_with_retry(path: Path) -> None:
         except OSError:
             if attempt + 1 == _WINDOWS_FILE_RETRY_ATTEMPTS:
                 raise
+            time.sleep(_WINDOWS_FILE_RETRY_DELAY_SECONDS * (attempt + 1))
+
+
+def _windows_held_entries(root: Path, limit: int = 8) -> list[Path]:
+    """列出子树中此刻无法独占打开的对象，用于定位改名被拒的真正占用点。
+
+    参数：
+        root: 改名失败的目录；连同其整个子树逐项探测。
+        limit: 最多报告多少个被持有的对象，避免错误信息失控。
+
+    返回：
+        被他人持有的路径列表；非 Windows、探测不可用或无人持有时返回空列表。
+
+    注意：
+        以 ``share=0`` 短暂独占打开是必要手段——占用可能在子树任意深处，而报错只落在
+        祖先目录上，只探测 ``root`` 自身会误判成「无人持有」。探测只在改名彻底失败后
+        运行一次，且只针对本项目自己的输出目录；本函数永不抛异常，诊断失败就返回空表，
+        不能让排查逻辑反过来破坏发布。
+    """
+
+    if os.name != "nt":
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_file = kernel32.CreateFileW
+        create_file.restype = wintypes.HANDLE
+        create_file.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.HANDLE,
+        ]
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+
+        invalid_handle = wintypes.HANDLE(-1).value
+        open_existing = 3
+        backup_semantics = 0x02000000
+        open_reparse_point = 0x00200000
+        read_access = 0x00000001  # 目录为 FILE_LIST_DIRECTORY，文件为 FILE_READ_DATA
+
+        held: list[Path] = []
+
+        def probe(path: Path, is_directory: bool) -> None:
+            flags = open_reparse_point | (backup_semantics if is_directory else 0)
+            handle = create_file(
+                str(path), read_access, 0, None, open_existing, flags, None
+            )
+            if handle == invalid_handle:
+                if ctypes.get_last_error() == _WINDOWS_SHARING_VIOLATION:
+                    held.append(path)
+                return
+            close_handle(wintypes.HANDLE(handle))
+
+        probe(root, True)
+        for current, directories, files in os.walk(root):
+            base = Path(current)
+            for name in directories:
+                if len(held) >= limit:
+                    return held
+                probe(base / name, True)
+            for name in files:
+                if len(held) >= limit:
+                    return held
+                probe(base / name, False)
+        return held
+    except Exception:  # noqa: BLE001 — 诊断绝不能盖掉真正的发布错误
+        return []
+
+
+def rename_directory_with_retry(source: Path, destination: Path) -> None:
+    """改名目录，并对 Windows 短暂目录句柄占用做有界重试。
+
+    参数：
+        source: 调用方已验证的源目录。
+        destination: 同一父目录下尚不存在的目标名。
+
+    抛出：
+        OSError: 重试用尽后仍被占用；异常信息点名子树里真正被持有的对象，
+            避免只留一个「拒绝访问」让人误以为是权限问题。
+
+    注意：
+        只重试占用类失败。目标已存在（``FileExistsError``）属于调用方逻辑错误，
+        必须立刻上抛，不能靠等待掩盖。
+    """
+
+    for attempt in range(_WINDOWS_RENAME_RETRY_ATTEMPTS):
+        try:
+            source.rename(destination)
+            return
+        except FileExistsError:
+            raise
+        except PermissionError as error:
+            if attempt + 1 == _WINDOWS_RENAME_RETRY_ATTEMPTS:
+                held = _windows_held_entries(source)
+                if held:
+                    listed = "；".join(str(path) for path in held)
+                    culprit = f"子树中仍被占用的对象：{listed}。"
+                else:
+                    culprit = (
+                        "子树逐项探测未发现占用对象（持有者可能在提权盲区内，"
+                        "或占用刚好在探测间隙释放）。"
+                    )
+                raise PermissionError(
+                    f"目录改名在 {_WINDOWS_RENAME_RETRY_ATTEMPTS} 次重试后仍被拒绝："
+                    f"{source} -> {destination}。"
+                    "Windows 上任何未带 FILE_SHARE_DELETE 的句柄都会挡住改名，"
+                    "且报错为「拒绝访问」而非「共享冲突」，因此这通常不是权限问题；"
+                    "占用还可能在子树任意深处，报错却落在被改名的目录上。"
+                    f"{culprit}"
+                    "常见持有者：文件资源管理器曾浏览过该目录（即使窗口已不显示它，"
+                    "explorer.exe 仍会留着句柄，重启 explorer.exe 即可释放）、"
+                    "编辑器/IDE 的目录监视、网盘同步客户端、防病毒实时扫描、"
+                    "以及工作目录停在该目录的终端。"
+                ) from error
             time.sleep(_WINDOWS_FILE_RETRY_DELAY_SECONDS * (attempt + 1))
 
 
@@ -218,7 +360,9 @@ def _restore_backup_after_publish_failure(
             raise FileNotFoundError(f"回滚备份已不存在：{backup}")
         if _entry_exists(destination):
             raise FileExistsError(f"活动输出路径已被其他进程占用：{destination}")
-        backup.rename(destination)
+        # 回滚同样要重试：挡住第一次改名的句柄往往还在，不重试会把「可恢复的
+        # 占用」升级成需要人工处理的 DirectoryRollbackError。
+        rename_directory_with_retry(backup, destination)
     except Exception as rollback_error:
         raise DirectoryRollbackError(
             destination=destination,
@@ -296,11 +440,11 @@ def replace_directory_with_rollback(
             )
             backup.rmdir()
             _reject_linked_path(target, "活动输出路径")
-            target.rename(backup)
+            rename_directory_with_retry(target, backup)
         try:
             _reject_linked_path(staged, "待发布暂存路径")
             _reject_linked_path(target, "活动输出路径")
-            staged.rename(target)
+            rename_directory_with_retry(staged, target)
         except Exception as publish_error:
             if backup is not None:
                 _restore_backup_after_publish_failure(target, backup, publish_error)
@@ -323,5 +467,6 @@ __all__ = [
     "DirectoryRollbackError",
     "create_inherited_temp_directory",
     "remove_tree_with_retry",
+    "rename_directory_with_retry",
     "replace_directory_with_rollback",
 ]

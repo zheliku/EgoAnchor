@@ -550,9 +550,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     for item in payload["paths"]["table_destinations"]
                 },
                 {
-                    "exp1_performance.tex",
                     "exp1_static.tex",
                     "exp1_dynamic.tex",
+                    "exp1_transition.tex",
                     "exp2_design.tex",
                 },
             )
@@ -594,9 +594,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
             table_names = {
-                "exp1_performance_table": "experiment1_performance.tex",
-                "exp1_static_table": "experiment1_static_occlusion_stability.tex",
-                "exp1_dynamic_table": "experiment1_dynamic_6dof_fidelity.tex",
+                "exp1_static_table": "experiment1_static_fidelity.tex",
+                "exp1_dynamic_table": "experiment1_dynamic_fidelity.tex",
+                "exp1_transition_table": "experiment1_transition_response.tex",
                 "exp2_table": "experiment2_design_attribution.tex",
             }
             artifact_paths = {}
@@ -646,9 +646,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
                 table_destinations=(
-                    ArtifactDestination("exp1_performance_table", paper_root / "tables" / "exp1_performance.tex"),
                     ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
                     ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
+                    ArtifactDestination("exp1_transition_table", paper_root / "tables" / "exp1_transition.tex"),
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
                 ),
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
@@ -692,10 +692,15 @@ class Experiment12WorkflowTests(unittest.TestCase):
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
             self.assertTrue((paper_root / "figures" / "panels" / "figure2_exp1_behavior.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
-            self.assertEqual(
-                (paper_root / "tables" / "exp1_dynamic.tex").read_text(encoding="utf-8"),
-                "exp1_dynamic_table",
-            )
+            for key, name in (
+                ("exp1_static_table", "exp1_static.tex"),
+                ("exp1_dynamic_table", "exp1_dynamic.tex"),
+                ("exp1_transition_table", "exp1_transition.tex"),
+            ):
+                self.assertEqual(
+                    (paper_root / "tables" / name).read_text(encoding="utf-8"),
+                    key,
+                )
             self.assertFalse((paper_root / "figures" / "panels" / "figure2c_occlusion.pdf").exists())
             self.assertFalse((paper_root / "tables" / "stale_table.tex").exists())
             self.assertFalse((paper_root / "main.tex").exists())
@@ -727,18 +732,19 @@ class Experiment12WorkflowTests(unittest.TestCase):
                     figure_paths[key] = str(source.resolve())
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
-            static_table = table_root / "static.tex"
-            dynamic_table = table_root / "dynamic.tex"
-            performance_table = table_root / "performance.tex"
-            static_table.write_text("static", encoding="utf-8")
-            dynamic_table.write_text("dynamic", encoding="utf-8")
-            performance_table.write_text("performance", encoding="utf-8")
+            present_tables = {}
+            for key, name in (
+                ("exp1_static_table", "static.tex"),
+                ("exp1_dynamic_table", "dynamic.tex"),
+                ("exp1_transition_table", "transition.tex"),
+            ):
+                table = table_root / name
+                table.write_text(key, encoding="utf-8")
+                present_tables[key] = str(table.resolve())
             missing_table = table_root / "missing.tex"
             missing_table.write_text("missing", encoding="utf-8")
             artifact_paths = {
-                "exp1_performance_table": str(performance_table.resolve()),
-                "exp1_static_table": str(static_table.resolve()),
-                "exp1_dynamic_table": str(dynamic_table.resolve()),
+                **present_tables,
                 "exp2_table": str(missing_table.resolve()),
             }
             implementation_root = _analysis_implementation_root()
@@ -780,9 +786,9 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
                 table_destinations=(
-                    ArtifactDestination("exp1_performance_table", paper_root / "tables" / "exp1_performance.tex"),
                     ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
                     ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
+                    ArtifactDestination("exp1_transition_table", paper_root / "tables" / "exp1_transition.tex"),
                     ArtifactDestination("exp2_table", paper_root / "tables" / "exp2_design.tex"),
                 ),
                 relay_assets=(),
