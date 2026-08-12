@@ -13,8 +13,8 @@ active_root = "data/experiments/experiment_1_2" # 当前论文五任务组合清
 experiment_destination = "figures/panels" # 当前活动批次 analysis/figures 下实验一、二 PNG/PDF 的论文相对目标目录。
 
 [experiment_1_2.copy_assets.tables]
-exp1_static_table = "tables/exp1_static.tex" # 实验一静态保真度表的论文相对目标路径；承载头动泄漏、绝对注册与静止抖动。
-exp1_dynamic_table = "tables/exp1_dynamic.tex" # 实验一动态保真度表的论文相对目标路径；承载有效时延、LA-RMSE、CT-RMSE 与残余抖动。
+exp1_static_table = "tables/exp1_static.tex" # 实验一静态配准表的论文相对目标路径；承载头动泄漏、绝对配准与静止抖动。
+exp1_dynamic_table = "tables/exp1_dynamic.tex" # 实验一动态跟随表的论文相对目标路径；承载有效时延、LA-RMSE、CT-RMSE 与残余抖动。
 exp1_transition_table = "tables/exp1_transition.tex" # 实验一转换响应表的论文相对目标路径；承载遮挡误差与起动转换。
 exp2_table = "tables/exp2_design.tex" # 实验二系统设计归因表的论文相对目标路径。
 

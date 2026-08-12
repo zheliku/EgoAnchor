@@ -88,10 +88,14 @@ _ITEM_GROUPS = (
 """
 
 _SCALE_GROUPS = (
-    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(c) Published scales (1-7)"),
-    (("TIA_RC", "TIA_UP"), 5, "(d) TiA scales (1-5)"),
+    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(c) AQ and S-TIAS (1-7)"),
+    (("TIA_RC", "TIA_UP"), 5, "(d) TiA (1-5)"),
 )
-"""下排两个量尺分区的结局、理论上限和面板标题。"""
+"""下排两个量尺分区的结局、理论上限和面板标题。
+
+分区逻辑与 Table 5 和 §6.3.2 的两个 \\textbf 标题一致：AQ 与 S-TIAS 均使用
+七点量尺且测量重叠的增强质量维度，TiA 使用五点量尺并独立测量信任。
+"""
 
 _SLOT_COUNT = len(PRIMARY_OUTCOMES)
 _PLOT_LEFT = 0.064

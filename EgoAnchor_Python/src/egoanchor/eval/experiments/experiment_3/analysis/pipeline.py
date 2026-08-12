@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -9,9 +10,14 @@ from typing import Any
 from ...._filesystem import (
     create_inherited_temp_directory,
     remove_tree_with_retry,
-    replace_directory_with_rollback,
+    replace_managed_files_with_rollback,
 )
-from ...common import begin_build, complete_build, source_trees_sha256
+from ...common import (
+    begin_build,
+    build_manifest_path,
+    complete_build,
+    source_trees_sha256,
+)
 from .artifacts import EXP3_ARTIFACTS
 from .contracts import PRIMARY_OUTCOMES, SCALE_OUTCOMES
 from .figures import publish_figures
@@ -53,6 +59,7 @@ def build_analysis(
     details = {
         "included_count": validation["included_count"],
         "artifact_contract_version": EXP3_ARTIFACTS.version,
+        "publish_mode": "managed_files",
     }
     implementation_root = Path(__file__).resolve().parent
     implementation_digest = source_trees_sha256(
@@ -125,10 +132,20 @@ def build_analysis(
             details=details,
             published_root=root,
         )
-        replace_directory_with_rollback(staging, root)
-    except Exception:
-        remove_tree_with_retry(staging)
-        raise
+        managed_paths = tuple(
+            Path(artifact.category) / artifact.canonical_name
+            for artifact in EXP3_ARTIFACTS.outputs
+        )
+        commit_path = build_manifest_path(staging).relative_to(staging)
+        replace_managed_files_with_rollback(
+            staging,
+            root,
+            managed_paths,
+            commit_path=commit_path,
+        )
+        _report_progress(progress, "提交完整分析产物")
+    finally:
+        _cleanup_staging(staging)
     return {"passed": True, "build": manifest}
 
 
@@ -179,6 +196,19 @@ def _report_progress(callback: Callable[[str], None] | None, message: str) -> No
 
     if callback is not None:
         callback(message)
+
+
+def _cleanup_staging(staging: Path) -> None:
+    """清理本轮暂存目录；失败时保留路径并且不覆盖构建或回滚结果。"""
+
+    try:
+        remove_tree_with_retry(staging)
+    except OSError as error:
+        warnings.warn(
+            f"实验三暂存目录清理失败，请人工检查 {staging}：{error}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
 
 __all__ = ["build_analysis", "validate_complete_pair_counts"]

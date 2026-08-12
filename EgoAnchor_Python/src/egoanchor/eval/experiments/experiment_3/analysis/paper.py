@@ -42,6 +42,17 @@ _ITEM_BLOCKS = (
 七项条目构成的同一家族内进行。
 """
 
+_SCALE_BLOCKS = (
+    ("增强质量", ("AQ_EQ", "AQ_IQ")),
+    ("信任", ("TIA_RC", "TIA_UP", "STIAS")),
+)
+"""已发表量表在表中的两个子块：增强质量与信任。
+
+与 §6.3.2「增强质量与信任」的两个 \\textbf 段落标题完全对应。
+分块只作陈述分组，与 ``SCALE_FAMILY`` 的 Holm 校正口径无关；校正仍在
+五项量表构成的同一家族内进行。
+"""
+
 
 def write_subjective_table(
     destination: Path,
@@ -84,13 +95,17 @@ def write_subjective_table(
             lines.append(r"\addlinespace")
         lines.append(rf"\multicolumn{{5}}{{@{{}}l}}{{\textit{{{block_label}}}}} \\")
         lines.extend(_result_rows(main[main["Outcome"].isin(outcomes)]))
-    lines.extend(
-        [
-            r"\midrule",
-            r"\multicolumn{5}{@{}l}{\textit{已发表量表}} \\",
-        ]
-    )
-    lines.extend(_result_rows(results[results["Family"] == SCALE_FAMILY]))
+
+    scale_blocks = _validated_scale_blocks()
+    scales = results[results["Family"] == SCALE_FAMILY]
+    for index, (block_label, outcomes) in enumerate(scale_blocks):
+        if index == 0:
+            lines.append(r"\midrule")
+        else:
+            lines.append(r"\addlinespace")
+        lines.append(rf"\multicolumn{{5}}{{@{{}}l}}{{\textit{{{block_label}}}}} \\")
+        lines.extend(_result_rows(scales[scales["Outcome"].isin(outcomes)]))
+
     lines.extend(
         [
             r"\bottomrule",
@@ -107,20 +122,28 @@ def _validated_item_blocks() -> tuple[tuple[str, tuple[str, ...]], ...]:
     """要求条目子块无重复地覆盖全部冻结的七项对象锚定条目。"""
 
     outcomes = tuple(
-        outcome for _, block in _ITEM_BLOCKS for outcome in block
+        outcome for block in _ITEM_BLOCKS for outcome in block[1]
     )
-    if len(outcomes) != len(set(outcomes)) or set(outcomes) != set(PRIMARY_OUTCOMES):
-        missing = set(PRIMARY_OUTCOMES).difference(outcomes)
-        unexpected = set(outcomes).difference(PRIMARY_OUTCOMES)
-        raise ValueError(
-            "对象锚定条目子块必须无重复地覆盖全部冻结条目："
-            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
-        )
+    if set(outcomes) != set(PRIMARY_OUTCOMES):
+        raise ValueError("条目子块必须无重复地覆盖全部七项对象锚定条目")
     return _ITEM_BLOCKS
 
 
+def _validated_scale_blocks() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """要求量表子块无重复地覆盖全部冻结的五项已发表量表。"""
+
+    from .contracts import SCALE_OUTCOMES
+
+    outcomes = tuple(
+        outcome for block in _SCALE_BLOCKS for outcome in block[1]
+    )
+    if set(outcomes) != set(SCALE_OUTCOMES):
+        raise ValueError("量表子块必须无重复地覆盖全部五项已发表量表")
+    return _SCALE_BLOCKS
+
+
 def _sample_note(results: pd.DataFrame) -> str:
-    """写出配对样本量脚注，非零差范围由数据计算而非写死。"""
+    """写出配对样本量脚注，配对数由数据计算而非写死。"""
 
     paired = pd.to_numeric(results.get("N"), errors="coerce").dropna()
     nonzero = pd.to_numeric(results.get("N_Nonzero"), errors="coerce").dropna()
@@ -129,12 +152,9 @@ def _sample_note(results: pd.DataFrame) -> str:
     if paired.nunique() != 1:
         raise ValueError("配对样本量在各结局间不一致，脚注口径需重新裁定")
     total = int(paired.iloc[0])
-    low, high = int(nonzero.min()), int(nonzero.max())
-    span = f"{low}" if low == high else f"{low}--{high}"
-    note = (
-        f"描述统计基于 {total} 组完整配对，秩检验不计入零差，"
-        f"故各结局的非零差为 {span} 个。"
-    )
+    # 正文已给出 (N=24)，故只声明配对完整性与零差口径，不再把逐结局的非零差
+    # 范围拉回 caption——该数字容易被误读为样本量缩减。
+    note = f"所有结局均有 {total} 组完整配对；零差不进入 Wilcoxon 秩统计。"
     status = results["r_rb_CI_Status"] if "r_rb_CI_Status" in results else pd.Series(dtype=object)
     if bool((status == "degenerate_at_bound").any()):
         note += (

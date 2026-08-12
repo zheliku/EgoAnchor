@@ -340,6 +340,39 @@ class Experiment3Tests(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "previous")
             self.assertFalse(tuple(analysis_root.parent.glob(".analysis.build-*")))
 
+    def test_interrupted_staged_build_cleans_staging(self) -> None:
+        """生成阶段收到 Ctrl+C 时保留旧构建并清理本轮暂存目录。"""
+
+        settings = replace(load_settings(), bootstrap_iterations=1000)
+        data = read_workbook(RAW_WORKBOOK)
+        with tempfile.TemporaryDirectory(dir=PYTHON_ROOT / "data") as directory:
+            analysis_root = Path(directory) / "analysis"
+            analysis_root.mkdir()
+            marker = analysis_root / "previous_complete.txt"
+            marker.write_text("previous", encoding="utf-8")
+            with (
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.analysis.pipeline.read_workbook",
+                    return_value=data,
+                ),
+                mock.patch(
+                    "egoanchor.eval.experiments.experiment_3.analysis.pipeline.write_subjective_table",
+                    side_effect=KeyboardInterrupt(),
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                build_analysis(
+                    settings,
+                    input_workbook=RAW_WORKBOOK,
+                    output_root=analysis_root,
+                    project_root=PYTHON_ROOT,
+                    config_sha256="0" * 64,
+                    batch_config_path=Path(directory) / "batch.toml",
+                    paper_config_path=Path(directory) / "paper.toml",
+                )
+            self.assertEqual(marker.read_text(encoding="utf-8"), "previous")
+            self.assertFalse(tuple(analysis_root.parent.glob(".analysis.build-*")))
+
     def test_complete_build_writes_six_results_pages_and_one_figure_pair(self) -> None:
         """完整构建写出 XLSX、TeX 和同一张复合图的 PNG/PDF。"""
 
@@ -347,6 +380,7 @@ class Experiment3Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=PYTHON_ROOT / "data") as directory:
             root = Path(directory)
             analysis_root = root / "analysis"
+            progress: list[str] = []
             payload = build_analysis(
                 settings,
                 input_workbook=RAW_WORKBOOK,
@@ -355,8 +389,12 @@ class Experiment3Tests(unittest.TestCase):
                 config_sha256="0" * 64,
                 batch_config_path=root / "batch.toml",
                 paper_config_path=root / "paper.toml",
+                progress=progress.append,
             )
             self.assertEqual(payload["build"]["details"]["included_count"], 24)
+            self.assertEqual(payload["build"]["details"]["publish_mode"], "managed_files")
+            self.assertEqual(len(progress), 6)
+            self.assertEqual(progress[-1], "提交完整分析产物")
             results = analysis_root / "results" / "experiment3_analysis.xlsx"
             workbook = load_workbook(results, read_only=True, data_only=True)
             try:
@@ -446,6 +484,48 @@ class Experiment3Tests(unittest.TestCase):
         args = parser.parse_args(["analyze", "exp3"])
         self.assertEqual(args.target, "exp3")
         self.assertIs(args.handler, eval_cli._run_analyze)
+
+    def test_cli_progress_total_matches_reported_stages(self) -> None:
+        """实验三上报全部阶段后进度条必须恰好到达 100%。"""
+
+        parser = eval_cli.build_parser()
+        args = parser.parse_args(["analyze", "exp3"])
+        bar = mock.MagicMock()
+
+        def report_all_stages(
+            target: str,
+            *,
+            rebuild_experiment_1_2: bool = False,
+            experiment_3_progress: object | None = None,
+        ) -> dict[str, bool]:
+            """模拟工作区按真实阶段数依次回调。"""
+
+            self.assertEqual(target, "exp3")
+            self.assertFalse(rebuild_experiment_1_2)
+            assert callable(experiment_3_progress)
+            for number in range(6):
+                experiment_3_progress(f"stage {number}")
+            return {"passed": True}
+
+        with (
+            mock.patch.object(eval_cli, "tqdm") as progress,
+            mock.patch.object(
+                eval_cli,
+                "analyze_workspace",
+                side_effect=report_all_stages,
+            ),
+        ):
+            progress.return_value.__enter__.return_value = bar
+            result = eval_cli._run_analyze(args)
+
+        self.assertTrue(result["passed"])
+        progress.assert_called_once_with(
+            total=6,
+            desc="analyze exp3",
+            unit="stage",
+            leave=False,
+        )
+        self.assertEqual(bar.update.call_count, 6)
 
 
 def _temporary_paths(source: Path, analysis_root: Path) -> ExperimentPaths:

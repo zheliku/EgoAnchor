@@ -235,7 +235,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 self.assertIn(f"{label} &", table)
             self.assertNotIn("平移 &", table)
             self.assertNotIn("旋转 &", table)
-        # 只有指标最多的动态保真度需要收紧列距，其余两张表保持模板列距；
+        # 只有指标最多的动态跟随需要收紧列距，其余两张表保持模板列距；
         # 赋值写在 table 环境内，因此不外溢到后续表格。
         for table in (static_table, transition_table):
             self.assertNotIn(r"\setlength{\tabcolsep}", table)
@@ -249,7 +249,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
         )
         # 方面名与 §5.1 的评价指标及 §6.1 的三个小节逐一对应，且各自单一概念。
         for aspect, table in zip(
-            ("静态保真度", "动态保真度", "转换响应"), exp1_tables, strict=True
+            ("静态配准", "动态跟随", "转换响应"), exp1_tables, strict=True
         ):
             self.assertIn(aspect, table)
         for label, table in zip(
@@ -264,7 +264,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
             self.assertNotIn(r"mm/$^\circ$\,$\downarrow$", table)
         for header, table in (
             (r"头动泄漏\,$\downarrow$", static_table),
-            (r"绝对注册\,$\downarrow$", static_table),
+            (r"绝对配准\,$\downarrow$", static_table),
             (r"静止抖动\,$\downarrow$", static_table),
             (r"有效时延\,$\downarrow$", dynamic_table),
             (r"LA-RMSE\,$\downarrow$", dynamic_table),

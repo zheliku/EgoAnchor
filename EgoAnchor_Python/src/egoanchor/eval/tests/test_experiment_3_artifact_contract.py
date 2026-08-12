@@ -162,11 +162,11 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
         )
         self.assertEqual(
             seven_point_axis.get_title(loc="left"),
-            "(c) Published scales (1-7)",
+            "(c) AQ and S-TIAS (1-7)",
         )
         self.assertEqual(
             tia_axis.get_title(loc="left"),
-            "(d) TiA scales (1-5)",
+            "(d) TiA (1-5)",
         )
         self.assertEqual(
             [text.get_text() for text in stage_axis.texts],

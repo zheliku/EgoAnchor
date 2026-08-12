@@ -36,6 +36,9 @@ EXIT_DATA_ERROR = 2
 _TARGETS = ("all", "exp1-2", "exp3")
 """生命周期命令接受的稳定目标集合。"""
 
+_EXP3_ANALYSIS_STAGES = 6
+"""实验三流水线实际向命令行报告的阶段数。"""
+
 
 def build_parser() -> argparse.ArgumentParser:
     """构造生命周期统一、正式路径固定的纯 Pixi 命令。"""
@@ -175,7 +178,12 @@ def _run_analyze(args: argparse.Namespace) -> dict[str, object]:
     )
     if args.target not in {"exp3", "all"}:
         return analyze_workspace(args.target, rebuild_experiment_1_2=rebuild)
-    with tqdm(total=18, desc=f"analyze {args.target}", unit="stage", leave=False) as bar:
+    with tqdm(
+        total=_EXP3_ANALYSIS_STAGES,
+        desc=f"analyze {args.target}",
+        unit="stage",
+        leave=False,
+    ) as bar:
         def update(message: str) -> None:
             """更新实验三分析阶段，保持 stdout 只有 JSON。"""
 

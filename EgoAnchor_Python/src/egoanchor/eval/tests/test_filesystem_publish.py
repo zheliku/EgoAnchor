@@ -237,6 +237,151 @@ class DirectoryPublishTests(unittest.TestCase):
             )
             self.assertFalse(staging.exists())
 
+    def test_managed_file_publish_commits_manifest_last(self) -> None:
+        """普通产物全部替换后才允许完整清单变为可见。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            staging, destination, files, commit = self._managed_file_fixture(parent)
+            original_replace = Path.replace
+            published: list[Path] = []
+
+            def record_replace(path: Path, target: Path) -> Path:
+                """只记录从 staging 搬到活动目录的受管文件顺序。"""
+
+                if path.is_relative_to(staging) and target.is_relative_to(destination):
+                    published.append(path.relative_to(staging))
+                return original_replace(path, target)
+
+            with mock.patch.object(
+                Path,
+                "replace",
+                autospec=True,
+                side_effect=record_replace,
+            ):
+                filesystem.replace_managed_files_with_rollback(
+                    staging,
+                    destination,
+                    files,
+                    commit_path=commit,
+                )
+
+            self.assertEqual(published, [*files, commit])
+            self.assertEqual(
+                (destination / commit).read_text(encoding="utf-8"),
+                "new manifest",
+            )
+            self.assertEqual(
+                (destination / "unmanaged.txt").read_text(encoding="utf-8"),
+                "keep",
+            )
+
+    def test_managed_file_publish_rolls_back_error_and_keyboard_interrupt(self) -> None:
+        """普通异常与 Ctrl+C 都恢复旧文件、旧清单和未受管文件。"""
+
+        failure_types = (RuntimeError, KeyboardInterrupt)
+        for failure_type in failure_types:
+            for failed_relative in (
+                Path("results/result.txt"),
+                Path("figures/figure.pdf"),
+                Path("provenance/build_result.json"),
+            ):
+                with (
+                    self.subTest(
+                        failure=failure_type.__name__,
+                        path=str(failed_relative),
+                    ),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    parent = Path(directory)
+                    staging, destination, files, commit = self._managed_file_fixture(parent)
+                    original_replace = Path.replace
+                    failed_source = staging / failed_relative
+                    failure = failure_type("simulated failure")
+
+                    def fail_managed_file(path: Path, target: Path) -> Path:
+                        """指定产物替换时注入同步异常或用户中断。"""
+
+                        if path == failed_source:
+                            raise failure
+                        return original_replace(path, target)
+
+                    with (
+                        mock.patch.object(
+                            Path,
+                            "replace",
+                            autospec=True,
+                            side_effect=fail_managed_file,
+                        ),
+                        self.assertRaises(failure_type),
+                    ):
+                        filesystem.replace_managed_files_with_rollback(
+                            staging,
+                            destination,
+                            files,
+                            commit_path=commit,
+                        )
+
+                    for relative in files:
+                        self.assertEqual(
+                            (destination / relative).read_text(encoding="utf-8"),
+                            f"old {relative.name}",
+                        )
+                    self.assertEqual(
+                        (destination / commit).read_text(encoding="utf-8"),
+                        "old manifest",
+                    )
+                    self.assertEqual(
+                        (destination / "unmanaged.txt").read_text(encoding="utf-8"),
+                        "keep",
+                    )
+                    self.assertFalse(tuple(parent.glob(".active.files-backup-*")))
+                    self.assertFalse((parent / ".active.publish.lock").exists())
+
+    @unittest.skipUnless(os.name == "nt", "共享模式语义只在 Windows 上成立")
+    def test_managed_file_publish_keeps_watched_directory_identity(self) -> None:
+        """真实目录句柄持续占用 results 时仍发布成功，且不更换目录节点。"""
+
+        import ctypes
+        from ctypes import wintypes
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            staging, destination, files, commit = self._managed_file_fixture(parent)
+            results = destination / "results"
+            identity = results.stat().st_ino
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            create_file = kernel32.CreateFileW
+            create_file.restype = wintypes.HANDLE
+            create_file.argtypes = [
+                wintypes.LPCWSTR,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.LPVOID,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.HANDLE,
+            ]
+            handle = create_file(
+                str(results), 0x00000001, 0x00000003, None, 3, 0x02000000, None
+            )
+            self.assertNotEqual(handle, wintypes.HANDLE(-1).value, "无法建立测试句柄")
+            try:
+                filesystem.replace_managed_files_with_rollback(
+                    staging,
+                    destination,
+                    files,
+                    commit_path=commit,
+                )
+            finally:
+                kernel32.CloseHandle(wintypes.HANDLE(handle))
+
+            self.assertEqual(results.stat().st_ino, identity)
+            self.assertEqual(
+                (destination / commit).read_text(encoding="utf-8"),
+                "new manifest",
+            )
+
     def test_persistent_directory_handle_reports_actionable_guidance(self) -> None:
         """持续占用在重试用尽后要给出可操作的排查线索，而非只报「拒绝访问」。"""
 
@@ -399,6 +544,39 @@ class DirectoryPublishTests(unittest.TestCase):
             self.assertTrue(staging.is_dir())
             self.assertFalse(destination.exists())
             self.assertEqual(lock_path.read_text(encoding="utf-8"), "another publisher")
+
+    @staticmethod
+    def _managed_file_fixture(
+        parent: Path,
+    ) -> tuple[Path, Path, tuple[Path, ...], Path]:
+        """创建带旧构建、新暂存构建和未受管文件的最小发布夹具。"""
+
+        staging = parent / "staging"
+        destination = parent / "active"
+        files = (
+            Path("results/result.txt"),
+            Path("figures/figure.pdf"),
+        )
+        commit = Path("provenance/build_result.json")
+        staging.mkdir()
+        destination.mkdir()
+        for relative in files:
+            (staging / relative).parent.mkdir(parents=True, exist_ok=True)
+            (destination / relative).parent.mkdir(parents=True, exist_ok=True)
+            (staging / relative).write_text(
+                f"new {relative.name}",
+                encoding="utf-8",
+            )
+            (destination / relative).write_text(
+                f"old {relative.name}",
+                encoding="utf-8",
+            )
+        (staging / commit).parent.mkdir(parents=True, exist_ok=True)
+        (destination / commit).parent.mkdir(parents=True, exist_ok=True)
+        (staging / commit).write_text("new manifest", encoding="utf-8")
+        (destination / commit).write_text("old manifest", encoding="utf-8")
+        (destination / "unmanaged.txt").write_text("keep", encoding="utf-8")
+        return staging, destination, files, commit
 
     @staticmethod
     def _path_key(path: Path) -> str:

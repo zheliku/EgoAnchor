@@ -139,7 +139,7 @@ _CHANNEL_SEPARATOR = "/"
 """单元格内平移与旋转两个通道之间的分隔。
 
 裸斜杠而非窄空包围的斜杠：双通道单元格是三张表里最宽的成分，去掉两侧窄空
-使承载指标最多的动态保真度表净宽从 229.50~pt 降到 220.49~pt，列距因而不必压
+使承载指标最多的动态跟随表净宽从 229.50~pt 降到 220.49~pt，列距因而不必压
 到视觉上过挤的档位。
 """
 
@@ -205,8 +205,8 @@ def _behavior_table(
     模板字号；宽度只由 ``tabcolsep_pt`` 调节，且仅在需要收紧时才写出
     ``\\setlength{\\tabcolsep}``——该赋值局限在 ``table`` 环境内，不外溢。
 
-    实测（``\\columnwidth`` 为 240.94~pt）：静态保真度三指标在模板列距下为
-    203.49~pt，转换响应两指标为 150.49~pt，均无需干预；动态保真度四指标为
+    实测（``\\columnwidth`` 为 240.94~pt）：静态配准三指标在模板列距下为
+    203.49~pt，转换响应两指标为 150.49~pt，均无需干预；动态跟随四指标为
     277.49~pt，超出 36.55~pt，收到 2~pt 列距后为 236.49~pt。瓶颈是数值而非表头，
     把单位从表头移入题注对宽度无影响（同为 220.49~pt），故单位保留在表头。
     """
@@ -234,11 +234,11 @@ def _behavior_table(
 
 
 def build_exp1_static_table(results: PaperResults) -> str:
-    """生成实验一静态保真度表：头动泄漏、绝对注册与静止抖动。"""
+    """生成实验一静态配准表：头动泄漏、绝对配准与静止抖动。"""
 
     static = results.static_segments
     return _behavior_table(
-        r"实验一的静态保真度。各单元格按平移/旋转顺序给出片段中位数，"
+        r"实验一的静态配准。各单元格按平移/旋转顺序给出重复测量的中位数，"
         r"三项指标均取P95；箭头标记优劣方向，粗体为各指标在该通道上的最优"
         r"中位数。分布见图~\ref{fig:exp1-final}(a,\,b)。",
         "tab:exp1-static",
@@ -252,7 +252,7 @@ def build_exp1_static_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "绝对注册",
+                "绝对配准",
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (static, "absolute_p95_mm"),
@@ -272,12 +272,12 @@ def build_exp1_static_table(results: PaperResults) -> str:
 
 
 def build_exp1_dynamic_table(results: PaperResults) -> str:
-    """生成实验一动态保真度表：有效时延、两个RMSE与残余抖动。"""
+    """生成实验一动态跟随表：有效时延、两个RMSE与残余抖动。"""
 
     translation = results.translation_segments
     rotation = results.rotation_segments
     return _behavior_table(
-        r"实验一的动态保真度。各单元格按平移/旋转顺序给出片段中位数；"
+        r"实验一的动态跟随。各单元格按平移/旋转顺序给出重复测量的中位数；"
         r"LA-RMSE为时延对齐均方根误差，CT-RMSE为当前时刻均方根误差，"
         r"残余抖动取P95。箭头标记优劣方向，粗体为各指标在该通道上的最优"
         r"中位数。分布见图~\ref{fig:exp1-final}(c,\,d)。",
@@ -328,9 +328,8 @@ def build_exp1_transition_table(results: PaperResults) -> str:
 
     occlusion = results.occlusion_episodes
     return _behavior_table(
-        r"实验一的转换响应。遮挡误差按平移/旋转顺序给出片段中位数并取"
-        r"P95，起动转换为跨通道标量。箭头标记优劣方向，粗体为最优中位数；"
-        r"同一序列上的定性行为见图~\ref{fig:exp1-replay}。",
+        r"实验一的转换响应。遮挡误差按平移/旋转顺序给出重复测量的中位数并取"
+        r"P95，起动转换为跨通道标量。箭头标记优劣方向，粗体为最优中位数。",
         "tab:exp1-transition",
         (
             (
@@ -440,7 +439,7 @@ def build_exp2_attribution_table(results: PaperResults) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{实验二的设计归因。效应倍率先在同一片段或同一遮挡过程内计算组件关闭与启用之比，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的启用与关闭分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的 Linear/SLERP 与 Smoothed KF。}",
+        r"\caption{实验二的设计归因。效应倍率先在同一次重复测量或同一遮挡过程内计算组件关闭与启用之比，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的启用与关闭分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的历史轨迹取值（Linear/SLERP）与平滑卡尔曼外推。}",
         r"\label{tab:exp2-final}",
         r"\small",
         r"\setlength{\tabcolsep}{3.0pt}",
@@ -449,10 +448,10 @@ def build_exp2_attribution_table(results: PaperResults) -> str:
         r"\toprule",
         r"受评设计 & 参照指标 & 启用 & 关闭 & 效应倍率 & 一致性 \\",
         r"\midrule",
-        f"采集时刻对齐 & 同候选复合 P95 & 采集时刻 {_array_cell(capture)}~mm & 到达时刻 {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
-        f"StaticLock & 中心化静止 P95 & {_array_cell(full_static)}~mm & {_array_cell(disabled_static)}~mm & {static_effect} & {static_consistency} " + r"\\",
+        f"采集时刻对齐 & 位姿泄漏 P95 & 采集时刻 {_array_cell(capture)}~mm & 到达时刻 {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
+        f"StaticLock & 静止平移波动 P95 & {_array_cell(full_static)}~mm & {_array_cell(disabled_static)}~mm & {static_effect} & {static_consistency} " + r"\\",
         f"VCD 判别性 & 遮挡过程 AURC & {_array_cell(vcd_aurc)}~mm & 全覆盖 {_array_cell(vcd_full_risk)}~mm & {vcd_effect} & {vcd_consistency} " + r"\\",
-        f"时序策略 & 平移 / 旋转 aligned RMSE & \\shortstack{{Linear/SLERP (StaticLock off)\\\\{_array_cell(linear_translation)}~mm / {_array_cell(linear_rotation)}$^\\circ$}} & \\shortstack{{Smoothed KF (StaticLock off)\\\\{_array_cell(extrapolation_translation)}~mm / {_array_cell(extrapolation_rotation)}$^\\circ$}} & \\shortstack{{T: {translation_effect}\\\\R: {rotation_effect}}} & \\shortstack{{T: {translation_consistency}\\\\R: {rotation_consistency}}} " + r"\\",
+        f"时序策略 & 平移 / 旋转 aligned RMSE & \\shortstack{{历史取值 (StaticLock off)\\\\{_array_cell(linear_translation)}~mm / {_array_cell(linear_rotation)}$^\\circ$}} & \\shortstack{{平滑外推 (StaticLock off)\\\\{_array_cell(extrapolation_translation)}~mm / {_array_cell(extrapolation_rotation)}$^\\circ$}} & \\shortstack{{T: {translation_effect}\\\\R: {rotation_effect}}} & \\shortstack{{T: {translation_consistency}\\\\R: {rotation_consistency}}} " + r"\\",
         r"\bottomrule",
         r"\end{tabular}%",
         r"}",

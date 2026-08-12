@@ -11,7 +11,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 
 _TEMP_DIRECTORY_ATTEMPTS = 32
@@ -209,6 +209,168 @@ def _windows_held_entries(root: Path, limit: int = 8) -> list[Path]:
         return held
     except Exception:  # noqa: BLE001 — 诊断绝不能盖掉真正的发布错误
         return []
+
+
+def replace_managed_files_with_rollback(
+    staging: Path,
+    destination: Path,
+    relative_paths: Iterable[Path],
+    *,
+    commit_path: Path,
+) -> None:
+    """在稳定目录内事务替换受管文件，并把提交标志最后发布。
+
+    参数：
+        staging: 已完整生成并验证的暂存目录。
+        destination: 身份必须保持稳定的活动目录。
+        relative_paths: 提交标志之外的受管文件相对路径。
+        commit_path: 完整清单等提交标志的相对路径；普通文件就位后才替换该文件。
+
+    注意：
+        文件级替换无法让多个文件在同一瞬间切换，因此提交标志必须最后替换。发布中的旧
+        提交标志与新旧混合文件摘要不符，读取方会关闭失败；新提交标志可见时，其余文件
+        已全部就位。任一 ``BaseException`` 都按预先完成的快照恢复整个旧集合；目录本身
+        始终不改名，目录监视句柄不参与事务。
+    """
+
+    staged = _validated_publish_path(staging, "受管文件暂存路径")
+    target = _validated_publish_path(destination, "受管文件活动路径")
+    if staged == target:
+        raise ValueError("受管文件暂存目录与活动目录不得是同一路径")
+    if not staged.is_dir():
+        raise FileNotFoundError(f"受管文件暂存目录不存在：{staged}")
+    if staged.parent != target.parent:
+        raise ValueError("受管文件暂存目录与活动目录必须位于同一父目录")
+
+    files = tuple(_validate_relative_file(path, "受管文件") for path in relative_paths)
+    commit = _validate_relative_file(commit_path, "提交标志")
+    if not files:
+        raise ValueError("受管文件发布至少需要一个非提交文件")
+    if len(files) != len(set(files)):
+        raise ValueError("受管文件相对路径不得重复")
+    if commit in files:
+        raise ValueError("提交标志不得同时出现在普通受管文件中")
+
+    with _exclusive_publish_lock(staged, target):
+        _reject_linked_path(staged, "受管文件暂存路径")
+        _reject_linked_path(target, "受管文件活动路径")
+        if not staged.is_dir():
+            raise FileNotFoundError(f"受管文件暂存目录不存在：{staged}")
+        if _entry_exists(target) and not target.is_dir():
+            raise NotADirectoryError(f"受管文件活动路径不是目录：{target}")
+        target.mkdir(parents=True, exist_ok=True)
+
+        ordered = (*files, commit)
+        for relative in ordered:
+            source = staged / relative
+            output = target / relative
+            _reject_linked_path(source, "受管文件来源")
+            _reject_linked_path(output, "受管文件目标")
+            if not source.is_file():
+                raise FileNotFoundError(f"待发布受管文件不存在：{source}")
+            if _entry_exists(output) and not output.is_file():
+                raise IsADirectoryError(f"受管文件目标不是普通文件：{output}")
+            output.parent.mkdir(parents=True, exist_ok=True)
+
+        backup_root = create_inherited_temp_directory(
+            target.parent,
+            f".{target.name}.files-backup-",
+        )
+        try:
+            existed = _snapshot_managed_files(target, backup_root, ordered)
+        except BaseException:
+            _cleanup_managed_backup(backup_root, state="发布尚未开始")
+            raise
+
+        try:
+            for relative in files:
+                (staged / relative).replace(target / relative)
+            (staged / commit).replace(target / commit)
+        except BaseException as publish_error:
+            rollback_errors = _restore_managed_files(
+                target,
+                backup_root,
+                ordered,
+                existed,
+            )
+            if rollback_errors:
+                raise RuntimeError(
+                    "受管文件发布失败且回滚不完整；"
+                    f"请保留备份 {backup_root}。回滚错误：{'；'.join(rollback_errors)}"
+                ) from publish_error
+            _cleanup_managed_backup(backup_root, state="旧构建已经恢复")
+            raise
+        else:
+            _cleanup_managed_backup(backup_root, state="新构建已经提交")
+
+
+def _validate_relative_file(path: Path, label: str) -> Path:
+    """验证单个文件相对路径不会逃逸发布根目录。"""
+
+    relative = Path(path)
+    if (
+        relative.is_absolute()
+        or bool(relative.drive)
+        or not relative.parts
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise ValueError(f"{label}必须是不可逃逸的文件相对路径：{path}")
+    return relative
+
+
+def _snapshot_managed_files(
+    destination: Path,
+    backup_root: Path,
+    relative_paths: tuple[Path, ...],
+) -> dict[Path, bool]:
+    """在修改活动集合前完整复制既有受管文件，并记录各路径是否原先存在。"""
+
+    existed: dict[Path, bool] = {}
+    for relative in relative_paths:
+        source = destination / relative
+        present = _entry_exists(source)
+        existed[relative] = present
+        if not present:
+            continue
+        backup = backup_root / relative
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, backup)
+    return existed
+
+
+def _restore_managed_files(
+    destination: Path,
+    backup_root: Path,
+    relative_paths: tuple[Path, ...],
+    existed: dict[Path, bool],
+) -> list[str]:
+    """按完整快照恢复所有受管路径，最后恢复提交标志。"""
+
+    errors: list[str] = []
+    for relative in relative_paths:
+        output = destination / relative
+        try:
+            if existed[relative]:
+                (backup_root / relative).replace(output)
+            else:
+                output.unlink(missing_ok=True)
+        except OSError as error:
+            errors.append(f"恢复 {output} 失败：{error}")
+    return errors
+
+
+def _cleanup_managed_backup(backup_root: Path, *, state: str) -> None:
+    """清理受管文件快照；失败时保留路径并准确说明事务所处状态。"""
+
+    try:
+        _reject_linked_path(backup_root, "受管文件备份路径")
+        remove_tree_with_retry(backup_root)
+    except OSError as error:
+        warnings.warn(
+            f"{state}，但受管文件备份清理失败；保留 {backup_root}：{error}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
 
 def rename_directory_with_retry(source: Path, destination: Path) -> None:
@@ -469,4 +631,5 @@ __all__ = [
     "remove_tree_with_retry",
     "rename_directory_with_retry",
     "replace_directory_with_rollback",
+    "replace_managed_files_with_rollback",
 ]
