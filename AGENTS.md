@@ -55,7 +55,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 定位为**系统论文，但方法部分按学术标准写**：凝练核心思想、学术化表达，不逐一介绍工程实现，行文精炼、控制篇幅。
 
-**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v1.tex`**（§3 已于 2026-08-07 冻结）：**12 页 / 17 式 / 0 overfull / 0 undefined**，产物 `2026-EgoAnchor/pdf/`。**当前落位**（2026-08-12 重编后实测，`.aux` 的 `\newlabel` 页号）：图 1 p1、图 2 p3、表 1（`tab:anchor-items`）p6、**实验一三张表 表 2/表 3/表 4 同落 p7**、图 3/图 4 p8、**表 5（`tab:exp3-subjective`）p8**、图 5/图 6 p9、附录表 6（`tab:appendix-params`）p12。`\output` 期间 1 处 underfull \vbox 属两栏平衡产物，**不构成回归**。**页数或浮动体变动后须重跑核对**（`.aux` 的 `\newlabel` 页号 + `pdftotext` 逐页），不要沿用上一轮页码。`2026-EgoAnchor/Makefile` 存在，但**本机没装 GNU make（`make` 与 `mingw32-make` 均不可用）**，实际编译一律走「常用验证」里的 `latexmk`。`egoanchor_cn_final_v1/v2/v3/v4` 等旧稿冻结备查，不得用旧稿覆盖当前章节。
+**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v2.tex`**（2026-08-14 起接替 v1；v1 冻结备查。同日删除 `alg:runtime` 算法浮动体与 `algorithm`/`algpseudocode` 宏包，§3.4 恢复 5 项枚举）：**12 页（含参考文献 p10--11 与附录 p12）/ 17 式 / 0 overfull / 0 undefined**，产物 `2026-EgoAnchor/pdf/`。**当前落位**（2026-08-14 latexmk 重编实测，`.aux` 的 `\newlabel` 页号）：图 1 p1、图 2 p3、表 1（`tab:staticlock-release`）p4、表 2（`tab:anchor-items`）p6、**实验一三张表 表 3/表 4/表 5 同落 p7**、图 3/图 4 p8、**表 6（`tab:exp3-subjective`）p8**、图 5/图 6 p9（图 6 不再落于结论之后）、结论 p10、附录表 7（`tab:appendix-params`）p12。`\output` 期间 1 处 underfull \vbox 属两栏平衡产物，**不构成回归**。**页数或浮动体变动后须重跑核对**（`.aux` 的 `\newlabel` 页号 + `pdftotext` 逐页），不要沿用上一轮页码。`2026-EgoAnchor/Makefile` 存在，但**本机没装 GNU make（`make` 与 `mingw32-make` 均不可用）**，实际编译一律走「常用验证」里的 `latexmk`。`egoanchor_cn_final_v1/v2/v3/v4` 等旧稿冻结备查，不得用旧稿覆盖当前章节。
 
 **三条贡献（顺序与短标题已冻结）**：① **EgoAnchor 系统**——零样本动态真实物体锚定系统；② **感知后端与锚定运行时**——感知后端组织为面向锚定的持续感知流水线 + 逐观测 VCD 评分，锚定运行时以采集时刻对齐与质量准入校正观测、再以时间索引轨迹取值与静止锚定合成锚点；③ **系统评价**——受控基准、同候选流组件消融、24 人日常物体研究。
 
@@ -112,7 +112,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 - **`sec:lifecycle` 子节已删，有效性弱化为 §3.3.2 末尾一段无 `\textbf{}` 引导的散文**（章内其余段落均有粗体引导，此处故意不给标签＝降低视觉权重），现为两句：三级退化（不外推 → `FrozenUncertain` → `Lost`）+「维持追踪的可靠性高于准入阈值 $R_{\min}$」。**不能整段删的三个硬依赖**：① 两个状态名被 §5.3 与 §6.3 直接引用（§6.3「144 个区块均进入 `FrozenUncertain`，没有区块进入 `Lost`」是遮挡时长设计的合法性证据），正文必须先定义；② 两门槛设计（0.2 对 0.5）由本段与 §4 共同承担；③ 无此段则「观测中断期间行为有定义」在 §3 内没有落点。**可再压措辞，不能压掉两个状态名与 $R_{\min}$ 比较。**
 - **§3.3.3 首段不点名 One-Euro**：只陈述该类方法的固有折中（「连续平滑以单一参数集在抑制静止抖动与保留运动响应之间取折中」），不加贬义。`casiez2012oneeuro` 的引用在 §2.3（首次提及）与 §5.3（基线标识）——**删批评前必须先安置引用**，否则条目变孤儿且基线无出处。
 - 运行时是**帧内串行两步**，不是并发：`Update()` 排空 NATS（`MaxMessagesPerFrame` 默认 1）先于 `LateUpdate()` 的 `Advance`，同帧同线程。成立的是速率不对称（候选约 9.5~Hz 对刷新 72/90~Hz），多数帧只执行锚点合成。**不变量：轨迹只在观测处理中追加，锚点合成不外推。**§3.3 总起不写执行调度，也不提「头显渲染循环」（与 §4「经 Quest Link 执行于主机」冲突）。
-- **符号层级**：$T_o^w$（单次观测直接复合）→ $\widehat{T}_o^w$（状态估计平滑后）→ $\widetilde{T}_o^w$（提交给应用的锚点）。**上标位只留坐标系，下标位统一承担索引**：$T_{o,f}^{c}$、$T_{o,f}^{w}$、$\widehat{T}_{o,j}^{w}$；旧写法 $T_o^{c_f}$ 与简记 $\widehat{T}_j$ 已废除。带括号的 $\widehat{T}_o^w(t_q)$/$\widetilde{T}_o^w(t_r)$ 指连续时刻取值。$j$ 标记被接纳观测的到达次序，$k$ 为 VCD 模态下标（有效模态集 $K_f$），$r$ 为渲染时刻索引。四段下标 $T_{o,\mathrm{lock}}^w$/$T_{o,\mathrm{ref}}^w$ 已实测采纳。$f_x$ 与帧标识 $f$ 共用字母保留（标准记法且已注明「校正后的像素焦距」）。
+- **符号层级**：$T_o^w$（单次观测直接复合）→ $\widehat{T}_o^w$（滤波状态估计；系统无 RTS 平滑，正文不得写「平滑状态」）→ $\widetilde{T}_o^w$（提交给应用的锚点）。**上标位只留坐标系，下标位统一承担索引**：$T_{o,f}^{c}$、$T_{o,f}^{w}$、$\widehat{T}_{o,j}^{w}$；旧写法 $T_o^{c_f}$ 与简记 $\widehat{T}_j$ 已废除。带括号的 $\widehat{T}_o^w(t_q)$/$\widetilde{T}_o^w(t_r)$ 指连续时刻取值。$j$ 标记被接纳观测的到达次序，$k$ 为 VCD 模态下标（有效模态集 $K_f$），$r$ 为渲染时刻索引。四段下标 $T_{o,\mathrm{lock}}^w$/$T_{o,\mathrm{ref}}^w$ 已实测采纳。$f_x$ 与帧标识 $f$ 共用字母保留（标准记法且已注明「校正后的像素焦距」）。
 - **`\mathcal{}` 全文归零**（$\mathcal{T}\to Q_o$ 文本提示、$\mathcal{M}\to G_o$ 三维模型、$\mathcal{K}_f\to K_f$、$\mathcal{B}_j\to B_j$、$\mathcal{H}_f\to H_f$）。$\mathcal{T}$ 与最高频的 $T$ 只差字体，是最坏的一类撞车。**新增符号不得再用花体。**
 - **算子一律 `\operatorname{}` 直立体语义名**：$\operatorname{Detect}$/$\operatorname{Seg}$/$\operatorname{Stereo}$/$\operatorname{Reg}$/$\operatorname{Track}$/$\operatorname{Erode}$/$\operatorname{Interp}$。**不区分「学习模型」与「固定算法」两层**（VRGA 的学习模块写 $\mathrm{MLP}_{\mathrm{proj}}$ 也是直立体，该分界本身不是 VRGA 体例）。$\Phi_\bullet$ 族已全部废除，全文 $\Phi$ 出现 0 次；用户提议过的 $F_\bullet$ 不采用（与帧标识 $f$、焦距 $f_x$ 形近）。
 - **符号只在正文真正参与推导处保留**（用户口径：「不要陷入了公式就是学术化的误区」「读者如何知道是什么意思？是变量还是常数？」）。**判据＝该符号在后文是否再被引用**；新增行内符号前先自问这一条。已据此删除：$Z_{\mathrm{rnd}}$、$(\mathbf p_j,\mathbf v_j)$/$(\boldsymbol\delta_j,\boldsymbol\omega_j)$、$\ell(t_r)$、$m(t_r)$、$\kappa_j$、$t_{\mathrm{latest}}$、$\mathcal{D}_j$、$\bar w_k$、$\rho_j$（锁内增益）、颜色 ZNCC 的 $\rho$、$T_{o,\mathrm{lock}}^w \leftarrow \widehat{T}_o^w(t_q)$ 赋值式、$\mathcal{H}_c$（帧索引缓存，从不参与推导）。
@@ -141,7 +141,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 - **StaticLock 三个量不得混为一谈**（改这一节前逐条核 `StaticLockController.cs`）：① **原始接纳观测 $T_{o,j}^{w}$**——死区判定 `:606`、CUSUM 累积 `:619`、creep 插值目标 `:646` 三者输入都是它（`OnObservation` 的 `pos`/`rot`，调用方 `AnchorPolicyHost.cs:362` 传 `observation.WorldPose`），故 $d_{p,j}$/$d_{\theta,j}$ 与 `eq:lock-update` 的插值目标一律写 $T_{o,j}^{w}$；② **平滑控制点 $\widehat{T}_{o,j}^{w}$**——只进轨迹 $B_j$ 与 `eq:delayed-interp`；③ **观测共识 `obsConsensus`**——持续跟随观测的低通量，入锁时冻结其当前值为**锚定参考** $T_{o,\mathrm{ref}}^w$（`anchorOrigin`，`:174`），此后累计漂移由 `:598` 的两者之差度量，**只用于漂移系绳**。**这个分工本身是论点**：证据取观测本身，避免平滑把真实偏移提前衰减（该理由写在「进入」段，**不要在「保持」段重复**）。
 - **锚定参考与观测共识的区分「非常重要，不要再改回去」**（GPT 原话，且与代码一致）：把两者混写成「持续跟随接纳观测的低增益共识」等于让参考系本身也变动，累计漂移就无从度量。正文另须点明锚定参考与锁定位姿相互独立，使锁内位姿微调不吸收目标自入锁以来的缓慢真实运动。该段**不得前向引用死区**（用户已要求删「不受死区约束」）。
 - 锁内增益 $g_j=(1-2^{-\Delta t_j/h_{\mathrm{creep}}})R_j(1-\rho_j^{\mathrm{head}})$，**只在死区内施加**。`anchorOrigin` 必须取观测共识而非 `lockedPose`，否则慢移场景 creep 停摆 → 漂移恒为 0 → **永不解锁**。
-- **入锁运动状态用相邻被接纳观测的差分速度**，非滤波器状态（`staticSpeedThresholdMps` 仅供 `motionState` 诊断）。
+- **入锁运动状态用相邻被接纳观测的差分速度**，非滤波器状态（`staticSpeedThresholdMps` 仅供 `motionState` 诊断）。差分速度经逐观测 $\alpha=0.5$ 的 EMA 平滑（`StaticLockController.cs:326`，非半衰期形式），附录列作「入锁运动统计平滑系数 0.5（逐观测）」。
 - **$\bar{\ell}_r$ 是控制点年龄的非对称 EWMA，不是实测时延**：$\ell_r=t_r-t_j$，$t_j$ 即轨迹末端控制点的采集时刻。`eq:target-time` 是「年龄 → 回溯量 → 查询时刻」三段链，含 $s$/$\Delta_{\min}$。正文**不得写「实测时延」**。「快升慢降」须给操作含义（上升立即跟随、下降缓慢回落，使偶发长时延不被迅速遗忘）。
 - **$t_j$/$T_{o,j}^{w}$/$R_j$ 三个量一并定义在 §3.3.1 准入段「按采集时刻递增编号」之后**（编号概念的引入处，早于控制点概念）。准入条件写「还须晚于 $t_j$」，**不写「晚于该控制点」**——控制点在该处尚未定义。
 - **`eq:delayed-interp` 为单式**（不用三分支 `cases`，那读起来像程序边界判断）：前置「设 $t_q$ 落在相邻控制点之间」，边界行为落到式后散文「查询超出轨迹两端时保持最近端点，不按速度模型外推」。**「不外推」这一 thesis 级 claim 必须留在散文里。**
@@ -206,7 +206,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 用户曾提议「VCD 即时评分」，**答：不可行，前提在事实上不成立**——MegaPose 推理中用粗分类器为渲染假设打分，FoundationPose 含 pose-selection 模块，声称「此前的视觉评分都是离线的」会被审稿人直接反驳；且「即时」强调速度，容易被追问是否 real-time。
 
-固定用**逐观测 VCD 评分**（§3.2.2 标题）/ **逐观测 VCD 可靠性评分**（摘要、§1、贡献② 全称）。VCD 与位姿估计器内部评分的真正区别在**系统角色**而非是否在线：内部评分用于 estimator 内部假设选择；VCD 对最终候选做显式多模态验证，被运行时用于轨迹准入、失效判定与重获取期间抑制有害更新，并按模态可用性退化。**不写「既有方法都是离线」这类防守性对比。**
+固定用**逐观测 VCD 评分**（§3.2.2 标题）/ **逐观测 VCD 可靠性评分**（摘要、§1、贡献② 全称）。**中文展开唯一为「可视度门控颜色--深度评分」**（2026-08-14 定）——「色深」易被误读为 color depth / bit depth，已废除，不得回退。VCD 与位姿估计器内部评分的真正区别在**系统角色**而非是否在线：内部评分用于 estimator 内部假设选择；VCD 对最终候选做显式多模态验证，被运行时用于轨迹准入、失效判定与重获取期间抑制有害更新，并按模态可用性退化。**不写「既有方法都是离线」这类防守性对比。**
 
 ### 版面（浮动体机制）
 
@@ -226,7 +226,11 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 - **VCD 拒绝提前 return、不刷新时间戳**（`AnchorPolicyHost.cs:333-339` 对 `:374-378`），即被拒候选**不**计入新鲜度，gap 与无候选同路累积。若写成「也计入」，因果就反了（持续坏观测会永停 Coasting）。
 - **`OnUncertainPose` 置的 `FrozenUncertain` 是瞬态**：`Advance:404-413` 每帧按 `lifecycleGap` 重算并覆盖状态。只读 `AcceptPose` 会得出相反结论。
 - **区分「拒绝坏观测」与「长时间无观测」的真实载体是 `TryLowScoreReacquire`**（`:326`，在 VCD 门控**之前**、对 raw observation 判定），阈值 0.45、持续 600~ms、冷却 3~s。算法 1 因此把「可靠性持续过低则请求重新注册」放在准入判断**之前**。
+- **重获取会重置全部运行时模块**：`NotifyReacquire` → `ResetModules()`（`AnchorPolicyHost.cs:630`）清空运动模型、平滑策略控制点（`HistoricalInterpolationStrategy.cs:47` `points.Clear()`）与 StaticLock，恢复后首个观测走 Snap 建新跟踪段——§3.3.4「不会跨失效区间插值」以此为据，不得改写成「保留旧轨迹」。
 - **有效时延搜索区间 `[0, 600]`~ms、步长 5~ms**（`paper.toml` 的 `minimum_ms/maximum_ms/step_ms`，`metrics.py` 的 `query_times = times - lag_ms` 为正向滞后）。旧稿的 `[-500, 0]` 上下界与符号全错。
+- **起动转换时延是方法无关的外部事件定义**（`metrics.py` `_transition_response`：转换前 250~ms 中位位姿为基线，参考与显示位移各自首次持续 100~ms 超过 5~mm 的时刻之差），不得写成「静止锚定释放后」——Arrival/Capture/One-Euro 无 StaticLock 却同报该指标。
+- **Kalman 只有滤波、无 RTS 平滑**：Smoothed KF Extrapolation 的「平滑」指输出侧校正残差按 0.06~s 半衰期衰减（`SmoothedKalmanExtrapolationStrategy.cs`），正文一律写「卡尔曼滤波状态」，不得写「卡尔曼平滑状态」。
+- **StaticLock 附录参数已补齐（2026-08-14 入表）**：$t_{\mathrm{ref}}=0.2$~s（`refObsIntervalSeconds`，`StaticLockController.cs:138`）、观测共识 EMA 半衰期复用 $h_E$（`:356`）、头动满容忍尺度 0.3~m/s / 60~°/s、容忍放大 $1+3\rho$ 上限 4×（`:143-145`）。
 - **$\widehat{\tau}$ 由快升慢降的非对称 EMA 给出**（`AnchorMath.UpdateAsymmetricEma`，上行 0.5 / 下行 0.05），**不是滑动中位数**；`MaxDelayChangePerSecond = 0.05` 属实现细节，不写入正文。**正文一律写「控制点年龄」，不写「端到端时延」也不写「实测时延」**：`HistoricalInterpolationStrategy.cs:95` 的 `observedLatency = nowSeconds - latest.TimeSeconds` 度量的是**最新控制点年龄**，不含 GPU 提交与扫出，故 $\ell_r = t_r - t_j$、$\bar{\ell}_r$ 为其非对称 EWMA。代码里的变量名不必改，但正文措辞不得沿用它。
 - **不得写「所有阈值随头动强度自适应放大」**：随头动因子缩放的只有运动判据（入锁速度、速度逃逸、漂移系绳、死区）；`staticEnterMinScore`、CUSUM 上限、低分释放均不缩放，蠕变增益随头动**削弱**。正文口径固定为「运动判据随头动强度放宽，可靠性判据不随之放松」。
 - **`staticSpeedThresholdMps=0.015` / `staticAngularSpeedThresholdDps=1.5` 是诊断用运动分类阈值，不是入锁门槛**，不得写进论文的入锁条件。
