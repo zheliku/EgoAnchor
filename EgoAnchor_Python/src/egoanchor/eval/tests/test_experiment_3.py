@@ -73,7 +73,7 @@ class Experiment3Tests(unittest.TestCase):
         self.assertEqual(settings.minimum_participants, 18)
         self.assertEqual(PRIMARY_OUTCOMES, ("Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7"))
         self.assertFalse(hasattr(settings, "q10_enabled"))
-        self.assertEqual(EXP3_ARTIFACTS.version, 8)
+        self.assertEqual(EXP3_ARTIFACTS.version, 9)
 
         source = PAPER_CONFIG.read_text(encoding="utf-8")
         cases = (

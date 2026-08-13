@@ -61,16 +61,16 @@ class ArtifactContract:
     """论文十二项主观结果表。"""
 
     figure4_png: ArtifactSpec
-    """十二项主观结局双排复合图的 PNG。"""
+    """十二项主观结局单排复合图的 PNG。"""
 
     figure4_pdf: ArtifactSpec
-    """十二项主观结局双排复合图的 PDF。"""
+    """十二项主观结局单排复合图的 PDF。"""
 
     def __post_init__(self) -> None:
         """保证清单键和目录内文件名在完整契约中都唯一。"""
 
-        if self.version != 8:
-            raise ValueError("实验三产物契约版本必须为 8")
+        if self.version != 9:
+            raise ValueError("实验三产物契约版本必须为 9")
         keys = tuple(spec.key for spec in self.outputs)
         locations = tuple(
             (spec.category, spec.canonical_name) for spec in self.outputs
@@ -101,7 +101,7 @@ class ArtifactContract:
         )
 
 EXP3_ARTIFACTS: Final = ArtifactContract(
-    version=8,
+    version=9,
     results_workbook=ArtifactSpec(
         key="results_workbook",
         category="results",

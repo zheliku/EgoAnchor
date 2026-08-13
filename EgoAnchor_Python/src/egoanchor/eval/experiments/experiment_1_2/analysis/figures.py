@@ -537,7 +537,7 @@ def _draw_paper_metric_axis(
     for method_index, method in enumerate(METHODS):
         color = _METHOD_COLORS[method]
         for metric_index, (offset, marker, hollow) in enumerate(
-            ((-0.12, "o", False), (0.12, "D", True))
+            ((-0.20, "o", False), (0.20, "D", True))
         ):
             linestyle = "-" if metric_index == 0 else "--"
             values = paired[:, method_index, metric_index]
@@ -546,18 +546,18 @@ def _draw_paper_metric_axis(
             axis.scatter(
                 center + raw_offsets,
                 values,
-                s=6.0,
+                s=8.0,
                 marker=marker,
                 facecolors="none" if hollow else color,
                 edgecolors=color,
-                linewidths=0.45,
-                alpha=0.20,
+                linewidths=0.55,
+                alpha=0.24,
                 zorder=2,
             )
             boxplot = axis.boxplot(
                 [values],
                 positions=[center],
-                widths=0.18,
+                widths=0.24,
                 patch_artist=True,
                 manage_ticks=False,
                 showfliers=False,
@@ -566,26 +566,26 @@ def _draw_paper_metric_axis(
                 boxprops={
                     "facecolor": "none",
                     "edgecolor": color,
-                    "linewidth": 1.05,
+                    "linewidth": 1.35,
                     "linestyle": linestyle,
                 },
-                medianprops={"color": color, "linewidth": 1.55},
+                medianprops={"color": color, "linewidth": 1.85},
                 whiskerprops={
                     "color": color,
-                    "linewidth": 0.85,
+                    "linewidth": 1.05,
                     "linestyle": linestyle,
                 },
                 capprops={
                     "color": color,
-                    "linewidth": 0.85,
+                    "linewidth": 1.05,
                     "linestyle": linestyle,
                 },
                 meanprops={
                     "marker": "o",
                     "markerfacecolor": color,
                     "markeredgecolor": "white",
-                    "markeredgewidth": 0.45,
-                    "markersize": 3.6,
+                    "markeredgewidth": 0.55,
+                    "markersize": 4.0,
                 },
                 zorder=3,
             )
@@ -679,7 +679,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
             markeredgecolor="white",
             markeredgewidth=0.45,
             linestyle="none",
-            markersize=3.6,
+            markersize=4.0,
             label="Mean",
         ),
     )
@@ -762,8 +762,8 @@ def _draw_vcd_paper_axis(axis: Any, results: PaperResults) -> None:
     )
     axis.set_xlim(0.0, 1.0)
     axis.set_ylim(max(0.0, float(np.min(q1)) - 0.45), float(np.max(q3)) + 0.45)
-    axis.set_xticks((0.0, 0.5, 1.0), ("0", "50", "100"))
-    axis.set_xlabel("Retained (%)")
+    axis.set_xticks((0.0, 0.5, 1.0), ("0%", "50%", "100%"))
+    axis.set_xlabel("Candidates retained (%)", labelpad=2.0)
     axis.set_ylabel("Risk (mm)", labelpad=1.0)
     axis.legend(
         frameon=False,
@@ -829,7 +829,7 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
             color=color,
             zorder=4,
         )
-    axis.set_xlabel("Lag (ms)")
+    axis.set_xlabel("Effective lag (ms)", labelpad=2.0)
     axis.set_ylabel("RMSE (mm)", labelpad=1.0)
     axis.set_ylim(bottom=0.0)
     axis.legend(

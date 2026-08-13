@@ -78,7 +78,7 @@ class AnalysisSettings:
     """PNG 论文面板分辨率。"""
 
     figure_size: tuple[float, float]
-    """正文 Figure 4 双排复合图的原生英寸尺寸。"""
+    """正文 Figure 4 单排复合图的原生英寸尺寸。"""
 
 
 @dataclass(frozen=True, slots=True)

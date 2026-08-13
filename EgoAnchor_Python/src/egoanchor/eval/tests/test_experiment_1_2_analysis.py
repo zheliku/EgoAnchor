@@ -353,11 +353,28 @@ class Experiment12AnalysisTests(unittest.TestCase):
             styles = [patch.get_linestyle() for patch in boxes]
             self.assertEqual(styles[0::2], ["-"] * 4)
             self.assertEqual(styles[1::2], ["--"] * 4)
+            self.assertTrue(
+                all(abs(float(patch.get_linewidth()) - 1.35) < 1.0e-12 for patch in boxes)
+            )
+            box_bounds = [
+                (float(np.min(patch.get_path().vertices[:, 0])), float(np.max(patch.get_path().vertices[:, 0])))
+                for patch in boxes
+            ]
+            self.assertTrue(
+                all(abs(right - left - 0.24) < 1.0e-12 for left, right in box_bounds)
+            )
+            self.assertTrue(
+                all(
+                    abs(box_bounds[index + 1][0] - box_bounds[index][1] - 0.16)
+                    < 1.0e-12
+                    for index in range(0, len(box_bounds), 2)
+                )
+            )
             means = [
                 line
                 for line in axis.lines
                 if line.get_marker() == "o"
-                and abs(line.get_markersize() - 3.6) < 1.0e-12
+                and abs(line.get_markersize() - 4.0) < 1.0e-12
             ]
             self.assertEqual(len(means), 8)
         self.assertEqual(
@@ -385,6 +402,15 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 "(c) VCD risk-coverage",
                 "(d) Temporal strategy",
             ],
+        )
+        self.assertEqual(
+            experiment_two.axes[2].get_xlabel(),
+            "Candidates retained (%)",
+        )
+        self.assertEqual(experiment_two.axes[3].get_xlabel(), "Effective lag (ms)")
+        self.assertEqual(
+            [tick.get_text() for tick in experiment_two.axes[2].get_xticklabels()],
+            ["0%", "50%", "100%"],
         )
         self.assertLess(experiment_two.subplotpars.wspace, 0.4)
         for axis in experiment_two.axes:

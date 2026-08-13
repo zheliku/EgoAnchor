@@ -12,6 +12,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from matplotlib.patches import PathPatch
 
 from egoanchor.eval.experiments.experiment_3.analysis import (
     EGOANCHOR,
@@ -80,7 +81,7 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                 "figure4_pdf",
             ),
         )
-        self.assertEqual(EXP3_ARTIFACTS.version, 8)
+        self.assertEqual(EXP3_ARTIFACTS.version, 9)
         self.assertEqual(
             EXP3_ARTIFACTS.figure4_png.canonical_name,
             "figure4_exp3_subjective_outcomes.png",
@@ -94,16 +95,18 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             setattr(EXP3_ARTIFACTS.figure4_png, "key", "changed")
 
     def test_composite_figure_preserves_scales_slots_and_one_legend(self) -> None:
-        """双排 Figure 4 必须保持四组轴、等宽槽和单一共享图例。"""
+        """单排 Figure 4 必须保持四组轴、等宽槽和单一共享图例。"""
 
         scores, tables = _analysis_fixture()
         settings = load_settings()
         captured: list[Figure] = []
+        save_options: list[dict[str, Any]] = []
 
-        def capture(figure: Figure, *_args: Any, **_kwargs: Any) -> None:
-            """保留关闭后的 Figure 对象，供布局语义断言。"""
+        def capture(figure: Figure, *_args: Any, **kwargs: Any) -> None:
+            """保留 Figure 与导出选项，供布局和裁剪语义断言。"""
 
             captured.append(figure)
+            save_options.append(kwargs)
 
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -118,6 +121,11 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
 
         self.assertEqual(set(outputs), {"figure4_png", "figure4_pdf"})
         self.assertEqual(len({id(figure) for figure in captured}), 1)
+        self.assertEqual(len(save_options), 2)
+        self.assertNotIn("bbox_inches", save_options[0])
+        self.assertNotIn("pad_inches", save_options[0])
+        self.assertEqual(save_options[1]["bbox_inches"], "tight")
+        self.assertAlmostEqual(save_options[1]["pad_inches"], 0.020)
         figure = captured[0]
         self.assertEqual(len(figure.axes), 4)
         self.assertEqual(len(figure.legends), 1)
@@ -143,26 +151,32 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             [tick.get_text() for tick in tia_axis.get_xticklabels()],
             ["TiA R/C", "TiA U/P"],
         )
-        # 每排首个面板给出该排量尺；与之同量尺的面板不再重复标注读数。
+        for axis in figure.axes:
+            self.assertTrue(
+                all(abs(float(tick.get_rotation()) - 30.0) < 1.0e-12 for tick in axis.get_xticklabels())
+            )
+        # 单排首个面板给出七点量尺；同量尺的后续面板不再重复标注读数。
         self.assertEqual(stage_axis.get_ylabel(), "Rating (1-7)")
-        self.assertEqual(seven_point_axis.get_ylabel(), "Rating (1-7)")
         self.assertEqual(overall_axis.get_ylabel(), "")
+        self.assertEqual(seven_point_axis.get_ylabel(), "")
         self.assertEqual(overall_axis.get_yticklabels(), [])
-        # 量尺不同的末个面板改用右侧纵轴，与相邻的七点面板互不干扰。
-        self.assertEqual(tia_axis.get_ylabel(), "Rating (1-5)")
-        self.assertEqual(tia_axis.yaxis.get_label_position(), "right")
+        self.assertEqual(seven_point_axis.get_yticklabels(), [])
+        # TiA 在自身右侧保留 1--5 刻度，避免刻度侵入前一分区。
+        self.assertEqual(tia_axis.get_ylabel(), "")
         self.assertEqual(tia_axis.yaxis.get_ticks_position(), "right")
+        self.assertFalse(tia_axis.spines["left"].get_visible())
+        self.assertTrue(tia_axis.spines["right"].get_visible())
         self.assertEqual(
             stage_axis.get_title(loc="left"),
-            "(a) Stage-wise anchor behavior (1-7)",
+            "(a) Stage behavior",
         )
         self.assertEqual(
             overall_axis.get_title(loc="left"),
-            "(b) Overall anchoring judgment (1-7)",
+            "(b) Overall judgment",
         )
         self.assertEqual(
             seven_point_axis.get_title(loc="left"),
-            "(c) AQ and S-TIAS (1-7)",
+            "(c) AQ and S-TIAS",
         )
         self.assertEqual(
             tia_axis.get_title(loc="left"),
@@ -170,26 +184,44 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
         )
         self.assertEqual(
             [text.get_text() for text in stage_axis.texts],
-            ["*<.05"] * 4,
+            ["*"] * 4,
         )
         self.assertEqual(
             [text.get_text() for text in overall_axis.texts],
-            ["*<.05"] * 3,
+            ["*"] * 3,
         )
         self.assertEqual(
             [text.get_text() for text in seven_point_axis.texts],
-            ["**<.01"] * 3,
+            ["**"] * 3,
         )
         self.assertEqual(
             [text.get_text() for text in tia_axis.texts],
-            ["**<.01"] * 2,
+            ["**"] * 2,
         )
+        for axis in figure.axes:
+            boxes = [patch for patch in axis.patches if isinstance(patch, PathPatch)]
+            bounds = [
+                (float(np.min(patch.get_path().vertices[:, 0])), float(np.max(patch.get_path().vertices[:, 0])))
+                for patch in boxes
+            ]
+            self.assertTrue(
+                all(abs(right - left - 0.24) < 1.0e-12 for left, right in bounds)
+            )
+            self.assertTrue(
+                all(
+                    abs(bounds[index + 1][0] - bounds[index][1] - 0.16)
+                    < 1.0e-12
+                    for index in range(0, len(bounds), 2)
+                )
+            )
 
         stage_box = stage_axis.get_position()
         overall_box = overall_axis.get_position()
         seven_point_box = seven_point_axis.get_position()
         tia_box = tia_axis.get_position()
-        # 四个面板共用同一槽宽，因此各结局的箱体等宽。
+        self.assertAlmostEqual(stage_box.x0, 0.045, places=8)
+        self.assertAlmostEqual(tia_box.x1, 0.980, places=8)
+        # 单排四个面板共用同一槽宽，因此各结局的箱体等宽。
         slot_width = stage_box.width / 4.0
         for box, slots in (
             (overall_box, 3.0),
@@ -197,17 +229,18 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
             (tia_box, 2.0),
         ):
             self.assertAlmostEqual(box.width / slots, slot_width, places=8)
-        for left_box, right_box in (
-            (stage_box, overall_box),
-            (seven_point_box, tia_box),
+        for left_box, right_box in zip(
+            (stage_box, overall_box, seven_point_box),
+            (overall_box, seven_point_box, tia_box),
+            strict=True,
         ):
-            self.assertGreater(right_box.x0 - left_box.x1, 0.0)
-            self.assertLess(right_box.x0 - left_box.x1, slot_width / 4.0)
-        # 两排各自在绘图区内居中，因此两排的水平中心重合。
-        self.assertAlmostEqual(
-            (stage_box.x0 + overall_box.x1) / 2.0,
-            (seven_point_box.x0 + tia_box.x1) / 2.0,
-            places=8,
+            self.assertAlmostEqual(right_box.x0 - left_box.x1, 0.035, places=8)
+        self.assertTrue(
+            all(
+                abs(box.y0 - stage_box.y0) < 1.0e-12
+                and abs(box.height - stage_box.height) < 1.0e-12
+                for box in (overall_box, seven_point_box, tia_box)
+            )
         )
 
 def _analysis_fixture() -> tuple[ScoreData, AnalysisTables]:

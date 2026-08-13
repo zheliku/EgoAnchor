@@ -1,4 +1,4 @@
-"""从实验三内存分析结果生成十二项主观结局的双排复合图。"""
+"""从实验三内存分析结果生成十二项主观结局的单排复合图。"""
 
 from __future__ import annotations
 
@@ -65,46 +65,30 @@ _OUTCOME_LABELS = {
     "Q5": "Position",
     "Q6": "Reliance",
     "Q7": "Balance",
-}
-"""Figure 4 横轴上的七项紧凑主结局标签。"""
-
-_SCALE_LABELS = {
     "AQ_EQ": "AQ-EQ",
     "AQ_IQ": "AQ-IQ",
     "TIA_RC": "TiA R/C",
     "TIA_UP": "TiA U/P",
     "STIAS": "S-TIAS",
 }
-"""Figure 4 下排使用的已发表量表缩写。"""
+"""Figure 4 横轴上的十二项紧凑结局标签。"""
 
-_ITEM_GROUPS = (
-    (("Q1", "Q2", "Q3", "Q4"), 7, "(a) Stage-wise anchor behavior (1-7)"),
-    (("Q5", "Q6", "Q7"), 7, "(b) Overall anchoring judgment (1-7)"),
-)
-"""上排两个条目分区的结局、理论上限和面板标题。
-
-分区与论文第 5.3.3 节的条目分类一致：前者逐阶段考察锚点行为，
-后者给出跨阶段的整体判断；显著性仍按七项条目构成的同一家族校正。
-"""
-
-_SCALE_GROUPS = (
-    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(c) AQ and S-TIAS (1-7)"),
+_OUTCOME_GROUPS = (
+    (("Q1", "Q2", "Q3", "Q4"), 7, "(a) Stage behavior"),
+    (("Q5", "Q6", "Q7"), 7, "(b) Overall judgment"),
+    (("AQ_EQ", "AQ_IQ", "STIAS"), 7, "(c) AQ and S-TIAS"),
     (("TIA_RC", "TIA_UP"), 5, "(d) TiA (1-5)"),
 )
-"""下排两个量尺分区的结局、理论上限和面板标题。
+"""单排四个语义分区的结局、理论上限和面板标题。"""
 
-分区逻辑与 Table 5 和 §6.3.2 的两个 \\textbf 标题一致：AQ 与 S-TIAS 均使用
-七点量尺且测量重叠的增强质量维度，TiA 使用五点量尺并独立测量信任。
-"""
-
-_SLOT_COUNT = len(PRIMARY_OUTCOMES)
-_PLOT_LEFT = 0.064
-_PLOT_RIGHT = 0.995
-_TOP_AXIS_BOTTOM = 0.565
-_BOTTOM_AXIS_BOTTOM = 0.105
-_ROW_HEIGHT = 0.325
-_SCALE_GUTTER = 0.018
-"""双排 Figure 4 的七槽绘图区、行高和分区间距。"""
+_SLOT_COUNT = len(PRIMARY_OUTCOMES) + len(SCALE_OUTCOMES)
+_PLOT_LEFT = 0.045
+_PLOT_RIGHT = 0.980
+_ROW_BOTTOM = 0.215
+_ROW_HEIGHT = 0.605
+_GROUP_GUTTER = 0.035
+_EXPORT_PADDING_IN = 0.020
+"""单排 Figure 4 的十二槽绘图区、行高和分区间距。"""
 
 
 def publish_figures(
@@ -113,7 +97,7 @@ def publish_figures(
     output_root: Path,
     settings: AnalysisSettings,
 ) -> dict[str, Path]:
-    """发布包含主结局和已发表量表的双排 Figure 4。
+    """发布包含主结局和已发表量表的单排 Figure 4。
 
     七项区块级结局先按参与者在三个物体上取均值，并保留原始 1--7 分量尺。
     AQ 子量表同样按三个物体取均值，TiA 与 S-TIAS 使用方法级单次施测得分。
@@ -152,42 +136,30 @@ def _subjective_figure(
     *,
     figure_size: tuple[float, float],
 ) -> Any:
-    """生成上排七项对象锚定条目、下排五项已发表量表的四面板复合图。
+    """生成按四类组织的十二项主观结局单排复合图。
 
-    两排均按测量结构分区：上排分为逐阶段锚点行为与整体锚定判断，
-    下排分为七点已发表量表与五点 TiA 量表。槽宽在四个面板间保持一致，
-    因此各结局的箱体等宽，分区仅改变面板边界而不改变箱体尺度。
+    四组依次为阶段行为、整体判断、AQ 与 S-TIAS、TiA。十二个结局共用同一排槽宽，
+    因此各结局的箱体等宽；前三组共享七点量尺，TiA 在右侧保留五点量尺。
     """
 
-    item_groups = _validated_item_blocks()
-    scale_groups = _validated_scale_groups()
+    groups = _validated_outcome_groups()
     figure = plt.figure(figsize=figure_size)
     plot_width = _PLOT_RIGHT - _PLOT_LEFT
-    slot_width = (plot_width - _SCALE_GUTTER * (len(item_groups) - 1)) / _SLOT_COUNT
+    slot_width = (plot_width - _GROUP_GUTTER * (len(groups) - 1)) / _SLOT_COUNT
     _draw_group_row(
         figure,
         paired_scores,
         results,
-        groups=item_groups,
+        groups=groups,
         labels=_OUTCOME_LABELS,
-        bottom=_TOP_AXIS_BOTTOM,
-        plot_width=plot_width,
-        slot_width=slot_width,
-    )
-    _draw_group_row(
-        figure,
-        paired_scores,
-        results,
-        groups=scale_groups,
-        labels=_SCALE_LABELS,
-        bottom=_BOTTOM_AXIS_BOTTOM,
+        bottom=_ROW_BOTTOM,
         plot_width=plot_width,
         slot_width=slot_width,
     )
     figure.legend(
         handles=_method_legend_handles(),
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.985),
+        bbox_to_anchor=(0.5, 0.995),
         ncol=3,
         frameon=False,
         handletextpad=0.35,
@@ -207,12 +179,12 @@ def _draw_group_row(
     plot_width: float,
     slot_width: float,
 ) -> list[Any]:
-    """按给定分区绘制一排面板，整排在绘图区内居中，纵轴按量尺归属放置。"""
+    """按给定分区绘制一排面板，纵轴按量尺归属放置。"""
 
     row_scale = groups[0][1]
     row_width = (
         slot_width * sum(len(outcomes) for outcomes, _, _ in groups)
-        + _SCALE_GUTTER * (len(groups) - 1)
+        + _GROUP_GUTTER * (len(groups) - 1)
     )
     next_left = _PLOT_LEFT + (plot_width - row_width) / 2.0
     axes: list[Any] = []
@@ -236,7 +208,6 @@ def _draw_group_row(
         _place_row_scale(
             axis,
             position=position,
-            group_count=len(groups),
             shares_row_scale=scale_upper == row_scale,
         )
         axis.set_title(
@@ -246,7 +217,7 @@ def _draw_group_row(
             fontweight="bold",
             color=PAPER_TEXT_COLOR,
         )
-        next_left += axis_width + _SCALE_GUTTER
+        next_left += axis_width + _GROUP_GUTTER
     return axes
 
 
@@ -254,13 +225,12 @@ def _place_row_scale(
     axis: Any,
     *,
     position: int,
-    group_count: int,
     shares_row_scale: bool,
 ) -> None:
-    """决定一排中某个面板如何呈现纵轴。
+    """决定单排中某个面板如何呈现纵轴。
 
-    与整排首个面板同量尺的后续面板只保留刻度线，读数由首个面板的纵轴给出；
-    量尺不同的末个面板改用右侧纵轴，使两套量尺各自贴近所在面板而互不干扰。
+    与首个面板同量尺的后续面板只保留刻度线，读数由首个面板的纵轴给出；
+    TiA 把独立的 1--5 刻度放在自身右侧，量尺名称由面板标题给出。
     """
 
     if position == 0:
@@ -268,10 +238,9 @@ def _place_row_scale(
     if shares_row_scale:
         axis.set_ylabel("")
         axis.tick_params(axis="y", labelleft=False)
-        return
-    if position == group_count - 1:
+    else:
+        axis.set_ylabel("")
         axis.yaxis.tick_right()
-        axis.yaxis.set_label_position("right")
         axis.spines["left"].set_visible(False)
         axis.spines["right"].set_visible(True)
 
@@ -313,7 +282,14 @@ def _format_outcome_axis(
     """设置同量尺结局轴的标签、范围和共享样式。"""
 
     centers: np.ndarray = np.arange(len(outcomes), dtype=float)
-    axis.set_xticks(centers, [labels[outcome] for outcome in outcomes])
+    axis.set_xticks(
+        centers,
+        [labels[outcome] for outcome in outcomes],
+        rotation=30,
+        ha="right",
+        rotation_mode="anchor",
+    )
+    axis.tick_params(axis="x", labelsize=_PANEL_FONT_SIZE)
     axis.set_xlim(-0.50, len(outcomes) - 0.50)
     axis.set_ylim(0.75, scale_upper + 0.50)
     axis.set_yticks(np.arange(1.0, scale_upper + 1.0, 1.0))
@@ -334,7 +310,7 @@ def _draw_outcome_group(
     if values[0].size == 0 or values[0].size != values[1].size:
         raise ValueError("实验三配对图缺少完整参与者配对")
     count = values[0].size
-    positions = (center - 0.17, center + 0.17)
+    positions = (center - 0.20, center + 0.20)
     jitter: np.ndarray = (
         np.zeros(1) if count == 1 else np.linspace(-0.036, 0.036, count)
     )
@@ -366,7 +342,7 @@ def _draw_outcome_group(
         axis.boxplot(
             [method_values],
             positions=[positions[method_index]],
-            widths=0.18,
+            widths=0.24,
             patch_artist=True,
             manage_ticks=False,
             showfliers=False,
@@ -375,11 +351,11 @@ def _draw_outcome_group(
             boxprops={
                 "facecolor": "none",
                 "edgecolor": color,
-                "linewidth": 1.10,
+                "linewidth": 1.25,
             },
-            medianprops={"color": color, "linewidth": 1.60},
-            whiskerprops={"color": color, "linewidth": 0.85},
-            capprops={"color": color, "linewidth": 0.85},
+            medianprops={"color": color, "linewidth": 1.75},
+            whiskerprops={"color": color, "linewidth": 1.00},
+            capprops={"color": color, "linewidth": 1.00},
             meanprops={
                 "marker": "o",
                 "markerfacecolor": color,
@@ -440,7 +416,7 @@ def _method_legend_handles() -> tuple[Line2D, Line2D, Line2D]:
                 [],
                 color=color,
                 linestyle="-",
-                linewidth=1.10,
+                linewidth=1.25,
                 marker=marker,
                 markersize=6.0,
                 markerfacecolor=color,
@@ -463,16 +439,14 @@ def _method_legend_handles() -> tuple[Line2D, Line2D, Line2D]:
     return methods[0], methods[1], mean
 
 
-def _validated_item_blocks() -> tuple[tuple[tuple[str, ...], int, str], ...]:
-    """要求上排布局恰好覆盖冻结的七项对象锚定条目。"""
+def _validated_outcome_groups() -> tuple[tuple[tuple[str, ...], int, str], ...]:
+    """要求单排分区恰好覆盖十二项冻结结局。"""
 
-    return _validated_groups(_ITEM_GROUPS, PRIMARY_OUTCOMES, "上排条目")
-
-
-def _validated_scale_groups() -> tuple[tuple[tuple[str, ...], int, str], ...]:
-    """要求下排布局恰好覆盖冻结的五项已发表量表结局。"""
-
-    return _validated_groups(_SCALE_GROUPS, SCALE_OUTCOMES, "下排量表")
+    return _validated_groups(
+        _OUTCOME_GROUPS,
+        (*PRIMARY_OUTCOMES, *SCALE_OUTCOMES),
+        "单排结局",
+    )
 
 
 def _validated_groups(
@@ -712,7 +686,7 @@ def _clean_axis(axis: Any) -> None:
 
 
 def _save_pair(figure: Any, png: Path, pdf: Path) -> tuple[Path, Path]:
-    """以固定画布保存正文复合图的 PNG/PDF。"""
+    """保存固定画布 PNG，并把论文使用的 PDF 按可见内容紧裁剪。"""
 
     if (
         png.parent != pdf.parent
@@ -721,12 +695,17 @@ def _save_pair(figure: Any, png: Path, pdf: Path) -> tuple[Path, Path]:
     ):
         raise ValueError("实验三图产物契约必须提供同目录的 PNG/PDF 路径")
     png.parent.mkdir(parents=True, exist_ok=True)
+    crop_options = {
+        "bbox_inches": "tight",
+        "pad_inches": _EXPORT_PADDING_IN,
+    }
     try:
         figure.savefig(png, facecolor="white")
         figure.savefig(
             pdf,
             facecolor="white",
             metadata={"CreationDate": None, "ModDate": None},
+            **crop_options,
         )
     finally:
         plt.close(figure)
@@ -744,17 +723,17 @@ def _finite_number(value: Any) -> float:
 
 
 def _significance_label(value: Any) -> str:
-    """把 Holm p 值转换为带阈值的显著性标签。"""
+    """把 Holm p 值转换为只含星号的显著性标签。"""
 
     number = _finite_number(value)
     if not math.isfinite(number):
         return ""
     if number < 0.001:
-        return "***<.001"
+        return "***"
     if number < 0.01:
-        return "**<.01"
+        return "**"
     if number < 0.05:
-        return "*<.05"
+        return "*"
     return ""
 
 

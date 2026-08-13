@@ -232,7 +232,7 @@ class Exp3Data:
 
 @dataclass(frozen=True, slots=True)
 class ScoreData:
-    """保存结果统计和正文双排复合图共同消费的派生长表。"""
+    """保存结果统计和正文单排复合图共同消费的派生长表。"""
 
     block_scores: pd.DataFrame
     """有效区块的原始条目与 AQ 子量表分。"""
