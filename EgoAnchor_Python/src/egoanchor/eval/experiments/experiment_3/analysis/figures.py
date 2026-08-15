@@ -71,7 +71,7 @@ _OUTCOME_LABELS = {
     "TIA_UP": "TiA U/P",
     "STIAS": "S-TIAS",
 }
-"""Figure 4 横轴上的十二项紧凑结局标签。"""
+"""Figure 4 横轴上的十二项紧凑结局标签；正式名称见图注与表格。"""
 
 _OUTCOME_GROUPS = (
     (("Q1", "Q2", "Q3", "Q4"), 7, "(a) Stage behavior"),

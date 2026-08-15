@@ -1,0 +1,20 @@
+# Fdb version 4
+["xdvipdfmx"] 0 "pdf/egoanchor_cn_final_v4.xdv" "pdf/egoanchor_cn_final_v4.pdf" "pdf/egoanchor_cn_final_v4" 0 -1
+  "pdf/egoanchor_cn_final_v4.xdv" 0 -1 0 "xelatex"
+  (generated)
+  "pdf/egoanchor_cn_final_v4.pdf"
+  (rewritten before read)
+["xelatex"] 1786789282.49203 "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/old/egoanchor_cn_final_v4.tex" "pdf/egoanchor_cn_final_v4.xdv" "egoanchor_cn_final_v4" 1786789282.89535 2
+  "e:/texlive/2025/texmf-dist/web2c/texmf.cnf" 1755617259 42148 61becc7c670cd061bb319c643c27fdd4 ""
+  "e:/texlive/2025/texmf-var/web2c/xetex/xelatex.fmt" 1755618713 5639758 a76785702803048bf19ba5b3944ac93e ""
+  "e:/texlive/2025/texmf.cnf" 1755618598 713 e69b156964470283e0530f5060668171 ""
+  "egoanchor_cn_final_v4.tex" 1786513773 65920 cd6d314f025fa52f7d5fd82208fed07d ""
+  "p:/VSCode-Project/EgoAnchor/2026-EgoAnchor/old/egoanchor_cn_final_v4.tex" 1786513773 65920 cd6d314f025fa52f7d5fd82208fed07d ""
+  "pdf/egoanchor_cn_final_v4.aux" 1786789282 32 3985256e7290058c681f74d7a3565a19 "xelatex"
+  "pdf/vgtc.cls" 0 -1 0 ""
+  "vgtc.cls" 0 -1 0 ""
+  (generated)
+  "pdf/egoanchor_cn_final_v4.aux"
+  "pdf/egoanchor_cn_final_v4.log"
+  "pdf/egoanchor_cn_final_v4.xdv"
+  (rewritten before read)

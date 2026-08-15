@@ -17,7 +17,7 @@
 7. 使用 Code Simplifier 优化项目代码；处理文档和语言表述时使用 humanizer-zh。
 8. 处理复杂或大型任务时，请使用子智能体辅助，加快梳理、审查和验证。
 9. 改动时直接在我的这个git分支改动，我能看见改动了哪些。我git有备份没有关系，不用担心
-10. 修改论文时，不要防御性表述、不要补丁式修改、注意全文的连贯通顺，以及不要钻牛角尖，不要本末倒置，不要忘记我们论文的核心。
+10. 修改论文时，以IEEE VR 2027会议论文为标准，不要防御性表述、不要补丁式修改、注意全文的连贯通顺，以及不要钻牛角尖，不要本末倒置，不要忘记我们论文的核心。
 11. 每次操作完后记得更新AGENTS.md
 
 <!-- USER-MAINTAINED-REQUIREMENTS:END -->
@@ -26,14 +26,14 @@
 
 ## 项目核心
 
-EgoAnchor 是面向透视混合现实（PMR）的**零样本动态真实物体锚定系统**。中心论点：**开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor**。系统把低频、异步、质量不均的视觉位姿观测，转换为消费级 MR 应用可持续绑定的世界系对象锚点。
+EgoAnchor 是面向透视混合现实（PMR）的**零样本动态物体锚定系统**。中心论点：**开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor**。系统把低频、异步、质量不均的视觉位姿观测，转换为消费级 MR 应用可持续绑定的世界系对象锚点。
 
 主叙事固定为 `pose estimate != usable MR anchor`。平台原生支持范围只解释外部感知为何必要；零样本视觉感知只说明给定三维模型的更多刚体为何可被定位。**两者都不是核心贡献**；核心问题是如何为异步观测恢复时间语义、判断是否接纳，并控制持续锚点的逐帧输出与有效性。
 
 两层解耦架构：
 
 - **感知后端**（外部 GPU 工作站）：语义初始化 → 时序分割 → 立体几何重建 → 零样本位姿估计，输出 camera-space pose 与 VCD 可靠性评分。
-- **锚定运行时**（头显端）：按 `frame_id` 回查采集时刻相机位姿并复合为世界锚点。四项机制为**采集时刻对齐 / 时间索引轨迹取值 / 静止锚定 / 分级有效性管理**（**计数与内涵冻结**）。
+- **锚定运行时**（头显端）：按 `frame_id` 回查采集时刻相机位姿并复合为世界锚点。四项机制为**采集时刻对齐 / 历史状态查询 / 静止锚定 / 分级有效性管理**（**计数与内涵冻结**）。
 
 三个时刻贯穿两层：采集 $t_f$（定空间语义）、到达 $t_a$（只定何时收到）、渲染 $t_r$（定何时需要输出）。
 
@@ -51,13 +51,17 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 ## 论文宗旨与当前稿件
 
-投稿目标 IEEE VR 2027（正文含图表 9 页 + 参考文献另 2 页）。标题**「EgoAnchor：透视混合现实中日常物体的稳定零样本动态锚定」**（*EgoAnchor: Stable Zero-Shot Dynamic Anchoring of Everyday Objects in Passthrough Mixed Reality*）；系统描述位统一为「零样本动态真实物体锚定系统」。
+投稿目标 IEEE VR 2027（正文含图表 9 页 + 参考文献另 2 页）。标题**「EgoAnchor：透视混合现实中日常物体的零样本动态锚定」**；系统描述位统一为「零样本动态物体锚定系统」。**2026-08-15 起「真实」二字从术语中去除：`动态真实物体锚定` → `动态物体锚定`**（旧长形式与标题的短形式自相矛盾，且 Azure Object Anchors／Apple object tracking／Meta Dynamic Object Tracker 均不带 "real"）。**作为指代对象的「真实物体」保留**（与「虚拟内容」对照时，如表格条目、teaser 说明），只改术语本身。**`跟踪` 整词退役 → `追踪`**（与图 2 的「运动追踪」标签一致）；`动态跟随` 是评价方面名、由生成器产出，不在此列。
 
 定位为**系统论文，但方法部分按学术标准写**：凝练核心思想、学术化表达，不逐一介绍工程实现，行文精炼、控制篇幅。
 
-**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v2.tex`**（2026-08-14 起接替 v1；v1 冻结备查。同日删除 `alg:runtime` 算法浮动体与 `algorithm`/`algpseudocode` 宏包，§3.4 恢复 5 项枚举）：**12 页（含参考文献 p10--11 与附录 p12）/ 17 式 / 0 overfull / 0 undefined**，产物 `2026-EgoAnchor/pdf/`。**当前落位**（2026-08-14 latexmk 重编实测，`.aux` 的 `\newlabel` 页号）：图 1 p1、图 2 p3、表 1（`tab:staticlock-release`）p4、表 2（`tab:anchor-items`）p6、**实验一三张表 表 3/表 4/表 5 同落 p7**、图 3/图 4 p8、**表 6（`tab:exp3-subjective`）p8**、图 5/图 6 p9（图 6 不再落于结论之后）、结论 p10、附录表 7（`tab:appendix-params`）p12。`\output` 期间 1 处 underfull \vbox 属两栏平衡产物，**不构成回归**。**页数或浮动体变动后须重跑核对**（`.aux` 的 `\newlabel` 页号 + `pdftotext` 逐页），不要沿用上一轮页码。`2026-EgoAnchor/Makefile` 存在，但**本机没装 GNU make（`make` 与 `mingw32-make` 均不可用）**，实际编译一律走「常用验证」里的 `latexmk`。`egoanchor_cn_final_v1/v2/v3/v4` 等旧稿冻结备查，不得用旧稿覆盖当前章节。
+**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v2.tex`**（2026-08-14 起接替 v1；v1 冻结备查）：**10 页 / 16 式 / 0 overfull / 2 underfull / 0 undefined**，产物 `2026-EgoAnchor/pdf/`。**当前落位**（2026-08-16 latexmk 重编实测，`.aux` 的 `\newlabel` 页号）：图 1 p1、图 2（`fig:arch`）p3、表 1（`tab:anchor-items`）p6、**实验一三张表同落 p7**、图 3（`fig:exp1-final`）/图 4（`fig:exp1-replay`）/表 5（`tab:exp3-subjective`）p8、图 5（`fig:exp2-final`）/图 6（`fig:exp3-subjective`）+§7 讨论起 p9、§8 结论 + 参考文献 p10。
 
-**三条贡献（顺序与短标题已冻结）**：① **EgoAnchor 系统**——零样本动态真实物体锚定系统；② **感知后端与锚定运行时**——感知后端组织为面向锚定的持续感知流水线 + 逐观测 VCD 评分，锚定运行时以采集时刻对齐与质量准入校正观测、再以时间索引轨迹取值与静止锚定合成锚点；③ **系统评价**——受控基准、同候选流组件消融、24 人日常物体研究。
+**版面现状（未达标，需用户裁定）**：**正文仍占满 p10 左栏（约 0.8 栏、2000 余字符），即正文＝10 页，超出 9 页限制 1 栏**；参考文献从 p10 左栏底部起、右栏续完，总 10 页仍在 9+2 允额内。已实测的结论：① **`\FloatBarrier` 反而更差**——在 §6.1/§6.2/§6.3 末尾各插一处后，`fig:exp3-subjective` 被推到 p10、讨论整体后移，已回退（`placeins` 仍在前言，但不要再按此法插）；② **削正文的边际收益很低**——p8/p9 各只装约 2100 字符（浮动体压着），而纯文字页可装约 4800，删了约 1500 字符正文只换来总页数 11→10。**真正的杠杆是减少浮动体面积**，候选（均需用户裁定）：合并实验一三张表为一张（需改 `paper.py` 生成器、与「按评价方面各自成表」的冻结决定冲突）、`tab:anchor-items` 转散文或移入附加材料、去掉 `fig:exp1-replay`。**pdftotext 的字符数不能用来量「正文残留」**——两栏抽取顺序会把参考文献排到 `REFERENCES`/`[1]` 标记之前，据此算出的残留量（曾得 436）严重偏小；**只能渲染该页 PNG 目视判断正文到哪一栏**。
+
+**页数或浮动体变动后须重跑核对**（`.aux` 的 `\newlabel` 页号 + 逐页 PNG），不要沿用上一轮页码。`2026-EgoAnchor/Makefile` 存在，但**本机没装 GNU make**，实际编译一律走「常用验证」里的 `latexmk`。`egoanchor_cn_final_v1/v2/v3/v4` 等旧稿冻结备查，不得用旧稿覆盖当前章节。
+
+**三条贡献（顺序与短标题已冻结）**：① **EgoAnchor 系统**——零样本动态物体锚定系统；② **感知后端与锚定运行时**——感知后端组织为面向锚定的持续感知流水线 + 逐观测 VCD 评分，锚定运行时以采集时刻对齐与质量准入校正观测、再以历史状态查询与插值、静止锚定合成锚点；③ **系统评价**——受控基准、同候选流组件消融、24 人日常物体研究。
 
 - 条目②的因果claim**不得丢失**：VCD 为观测失效判定与遮挡后的重新获取提供依据。改写该条目时只写「输出可靠性评分」即为回归。
 - 措辞固定为「限制与图像观测不一致的候选写入锚点轨迹」，**不写「拒绝物理错误的候选」**——VCD 只能验证候选与当前图像观测的一致性。§1 与 §3.2.2 两处必须同步。
@@ -66,10 +70,12 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 三个实验（论文外部不再使用 RQ1/RQ2/RQ3 作为顶层结构）：
 
 - **实验一 端到端系统表征**：静止+主动头动 / 起停 6DoF / 持续平移 / 持续旋转 / 遮挡恢复五场景，比较 *Arrival-Hold*、*Capture-Hold*、*One-Euro Anchor* 与 *EgoAnchor*。
-- **实验二 系统设计归因**：同批日志、同平台参考下关闭单一设计，归因采集时刻对齐、VCD 接纳与 StaticLock；时序策略以 Smoothed KF Extrapolation 对关闭 StaticLock 的 Linear/SLERP 为主比较，Hermite Interpolation 仅作审计条件。
+- **实验二 系统设计归因**：同批日志、同平台参考下关闭单一设计，归因采集时刻对齐、VCD 接纳与 StaticLock；主比较为预测式追踪（Smoothed KF Extrapolation）与历史状态查询（相邻轨迹节点的 Linear/SLERP），均关闭 StaticLock；Hermite Interpolation 仅作审计条件。
 - **实验三 日常物体上的跨对象感知评价**：`2 方法 × 3 物体 = 6 区块` 被试内、24 人、纯主观，只比较 *One-Euro Anchor* 与完整 *EgoAnchor*。
 
-**当前缺口**（稿件现状，非待办日志）：① teaser（Figure 1）与 `fig:arch`（Figure 2）仍共用 `figures/pipeline.png`，且图内文字用的是过期术语——**用户已接手重绘（「我自己改就好」），代理不要动该图与图内文字**；② Figure 6 仍排在结论之后（机制见「版面」）；③ 八条 arXiv-only 参考文献未升级为正式出版信息（`foundationpose2023`、`megapose2022`、`cosypose2020`、`cutie2024`、`bundlesdf2023`、`hodan2020bop`、`posecnn2017`、`densefusion2019`），需联网逐条核实卷期页码，**不得凭记忆填写**；④ **§5 L445 承诺四项最终问卷的描述性分析（偏好强度、方法区分信心、两项开放反馈），§6.3.2 只报告了偏好／信任选择的人数分布**（结果工作簿「选择结果」页已给出偏好强度 Mdn 4.00 [3.00, 5.00]、N=19 与区分信心 Mdn 6.00 [5.00, 7.00]、N=24；原始工作簿「Final」页每项开放题各有 24 条文本）——**现稿 12 页、投稿目标 9 页正文，版面赤字 3 页，这四项能否纳入、以何形式纳入由用户决定**；开放题若要报告则需建立持久编码文件（contracts.py L257 要求「开放题编码工作区」独立且不被重建覆盖，目前不存在）。
+**当前缺口**（稿件现状，非待办日志）：① teaser（`figures/teaser.pdf`）与 `fig:arch`（`figures/pipeline0814.pdf`）已由用户重绘并各自独立，**题注已按实际渲染图重写**（teaser：中三人称／左第一人称增强+原始／右五组物体原始与锚定；`fig:arch`：右上感知后端、右下观测校正、左下锚点合成、反馈通路）——**图与图内文字由用户维护，代理不要动**。`pipeline0814.pdf` 是 WPS 导出文件，仓库未保存演示或矢量源且无内嵌附件，术语改动须由用户在原始文件中完成后重新导出；其中「时刻查询」/「轨迹取值」须改为「历史查询时刻」/「历史状态插值」。② 八条 arXiv-only 参考文献未升级为正式出版信息（`foundationpose2023`、`megapose2022`、`cosypose2020`、`cutie2024`、`bundlesdf2023`、`hodan2020bop`、`posecnn2017`、`densefusion2019`），需联网逐条核实卷期页码，**不得凭记忆填写**；③ 正文超 1 栏（见上「版面现状」）。
+
+**已消除的缺口（勿再当待办）**：§5 承诺与 §6.3 报告的口径已对齐——偏好强度 Mdn 4.00 [3.00, 5.00]（N=19，仅对做出选择者，须说明分母来由）、区分信心 6.00 [5.00, 7.00]（N=24）、实验后 3 名轻微不适均已写入 §6.3.2；**两项开放反馈已从 §5 的承诺列表中删除**（无持久编码文件、无版面），故不再构成前后不一致。
 
 配套文件：**`2026-EgoAnchor/docs/design.md` 为当前写作路线**（定位、核心技术设计、贡献、标题体系、术语规范）。旧 `plan.md` 与 `revision_plan_final_v1.md` 已不存在，不得引用。
 
@@ -83,18 +89,19 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 ### 术语五层规则（每层只允许一个名字）
 
-| 层次 | 固定名字 | 出现位置 |
-| --- | --- | --- |
-| 系统级流水线 | 面向锚定的零样本感知流水线（简称「感知流水线」） | 摘要、§1、§3.2.1 |
-| 研究领域能力 | 开放词表检测与分割 / 立体匹配 / 模型驱动的零样本6DoF位姿估计 | §1、§2.1、§2.2 |
-| 我们的四个阶段 | 语义初始化 / 时序分割 / 立体几何重建 / 零样本位姿估计 | **仅 §3.2.1** |
-| 具体模型名 | —— | **仅 §4** |
-| 运行时四项机制 | 采集时刻对齐 / 时间索引轨迹取值 / 静止锚定 / 分级有效性管理 | 摘要、贡献②、§3.3、§8 |
+| 层次           | 固定名字                                                     | 出现位置                 |
+| -------------- | ------------------------------------------------------------ | ------------------------ |
+| 系统级流水线   | 面向锚定的零样本感知流水线（简称「感知流水线」）             | 摘要、§1、§3.2.1       |
+| 研究领域能力   | 开放词表检测与分割 / 立体匹配 / 模型驱动的零样本6DoF位姿估计 | §1、§2.1、§2.2        |
+| 我们的四个阶段 | 语义初始化 / 时序分割 / 立体几何重建 / 零样本位姿估计        | **仅 §3.2.1**     |
+| 具体模型名     | ——                                                         | **仅 §4**         |
+| 运行时四项机制 | 采集时刻对齐 / 历史状态查询 / 静止锚定 / 分级有效性管理  | 摘要、贡献②、§3.3、§8 |
 
 **已归零、不得复活的旧名**：采集时刻配准、采集时刻世界配准、采集时刻世界对齐、双目深度估计、双目重建、延迟插值、时序合成、开放词表分割（漏检测阶段）、观测轴/渲染轴/跨轴、两条通路/两个事件源、锚点交付（GPT 造词）、易部署・广适用・稳锚定三标签、G1/G2/G3 标签、$\mathcal{V}_f$、漂移**租**绳（正确为漂移**系**绳）、RTX 5070（从未跑过）、**分级生命周期**、**显式静止锚定**、**静态保真度**／**动态保真度**（评价方面名，2026-08-11 起为 静态配准／动态跟随）、**绝对注册**（正确为 绝对配准）、**世界一致性**（笼统，不作评价用词）。**这四个名字同时存在于 `analysis/paper.py` 的题注与表头字面**，改名须走 L318 的生成器口径。
 
 - **该机制第 4 次改名后已定：`生命周期` 整词退役 → `有效性`**（有效性规则／标注／状态、分级有效性管理），**勿再改**。`\texttt{FrozenUncertain}`/`\texttt{Lost}` 两个状态名保留。
 - **静止锚定统一为「静止锚定（StaticLock）」单一配对**（在 §3.3.3 定义处给出）：正文机制名一律**静止锚定**，`StaticLock` 保留作图表、实验条件与消融名（图表由分析流水线生成、不可手改）。修饰词「显式」不再作为机制名的一部分。
+- **时间术语按层级固定**：§2.3 的问题名为「XR时间对齐」；既有方法用「预测式追踪（predictive tracking）」与「历史状态查询（history retrieval）」；系统机制名为「历史状态查询」；§3.3.2 依次写「历史查询时刻」与「历史状态插值」。不得以「自适应」修饰这三个名称。`Smoothed KF Extrapolation` 是预测条件，完整 EgoAnchor 的历史条件是在 $t_q$ 上对相邻轨迹节点作 Linear/SLERP。时间索引轨迹 $B_j$ 是数据结构，元素一律称「轨迹节点」；「插值」只描述数学操作，不把它包装为「延迟插值」。§2.3 只讨论既有工作，不写 EgoAnchor、ATW 或 One-Euro。
 - **`centered_p95_mm` 的正文名唯一为「头动泄漏」**（已实测与 `head_motion_leakage_p95_mm` 同值 0.8179，是同一个量）。曾并存的「中心化平移泄漏」「中心化静止平移 P95」「中心化 P95」均已归零，表 1、图 2 题注与 §6 三处口径统一。
 - **§5.2 与 §6.2 的小节名唯一为「设计归因」**，不写「机制归因」——该节标的四项里有两项运行时机制、一项后端组件（VCD）、一项策略比较，与已冻结的「运行时四项机制」不是同一个集合。2026-08-09 复核维持：外部评审曾建议把摘要、贡献、§5.2、§6.2、结论统一改成「机制归因／关键机制归因」，未采纳——改后 VCD 会被读成第五项机制，与 L64「全文不得出现「五项机制」」直接冲突。
 - 正文统一「感知后端」（不写「视觉感知后端」/「视觉后端」）。**方法名全文一律短名 Arrival / Capture / One-Euro**；`variant_matrix_id` 里的 *Arrival-Hold* / *Capture-Hold* / *One-Euro Anchor* 只是数据管线 ID，不回填正文。
@@ -109,6 +116,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 - 每个子节以**一句框架句**开场再进 `\textbf{}` 段，且该框架句要给出本子节各段的路线图（只陈述问题会让读者觉得与下文脱节）。此体例不得为省版面删除。
 - **`eq:staticlock` 属 §3.3.2**（静止锚定是锚点合成的一部分），故 §3.3.2 产出 $\widetilde{T}_o^w(t_r)$；§3.3.3 作用域为 $\mathsf{Locked}$ 分支的入锁/锁内/解锁。
+- **v2 现状（2026-08-15）**：有效性三级（有效／不确定／丢失）为 §3.3.2 末尾一段无 `\textbf{}` 引导的散文；`sec:validity` 子节保留 label 但**已改名为「重新获取」并压到两句**（只留反馈通路与「不跨失效区间取值」），符合约束③「提一句即可、弱化占比」。以下 v1 时期的论证仍然适用：
 - **`sec:lifecycle` 子节已删，有效性弱化为 §3.3.2 末尾一段无 `\textbf{}` 引导的散文**（章内其余段落均有粗体引导，此处故意不给标签＝降低视觉权重），现为两句：三级退化（不外推 → `FrozenUncertain` → `Lost`）+「维持追踪的可靠性高于准入阈值 $R_{\min}$」。**不能整段删的三个硬依赖**：① 两个状态名被 §5.3 与 §6.3 直接引用（§6.3「144 个区块均进入 `FrozenUncertain`，没有区块进入 `Lost`」是遮挡时长设计的合法性证据），正文必须先定义；② 两门槛设计（0.2 对 0.5）由本段与 §4 共同承担；③ 无此段则「观测中断期间行为有定义」在 §3 内没有落点。**可再压措辞，不能压掉两个状态名与 $R_{\min}$ 比较。**
 - **§3.3.3 首段不点名 One-Euro**：只陈述该类方法的固有折中（「连续平滑以单一参数集在抑制静止抖动与保留运动响应之间取折中」），不加贬义。`casiez2012oneeuro` 的引用在 §2.3（首次提及）与 §5.3（基线标识）——**删批评前必须先安置引用**，否则条目变孤儿且基线无出处。
 - 运行时是**帧内串行两步**，不是并发：`Update()` 排空 NATS（`MaxMessagesPerFrame` 默认 1）先于 `LateUpdate()` 的 `Advance`，同帧同线程。成立的是速率不对称（候选约 9.5~Hz 对刷新 72/90~Hz），多数帧只执行锚点合成。**不变量：轨迹只在观测处理中追加，锚点合成不外推。**§3.3 总起不写执行调度，也不提「头显渲染循环」（与 §4「经 Quest Link 执行于主机」冲突）。
@@ -138,19 +146,19 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 #### 锚定运行时（§3.3，公式与量的分工）
 
 - **`eq:capture-alignment` 的 $S$ 由代码裁定**：$S=S^{-1}=\mathrm{diag}(1,-1,1,1)$（沿 $y$ 轴镜像，**写作 `diag` 四元组而非 `bmatrix` 分块**——分块矩阵是编号被挤下行的主因）。依据 `CameraPoseFrameAligner.cs`（OpenCV $y$ 下、Unity $y$ 上，对 rotation 等价于 $MRM$）与 `AnchorPoseTransform.OpenCvToUnityDefault` 只置 `flipY = true`。措辞用**共轭**而非「相似变换」（后者易被读作含缩放）。**gpt-0806-5.md 自认无法填出该矩阵，此项只能由代码裁定；若 `flipX`/`flipZ` 默认值变更，正文矩阵须同步。**
-- **StaticLock 三个量不得混为一谈**（改这一节前逐条核 `StaticLockController.cs`）：① **原始接纳观测 $T_{o,j}^{w}$**——死区判定 `:606`、CUSUM 累积 `:619`、creep 插值目标 `:646` 三者输入都是它（`OnObservation` 的 `pos`/`rot`，调用方 `AnchorPolicyHost.cs:362` 传 `observation.WorldPose`），故 $d_{p,j}$/$d_{\theta,j}$ 与 `eq:lock-update` 的插值目标一律写 $T_{o,j}^{w}$；② **平滑控制点 $\widehat{T}_{o,j}^{w}$**——只进轨迹 $B_j$ 与 `eq:delayed-interp`；③ **观测共识 `obsConsensus`**——持续跟随观测的低通量，入锁时冻结其当前值为**锚定参考** $T_{o,\mathrm{ref}}^w$（`anchorOrigin`，`:174`），此后累计漂移由 `:598` 的两者之差度量，**只用于漂移系绳**。**这个分工本身是论点**：证据取观测本身，避免平滑把真实偏移提前衰减（该理由写在「进入」段，**不要在「保持」段重复**）。
+- **StaticLock 三个量不得混为一谈**（改这一节前逐条核 `StaticLockController.cs`）：① **原始接纳观测 $T_{o,j}^{w}$**——死区判定 `:606`、CUSUM 累积 `:619`、creep 插值目标 `:646` 三者输入都是它（`OnObservation` 的 `pos`/`rot`，调用方 `AnchorPolicyHost.cs:362` 传 `observation.WorldPose`），故 $d_{p,j}$/$d_{\theta,j}$ 与 `eq:lock-update` 的插值目标一律写 $T_{o,j}^{w}$；② **滤波轨迹节点 $\widehat{T}_{o,j}^{w}$**——只进轨迹 $B_j$ 与 `eq:history-interp`；③ **观测共识 `obsConsensus`**——持续跟随观测的低通量，入锁时冻结其当前值为**锚定参考** $T_{o,\mathrm{ref}}^w$（`anchorOrigin`，`:174`），此后累计漂移由 `:598` 的两者之差度量，**只用于漂移系绳**。**这个分工本身是论点**：证据取观测本身，避免平滑把真实偏移提前衰减（该理由写在「进入」段，**不要在「保持」段重复**）。
 - **锚定参考与观测共识的区分「非常重要，不要再改回去」**（GPT 原话，且与代码一致）：把两者混写成「持续跟随接纳观测的低增益共识」等于让参考系本身也变动，累计漂移就无从度量。正文另须点明锚定参考与锁定位姿相互独立，使锁内位姿微调不吸收目标自入锁以来的缓慢真实运动。该段**不得前向引用死区**（用户已要求删「不受死区约束」）。
 - 锁内增益 $g_j=(1-2^{-\Delta t_j/h_{\mathrm{creep}}})R_j(1-\rho_j^{\mathrm{head}})$，**只在死区内施加**。`anchorOrigin` 必须取观测共识而非 `lockedPose`，否则慢移场景 creep 停摆 → 漂移恒为 0 → **永不解锁**。
 - **入锁运动状态用相邻被接纳观测的差分速度**，非滤波器状态（`staticSpeedThresholdMps` 仅供 `motionState` 诊断）。差分速度经逐观测 $\alpha=0.5$ 的 EMA 平滑（`StaticLockController.cs:326`，非半衰期形式），附录列作「入锁运动统计平滑系数 0.5（逐观测）」。
-- **$\bar{\ell}_r$ 是控制点年龄的非对称 EWMA，不是实测时延**：$\ell_r=t_r-t_j$，$t_j$ 即轨迹末端控制点的采集时刻。`eq:target-time` 是「年龄 → 回溯量 → 查询时刻」三段链，含 $s$/$\Delta_{\min}$。正文**不得写「实测时延」**。「快升慢降」须给操作含义（上升立即跟随、下降缓慢回落，使偶发长时延不被迅速遗忘）。
-- **$t_j$/$T_{o,j}^{w}$/$R_j$ 三个量一并定义在 §3.3.1 准入段「按采集时刻递增编号」之后**（编号概念的引入处，早于控制点概念）。准入条件写「还须晚于 $t_j$」，**不写「晚于该控制点」**——控制点在该处尚未定义。
-- **`eq:delayed-interp` 为单式**（不用三分支 `cases`，那读起来像程序边界判断）：前置「设 $t_q$ 落在相邻控制点之间」，边界行为落到式后散文「查询超出轨迹两端时保持最近端点，不按速度模型外推」。**「不外推」这一 thesis 级 claim 必须留在散文里。**
+- **$\bar{\ell}_r$ 是状态年龄的非对称 EWMA，不是实测时延**：$\ell_r=t_r-t_j$，$t_j$ 即最新轨迹节点的采集时刻。`eq:target-time` 是「年龄 → 回溯量 → 查询时刻」三段链，含 $s$/$\Delta_{\min}$。正文**不得写「实测时延」**。「快升慢降」须给操作含义（上升立即跟随、下降缓慢回落，使偶发长时延不被迅速遗忘）。
+- **$t_j$/$T_{o,j}^{w}$/$R_j$ 三个量一并定义在 §3.3.1 准入段「按采集时刻递增编号」之后**（编号概念的引入处，早于轨迹节点概念）。准入条件写「还须晚于 $t_j$」，**不写「晚于该轨迹节点」**——轨迹节点在该处尚未定义。
+- **`eq:history-interp` 为单式**（不用三分支 `cases`，那读起来像程序边界判断）：前置「设 $t_q$ 落在相邻轨迹节点之间」，边界行为落到式后散文「查询超出轨迹两端时保持最近端点，不按速度模型外推」。**「不外推」这一 thesis 级 claim 必须留在散文里。**
 - **两套索引的分工是全章唯一交代处，不得当冗余删掉**：「轨迹按\emph{时间}索引：帧标识只用于 §3.3.1 回查采集时刻的相机位姿，取值本身则在连续时间轴上进行。」用户曾两次读不懂查询时刻段，根因正是此前从未讲明二者分工，读者会把 $t_q$ 误读为帧号运算。
-- **`eq:lock-update` 的死区二分支条件写在 `cases` 内，用 `\begin{aligned}[t]` 分两行**（单行写不下会把 (16) 挤下基线）。**不用 `\substack`**——它把条件渲染成 scriptstyle，明显小于周围数学。行距用 `\\[2pt]`。
-- **四类解锁证据固定为 `itemize` 列表**，每项一行「\emph{名称}：判据，作用」，列表后接分类句。**此条已往复三次（列表→散文→列表），以列表为最终态，版面压力不构成改回散文的理由**（用户两次主动要求列表）。
+- **`eq:lock-update` 的死区条件已归一化为单一统计量**（2026-08-15，用户要求「简化形式、不用换行」）：$\delta_j=\max(d_{p,j}/d_{\mathrm{db}},\,d_{\theta,j}/\theta_{\mathrm{db}})$，两分支写作 $\delta_j\le 1$／$\delta_j>1$，各占一行、编号与基线同行、0 overfull。这与 `eq:lock-entry` 的 $\sigma_j\le1$ 同构，**新增 1 个符号但消掉 2 个条件行**。旧的 `\begin{aligned}[t]` 两行写法与「不用 `\substack`」（scriptstyle 过小）的理由都还在，但已无适用对象。
+- **四类解锁证据固定为 `itemize` 列表**，每项一行「\emph{名称}：判据，作用」，列表后接分类句。**此条已往复四次（列表→散文→列表→表格→列表），以列表为最终态，版面压力不构成改回散文或表格的理由**（用户三次主动要求列表；2026-08-15 从 `tab:staticlock-release` 表格改回列表并删表）。
 - **§3.4 `sec:runtime-alg` 为 5 项 `enumerate` 列表**（范文＝VRGA 页 04 "Algorithmic Outline."），参数 `[leftmargin=1.6em,itemsep=1pt,topsep=2pt]`，列表后留一句收束。**已改为无公式引用形式，不要再往里加 `\eqref`。**定位是逐帧次序清单，不重述 §3.3 首段已给的原理。算法浮动体 `alg:runtime` 已删除。
 - **两门槛设计（准入 0.2 对追踪 0.5）必须在正文某处显式成立**：现由 §3.3.2 有效性段的「两阈值之间存在一段『可用于插值但不足以维持追踪状态』的区间」+ §4 的三阈值递进句（0.2 / 0.45 / 0.5）共同承担，**不得两处同时删**。
-- **现存 17 式（编号顺序，全部与基线同行）**：`eq:observation`(1)、`eq:detect`(2)、`eq:seg`(3)、`eq:depth`(4)、`eq:pose`(5)、`eq:visibility`(6)、`eq:depth-score`(7)、`eq:vcd`(8)、`eq:capture-alignment`(9)、`eq:admission`(10)、`eq:trajectory`(11)、`eq:target-time`(12)、`eq:delayed-interp`(13)、`eq:staticlock`(14)、`eq:lock-entry`(15)、`eq:lock-update`(16)、`eq:cusum`(17)。$\sigma_j$ 的定义与两条入锁条件同在 `eq:lock-entry`（`eq:motion-stat` 已并入）。
+- **现存 16 式（编号顺序，全部与基线同行）**：`eq:observation`(1)、`eq:detect`(2)、`eq:seg`(3)、`eq:depth`(4)、`eq:pose`(5)、`eq:visibility`(6)、`eq:depth-score`(7)、`eq:vcd`(8)、`eq:capture-alignment`(9)、`eq:admission`(10)、`eq:trajectory`(11)、`eq:target-time`(12)、`eq:history-interp`(13)、`eq:staticlock`(14)、`eq:lock-entry`(15)、`eq:lock-update`(16)。$\sigma_j$ 的定义与两条入锁条件同在 `eq:lock-entry`（`eq:motion-stat` 已并入）。**`eq:cusum` 已随附录移出正文**（见「附加材料」条），CUSUM 的机制说明改由 §3.3.3 释放证据列表的第一项承担。
 - **已删且不得复活**：`eq:temporal-alignment`/`eq:spatial-alignment`（合并为 `eq:capture-alignment`）、`eq:unlock`、`eq:deadband`、`eq:frontend`、`eq:depth-abs`、集合记号 $A_j$、§1 论文组织段、§3.1 三性质标签段、「逐帧流程」散文段。**`eq:admission`/`eq:trajectory`/`eq:lock-entry` 现均为行间公式**——git 核查证明这三式从来不是用户的删除决定，旧「不要复活」禁令无事实依据，**不得再据此删除**。
 
 ### §3 体例＝VRGA 公式驱动
@@ -172,12 +180,12 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 - **不得写「四组已发表量表」**：TiA-R/C 与 TiA-U/P 是同一量表的两个子量表，正确写法是「四项已发表量表**结局**」（横跨 AQ / TiA / S-TIAS 三种工具）。
 - 阴性口径全文统一「**未检测到显著差异**」，不写「用户无法区分」也不写「未出现差异」。
 - **摘要不是数字强制项**：现行摘要约 320 字，只以「验证其在头动、静止与遮挡恢复下的锚定稳定性**及其响应代价**」一句概述评估，不含倍率、RMSE、阴性点名。**「代价」一词是不可删除的下限**——删掉摘要就变成单向宣称。两项阴性的点名义务下沉到 §6.3 与 §7.1，不得在正文一并省略。末句强调代码随论文发表开源（约束⑤）。
-- 必须披露 **AQ-IQ 的 α：One-Euro .504 / EgoAnchor .892**（AQ-IQ 恰是唯一不显著的已发表量表结局，p=.446），TiA-U/P 的 .565/.769 同步内联；只陈述数值，不加防守性从句。
-- 候选率：§4 用活动批次的 **9.52~Hz**（配套 75.44 / 88.47 / 105.07），并预先说明「在第 6 节的日常物体条件下约为 12.9~Hz」；§6.3 实验三为 12.85/12.86~Hz。已归档批次的 9.37 等旧数不得回填。
+- 必须披露 **AQ-IQ 的 α：One-Euro .504 / EgoAnchor .892**（AQ-IQ 恰是唯一不显著的已发表量表结局，p=.446），TiA-U/P 的 .565/.769 同步内联；只陈述数值，不加防守性从句。**2026-08-15 已补入 §6.3.2**（此前只报了 AQ-EQ 的 .768/.769，把唯一阴性结局的低一致性漏掉了）；两处低于 .70 的情形（AQ-IQ 与 TiA-U/P 的 One-Euro 条件）措辞对称。
+- 候选率：§4 用活动批次的 **约 9.5~Hz**，写法为「追踪处理 75.44~ms（P95 88.47），候选发布间隔中位数 105.07~ms，即约 9.5~Hz」。**不得把 1/75.44~ms＝13.25~Hz 写成候选到达率**——那是处理耗时的倒数，不含图像传输与编解码；v2 曾误写 13.25，2026-08-15 已订正。权威值在 `data/experiments/experiment_1_2/analysis/metrics/runtime_performance.json` 的 `pose_publish_rate_hz_from_median`（9.5176）。§6.3 实验三为 12.85/12.86~Hz（v2 正文未报，不构成不一致）。已归档批次的 9.37 等旧数不得回填。
 - 不使用笼统的「毫米级精度」：中心化静止可达亚毫米，绝对配准 6.60~mm，持续运动当前时刻误差约 126~mm，§7.1 与讨论节须显式界定口径。
 - **遮挡期旋转 P95（2026-08-09 新增指标）**：Arrival 18.39° / Capture 18.38° / One-Euro 8.66° / EgoAnchor 5.52°，与平移通道同次序。Arrival 与 Capture 几乎相同是预期结果——两者在遮挡期都保持最后位姿，误差由物体继续运动累积，与复合时刻的选择无关。由 `_occlusion_rotation_metrics` 计算，口径与静止绝对旋转误差一致。
 - **`occlusion_max_mm` 与灾难性计数不矛盾，不要「修正」**：`paper.py:960` 的 `occlusion_max_mm` 是 12 次遮挡过程各自峰值的**中位数**（`_summary` 取 median/Q1/Q3），Arrival 为 18.26~mm；`paper.py:961` 的计数则是逐次判断 `metrics.py:905` 的 `maximum > 40`。故「峰值中位数 18.26」与「3 次峰值超 40」同时成立。
-- **外推的时延收益不得删回单向陈述**：平滑卡尔曼外推相对历史插值把有效时延降低 60.0~ms（平移）与 92.5~ms（旋转），§6.2 必须与其 RMSE 代价成对陈述，只报代价即歪曲 §5.2 的设计意图。正文写法为「305.00/250.00~ms 低于历史插值的 360.00/345.00~ms」——**历史插值（Linear/SLERP）的时延中位数确为 360.00/345.00~ms**（`strategy_comparison_summary.csv` 的 `linear_slerp_interpolation_median`），与 exp1 的 EgoAnchor 数值相同属真实巧合；它与配对差 $-60.00$/$-92.50$ 不矛盾，因为配对差的中位数不等于中位数之差。
+- **外推的时延收益不得删回单向陈述**：平滑卡尔曼外推相对历史状态查询把有效时延降低 60.0~ms（平移）与 92.5~ms（旋转），§6.2 必须与其 RMSE 代价成对陈述，只报代价即歪曲 §5.2 的设计意图。正文写法为「305.00/250.00~ms 低于历史状态查询的 360.00/345.00~ms」——**历史状态查询（位置 Linear、旋转 SLERP）的时延中位数确为 360.00/345.00~ms**（`strategy_comparison_summary.csv` 的 `linear_slerp_interpolation_median`），与 exp1 的 EgoAnchor 数值相同属真实巧合；它与配对差 $-60.00$/$-92.50$ 不矛盾，因为配对差的中位数不等于中位数之差。
 - **灾难性计数（平移误差 >40~mm）已于 2026-08-09 按用户指令从 §5.1 与 §6.1 撤除**（用户在 L494 批注「40mm 是分水岭吗？无形给读者添加疑惑，这种叙述统统检查删除」，外部评审同步建议同一处删除）。`metrics.py` 仍计算 `catastrophic_gt40` 并写入 provenance，只是不进正文；**不要再以「曾漏报」为由把它写回论文**。§5.1 遮挡鲁棒性现定义为遮挡期**平移与旋转**误差 P95。
 - **AURC 的零假设基线不得重新论证**：分数无判别力时任一覆盖率下选择性风险的期望都等于该 event 的总体均值，积分后恰等于全覆盖风险（文献中 Excess-AURC 的构造），故全覆盖风险**就是 AURC 的零假设期望**。且 `metrics.py:1177` 的 `risk_gain_mm` 是**逐 event** 计算，12/12 为正已是配对检验。指标定义与该原理在 §5.2，§6.2 只报数值（AURC 4.79 / 全覆盖 7.25 / 逐 event 倍率 1.46 [1.16, 1.70]）。**不要再提议改为打乱分数分布或固定覆盖率报告。**
 
@@ -212,26 +220,26 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 **页数由浮动体数目对可用页顶数决定，不由正文长度决定，且与正文长度非单调**（实测双向都发生过：三处压缩后表 2 由 p7 迁至 p8、总页数 10→11；§3 改 VRGA 体例后又由 p8 回到 p7、11→10）。**抢页不要靠削正文。每次改完 §3 都要重新核浮动体落位**（`pdf/*.aux` 里 `\newlabel{fig:*}`/`{tab:*}` 的第二个花括号即页码，比翻 PDF 快）。
 
-- 附录表 3 独占末页的机制：`\appendix` 前有 `\clearpage`，且表 3 是 `[t]`-only，末页页顶已被参考文献续页占据，浮动体只能顺延。**用户裁定「附录让它独占一页」，`\clearpage` 与 `[t]` 两处不要以省页为由改动。**
-- Figure 6 同属「页顶排队」问题：**动 `\clearpage` 与浮动体放行参数比压正文有效**（曾误诊为「压缩正文约半栏即可」，实测证伪——压缩会把参考文献起始位置一起左移，Figure 6 同步前移）。
-- **`\FloatBarrier` 按位置分开裁定**（`placeins` 已在前言，随时可用）。**§4 前不要放**：虽让算法 1 不打断 §4 首段，但表 1 被挤出第 6 页、离开它在 §6.1 的讨论；表 1 贴着讨论更重要。**§6 内每个实验末尾要放**：`figure*` 与单栏 `table` 走两个独立浮动队列，**改源码顺序不能约束二者的相对落位**（两轮重排均无效），`\FloatBarrier` 才是真正的放行闸。实测三处 barrier 后，结果 p6 → 实验一表图 p7/p8 → 实验二图 p9 → 实验三表 p9／图 p10 → 讨论 p10，浮动体不再越过讨论其内容的小节。
+- **附加材料**：2026-08-15 按用户 Q4 裁定，附录「运行时参数」（原表 7 + `eq:cusum` + $g_j$ 式）**已整体移出正文**到 `2026-EgoAnchor/supplementary_runtime_parameters.tex`，**正文不再出现「附录」「附加材料」字样**（原 12 处引用已清零）。正文改为自足：§4 内联三阈值递进（0.2/0.45/0.5）、450~ms 与 1.0~s 有效性门槛、$s$/$\Delta_{\min}$、时延跟踪系数、StaticLock 入锁门槛族与死区、锁内增益半衰期、累计漂移上限、头动放宽上限 4×、$w_C$/$w_D$、$\epsilon$，末句「完整取值随代码一并发布」；§5.2 内联外推时域 0.18~s 与半衰期 0.06~s。原「附录独占末页」「`\clearpage` 不要动」两条机制已失效，勿再引用。
+- **`\FloatBarrier` 实测有害，不要再插**（`placeins` 仍在前言）：2026-08-15 在 §6.1/§6.2/§6.3 末尾各插一处后，`fig:exp3-subjective` 由 p9 被推到 p10、讨论整体后移、参考文献外溢更多，已全部回退。旧记录里「§6 内每个实验末尾要放」的结论**在 v2 的浮动体集合下不成立**（v2 已删 `tab:staticlock-release` 与附录表，队列构成变了）。
+- **`tab:staticlock-release` 已删**：四类释放证据 2026-08-15 按用户要求改为 §3.3.3 的 `itemize` 列表（此项已第四次往复，**以列表为最终态**），少一个单栏浮动体。
 - `tables/` 由分析流水线生成，**不改其中的浮动体参数**。前言放宽了 `\dbltopfraction` 等参数以容纳 4 图 + 1 宽表，调整该组参数前先确认浮动体总面积没有增加。
 - **不得以「排版会挤号」为由否决建议而不实测**：$\Omega_f$ 三关系并入 `eq:visibility`、`eq:vcd` 改 cases、死区条件内联、四段下标、`\dfrac` 归一化——五项都曾被我以「必然挤号」否决，逐页渲染实测全部推翻（宽度才是挤号主因，分式增高不增宽）。**先渲染再判断。**
 
 ## 论文所依赖的代码事实（曾被写错，不得凭旧说行事）
 
 - **`weighted_geometric_mean` 无有效模态时返回 `1.0`，不是 `0.0`**：`reliability/pose_quality.py` 的 `_geometry_core`（L168--182）在 `weight_sum <= 0.0` 时 `return 1.0`，即 $\mathcal{K}_f=\varnothing$ 给出 $R_f = V_f$（docstring：两路都无信号时保持当前 pose 信任）。`_mask_factor`（L192--215）在无投影面积信号时回落到 `mask_area_ratio` 启发式，故除零路径同样不可达。**结论仍是正文不写退化情形**，但理由必须是上述实测；`\mathcal{K}_f=\varnothing \Rightarrow R_f=0` 方向相反，已否决。
-- **三个同尺度阈值互不相同，不得混用**：准入 `minQualityScore=0.2` / 低分重新注册 `0.45` / 追踪新鲜度 `trackingScoreFloor=0.5`。正文只出现 $R_{\min}$ 一个记号（0.2），另两个数值只留在附录表 3；三者的**关系**仍须交代，现分置两处：§3.3.2 有效性段写两阈值之间的区间「可用于插值但不足以维持追踪状态」，§4 在 $R_{\min}=0.2$ 处写 0.2 / 0.45 / 0.5 三段递进。（原指定位置 §3.3.4 已随 `sec:lifecycle` 子节删除。）
+- **三个同尺度阈值互不相同，不得混用**：准入 `minQualityScore=0.2` / 低分重新注册 `0.45` / 追踪新鲜度 `trackingScoreFloor=0.5`。正文只出现 $R_{\min}$ 一个记号，但三个数值 2026-08-15 起全部内联在 §4（附录已移出正文）；三者的**关系**仍须交代，现分置两处：§3.3.2 有效性段写两阈值之间的区间「可用于插值但不足以维持追踪状态」，§4 在 $R_{\min}=0.2$ 处写 0.2 / 0.45 / 0.5 三段递进。（原指定位置 §3.3.4 已随 `sec:lifecycle` 子节删除。）
 - **生命周期边界**（`AnchorStateMachine.cs:105-115`）：gap ≤ 0.45~s → Coasting，0.45--1.0~s → FrozenUncertain，≥ 1.0~s → Lost。故 450~ms 是**缓冲保持时长**，不是「进入缓冲保持」的门槛（无可靠观测时立刻进缓冲保持）。
 - **VCD 拒绝提前 return、不刷新时间戳**（`AnchorPolicyHost.cs:333-339` 对 `:374-378`），即被拒候选**不**计入新鲜度，gap 与无候选同路累积。若写成「也计入」，因果就反了（持续坏观测会永停 Coasting）。
 - **`OnUncertainPose` 置的 `FrozenUncertain` 是瞬态**：`Advance:404-413` 每帧按 `lifecycleGap` 重算并覆盖状态。只读 `AcceptPose` 会得出相反结论。
 - **区分「拒绝坏观测」与「长时间无观测」的真实载体是 `TryLowScoreReacquire`**（`:326`，在 VCD 门控**之前**、对 raw observation 判定），阈值 0.45、持续 600~ms、冷却 3~s。算法 1 因此把「可靠性持续过低则请求重新注册」放在准入判断**之前**。
-- **重获取会重置全部运行时模块**：`NotifyReacquire` → `ResetModules()`（`AnchorPolicyHost.cs:630`）清空运动模型、平滑策略控制点（`HistoricalInterpolationStrategy.cs:47` `points.Clear()`）与 StaticLock，恢复后首个观测走 Snap 建新跟踪段——§3.3.4「不会跨失效区间插值」以此为据，不得改写成「保留旧轨迹」。
+- **重获取会重置全部运行时模块**：`NotifyReacquire` → `ResetModules()`（`AnchorPolicyHost.cs:630`）清空运动模型、平滑策略轨迹节点（`HistoricalInterpolationStrategy.cs:47` 的 `points.Clear()`）与 StaticLock，恢复后首个观测走 Snap 建新跟踪段——§3.3.4「不会跨失效区间插值」以此为据，不得改写成「保留旧轨迹」。
 - **有效时延搜索区间 `[0, 600]`~ms、步长 5~ms**（`paper.toml` 的 `minimum_ms/maximum_ms/step_ms`，`metrics.py` 的 `query_times = times - lag_ms` 为正向滞后）。旧稿的 `[-500, 0]` 上下界与符号全错。
 - **起动转换时延是方法无关的外部事件定义**（`metrics.py` `_transition_response`：转换前 250~ms 中位位姿为基线，参考与显示位移各自首次持续 100~ms 超过 5~mm 的时刻之差），不得写成「静止锚定释放后」——Arrival/Capture/One-Euro 无 StaticLock 却同报该指标。
 - **Kalman 只有滤波、无 RTS 平滑**：Smoothed KF Extrapolation 的「平滑」指输出侧校正残差按 0.06~s 半衰期衰减（`SmoothedKalmanExtrapolationStrategy.cs`），正文一律写「卡尔曼滤波状态」，不得写「卡尔曼平滑状态」。
 - **StaticLock 附录参数已补齐（2026-08-14 入表）**：$t_{\mathrm{ref}}=0.2$~s（`refObsIntervalSeconds`，`StaticLockController.cs:138`）、观测共识 EMA 半衰期复用 $h_E$（`:356`）、头动满容忍尺度 0.3~m/s / 60~°/s、容忍放大 $1+3\rho$ 上限 4×（`:143-145`）。
-- **$\widehat{\tau}$ 由快升慢降的非对称 EMA 给出**（`AnchorMath.UpdateAsymmetricEma`，上行 0.5 / 下行 0.05），**不是滑动中位数**；`MaxDelayChangePerSecond = 0.05` 属实现细节，不写入正文。**正文一律写「控制点年龄」，不写「端到端时延」也不写「实测时延」**：`HistoricalInterpolationStrategy.cs:95` 的 `observedLatency = nowSeconds - latest.TimeSeconds` 度量的是**最新控制点年龄**，不含 GPU 提交与扫出，故 $\ell_r = t_r - t_j$、$\bar{\ell}_r$ 为其非对称 EWMA。代码里的变量名不必改，但正文措辞不得沿用它。
+- **$\widehat{\tau}$ 由快升慢降的非对称 EMA 给出**（`AnchorMath.UpdateAsymmetricEma`，上行 0.5 / 下行 0.05），**不是滑动中位数**；`MaxDelayChangePerSecond = 0.05` 属实现细节，不写入正文。**正文一律写「状态年龄」，不写「端到端时延」也不写「实测时延」**：`HistoricalInterpolationStrategy.cs:95` 的 `observedLatency = nowSeconds - latest.TimeSeconds` 度量的是**最新轨迹节点的状态年龄**，不含 GPU 提交与扫出，故 $\ell_r = t_r - t_j$、$\bar{\ell}_r$ 为其非对称 EWMA。代码里的变量名不必改，但正文措辞不得沿用它。
 - **不得写「所有阈值随头动强度自适应放大」**：随头动因子缩放的只有运动判据（入锁速度、速度逃逸、漂移系绳、死区）；`staticEnterMinScore`、CUSUM 上限、低分释放均不缩放，蠕变增益随头动**削弱**。正文口径固定为「运动判据随头动强度放宽，可靠性判据不随之放松」。
 - **`staticSpeedThresholdMps=0.015` / `staticAngularSpeedThresholdDps=1.5` 是诊断用运动分类阈值，不是入锁门槛**，不得写进论文的入锁条件。
 - **控制器外参无标定流程**：`AnchorPoseTransform.cs` 为 Inspector 配置量，`EgoAnchor-Experiment12.unity:498` 实测只有 `cameraLocalPositionOffset.z = -0.016` 与 `anchorLocalRotationOffsetEuler.z = 180`。正文写「该补偿量在全部序列中保持不变、不做逐次标定，其残余误差包含在所报告的注册误差中」，**不写「实验前标定」**。补偿量是**相机系**轴向平移，其世界系方向随头动旋转，故在「静止目标+主动头动」场景残差不是常量，**不得写「残差是常量，因此不影响中心化指标」**。这解释了 6.60~mm 绝对注册与 0.82~mm 中心化泄漏的量级差。
@@ -241,12 +249,12 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 ## 主线目录
 
-| 目录 | 职责 |
-| --- | --- |
-| `EgoAnchor_Python/src` | 图像接收、感知、VCD、通信、评估分析 |
+| 目录                                         | 职责                                                         |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `EgoAnchor_Python/src`                     | 图像接收、感知、VCD、通信、评估分析                          |
 | `EgoAnchor_Unity/Assets/Scripts/EgoAnchor` | Quest 采集、时空对齐、公共 admission、四时序策略、显示与录制 |
-| `EgoAnchor_Protocol` | Proto 与 subject 唯一来源 |
-| `2026-EgoAnchor` | 中文主稿、VGTC 模板、图表、采集手册与论文路线 |
+| `EgoAnchor_Protocol`                       | Proto 与 subject 唯一来源                                    |
+| `2026-EgoAnchor`                           | 中文主稿、VGTC 模板、图表、采集手册与论文路线                |
 
 旧 RQ1/RQ2 Unity 脚本、场景、Python 分析包和 `EgoAnchor_Tools3` 已删除，不得恢复。正式评估入口只使用实验一/二命名。
 
@@ -254,11 +262,11 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 系统使用三条语义平面：
 
-| 平面 | 传输 | 方向 | 内容 |
-| --- | --- | --- | --- |
-| Data | ZMQ PUB/SUB | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo`，multipart，latest-drain |
-| Message | NATS Core pub/sub | Python -> Unity | `PoseResult`、状态、heartbeat |
-| Command | NATS request/reply | Unity -> Python | reset、reacquire、control，`request_id` 幂等 |
+| 平面    | 传输               | 方向            | 内容                                                               |
+| ------- | ------------------ | --------------- | ------------------------------------------------------------------ |
+| Data    | ZMQ PUB/SUB        | Unity -> Python | `QuestStereoFrame`、`QuestCameraInfo`，multipart，latest-drain |
+| Message | NATS Core pub/sub  | Python -> Unity | `PoseResult`、状态、heartbeat                                    |
+| Command | NATS request/reply | Unity -> Python | reset、reacquire、control，`request_id` 幂等                     |
 
 - Python 只输出 camera-space pose；Unity 用 `frame_id` 回查 image-time proxy camera pose 并合成 world anchor。
 - 不得用 PoseResult 到达时的 HMD pose 代替发送帧 pose。
@@ -281,14 +289,14 @@ PoseResult candidate
 
 - *Arrival-Hold*：到达时刻复合 + 零阶保持，直接消费异步位姿的朴素基线。
 - *Capture-Hold*：采集时刻世界复合 + 零阶保持，隔离 frame alignment。
-- *One-Euro Anchor*（schema 保留 ID，场景显示名 *One-Euro Interpolation*）：采集时刻世界复合、VCD 接纳、`OneEuroModel` + `LinearSlerpStrategy`、与完整系统相同的自适应历史目标时刻/生命周期/重获取，**仅关闭 StaticLock**。当前参数按米制位置与约 10~Hz 候选标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`。
+- *One-Euro Anchor*（schema 保留 ID，场景显示名 *One-Euro Interpolation*）：采集时刻世界复合、VCD 接纳、`OneEuroModel` + `LinearSlerpStrategy`、与完整系统相同的历史查询时刻/有效性管理/重获取，**仅关闭 StaticLock**。当前参数按米制位置与约 10~Hz 候选标定为位置 `(minCutoff=0.8, beta=6, derivativeCutoff=2)`、旋转 `(1, 1, 2)`。
 - *EgoAnchor*：采集时刻复合、VCD 接纳、Kalman + `LinearSlerpStrategy`、StaticLock 与有效性管理。
 - 组件消融按 `EgoAnchor w/o <component>` 命名，三项为 w/o capture-time alignment、w/o VCD、w/o StaticLock。
 - 实验二两路时序策略 *Smoothed KF Extrapolation* 与 *Hermite Interpolation* 共享候选、Kalman、VCD、生命周期、重获取并关闭 StaticLock，只替换输出策略。
 - 正式输出策略统一 `Strategy` 后缀（`HoldStrategy`、`LinearSlerpStrategy`、`SmoothedKalmanExtrapolationStrategy`、`HermiteStrategy`），运动模型统一 `Model` 后缀；日志字符串为 `hold`、`linear_slerp`、`smoothed_kf_extrapolation`、`hermite_interpolation`。废弃策略与兼容分支不得恢复。
 - 模型相关 per-variant jump gate 不进入正式比较。
 - `KalmanModel` 为连续白噪声加速度 CV 模型，离散过程协方差 `q_a [[dt^3/3, dt^2/2], [dt^2/2, dt]]`；冻结参数位置 `q_a=0.002 m^2/s^3`、`R=0.000004 m^2`，旋转 `q_a=0.2 rad^2/s^3`、`R=0.0004 rad^2`，首帧方差均为 `1`，配置指纹必须含 `q-model:cwna-v1` 及这些数值。协方差校正用 Joseph 形式；共享 admission 拒绝非有限或非递增 measurement time。**VCD 只控制 admission，不得声称测量噪声随 VCD 分数在线自适应**。
-- 旋转控制点的 `AngularVelocityRad` 表示控制点姿态下的 body-local 角速度；Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度，不得混用不同参考姿态下的旋转向量导数。
+- 旋转轨迹节点的 `AngularVelocityRad` 表示该节点姿态下的 body-local 角速度；Kalman/One-Euro 每次校正后重置旋转切空间，并用 SO(3) 右雅可比保存物理角速度，不得混用不同参考姿态下的旋转向量导数。
 - 完整 EgoAnchor 及保留 StaticLock 的两个消融统一使用 `enterAngSpeedDps=22`、`unlockDriftDegrees=12`；单项消融不得残留不同 StaticLock 数值。旋转证据必须独立报告，不能用平移收益替代。
 
 ## 离线分析与论文产物契约
@@ -315,10 +323,10 @@ schema-v2 task directory
 - 显示误差使用 `reference_*` 与 `display_*`；output availability 只用 `has_output_pose`。candidate arrival 用 Unity 同一单调时钟的 `source_capture_mono_ms -> unity_pose_handle_mono_ms`；Python processing 用 `server_receive_mono_ms -> server_publish_mono_ms`，**不得跨进程相减单调时钟**。
 - `capture_mono_ms` 是 image-time proxy，不得称曝光真值。平台参考轨迹只用于同一 Quest、同一时间线下的配对分析，不得称外部物理真值。
 - 静止指标同时报告 HP-RMS、绝对误差与漂移，避免「冻结错误位姿」获得虚假优势；转换指标至少含 visible response、unlock/relock、peak error 与 settling time。
-- 图二以四方法为横轴，左移实心圆为误差、右移空心菱形为抖动；静止误差用中心化 P95，动态误差用 lag-aligned RMSE，动态抖动必须用同一最佳时延下残差轨迹的帧间增量 P95（**不得把真实运动计为抖动**）。合并表另报不补偿时延的 current-time RMSE。实验二图 5(c) 保留 event 风险曲线、median 与 IQR，以 `Candidates retained (%)` 明确标出候选保留率；图 5(d) 只展示 Smoothed KF 与 Linear/SLERP，以 `Effective lag (ms)` 标出有效时延，子图标题为 `(d) Temporal strategy`，**不展示 Hermite**。
+- 图二以四方法为横轴，左移实心圆为误差、右移空心菱形为抖动；静止误差用中心化 P95，动态误差用 lag-aligned RMSE，动态抖动必须用同一最佳时延下残差轨迹的帧间增量 P95（**不得把真实运动计为抖动**）。合并表另报不补偿时延的 current-time RMSE。实验二图 5(c) 保留 event 风险曲线、median 与 IQR，以 `Candidates retained (%)` 明确标出候选保留率；图 5(d) 只展示 `Predictive tracking` 与 `History retrieval`，以 `Effective lag (ms)` 标出有效时延，纵轴为 `Lag-aligned RMSE (mm)`，子图标题为 `(d) Predictive tracking` / `vs. history retrieval`，**不展示 Hermite**。
 - VCD risk-coverage 只在最终有效的 `occlusion_started` event 内计算：仅用完整 EgoAnchor 的 capture-time aligned raw pose 相对同帧有效平台参考的平移误差（mm），按分数降序、同分整组进入，以保留候选的平均平移误差为 selective risk，右连续阶梯积分得 event AURC。不得按 admission 过滤低分候选，不得跨 event 混池，不得用 VCD 分量代替 risk。
 - 正文图为分析器原生生成的两张 `1×4` 双栏组合 PDF `figure2_exp1_behavior` 与 `figure3_exp2_attribution`，加实验三 `figure4_exp3_subjective_outcomes`；基础字号 7.4~pt、子图标题 7.2~pt 加粗、画布宽 7.15~in。八个独立子图 PNG/PDF 只作审计，正文不引用。缺失、重复键或非有限值必须拒绝绘图。图中可见点统一导出到 `analysis/plots/figure_plot_data.xlsx`（**审计导出，不是绘图输入**）。不恢复 `figures/make_paper_figures.py`、`panels_v9` 或 LaTeX subfigure 拼图路线。
-- **实验一正文表为三张，按 §5.1 的评价方面各自成表**：`tables/exp1_static.tex`（头动泄漏／绝对配准／静止抖动，单栏）、`tables/exp1_dynamic.tex`（有效时延／LA-RMSE／CT-RMSE／残余抖动）、`tables/exp1_transition.tex`（遮挡误差＋起动转换），生成器为 `experiment_1_2/analysis/paper.py` 的 `build_exp1_static_table`／`build_exp1_dynamic_table`／`build_exp1_transition_table`，三者共用 `_behavior_table`。**三张一律单栏、按自然宽度排版**：`tabular{@{}l...@{}}`，**禁止 `tabular*`／`@{\extracolsep{\fill}}`（不横向撑满）、禁止 `\small`／`\footnotesize`／`\renewcommand{\arraystretch}`／`\resizebox`／`table*`**；**唯一允许的控宽手段是 `\setlength{\tabcolsep}`**，写在 `table` 环境内（作用域不外溢），且仅在模板 6~pt 列距装不下时才写出。**每个方法一行，平移与旋转并入同一单元格**写作 `平移/旋转`（`_channel_cells`，裸斜杠不加窄空），不再有 `\multirow` 通道行。表头由 `_metric_header` 排成两行 `指标名\,$\downarrow$\\单位`，统计量（P95／RMSE）写进题注而非表头，**箭头紧随指标名，绝不放在单位后**。时延用 `_fmt_ms` 保留一位小数（有效时延在 5~ms 网格上取极小值，两位小数是伪精度），其余指标两位小数。只显示中位数，不出现 `n=`、`[Q1,Q3]`。**列距档位是实测反解的**（savebox 量净宽，`\columnwidth` 240.94~pt）：静态 203.49~pt、转换 150.49~pt，均保持模板 6~pt；动态四指标×两通道在 6~pt 下 277.49~pt、超出 36.55~pt，收到 **2~pt 得 236.49~pt**（留 4.45~pt 余量）。曾判「瓶颈是数值不是表头，故改列距也装不下」并据此上 `table*`、再退 `\small`，两次都被推翻——**该结论只对表头缩写成立，列距是独立的一档**，5 列表在 `@{}` 外缘下有 4 处列距共 8 倍 `\tabcolsep`，6→2~pt 直接回收 32~pt。**把单位从表头移入题注对宽度无影响**（同为 220.49~pt），故单位留在表头。参考 `reference/gpt-web/egoanchor_v4_academic_revision/tables/` 的同类做法：plain `tabular` + 模板字号 + 逐表 `\tabcolsep`。**遮挡误差含旋转通道**（`rotation_p95_deg`，与平移同口径：`reference.inv()*display` 的测地角 P95）。实验二归因表不进正文，关键数值由图与结果文字承担。读者表格连续数值固定两位小数，完整精度留在 `analysis/metrics/`；发布层必须把内部 `scenario_id` 与指标键映射为可读标签，CSV/QC 审计文件保留稳定机器字段。
+- **实验一正文表为三张，按 §5.1 的评价方面各自成表**：`tables/exp1_static.tex`（头动泄漏／绝对配准／静止抖动，单栏）、`tables/exp1_dynamic.tex`（有效时延／LA-RMSE／CT-RMSE／残余抖动）、`tables/exp1_transition.tex`（遮挡误差＋起动转换），生成器为 `experiment_1_2/analysis/paper.py` 的 `build_exp1_static_table`／`build_exp1_dynamic_table`／`build_exp1_transition_table`，三者共用 `_behavior_table`。**三张一律单栏、按自然宽度排版**：`tabular{@{}l...@{}}`，**禁止 `tabular*`／`@{\extracolsep{\fill}}`（不横向撑满）、禁止 `\small`／`\footnotesize`／`\renewcommand{\arraystretch}`／`\resizebox`／`table*`**；**唯一允许的控宽手段是 `\setlength{\tabcolsep}`**，写在 `table` 环境内（作用域不外溢），且仅在模板 6~pt 列距装不下时才写出。**每个方法一行，平移与旋转并入同一单元格**写作 `平移/旋转`（`_channel_cells`，裸斜杠不加窄空），不再有 `\multirow` 通道行。表头由 `_metric_header` 排成两行 `指标名\,$\downarrow$\\单位`，统计量（P95／RMSE）写进题注而非表头，**箭头紧随指标名，绝不放在单位后**。时延用 `_fmt_ms` 保留一位小数（有效时延在 5~ms 网格上取极小值，两位小数是伪精度），其余指标两位小数。只显示中位数，不出现 `n=`、`[Q1,Q3]`。**列距档位是实测反解的**（savebox 量净宽，`\columnwidth` 240.94~pt）：静态 203.49~pt、转换 150.49~pt，均保持模板 6~pt；动态四指标×两通道在 6~pt 下 277.49~pt、超出 36.55~pt，收到 **2~pt 得 236.49~pt**（留 4.45~pt 余量）。曾判「瓶颈是数值不是表头，故改列距也装不下」并据此上 `table*`、再退 `\small`，两次都被推翻——**该结论只对表头缩写成立，列距是独立的一档**，5 列表在 `@{}` 外缘下有 4 处列距共 8 倍 `\tabcolsep`，6→2~pt 直接回收 32~pt。**把单位从表头移入题注对宽度无影响**（同为 220.49~pt），故单位留在表头。参考 `reference/gpt-web/egoanchor_v4_academic_revision/tables/` 的同类做法：plain `tabular` + 模板字号 + 逐表 `\tabcolsep`。**遮挡误差含旋转通道**（`rotation_p95_deg`，与平移同口径：`reference.inv()*display` 的测地角 P95）。实验二仅以组合图和结果文字呈现，不生成或发布独立归因表；`write_analysis_artifacts` 重建时清除遗留的 `experiment2_design_attribution.tex`。读者表格连续数值固定两位小数，完整精度留在 `analysis/metrics/`；发布层必须把内部 `scenario_id` 与指标键映射为可读标签，CSV/QC 审计文件保留稳定机器字段。
 - **`2026-EgoAnchor/tables/*.tex` 是产物，改术语只能改生成器**（2026-08-11 用户指出「表格是生成的，下次重新生成又会回到原来的样子」）：题注、表头与方面名的中文字面全部硬编码在 `experiment_1_2/analysis/paper.py`（exp3 同理在 `experiment_3/analysis/paper.py`），直接编辑 `tables/` 会在下一次 `analyze` 时被覆盖。落位口径：改完 `paper.py` → `pixi run eval analyze exp1-2` → 比对 `data/experiments/experiment_1_2/analysis/tex/tables/` 与 `2026-EgoAnchor/tables/` 的 SHA256 → `pixi run eval copy-assets exp1-2` → 重编。术语断言同时写在 `eval/tests/test_experiment_1_2_analysis.py`，改字面必须同步改测试，否则全量套件会红。
 - **两侧文件名故意不同名，不要「对齐」**：分析侧 `experiment1_static_fidelity.tex` ↔ 论文侧 `exp1_static.tex`，翻译由 `eval/config/batch.toml` 的 `[experiment_1_2.copy_assets.tables]` + `ArtifactDestination` 在 `copy-assets` 阶段完成。曾把分析侧改名成论文侧名以求一致，反而破坏 `test_experiment_1_2_workflow.py:597-600` 钉住的分析侧名，已全部回退。`analysis_manifest.json` 的 `publication_boundary` 为 `analysis_only_manual_tex_copy`——`analyze` 只写分析目录，永不回填论文。
 - 自动生成的 LaTeX 控制序列**不得含阿拉伯数字**（分位数后缀写 `PFifty`、`PNinetyFive`），否则 TeX 在数字处截断命令名。
@@ -374,7 +382,7 @@ Run 1 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`pytho
 - **联网核查结论：不存在测量「虚拟内容在真实物体上的配准质量」的已验证量表**，该结论写入论文测量说明。信任动机文献为 Gottsacker et al. 2024（AR 跟踪偏移/抖动在测试的 0/1/2 度水平内每升高一级伴随信任下降），**不得表述为任意每度线性下降的连续定律**。
 - 禁止引入 SUS、完整 NASA-TLX、IPQ/临场感量表、具身量表、UEQ/AttrakDiff（构念在两方法间按设计恒定）。
 - **实验三数据版本**：`material/EgoAnchor_Experiment3_RawData_Template_v5_3.xlsx` 是当前唯一分析源，包含 24 人数据；旧 v5.2 工作簿已退役。分析器只接受 v5.3 契约；WPS/Excel 清除 `identifier` 时，以数据类别、v5.3 说明、五表结构和关键题目措辞共同确认身份。当前工作簿采用 AQ-EQ2、TiA-RC1/RC4/UP1 的情境化措辞与互斥 B5 累计次数选项。v5.3 问卷包以 `material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_3_Bilingual.md` 为唯一事实源，同名 docx 由 `material/build_exp3_questionnaire_docx.py` 从 md 确定性生成（先改 md 再重跑脚本，不得手改 docx）。不要依赖本机 Excel COM 重算：仓库在网络盘 `P:\`，受保护视图可能拒绝 COM 并残留锁文件。
-- **分析参数契约 v5、图产物契约 v9**：只生成 `figure4_exp3_subjective_outcomes.{png,pdf}` 与 `tables/exp3_subjective.tex`。复合图为单排四分区，按 Stage behavior（4 项）、Overall judgment（3 项）、AQ and S-TIAS（3 项）、TiA（2 项）排列；前三区使用 1--7 轴，TiA 分区保留自身右侧 1--5 刻度，量尺名称由面板标题 `(d) TiA (1-5)` 给出，不重复放置纵轴标题，不归一化。基础字号与实验一/二同为 7.4 pt，固定画布中的轴框范围为 4.5%--98.0%，分区缝为 3.5% 画布宽；首面板纵轴标题使用 Matplotlib 默认轴外布局，不得手工推入刻度区。PNG 保留 7.15×2.55 in 固定画布供审计，正文 PDF 按全部可见内容紧裁并保留 0.020 in 安全边距。成对箱线图保持统一风格：两方法中心距 0.40、箱宽 0.24、组内净间隙 0.16；实验一图 3 的双指标箱线同样使用中心距 0.40、箱宽 0.24。显著性括号只显示所属冻结家族内 Holm 校正后的星号，绘图入口从参与者配对分重算精确 Wilcoxon 与分家族 Holm，拒绝与结果表不一致的显著性数据。旧对象展开图、独立 Figure 5、森林图、Figure S1 已退役。
+- **分析参数契约 v5、图产物契约 v9**：只生成 `figure4_exp3_subjective_outcomes.{png,pdf}` 与 `tables/exp3_subjective.tex`。复合图为单排四分区，按 Stage behavior（4 项）、Overall judgment（3 项）、AQ and S-TIAS（3 项）、TiA（2 项）排列；前三区使用 1--7 轴，TiA 分区保留自身右侧 1--5 刻度，量尺名称由面板标题 `(d) TiA (1-5)` 给出，不重复放置纵轴标题，不归一化。七个自制条目的横轴固定为 `Stability / Attachment / Orientation / Recovery / Position / Reliance / Balance`；完整名称只在图注和表格中给出，不扩为多行标签。基础字号与实验一/二同为 7.4 pt，固定画布中的轴框范围为 4.5%--98.0%，分区缝为 3.5% 画布宽；首面板纵轴标题使用 Matplotlib 默认轴外布局，不得手工推入刻度区。PNG 保留 7.15×2.55 in 固定画布供审计，正文 PDF 按全部可见内容紧裁并保留 0.020 in 安全边距。成对箱线图保持统一风格：两方法中心距 0.40、箱宽 0.24、组内净间隙 0.16；实验一图 3 的双指标箱线同样使用中心距 0.40、箱宽 0.24。显著性括号只显示所属冻结家族内 Holm 校正后的星号，绘图入口从参与者配对分重算精确 Wilcoxon 与分家族 Holm，拒绝与结果表不一致的显著性数据。旧对象展开图、独立 Figure 5、森林图、Figure S1 已退役。
 - **`tables/exp3_subjective.tex` 为单栏 `table` 5 列**（`@{}lcccc@{}` + `\tabcolsep` 2pt，**模板字号，无 `\footnotesize`／`\arraystretch`**）：结局、`One-Euro / EgoAnchor` 中位数、`$W$`、`$p_{\mathrm{adj}}$`、`$r_{\mathrm{rb}}$ [95\% CI]`；两条件**只报中位数**（四分位区间与分布交给图~4），家族分组行为「对象锚定条目」/「已发表量表」。两个中位数并入一列写作 `One-Euro / EgoAnchor`，表头用 `\shortstack` 两行，**`{[}95\% CI{]}` 的花括号必须留着**（`[` 紧跟 `\\` 会被 `\shortstack` 当成可选参数）。**与实验一三张表同一体例：按自然宽度排版，不用 `tabularx`／`X` 撑满单栏**——数值表没有需要折行的文字列，`X` 只会把列拉宽再迫使内容折行。实测五列净宽合计 219.14~pt（结局列 72.93、CI 列 53.49、中位数列 47.49、`$W$` 20.25、`$p$` 24.99），模板 6~pt 列距下 267.14~pt、超 26.20~pt，收到 2~pt 得 235.14~pt（`\columnwidth` 240.94~pt）。**`tabularx` 只留给真有折行文字列的表**（正文 `tab:anchor-items` 与附录表 5），故 `\usepackage{tabularx}` 保留。`_OUTCOME_LABELS_ZH` 是纯显示名映射（冻结键在 `contracts.OUTCOME_LABELS`），`TIA_UP` 写作 `TiA理解/可预测性`——**`\allowbreak\mbox{}` 补丁已删**：它是为 `X` 列窄宽下的孤字「性」加的，改成 `l` 列后列内不折行，补丁失去对象。`_escape_tex` 只转义 `& % _ #`，反斜杠可安全穿过。**$r_{\mathrm{rb}}$ 是 Wilcoxon 符号秩的配套效应量**（R `effectsize`/`rcompanion`、JASP/jamovi 默认），不得因「少见」而换成 $Z/\sqrt{N}$；下标用 `\mathrm` 直立。**逐行 $n$ 与 McDonald's $\omega$ 不进正文**（仍在结果工作簿与 provenance 里，删除的是版面而非数据）：审稿人扫到 `n = 15` 会先误读成「只有 15 人」。**$W$ 进正文**（早前「$W$ 不承载信息」的说法已推翻）：逐结局的 $W$／$p_{\mathrm{adj}}$／$r_{\mathrm{rb}}$ 是 VRGA 逐结局报 $F$／$p$／$\eta^2_p$ 的对应做法，缺检验统计量反而不合惯例。**表注只声明配对完整性与零差口径**（`_sample_note()` 读 `N`/`N_Nonzero`，校验 `N` 在各结局间恒定后写「所有结局均有 24 组完整配对；零差不进入 Wilcoxon 秩统计」），样本量由数据算出、不得写死；**逐结局非零差范围不进表注**——与 `n = 15` 同理，`15--23` 会被读成样本量缩减。`degenerate_at_bound` 行加 `$^{\dagger}$` 并在表注说明不报自举 CI。**表格只能由 `analysis/paper.py` 生成**（首行有「请勿手工修改」）。
 - 结果工作簿固定为 6 张中文页：`说明`、`样本与质控`、`主结果`、`分物体描述`、`量表信度`、`选择结果`。`分物体描述` 不写 p、Holm、显著性或 `r_rb`。开放题编码必须放在独立、持久、不会被自动重建覆盖的文件。`r_rb_CI_Status=degenerate_at_bound` 时只能写「方向完全一致」，不得把 `[1.00, 1.00]` 当置信区间。`Measurement_Unit=block_mean` 的 AQ 信度与 `method_single` 的 TiA/S-TIAS 信度不可互比，也不可与原量表发表 α 直接对标。
 - Exp3 使用独立的 2 runtime `variant_matrix_id`、独立启动门禁和与 schema-v2 隔离的日志与分析模块，不复用九路矩阵。`analyze` 先在 staging 生成并验证全部产物，再以受管文件事务发布；`analysis/results`、`tex`、`figures`、`provenance` 的目录节点始终保持不变。四个契约产物按固定顺序替换，`provenance/build_result.json` 最后作为完整构建的提交标志；修改活动文件前须完整快照旧集合，任一 `BaseException` 都回滚全部受管文件，且不得扫描、删除未受管文件。命令行进度固定为实际的 6 个阶段，构建或中断后都在 `finally` 清理本轮 staging。实现与回归证据见 `eval/_filesystem.py`、`experiment_3/analysis/pipeline.py`、`test_filesystem_publish.py`；**不得恢复 Exp3 整目录切换，也不得恢复影响实验一/二的全局 `content_sync` 降级**。`validate exp3` 是可选诊断，不是前置门禁。

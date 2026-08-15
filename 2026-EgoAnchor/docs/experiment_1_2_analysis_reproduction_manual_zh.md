@@ -167,7 +167,7 @@ metrics.py + xlsx.py 实现指纹
 缓存命中时不打开 XLSX。缓存缺失或键变化时，只对对应工作簿计算 SHA、核对 `batch.json` 摘要并读取
 其大表。Task 3 更新后，正常进度应为四个“使用指标缓存”和一个“重建指标缓存”。
 
-五项 `TaskResults` 合并后才计算全批性能统计，并生成两张组合图、八个独立审计子图和四张 TeX 表。性能缓存保存原始
+五项 `TaskResults` 合并后才计算全批性能统计，并生成两张组合图、八个独立审计子图和三张 TeX 表。性能缓存保存原始
 TRACK、REGISTER 和 pose publish interval 样本，不会错误合并各 Task 的中位数。
 
 输出目录：
@@ -177,7 +177,7 @@ data/experiments/experiment_1_2/analysis/
 ├─ metrics/                         # 完整精度指标
 ├─ plots/figure_plot_data.xlsx      # 图中可见数据点
 ├─ figures/                         # 两张组合图和八个独立审计子图的 PNG/PDF
-├─ tex/tables/                      # 四张待复制的 TeX 表
+├─ tex/tables/                      # 三张待复制的 TeX 表
 └─ provenance/build_result.json     # batch、输入、参数、实现指纹和缓存状态
 ```
 
@@ -194,7 +194,7 @@ pixi run eval copy-assets exp1-2
 
 命令先确认 `analysis/provenance/build_result.json` 的 batch ID 与活动清单一致，防止新组合误复制旧图表。
 通过后，复制本次清单中的实验 PNG/PDF、`batch.toml` 明确列出的 relay PNG/PDF，以及
-`[experiment_1_2.copy_assets.tables]` 配置的四张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
+`[experiment_1_2.copy_assets.tables]` 配置的三张表格 TeX。所有来源在写入论文目录前统一校验，主稿不会自动修改。
 
 表格默认复制到：
 
@@ -202,7 +202,6 @@ pixi run eval copy-assets exp1-2
 2026-EgoAnchor/tables/exp1_static.tex
 2026-EgoAnchor/tables/exp1_dynamic.tex
 2026-EgoAnchor/tables/exp1_transition.tex
-2026-EgoAnchor/tables/exp2_design.tex
 ```
 
 正文直接从 `figures/panels/` 引用 Figure 2/3 的组合 PDF；八个独立子图只作审计。分析器不再生成

@@ -42,10 +42,9 @@ _ANALYSIS_TABLE_KEYS = frozenset(
         "exp1_static_table",
         "exp1_dynamic_table",
         "exp1_transition_table",
-        "exp2_table",
     }
 )
-"""实验一/二必须复制到论文目录的正文表与审计表格键。"""
+"""实验一必须复制到论文目录的三张正文表键。"""
 
 _IMAGE_SUFFIXES = frozenset({".png", ".pdf"})
 """论文图片资源允许的文件后缀。"""
@@ -304,12 +303,12 @@ def _resolve_table_destinations(
     paper_root: Path,
     copy_assets: dict[str, Any],
 ) -> tuple[ArtifactDestination, ...]:
-    """读取正文合并表与三张审计表在论文目录中的明确目标路径。"""
+    """读取三张实验一正文表在论文目录中的明确目标路径。"""
 
     raw_tables = copy_assets.get("tables")
     if not isinstance(raw_tables, dict) or set(raw_tables) != _ANALYSIS_TABLE_KEYS:
         raise ValueError(
-            "batch.toml experiment_1_2.copy_assets.tables 必须恰好配置四张分析表格"
+            "batch.toml experiment_1_2.copy_assets.tables 必须恰好配置三张分析表格"
         )
     destinations = tuple(
         ArtifactDestination(

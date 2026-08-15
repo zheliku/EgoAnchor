@@ -323,9 +323,13 @@ def _paired_panel(
 
 
 def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
-    """绘制外推、默认 Linear/SLERP 与 Hermite 的配对 lag--residual 分布。"""
+    """绘制预测式追踪与两种历史状态查询的配对 lag--residual 分布。"""
 
-    labels = ("Smoothed KF", "Linear/SLERP", "Hermite")
+    labels = (
+        "Predictive tracking",
+        "History retrieval\n(Linear/SLERP)",
+        "History retrieval\n(Hermite)",
+    )
     colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR, _HERMITE_COLOR)
     markers = ("D", "s", "o")
     for episode in paired_points:
@@ -392,7 +396,7 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
 
 
 def build_temporal_strategy_panel(paired_points: np.ndarray) -> Any:
-    """创建可直接放入 LaTeX 子图的时序合成面板。"""
+    """创建可直接放入 LaTeX 子图的预测与历史查询审计面板。"""
 
     figure, axis = plt.subplots(
         figsize=(_EXP2_WIDE_WIDTH_IN, _EXP2_PANEL_HEIGHT_IN)
@@ -659,7 +663,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
             marker="o",
             linestyle="-",
             markersize=5.0,
-            label="Error / lag-aligned RMSE",
+            label="Head-motion leakage / LA-RMSE",
         ),
         Line2D(
             (),
@@ -669,7 +673,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
             markerfacecolor="white",
             linestyle="--",
             markersize=5.0,
-            label="Residual jitter P95",
+            label="Static / residual jitter P95",
         ),
         Line2D(
             (),
@@ -777,7 +781,7 @@ def _draw_vcd_paper_axis(axis: Any, results: PaperResults) -> None:
 
 
 def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
-    """只展示正文相关的 Smoothed KF 与 Linear/SLERP 配对。"""
+    """只展示正文相关的预测式追踪与历史状态查询配对。"""
 
     variants = (SMOOTHED_EXTRAPOLATION_VARIANT, LINEAR_SLERP_VARIANT)
     points = _require_finite_matrix(
@@ -788,7 +792,7 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
         ),
         "实验二两路时序策略",
     )
-    labels = ("Smoothed KF", "Linear/SLERP")
+    labels = ("Predictive tracking", "History retrieval")
     colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR)
     markers = ("D", "s")
     for episode in points:
@@ -830,7 +834,7 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
             zorder=4,
         )
     axis.set_xlabel("Effective lag (ms)", labelpad=2.0)
-    axis.set_ylabel("RMSE (mm)", labelpad=1.0)
+    axis.set_ylabel("Lag-aligned RMSE (mm)", labelpad=1.0)
     axis.set_ylim(bottom=0.0)
     axis.legend(
         frameon=False,
@@ -885,7 +889,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
         "(a) Capture-time alignment",
         "(b) StaticLock",
         "(c) VCD risk-coverage",
-        "(d) Temporal strategy",
+        "(d) Predictive tracking\nvs. history retrieval",
     )
     for axis, title in zip(axes, titles, strict=True):
         axis.set_title(
@@ -922,7 +926,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
                 marker="D",
                 linestyle="-",
                 markersize=4.8,
-                label="Smoothed KF",
+                label="Predictive tracking",
             ),
             Line2D(
                 (),
@@ -931,7 +935,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
                 marker="s",
                 linestyle="-",
                 markersize=4.8,
-                label="Linear/SLERP",
+                label="History retrieval",
             ),
         ),
         loc="upper center",
@@ -945,7 +949,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
         left=0.064,
         right=0.985,
         bottom=0.180,
-        top=0.820,
+        top=0.780,
         wspace=0.36,
     )
     return figure

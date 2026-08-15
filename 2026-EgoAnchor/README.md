@@ -45,7 +45,7 @@ latexmk 自行处理 bibtex 与重跑依赖，无需手动调用 bibtex。工作
 ----------
 
 实验一/二分析由 `EgoAnchor_Python` 下的 `pixi run eval analyze exp1-2` 生成两张组合图、八个独立审计子图
-及其 PNG/PDF，并生成四张 TeX 表。`pixi run eval copy-assets exp1-2` 按 `batch.toml` 复制这些资源，
+及其 PNG/PDF，并生成三张 TeX 表。`pixi run eval copy-assets exp1-2` 按 `batch.toml` 复制这些资源，
 不会修改主稿。正文直接引用组合 PDF，独立子图不进入论文。
 
 实验一和实验二的组合图均为原生 `1 x 4` 布局。实验一各面板使用单个线性纵轴；动态结果把

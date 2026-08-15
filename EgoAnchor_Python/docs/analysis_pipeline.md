@@ -159,7 +159,7 @@ pixi run eval copy-assets exp1-2
 
 `analyze exp1-2` 读取活动 `batch.json` 指向的五本 Stage 1 XLSX。逐任务指标缓存按工作簿摘要、实验一/二
 参数摘要和指标实现摘要命中，只重算失效任务；随后生成两张组合图、八个独立审计子图及其 PNG/PDF、
-四张 TeX 表、指标文件和绘图数据。分析器不再生成 Figure 2/3 的图环境 TeX。
+三张 TeX 表、指标文件和绘图数据。分析器不再生成 Figure 2/3 的图环境 TeX。
 
 本地产物位于：
 
@@ -172,7 +172,7 @@ data/experiments/experiment_1_2/analysis/
 └─ provenance/build_result.json
 ```
 
-只有 `copy-assets exp1-2` 会把清单中的组合图、独立审计子图、四张表格和 TOML 明确列出的 relay 文件写入论文目录。
+只有 `copy-assets exp1-2` 会把清单中的组合图、独立审计子图、三张表格和 TOML 明确列出的 relay 文件写入论文目录。
 
 ## 6. 实验一/二新增或局部重采
 

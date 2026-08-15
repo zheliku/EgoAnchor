@@ -15,7 +15,6 @@ from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from .figures import summarize_risk_coverage
 from .metrics import (
-    LINEAR_SLERP_VARIANT,
     SMOOTHED_EXTRAPOLATION_VARIANT,
     FULL_VARIANT,
     METHODS,
@@ -92,13 +91,6 @@ def _summary(rows: tuple[Mapping[str, Any], ...], key: str) -> tuple[float, floa
     if values.size == 0:
         raise ValueError(f"论文表缺少指标：{key}")
     return tuple(float(item) for item in np.quantile(values, (0.5, 0.25, 0.75)))  # type: ignore[return-value]
-
-
-def _cell(summary: tuple[float, float, float]) -> str:
-    """写出 ``median [Q1, Q3]`` 读者表格单元格。"""
-
-    median, q1, q3 = summary
-    return f"{_fmt(median)} [{_fmt(q1)}, {_fmt(q3)}]"
 
 
 def _best_median_cells(
@@ -351,120 +343,11 @@ def build_exp1_transition_table(results: PaperResults) -> str:
     )
 
 
-
-def _paired_values(
-    rows: Mapping[str, tuple[Mapping[str, Any], ...]],
-    alternative_variant: str,
-    key: str,
-    reference_variant: str = FULL_VARIANT,
-) -> tuple[np.ndarray, np.ndarray]:
-    """返回按片段身份严格配对的参照值和对照值。"""
-
-    matrix = paired_metric_matrix(
-        rows,
-        (reference_variant, alternative_variant),
-        (key,),
-    )[:, :, 0]
-    return matrix[:, 0], matrix[:, 1]
-
-
-def _array_cell(values: np.ndarray) -> str:
-    """把有限数组写成 median [Q1, Q3] 单元格。"""
-
-    finite = values[np.isfinite(values)]
-    if finite.size == 0:
-        raise ValueError("论文表缺少有限配对指标")
-    median, q1, q3 = (float(item) for item in np.quantile(finite, (0.5, 0.25, 0.75)))
-    return _cell((median, q1, q3))
-
-
-def _effect_summary(reference: np.ndarray, alternative: np.ndarray) -> tuple[str, str]:
-    """按配对样本汇总对照/参照倍率及对照更差的一致性。"""
-
-    valid = np.isfinite(reference) & np.isfinite(alternative) & (reference > 0.0)
-    if not bool(valid.any()):
-        raise ValueError("论文表效应倍率缺少正的有限参照值")
-    reference = reference[valid]
-    alternative = alternative[valid]
-    ratios = alternative / reference
-    return (
-        f"{_array_cell(ratios)}$\\times$",
-        f"{int(np.sum(alternative > reference))}/{len(reference)}",
-    )
-
-
-def build_exp2_attribution_table(results: PaperResults) -> str:
-    """生成实验二四项设计归因与配对时序策略表。"""
-
-    capture = np.asarray([float(row["capture_p95_mm"]) for row in results.capture_alignment])
-    arrival = np.asarray([float(row["arrival_p95_mm"]) for row in results.capture_alignment])
-    if capture.size == 0 or capture.size != arrival.size:
-        raise ValueError("采集时刻对齐表缺少完整配对片段")
-    capture_effect, capture_consistency = _effect_summary(capture, arrival)
-
-    full_static, disabled_static = _paired_values(
-        results.static_segments,
-        NO_STATIC_LOCK,
-        "centered_p95_mm",
-    )
-    static_effect, static_consistency = _effect_summary(full_static, disabled_static)
-
-    linear_translation, extrapolation_translation = _paired_values(
-        results.translation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "aligned_rmse_mm",
-        LINEAR_SLERP_VARIANT,
-    )
-    linear_rotation, extrapolation_rotation = _paired_values(
-        results.rotation_segments,
-        SMOOTHED_EXTRAPOLATION_VARIANT,
-        "aligned_rmse_deg",
-        LINEAR_SLERP_VARIANT,
-    )
-    translation_effect, translation_consistency = _effect_summary(
-        linear_translation,
-        extrapolation_translation,
-    )
-    rotation_effect, rotation_consistency = _effect_summary(
-        linear_rotation,
-        extrapolation_rotation,
-    )
-
-    vcd_aurc = np.asarray([float(row["aurc_mm"]) for row in results.vcd_aurc_segments])
-    vcd_full_risk = np.asarray(
-        [float(row["full_coverage_risk_mm"]) for row in results.vcd_aurc_segments]
-    )
-    vcd_effect, vcd_consistency = _effect_summary(vcd_aurc, vcd_full_risk)
-
-    lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
-        r"\caption{实验二的设计归因。效应倍率先在同一次重复测量或同一遮挡过程内计算组件关闭与启用之比，再报告 median [Q1, Q3]；所有指标越低越好，倍率大于 1 表示启用设计更优。VCD 行的启用与关闭分别表示分数排序的 AURC 与忽略排序的全覆盖风险，并非冻结阈值接纳消融；时序策略行比较均关闭 StaticLock 的历史轨迹取值（Linear/SLERP）与平滑卡尔曼外推。}",
-        r"\label{tab:exp2-final}",
-        r"\small",
-        r"\setlength{\tabcolsep}{3.0pt}",
-        r"\resizebox{\textwidth}{!}{%",
-        r"\begin{tabular}{llllll}",
-        r"\toprule",
-        r"受评设计 & 参照指标 & 启用 & 关闭 & 效应倍率 & 一致性 \\",
-        r"\midrule",
-        f"采集时刻对齐 & 位姿泄漏 P95 & 采集时刻 {_array_cell(capture)}~mm & 到达时刻 {_array_cell(arrival)}~mm & {capture_effect} & {capture_consistency} " + r"\\",
-        f"StaticLock & 静止平移波动 P95 & {_array_cell(full_static)}~mm & {_array_cell(disabled_static)}~mm & {static_effect} & {static_consistency} " + r"\\",
-        f"VCD 判别性 & 遮挡过程 AURC & {_array_cell(vcd_aurc)}~mm & 全覆盖 {_array_cell(vcd_full_risk)}~mm & {vcd_effect} & {vcd_consistency} " + r"\\",
-        f"时序策略 & 平移 / 旋转 aligned RMSE & \\shortstack{{历史取值 (StaticLock off)\\\\{_array_cell(linear_translation)}~mm / {_array_cell(linear_rotation)}$^\\circ$}} & \\shortstack{{平滑外推 (StaticLock off)\\\\{_array_cell(extrapolation_translation)}~mm / {_array_cell(extrapolation_rotation)}$^\\circ$}} & \\shortstack{{T: {translation_effect}\\\\R: {rotation_effect}}} & \\shortstack{{T: {translation_consistency}\\\\R: {rotation_consistency}}} " + r"\\",
-        r"\bottomrule",
-        r"\end{tabular}%",
-        r"}",
-        r"\end{table*}",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def _write_strategy_candidate_data(
     results: PaperResults,
     data_root: Path,
 ) -> tuple[Path, Path]:
-    """写出关闭 StaticLock 后外推、Linear/SLERP 与 Hermite 的配对数据和汇总。"""
+    """写出关闭 StaticLock 后预测与两种历史状态查询的配对数据和汇总。"""
 
     rows_by_family = {
         "static": results.static_segments,
@@ -883,7 +766,7 @@ def _write_figure_source_data(
     append_metric_rows(
         figure3_rows,
         figure="Figure 3",
-        panel="(d) Runtime temporal strategies",
+        panel="(d) Predictive tracking vs. history retrieval",
         rows=results.translation_segments,
         variants=TEMPORAL_STRATEGY_VARIANTS,
         x_key="effective_lag_ms",
@@ -1070,20 +953,18 @@ def write_analysis_artifacts(
         path = table_root / name
         path.write_text(content, encoding="utf-8")
         exp1_table_paths[key] = path
-    exp2_table = build_exp2_attribution_table(results)
-    exp2_table_path = table_root / "experiment2_design_attribution.tex"
-    exp2_table_path.write_text(exp2_table, encoding="utf-8")
-    legacy_exp1_tables = (
+    retired_table_names = (
         "experiment1_system_characterization.tex",
         "experiment1_static_occlusion_stability.tex",
         "experiment1_dynamic_6dof_fidelity.tex",
         "experiment1_performance.tex",
         "experiment1_anchor_behavior.tex",
+        "experiment2_design_attribution.tex",
     )
-    for legacy_name in legacy_exp1_tables:
-        legacy_exp1_table = table_root / legacy_name
-        if legacy_exp1_table.exists():
-            legacy_exp1_table.unlink()
+    for retired_name in retired_table_names:
+        retired_table = table_root / retired_name
+        if retired_table.exists():
+            retired_table.unlink()
     legacy_figure_root = tex_root / "figures"
     for legacy_name in ("figure2_experiment1.tex", "figure3_experiment2.tex"):
         legacy_figure = legacy_figure_root / legacy_name
@@ -1094,7 +975,6 @@ def write_analysis_artifacts(
 
     return {
         **exp1_table_paths,
-        "exp2_table": exp2_table_path,
         "summary": summary_path,
         "capture": capture_path,
         "vcd_risk_coverage": vcd_curve_path,
@@ -1110,6 +990,5 @@ __all__ = [
     "build_exp1_dynamic_table",
     "build_exp1_static_table",
     "build_exp1_transition_table",
-    "build_exp2_attribution_table",
     "write_analysis_artifacts",
 ]

@@ -11,6 +11,7 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import PathPatch
 
@@ -242,6 +243,15 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
                 for box in (overall_box, seven_point_box, tia_box)
             )
         )
+        canvas = FigureCanvasAgg(figure)
+        canvas.draw()
+        renderer = canvas.get_renderer()
+        for axis in figure.axes:
+            for label in axis.get_xticklabels():
+                self.assertGreaterEqual(
+                    label.get_window_extent(renderer).y0,
+                    figure.bbox.y0,
+                )
 
 def _analysis_fixture() -> tuple[ScoreData, AnalysisTables]:
     """构造无需读取工作簿即可覆盖十二项冻结结局的最小一致分析对象。"""

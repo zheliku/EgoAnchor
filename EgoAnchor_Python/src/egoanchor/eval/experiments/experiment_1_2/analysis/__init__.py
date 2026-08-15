@@ -38,7 +38,6 @@ from .paper import (
     build_exp1_dynamic_table,
     build_exp1_static_table,
     build_exp1_transition_table,
-    build_exp2_attribution_table,
     write_analysis_artifacts,
 )
 from .reader import iter_rows, workbook_sha256
@@ -63,7 +62,6 @@ __all__ = [
     "build_exp1_static_table",
     "build_exp1_transition_table",
     "build_exp2_attribution_figure",
-    "build_exp2_attribution_table",
     "build_temporal_strategy_panel",
     "build_vcd_risk_coverage_panel",
     "cache_key",

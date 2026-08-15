@@ -33,7 +33,6 @@ from egoanchor.eval.experiments.experiment_1_2.analysis import (
     build_exp1_static_table,
     build_exp1_transition_table,
     build_exp2_attribution_figure,
-    build_exp2_attribution_table,
     cache_key,
     cache_path,
     eligible_trials,
@@ -120,8 +119,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertLess(translation_rmse, 1e-9)
         self.assertLess(rotation_rmse, 1e-9)
 
-    def test_main_tables_split_exp1_by_aspect_and_keep_audit_table(self) -> None:
-        """实验一正文表按三个评价方面各自成表，实验二表继续用于审计。"""
+    def test_main_tables_split_exp1_by_aspect(self) -> None:
+        """实验一正文表按三个评价方面各自成表。"""
 
         def rows(variants: tuple[str, ...], **metrics: float) -> dict[str, tuple[dict[str, object], ...]]:
             """构造两个身份完整且可严格配对的片段。"""
@@ -202,10 +201,9 @@ class Experiment12AnalysisTests(unittest.TestCase):
         static_table = build_exp1_static_table(results)
         dynamic_table = build_exp1_dynamic_table(results)
         transition_table = build_exp1_transition_table(results)
-        attribution_table = build_exp2_attribution_table(results)
         exp1_tables = (static_table, dynamic_table, transition_table)
 
-        for table in (*exp1_tables, attribution_table):
+        for table in exp1_tables:
             self.assertTrue(table.endswith("\n"))
             self.assertFalse(table.endswith("\n\n"))
         # 三个评价方面各自成表，均按自然宽度排在单栏内：不横向撑满，不改字号，
@@ -296,16 +294,10 @@ class Experiment12AnalysisTests(unittest.TestCase):
             r"Arrival & \textbf{4.50}/\textbf{2.30} & \textbf{150.5} \\",
             transition_table,
         )
-        combined = "".join(exp1_tables) + attribution_table
+        combined = "".join(exp1_tables)
         self.assertNotIn("Arrival-Hold &", combined)
         self.assertNotIn("Capture-Hold &", combined)
         self.assertNotIn("One-Euro Anchor &", combined)
-        self.assertIn("受评设计 & 参照指标 & 启用 & 关闭", attribution_table)
-        for row_label in ("采集时刻对齐", "StaticLock", "VCD 判别性", "时序策略"):
-            self.assertIn(f"{row_label} &", attribution_table)
-        for removed in ("VCD 接纳", "Hermite 补充", "停止护栏"):
-            self.assertNotIn(removed, attribution_table)
-        self.assertIn(r"$\times$", attribution_table)
         self.assertNotIn(">40", combined)
         self.assertNotIn("灾难性失效", combined)
 
@@ -379,7 +371,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
             self.assertEqual(len(means), 8)
         self.assertEqual(
             [text.get_text() for text in experiment_one.legends[0].get_texts()],
-            ["Error / lag-aligned RMSE", "Residual jitter P95", "Mean"],
+            ["Head-motion leakage / LA-RMSE", "Static / residual jitter P95", "Mean"],
         )
 
         experiment_two = build_exp2_attribution_figure(results)
@@ -387,12 +379,12 @@ class Experiment12AnalysisTests(unittest.TestCase):
         temporal_legend = [
             text.get_text() for text in experiment_two.axes[3].get_legend().get_texts()
         ]
-        self.assertEqual(temporal_legend, ["Smoothed KF", "Linear/SLERP"])
+        self.assertEqual(temporal_legend, ["Predictive tracking", "History retrieval"])
         self.assertNotIn("Hermite", " ".join(temporal_legend))
         self.assertFalse(experiment_two.axes[3].get_legend().get_visible())
         self.assertEqual(
             [text.get_text() for text in experiment_two.legends[0].get_texts()],
-            ["IQR", "Median", "Smoothed KF", "Linear/SLERP"],
+            ["IQR", "Median", "Predictive tracking", "History retrieval"],
         )
         self.assertEqual(
             [axis.get_title(loc="left") for axis in experiment_two.axes],
@@ -400,7 +392,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 "(a) Capture-time alignment",
                 "(b) StaticLock",
                 "(c) VCD risk-coverage",
-                "(d) Temporal strategy",
+                "(d) Predictive tracking\nvs. history retrieval",
             ],
         )
         self.assertEqual(
@@ -408,6 +400,14 @@ class Experiment12AnalysisTests(unittest.TestCase):
             "Candidates retained (%)",
         )
         self.assertEqual(experiment_two.axes[3].get_xlabel(), "Effective lag (ms)")
+        self.assertEqual(experiment_two.axes[3].get_ylabel(), "Lag-aligned RMSE (mm)")
+        experiment_two.canvas.draw()
+        renderer = experiment_two.canvas.get_renderer()
+        temporal_title_bounds = left_title(experiment_two.axes[3]).get_window_extent(
+            renderer
+        )
+        legend_bounds = experiment_two.legends[0].get_window_extent(renderer)
+        self.assertLess(temporal_title_bounds.y1, legend_bounds.y0)
         self.assertEqual(
             [tick.get_text() for tick in experiment_two.axes[2].get_xticklabels()],
             ["0%", "50%", "100%"],
@@ -554,8 +554,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
-    def test_analysis_artifacts_remove_only_retired_figure_tex(self) -> None:
-        """重建时删除旧拼图 TeX，但保留同目录内未托管文件。"""
+    def test_analysis_artifacts_remove_retired_tex(self) -> None:
+        """重建时删除退役图表 TeX，但保留同目录内未托管文件。"""
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_root = Path(temporary_directory) / "analysis"
@@ -569,6 +569,12 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 path.write_text("retired", encoding="utf-8")
             unrelated = legacy_root / "researcher_note.tex"
             unrelated.write_text("keep", encoding="utf-8")
+            table_root = output_root / "tex" / "tables"
+            table_root.mkdir()
+            retired_table = table_root / "experiment2_design_attribution.tex"
+            retired_table.write_text("retired", encoding="utf-8")
+            unrelated_table = table_root / "researcher_note.tex"
+            unrelated_table.write_text("keep", encoding="utf-8")
 
             artifacts = write_analysis_artifacts(
                 _presentation_results(),
@@ -576,9 +582,12 @@ class Experiment12AnalysisTests(unittest.TestCase):
             )
 
             self.assertTrue(all(not path.exists() for path in retired))
+            self.assertFalse(retired_table.exists())
             self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep")
+            self.assertEqual(unrelated_table.read_text(encoding="utf-8"), "keep")
             self.assertNotIn("figure2_tex", artifacts)
             self.assertNotIn("figure3_tex", artifacts)
+            self.assertNotIn("exp2_table", artifacts)
 
     def test_task_cache_round_trips_non_finite_metrics_as_strict_json(self) -> None:
         """task 缓存必须显式编码 NaN，不能写出非标准 JSON 数字。"""
@@ -880,11 +889,23 @@ class Experiment12AnalysisTests(unittest.TestCase):
         labeled_collections = {
             collection.get_label(): collection
             for collection in axis.collections
-            if collection.get_label() in {"Smoothed KF", "Linear/SLERP", "Hermite"}
+            if collection.get_label()
+            in {
+                "Predictive tracking",
+                "History retrieval\n(Linear/SLERP)",
+                "History retrieval\n(Hermite)",
+            }
         }
 
         self.assertEqual(tuple(figure.get_size_inches()), (2.8, 2.18))
-        self.assertEqual(set(labeled_collections), {"Smoothed KF", "Linear/SLERP", "Hermite"})
+        self.assertEqual(
+            set(labeled_collections),
+            {
+                "Predictive tracking",
+                "History retrieval\n(Linear/SLERP)",
+                "History retrieval\n(Hermite)",
+            },
+        )
         self.assertTrue(
             all(len(collection.get_offsets()) == 2 for collection in labeled_collections.values())
         )
@@ -893,10 +914,13 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(axis.get_position().y1, 0.97)
         self.assertEqual(
             [text.get_text() for text in axis.get_legend().get_texts()],
-            ["Smoothed KF", "Linear/SLERP", "Hermite"],
+            [
+                "Predictive tracking",
+                "History retrieval\n(Linear/SLERP)",
+                "History retrieval\n(Hermite)",
+            ],
         )
         self.assertFalse(axis.get_legend().get_frame_on())
-        self.assertEqual(axis.get_legend().borderaxespad, 0.0)
 
 def _presentation_results() -> PaperResults:
     """构造覆盖两张正文组合图全部输入契约的最小结果。"""
