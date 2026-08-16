@@ -1,13 +1,15 @@
-% `vgtc' LaTeX class. 
+% `vgtc' LaTeX class.
 % THIS FILE MAY NOT BE MODIFIED WITHOUT THE EXPRESS APPROVAL
 % OF THE VGTC PUBLICATIONS CHAIR (submissions@vgtc.org).
 %
 % Changelog:
+% - modifications by Dominik Moritz on 2026/06/26
+%   - Spell out reference names.
 % - modifications by Matthew Brehmer on 2024/02/12
 %   - ACM CCS keywords replaced with index terms, so as to be consistent with full papers
 %   - added cleveref package and instructions for use, rather than using autoref (mirrorring full paper template)
 %     - added Supplemental Materials and Figure Credits sections at the end.
-%     - added supplemental materials instructions and goals, an example project 
+%     - added supplemental materials instructions and goals, an example project
 %       on OSF.
 %     - added figure credits for CypressView.
 %     - replaced paper count figure with newly-made ones.
@@ -15,7 +17,6 @@
 %     - added blue hyperlink coloring, now that electronic has long been the default.
 %     - removed sample.pdf & sample.eps.
 %     - removed Google Scholar fields from template.bib.
-
 % - modifications by Cagatay Turkay and Soumya Dutta on 2019/09/11
 %   - modified the preprint article style to contain the IEEE copyright notices to produce IEEE compliant OA preprints.
 %   - included two different statements for journal and conference papers
@@ -92,7 +93,7 @@
 %      - new caption style
 %      - new reference style
 %      - copyrightspace reduced to 0.5in
-% - borrows *heavily* from Daniel Kartch's 'siggraph' class. 
+% - borrows *heavily* from Daniel Kartch's 'siggraph' class.
 % - also uses pieces of 'apalike.sty' and 'authordate1-4.cls'
 % - version 0.1 2001/06/01 Stephen Spencer (spencer@acm.org)
 % - version 0.2 2001/10/15 Stephen Spencer
@@ -108,7 +109,7 @@
 
 % ------------ identification --------------
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{vgtc}[2006/05/21 IEEE VGTC]
+\ProvidesClass{vgtc}[2026/07/17 IEEE VGTC]
 
 % ------------ initial code --------------
 
@@ -201,10 +202,10 @@
 
 %%% the following code has partly been adapted from egpubl.cls
 %\newif\ifpdf  % determine if we are running PDFLaTeX or not
-%\ifx\pdfoutput\undefined \pdffalse % we are not running PDFLaTeX 
-%\else 
-% %\pdfoutput=1 % we are running PDFLaTeX 
-% \pdftrue 
+%\ifx\pdfoutput\undefined \pdffalse % we are not running PDFLaTeX
+%\else
+% %\pdfoutput=1 % we are running PDFLaTeX
+% \pdftrue
 %\fi
 
 \newcommand{\vgtcinsertpkg}{}
@@ -213,7 +214,7 @@
   \RequirePackage[pagebackref,bookmarks]{hyperref}
   \RequirePackage[all]{hypcap}% makes hyperlinks go to top of floats rather than the caption
   \RequirePackage[svgnames]{xcolor}
-  
+
   \hypersetup{
    pdfpagemode=UseNone,
    pdftitle={\@title},
@@ -249,11 +250,15 @@
   %% AND ``\Crefname`` must be specified for each, otherwise cleveref uses whatever is
   %% given for both cases.
   \RequirePackage[nameinlink,capitalise]{cleveref}
+  \crefname{figure}{Fig.}{Figs.}
+  \Crefname{figure}{Figure}{Figures}
   \crefname{table}{Tab.}{Tabs.}
   \Crefname{table}{Table}{Tables}
+  \crefname{equation}{Eq.}{Eqs.}
+  \Crefname{equation}{Equation}{Equations}
   \crefname{section}{Sec.}{Secs.}
   \Crefname{section}{Section}{Sections}
-  
+
  }
 }
 %% end of code adapted from egpubl.cls
@@ -392,8 +397,6 @@ Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx 
 \newcommand{\ifreviewelse}[2]{\ifvgtc@review #1 \else #2 \fi}
 
 \ifvgtcjournal
-\renewcommand{\figurename}{Fig.}
-
 \setlength{\textheight}{9.625in}
 \setlength{\topmargin}{-0.625in}
 \setlength{\headheight}{0.0625in}
@@ -725,8 +728,8 @@ Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx 
              \vspace{14pt}%
            \else%
 	    \vspace{1\baselineskip}\fi%
-           \large\sffamily\vgtc@sectionfont 
-           \begin{tabular}[t]{c}%
+           \large\sffamily\vgtc@sectionfont
+           \begin{tabular}[t]{@{}c@{}}%
                \@author
            \end{tabular}\par%
            \ifx\vgtc@affiliation\vgtc@empty \else%
@@ -735,7 +738,7 @@ Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx 
            \fi%
           \ifvgtcjournal\vspace{0.08in}\else\vspace{\titlespace}\fi%
            \ifx\vgtc@teaser\vgtc@empty \else%
-             { 
+             {
                \begingroup%
                    \def\@captype{figure}%
                    \vgtc@teaser%
@@ -986,4 +989,3 @@ Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx 
 \endinput
 
 % End of file 'vgtc.cls'.
-

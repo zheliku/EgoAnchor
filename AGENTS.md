@@ -55,9 +55,9 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 定位为**系统论文，但方法部分按学术标准写**：凝练核心思想、学术化表达，不逐一介绍工程实现，行文精炼、控制篇幅。
 
-**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v2.tex`**（2026-08-14 起接替 v1；v1 冻结备查）：**10 页 / 16 式 / 0 overfull / 2 underfull / 0 undefined**，产物 `2026-EgoAnchor/pdf/`。**当前落位**（2026-08-16 latexmk 重编实测，`.aux` 的 `\newlabel` 页号）：图 1 p1、图 2（`fig:arch`）p3、表 1（`tab:anchor-items`）p6、**实验一三张表同落 p7**、图 3（`fig:exp1-final`）/图 4（`fig:exp1-replay`）/表 5（`tab:exp3-subjective`）p8、图 5（`fig:exp2-final`）/图 6（`fig:exp3-subjective`）+§7 讨论起 p9、§8 结论 + 参考文献 p10。
+**当前工作稿 `2026-EgoAnchor/egoanchor_cn_ready_v3.tex`**（v2 及更早版本冻结备查）：2026-08-16 以 `latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf` 重编为 **11 页 / 0 overfull / 1 个竖直 + 9 个横向 Underfull / 0 未定义引用或交叉引用**，产物 `2026-EgoAnchor/pdf/egoanchor_cn_ready_v3.pdf`。正文与引用实际使用 `egoanchor_cn_refs_verified.bib` 的 56 个键：55 个 DOI 均经 Crossref 正式记录核验，题名再经 TrueCite 核验；MegaPose 是 PMLR 正式 CoRL 论文（PMLR 205:715--725, 2023），出版方未登记 DOI，故保留 PMLR 正式页面 URL，绝不以 arXiv DOI 替代。页数或浮动体变动后必须重跑 `.aux` 的 `\newlabel` 页号与逐页 PNG，不能沿用旧稿落位。
 
-**版面现状（未达标，需用户裁定）**：**正文仍占满 p10 左栏（约 0.8 栏、2000 余字符），即正文＝10 页，超出 9 页限制 1 栏**；参考文献从 p10 左栏底部起、右栏续完，总 10 页仍在 9+2 允额内。已实测的结论：① **`\FloatBarrier` 反而更差**——在 §6.1/§6.2/§6.3 末尾各插一处后，`fig:exp3-subjective` 被推到 p10、讨论整体后移，已回退（`placeins` 仍在前言，但不要再按此法插）；② **削正文的边际收益很低**——p8/p9 各只装约 2100 字符（浮动体压着），而纯文字页可装约 4800，删了约 1500 字符正文只换来总页数 11→10。**真正的杠杆是减少浮动体面积**，候选（均需用户裁定）：合并实验一三张表为一张（需改 `paper.py` 生成器、与「按评价方面各自成表」的冻结决定冲突）、`tab:anchor-items` 转散文或移入附加材料、去掉 `fig:exp1-replay`。**pdftotext 的字符数不能用来量「正文残留」**——两栏抽取顺序会把参考文献排到 `REFERENCES`/`[1]` 标记之前，据此算出的残留量（曾得 436）严重偏小；**只能渲染该页 PNG 目视判断正文到哪一栏**。
+**版面现状（已达标）**：当前稿正文和图表位于 p1--p9，参考文献位于 p10--p11，满足 9 页正文加 2 页参考文献的限制。两栏 PDF 的 `pdftotext` 顺序不可靠，页数与正文末页只能以 `.aux` 的 `\newlabel` 和逐页 PNG 判断。
 
 **页数或浮动体变动后须重跑核对**（`.aux` 的 `\newlabel` 页号 + 逐页 PNG），不要沿用上一轮页码。`2026-EgoAnchor/Makefile` 存在，但**本机没装 GNU make**，实际编译一律走「常用验证」里的 `latexmk`。`egoanchor_cn_final_v1/v2/v3/v4` 等旧稿冻结备查，不得用旧稿覆盖当前章节。
 
@@ -73,13 +73,13 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 - **实验二 系统设计归因**：同批日志、同平台参考下关闭单一设计，归因采集时刻对齐、VCD 接纳与 StaticLock；主比较为预测式追踪（Smoothed KF Extrapolation）与历史状态查询（相邻轨迹节点的 Linear/SLERP），均关闭 StaticLock；Hermite Interpolation 仅作审计条件。
 - **实验三 日常物体上的跨对象感知评价**：`2 方法 × 3 物体 = 6 区块` 被试内、24 人、纯主观，只比较 *One-Euro Anchor* 与完整 *EgoAnchor*。
 
-**当前缺口**（稿件现状，非待办日志）：① teaser（`figures/teaser.pdf`）与 `fig:arch`（`figures/pipeline0814.pdf`）已由用户重绘并各自独立，**题注已按实际渲染图重写**（teaser：中三人称／左第一人称增强+原始／右五组物体原始与锚定；`fig:arch`：右上感知后端、右下观测校正、左下锚点合成、反馈通路）——**图与图内文字由用户维护，代理不要动**。`pipeline0814.pdf` 是 WPS 导出文件，仓库未保存演示或矢量源且无内嵌附件，术语改动须由用户在原始文件中完成后重新导出；其中「时刻查询」/「轨迹取值」须改为「历史查询时刻」/「历史状态插值」。② 八条 arXiv-only 参考文献未升级为正式出版信息（`foundationpose2023`、`megapose2022`、`cosypose2020`、`cutie2024`、`bundlesdf2023`、`hodan2020bop`、`posecnn2017`、`densefusion2019`），需联网逐条核实卷期页码，**不得凭记忆填写**；③ 正文超 1 栏（见上「版面现状」）。
+**当前缺口**（稿件现状，非待办日志）：① teaser（`figures/teaser.pdf`）与 `fig:arch`（`figures/pipeline0814.pdf`）已由用户重绘并各自独立，**题注已按实际渲染图重写**（teaser：中三人称／左第一人称增强+原始／右五组物体原始与锚定；`fig:arch`：右上感知后端、右下观测校正、左下锚点合成、反馈通路）——**图与图内文字由用户维护，代理不要动**。`pipeline0814.pdf` 是 WPS 导出文件，仓库未保存演示或矢量源且无内嵌附件，术语改动须由用户在原始文件中完成后重新导出；其中「时刻查询」/「轨迹取值」须改为「历史查询时刻」/「历史状态插值」。② 严格 9+2 页限制尚未满足（见上「版面现状」）。
 
 **已消除的缺口（勿再当待办）**：§5 承诺与 §6.3 报告的口径已对齐——偏好强度 Mdn 4.00 [3.00, 5.00]（N=19，仅对做出选择者，须说明分母来由）、区分信心 6.00 [5.00, 7.00]（N=24）、实验后 3 名轻微不适均已写入 §6.3.2；**两项开放反馈已从 §5 的承诺列表中删除**（无持久编码文件、无版面），故不再构成前后不一致。
 
 配套文件：**`2026-EgoAnchor/docs/design.md` 为当前写作路线**（定位、核心技术设计、贡献、标题体系、术语规范）。旧 `plan.md` 与 `revision_plan_final_v1.md` 已不存在，不得引用。
 
-**bib 维护坑**：BibTeX **不接受 entry 内 `%` 注释**。投稿前待办只能写成 entry **前**一行的 `%` 注释，不得塞进 `note` 字段——否则会被排版进参考文献（`metaDynamicObjectTracker`、`yoloe2025`、`sam3_2025` 曾印出「recheck before submission」）。
+**bib 维护坑**：v3 唯一 Bib 源为 `egoanchor_cn_refs_verified.bib`（55 个 DOI 核验的正式出版条目 + 1 个无 DOI 的 PMLR 正式 CoRL 条目，且当前全部实引）；**不得与旧 `egoanchor_cn_refs.bib` 合并**，两库同名键会把 arXiv 或不完整记录重新带回。MegaPose（PMLR 205:715--725, 2023）没有出版 DOI，保留其 PMLR `url`，不得写入 `10.48550/arXiv.2212.06870`。BibTeX **不接受 entry 内 `%` 注释**。投稿前待办只能写成 entry **前**一行的 `%` 注释，不得塞进 `note` 字段——否则会被排版进参考文献（`metaDynamicObjectTracker`、`yoloe2025`、`sam3_2025` 曾印出「recheck before submission」）。
 
 ## 论文硬约束（易错，逐条核对后再改稿）
 
@@ -450,10 +450,11 @@ pixi run pwsh -File ..\EgoAnchor_Protocol\tools\generate_proto.ps1
 论文（`2026-EgoAnchor`，审阅已复制的组合图与表格后；`-g` 强制标志是必需的）：
 
 ```text
-latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_ready_v1.tex
+latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf egoanchor_cn_ready_v3.tex
 ```
 
 - **编译器只能是 xelatex**（xeCJK + fontspec）。编辑器保存时若走默认 `pdflatex` 配方，会在 `fontspec.sty:101` 失败、**覆盖 `pdf/*.log` 却保留上一次的旧 PDF**，PDF 时间戳早于 `.tex` 而容易误判为「已通过」。核对两点：日志首行是 `This is XeTeX`（不是 `pdfTeX`），且 PDF 时间戳晚于 `.tex`。
+- **官方 `vgtc` 模板与 XeLaTeX 的脚注兼容项**：官方 main `vgtc.cls` 的 `\vgtcinsertpkg` 显式设定 `nesting=true`；在本机 XeLaTeX 2025/xdvipdfmx 下会吞掉脚注正文（pdfLaTeX 不复现）。`egoanchor_cn_ready_v3.tex` 必须在该宏后保留 `\hypersetup{nesting=false}`，恢复 hyperref 的受支持默认值；不得为此修改 `template.tex` 或 `vgtc.cls`。官方最小示例与正文第 2、5 页渲染均已核验。
 - **PowerShell 工作目录在多次调用间保持**：连续两次 `Set-Location "2026-EgoAnchor"` 第二次会失败，且失败会吃掉该次调用中后续用 `;` 串联的命令（`bibtex` 曾因此被静默跳过）。**一律用绝对路径 `Set-Location "P:\VSCode-Project\EgoAnchor\2026-EgoAnchor"`。**
 - **行数两种口径都会骗人，改动前后必须同口径对比**：`(Get-Content f).Count` 对**混合行尾**文件会连裸 `\r` 一起切分（`.tex` 曾被报成 507 行／真实 367 行，`AGENTS.md` 曾被报成 608／真实 465）；而 `Measure-Object -Line` **不计空行**（空串的行数为 0），`design.md` 因此被报成 118 行／真实 194 行（76 个空行）。散文类文件空行占比高，用它对比会凭空「少掉」三成。**净变化一律用 `git diff --numstat` 或字符数核。**
 - **`Get-ChildItem -Recurse` 扫仓库必须排除 `.pixi`**（否则 site-packages 把源码埋掉）：加 `| Where-Object { $_.FullName -notmatch '\\\.pixi\\' }`。
