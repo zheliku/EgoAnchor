@@ -27,7 +27,7 @@
 \usepackage{placeins}
 
 \onlineid{1118}
-\vgtccategory{Research}
+\vgtccategory{System}
 \vgtcinsertpkg
 % XeLaTeX/xdvipdfmx 下禁用嵌套链接，避免官方模板的脚注正文丢失。
 \hypersetup{nesting=false}
@@ -96,7 +96,7 @@
 
 视觉基础模型进一步扩大了开放场景中的对象感知范围：开放词表检测允许通过文本语义指定目标~\cite{owlvit2022,glip2022,groundingdino2025,yoloe2025}，视频对象分割能够维持帧间对象身份~\cite{xmem2022,cutie2024}，现代双目匹配则提升了复杂场景下的深度恢复与跨域泛化~\cite{raftstereo2021,igevstereo2023,foundationstereo2025}。这些能力共同使面向日常物体的零样本视觉定位逐渐可行，但主要解决相机坐标系中的感知与位姿估计问题；在混合现实中，视觉观测仍需进一步转化为稳定、连续的世界系对象状态，才能形成可持续使用的对象锚点。
 
-\subsection{XR中的时间对齐}
+\subsection{XR时间对齐}
 
 XR系统中的感知、追踪与传输通常引入处理时延，使渲染时可用的状态对应早于当前显示的观测时刻；端到端时延还会随系统负载与处理过程发生变化~\cite{diluca2010latency,mrloop2022,stauffert2020mtp}。针对这种状态与目标时刻之间的时间错位，一类典型方法是\emph{预测式追踪（predictive tracking）}：根据历史运动将已有状态预测或外推至当前或预期显示时刻，以减小由追踪与显示时延造成的动态配准误差~\cite{azuma1994improving,laviola2003double,pvt2023,yoon2022headmotion}。
 
@@ -466,13 +466,13 @@ EgoAnchor的感知后端与锚定运行时通过局域网通信。感知后端�
 
 \subsubsection{静态配准}
 
-\input{tables/exp1_static.tex}
+\input{tables/cn/exp1_static.tex}
 
 主动头动首先暴露了异步观测的时间语义问题。Arrival的头动泄漏达到43.67~mm/6.49°；仅将同一候选改为按图像采集时刻解释，Capture即降至13.03~mm/5.40°。One-Euro为10.65~mm/3.29°，EgoAnchor为0.82~mm/0.33°，相较One-Euro在两个通道上分别降低约92\%和90\%；配准误差呈同向排序，最低值同样由EgoAnchor取得（6.60~mm/4.39°）。静止抖动上，两种直接消费候选的配置仍有可见波动，One-Euro降至0.85~mm/0.40°，EgoAnchor为0.06~mm/0.03°，比One-Euro再低一个数量级以上；图~\ref{fig:exp1-final}(a,\,b)显示其静止输出集中在接近零的窄范围内。
 
 \subsubsection{动态跟随}
 
-\input{tables/exp1_dynamic.tex}
+\input{tables/cn/exp1_dynamic.tex}
 
 按各方法自身的最佳有效时延对齐后，LA-RMSE反映去除整体响应滞后后的轨迹残差。EgoAnchor的LA-RMSE为9.12~mm/4.81°，相较One-Euro的15.69~mm/5.55°分别降低约42\%和13\%；残余抖动为4.56~mm/2.64°与5.25~mm/2.70°。相比静止条件，两种方法在残余抖动上的差距较小，而LA-RMSE的差异更为明显。
 
@@ -480,7 +480,7 @@ EgoAnchor的感知后端与锚定运行时通过局域网通信。感知后端�
 
 \subsubsection{转换响应}
 
-\input{tables/exp1_transition.tex}
+\input{tables/cn/exp1_transition.tex}
 
 表~\ref{tab:exp1-transition}把遮挡恢复与起动响应并列。短时完全遮挡期间，遮挡误差由Arrival的18.23~mm/18.39°与One-Euro的10.41~mm/8.66°降至EgoAnchor的4.85~mm/5.52°，相较One-Euro分别降低约53\%和36\%。起动转换时延则由Arrival的157.0~ms、One-Euro的334.0~ms增加至EgoAnchor的510.4~ms，呈现与遮挡误差相反的排序。
 
@@ -524,7 +524,7 @@ EgoAnchor的感知后端与锚定运行时通过局域网通信。感知后端�
   \label{fig:exp3-subjective}
 \end{figure*}
 
-\input{tables/exp3_subjective.tex}
+\input{tables/cn/exp3_subjective.tex}
 
 \subsubsection{对象锚定体验}
 
