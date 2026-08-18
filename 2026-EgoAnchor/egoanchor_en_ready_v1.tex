@@ -1,16 +1,12 @@
 \documentclass[review]{vgtc}
+% \documentclass{vgtc}
 
 \graphicspath{{figures/}{pictures/}{images/}{./}}
 
-% Keep the VR template's metrics and line spacing; retain XeLaTeX for the existing build setup.
+% Keep the VR template's metrics and line spacing.
 \usepackage{times}
 \renewcommand*\ttdefault{txtt}
 \usepackage{mathptmx}
-\usepackage{fontspec}
-\setmainfont{Times New Roman}
-\setsansfont{Arial}
-\setmonofont{Courier New}
-
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{enumitem}
@@ -25,18 +21,13 @@
 \onlineid{1118}
 \vgtccategory{System}
 \vgtcinsertpkg
-% Disable nested links under XeLaTeX/xdvipdfmx to avoid missing footnote text in the official template.
 \hypersetup{nesting=false}
-% Use a narrow monospaced font for URLs to reduce excessive wrapping in footnotes.
-\newfontfamily\EgoUrlMono{Latin Modern Mono}
-\renewcommand{\UrlFont}{\EgoUrlMono}
-
 \title{EgoAnchor: Zero-Shot Dynamic Anchoring of Everyday Objects in Passthrough Mixed Reality}
-\author{Authors Withheld}
+\author{Anonymous Authors}
 \authorfooter{}
 
 \abstract{%
-Zero-shot 6DoF pose estimation is extending visual localization to a broader range of everyday rigid objects with available 3D models, yet its asynchronous, low-rate, and variable-quality outputs remain difficult to use directly as stable object anchors. We present EgoAnchor, an egocentric zero-shot dynamic object anchoring system for passthrough mixed reality. EgoAnchor consists of a perception backend and an anchoring runtime. The backend continuously produces camera-frame pose observations with visual-consistency scores, while the runtime recovers world-frame states that are valid at image capture time and maintains reliable object states for rendering, allowing low-rate visual outputs to form stable, continuous, and recoverable object anchors. We implement EgoAnchor with a Meta Quest 3 and evaluate it through a controlled benchmark with a platform reference, attribution studies of key design choices, and a within-subject study with 24 participants. EgoAnchor achieves lower errors in static registration, occlusion recovery, and latency-aligned dynamic trajectory residuals, at the cost of a longer motion-onset response. The user study further shows higher subjective static stability, willingness to rely, and method-level trust. We will release the implementation with the publication of this paper.
+Zero-shot 6DoF pose estimation can localize a growing range of everyday rigid objects with available 3D models, yet its asynchronous, low-rate outputs vary in quality and remain difficult to use directly as stable object anchors. We present EgoAnchor, an egocentric zero-shot dynamic object anchoring system for passthrough mixed reality. The perception backend produces camera-frame pose observations with visual consistency scores. The runtime restores each observation to a capture-time world-space state and maintains a reliable object state for rendering, turning low-rate estimates into stable, continuous, and recoverable anchors. We implement EgoAnchor on Meta Quest 3 and evaluate it through a controlled benchmark against the platform reference, attribution studies of key design choices, and a within-subject study with 24 participants. EgoAnchor achieves lower static-registration and occlusion-recovery errors and smaller latency-aligned dynamic trajectory residuals, at the cost of higher motion-onset latency. The user study further shows higher perceived stationary stability, willingness to rely on the anchor, and method-level trust. We will release the code upon publication.
 }
 
 \keywords{passthrough mixed reality, dynamic object anchoring, 6DoF pose estimation, runtime systems, user perception}
@@ -46,7 +37,7 @@ Zero-shot 6DoF pose estimation is extending visual localization to a broader ran
   \centering
   \includegraphics[width=\linewidth]{figures/teaser.pdf}
   \label{fig:teaser}
-  \caption{Examples of zero-shot dynamic anchoring of everyday objects with EgoAnchor. (a) Anchored augmentation in the user's egocentric headset view, (b) the raw passthrough view at the same moment, and (c) a third-person view of the user manipulating the object. The right side shows the physical appearance of five everyday objects and their corresponding anchored results. Red object contours and local coordinate axes visualize the estimated 6DoF object anchors. From top to bottom: (1) Meta Quest 3 controller, (2) wireless mouse, (3) game controller, (4) stapler, and (5) earbud case.}
+  \caption{Examples of zero-shot dynamic anchoring with EgoAnchor. (a) Egocentric anchored augmentation, (b) the raw passthrough view at the same moment, and (c) a third-person view of the interaction. The right column shows the physical objects and corresponding anchors for five everyday object categories. Red contours and local coordinate axes indicate the estimated 6DoF anchors. From top to bottom: (1) Meta Quest 3 controller, (2) wireless mouse, (3) game controller, (4) stapler, and (5) earbud case.}
 }
 
 \begin{document}
@@ -55,106 +46,95 @@ Zero-shot 6DoF pose estimation is extending visual localization to a broader ran
 \maketitle
 
 % ===== Motivation =====
-Passthrough mixed reality (PMR) increasingly attaches virtual content to nearby physical objects for object annotation, manipulation guidance, state visualization, and near-object interfaces. Such applications require more than object recognition: they need an object-level spatial reference that continuously updates with the object. When the user turns their head, picks up, rotates, places down, or briefly occludes an object, the virtual content should preserve a consistent six-degree-of-freedom (6DoF) relationship with that object. Conventional spatial anchors are well suited to static environments but cannot represent the object's own motion. Dynamic object anchoring is therefore a foundational system capability for object-centric consumer mixed reality applications~\cite{selfblending2026,gradualreality2024}.
+Passthrough mixed reality (PMR) attaches virtual content to physical objects around the user for object-specific instructions, task guidance, state visualization, and interaction with nearby objects. Such applications require more than object recognition. They need an object-level spatial reference that continuously follows object motion so that virtual content preserves a consistent six-degree-of-freedom (6DoF) relationship when the user turns their head, picks up, rotates, puts down, or briefly occludes the object. Conventional spatial anchors are well suited to static environments but cannot represent motion of the object itself. Dynamic object anchoring is therefore a fundamental system capability for object-centric consumer mixed reality applications~\cite{selfblending2026,gradualreality2024}.
 
 % ===== Limitations of existing approaches =====
-Existing approaches provide partial support at different layers. Platform-native object tracking is typically well integrated with the system, but its supported object scope, model preparation, and runtime behavior are defined by the platform (e.g., Apple Vision Pro and the Meta Quest family). Physical markers and dedicated trackers can provide stable localization, but they require modifying or instrumenting the target object (e.g., HTC Tracker). Recent advances in open-vocabulary detection and segmentation, stereo matching, and model-based zero-shot 6DoF pose estimation have enabled visual localization of a broader range of rigid objects given a 3D model~\cite{groundingdino2025,cutie2024,foundationstereo2025,foundationpose2024,gigapose2024}. However, these methods output an object pose in the camera coordinate frame at a particular image time, rather than a persistent object anchor that an MR application can continuously bind to.
+Existing solutions provide partial support at different levels. Platform-native object tracking is well integrated, but the supported object set, model preparation, and runtime behavior are defined by the platform, as in Vision Pro and the Quest family. Physical markers and dedicated trackers are stable, but require modifying or instrumenting the target object. Recent advances in open-vocabulary detection and segmentation, stereo matching, and model-based zero-shot 6DoF pose estimation allow vision systems to localize a broader range of rigid objects for which 3D models are available~\cite{groundingdino2025,cutie2024,fastfoundationstereo2026,foundationpose2024,gigapose2024}. However, these methods output object poses in the camera coordinate frame at image capture time, rather than persistent object anchors that an MR application can continuously bind content to.
 
 % ===== Core problem =====
-Using such visual poses directly as object anchors exposes several runtime challenges. First, asynchronous inference results are already stale when they return to the application. If they are composed with the headset pose at arrival time, the user's own head motion is incorrectly written into the object's world position. Second, even when the temporal semantics are recovered, formally valid candidates can still be physically incorrect because of occlusion, depth noise, or geometric mismatch, producing visible jumps if accepted. Finally, a low-rate, temporally irregular, and noisy pose stream is insufficient for frame-by-frame rendering. The runtime must also determine which object state time should be used for each render frame and separately define behavior for static stability, motion following, start/stop transitions, brief failures, and reacquisition. Thus, single-frame pose accuracy alone does not define an object anchor that applications can continuously consume.
+Using visual pose estimates directly as object anchors exposes several runtime problems. First, asynchronous results are stale on arrival; composing them with the headset pose at arrival time writes head motion into the object's world-space position. Second, candidates can remain incorrect after temporal alignment because of occlusion, depth noise, or geometric mismatch, causing visible jumps when accepted. Finally, low-rate, irregular, noisy pose streams cannot support frame-by-frame rendering without explicit state selection and behavior for stationary periods, motion, transitions, short observation failures, and reacquisition. Single-frame pose accuracy is therefore insufficient for continuous object anchoring.
 
 % ===== EgoAnchor =====
-We therefore present EgoAnchor, a zero-shot dynamic object anchoring system for passthrough mixed reality, organized into a perception backend and an anchoring runtime. The perception backend combines open-vocabulary detection, temporal segmentation, stereo depth, and zero-shot pose estimation into a continuous perception pipeline. A per-observation Visibility-gated Color-Depth (VCD) score converts current image evidence into candidate reliability. The anchoring runtime then recovers these asynchronous candidates as world-frame observations at image capture time and maintains a reliable object state for rendering, allowing the system to continuously provide object anchors during motion, rest, and brief observation interruptions. For a new target, EgoAnchor requires neither physical markers nor object-specific training; it only requires a 3D model and a short text description. The 3D model may come directly from an existing digital asset or be generated offline from ordinary photographs using existing image-to-3D methods.
+We present EgoAnchor, a zero-shot dynamic object anchoring system for passthrough mixed reality. The perception backend organizes open-vocabulary detection, temporal segmentation, stereo depth, and zero-shot pose estimation into a continuous pipeline, and estimates candidate reliability using a per-observation Visibility-gated Color-Depth (VCD) score. The anchoring runtime restores asynchronous candidates to world-space observations at their capture times and maintains a reliable object state for rendering, allowing the system to continuously produce usable object anchors during motion, stationary periods, and short observation gaps. A new target requires no physical marker or object-specific training, only a 3D model and a short text description. The model can come from an existing digital asset or offline image-to-3D generation.
 
 % ===== Contributions =====
-The main contributions of this work are:
-
-\begin{enumerate}
-  \item \textbf{The EgoAnchor system:} We introduce a zero-shot dynamic object anchoring system for passthrough mixed reality that transforms asynchronous, low-rate, and variable-quality camera-frame visual observations into world-frame object anchors that applications can consume on every render frame.
-
-  \item \textbf{Anchoring-oriented perception and runtime:} We introduce an anchoring-oriented perception and runtime design. VCD converts current image evidence into per-observation reliability, while the runtime recovers asynchronous camera-frame candidates as world-frame observations at capture time and maintains a time-indexed reliable object state, providing continuous and recoverable anchor behavior during motion, rest, and brief failures.
-
-  \item \textbf{System evaluation:} We evaluate the complete system, its key design trade-offs, and their perceptual utility at three levels---system behavior, design attribution, and user perception---through a controlled benchmark with a platform reference and a 24-participant everyday-object study.
+Our main contributions are:
+\begin{enumerate}[leftmargin=1.8em,itemsep=1pt,topsep=2pt]
+  \item \textbf{The EgoAnchor system:} a runtime system that converts asynchronous, low-rate camera-frame zero-shot visual observations of varying quality into world-space dynamic object anchors available at every rendering frame.
+  \item \textbf{Anchoring-aware perception and runtime:} VCD evaluates per-observation reliability, while capture-time alignment, time-indexed state, and stationary anchoring maintain continuous and recoverable runtime output.
+  \item \textbf{System evaluation:} a controlled benchmark against a platform reference, attribution studies of key design choices, and a within-subject study with 24 participants quantify system performance, design trade-offs, and perceptual utility.
 \end{enumerate}
 
 \section{Related Work}\label{sec:related-work}
 
 \subsection{Object Anchoring in MR}
 
-Object anchoring establishes an object-level spatial reference for a physical object so that virtual content can remain attached to it. Early approaches primarily relied on fiducial markers such as AprilTag and ArUco to recover object pose~\cite{apriltag2011,aruco2014}. However, markers require modifying the target object and are difficult to scale to diverse everyday objects in open environments.
+Object anchoring establishes an object-level spatial reference for a physical object so that virtual content can remain attached to it. Early approaches mainly rely on artificial markers such as AprilTag and ArUco to recover object pose~\cite{apriltag2011,aruco2014}. These methods require modifying the target object and are difficult to scale to diverse everyday objects in open environments.
 
-Consumer mixed reality platforms have increasingly provided markerless object recognition and tracking. Azure Object Anchors\footnote{\url{https://learn.microsoft.com/en-us/dynamics365/mixed-reality/guides/pc-app-anchor-object}}, Vuforia Model Targets\footnote{\url{https://developer.vuforia.com/library/vuforia-engine/images-and-objects/model-targets/model-targets/}}, Apple Vision Pro\footnote{\url{https://developer.apple.com/documentation/visionos/implementing-object-tracking-in-your-app}}, and Meta Quest\footnote{\url{https://developers.meta.com/horizon/documentation/native/android/mobile-dynamic-object-tracker/}} can all establish object-level spatial states using device sensing and target models. However, these systems generally depend on pre-generated platform-specific reference objects, offline target configuration, or support restricted by object type and platform APIs. Academic work has further combined headset device tracking, spatial mapping, cameras, and depth sensing for scene-asset localization, known-object registration, and persistent object tracking~\cite{farasin2020hololens,fan2021assettracking,haxthausen2021hololens,doughty2022hmdegopose,pollabauer2023hololens,martingomez2024sttar,trojak2025mixedpose,greene2025markerless,trojak2026markerless,gbot2024,banerjee2025hot3d,kari2025realitypromises}. These studies demonstrate the feasibility of combining headset sensing with object-level tracking, but often still rely on specific objects, task priors, dedicated hardware, or platform configuration, limiting flexible onboarding of diverse everyday objects in open settings~\cite{hurt2025surrealitycv}.
+Consumer mixed reality platforms increasingly provide markerless object recognition and tracking. Azure Object Anchors\footnote{\href{https://learn.microsoft.com/en-us/dynamics365/mixed-reality/guides/pc-app-anchor-object}{Azure Object Anchors}}, Vuforia Model Targets\footnote{\href{https://developer.vuforia.com/library/vuforia-engine/images-and-objects/model-targets/model-targets/}{Vuforia Model Targets}}, Apple Vision Pro\footnote{\href{https://developer.apple.com/documentation/visionos/implementing-object-tracking-in-your-app}{Apple object tracking}}, and Meta Quest\footnote{\href{https://developers.meta.com/horizon/documentation/native/android/mobile-dynamic-object-tracker/}{Meta dynamic object tracking}} can use device sensing and target models to establish object-level spatial states, but typically depend on platform-specific reference objects, offline target configuration, or platform-defined support for object types and runtime interfaces. Academic work further combines headset tracking, spatial mapping, cameras, and depth sensing for scene asset localization, known-object registration, and persistent object tracking~\cite{fan2021assettracking,doughty2022hmdegopose,pollabauer2023hololens,martingomez2024sttar,trojak2025mixedpose,greene2025markerless,trojak2026markerless,gbot2024}. These studies demonstrate the feasibility of combining headset sensing with object-level tracking, but often still rely on specific objects, task priors, dedicated hardware, or platform configuration, which limits flexible support for diverse everyday objects in open environments~\cite{hurt2025surrealitycv}.
 
 \subsection{6DoF Object Pose Estimation and Tracking}
 
-6DoF object pose estimation recovers the spatial pose of a rigid object relative to a camera from visual observations and provides an important perceptual foundation for dynamic object anchoring~\cite{aguirrezabal2026survey}. Research has progressed from traditional methods based on local geometric features to known-instance estimation using RGB-D fusion, dense geometric regression, symmetry modeling, and self-supervised learning~\cite{densefusion2019,epos2020,gdrnet2021,self6d2020}, and has further expanded to unseen-object and zero-shot settings~\cite{gen6d2022,megapose2022,gigapose2024,lin2024sam6d,ornek2024foundpose,moon2024genflow,moon2025coop,foundationpose2024}. Filtering and multi-frame geometric methods can additionally maintain object state over time~\cite{poserbpf2021,bundletrack2021}.
+6DoF object pose estimation recovers the spatial pose of a rigid object relative to the camera and provides a key perception component for dynamic object anchoring~\cite{aguirrezabal2026survey}. Research has progressed from conventional methods based on local geometric features to known-instance estimation using RGB-D fusion, dense geometric regression, symmetry modeling, and self-supervised learning~\cite{densefusion2019,epos2020,gdrnet2021,self6d2020}, and further to unseen-object and zero-shot settings~\cite{gen6d2022,megapose2022,lin2024sam6d,ornek2024foundpose,moon2025coop,foundationpose2024}. Filtering and multi-frame geometric methods can additionally maintain object state over time~\cite{poserbpf2021,bundletrack2021}.
 
-Vision foundation models have further broadened object perception in open settings. Open-vocabulary detection allows targets to be specified through text semantics~\cite{owlvit2022,glip2022,groundingdino2025,yoloe2025}; video object segmentation can maintain object identity across frames~\cite{xmem2022,cutie2024}; and modern stereo matching improves depth recovery and cross-domain generalization in challenging scenes~\cite{raftstereo2021,igevstereo2023,foundationstereo2025}. Together, these capabilities make zero-shot visual localization of everyday objects increasingly practical. However, they primarily address perception and pose estimation in the camera coordinate frame. In MR, visual observations must still be transformed into stable and continuous world-frame object states before they can serve as persistent object anchors.
+Visual foundation models further broaden object perception in open environments. Open-vocabulary detection allows targets to be specified semantically through text~\cite{owlvit2022,glip2022,groundingdino2025,yoloe2025}; video object segmentation maintains object identity across frames~\cite{xmem2022,cutie2024}; and modern stereo matching improves depth recovery and cross-domain generalization in complex scenes~\cite{raftstereo2021,igevstereo2023,fastfoundationstereo2026}. Together, these capabilities make zero-shot visual localization of everyday objects increasingly practical. However, they primarily address perception and pose estimation in the camera coordinate frame. In mixed reality, visual observations must still be converted into stable and continuous world-space object states before they can serve as persistent object anchors.
 
 \subsection{Temporal Alignment in XR}
 
-Perception, tracking, and transmission in XR systems introduce processing latency, such that the state available at render time often corresponds to an observation earlier than the current display time; end-to-end latency can also vary with system load and processing stages~\cite{diluca2010latency,mrloop2022,stauffert2020mtp}. A common approach to this temporal mismatch is \emph{predictive tracking}: historical motion is used to predict or extrapolate an available state to the current or expected display time, reducing dynamic registration error caused by tracking and display latency~\cite{azuma1994improving,laviola2003double,pvt2023,yoon2022headmotion}.
+Perception, tracking, and transmission in XR systems introduce processing latency, so the state available at rendering time often corresponds to an observation earlier than the current display time. End-to-end latency can also vary with system load and processing stages~\cite{diluca2010latency,mrloop2022,stauffert2020mtp}. A common way to address this temporal mismatch between the available state and the target time is \emph{predictive tracking}, which predicts or extrapolates a historical state toward the current or expected display time to reduce dynamic registration error caused by tracking and display latency~\cite{azuma1994improving,laviola2003double,pvt2023,yoon2022headmotion}.
 
-An alternative is to retain timestamps and query or reconstruct the state at a specified historical time. Prior AR systems have used timestamps, adjusted sampling times, and interpolation or extrapolation to temporally register data streams with different delays~\cite{jacobs1997latency}. OpenXR further distinguishes future-state prediction from \emph{history retrieval}: the runtime predicts future states, whereas states at past times are returned from retained historical state estimates\footnote{\url{https://registry.khronos.org/OpenXR/specs/1.1/khr/html/xrspec.html}}. Predictive tracking and history retrieval therefore address different temporal-alignment objectives: the former reduces state lag, whereas the latter reconstructs spatial state at a specified past time.
+Another approach preserves state timestamps and queries or reconstructs the state at a specified historical time. Prior AR systems use timestamps, adjusted sampling times, and interpolation or extrapolation to temporally register data streams with different latencies~\cite{jacobs1997latency}. OpenXR further distinguishes future-state prediction from \emph{history retrieval}: future states are predicted by the runtime, whereas past-time queries return estimates based on retained state history. Predictive tracking therefore reduces state lag, while history retrieval reconstructs spatial state at a specified past time. They represent different temporal alignment strategies.
 
 \section{EgoAnchor System}\label{sec:system}
 
 \subsection{System Overview}
 
-EgoAnchor specifies a target object using a short text description and an offline 3D model, without physical markers or object-specific training. The system comprises a perception backend and an anchoring runtime. The backend continuously forms camera-frame pose observations with reliability scores; the runtime recovers their world coordinates and temporal semantics and maintains the object anchor at render rate.
+EgoAnchor specifies a target using a short text description and an offline 3D model, without physical markers or object-specific training. The perception backend continuously produces camera-frame pose observations with reliability scores. The anchoring runtime recovers their world-space poses with the correct capture-time semantics and maintains object anchors at the rendering rate.
 
-An observation passes through three distinct times between being formed and being consumed by the application:
-\begin{itemize}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
-  \item $t_f$: image \emph{frame} capture time, at which the camera-frame pose observation is valid;
-  \item $t_a$: candidate \emph{arrival} time, at which the observation first becomes available to the runtime;
-  \item $t_r$: \emph{render} time, at which the application requires an anchor.
-\end{itemize}
-
-These times generally do not coincide, and the anchoring runtime must distinguish them explicitly. Throughout the paper, $T_a^b \in \mathrm{SE}(3)$ denotes a rigid transformation from coordinate frame $a$ to frame $b$; $w$, $c$, and $o$ denote the world, the headset's left-eye camera, and the object coordinate frames, respectively. Discrete observations are indexed by frame identifier $f$ or admitted-observation index $j$, e.g., $T_{o,f}^{c}$. State estimates after motion-model fusion are denoted by $\widehat{T}$, anchors committed to the application by $\widetilde{T}$, and the continuous-time state by $\widehat{T}_o^w(t)$. Fig.~\ref{fig:arch} summarizes the responsibilities of the two layers and their data flow.
+The runtime explicitly distinguishes image capture time $t_f$, candidate arrival time $t_a$, and rendering time $t_r$. Throughout the paper, $T_a^b\in\mathrm{SE}(3)$ denotes the rigid transform from coordinate frame $a$ to frame $b$. We use $w$, $c$, and $o$ for the world, left-eye camera, and object coordinate frames, respectively. Filtered states and application outputs are denoted by $\widehat{T}$ and $\widetilde{T}$. Figure~\ref{fig:arch} summarizes system responsibilities and the asynchronous data flow.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/pipeline.pdf}
-  \caption{End-to-end EgoAnchor architecture and asynchronous data flow. The client captures stereo headset images. The perception backend combines the text description and 3D model for semantic initialization, temporal segmentation, stereo geometry reconstruction, and zero-shot 6DoF pose estimation, and computes a per-observation VCD reliability score from visibility (V), color (C), and depth (D) consistency. Candidates arrive at the anchoring runtime as an asynchronous observation stream $o_f$. The runtime recovers each observation in the world frame at image capture time, applies reliability-based admission and state updates, and maintains the time-indexed trajectory $B_j$. On every render frame, an object state is synthesized from the trajectory at the historical query time $t_q$ and switched between motion tracking and static anchoring according to the motion state. Prolonged absence of reliable observations triggers reacquisition.}
-
+  \includegraphics[width=\textwidth]{figures/pipeline_en.pdf}
+  \caption{EgoAnchor architecture and asynchronous data flow. The perception backend takes stereo images, a text description, and a 3D model as input, and performs semantic initialization, temporal segmentation, depth recovery, and zero-shot 6DoF pose estimation. It computes VCD reliability from visibility (V), color (C), and depth (D). After an asynchronous observation $o_f$ reaches the runtime, EgoAnchor recovers its world pose at capture time, applies admission and state updates to form a time-indexed trajectory $B_j$, and queries the trajectory at $t_q$ for each rendering frame. The runtime switches between motion tracking and stationary anchoring, and reacquires the target when reliable observations remain unavailable.}
   \label{fig:arch}
 \end{figure*}
 
 \subsection{Perception Backend}\label{sec:perception}
 
-\textbf{Inputs and objective.} Given stereo headset images $I_f = (I_f^L, I_f^R)$, a text description of the target $Q_o$, and a 3D model $G_o$, the perception backend forms an observation for each processed frame:
+\textbf{Inputs and objective.} Given a headset stereo frame $I_f = (I_f^L, I_f^R)$, a text description $Q_o$ of the target, and a 3D model $G_o$, the perception backend produces an observation for each processed frame:
 \begin{equation}
 o_f = (f, t_f, T_{o,f}^{c}, R_f),
 \label{eq:observation}
 \end{equation}
-where $f$ is the frame identifier assigned by the headset client, $T_{o,f}^{c}$ is the target pose in the left-eye camera coordinate frame at that frame, and $R_f \in [0,1]$ is a per-observation reliability score. The sequence $\{o_f\}$ forms the asynchronous observation stream connecting the two system layers.
+where $f$ is the frame identifier assigned on the headset, $T_{o,f}^{c}$ is the target pose in the left-eye camera frame for that image, and $R_f \in [0,1]$ is a per-observation reliability score. The sequence $\{o_f\}$ forms the asynchronous observation stream between the perception and runtime layers.
 
 \subsubsection{Anchoring-Oriented Perception Pipeline}
 
-The pipeline sequentially establishes target identity, metric depth, and camera-frame pose.
+The pipeline establishes target identity, recovers metric depth, and estimates camera-frame pose in sequence.
 
-\textbf{Semantic initialization.} An open-vocabulary detector~\cite{yoloe2025} takes the left-eye image and text description to obtain an initial target mask:
+\textbf{Semantic initialization.} An open-vocabulary detector~\cite{yoloe2025} obtains the target mask from the left-eye image and text description at initialization frame $f_0$:
 \begin{equation}
 M_{f_0} = \operatorname{Detect}(I_{f_0}^{L}, Q_o),
 \label{eq:detect}
 \end{equation}
-where $f_0$ is the \emph{initialization frame} of the current tracking segment, defined as the first frame in which both a valid mask and sufficient depth coverage are available. During re-registration, the pipeline returns to this state and assigns a new $f_0$. Text conditioning removes dependence on a predefined class set, so onboarding a new object does not require target-specific retraining.
+where $f_0$ is the first frame that provides both a valid mask and sufficient depth coverage. A new $f_0$ is selected upon re-registration.
 
-\textbf{Temporal segmentation.} The initial mask $M_{f_0}$ initializes the temporal memory of a video object segmenter~\cite{cutie2024}. The segmenter then propagates the mask frame by frame while updating its memory $H_f$:
+\textbf{Temporal segmentation.} The initial mask initializes a video object segmenter~\cite{cutie2024}, which then propagates target identity frame by frame:
 \begin{equation}
 (M_f, H_f) = \operatorname{Seg}(I_f^{L}, H_{f-1}), \qquad f > f_0,
 \label{eq:seg}
 \end{equation}
-where $H_f$ is the target-appearance memory aggregated from processed frames. This memory preserves target identity under viewpoint changes and partial occlusion, allowing pose estimation to operate on the same temporally tracked object rather than on independently detected objects in each frame.
+where $H_f$ is the temporal appearance memory that keeps pose estimation associated with the same target instance.
 
-\textbf{Stereo depth recovery.} A stereo matcher predicts disparity $d_f$ from the rectified image pair, after which metric depth is recovered using the stereo baseline $b$ and pixel focal length $f_x$:
+\textbf{Stereo depth recovery.} A stereo matcher~\cite{fastfoundationstereo2026} predicts disparity from rectified stereo images and converts it to metric depth:
 \begin{equation}
-d_f = \operatorname{Stereo}(I_f^{L}, I_f^{R}), \qquad Z_f = \frac{b f_x}{d_f}.
+d_f = \operatorname{Stereo}(I_f^{L}, I_f^{R}), \qquad Z_f = \frac{b f_x}{d_f},
 \label{eq:depth}
 \end{equation}
-Metric depth gives subsequent pose estimation a scale consistent with the physical scene, enabling the resulting anchor to be used directly for spatial registration in MR.
+where $b$ and $f_x$ are the stereo baseline and focal length in pixels, respectively.
 
-\textbf{Zero-shot pose estimation.} A model-based pose estimator~\cite{foundationpose2024} recovers the camera-frame pose from the mask, depth, and target model:
+\textbf{Zero-shot pose estimation.} A model-based estimator~\cite{foundationpose2024} recovers the camera-frame pose from the mask, depth map, and 3D model:
 \begin{equation}
 T_{o,f}^{c} =
 \begin{cases}
@@ -163,46 +143,46 @@ T_{o,f}^{c} =
 \end{cases}
 \label{eq:pose}
 \end{equation}
-where $f^-$ is the most recent processed frame. Registration searches over candidate poses and refines the pose that best matches the observation. Because it is computationally expensive, it is performed only at $f_0$ and during re-registration. Tracking instead uses the previous-frame pose as the initialization for local refinement, preserving continuity between adjacent observations.
+Registration runs only during initialization and reacquisition, while subsequent frames use local tracking initialized from the previous estimate.
 
 \subsubsection{Per-Observation VCD Scoring}
 
-The geometric optimization of zero-shot pose estimation can converge to local optima, yielding candidates that are formally valid but inconsistent with the current image observation. VCD limits such candidates from entering the anchor trajectory. Following the render--observe comparison paradigm~\cite{deepim2018,latentfusion2020,focalpose2022}, VCD compares a rendering of the model under the candidate pose against the observation from the same frame and scores each candidate using three sources of evidence: visibility (V), color (C), and depth (D).
+Zero-shot pose optimization can produce candidates that are inconsistent with the current observation. VCD follows the render-and-compare paradigm~\cite{deepim2018,latentfusion2020,focalpose2022} and evaluates each candidate using visibility (V), color (C), and depth (D) evidence.
 
-\textbf{Visibility gating.} Let $M_f^{\mathrm{rnd}}$ denote the rendered mask under the candidate pose and $\operatorname{Erode}$ morphological erosion. The common support region, its eroded core, and visibility are defined as
+\textbf{Visibility gating.} Let $M_f^{\mathrm{rnd}}$ denote the rendered mask under the candidate pose. We define
 \begin{equation}
 \Omega_f = M_f \cap M_f^{\mathrm{rnd}}, \quad \Omega_f^{\circ} = \operatorname{Erode}(\Omega_f), \quad V_f = \frac{|\Omega_f|}{|M_f^{\mathrm{rnd}}|},
 \label{eq:visibility}
 \end{equation}
-where $V_f$ is the fraction of the rendered projection supported by the observed mask. Both occlusion and projection misalignment reduce this value. Erosion contracts the support boundary so that color and depth consistency are computed only within $\Omega_f^{\circ}$, excluding mixed pixels along mask boundaries.
+where $V_f$ measures the fraction of the rendered projection supported by the observation. The interior region $\Omega_f^\circ$ excludes mixed pixels near object boundaries.
 
-\textbf{Color and depth consistency.} Color consistency $S_f^C$ is the zero-mean normalized cross-correlation between the two images in LAB space, with the luminance channel downweighted so that chromatic structure rather than illumination intensity dominates the score. Depth consistency contains two complementary terms. The absolute term $S_f^{D,\mathrm{abs}}$ is a convex combination of an inlier ratio under a distance-adaptive tolerance and a normalized residual; the tolerance scales proportionally with target distance to reflect stereo-depth uncertainty. The structural term $S_f^{D,\mathrm{str}}$ computes cross-correlation after median--interquartile-range normalization, comparing depth shape while remaining insensitive to global depth bias. The two terms are fused as
+\textbf{Color and depth consistency.} The color consistency score $S_f^C$ uses zero-mean normalized cross-correlation in LAB space with a lower weight on the luminance channel. Depth consistency combines a distance-adaptive absolute residual term $S_f^{D,\mathrm{abs}}$ with a structural term $S_f^{D,\mathrm{str}}$ that is less sensitive to global depth bias:
 \begin{equation}
 S_f^D = (1-\alpha_f)\,S_f^{D,\mathrm{abs}} + \alpha_f\,S_f^{D,\mathrm{str}},
 \label{eq:depth-score}
 \end{equation}
-where $\alpha_f$ increases with the interquartile range of rendered depth and is upper-bounded. Flat targets therefore rely primarily on absolute residuals, whereas structural constraints contribute more when the target exhibits substantial depth variation.
+where $\alpha_f$ increases with the target's depth variation. Nearly planar targets therefore rely mainly on absolute depth, whereas targets with more pronounced geometric variation receive a stronger structural constraint.
 
-\textbf{Evidence aggregation.} Both evidence modalities are not necessarily valid in every frame. The color variance within the core region approaches zero for uniformly colored targets, while depth evidence becomes invalid when valid depth coverage is too low. Let $K_f \subseteq \{C, D\}$ denote the set of valid modalities in frame $f$. Then
+\textbf{Evidence aggregation.} Let $K_f\subseteq\{C,D\}$ denote the set of valid modalities for the current frame. We compute
 \begin{equation}
 R_f = V_f \cdot
 \begin{cases}
 \exp\!\left(\dfrac{\sum_{k \in K_f} w_k \ln \max(S_f^{k}, \epsilon)}{\sum_{k \in K_f} w_k}\right), & K_f \neq \varnothing, \\[6pt]
-1, & K_f = \varnothing,
+1, & K_f = \varnothing.
 \end{cases}
 \label{eq:vcd}
 \end{equation}
-where $w_k$ is the modality weight and $\epsilon$ is the lower bound inside the logarithm. The geometric mean requires all available evidence to jointly support the candidate. Invalid modalities are excluded rather than counted as low scores; if both color and depth evidence are unavailable, the score falls back to visibility $V_f$. Visibility multiplicatively gates the full score, so occlusion or projection misalignment directly reduces candidate reliability. A sustained absence of reliable candidates constitutes an observation interruption and is handled by the runtime validity rules.
+Here, $w_k$ is the modality weight and $\epsilon$ is the lower bound inside the logarithm. Invalid modalities do not participate in aggregation. If both color and depth are unavailable, the score reduces to $V_f$. Multiplicative visibility gating directly suppresses the reliability of candidates under occlusion or projection mismatch.
 
 \subsection{Anchoring Runtime}\label{sec:anchoring}
 
-The anchoring runtime converts low-rate, asynchronously arriving visual candidates into an object state synchronized with display refresh. When a candidate arrives, observation correction recovers its world-frame semantics at capture time and updates a time-indexed trajectory (Sec.~\ref{sec:obs-update}). On each render frame, anchor synthesis produces an object anchor from this trajectory, while static anchoring and validity management further adjust the output according to motion state and observational support (Secs.~\ref{sec:frame-output}--\ref{sec:validity}). These paths are triggered separately by candidate-arrival events and render frames, decoupling anchor output frequency from the perception arrival rate and its variability.
+The anchoring runtime converts a low-rate asynchronous candidate stream into object states synchronized with the display refresh. When a candidate arrives, it restores the world-space pose at capture time and updates the trajectory. At each rendering frame, it synthesizes an anchor from the trajectory and manages stationary anchoring and validity according to object motion and observation support. Separating candidate events from rendering events makes the output rate independent of perception arrival rate.
 
 \subsubsection{Observation Correction}\label{sec:obs-update}
 
-The perception backend outputs camera-frame pose candidates tied to capture frames. Their world-frame representation has not yet been recovered, and candidate reliability and temporal order do not always satisfy anchor-update requirements. The runtime therefore first recovers each candidate's world-frame pose at capture time, applies reliability and temporal admission, and then uses admitted observations to update the state estimate and time-indexed trajectory.
+The runtime first restores each candidate to its world-space pose at capture time, then applies reliability and temporal admission before updating the state trajectory.
 
-\textbf{Observation alignment.} The visual pose $T_{o,f}^{c}$ describes the geometry between the target and camera at the \emph{capture time}. The observation is valid at $t_f$ but returns later at $t_a$; any head motion over $[t_f,t_a]$ would be incorrectly written into the object's world position if the candidate were composed using the later camera pose. At capture time, the runtime therefore records the camera-to-world transform keyed by frame identifier $f$. When the candidate returns, the runtime looks up $T_{c,f}^{w}$ using $f$ and transforms the pose into the world frame:
+\textbf{Observation alignment.} Candidate $T_{o,f}^{c}$ is valid at $t_f$ but arrives at $t_a$. If the runtime uses the camera pose at arrival time, head motion during the interval is written into the object's world-space position. EgoAnchor caches $T_{c,f}^{w}$ at capture time using frame identifier $f$, and computes the following when the candidate returns:
 \begin{equation}
 T_{o,f}^{w} = T_{c,f}^{w}
 \begin{bmatrix}
@@ -220,355 +200,328 @@ T_{o,f}^{c}
 \end{bmatrix},
 \label{eq:capture-alignment}
 \end{equation}
-where the left matrix is the fixed reflection along the $y$ axis between the vision convention ($y$ downward) and rendering convention ($y$ upward); the right matrix combines its inverse with a fixed $180^\circ$ rotation of the anchor's local coordinate frame about the $z$ axis. Pairing by frame identifier directly associates each candidate with the camera-to-world pose at its capture time.
+where the two fixed matrices convert between the vision and rendering coordinate conventions and between the respective local object-axis conventions.
 
-\textbf{Reliability-based admission.} A formally valid pose can still be geometrically incorrect. Admitted observations are indexed in increasing capture-time order. For the $j$th admitted observation, its capture time, world-frame pose, and reliability are denoted $t_j$, $T_{o,j}^{w}$, and $R_j$. The first candidate can establish the trajectory once it satisfies the reliability threshold; when $j$ observations have already been admitted, a new candidate must also be later than $t_j$:
+\textbf{Reliable admission.} Let the $j$th accepted observation be $(t_j,T_{o,j}^{w},R_j)$. The first candidate establishes a trajectory once it passes the reliability threshold. Each subsequent candidate must additionally have a later capture time:
 \begin{equation}
-R_f \geq R_{\min}, \qquad t_f > t_j \quad (j \geq 1),
+R_f \geq R_{\min}, \qquad t_f > t_j \quad (j \geq 1).
 \label{eq:admission}
 \end{equation}
-where the two conditions reject low-consistency and out-of-order candidates, respectively. Rejected candidates neither enter the trajectory nor update the state, preventing them from contaminating subsequent queries.
+Rejected candidates do not update the state.
 
-\textbf{State update.} Each admitted observation triggers a measurement update. Translation and rotation are filtered in separate channels using constant-velocity Kalman filters~\cite{kalman1960new}, producing the state estimate $\widehat{T}_{o,j}^{w}$. Because each estimate corresponds one-to-one with an admitted observation, the trajectory after the $j$th admitted observation is indexed by capture time as
+\textbf{State update.} Each accepted observation triggers constant-velocity Kalman updates for translation and rotation~\cite{kalman1960new}, producing $\widehat{T}_{o,j}^{w}$ and the time-indexed trajectory
 \begin{equation}
 B_j = \{(t_i, \widehat{T}_{o,i}^{w})\}_{i=1}^{j}.
 \label{eq:trajectory}
 \end{equation}
-Each pair $(t_i, \widehat{T}_{o,i}^{w})$ is a \emph{trajectory node}, i.e., the time--pose pair of an admitted state. The same update also refreshes the motion and reliability evidence required by static anchoring.
+The same update also refreshes the motion and reliability evidence used by stationary anchoring.
 
 \subsubsection{Anchor Synthesis}\label{sec:frame-output}
 
-The trajectory $B_j$ contains low-rate and temporally irregular discrete states, whereas rendering requires a well-defined anchor on every frame. Anchor synthesis first determines a historical query time $t_q$, then interpolates between adjacent trajectory nodes to recover the state at that time, and finally selects the output mode according to the object's motion state.
+Trajectory $B_j$ is low-rate and irregular, whereas rendering requires an object state every frame. The runtime first selects a historical query time $t_q$ and then interpolates between adjacent trajectory nodes.
 
-\textbf{Historical query time.} The latest trajectory-node time $t_j$ precedes the current render time $t_r$. Their difference defines the state age $\ell_r$, which varies with perception processing time and candidate intervals. The runtime uses this age to choose a delayed query time:
+\textbf{History query.} The state age of the latest node at rendering time $t_r$ is $\ell_r=t_r-t_j$. The runtime uses its asymmetric exponential estimate $\bar{\ell}_r$ to set the query lag:
 \begin{equation}
-\ell_r = t_r - t_j, \qquad \Delta_r = \max(\Delta_{\min},\, s\,\bar{\ell}_r), \qquad t_q = t_r - \Delta_r,
+\ell_r = t_r - t_j, \qquad \Delta_r = \max(\Delta_{\min},\, s\,\bar{\ell}_r), \qquad t_q = t_r - \Delta_r.
 \label{eq:target-time}
 \end{equation}
-where $\bar{\ell}_r$ is an asymmetric exponential estimate of $\ell_r$, following increases more quickly and decreases more slowly. The scale $s>1$ and lower bound $\Delta_{\min}$ jointly determine the query lag so that $t_q$ is likely to fall between two trajectory nodes that have already arrived.
+This strategy keeps $t_q$ inside the interval between two available trajectory nodes whenever possible.
 
-\textbf{Historical state interpolation.} Let $t_i \leq t_q \leq t_{i+1}$. The tracking pose at the query time is
+\textbf{State interpolation.} If $t_i\leq t_q\leq t_{i+1}$,
 \begin{equation}
 \lambda_q = \frac{t_q - t_i}{t_{i+1} - t_i}, \qquad \widehat{T}_o^w(t_q) = \operatorname{Interp}(\widehat{T}_{o,i}^{w}, \widehat{T}_{o,i+1}^{w}; \lambda_q),
 \label{eq:history-interp}
 \end{equation}
-where $\operatorname{Interp}$ performs linear interpolation for position and quaternion spherical linear interpolation (SLERP) for rotation. When the query time lies within the trajectory range, only adjacent arrived nodes are used. If it lies outside either end of the trajectory, the nearest endpoint is held.
+where position uses linear interpolation and rotation uses SLERP. If the query falls outside the trajectory range, the runtime holds the nearest endpoint.
 
-\textbf{Output modes.} Historical interpolation still preserves residual fluctuations caused by observation noise during static periods. EgoAnchor therefore switches explicitly between tracking and locking according to motion state:
+\textbf{Output mode.} To suppress residual variation while the object is stationary, EgoAnchor switches between tracking and locking:
 \begin{equation}
 \widetilde{T}_o^w(t_r) = \begin{cases}
 \widehat{T}_o^w(t_q), & \text{tracking}, \\
-T_{o,\mathrm{lock}}^w, & \text{locking},
+T_{o,\mathrm{lock}}^w, & \text{locked}.
 \end{cases}
 \label{eq:staticlock}
 \end{equation}
-where the locked pose $T_{o,\mathrm{lock}}^w$ and release evidence are maintained during observation correction. Mode switches are committed at render-frame boundaries to avoid mixing two output modes within a single frame.
 
-\subsubsection{Static Anchoring}\label{sec:staticlock}
+\subsubsection{Stationary Anchoring}\label{sec:staticlock}
 
-Static anchoring (StaticLock) separates the static state from the continuous trajectory as an independent output mode. After sustained low-motion evidence confirms that the target is stationary, the anchor switches to a locked pose and exits this mode once motion or reliability evidence satisfies a release condition. StaticLock comprises entry detection, constrained updates while locked, and release criteria.
+StaticLock switches the output to a locked pose under sustained low motion and reliable observations, and releases the lock when true motion or reduced reliability is detected.
 
-\textbf{Entry.} The pose change between two consecutive admitted observations divided by their time interval yields the instantaneous translational and rotational rates. Exponential smoothing produces $\bar{v}_j$ and $\bar{\omega}_j$, which are normalized by their respective thresholds to form a dimensionless motion statistic. Together with the lock-entry reliability threshold $R_{\mathrm{lock}}$, the entry condition is
+\textbf{Entry.} From adjacent accepted observations, EgoAnchor computes and exponentially smooths translational and rotational rates $\bar v_j$ and $\bar\omega_j$, and defines
 \begin{equation}
-\sigma_j = \max\left(\frac{\bar{v}_j}{v_{\mathrm{th}}},\ \frac{\bar{\omega}_j}{\omega_{\mathrm{th}}}\right), \qquad \sigma_j \leq 1, \qquad R_j \geq R_{\mathrm{lock}},
+\sigma_j = \max\left(\frac{\bar{v}_j}{v_{\mathrm{th}}},\ \frac{\bar{\omega}_j}{\omega_{\mathrm{th}}}\right), \qquad \sigma_j \leq 1, \qquad R_j \geq R_{\mathrm{lock}}.
 \label{eq:lock-entry}
 \end{equation}
-where normalization places translation and rotation on a common scale. Rates are computed from admitted observations rather than filtered states to avoid underestimating instantaneous changes at motion onset through state smoothing.
+If these conditions persist for $\tau_{\mathrm{dwell}}$, the runtime initializes $T_{o,\mathrm{lock}}^w$ from the current tracking pose. It also freezes a low-pass observation consensus as reference $T_{o,\mathrm{ref}}^w$ for measuring accumulated drift.
 
-After these conditions persist for a dwell time $\tau_{\mathrm{dwell}}$, the system initializes the locked pose $T_{o,\mathrm{lock}}^w$ on the next render frame using the current tracking pose $\widehat{T}_o^w(t_q)$, preserving anchor continuity at the mode switch. The runtime separately maintains a low-pass \emph{observation consensus} that continuously follows admitted observations. Upon entering the lock, its current value is frozen as the \emph{anchor reference} $T_{o,\mathrm{ref}}^w$; accumulated drift is subsequently measured as the offset of the observation consensus relative to this reference. Keeping the anchor reference separate from the locked pose ensures that accumulated drift is always measured against the reference state at lock entry.
-
-\textbf{Updates while locked.} While locked, small observation changes can still slowly correct the locked pose, whereas larger offsets are retained as release evidence. Let $d_{p,j}$ and $d_{\theta,j}$ be the translational and rotational residuals between the admitted observation $T_{o,j}^{w}$ and the current locked pose, and let $d_{\mathrm{db}}$ and $\theta_{\mathrm{db}}$ be the corresponding deadband radii. Defining $\delta_j = \max(d_{p,j}/d_{\mathrm{db}},\ d_{\theta,j}/\theta_{\mathrm{db}})$, the locked pose is updated as
+\textbf{Locked-state update.} Let $d_{p,j}$ and $d_{\theta,j}$ be the translational and rotational residuals between the current observation and locked pose. With deadbands $d_{\mathrm{db}}$ and $\theta_{\mathrm{db}}$, define $\delta_j=\max(d_{p,j}/d_{\mathrm{db}},d_{\theta,j}/\theta_{\mathrm{db}})$. The locked pose is updated as
 \begin{equation}
 T_{o,\mathrm{lock},j}^w =
 \begin{cases}
 \operatorname{Interp}\left(T_{o,\mathrm{lock},j-1}^w, T_{o,j}^{w};\, g_j\right), & \delta_j \leq 1, \\
-T_{o,\mathrm{lock},j-1}^w, & \delta_j > 1
+T_{o,\mathrm{lock},j-1}^w, & \delta_j > 1.
 \end{cases}
 \label{eq:lock-update}
 \end{equation}
-Residuals inside the deadband are slowly absorbed with gain $g_j$; outside the deadband, updates stop and the residual contributes to release evidence. The locked pose can therefore absorb small long-term changes while suppressing observation-to-observation fluctuations. The gain $g_j$ increases with observation reliability and decreases with head-motion intensity.
+Changes within the deadband are slowly absorbed using the reliability-dependent gain $g_j$, while offsets outside the deadband are retained as evidence for release.
 
-\textbf{Release.} The lock must be released promptly when the target resumes genuine motion or the observation becomes unreliable. The runtime maintains four complementary evidence types in parallel; if any is satisfied, the system returns to tracking mode on the next render frame:
-\begin{itemize}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
-  \item \emph{Persistent residual:} a leaky cumulative sum of residuals outside the deadband reaches its limit, indicating sustained deviation of admitted observations from the locked pose. Leakage gradually forgets isolated noise spikes, so only persistent offsets can accumulate to the threshold.
-  \item \emph{Accumulated drift:} the offset of the observation consensus relative to the anchor reference $T_{o,\mathrm{ref}}^w$ exceeds its bound, preventing slow genuine displacement from remaining permanently locked.
-  \item \emph{Explicit motion:} $\sigma_j$ exceeds a release multiplier for a sustained interval, addressing cases in which motion has begun but displacement remains small.
-  \item \emph{Reliability degradation:} reliability remains below a release threshold for a sustained interval.
-\end{itemize}
-The first two criteria are based on pose displacement, while the latter two complement them with motion rate and observation reliability. Motion-based criteria are relaxed as head-motion intensity increases to reduce false motion detection caused by viewpoint-induced observation slippage; the reliability criterion remains unchanged. After release, the anchor transitions briefly back to the tracking trajectory.
+\textbf{Release.} The system returns to tracking on the next rendering frame when any of the following persists: residuals outside the deadband, accumulated drift relative to $T_{o,\mathrm{ref}}^w$, clear motion, or reduced reliability. The motion criterion is moderately relaxed under stronger head motion to reduce false releases caused by viewpoint changes.
 
-\subsubsection{Validity and Reacquisition}\label{sec:validity}
-
-The anchor output carries a \emph{validity} label indicating whether the current state remains supported by recent reliable observations. While admitted observations satisfying the reliable-support threshold continue to arrive, the anchor is \emph{valid}. After a short interval without new reliable support, it becomes \emph{uncertain}: the runtime first continues querying among existing trajectory nodes and, once the query moves beyond the available range, holds the last trusted pose. If the unsupported interval exceeds its limit, the anchor is marked \emph{lost} and is no longer delivered.
-
-When the anchor is marked lost, or when candidates continue arriving but remain unreliable for too long, the runtime requests reacquisition. The perception backend switches from tracking back to registration and assigns a new initialization frame $f_0$. Reacquisition also resets the state estimate, time-indexed trajectory, and lock state. The first admitted observation after recovery establishes a new tracking segment, avoiding trajectory connections across the failure interval.
-
-\subsection{Runtime Flow}\label{sec:runtime-flow}
-
-The online execution of EgoAnchor can be summarized by four event types:
-\begin{enumerate}[leftmargin=1.8em,itemsep=1pt,topsep=2pt]
-  \item \textbf{Captured frame:} the perception backend forms the target mask, metric depth, and zero-shot pose candidate from the stereo images and computes a per-observation VCD score;
-  \item \textbf{Candidate arrival:} the runtime looks up the camera pose at capture time by frame identifier, recovers the candidate in the world frame, and, after reliability and temporal admission, updates the state estimate, trajectory nodes, and static-anchoring evidence;
-  \item \textbf{Render frame:} the runtime determines the historical query time, queries and interpolates the object state from the trajectory, then outputs the anchor in tracking or locking mode together with its validity label;
-  \item \textbf{Failure feedback:} prolonged absence of reliable support or persistently low candidate reliability triggers reacquisition, after which output resumes from a new tracking segment.
-\end{enumerate}
+\textbf{Validity and reacquisition.}\label{sec:validity}
+The anchor is marked valid, uncertain, or lost according to support from recent reliable observations. During a short observation gap, the runtime continues querying the trajectory and holds the last trusted pose when necessary. It stops delivering the anchor after a timeout. If the anchor is lost or candidates remain unreliable, the backend re-registers the target and resets the state, trajectory, and lock. A new tracking segment begins with the first newly accepted observation.
 
 \section{System Implementation}\label{sec:implementation}
 
-The EgoAnchor perception backend and anchoring runtime communicate over a local-area network. The perception backend runs on a GPU workstation equipped with an NVIDIA GeForce RTX 5090 and is implemented with Python 3.14.6, PyTorch 2.12.1, CUDA 13.2, and TensorRT 11.1. The runtime is developed with Unity 6000.3.11f1 and Meta XR SDK 203.0.0 and, in our experiments, runs through Meta Quest Link on a host PC with an Intel Core i9-14900K CPU and 32~GB of memory. A Meta Quest 3 performs stereo image capture, device-pose tracking, and display.
+The two EgoAnchor layers communicate over a local network. The perception backend runs on a workstation with an NVIDIA RTX 5090 and uses Python 3.14.6, PyTorch 2.12.1, CUDA 13.2, and TensorRT 11.1. The runtime is implemented in Unity 6000.3.11f1 with Meta XR SDK 203.0.0 and runs through Quest Link on a host with an Intel i9-14900K and 32~GB of RAM. Quest 3 provides stereo capture, device tracking, and display.
 
 \textbf{Perception backend.}
-The backend uses YOLOE-26 for open-vocabulary initialization~\cite{yoloe2025}, Cutie for propagating the target mask across frames~\cite{cutie2024}, and Fast-FoundationStereo for metric depth recovery~\cite{foundationstereo2025}; TensorRT inference uses FP16 precision and four iterations. FoundationPose performs zero-shot 6DoF registration and tracking from the target 3D model~\cite{foundationpose2024}, using five and two refinement iterations for registration and tracking, respectively. VCD renders the target model using nvdiffrast~\cite{nvdiffrast2020} and compares color, depth, and mask consistency. On the RTX 5090 configuration, median server processing time during tracking is 75.44~ms and P95 is 88.47~ms, corresponding to a median candidate arrival rate of 13.25~Hz. All quantitative results in this paper were collected with this configuration.
+The backend uses YOLOE-26 for open-vocabulary target initialization~\cite{yoloe2025}, Cutie for mask propagation~\cite{cutie2024}, Fast-FoundationStereo for metric depth recovery~\cite{fastfoundationstereo2026}, and FoundationPose for zero-shot 6DoF registration and tracking~\cite{foundationpose2024}. VCD renders the model with nvdiffrast~\cite{nvdiffrast2020}. On the RTX 5090, the tracking-stage server processing time has a median/P95 of 75.44/88.47~ms, and the candidate arrival rate has a median of 13.25~Hz. All quantitative results use this configuration.
 
 \textbf{Anchoring runtime.}
-The runtime is implemented in C\# and uses the Meta Passthrough Camera API to acquire stereo images and camera calibration. Camera-pose history is stored in a bounded cache keyed by frame identifier. Key runtime parameters are as follows: observation admission threshold $R_{\min}=0.2$; reliable-support threshold 0.5; uncertain and lost timeouts of 450~ms and 1.0~s, respectively; reacquisition is triggered when candidate reliability remains below 0.45 for 600~ms; historical querying uses $s=1.15$ and $\Delta_{\min}=250$~ms. All remaining thresholds and gains for static anchoring are held fixed across the three experiments.
+The runtime is implemented in C\# and obtains stereo images and camera calibration through the Meta Passthrough Camera API. It caches camera-pose history by frame identifier. All runtime thresholds and gains remain fixed across the three experiments. The complete parameter configuration is provided with the code and supplementary material.
 
 \textbf{Communication.}
-Stereo images and camera calibration are transmitted with ZeroMQ/Protobuf using a latest-frame-first policy, while poses, states, and control messages are transmitted with NATS Core/Protobuf. Images and returned observations retain the same frame identifier, enabling the runtime to recover the corresponding camera pose at capture time.
+Stereo images and camera calibration are transmitted through ZeroMQ/Protobuf with a latest-frame-first policy, while pose, state, and control messages use NATS Core/Protobuf. Images and returned observations preserve the same frame identifiers so that the runtime can recover the camera pose at the corresponding capture time.
 
 \section{Evaluation Design}\label{sec:evaluation}
-We evaluate EgoAnchor through three complementary experiments. Experiment 1 compares the complete system with three runtime configurations under controlled conditions to characterize anchor behavior during static, dynamic, and state-transition scenarios. Experiment 2 further decomposes the contributions of the temporal and coordinate interpretation of observations, reliability control, static-state management, and render-time temporal selection. Experiment 3 conducts a within-subject user study with everyday rigid objects to examine whether system-level differences translate into perceived anchoring quality, trust, and willingness to rely on the system.
 
-The 3D models of everyday objects used in the experiments were generated from ordinary smartphone photographs with Hunyuan3D. The Meta Quest 3 controller model was taken from the official development package. Generated models were simplified and their textures rebaked before being used as offline system assets.
+We evaluate EgoAnchor through three complementary experiments. Experiment 1 compares the static, dynamic, and transition behavior of four runtime configurations under controlled conditions. Experiment 2 isolates the contributions of temporal/coordinate interpretation, reliability control, stationary-state management, and rendering-time alignment. Experiment 3 conducts a within-subject study with everyday rigid objects to assess perceived anchoring quality, trust, and willingness to rely on the anchor.
 
-\subsection{Experiment 1: Application-Side Anchor Behavior}\label{sec:exp1-design}
+We generated 3D models of the everyday objects from smartphone photographs using Hunyuan3D, followed by mesh simplification and texture rebaking. The Quest 3 controller uses the official asset.
+
+\subsection{Experiment 1: Application-Level Anchor Behavior}\label{sec:exp1-design}
 
 \textbf{Reference and scenarios.}
-We use a Quest 3 controller as the visual tracking target and the controller's 6DoF pose reported by the platform SDK as a synchronized reference. In practical use, an object anchor must handle observer motion, target rest, target motion, occlusion, and start/stop transitions. We therefore designed four capture scenarios:
-\begin{enumerate}
-  \item \textbf{Static target with head motion:} the target remains stationary while the observer actively changes viewpoint, testing whether observer motion leaks into the anchor's world-frame pose and evaluating frame-to-frame stability during rest;
-  \item \textbf{Start/stop motion:} the target repeatedly transitions between rest and 6DoF motion, testing entry into and release from static anchoring as well as motion-onset response;
-  \item \textbf{Sustained motion:} continuous translation and continuous rotation sequences are captured separately to evaluate response lag, trajectory fidelity, and residual jitter during motion;
-  \item \textbf{Occlusion recovery:} the target is fully occluded and then revealed again, testing anchor behavior during brief observation failure and reacquisition.
-\end{enumerate}
+We use a Quest 3 controller as the visual tracking target and the synchronized 6DoF pose from the platform SDK as the reference. Four capture scenarios cover the main runtime states of object anchoring: active head motion while the target remains stationary, transitions between stationary and 6DoF motion, continuous translation and rotation, and reappearance after complete occlusion. These scenarios evaluate static stability, transition response, dynamic following, and occlusion recovery, respectively.
 
-\textbf{Comparison conditions.}
-Experiment 1 compares four runtime configurations, all of which receive the same raw candidate stream. \textbf{Arrival} and \textbf{Capture} directly consume each returned candidate and hold it until the next candidate arrives; they differ only in the temporal semantics used for camera-to-world composition, with Arrival using the candidate-arrival time and Capture using the image-capture time. \textbf{One-Euro} serves as the primary runtime smoothing baseline~\cite{casiez2012oneeuro}. Designed for noisy interactive input, the One-Euro filter uses velocity-adaptive low-pass filtering to trade off jitter suppression against response lag, with low computational overhead and few parameters. This trade-off directly matches the stability--responsiveness problem in dynamic object anchoring. In our implementation, One-Euro receives the same admitted observations as EgoAnchor, maintains a time-indexed trajectory using One-Euro filtering, and synthesizes a frame-by-frame anchor from that trajectory at render time, but does not enable static anchoring. \textbf{EgoAnchor} denotes the complete system.
+\textbf{Conditions.}
+All four configurations receive the same raw candidate stream. \textbf{Arrival} and \textbf{Capture} directly hold the latest candidate and differ only in whether world-space composition uses the camera pose at candidate arrival time or image capture time. \textbf{One-Euro}~\cite{casiez2012oneeuro} serves as an adaptive smoothing baseline. It maintains the same time-indexed trajectory from accepted observations as EgoAnchor and produces per-frame output, but disables stationary anchoring. Designed for noisy interactive input, One-Euro uses velocity-adaptive low-pass filtering to trade off jitter suppression against response lag, with low computational cost and few parameters. \textbf{EgoAnchor} is the full system.
 
-\textbf{Evaluation metrics.}
-The four scenarios map to three evaluation aspects and nine metrics:
-
-\begin{itemize}[leftmargin=1.6em,itemsep=2pt,topsep=2pt]
-  \item \textbf{Static registration:} evaluates the spatial relationship between the anchor and the physical object while the target is stationary. \emph{Head-motion leakage} measures relative pose changes induced by observer motion; \emph{registration error} measures spatial deviation of the anchor from the platform reference; and \emph{static jitter} measures visible frame-to-frame fluctuation using adjacent-frame increments.
-  \item \textbf{Dynamic following:} evaluates how the anchor follows the physical object's motion. \emph{Effective latency} is the temporal offset that minimizes the residual between the anchor output and the reference trajectory shifted backward by that latency. \emph{Latency-aligned root-mean-square error} (LA-RMSE) is this minimum residual. \emph{Current-time root-mean-square error} (CT-RMSE) is the actual registration error at the current render time without latency alignment. \emph{Residual jitter} measures high-frequency fluctuation in the aligned residual.
-  \item \textbf{Transition response:} evaluates behavior during observation interruption and motion-state transitions. \emph{Occlusion error} is measured from occlusion onset until stable recovery. \emph{Motion-onset latency} is the time difference between the onset of reference-object motion and the beginning of anchor-output response.
-\end{itemize}
-
-Except for motion-onset latency, which is a scalar across channels, all metrics are reported separately for translation and rotation; aggregation details are given in the corresponding table captions.
+\textbf{Metrics.}
+We organize nine metrics into three groups. \textbf{Static registration} includes head-motion leakage, which measures relative changes induced by observer motion; registration error, which measures spatial deviation from the platform reference; and stationary jitter, which measures frame-to-frame increments. \textbf{Dynamic following} includes effective latency, defined as the latency that minimizes the residual between a time-shifted reference and the output; LA-RMSE, the minimum latency-aligned residual; CT-RMSE, the current-time error without latency alignment; and residual jitter, the high-frequency component of the aligned residual. \textbf{Transition response} includes occlusion error from the start of occlusion until stable recovery, and motion-onset latency from the start of reference motion to anchor response. Except for motion-onset latency, which is a scalar across channels, all metrics are reported separately for translation and rotation.
 
 \subsection{Experiment 2: Design Attribution}\label{sec:exp2-design}
 
-Experiment 2 performs paired comparisons for four key design choices and quantifies their effects.
+Experiment 2 uses paired comparisons to quantify the contribution of four key design choices.
 
 \textbf{Observation alignment.}
-The same camera-frame candidates are transformed into world-frame poses using either the image-capture time or candidate-arrival time. We compare pose leakage under active head motion to evaluate the effect of recovering observation temporal semantics on static registration.
+We recover the same camera-frame candidates into world space using either image capture time or candidate arrival time, and compare pose leakage under active head motion. This comparison evaluates how restoring temporal semantics affects static registration.
 
-\textbf{Static anchoring.}
-We disable static anchoring in the complete EgoAnchor system and compare head-motion leakage under stationary conditions to quantify its contribution to anchor stability during rest.
+\textbf{Stationary anchoring.}
+We disable stationary anchoring in the full EgoAnchor system and compare head-motion leakage under stationary conditions to quantify its contribution to anchor stability while the object is at rest.
 
 \textbf{VCD.}
-Candidates are ranked by VCD score, and the area under the risk--coverage curve (AURC) summarizes the ranking relationship between the score and translational error~\cite{riskcontrolled2020,ding2020uncertainty}. Lower AURC indicates that higher VCD scores are more concentrated among lower-error candidates.
+We rank candidates by VCD score and use the area under the risk-coverage curve (AURC) to summarize how the score orders candidates by translation error~\cite{riskcontrolled2020,ding2020uncertainty}. Lower AURC indicates that higher VCD scores are more concentrated among lower-error candidates.
 
-\textbf{Prediction versus historical querying.}
-To quantify the trade-off between response speed and trajectory fidelity, we compare \emph{predictive tracking} with \emph{historical state querying}. The predictive condition uses smoothed Kalman-filter extrapolation (Smoothed KF Extrapolation), extrapolating the latest Kalman state to the current render time $t_r$ under a constant-velocity model while decaying correction residuals with a short half-life to preserve output continuity. The historical-query condition uses the query time $t_q$ defined in Sec.~\ref{sec:frame-output} and performs Linear/SLERP interpolation between adjacent arrived trajectory nodes. The two conditions share the candidate stream, state estimator, and admission rules.
+\textbf{Prediction versus history query.}
+To quantify the trade-off between response speed and trajectory fidelity, we compare \emph{predictive tracking} with \emph{history query}. Predictive tracking extrapolates a smoothed constant-velocity Kalman model to $t_r$ and decays correction residuals to preserve continuity. History query performs Linear/SLERP interpolation between arrived neighboring nodes at $t_q$, as described in Section~\ref{sec:frame-output}. Both conditions share the same candidate stream, state estimation, and admission rules.
 
 \subsection{Experiment 3: User Study}\label{sec:exp3-design}
 
-Experiment 3 examines whether the system differences observed in the controlled evaluation translate into user perception. We compare One-Euro with the complete EgoAnchor system using everyday rigid objects, focusing on static stability, motion attachment, occlusion recovery, and users' trust in and willingness to rely on the anchor.
+Experiment 3 examines whether the system differences observed in the controlled evaluation are reflected in user perception. We compare One-Euro with the full EgoAnchor system on everyday rigid objects, focusing on stationary stability, motion attachment, occlusion recovery, and user trust and reliance.
 
 \subsubsection{Experimental Design}
 
-We selected three everyday objects with complementary visual observability and manipulation-induced occlusion to span differences in scale, geometry, surface texture, and natural grasp occlusion. The wireless mouse is small, smoothly curved, and weakly textured; the stapler is elongated, multi-planar, and strongly directional; the game controller is larger and has richer geometry and texture, while producing more substantial hand occlusion during natural grasping.
-
-The study uses a fully within-subject design. Each participant experiences both One-Euro and EgoAnchor for all three objects. The objects serve as heterogeneous instances that provide different visual and interaction conditions, and condition scores are averaged across objects within each participant. The two methods use the same One-Euro runtime baseline and complete EgoAnchor configuration as in Experiment 1. Object order and method order are counterbalanced across participants, and the two methods are presented anonymously as A/B.
+We select a wireless mouse, stapler, and game controller to provide complementary visual observability and manipulation-induced occlusion. They cover a weakly textured curved surface, an elongated multi-planar shape, and richer geometry and texture with natural grasp occlusion. We use a fully within-subject design. Each participant experiences One-Euro and EgoAnchor with all three objects. For analysis, condition ratings are averaged across objects within each participant. Object and method order are counterbalanced, and methods are presented using anonymous A/B labels.
 
 \subsubsection{Tasks}
 
-Each method--object condition consists of three sequential operations:
-\begin{enumerate}[leftmargin=1.8em,label=(\arabic*),itemsep=1pt,topsep=2pt]
-  \item \textbf{Static observation:} the object remains fixed on the table while the participant observes the attachment and stability of the virtual content from the front, left, right, and a slightly closer viewpoint;
-  \item \textbf{Move and place:} the participant picks up the object, translates it by approximately 25--30~cm and naturally rotates it by approximately $30$--$45^\circ$, briefly holds it in the air, then places it in a target region and continues observing it;
-  \item \textbf{Occlusion and recovery:} the object remains stationary while a standardized occluder fully covers it for approximately 1~s; the occluder is then removed and the participant observes anchor recovery.
-\end{enumerate}
-
-Participants provide ratings after completing all three tasks, so the static, motion, and recovery phases jointly constitute one complete object-anchoring experience.
+Each method-object condition contains three standardized operations in sequence: observing the stationary object; picking it up, translating it by approximately 25--30~cm while naturally rotating it by 30--45$^\circ$, and placing it down; and fully occluding it with a standardized board for approximately 1~s before observing recovery. Participants provide ratings after completing all three tasks.
 
 \subsubsection{Subjective Measures}
 
-Subjective measures comprise two parts. Our \textbf{object-anchoring items} directly measure participants' perceived anchor behavior. Three \textbf{published scales} measure the resulting augmentation quality and participants' trust in the method: Augmentation Quality (AQ), Trust in Automation (TiA), and S-TIAS.
+Subjective measures include seven object-anchoring items and three published scales: Augmentation Quality (AQ), Trust in Automation (TiA), and S-TIAS.
 
 \textbf{Object-anchoring items.}
-These items correspond to the application-side evaluation aspects in Experiment 1 and were designed with reference to work on tracking factors and user trust in augmented reality~\cite{trustar2024}, as shown in Table~\ref{tab:anchor-items}. The items are organized into two groups according to what they measure. Four \textbf{phase-specific anchor behavior} items target rest, translational motion, rotation, and occlusion recovery, respectively, matching the anchor states encountered sequentially in the tasks. Three \textbf{overall anchoring judgments} assess the method through virtual--physical spatial correspondence, willingness to rely on the method, and the stability--responsiveness trade-off. All seven items use seven-point agreement scales and are analyzed separately rather than combined into a single score; the grouping is used only to organize measurement and reporting.
-
-\begin{table}[t]
-\centering
-\caption{Seven object-anchoring items, grouped into phase-specific anchor behavior and overall anchoring judgments according to their measurement targets. Items were presented as statements and rated on seven-point agreement scales.}
-\label{tab:anchor-items}
-\begin{tabularx}{\columnwidth}{@{}l>{}X@{}}
-\toprule
-Item & Perceived content \\
-\midrule
-\multicolumn{2}{@{}l}{\textit{Phase-specific anchor behavior}} \\
-Static stability & The virtual content remains in the same position when the object is stationary. \\
-Motion attachment & The virtual content remains attached to the same location on the object while the object is moved and rotated. \\
-Orientation consistency & The orientation of the virtual content remains consistent with the physical object while the object is rotated. \\
-Recovery consistency & After the occlusion is removed, the virtual content recovers to a position consistent with the physical object. \\
-\addlinespace
-\multicolumn{2}{@{}l}{\textit{Overall anchoring judgments}} \\
-Positional correctness & The virtual content appears at a position consistent with the actual location of the physical object. \\
-Willingness to rely & I would rely on this method in an MR application that requires virtual content to remain accurately attached to a physical object. \\
-Stability--responsiveness balance & This method provides an appropriate balance between anchor stability and response timeliness. \\
-\bottomrule
-\end{tabularx}
-\end{table}
+Seven items use a seven-point agreement scale and correspond to the application-level measures in Experiment 1; their design is informed by prior work on AR tracking and trust~\cite{trustar2024}. Phase-specific behavior includes stationary stability, motion attachment, orientation consistency, and recovery consistency. Overall judgments include positional correctness, willingness to rely on the anchor, and the stability-responsiveness balance. We analyze each item separately rather than combining them into a total score. The full item wording appears in the supplementary material.
 
 \textbf{Augmentation Quality (AQ).}
-Whereas the object-anchoring items assess anchor behavior itself, AQ measures the quality of the augmentation produced by that behavior~\cite{aq2026}. We use the complete three-item subscales for Embedding Quality (EQ) and Interaction Quality (IQ). EQ evaluates the integration of virtual content with the physical object and environment, the plausibility of embedding, and scale consistency. IQ evaluates interaction intuitiveness, real-time response, and motion smoothness when the physical object is manipulated. Both use seven-point agreement scales.
+We use the complete three-item Embedding Quality (EQ) and Interaction Quality (IQ) subscales of AQ~\cite{aq2026}. They assess virtual-physical embedding and interaction quality during manipulation, respectively, using seven-point agreement scales.
 
-\textbf{Trust (TiA and S-TIAS).}
-Whether an anchor is adopted also depends on whether users trust it. From the Trust in Automation scale (TiA)~\cite{tia2019}, we use the six Reliability/Competence items and four Understanding/Predictability items, corresponding respectively to whether the anchor is reliable and whether its behavior is predictable. Together they cover competence and transparency dimensions of trust and use five-point agreement scales. S-TIAS provides an overall trust score using three seven-point items~\cite{stias2025}, capturing participants' overall confidence, perceived reliability, and trust in the method with minimal administration burden. For all three published scales, only the referent of each item was contextualized. The Chinese items were translated from the original English wording and checked item by item for semantic equivalence; cognitive interviews in a pilot study were used to assess wording comprehensibility.
+\textbf{User Trust (TiA and S-TIAS).}
+For TiA~\cite{tia2019}, we use six Reliability/Competence items and four Understanding/Predictability items on five-point agreement scales. S-TIAS~\cite{stias2025} provides an overall trust score from three seven-point items. We adapt only the referent of each scale item to the current context. The Chinese translations were checked item by item, and their comprehensibility was assessed through pilot cognitive interviews.
 
-The final questionnaire additionally records overall method preference, direct trust choice, preference strength, confidence in distinguishing the methods, and post-study discomfort. These outcomes are reported descriptively only.
+The final questionnaire also records overall method preference, direct trust choice, preference strength, confidence in distinguishing the methods, and post-study discomfort. These measures are reported descriptively only.
 
 \subsubsection{Procedure}
 
-The study was approved by the ethics review body at the authors' institution. All participants provided informed consent before the experiment and were informed that they could withdraw at any time. Participants first completed a background questionnaire and adjusted the headset, then used a practice trial to familiarize themselves with the three standardized operations and the in-headset rating interface. In the formal study, they completed six method--object conditions. After each condition, participants completed the object-anchoring items and AQ ratings. After all conditions, they completed TiA and S-TIAS evaluations for each method and then the final questionnaire. Each session lasted approximately 60 minutes, with breaks available as needed.
+The study was approved by the authors' institutional ethics review board, and all participants provided informed consent. After completing a background questionnaire, headset adjustment, and practice, participants experienced six method-object conditions. After each condition, they completed the object-anchoring items and AQ. After all conditions, they rated both methods using TiA and S-TIAS and completed the final questionnaire. Each session lasted approximately 60 minutes, with breaks available as needed.
 
 \subsubsection{Participants}
 
-We recruited 24 participants through our laboratory recruitment platform; all completed the study and were included in the analysis. Participants were 20--36 years old ($M=27.08$, $\mathrm{SD}=4.45$), with 12 women and 12 men; 22 were right-handed and 2 left-handed, while 15 had normal vision and 9 had corrected-to-normal vision. Prior VR/MR experience was distributed as follows: 6 had never used VR/MR, 10 had used it 1--5 times, and the remaining 8 had at least 6 prior uses. For AR/MR applications involving manipulation of physical objects, 12 had no prior experience, 6 had 1--2 prior experiences, and the remaining 6 reported several or frequent prior uses. The sample therefore included both first-time and experienced users.
+We recruited 24 participants and included all of them in the analysis (age 20--36 years, $M=27.08$, $\mathrm{SD}=4.45$; 12 women and 12 men; 22 right-handed). Six had never used VR/MR, 10 had used it 1--5 times, and eight had used it at least six times. Twelve had no prior experience manipulating physical objects in AR/MR.
 
 \subsubsection{Statistical Analysis}
 
-The seven object-anchoring items and two AQ subscales were first averaged across the three objects within each participant. The two TiA subscales and S-TIAS used method-level scores, yielding 12 subjective outcomes in total. Reverse-coded TiA items were recoded according to the original scale instructions before subscale scores were computed. Each outcome is described by the median and first and third quartiles (Mdn [Q1, Q3]). All outcomes contain 24 complete pairs. Between-method comparisons use two-sided conditional exact Wilcoxon signed-rank tests, with zero differences excluded from the rank statistic. Effect size is reported as the matched-pairs rank-biserial correlation $r_{\mathrm{rb}}$, accompanied by participant-level bootstrap 95\% confidence intervals. Multiple comparisons were pre-grouped into two families according to measurement source. The seven object-anchoring items form the first family; their two organizational groups do not further subdivide the correction scope. AQ-EQ, AQ-IQ, the two TiA subscales, and S-TIAS form the second family. Holm correction is applied separately within each family. Internal consistency of the published scales is computed and reported as Cronbach's $\alpha$ separately for each method in this sample.
+For each participant, the seven object-anchoring items and AQ-EQ/IQ are first averaged across the three objects, while the two TiA subscales and S-TIAS use method-level scores, yielding 12 outcomes. We report each outcome as Mdn [Q1, Q3]. For all 24 complete pairs, we use two-sided exact conditional Wilcoxon signed-rank tests and report the matched-pairs rank-biserial correlation $r_{\mathrm{rb}}$ with participant-level bootstrap 95\% confidence intervals. The seven custom items and the five published-scale outcomes form two separate Holm-correction families. For each published scale, we additionally report Cronbach's $\alpha$ by method.
 
 \section{Results}\label{sec:results}
 
-\subsection{Experiment 1: Application-Side Anchor Behavior}
+\subsection{Experiment 1: Application-Level Anchor Behavior}
 
-We report the three evaluation aspects from Sec.~\ref{sec:exp1-design} in order. Median summaries are provided in Tables~\ref{tab:exp1-static}--\ref{tab:exp1-transition}. Fig.~\ref{fig:exp1-final} shows repeated-measurement distributions under static and sustained-motion conditions, while Fig.~\ref{fig:exp1-replay} qualitatively compares the four methods on a continuous replay of the same sequence. Each metric is first summarized within each captured sequence and then aggregated by the median across repeated captures. When two channels are involved, results are reported in translation/rotation order.
+We report results according to the three metric groups in Section~\ref{sec:exp1-design}. Tables~\ref{tab:exp1-static}--\ref{tab:exp1-transition} summarize medians, Fig.~\ref{fig:exp1-final} shows repeated-measure distributions, and Fig.~\ref{fig:exp1-replay} shows continuous replay. Each metric is first summarized within a recorded sequence and then aggregated by the median across repetitions. Two-channel metrics are reported separately for translation and rotation.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth]{figures/panels/figure2_exp1_behavior.pdf}
-  \caption{Static and dynamic error distributions for the four runtime configurations in Experiment 1. (a) Static translation, (b) static rotation, (c) sustained-motion translation, and (d) sustained-motion rotation. Static conditions report P95 head-motion leakage and static jitter; dynamic conditions report latency-aligned root-mean-square error (LA-RMSE) and P95 residual jitter. Light points denote repeated captures, boxes denote the interquartile range (IQR), horizontal lines inside boxes denote medians, and dark points denote means. Lower values are better for all metrics. EgoAnchor's static error distributions are most concentrated near zero and it achieves the lowest LA-RMSE under dynamic conditions, while residual jitter is comparable to One-Euro.}
-
+  \caption{Error distributions for the four configurations in Experiment 1. (a,b) Static translation/rotation, reporting P95 head-motion leakage and stationary jitter; (c,d) continuous-motion translation/rotation, reporting LA-RMSE and P95 residual jitter. Light points denote repeated recordings, boxes/center lines denote IQR/median, and dark points denote means. Lower is better for all metrics. EgoAnchor produces static errors closest to zero and the lowest LA-RMSE, while its dynamic residual jitter is similar to One-Euro.}
   \label{fig:exp1-final}
 \end{figure*}
 
 \subsubsection{Static Registration}
 
-\input{tables/en/exp1_static.tex}
+\begin{table}[t]
+\centering
+\caption{Static registration in Experiment 1. Cells report medians across repeated measurements as translation/rotation; all three metrics are P95 values. $\downarrow$ indicates lower is better, and bold marks the best value in each channel. Distributions are shown in Fig.~\ref{fig:exp1-final}(a,b).}
+\label{tab:exp1-static}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & \shortstack{Head-motion\\leakage\,$\downarrow$\\mm/$^\circ$} & \shortstack{Registration\\error\,$\downarrow$\\mm/$^\circ$} & \shortstack{Stationary\\jitter\,$\downarrow$\\mm/$^\circ$} \\
+\midrule
+Arrival & 43.67/6.49 & 44.31/9.65 & 11.70/2.98 \\
+Capture & 13.03/5.40 & 17.54/8.26 & 4.30/2.60 \\
+One-Euro & 10.65/3.29 & 14.00/6.96 & 0.85/0.40 \\
+EgoAnchor & \textbf{0.82}/\textbf{0.33} & \textbf{6.60}/\textbf{4.39} & \textbf{0.06}/\textbf{0.03} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Active head motion first exposes the temporal-semantics problem of asynchronous observations. Head-motion leakage for Arrival reaches 43.67~mm/6.49$^\circ$; simply interpreting the same candidates at image capture time reduces Capture to 13.03~mm/5.40$^\circ$. One-Euro reaches 10.65~mm/3.29$^\circ$, whereas EgoAnchor reaches 0.82~mm/0.33$^\circ$, reductions of approximately 92\% and 90\% relative to One-Euro in the two channels. Registration error follows the same ordering, with EgoAnchor again achieving the lowest values (6.60~mm/4.39$^\circ$). For static jitter, the two direct-consumption configurations still exhibit visible fluctuation. One-Euro reduces jitter to 0.85~mm/0.40$^\circ$, while EgoAnchor reaches 0.06~mm/0.03$^\circ$, more than an order of magnitude lower than One-Euro. Fig.~\ref{fig:exp1-final}(a,\,b) shows that its static outputs are concentrated within a narrow range near zero.
+Active head motion first exposes the temporal-semantics problem of asynchronous observations. Head-motion leakage reaches 43.67~mm/6.49$^\circ$ for Arrival. Simply interpreting the same candidates using the image capture time reduces the leakage to 13.03~mm/5.40$^\circ$ for Capture. One-Euro yields 10.65~mm/3.29$^\circ$, while EgoAnchor yields 0.82~mm/0.33$^\circ$, reductions of approximately 92\% and 90\% relative to One-Euro in the two channels. Registration error follows the same ordering, with EgoAnchor again achieving the lowest value at 6.60~mm/4.39$^\circ$. For stationary jitter, both configurations that directly consume candidates retain visible variation. One-Euro reduces it to 0.85~mm/0.40$^\circ$, whereas EgoAnchor reaches 0.06~mm/0.03$^\circ$, more than an order of magnitude lower than One-Euro. Figure~\ref{fig:exp1-final}(a,\,b) shows that EgoAnchor's stationary output is concentrated within a narrow range near zero.
 
 \subsubsection{Dynamic Following}
 
-\input{tables/en/exp1_dynamic.tex}
+\begin{table}[t]
+\centering
+\caption{Dynamic following in Experiment 1. Cells report medians across repeated measurements as translation/rotation; residual jitter is P95. $\downarrow$ indicates lower is better, and bold marks the best value in each channel. Distributions are shown in Fig.~\ref{fig:exp1-final}(c,d).}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Method & \shortstack{Effective\\latency\,$\downarrow$\\ms} & \shortstack{LA-RMSE\,$\downarrow$\\mm/$^\circ$} & \shortstack{CT-RMSE\,$\downarrow$\\mm/$^\circ$} & \shortstack{Residual\\jitter\,$\downarrow$\\mm/$^\circ$} \\
+\midrule
+Arrival & \textbf{202.5}/\textbf{255.0} & 18.57/6.09 & \textbf{84.74}/25.44 & 41.08/10.40 \\
+Capture & 255.0/257.5 & 17.14/5.84 & 103.63/\textbf{25.35} & 39.69/10.26 \\
+One-Euro & 380.0/385.0 & 15.69/5.55 & 117.61/34.10 & 5.25/2.70 \\
+EgoAnchor & 360.0/345.0 & \textbf{9.12}/\textbf{4.81} & 125.83/31.88 & \textbf{4.56}/\textbf{2.64} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-After aligning each method by its own optimal effective latency, LA-RMSE reflects trajectory residuals after removing overall response lag. EgoAnchor achieves an LA-RMSE of 9.12~mm/4.81$^\circ$, reductions of approximately 42\% and 13\% relative to One-Euro's 15.69~mm/5.55$^\circ$. Residual jitter is 4.56~mm/2.64$^\circ$ for EgoAnchor and 5.25~mm/2.70$^\circ$ for One-Euro. Compared with the static condition, the difference between the two methods is smaller for residual jitter, while the difference in LA-RMSE is more pronounced.
+After alignment by each method's own optimal effective latency, LA-RMSE measures trajectory residuals after removing the overall response lag. EgoAnchor achieves an LA-RMSE of 9.12~mm/4.81$^\circ$, which is approximately 42\% and 13\% lower than One-Euro's 15.69~mm/5.55$^\circ$ in translation and rotation, respectively. Residual jitter is 4.56~mm/2.64$^\circ$ for EgoAnchor and 5.25~mm/2.70$^\circ$ for One-Euro. Compared with the stationary condition, the difference in residual jitter between the two methods is smaller, while the LA-RMSE difference is more pronounced.
 
-Real-time response exhibits a different ordering. The configurations that directly hold returned candidates have lower lag (Arrival: 202.5/255.0~ms). With state estimation and historical state querying, effective latency increases to 380.0/385.0~ms for One-Euro and 360.0/345.0~ms for EgoAnchor. Without latency alignment, this lag contributes to current-time error: the translational CT-RMSE rises from 84.74~mm for Arrival to 125.83~mm for EgoAnchor, whereas for rotation EgoAnchor's 31.88$^\circ$ remains below One-Euro's 34.10$^\circ$. Thus, lower LA-RMSE does not imply a corresponding reduction in current-time registration error.
+Real-time response shows a different ordering. The direct candidate-hold configurations have lower latency, with Arrival at 202.5/255.0~ms. State estimation and history query increase the latency to 380.0/385.0~ms for One-Euro and 360.0/345.0~ms for EgoAnchor. Without latency alignment, this lag contributes to current-time error. The translational CT-RMSE increases from 84.74~mm for Arrival to 125.83~mm for EgoAnchor, while EgoAnchor's rotational CT-RMSE of 31.88$^\circ$ remains below One-Euro's 34.10$^\circ$. Thus, lower LA-RMSE does not imply a simultaneous reduction in current-time registration error.
 
 \subsubsection{Transition Response}
 
-\input{tables/en/exp1_transition.tex}
+\begin{table}[t]
+\centering
+\caption{Transition response in Experiment 1. Occlusion error reports medians across repeated measurements as translation/rotation (P95), while motion-onset latency is a scalar across channels. $\downarrow$ indicates lower is better, and bold marks the best value.}
+\label{tab:exp1-transition}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Method & \shortstack{Occlusion error\,$\downarrow$\\mm/$^\circ$} & \shortstack{Motion-onset latency\,$\downarrow$\\ms} \\
+\midrule
+Arrival & 18.23/18.39 & \textbf{157.0} \\
+Capture & 16.93/18.38 & 263.8 \\
+One-Euro & 10.41/8.66 & 334.0 \\
+EgoAnchor & \textbf{4.85}/\textbf{5.52} & 510.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Table~\ref{tab:exp1-transition} juxtaposes occlusion recovery and motion-onset response. During brief full occlusion, occlusion error decreases from 18.23~mm/18.39$^\circ$ for Arrival and 10.41~mm/8.66$^\circ$ for One-Euro to 4.85~mm/5.52$^\circ$ for EgoAnchor, reductions of approximately 53\% and 36\% relative to One-Euro. Motion-onset latency, however, increases from 157.0~ms for Arrival and 334.0~ms for One-Euro to 510.4~ms for EgoAnchor, producing the opposite ordering from occlusion error.
+
+Table~\ref{tab:exp1-transition} contrasts occlusion recovery with motion-onset response. During short complete occlusions, occlusion error decreases from 18.23~mm/18.39$^\circ$ for Arrival and 10.41~mm/8.66$^\circ$ for One-Euro to 4.85~mm/5.52$^\circ$ for EgoAnchor, corresponding to reductions of approximately 53\% and 36\% relative to One-Euro. Motion-onset latency, however, increases from 157.0~ms for Arrival and 334.0~ms for One-Euro to 510.4~ms for EgoAnchor, producing the opposite ordering.
 
 \subsubsection{Qualitative Replay}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figures/replay_grid.pdf}
-  \caption{Qualitative replay of the same continuous sequence in Experiment 1. Columns sample the sequence from $\Delta t=0$ to $6.25\,\mathrm{s}$ at $1.25\,\mathrm{s}$ intervals. The first two rows show the raw passthrough image and the Quest platform reference, followed by Arrival, Capture, One-Euro, and EgoAnchor anchor projections at the same capture times. Colored object contours and local coordinate axes indicate the 6DoF object anchor estimated by each method. This 2D projection provides an intuitive comparison of virtual--physical registration and temporal continuity under observer head motion and object motion.}
+  \caption{Continuous sequence replay from Experiment 1 ($\Delta t=0$--$6.25\,\mathrm{s}$, sampled every $1.25\,\mathrm{s}$). The top two rows show the raw passthrough frames and Quest reference. The next four rows show the anchor projections of Arrival, Capture, One-Euro, and EgoAnchor at the same capture times. Contours and local axes indicate the estimated 6DoF anchor and reveal registration and temporal continuity under head and object motion.}
   \label{fig:exp1-replay}
 \end{figure}
 
-Fig.~\ref{fig:exp1-replay} translates the quantitative results into visible behavior. While the target is stationary, the contours from all four configurations roughly overlap the physical object. During observer head motion, Arrival and Capture show more pronounced spatial deviation, One-Euro deviates less, and EgoAnchor remains overall closer to the platform reference, consistent with the ordering observed in static registration.
+Figure~\ref{fig:exp1-replay} illustrates how the quantitative differences manifest visually. During head motion, Arrival and Capture deviate more strongly from the platform reference, One-Euro reduces the deviation, and EgoAnchor remains closest to the reference, consistent with the static results.
 
 \subsection{Experiment 2: Design Attribution}
 
-All attribution analyses use paired comparisons on the same set of sequences. Each repetition is first summarized according to the corresponding metric definition, after which statistics are reported across repetitions. Brackets denote bootstrap 95\% confidence intervals; comparisons involving relative changes additionally report paired ratios.
+All attribution comparisons use paired measurements from the same recorded sequences. Each repetition is first summarized by the corresponding metric, followed by statistics across repetitions. Brackets denote bootstrap 95\% confidence intervals, and relative changes are additionally reported as paired ratios.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth]{figures/panels/figure3_exp2_attribution.pdf}
-  \caption{Paired attribution analysis of four key EgoAnchor design choices in Experiment 2. (a) \textbf{Observation alignment:} P95 head-motion leakage when the same camera-frame candidates are transformed into world-frame poses using image capture time (Capture) versus candidate arrival time (Arrival). (b) \textbf{Static anchoring:} P95 head-motion leakage with StaticLock enabled (On) versus disabled (Off) in the complete system. (c) \textbf{VCD reliability:} risk--coverage curves obtained by progressively retaining candidates from high to low VCD score; the red line denotes the median across repetitions and the shaded region denotes the IQR. (d) \textbf{Render-time temporal selection:} relationship between effective latency and latency-aligned RMSE for predictive tracking versus historical state querying. Light gray lines connect paired results from the same repeated sequence. Capture-time alignment and StaticLock both reduce static error; high VCD scores correspond to lower candidate risk; and historical state querying trades higher effective latency for lower latency-aligned trajectory residuals.}
+  \caption{Attribution of four design choices in Experiment 2. (a) P95 head-motion leakage when world-space composition uses capture-time versus arrival-time camera poses; (b) P95 head-motion leakage with StaticLock enabled versus disabled; (c) risk-coverage curves when candidates are retained by VCD score, with the red line/shading denoting the median/IQR across repetitions; and (d) effective latency versus LA-RMSE for predictive tracking and history query. Gray lines connect paired sequences. Capture-time alignment and StaticLock reduce static error, higher VCD scores correspond to lower risk, and history query trades higher latency for lower trajectory residuals.}
   \label{fig:exp2-final}
 \end{figure*}
 
-Fig.~\ref{fig:exp2-final}(a,b) separately isolates the temporal semantics used for world-frame composition and static anchoring. Under active head motion, composing the same camera-frame candidates using the camera pose at image capture time yields a median P95 pose leakage of 15.38~mm. Using the camera pose at candidate arrival instead increases this value to 43.75~mm, with a paired ratio of 2.69 [2.38, 3.00]. This result shows that capture-time alignment alone substantially reduces spatial mismatch induced by head motion. When only static anchoring is disabled in the complete EgoAnchor system, median P95 head-motion leakage under static conditions rises from 0.82~mm to 13.73~mm, corresponding to a paired ratio of 17.06 [13.89, 27.52]. Static anchoring is therefore the primary source of the system's low-fluctuation output during stationary periods.
+Figures~\ref{fig:exp2-final}(a,b) isolate the temporal semantics used for world-space composition and the contribution of stationary anchoring. Under active head motion, composing the same camera-frame candidates with the camera pose at image capture time produces a median P95 pose leakage of 15.38~mm. Using the camera pose at candidate arrival time increases this value to 43.75~mm, a paired ratio of 2.69 [2.38, 3.00]. Capture-time alignment alone therefore substantially reduces spatial mismatch induced by head motion. Disabling only stationary anchoring in the full EgoAnchor system increases P95 head-motion leakage under stationary conditions from 0.82~mm to 13.73~mm, corresponding to a paired ratio of 17.06 [13.89, 27.52]. This result identifies stationary anchoring as the primary source of EgoAnchor's low-variation output while the object is at rest.
 
-Fig.~\ref{fig:exp2-final}(c) examines the relationship between VCD score and candidate error through risk--coverage curves. When candidates are included from high to low score, high-scoring candidates correspond to lower selective risk, and risk increases progressively as coverage expands to include lower-scoring candidates. Under occlusion, AURC is 4.79 [4.20, 5.13]~mm and full-coverage risk is 7.25 [5.15, 7.95]~mm. This trend indicates that VCD provides useful ranking information about candidate geometric error.
+Figure~\ref{fig:exp2-final}(c) examines the relationship between VCD score and candidate error using risk-coverage curves. When candidates are included from high to low score, high-scoring candidates correspond to lower selective risk, and risk increases as coverage expands to include lower-scoring candidates. Under occlusion, AURC is 4.79 [4.20, 5.13]~mm and full-coverage risk is 7.25 [5.15, 7.95]~mm. This trend shows that VCD provides useful ranking information about candidate geometric error.
 
-Fig.~\ref{fig:exp2-final}(d) compares response latency and trajectory residuals for predictive tracking and historical state querying. Predictive tracking has effective latencies of 305.00/250.00~ms, lower than the 360.00/345.00~ms of historical querying. However, its latency-aligned RMSE is 45.64~mm/12.21$^\circ$, compared with 8.93~mm/4.70$^\circ$ for historical querying. In paired-ratio terms, the translational and rotational trajectory residuals under prediction are 5.46 [4.02, 5.73] and 2.63 [2.44, 2.78] times those under historical querying, respectively. Prediction reduces effective latency by extrapolating unobserved motion, whereas historical querying preserves substantially lower latency-aligned trajectory residuals.
+Figure~\ref{fig:exp2-final}(d) compares response latency and trajectory residuals for predictive tracking and history query. Predictive tracking has effective latencies of 305.00/250.00~ms, lower than 360.00/345.00~ms for history query. Its latency-aligned RMSE, however, is 45.64~mm/12.21$^\circ$, compared with 8.93~mm/4.70$^\circ$ for history query. Paired ratios show that the translational and rotational trajectory residuals under prediction are 5.46 [4.02, 5.73] and 2.63 [2.44, 2.78] times those under history query, respectively. Predictive tracking achieves lower effective latency by extrapolating unobserved motion, whereas history query preserves lower latency-aligned trajectory residuals.
 
 \subsection{Experiment 3: User Study}
 
-Fig.~\ref{fig:exp3-subjective} shows the within-participant rating distributions from the 24 participants, and Table~\ref{tab:exp3-subjective} summarizes medians, Wilcoxon statistics, Holm-adjusted $p$ values, and effect sizes. Following the measurement structure in Sec.~\ref{sec:exp3-design}, we first report the two groups of object-anchoring items, then the three published scales, and finally the overall choices in the final questionnaire.
+Figure~\ref{fig:exp3-subjective} shows paired ratings from 24 participants. The complete medians, Wilcoxon statistics, Holm-adjusted $p$ values, and effect sizes for all 12 outcomes appear in the supplementary material. We report the principal results and key nonsignificant comparisons in the main paper.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth]{figures/panels/figure4_exp3_subjective_outcomes.pdf}
-  \caption{Within-participant subjective ratings of One-Euro and EgoAnchor from 24 participants in Experiment 3. (a) Phase-specific anchor behavior: static stability, motion attachment, orientation consistency, and recovery consistency. (b) Overall anchoring judgments: positional correctness, willingness to rely, and stability--responsiveness balance. (c) Augmentation Quality embedding quality (AQ-EQ), interaction quality (AQ-IQ), and overall S-TIAS trust. (d) Trust in Automation (TiA) Reliability/Competence (R/C) and Understanding/Predictability (U/P). Object-anchoring items and AQ scores were first averaged across the three objects within each participant. Panels (a)--(c) use seven-point scales and panel (d) uses five-point scales. Light points denote participant scores, gray lines connect within-participant pairs, boxes denote the IQR, horizontal lines inside boxes denote medians, and black points denote means. Asterisks indicate significance after within-family Holm correction ($^{*}p_{\mathrm{adj}}<.05$, $^{**}p_{\mathrm{adj}}<.01$, $^{***}p_{\mathrm{adj}}<.001$).}
+  \caption{Within-subject ratings for One-Euro and EgoAnchor ($N=24$). (a) Stationary stability, motion attachment, orientation consistency, and recovery consistency; (b) positional correctness, willingness to rely on the anchor, and stability-responsiveness balance; (c) AQ-EQ, AQ-IQ, and S-TIAS; and (d) TiA Reliability/Competence (R/C) and Understanding/Predictability (U/P). Object-anchoring items and AQ are averaged across the three objects. Panels (a)--(c) use seven-point scales; (d) uses five-point scales. Light points/gray lines denote individuals/paired observations; boxes/center lines/black points denote IQR/median/mean. Asterisks indicate within-family Holm correction ($^*p_{\rm adj}<.05$, $^{**}<.01$, $^{***}<.001$).}
   \label{fig:exp3-subjective}
 \end{figure*}
 
-\input{tables/en/exp3_subjective.tex}
-
 \subsubsection{Object-Anchoring Experience}
 
-\textbf{Static and recovery phases.}
-The two strongest effects among the seven items occur in these phases. Under the static condition, EgoAnchor receives a median score of 5.00 [4.58, 5.67], higher than One-Euro's 4.33 [3.92, 4.67], with the difference remaining significant after Holm correction ($W=13.5$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.90$). After occlusion removal, EgoAnchor's recovery-consistency score is 5.00 [4.33, 5.42], compared with 4.17 [3.92, 4.33] for One-Euro, yielding the largest effect size among the seven items ($W=6$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.95$).
+\textbf{Stationary and recovery phases.}
+Two of the largest effects among the seven items occur in these phases. Under the stationary condition, EgoAnchor has a median rating of 5.00 [4.58, 5.67], higher than One-Euro's 4.33 [3.92, 4.67], and the difference remains significant after Holm correction ($W=13.5$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.90$). After occlusion is removed, EgoAnchor has a recovery-consistency rating of 5.00 [4.33, 5.42], compared with 4.17 [3.92, 4.33] for One-Euro. This outcome has the largest effect size among the seven items ($W=6$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.95$).
 
-\textbf{Sustained-motion phase.}
-When the object is in sustained motion, the subjective difference between the two methods is substantially smaller. Motion-attachment scores are 5.17 [4.58, 5.33] for EgoAnchor and 5.00 [4.33, 5.08] for One-Euro; orientation-consistency scores are 5.00 [4.67, 5.33] for EgoAnchor and 4.67 [4.67, 5.00] for One-Euro. Neither item shows a difference after Holm correction (attachment: $W=67.5$, $p_{\mathrm{adj}}=.267$, $r_{\mathrm{rb}}=.29$; consistency: $W=81$, $p_{\mathrm{adj}}=.162$, $r_{\mathrm{rb}}=.41$).
+\textbf{Continuous-motion phase.}
+The subjective difference between the two methods is substantially smaller during continuous object motion. Motion-attachment ratings are 5.17 [4.58, 5.33] for EgoAnchor and 5.00 [4.33, 5.08] for One-Euro. Orientation-consistency ratings are 5.00 [4.67, 5.33] for EgoAnchor and 4.67 [4.67, 5.00] for One-Euro. Neither difference is significant after Holm correction (attachment: $W=67.5$, $p_{\mathrm{adj}}=.267$, $r_{\mathrm{rb}}=.29$; consistency: $W=81$, $p_{\mathrm{adj}}=.162$, $r_{\mathrm{rb}}=.41$).
 
 \textbf{Overall anchoring judgments.}
-All three overall judgments favor EgoAnchor. Positional correctness is 5.00 [4.67, 5.75] for EgoAnchor and 4.67 [4.00, 5.00] for One-Euro ($W=16$, $p_{\mathrm{adj}}=.001$, $r_{\mathrm{rb}}=.85$). Willingness to rely is 5.00 [4.33, 5.33] for EgoAnchor and 4.00 [4.00, 4.33] for One-Euro ($W=16.5$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.87$). The stability--responsiveness balance is 4.83 [4.58, 5.33] for EgoAnchor and 4.50 [4.25, 4.75] for One-Euro ($W=6$, $p_{\mathrm{adj}}=.003$, $r_{\mathrm{rb}}=.90$).
+All three overall judgments favor EgoAnchor. Positional-correctness ratings are 5.00 [4.67, 5.75] for EgoAnchor and 4.67 [4.00, 5.00] for One-Euro ($W=16$, $p_{\mathrm{adj}}=.001$, $r_{\mathrm{rb}}=.85$). Willingness-to-rely ratings are 5.00 [4.33, 5.33] for EgoAnchor and 4.00 [4.00, 4.33] for One-Euro ($W=16.5$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=.87$). Stability-responsiveness balance ratings are 4.83 [4.58, 5.33] for EgoAnchor and 4.50 [4.25, 4.75] for One-Euro ($W=6$, $p_{\mathrm{adj}}=.003$, $r_{\mathrm{rb}}=.90$).
 
 \subsubsection{Augmentation Quality and Trust}
 
 \textbf{Augmentation quality.}
-The two AQ subscales indicate that the method difference is concentrated in embedding quality rather than interaction quality. EgoAnchor's embedding-quality score is 5.17 [4.50, 5.47], compared with 4.78 [4.50, 5.03] for One-Euro, with the difference remaining significant after Holm correction ($W=32$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.75$). Interaction-quality scores are similar: 5.06 [4.50, 5.33] for EgoAnchor and 4.89 [4.64, 5.14] for One-Euro, with no adjusted significant difference detected ($W=102.5$, $p_{\mathrm{adj}}=.446$, $r_{\mathrm{rb}}=.19$).
+The two AQ subscales indicate that the method difference is concentrated in embedding quality rather than interaction quality. EgoAnchor's embedding-quality rating is 5.17 [4.50, 5.47], compared with 4.78 [4.50, 5.03] for One-Euro, and the difference remains significant after Holm correction ($W=32$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.75$). Interaction-quality ratings are similar: 5.06 [4.50, 5.33] for EgoAnchor and 4.89 [4.64, 5.14] for One-Euro, and the difference is not significant after Holm correction ($W=102.5$, $p_{\mathrm{adj}}=.446$, $r_{\mathrm{rb}}=.19$).
 
 \textbf{User trust.}
-All three trust outcomes point in the same direction. TiA Reliability/Competence shows the largest effect size ($W=0$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=1.00$), with EgoAnchor at 4.58 [4.29, 4.83] and One-Euro at 4.17 [3.83, 4.50]. For Understanding/Predictability, EgoAnchor scores 4.38 [4.00, 5.00] and One-Euro 4.00 [3.94, 4.25] ($W=32$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.75$). For overall S-TIAS trust, EgoAnchor scores 5.67 [5.33, 6.00] and One-Euro 5.33 [4.92, 5.67] ($W=22.5$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.79$). Thus, all three method-level trust measures rate EgoAnchor higher.
+All three trust outcomes point in the same direction. TiA Reliability/Competence has the largest effect size ($W=0$, $p_{\mathrm{adj}}<.001$, $r_{\mathrm{rb}}=1.00$), with ratings of 4.58 [4.29, 4.83] for EgoAnchor and 4.17 [3.83, 4.50] for One-Euro. For Understanding/Predictability, ratings are 4.38 [4.00, 5.00] for EgoAnchor and 4.00 [3.94, 4.25] for One-Euro ($W=32$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.75$). For overall trust measured by S-TIAS, ratings are 5.67 [5.33, 6.00] for EgoAnchor and 5.33 [4.92, 5.67] for One-Euro ($W=22.5$, $p_{\mathrm{adj}}=.004$, $r_{\mathrm{rb}}=.79$). All three method-level trust measures are therefore higher for EgoAnchor.
 
-Internal consistency of the published scales in this sample (Cronbach's $\alpha$, reported as One-Euro/EgoAnchor) is: AQ Embedding Quality .768/.769, AQ Interaction Quality .504/.892, TiA Reliability/Competence .792/.751, TiA Understanding/Predictability .565/.769, and S-TIAS .672/.697. AQ Interaction Quality and TiA Understanding/Predictability show relatively low internal consistency under One-Euro, while S-TIAS is also relatively low under both methods.
+Complete Cronbach's $\alpha$ values appear in the supplementary material. AQ Interaction Quality (.504) and TiA Understanding/Predictability (.565) are relatively low under One-Euro, and S-TIAS is also relatively low under both methods (.672/.697).
 
 \textbf{Overall choice.}
-Final preferences follow the same direction. Of the 24 participants, 15 (62.5\%) overall prefer EgoAnchor, 4 (16.7\%) prefer One-Euro, and 5 (20.8\%) report no clear preference. When asked directly which method they trust more, 18 (75.0\%) choose EgoAnchor, 1 (4.2\%) chooses One-Euro, and 5 report no clear preference. Among the 19 participants who selected a method, median preference strength is 4.00 [3.00, 5.00] on a seven-point scale. Across all participants, confidence in distinguishing the two methods is 6.00 [5.00, 7.00]. Three participants report mild discomfort after the study, and none discontinue because of discomfort.
+Preference counts also favor EgoAnchor: 15/24 participants (62.5\%) preferred EgoAnchor, 4/24 preferred One-Euro, and 5/24 reported no clear preference. Direct trust choices were 18/1/5, respectively. Median preference strength was 4.00 [3.00, 5.00], and median confidence in distinguishing the methods was 6.00 [5.00, 7.00]. Three participants reported mild discomfort, and none withdrew.
 
 \section{Discussion}\label{sec:discussion}
 
 \subsection{Technical Implications}
 
-Across system behavior, design mechanisms, and user perception, the three experiments jointly indicate that single-frame pose accuracy captures only part of dynamic object anchoring quality. Experiment 1 shows that differences in the complete system appear across static registration, dynamic following, and transition response. Experiment 2 further shows that these behaviors are shaped by the temporal and coordinate interpretation of observations, reliability-based selection, static-state management, and render-time temporal selection. Experiment 3 shows that some of these differences are perceptible to users and are reflected in positional correctness, willingness to rely, and method-level trust. A visual observation contains not only a geometric pose but also a capture time, camera coordinate frame, reliability, and asynchronous arrival semantics. An object-anchoring runtime must therefore organize these attributes into a continuously consumable object state rather than merely process single-frame poses.
+Across the three experiments, the largest improvements arise when the runtime resolves temporal mismatch, unreliable observations, or stationary-state transitions rather than framewise smoothing. These differences are also reflected in perceived positional correctness, willingness to rely on the anchor, and method-level trust. Dynamic object anchoring therefore requires the runtime to organize pose, capture time, reliability, and asynchronous arrival into a continuous object state for applications.
 
-The results also expose a trade-off among stability, trajectory fidelity, and response speed. EgoAnchor achieves lower error in static registration, occlusion recovery, and latency-aligned dynamic trajectory residuals, but incurs a longer motion-onset response and greater current-time translational error during sustained motion. In the user study, static stability, recovery consistency, positional correctness, willingness to rely, and stability--responsiveness balance all favor EgoAnchor, whereas no adjusted method difference is detected during sustained motion. This suggests that an object-anchoring runtime should select its operating point between response speed and trajectory fidelity according to application requirements. Scenarios centered on post-placement reading, object annotation, and near-object interaction may prioritize a stable object-level spatial relationship, whereas rapid continuous manipulation places greater value on low response lag.
+EgoAnchor trades a longer motion-onset response for lower static error, lower occlusion-recovery error, and lower latency-aligned trajectory residuals. It also incurs larger current-time translation error during continuous motion. The user-study advantage is likewise concentrated in stationary behavior, recovery, and overall reliance, while no difference is detected during continuous motion. Applications such as post-placement inspection and object annotation can therefore favor stability and trajectory fidelity, whereas rapid continuous manipulation places a stronger premium on reducing response lag.
 
 \subsection{Limitations and Future Work}
 
 \textbf{Objects and 3D models.}
-EgoAnchor targets rigid objects with available 3D models, and its performance is constrained by target observability and model quality. Severe occlusion, extremely weak texture, transparent or specular materials, and stereo-depth failure can degrade segmentation, depth recovery, and pose verification; non-rigid objects fall outside the rigid-body pose model considered here. The 3D model participates in both pose estimation and VCD verification, so errors in its scale, geometry, or object coordinate frame propagate to the final anchor. Current image-to-3D methods provide a more accessible route for obtaining models of everyday objects, but the geometry, scale, and coordinate-frame quality of generated models still affect downstream anchoring. Future work can investigate anchoring-oriented model generation, scale calibration, and more automated asset-preparation pipelines.
+EgoAnchor targets rigid objects with available 3D models and depends on target observability and model quality. Severe occlusion, weak texture, transparent or specular materials, and stereo-depth failure can degrade segmentation, depth recovery, and pose verification; non-rigid objects fall outside our rigid-pose model. Because the same 3D model supports pose estimation and VCD verification, scale, geometry, or coordinate errors propagate to the anchor. Image-to-3D methods simplify model acquisition, but generated model quality still affects anchoring. Future work can investigate anchoring-oriented model generation, scale calibration, and automated preparation.
 
 \textbf{Evaluation reference and cross-platform comparison.}
-Our controlled evaluation is conducted within the Quest 3 platform and does not yet include cross-headset quantitative 6DoF comparisons (e.g., with Apple Vision Pro). Such comparisons first require the outputs of different systems to be calibrated into a common object coordinate frame. Platforms may use different 3D models, local origins, and axis conventions; without a rigid transformation from each system's output to a shared object reference frame, translational and rotational errors cannot be interpreted on a common basis. Tracking update rates, timestamp semantics, and failure handling may also differ across systems, requiring aligned sampling times and consistent validity definitions. Two-dimensional contours or keypoints can provide auxiliary evidence of appearance alignment, but they do not fully constrain depth-direction translation or out-of-plane rotation and therefore cannot replace a 6DoF reference.
-
-We selected the Quest 3 controller as the controlled target because its platform-tracked pose and headset pose share the same world coordinate frame, and a fixed rigid correspondence can be established between the controller geometry and the platform tracking origin. This provides a reference for synchronized 6DoF error computation within the same device. The reference still depends on the platform's own tracking and is not independent physical ground truth. Future cross-platform evaluation could use an external optical motion-capture system or robotic motion platform as a shared 6DoF reference under a common object model and local coordinate frame, while aligning timestamps and validity states across systems before comparing static registration, dynamic following, and transition response.
+The controlled evaluation is limited to Quest 3 and does not include cross-headset 6DoF comparisons. Platforms can differ in object models, coordinate conventions, update rates, timestamps, and failure semantics, so comparison requires a common object frame, sampling-time definition, and validity semantics. We use the Quest 3 controller because it shares the headset's world frame and permits a fixed object-frame correspondence, but it still relies on platform tracking rather than independent ground truth. Future work can use external optical motion capture or a robotic platform to establish a shared 6DoF reference.
 
 \textbf{Deployment and evaluation benchmark.}
-The current implementation depends on an external GPU workstation, and perception and communication latency still limit current-time registration quality during rapid motion. Lower perception latency, higher candidate frequency, and headset-side deployment would broaden applicability to fast manipulation tasks. In addition, the present evaluation focuses on a single platform and a small set of rigid objects. Future studies could reuse the three metric groups---static registration, dynamic following, and transition response---across a broader range of objects and devices to establish a cross-device, cross-object benchmark for dynamic object anchoring~\cite{cheng2024tracking,hu2024applemeta,hu2025xrrealitycheck}.
+The current implementation depends on an external GPU workstation, and perception and communication latency still limit current-time registration quality during fast motion. Reducing perception latency, increasing candidate rate, and moving more computation onto the headset can broaden applicability to rapid manipulation tasks. The current evaluation is also limited to one platform and a small set of rigid objects. Future studies can reuse the three metric groups of static registration, dynamic following, and transition response across more objects and devices to establish a cross-device, cross-object benchmark for dynamic object anchoring~\cite{cheng2024tracking,hu2024applemeta,hu2025xrrealitycheck}.
 
 \section{Conclusion}\label{sec:conclusion}
 
-We presented EgoAnchor, an egocentric zero-shot dynamic object anchoring system for passthrough mixed reality. EgoAnchor recovers asynchronous camera-frame observations produced by open-vocabulary and zero-shot visual perception into world-frame states consistent with image capture time, maintains reliability-constrained object state, and synthesizes stable, continuous, and recoverable anchors on every render frame. Controlled evaluation shows lower error in static registration, latency-aligned dynamic trajectory residuals, and occlusion recovery, while incurring a longer motion-onset response. A 24-participant user study further shows higher ratings for static stability, recovery consistency, positional correctness, willingness to rely, and method-level trust.
+We present EgoAnchor, an egocentric zero-shot dynamic object anchoring system for passthrough mixed reality that converts asynchronous camera-frame observations into capture-time world states and maintains stable, continuous, and recoverable frame-by-frame anchors. Controlled evaluation shows lower static-registration and occlusion-recovery errors and smaller latency-aligned trajectory residuals, at the cost of higher motion-onset latency. A 24-participant study further shows higher stationary stability, recovery consistency, positional correctness, willingness to rely on the anchor, and method-level trust.
 
-More broadly, converting visual-model object-pose outputs into object-level spatial states for MR requires not only accurate pose estimation but also explicit runtime treatment of observation temporal semantics, reliability, and continuous output behavior. As open-world visual models, 3D generation, and headset computing capabilities continue to advance, such perception--runtime co-design can expand the range of everyday objects and interaction scenarios supported by dynamic object anchoring.
+Converting visual pose outputs into object-level spatial state requires runtime handling of observation timing, reliability, and continuous output, not pose accuracy alone. As open visual models, 3D generation, and on-device computing advance, perception-runtime co-design can broaden dynamic anchoring to more everyday objects and interactions.
 
-\raggedbottom
+\acknowledgments{
+  This research was supported by the National Natural Science Foundation of China (No. 62377004).
+}
 
 \bibliographystyle{abbrv-doi-hyperref-narrow}
 \bibliography{egoanchor_cn_refs}

@@ -19,6 +19,7 @@ MonoBehaviour:
     - 0080b5c12b54cff40894bd1540cde5e2
     - e83472529815eca4792d8712caf83613
     - 5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c
+    - 8a183e2bff420cc4687b8bc39955d9fb
     values:
     - goDatas_byGlobalId:
         keys:
@@ -120,5 +121,53 @@ MonoBehaviour:
           iconNameOrGuid: 
           isIconRecursive: 0
           isColorRecursive: 1
+    - goDatas_byGlobalId:
+        keys:
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-1645134056
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-1826971157
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-1342311013
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-1971731090
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-906733355
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-875798642
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-369174976
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-2038087640
+        - globalObjectIdString: GlobalObjectId_V1-2-8a183e2bff420cc4687b8bc39955d9fb-919132149155446097-2019093919
+        values:
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 2
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 4
+          iconNameOrGuid: 
+          isIconRecursive: 0
+          isColorRecursive: 0
   bookmarks: []
   bookmarkedScenePaths: []

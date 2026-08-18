@@ -247,3 +247,59 @@ confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高�
 [objects.gamepad.module.foundationpose]
 mesh_path = "data/model/gamepad.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
 symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.scissors.module.segmenter]
+prompt = "black scissors" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.scissors.module.foundationpose]
+mesh_path = "data/model/scissors.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.mug.module.segmenter]
+prompt = "pink mug" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.mug.module.foundationpose]
+mesh_path = "data/model/mug.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.umbrella.module.segmenter]
+prompt = "folded umbrella" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.umbrella.module.foundationpose]
+mesh_path = "data/model/umbrella.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.tape_roll.module.segmenter]
+prompt = "pink tape_roll" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.tape_roll.module.foundationpose]
+mesh_path = "data/model/tape_roll.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.glasses.module.segmenter]
+prompt = "black glasses" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.glasses.module.foundationpose]
+mesh_path = "data/model/glasses.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.desk_fan.module.segmenter]
+prompt = "green fan" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.desk_fan.module.foundationpose]
+mesh_path = "data/model/desk_fan.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.book.module.segmenter]
+prompt = "book" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.book.module.foundationpose]
+mesh_path = "data/model/book.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
