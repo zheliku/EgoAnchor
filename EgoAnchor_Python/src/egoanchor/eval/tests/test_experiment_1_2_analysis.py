@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from dataclasses import replace
@@ -47,6 +48,16 @@ from egoanchor.eval.experiments.experiment_1_2.analysis import (
     write_analysis_artifacts,
     write_task_results,
 )
+
+
+def _data_rows(table: str) -> tuple[str, ...]:
+    """取出四个方法的数据行，用于比对中英文两套表的数值是否逐字相同。"""
+
+    return tuple(
+        line
+        for line in table.splitlines()
+        if line.split(" &")[0] in {"Arrival", "Capture", "One-Euro", "EgoAnchor"}
+    )
 
 
 class Experiment12AnalysisTests(unittest.TestCase):
@@ -202,17 +213,23 @@ class Experiment12AnalysisTests(unittest.TestCase):
         dynamic_table = build_exp1_dynamic_table(results)
         transition_table = build_exp1_transition_table(results)
         exp1_tables = (static_table, dynamic_table, transition_table)
+        english_tables = (
+            build_exp1_static_table(results, "en"),
+            build_exp1_dynamic_table(results, "en"),
+            build_exp1_transition_table(results, "en"),
+        )
 
-        for table in exp1_tables:
+        for table in (*exp1_tables, *english_tables):
             self.assertTrue(table.endswith("\n"))
             self.assertFalse(table.endswith("\n\n"))
         # 三个评价方面各自成表，均按自然宽度排在单栏内：不横向撑满，不改字号，
-        # 也不动行距；唯一允许的宽度手段是列距。
-        for index, table in enumerate(exp1_tables):
+        # 也不动行距；唯一允许的宽度手段是列距。中英文两套只有字面不同，同一批
+        # 版式约束对两者都成立。
+        for columns, table in zip((3, 4, 2) * 2, (*exp1_tables, *english_tables), strict=True):
             self.assertIn(r"\begin{table}[t]", table)
             self.assertNotIn(r"\begin{table*}", table)
             self.assertIn(
-                r"\begin{tabular}{@{}l" + "c" * (3, 4, 2)[index] + r"@{}}",
+                r"\begin{tabular}{@{}l" + "c" * columns + r"@{}}",
                 table,
             )
             for forbidden in (
@@ -235,43 +252,78 @@ class Experiment12AnalysisTests(unittest.TestCase):
             self.assertNotIn("旋转 &", table)
         # 只有指标最多的动态跟随需要收紧列距，其余两张表保持模板列距；
         # 赋值写在 table 环境内，因此不外溢到后续表格。
-        for table in (static_table, transition_table):
+        for table in (static_table, transition_table, english_tables[0], english_tables[2]):
             self.assertNotIn(r"\setlength{\tabcolsep}", table)
-        self.assertIn(
-            "\n" + r"\setlength{\tabcolsep}{2pt}" + "\n" + r"\begin{tabular}",
-            dynamic_table,
-        )
-        self.assertGreater(
-            dynamic_table.index(r"\setlength{\tabcolsep}"),
-            dynamic_table.index(r"\caption{"),
-        )
+        for table in (dynamic_table, english_tables[1]):
+            self.assertIn(
+                "\n" + r"\setlength{\tabcolsep}{2pt}" + "\n" + r"\begin{tabular}",
+                table,
+            )
+            self.assertGreater(
+                table.index(r"\setlength{\tabcolsep}"),
+                table.index(r"\caption{"),
+            )
         # 方面名与 §5.1 的评价指标及 §6.1 的三个小节逐一对应，且各自单一概念。
         for aspect, table in zip(
             ("静态配准", "动态跟随", "转换响应"), exp1_tables, strict=True
         ):
             self.assertIn(aspect, table)
-        for label, table in zip(
-            ("tab:exp1-static", "tab:exp1-dynamic", "tab:exp1-transition"),
-            exp1_tables,
+        for aspect, table in zip(
+            ("Static registration", "Dynamic following", "Transition response"),
+            english_tables,
             strict=True,
         ):
-            self.assertIn(rf"\label{{{label}}}", table)
-        # 每个指标列带一个方向箭头，箭头紧随指标名而非单位。
-        for count, table in zip((3, 4, 2), exp1_tables, strict=True):
-            self.assertEqual(table.count(r"$\downarrow$"), count)
+            self.assertIn(aspect, table)
+        # 两种语言共用同一组 label，两份主稿各自 \input 自己语言的目录。
+        for label, cn_table, en_table in zip(
+            ("tab:exp1-static", "tab:exp1-dynamic", "tab:exp1-transition"),
+            exp1_tables,
+            english_tables,
+            strict=True,
+        ):
+            self.assertIn(rf"\label{{{label}}}", cn_table)
+            self.assertIn(rf"\label{{{label}}}", en_table)
+        # 每个指标列带一个方向箭头，箭头紧随指标名而非单位；题注另有一个箭头，
+        # 因为两份主稿的题注都以「$\downarrow$越低越好 / lower is better」交代方向。
+        for count, table in zip((3, 4, 2) * 2, (*exp1_tables, *english_tables), strict=True):
+            header = table.split(r"\midrule")[0].split(r"\toprule")[1]
+            self.assertEqual(header.count(r"$\downarrow$"), count)
+            self.assertEqual(table.count(r"$\downarrow$"), count + 1)
             self.assertNotIn(r"mm/$^\circ$\,$\downarrow$", table)
+        # 表头字面与两份主稿逐字一致：中文 v5 用「配准误差」「运动起动」，
+        # 英文 v2 用 Effective latency 而非已退役的 lag。
         for header, table in (
             (r"头动泄漏\,$\downarrow$", static_table),
-            (r"绝对配准\,$\downarrow$", static_table),
+            (r"配准误差\,$\downarrow$", static_table),
             (r"静止抖动\,$\downarrow$", static_table),
             (r"有效时延\,$\downarrow$", dynamic_table),
             (r"LA-RMSE\,$\downarrow$", dynamic_table),
             (r"CT-RMSE\,$\downarrow$", dynamic_table),
             (r"残余抖动\,$\downarrow$", dynamic_table),
             (r"遮挡误差\,$\downarrow$", transition_table),
-            (r"起动转换\,$\downarrow$", transition_table),
+            (r"运动起动\,$\downarrow$", transition_table),
+            (r"Head-motion\\leakage\,$\downarrow$", english_tables[0]),
+            (r"Registration\\error\,$\downarrow$", english_tables[0]),
+            (r"Stationary\\jitter\,$\downarrow$", english_tables[0]),
+            (r"Effective\\latency\,$\downarrow$", english_tables[1]),
+            (r"LA-RMSE\,$\downarrow$", english_tables[1]),
+            (r"CT-RMSE\,$\downarrow$", english_tables[1]),
+            (r"Residual\\jitter\,$\downarrow$", english_tables[1]),
+            (r"Occlusion error\,$\downarrow$", english_tables[2]),
+            (r"Motion-onset latency\,$\downarrow$", english_tables[2]),
         ):
             self.assertIn(header, table)
+        # 中英两套各自只出现自己的方法列表头，且英文表不残留中文字面。
+        for table in exp1_tables:
+            self.assertIn("方法 &", table)
+        for table in english_tables:
+            self.assertIn("Method &", table)
+            self.assertNotIn("方法 &", table)
+            self.assertIsNone(re.search(r"[一-鿿]", table))
+        # 已退役写法不得回流：绝对配准、起动转换、Effective lag。
+        for table in (*exp1_tables, *english_tables):
+            for retired in ("绝对配准", "起动转换", "Effective lag", "Lag-aligned"):
+                self.assertNotIn(retired, table)
         # 单元格按平移/旋转顺序书写，两通道各自独立加粗最优中位数；通道分隔用
         # 裸斜杠，双通道单元格是全表最宽成分，两侧窄空会把列距逼到过挤的档位。
         self.assertIn(
@@ -280,8 +332,11 @@ class Experiment12AnalysisTests(unittest.TestCase):
             static_table,
         )
         self.assertIn(r"Capture & 2.50/2.00 & 3.50/3.00", static_table)
-        for table in exp1_tables:
+        for table in (*exp1_tables, *english_tables):
             self.assertNotIn(r"\,/\,", table)
+        # 中英两套只有字面不同：去掉题注与表头后的数据行必须逐字相同。
+        for cn_table, en_table in zip(exp1_tables, english_tables, strict=True):
+            self.assertEqual(_data_rows(cn_table), _data_rows(en_table))
         # 时延按 5~ms 网格的实际分辨率保留一位小数，其余指标保留两位。
         self.assertIn(
             r"Arrival & \textbf{200.5}/\textbf{220.5} & "
@@ -294,7 +349,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
             r"Arrival & \textbf{4.50}/\textbf{2.30} & \textbf{150.5} \\",
             transition_table,
         )
-        combined = "".join(exp1_tables)
+        combined = "".join((*exp1_tables, *english_tables))
         self.assertNotIn("Arrival-Hold &", combined)
         self.assertNotIn("Capture-Hold &", combined)
         self.assertNotIn("One-Euro Anchor &", combined)
@@ -371,7 +426,7 @@ class Experiment12AnalysisTests(unittest.TestCase):
             self.assertEqual(len(means), 8)
         self.assertEqual(
             [text.get_text() for text in experiment_one.legends[0].get_texts()],
-            ["Head-motion leakage / LA-RMSE", "Static / residual jitter P95", "Mean"],
+            ["Head-motion leakage / LA-RMSE", "Jitter P95", "Mean"],
         )
 
         experiment_two = build_exp2_attribution_figure(results)
@@ -379,12 +434,12 @@ class Experiment12AnalysisTests(unittest.TestCase):
         temporal_legend = [
             text.get_text() for text in experiment_two.axes[3].get_legend().get_texts()
         ]
-        self.assertEqual(temporal_legend, ["Predictive tracking", "History retrieval"])
+        self.assertEqual(temporal_legend, ["Predictive tracking", "History query"])
         self.assertNotIn("Hermite", " ".join(temporal_legend))
         self.assertFalse(experiment_two.axes[3].get_legend().get_visible())
         self.assertEqual(
             [text.get_text() for text in experiment_two.legends[0].get_texts()],
-            ["IQR", "Median", "Predictive tracking", "History retrieval"],
+            ["IQR", "Median", "Predictive tracking", "History query"],
         )
         self.assertEqual(
             [axis.get_title(loc="left") for axis in experiment_two.axes],
@@ -392,15 +447,15 @@ class Experiment12AnalysisTests(unittest.TestCase):
                 "(a) Capture-time alignment",
                 "(b) StaticLock",
                 "(c) VCD risk-coverage",
-                "(d) Predictive tracking\nvs. history retrieval",
+                "(d) Predictive tracking\nvs. history query",
             ],
         )
         self.assertEqual(
             experiment_two.axes[2].get_xlabel(),
             "Candidates retained (%)",
         )
-        self.assertEqual(experiment_two.axes[3].get_xlabel(), "Effective lag (ms)")
-        self.assertEqual(experiment_two.axes[3].get_ylabel(), "Lag-aligned RMSE (mm)")
+        self.assertEqual(experiment_two.axes[3].get_xlabel(), "Effective latency (ms)")
+        self.assertEqual(experiment_two.axes[3].get_ylabel(), "LA-RMSE (mm)")
         experiment_two.canvas.draw()
         renderer = experiment_two.canvas.get_renderer()
         temporal_title_bounds = left_title(experiment_two.axes[3]).get_window_extent(
@@ -892,8 +947,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
             if collection.get_label()
             in {
                 "Predictive tracking",
-                "History retrieval\n(Linear/SLERP)",
-                "History retrieval\n(Hermite)",
+                "History query\n(Linear/SLERP)",
+                "History query\n(Hermite)",
             }
         }
 
@@ -902,8 +957,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
             set(labeled_collections),
             {
                 "Predictive tracking",
-                "History retrieval\n(Linear/SLERP)",
-                "History retrieval\n(Hermite)",
+                "History query\n(Linear/SLERP)",
+                "History query\n(Hermite)",
             },
         )
         self.assertTrue(
@@ -916,8 +971,8 @@ class Experiment12AnalysisTests(unittest.TestCase):
             [text.get_text() for text in axis.get_legend().get_texts()],
             [
                 "Predictive tracking",
-                "History retrieval\n(Linear/SLERP)",
-                "History retrieval\n(Hermite)",
+                "History query\n(Linear/SLERP)",
+                "History query\n(Hermite)",
             ],
         )
         self.assertFalse(axis.get_legend().get_frame_on())

@@ -389,3 +389,7 @@ python src/run_server.py --object book
 desk_fan ={ cmd = """
 python src/run_server.py --object desk_fan
 """ }
+
+phone ={ cmd = """
+python src/run_server.py --object phone
+""" }

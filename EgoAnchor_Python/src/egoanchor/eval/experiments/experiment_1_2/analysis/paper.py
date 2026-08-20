@@ -180,11 +180,23 @@ _CHANNEL_UNIT = r"mm/$^\circ$"
 """双通道指标的单位，与单元格内的平移/旋转书写顺序一致。"""
 
 
+LANGUAGES = ("cn", "en")
+"""表格文字的两种语言，与中英文两份主稿一一对应。
+
+中英文主稿共用同一批数值，只有题注与表头字面不同，因此同一份指标结果直接
+产出两套 TeX；论文侧各自 ``\\input`` 自己语言的目录，不再手工翻译表格。
+"""
+
+_METHOD_HEADER = {"cn": "方法", "en": "Method"}
+"""方法列表头。"""
+
+
 _DEFAULT_TABCOLSEP_PT = 6.0
 """``vgtc`` 模板的 ``\\tabcolsep`` 默认值，仅作为是否需要收紧列距的判据。"""
 
 
 def _behavior_table(
+    language: str,
     caption: str,
     label: str,
     columns: tuple[tuple[str, str, Mapping[str, str]], ...],
@@ -203,6 +215,8 @@ def _behavior_table(
     把单位从表头移入题注对宽度无影响（同为 220.49~pt），故单位保留在表头。
     """
 
+    if language not in LANGUAGES:
+        raise ValueError(f"表格语言必须是 {LANGUAGES} 之一：{language}")
     lines = [
         r"\begin{table}[t]",
         r"\centering",
@@ -215,7 +229,7 @@ def _behavior_table(
         ),
         r"\begin{tabular}{@{}l" + "c" * len(columns) + r"@{}}",
         r"\toprule",
-        "方法 & "
+        f"{_METHOD_HEADER[language]} & "
         + " & ".join(_metric_header(name, unit) for name, unit, _ in columns)
         + r" \\",
         r"\midrule",
@@ -225,18 +239,43 @@ def _behavior_table(
     return "\n".join(lines) + "\n"
 
 
-def build_exp1_static_table(results: PaperResults) -> str:
-    """生成实验一静态配准表：头动泄漏、绝对配准与静止抖动。"""
+_STATIC_CAPTION = {
+    "cn": (
+        r"实验一静态配准。单元格按平移/旋转给出重复测量中位数，三项均为P95；"
+        r"$\downarrow$越低越好，粗体为通道最优，分布见图~\ref{fig:exp1-final}(a,b)。"
+    ),
+    "en": (
+        r"Static registration in Experiment 1. Cells report medians across repeated "
+        r"measurements as translation/rotation; all three metrics are P95 values. "
+        r"$\downarrow$ indicates lower is better, and bold marks the best value in "
+        r"each channel. Distributions are shown in Fig.~\ref{fig:exp1-final}(a,b)."
+    ),
+}
+"""静态配准表题注，逐字对应两份主稿。"""
+
+_STATIC_METRICS = {
+    "cn": ("头动泄漏", "配准误差", "静止抖动"),
+    "en": (
+        r"Head-motion\\leakage",
+        r"Registration\\error",
+        r"Stationary\\jitter",
+    ),
+}
+"""静态配准三指标表头；英文名较长，在 ``\\shortstack`` 内自行折行。"""
+
+
+def build_exp1_static_table(results: PaperResults, language: str = "cn") -> str:
+    """生成实验一静态配准表：头动泄漏、配准误差与静止抖动。"""
 
     static = results.static_segments
+    leakage, registration, jitter = _STATIC_METRICS[language]
     return _behavior_table(
-        r"实验一的静态配准。各单元格按平移/旋转顺序给出重复测量的中位数，"
-        r"三项指标均取P95；箭头标记优劣方向，粗体为各指标在该通道上的最优"
-        r"中位数。分布见图~\ref{fig:exp1-final}(a,\,b)。",
+        language,
+        _STATIC_CAPTION[language],
         "tab:exp1-static",
         (
             (
-                "头动泄漏",
+                leakage,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (static, "centered_p95_mm"),
@@ -244,7 +283,7 @@ def build_exp1_static_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "绝对配准",
+                registration,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (static, "absolute_p95_mm"),
@@ -252,7 +291,7 @@ def build_exp1_static_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "静止抖动",
+                jitter,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (static, "frame_increment_p95_mm"),
@@ -263,20 +302,45 @@ def build_exp1_static_table(results: PaperResults) -> str:
     )
 
 
-def build_exp1_dynamic_table(results: PaperResults) -> str:
+_DYNAMIC_CAPTION = {
+    "cn": (
+        r"实验一动态跟随。单元格按平移/旋转给出重复测量中位数；残余抖动为P95，"
+        r"$\downarrow$越低越好，粗体为通道最优，分布见图~\ref{fig:exp1-final}(c,d)。"
+    ),
+    "en": (
+        r"Dynamic following in Experiment 1. Cells report medians across repeated "
+        r"measurements as translation/rotation; residual jitter is P95. $\downarrow$ "
+        r"indicates lower is better, and bold marks the best value in each channel. "
+        r"Distributions are shown in Fig.~\ref{fig:exp1-final}(c,d)."
+    ),
+}
+"""动态跟随表题注，逐字对应两份主稿。"""
+
+_DYNAMIC_METRICS = {
+    "cn": ("有效时延", "LA-RMSE", "CT-RMSE", "残余抖动"),
+    "en": (
+        r"Effective\\latency",
+        "LA-RMSE",
+        "CT-RMSE",
+        r"Residual\\jitter",
+    ),
+}
+"""动态跟随四指标表头；两个 RMSE 缩写在中英文主稿中一致。"""
+
+
+def build_exp1_dynamic_table(results: PaperResults, language: str = "cn") -> str:
     """生成实验一动态跟随表：有效时延、两个RMSE与残余抖动。"""
 
     translation = results.translation_segments
     rotation = results.rotation_segments
+    latency, aligned_rmse, current_rmse, jitter = _DYNAMIC_METRICS[language]
     return _behavior_table(
-        r"实验一的动态跟随。各单元格按平移/旋转顺序给出重复测量的中位数；"
-        r"LA-RMSE为时延对齐均方根误差，CT-RMSE为当前时刻均方根误差，"
-        r"残余抖动取P95。箭头标记优劣方向，粗体为各指标在该通道上的最优"
-        r"中位数。分布见图~\ref{fig:exp1-final}(c,\,d)。",
+        language,
+        _DYNAMIC_CAPTION[language],
         "tab:exp1-dynamic",
         (
             (
-                "有效时延",
+                latency,
                 "ms",
                 _channel_cells(
                     (translation, "effective_lag_ms"),
@@ -285,7 +349,7 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "LA-RMSE",
+                aligned_rmse,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (translation, "aligned_rmse_mm"),
@@ -293,7 +357,7 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "CT-RMSE",
+                current_rmse,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (translation, "current_time_rmse_mm"),
@@ -301,7 +365,7 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "残余抖动",
+                jitter,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (translation, "aligned_residual_increment_p95_mm"),
@@ -315,17 +379,39 @@ def build_exp1_dynamic_table(results: PaperResults) -> str:
     )
 
 
-def build_exp1_transition_table(results: PaperResults) -> str:
-    """生成实验一转换响应表：遮挡误差与起动转换。"""
+_TRANSITION_CAPTION = {
+    "cn": (
+        r"实验一转换响应。遮挡误差按平移/旋转给出重复测量中位数（P95），"
+        r"运动起动时延为跨通道标量；$\downarrow$越低越好，粗体为最优。"
+    ),
+    "en": (
+        r"Transition response in Experiment 1. Occlusion error reports medians across "
+        r"repeated measurements as translation/rotation (P95), while motion-onset "
+        r"latency is a scalar across channels. $\downarrow$ indicates lower is better, "
+        r"and bold marks the best value."
+    ),
+}
+"""转换响应表题注，逐字对应两份主稿。"""
+
+_TRANSITION_METRICS = {
+    "cn": ("遮挡误差", "运动起动"),
+    "en": ("Occlusion error", "Motion-onset latency"),
+}
+"""转换响应两指标表头；两列表最窄，英文名不折行也能排进单栏。"""
+
+
+def build_exp1_transition_table(results: PaperResults, language: str = "cn") -> str:
+    """生成实验一转换响应表：遮挡误差与运动起动时延。"""
 
     occlusion = results.occlusion_episodes
+    occlusion_error, onset = _TRANSITION_METRICS[language]
     return _behavior_table(
-        r"实验一的转换响应。遮挡误差按平移/旋转顺序给出重复测量的中位数并取"
-        r"P95，起动转换为跨通道标量。箭头标记优劣方向，粗体为最优中位数。",
+        language,
+        _TRANSITION_CAPTION[language],
         "tab:exp1-transition",
         (
             (
-                "遮挡误差",
+                occlusion_error,
                 _CHANNEL_UNIT,
                 _channel_cells(
                     (occlusion, "translation_p95_mm"),
@@ -333,7 +419,7 @@ def build_exp1_transition_table(results: PaperResults) -> str:
                 ),
             ),
             (
-                "起动转换",
+                onset,
                 "ms",
                 _best_median_cells(
                     results.transition_segments, "response_ms", _fmt_ms
@@ -766,7 +852,7 @@ def _write_figure_source_data(
     append_metric_rows(
         figure3_rows,
         figure="Figure 3",
-        panel="(d) Predictive tracking vs. history retrieval",
+        panel="(d) Predictive tracking vs. history query",
         rows=results.translation_segments,
         variants=TEMPORAL_STRATEGY_VARIANTS,
         x_key="effective_lag_ms",
@@ -934,25 +1020,23 @@ def write_analysis_artifacts(
     performance_path.write_text(json.dumps(results.performance, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     strategy_metrics_path, strategy_summary_path = _write_strategy_candidate_data(results, metrics_root)
     plot_data_path = _write_figure_source_data(results, plot_root)
-    exp1_tables = {
-        "exp1_static_table": (
-            "experiment1_static_fidelity.tex",
-            build_exp1_static_table(results),
+    # 每个评价方面按语言产出两份 TeX：分析侧文件名带语言后缀，论文侧目标由
+    # batch.toml 映射到 tables/cn 与 tables/en，两份主稿各自 \input 自己那份。
+    exp1_builders = (
+        ("exp1_static_table", "experiment1_static_fidelity", build_exp1_static_table),
+        ("exp1_dynamic_table", "experiment1_dynamic_fidelity", build_exp1_dynamic_table),
+        (
+            "exp1_transition_table",
+            "experiment1_transition_response",
+            build_exp1_transition_table,
         ),
-        "exp1_dynamic_table": (
-            "experiment1_dynamic_fidelity.tex",
-            build_exp1_dynamic_table(results),
-        ),
-        "exp1_transition_table": (
-            "experiment1_transition_response.tex",
-            build_exp1_transition_table(results),
-        ),
-    }
+    )
     exp1_table_paths = {}
-    for key, (name, content) in exp1_tables.items():
-        path = table_root / name
-        path.write_text(content, encoding="utf-8")
-        exp1_table_paths[key] = path
+    for key, stem, builder in exp1_builders:
+        for language in LANGUAGES:
+            path = table_root / f"{stem}_{language}.tex"
+            path.write_text(builder(results, language), encoding="utf-8")
+            exp1_table_paths[f"{key}_{language}"] = path
     retired_table_names = (
         "experiment1_system_characterization.tex",
         "experiment1_static_occlusion_stability.tex",
@@ -960,6 +1044,10 @@ def write_analysis_artifacts(
         "experiment1_performance.tex",
         "experiment1_anchor_behavior.tex",
         "experiment2_design_attribution.tex",
+        # 单语时期的三张无后缀表，双语拆分后不再产出。
+        "experiment1_static_fidelity.tex",
+        "experiment1_dynamic_fidelity.tex",
+        "experiment1_transition_response.tex",
     )
     for retired_name in retired_table_names:
         retired_table = table_root / retired_name
@@ -987,6 +1075,7 @@ def write_analysis_artifacts(
 
 
 __all__ = [
+    "LANGUAGES",
     "build_exp1_dynamic_table",
     "build_exp1_static_table",
     "build_exp1_transition_table",

@@ -31,7 +31,7 @@ MODEL_PATH = WEIGHTS_DIR / "yoloe-26l-seg.pt"
 MOBILECLIP2_PATH = WEIGHTS_DIR / "mobileclip2_b.ts"
 
 # 初始提示词；可写字符串，也可写多个候选类别。
-PROMPT: str | list[str] = ["pink earbuds case"]
+PROMPT: str | list[str] = ["smartphone"]
 
 # 检测置信度阈值；降低可提高召回，但会增加误检。
 CONF = 0.15

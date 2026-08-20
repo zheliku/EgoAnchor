@@ -327,8 +327,8 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
 
     labels = (
         "Predictive tracking",
-        "History retrieval\n(Linear/SLERP)",
-        "History retrieval\n(Hermite)",
+        "History query\n(Linear/SLERP)",
+        "History query\n(Hermite)",
     )
     colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR, _HERMITE_COLOR)
     markers = ("D", "s", "o")
@@ -369,8 +369,8 @@ def _plot_temporal_axis(axis: Any, paired_points: np.ndarray) -> None:
             linewidth=1.7,
             color=color,
         )
-    axis.set_xlabel("Effective lag (ms)")
-    axis.set_ylabel("Lag-aligned translation RMSE (mm)")
+    axis.set_xlabel("Effective latency (ms)")
+    axis.set_ylabel("LA-RMSE, translation (mm)")
     all_points = paired_points.reshape(-1, paired_points.shape[-1])
     axis.set_xlim(
         min(_DYNAMIC_X_LIMITS[0], float(np.min(all_points[:, 0])) * 0.96),
@@ -673,7 +673,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
             markerfacecolor="white",
             linestyle="--",
             markersize=5.0,
-            label="Static / residual jitter P95",
+            label="Jitter P95",
         ),
         Line2D(
             (),
@@ -792,7 +792,7 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
         ),
         "实验二两路时序策略",
     )
-    labels = ("Predictive tracking", "History retrieval")
+    labels = ("Predictive tracking", "History query")
     colors = (_EXTRAPOLATION_COLOR, _FULL_COLOR)
     markers = ("D", "s")
     for episode in points:
@@ -833,8 +833,8 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
             color=color,
             zorder=4,
         )
-    axis.set_xlabel("Effective lag (ms)", labelpad=2.0)
-    axis.set_ylabel("Lag-aligned RMSE (mm)", labelpad=1.0)
+    axis.set_xlabel("Effective latency (ms)", labelpad=2.0)
+    axis.set_ylabel("LA-RMSE (mm)", labelpad=1.0)
     axis.set_ylim(bottom=0.0)
     axis.legend(
         frameon=False,
@@ -889,7 +889,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
         "(a) Capture-time alignment",
         "(b) StaticLock",
         "(c) VCD risk-coverage",
-        "(d) Predictive tracking\nvs. history retrieval",
+        "(d) Predictive tracking\nvs. history query",
     )
     for axis, title in zip(axes, titles, strict=True):
         axis.set_title(
@@ -935,7 +935,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
                 marker="s",
                 linestyle="-",
                 markersize=4.8,
-                label="History retrieval",
+                label="History query",
             ),
         ),
         loc="upper center",

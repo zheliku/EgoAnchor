@@ -303,3 +303,11 @@ confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高�
 [objects.book.module.foundationpose]
 mesh_path = "data/model/book.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
 symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。
+
+[objects.phone.module.segmenter]
+prompt = "smartphone" # 文本提示词；若检测不到，可用显式 --config 临时 TOML 覆盖。
+confidence_threshold = 0.35 # 检测候选置信度阈值；误检多时调高，漏检多时调低。
+
+[objects.phone.module.foundationpose]
+mesh_path = "data/model/phone.glb" # 相对 EgoAnchor_Python 的目标 mesh 路径。
+symmetry_mode = "none" # 控制器不是 cube 对称体，不能沿用 cube 对称约束。

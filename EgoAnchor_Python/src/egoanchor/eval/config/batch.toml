@@ -13,9 +13,12 @@ active_root = "data/experiments/experiment_1_2" # 当前论文五任务组合清
 experiment_destination = "figures/panels" # 当前活动批次 analysis/figures 下实验一、二 PNG/PDF 的论文相对目标目录。
 
 [experiment_1_2.copy_assets.tables]
-exp1_static_table = "cn/tables/exp1_static.tex" # 实验一静态配准表的论文相对目标路径；承载头动泄漏、绝对配准与静止抖动。
-exp1_dynamic_table = "cn/tables/exp1_dynamic.tex" # 实验一动态跟随表的论文相对目标路径；承载有效时延、LA-RMSE、CT-RMSE 与残余抖动。
-exp1_transition_table = "cn/tables/exp1_transition.tex" # 实验一转换响应表的论文相对目标路径；承载遮挡误差与起动转换。
+exp1_static_table_cn = "tables/cn/exp1_static.tex" # 中文稿静态配准表的论文相对目标路径；承载头动泄漏、配准误差与静止抖动。
+exp1_static_table_en = "tables/en/exp1_static.tex" # 英文稿静态配准表的论文相对目标路径；与中文稿同数值、仅字面不同。
+exp1_dynamic_table_cn = "tables/cn/exp1_dynamic.tex" # 中文稿动态跟随表的论文相对目标路径；承载有效时延、LA-RMSE、CT-RMSE 与残余抖动。
+exp1_dynamic_table_en = "tables/en/exp1_dynamic.tex" # 英文稿动态跟随表的论文相对目标路径；与中文稿同数值、仅字面不同。
+exp1_transition_table_cn = "tables/cn/exp1_transition.tex" # 中文稿转换响应表的论文相对目标路径；承载遮挡误差与运动起动时延。
+exp1_transition_table_en = "tables/en/exp1_transition.tex" # 英文稿转换响应表的论文相对目标路径；与中文稿同数值、仅字面不同。
 
 [[experiment_1_2.copy_assets.relay]]
 source = "data/replay_capture/20260723_125041_569_controller_right/rendered/grid/replay_grid.pdf" # 已确认的 relay 网格 PDF，相对于 EgoAnchor_Python 根目录；更换定性图时在此显式指定。
@@ -32,4 +35,4 @@ analysis_root = "data/experiments/experiment_3/analysis" # 实验三结果工作
 
 [experiment_3.copy_assets]
 experiment_destination = "figures/panels" # 实验三 PNG/PDF 的论文相对发布目录。
-table_destination = "tables/exp3_subjective.tex" # 实验三主观结果表的论文相对发布路径；图片复用统一的面板目录。
+table_destination = "tables/cn/exp3_subjective.tex" # 实验三主观结果表的论文相对发布路径；生成器只产中文，tables/en 下同名文件由用户手工维护、不受本管线管辖。图片复用统一的面板目录。

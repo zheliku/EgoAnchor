@@ -593,9 +593,13 @@ class Experiment12WorkflowTests(unittest.TestCase):
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
             table_names = {
-                "exp1_static_table": "experiment1_static_fidelity.tex",
-                "exp1_dynamic_table": "experiment1_dynamic_fidelity.tex",
-                "exp1_transition_table": "experiment1_transition_response.tex",
+                f"{key}_{language}": f"{stem}_{language}.tex"
+                for key, stem in (
+                    ("exp1_static_table", "experiment1_static_fidelity"),
+                    ("exp1_dynamic_table", "experiment1_dynamic_fidelity"),
+                    ("exp1_transition_table", "experiment1_transition_response"),
+                )
+                for language in ("cn", "en")
             }
             artifact_paths = {}
             for key, name in table_names.items():
@@ -643,10 +647,17 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 active_root=active_root,
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
-                table_destinations=(
-                    ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
-                    ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
-                    ArtifactDestination("exp1_transition_table", paper_root / "tables" / "exp1_transition.tex"),
+                table_destinations=tuple(
+                    ArtifactDestination(
+                        f"{key}_{language}",
+                        paper_root / "tables" / language / f"{name}.tex",
+                    )
+                    for key, name in (
+                        ("exp1_static_table", "exp1_static"),
+                        ("exp1_dynamic_table", "exp1_dynamic"),
+                        ("exp1_transition_table", "exp1_transition"),
+                    )
+                    for language in ("cn", "en")
                 ),
                 relay_assets=(AssetCopy(relay_source, paper_root / "figures" / "replay_grid.pdf"),),
                 batch_config_path=root / "batch.toml",
@@ -685,7 +696,8 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 ):
                     plan_assets(root=root)
 
-            self.assertEqual(len(result), 24)
+            # 20 张图 + 6 张表（三方面 × 中英文）+ 1 个 relay。
+            self.assertEqual(len(result), 27)
             self.assertTrue((paper_root / "figures" / "panels" / "figure3d_temporal_strategies.pdf").is_file())
             self.assertTrue((paper_root / "figures" / "panels" / "figure2_exp1_behavior.pdf").is_file())
             self.assertEqual((paper_root / "figures" / "replay_grid.pdf").read_bytes(), b"relay")
@@ -694,10 +706,11 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 ("exp1_dynamic_table", "exp1_dynamic.tex"),
                 ("exp1_transition_table", "exp1_transition.tex"),
             ):
-                self.assertEqual(
-                    (paper_root / "tables" / name).read_text(encoding="utf-8"),
-                    key,
-                )
+                for language in ("cn", "en"):
+                    self.assertEqual(
+                        (paper_root / "tables" / language / name).read_text(encoding="utf-8"),
+                        f"{key}_{language}",
+                    )
             self.assertFalse((paper_root / "figures" / "panels" / "figure2c_occlusion.pdf").exists())
             self.assertFalse((paper_root / "tables" / "stale_table.tex").exists())
             self.assertFalse((paper_root / "main.tex").exists())
@@ -730,18 +743,21 @@ class Experiment12WorkflowTests(unittest.TestCase):
             table_root = active_root / "analysis" / "tex" / "tables"
             table_root.mkdir(parents=True)
             present_tables = {}
-            for key, name in (
-                ("exp1_static_table", "static.tex"),
-                ("exp1_dynamic_table", "dynamic.tex"),
+            for key in (
+                "exp1_static_table_cn",
+                "exp1_static_table_en",
+                "exp1_dynamic_table_cn",
+                "exp1_dynamic_table_en",
+                "exp1_transition_table_cn",
             ):
-                table = table_root / name
+                table = table_root / f"{key}.tex"
                 table.write_text(key, encoding="utf-8")
                 present_tables[key] = str(table.resolve())
             missing_table = table_root / "missing.tex"
             missing_table.write_text("missing", encoding="utf-8")
             artifact_paths = {
                 **present_tables,
-                "exp1_transition_table": str(missing_table.resolve()),
+                "exp1_transition_table_en": str(missing_table.resolve()),
             }
             implementation_root = _analysis_implementation_root()
             building = begin_build(
@@ -781,10 +797,17 @@ class Experiment12WorkflowTests(unittest.TestCase):
                 active_root=active_root,
                 paper_root=paper_root,
                 experiment_asset_destination=paper_root / "figures" / "panels",
-                table_destinations=(
-                    ArtifactDestination("exp1_static_table", paper_root / "tables" / "exp1_static.tex"),
-                    ArtifactDestination("exp1_dynamic_table", paper_root / "tables" / "exp1_dynamic.tex"),
-                    ArtifactDestination("exp1_transition_table", paper_root / "tables" / "exp1_transition.tex"),
+                table_destinations=tuple(
+                    ArtifactDestination(
+                        f"{key}_{language}",
+                        paper_root / "tables" / language / f"{name}.tex",
+                    )
+                    for key, name in (
+                        ("exp1_static_table", "exp1_static"),
+                        ("exp1_dynamic_table", "exp1_dynamic"),
+                        ("exp1_transition_table", "exp1_transition"),
+                    )
+                    for language in ("cn", "en")
                 ),
                 relay_assets=(),
                 batch_config_path=root / "batch.toml",
