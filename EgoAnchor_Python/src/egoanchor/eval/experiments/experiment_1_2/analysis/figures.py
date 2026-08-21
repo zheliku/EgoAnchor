@@ -45,6 +45,9 @@ _SHORT_LABELS = {
     "One-Euro Anchor": "One-Euro",
     FULL_VARIANT: "EgoAnchor",
 }
+_PAPER_XTICK_LABELS = {
+    **_SHORT_LABELS,
+}
 _METHOD_COLORS = {
     "Arrival-Hold": ARRIVAL_COLOR_HEX,
     "Capture-Hold": CAPTURE_COLOR_HEX,
@@ -598,15 +601,20 @@ def _draw_paper_metric_axis(
                 artist.set_linestyle(linestyle)
     axis.set_xticks(
         positions,
-        [_SHORT_LABELS[method] for method in METHODS],
-        rotation=27,
-        ha="right",
-        rotation_mode="anchor",
+        [_PAPER_XTICK_LABELS[method] for method in METHODS],
+        rotation=15,
+        ha="center",
     )
     axis.set_xlim(-0.48, len(METHODS) - 0.52)
     axis.set_ylim(bottom=0.0)
     axis.set_ylabel(f"Value ({unit})")
-    axis.tick_params(axis="both", length=2.6, width=0.75, pad=2.0)
+    axis.tick_params(
+        axis="both",
+        length=2.6,
+        width=0.75,
+        pad=2.0,
+        labelsize=_COMPOSITE_FONT_SIZE - 0.6,
+    )
     _clean_axis(axis)
 
 
@@ -614,7 +622,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
     """生成实验一正文使用的四面板单轴组合图。"""
 
     apply_paper_style(font_size=_COMPOSITE_FONT_SIZE)
-    figure, axes = plt.subplots(1, 4, figsize=(7.15, 2.50))
+    figure, axes = plt.subplots(1, 4, figsize=(7.15, 2.25))
     specifications = (
         (
             results.static_segments,
@@ -863,7 +871,7 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
         NO_STATIC_LOCK,
         "centered_p95_mm",
     )
-    figure = plt.figure(figsize=(7.15, 2.48))
+    figure = plt.figure(figsize=(7.15, 2.05))
     grid = figure.add_gridspec(1, 4, width_ratios=(1.15, 0.85, 1.18, 1.42))
     axes = tuple(figure.add_subplot(grid[0, index]) for index in range(4))
     _paired_axis(

@@ -154,7 +154,7 @@ class Experiment3ArtifactContractTests(unittest.TestCase):
         )
         for axis in figure.axes:
             self.assertTrue(
-                all(abs(float(tick.get_rotation()) - 30.0) < 1.0e-12 for tick in axis.get_xticklabels())
+                all(abs(float(tick.get_rotation()) - 12.0) < 1.0e-12 for tick in axis.get_xticklabels())
             )
         # 单排首个面板给出七点量尺；同量尺的后续面板不再重复标注读数。
         self.assertEqual(stage_axis.get_ylabel(), "Rating (1-7)")

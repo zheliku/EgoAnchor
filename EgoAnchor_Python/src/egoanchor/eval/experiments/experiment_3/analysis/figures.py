@@ -84,8 +84,8 @@ _OUTCOME_GROUPS = (
 _SLOT_COUNT = len(PRIMARY_OUTCOMES) + len(SCALE_OUTCOMES)
 _PLOT_LEFT = 0.045
 _PLOT_RIGHT = 0.980
-_ROW_BOTTOM = 0.215
-_ROW_HEIGHT = 0.605
+_ROW_BOTTOM = 0.21
+_ROW_HEIGHT = 0.560
 _GROUP_GUTTER = 0.035
 _EXPORT_PADDING_IN = 0.020
 """单排 Figure 4 的十二槽绘图区、行高和分区间距。"""
@@ -159,7 +159,7 @@ def _subjective_figure(
     figure.legend(
         handles=_method_legend_handles(),
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.995),
+        bbox_to_anchor=(0.5, 1.0),
         ncol=3,
         frameon=False,
         handletextpad=0.35,
@@ -213,6 +213,7 @@ def _draw_group_row(
         axis.set_title(
             title,
             loc="left",
+            pad=8.0,
             fontsize=_PANEL_FONT_SIZE - 0.2,
             fontweight="bold",
             color=PAPER_TEXT_COLOR,
@@ -285,9 +286,8 @@ def _format_outcome_axis(
     axis.set_xticks(
         centers,
         [labels[outcome] for outcome in outcomes],
-        rotation=30,
-        ha="right",
-        rotation_mode="anchor",
+        rotation=12,
+        ha="center",
     )
     axis.tick_params(axis="x", labelsize=_PANEL_FONT_SIZE)
     axis.set_xlim(-0.50, len(outcomes) - 0.50)

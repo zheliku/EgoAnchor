@@ -40,4 +40,4 @@ stias_min_items = 3 # S-TIAS 三项必须全部有效。
 [experiment_3.figures]
 dpi = 300 # 实验三 PNG 的导出分辨率。
 width_inches = 7.15 # 正文 Figure 4 单排复合图的原生宽度，贴合 VGTC 双栏版心。
-height_inches = 2.55 # 正文 Figure 4 单排复合图的原生高度，包含一个共享图例和四个语义分区。
+height_inches = 2.05 # 正文 Figure 4 单排复合图的原生高度，包含一个共享图例和四个语义分区；为满足正文页限进一步压缩版面，字体字号保持不变。
