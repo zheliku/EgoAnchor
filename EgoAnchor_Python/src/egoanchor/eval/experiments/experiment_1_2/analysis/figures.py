@@ -25,7 +25,6 @@ from egoanchor.visuals import (
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.patches import Patch  # noqa: E402
 
 from .metrics import (
     FULL_VARIANT,
@@ -70,6 +69,10 @@ _COMPOSITE_FONT_SIZE = 7.4
 
 _COMPOSITE_TITLE_SIZE = 7.2
 """单行子图标题字号；与正文接近但不压过图内数据。"""
+_EXP2_COMPOSITE_FONT_SIZE = 6.8
+"""实验二四面板图的正文对齐字号；较矮画布需避免视觉放大。"""
+_EXP2_TITLE_SIZE = 6.8
+"""实验二四面板图的子图标题字号。"""
 
 
 def _configure() -> None:
@@ -780,9 +783,11 @@ def _draw_vcd_paper_axis(axis: Any, results: PaperResults) -> None:
     axis.legend(
         frameon=False,
         loc="upper left",
+        bbox_to_anchor=(0.02, 1.0),
         borderaxespad=0.15,
+        fontsize=_EXP2_COMPOSITE_FONT_SIZE - 0.5,
         handlelength=1.0,
-        handletextpad=0.35,
+        handletextpad=0.60,
         labelspacing=0.18,
     )
     _clean_axis(axis, "both")
@@ -847,8 +852,10 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
     axis.legend(
         frameon=False,
         loc="lower left",
+        bbox_to_anchor=(-0.02, 0.00),
         borderaxespad=0.15,
-        handletextpad=0.35,
+        fontsize=_EXP2_COMPOSITE_FONT_SIZE - 0.5,
+        handletextpad=0.1,
         labelspacing=0.18,
     )
     _clean_axis(axis, "both")
@@ -857,7 +864,7 @@ def _draw_two_strategy_axis(axis: Any, results: PaperResults) -> None:
 def build_exp2_attribution_figure(results: PaperResults) -> Any:
     """生成实验二正文使用的四面板组合图，并隐藏无关 Hermite 条件。"""
 
-    apply_paper_style(font_size=_COMPOSITE_FONT_SIZE)
+    apply_paper_style(font_size=_EXP2_COMPOSITE_FONT_SIZE)
     capture_alignment = _unique_metric_matrix(
         results.capture_alignment,
         ("capture_p95_mm", "arrival_p95_mm"),
@@ -903,61 +910,16 @@ def build_exp2_attribution_figure(results: PaperResults) -> Any:
         axis.set_title(
             title,
             loc="left",
-            fontsize=_COMPOSITE_TITLE_SIZE,
+            fontsize=_EXP2_TITLE_SIZE,
             fontweight="bold",
         )
         axis.tick_params(axis="both", length=2.6, width=0.75, pad=2.0)
-    for axis in axes[2:]:
-        legend = axis.get_legend()
-        if legend is not None:
-            legend.set_visible(False)
-    # 四个面板只共享一份图例，避免 VCD 与时序面板各自占用绘图区。
-    figure.legend(
-        handles=(
-            Patch(
-                facecolor=_FULL_COLOR,
-                edgecolor="none",
-                alpha=0.16,
-                label="IQR",
-            ),
-            Line2D(
-                (),
-                (),
-                color=_FULL_COLOR,
-                linewidth=1.8,
-                label="Median",
-            ),
-            Line2D(
-                (),
-                (),
-                color=_EXTRAPOLATION_COLOR,
-                marker="D",
-                linestyle="-",
-                markersize=4.8,
-                label="Predictive tracking",
-            ),
-            Line2D(
-                (),
-                (),
-                color=_FULL_COLOR,
-                marker="s",
-                linestyle="-",
-                markersize=4.8,
-                label="History query",
-            ),
-        ),
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.995),
-        ncol=4,
-        frameon=False,
-        handletextpad=0.35,
-        columnspacing=1.0,
-    )
+        axis.tick_params(axis="x", labelsize=_EXP2_COMPOSITE_FONT_SIZE)
     figure.subplots_adjust(
         left=0.064,
         right=0.985,
         bottom=0.180,
-        top=0.780,
+        top=0.900,
         wspace=0.36,
     )
     return figure

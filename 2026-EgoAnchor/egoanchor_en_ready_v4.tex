@@ -58,7 +58,7 @@
 }
 
 \abstract{%
-Zero-shot six-degree-of-freedom (6-DoF) object pose estimation enables the localization of unseen everyday objects. Its outputs, however, are asynchronous, low-rate, and variable in quality, making them unsuitable for direct use as continuous, stable spatial anchors in passthrough mixed reality (PMR). We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring. The perception backend produces camera-frame pose observations with visual-consistency scores. The runtime transforms these observations into world-frame states at image capture time and maintains a reliable object state, thereby producing continuous, stable anchors with occlusion recovery. We implement EgoAnchor on Meta Quest 3 and evaluate it through controlled benchmarks using a platform-tracked controller reference, ablations of key components, and a within-subject study with 24 participants. Compared with the baselines, EgoAnchor reduces static registration error, occlusion-recovery error, and latency-aligned trajectory residuals, at the cost of longer motion-response latency. The user study also shows higher ratings for real--virtual integration, interaction trust, and willingness to rely on the system. The source code will be released upon acceptance.
+Zero-shot six-degree-of-freedom (6-DoF) object pose estimation enables the localization of unseen everyday objects. Its outputs, however, are asynchronous, low-rate, and variable in quality, making them unsuitable for direct use as continuous, stable object anchors in passthrough mixed reality (PMR). We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring. The perception backend produces camera-frame pose observations with visual-consistency scores. The runtime transforms these observations into world-frame object states at image capture time and maintains a reliable object state, thereby producing continuous, stable anchors with occlusion recovery. We implement EgoAnchor on Meta Quest 3 and evaluate it through controlled benchmarks using a platform-tracked controller reference, ablations of key components, and a within-subject study with 24 participants. Compared with the baselines, EgoAnchor reduces static registration error, occlusion-recovery error, and latency-aligned trajectory residuals, at the cost of longer motion-response latency. The user study also shows higher ratings for real--virtual integration, interaction trust, and willingness to rely on the system. The source code will be released upon acceptance.
 }
 
 \keywords{passthrough mixed reality, dynamic object anchoring, 6-DoF pose estimation, runtime system, user perception}
@@ -77,16 +77,16 @@ Zero-shot six-degree-of-freedom (6-DoF) object pose estimation enables the local
 \maketitle
 
 % ===== Problem motivation =====
-Passthrough mixed reality (PMR) can attach virtual content to physical objects for operating instructions, interaction guidance, state visualization, and proximal interaction. Such applications must continuously maintain an object-level spatial reference as the object moves: the virtual overlay should preserve a consistent six-degree-of-freedom (6-DoF) relationship with the object during head motion, object manipulation, and brief occlusion. Conventional spatial anchors target static environments and cannot represent the motion of individual objects. Dynamic object anchoring is therefore a fundamental capability for object-centered MR applications~\cite{selfblending2026,gradualreality2024}.
+Passthrough mixed reality (PMR) can attach virtual content to physical objects for operating instructions, interaction guidance, state visualization, and proximal interaction. Such applications must continuously maintain an object-level spatial state as the object moves: the virtual overlay should preserve a consistent six-degree-of-freedom (6-DoF) relationship with the object during head motion, object manipulation, and brief occlusion. Conventional spatial anchors target static environments and cannot represent the motion of individual objects. Dynamic object anchoring is therefore a fundamental capability for object-centered MR applications~\cite{selfblending2026,gradualreality2024}.
 
 % ===== Limitations of existing solutions =====
-Existing solutions provide partial support at different technical levels. Native object-tracking APIs on commercial headsets offer tight integration, but the supported object classes, geometric-model specifications, and runtime behavior are defined by the platform, as exemplified by Apple Vision Pro and Meta Quest. Fiducial markers such as AprilTag and ArUco, as well as dedicated hardware trackers such as the HTC Tracker, provide stable localization but require modifying the target object or attaching extra hardware. More recently, open-vocabulary detection, temporal segmentation, stereo matching, and model-based zero-shot 6-DoF pose estimation enable visual localization of rigid objects with known 3D models~\cite{groundingdino2025,cutie2024,fastfoundationstereo2026,foundationpose2024,gigapose2024}. These perception foundation models broaden the scope of visual localization, but their outputs remain discrete, asynchronous camera-frame observations tied to specific image-capture times. They therefore cannot directly provide reliable object anchors for MR applications.
+Existing solutions provide partial support at different technical levels. Native object-tracking APIs on commercial headsets offer tight integration, but the supported object classes, geometric-model specifications, and runtime behavior are defined by the platform, as exemplified by Apple Vision Pro and Meta Quest. Fiducial markers such as AprilTag and ArUco, as well as dedicated hardware trackers such as the HTC Tracker, provide stable localization but require modifying the target object or attaching extra hardware. More recently, open-vocabulary detection, temporal segmentation, stereo matching, and model-based zero-shot 6-DoF pose estimation enable visual localization of rigid objects with known 3D models~\cite{groundingdino2025,cutie2024,fastfoundationstereo2026,foundationpose2024,gigapose2024}. These perception foundation models broaden the scope of visual localization, but their outputs remain discrete, asynchronous camera-frame pose observations tied to specific image-capture times. They therefore cannot directly provide reliable object anchors for MR rendering.
 
 % ===== Core problem =====
-Using visual poses directly as object anchors creates several problems. First, an asynchronous estimate reaches the renderer only after nontrivial latency. Composing it with the headset pose at arrival time incorrectly attributes head motion to object motion. Second, pose candidates can jump because of occlusion, depth noise, or geometric mismatch, and accepting them directly causes visible jitter. Finally, a noisy pose stream with a low and irregular update rate cannot match high-rate rendering. The runtime must also manage stationary and moving states, brief tracking failures, and reacquisition. A single-frame pose estimator is therefore insufficient for a continuously usable object anchor.
+Directly using visual pose estimates as object anchors introduces several challenges. First, an asynchronous estimate reaches the renderer only after nontrivial latency. Composing it with the headset pose at arrival time incorrectly attributes head motion to object motion. Second, pose candidates can fluctuate because of occlusion, depth noise, or geometric mismatch, and accepting them directly causes visible jitter. Finally, a noisy pose stream with a low and irregular update rate cannot match high-rate rendering. The runtime must also manage stationary and moving states, brief tracking failures, and reacquisition. A single-frame pose estimator is therefore insufficient for maintaining a continuously usable object anchor state.
 
 % ===== EgoAnchor solution =====
-We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring. The perception backend integrates open-vocabulary detection, temporal segmentation, stereo depth recovery, and zero-shot pose estimation into a continuous pipeline. It assesses each observation using a visibility-gated color--depth (VCD) reliability score. The runtime transforms asynchronous candidates into world-frame observations at capture time, maintains object states for real-time rendering, and produces continuously usable spatial anchors while the object moves, remains still, or is briefly unobserved. A new target requires only a 3D CAD model and a short text description, with no fiducial marker or object-specific training. The 3D model can be an existing digital asset or reconstructed offline from images.
+We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring. The perception backend integrates open-vocabulary detection, temporal segmentation, stereo depth recovery, and zero-shot pose estimation into a continuous pipeline. It assesses each observation using a visibility-gated color--depth (VCD) reliability score. The runtime transforms asynchronous pose candidates into world-frame observations at capture time, maintains a temporal object state for real-time rendering, and produces continuously usable object anchors while the object moves, remains stationary, or is briefly unobserved. A new target requires only a 3D model and a short text description, with no fiducial marker or object-specific training. The 3D model can be an existing digital asset or reconstructed offline from images.
 
 % ===== Contributions =====
 Our main contributions are:
@@ -127,13 +127,13 @@ The runtime distinguishes the image-capture time $t_f$, candidate-arrival time $
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{figures/pipeline_en.pdf}
-  \caption{EgoAnchor architecture and asynchronous data flow. From stereo images, a text description, and a 3D model, the perception backend performs semantic initialization, temporal segmentation, depth recovery, and zero-shot 6-DoF pose estimation. It computes VCD reliability from visibility (V), color (C), and depth (D). When an asynchronous observation $o_f$ reaches the runtime, it is converted into a world-frame pose at capture time. Admission and state updates form a time-indexed trajectory $B_j$. At rendering time $t_r$, the runtime queries the trajectory at $t_q$ and switches between dynamic tracking and static locking. A sustained lack of reliable observations triggers reacquisition.}
+  \caption{EgoAnchor architecture and asynchronous data flow. From stereo images, a text description, and a 3D model, the perception backend performs semantic initialization, temporal segmentation, depth recovery, and zero-shot 6-DoF pose estimation. It computes VCD reliability from visibility (V), color (C), and depth (D). When an asynchronous observation $o_f$ reaches the runtime, it is converted into a world-frame pose at capture time. Admission and state updates form a time-indexed trajectory $B_j$. At rendering time $t_r$, the runtime queries the trajectory at $t_q$ and switches between dynamic tracking and StaticLock. A sustained lack of reliable observations triggers reacquisition.}
   \label{fig:arch}
 \end{figure*}
 
 \subsection{Perception Backend}\label{sec:perception}
 
-\textbf{Input and observation representation.}
+\textbf{Input and observation.}
 Given stereo images $I_f = (I_f^L, I_f^R)$, a target description $Q_o$, and a 3D model $G_o$, the backend forms an observation for each processed frame:
 \begin{equation}
 o_f = (f, t_f, T_{o,f}^{c}, R_f),
@@ -169,7 +169,7 @@ d_f = \operatorname{Stereo}(I_f^{L}, I_f^{R}), \qquad Z_f = \frac{b f_x}{d_f},
 \end{equation}
 where $b$ is the stereo baseline and $f_x$ is the focal length in pixels.
 
-\textbf{Zero-shot pose estimation.}
+\textbf{Zero-shot 6-DoF pose estimation.}
 A model-based estimator~\cite{foundationpose2024} recovers the camera-frame pose from the mask, depth, and 3D model:
 \begin{equation}
 T_{o,f}^{c} =
@@ -215,7 +215,7 @@ where $w_k$ is the modality weight and $\epsilon$ prevents a logarithmic singula
 
 \subsection{Anchoring Runtime}\label{sec:anchoring}
 
-The runtime converts low-rate asynchronous candidates into display-synchronous object states. On arrival, a candidate is transformed into a world-frame pose at capture time and used to update the trajectory. Rendering frames synthesize anchors by interpolation and manage static locking and validity. Decoupling candidate and rendering events prevents the inference rate from limiting the output rate.
+The runtime converts low-rate asynchronous pose candidates into display-synchronous object states for rendering. On arrival, a candidate is transformed into a world-frame pose at capture time and used to update the trajectory. Rendering frames synthesize anchors by interpolation and manage StaticLock and validity. Decoupling candidate and rendering events prevents the inference rate from limiting the output rate.
 
 \subsubsection{Observation Correction}\label{sec:obs-update}
 
@@ -256,7 +256,7 @@ Each admitted observation updates constant-velocity Kalman filters~\cite{kalman1
 B_j = \{(t_i, \widehat{T}_{o,i}^{w})\}_{i=1}^{j}.
 \label{eq:trajectory}
 \end{equation}
-The update also refreshes the motion and reliability measures used for static locking.
+The update also refreshes the motion and reliability measures used for StaticLock.
 
 \subsubsection{Anchor Synthesis}\label{sec:frame-output}
 
@@ -280,7 +280,7 @@ When $t_i\leq t_q\leq t_{i+1}$, the runtime geometrically interpolates the objec
 Position uses linear interpolation (LERP), and rotation uses quaternion spherical linear interpolation (SLERP). Outside the trajectory interval, the nearest endpoint state is held.
 
 \textbf{Output mode.}
-To suppress small fluctuations while the object is stationary, EgoAnchor adaptively switches between dynamic tracking and static locking:
+To suppress small fluctuations while the object is stationary, EgoAnchor adaptively switches between dynamic tracking and StaticLock:
 \begin{equation}
 \widetilde{T}_o^w(t_r) = \begin{cases}
 \widehat{T}_o^w(t_q), & \text{tracking}, \\
@@ -291,7 +291,7 @@ T_{o,\mathrm{lock}}^w, & \text{locked}.
 
 \subsubsection{Static Locking}\label{sec:staticlock}
 
-We introduce StaticLock, which switches to a locked pose when motion remains low and observations are reliable, then smoothly releases the lock when clear motion or reduced reliability is detected.
+We introduce StaticLock, a static-state anchoring mechanism that switches to a locked pose when motion remains low and observations are reliable, then smoothly releases the lock when clear motion or reduced reliability is detected.
 
 \textbf{Entry.}
 The translation and rotation rates $\bar v_j$ and $\bar\omega_j$ are computed from consecutive admitted observations and exponentially smoothed. We define the joint condition:
@@ -344,7 +344,7 @@ The 3D models of everyday objects are generated from multi-view smartphone photo
 The evaluation uses a Quest 3 controller as the visual tracking target and the 6-DoF pose reported by the platform SDK as the tracking reference. Four capture scenarios cover active head motion around a stationary target, start--stop transitions between rest and 6-DoF motion, continuous spatial translation and rotation, and tracking recovery after complete occlusion. These scenarios assess static stability, state-transition response, dynamic following, and occlusion-recovery performance, respectively.
 
 \textbf{Conditions.}
-All four configurations receive the same raw pose-candidate stream. \textbf{Arrival} and \textbf{Capture} both hold the latest candidate but use the camera pose at arrival time and capture time, respectively, when transforming it into the world frame. \textbf{One-Euro}~\cite{casiez2012oneeuro} is a representative smoothing baseline that balances jitter suppression and low-latency response in real-time interactive systems. It applies a speed-adaptive low-pass filter to admitted observations and maintains a time-indexed trajectory, but does not use static locking. \textbf{EgoAnchor} is the complete system.
+All four configurations receive the same raw pose-candidate stream. \textbf{Arrival} and \textbf{Capture} both hold the latest candidate but use the camera pose at arrival time and capture time, respectively, when transforming it into the world frame. \textbf{One-Euro}~\cite{casiez2012oneeuro} is a representative smoothing baseline that balances jitter suppression and low-latency response in real-time interactive systems. It applies a speed-adaptive low-pass filter to admitted observations and maintains a time-indexed trajectory, but does not use StaticLock. \textbf{EgoAnchor} is the complete system.
 
 \textbf{Metrics.}
 Nine quantitative metrics are divided into three groups according to system response. \textbf{Static registration} includes head-motion coupling error (the spatial anchor displacement induced by observer head motion around a stationary target), registration error (the spatial deviation from the platform tracking reference), and static jitter (the pose change between consecutive rendering frames while the target is stationary). \textbf{Dynamic following} includes effective latency (the temporal offset that minimizes the residual between estimated and reference trajectories), LA-RMSE (the geometric trajectory residual after latency alignment), CT-RMSE (the current-time error without latency alignment), and residual jitter (the high-frequency component of the residual after latency alignment). \textbf{State-transition response} includes occlusion-recovery error (the pose deviation from the onset of occlusion until tracking restabilizes) and motion-response latency (the interval from the onset of object motion until the anchor begins to respond). All metrics are reported separately for translation and rotation, except motion-response latency, which is a scalar statistic shared across channels.
@@ -357,7 +357,7 @@ Experiment~2 ablates four key design choices.
 The same camera-frame candidates are composed with the camera poses at image capture time and candidate-arrival time. We compare head-motion coupling error under active head motion to assess how capture-time alignment affects static registration.
 
 \textbf{Static locking.}
-We disable static locking in the complete EgoAnchor system and compare head-motion coupling error and jitter under stationary conditions, thereby quantifying the contribution of the module to anchor stability while the object is at rest.
+We disable StaticLock in the complete EgoAnchor system and compare head-motion coupling error and jitter under stationary conditions, thereby quantifying the contribution of the module to anchor stability while the object is at rest.
 
 \textbf{VCD.}
 We rank candidates by decreasing VCD score, plot risk--coverage curves, and use the area under the risk--coverage curve (AURC) to quantify how well the score ranks geometric error~\cite{riskcontrolled2020,ding2020uncertainty}. A lower AURC indicates that higher-scoring candidates generally have lower geometric error.
@@ -564,9 +564,9 @@ The current system relies on an external high-performance GPU workstation for pe
 
 \section{Conclusion}\label{sec:conclusion}
 
-We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring in passthrough mixed reality. It transforms asynchronous camera-frame observations into world-frame states at image capture time and maintains a reliable object state for the rendering pipeline. In this way, discrete, low-rate visual estimates become continuous, stable spatial anchors with occlusion recovery. Controlled benchmarks and ablations show that EgoAnchor reduces static registration error, occlusion-recovery error, and geometric trajectory residuals relative to the baselines, but increases motion-response latency. A within-subject study with 24 participants further shows higher ratings for real--virtual integration, interaction trust, and willingness to rely on the system.
+We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring in passthrough mixed reality. It transforms asynchronous camera-frame observations into world-frame states at image capture time and maintains a reliable object state for the rendering pipeline. This runtime process converts discrete, low-rate visual estimates into continuous, stable object anchors with occlusion recovery. Controlled benchmarks and ablations show that EgoAnchor reduces static registration error, occlusion-recovery error, and geometric trajectory residuals relative to the baselines, but increases motion-response latency. A within-subject study with 24 participants further shows higher ratings for real--virtual integration, interaction trust, and willingness to rely on the system.
 
-Turning visually estimated poses into usable object-level spatial anchors depends not only on single-frame pose accuracy, but also on systematic runtime modeling of temporal semantics, perceptual uncertainty, and the state lifecycle. As open-vocabulary foundation models, rapid 3D generation, and mobile computing continue to advance, coordinated perception--runtime architectures can extend high-fidelity dynamic anchoring to more everyday objects and natural human--computer interactions.
+Transforming visually estimated poses into usable object-level spatial anchors requires more than single-frame pose accuracy; it requires systematic runtime modeling of temporal semantics, perceptual uncertainty, and the state lifecycle. With continued advances in open-vocabulary foundation models, rapid 3D generation, and mobile computing, coordinated perception--runtime architectures may enable high-fidelity dynamic anchoring for a broader range of everyday objects and mixed-reality interactions.
 
 \acknowledgments{
   This work is supported by the National Natural Science Foundation of China (No. 62377004). OpenAI ChatGPT was used only to assist with English translation and language editing. The authors reviewed and verified all revisions.

@@ -436,11 +436,9 @@ class Experiment12AnalysisTests(unittest.TestCase):
         ]
         self.assertEqual(temporal_legend, ["Predictive tracking", "History query"])
         self.assertNotIn("Hermite", " ".join(temporal_legend))
-        self.assertFalse(experiment_two.axes[3].get_legend().get_visible())
-        self.assertEqual(
-            [text.get_text() for text in experiment_two.legends[0].get_texts()],
-            ["IQR", "Median", "Predictive tracking", "History query"],
-        )
+        self.assertTrue(experiment_two.axes[2].get_legend().get_visible())
+        self.assertTrue(experiment_two.axes[3].get_legend().get_visible())
+        self.assertEqual(len(experiment_two.legends), 0)
         self.assertEqual(
             [axis.get_title(loc="left") for axis in experiment_two.axes],
             [
@@ -461,8 +459,10 @@ class Experiment12AnalysisTests(unittest.TestCase):
         temporal_title_bounds = left_title(experiment_two.axes[3]).get_window_extent(
             renderer
         )
-        legend_bounds = experiment_two.legends[0].get_window_extent(renderer)
-        self.assertLess(temporal_title_bounds.y1, legend_bounds.y0)
+        temporal_legend_bounds = experiment_two.axes[3].get_legend().get_window_extent(
+            renderer
+        )
+        self.assertGreater(temporal_title_bounds.y1, temporal_legend_bounds.y0)
         self.assertEqual(
             [tick.get_text() for tick in experiment_two.axes[2].get_xticklabels()],
             ["0%", "50%", "100%"],
@@ -470,9 +470,9 @@ class Experiment12AnalysisTests(unittest.TestCase):
         self.assertLess(experiment_two.subplotpars.wspace, 0.4)
         for axis in experiment_two.axes:
             title = left_title(axis)
-            self.assertAlmostEqual(float(title.get_fontsize()), 7.2)
+            self.assertAlmostEqual(float(title.get_fontsize()), 6.8)
             self.assertEqual(title.get_fontweight(), "bold")
-            self.assertAlmostEqual(axis.yaxis.label.get_fontsize(), 7.4)
+            self.assertAlmostEqual(axis.yaxis.label.get_fontsize(), 6.8)
 
     def test_paper_vcd_axis_matches_aurc_step_intervals(self) -> None:
         """正文 VCD 阶梯在零覆盖起步，并把完整同分组风险画在左侧区间。"""
