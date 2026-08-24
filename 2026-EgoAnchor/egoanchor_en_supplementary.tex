@@ -1,0 +1,213 @@
+% Supplemental material for the English main paper (egoanchor_en_ready_v4.tex).
+% Compiles standalone: latexmk -g -xelatex -outdir=pdf egoanchor_en_supplementary.tex
+% Covers the five items the main text promises:
+%   S1 runtime parameters      <- main text Sec. 4 "Anchoring runtime"
+%   S2 object-anchoring items  <- main text Sec. 5.3.3 "Object-anchoring items"
+%   S3 standardized scales     <- main text Sec. 5.3.3 "User trust (TiA and S-TIAS)"
+%   S4 complete statistics     <- main text Sec. 6.3
+%   S5 scale reliability       <- main text Sec. 6.3.2
+% Values are transcribed from: supplementary_runtime_parameters.tex (S1),
+% material/EgoAnchor_Experiment3_Complete_Questionnaire_v5_3_Bilingual.md (S2, S3),
+% tables/en/exp3_subjective.tex (S4), and
+% data/experiments/experiment_3/analysis/results/experiment3_analysis.xlsx (S5).
+
+\documentclass[review]{vgtc}
+
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{mathptmx}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\hyphenation{Static-Lock Ego-Anchor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+
+\onlineid{1118}
+\vgtccategory{System}
+\vgtcinsertpkg
+
+% Number sections, tables and equations with an S prefix so that references
+% cannot be confused with the main paper.
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\theequation}{S\arabic{equation}}
+
+\title{EgoAnchor: Zero-Shot Dynamic Anchoring of Everyday Objects in Passthrough Mixed Reality --- Supplemental Material}
+
+\author{}
+
+\abstract{}
+
+\begin{document}
+
+\firstsection{Runtime Parameters}
+\maketitle
+\label{sec:supp-params}
+
+This document contains the five items referenced in the main paper: runtime
+parameters, the seven object-anchoring items, standardized-scale details, the
+complete statistics for twelve subjective outcomes, and scale reliability.
+
+Table~\ref{tab:supp-params} lists the complete parameter values of the anchoring
+runtime. All parameters were fixed in advance and were not adjusted per scenario,
+per object, or per condition across Experiments 1--3.
+
+The locked-state gain is
+$g_j = (1 - 2^{-\Delta t_j / h_{\mathrm{creep}}}) R_j (1 - \rho_j^{\mathrm{head}})$,
+where $\rho_j^{\mathrm{head}}$ is the larger normalized head linear or angular speed,
+clipped to $[0,1]$ using 0.3~m/s and 60~$^\circ$/s as full-tolerance scales. It
+reduces the gain, while the motion criteria are relaxed by $1+3\rho_j^{\mathrm{head}}$
+up to $4\times$; reliability criteria are unchanged. A 600~ms settling window
+freezes motion-based release criteria after head motion stops.
+
+The leaky cumulative sum used for the persistent-residual criterion is updated as
+\begin{equation}
+E_{p,j} = 2^{-\Delta t_j / h_E} E_{p,j-1} + \frac{\Delta t_j}{t_{\mathrm{ref}}} R_j \max\!\left(0,\, d_{p,j} - d_{\mathrm{db}}\right),
+\label{eq:supp-cusum}
+\end{equation}
+and analogously for rotation. Release occurs when either channel exceeds its limit;
+the observation consensus uses the same evidence half-life.
+
+The comparison parameters were also fixed in advance: One-Euro uses position
+cutoff/speed-coefficient/derivative-cutoff values of 0.8~Hz/6/2~Hz and rotation
+values of 1~Hz/1/2~Hz; Smoothed KF Extrapolation uses a 0.18~s prediction horizon
+and a 0.06~s correction half-life.
+
+\begin{table*}[t]
+\centering
+\caption{Anchoring runtime parameters. The upper block covers observation admission
+and history query, the middle block covers static locking (StaticLock), and the
+lower block covers the validity rules and VCD scoring.}
+\label{tab:supp-params}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Parameter & Symbol & Value \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Observation admission and history query}} \\
+Admission reliability threshold & $R_{\min}$ & 0.2 \\
+Kalman process noise (trans./rot.) & --- & 0.002~m$^2$/s$^3$ / 0.2~rad$^2$/s$^3$ \\
+Kalman measurement noise (trans./rot.) & --- & $4\times10^{-6}$~m$^2$ / $4\times10^{-4}$~rad$^2$ \\
+Query lag scale factor & $s$ & 1.15 \\
+Minimum query lag & $\Delta_{\min}$ & 250~ms \\
+State-age estimator coefficients (up/down) & --- & 0.5 / 0.05 \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Static locking (StaticLock)}} \\
+Lock-entry linear speed threshold & $v_{\mathrm{th}}$ & 50~mm/s \\
+Lock-entry angular speed threshold & $\omega_{\mathrm{th}}$ & 22~$^\circ$/s \\
+Lock-entry reliability threshold & $R_{\mathrm{lock}}$ & 0.25 \\
+Lock-entry dwell time & $\tau_{\mathrm{dwell}}$ & 350~ms \\
+Lock-entry motion statistic smoothing & --- & 0.5 (per observation) \\
+Deadband (trans./rot.) & $d_{\mathrm{db}}$ / $\theta_{\mathrm{db}}$ & 8~mm / 3~$^\circ$ \\
+Locked-update gain half-life & $h_{\mathrm{creep}}$ & 2.7~s \\
+CUSUM limit (trans./rot.) & $E_p^{\max}$ / $E_\theta^{\max}$ & 80~mm / 20~$^\circ$ \\
+CUSUM evidence half-life & $h_E$ & 0.27~s \\
+CUSUM reference interval & $t_{\mathrm{ref}}$ & 0.2~s \\
+Accumulated drift limit (trans./rot.) & --- & 15~mm / 12~$^\circ$ \\
+Speed-escape ratio and duration & --- & 2.5$\times$, 400~ms \\
+Low-reliability release (threshold/duration) & --- & 0.3, 600~ms \\
+Relock suppression duration & --- & 1.0~s \\
+Seam transition per-frame decay & --- & 0.85 \\
+Head settling window & --- & 600~ms \\
+Head-motion full-tolerance scale (lin./ang.) & --- & 0.3~m/s / 60~$^\circ$/s \\
+Head-motion tolerance amplification limit & --- & 4$\times$ \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Validity and VCD scoring}} \\
+Tracking reliability floor & --- & 0.5 \\
+Coasting duration & --- & 450~ms without a reliable observation \\
+Lost determination & --- & 1.0~s without a reliable observation \\
+Reacquisition trigger (threshold/duration) & --- & 0.45, 600~ms \\
+Reacquisition cooldown & --- & 3.0~s \\
+Color/depth weights & $w_C$ / $w_D$ & 0.2 / 0.8 \\
+Logarithmic floor & $\epsilon$ & 0.05 \\
+Depth tolerance (floor/distance ratio) & --- & 5~mm / 0.02 \\
+Inlier-rate weight and residual factor & --- & 0.6 / 2.5 \\
+Valid depth coverage threshold & --- & 0.10 \\
+Structural weight limit and IQR threshold & --- & 0.35 / 20~mm \\
+LAB lightness channel weight & --- & 0.3 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Object-Anchoring Items}\label{sec:supp-items}
+
+The seven object-anchoring items were administered after each of the six
+method--object blocks on a seven-point agreement scale (1 = strongly disagree,
+7 = strongly agree). Q1--Q4 address phase-specific behavior; Q5--Q7 address
+overall judgments.
+
+\begin{enumerate}[label=Q\arabic*.]
+  \item (Stationary stability) During static observation, the virtual content
+        stayed in the same position without moving.
+  \item (Motion attachment) While I picked up, moved, and rotated the object, the
+        virtual content remained attached to the same location on the physical
+        object.
+  \item (Orientation consistency) While I rotated the object, the orientation of
+        the virtual content stayed consistent with the orientation of the physical
+        object.
+  \item (Recovery consistency) After the occlusion was removed, the virtual content
+        recovered to a position consistent with the physical object.
+  \item (Positional correctness) The virtual content appeared at a position that
+        matched where the physical object actually was.
+  \item (Willingness to rely) I would be willing to rely on this anchoring method
+        in an MR application that requires virtual content to be accurately
+        attached to a physical object.
+  \item (Stability--responsiveness balance) Overall, this method achieved an
+        appropriate balance between anchor stability and responsiveness.
+\end{enumerate}
+
+\section{Standardized Scales}\label{sec:supp-scales}
+
+AQ contains three-item Embedding Quality and Interaction Quality
+subscales, administered after each block on seven-point scales. TiA contains the
+six-item Reliability/Competence and four-item Understanding/Predictability
+subscales, administered once per method on five-point scales; RC3, RC5, UP2, and
+UP4 are reverse-scored as $6-\text{raw}$. S-TIAS contains three seven-point
+intensity items and was administered once per method. The final questionnaire
+recorded method preference, trust choice, preference strength, discrimination
+confidence, and post-study discomfort as descriptive outcomes.
+
+\section{Complete Subjective Statistics}\label{sec:supp-stats}
+
+Table~\ref{tab:supp-stats} reports all twelve subjective outcomes. The seven custom
+items and five standardized-scale outcomes form separate Holm--Bonferroni families.
+
+\input{tables/en/exp3_subjective_supp}
+
+\section{Scale Reliability}\label{sec:supp-reliability}
+
+\noindent\textbf{Reliability coefficients.} Internal consistency by scale and method
+($N=24$). Cronbach's $\alpha$ and McDonald's $\omega$ describe the present sample.
+AQ coefficients use scores averaged across the three objects; TiA and S-TIAS were
+administered once per method.
+\par\smallskip
+\centering
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}llccc@{}}
+\toprule
+Scale & Method & Items & $\alpha$ & $\omega$ \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Averaged across three objects}} \\
+AQ Embedding Quality & One-Euro & 3 & .768 & .773 \\
+AQ Embedding Quality & EgoAnchor & 3 & .769 & .770 \\
+AQ Interaction Quality & One-Euro & 3 & .504 & .525 \\
+AQ Interaction Quality & EgoAnchor & 3 & .892 & .899 \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Single method-level administration}} \\
+TiA Reliability/Competence & One-Euro & 6 & .792 & .796 \\
+TiA Reliability/Competence & EgoAnchor & 6 & .751 & .777 \\
+TiA Understanding/Predictability & One-Euro & 4 & .565 & .580 \\
+TiA Understanding/Predictability & EgoAnchor & 4 & .769 & .756 \\
+S-TIAS & One-Euro & 3 & .672 & .698 \\
+S-TIAS & EgoAnchor & 3 & .697 & .740 \\
+\bottomrule
+\end{tabular}
+}%
+\par\medskip
+
+\end{document}

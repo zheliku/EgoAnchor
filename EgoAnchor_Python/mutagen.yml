@@ -35,11 +35,45 @@ sync:
   # ============================ SOURCE PUSH ============================
   # Local -> remote, one direction only. Remote is a replica of local.
 
-  push-5090:
+  # push-5090:
+  #   alpha: "."
+  #   beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
+  #   mode: one-way-replica
+  #   ignore:
+      
+
+  # push-4090:
+  #   alpha: "."
+  #   beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
+  #   mode: one-way-replica
+  #   ignore:
+  #     paths: *source_ignore
+
+  # --- 5080 DISABLED until its Chinese-locale UTF-8 handshake is fixed ---
+  # On a Chinese (GBK/936) Windows box, "remote did not return UTF-8 output" is a
+  # SECONDARY error: the agent bootstrap already failed, and mutagen's attempt to
+  # read the remote stderr trips utf8.Valid() on the GBK bytes. TWO root causes,
+  # both must be fixed (verified 2026-07-09 on the 5090 Win11 migration):
+  #   1. HKLM\SOFTWARE\OpenSSH\DefaultShell MUST be cmd.exe, NOT PowerShell.
+  #      Mutagen bootstraps the agent via a RELATIVE-PATH command
+  #      (.mutagen/agents/<ver>/mutagen-agent synchronizer); cmd.exe runs it,
+  #      PowerShell rejects it ("is not recognized as ... cmdlet"). See GitHub
+  #      issues #251/#252 — the community fix is cmd.exe. Then Restart-Service sshd.
+  #        reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
+  #          /d "C:\Windows\System32\cmd.exe" /f
+  #   2. Enable system-wide UTF-8 (Settings > Language > Administrative language
+  #      settings > "Beta: Use Unicode UTF-8"; needs a reboot) so codepage 936 no
+  #      longer mangles any output into the handshake's first line.
+  # WRONG OLD NOTE (retracted): the earlier "switch cmd.exe -> PowerShell" advice
+  # was backwards — PowerShell as DefaultShell is what BREAKS the agent bootstrap.
+  # Then un-comment the two 5080 blocks below and re-run `mutagen project start`.
+  
+  push-5080:
     alpha: "."
-    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
+    beta: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python"
     mode: one-way-replica
     ignore:
+      # paths: *source_ignore
       paths: &source_ignore
         # --- python / tooling caches ---
         - "*.pyc"
@@ -86,39 +120,6 @@ sync:
         - "/mutagen.yml"
         - "/mutagen.yml.lock"
 
-  # push-4090:
-  #   alpha: "."
-  #   beta: "johnren@172.24.244.55:/home/johnren/tmp/EgoAnchor_Python"
-  #   mode: one-way-replica
-  #   ignore:
-  #     paths: *source_ignore
-
-  # --- 5080 DISABLED until its Chinese-locale UTF-8 handshake is fixed ---
-  # On a Chinese (GBK/936) Windows box, "remote did not return UTF-8 output" is a
-  # SECONDARY error: the agent bootstrap already failed, and mutagen's attempt to
-  # read the remote stderr trips utf8.Valid() on the GBK bytes. TWO root causes,
-  # both must be fixed (verified 2026-07-09 on the 5090 Win11 migration):
-  #   1. HKLM\SOFTWARE\OpenSSH\DefaultShell MUST be cmd.exe, NOT PowerShell.
-  #      Mutagen bootstraps the agent via a RELATIVE-PATH command
-  #      (.mutagen/agents/<ver>/mutagen-agent synchronizer); cmd.exe runs it,
-  #      PowerShell rejects it ("is not recognized as ... cmdlet"). See GitHub
-  #      issues #251/#252 — the community fix is cmd.exe. Then Restart-Service sshd.
-  #        reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
-  #          /d "C:\Windows\System32\cmd.exe" /f
-  #   2. Enable system-wide UTF-8 (Settings > Language > Administrative language
-  #      settings > "Beta: Use Unicode UTF-8"; needs a reboot) so codepage 936 no
-  #      longer mangles any output into the handshake's first line.
-  # WRONG OLD NOTE (retracted): the earlier "switch cmd.exe -> PowerShell" advice
-  # was backwards — PowerShell as DefaultShell is what BREAKS the agent bootstrap.
-  # Then un-comment the two 5080 blocks below and re-run `mutagen project start`.
-  
-  # push-5080:
-  #   alpha: "."
-  #   beta: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python"
-  #   mode: one-way-replica
-  #   ignore:
-  #     paths: *source_ignore
-
   # ============================ EVAL-LOG PULL ============================
   # Remote data/eval -> local data/eval (shared dir for all machines).
   # one-way-safe: remote is authoritative; we never write back to the machines,
@@ -130,12 +131,12 @@ sync:
   #   beta: "./data/eval"
   #   mode: one-way-safe
 
-  logs-5090:
-    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
-    beta: "./data/eval"
-    mode: one-way-safe
-
-  # logs-5080:
-  #   alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"
+  # logs-5090:
+  #   alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
   #   beta: "./data/eval"
   #   mode: one-way-safe
+
+  logs-5080:
+    alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
