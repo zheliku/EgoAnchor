@@ -115,7 +115,7 @@ protobuf = ">=7.34.1, <8"
 # 注意：main-devel 是滚动标签，构建 hash（fe3af4b）会随上游 CI 更新，
 # 届时需从 https://github.com/isl-org/Open3D/releases/tag/main-devel 获取新 URL。
 [target.win-64.pypi-dependencies]
-open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+aab533f-cp314-cp314-win_amd64.whl" }
+open3d = { url = "https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+22a6a30-cp314-cp314-win_amd64.whl" }
 # 官方 triton 无 Windows wheel，继续用 woct0rdho 的 triton-windows 分叉（有 cp314）。
 triton-windows = ">=3.7.1.post27, <4"
 
