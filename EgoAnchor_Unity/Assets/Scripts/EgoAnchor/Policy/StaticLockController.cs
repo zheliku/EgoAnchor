@@ -163,7 +163,7 @@ namespace EgoAnchor.Policy
         private float posToleranceMaxFactor = 3.0f;           // 位置容忍放大上限 (1=关闭距离自适应)
 
         // 低分释放 (问题1): 锁定时若 score 持续低于阈值, 锁点已不可信 (物体可能被移走/遮挡/跟丢),
-        // 强制解锁, 不让 anchor 冻在错误 pose 上 (否则用户得手动移出视野再回来)。解锁后交回 coasting,
+        // 强制解锁, 不让 anchor 冻在错误 pose 上 (否则用户得手动移出视野再回来)。解锁后交回正常追踪输出,
         // 配合 PoseToAnchorRuntime 的低分自动 reacquire。0=关闭该机制。
         private float lowScoreReleaseScore = 0.3f;        // 低于此分视为不可信
         private float lowScoreReleaseSeconds = 0.6f;      // 持续低分多久后强制解锁
@@ -546,7 +546,7 @@ namespace EgoAnchor.Policy
             float f = headToleranceFactor;
 
             // 低分释放 (问题1): 锁定时持续低分 → 锁点不可信 (物体被移走/遮挡/跟丢), 强制解锁,
-            // 不让 anchor 冻在错 pose 上。解锁后交回 coasting + 由 PoseToAnchorRuntime 低分 reacquire。
+            // 不让 anchor 冻在错 pose 上。解锁后交回正常追踪输出 + 由 PoseToAnchorRuntime 低分 reacquire。
             if (lowScoreReleaseSeconds > 0.0f && score < lowScoreReleaseScore)
             {
                 lowScoreRunSeconds += obsDt;

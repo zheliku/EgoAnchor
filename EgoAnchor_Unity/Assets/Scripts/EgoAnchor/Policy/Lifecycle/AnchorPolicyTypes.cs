@@ -9,26 +9,25 @@ namespace EgoAnchor.Policy
     /// </summary>
     public enum AnchorState
     {
-        /// <summary>尚未收到有效 pose，或 runtime 还未完成必要配置。</summary>
-        Uninitialized,
-
-        /// <summary>正在等待 Python 检测/register，Unity 暂无稳定 anchor。</summary>
+        /// <summary>
+        /// 尚无可用 anchor：冷启动、等待 Python 检测/register、reset 或 reacquire 后重建中。
+        /// 触发原因（cold start / reset / reacquire / low_score_reacquire）见 policy reason，不再单列状态。
+        /// </summary>
         Searching,
 
-        /// <summary>持续收到可靠 pose，anchor 正常更新。</summary>
+        /// <summary>
+        /// anchor 正常显示：最近一次可靠 pose 仍在 coast 窗口内。
+        ///
+        /// 渲染帧率高于 pose 到达率，因此绝大多数帧都处于"上一条可靠 pose 之后、下一条到达之前"的
+        /// 帧间空档，物体停在预测位置。该空档属于正常追踪，不单列状态；实际空档长度见 observation_age_ms。
+        /// </summary>
         Tracking,
 
-        /// <summary>短时间缺少 pose，使用预测或上一稳定 pose 维持显示。</summary>
-        Coasting,
+        /// <summary>已有 anchor 但当前 pose 不可信：质量评估门控拒绝，或超出 coast 窗口仍未到 lost 超时。</summary>
+        Uncertain,
 
-        /// <summary>pose 不可靠，冻结稳定输出并标记为不确定。</summary>
-        FrozenUncertain,
-
-        /// <summary>长时间没有可靠 pose，anchor 已丢失或停止更新。</summary>
+        /// <summary>超过 lost 超时仍无可靠 pose，anchor 已丢失。</summary>
         Lost,
-
-        /// <summary>用户或系统主动请求重新获取目标。</summary>
-        Relocalizing,
 
         /// <summary>用户暂停 anchor 更新。</summary>
         Paused,

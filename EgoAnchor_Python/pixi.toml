@@ -58,6 +58,7 @@ ruamel = ">=1.0,<2"
 setuptools = ">=69.0.0,<75"
 einops = ">=0.8.2,<0.9"
 pillow = ">=12, <13" # PyPI Pillow 12.3.0 当前会在 win-64/py314 下留下 cp313 扩展；使用 conda-forge 的 py314 构建。
+pytest = ">=9.1.1,<10"
 
 [pypi-dependencies]
 # PyTorch 全家桶从 PyPI 安装。

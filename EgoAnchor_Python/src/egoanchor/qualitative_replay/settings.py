@@ -59,6 +59,7 @@ _TABLE_KEYS = {
             "column_label_color_hex",
             "header_padding_px",
             "row_label_line_spacing_px",
+            "mean_error_font_size_px",
         }
     ),
     "timeline": frozenset(
@@ -182,6 +183,9 @@ class LayoutSettings:
 
     row_label_line_spacing_px: int
     """多行行标题的行间距，单位像素。"""
+
+    mean_error_font_size_px: int
+    """平均误差数值标注字号，单位像素。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -506,7 +510,9 @@ def _parse_settings(
     row_label_line_spacing_px = _bounded_integer(
         layout, "row_label_line_spacing_px", minimum=0, maximum=32
     )
-
+    mean_error_font_size_px = _bounded_integer(
+        layout, "mean_error_font_size_px", minimum=8, maximum=96
+    )
     timeline_mode = _text(timeline, "mode")
     if timeline_mode not in TIMELINE_MODES:
         raise ValueError(f"timeline.mode 必须是 {TIMELINE_MODES} 之一")
@@ -637,6 +643,7 @@ def _parse_settings(
             column_label_color_hex=column_label_color_hex,
             header_padding_px=header_padding_px,
             row_label_line_spacing_px=row_label_line_spacing_px,
+            mean_error_font_size_px=mean_error_font_size_px,
         ),
         timeline=TimelineSettings(
             mode=timeline_mode,

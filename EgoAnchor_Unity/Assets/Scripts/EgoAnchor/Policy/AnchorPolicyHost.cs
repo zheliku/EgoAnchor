@@ -10,7 +10,7 @@ namespace EgoAnchor.Policy
     ///
     /// 职责收敛为三件事：
     ///   1. 持有两个可自由组合的模块：MotionModel (运动模型) + SmoothingStrategy (平滑策略)；
-    ///   2. 维护 anchor 生命周期状态机 (Tracking / Coasting / Lost / Reacquire ...)；
+    ///   2. 维护 anchor 生命周期状态机 (Searching / Tracking / Uncertain / Lost / Paused / Error)；
     ///   3. 把观测喂给模块，并每渲染帧产出平滑 pose。
     ///
     /// VCD 观测接纳门控作为本 host 的可选内联功能 (默认关闭)，
@@ -49,13 +49,13 @@ namespace EgoAnchor.Policy
         [Tooltip("EgoAnchor 静止锚定方法模块 (EgoAnchorStaticLockModule)。拖入并 enabled = EgoAnchor 方法 (静止冻结/头动感知/低分释放); 留空或不启用 = 纯 baseline (motion × smoothing)。挂在同一 GameObject 上。")]
         [SerializeField] private EgoAnchorStaticLockModule staticLockModule;
 
-        /// <summary>短时无可靠测量的 coasting 时长，单位秒。</summary>
+        /// <summary>帧间空档仍算 Tracking 的时长上限，单位秒。</summary>
         [Header("Lifecycle")]
-        [Tooltip("短时无可靠测量时保持 Coasting (继续外推/插值) 的时长，单位秒。超过则进入更不确定状态。默认 0.45。")]
+        [Tooltip("帧间空档仍算 Tracking 的时长上限，单位秒。渲染帧率高于 pose 到达率，gap 在该窗口内保持 Tracking (继续外推/插值)；超过则降级为 Uncertain。默认 0.45。")]
         [SerializeField] private float coastTimeoutSeconds = 0.45f;
 
         /// <summary>判定 pose 是否"可靠"的总分下限：决定 Tracking vs 低分降级，并决定是否刷新可靠时间戳。0 = 关闭。</summary>
-        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Coasting→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。EgoAnchor 可设 0.5 作为用户可见低质提示；server reacquire 阈值默认 0.45，更低且需要持续时间确认。")]
+        [Tooltip("判定 pose 可靠的 reliability 总分下限 (0..1)。0 = 关闭分数参与状态判定 (baseline 原语义: 收到 pose 即 Tracking, 照单全收, 永不因低分降级/Lost)，多变体对照应保持 0 以免 Lost 停输出污染轨迹。>0 启用: ≥ 它 = 可靠 → Tracking 并刷新可靠时间戳; < 它 = 不可靠 → 不刷新时间戳, gap 持续累积, 由 Advance 按 coast/lost 超时推进 Tracking→Uncertain→Lost, 使状态如实反映 pose 质量 (遮挡/持续低分会变 Lost)。EgoAnchor 可设 0.5 作为用户可见低质提示；server reacquire 阈值默认 0.45，更低且需要持续时间确认。")]
         [Range(0f, 1f)]
         [SerializeField] private float trackingScoreFloor = 0.0f;
 
@@ -78,7 +78,7 @@ namespace EgoAnchor.Policy
 
         /// <summary>是否启用低分重定位。</summary>
         [Header("Low-Score Reacquire")]
-        [Tooltip("是否启用低分重定位：reliability 总分持续过低时，本地重置 policy 并进入 Relocalizing。是否同时请求 Python 重新 register 由 emitServerReacquire 控制。")]
+        [Tooltip("是否启用低分重定位：reliability 总分持续过低时，本地重置 policy 并回到 Searching。是否同时请求 Python 重新 register 由 emitServerReacquire 控制。")]
         [SerializeField] private bool enableLowScoreReacquire = true;
 
         /// <summary>本地重获取发生时，是否向 AnchorRuntimeHub 发出服务器重获取请求。</summary>
@@ -320,7 +320,7 @@ namespace EgoAnchor.Policy
                 return new AnchorPolicyDecision(AnchorPolicyAction.Reject, stateMachine.State, timeRejectReason);
             }
 
-            // 低分重定位：已有锚定后若总分持续过低，本地重置进入 Relocalizing；
+            // 低分重定位：已有锚定后若总分持续过低，本地重置回到 Searching；
             // emitServerReacquire 决定是否同时请求上游通知 Python 重 register。
             // host 不持 client; 在 raw observation 上判定, 不受下面质量评估门控是否拒绝影响。
             if (TryLowScoreReacquire(observation, lifecycleTime))
@@ -368,7 +368,7 @@ namespace EgoAnchor.Policy
 
             // 分数参与状态判定: 模型已更新 (低分 pose 也喂模型以维持平滑连续性), 但只有"可靠" pose
             // (总分 >= trackingScoreFloor) 才刷新可靠时间戳并进 Tracking。低分 pose 不刷新时间戳、
-            // 也不在此直接改状态——把"无新鲜可靠 pose"的状态推进 (Coasting→Uncertain→Lost) 统一交给
+            // 也不在此直接改状态——把"无新鲜可靠 pose"的状态推进 (Tracking→Uncertain→Lost) 统一交给
             // 每帧 Advance 的 gap 机制 (单一数据源, 避免与 Advance 在同帧内打架)。这样遮挡/持续低分时
             // FoundationPose 仍发漂移 pose, 但 gap 持续累积会按 coast/lost 超时如实推进到 Lost。
             if (observation.ReliabilityScore >= trackingScoreFloor)
@@ -474,7 +474,7 @@ namespace EgoAnchor.Policy
             latestQualityGateDecision = QualityGateDecision.Hold(reason ?? "reset");
         }
 
-        /// <summary>reacquire command/status 到达时进入 Relocalizing 并清空估计。</summary>
+        /// <summary>reacquire command/status 到达时清空估计并回到 Searching。</summary>
         public void NotifyReacquire(double sampleTimeSeconds, string reason)
         {
             ResetModules();
@@ -520,7 +520,7 @@ namespace EgoAnchor.Policy
 
         /// <summary>
         /// 低分重定位: 已有锚定后 reliability 总分连续低于阈值持续一段时间 → 本地重置
-        /// (清空运动模型/平滑/静止锁的内部状态并进入 Relocalizing, 不再信任旧低分锚点, 下一帧 pose 重新建立锚定)。
+        /// (清空运动模型/平滑/静止锁的内部状态并回到 Searching, 不再信任旧低分锚点, 下一帧 pose 重新建立锚定)。
         /// emitServerReacquire 开启时，由上游 (runtime → hub) 发 NATS reacquire 让 Python 重新 register。
         /// 几何子分只决定诊断 reason：几何差/缺失记为 track_lost/no_geometry，几何仍好记为 low_score。
         /// 触发时返回 true (调用方应提前返回)。

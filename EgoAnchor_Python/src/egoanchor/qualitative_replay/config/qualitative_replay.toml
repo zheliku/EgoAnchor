@@ -2,17 +2,17 @@
 version = 2 # 定性 replay 配置契约版本。
 
 [selection]
-columns = 6 # 连续轨迹网格默认使用 6 列；命令行或自定义 TOML 可设为 2--20 列。
+columns = 5 # 连续轨迹网格默认使用 5 列；命令行或自定义 TOML 可设为 2--20 列。
 frame_step = 30 # 相邻列之间的已保存样本索引差；设为 3 时中间跳过 2 个样本。
-start_sample_id = "000000365" # 默认首列的保存帧序号；留空自动寻找最早完整序列，填写如 000000761 可固定复现窗口。
+start_sample_id = "000000395" # 默认首列的保存帧序号；留空自动寻找最早完整序列，填写如 000000761 可固定复现窗口。
 row_keys = ["passthrough", "reference", "arrival", "capture", "one-euro", "egoanchor"] # 数据源行及排列顺序，使用稳定的小写行标识；与 rows 按索引一一对应。
-rows = ["Passthrough", "Quest\nReference", "Arrival", "Capture", "One-Euro", "EgoAnchor\n(Ours)"] # 图中左侧实际显示的行标题，按原样绘制；与 row_keys 等长且同顺序。
+rows = ["Passthrough", "Quest\nReference", "Arrival", "Capture", "One-Euro", "EgoAnchor"] # 图中左侧实际显示的行标题，按原样绘制；与 row_keys 等长且同顺序。
 
 [layout]
 cell_width = 320 # 每个图像单元的输出宽度，单位像素。
 column_label = "none" # 独立列标题模式，可选 none、delta-t、sample-id 或 both；默认由时间轴显示相对时间。
 label_font_size = 60 # 左侧行名字号，单位像素；按单栏正文缩放后接近正文文字大小。
-row_label_rotation_deg = 60 # 左侧行名逆时针旋转角度，90 度时可收窄标签栏。
+row_label_rotation_deg = 0 # 左侧行名逆时针旋转角度，90 度时可收窄标签栏。
 column_font_size = 60 # 顶部 delta-t 或 sample id 字号，单位像素；与左侧行名保持一致。
 label_padding_px = 14 # 旋转行名区域的左右合计留白，单位像素。
 label_min_width_px = 104 # 旋转行名区域最小宽度；收窄标签栏以扩大图像网格。
@@ -24,6 +24,7 @@ row_label_color_hex = "#202020" # 左侧行名文字颜色。
 column_label_color_hex = "#202020" # 顶部 delta-t 或 sample id 文字颜色。
 header_padding_px = 10 # 顶部标题区域在字号之外增加的高度，单位像素。
 row_label_line_spacing_px = 4 # 多行行标题的行间距，单位像素。
+mean_error_font_size_px = 48 # 平均误差数值标注字号，单位像素；可按最终版面自行调整。
 
 [timeline]
 mode = "relative-time" # 时间轴模式，可选 none、relative-time 或 frame-sequence；后者显示可用于 --start-sample-id 的保存帧序号。
@@ -39,7 +40,7 @@ right_extension_px = 20 # 横轴箭头在最后一列图像右侧额外伸出的
 mode = "auto" # 裁剪模式，可选 auto 或 fixed。
 padding = 0 # 自动裁剪相对参考轮廓的额外留白比例。
 fixed_xywh = [] # 固定裁剪框 [x, y, width, height]；auto 模式必须留空。
-aspect_ratio = 1.0 # 自动裁剪和图像单元的宽高比；1:1 增加行高，不压缩图像宽度。
+aspect_ratio = 1.2 # 自动裁剪和图像单元的宽高比；1:1 增加行高，不压缩图像宽度。
 
 [overlay]
 model_alpha = 0.6 # 四种方法纹理模型的填充不透明度，范围 0--1。

@@ -519,7 +519,12 @@ MonoBehaviour:
   targetTransform: {fileID: 160200733}
   applyPosition: 1
   applyRotation: 1
+  visualTransforms:
+  - {fileID: 722913590}
+  - {fileID: 4868159}
   holdLastPoseWhenMissing: 1
+  hideWhenAnchorNotTracking: 1
+  hideDelaySeconds: 0.35
   lastAppliedFrameId: -1
 --- !u!4 &160200733
 Transform:
@@ -2245,7 +2250,7 @@ MonoBehaviour:
     ip: 172.24.247.32
   - label: RTX5080 - Laptop
     ip: 192.168.3.9
-  selected: 3
+  selected: 2
   useCustomIp: 0
   customIp: 127.0.0.1
   natsPort: 4222
@@ -2352,9 +2357,6 @@ MonoBehaviour:
   searchingColor: {r: 0.3, g: 0.75, b: 0.95, a: 1}
   pausedColor: {r: 0.7, g: 0.7, b: 0.7, a: 1}
   errorColor: {r: 1, g: 0.15, b: 0.45, a: 1}
-  coastingColor: {r: 0.7, g: 0.85, b: 0.3, a: 1}
-  relocalizingColor: {r: 0.45, g: 0.55, b: 1, a: 1}
-  uninitializedColor: {r: 0.55, g: 0.55, b: 0.55, a: 1}
 --- !u!4 &518730193 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4610006862141434467, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
@@ -5031,7 +5033,10 @@ MonoBehaviour:
   targetTransform: {fileID: 1137170460}
   applyPosition: 1
   applyRotation: 1
+  visualTransforms: []
   holdLastPoseWhenMissing: 1
+  hideWhenAnchorNotTracking: 0
+  hideDelaySeconds: 0.35
   lastAppliedFrameId: -1
 --- !u!4 &1137170460
 Transform:
@@ -8270,7 +8275,10 @@ MonoBehaviour:
   targetTransform: {fileID: 7000000003}
   applyPosition: 1
   applyRotation: 1
+  visualTransforms: []
   holdLastPoseWhenMissing: 1
+  hideWhenAnchorNotTracking: 0
+  hideDelaySeconds: 0.35
   lastAppliedFrameId: -1
 --- !u!4 &7000000003
 Transform:
@@ -8440,7 +8448,10 @@ MonoBehaviour:
   targetTransform: {fileID: 7100000003}
   applyPosition: 1
   applyRotation: 1
+  visualTransforms: []
   holdLastPoseWhenMissing: 1
+  hideWhenAnchorNotTracking: 0
+  hideDelaySeconds: 0.35
   lastAppliedFrameId: -1
 --- !u!4 &7100000003
 Transform:

@@ -74,7 +74,7 @@ namespace EgoAnchor.Runtime
         private string latestPolicyAction = "";
         private string latestPolicyReason = "";
         private float latestReliabilityScore = 1.0f;
-        private AnchorState currentAnchorState = AnchorState.Uninitialized;
+        private AnchorState currentAnchorState = AnchorState.Searching;
         private AnchorMotionState currentMotionState = AnchorMotionState.Unknown;
         private double latestPredictAheadMs = double.NaN;
         private string latestServerState = "";
@@ -591,7 +591,7 @@ namespace EgoAnchor.Runtime
             {
                 latestPolicyAction = "no_pose";
                 latestPolicyReason = reason;
-                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
+                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.Uncertain : AnchorState.Searching;
                 return;
             }
 
@@ -777,7 +777,7 @@ namespace EgoAnchor.Runtime
 
             if (!heartbeat.InputReady && CurrentAnchorState != AnchorState.Paused)
             {
-                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.FrozenUncertain : AnchorState.Searching;
+                currentAnchorState = hasOutputPose || hasRawPose ? AnchorState.Uncertain : AnchorState.Searching;
                 latestPolicyAction = "heartbeat";
                 latestPolicyReason = "input_not_ready";
             }
@@ -818,7 +818,7 @@ namespace EgoAnchor.Runtime
             }
             else
             {
-                currentAnchorState = AnchorState.Relocalizing;
+                currentAnchorState = AnchorState.Searching;
             }
             latestFailure = reason ?? "reacquire";
             latestPolicyAction = "reacquire";

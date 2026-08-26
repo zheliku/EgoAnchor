@@ -44,7 +44,7 @@ ROW_TITLES = {
     "arrival": "Arrival",
     "capture": "Capture",
     "one-euro": "One-Euro",
-    "egoanchor": "EgoAnchor\n(Ours)",
+    "egoanchor": "EgoAnchor",
 }
 """论文网格左侧显示的正式英文行名。"""
 
@@ -696,6 +696,7 @@ def render_comparison_grid(
     header_padding: int = 18,
     row_titles: Sequence[str] = DEFAULT_ROW_TITLES,
     row_label_line_spacing: int = 4,
+    mean_error_font_size: int = 24,
     export_pdf: bool = True,
     configuration_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Path]:
@@ -776,6 +777,8 @@ def render_comparison_grid(
         raise ValueError("header_padding 必须位于 0 到 96 px。")
     if not 0 <= int(row_label_line_spacing) <= 32:
         raise ValueError("row_label_line_spacing 必须位于 0 到 32 px。")
+    if not 8 <= int(mean_error_font_size) <= 96:
+        raise ValueError("mean_error_font_size 必须位于 8 到 96 px。")
     axis_style = _axis_draw_style(
         axis_colors_hex,
         thickness=axis_thickness,
@@ -852,6 +855,11 @@ def render_comparison_grid(
         GridColumn(item.sample_index, item.sample, item.background, item.masks, item.axes, crop)
         for item, crop in zip(prepared, crops, strict=True)
     )
+    reference_error_summary = _summarize_reference_errors(
+        capture.samples,
+        start_index=grid_columns[0].sample_index,
+        end_index=grid_columns[-1].sample_index,
+    )
     sheet, timeline_band_height, coordinate_axes = _compose_grid(
         grid_columns,
         projector,
@@ -888,6 +896,8 @@ def render_comparison_grid(
         header_padding=int(header_padding),
         row_titles=resolved_row_titles,
         row_label_line_spacing=int(row_label_line_spacing),
+        mean_error_font_size=int(mean_error_font_size),
+        reference_error_summary=reference_error_summary,
     )
 
     output = Path(output_dir).expanduser().resolve()
@@ -929,6 +939,7 @@ def render_comparison_grid(
             "header_padding_px": int(header_padding),
             "row_titles": list(row_titles),
             "row_label_line_spacing_px": int(row_label_line_spacing),
+            "mean_error_font_size_px": int(mean_error_font_size),
         },
         "timeline": _effective_timeline_configuration(timeline),
         "crop": {
@@ -1018,6 +1029,7 @@ def render_comparison_grid(
             "column_label_color_hex": column_label_color_hex,
             "header_padding_px": int(header_padding),
             "row_label_line_spacing_px": int(row_label_line_spacing),
+            "mean_error_font_size_px": int(mean_error_font_size),
         },
         "method_colors_hex": list(method_colors_hex),
         "capture_variant_colors_hex": list(capture.manifest.variant_colors_hex),
@@ -1077,6 +1089,7 @@ def render_comparison_grid(
             "row_keys": list(selected_rows),
             "row_titles": [resolved_row_titles[row] for row in selected_rows],
         },
+        "reference_error_summary": reference_error_summary,
         "coordinate_axes": coordinate_axes,
         "outputs": {
             "grid": image_path.name,
@@ -1310,6 +1323,44 @@ def _describe_sample(index: int, sample: ReplaySample) -> dict[str, Any]:
     }
 
 
+def _summarize_reference_errors(
+    samples: Sequence[ReplaySample],
+    *,
+    start_index: int,
+    end_index: int,
+) -> dict[str, dict[str, float | int | str]]:
+    """汇总当前网格时间窗内各方法相对 Quest 参考的逐帧平均误差。"""
+
+    if not 0 <= int(start_index) <= int(end_index) < len(samples):
+        raise ValueError("平均误差时间窗必须落在 replay capture 样本范围内。")
+    summary: dict[str, dict[str, float | int | str]] = {}
+    for variant_id in VARIANT_IDS:
+        position_errors: list[float] = []
+        rotation_errors: list[float] = []
+        for sample in samples[int(start_index) : int(end_index) + 1]:
+            reference = sample.platform_reference
+            variant = next(item for item in sample.variants if item["variant_id"] == variant_id)
+            display_pose = variant.get("display_world_pose")
+            if reference.get("valid") is not True or variant.get("has_display_pose") is not True:
+                continue
+            if not isinstance(display_pose, dict):
+                continue
+            position_error, rotation_error = _pose_difference(
+                reference["world_pose"],
+                display_pose,
+            )
+            position_errors.append(position_error)
+            rotation_errors.append(rotation_error)
+        if position_errors:
+            summary[variant_id] = {
+                "mean_position_error_mm": round(float(np.mean(position_errors)) * 10.0, 6),
+                "mean_rotation_error_deg": round(float(np.mean(rotation_errors)), 6),
+                "sample_count": len(position_errors),
+                "semantics": "shown-window mean over valid display samples vs Quest Reference; translation in mm, rotation in deg",
+            }
+    return summary
+
+
 def _pose_difference(reference: dict[str, Any], display: dict[str, Any]) -> tuple[float, float]:
     """计算两条 world pose 的位置厘米差和最短四元数角差。"""
 
@@ -1539,6 +1590,8 @@ def _compose_grid(
     header_padding: int,
     row_titles: Mapping[str, str],
     row_label_line_spacing: int,
+    mean_error_font_size: int,
+    reference_error_summary: Mapping[str, Mapping[str, float | int | str]],
 ) -> tuple[np.ndarray, int, dict[str, Any]]:
     """把选定同步行排成白底论文图，并按需显示列标题。"""
 
@@ -1546,6 +1599,7 @@ def _compose_grid(
     crop_height = columns[0].crop[3]
     cell_height = max(90, int(round(cell_width * crop_height / crop_width)))
     label_font = _load_font(label_font_size)
+    annotation_font = _load_font(mean_error_font_size)
     column_font = _load_font(column_font_size)
     measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     row_label_images = {
@@ -1615,7 +1669,34 @@ def _compose_grid(
             (2, y, label_width - 2, y + cell_height),
             row_label_images[row_key],
         )
-
+        variant_id = (
+            VARIANT_IDS[ROW_KEYS.index(row_key) - 2]
+            if row_key not in {"passthrough", "reference"}
+            else None
+        )
+        if variant_id is not None and variant_id in reference_error_summary:
+            mean_position = reference_error_summary[variant_id]["mean_position_error_mm"]
+            mean_rotation = reference_error_summary[variant_id]["mean_rotation_error_deg"]
+            annotation = f"{float(mean_position):.2f} mm\n{float(mean_rotation):.2f}°"
+            annotation_bounds = draw.multiline_textbbox(
+                (0, 0), annotation, font=annotation_font, spacing=2, align="center"
+            )
+            annotation_height = annotation_bounds[3] - annotation_bounds[1] + 8
+            annotation_box = (
+                2,
+                y + cell_height - annotation_height - 8,
+                label_width - 2,
+                y + cell_height - 8,
+            )
+            draw.rectangle(annotation_box, fill=canvas_color)
+            _draw_centered_text(
+                draw,
+                annotation_box,
+                annotation,
+                annotation_font,
+                _hex_to_rgb(str(method_colors_hex[VARIANT_IDS.index(variant_id)])),
+                spacing=2,
+            )
     for column_index, column in enumerate(columns):
         x = label_width + column_index * (cell_width + gutter)
         if column_label != "none":

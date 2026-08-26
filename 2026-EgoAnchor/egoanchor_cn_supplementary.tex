@@ -1,0 +1,272 @@
+% EgoAnchor 英文附加材料的中文对照译稿。
+% 本文件以 egoanchor_en_supplementary.tex 为唯一翻译依据，保留其结构、数值、公式与标签，并完成正文与内嵌表格的中英文对齐。
+% 独立编译方式与英文版一致：latexmk -g -xelatex -outdir=pdf <filename>.tex
+% 本附加材料包含主文所引用的内容：
+%   S1 运行时参数
+%   S2 对象锚定条目
+%   S3 标准化量表
+%   S4 完整主观统计
+%   S5 量表信度
+
+\documentclass[review]{vgtc}
+
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{mathptmx}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Courier New}
+\setCJKmainfont[BoldFont=SimHei,ItalicFont=KaiTi]{SimSun}
+\setCJKsansfont{Microsoft YaHei}
+\setCJKmonofont{FangSong}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\hyphenation{Ego-Anchor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{placeins}
+
+\onlineid{1118}
+\vgtccategory{System}
+\vgtcinsertpkg
+
+% 章节、表格和公式均采用 S 前缀编号，以避免与主文编号混淆。
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\theequation}{S\arabic{equation}}
+
+\title{EgoAnchor：透视混合现实中日常物体的零样本动态锚定——附加材料}
+
+\author{}
+
+\abstract{}
+
+\begin{document}
+
+\firstsection{运行时参数}
+\maketitle
+\label{sec:supp-params}
+
+本文档包含主文所引用的五项附加内容：运行时参数、七项对象锚定条目、标准化量表细节、十二项主观结果的完整统计，以及量表信度。
+
+表~\ref{tab:supp-params}列出锚定运行时的完整参数取值。所有参数均预先固定，在实验一至实验三中不针对具体场景、物体或实验条件进行调整。
+
+锁定状态下的更新增益为
+$g_j = (1 - 2^{-\Delta t_j / h_{\mathrm{creep}}}) R_j (1 - \rho_j^{\mathrm{head}})$，
+其中，$\rho_j^{\mathrm{head}}$ 为归一化头部线速度与角速度中的较大者，并以 0.3~m/s 和 60~$^\circ$/s 作为满容忍尺度，将其截断至 $[0,1]$。该项用于降低更新增益；与此同时，运动相关判据按 $1+3\rho_j^{\mathrm{head}}$ 放宽，最高为 $4\times$，而可靠性判据保持不变。头动停止后设置 600~ms 的沉降窗口，在此期间冻结基于运动的释放判据。
+
+持续残差判据采用带泄漏累积和，其更新为
+\begin{equation}
+E_{p,j} = 2^{-\Delta t_j / h_E} E_{p,j-1} + \frac{\Delta t_j}{t_{\mathrm{ref}}} R_j \max\!\left(0,\, d_{p,j} - d_{\mathrm{db}}\right),
+\label{eq:supp-cusum}
+\end{equation}
+旋转通道同理。当任一通道超过其上限时触发释放；观测共识采用相同的证据半衰期。
+
+对照方法的参数同样预先固定：One-Euro 的位置通道截止频率/速度系数/导数截止频率分别为 0.8~Hz/6/2~Hz，旋转通道分别为 1~Hz/1/2~Hz；Smoothed KF Extrapolation 采用 0.18~s 的预测时域和 0.06~s 的校正半衰期。
+
+\paragraph{旋转卡尔曼滤波。}
+平移在三个笛卡尔轴上分别采用相互独立的位置--速度常速度滤波器。旋转采用局部 $\mathrm{SO}(3)$ 切空间状态 $(\phi_i,\omega_i)$ 上的三个独立常速度滤波器，其中 $\phi_i$ 为旋转向量分量，$\omega_i$ 为机体系角速度。连续过程模型采用白噪声加速度，平移和旋转的参数取值见表~\ref{tab:supp-params}；观测表示为位置残差和旋转向量残差。首次观测初始化归一化参考四元数、零旋转向量和零角速度，各轴初始角速度方差为 $1.0~(\mathrm{rad}/\mathrm{s})^2$。此后的每个四元数均先归一化，与当前估计进行同半球对齐，再映射为最短弧相对对数。校正后，将切空间原点重新置于更新后的姿态，并通过 $\mathrm{SO}(3)$ 右雅可比搬运机体系角速度；随后通过指数映射恢复输出四元数。上述操作使四元数符号保持一致，并在接近 $\pi$ 时维持一致的切空间分支。
+
+\begin{table*}[t]
+\centering
+\caption{锚定运行时参数。上段为观测准入与历史查询，中段为静止锁定（StaticLock），下段为有效性规则与 VCD 评分。}
+\label{tab:supp-params}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}lll@{}}
+\toprule
+参数 & 记号 & 取值 \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{观测准入与历史查询}} \\
+准入可靠性阈值 & $R_{\min}$ & 0.2 \\
+卡尔曼白噪声加速度（平移/旋转） & --- & 0.002~m$^2$/s$^3$ / 0.2~rad$^2$/s$^3$ \\
+卡尔曼量测噪声（平移/旋转） & --- & $4\times10^{-6}$~m$^2$ / $4\times10^{-4}$~rad$^2$ \\
+查询滞后缩放因子 & $s$ & 1.15 \\
+最小查询滞后 & $\Delta_{\min}$ & 250~ms \\
+状态年龄估计系数（升/降） & --- & 0.5 / 0.05 \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{静止锁定（StaticLock）}} \\
+入锁线速度阈值 & $v_{\mathrm{th}}$ & 50~mm/s \\
+入锁角速度阈值 & $\omega_{\mathrm{th}}$ & 22~$^\circ$/s \\
+入锁可靠性阈值 & $R_{\mathrm{lock}}$ & 0.25 \\
+入锁驻留时间 & $\tau_{\mathrm{dwell}}$ & 350~ms \\
+入锁运动统计平滑系数 & --- & 0.5（逐观测） \\
+死区（平移/旋转） & $d_{\mathrm{db}}$ / $\theta_{\mathrm{db}}$ & 8~mm / 3~$^\circ$ \\
+锁定更新增益半衰期 & $h_{\mathrm{creep}}$ & 2.7~s \\
+CUSUM 上限（平移/旋转） & $E_p^{\max}$ / $E_\theta^{\max}$ & 80~mm / 20~$^\circ$ \\
+CUSUM 证据半衰期 & $h_E$ & 0.27~s \\
+CUSUM 参考间隔 & $t_{\mathrm{ref}}$ & 0.2~s \\
+累计漂移上限（平移/旋转） & --- & 15~mm / 12~$^\circ$ \\
+速度逃逸倍率与时长 & --- & 2.5$\times$, 400~ms \\
+低可靠性释放（阈值/时长） & --- & 0.3, 600~ms \\
+重锁抑制时长 & --- & 1.0~s \\
+接缝过渡逐帧衰减 & --- & 0.85 \\
+头部沉降窗口 & --- & 600~ms \\
+头动满容忍尺度（线/角） & --- & 0.3~m/s / 60~$^\circ$/s \\
+头动容忍放大上限 & --- & 4$\times$ \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{有效性与 VCD 评分}} \\
+跟踪可靠性下限 & --- & 0.5 \\
+跟踪保持时长 & --- & 无可靠观测 450~ms \\
+丢失判定 & --- & 无可靠观测 1.0~s \\
+重新获取触发（阈值/时长） & --- & 0.45, 600~ms \\
+重新获取冷却时间 & --- & 3.0~s \\
+颜色/深度权重 & $w_C$ / $w_D$ & 0.2 / 0.8 \\
+对数下限 & $\epsilon$ & 0.05 \\
+深度容差（下限/距离比） & --- & 5~mm / 0.02 \\
+内点率权重与残差因子 & --- & 0.6 / 2.5 \\
+有效深度覆盖率阈值 & --- & 0.10 \\
+结构项权重上限与 IQR 阈值 & --- & 0.35 / 20~mm \\
+LAB 明度通道权重 & --- & 0.3 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{实验一：采样与置信区间}\label{sec:supp-exp1-ci}
+
+表~\ref{tab:supp-exp1-sampling}给出各受控序列类型的评估片段数量、正式任务完整时长，以及所记录参考运动的取值范围。每一行对应一次连续的正式记录；$n$ 表示其中由标记划分的评估片段数量。取值范围包含静止区间以及全部记录样本。所有序列均由同一名操作者完成，因此以下区间描述的是单一操作者条件下的重复性。
+
+\begin{table}[t]
+\centering
+\caption{实验一采样信息。时长为完整正式任务的记录时长；参考运动范围为各任务中所记录瞬时线速度/角速度的完整取值范围。}\label{tab:supp-exp1-sampling}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+序列类型 & $n$ & \shortstack{时长\\（s）} & \shortstack{线速度\\（m/s）} & \shortstack{角速度\\（$^\circ$/s）} \\
+\midrule
+静止目标下的头动 & 12 & 79.157 & 0--0 & 0--0 \\
+启停 6-DoF 运动 & 12 & 95.293 & 0--0.923 & 0--374.3 \\
+连续平移 & 16 & 77.257 & 0--3.453 & 0--385.9 \\
+连续旋转 & 12 & 65.062 & 0--0.722 & 0--903.7 \\
+遮挡恢复 & 12 & 106.511 & 0--0 & 0--0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表~\ref{tab:supp-exp1-ci}报告主文表 1--3 中每个中位数对应的自举 95\% 置信区间。各指标先在由标记划分的单个评估片段内汇总，再计算跨片段中位数；置信区间由这些片段级数值进行 20{,}000 次重采样得到。静态配准的片段数为 12；动态跟随中，平移为 16、旋转为 12；遮挡恢复与运动响应的片段数均为 12。
+
+\begin{table*}[t]
+\centering
+\caption{实验一各指标中位数及自举 95\% 置信区间（对由标记划分的评估片段进行 20{,}000 次重采样）。各指标先在单个片段内汇总，再计算跨片段中位数；数值复现主文表 1--3。所有任务均由同一名操作者完成。}
+\label{tab:supp-exp1-ci}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+指标 & Arrival & Capture & One-Euro & EgoAnchor \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{静态配准（$n=12$）}} \\
+头动耦合误差（mm） & 43.67 [35.87, 56.42] & 13.03 [11.40, 16.39] & 10.65 [7.99, 14.12] & 0.82 [0.58, 0.92] \\
+头动耦合误差（$^\circ$） & 6.49 [4.50, 8.48] & 5.40 [4.38, 8.19] & 3.29 [3.01, 4.40] & 0.33 [0.22, 0.37] \\
+配准误差（mm） & 44.31 [37.10, 56.53] & 17.54 [13.89, 19.88] & 14.00 [11.95, 16.90] & 6.60 [5.18, 8.01] \\
+配准误差（$^\circ$） & 9.65 [7.42, 11.35] & 8.26 [7.44, 10.50] & 6.96 [6.09, 8.17] & 4.39 [4.05, 5.02] \\
+静止抖动（mm） & 11.70 [10.70, 16.88] & 4.30 [3.57, 7.01] & 0.85 [0.67, 1.57] & 0.06 [0.06, 0.08] \\
+静止抖动（$^\circ$） & 2.98 [2.26, 3.77] & 2.60 [2.26, 3.11] & 0.40 [0.34, 0.50] & 0.03 [0.03, 0.03] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{动态跟随：平移（$n=16$）}} \\
+有效时延（ms） & 202.5 [185.0, 217.5] & 255.0 [252.5, 262.5] & 380.0 [370.0, 385.0] & 360.0 [355.0, 365.0] \\
+LA-RMSE（mm） & 18.57 [15.08, 20.81] & 17.14 [13.42, 18.29] & 15.69 [13.27, 20.35] & 9.12 [7.46, 11.27] \\
+CT-RMSE（mm） & 84.74 [71.89, 92.70] & 103.63 [87.98, 110.61] & 117.61 [102.34, 130.03] & 125.83 [110.47, 137.82] \\
+残余抖动（mm） & 41.08 [34.13, 45.05] & 39.69 [33.87, 45.51] & 5.25 [4.27, 7.33] & 4.56 [4.10, 5.98] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{动态跟随：旋转（$n=12$）}} \\
+有效时延（ms） & 255.0 [250.0, 262.5] & 257.5 [252.5, 265.0] & 385.0 [380.0, 390.0] & 345.0 [342.5, 350.0] \\
+LA-RMSE（$^\circ$） & 6.09 [5.72, 6.53] & 5.84 [5.43, 6.04] & 5.55 [5.08, 6.15] & 4.81 [4.67, 5.29] \\
+CT-RMSE（$^\circ$） & 25.44 [24.17, 30.74] & 25.35 [24.09, 31.16] & 34.10 [31.71, 41.76] & 31.88 [30.24, 39.20] \\
+残余抖动（$^\circ$） & 10.40 [9.64, 12.69] & 10.26 [9.66, 12.36] & 2.70 [2.56, 2.84] & 2.64 [2.39, 3.04] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{状态转换响应（$n=12$）}} \\
+遮挡恢复误差（mm） & 18.23 [14.04, 36.83] & 16.93 [14.10, 36.95] & 10.41 [7.30, 14.59] & 4.85 [4.51, 13.93] \\
+遮挡恢复误差（$^\circ$） & 18.39 [11.77, 27.96] & 18.38 [11.90, 27.98] & 8.66 [5.95, 14.10] & 5.52 [4.88, 12.86] \\
+运动响应时延（ms） & 157.0 [134.9, 207.3] & 263.8 [229.8, 281.5] & 334.0 [326.7, 348.6] & 510.4 [446.7, 582.4] \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{对象锚定条目}\label{sec:supp-items}
+
+七项对象锚定条目在六个“方法--物体”条件中的每个条件结束后进行评价，均采用七点同意度量表（1 = 非常不同意，7 = 非常同意）。Q1--Q4 对应阶段性行为，Q5--Q7 对应整体判断。
+
+\begin{enumerate}[label=Q\arabic*.]
+  \item （静止稳定性）静态观察过程中，虚拟内容保持在同一位置，没有发生移动。
+  \item （运动附着性）当我拿起、移动并旋转物体时，虚拟内容始终附着在真实物体上的同一位置。
+  \item （姿态一致性）当我旋转物体时，虚拟内容的朝向始终与真实物体的朝向保持一致。
+  \item （恢复一致性）遮挡移除后，虚拟内容恢复到与真实物体一致的位置。
+  \item （位置正确性）虚拟内容显示的位置与真实物体的实际位置相匹配。
+  \item （依赖意愿）在需要将虚拟内容准确附着于真实物体的 MR 应用中，我愿意依赖这种锚定方法。
+  \item （稳定性--响应性权衡）总体而言，该方法在锚点稳定性与响应性之间实现了适当的平衡。
+\end{enumerate}
+
+\section{标准化量表}\label{sec:supp-scales}
+
+AQ 包含“嵌入质量”（Embedding Quality）和“交互质量”（Interaction Quality）两个三条目子量表，在每个实验条件结束后采用七点量表施测。TiA 包含六条目的“可靠性/能力”（Reliability/Competence）子量表和四条目的“理解/可预测性”（Understanding/Predictability）子量表，每种方法仅施测一次，采用五点量表；其中 RC3、RC5、UP2 和 UP4 按 $6-\text{raw}$ 进行反向计分。S-TIAS 包含三个七点强度条目，每种方法施测一次。最终问卷记录方法偏好、信任选择、偏好强度、方法区分信心以及实验后不适，并作为描述性结果报告。
+
+\section{完整主观统计}\label{sec:supp-stats}
+
+表~\ref{tab:supp-stats}报告全部十二项主观结果。七项自定义条目与五项标准化量表结果分别构成两个独立的 Holm--Bonferroni 校正家族。
+
+% tables/en/exp3_subjective.tex 的附加材料版本。
+% 表体保持一致；caption 将主文中的两个交叉引用改为普通文本，以便附加材料独立编译。
+% 数值必须与主文表格保持同步。
+\begin{table*}[t]
+\centering
+\caption{实验三的十二项被试内主观结果，按主文第~5.3 节所述测量结构分组。对象锚定条目与 AQ 子量表均先在每个条件内跨三个物体取均值；TiA 与 S-TIAS 则按方法各施测一次。中位数按 One-Euro / EgoAnchor 报告。$W$ 与 $p_{\mathrm{adj}}$ 分别表示 Wilcoxon 符号秩统计量及对应校正家族内经 Holm 校正后的 $p$ 值。$r_{\mathrm{rb}}$ 为配对秩双列相关系数，正值表示结果有利于 EgoAnchor。TiA 采用五点量表，其余指标均采用七点量表；箭头表示分数越高越有利。所有指标均包含 24 组完整配对，Wilcoxon 秩统计量计算时排除差值为零的配对。对于标记为 $\dagger$ 的指标，所有非零配对差值方向一致，且 $r_{\mathrm{rb}}$ 达到边界值，因此不报告自举置信区间。分布见主文图~4。}
+\label{tab:supp-stats}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+指标 & \shortstack{One-Euro /\\EgoAnchor\,$\uparrow$} & $W$ & $p_{\mathrm{adj}}$ & \shortstack{$r_{\mathrm{rb}}$\\{[}95\% CI{]}} \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{阶段性锚定行为}} \\
+静止稳定性 & 4.33 / 5.00 & 13.5 & $<.001$ & .90 [.69, 1.00] \\
+运动附着性 & 5.00 / 5.17 & 67.5 & .267 & .29 [$-$.22, .77] \\
+姿态一致性 & 4.67 / 5.00 & 81 & .162 & .41 [$-$.05, .78] \\
+恢复一致性 & 4.17 / 5.00 & 6 & $<.001$ & .95 [.80, 1.00] \\
+\addlinespace
+\multicolumn{5}{@{}l}{\textit{整体锚定判断}} \\
+位置正确性 & 4.67 / 5.00 & 16 & .001 & .85 [.57, 1.00] \\
+依赖意愿 & 4.00 / 5.00 & 16.5 & $<.001$ & .87 [.62, 1.00] \\
+稳定性--响应性权衡 & 4.50 / 4.83 & 6 & .003 & .90 [.65, 1.00] \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{增强质量}} \\
+AQ 嵌入质量 & 4.78 / 5.17 & 32 & .004 & .75 [.42, .96] \\
+AQ 交互质量 & 4.89 / 5.06 & 102.5 & .446 & .19 [$-$.29, .64] \\
+\addlinespace
+\multicolumn{5}{@{}l}{\textit{信任}} \\
+TiA 可靠性/能力 & 4.17 / 4.58 & 0 & $<.001$ & 1.00$^{\dagger}$ \\
+TiA 理解/可预测性 & 4.00 / 4.38 & 32 & .004 & .75 [.42, .96] \\
+S-TIAS & 5.33 / 5.67 & 22.5 & .004 & .79 [.47, .97] \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+
+\section{量表信度}\label{sec:supp-reliability}
+
+\textbf{信度系数。} 按量表与方法报告内部一致性（$N=24$）。Cronbach's $\alpha$ 与 McDonald's $\omega$ 描述当前样本的内部一致性。AQ 的系数基于跨三个物体取均值后的得分计算；TiA 与 S-TIAS 则按方法各施测一次。
+
+\begin{tabular}{@{}llccc@{}}
+\toprule
+量表 & 方法 & 条目数 & $\alpha$ & $\omega$ \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{跨三个物体取均值}} \\
+AQ 嵌入质量 & One-Euro & 3 & .768 & .773 \\
+AQ 嵌入质量 & EgoAnchor & 3 & .769 & .770 \\
+AQ 交互质量 & One-Euro & 3 & .504 & .525 \\
+AQ 交互质量 & EgoAnchor & 3 & .892 & .899 \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{单次方法级施测}} \\
+TiA 可靠性/能力 & One-Euro & 6 & .792 & .796 \\
+TiA 可靠性/能力 & EgoAnchor & 6 & .751 & .777 \\
+TiA 理解/可预测性 & One-Euro & 4 & .565 & .580 \\
+TiA 理解/可预测性 & EgoAnchor & 4 & .769 & .756 \\
+S-TIAS & One-Euro & 3 & .672 & .698 \\
+S-TIAS & EgoAnchor & 3 & .697 & .740 \\
+\bottomrule
+\end{tabular}
+
+\end{document}

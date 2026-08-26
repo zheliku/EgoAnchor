@@ -15,7 +15,10 @@ namespace AnchorViz
     /// </summary>
     public sealed class AnchorStatusLabel : MonoBehaviour
     {
-        /// <summary>简化后的对用户友好的状态分类。</summary>
+        /// <summary>
+        /// 显示分类。与 AnchorState 一一对应，只额外拆出 Static
+        /// （Tracking 且静止锁定，让用户看到"已稳定锁定"而非普通跟踪）。
+        /// </summary>
         private enum DisplayStatus
         {
             Tracking,
@@ -49,13 +52,13 @@ namespace AnchorViz
         [Tooltip("文字显示成镜像/背面时勾选，绕 Y 轴翻转 180°。")]
         [SerializeField] private bool flip = false;
 
-        /// <summary>是否简化状态显示。</summary>
+        /// <summary>是否把静止锁定单列为 Static。</summary>
         [Header("Display")]
-        [Tooltip("简化显示：显示 Tracking / Static / Uncertain / Lost / Searching / Paused / Error，并隐藏 Coasting、Relocalizing 等内部状态。关闭则显示原始状态，便于调试。")]
+        [Tooltip("开启后 Tracking 且静止锁定时显示 Static，让用户看到“已稳定锁定”。关闭则统一显示 Tracking，便于对照原始 anchor 状态。")]
         [SerializeField] private bool simplified = true;
 
-        /// <summary>简化模式下，Uncertain 候选状态需持续多久才显示，单位秒。</summary>
-        [Tooltip("简化模式下，Static/Tracking 切到 Uncertain 前的显示防抖时间。用于吸收低帧率 GPU 或偶发低分帧导致的短暂 FrozenUncertain；不改变实际 anchor policy。0=关闭防抖。")]
+        /// <summary>Uncertain 候选状态需持续多久才显示，单位秒。</summary>
+        [Tooltip("Static/Tracking 切到 Uncertain 前的显示防抖时间。用于吸收低帧率 GPU 或偶发低分帧导致的短暂 Uncertain；不改变实际 anchor policy。0=关闭防抖。")]
         [SerializeField] private float uncertainDelaySeconds = 0.75f;
 
         /// <summary>状态颜色（简化模式与详细模式共用）。</summary>
@@ -67,12 +70,6 @@ namespace AnchorViz
         [SerializeField] private Color searchingColor = new Color(0.30f, 0.75f, 0.95f);
         [SerializeField] private Color pausedColor = new Color(0.70f, 0.70f, 0.70f);
         [SerializeField] private Color errorColor = new Color(1.00f, 0.15f, 0.45f);
-
-        /// <summary>仅详细模式（simplified=false）使用的额外状态颜色。</summary>
-        [Header("Colors (detailed mode only)")]
-        [SerializeField] private Color coastingColor = new Color(0.70f, 0.85f, 0.30f);
-        [SerializeField] private Color relocalizingColor = new Color(0.45f, 0.55f, 1.00f);
-        [SerializeField] private Color uninitializedColor = new Color(0.55f, 0.55f, 0.55f);
 
         private AnchorState lastState = (AnchorState)(-1);
         private bool lastStaticLocked;
@@ -238,16 +235,15 @@ namespace AnchorViz
             return facingCamera;
         }
 
-        /// <summary>把 9 个内部状态归并为对用户友好的分类。staticLocked=true 且正在跟踪时显示 Static。</summary>
+        /// <summary>把 anchor 状态映射到显示分类。staticLocked=true 且正在跟踪时单列 Static。</summary>
         private static DisplayStatus Simplify(AnchorState state, bool staticLocked)
         {
             switch (state)
             {
                 case AnchorState.Tracking:
-                case AnchorState.Coasting: // 帧间正常空档（<coastTimeout），物体仍在预测位置
                     // 静止锁定中 = 物体已静止并被锚定冻结，单列 Static 让用户看到"已稳定锁定"而非普通跟踪。
                     return staticLocked ? DisplayStatus.Static : DisplayStatus.Tracking;
-                case AnchorState.FrozenUncertain: // pose 不可靠、已冻结降级，不能当作正常跟踪
+                case AnchorState.Uncertain:
                     return DisplayStatus.Uncertain;
                 case AnchorState.Lost:
                     return DisplayStatus.Lost;
@@ -255,7 +251,7 @@ namespace AnchorViz
                     return DisplayStatus.Paused;
                 case AnchorState.Error:
                     return DisplayStatus.Error;
-                default: // Uninitialized / Searching / Relocalizing
+                default: // Searching
                     return DisplayStatus.Searching;
             }
         }
@@ -288,20 +284,17 @@ namespace AnchorViz
             }
         }
 
-        /// <summary>详细模式：每个原始状态的简短文字。</summary>
+        /// <summary>不单列 Static 时：直接显示 anchor 状态名。</summary>
         private static string DetailedText(AnchorState state, bool staticLocked)
         {
             switch (state)
             {
                 case AnchorState.Tracking: return staticLocked ? "Locked" : "Tracking";
-                case AnchorState.Coasting: return "Coasting";
-                case AnchorState.FrozenUncertain: return "Uncertain";
-                case AnchorState.Searching: return "Searching";
-                case AnchorState.Relocalizing: return "Relocating";
+                case AnchorState.Uncertain: return "Uncertain";
                 case AnchorState.Lost: return "Lost";
                 case AnchorState.Paused: return "Paused";
                 case AnchorState.Error: return "Error";
-                default: return "Init";
+                default: return "Searching";
             }
         }
 
@@ -310,14 +303,11 @@ namespace AnchorViz
             switch (state)
             {
                 case AnchorState.Tracking: return trackingColor;
-                case AnchorState.Coasting: return coastingColor;
-                case AnchorState.FrozenUncertain: return uncertainColor;
-                case AnchorState.Searching: return searchingColor;
-                case AnchorState.Relocalizing: return relocalizingColor;
+                case AnchorState.Uncertain: return uncertainColor;
                 case AnchorState.Lost: return lostColor;
                 case AnchorState.Paused: return pausedColor;
                 case AnchorState.Error: return errorColor;
-                default: return uninitializedColor;
+                default: return searchingColor;
             }
         }
     }

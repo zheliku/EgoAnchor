@@ -428,6 +428,319 @@ namespace EgoAnchor.Tests
         }
 
         /// <summary>
+        /// 帧间空档（渲染帧率高于 pose 到达率）必须仍算 Tracking 并保持可见，
+        /// 否则物体在正常追踪下永久隐藏。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorStaysVisibleBetweenPoseArrivals()
+        {
+            GameObject go = new GameObject("DynamicObjectAnchorFrameGapVisibilityTests");
+            try
+            {
+                GameObject meshChild = new GameObject("Mesh");
+                meshChild.transform.SetParent(go.transform, false);
+                MeshRenderer renderer = meshChild.AddComponent<MeshRenderer>();
+
+                AnchorPolicyHost host = go.AddComponent<AnchorPolicyHost>();
+                ConstantVelocityModel model = go.AddComponent<ConstantVelocityModel>();
+                HoldStrategy smoothing = go.AddComponent<HoldStrategy>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                SetPrivateField(host, "motionModel", model);
+                SetPrivateField(host, "smoothingStrategy", smoothing);
+                SetPrivateField(runtime, "policyHost", host);
+                host.Bind(runtime);
+
+                DynamicObjectAnchor presenter = go.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", go.transform);
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                InvokePrivateMethod(presenter, "Awake");
+
+                // 一条可靠 pose 到达 → Tracking。
+                double accepted = Time.realtimeSinceStartupAsDouble;
+                runtime.AcceptWorldPose(42, new Pose(Vector3.one, Quaternion.identity));
+                Assert.That(runtime.CurrentAnchorState, Is.EqualTo(AnchorState.Tracking));
+
+                // 随后的渲染帧没有新 pose：runtime(-50) 先 Advance，之后 presenter(0) 才读状态。
+                // gap 仍在 coast 窗口内，必须保持 Tracking。这正是真机稳态。
+                runtime.AdvanceAnchorOutput(accepted + 0.05);
+                Assert.That(runtime.CurrentAnchorState, Is.EqualTo(AnchorState.Tracking));
+
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.True, "帧间正常空档不得隐藏物体。");
+                Assert.That(presenter.HasDisplayPose, Is.True);
+                Assert.That(presenter.LastAppliedFrameId, Is.EqualTo(42L));
+
+                // 超过 coast 窗口才降级 Uncertain（0.45 < gap < 1.0 lost 超时）。
+                runtime.AdvanceAnchorOutput(accepted + 0.6);
+                Assert.That(runtime.CurrentAnchorState, Is.EqualTo(AnchorState.Uncertain));
+
+                // 超过 lost 超时进入 Lost。
+                runtime.AdvanceAnchorOutput(accepted + 1.5);
+                Assert.That(runtime.CurrentAnchorState, Is.EqualTo(AnchorState.Lost));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 开启按追踪状态隐藏时，失去可信追踪要隐藏渲染器，重新追踪后恢复显示。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorHidesUntilTrackingResumes()
+        {
+            GameObject go = new GameObject("DynamicObjectAnchorVisibilityTests");
+            try
+            {
+                GameObject meshChild = new GameObject("Mesh");
+                meshChild.transform.SetParent(go.transform, false);
+                MeshRenderer renderer = meshChild.AddComponent<MeshRenderer>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = go.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", go.transform);
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "latestAcceptedFrameId", 7L);
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Uncertain);
+
+                InvokePrivateMethod(presenter, "Awake");
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.False);
+                Assert.That(presenter.HasDisplayPose, Is.False);
+                Assert.That(go.transform.position, Is.EqualTo(Vector3.one));
+
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Tracking);
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.True);
+                Assert.That(presenter.HasDisplayPose, Is.True);
+                Assert.That(presenter.LastAppliedFrameId, Is.EqualTo(7L));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 隐藏防抖：单帧 FrozenUncertain 不得让物体闪灭；持续不可信超过防抖时间才隐藏。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorDebouncesSingleFrameUncertainty()
+        {
+            GameObject go = new GameObject("DynamicObjectAnchorHideDebounceTests");
+            try
+            {
+                GameObject meshChild = new GameObject("Mesh");
+                meshChild.transform.SetParent(go.transform, false);
+                MeshRenderer renderer = meshChild.AddComponent<MeshRenderer>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = go.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", go.transform);
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                SetPrivateField(presenter, "hideDelaySeconds", 0.35f);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "latestAcceptedFrameId", 11L);
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Tracking);
+                InvokePrivateMethod(presenter, "Awake");
+
+                double now = 100.0;
+                Assert.That(InvokeStabilizeVisibility(presenter, true, now), Is.True);
+
+                // 单帧掉到不可信：仍在防抖窗口内，保持显示。
+                Assert.That(InvokeStabilizeVisibility(presenter, false, now + 0.016), Is.True);
+                // 立即恢复可信：不残留待隐藏状态。
+                Assert.That(InvokeStabilizeVisibility(presenter, true, now + 0.032), Is.True);
+
+                // 持续不可信超过防抖时间：隐藏。
+                Assert.That(InvokeStabilizeVisibility(presenter, false, now + 0.05), Is.True);
+                Assert.That(InvokeStabilizeVisibility(presenter, false, now + 0.45), Is.False);
+
+                // 恢复追踪立即显示，不等防抖。
+                Assert.That(InvokeStabilizeVisibility(presenter, true, now + 0.46), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// anchor 状态集必须保持精简：只有 5 个行为上真正不同的状态 + Paused。
+        /// 帧间空档不单列状态，reacquire/冷启动统一为 Searching。
+        /// </summary>
+        [Test]
+        public void AnchorStateSetStaysMinimal()
+        {
+            AnchorState[] states = (AnchorState[])Enum.GetValues(typeof(AnchorState));
+            Assert.That(states, Is.EquivalentTo(new[]
+            {
+                AnchorState.Searching,
+                AnchorState.Tracking,
+                AnchorState.Uncertain,
+                AnchorState.Lost,
+                AnchorState.Paused,
+                AnchorState.Error,
+            }));
+        }
+
+        /// <summary>
+        /// Paused 是用户主动暂停更新，不是失去追踪：冻结暂停前的可见度，不隐藏物体。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorFreezesVisibilityWhilePaused()
+        {
+            GameObject go = new GameObject("DynamicObjectAnchorPausedVisibilityTests");
+            try
+            {
+                GameObject meshChild = new GameObject("Mesh");
+                meshChild.transform.SetParent(go.transform, false);
+                MeshRenderer renderer = meshChild.AddComponent<MeshRenderer>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = go.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", go.transform);
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "latestAcceptedFrameId", 21L);
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Tracking);
+                InvokePrivateMethod(presenter, "Awake");
+
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.True);
+
+                // 暂停：保持可见，不因"非 Tracking"而隐藏。
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Paused);
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.True, "Paused 不得隐藏物体。");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// visualTransforms 条目指向 runtime 的祖先时必须剔除该条目，
+        /// 否则停用后 runtime.LateUpdate 不再执行，物体永久隐藏。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorRefusesToDeactivateRuntimeAncestor()
+        {
+            GameObject visualRoot = new GameObject("VisualRootContainingRuntime");
+            try
+            {
+                GameObject anchorChild = new GameObject("AnchorChild");
+                anchorChild.transform.SetParent(visualRoot.transform, false);
+                MeshRenderer renderer = anchorChild.AddComponent<MeshRenderer>();
+                PoseToAnchorRuntime runtime = anchorChild.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = anchorChild.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", anchorChild.transform);
+                SetPrivateField(presenter, "visualTransforms", new List<Transform> { visualRoot.transform });
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Lost);
+
+                LogAssert.Expect(LogType.Warning, new Regex("visualTransforms"));
+                InvokePrivateMethod(presenter, "Awake");
+                InvokePrivateMethod(presenter, "LateUpdate");
+
+                Assert.That(visualRoot.activeSelf, Is.True, "不得停用含 runtime 的节点。");
+                Assert.That(renderer.enabled, Is.False, "应回退到切换 Renderer。");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(visualRoot);
+            }
+        }
+
+        /// <summary>
+        /// 关闭按追踪状态隐藏时，旧的 hold-last 可见度行为保持不变。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorKeepsVisibilityWhenStateHidingDisabled()
+        {
+            GameObject go = new GameObject("DynamicObjectAnchorVisibilityCompatibilityTests");
+            try
+            {
+                GameObject meshChild = new GameObject("Mesh");
+                meshChild.transform.SetParent(go.transform, false);
+                MeshRenderer renderer = meshChild.AddComponent<MeshRenderer>();
+                PoseToAnchorRuntime runtime = go.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = go.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", go.transform);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "latestAcceptedFrameId", 8L);
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Uncertain);
+
+                InvokePrivateMethod(presenter, "Awake");
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(renderer.enabled, Is.True);
+                Assert.That(presenter.HasDisplayPose, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 配置多个外部视觉 Transform（如 Mesh + Axis）时，隐藏和恢复必须同时切换全部条目。
+        /// </summary>
+        [Test]
+        public void DynamicObjectAnchorTogglesAllExternalVisualTransforms()
+        {
+            GameObject anchorRoot = new GameObject("DynamicObjectAnchorExternalVisualTests");
+            try
+            {
+                GameObject meshRoot = new GameObject("Mesh");
+                meshRoot.transform.SetParent(anchorRoot.transform, false);
+                meshRoot.AddComponent<MeshRenderer>();
+                GameObject axisRoot = new GameObject("Axis");
+                axisRoot.transform.SetParent(anchorRoot.transform, false);
+                axisRoot.AddComponent<MeshRenderer>();
+
+                PoseToAnchorRuntime runtime = anchorRoot.AddComponent<PoseToAnchorRuntime>();
+                DynamicObjectAnchor presenter = anchorRoot.AddComponent<DynamicObjectAnchor>();
+                SetPrivateField(presenter, "runtime", runtime);
+                SetPrivateField(presenter, "targetTransform", anchorRoot.transform);
+                SetPrivateField(presenter, "visualTransforms", new List<Transform> { meshRoot.transform, axisRoot.transform });
+                SetPrivateField(presenter, "hideWhenAnchorNotTracking", true);
+                SetPrivateField(runtime, "hasOutputPose", true);
+                SetPrivateField(runtime, "outputPose", new Pose(Vector3.one, Quaternion.identity));
+                SetPrivateField(runtime, "latestAcceptedFrameId", 9L);
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Uncertain);
+
+                InvokePrivateMethod(presenter, "Awake");
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(meshRoot.activeSelf, Is.False);
+                Assert.That(axisRoot.activeSelf, Is.False);
+                Assert.That(presenter.HasDisplayPose, Is.False);
+
+                SetPrivateField(runtime, "currentAnchorState", AnchorState.Tracking);
+                InvokePrivateMethod(presenter, "LateUpdate");
+                Assert.That(meshRoot.activeSelf, Is.True);
+                Assert.That(axisRoot.activeSelf, Is.True);
+                Assert.That(presenter.HasDisplayPose, Is.True);
+                Assert.That(presenter.LastAppliedFrameId, Is.EqualTo(9L));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(anchorRoot);
+            }
+        }
+
+        /// <summary>
         /// output JSON 必须包含观测年龄、policy 目标时刻、平滑延迟与 Unity pose 处理时刻。
         /// </summary>
         [Test]
@@ -1209,6 +1522,29 @@ namespace EgoAnchor.Tests
             MethodInfo buildSnapshots = typeof(EvalRecorder).GetMethod("BuildSnapshots", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(buildSnapshots, Is.Not.Null);
             buildSnapshots.Invoke(recorder, Array.Empty<object>());
+        }
+
+        /// <summary>通过反射调用组件私有 Unity 生命周期方法。</summary>
+        private static void InvokePrivateMethod(object instance, string methodName)
+        {
+            MethodInfo method = instance.GetType().GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null, $"missing private method {methodName}");
+            method.Invoke(instance, Array.Empty<object>());
+        }
+
+        /// <summary>反射驱动可见度防抖，避免为测试把时间注入生产 API。</summary>
+        private static bool InvokeStabilizeVisibility(
+            DynamicObjectAnchor presenter,
+            bool displayable,
+            double nowSeconds)
+        {
+            MethodInfo method = typeof(DynamicObjectAnchor).GetMethod(
+                "StabilizeVisibility",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null, "missing StabilizeVisibility");
+            return (bool)method.Invoke(presenter, new object[] { displayable, nowSeconds });
         }
 
         /// <summary>读取组件声明的 Unity 默认执行顺序。</summary>

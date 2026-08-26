@@ -423,6 +423,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.row_label_line_spacing,
             settings.layout.row_label_line_spacing_px,
         ),
+        mean_error_font_size=settings.layout.mean_error_font_size_px,
         configuration_provenance=configuration_sources,
     )
     _print_paths(capture, paths)

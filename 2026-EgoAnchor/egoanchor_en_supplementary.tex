@@ -77,6 +77,23 @@ cutoff/speed-coefficient/derivative-cutoff values of 0.8~Hz/6/2~Hz and rotation
 values of 1~Hz/1/2~Hz; Smoothed KF Extrapolation uses a 0.18~s prediction horizon
 and a 0.06~s correction half-life.
 
+\paragraph{Rotation Kalman filter.}
+Translation uses independent position--velocity constant-velocity filters on the
+three Cartesian axes. Rotation is represented by three independent constant-velocity
+filters on the local $\mathrm{SO}(3)$ tangent state $(\phi_i,\omega_i)$, where
+$\phi_i$ is a rotation-vector component and $\omega_i$ is body-frame angular
+velocity. The continuous process model uses white acceleration noise, with the
+translational and rotational values in Table~\ref{tab:supp-params}; observations
+are expressed as position and rotation-vector residuals. The first observation
+initializes a normalized reference quaternion, zero rotation vector, and zero angular
+velocity with an initial angular-velocity variance of $1.0~(\mathrm{rad}/\mathrm{s})^2$
+per axis. Each subsequent quaternion is normalized, hemisphere-aligned with the
+current estimate, and mapped to a shortest-arc relative logarithm. After correction,
+the tangent origin is recentered at the updated orientation and the body-frame angular
+velocity is transported by the $\mathrm{SO}(3)$ right Jacobian; the exponential map
+recovers the output quaternion. These operations maintain a consistent quaternion
+sign and tangent-space branch near $\pi$.
+
 \begin{table*}[t]
 \centering
 \caption{Anchoring runtime parameters. The upper block covers observation admission
@@ -90,7 +107,7 @@ Parameter & Symbol & Value \\
 \midrule
 \multicolumn{3}{@{}l}{\emph{Observation admission and history query}} \\
 Admission reliability threshold & $R_{\min}$ & 0.2 \\
-Kalman process noise (trans./rot.) & --- & 0.002~m$^2$/s$^3$ / 0.2~rad$^2$/s$^3$ \\
+Kalman white-acceleration noise (trans./rot.) & --- & 0.002~m$^2$/s$^3$ / 0.2~rad$^2$/s$^3$ \\
 Kalman measurement noise (trans./rot.) & --- & $4\times10^{-6}$~m$^2$ / $4\times10^{-4}$~rad$^2$ \\
 Query lag scale factor & $s$ & 1.15 \\
 Minimum query lag & $\Delta_{\min}$ & 250~ms \\
@@ -118,7 +135,7 @@ Head-motion tolerance amplification limit & --- & 4$\times$ \\
 \midrule
 \multicolumn{3}{@{}l}{\emph{Validity and VCD scoring}} \\
 Tracking reliability floor & --- & 0.5 \\
-Coasting duration & --- & 450~ms without a reliable observation \\
+Tracking-hold duration & --- & 450~ms without a reliable observation \\
 Lost determination & --- & 1.0~s without a reliable observation \\
 Reacquisition trigger (threshold/duration) & --- & 0.45, 600~ms \\
 Reacquisition cooldown & --- & 3.0~s \\
@@ -129,6 +146,79 @@ Inlier-rate weight and residual factor & --- & 0.6 / 2.5 \\
 Valid depth coverage threshold & --- & 0.10 \\
 Structural weight limit and IQR threshold & --- & 0.35 / 20~mm \\
 LAB lightness channel weight & --- & 0.3 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Experiment 1 Sampling and Confidence Intervals}\label{sec:supp-exp1-ci}
+
+Table~\ref{tab:supp-exp1-sampling} gives the evaluation-segment counts, full formal-task
+durations, and recorded reference-motion ranges for every controlled sequence family.
+Each row is one continuous formal recording; $n$ is its number of marker-delimited
+evaluation segments. Ranges include rest intervals and all recorded samples. A single
+operator recorded all sequences; the intervals below therefore describe within-operator
+repeatability.
+
+\begin{table}[t]
+\centering
+\caption{Experiment~1 sampling. Duration is the full formal-task recording time;
+reference-motion ranges are the full recorded ranges of instantaneous linear/angular
+speeds across each task.}\label{tab:supp-exp1-sampling}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Sequence family & $n$ & \shortstack{Duration\\(s)} & \shortstack{Linear\\speed\\(m/s)} & \shortstack{Angular\\speed\\($^\circ$/s)} \\
+\midrule
+Static head motion & 12 & 79.157 & 0--0 & 0--0 \\
+Start--stop 6-DoF & 12 & 95.293 & 0--0.923 & 0--374.3 \\
+Continuous translation & 16 & 77.257 & 0--3.453 & 0--385.9 \\
+Continuous rotation & 12 & 65.062 & 0--0.722 & 0--903.7 \\
+Occlusion recovery & 12 & 106.511 & 0--0 & 0--0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:supp-exp1-ci} reports a bootstrap 95\% confidence interval for every
+median in Tables~1--3 of the main paper. Each metric is aggregated within a
+marker-delimited evaluation segment before the median across segments is taken, and
+intervals come from 20{,}000 resamples of those per-segment values. Segment counts
+are 12 for static registration, 16 (translation) and 12 (rotation) for dynamic
+following, and 12 for occlusion recovery and motion response.
+
+\begin{table*}[t]
+\centering
+\caption{Experiment~1 medians with bootstrap 95\% confidence intervals (20{,}000 resamples of
+marker-delimited evaluation segments). Each metric is aggregated within a segment before the median across
+segments is taken; values reproduce Tables~1--3 of the main paper. A single operator recorded all tasks.}
+\label{tab:supp-exp1-ci}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Metric & Arrival & Capture & One-Euro & EgoAnchor \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Static registration ($n=12$)}} \\
+Head-motion coupling (mm) & 43.67 [35.87, 56.42] & 13.03 [11.40, 16.39] & 10.65 [7.99, 14.12] & 0.82 [0.58, 0.92] \\
+Head-motion coupling ($^\circ$) & 6.49 [4.50, 8.48] & 5.40 [4.38, 8.19] & 3.29 [3.01, 4.40] & 0.33 [0.22, 0.37] \\
+Registration error (mm) & 44.31 [37.10, 56.53] & 17.54 [13.89, 19.88] & 14.00 [11.95, 16.90] & 6.60 [5.18, 8.01] \\
+Registration error ($^\circ$) & 9.65 [7.42, 11.35] & 8.26 [7.44, 10.50] & 6.96 [6.09, 8.17] & 4.39 [4.05, 5.02] \\
+Static jitter (mm) & 11.70 [10.70, 16.88] & 4.30 [3.57, 7.01] & 0.85 [0.67, 1.57] & 0.06 [0.06, 0.08] \\
+Static jitter ($^\circ$) & 2.98 [2.26, 3.77] & 2.60 [2.26, 3.11] & 0.40 [0.34, 0.50] & 0.03 [0.03, 0.03] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Dynamic following, translation ($n=16$)}} \\
+Effective latency (ms) & 202.5 [185.0, 217.5] & 255.0 [252.5, 262.5] & 380.0 [370.0, 385.0] & 360.0 [355.0, 365.0] \\
+LA-RMSE (mm) & 18.57 [15.08, 20.81] & 17.14 [13.42, 18.29] & 15.69 [13.27, 20.35] & 9.12 [7.46, 11.27] \\
+CT-RMSE (mm) & 84.74 [71.89, 92.70] & 103.63 [87.98, 110.61] & 117.61 [102.34, 130.03] & 125.83 [110.47, 137.82] \\
+Residual jitter (mm) & 41.08 [34.13, 45.05] & 39.69 [33.87, 45.51] & 5.25 [4.27, 7.33] & 4.56 [4.10, 5.98] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Dynamic following, rotation ($n=12$)}} \\
+Effective latency (ms) & 255.0 [250.0, 262.5] & 257.5 [252.5, 265.0] & 385.0 [380.0, 390.0] & 345.0 [342.5, 350.0] \\
+LA-RMSE ($^\circ$) & 6.09 [5.72, 6.53] & 5.84 [5.43, 6.04] & 5.55 [5.08, 6.15] & 4.81 [4.67, 5.29] \\
+CT-RMSE ($^\circ$) & 25.44 [24.17, 30.74] & 25.35 [24.09, 31.16] & 34.10 [31.71, 41.76] & 31.88 [30.24, 39.20] \\
+Residual jitter ($^\circ$) & 10.40 [9.64, 12.69] & 10.26 [9.66, 12.36] & 2.70 [2.56, 2.84] & 2.64 [2.39, 3.04] \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{State-transition response ($n=12$)}} \\
+Occlusion recovery (mm) & 18.23 [14.04, 36.83] & 16.93 [14.10, 36.95] & 10.41 [7.30, 14.59] & 4.85 [4.51, 13.93] \\
+Occlusion recovery ($^\circ$) & 18.39 [11.77, 27.96] & 18.38 [11.90, 27.98] & 8.66 [5.95, 14.10] & 5.52 [4.88, 12.86] \\
+Motion-response latency (ms) & 157.0 [134.9, 207.3] & 263.8 [229.8, 281.5] & 334.0 [326.7, 348.6] & 510.4 [446.7, 582.4] \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -176,18 +266,48 @@ confidence, and post-study discomfort as descriptive outcomes.
 Table~\ref{tab:supp-stats} reports all twelve subjective outcomes. The seven custom
 items and five standardized-scale outcomes form separate Holm--Bonferroni families.
 
-\input{tables/en/exp3_subjective_supp}
+% Supplement variant of tables/en/exp3_subjective.tex.
+% Identical body; the caption resolves the two main-paper cross-references
+% (\ref{sec:exp3-design}, \ref{fig:exp3-subjective}) to plain text so that the
+% supplement compiles standalone. Numbers must stay in sync with the main table.
+\begin{table*}[t]
+\centering
+\caption{Twelve within-participant subjective outcomes in Experiment 3, grouped according to the measurement structure described in Sec.~5.3 of the main paper. Object-anchoring items and AQ subscales are first averaged within condition across the three objects; TiA and S-TIAS are administered once per method. Median values are reported as One-Euro / EgoAnchor. $W$ and $p_{\mathrm{adj}}$ are the Wilcoxon signed-rank statistic and the within-family Holm-adjusted $p$ value, respectively. $r_{\mathrm{rb}}$ is the matched-pairs rank-biserial correlation, where positive values favor EgoAnchor. TiA uses five-point scales and all other outcomes use seven-point scales; arrows indicate that higher scores are more favorable. All outcomes contain 24 complete pairs, and zero differences are excluded from the Wilcoxon rank statistic. For outcomes marked with $\dagger$, all nonzero paired differences have the same sign and $r_{\mathrm{rb}}$ reaches its boundary value, so no bootstrap confidence interval is reported. Distributions are shown in Fig.~4 of the main paper.}
+\label{tab:supp-stats}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Outcome & \shortstack{One-Euro /\\EgoAnchor\,$\uparrow$} & $W$ & $p_{\mathrm{adj}}$ & \shortstack{$r_{\mathrm{rb}}$\\{[}95\% CI{]}} \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{Phase-specific anchoring behavior}} \\
+Stationary stability & 4.33 / 5.00 & 13.5 & $<.001$ & .90 [.69, 1.00] \\
+Motion attachment & 5.00 / 5.17 & 67.5 & .267 & .29 [$-$.22, .77] \\
+Orientation consistency & 4.67 / 5.00 & 81 & .162 & .41 [$-$.05, .78] \\
+Recovery consistency & 4.17 / 5.00 & 6 & $<.001$ & .95 [.80, 1.00] \\
+\addlinespace
+\multicolumn{5}{@{}l}{\textit{Overall anchoring judgments}} \\
+Positional correctness & 4.67 / 5.00 & 16 & .001 & .85 [.57, 1.00] \\
+Willingness to rely & 4.00 / 5.00 & 16.5 & $<.001$ & .87 [.62, 1.00] \\
+Stability-responsiveness balance & 4.50 / 4.83 & 6 & .003 & .90 [.65, 1.00] \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{Augmentation quality}} \\
+AQ Embedding Quality & 4.78 / 5.17 & 32 & .004 & .75 [.42, .96] \\
+AQ Interaction Quality & 4.89 / 5.06 & 102.5 & .446 & .19 [$-$.29, .64] \\
+\addlinespace
+\multicolumn{5}{@{}l}{\textit{Trust}} \\
+TiA Reliability/Competence & 4.17 / 4.58 & 0 & $<.001$ & 1.00$^{\dagger}$ \\
+TiA Understanding/Predictability & 4.00 / 4.38 & 32 & .004 & .75 [.42, .96] \\
+S-TIAS & 5.33 / 5.67 & 22.5 & .004 & .79 [.47, .97] \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \section{Scale Reliability}\label{sec:supp-reliability}
 
-\noindent\textbf{Reliability coefficients.} Internal consistency by scale and method
+\textbf{Reliability coefficients.} Internal consistency by scale and method
 ($N=24$). Cronbach's $\alpha$ and McDonald's $\omega$ describe the present sample.
 AQ coefficients use scores averaged across the three objects; TiA and S-TIAS were
 administered once per method.
-\par\smallskip
-\centering
-\setlength{\tabcolsep}{3.5pt}
-\resizebox{\columnwidth}{!}{%
 \begin{tabular}{@{}llccc@{}}
 \toprule
 Scale & Method & Items & $\alpha$ & $\omega$ \\
@@ -207,7 +327,5 @@ S-TIAS & One-Euro & 3 & .672 & .698 \\
 S-TIAS & EgoAnchor & 3 & .697 & .740 \\
 \bottomrule
 \end{tabular}
-}%
-\par\medskip
 
 \end{document}

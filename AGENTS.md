@@ -24,11 +24,13 @@
 
 ## 当前版面事实
 
-- 英文稿当前入口为 `2026-EgoAnchor/egoanchor_en_ready_v4.tex`；实验 1--3 组合图由 `EgoAnchor_Python` 生成，源高度已分别固定为 2.25 / 2.232 / 2.295 英寸，基础图中文字保持约 7.4 pt。
+- 中英文稿当前入口分别为 `2026-EgoAnchor/egoanchor_cn_ready_v8_compress.tex` 与 `2026-EgoAnchor/egoanchor_en_ready_v5.tex`；实验 1--3 组合图由 `EgoAnchor_Python` 生成，源高度已分别固定为 2.25 / 2.232 / 2.295 英寸，基础图中文字保持约 7.4 pt。
 - 实验 1 与实验 3 的横坐标标签采用小角度旋转（15°/12°）并居中对齐，以避免相邻标签重叠；实验 1 的方法标签保持单行。对应发布图位于 `2026-EgoAnchor/figures/panels/`。
 - 实验 3 复合图的共享图例与四个子图采用分离的垂直留白（图例上移、子图下移并略减高度），避免图例、(a)--(d) 标题和绘图区相互拥挤。
-- 论文图 4 `replay_grid` 的行名、顶部时间轴和列标题字号统一为 22 px；左侧行名栏最小宽度为 70 px、留白为 8 px，以接近正文视觉字号并尽量扩大图像网格。配置源为 `EgoAnchor_Python/src/egoanchor/qualitative_replay/config/qualitative_replay.toml`。
+- 论文图 4 `replay_grid` 当前使用 5 列（sample id 395/425/455/485/515，0--5.00 s），左侧方法名水平排版；图内仅显示四种方法的平移/旋转数值（mm/°，不写 `mean`），图注说明这些数值是显示窗口内相对 Quest Reference 的逐帧平均差，并保留在 `replay_grid.json` 的 `reference_error_summary`。标注字号由 `EgoAnchor_Python/src/egoanchor/qualitative_replay/config/qualitative_replay.toml` 配置。
 - 实验二四面板归因图的 VCD 与时序策略图例均内嵌在对应子图中，组合图不再使用顶部共享图例；图 5 采用 6.8 pt 基础字号、6.2 pt 横坐标刻度字号以与图 3、图 6 的正文视觉字号对齐；生成器为 `EgoAnchor_Python/src/egoanchor/eval/experiments/experiment_1_2/analysis/figures.py`。
+- 实验一的评价片段数、完整正式任务录制时长、正式任务内参考运动全范围和 20,000 次自举 95% 置信区间统一见 `egoanchor_en_supplementary.tex`；主文三张性能表题注只保留对应 $n$ 并指向补充材料，避免进一步占用英文主文版面。
+- LaTeX 编译产物统一写入 `2026-EgoAnchor/pdf/`，不得写入 `.tex` 源文件所在目录；英文稿及英文补充材料用 `pdflatex`，中文稿用 `xelatex`。
 
 本文件只记录**当前事实、长期约束、已冻结路线**和会直接导致失败的历史坑。**不记流水账**：不写逐轮评审日志、不为每轮改稿新增一节、不记 session 数字/迁移 hash/调参过程/一次性排障。**挑重点写**：一条约束只写「规则 + 最小证据指针」，不写决策经过、不写被推翻的旧说法、不留划除线文本。事实变化时直接改原条目。
 
@@ -63,7 +65,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 定位为**系统论文，但方法部分按学术标准写**：凝练核心思想、学术化表达，不逐一介绍工程实现，行文精炼、控制篇幅。
 
-**当前工作稿是中英文一对**（更早版本冻结备查）：中文 `2026-EgoAnchor/egoanchor_cn_ready_v5_compress.tex`，英文 `egoanchor_en_ready_v2.tex`。两稿共用 `figures/`、`tables/`（分 `cn`/`en` 两目录）与 `egoanchor_cn_refs.bib`，正文结构与图表编号一一对应；**改任一稿的表述必须同步另一稿**。2026-08-20 实测（`latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=pdf`）：中文 **9 页 / 0 overfull / 4 Underfull / 0 未定义引用**；英文 **12 页 / 1 overfull / 11 Underfull / 0 未定义引用**。
+**当前工作稿是中英文一对**（更早版本冻结备查）：中文 `2026-EgoAnchor/egoanchor_cn_ready_v8_compress.tex`，英文 `2026-EgoAnchor/egoanchor_en_ready_v5.tex`。两稿共用 `figures/`、`tables/`（分 `cn`/`en` 两目录）与 `egoanchor_cn_refs.bib`，正文结构与图表编号一一对应；**改任一稿的表述必须同步另一稿**。页数与日志状态须以最近一次对应稿件的 `latexmk -g -xelatex` 实测为准。
 
 - **英文稿那 1 个 overfull 是已知且被用户接受的**：动态跟随表在单栏下超 13.4 pt（实测净宽 254.34 pt vs `\columnwidth` 240.94 pt）。**已逐项实测排除的无效解法**：单位移入题注（宽度完全不变，254.34 pt——五列中三列由数据格定宽，`Method`=44.86／`latency`=46.78／`LA-RMSE`=48.52／`CT-RMSE`=51.41／`Jitter`=46.78 pt，净和 238.35 pt）、缩短表头（同为 254.34 pt）、`\tabcolsep` 1pt（246.34 pt，仍超）。只有 0pt 能装下（238.34 pt，余量 2.6 pt）。**用户 2026-08-20 裁定按 v1/v2 原样保留 2pt 与该 overfull，不要再「修」它**（v1 与 v2 同为 13.39943 pt，是一贯选择而非疏漏）。差异根因是字体度量而非表格结构：同一内容同为 2pt，中文稿前言（`fontspec` + Times New Roman）为 236.54 pt、英文稿前言（`times` + `mathptmx`，不加载 `fontspec`）为 254.34 pt，差 17.8 pt。**量表宽必须用目标稿的真实前言**，用另一稿的前言量会得出「装得下」的错误结论。
 - 页数或浮动体变动后必须重跑 `.aux` 的 `\newlabel` 页号与逐页 PNG，不能沿用旧稿落位。两栏 PDF 的 `pdftotext` 顺序不可靠，页数与正文末页只能以 `.aux` 的 `\newlabel` 和逐页 PNG 判断。
@@ -117,7 +119,7 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 **已归零、不得复活的旧名**：采集时刻配准、采集时刻世界配准、采集时刻世界对齐、双目深度估计、双目重建、延迟插值、时序合成、开放词表分割（漏检测阶段）、观测轴/渲染轴/跨轴、两条通路/两个事件源、锚点交付（GPT 造词）、易部署・广适用・稳锚定三标签、G1/G2/G3 标签、$\mathcal{V}_f$、漂移**租**绳（正确为漂移**系**绳）、RTX 5070（从未跑过）、**分级生命周期**、**显式静止锚定**、**静态保真度**／**动态保真度**（评价方面名，2026-08-11 起为 静态配准／动态跟随）、**绝对注册**（正确为 绝对配准）、**世界一致性**（笼统，不作评价用词）。**这四个名字同时存在于 `analysis/paper.py` 的题注与表头字面**，改名须走 L318 的生成器口径。
 
-- **该机制第 4 次改名后已定：`生命周期` 整词退役 → `有效性`**（有效性规则／标注／状态、分级有效性管理），**勿再改**。`\texttt{FrozenUncertain}`/`\texttt{Lost}` 两个状态名保留。
+- **该机制第 4 次改名后已定：`生命周期` 整词退役 → `有效性`**（有效性规则／标注／状态、分级有效性管理），**勿再改**。状态名以代码为准：2026-08-26 起 `FrozenUncertain` → `Uncertain`（枚举精简，见 L253 附近条目）。当前 cn v7 / en v4 正文均已不再打印 `\texttt{}` 状态名（EN 用 valid/uncertain/lost 散文表述），仅附录参数表列出边界时长；若日后恢复引用状态名，必须与代码一致。
 - **静止锚定统一为「静止锚定（StaticLock）」单一配对**（在 §3.3.3 定义处给出）：正文机制名一律**静止锚定**，`StaticLock` 保留作图表、实验条件与消融名（图表由分析流水线生成、不可手改）。修饰词「显式」不再作为机制名的一部分。
 - **时间术语按层级固定**：§2.3 的问题名为「XR时间对齐」；既有方法用「预测式追踪（predictive tracking）」与「历史状态查询（history query）」（**英文 `history retrieval` 已于 2026-08-20 全线退役，图内与两份主稿统一 `history query`**）；系统机制名为「历史状态查询」；§3.3.2 依次写「历史查询时刻」与「历史状态插值」。不得以「自适应」修饰这三个名称。`Smoothed KF Extrapolation` 是预测条件，完整 EgoAnchor 的历史条件是在 $t_q$ 上对相邻轨迹节点作 Linear/SLERP。时间索引轨迹 $B_j$ 是数据结构，元素一律称「轨迹节点」；「插值」只描述数学操作，不把它包装为「延迟插值」。§2.3 只讨论既有工作，不写 EgoAnchor、ATW 或 One-Euro。
 - **`centered_p95_mm` 的正文名唯一为「头动泄漏」**（已实测与 `head_motion_leakage_p95_mm` 同值 0.8179，是同一个量）。曾并存的「中心化平移泄漏」「中心化静止平移 P95」「中心化 P95」均已归零，表 1、图 2 题注与 §6 三处口径统一。
@@ -248,9 +250,10 @@ VCD 的三个语义层次不得混淆：方法输出 `[0,1]` 连续可靠性评�
 
 - **`weighted_geometric_mean` 无有效模态时返回 `1.0`，不是 `0.0`**：`reliability/pose_quality.py` 的 `_geometry_core`（L168--182）在 `weight_sum <= 0.0` 时 `return 1.0`，即 $\mathcal{K}_f=\varnothing$ 给出 $R_f = V_f$（docstring：两路都无信号时保持当前 pose 信任）。`_mask_factor`（L192--215）在无投影面积信号时回落到 `mask_area_ratio` 启发式，故除零路径同样不可达。**结论仍是正文不写退化情形**，但理由必须是上述实测；`\mathcal{K}_f=\varnothing \Rightarrow R_f=0` 方向相反，已否决。
 - **三个同尺度阈值互不相同，不得混用**：准入 `minQualityScore=0.2` / 低分重新注册 `0.45` / 追踪新鲜度 `trackingScoreFloor=0.5`。正文只出现 $R_{\min}$ 一个记号，但三个数值 2026-08-15 起全部内联在 §4（附录已移出正文）；三者的**关系**仍须交代，现分置两处：§3.3.2 有效性段写两阈值之间的区间「可用于插值但不足以维持追踪状态」，§4 在 $R_{\min}=0.2$ 处写 0.2 / 0.45 / 0.5 三段递进。（原指定位置 §3.3.4 已随 `sec:lifecycle` 子节删除。）
-- **生命周期边界**（`AnchorStateMachine.cs:105-115`）：gap ≤ 0.45~s → Coasting，0.45--1.0~s → FrozenUncertain，≥ 1.0~s → Lost。故 450~ms 是**缓冲保持时长**，不是「进入缓冲保持」的门槛（无可靠观测时立刻进缓冲保持）。
-- **VCD 拒绝提前 return、不刷新时间戳**（`AnchorPolicyHost.cs:333-339` 对 `:374-378`），即被拒候选**不**计入新鲜度，gap 与无候选同路累积。若写成「也计入」，因果就反了（持续坏观测会永停 Coasting）。
-- **`OnUncertainPose` 置的 `FrozenUncertain` 是瞬态**：`Advance:404-413` 每帧按 `lifecycleGap` 重算并覆盖状态。只读 `AcceptPose` 会得出相反结论。
+- **有效性边界**（`AnchorStateMachine.cs:OnMissingPose`）：gap ≤ 0.45~s → `Tracking`（帧间正常空档），0.45--1.0~s → `Uncertain`，≥ 1.0~s → `Lost`。故 450~ms 是**缓冲保持时长**，不是「进入缓冲保持」的门槛（无可靠观测时立刻进缓冲保持）。
+- **VCD 拒绝提前 return、不刷新时间戳**（`AnchorPolicyHost.cs:333-339` 对 `:374-378`），即被拒候选**不**计入新鲜度，gap 与无候选同路累积。若写成「也计入」，因果就反了（持续坏观测会永停在 `Tracking`）。
+- **`OnUncertainPose` 置的 `Uncertain` 是瞬态**：`Advance` 每帧按 `lifecycleGap` 重算并覆盖状态。只读 `AcceptPose` 会得出相反结论。
+- **`AnchorState` 只有 6 个值**：`Searching` / `Tracking` / `Uncertain` / `Lost` / `Paused` / `Error`（`AnchorPolicyTypes.cs`）。已删除的 `Uninitialized`、`Coasting`、`Relocalizing` 均为**同帧即被覆盖的瞬态**，不得复活：`Coasting` 因渲染帧率高于候选到达率而在正常追踪时逐帧命中（已并入 `Tracking`，实际空档长度看 `observation_age_ms`）；`Relocalizing` 被 `NotifyReacquire → ResetModules()` 清空模型后于下一次 `Advance` 立刻变 `Searching`（已并入 `Searching`，触发原因看 `policy_reason`）。**2026-08-26 之前的 eval 日志仍含旧名**。
 - **区分「拒绝坏观测」与「长时间无观测」的真实载体是 `TryLowScoreReacquire`**（`:326`，在 VCD 门控**之前**、对 raw observation 判定），阈值 0.45、持续 600~ms、冷却 3~s。算法 1 因此把「可靠性持续过低则请求重新注册」放在准入判断**之前**。
 - **重获取会重置全部运行时模块**：`NotifyReacquire` → `ResetModules()`（`AnchorPolicyHost.cs:630`）清空运动模型、平滑策略轨迹节点（`HistoricalInterpolationStrategy.cs:47` 的 `points.Clear()`）与 StaticLock，恢复后首个观测走 Snap 建新跟踪段——§3.3.4「不会跨失效区间插值」以此为据，不得改写成「保留旧轨迹」。
 - **有效时延搜索区间 `[0, 600]`~ms、步长 5~ms**（`paper.toml` 的 `minimum_ms/maximum_ms/step_ms`，`metrics.py` 的 `query_times = times - lag_ms` 为正向滞后）。旧稿的 `[-500, 0]` 上下界与符号全错。
@@ -386,7 +389,7 @@ Run 1 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`pytho
 - 论文图必须保留物体局部 XYZ 轴、顶部时间轴与纵向方法轴。离线投影必须从 runtime 配置指纹恢复 OpenCV GLB 到 Unity renderer 的对象局部基，不能把已含 anchor-local 补偿的显示根节点 pose 直接作用到原始 GLB；轮廓与 XYZ 轴必须共用 `K * P * C` 投影链。轮廓按三角面并集生成，不能交给 OpenCV 奇偶填充。首次使用某对象模型必须先用 `replay frame` 做像素贴合检查。
 - sidecar 必须保留默认与自定义 TOML、实际 mesh、严格校验模式、最终生效配置及其 SHA-256，以及最终行列、字体、`delta-t`、坐标轴、纹理后端与裁剪配置。
 - **该图只是二维定性示意**，必须显式标注，不得把像素偏移写成正式配对指标或替代 schema-v2 定量证据。
-- 论文当前用图：6 列，源 `replay_capture/20260723_125041_569_controller_right`（**独立的定性回放采集**，与实验一/二正式批次不同源），目标 `2026-EgoAnchor/figures/replay_grid.{png,pdf}`。单元宽度固定 320 px，裁剪比例 1:1；行名 56 px、逆时针旋转 45°，时间轴 56 px，XYZ 标签 22 px（三项以 `rendered/grid/replay_grid.json` 侧车为准，该文件记录出图时的生效配置）。旋转标签只压缩左侧栏，不得缩小图像单元宽度。
+- 论文当前用图：5 列，源 `replay_capture/20260723_125041_569_controller_right`（**独立的定性回放采集**，与实验一/二正式批次不同源），目标 `2026-EgoAnchor/figures/replay_grid.{png,pdf}`。单元宽度固定 320 px，裁剪比例 1:1；左侧行名水平排版，字号 60 px，时间轴字号 65 px，XYZ 标签 22 px；显示窗口为 sample id 395/425/455/485/515（0--5.00 s），逐方法数值标注由 TOML 中的 `mean_error_font_size_px` 控制（三项以 `rendered/grid/replay_grid.json` 侧车为准，该文件记录出图时的生效配置）。
 - **配色（全文共享，唯一定义在 `egoanchor/visuals/__init__.py`，`qualitative_replay.toml` 的 `method_colors_hex` 必须逐项一致）**：Arrival `#4C78A8`、Capture `#F28E2B`、One-Euro `#59A14F`、EgoAnchor `#E15759`。**已知可访问性缺陷**：该绿/红对在绿色盲（deutan）模拟下几乎无法区分；实验三图中两方法依靠固定位置、点形、箱体边框和图例区分而非仅靠色相。若要修正必须**全文一次性**换成同一套色盲安全配色（Okabe-Ito：One-Euro `#0072B2`、EgoAnchor `#E69F00`、Arrival `#009E73`、Capture `#CC79A7`）并同步重跑实验一/二论文图与定性 grid，**不得只改实验三**而让同一方法在不同图里换色。
 
 ### 实验三（冻结设计，改前必读权威文件）
@@ -427,6 +430,7 @@ Run 1 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`pytho
 
 - `MeasurementTimeSeconds` 属采集时间轴，用于运动估计与静止锚定；生命周期 freshness 使用到达/生命周期时间轴。**不得用 capture time 刷新 stale/lost**。
 - `has_output_pose` 表示 runtime 是否有输出，`has_display_pose` 表示用户实际看到的 Transform（含 hold-last）。hold-last 显示行从 `DynamicObjectAnchor.LastAppliedFrameId` 保留实际来源帧；只有从未应用或已隐藏的显示才允许 `source_frame_id=-1`。
+- `DynamicObjectAnchor.hideWhenAnchorNotTracking` 默认关闭；开启后仅 `AnchorState.Tracking` 显示目标，`Uncertain`/`Lost`/`Searching`（含遮挡与重新获取）隐藏，回到 `Tracking` 立即恢复。`Paused` 冻结暂停前可见度，不参与判定。**隐藏方向必带 `hideDelaySeconds`（默认 0.35~s）单向防抖**：VCD 单帧拒绝即置 `Uncertain`，无防抖会逐帧闪灭；恢复方向不防抖。`visualTransforms` 是列表（场景内为 `Mesh` + `Axis3D`），隐藏时对每个条目 `GameObject.SetActive`；列表为空时回退为切换 `targetTransform` 下全部 `Renderer`。**条目不得是 runtime 或本组件的祖先**——停用后 `runtime.LateUpdate` 不再执行，状态无法回到 `Tracking` 即永久隐藏（死锁）；`Awake` 已剔除并告警此类条目。
 - 平台控制器参考 pose 只从 `EvalRecorder.groundTruth` 绑定的 Transform 读取；`controller_right` 必须绑定 `OVRCameraRig/OVRInteractionComprehensive/OVRControllerVisualRight/OVRControllerPrefab`（对应 `m_controller=RTouch`、`gtController=RTouch`），**不得绑定名称相似但不会更新的静态节点**。失活或隐藏时无限期保持最后一次激活 pose，激活状态只写入 `reference_pose_fresh/reference_pose_keep_alive`，不得当作另一套 pose 来源。正式 session 启动前必须观察到参考对象至少 1~cm 平移或 5 度旋转，未通过时禁止启动。
 - StaticLock tether 计算 `obsConsensus -> anchorOrigin`，**不得改成单帧观测或 `lockedPose`**。头动期间不冻结真实运动证据，`headSettleSeconds` 只覆盖头停后的沉降窗口。距离自适应只放大位置通道，旋转 tether 必须高于旋转噪声地板。
 - `EvalLog` 使用有界后台队列；正式 session 所有日志 `dropped_rows` 必须为 0。Unity 独占写 `manifest.json`、`unity_reference.jsonl`、`unity_admission.jsonl`、`unity_render.jsonl`、`unity_events.jsonl`（render 为 tick×variant 长表，admission 由每个 runtime 的实际处理结果产生）；Python 远端独占写 `python_events.jsonl`。
