@@ -87,6 +87,14 @@ _TABLE_KEYS = {
             "model_color_hex",
             "method_colors_hex",
             "method_contour_thickness_px",
+            "trajectory_enabled",
+            "trajectory_thickness_px",
+            "trajectory_alpha",
+            "trajectory_inset_width_ratio",
+            "trajectory_inset_height_ratio",
+            "trajectory_inset_margin_ratio",
+            "trajectory_reference_marker_px",
+            "trajectory_reference_color_hex",
             "reference_contour_color_hex",
             "reference_contour_thickness_px",
             "reference_halo_color_hex",
@@ -267,6 +275,30 @@ class OverlaySettings:
 
     method_contour_thickness_px: int
     """四种方法彩色轮廓的线宽，单位像素。"""
+
+    trajectory_enabled: bool
+    """是否叠加四种方法的历史显示位姿轨迹。"""
+
+    trajectory_thickness_px: int
+    """轨迹线宽，单位像素。"""
+
+    trajectory_alpha: float
+    """轨迹线透明度。"""
+
+    trajectory_inset_width_ratio: float
+    """轨迹放大窗相对单元宽度的比例。"""
+
+    trajectory_inset_height_ratio: float
+    """轨迹放大窗相对单元高度的比例。"""
+
+    trajectory_inset_margin_ratio: float
+    """轨迹放大窗相对单元短边的边距比例。"""
+
+    trajectory_reference_marker_px: int
+    """Quest Reference 放大窗标记的半径基准像素。"""
+
+    trajectory_reference_color_hex: str
+    """Quest Reference 轨迹和标记颜色。"""
 
     reference_contour_color_hex: str
     """Quest Reference 内轮廓颜色。"""
@@ -582,6 +614,24 @@ def _parse_settings(
     method_contour_thickness_px = _positive_pixel_value(
         overlay, "method_contour_thickness_px"
     )
+    trajectory_enabled = _boolean(overlay, "trajectory_enabled")
+    trajectory_thickness_px = _positive_pixel_value(overlay, "trajectory_thickness_px")
+    trajectory_alpha = _number(overlay, "trajectory_alpha")
+    if not 0.1 <= trajectory_alpha <= 1.0:
+        raise ValueError("overlay.trajectory_alpha 必须位于 0.1 到 1.0")
+    trajectory_inset_width_ratio = _number(overlay, "trajectory_inset_width_ratio")
+    trajectory_inset_height_ratio = _number(overlay, "trajectory_inset_height_ratio")
+    trajectory_inset_margin_ratio = _number(overlay, "trajectory_inset_margin_ratio")
+    if not 0.2 <= trajectory_inset_width_ratio <= 0.8:
+        raise ValueError("overlay.trajectory_inset_width_ratio 必须位于 0.2 到 0.8")
+    if not 0.15 <= trajectory_inset_height_ratio <= 0.7:
+        raise ValueError("overlay.trajectory_inset_height_ratio 必须位于 0.15 到 0.7")
+    if not 0.005 <= trajectory_inset_margin_ratio <= 0.1:
+        raise ValueError("overlay.trajectory_inset_margin_ratio 必须位于 0.005 到 0.1")
+    trajectory_reference_marker_px = _positive_pixel_value(overlay, "trajectory_reference_marker_px")
+    if trajectory_reference_marker_px > 16:
+        raise ValueError("overlay.trajectory_reference_marker_px 不能大于 16")
+    trajectory_reference_color_hex = _hex_color(overlay, "trajectory_reference_color_hex")
     reference_contour_color_hex = _hex_color(overlay, "reference_contour_color_hex")
     reference_contour_thickness_px = _positive_pixel_value(
         overlay, "reference_contour_thickness_px"
@@ -672,6 +722,14 @@ def _parse_settings(
             model_color_hex=model_color_hex,
             method_colors_hex=method_colors_hex,
             method_contour_thickness_px=method_contour_thickness_px,
+            trajectory_enabled=trajectory_enabled,
+            trajectory_thickness_px=trajectory_thickness_px,
+            trajectory_alpha=trajectory_alpha,
+            trajectory_inset_width_ratio=trajectory_inset_width_ratio,
+            trajectory_inset_height_ratio=trajectory_inset_height_ratio,
+            trajectory_inset_margin_ratio=trajectory_inset_margin_ratio,
+            trajectory_reference_marker_px=trajectory_reference_marker_px,
+            trajectory_reference_color_hex=trajectory_reference_color_hex,
             reference_contour_color_hex=reference_contour_color_hex,
             reference_contour_thickness_px=reference_contour_thickness_px,
             reference_halo_color_hex=reference_halo_color_hex,

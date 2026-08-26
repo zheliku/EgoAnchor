@@ -27,7 +27,7 @@
 - 中英文稿当前入口分别为 `2026-EgoAnchor/egoanchor_cn_ready_v8_compress.tex` 与 `2026-EgoAnchor/egoanchor_en_ready_v5.tex`；实验 1--3 组合图由 `EgoAnchor_Python` 生成，源高度已分别固定为 2.25 / 2.232 / 2.295 英寸，基础图中文字保持约 7.4 pt。
 - 实验 1 与实验 3 的横坐标标签采用小角度旋转（15°/12°）并居中对齐，以避免相邻标签重叠；实验 1 的方法标签保持单行。对应发布图位于 `2026-EgoAnchor/figures/panels/`。
 - 实验 3 复合图的共享图例与四个子图采用分离的垂直留白（图例上移、子图下移并略减高度），避免图例、(a)--(d) 标题和绘图区相互拥挤。
-- 论文图 4 `replay_grid` 当前使用 5 列（sample id 395/425/455/485/515，0--5.00 s），左侧方法名水平排版；图内仅显示四种方法的平移/旋转数值（mm/°，不写 `mean`），图注说明这些数值是显示窗口内相对 Quest Reference 的逐帧平均差，并保留在 `replay_grid.json` 的 `reference_error_summary`。标注字号由 `EgoAnchor_Python/src/egoanchor/qualitative_replay/config/qualitative_replay.toml` 配置。
+- 论文图 4 `replay_grid` 当前使用 5 列（sample id 395/425/455/485/515，0--5.00 s），左侧方法名水平排版；图内仅显示四种方法的平移/旋转数值（mm/°，不写 `mean`），各方法行左下角放大窗显示二维轨迹（半透明彩色方法曲线与灰色 Quest Reference 标记），图注说明这些数值是显示窗口内相对 Quest Reference 的逐帧平均差，并保留在 `replay_grid.json` 的 `reference_error_summary`。标注字号由 `EgoAnchor_Python/src/egoanchor/qualitative_replay/config/qualitative_replay.toml` 配置。
 - 实验二四面板归因图的 VCD 与时序策略图例均内嵌在对应子图中，组合图不再使用顶部共享图例；图 5 采用 6.8 pt 基础字号、6.2 pt 横坐标刻度字号以与图 3、图 6 的正文视觉字号对齐；生成器为 `EgoAnchor_Python/src/egoanchor/eval/experiments/experiment_1_2/analysis/figures.py`。
 - 实验一的评价片段数、完整正式任务录制时长、正式任务内参考运动全范围和 20,000 次自举 95% 置信区间统一见 `egoanchor_en_supplementary.tex`；主文三张性能表题注只保留对应 $n$ 并指向补充材料，避免进一步占用英文主文版面。
 - LaTeX 编译产物统一写入 `2026-EgoAnchor/pdf/`，不得写入 `.tex` 源文件所在目录；英文稿及英文补充材料用 `pdflatex`，中文稿用 `xelatex`。
@@ -35,6 +35,8 @@
 本文件只记录**当前事实、长期约束、已冻结路线**和会直接导致失败的历史坑。**不记流水账**：不写逐轮评审日志、不为每轮改稿新增一节、不记 session 数字/迁移 hash/调参过程/一次性排障。**挑重点写**：一条约束只写「规则 + 最小证据指针」，不写决策经过、不写被推翻的旧说法、不留划除线文本。事实变化时直接改原条目。
 
 ## 项目核心
+
+Replay 网格由 `qualitative_replay/render.py` 按历史有效 display pose 绘制方法轨迹，并在左下角放大窗先绘制半透明方法轨迹、再叠加小型带黑色描边的灰色虚线 Quest Reference 标记；大图轨迹固定隐藏，放大窗尺寸、边距、参考点大小、参考颜色、线宽和透明度均由 replay TOML 的 overlay 轨迹参数控制，并写入网格 sidecar。
 
 EgoAnchor 是面向透视混合现实（PMR）的**零样本动态物体锚定系统**。中心论点：**开放视觉后端输出的异步 6DoF pose 不是可直接消费的 MR anchor**。系统把低频、异步、质量不均的视觉位姿观测，转换为消费级 MR 应用可持续绑定的世界系对象锚点。
 
@@ -528,3 +530,8 @@ latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=p
 - **本文件是记录，不是权威**：它不能用来驳回用户的要求，也不能用来否决 GPT 的建议。与用户要求冲突时以用户为准，并同步改本文件。
 - **「冻结」不是硬约束**：新证据推翻理由后可以改，但改前必须先读懂原理由，并在本文件写清推翻它的证据。不得以「冻结」为由拒绝修正事实错误，也不得不留记录地悄悄推翻。
 - 涉及**系统行为**的断言一律回代码核（外部建议者看不到代码）；涉及**排版**的判断一律先渲染再下结论。两类都不得凭记忆或推断写入本文件。
+
+## 轨迹显示
+
+- `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/AnchorTrajectoryRenderer.cs` 已挂载到 `EgoAnchor.unity` 四个 anchor 各自的 `TrajectoryRenderer` 子节点；其只管理采样、Tracking/可见性断段、历史段失活和材质。可单独挂载的 `EgoAnchor_Unity/Assets/Scripts/EgoAnchor/Runtime/LineRenderer3D.cs` 承担圆管网格生成，并保留 `survivorr9049/LineRenderer3D` 的 MIT 许可；轨迹按世界坐标以 `sampleIntervalSeconds` 时间间隔记录（当前约 45 Hz、外径 0.002 m），每个轨迹段在 `Trajectory xx` 子物体下创建 `MeshFilter`/`MeshRenderer`，圆管几何基于该仓库的环形截面、Job、Burst 和转折法向修正，项目通过 `EgoAnchor.asmdef` 引用 `Unity.Burst`；截面默认 8 段并使用 32 位索引支持长轨迹，每次采样按仓库方式重建当前段网格，历史段不再更新，跳过近零位移；`MeshRenderer` 关闭动态遮挡剔除与阴影并固定 `sortingOrder=32767`，运行时材质为支持 `_ZTest` 的 `Hidden/Internal-Colored` 并设为 `ZTest Always` 置顶；每轮生成在重入、停用和销毁前完成 Job 并释放全部 TempJob 缓冲，不得覆盖尚未完成的 NativeArray；在视觉隐藏或 Lost/Searching 后暂停，组件停用会断开当前段，重新启用会停用历史轨迹并在 Tracking 条件满足后新建轨迹子物体，颜色在场景中静态配置为对应 anchor 的 HighlightPlus `outlineColor` 并写入材质；当前 Capture-Hold 使用橙色、One-Euro Interpolation 使用绿色，且高亮与轨迹颜色保持一致。
+- `DynamicObjectAnchor.SetVisualHidden` 仅在系统可见度状态发生变化时写入外部 `visualTransforms` 的 `GameObject.activeSelf`；重复帧不覆盖 Inspector 或外部脚本对 Mesh/Axis 的手动开关。

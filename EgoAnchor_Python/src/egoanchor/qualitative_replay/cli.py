@@ -143,6 +143,8 @@ def _add_overlay_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--minimum-component-faces", type=int, default=None, help="保留 mesh 组件所需的最小三角面数")
     parser.add_argument("--texture-brightness", type=float, default=None, help="base-color 纹理亮度倍率")
     parser.add_argument("--method-contour-thickness", type=int, default=None, help="四方法彩色轮廓线宽")
+    parser.add_argument("--trajectory-enabled", action=argparse.BooleanOptionalAction, default=None, help="显示或隐藏方法轨迹")
+    parser.add_argument("--trajectory-thickness", type=int, default=None, help="轨迹线宽，单位原图像素")
     parser.add_argument("--reference-contour-color", default=None, help="Quest Reference 内轮廓颜色")
     parser.add_argument("--reference-contour-thickness", type=int, default=None, help="Quest Reference 内轮廓线宽")
     parser.add_argument("--reference-halo-color", default=None, help="Quest Reference 外沿颜色")
@@ -219,6 +221,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.method_contour_thickness is None
         else args.method_contour_thickness
     )
+    trajectory_enabled = settings.overlay.trajectory_enabled if args.trajectory_enabled is None else args.trajectory_enabled
+    trajectory_thickness = settings.overlay.trajectory_thickness_px if args.trajectory_thickness is None else args.trajectory_thickness
+    trajectory_alpha = settings.overlay.trajectory_alpha
+    trajectory_inset_width_ratio = settings.overlay.trajectory_inset_width_ratio
+    trajectory_inset_height_ratio = settings.overlay.trajectory_inset_height_ratio
+    trajectory_inset_margin_ratio = settings.overlay.trajectory_inset_margin_ratio
+    trajectory_reference_marker_px = settings.overlay.trajectory_reference_marker_px
+    trajectory_reference_color_hex = settings.overlay.trajectory_reference_color_hex
     show_axes = settings.axes.enabled if args.axes is None else args.axes
     axis_length = settings.axes.length_m if args.axis_length is None else args.axis_length
     axis_thickness = (
@@ -268,6 +278,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.texture_brightness, settings.overlay.texture_brightness
             ),
             method_contour_thickness=method_contour_thickness,
+            show_trajectories=False,
+            trajectory_thickness=trajectory_thickness,
+            trajectory_alpha=trajectory_alpha,
+            trajectory_inset_enabled=trajectory_enabled,
+            trajectory_inset_width_ratio=trajectory_inset_width_ratio,
+            trajectory_inset_height_ratio=trajectory_inset_height_ratio,
+            trajectory_inset_margin_ratio=trajectory_inset_margin_ratio,
+            trajectory_reference_marker_px=trajectory_reference_marker_px,
+            trajectory_reference_color_hex=trajectory_reference_color_hex,
             reference_contour_color_hex=_value_or(
                 args.reference_contour_color,
                 settings.overlay.reference_contour_color_hex,
@@ -368,6 +387,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.texture_brightness, settings.overlay.texture_brightness
         ),
         method_contour_thickness=method_contour_thickness,
+        show_trajectories=False,
+        trajectory_thickness=trajectory_thickness,
+        trajectory_alpha=trajectory_alpha,
+        trajectory_inset_enabled=trajectory_enabled,
+        trajectory_inset_width_ratio=trajectory_inset_width_ratio,
+        trajectory_inset_height_ratio=trajectory_inset_height_ratio,
+        trajectory_inset_margin_ratio=trajectory_inset_margin_ratio,
+        trajectory_reference_marker_px=trajectory_reference_marker_px,
+        trajectory_reference_color_hex=trajectory_reference_color_hex,
         reference_contour_color_hex=_value_or(
             args.reference_contour_color,
             settings.overlay.reference_contour_color_hex,

@@ -53,6 +53,14 @@ texture_brightness = 1.0 # unlit base-color 纹理亮度倍率，范围 0--3。
 model_color_hex = "#D8DCE2" # fill_mode=color 或纹理不可用时的回退填充颜色。
 method_colors_hex = ["#4C78A8", "#F28E2B", "#59A14F", "#E15759"] # Arrival、Capture、One-Euro、EgoAnchor 的轮廓颜色，与全文方法配色完全一致。
 method_contour_thickness_px = 3 # 四种方法彩色轮廓的线宽，单位原图像素。
+trajectory_enabled = true # 是否叠加四种方法按历史显示位姿绘制的连续轨迹。
+trajectory_thickness_px = 8 # 轨迹线宽，单位原图像素；网格缩放后约为 4 px。
+trajectory_alpha = 0.6 # 轨迹线不透明度；较低值可减少对模型和坐标轴的遮挡。
+trajectory_inset_width_ratio = 0.32 # 左下角轨迹放大窗宽度占图像单元宽度的比例。
+trajectory_inset_height_ratio = 0.28 # 左下角轨迹放大窗高度占图像单元高度的比例。
+trajectory_inset_margin_ratio = 0.005 # 放大窗距图像单元边缘的比例边距。
+trajectory_reference_marker_px = 5 # Quest Reference 参考点半径基准像素。
+trajectory_reference_color_hex = "#5A5A5A" # Quest Reference 轨迹和参考点颜色。
 reference_contour_color_hex = "#2D2D2D" # Quest Reference 内轮廓颜色。
 reference_contour_thickness_px = 3 # Quest Reference 内轮廓线宽，单位原图像素。
 reference_halo_color_hex = "#FFFFFF" # Quest Reference 外沿 halo 颜色。

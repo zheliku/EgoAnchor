@@ -284,14 +284,20 @@ namespace EgoAnchor.Runtime
         /// 切换视觉对象可见性；优先启停外部视觉对象，否则切换目标渲染器。
         /// </summary>
         /// <param name="hidden">是否隐藏视觉对象。</param>
-        private void SetVisualHidden(bool hidden)
+private void SetVisualHidden(bool hidden)
         {
+            // 可见度未变化时不重写 GameObject.activeSelf，保留 Inspector 或外部脚本的手动开关。
+            if (hidden == renderersHidden)
+            {
+                return;
+            }
+
             if (toggleableVisuals != null && toggleableVisuals.Length > 0)
             {
                 renderersHidden = hidden;
                 foreach (Transform item in toggleableVisuals)
                 {
-                    if (item != null && item.gameObject.activeSelf == hidden)
+                    if (item != null)
                     {
                         item.gameObject.SetActive(!hidden);
                     }
@@ -300,7 +306,7 @@ namespace EgoAnchor.Runtime
                 return;
             }
 
-            if (targetRenderers == null || hidden == renderersHidden)
+            if (targetRenderers == null)
             {
                 return;
             }

@@ -18,6 +18,8 @@ from egoanchor.visuals import METHOD_COLORS_HEX
 
 from .contracts import ReplayCapture, ReplaySample, VARIANT_IDS
 from .geometry import (
+    UNITY_TO_CV_BASIS,
+    pose_to_matrix,
     projection_mesh_local_matrix,
     recorded_projection_matrix,
     verify_projection_matrix,
@@ -77,6 +79,9 @@ class GridColumn:
     axes: tuple[np.ndarray, ...]
     """Quest 参考和四方法的投影坐标轴点，每项依次为原点、X、Y、Z 端点。"""
 
+    trajectories: tuple[tuple[np.ndarray, ...], ...]
+    """Quest 参考及四种方法截至当前列的二维轨迹段。"""
+
     crop: tuple[int, int, int, int]
     """同列六行共享的 x、y、width、height。"""
 
@@ -99,6 +104,9 @@ class PreparedColumn:
 
     axes: tuple[np.ndarray, ...]
     """Quest 参考和四方法坐标轴的二维投影点。"""
+
+    trajectories: tuple[tuple[np.ndarray, ...], ...]
+    """Quest 参考及四种方法截至当前列的二维轨迹段。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -492,6 +500,15 @@ def render_frame_overlays(
     texture_max_size_px: int = 0,
     texture_brightness: float = 1.0,
     method_contour_thickness: int = 3,
+    show_trajectories: bool = True,
+    trajectory_thickness: int = 3,
+    trajectory_alpha: float = 0.72,
+    trajectory_inset_width_ratio: float = 0.36,
+    trajectory_inset_height_ratio: float = 0.30,
+    trajectory_inset_margin_ratio: float = 0.018,
+    trajectory_reference_marker_px: int = 3,
+    trajectory_reference_color_hex: str = "#5A5A5A",
+    trajectory_inset_enabled: bool = True,
     reference_contour_color_hex: str = "#2D2D2D",
     reference_contour_thickness: int = 3,
     reference_halo_color_hex: str = "#FFFFFF",
@@ -601,6 +618,14 @@ def render_frame_overlays(
     _write_rgb_png(reference_path, reference_image)
     paths["quest_reference"] = reference_path
 
+    frame_trajectories = None
+    if show_trajectories or trajectory_inset_enabled:
+        frame_trajectories = _project_world_trajectories(
+            capture.samples,
+            start_index=0,
+            end_index=capture.samples.index(sample),
+            camera_sample=sample,
+        )
     for variant, mask, color_hex in zip(
         sample.variants,
         masks[1:],
@@ -635,6 +660,28 @@ def render_frame_overlays(
                 image,
                 axes[variant_index],
                 axis_style,
+            )
+        variant_index = VARIANT_IDS.index(variant_id)
+        if show_trajectories and not trajectory_inset_enabled:
+            image = _draw_trajectory_crop(
+                image,
+                frame_trajectories[variant_index + 1],
+                (0, 0, width, height),
+                str(color_hex),
+                trajectory_thickness,
+            )
+        if trajectory_inset_enabled:
+            image = _draw_trajectory_inset(
+                image,
+                frame_trajectories[variant_index + 1],
+                str(color_hex),
+                reference_segments=frame_trajectories[0],
+                alpha=trajectory_alpha,
+                inset_width_ratio=trajectory_inset_width_ratio,
+                inset_height_ratio=trajectory_inset_height_ratio,
+                inset_margin_ratio=trajectory_inset_margin_ratio,
+                reference_marker_px=trajectory_reference_marker_px,
+                reference_color_hex=trajectory_reference_color_hex,
             )
         path = output / f"{sample.sample_id}_{variant_id}.png"
         _write_rgb_png(path, image)
@@ -672,6 +719,15 @@ def render_comparison_grid(
     texture_max_size_px: int = 0,
     texture_brightness: float = 1.0,
     method_contour_thickness: int = 3,
+    show_trajectories: bool = True,
+    trajectory_thickness: int = 3,
+    trajectory_inset_enabled: bool = True,
+    trajectory_alpha: float = 0.72,
+    trajectory_inset_width_ratio: float = 0.36,
+    trajectory_inset_height_ratio: float = 0.30,
+    trajectory_inset_margin_ratio: float = 0.018,
+    trajectory_reference_marker_px: int = 3,
+    trajectory_reference_color_hex: str = "#5A5A5A",
     reference_contour_color_hex: str = "#2D2D2D",
     reference_contour_thickness: int = 3,
     reference_halo_color_hex: str = "#FFFFFF",
@@ -779,6 +835,16 @@ def render_comparison_grid(
         raise ValueError("row_label_line_spacing 必须位于 0 到 32 px。")
     if not 8 <= int(mean_error_font_size) <= 96:
         raise ValueError("mean_error_font_size 必须位于 8 到 96 px。")
+    if not 1 <= int(trajectory_thickness) <= 16:
+        raise ValueError("trajectory_thickness 必须位于 1 到 16 px。")
+    if not 0.2 <= float(trajectory_inset_width_ratio) <= 0.8:
+        raise ValueError("trajectory_inset_width_ratio 必须位于 0.2 到 0.8。")
+    if not 0.15 <= float(trajectory_inset_height_ratio) <= 0.7:
+        raise ValueError("trajectory_inset_height_ratio 必须位于 0.15 到 0.7。")
+    if not 0.005 <= float(trajectory_inset_margin_ratio) <= 0.1:
+        raise ValueError("trajectory_inset_margin_ratio 必须位于 0.005 到 0.1。")
+    if not 1 <= int(trajectory_reference_marker_px) <= 16:
+        raise ValueError("trajectory_reference_marker_px 必须位于 1 到 16 px。")
     axis_style = _axis_draw_style(
         axis_colors_hex,
         thickness=axis_thickness,
@@ -830,7 +896,19 @@ def render_comparison_grid(
             show_axes=show_axes,
             axis_margin_px=_axis_margin_px(axis_style),
         )
-        prepared.append(PreparedColumn(sample_index, sample, background, masks, axes))
+        trajectories = (
+            _project_world_trajectories(
+                capture.samples,
+                start_index=selected[0][0],
+                end_index=sample_index,
+                camera_sample=sample,
+            )
+            if show_trajectories or trajectory_inset_enabled
+            else tuple(() for _ in range(len(VARIANT_IDS) + 1))
+        )
+        prepared.append(
+            PreparedColumn(sample_index, sample, background, masks, axes, trajectories)
+        )
 
     if crop_xywh is None:
         crops = _compute_shared_crops(
@@ -852,7 +930,15 @@ def render_comparison_grid(
         )
         crop_semantics = "fixed image-space crop; identical crop shared by all columns and displayed rows"
     grid_columns = tuple(
-        GridColumn(item.sample_index, item.sample, item.background, item.masks, item.axes, crop)
+        GridColumn(
+            item.sample_index,
+            item.sample,
+            item.background,
+            item.masks,
+            item.axes,
+            item.trajectories,
+            crop,
+        )
         for item, crop in zip(prepared, crops, strict=True)
     )
     reference_error_summary = _summarize_reference_errors(
@@ -881,6 +967,15 @@ def render_comparison_grid(
         texture_max_size_px=int(texture_max_size_px),
         texture_brightness=float(texture_brightness),
         method_contour_thickness=int(method_contour_thickness),
+        show_trajectories=bool(show_trajectories),
+        trajectory_thickness=int(trajectory_thickness),
+        trajectory_inset_enabled=bool(trajectory_inset_enabled),
+        trajectory_alpha=float(trajectory_alpha),
+        trajectory_inset_width_ratio=float(trajectory_inset_width_ratio),
+        trajectory_inset_height_ratio=float(trajectory_inset_height_ratio),
+        trajectory_inset_margin_ratio=float(trajectory_inset_margin_ratio),
+        trajectory_reference_marker_px=int(trajectory_reference_marker_px),
+        trajectory_reference_color_hex=trajectory_reference_color_hex,
         reference_contour_color=_hex_to_rgb(reference_contour_color_hex),
         reference_contour_thickness=int(reference_contour_thickness),
         reference_halo_color=_hex_to_rgb(reference_halo_color_hex),
@@ -959,6 +1054,14 @@ def render_comparison_grid(
             "minimum_component_faces": projector.minimum_component_faces,
             "texture_brightness": float(texture_brightness),
             "method_contour_thickness_px": int(method_contour_thickness),
+            "trajectory_enabled": bool(show_trajectories or trajectory_inset_enabled),
+            "trajectory_thickness_px": int(trajectory_thickness),
+            "trajectory_alpha": float(trajectory_alpha),
+            "trajectory_inset_width_ratio": float(trajectory_inset_width_ratio),
+            "trajectory_inset_height_ratio": float(trajectory_inset_height_ratio),
+            "trajectory_inset_margin_ratio": float(trajectory_inset_margin_ratio),
+            "trajectory_reference_marker_px": int(trajectory_reference_marker_px),
+            "trajectory_reference_color_hex": trajectory_reference_color_hex,
             "reference_contour_color_hex": reference_contour_color_hex,
             "reference_contour_thickness_px": int(reference_contour_thickness),
             "reference_halo_color_hex": reference_halo_color_hex,
@@ -1058,6 +1161,14 @@ def render_comparison_grid(
             ),
             "texture_fallback_reason": texture_fallback_reason,
             "method_contour_thickness_px": int(method_contour_thickness),
+            "trajectory_enabled": bool(show_trajectories or trajectory_inset_enabled),
+            "trajectory_thickness_px": int(trajectory_thickness),
+            "trajectory_alpha": float(trajectory_alpha),
+            "trajectory_inset_width_ratio": float(trajectory_inset_width_ratio),
+            "trajectory_inset_height_ratio": float(trajectory_inset_height_ratio),
+            "trajectory_inset_margin_ratio": float(trajectory_inset_margin_ratio),
+            "trajectory_reference_marker_px": int(trajectory_reference_marker_px),
+            "trajectory_reference_color_hex": trajectory_reference_color_hex,
             "reference_contour_color_hex": reference_contour_color_hex,
             "reference_contour_thickness_px": int(reference_contour_thickness),
             "reference_halo_color_hex": reference_halo_color_hex,
@@ -1553,6 +1664,244 @@ def _centered_crop(
     return x, y, width, height
 
 
+def _project_world_trajectories(
+    samples: Sequence[ReplaySample],
+    *,
+    start_index: int,
+    end_index: int,
+    camera_sample: ReplaySample,
+) -> tuple[tuple[np.ndarray, ...], ...]:
+    """把 Quest 参考和四种方法的历史位姿分段投影到当前列相机。"""
+
+    if not samples or start_index < 0 or end_index >= len(samples) or start_index > end_index:
+        raise ValueError("轨迹样本索引范围无效。")
+    camera_to_world = pose_to_matrix(camera_sample.camera["world_pose"])
+    world_to_camera = np.linalg.inv(camera_to_world)
+    camera = _camera_matrix(camera_sample)
+    segments: list[list[np.ndarray]] = [[] for _ in range(len(VARIANT_IDS) + 1)]
+    result: list[list[np.ndarray]] = [[] for _ in range(len(VARIANT_IDS) + 1)]
+
+    def flush(index: int) -> None:
+        if len(segments[index]) >= 2:
+            result[index].append(np.asarray(segments[index], dtype=np.float64))
+        segments[index] = []
+
+    variants_by_id = {variant_id: index + 1 for index, variant_id in enumerate(VARIANT_IDS)}
+    for sample in samples[start_index : end_index + 1]:
+        seen_reference = False
+        reference_valid = sample.platform_reference.get("valid") is True
+        if reference_valid:
+            try:
+                reference_position = np.asarray(sample.platform_reference["world_pose"]["position"], dtype=np.float64).reshape(3)
+                point_world = np.ones(4, dtype=np.float64)
+                point_world[:3] = reference_position
+                point_camera = UNITY_TO_CV_BASIS @ (world_to_camera @ point_world)
+                uv = camera @ point_camera[:3]
+                uv = uv[:2] / uv[2]
+                if np.all(np.isfinite(uv)) and point_camera[2] > 1e-4:
+                    segments[0].append(uv)
+                    seen_reference = True
+                else:
+                    flush(0)
+            except (KeyError, TypeError, ValueError):
+                flush(0)
+        else:
+            flush(0)
+        seen = set()
+        for variant in sample.variants:
+            variant_id = str(variant.get("variant_id", ""))
+            index = variants_by_id.get(variant_id)
+            if index is None:
+                continue
+            seen.add(index)
+            if variant.get("has_output_pose") is not True or variant.get("has_display_pose") is not True:
+                flush(index)
+                continue
+            try:
+                position = np.asarray(variant["display_world_pose"]["position"], dtype=np.float64).reshape(3)
+                point_world = np.ones(4, dtype=np.float64)
+                point_world[:3] = position
+                point_camera_unity = world_to_camera @ point_world
+                point_camera = UNITY_TO_CV_BASIS @ point_camera_unity
+                if not np.all(np.isfinite(point_camera)) or point_camera[2] <= 1e-4:
+                    flush(index)
+                    continue
+                uv = camera @ point_camera[:3]
+                uv = uv[:2] / uv[2]
+                if not np.all(np.isfinite(uv)):
+                    flush(index)
+                    continue
+                segments[index].append(uv)
+            except (KeyError, TypeError, ValueError):
+                flush(index)
+        for index in range(len(VARIANT_IDS) + 1):
+            if index == 0:
+                if not seen_reference:
+                    flush(index)
+            elif index not in seen:
+                flush(index)
+    for index in range(len(VARIANT_IDS) + 1):
+        flush(index)
+    return tuple(tuple(items) for items in result)
+
+
+def _draw_trajectory_crop(
+    image: np.ndarray,
+    trajectory_segments: Sequence[np.ndarray],
+    crop_xywh: tuple[int, int, int, int],
+    color_hex: str,
+    thickness: int,
+) -> np.ndarray:
+    """将轨迹段平移到裁剪图，以高对比圆角折线绘制。"""
+
+    x, y, _, _ = crop_xywh
+    output = image.copy()
+    offset = np.array([float(x), float(y)], dtype=np.float64)
+    for segment_index, segment in enumerate(trajectory_segments):
+        points = np.asarray(segment, dtype=np.float64) - offset
+        points = np.rint(points).astype(np.int32)
+        if points.shape[0] >= 2:
+            # 黑白双层外沿把轨迹从复杂纹理和同色模型轮廓中分离出来。
+            cv2.polylines(
+                output,
+                [points.reshape(-1, 1, 2)],
+                False,
+                (255, 255, 255),
+                int(thickness) + 4,
+                lineType=cv2.LINE_AA,
+            )
+            cv2.polylines(
+                output,
+                [points.reshape(-1, 1, 2)],
+                False,
+                (24, 24, 24),
+                int(thickness) + 2,
+                lineType=cv2.LINE_AA,
+            )
+            cv2.polylines(
+                output,
+                [points.reshape(-1, 1, 2)],
+                False,
+                _hex_to_rgb(color_hex),
+                int(thickness),
+                lineType=cv2.LINE_AA,
+            )
+            for point in points[:: max(1, len(points) // 8)]:
+                cv2.circle(output, tuple(int(value) for value in point), max(3, int(thickness) // 2), _hex_to_rgb(color_hex), -1, lineType=cv2.LINE_AA)
+            if segment_index == len(trajectory_segments) - 1:
+                endpoint = tuple(int(value) for value in points[-1])
+                cv2.circle(output, endpoint, max(6, int(thickness) + 3), (255, 255, 255), -1, lineType=cv2.LINE_AA)
+                cv2.circle(output, endpoint, max(5, int(thickness) + 1), (24, 24, 24), -1, lineType=cv2.LINE_AA)
+                cv2.circle(output, endpoint, max(4, int(thickness)), _hex_to_rgb(color_hex), -1, lineType=cv2.LINE_AA)
+    return output
+
+
+def _draw_trajectory_inset(
+    image: np.ndarray,
+    trajectory_segments: Sequence[np.ndarray],
+    color_hex: str,
+    *,
+    normalization_bounds: tuple[np.ndarray, np.ndarray] | None = None,
+    reference_segments: Sequence[np.ndarray] = (),
+    alpha: float = 0.72,
+    inset_width_ratio: float = 0.36,
+    inset_height_ratio: float = 0.30,
+    inset_margin_ratio: float = 0.018,
+    reference_marker_px: int = 3,
+    reference_color_hex: str = "#5A5A5A",
+) -> np.ndarray:
+    """在图像左下角绘制与同列方法共享尺度的轨迹放大窗。"""
+
+    points = [np.asarray(segment, dtype=np.float64) for segment in trajectory_segments if len(segment) >= 2]
+    reference_points = [np.asarray(segment, dtype=np.float64) for segment in reference_segments if len(segment) >= 2]
+    if not points and not reference_points:
+        return image
+    all_points = np.concatenate(points + reference_points, axis=0)
+    if not np.all(np.isfinite(all_points)):
+        return image
+    image_height, image_width = image.shape[:2]
+    margin = max(8, int(round(min(image_width, image_height) * float(inset_margin_ratio))))
+    inset_width = max(80, int(round(image_width * float(inset_width_ratio))))
+    inset_height = max(60, int(round(image_height * float(inset_height_ratio))))
+    x0 = margin
+    y0 = image_height - margin - inset_height
+    x1 = x0 + inset_width
+    y1 = y0 + inset_height
+    output = image.copy()
+    panel = output[y0:y1, x0:x1]
+    panel[:] = (248, 248, 248)
+    cv2.rectangle(output, (x0, y0), (x1 - 1, y1 - 1), (32, 32, 32), 2, lineType=cv2.LINE_AA)
+    if normalization_bounds is None:
+        min_xy = np.min(all_points, axis=0)
+        max_xy = np.max(all_points, axis=0)
+    else:
+        min_xy = np.asarray(normalization_bounds[0], dtype=np.float64)
+        max_xy = np.asarray(normalization_bounds[1], dtype=np.float64)
+    span = np.maximum(max_xy - min_xy, 1e-6)
+    pad = 0.16
+    inner_w = max(1.0, inset_width - 2.0 * margin)
+    inner_h = max(1.0, inset_height - 2.0 * margin)
+    scale = min(inner_w / (span[0] * (1.0 + 2.0 * pad)), inner_h / (span[1] * (1.0 + 2.0 * pad)))
+    center = (min_xy + max_xy) * 0.5
+    inset_center = np.array([x0 + inset_width * 0.5, y0 + inset_height * 0.5], dtype=np.float64)
+    drawing = output.copy()
+    for segment_index, segment in enumerate(points):
+        mapped = (segment - center) * scale + inset_center
+        mapped = np.rint(mapped).astype(np.int32)
+        cv2.polylines(drawing, [mapped.reshape(-1, 1, 2)], False, (0, 0, 0), 7, lineType=cv2.LINE_AA)
+        cv2.polylines(drawing, [mapped.reshape(-1, 1, 2)], False, _hex_to_rgb(color_hex), 4, lineType=cv2.LINE_AA)
+        if segment_index == len(points) - 1:
+            endpoint = tuple(int(value) for value in mapped[-1])
+            cv2.circle(drawing, endpoint, 7, (0, 0, 0), -1, lineType=cv2.LINE_AA)
+            cv2.circle(drawing, endpoint, 5, _hex_to_rgb(color_hex), -1, lineType=cv2.LINE_AA)
+    output = cv2.addWeighted(drawing, float(alpha), output, 1.0 - float(alpha), 0.0)
+    # 当前方法端点在透明混合后以不透明实心点重绘，明确标出列对应的最新位置。
+    for segment in points:
+        mapped = np.rint((segment - center) * scale + inset_center).astype(np.int32)
+        endpoint = tuple(int(value) for value in mapped[-1])
+        cv2.circle(output, endpoint, 7, (0, 0, 0), -1, lineType=cv2.LINE_AA)
+        cv2.circle(output, endpoint, 5, _hex_to_rgb(color_hex), -1, lineType=cv2.LINE_AA)
+    marker = max(1, int(reference_marker_px))
+    # Quest 参考在透明方法轨迹上方绘制，使用小型菱形和细虚线保持辨识度。
+    for segment in reference_points:
+        mapped = np.rint((segment - center) * scale + inset_center).astype(np.int32)
+        for point_index in range(len(mapped) - 1):
+            if point_index % 3 != 1:
+                cv2.line(output, tuple(mapped[point_index]), tuple(mapped[point_index + 1]), (0, 0, 0), marker + 2, lineType=cv2.LINE_AA)
+                cv2.line(output, tuple(mapped[point_index]), tuple(mapped[point_index + 1]), _hex_to_rgb(reference_color_hex), marker, lineType=cv2.LINE_AA)
+        for point_index in range(0, len(mapped), max(1, len(mapped) // 7)):
+            point = tuple(int(value) for value in mapped[point_index])
+            diamond = np.array([[point[0], point[1] - marker], [point[0] + marker, point[1]], [point[0], point[1] + marker], [point[0] - marker, point[1]]], dtype=np.int32)
+            cv2.fillPoly(output, [diamond], (0, 0, 0), lineType=cv2.LINE_AA)
+            inner_marker = max(1, marker - 1)
+            inner = np.array([[point[0], point[1] - inner_marker], [point[0] + inner_marker, point[1]], [point[0], point[1] + inner_marker], [point[0] - inner_marker, point[1]]], dtype=np.int32)
+            cv2.fillPoly(output, [inner], _hex_to_rgb(reference_color_hex), lineType=cv2.LINE_AA)
+        endpoint = tuple(int(value) for value in mapped[-1])
+        cv2.circle(output, endpoint, marker + 1, (0, 0, 0), -1, lineType=cv2.LINE_AA)
+        cv2.circle(output, endpoint, marker, _hex_to_rgb(reference_color_hex), -1, lineType=cv2.LINE_AA)
+    return output
+
+
+def _trajectory_bounds(
+    trajectory_groups: Sequence[Sequence[np.ndarray]],
+    crop_xywh: tuple[int, int, int, int],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """计算同一列所有方法共享的轨迹放大窗范围。"""
+
+    points = [
+        np.asarray(segment, dtype=np.float64)
+        for group in trajectory_groups
+        for segment in group
+        if len(segment) >= 2
+    ]
+    if not points:
+        return None
+    merged = np.concatenate(points, axis=0)
+    if not np.all(np.isfinite(merged)):
+        return None
+    return np.min(merged, axis=0), np.max(merged, axis=0)
+
+
 def _compose_grid(
     columns: Sequence[GridColumn],
     projector: MeshProjector,
@@ -1575,6 +1924,15 @@ def _compose_grid(
     texture_max_size_px: int,
     texture_brightness: float,
     method_contour_thickness: int,
+    show_trajectories: bool,
+    trajectory_thickness: int,
+    trajectory_inset_enabled: bool,
+    trajectory_alpha: float,
+    trajectory_inset_width_ratio: float,
+    trajectory_inset_height_ratio: float,
+    trajectory_inset_margin_ratio: float,
+    trajectory_reference_marker_px: int,
+    trajectory_reference_color_hex: str,
     reference_contour_color: tuple[int, int, int],
     reference_contour_thickness: int,
     reference_halo_color: tuple[int, int, int],
@@ -1726,6 +2084,15 @@ def _compose_grid(
             texture_max_size_px=texture_max_size_px,
             texture_brightness=texture_brightness,
             method_contour_thickness=method_contour_thickness,
+            show_trajectories=show_trajectories,
+            trajectory_thickness=trajectory_thickness,
+            trajectory_inset_enabled=trajectory_inset_enabled,
+            trajectory_alpha=trajectory_alpha,
+            trajectory_inset_width_ratio=trajectory_inset_width_ratio,
+            trajectory_inset_height_ratio=trajectory_inset_height_ratio,
+            trajectory_inset_margin_ratio=trajectory_inset_margin_ratio,
+            trajectory_reference_marker_px=trajectory_reference_marker_px,
+            trajectory_reference_color_hex=trajectory_reference_color_hex,
             reference_contour_color=reference_contour_color,
             reference_contour_thickness=reference_contour_thickness,
             reference_halo_color=reference_halo_color,
@@ -2098,6 +2465,15 @@ def _render_column_crops(
     texture_max_size_px: int,
     texture_brightness: float,
     method_contour_thickness: int,
+    show_trajectories: bool,
+    trajectory_thickness: int,
+    trajectory_inset_enabled: bool,
+    trajectory_alpha: float,
+    trajectory_inset_width_ratio: float,
+    trajectory_inset_height_ratio: float,
+    trajectory_inset_margin_ratio: float,
+    trajectory_reference_marker_px: int,
+    trajectory_reference_color_hex: str,
     reference_contour_color: tuple[int, int, int],
     reference_contour_thickness: int,
     reference_halo_color: tuple[int, int, int],
@@ -2111,6 +2487,7 @@ def _render_column_crops(
     background = column.background[y : y + height, x : x + width]
     masks = tuple(mask[y : y + height, x : x + width] for mask in column.masks)
     axes = tuple(_translate_axes(points, -x, -y) for points in column.axes)
+    trajectory_bounds = _trajectory_bounds(column.trajectories, column.crop)
     image_height, image_width = column.background.shape[:2]
     camera_matrix = _camera_matrix(column.sample)
     selected = set(selected_rows)
@@ -2179,11 +2556,33 @@ def _render_column_crops(
             fill_texture=texture,
             contour_thickness=method_contour_thickness,
         )
+        if show_trajectories and not trajectory_inset_enabled and row_key in selected:
+            rendered = _draw_trajectory_crop(
+                rendered,
+                column.trajectories[index],
+                column.crop,
+                str(color_hex),
+                trajectory_thickness,
+            )
         if show_axes and row_key in selected and np.all(np.isfinite(axes[index])):
             rendered = _draw_axes(
                 rendered,
                 axes[index],
                 axis_style,
+            )
+        if trajectory_inset_enabled and row_key in selected:
+            rendered = _draw_trajectory_inset(
+                rendered,
+                column.trajectories[index],
+                str(color_hex),
+                normalization_bounds=trajectory_bounds,
+                reference_segments=column.trajectories[0],
+                alpha=trajectory_alpha,
+                inset_width_ratio=trajectory_inset_width_ratio,
+                inset_height_ratio=trajectory_inset_height_ratio,
+                inset_margin_ratio=trajectory_inset_margin_ratio,
+                reference_marker_px=trajectory_reference_marker_px,
+                reference_color_hex=trajectory_reference_color_hex,
             )
         rendered_rows.append(rendered)
     return tuple(rendered_rows[ROW_KEYS.index(label)] for label in selected_rows)

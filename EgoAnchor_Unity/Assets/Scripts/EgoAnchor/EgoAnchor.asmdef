@@ -5,7 +5,8 @@
         "Oculus.VR",
         "meta.xr.mrutilitykit",
         "Unity.TextMeshPro",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.Burst"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
