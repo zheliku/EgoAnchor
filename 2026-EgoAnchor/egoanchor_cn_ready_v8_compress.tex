@@ -100,7 +100,7 @@
 透视混合现实（Passthrough Mixed Reality, PMR）支持将虚拟内容附着于真实物体，用于操作说明、交互引导、状态可视化与近物交互。此类应用需随物体运动持续维护对象级空间参考：在用户头动、操纵物体或短暂遮挡时，虚拟叠加层仍应保持相对于物体一致的六自由度（6-DoF）变换。传统空间锚点面向静态环境，无法表达物体自身运动；因此，动态对象锚定是以物体为中心的 MR 应用的一项基础能力~\cite{selfblending2026,gradualreality2024}。
 
 % ===== 第二段：现有方案局限 =====
-现有方案在不同技术层面提供了部分支持。商用头显原生提供的对象跟踪接口集成度高，但其支持的对象类别、几何模型要求与运行时行为受平台特定定义限制（如 Apple Vision Pro 与 Meta Quest 系列）；物理标记（如 AprilTag、ArUco）与专用硬件跟踪器（如 HTC Tracker）能够提供稳定定位，但必须预先改造目标物体或安装附加硬件。近年来，开放词表检测、时序分割、双目立体匹配与模型驱动的零样本 6-DoF 位姿估计为具有已知三维模型的刚性物体提供了视觉定位能力~\cite{groundingdino2025,cutie2024,fastfoundationstereo2026,foundationpose2024,gigapose2024}。这些感知基础模型拓展了视觉定位的适用范围，但其输出本质上仍是与特定图像采集时刻绑定的离散、异步相机系观测，无法直接提供可供 MR 内容稳定绑定的对象锚点。
+现有方案在不同技术层面提供了部分支持。商用头显原生提供的对象跟踪接口集成度高，但其支持的对象类别、几何模型要求与运行时行为受平台特定定义限制（如 Apple Vision Pro 与 Meta Quest 系列）；物理标记（如 AprilTag、ArUco）与专用硬件跟踪器（如 HTC VIVE Tracker）能够提供稳定定位，但必须预先改造目标物体或安装附加硬件。近年来，开放词表检测、时序分割、双目立体匹配与模型驱动的零样本 6-DoF 位姿估计为具有已知三维模型的刚性物体提供了视觉定位能力~\cite{groundingdino2025,cutie2024,fastfoundationstereo2026,foundationpose2024,gigapose2024}。这些感知基础模型拓展了视觉定位的适用范围，但其输出本质上仍是与特定图像采集时刻绑定的离散、异步相机系观测，无法直接提供可供 MR 内容稳定绑定的对象锚点。
 
 % ===== 第三段：核心问题 =====
 直接采用视觉位姿作为对象锚点会引入若干关键问题。首先，异步结果到达渲染端时已累积时延；若与到达时刻的相机位姿复合，头动会被误作物体运动。其次，候选位姿仍可能因遮挡、深度噪声或几何错配而跳变，直接接纳会引发渲染抖动。最后，低频、不规则的含噪位姿流无法匹配高频渲染，运行时还需管理静止、运动、短时失效与重新获取。因此，单帧位姿估计不足以形成持续可用的对象锚点。
@@ -208,7 +208,7 @@ T_{o,f}^{c} =
 \textbf{可视度门控。}
 记 $M_f^{\mathrm{rnd}}$ 为候选位姿下的理论渲染掩膜，定义：
 \begin{equation}
-\Omega_f = M_f \cap M_f^{\mathrm{rnd}}, \quad \Omega_f^{\circ} = \operatorname{Erode}(\Omega_f), \quad V_f = \frac{|\Omega_f|}{|M_f^{\mathrm{rnd}}|},
+\Omega_f = M_f \cap M_f^{\mathrm{rnd}}, \quad \Omega_f^{\circ} = \operatorname{Erode}(\Omega_f), \quad V_f = \frac{|\Omega_f|^{\circ}}{|M_f^{\mathrm{rnd}}|},
 \label{eq:visibility}
 \end{equation}
 其中 $V_f$ 为渲染投影受观测掩膜支持的比例；腐蚀区域 $\Omega_f^\circ$ 减小边缘混合像素影响。
@@ -405,7 +405,7 @@ TiA~\cite{tia2019} 采用可靠性/能力（6 项）与理解/可预测性（4 �
 
 \subsubsection{统计分析}
 
-对每名被试，七项对象锚定条目的各项得分与两个 AQ 子量表得分均先跨三个物体取均值；TiA 的两个子量表与 S-TIAS 则按方法分别计算条目均分，共形成 12 项结果。各指标报告中位数与四分位距 $\mathrm{Mdn}\ [\mathrm{Q}_1, \mathrm{Q}_3]$；24 组配对样本采用双侧 Wilcoxon 符号秩检验，并报告配对秩双列相关系数 $r_{\mathrm{rb}}$ 及其 95\% 置信区间。七项自定义条目与五项标准化量表分别构成两个独立的 Holm--Bonferroni 校正家族；量表内部一致性按方法报告 Cronbach's $\alpha$。
+对每名被试，七项对象锚定条目的各项得分与两个 AQ 子量表得分均先跨三个物体取均值；TiA 的两个子量表与 S-TIAS 则按方法分别计算条目均分，共形成 12 项结果。各指标报告中位数与四分位距 $\mathrm{Mdn}\ [\mathrm{Q}_1, \mathrm{Q}_3]$；24 组配对样本采用双侧 Wilcoxon 符号秩检验，并报告配对秩双列相关系数 $r_{\mathrm{rb}}$ 及其 95\% 置信区间。七项自定义条目与五项标准化量表分别构成两个独立的 Holm--Bonferroni 校正家族。
 
 \section{结果}\label{sec:results}
 

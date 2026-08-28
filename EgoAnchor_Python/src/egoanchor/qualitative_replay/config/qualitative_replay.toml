@@ -11,10 +11,10 @@ rows = ["Passthrough", "Quest\nReference", "Arrival", "Capture", "One-Euro", "Eg
 [layout]
 cell_width = 320 # 每个图像单元的输出宽度，单位像素。
 column_label = "none" # 独立列标题模式，可选 none、delta-t、sample-id 或 both；默认由时间轴显示相对时间。
-label_font_size = 60 # 左侧行名字号，单位像素；按单栏正文缩放后接近正文文字大小。
+label_font_size = 54 # 左侧行名字号，单位像素；按单栏正文缩放后接近正文文字大小。
 row_label_rotation_deg = 0 # 左侧行名逆时针旋转角度，90 度时可收窄标签栏。
-column_font_size = 60 # 顶部 delta-t 或 sample id 字号，单位像素；与左侧行名保持一致。
-label_padding_px = 14 # 旋转行名区域的左右合计留白，单位像素。
+column_font_size = 54 # 顶部 delta-t 或 sample id 字号，单位像素；与左侧行名保持一致。
+label_padding_px = 32 # 旋转行名区域的左右合计留白，单位像素。
 label_min_width_px = 104 # 旋转行名区域最小宽度；收窄标签栏以扩大图像网格。
 gutter_px = 4 # 相邻图像单元之间的间距，单位像素。
 border_thickness_px = 1 # 每个图像单元的边框线宽，单位像素；设为 0 时不绘制边框。
@@ -29,7 +29,7 @@ mean_error_font_size_px = 48 # 平均误差数值标注字号，单位像素；�
 [timeline]
 mode = "relative-time" # 时间轴模式，可选 none、relative-time 或 frame-sequence；后者显示可用于 --start-sample-id 的保存帧序号。
 placement = "top" # 时间轴位置，可选 top 或 bottom；默认放在第一行图像上方。
-font_size_px = 65 # 时间刻度和横轴标题字号，单位像素；按单栏正文缩放后接近正文文字大小。
+font_size_px = 54 # 时间刻度和横轴标题字号，单位像素；按单栏正文缩放后接近正文文字大小。
 color_hex = "#202020" # 时间轴主线、刻度、箭头和文字颜色。
 line_thickness_px = 3 # 横纵轴主线和刻度线宽，单位像素；默认稍加粗以适应论文缩放。
 tick_length_px = 10 # 时间刻度和方法行刻度的长度，单位像素。

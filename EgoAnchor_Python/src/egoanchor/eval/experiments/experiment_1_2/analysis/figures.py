@@ -674,7 +674,7 @@ def build_exp1_behavior_figure(results: PaperResults) -> Any:
             marker="o",
             linestyle="-",
             markersize=5.0,
-            label="Head-motion leakage / LA-RMSE",
+            label="Head-motion coupling error / LA-RMSE",
         ),
         Line2D(
             (),
