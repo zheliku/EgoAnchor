@@ -72,7 +72,7 @@ class DebugViewTest(unittest.TestCase):
             put_text.side_effect = lambda img, text, *args, **kwargs: texts.append(str(text)) or img
             view = make_score_debug_view(diagnostics, observation, width=640, height=360)
 
-        self.assertEqual(view.shape[:2], (360, 640))
+        self.assertEqual(view.shape[:2], (1236, 2008))
         self.assertTrue(any("R=0.200" in text for text in texts))
         self.assertTrue(any("V(0.900)" in text for text in texts))
         self.assertTrue(any("C=0.420" in text for text in texts))
@@ -138,7 +138,7 @@ class DebugViewTest(unittest.TestCase):
         self.assertGreater(float(np.mean(with_flags[expected_banner_h + 8])), 20.0)
 
     def test_pose_dashboard_reserves_top_banner(self) -> None:
-        """主调试窗口顶部应保留 HUD 横幅，四宫格画面从横幅下方开始。"""
+        """主调试窗口顶部应保留 HUD 横幅，五面板画面从横幅下方开始。"""
 
         left = np.full((109, 160, 3), 255, dtype=np.uint8)
         right = np.full((109, 160, 3), 255, dtype=np.uint8)
@@ -146,14 +146,14 @@ class DebugViewTest(unittest.TestCase):
 
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360)
         expected_banner_h = 10 * 24 + 22
-        row_h = (360 - expected_banner_h) // 2
+        row_h = 480 + 30
         label_y = expected_banner_h + row_h - 30
 
-        self.assertEqual(view.shape[:2], (360, 640))
+        self.assertEqual(view.shape[:2], (1282, 1920))
         self.assertLess(float(np.mean(view[5])), 20.0)
         self.assertLess(float(np.mean(view[expected_banner_h - 6])), 20.0)
-        self.assertGreater(float(np.mean(view[expected_banner_h + 8, 160])), 200.0)
-        self.assertLess(float(np.mean(view[label_y + 2, :320])), 50.0)
+        self.assertGreater(float(np.mean(view[expected_banner_h + 30, 160])), 200.0)
+        self.assertLess(float(np.mean(view[label_y + 2, :640])), 50.0)
 
     def test_pose_dashboard_panel_area_stays_stable_when_hud_lines_change(self) -> None:
         """主窗口 HUD 行数变化时，图像区域起点和尺寸不能跳动。"""
@@ -185,8 +185,8 @@ class DebugViewTest(unittest.TestCase):
 
         self.assertLess(float(np.mean(normal[expected_banner_h - 6])), 20.0)
         self.assertLess(float(np.mean(verbose[expected_banner_h - 6])), 20.0)
-        self.assertGreater(float(np.mean(normal[expected_banner_h + 8, 160])), 200.0)
-        self.assertGreater(float(np.mean(verbose[expected_banner_h + 8, 160])), 200.0)
+        self.assertGreater(float(np.mean(normal[expected_banner_h + 30, 160])), 200.0)
+        self.assertGreater(float(np.mean(verbose[expected_banner_h + 30, 160])), 200.0)
 
     def test_pose_dashboard_depth_panel_preserves_depth_color_inside_mask(self) -> None:
         """主窗口 depth 面板只画细轮廓，不用半透明填充覆盖物体内部深度颜色。"""
@@ -198,8 +198,8 @@ class DebugViewTest(unittest.TestCase):
         view = tile_pose_depth_dashboard(diagnostics, None, width=640, height=360, min_depth=0.1, max_depth=5.0)
         expected_depth = colorize_depth(depth, min_depth=0.1, max_depth=5.0)
         expected_banner_h = 10 * 24 + 22
-        row_h = (360 - expected_banner_h) // 2
-        sample_y = expected_banner_h + row_h + 8
+        row_h = 480 + 30
+        sample_y = expected_banner_h + row_h + 180
         sample_x = 160
 
         np.testing.assert_allclose(view[sample_y, sample_x], expected_depth[0, 0], atol=1)
@@ -225,7 +225,7 @@ class DebugViewTest(unittest.TestCase):
             put_text.side_effect = lambda img, text, *args, **kwargs: texts.append(str(text)) or img
             view = make_score_debug_view(diagnostics, None, width=720, height=480)
 
-        self.assertEqual(view.shape[:2], (480, 720))
+        self.assertEqual(view.shape[:2], (1236, 2008))
         self.assertTrue(any("RGB: green render / cyan Cutie" in text for text in texts))
         self.assertTrue(any("render RGB on checkerboard" in text for text in texts))
         self.assertTrue(any("LAB residual on RGB ZNCC=" in text for text in texts))
@@ -280,7 +280,7 @@ class DebugViewTest(unittest.TestCase):
 
         view = make_score_debug_view(diagnostics, None, width=720, height=480)
         banner_h = 5 * 24 + 3 * 20 + 36
-        row_h = (480 - banner_h) // 2
+        row_h = 480 + 30
         label_y = banner_h + row_h - 30
 
         self.assertGreater(float(np.mean(view[banner_h + 12, 40:200])), 30.0)
@@ -303,7 +303,7 @@ class DebugViewTest(unittest.TestCase):
 
         view = make_score_debug_view(diagnostics, None, width=720, height=480)
         banner_h = 5 * 24 + 3 * 20 + 36
-        sample_bgr = view[banner_h + 36, 120]
+        sample_bgr = view[banner_h + 240, 320]
 
         np.testing.assert_allclose(sample_bgr, np.array([220, 96, 32], dtype=np.uint8), atol=3)
 
@@ -319,10 +319,10 @@ class DebugViewTest(unittest.TestCase):
 
         view = make_score_debug_view(diagnostics, None, width=720, height=480)
         banner_h = 5 * 24 + 3 * 20 + 36
-        row_h = (480 - banner_h) // 2
-        panel_image_h = row_h - 30
+        row_h = 480 + 30
+        panel_image_h = 480
         fitted_size = panel_image_h
-        image_x = 240 + (240 - fitted_size) // 2
+        image_x = 640 + (640 - fitted_size) // 2
         panel_y = banner_h + row_h
         outside_pixel = view[panel_y + 10, image_x + 10].astype(np.int16)
         inside_pixel = view[panel_y + fitted_size // 2, image_x + fitted_size // 2].astype(np.int16)
@@ -333,7 +333,7 @@ class DebugViewTest(unittest.TestCase):
     def test_top_banner_long_text_is_clipped_to_window_width(self) -> None:
         """顶部横幅长文本应被截短，避免横向溢出覆盖窗口右侧内容。"""
 
-        long_error = "x" * 260
+        long_error = "x" * 500
         diagnostics = FrameDiagnostics(
             failure_reason="failure-" + long_error,
             segmenter_error="segmenter-" + long_error,
@@ -356,16 +356,16 @@ class DebugViewTest(unittest.TestCase):
 
         self.assertTrue(clipped)
         self.assertTrue(
-            all(_cv2_text_width(text, 0.55, 1) <= 640 - 24 for text in clipped),
+            all(_cv2_text_width(text, 0.55, 1) <= 2008 - 24 for text in clipped),
             clipped,
         )
 
     def test_score_debug_view_default_size_matches_config(self) -> None:
-        """评分窗口工具默认尺寸应与 defaults.toml 中的 960x800 保持一致。"""
+        """评分窗口应容纳六张 640x480 子图及固定 HUD。"""
 
         view = make_score_debug_view(FrameDiagnostics(), None)
 
-        self.assertEqual(view.shape[:2], (800, 960))
+        self.assertEqual(view.shape[:2], (1236, 2008))
 
 
 if __name__ == "__main__":

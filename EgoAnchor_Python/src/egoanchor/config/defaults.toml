@@ -160,17 +160,18 @@ wait_log_interval_s = 3.0 # 尚未收到 stereo 时等待日志输出间隔，�
 [demo.pose]
 debug_window_name = "EgoAnchor Pose Debug" # Python 本地 pose debug 主窗口名。
 score_window_name = "EgoAnchor Score Debug" # Python 本地评分与渲染质量调试窗口名。
-debug_window_width = 1280 # pose debug 主窗口固定宽度，单位像素。
-debug_window_height = 720 # pose debug 主窗口固定高度，单位像素。
+debug_window_width = 1920 # pose debug 主窗口宽度，三列子图各占 640 像素。
+debug_window_height = 1282 # pose debug 主窗口高度，包含 262 像素 HUD 与两行 480 像素子图和标签条。
 debug_window_max_fps = 20.0 # pose debug 主窗口最高重绘帧率；只限制 OpenCV 合成显示，不限制 pipeline 推理。
-score_window_width = 960 # 评分调试窗口固定宽度，单位像素。
-score_window_height = 800 # 评分调试窗口固定高度，单位像素；顶部预留诊断文本横幅，避免遮挡颜色/深度 2x3 诊断矩阵。
-score_window_max_fps = 6.0 # 评分调试窗口最高重绘帧率；LAB/深度残差矩阵较重，默认降频避免窗口卡顿。
+score_window_width = 2008 # 评分调试窗口宽度；前两列各 640 像素，第三列为 640 像素原图加 88 像素独立色标。
+score_window_height = 1236 # 评分调试窗口高度，包含 216 像素 HUD 与两行 480 像素子图和标签条。
 snapshot_output_dir = "data/debug/snapshots" # 按 S 保存高分辨率 PNG 的目录，相对 EgoAnchor_Python 项目根目录。
-snapshot_pose_width = 2560 # 保存的 pose dashboard 宽度，单位像素；独立于屏幕窗口尺寸，便于后续裁剪子图。
-snapshot_pose_height = 1280 # 保存的 pose dashboard 高度，单位像素；容纳顶部 HUD 和两行接近原始分辨率的面板。
-snapshot_score_width = 1920 # 保存的 VCD/score dashboard 宽度，单位像素；每列 640 像素以保留诊断源图细节。
-snapshot_score_height = 1240 # 保存的 VCD/score dashboard 高度，单位像素；容纳顶部 HUD 和两行接近原始分辨率的面板。
+snapshot_pose_width = 1920 # 保存的 pose dashboard 宽度，单位像素；五张子图保持 640x480。
+snapshot_pose_height = 1282 # 保存的 pose dashboard 高度，单位像素；包含 HUD、两行子图与标签条。
+snapshot_score_width = 2008 # 保存的 VCD/score dashboard 宽度，单位像素；第三列额外保留 88 像素独立色标。
+snapshot_score_height = 1236 # 保存的 VCD/score dashboard 高度，单位像素；包含 HUD、两行子图与标签条。
+video_output_dir = "data/debug/videos" # 按 V 录制 11 路无损调试视频的根目录，每次录制创建独立时间戳子目录。
+video_fps = 10.0 # 全部调试视频统一帧率；录制期间每个 Pose 帧都从同一 pipeline 输出生成同期 mask 与 VCD。
 wait_log_interval_s = 3.0 # 无输入或缺少 camera_info 时等待日志输出间隔，单位秒。
 
 # ============================================================================

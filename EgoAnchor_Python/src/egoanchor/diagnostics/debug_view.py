@@ -11,8 +11,6 @@ from egoanchor.perception import PoseObservation
 from egoanchor.reliability import ReprojectionChecker, ReprojectionDiffMaps
 from egoanchor.utils import clamp01
 
-from .image_utils import fit_to_size, stack_stereo
-
 if TYPE_CHECKING:
     from egoanchor.perception import FrameDiagnostics
 
@@ -25,6 +23,15 @@ SCORE_HUD_LINE_COUNT = 5
 
 SCORE_BAR_COUNT = 3
 """评分 debug 横幅中的 V/C/D 子分条数量。"""
+
+PANEL_WIDTH = 640
+"""调试窗口每个子图的固定显示宽度。"""
+
+PANEL_HEIGHT = 480
+"""调试窗口每个子图的固定显示高度。"""
+
+HEATMAP_LEGEND_WIDTH = 88
+"""VCD 残差对比图右侧独立色标的固定宽度。"""
 
 
 def colorize_depth(depth: np.ndarray | None, min_depth: float = 0.1, max_depth: float = 5.0) -> np.ndarray:
@@ -187,6 +194,7 @@ def _paste_labeled_panel(
     panel_h = max(int(height), 1)
     caption_h = min(max(int(label_h), 0), max(panel_h - 1, 0))
     image_h = max(panel_h - caption_h, 1)
+    # 布局层已经保证目标格不小于源图；此处仅对较小图像做放大和留白。
     fitted = _fit_to_size(panel, panel_w, image_h, background_color)
     canvas[y : y + image_h, x : x + panel_w] = fitted
     if caption_h <= 0:
@@ -220,10 +228,8 @@ def _put_caption_label(canvas: np.ndarray, label: str, x: int, y: int, max_width
 
 
 def _fit_to_size(image: np.ndarray, width: int, height: int, background_color: tuple[int, int, int]) -> np.ndarray:
-    """缩放 panel 并用指定背景填充 letterbox 区域。"""
+    """等比例适配 panel，并用背景填充多余区域。"""
 
-    if tuple(background_color) == (0, 0, 0):
-        return fit_to_size(image, width, height)
     target_width = max(int(width), 1)
     target_height = max(int(height), 1)
     scale = min(target_width / max(image.shape[1], 1), target_height / max(image.shape[0], 1))
@@ -247,16 +253,8 @@ def make_score_debug_view(
 ) -> np.ndarray:
     """构建独立 reliability / render quality 调试窗口。"""
 
-    canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
-    lines = _fit_banner_lines(_score_debug_lines(diagnostics, observation), SCORE_HUD_LINE_COUNT, max(canvas.shape[1] - 24, 1))
-    banner_h = min(_score_banner_height(), max(canvas.shape[0] - 2, 1))
-    panel_area_h = max(canvas.shape[0] - banner_h, 2)
-    col_w = max(canvas.shape[1] // 3, 1)
-    row_h = max(panel_area_h // 2, 1)
-    right_w = max(canvas.shape[1] - col_w * 2, 1)
-    bottom_h = max(panel_area_h - row_h, 1)
     diff_maps = _reprojection_diff_maps(diagnostics)
-    panels = [
+    panel_images = [
         (
             _observed_rgb_contour_panel(
                 diagnostics.render_quality_observed_rgb,
@@ -264,10 +262,6 @@ def make_score_debug_view(
                 diagnostics.render_quality_observed_mask,
             ),
             "RGB: green render / cyan Cutie",
-            0,
-            banner_h,
-            col_w,
-            row_h,
         ),
         (
             _render_projection_panel(
@@ -275,18 +269,10 @@ def make_score_debug_view(
                 diagnostics.render_quality_render_mask,
             ),
             "render RGB on checkerboard",
-            col_w,
-            banner_h,
-            col_w,
-            row_h,
         ),
         (
             _lab_residual_panel(diff_maps, diagnostics.render_quality_observed_rgb),
             _lab_residual_label(diff_maps),
-            col_w * 2,
-            banner_h,
-            right_w,
-            row_h,
         ),
         (
             _depth_map_panel(
@@ -297,10 +283,6 @@ def make_score_debug_view(
                 (255, 255, 0),
             ),
             "FFS observed depth",
-            0,
-            banner_h + row_h,
-            col_w,
-            bottom_h,
         ),
         (
             _render_depth_projection_panel(
@@ -310,10 +292,6 @@ def make_score_debug_view(
                 max_depth,
             ),
             "render projected depth",
-            col_w,
-            banner_h + row_h,
-            col_w,
-            bottom_h,
         ),
         (
             _depth_residual_panel(
@@ -324,12 +302,18 @@ def make_score_debug_view(
                 diagnostics.render_quality_observed_rgb,
             ),
             "depth diff: blue aligned / red large",
-            col_w * 2,
-            banner_h + row_h,
-            right_w,
-            bottom_h,
         ),
     ]
+    col_w = PANEL_WIDTH
+    right_w = PANEL_WIDTH + HEATMAP_LEGEND_WIDTH
+    row_h = PANEL_HEIGHT + 30
+    bottom_h = PANEL_HEIGHT + 30
+    banner_h = _score_banner_height()
+    canvas_w = max(int(width), col_w * 2 + right_w)
+    canvas_h = max(int(height), banner_h + row_h + bottom_h)
+    canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+    lines = _fit_banner_lines(_score_debug_lines(diagnostics, observation), SCORE_HUD_LINE_COUNT, max(canvas_w - 24, 1))
+    panels = [(panel_images[0][0], panel_images[0][1], 0, banner_h, col_w, row_h), (panel_images[1][0], panel_images[1][1], col_w, banner_h, col_w, row_h), (panel_images[2][0], panel_images[2][1], col_w * 2, banner_h, right_w, row_h), (panel_images[3][0], panel_images[3][1], 0, banner_h + row_h, col_w, bottom_h), (panel_images[4][0], panel_images[4][1], col_w, banner_h + row_h, col_w, bottom_h), (panel_images[5][0], panel_images[5][1], col_w * 2, banner_h + row_h, right_w, bottom_h)]
     for panel, label, x, y, panel_w, panel_h in panels:
         _paste_labeled_panel(canvas, panel, label, x, y, panel_w, panel_h, background_color=(42, 42, 42))
 
@@ -527,16 +511,16 @@ def _append_heatmap_legend(
     low_label: str,
     high_label: str,
 ) -> np.ndarray:
-    """在热力图右侧追加竖向色标，说明冷色到热色的数值含义。"""
+    """在热力图右侧追加独立色标，不挤占或横向压缩原图。"""
 
-    image = np.asarray(image_bgr, dtype=np.uint8)
+    image = np.asarray(image_bgr, dtype=np.uint8).copy()
     height = max(int(image.shape[0]), 1)
-    legend_w = 88
-    bar_w = 14
-    pad = 8
+    legend_w = HEATMAP_LEGEND_WIDTH
+    pad = min(8, max(1, legend_w // 8))
+    bar_w = min(14, max(1, legend_w - pad))
     legend = np.full((height, legend_w, 3), 34, dtype=np.uint8)
-    bar_h = max(height - 36, 12)
-    y0 = max((height - bar_h) // 2, 4)
+    bar_h = min(height, max(min(height - 36, height - 8), 4))
+    y0 = max((height - bar_h) // 2, 0)
     x0 = pad
     gradient = np.linspace(255, 0, bar_h, dtype=np.uint8).reshape(bar_h, 1)
     bar = cv2.applyColorMap(np.repeat(gradient, bar_w, axis=1), colormap)
@@ -696,15 +680,10 @@ def tile_pose_depth_dashboard(
     min_depth: float = 0.1,
     max_depth: float = 5.0,
 ) -> np.ndarray:
-    """构建四宫格 pose debug dashboard。"""
+    """构建包含双目、mask、depth 和 pose 的五面板 debug dashboard。"""
 
-    canvas = np.zeros((max(int(height), 1), max(int(width), 1), 3), dtype=np.uint8)
-    lines = _fit_banner_lines(_hud_lines(observation, diagnostics), POSE_HUD_LINE_COUNT, max(canvas.shape[1] - 28, 1))
-    banner_h = min(_pose_banner_height(), max(canvas.shape[0] - 2, 1))
-    panel_area_h = max(canvas.shape[0] - banner_h, 2)
     left = diagnostics.left_bgr if diagnostics.left_bgr is not None else np.zeros((240, 320, 3), dtype=np.uint8)
     right = diagnostics.right_bgr if diagnostics.right_bgr is not None else np.zeros_like(left)
-    stereo = stack_stereo(left, right)
     mask_view = overlay_mask_contour(left, diagnostics.mask)
     if diagnostics.segmentation_overlay_bgr is not None:
         seg = diagnostics.segmentation_overlay_bgr
@@ -719,15 +698,20 @@ def tile_pose_depth_dashboard(
     if w > 0 and h > 0:
         cv2.rectangle(pose_view, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 255), 2)
 
-    cell_w = max(canvas.shape[1] // 2, 1)
-    right_w = max(canvas.shape[1] - cell_w, 1)
-    row_h = max(panel_area_h // 2, 1)
-    bottom_h = max(panel_area_h - row_h, 1)
+    banner_h = _pose_banner_height()
+    cell_w = PANEL_WIDTH
+    row_h = PANEL_HEIGHT + 30
+    bottom_h = PANEL_HEIGHT + 30
+    canvas_w = max(int(width), cell_w * 3)
+    canvas_h = max(int(height), banner_h + row_h + bottom_h)
+    canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+    lines = _fit_banner_lines(_hud_lines(observation, diagnostics), POSE_HUD_LINE_COUNT, max(canvas_w - 28, 1))
     panels = [
-        (stereo, "stereo", 0, banner_h, cell_w, row_h),
-        (mask_view, "mask", cell_w, banner_h, right_w, row_h),
+        (left, "left", 0, banner_h, cell_w, row_h),
+        (right, "right", cell_w, banner_h, cell_w, row_h),
+        (mask_view, "mask", cell_w * 2, banner_h, cell_w, row_h),
         (depth_view, "depth", 0, banner_h + row_h, cell_w, bottom_h),
-        (pose_view, "pose", cell_w, banner_h + row_h, right_w, bottom_h),
+        (pose_view, "pose", cell_w, banner_h + row_h, cell_w, bottom_h),
     ]
     for panel, label, panel_x, panel_y, panel_w, panel_h in panels:
         _paste_labeled_panel(canvas, panel, label, panel_x, panel_y, panel_w, panel_h)

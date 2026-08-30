@@ -785,7 +785,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://prefix.dev/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
       - pypi: ./Cutie
-      - pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+22a6a30-cp314-cp314-win_amd64.whl
+      - pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+fb693b6-cp314-cp314-win_amd64.whl
       - pypi: git+https://github.com/cheind/py-thin-plate-spline#f6995795397118b7d0ac01aecd3f39ffbfad9dee
       - pypi: git+https://github.com/ultralytics/CLIP.git#f5e9fc6a896e66309f07747bd607704f6c3d282a
       - pypi: https://download-r2.pytorch.org/whl/cu130/torch-2.12.1%2Bcu130-cp314-cp314-win_amd64.whl
@@ -9520,9 +9520,9 @@ packages:
   - requests
   - pyqtdarktheme
   requires_python: '>=3.8'
-- pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+22a6a30-cp314-cp314-win_amd64.whl
+- pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0+fb693b6-cp314-cp314-win_amd64.whl
   name: open3d
-  version: 0.19.0+22a6a30
+  version: 0.19.0+fb693b6
   requires_dist:
   - numpy>=1.18.0
   - dash>=2.6.0
@@ -9532,6 +9532,15 @@ packages:
   - configargparse
   - pywinpty==2.0.2 ; python_full_version == '3.6.*' and sys_platform == 'win32'
   - ipywidgets>=8.0.4
+  - addict ; extra == 'ml'
+  - pillow>=9.3.0 ; extra == 'ml'
+  - matplotlib>=3 ; extra == 'ml'
+  - numpy>1.18 ; extra == 'ml'
+  - pandas>=1.0 ; extra == 'ml'
+  - pyyaml>=5.4.1 ; extra == 'ml'
+  - scikit-learn>=0.21 ; extra == 'ml'
+  - tqdm ; extra == 'ml'
+  - pyquaternion ; extra == 'ml'
   requires_python: '>=3.10'
 - pypi: direct+https://github.com/isl-org/Open3D/releases/download/main-devel/open3d-0.19.0-cp314-cp314-manylinux_2_35_x86_64.whl
   name: open3d

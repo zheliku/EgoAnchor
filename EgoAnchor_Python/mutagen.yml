@@ -35,11 +35,56 @@ sync:
   # ============================ SOURCE PUSH ============================
   # Local -> remote, one direction only. Remote is a replica of local.
 
-  # push-5090:
-  #   alpha: "."
-  #   beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
-  #   mode: one-way-replica
-  #   ignore:
+  push-5090:
+    alpha: "."
+    beta: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python"
+    mode: one-way-replica
+    ignore:
+        paths: &source_ignore_5090
+        # --- python / tooling caches ---
+        - "*.pyc"
+        - "*.pyo"
+        - "__pycache__/"
+        - ".venv/"
+        - "/.pixi/" # ~17 GB conda/pixi env — rebuilt on remote via `pixi install`
+        - "/.mypy_cache/"
+        - "/.pycache_compile/"
+        - "/build/"
+        - "/dist/"
+        - "/wheels/"
+        - "*.egg-info/"
+        - "/logs/" # SLURM stdout/stderr — stays per-machine
+        # --- pulled-back eval logs are remote-authoritative; never push them out
+        #     (replica would delete each box's own fresh eval runs) ---
+        - "/data/eval/"
+        # --- model weights (rebuilt/downloaded on remote) ---
+        - "*.pt"
+        - "*.pth"
+        - "*.onnx"
+        - "*.engine"
+        - "*.plan"
+        - "/weights/"
+        - "/Cutie/weights/"
+        - "/FoundationPose/weights/"
+        - "/FoundationPose/demo_data/"
+        - "/sam3/assets/sam3_ckpt/"
+        # --- generated runtime outputs ---
+        - "/Fast-FoundationStereo/output_docker/"
+        - "/data/debug/"
+        - "/data/runtime_logs/" # per-machine debug logs; not collected
+        - "/data/online/*/output/"
+        - "/Calibration/cache/"
+        # --- misc large downloads present only on remote ---
+        - "*.tar.gz"
+        - "/nats-server-*"
+        # --- remote-side build artifacts (platform-specific, never sync) ---
+        - "/FoundationPose/mycpp/build/"
+        - "*.o"
+        - "*.so"
+        - "a.out"
+        # --- the sync config itself stays local-only ---
+        - "/mutagen.yml"
+        - "/mutagen.yml.lock"
       
 
   # push-4090:
@@ -74,7 +119,7 @@ sync:
     mode: one-way-replica
     ignore:
       # paths: *source_ignore
-      paths: &source_ignore
+      paths: &source_ignore_5080
         # --- python / tooling caches ---
         - "*.pyc"
         - "*.pyo"
@@ -131,10 +176,10 @@ sync:
   #   beta: "./data/eval"
   #   mode: one-way-safe
 
-  # logs-5090:
-  #   alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
-  #   beta: "./data/eval"
-  #   mode: one-way-safe
+  logs-5090:
+    alpha: "BNU@172.24.247.32:D:/Project/EgoAnchor_Python/data/eval"
+    beta: "./data/eval"
+    mode: one-way-safe
 
   logs-5080:
     alpha: "gjw@192.168.3.9:D:/Projects/EgoAnchor_Python/data/eval"

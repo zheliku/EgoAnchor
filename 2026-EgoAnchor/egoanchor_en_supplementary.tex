@@ -16,6 +16,7 @@
 \usepackage{times}
 \renewcommand*\ttdefault{txtt}
 \usepackage{mathptmx}
+\usepackage{makecell}
 
 \usepackage{amsmath}
 \usepackage{amssymb}
@@ -166,7 +167,7 @@ reference-motion ranges are the full recorded ranges of instantaneous linear/ang
 speeds across each task.}\label{tab:supp-exp1-sampling}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-Sequence family & $n$ & \shortstack{Duration\\(s)} & \shortstack{Linear\\speed\\(m/s)} & \shortstack{Angular\\speed\\($^\circ$/s)} \\
+Sequence family & $n$ & \makecell{Duration\\(s)} & \makecell{Linear\\speed\\(m/s)} & \makecell{Angular\\speed\\($^\circ$/s)} \\
 \midrule
 Static head motion & 12 & 79.157 & 0--0 & 0--0 \\
 Start--stop 6-DoF & 12 & 95.293 & 0--0.923 & 0--374.3 \\
@@ -277,7 +278,7 @@ items and five standardized-scale outcomes form separate Holm--Bonferroni famili
 \setlength{\tabcolsep}{2pt}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-Outcome & \shortstack{One-Euro /\\EgoAnchor\,$\uparrow$} & $W$ & $p_{\mathrm{adj}}$ & \shortstack{$r_{\mathrm{rb}}$\\{[}95\% CI{]}} \\
+\makecell{Outcome} & \makecell{One-Euro /\\EgoAnchor\,$\uparrow$} & $W$ & $p_{\mathrm{adj}}$ & \makecell{$r_{\mathrm{rb}}$\\{[}95\% CI{]}} \\
 \midrule
 \multicolumn{5}{@{}l}{\textit{Phase-specific anchoring behavior}} \\
 Stationary stability & 4.33 / 5.00 & 13.5 & $<.001$ & .90 [.69, 1.00] \\

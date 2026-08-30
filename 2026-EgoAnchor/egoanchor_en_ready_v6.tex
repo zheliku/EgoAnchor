@@ -15,6 +15,7 @@
 \hyphenation{Ego-Anchor}
 \usepackage{array}
 \usepackage{booktabs}
+\usepackage{makecell}
 \usepackage{multirow}
 \usepackage{tabularx}
 \usepackage{xcolor}
@@ -420,7 +421,7 @@ We report results using the metrics in Sec.~\ref{sec:exp1-design}. Tables~\ref{t
 \label{tab:exp1-static}
 \begin{tabular}{@{}lccc@{}}
 \toprule
-Method & \shortstack{Head-motion\\coupling\,$\downarrow$\\mm/$^\circ$} & \shortstack{Registration\\error\,$\downarrow$\\mm/$^\circ$} & \shortstack{Static jitter\,$\downarrow$\\mm/$^\circ$} \\
+Method & \makecell{Head-motion\\coupling $\downarrow$\\mm/$^\circ$} & \makecell{Registration\\error $\downarrow$\\mm/$^\circ$} & \makecell{\\Static jitter $\downarrow$\\mm/$^\circ$} \\
 \midrule
 Arrival   & 43.67/6.49 & 44.31/9.65 & 11.70/2.98 \\
 Capture   & 13.03/5.40 & 17.54/8.26 & 4.30/2.60 \\
@@ -441,7 +442,7 @@ Table~\ref{tab:exp1-static} shows that capture-time composition reduces head-mot
 \setlength{\tabcolsep}{2pt}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-Method & \shortstack{Effective\\latency\,$\downarrow$\\ms} & \shortstack{LA-RMSE\,$\downarrow$\\mm/$^\circ$} & \shortstack{CT-RMSE\,$\downarrow$\\mm/$^\circ$} & \shortstack{Residual\\jitter\,$\downarrow$\\mm/$^\circ$} \\
+Method & \makecell{Effective\\latency $\downarrow$\\ms} & \makecell{\\LA-RMSE $\downarrow$\\mm/$^\circ$} & \makecell{\\CT-RMSE $\downarrow$\\mm/$^\circ$} & \makecell{Residual\\jitter $\downarrow$\\mm/$^\circ$} \\
 \midrule
 Arrival   & \textbf{202.5}/\textbf{255.0} & 18.57/6.09 & \textbf{84.74}/25.44 & 41.08/10.40 \\
 Capture   & 255.0/257.5 & 17.14/5.84 & 103.63/\textbf{25.35} & 39.69/10.26 \\
@@ -463,7 +464,7 @@ Current-time error shows the opposite tradeoff. Arrival has the lowest effective
 \label{tab:exp1-transition}
 \begin{tabular}{@{}lcc@{}}
 \toprule
-Method & \shortstack{Occlusion\\recovery error\,$\downarrow$\\mm/$^\circ$} & \shortstack{Motion-response\\latency\,$\downarrow$\\ms} \\
+Method & \makecell{Occlusion\\recovery error $\downarrow$\\mm/$^\circ$} & \makecell{Motion-response\\latency $\downarrow$\\ms} \\
 \midrule
 Arrival   & 18.23/18.39 & \textbf{157.0} \\
 Capture   & 16.93/18.38 & 263.8 \\
@@ -561,7 +562,7 @@ The current system relies on an external high-performance GPU workstation for pe
 
 We present EgoAnchor, an egocentric system for zero-shot dynamic object anchoring in passthrough mixed reality. The system converts asynchronous camera-frame observations into world-frame states at image capture time and maintains a reliable object state for the rendering pipeline. This runtime process transforms discrete and low-rate visual estimates into continuous and stable object anchors that support recovery from occlusion. Controlled benchmarks and ablations show that EgoAnchor reduces static registration error, occlusion-recovery error, and geometric trajectory residuals relative to the baselines, but increases motion-response latency. A within-subject study with 24 participants further shows higher ratings for real--virtual integration, interaction trust, and willingness to rely on the system.
 
-Transforming visually estimated poses into usable object-level spatial anchors requires more than single-frame pose accuracy; it requires systematic runtime modeling of temporal semantics, observation reliability, and the state lifecycle. With continued advances in open-vocabulary foundation models, rapid 3D generation, and mobile computing, coordinated perception--runtime architectures may enable high-fidelity dynamic anchoring for a broader range of everyday objects and natural mixed-reality interaction scenarios.
+In summary, EgoAnchor demonstrates the feasibility of transforming zero-shot visual pose estimates into stable and continuous dynamic anchors for everyday objects in PMR.
 
 \acknowledgments{
   This work is supported by the National Natural Science Foundation of China (Grant Nos. 62377004 and 62671062). OpenAI ChatGPT was used to assist with English translation and language editing throughout the manuscript. The authors reviewed and verified all AI-assisted revisions.

@@ -115,8 +115,8 @@ class TrackingServerAppTest(unittest.TestCase):
 
         self.assertEqual(pose_path.parent.name, "snapshots")
         self.assertIn("frame-42", pose_path.name)
-        self.assertEqual(pose_image.shape[:2], (180, 320))
-        self.assertEqual(score_image.shape[:2], (240, 300))
+        self.assertEqual(pose_image.shape[:2], (1282, 1920))
+        self.assertEqual(score_image.shape[:2], (1236, 2008))
 
     def test_tracking_window_disabled_skips_opencv_window_calls(self) -> None:
         """关闭 tracking window 时不应调用 OpenCV 窗口 API，便于 Ubuntu headless 运行。"""
@@ -146,7 +146,7 @@ class TrackingServerAppTest(unittest.TestCase):
             patch.object(app_globals["SubjectRegistry"], "load", return_value=object()),
             patch.object(app_globals["cv2"], "imshow") as imshow,
             patch.object(app_globals["cv2"], "waitKey") as wait_key,
-            patch.dict(app_globals, {"_create_fixed_window": create_window}),
+            patch.dict(app_globals, {"_create_image_window": create_window}),
         ):
             with self.assertRaises(_StopLoop):
                 run_tracking_server()
@@ -157,8 +157,8 @@ class TrackingServerAppTest(unittest.TestCase):
         self.assertEqual(fake_runtime.tick_return_debug_values, [False])
         self.assertTrue(fake_runtime.closed)
 
-    def test_score_debug_rendering_is_rate_limited_independently(self) -> None:
-        """评分窗口应按独立帧率上限重绘，避免每帧重复构建重型诊断矩阵。"""
+    def test_score_debug_rendering_matches_pose_frames(self) -> None:
+        """评分窗口必须与 Pose 窗口逐帧同源，不使用独立刷新频率。"""
 
         fake_runtime = _SequenceRuntime(frame_count=3)
         cfg = SimpleNamespace(
@@ -172,7 +172,6 @@ class TrackingServerAppTest(unittest.TestCase):
                     debug_window_max_fps=0.0,
                     score_window_width=320,
                     score_window_height=240,
-                    score_window_max_fps=5.0,
                     wait_log_interval_s=999.0,
                 )
             ),
@@ -192,7 +191,7 @@ class TrackingServerAppTest(unittest.TestCase):
                     "tile_pose_depth_dashboard": dashboard,
                     "make_score_debug_view": score_view,
                     "make_pose_waiting_image": lambda _width, _height, _title: np.zeros((240, 320, 3), dtype=np.uint8),
-                    "_create_fixed_window": Mock(),
+                    "_create_image_window": Mock(),
                     "_destroy_window_if_created": Mock(),
                 },
             ),
@@ -205,9 +204,62 @@ class TrackingServerAppTest(unittest.TestCase):
                 run_tracking_server()
 
         self.assertEqual(dashboard.call_count, 3)
-        self.assertEqual(score_view.call_count, 1)
+        self.assertEqual(score_view.call_count, 3)
         self.assertEqual(fake_runtime.tick_return_debug_values, [True, True, True, True])
         self.assertTrue(fake_runtime.closed)
+
+    def test_recording_forces_vcd_from_each_pose_output(self) -> None:
+        """录制期间每个 Pose 输出都必须生成同源 VCD，不能复用上一帧评分画面。"""
+
+        fake_runtime = _SequenceRuntime(frame_count=3)
+        cfg = SimpleNamespace(
+            paths=SimpleNamespace(subjects_path="subjects.v1.json"),
+            demo=SimpleNamespace(
+                pose=SimpleNamespace(
+                    debug_window_name="debug",
+                    score_window_name="score",
+                    debug_window_width=320,
+                    debug_window_height=240,
+                    debug_window_max_fps=0.0,
+                    score_window_width=320,
+                    score_window_height=240,
+                    video_fps=10.0,
+                    wait_log_interval_s=999.0,
+                )
+            ),
+            pipeline=SimpleNamespace(depth=SimpleNamespace(min_depth=0.1, max_depth=5.0)),
+            debug=SimpleNamespace(enable_tracking_window=True),
+        )
+        app_globals = run_tracking_server.__globals__
+        recorder = SimpleNamespace(active=True, submit=Mock(), stop=Mock(), start=Mock())
+        dashboard = Mock(return_value=np.zeros((240, 320, 3), dtype=np.uint8))
+        score_view = Mock(return_value=np.zeros((240, 320, 3), dtype=np.uint8))
+
+        with (
+            patch.dict(
+                app_globals,
+                {
+                    "load_config": lambda _path, object_name=None: cfg,
+                    "TrackingRuntime": lambda _cfg, _subjects: fake_runtime,
+                    "DebugVideoRecorder": lambda *_args, **_kwargs: recorder,
+                    "tile_pose_depth_dashboard": dashboard,
+                    "make_score_debug_view": score_view,
+                    "make_pose_waiting_image": lambda _width, _height, _title: np.zeros((240, 320, 3), dtype=np.uint8),
+                    "_create_image_window": Mock(),
+                    "_destroy_window_if_created": Mock(),
+                },
+            ),
+            patch.object(app_globals["SubjectRegistry"], "load", return_value=object()),
+            patch.object(app_globals["cv2"], "imshow"),
+            patch.object(app_globals["cv2"], "waitKey", return_value=255),
+            patch.object(app_globals["time"], "perf_counter", side_effect=[100.0 + index * 0.01 for index in range(30)]),
+        ):
+            with self.assertRaises(_StopLoop):
+                run_tracking_server()
+
+        self.assertEqual(dashboard.call_count, 3)
+        self.assertEqual(score_view.call_count, 3)
+        self.assertEqual([call.args[0] for call in recorder.submit.call_args_list], ["pose", "vcd"] * 3)
 
 
 if __name__ == "__main__":
