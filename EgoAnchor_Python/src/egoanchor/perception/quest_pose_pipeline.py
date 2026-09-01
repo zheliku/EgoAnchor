@@ -52,7 +52,7 @@ def _pose_delta_metrics(current_pose: np.ndarray, previous_pose: np.ndarray | No
 
 
 class QuestPosePipeline:
-    """Quest object pose estimation pipeline。"""
+    """Quest 物体位姿估计流水线：串联语义分割、时序跟踪、立体深度与零样本位姿估计四个阶段。"""
 
     def __init__(
         self,

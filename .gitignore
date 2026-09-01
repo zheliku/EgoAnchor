@@ -1,6 +1,16 @@
 # Root-local editor state
 /.vscode/
 
+# AI 协作与本机工具的本地配置，不随仓库发布
+/.agents/
+/.claude/
+/.mcp.json
+/.superpowers/
+
+# IDE 生成的解决方案与编辑器配置（Unity/Visual Studio 每次重新生成）
+*.slnx
+/EgoAnchor_Unity/.vscode/
+
 # Python caches and repository-local scratch output
 __pycache__/
 *.py[cod]

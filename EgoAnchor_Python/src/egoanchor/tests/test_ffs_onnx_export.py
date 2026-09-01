@@ -72,6 +72,7 @@ class FfsOnnxExportTest(unittest.TestCase):
     """验证 ONNX artifact 命名契约，避免 build 任务生成文件名漂移。"""
 
     def test_artifact_tag_contains_export_parameters(self) -> None:
+        """artifact 标签必须完整携带导出参数，保证不同尺寸引擎不互相覆盖。"""
         module = _load_make_onnx_module()
 
         tag = module.build_artifact_tag(height=480, width=640, valid_iters=8, max_disp=192)
@@ -79,6 +80,7 @@ class FfsOnnxExportTest(unittest.TestCase):
         self.assertEqual(tag, "h480-w640-it8-md192")
 
     def test_onnx_names_use_artifact_tag(self) -> None:
+        """feature/post 两个 ONNX 文件名必须嵌入同一 artifact 标签。"""
         module = _load_make_onnx_module()
 
         feature_name, post_name = module.build_onnx_names("h480-w640-it4-md192")
@@ -87,6 +89,7 @@ class FfsOnnxExportTest(unittest.TestCase):
         self.assertEqual(post_name, "post_runner-h480-w640-it4-md192.onnx")
 
     def test_prepare_export_path_removes_existing_onnx_sidecar(self) -> None:
+        """导出前必须删除旧 .onnx 与 .onnx.data sidecar，避免 Windows 写入被占用文件。"""
         module = _load_make_onnx_module()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -101,6 +104,7 @@ class FfsOnnxExportTest(unittest.TestCase):
             self.assertFalse(data_path.exists())
 
     def test_fixed_shape_onnx_warning_filter_keeps_unrelated_warnings(self) -> None:
+        """固定 shape 导出的告警过滤器只吞 TracerWarning 命中行，其余告警照常上报。"""
         module = _load_make_onnx_module()
 
         with warnings.catch_warnings(record=True) as caught:

@@ -382,6 +382,9 @@ class ProtobufPublisher:
         self._failed = 0
         """本发布器发现的失败或丢弃数量。"""
 
+        self._counter_lock = threading.Lock()
+        """计数器互斥锁：publish 在 runtime 主线程递增，publish 协程在后台 loop 线程递增。"""
+
     @property
     def enabled(self) -> bool:
         """当前发布链路是否启用。"""
@@ -393,14 +396,17 @@ class ProtobufPublisher:
         """后台 NATS publish 已成功完成的消息数量。"""
 
         self._drain_completed_futures()
-        return self._published
+        with self._counter_lock:
+            return self._published
 
     @property
     def failed_count(self) -> int:
         """发布失败、连接失败或限流丢弃数量。"""
 
         self._drain_completed_futures()
-        return self._failed + self.client.connect_failed_count
+        with self._counter_lock:
+            failed = self._failed
+        return failed + self.client.connect_failed_count
 
     @property
     def pending_count(self) -> int:
@@ -430,12 +436,14 @@ class ProtobufPublisher:
             return False
         loop = self.client.loop
         if loop is None or not loop.is_running() or not self.client.is_connected:
-            self._failed += 1
+            with self._counter_lock:
+                self._failed += 1
             return False
 
         self._drain_completed_futures()
         if len(self._pending) >= self.max_pending_futures:
-            self._failed += 1
+            with self._counter_lock:
+                self._failed += 1
             return False
 
         payload = msg.SerializeToString()
@@ -448,9 +456,11 @@ class ProtobufPublisher:
 
         try:
             await self.client.publish(self.subject, payload)
-            self._published += 1
+            with self._counter_lock:
+                self._published += 1
         except Exception as exc:
-            self._failed += 1
+            with self._counter_lock:
+                self._failed += 1
             LOGGER.debug("publish 失败 subject=%s：%s", self.subject, exc)
 
     def _drain_completed_futures(self) -> None:

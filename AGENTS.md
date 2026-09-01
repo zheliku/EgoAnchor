@@ -391,7 +391,7 @@ Run 1 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`pytho
 - 论文图必须保留物体局部 XYZ 轴、顶部时间轴与纵向方法轴。离线投影必须从 runtime 配置指纹恢复 OpenCV GLB 到 Unity renderer 的对象局部基，不能把已含 anchor-local 补偿的显示根节点 pose 直接作用到原始 GLB；轮廓与 XYZ 轴必须共用 `K * P * C` 投影链。轮廓按三角面并集生成，不能交给 OpenCV 奇偶填充。首次使用某对象模型必须先用 `replay frame` 做像素贴合检查。
 - sidecar 必须保留默认与自定义 TOML、实际 mesh、严格校验模式、最终生效配置及其 SHA-256，以及最终行列、字体、`delta-t`、坐标轴、纹理后端与裁剪配置。
 - **该图只是二维定性示意**，必须显式标注，不得把像素偏移写成正式配对指标或替代 schema-v2 定量证据。
-- 论文当前用图：5 列，源 `replay_capture/20260723_125041_569_controller_right`（**独立的定性回放采集**，与实验一/二正式批次不同源），目标 `2026-EgoAnchor/figures/replay_grid.{png,pdf}`。单元宽度固定 320 px，裁剪比例 1:1；左侧行名水平排版，字号 60 px，时间轴字号 65 px，XYZ 标签 22 px；显示窗口为 sample id 395/425/455/485/515（0--5.00 s），逐方法数值标注由 TOML 中的 `mean_error_font_size_px` 控制（三项以 `rendered/grid/replay_grid.json` 侧车为准，该文件记录出图时的生效配置）。
+- 论文当前用图：5 列，源 `replay_capture/20260723_125041_569_controller_right`（**独立的定性回放采集**，与实验一/二正式批次不同源），目标 `2026-EgoAnchor/figures/replay_grid.{png,pdf}`。单元宽度固定 320 px，裁剪比例 1:1；左侧行名水平排版，行名/顶部列/时间轴字号 54 px、XYZ 标签 22 px（生效值以 `rendered/grid/replay_grid.json` 侧车为准，旧的 60/65 px 说法已过时）；显示窗口为 sample id 395/425/455/485/515（0--5.00 s），逐方法数值标注由 TOML 中的 `mean_error_font_size_px` 控制（三项以 `rendered/grid/replay_grid.json` 侧车为准，该文件记录出图时的生效配置）。
 - **配色（全文共享，唯一定义在 `egoanchor/visuals/__init__.py`，`qualitative_replay.toml` 的 `method_colors_hex` 必须逐项一致）**：Arrival `#4C78A8`、Capture `#F28E2B`、One-Euro `#59A14F`、EgoAnchor `#E15759`。**已知可访问性缺陷**：该绿/红对在绿色盲（deutan）模拟下几乎无法区分；实验三图中两方法依靠固定位置、点形、箱体边框和图例区分而非仅靠色相。若要修正必须**全文一次性**换成同一套色盲安全配色（Okabe-Ito：One-Euro `#0072B2`、EgoAnchor `#E69F00`、Arrival `#009E73`、Capture `#CC79A7`）并同步重跑实验一/二论文图与定性 grid，**不得只改实验三**而让同一方法在不同图里换色。
 
 ### 实验三（冻结设计，改前必读权威文件）
@@ -415,12 +415,13 @@ Run 1 原始日志固定为 `manifest.json`、`python_candidates.jsonl`、`pytho
 
 ## Python 关键约束
 
-入口 `EgoAnchor_Python/src/run_server.py` -> `egoanchor.app.tracking_server`；配置在 `src/egoanchor/config/defaults.toml` 与 `objects.toml`。
+入口 `EgoAnchor_Python/src/run_server.py` -> `egoanchor.app.tracking_server`；配置唯一入口是 `src/egoanchor/config/defaults.toml`（物体差异以 `[objects.<name>.*]` 表与默认配置同住该文件，**没有独立 objects.toml**，旧记录里的 objects.toml 已过时）。
 
 - 默认分割器 `yoloe26`；SAM3 只能显式启用。
 - 评估模式写 `data/eval/<session_id>/` 并通过 header 与 Unity 配对；普通模式写 `data/runtime_logs/`。
 - VCD 目标公式 `R = V * G_CD`，其中 `V = |M_obs ∩ M_rnd| / |M_rnd|`；旧面积比实现不得进入正式结果。`color_reprojection < 0` 表示颜色信号不可用，应从几何核排除，**不是坏 pose**。深度评分保留绝对与结构分量 `D = (1-alpha) D_abs + alpha D_struct`，日志必须暴露消融所需分量。
 - `RuntimeLogWriter` 把候选行映射为严格 `PythonCandidateRow`（颜色不可用写 `null` 并保留解释 flag），runtime 事件与候选行分写固定 schema-v2 文件；关闭时把真实 `rows_written`、`dropped_rows`、`log_write_failures` 写回 `python_session.json`，**Unity 不得伪造 Python 丢行统计**。
+- `ProtobufPublisher` 的 `_published`/`_failed` 计数器同时被 runtime 主线程（publish 丢弃路径）与后台 event loop 线程（`_publish_bytes`）递增，已由 `_counter_lock` 保护；改 transport 时不得去掉该锁。
 - `egoanchor.eval` 包级入口只导出 schema-v2、QC 与 Stage 1 基础设施；论文分析必须从 `experiments.experiment_1_2` / `experiments.experiment_3` 包级入口或离线 CLI 进入，运行时服务不得因绘图依赖加载失败。
 - `CutieMaskTracker` 不直接导入 `torchvision.transforms.functional.to_tensor`（避免 Windows 图像 DLL 冲突）。
 - FFS 必须在 server 启动阶段按固定 `pipeline.calibration.process_width/process_height` 完成一次中性立体图完整预热（TRT 尺寸匹配、CUDA 上下文与首次前向不得推迟到 Unity 首帧），预热结果不得进入跟踪状态或日志候选。
@@ -459,7 +460,10 @@ Python（`EgoAnchor_Python`）：
 pixi run python .\src\run_server.py
 pixi run python -m compileall src
 pixi run python -m unittest discover -s src -p "test_*.py" -t src
+pixi run python -m pytest tests -q
 ```
+
+根目录 `tests/` 没有 `__init__.py`，**不能**用 `unittest discover -s tests`（报 Start directory is not importable），只能走 pytest（8 个用例）。`src` 侧全量套件当前有 **3 个既有失败**（复现于清理前的代码，与开源清理无关，改任一侧前先核论文已发布图的口径）：`test_paper_composites_use_single_axes_and_hide_hermite`（生成器图例输出 `Head-motion coupling error / LA-RMSE`，测试与图二条目期望 `Head-motion leakage`）、`test_grid_supports_explicit_samples_rows_crop_and_labels`（渲染行名无 `(Ours)` 后缀，测试期望带）、`test_replay_settings_support_strict_partial_toml_override`（TOML `label_font_size=54`，测试期望 56）。
 
 Unity（仓库根目录）：
 
@@ -518,6 +522,15 @@ latexmk -g -xelatex -synctex=1 -interaction=nonstopmode -halt-on-error -outdir=p
 - **AI 或自动化工具修改 Unity 文件、保存场景、刷新 AssetDatabase 或触发编译前，必须先确认 Editor 不在 Play Mode**；正式采集从进入到退出 Play Mode 期间禁止任何代码写入和 Unity MCP 状态变更。
 - 不恢复旧端口、旧 MessagePack/JSON pose、旧 NATS 图像流、旧 Python/Unity 入口或旧 eval schema；不添加 `FormerlySerializedAs`、旧字段、旧路径、旧标签或旧 CLI 兼容层。
 - 改 schema 时同步 writer、reader、分析、论文接口和本文件。
+
+## 开源发布准备
+
+发布决策与阻断项统一记录在根目录 `OPEN_SOURCE_CHECKLIST.md`，以它为准；README 入口为根 `README.md` 与三个子目录各自的 README，改运行方式要同步。已确立的事实：
+
+- 已删除且不得恢复：`EgoAnchor_Python/samples/`（ZMQ 教程 demo）、`EgoAnchor_Python/tmp/`（临时脚本与产物）、`EgoAnchor_Unity/Assets/Net Samples/`（早期 ZMQ 练习脚本+场景，含内网 IP）、`Assets/TutorialInfo/` 与 `Assets/Readme.asset`（URP 模板残留）、根目录空 `design.md`。均经引用核查为无引用。
+- 本机配置不入库：`.claude/`、`.mcp.json`、`EgoAnchor_Unity/.vscode/`、`EgoAnchor_Unity.slnx` 已 untrack 并写入 `.gitignore`（本地文件保留）。`AGENTS.md` 与 `mutagen.yml` 因日常工作流仍被跟踪，发布前按清单 `git rm --cached`。
+- `EditorBuildSettings.asset` 主场景固定为 `Assets/Scene/EgoAnchor.unity`（guid `8a183e2bff420cc4687b8bc39955d9fb`；Unity 场景目录是单数 `Scene`，不存在 `Scenes/`）。
+- vendor 目录（`Cutie`/`FoundationPose`/`Fast-FoundationStereo`/`sam3`/`weights`/`data.zip`）**均不在 git 里**，克隆后需按 Python README「第三方依赖」自备；`pixi.toml` 的 `cutie` 是 editable path 依赖，缺失则 `pixi install` 失败。
 
 ## AGENTS.md 维护规则
 
